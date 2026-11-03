@@ -7,8 +7,8 @@ import (
 	"github.com/w3cj/devvm/internal/ui"
 )
 
-// The tool table: each build's backend and C library, as its record says,
-// and - for what a row lacks, a tool that isn't built included.
+// The tool table: each build's C library, as its record says, and - for
+// what a row lacks, a tool that isn't built included.
 func TestWriteImagesTools(t *testing.T) {
 	ts := []tools.Listed{
 		{
@@ -19,11 +19,11 @@ func TestWriteImagesTools(t *testing.T) {
 		{Name: "go", Tool: "go", Version: "1.27.2", State: tools.StateNotBuilt},
 	}
 	got, colored := tables(t, func(tab *ui.Table) error { return writeImages(tab, nil, ts) })
-	want := "IMAGE  FROM  DIGEST  KEY  STATE  SIZE  BACKEND\n\n" +
-		"NAME  TOOL  VERSION  BACKEND  LIBC  SIZE  VMS  STATE\n" +
-		"node  node  24.22.2  lima     gnu   4.0K  1    current\n" +
-		"node  node  24.22.2  -        -     4.0K  0    current\n" +
-		"go    go    1.27.2   -        -     -     -    not built\n"
+	want := "IMAGE  FROM  DIGEST  KEY  STATE  SIZE\n\n" +
+		"NAME  TOOL  VERSION  LIBC  SIZE  VMS  STATE\n" +
+		"node  node  24.22.2  gnu   4.0K  1    current\n" +
+		"node  node  24.22.2  -     4.0K  0    current\n" +
+		"go    go    1.27.2   -     -     -    not built\n"
 	if got != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}

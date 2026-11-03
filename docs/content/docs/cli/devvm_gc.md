@@ -7,7 +7,7 @@ Delete stale images and unused tool images
 
 ## Synopsis
 
-Delete the stale and unfinished images on every backend, the shared tools devvm images lists as unused, the files devvm itself no longer needs, and the shared Nix cache's least recently used files while it's over its cap, after listing them and asking in a terminal. Its flags delete more, such as --tool-images for the current shared tool images no VM has. gc never deletes a VM.
+Delete the stale and unfinished images, the shared tools devvm images lists as unused, the files devvm itself no longer needs, and the shared Nix cache's least recently used files while it's over its cap, after listing them and asking in a terminal. Its flags delete more, such as --tool-images for the current shared tool images no VM has. gc never deletes a VM.
 
 ```text
 devvm gc [--tool-images [--recent] [TOOL...]] [flags]
@@ -25,8 +25,7 @@ devvm gc [--tool-images [--recent] [TOOL...]] [flags]
 ## Options
 
 ```text
-      --backend NAME          act only on the backend NAME (default: every backend)
-      --caches                then free devvm's share of the backends' own caches, asking for each backend
+      --caches                then free devvm's share of Lima's own caches, after asking
   -f, --force                 don't ask to confirm, which devvm needs without a terminal
   -h, --help                  help for gc
       --history               also delete the saved exports of agents' history

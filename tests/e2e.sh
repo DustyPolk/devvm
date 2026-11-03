@@ -1195,9 +1195,9 @@ kf=$(keys_of e2efix | head -1)
 dg=$(rec "$kb" digest | sed -n 's/^.* sha256:\([0-9a-f]\{12\}\)[0-9a-f]*$/\1/p')
 check "devvm images lists base and the fixture, current, with Ubuntu's release, digest and size" bash -c "
   out=\$('$D' images </dev/null 2>/dev/null) &&
-  grep -qE '^base +ubuntu [0-9.]+ \([0-9]{8}\) +$dg +$kb +current +[0-9.]+[KMGT] +lima$' <<<\"\$out\" &&
-  grep -qE '^e2efix +ubuntu [0-9.]+ \([0-9]{8}\) +$dg +$kf +current +[0-9.]+[KMGT] +lima$' <<<\"\$out\" &&
-  grep -qE '^NAME +TOOL +VERSION +BACKEND +LIBC +SIZE +VMS +STATE$' <<<\"\$out\""
+  grep -qE '^base +ubuntu [0-9.]+ \([0-9]{8}\) +$dg +$kb +current +[0-9.]+[KMGT]$' <<<\"\$out\" &&
+  grep -qE '^e2efix +ubuntu [0-9.]+ \([0-9]{8}\) +$dg +$kf +current +[0-9.]+[KMGT]$' <<<\"\$out\" &&
+  grep -qE '^NAME +TOOL +VERSION +LIBC +SIZE +VMS +STATE$' <<<\"\$out\""
 check "images rm deletes an image by name, with its record, not base" bash -c "
   [[ -n '$kf' ]] && '$D' images rm --force e2efix </dev/null >/dev/null 2>&1 &&
   [[ -z \$(status_of devvm-img-$kf) ]] && [[ ! -e '$images/$kf' ]] && [[ \$(status_of devvm-img-$kb) == Stopped ]]"
@@ -1343,7 +1343,7 @@ check "it gets --cpus, --memory and --disk" in_vm "$vm" \
   '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
 check "devvm size shows it" bash -c "cd '$p' && [[ \$('$D' size 2>&1) == 'cpus=2 memory=3GiB disk=120GiB' ]]"
 check "ls lists it, and no image" bash -c "'$D' ls >'$work/ls.out' 2>&1 &&
-  grep -Eq '^$vm +Running +base +- +(on|off) +off +- +lima +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
+  grep -Eq '^$vm +Running +base +- +(on|off) +off +- +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
 check "ls --json and size --json show it" bash -c "'$D' ls --json 2>/dev/null | grep -qxF '      \"name\": \"$vm\",' &&
   cd '$p' && '$D' size --json 2>/dev/null | grep -qxF '  \"disk_gib\": 120'"
 check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm bash -c 'echo from-vm > $p/vm.txt' </dev/null && grep -qx from-vm '$p/vm.txt'"
@@ -1763,7 +1763,7 @@ else
 fi
 check "gc again finds nothing to clean up" bash -c "'$D' gc </dev/null 2>&1 | grep -qxF \"==> \$(m nothing_to_clean)\""
 check "space lists the Lima VM and images, and changes nothing" bash -c "'$D' space </dev/null 2>/dev/null >'$work/last.log' &&
-  grep -qE '^VMs +lima +[0-9]+ ' '$work/last.log' && grep -qE '^images +lima +[0-9]+ ' '$work/last.log' &&
+  grep -qE '^VMs +[0-9]+ ' '$work/last.log' && grep -qE '^images +[0-9]+ ' '$work/last.log' &&
   [[ \$(status_of $vm) == Running && -f '$(vmdir "$vm")/state' ]]"
 # The img-* VM deleted outside devvm, its state an hour old: gc --orphans forgets what devvm kept.
 quiet limactl delete -f "$vm"
@@ -2144,12 +2144,12 @@ wait "$ip"; rc=$?
 check "Ctrl+C during its start stops it and its proxy, and ls shows its policy on" bash -c "
   [[ $rc -eq 130 ]] && grep -qx '==> interrupted_start vm=$vm' '$work/int.log' && [[ \$(status_of '$vm') == Stopped ]] &&
   ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
-  '$D' ls | grep -Eq '^$vm +Stopped +base +[a-z,]*claude[a-z,]* +off +on +- +lima '"
+  '$D' ls | grep -Eq '^$vm +Stopped +base +[a-z,]*claude[a-z,]* +off +on +- +/'"
 (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" >"$work/last.log" 2>&1)
 check "ls shows its policy on, and unenforced once started outside devvm" bash -c "
-  '$D' ls | grep -Eq '^$vm +Running +base +[a-z,]*claude[a-z,]* +off +on +- +lima ' &&
+  '$D' ls | grep -Eq '^$vm +Running +base +[a-z,]*claude[a-z,]* +off +on +- +/' &&
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 &&
-  '$D' ls | grep -Eq '^$vm +Running +base +[a-z,]*claude[a-z,]* +off +unenforced +- +lima '"
+  '$D' ls | grep -Eq '^$vm +Running +base +[a-z,]*claude[a-z,]* +off +unenforced +- +/'"
 check "started outside devvm again: without a terminal, devvm stops it and opens nothing" bash -c "
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$n' &&
   ! printf 'echo e2e-opened\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&

@@ -23,10 +23,9 @@ devvm rebuild IMAGE [flags]
 ## Options
 
 ```text
-      --backend NAME   the backend NAME to use (default: devvm setup's, else lima)
-  -f, --force          don't ask to confirm, which devvm needs without a terminal
-      --from IMAGE     the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
-  -h, --help           help for rebuild
+  -f, --force        don't ask to confirm, which devvm needs without a terminal
+      --from IMAGE   the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
+  -h, --help         help for rebuild
 ```
 
 ## Options inherited from parent commands

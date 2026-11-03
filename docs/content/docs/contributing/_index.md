@@ -153,6 +153,17 @@ A review of a body of work, and the review before a release, look across the cod
 
 Each copy gets one of three outcomes: extend the owner, make one owner, or leave it. Leave it when the only shared helper would be the wrong one, because a copy costs less than the wrong helper, and wait for a third copy before making one. The pass is part of those reviews, not a step every change runs.
 
+## How a backend plugs in
+
+devvm runs every VM on Lima, but the rest of devvm reaches Lima only through the `backend.Backend` interface in `internal/backend`, so another backend is an addition rather than a change to the callers. A backend lives in a package of its own under `internal/backend`, and it does four things:
+
+- **It implements `backend.Backend`** and returns errors as messages, as [AGENTS.md](https://github.com/w3cj/devvm/blob/main/AGENTS.md#backends) says, instead of ending the run.
+- **It declares `Caps`**, saying for each of `backend.Features` whether it has the feature natively, emulates it, or lacks it ([features](../internals/backends.md#features)). Callers check what a VM needs with the registry's `Review.Require` before they act, and an emulation stays refused until its review passes.
+- **It's registered in `registry.New`** (`internal/backend/registry`), the only place besides `internal/cli` that imports a backend.
+- **It names its images by key**, and an image's key hashes the backend's name, so two backends never share an image.
+
+The registry's `For` chooses a VM's backend: a VM that exists gets the one its state records in `backend=`, and a new VM gets `backend.Default`, which is `lima`. Tests set the registry's `NewVMs` to give new VMs a fake backend (`backendtest.Fake`). The command line has no way to choose a backend, so a second backend would also add one, following the [cli skill](https://github.com/w3cj/devvm/blob/main/.agents/skills/cli/SKILL.md), together with its column in the tables that list VMs, images and caches. `--json` output already names each VM's, image's and shared tool's backend.
+
 ## CLI conventions
 
 devvm's commands follow one set of rules, so that a user who knows a few of them can guess the rest. A bare verb acts on this folder's VM, anything else goes under its noun, and a bare noun shows or lists. A setting shows bare, changes with a value and takes `-g` for what new VMs get. The [cli skill](https://github.com/w3cj/devvm/blob/main/.agents/skills/cli/SKILL.md) holds every rule, with a checklist for adding a command and a review for changing one, and its [judgment.md](https://github.com/w3cj/devvm/blob/main/.agents/skills/cli/judgment.md) explains, with examples, the rules that only a reviewer can check. The reasoning behind most of them is in the [Command Line Interface Guidelines](https://clig.dev/), and Cobra's own mechanics are in [Cobra's docs](https://cobra.dev/docs/).

@@ -68,7 +68,7 @@ exec devvm retention history.count=3
 exec devvm retention history.count=off
 rm $CFG/config.toml
 exec devvm space
-stdout '^history +- +2 +\S+ +only copy +- +gc --history +30d \(\S+\)$'
+stdout '^history +2 +\S+ +only copy +- +gc --history +30d \(\S+\)$'
 stdout 'RETAIN'
 
 # The next command applies it, once: the old export goes, the new stays.

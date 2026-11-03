@@ -58,14 +58,13 @@ func TestFlagNames(t *testing.T) {
 	// the flag names whose help differs between commands, with why it's
 	// one meaning still
 	manyUses := map[string]string{
-		"backend": "the backend a command uses, new VMs' with devvm setup, or the one alone a command over every backend acts on",
-		"cpus":    "a new VM's says where its default comes from, and devvm size's changes the VM's",
-		"memory":  "a new VM's says where its default comes from, and devvm size's changes the VM's",
-		"disk":    "a new VM's is at least the image's, and devvm size's at least what the VM has",
-		"global":  "each setting's -g says which setting new VMs get",
-		"json":    "devvm doctor's also says it succeeds whatever is missing",
-		"as":      "the name a VM reaches another by: devvm link add's for the link's target, devvm group join's for this VM in the others",
-		"agents":  "the coding agents a list of them gives: a new VM's, or with devvm setup new VMs' default",
+		"cpus":   "a new VM's says where its default comes from, and devvm size's changes the VM's",
+		"memory": "a new VM's says where its default comes from, and devvm size's changes the VM's",
+		"disk":   "a new VM's is at least the image's, and devvm size's at least what the VM has",
+		"global": "each setting's -g says which setting new VMs get",
+		"json":   "devvm doctor's also says it succeeds whatever is missing",
+		"as":     "the name a VM reaches another by: devvm link add's for the link's target, devvm group join's for this VM in the others",
+		"agents": "the coding agents a list of them gives: a new VM's, or with devvm setup new VMs' default",
 	}
 	u, _, _ := testUI()
 	root := NewRoot(u)

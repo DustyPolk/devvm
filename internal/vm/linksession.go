@@ -52,7 +52,7 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 	if !st.Exists() {
 		return fmt.Errorf("%s: no such VM", vm)
 	}
-	c, err := e.Registry.For(e.Dirs, st, "")
+	c, err := e.Registry.For(e.Dirs, st)
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (e Links) linkConn(ctx context.Context, client string, l vmssh.Link, runs *
 	case why != "":
 		return refused(why, nil)
 	}
-	c, err := e.Registry.For(e.Dirs, tst, "")
+	c, err := e.Registry.For(e.Dirs, tst)
 	if err != nil {
 		return refused(linkUnread, err)
 	}
@@ -328,7 +328,7 @@ func (e Links) warnUnenforced(ctx context.Context, client, target *state.VM) {
 	if !netpolicy.On(client) {
 		return
 	}
-	c, err := e.Registry.For(e.Dirs, target, "")
+	c, err := e.Registry.For(e.Dirs, target)
 	if err != nil {
 		return
 	}

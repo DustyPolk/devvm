@@ -207,9 +207,6 @@ type found struct {
 	st     *state.VM       // its state; one that doesn't exist for a new VM
 	b      backend.Backend // its backend: the one its state records, else a new VM's
 	exists bool            // the backend has it
-	// flagIgnored is set when --backend named another backend than the
-	// VM's.
-	flagIgnored bool
 	// sub is the folder devvm runs in when the VM is a parent folder's
 	// (f.Dir), and so mounts it at the same path; "" when it's this
 	// folder's own.
@@ -220,12 +217,12 @@ type found struct {
 }
 
 // find finds the folder's VM, which needn't exist, with the backend that
-// has it or would make it (flag is --backend). When the folder has none,
-// it's the nearest parent folder's VM, if one has one (lookup), said in
-// an info line first. A folder with a repo of its own below the parent's
-// (found.repo) never gets the parent's VM here: only up offers it.
-func (e *Env) find(ctx context.Context, flag string) (*found, error) {
-	t, parent, err := e.lookup(ctx, flag, true)
+// has it or would make it. When the folder has none, it's the nearest
+// parent folder's VM, if one has one (lookup), said in an info line
+// first. A folder with a repo of its own below the parent's (found.repo)
+// never gets the parent's VM here: only up offers it.
+func (e *Env) find(ctx context.Context) (*found, error) {
+	t, parent, err := e.lookup(ctx, true)
 	if err != nil {
 		return nil, err
 	}
@@ -245,13 +242,13 @@ func (e *Env) find(ctx context.Context, flag string) (*found, error) {
 // its folder in devvm's data folder: one that exists has the name and
 // the backend its state records, whichever backend is asked now. Only a
 // new VM gets a name, fitting its backend's.
-func (e *Env) lookup(ctx context.Context, flag string, parents bool) (*found, *found, error) {
+func (e *Env) lookup(ctx context.Context, parents bool) (*found, *found, error) {
 	f, st, err := vmFolders{e}.state(e.Dir)
 	if err != nil {
 		return nil, nil, err
 	}
 	if !st.Exists() {
-		if f, err = (vmFolders{e}).newName(e.Dir, flag); err != nil {
+		if f, err = (vmFolders{e}).newName(e.Dir); err != nil {
 			return nil, nil, err
 		}
 		if st, err = state.ReadVM(e.Dirs, f.Name); err != nil {
@@ -260,11 +257,11 @@ func (e *Env) lookup(ctx context.Context, flag string, parents bool) (*found, *f
 	}
 	// A folder with state of its own has a VM, even one its backend has
 	// lost: never a parent's in its place.
-	t, err := e.inspect(ctx, f, st, flag)
+	t, err := e.inspect(ctx, f, st)
 	if err != nil || t.exists || st.Exists() || !parents {
 		return t, nil, err
 	}
-	p, err := e.parentVM(ctx, flag)
+	p, err := e.parentVM(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -292,9 +289,9 @@ func (e vmFolders) state(dir string) (project.Folder, *state.VM, error) {
 }
 
 // newName is the name a new VM for dir gets: fitting the names of the
-// backend it would be made on (flag is --backend).
-func (e vmFolders) newName(dir, flag string) (project.Folder, error) {
-	first, err := e.Registry.For(e.Dirs, new(state.VM), flag)
+// backend it would be made on.
+func (e vmFolders) newName(dir string) (project.Folder, error) {
+	first, err := e.Registry.For(e.Dirs, new(state.VM))
 	if err != nil {
 		return project.Folder{}, err
 	}
@@ -313,7 +310,7 @@ func (e vmFolders) newName(dir, flag string) (project.Folder, error) {
 // gives nil unless its backend has its VM and it was made for that folder.
 // A VM in an outer folder can replace a nested folder through its mount,
 // and devvm then never skips the nested folder's VM for the outer one's.
-func (e *Env) parentVM(ctx context.Context, flag string) (*found, error) {
+func (e *Env) parentVM(ctx context.Context) (*found, error) {
 	repo := ""
 	if hasGit(e.Dir) {
 		repo = e.Dir
@@ -335,7 +332,7 @@ func (e *Env) parentVM(ctx context.Context, flag string) (*found, error) {
 		if !e.sameFolder(pf, pst) {
 			return nil, nil
 		}
-		p, err := e.inspect(ctx, pf, pst, flag)
+		p, err := e.inspect(ctx, pf, pst)
 		if err != nil || !p.exists {
 			return nil, err
 		}
@@ -353,10 +350,10 @@ func hasGit(dir string) bool {
 }
 
 // inspect finds the VM for folder f, whose state is st, on the backend
-// its state records, else a new VM's (flag is --backend). One that
-// exists gets devvm's connections carrying its SSH agent.
-func (e *Env) inspect(ctx context.Context, f project.Folder, st *state.VM, flag string) (*found, error) {
-	choice, err := e.Registry.For(e.Dirs, st, flag)
+// its state records, else a new VM's. One that exists gets devvm's
+// connections carrying its SSH agent.
+func (e *Env) inspect(ctx context.Context, f project.Folder, st *state.VM) (*found, error) {
+	choice, err := e.Registry.For(e.Dirs, st)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +361,7 @@ func (e *Env) inspect(ctx context.Context, f project.Folder, st *state.VM, flag 
 	if err := b.Check(ctx); err != nil {
 		return nil, err
 	}
-	t := &found{f: f, st: st, b: b, flagIgnored: choice.FlagIgnored}
+	t := &found{f: f, st: st, b: b}
 	switch in, err := b.Inspect(ctx, f.Name); {
 	case err == nil:
 		t.exists = true
@@ -382,8 +379,8 @@ func (e *Env) inspect(ctx context.Context, f project.Folder, st *state.VM, flag 
 }
 
 // findExisting finds the folder's VM, which must exist.
-func (e *Env) findExisting(ctx context.Context, flag string) (*found, error) {
-	t, err := e.find(ctx, flag)
+func (e *Env) findExisting(ctx context.Context) (*found, error) {
+	t, err := e.find(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -395,8 +392,8 @@ func (e *Env) findExisting(ctx context.Context, flag string) (*found, error) {
 
 // existing finds the folder's VM, which must exist, be made for this
 // folder and have finished being made.
-func (e *Env) existing(ctx context.Context, flag string) (*found, error) {
-	t, err := e.findExisting(ctx, flag)
+func (e *Env) existing(ctx context.Context) (*found, error) {
+	t, err := e.findExisting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +410,7 @@ func (e *Env) existing(ctx context.Context, flag string) (*found, error) {
 // which must exist (else noVM), be made for this folder and have finished
 // being made.
 func (e *Env) folderVM(ctx context.Context, noVM func(dir string) msg.M) (*found, error) {
-	t, err := e.find(ctx, "")
+	t, err := e.find(ctx)
 	if err != nil {
 		return nil, err
 	}

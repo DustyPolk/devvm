@@ -184,7 +184,7 @@ At boot the same failure fails only the `devvm-tools` service, and the boot goes
 
 Listing never resolves the tools lock. Before there is a lock, no tool image is current, and the tool images that no VM has show no state.
 
-A tool image's name doesn't say which backend and C library it's built for, so `BACKEND` and `LIBC` come from its record, which names the backend that built it. An image without a record shows `-` in both.
+A tool image's name doesn't say which backend and C library it's built for, so `LIBC` comes from its record, which also names the backend that built it, as `devvm images --json` shows in `backend`. An image without a record shows `-`, and has no `backend` or `libc`.
 
 `devvm images rm` deletes images with their records. `devvm gc` deletes stale and unfinished images with their records, and unused tool images with theirs. With `--tool-images`, it also deletes the current tool images that no VM's state lists (`Share.NoVM`), but not one whose record says it was built in the last hour, because a VM's launch builds its tools before it records them in its state. gc names the ones it keeps for that reason (`Share.NoVMRecent`), after the same filters as the ones it deletes, and with `--recent` it deletes them too. Retention's `tools.unused-age` always keeps the hour.
 
@@ -194,6 +194,6 @@ When a VM is being made, `devvm gc --tool-images --recent` gets `gc_recent_makin
 
 When a tool image that a new VM's state lists is gone by the VM's setup, `devvm-tools` can't mount it, the setup fails with `tools_unmounted`, and the VM and its state stay, because only an interrupt undoes a new VM. Every launch of the VM fails the same way until `devvm tools update` builds the missing images, as `Launch.buildTools` builds whatever the share lacks.
 
-With `--backend`, gc acts only on that backend's images and on the tool images whose record names that backend, so one without a record stays. gc holds the share's lock throughout, so no tool build or `devvm tools update` changes the share meanwhile. A tool image is unused only when compared with the tools lock, so before there is a lock, gc deletes none. Because `current` is for the C library of the base that new VMs get, the musl tool images of an Alpine VM are unused once it's gone, unless you give gc that `--from`.
+gc holds the share's lock throughout, so no tool build or `devvm tools update` changes the share meanwhile. A tool image is unused only when compared with the tools lock, so before there is a lock, gc deletes none. Because `current` is for the C library of the base that new VMs get, the musl tool images of an Alpine VM are unused once it's gone, unless you give gc that `--from`.
 
-Without `--backend`, gc also trims the [shared Nix cache](network.md#the-shared-nix-cache) to its cap, deleting its least recently used files under the lock that the VMs' proxies take, and with `--nix-cache`, it deletes all of the cache's files. `devvm images` ends with what the cache takes of its cap when it holds anything.
+gc also trims the [shared Nix cache](network.md#the-shared-nix-cache) to its cap, deleting its least recently used files under the lock that the VMs' proxies take, and with `--nix-cache`, it deletes all of the cache's files. `devvm images` ends with what the cache takes of its cap when it holds anything.

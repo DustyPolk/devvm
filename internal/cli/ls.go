@@ -22,8 +22,8 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List the project VMs",
-		Long: "List the project VMs on every backend, sorted by name. " +
-			"Each row has the VM's status, image, .git protection, network policy, links to your other VMs, backend and folder.",
+		Long: "List the project VMs, sorted by name. " +
+			"Each row has the VM's status, image, .git protection, network policy, links to your other VMs and folder.",
 		Example: examples(
 			"devvm ls", "list every project VM",
 			"devvm ls --json", "the same list as JSON, for scripts",
@@ -91,7 +91,7 @@ func listVMs(cmd *cobra.Command, u *ui.UI, dirs paths.Dirs) ([]vm.Listed, error)
 // without links. A VM's status, .git protection and network policy are
 // colored by what they mean.
 func writeList(tab *ui.Table, ls []vm.Listed) error {
-	tab.Header("NAME", "STATUS", "IMAGE", "TOOLS", "GIT", "NET", "LINKS", "BACKEND", "FOLDER")
+	tab.Header("NAME", "STATUS", "IMAGE", "TOOLS", "GIT", "NET", "LINKS", "FOLDER")
 	for _, l := range ls {
 		image := l.Image
 		if l.From != "" {
@@ -102,7 +102,7 @@ func writeList(tab *ui.Table, ls []vm.Listed) error {
 			links = strconv.Itoa(l.Links)
 		}
 		tab.Row(cell(l.Name), cellAs(l.Status, vmStatuses), cell(image), cell(strings.Join(l.Tools, ",")), cellAs(l.Git, gitModes),
-			cellAs(l.Net, netModes), cell(links), cell(l.Backend), cell(l.Folder))
+			cellAs(l.Net, netModes), cell(links), cell(l.Folder))
 	}
 	return tab.Flush()
 }

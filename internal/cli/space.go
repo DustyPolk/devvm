@@ -45,24 +45,20 @@ const (
 
 // newSpaceCmd is devvm space.
 func newSpaceCmd(u *ui.UI) *cobra.Command {
-	var (
-		asJSON bool
-		only   string
-	)
+	var asJSON bool
 	c := &cobra.Command{
 		Use:   "space",
 		Short: "Show what devvm keeps on this machine and the space it takes",
-		Long: "Show each kind of thing devvm keeps on this machine, on every backend, with the disk it takes, " +
-			"what devvm gc frees of it now and what frees the rest, then the backends' own caches apart. " +
+		Long: "Show each kind of thing devvm keeps on this machine, with the disk it takes, " +
+			"what devvm gc frees of it now and what frees the rest, then Lima's own caches apart. " +
 			"It changes nothing and starts no VM.",
 		Example: examples(
 			"devvm space", "show what devvm keeps and what frees it", "devvm space --json", "the same as JSON, for scripts",
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			r, err := space(cmd.Context(), u, only)
+			r, err := space(cmd.Context(), u)
 			fail(u, err, msg.SpaceFailed)
-			r = r.only(only)
 			for _, b := range r.Unknown {
 				u.Note(msg.SpaceBackendUnknown(b))
 			}
@@ -90,39 +86,8 @@ func newSpaceCmd(u *ui.UI) *cobra.Command {
 			return nil
 		},
 	}
-	addBackendFilterFlag(c.Flags(), &only)
 	jsonFlag(c, &asJSON)
 	return c
-}
-
-// only is the report of the backend named alone: its rows, caches and
-// stray VMs, and the totals of those rows; all of it when name is "".
-func (r spaceReport) only(name string) spaceReport {
-	if name == "" {
-		return r
-	}
-	out := spaceReport{}
-	for _, row := range r.Rows {
-		if row.Backend == name {
-			out.Rows = append(out.Rows, row)
-			out.Total += row.Size
-			out.GC += row.GC
-		}
-	}
-	for _, c := range r.Caches {
-		if c.Backend == name {
-			out.Caches = append(out.Caches, c)
-		}
-	}
-	for _, s := range r.Strays {
-		if s.Backend == name {
-			out.Strays = append(out.Strays, s)
-		}
-	}
-	if slices.Contains(r.Unknown, name) {
-		out.Unknown = []string{name}
-	}
-	return out
 }
 
 // spaceRow is one kind of thing devvm keeps, as devvm space shows it.
@@ -194,10 +159,10 @@ type spaceEnv struct {
 
 // space reads what devvm keeps. Nothing it runs changes anything, and
 // each backend gets spaceTimeout.
-func space(ctx context.Context, u *ui.UI, only string) (spaceReport, error) {
+func space(ctx context.Context, u *ui.UI) (spaceReport, error) {
 	defer u.Status(msg.ReadingSpace())()
 	var r spaceReport
-	b, err := builder(u, only)
+	b, err := builder(u)
 	if err != nil {
 		return r, err
 	}
@@ -219,9 +184,6 @@ func space(ctx context.Context, u *ui.UI, only string) (spaceReport, error) {
 		return r, err
 	}
 	for _, be := range reg.All() {
-		if only != "" && be.Name() != only {
-			continue
-		}
 		rows, caches, ok := e.backendRows(ctx, be)
 		if !ok {
 			if used[be.Name()] {
@@ -281,7 +243,7 @@ func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []s
 		vmRow.Size += n
 		vmRow.Sized = vmRow.Sized && sized
 	}
-	imgRow := spaceRow{What: "images", Backend: be.Name(), Count: len(ls), Sized: true, Kept: keptRemade, Rest: "gc --backend " + be.Name()}
+	imgRow := spaceRow{What: "images", Backend: be.Name(), Count: len(ls), Sized: true, Kept: keptRemade, Rest: "images rm"}
 	for _, l := range ls {
 		imgRow.Size += l.Size
 		imgRow.Sized = imgRow.Sized && l.Sized
@@ -636,21 +598,21 @@ func writeSpace(tab *ui.Table, r spaceReport) error {
 		}
 		return humanSize(n)
 	}
-	tab.Header("WHAT", "BACKEND", "COUNT", "SIZE", "KEPT", "GC", "FREED BY", "RETAIN")
+	tab.Header("WHAT", "COUNT", "SIZE", "KEPT", "GC", "FREED BY", "RETAIN")
 	for _, s := range r.Rows {
-		tab.Row(cell(s.What), cell(s.Backend), cell(strconv.Itoa(s.Count)), cell(size(s.Size, s.Sized)),
+		tab.Row(cell(s.What), cell(strconv.Itoa(s.Count)), cell(size(s.Size, s.Sized)),
 			cellAs(s.Kept, keptRoles), cell(gc(s.GC)), cell(s.Rest), cell(s.retainCell()))
 	}
-	tab.Total(cell("total"), cell(""), cell(""), cell(humanSize(r.Total)), cell(""), cell(gc(r.GC)), cell(""), cell(""))
+	tab.Total(cell("total"), cell(""), cell(humanSize(r.Total)), cell(""), cell(gc(r.GC)), cell(""), cell(""))
 	if len(r.Caches) == 0 {
 		return tab.Flush()
 	}
 	if err := tab.Break(); err != nil {
 		return err
 	}
-	tab.Header("BACKEND", "CACHE", "COUNT", "SIZE", "PATH")
+	tab.Header("CACHE", "COUNT", "SIZE", "PATH")
 	for _, c := range r.Caches {
-		tab.Row(cell(c.Backend), cell(c.Name), cell(strconv.Itoa(c.Count)), cell(size(c.Size, c.Sized)), cell(c.Path))
+		tab.Row(cell(c.Name), cell(strconv.Itoa(c.Count)), cell(size(c.Size, c.Sized)), cell(c.Path))
 	}
 	return tab.Flush()
 }

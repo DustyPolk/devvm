@@ -1,17 +1,15 @@
-# setup: the default backend, base's features, and new VMs' size and
-# network policy (all asked in a terminal, which Go tests cover; without
-# one, the backend, size and network policy aren't asked and the features
-# are kept, or every one until they're chosen; --backend and --features
-# without asking), each saved in settings.json. A new choice of features
-# says base rebuilds, and once images are built that devvm gc deletes the
-# old ones.
+# setup: base's features, and new VMs' size and network policy (all asked
+# in a terminal, which Go tests cover; without one, the size and network
+# policy aren't asked and the features are kept, or every one until
+# they're chosen; --features without asking), each saved in
+# settings.json. A new choice of features says base rebuilds, and once
+# images are built that devvm gc deletes the old ones.
 env SAVED=$DATA/settings.json
 
-# Kept: none chosen; no backend or size asked.
+# Kept: none chosen; no size asked.
 exec devvm setup
 stdout '^==> base_features_none$'
 ! stdout base_will_rebuild
-! stdout default_backend
 ! stdout 'size_question|size_defaults'
 ! grep '"backend"|"size"|"agents"' $SAVED
 grep '^  "features": \[\]$' $SAVED
@@ -30,7 +28,6 @@ exec devvm setup --features omb,fzf
 stdout '^==> base_features features=fzf omb$'
 stdout '^==> base_will_rebuild$'
 ! stdout gc_old_hint
-! stdout default_backend
 grep '^  "features": \[\n    "fzf",\n    "omb"\n  \]$' $SAVED
 exec devvm setup --features fzf,omb
 ! stdout base_will_rebuild
@@ -53,21 +50,11 @@ stderr '^devvm: no_feature feature=nope features=cli-tools desktop fzf omb$'
 exec devvm setup
 stdout '^==> base_features_none$'
 
-# The default backend: only it, unless --features is given too.
-exec devvm setup --backend lima
-stdout '^==> default_backend backend=lima$'
-! stdout base_features
-grep '^  "backend": "lima",$' $SAVED
-exec devvm setup --backend lima --features fzf
-stdout '^==> default_backend backend=lima$'
-stdout '^==> base_features features=fzf$'
-! exec devvm setup --backend nope
-stderr '^devvm: backend_unknown backends=lima name=nope$'
-grep '^  "backend": "lima",$' $SAVED
-
 # New VMs' size is devvm size -g's, and without a terminal nothing asks
-# for it or for new VMs' network policy. Flags for a new VM are devvm
-# [IMAGE]'s alone, so setup doesn't take them.
+# for it or for new VMs' network policy. Flags for a new VM are devvm's
+# alone, so setup doesn't take them, and no command chooses a backend.
+! exec devvm setup --backend lima
+stderr '^devvm: flag_unknown command=devvm setup flag=--backend$'
 ! exec devvm setup --cpus 2
 stderr '^devvm: flag_unknown command=devvm setup flag=--cpus$'
 ! exec devvm setup --memory 8
@@ -121,20 +108,21 @@ cd $WORK
 # can't change it: refused, naming the file and the key, with nothing
 # saved.
 cp config.toml $CFG/config.toml
-! exec devvm setup --backend lima
-stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=backend$'
 ! exec devvm setup --features omb
 stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=features$'
 ! exec devvm setup --agents claude
 stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=agents$'
-grep '^  "backend": "lima",$' $SAVED
 grep '^  "agents": \[\n    "codex"\n  \]$' $SAVED
 # Without a terminal, setup keeps config.toml's features, saying so.
 exec devvm setup
 stdout '^==> setup_in_config file=\S*/config/devvm/config\.toml key=features$'
 ! stdout base_features
-exec devvm doctor --json
-stdout '"backend": "lima",\n  "backend_source": "config.toml",'
+rm $CFG/config.toml
+
+# config.toml has no backend key: a file that sets one is refused.
+cp backend.toml $CFG/config.toml
+! exec devvm setup
+stderr '^devvm: setup_failed reason=\S*/config/devvm/config\.toml:1: unknown key "backend"$'
 rm $CFG/config.toml
 
 # An unreadable choice stays for you to fix.
@@ -144,8 +132,9 @@ stderr '^devvm: setup_failed reason=\S*/data/devvm/settings\.json: features: not
 cmp $SAVED bad.json
 
 -- config.toml --
-backend = "lima"
 features = ["fzf"]
 agents = ["opencode"]
+-- backend.toml --
+backend = "lima"
 -- bad.json --
 {"features": ["Not_A_Feature"]}

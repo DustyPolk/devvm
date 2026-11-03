@@ -22,7 +22,7 @@ type Tools struct{ *Env }
 // version when it's another and whether the share has that one built.
 // The lock is read as it is: List never goes online.
 func (e Tools) List(ctx context.Context) ([]tools.VMTool, error) {
-	t, err := e.existing(ctx, "")
+	t, err := e.existing(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (e Tools) Remove(ctx context.Context, o Options, names []string) error {
 // taken out aren't mounted from its next launch (an agent's folders
 // neither), and what the VM installed itself stays.
 func (e Tools) Change(ctx context.Context, o Options, add, gone []string) error {
-	t, err := e.existing(ctx, o.Backend)
+	t, err := e.existing(ctx)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func (e Tools) add(ctx context.Context, t *found, names []string) error {
 // checked and its layers shown as they are, then makes what changed
 // (Change). When nothing changed it says so and opens nothing.
 func (e Tools) Pick(ctx context.Context, o Options) error {
-	t, err := e.existing(ctx, o.Backend)
+	t, err := e.existing(ctx)
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func layerRows(b *build.Env, img string) []string {
 // Update checks for newer shared tools and moves the folder's VM to them,
 // built first, then opens it.
 func (e Tools) Update(ctx context.Context, o Options) error {
-	t, err := e.existing(ctx, o.Backend)
+	t, err := e.existing(ctx)
 	if err != nil {
 		return err
 	}

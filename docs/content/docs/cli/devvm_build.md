@@ -23,9 +23,8 @@ devvm build IMAGE [flags]
 ## Options
 
 ```text
-      --backend NAME   the backend NAME to use (default: devvm setup's, else lima)
-      --from IMAGE     the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
-  -h, --help           help for build
+      --from IMAGE   the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
+  -h, --help         help for build
 ```
 
 ## Options inherited from parent commands

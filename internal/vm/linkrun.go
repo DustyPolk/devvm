@@ -211,7 +211,7 @@ func (e linkRuns) warnTargets(ctx context.Context, st *state.VM, links []Link) e
 			e.Warn(msg.LinkPolicyMismatch(l.Target, st.Name()))
 			continue
 		}
-		c, err := e.Registry.For(e.Dirs, tst, "")
+		c, err := e.Registry.For(e.Dirs, tst)
 		if err != nil {
 			return err
 		}

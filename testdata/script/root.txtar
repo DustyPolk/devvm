@@ -64,13 +64,16 @@ stderr '^usage_help command=devvm$'
 stderr '^devvm: flag_unknown command=devvm ls flag=--cpus$'
 ! exec devvm --cpus 4 ls
 stderr '^devvm: flag_unknown command=devvm ls flag=--cpus$'
-! exec devvm restart --backend lima
-stderr '^devvm: flag_unknown command=devvm restart flag=--backend$'
 ! exec devvm tools add node --from node:24
 stderr '^devvm: flag_unknown command=devvm tools add flag=--from$'
-# A backend that isn't one is refused first too.
-! exec devvm build --backend nope base
-stderr '^devvm: backend_unknown backends=lima name=nope$'
+# No command takes --backend: devvm, its image commands and the rest
+# refuse it first.
+! exec devvm --backend lima
+stderr '^devvm: flag_unknown command=devvm flag=--backend$'
+! exec devvm restart --backend lima
+stderr '^devvm: flag_unknown command=devvm restart flag=--backend$'
+! exec devvm build --backend lima base
+stderr '^devvm: flag_unknown command=devvm build flag=--backend$'
 stderr '^usage_help command=devvm build$'
 ! stub_calls
 

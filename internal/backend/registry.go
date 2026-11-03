@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"slices"
@@ -12,8 +13,7 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Default is the backend for new VMs when neither --backend nor a file of
-// defaults (config.toml, settings.json) names one.
+// Default is the backend new VMs get.
 const Default = "lima"
 
 // Registry is the backends devvm has, by name, and the review their
@@ -22,11 +22,10 @@ const Default = "lima"
 type Registry struct {
 	Review
 	Host platform.Host
-	// DefaultBackend returns the backend new VMs get without --backend,
-	// and the file that names it, "" for Default (internal/settings);
-	// nil is Default.
-	DefaultBackend func() (name, file string, err error)
-	byName         map[string]Backend
+	// NewVMs names the backend new VMs get; "" is Default. Tests set it
+	// to a fake's name.
+	NewVMs string
+	byName map[string]Backend
 }
 
 // NewRegistry returns a registry holding bs.
@@ -91,15 +90,11 @@ func (r *Registry) Used(d paths.Dirs) ([]Backend, error) {
 // Choice is the backend a VM runs on.
 type Choice struct {
 	Backend Backend
-	// FlagIgnored is set when --backend was given for a VM that exists:
-	// it keeps the backend it was made with.
-	FlagIgnored bool
 }
 
 // For chooses the backend for vm. A VM that exists runs on the backend
-// its state records. A new one gets flag (--backend), else
-// DefaultBackend's.
-func (r *Registry) For(d paths.Dirs, vm *state.VM, flag string) (Choice, error) {
+// its state records, and a new one gets NewVMs, else Default.
+func (r *Registry) For(d paths.Dirs, vm *state.VM) (Choice, error) {
 	if vm.Exists() {
 		name := vm.Get(state.KeyBackend)
 		if name == "" {
@@ -109,31 +104,12 @@ func (r *Registry) For(d paths.Dirs, vm *state.VM, flag string) (Choice, error) 
 		if !ok {
 			return Choice{}, msg.BackendUnknownVM(name, vm.Name())
 		}
-		return Choice{Backend: b, FlagIgnored: flag != "" && flag != name}, nil
-	}
-	if flag != "" {
-		b, ok := r.Lookup(flag)
-		if !ok {
-			return Choice{}, msg.BackendUnknown(r.list(), flag)
-		}
 		return Choice{Backend: b}, nil
 	}
-	name, file := Default, ""
-	if r.DefaultBackend != nil {
-		var err error
-		if name, file, err = r.DefaultBackend(); err != nil {
-			return Choice{}, err
-		}
-	}
+	name := cmp.Or(r.NewVMs, Default)
 	b, ok := r.Lookup(name)
-	switch {
-	case !ok && file != "":
-		return Choice{}, msg.BackendUnknownDefault(r.list(), file, name)
-	case !ok:
-		return Choice{}, msg.BackendUnknown(r.list(), name)
+	if !ok {
+		return Choice{}, fmt.Errorf("backend %s, which new VMs get, isn't registered", name)
 	}
 	return Choice{Backend: b}, nil
 }
-
-// list is the backends' names for a message: lima, qemu.
-func (r *Registry) list() string { return strings.Join(r.Names(), ", ") }

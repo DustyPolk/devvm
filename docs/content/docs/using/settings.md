@@ -26,9 +26,6 @@ Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles re
 `~/.config/devvm/config.toml` sets the defaults that new VMs get, and the retention settings, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
 
 ```toml
-# The backend new VMs get: lima.
-backend = "lima"
-
 # Whether new VMs get network policy: ask, on or off.
 network = "on"
 
@@ -57,13 +54,13 @@ orphans.age = "30d"
 nix-cache.size = "20G"
 ```
 
-Each key takes what its command takes. `backend` is the [default backend](../backends/_index.md#choosing-a-backend), as `devvm setup --backend` sets it, and `network` is `ask`, `on` or `off`, as `devvm network -g` sets it ([turning it on or off](../safety/network.md#turning-it-on-or-off)). `ports` is `all`, `none` or a list, as `devvm ports -g` takes it ([size and ports](ports-size.md#size-and-ports)). `features` lists the [features](customizing.md#choosing-features) that base gets, and `agents` the [coding agents](#coding-agents-for-new-vms) that new VMs get. `cpus` is a whole number, and `memory` and `disk` are a number of GiB, such as `8`, `8.5` or `"8G"`, as `devvm size -g` takes them. The `[retention]` keys are the [retention settings](#retention), with a duration such as `"90d"` or a size such as `"20G"` in quotes, and a count as a number.
+Each key takes what its command takes. `network` is `ask`, `on` or `off`, as `devvm network -g` sets it ([turning it on or off](../safety/network.md#turning-it-on-or-off)). `ports` is `all`, `none` or a list, as `devvm ports -g` takes it ([size and ports](ports-size.md#size-and-ports)). `features` lists the [features](customizing.md#choosing-features) that base gets, and `agents` the [coding agents](#coding-agents-for-new-vms) that new VMs get. `cpus` is a whole number, and `memory` and `disk` are a number of GiB, such as `8`, `8.5` or `"8G"`, as `devvm size -g` takes them. The `[retention]` keys are the [retention settings](#retention), with a duration such as `"90d"` or a size such as `"20G"` in quotes, and a count as a number.
 
 ### Where a default comes from
 
 For each default, devvm uses the first of these that sets it:
 
-1. A flag for one VM, such as `--ports` or `--backend`.
+1. A flag for one VM, such as `--ports` or `--cpus`.
 2. `config.toml`.
 3. What devvm's commands saved: `devvm setup`, `devvm size -g`, `devvm ports -g`, `devvm network -g` and `devvm retention` save in `~/.local/share/devvm/settings.json`.
 4. devvm's own default.
@@ -79,31 +76,29 @@ $ devvm network -g
 ask # devvm: default
 ```
 
-With `--json`, the same commands add `source`, or `sources` for each value of `devvm size -g` and `devvm retention`, which is `config.toml`, `settings.json` or `built-in`. `devvm doctor` names the file that sets the backend it checks, and its `--json` has `backend_source`, which is `flag` for `--backend`.
+With `--json`, the same commands add `source`, or `sources` for each value of `devvm size -g` and `devvm retention`, which is `config.toml`, `settings.json` or `built-in`.
 
 ### When devvm can't read it
 
-devvm reads all of `config.toml` each time it needs a default, and it checks every key and value. A key it doesn't know, such as a typo, a value that a key can't take, and a file that isn't TOML each stop the command, and devvm names the file and the line. Fix the line, and run the command again. A `backend` that names a backend devvm doesn't have stops the command that picks a new VM's backend, and devvm names the file and lists the backends it has.
+devvm reads all of `config.toml` each time it needs a default, and it checks every key and value. A key it doesn't know, such as a typo, a value that a key can't take, and a file that isn't TOML each stop the command, and devvm names the file and the line. Fix the line, and run the command again. `config.toml` has no key for the backend, because every new VM runs on [Lima](../backends/lima.md), so a `backend` key stops the command as an unknown key.
 
 ## devvm setup
 
-`devvm setup` chooses what new VMs get. In a terminal, it asks five questions, each starting from the current choice, and saves each answer in `~/.local/share/devvm/settings.json`, as the command for that setting saves it. It skips a question that [`config.toml`](#configtoml) answers, saying so, and it refuses a flag that would change what `config.toml` sets.
+`devvm setup` chooses what new VMs get. In a terminal, it asks four questions, each starting from the current choice, and saves each answer in `~/.local/share/devvm/settings.json`, as the command for that setting saves it. It skips a question that [`config.toml`](#configtoml) answers, saying so, and it refuses a flag that would change what `config.toml` sets.
 
-1. The [default backend](../backends/_index.md#choosing-a-backend) for new VMs.
-2. The [features](customizing.md#choosing-features) that base gets.
-3. The [CPUs and memory](ports-size.md#choosing-new-vms-size) that new VMs get, as `devvm size -g` saves them.
-4. The [network policy](../safety/network.md) that new VMs get, as `devvm network -g` saves it. With `ask`, the default, devvm asks for each new VM in a terminal, and a new VM gets network policy when there's no terminal to ask in. With `on` or `off`, devvm makes every new VM that way without asking. `--network-policy` and `--no-network-policy` choose for one VM and win over the saved choice.
-5. The [coding agents](#coding-agents-for-new-vms) that new VMs get.
+1. The [features](customizing.md#choosing-features) that base gets.
+2. The [CPUs and memory](ports-size.md#choosing-new-vms-size) that new VMs get, as `devvm size -g` saves them.
+3. The [network policy](../safety/network.md) that new VMs get, as `devvm network -g` saves it. With `ask`, the default, devvm asks for each new VM in a terminal, and a new VM gets network policy when there's no terminal to ask in. With `on` or `off`, devvm makes every new VM that way without asking. `--network-policy` and `--no-network-policy` choose for one VM and win over the saved choice.
+4. The [coding agents](#coding-agents-for-new-vms) that new VMs get.
 
 ```sh
-devvm setup                          # asks all five questions
-devvm setup --backend lima           # the default backend, without asking
+devvm setup                          # asks all four questions
 devvm setup --features fzf,omb       # base's features, without asking
 devvm setup --features none          # base gets no features
 devvm setup --agents claude,codex    # new VMs' coding agents, without asking
 ```
 
-`devvm setup` has three flags of its own, and each one chooses without asking anything. `--backend NAME` chooses the default backend. `--features LIST` chooses base's features, as a comma-separated list or `none` for none, and devvm refuses an empty `--features ''`. `--agents LIST` chooses new VMs' coding agents in the same way. With any of the flags, what the flags leave out stays as it is. Without a terminal and without flags, `devvm setup` asks nothing and keeps base's features, saving every feature when none was chosen yet. To change new VMs' size without asking, use `devvm size -g` ([choosing new VMs' size](ports-size.md#choosing-new-vms-size)), and to change their network policy, use `devvm network -g` ([turning it on or off](../safety/network.md#turning-it-on-or-off)).
+`devvm setup` has two flags of its own, and each one chooses without asking anything. `--features LIST` chooses base's features, as a comma-separated list or `none` for none, and devvm refuses an empty `--features ''`. `--agents LIST` chooses new VMs' coding agents in the same way. With any of the flags, what the flags leave out stays as it is. Without a terminal and without flags, `devvm setup` asks nothing and keeps base's features, saving every feature when none was chosen yet. To change new VMs' size without asking, use `devvm size -g` ([choosing new VMs' size](ports-size.md#choosing-new-vms-size)), and to change their network policy, use `devvm network -g` ([turning it on or off](../safety/network.md#turning-it-on-or-off)).
 
 ### Coding agents for new VMs
 

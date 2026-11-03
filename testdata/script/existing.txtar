@@ -19,13 +19,11 @@ stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 exec grep -c '^devvm-web-' $KNOWN
 stdout '^1$'
 
-# Flags for new VMs: ignored, with a warning each; --backend names the
-# backend it stays on.
-exec devvm --network-policy --cpus 2 --ports none --backend lima
+# Flags for new VMs: ignored, with a warning each.
+exec devvm --network-policy --cpus 2 --ports none
 stderr '^devvm: net_flag_ignored$'
 stderr '^devvm: size_flags_ignored$'
 stderr '^devvm: ports_flag_ignored$'
-! stderr backend_flag_ignored
 exec devvm --no-git-protect
 stderr '^devvm: git_protect_flag_ignored$'
 exec grep -c '^net=off$' $WEB_dir/state

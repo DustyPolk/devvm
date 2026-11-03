@@ -58,10 +58,10 @@ func TestWriteListColored(t *testing.T) {
 		{Name: "devvm-c", Status: "Broken", Git: vm.ModeClone, Backend: "lima", Folder: "/c"},
 	}
 	plain, colored := tables(t, func(tab *ui.Table) error { return writeList(tab, ls) })
-	want := "NAME      STATUS   IMAGE   TOOLS        GIT    NET         LINKS  BACKEND  FOLDER\n" +
-		"devvm-a   Running  base    -            on     on          -      lima     /a\n" +
-		"devvm-bb  Stopped  docker  node,claude  off    unenforced  2      fake     /b\n" +
-		"devvm-c   Broken   -       -            clone  -           -      lima     /c\n"
+	want := "NAME      STATUS   IMAGE   TOOLS        GIT    NET         LINKS  FOLDER\n" +
+		"devvm-a   Running  base    -            on     on          -      /a\n" +
+		"devvm-bb  Stopped  docker  node,claude  off    unenforced  2      /b\n" +
+		"devvm-c   Broken   -       -            clone  -           -      /c\n"
 	if plain != want {
 		t.Errorf("got\n%s\nwant\n%s", plain, want)
 	}

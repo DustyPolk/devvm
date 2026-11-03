@@ -71,7 +71,6 @@ These options are for a new VM, and only `devvm` takes them. Another command giv
 | `--unsafe-folder` | mount a folder that devvm refuses, such as one that is or holds your home folder ([details](../using/settings.md#project-folders-devvm-refuses)) |
 | `--cpus N`, `--memory GiB`, `--disk GiB` | the VM's size ([details](../using/ports-size.md#size-and-ports)) |
 | `--ports all\|none\|LIST` | which ports the VM forwards ([details](../using/ports-size.md#size-and-ports)) |
-| `--backend NAME` | the [backend](../backends/_index.md#choosing-a-backend) that runs it |
 | `--from IMAGE` | start its base from a container image, such as `node:24`, instead of Ubuntu's cloud image ([details](../using/from.md)) |
 | `--no-devcontainer` | create the VM without reading the folder's `devcontainer.json` ([details](../using/devcontainer.md)) |
 | `--here` | create a VM for this folder even when a folder it's inside has one, without asking whether to use that VM ([details](#a-subfolder)) |
@@ -121,7 +120,7 @@ A subfolder that is a git repo of its own is treated as a separate project, and 
 
 ### Listing VMs
 
-`devvm ls` prints a table of the project VMs on every backend, sorted by name, with a header first. Images and build VMs aren't in it.
+`devvm ls` prints a table of the project VMs, sorted by name, with a header first. Images and build VMs aren't in it.
 
 | Column | |
 | --- | --- |
@@ -132,10 +131,9 @@ A subfolder that is a git repo of its own is treated as a separate project, and 
 | `GIT` | its [`.git` protection](../safety/git-protection.md), `on`, `strict` or `off`, or `clone` for a [`--clone`](../using/clone.md) VM |
 | `NET` | its [network policy](../safety/network.md), `on`, `off`, or `unenforced` ([the self-check](../internals/network.md#the-self-check)) |
 | `LINKS` | how many [links](../using/links.md) it has to ports of your other VMs, or `-` for none |
-| `BACKEND` | the [backend](../backends/_index.md) that runs it |
 | `FOLDER` | its project folder |
 
-A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't finish shows only its name, status and backend.
+A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't finish shows only its name and status.
 
 ### devvm ls --json
 
@@ -225,13 +223,13 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 | | |
 | --- | --- |
-| `devvm images` | list the images on every backend, then the shared tool images ([details](../using/images.md#listing-images)) |
+| `devvm images` | list the images, then the shared tool images ([details](../using/images.md#listing-images)) |
 | `devvm images rm IMAGE\|KEY...` | delete images, by name or by the key `devvm images` shows ([details](../using/images.md#deleting-images)) |
 | `devvm build IMAGE` | build an image and the images under it, unless they're built, such as `devvm build docker` or `devvm build foo+bar`, where IMAGE is base or layers and never a shared tool ([details](../using/images.md#layers)) |
 | `devvm rebuild IMAGE` | build an image of base or layers again from its parent as it is, and delete the stale images no VM uses, while shared tools follow the tools lock instead ([details](../using/images.md#rebuilding)) |
 | `devvm layer new NAME` | start a layer of your own, `~/.config/devvm/layers/NAME.sh`, with its allowlist, `NAME.policy` ([details](../using/customizing.md#your-own-layers)) |
 
-`devvm build`, `devvm rebuild` and `devvm images rm` take `--backend NAME` to build or delete on that backend instead of the one new VMs get, and `--from IMAGE` to work on a base made from that container image ([details](../using/from.md)). `devvm images`, `devvm gc` and `devvm space` act on every backend, and with `--backend NAME` they act on that backend alone.
+`devvm build`, `devvm rebuild` and `devvm images rm` take `--from IMAGE` to work on a base made from that container image ([details](../using/from.md)).
 
 ## Disk space
 
@@ -245,14 +243,14 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 | | |
 | --- | --- |
-| `devvm setup [--backend NAME] [--features LIST\|none] [--agents LIST\|none]` | choose the default backend, base's features and the coding agents new VMs get, and in a terminal also new VMs' size and network policy ([details](../using/settings.md#devvm-setup)) |
+| `devvm setup [--features LIST\|none] [--agents LIST\|none]` | choose base's features and the coding agents new VMs get, and in a terminal also new VMs' size and network policy ([details](../using/settings.md#devvm-setup)) |
 | `devvm doctor` | check what devvm needs on this machine and say how to get what's missing ([details](install.md#checking-what-devvm-needs)) |
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
 | `devvm limactl ARGS...` | run Lima's `limactl` on the VMs and images in devvm's own Lima home, not `~/.lima`, for debugging, which starts VMs without network policy ([details](../backends/lima.md#running-limactl)) |
 
 ### Shell completion
 
-The completion script completes commands, flags and the image names that `devvm build` and `devvm rebuild` take, including layers joined with `+` after the ones you've already typed. It also completes shared tools for `devvm tools add` and `devvm tools rm`, the lists that `--tools`, `--agents` and `--layers` take, after the names you've already typed and their commas, `--backend` values, and `all` and `none` for `--ports` and `devvm ports`. Load it from your shell's startup file:
+The completion script completes commands, flags and the image names that `devvm build` and `devvm rebuild` take, including layers joined with `+` after the ones you've already typed. It also completes shared tools for `devvm tools add` and `devvm tools rm`, the lists that `--tools`, `--agents` and `--layers` take, after the names you've already typed and their commas, and `all` and `none` for `--ports` and `devvm ports`. Load it from your shell's startup file:
 
 | Shell | Line | In |
 | --- | --- | --- |
@@ -281,7 +279,7 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 | the coding agents new VMs get, on the first run and in `devvm setup` | `devvm setup --agents LIST` or `devvm setup --agents none` |
 | a VM's toolchains and agents, in `devvm tools` | `devvm tools add` and `devvm tools rm`, or `--json` to show them |
 | base's features, on the first build | `devvm setup --features LIST` or `devvm setup --features none` |
-| the default backend and new VMs' network policy, in `devvm setup` | `devvm setup --backend NAME` and `devvm network -g` |
+| new VMs' network policy, in `devvm setup` | `devvm network -g` |
 | whether to load an SSH key into your agent | `devvm ssh-agent add KEY_FILE` beforehand |
 | whether to restart a running VM to mount an agent's folders | `devvm restart` afterwards |
 | whether to add the `Include` line to `~/.ssh/config` | `--ssh-config` on `devvm`, `devvm host` and `devvm code` |

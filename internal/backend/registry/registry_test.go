@@ -3,7 +3,6 @@ package registry
 import (
 	"context"
 	"net/netip"
-	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -11,12 +10,12 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
@@ -81,6 +80,25 @@ func TestOverrides(t *testing.T) {
 	}
 }
 
+// A backend whose name is bad or already taken fails the registry, with
+// no registry; good ones get the host, the unreviewed emulations and the
+// UI's warnings.
+func TestBuild(t *testing.T) {
+	host := platform.NewHost(platform.Overrides{})
+	for name, bs := range map[string][]backend.Backend{
+		"an empty name": {backendtest.New("", nil)},
+		"a name twice":  {backendtest.New("lima", nil), backendtest.New("lima", nil)},
+	} {
+		if r, err := build(quietUI{}, host, "", bs...); err == nil || r != nil {
+			t.Errorf("%s: %v, %v", name, r, err)
+		}
+	}
+	r, err := build(quietUI{}, host, "fake:ports", backendtest.New("fake", nil))
+	if err != nil || r.Host != host || !r.Unreviewed["fake:ports"] || r.Warn == nil {
+		t.Errorf("build: %+v, %v", r, err)
+	}
+}
+
 // lima is registered, and it's what a new VM gets by default.
 func TestLimaIsTheDefault(t *testing.T) {
 	t.Parallel()
@@ -89,58 +107,16 @@ func TestLimaIsTheDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := r.Lookup("lima"); !ok {
-		t.Fatalf("no lima in %q", r.Names())
-	}
-	// Names, which --backend is checked against before anything runs,
-	// are the registry's own.
-	if got, want := strings.Join(Names(), " "), strings.Join(r.Names(), " "); got != want {
-		t.Errorf("Names() = %q, the registry has %q", got, want)
+	if got := strings.Join(r.Names(), " "); got != "lima" {
+		t.Fatalf("the registry has %q, want lima alone", got)
 	}
 	vm, err := state.ReadVM(d, "devvm-p-0123456789abcd")
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := r.For(d, vm, "")
+	c, err := r.For(d, vm)
 	if err != nil || c.Backend.Name() != backend.Default || backend.Default != "lima" {
 		t.Errorf("For a new VM: %+v, %v", c, err)
-	}
-}
-
-// A new VM's backend is settings.json's, then config.toml's over it, and
-// one that isn't registered names the file that set it.
-func TestDefaultBackendFiles(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
-	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
-	r, err := New(d, assets.FS, quietUI{}, Overrides{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	vm, err := state.ReadVM(d, "devvm-p-0123456789abcd")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := settings.Save(d, settings.Values{Backend: settings.Of("qemu")}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.For(d, vm, ""); msg.NamesOf(err) != "backend_unknown_default backends=lima file="+d.Settings()+" name=qemu" {
-		t.Errorf("settings.json's: %v", msg.NamesOf(err))
-	}
-	for _, tc := range []struct{ file, want string }{
-		{"backend = \"lima\"\n", "lima"},
-		{"backend = \"qemu\"\n", "backend_unknown_default backends=lima file=" + d.ConfigFile() + " name=qemu"},
-	} {
-		if err := os.WriteFile(d.ConfigFile(), []byte(tc.file), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		c, err := r.For(d, vm, "")
-		got := msg.NamesOf(err)
-		if err == nil {
-			got = c.Backend.Name()
-		}
-		if got != tc.want {
-			t.Errorf("%q: got %q, want %q", tc.file, got, tc.want)
-		}
 	}
 }
 

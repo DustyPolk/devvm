@@ -1,8 +1,8 @@
-# ls: project VMs on every backend, by name, with their status, image,
-# shared tools, .git protection, network policy, backend and folder. Images and build
-# VMs aren't listed; a project VM named like an image is.
+# ls: project VMs, by name, with their status, image, shared tools, .git
+# protection, network policy, links and folder. Images and build VMs
+# aren't listed; a project VM named like an image is.
 
-# No VMs: the header alone, and nothing is asked of a backend but its list.
+# No VMs: the header alone, and nothing is asked of Lima but its list.
 exec devvm ls
 cmp stdout header.txt
 ! stderr .
@@ -14,8 +14,8 @@ stdout '^limactl list --json\n\z'
 project img-foo
 exec devvm --no-network-policy --no-git-protect
 exec devvm ls
-stdout '^NAME +STATUS +IMAGE +TOOLS +GIT +NET +LINKS +BACKEND +FOLDER\n'
-stdout '^devvm-img-foo-[0-9a-f]{14} +Running +base +- +off +off +- +lima +/\S*/img-foo\n\z'
+stdout '^NAME +STATUS +IMAGE +TOOLS +GIT +NET +LINKS +FOLDER\n'
+stdout '^devvm-img-foo-[0-9a-f]{14} +Running +base +- +off +off +- +/\S*/img-foo\n\z'
 ! stdout '^devvm-img-[0-9a-f]{12} '
 
 # Network policy: on while it runs on the hostagent devvm started (here
@@ -26,19 +26,19 @@ exec devvm --network-policy --no-git-protect
 vm_name NET net
 exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$NET_dir/run/started"'
 exec devvm ls
-stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +on +- +lima '
+stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +on +- +/'
 # (The exit keeps limactl start sh's child, so its hostagent is sh, soon
 # gone: bash 5.2 and newer as sh, Fedora's, runs a last command in sh's
 # place, which would make the runner, which lasts, its hostagent.)
 exec sh -c 'limactl stop "$NET" && limactl start --tty=false "$NET"; exit $?'
 exec devvm ls
-stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +unenforced +- +lima '
+stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +unenforced +- +/'
 exec limactl stop $NET
 exec devvm ls
-stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +on +- +lima '
+stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +on +- +/'
 exec sh -c '{ grep -v ^net_check= "$NET_dir/state"; echo net_check=unenforced; } > "$WORK/st" && mv "$WORK/st" "$NET_dir/state"'
 exec devvm ls
-stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +unenforced +- +lima '
+stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +unenforced +- +/'
 
 # A --clone VM shows clone in GIT, a base from a container image its
 # label, and a VM whose creation didn't finish - for what it lacks.
@@ -47,9 +47,9 @@ cp $WORK/clone.state $VMS/0123456789ab01/state
 cp $WORK/from.state $VMS/0123456789ab02/state
 exec sh -c 'printf "devvm-cl-0123456789ab01\ndevvm-from-0123456789ab02 Running\ndevvm-half-0123456789ab03\ndevvm-tools-build\n" >> "$STUB_DIR/instances"'
 exec devvm ls
-stdout '^devvm-cl-0123456789ab01 +Stopped +base +node,claude +clone +on +- +lima +/p/cl\n'
-stdout '^devvm-from-0123456789ab02 +Running +image_from from=node:24 image=base +- +on +off +- +lima +/p/from\n'
-stdout '^devvm-half-0123456789ab03 +Stopped +- +- +- +- +- +lima +-\n'
+stdout '^devvm-cl-0123456789ab01 +Stopped +base +node,claude +clone +on +- +/p/cl\n'
+stdout '^devvm-from-0123456789ab02 +Running +image_from from=node:24 image=base +- +on +off +- +/p/from\n'
+stdout '^devvm-half-0123456789ab03 +Stopped +- +- +- +- +- +-\n'
 ! stdout devvm-tools-build
 # Sorted by name.
 stdout '\ndevvm-cl-.*\ndevvm-from-.*\ndevvm-half-.*\ndevvm-img-foo-.*\ndevvm-net-'
@@ -80,7 +80,7 @@ cmp stdout $WORK/none.json
   "vms": []
 }
 -- header.txt --
-NAME  STATUS  IMAGE  TOOLS  GIT  NET  LINKS  BACKEND  FOLDER
+NAME  STATUS  IMAGE  TOOLS  GIT  NET  LINKS  FOLDER
 -- clone.state --
 name=devvm-cl-0123456789ab01
 image=base

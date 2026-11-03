@@ -282,7 +282,7 @@ func autoRetain(ctx context.Context, u *ui.UI) {
 		return
 	}
 	defer unlock()
-	b, err := builder(u, "")
+	b, err := builder(u)
 	if err != nil {
 		return
 	}

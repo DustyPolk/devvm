@@ -140,10 +140,9 @@ func TestCreateClearsFolder(t *testing.T) {
 }
 
 // A folder's VM is found by its path's hash, under the name and on the
-// backend it was made with: made with --backend on a backend whose names
-// leave all of a long folder's name, a later devvm without the flag (the
-// default backend, whose names would cut it) finds that VM, and makes no
-// second one.
+// backend it was made with: made on a backend whose names leave all of a
+// long folder's name, a later devvm whose new VMs get another backend
+// (whose names would cut it) finds that VM, and makes no second one.
 func TestLookupOtherBackend(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	f.NameLimit = 32
@@ -158,16 +157,16 @@ func TestLookupOtherBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reg.NewVMs = "other"
 	e.Registry = reg
-	st := existingVM(t, e, Options{NoNetworkPolicy: true, Backend: "other"})
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	if st.Get(state.KeyBackend) != "other" || len(st.Name()) <= f.NameLimit {
 		t.Fatalf("made %s on %s", st.Name(), st.Get(state.KeyBackend))
 	}
-	for _, flag := range []string{"", "fake"} {
-		own, _, err := e.lookup(t.Context(), flag, true)
-		if err != nil || own.f.Name != st.Name() || own.b.Name() != "other" || !own.exists || own.flagIgnored != (flag != "") {
-			t.Errorf("lookup(%q) = %+v, %v", flag, own, err)
-		}
+	reg.NewVMs = "fake"
+	own, _, err := e.lookup(t.Context(), true)
+	if err != nil || own.f.Name != st.Name() || own.b.Name() != "other" || !own.exists {
+		t.Errorf("lookup = %+v, %v", own, err)
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))

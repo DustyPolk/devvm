@@ -10,36 +10,8 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 )
-
-// The tool images on a backend are those whose record names it: one
-// without a record is on none.
-func TestToolsOn(t *testing.T) {
-	ts := []tools.Listed{
-		{File: "node-1-0123456789ab.erofs", Backend: "lima", Targeted: true},
-		{File: "go-1.20.0-0123456789ab.erofs", Backend: "fake", Targeted: true},
-		{File: "go-1.9.0-0123456789ab.erofs"},
-	}
-	files := func(ls []tools.Listed) string {
-		var out []string
-		for _, l := range ls {
-			out = append(out, l.File)
-		}
-		return strings.Join(out, " ")
-	}
-	for name, want := range map[string]string{
-		"":     "node-1-0123456789ab.erofs go-1.20.0-0123456789ab.erofs go-1.9.0-0123456789ab.erofs",
-		"lima": "node-1-0123456789ab.erofs",
-		"fake": "go-1.20.0-0123456789ab.erofs",
-		"qemu": "",
-	} {
-		if got := files(toolsOn(name, ts)); got != want {
-			t.Errorf("toolsOn(%q) = %q, want %q", name, got, want)
-		}
-	}
-}
 
 // Counting a folder: only what's picked, and a folder that isn't there is
 // empty.
@@ -157,7 +129,7 @@ func TestExports(t *testing.T) {
 func TestWriteSpace(t *testing.T) {
 	r := spaceReport{
 		Rows: []spaceRow{
-			{What: "images", Backend: "lima", Count: 2, Size: 2048, Sized: true, Kept: keptRemade, GC: 1024, Rest: "gc --backend lima"},
+			{What: "images", Backend: "lima", Count: 2, Size: 2048, Sized: true, Kept: keptRemade, GC: 1024, Rest: "images rm"},
 			{What: "VMs", Backend: "fake", Count: 1, Kept: keptOnlyCopy, Rest: "devvm rm"},
 			{What: "history", Count: 1, Size: 1024, Sized: true, Kept: keptOnlyCopy, Rest: "gc --history", Retain: "30d", RetainFrees: 1024},
 		},
@@ -166,16 +138,16 @@ func TestWriteSpace(t *testing.T) {
 		Caches: []cacheRow{{Backend: "lima", Name: "download cache", Count: 1, Size: 1 << 30, Sized: true, Path: "/c/lima"}},
 	}
 	got, colored := tables(t, func(tab *ui.Table) error { return writeSpace(tab, r) })
-	want := "WHAT     BACKEND  COUNT  SIZE  KEPT       GC    FREED BY           RETAIN\n" +
-		"images   lima     2      2.0K  remade     1.0K  gc --backend lima  -\n" +
-		"VMs      fake     1      -     only copy  -     devvm rm           -\n" +
-		"history  -        1      1.0K  only copy  -     gc --history       30d (1.0K)\n" +
-		"total    -        -      2.0K  -          1.0K  -                  -\n" +
+	want := "WHAT     COUNT  SIZE  KEPT       GC    FREED BY      RETAIN\n" +
+		"images   2      2.0K  remade     1.0K  images rm     -\n" +
+		"VMs      1      -     only copy  -     devvm rm      -\n" +
+		"history  1      1.0K  only copy  -     gc --history  30d (1.0K)\n" +
+		"total    -      2.0K  -          1.0K  -             -\n" +
 		"\n" +
-		"BACKEND  CACHE           COUNT  SIZE  PATH\n" +
-		"lima     download cache  1      1.0G  /c/lima\n"
+		"CACHE           COUNT  SIZE  PATH\n" +
+		"download cache  1      1.0G  /c/lima\n"
 	if got != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
-	wantCodes(t, colored, "\033[1mWHAT\033[0m", "\033[1mtotal\033[0m", "\033[1m2.0K\033[0m", "\033[33monly copy\033[0m", "  remade  ", "\033[1mBACKEND\033[0m")
+	wantCodes(t, colored, "\033[1mWHAT\033[0m", "\033[1mtotal\033[0m", "\033[1m2.0K\033[0m", "\033[33monly copy\033[0m", "  remade  ", "\033[1mCACHE\033[0m")
 }

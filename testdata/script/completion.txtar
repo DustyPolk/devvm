@@ -59,11 +59,7 @@ exec devvm __complete tools add python ''
 ! stdout '^python$'
 stdout '^claude$'
 
-# Flags: backend names, the ports keywords; never file names.
-exec devvm __complete --backend ''
-stdout '^lima$'
-exec devvm __complete setup --backend ''
-stdout '^lima$'
+# Flags: features, the ports keywords; never file names.
 exec devvm __complete setup --features fzf,
 stdout '^fzf,omb$'
 ! stdout '^fzf,fzf$'

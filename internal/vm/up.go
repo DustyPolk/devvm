@@ -30,7 +30,6 @@ type Options struct {
 	// each the exact list of its part a new VM gets, empty for none; nil
 	// for the part's default.
 	Toolchains, Agents, Layers *[]string
-	Backend                    string // --backend: a new VM's backend
 	NetworkPolicy              bool   // --network-policy
 	NoNetworkPolicy            bool   // --no-network-policy
 	Size                       Size   // --cpus, --memory, --disk as given
@@ -76,7 +75,7 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 		}
 	}
 	// --clone asks for a new VM of the folder's own: as --here.
-	t, parent, err := e.lookup(ctx, o.Backend, !o.Here && !o.Clone)
+	t, parent, err := e.lookup(ctx, !o.Here && !o.Clone)
 	if err != nil {
 		return err
 	}

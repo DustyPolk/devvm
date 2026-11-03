@@ -24,9 +24,6 @@ import (
 // gcOpts are what devvm gc is asked for besides its default run, which
 // each option adds to.
 type gcOpts struct {
-	// only is --backend as passed (never the default backend file): that
-	// backend alone.
-	only string
 	// tools is --tool-images: also the current tool images no VM has, of
 	// toolNames when there are any.
 	tools     bool
@@ -65,7 +62,7 @@ func newGCCmd(u *ui.UI) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "gc [--tool-images [--recent] [TOOL...]]",
 		Short: "Delete stale images and unused tool images",
-		Long: "Delete the stale and unfinished images on every backend, the shared tools devvm images lists as unused, " +
+		Long: "Delete the stale and unfinished images, the shared tools devvm images lists as unused, " +
 			"the files devvm itself no longer needs, and the shared Nix cache's least recently used files while it's over its cap, " +
 			"after listing them and asking in a terminal. " +
 			"Its flags delete more, such as --tool-images for the current shared tool images no VM has. " +
@@ -83,7 +80,6 @@ func newGCCmd(u *ui.UI) *cobra.Command {
 		},
 	}
 	f := c.Flags()
-	addBackendFilterFlag(f, &o.only)
 	f.BoolVar(&o.tools, "tool-images", false, "also delete the current shared tool images no VM has, or only those of the TOOLs named")
 	f.BoolVar(&o.recent, "recent", false, "with --tool-images, also delete those built in the last hour")
 	addForceFlag(f, &o.force)
@@ -91,7 +87,7 @@ func newGCCmd(u *ui.UI) *cobra.Command {
 	f.StringVar(&o.olderThan, "older-than", "", "with --history, only those older than `DURATION`, such as 30d")
 	f.BoolVar(&o.nixCache, "nix-cache", false, "also delete the whole shared Nix cache")
 	f.BoolVar(&o.orphans, "orphans", false, "also delete what devvm keeps for VMs their backend no longer has")
-	f.BoolVar(&o.caches, "caches", false, "then free devvm's share of the backends' own caches, asking for each backend")
+	f.BoolVar(&o.caches, "caches", false, "then free devvm's share of Lima's own caches, after asking")
 	f.BoolVar(&o.retention, "retention", false, "then apply the retention settings")
 	return c
 }
@@ -150,7 +146,7 @@ type gcPlan struct {
 // holds the share's lock throughout, so no build moves a tool image in
 // and no update swaps the lock meanwhile.
 func gc(ctx context.Context, u *ui.UI, o gcOpts) error {
-	b, err := builder(u, o.only)
+	b, err := builder(u)
 	if err != nil {
 		return err
 	}
@@ -249,8 +245,7 @@ func gcRun(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bo
 	return p.skipped, p.run(ctx, u)
 }
 
-// planGC gathers what gc deletes. With o.only, it gathers that backend's images, current or not, and its
-// tool images, and nothing that isn't a backend's.
+// planGC gathers what gc deletes.
 func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, error) {
 	p := gcPlan{share: tools.Share{Env: b.Tools}}
 	l, err := listImages(ctx, u, b)
@@ -286,11 +281,6 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 			return p, err
 		}
 		p.orphans = withoutSkipped(p.orphans, p.skipped)
-	}
-	if o.only != "" {
-		p.images = backendImages(imgs, o.only)
-		p.tools, p.current, p.recent = toolsOn(o.only, p.tools), toolsOn(o.only, p.current), toolsOn(o.only, p.recent)
-		return p, nil
 	}
 	if p.mise, err = (tools.Versions{Env: b.Tools}).StaleMise(); err != nil {
 		return p, err
@@ -336,18 +326,6 @@ func withoutSkipped(r vm.LeftoverReport, skipped map[string]bool) vm.LeftoverRep
 	}
 	r.Orphans = orphans
 	return r
-}
-
-// backendImages are a backend's images, current or not, but none another
-// devvm is building.
-func backendImages(imgs []listedImage, be string) []listedImage {
-	var out []listedImage
-	for _, l := range imgs {
-		if l.Backend == be && l.State != build.StateBuilding {
-			out = append(out, l)
-		}
-	}
-	return out
 }
 
 // showRecent says which current tool images no VM has gc keeps because

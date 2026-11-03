@@ -12,18 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/ui"
 )
 
-// addBackendFlag adds --backend, the backend a command uses: a new VM's,
-// or the one it builds, deletes or checks on.
-func addBackendFlag(f *pflag.FlagSet, p *string) {
-	f.StringVar(p, "backend", "", "the backend `NAME` to use (default: devvm setup's, else lima)")
-}
-
-// addBackendFilterFlag adds --backend as a filter: a command that acts on
-// every backend acts on that one alone.
-func addBackendFilterFlag(f *pflag.FlagSet, p *string) {
-	f.StringVar(p, "backend", "", "act only on the backend `NAME` (default: every backend)")
-}
-
 // addFromFlag adds --from, the container image a base starts from.
 func addFromFlag(f *pflag.FlagSet, p *string) {
 	f.StringVar(p, "from", "", "the container `IMAGE` base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)")

@@ -18,7 +18,6 @@ import (
 // configFile is config.toml as it's written: each value checked as it's
 // decoded, so a bad one names its line.
 type configFile struct {
-	Backend  opt[backendKind]  `toml:"backend"`
 	Network  opt[networkKind]  `toml:"network"`
 	Ports    opt[portsKind]    `toml:"ports"`
 	Features list[featureKind] `toml:"features"`
@@ -52,7 +51,7 @@ type configFile struct {
 func (c *configFile) values() Values {
 	r := c.Retention
 	v := Values{
-		Backend: c.Backend.ptr(), Network: c.Network.ptr(), Ports: c.Ports.ptr(),
+		Network: c.Network.ptr(), Ports: c.Ports.ptr(),
 		Size:     SizeValues{CPUs: c.Size.CPUs.ptr(), Memory: c.Size.Memory.ptr(), Disk: c.Size.Disk.ptr()},
 		Features: c.Features.ptr(), Agents: c.Agents.ptr(),
 		Retention: map[string]string{},
@@ -216,7 +215,6 @@ func number(v any) (string, error) {
 }
 
 type (
-	backendKind  struct{}
 	networkKind  struct{}
 	portsKind    struct{}
 	cpusKind     struct{}
@@ -229,7 +227,6 @@ type (
 	nixSizeKind  struct{}
 )
 
-func (backendKind) parse(v any) (string, error) { return checked(text(v))(checkBackend) }
 func (networkKind) parse(v any) (string, error) { return checked(text(v))(checkNetwork) }
 func (portsKind) parse(v any) (string, error) {
 	s, err := text(v)

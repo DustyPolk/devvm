@@ -21,7 +21,6 @@ import (
 type upFlags struct {
 	tools, agents   string // --tools and --agents: lists, or none
 	layers          string // --layers: a list, or none
-	backend         string
 	from            string
 	networkPolicy   bool
 	noNetworkPolicy bool
@@ -44,7 +43,6 @@ func addUpFlags(root *cobra.Command, uf *upFlags) {
 	f.StringVar(&uf.tools, "tools", "", "the `LIST` of toolchains a new VM gets, such as node,python, or none (default: those the folder's files call for)")
 	addAgentsFlag(f, &uf.agents, "the `LIST` of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)")
 	f.StringVar(&uf.layers, "layers", "", "the `LIST` of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: none)")
-	addBackendFlag(f, &uf.backend)
 	addFromFlag(f, &uf.from)
 	f.BoolVar(&uf.networkPolicy, "network-policy", false, "create the VM with network policy (default: devvm network -g, else asked in a terminal, and on without one)")
 	f.BoolVar(&uf.noNetworkPolicy, "no-network-policy", false, "create the VM without network policy")
@@ -66,7 +64,7 @@ func addUpFlags(root *cobra.Command, uf *upFlags) {
 func (uf *upFlags) options() vm.Options {
 	return vm.Options{
 		Toolchains: partFlag(uf.tools), Agents: partFlag(uf.agents), Layers: partFlag(uf.layers),
-		Backend: uf.backend, NetworkPolicy: uf.networkPolicy, NoNetworkPolicy: uf.noNetworkPolicy, Size: uf.size, Ports: uf.ports,
+		NetworkPolicy: uf.networkPolicy, NoNetworkPolicy: uf.noNetworkPolicy, Size: uf.size, Ports: uf.ports,
 		From: fromRef(uf.from), FromSet: uf.from != "",
 		UnsafeFolder: uf.unsafeFolder, NoGitProtect: uf.noGitProtect, Clone: uf.clone, SSHAgent: uf.sshAgent,
 		NoDevcontainer: uf.noDevcontainer, Here: uf.here,

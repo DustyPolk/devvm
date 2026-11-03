@@ -95,7 +95,7 @@ func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 	if _, ok := secrets.Lookup(name); !ok {
 		return msg.NoSecret(name)
 	}
-	t, err := e.existing(ctx, "")
+	t, err := e.existing(ctx)
 	if err != nil {
 		return err
 	}

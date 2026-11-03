@@ -391,7 +391,7 @@ func (e Links) List(ctx context.Context) ([]LinkListed, error) {
 // targetStatus is a target's status as its backend reports it: "" when it
 // can't say, or doesn't have the VM.
 func (e Links) targetStatus(ctx context.Context, tst *state.VM) string {
-	c, err := e.Registry.For(e.Dirs, tst, "")
+	c, err := e.Registry.For(e.Dirs, tst)
 	if err != nil {
 		return ""
 	}
@@ -489,7 +489,7 @@ func (e Links) checkTarget(t *found, target string, port int) (*state.VM, error)
 	if netpolicy.On(t.st) && !netpolicy.On(tst) {
 		return nil, msg.LinkPolicyMismatch(target, t.f.Name)
 	}
-	c, err := e.Registry.For(e.Dirs, tst, "")
+	c, err := e.Registry.For(e.Dirs, tst)
 	if err != nil {
 		return nil, err
 	}

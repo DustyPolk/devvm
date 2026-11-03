@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/sshagent"
@@ -251,10 +250,6 @@ func checkFlagValue(name, value string) error {
 		err = vm.CheckLinkName(value)
 	case "older-than":
 		_, err = state.ParseDuration(value)
-	case "backend":
-		if names := registry.Names(); value != "" && !slices.Contains(names, value) {
-			err = msg.BackendUnknown(strings.Join(names, ", "), value)
-		}
 	case "tools", "agents", "layers":
 		err = checkPartFlag("--"+name, value)
 	}

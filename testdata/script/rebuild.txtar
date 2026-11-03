@@ -53,12 +53,12 @@ env https_proxy=http://127.0.0.1:9
 exec devvm --from $PIN build base
 exec devvm --from $PIN2 build base
 exec devvm images
-stdout -count=3 '^base +.* current +\S+ +lima$'
+stdout -count=3 '^base +.* current +\S+$'
 exec devvm rebuild --from $PIN --force base
 stdout -count=1 '^==> deleted_old_image image=base key=[0-9a-f]{12}$'
 exec devvm images
-stdout -count=1 '^base +ubuntu 26\.04 \(\d{8}\) .* current +\S+ +lima$'
-stdout -count=3 '^base +.* current +\S+ +lima$'
+stdout -count=1 '^base +ubuntu 26\.04 \(\d{8}\) .* current +\S+$'
+stdout -count=3 '^base +.* current +\S+$'
 ! stdout ' stale '
 grep '"backend": "lima",\n      "from": "ubuntu:26.04@sha256:a{64}",\n      "name": "base",' $IMAGES/rebuilds.json
 ! grep '"from": "ubuntu-26.04' $IMAGES/rebuilds.json

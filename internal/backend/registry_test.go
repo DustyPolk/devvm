@@ -61,38 +61,29 @@ func TestRegistry(t *testing.T) {
 func TestFor(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
-		file     string // the default backend file; "" for none
+		newVMs   string // the registry's NewVMs; "" for Default
 		recorded string // the VM's backend=; "" for a new VM
-		flag     string
 		want     string // the backend chosen, or the error's names
-		ignored  bool
 	}{
-		{name: "a new VM, nothing set", want: "lima"},
-		{name: "a new VM, the default file", file: "vz", want: "vz"},
-		{name: "a new VM, --backend", file: "vz", flag: "fake", want: "fake"},
-		{name: "an existing VM keeps its backend", file: "fake", recorded: "vz", want: "vz"},
-		{name: "an existing VM ignores --backend", recorded: "vz", flag: "fake", want: "vz", ignored: true},
-		{name: "--backend naming its own", recorded: "vz", flag: "vz", want: "vz"},
-		{name: "an unknown --backend", flag: "sbx", want: "backend_unknown backends=fake, lima, vz name=sbx"},
-		{name: "an unknown default", file: "sbx", want: "backend_unknown_default backends=fake, lima, vz file=/c/config.toml name=sbx"},
+		{name: "a new VM", want: "lima"},
+		{name: "a new VM, NewVMs set", newVMs: "vz", want: "vz"},
+		{name: "an existing VM keeps its backend", newVMs: "fake", recorded: "vz", want: "vz"},
 		{name: "an existing VM on a backend not here", recorded: "qemu", want: "backend_unknown_vm backend=qemu vm=devvm-x-0123456789abcd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testDirs(t)
 			r := testRegistry(t, "lima", "vz", "fake")
-			if tc.file != "" {
-				r.DefaultBackend = func() (string, string, error) { return tc.file, "/c/config.toml", nil }
-			}
+			r.NewVMs = tc.newVMs
 			vm := readVM(t, d, tc.recorded)
-			c, err := r.For(d, vm, tc.flag)
+			c, err := r.For(d, vm)
 			if err != nil {
 				if got := msg.NamesOf(err); got != tc.want {
 					t.Errorf("got %q, want %q", got, tc.want)
 				}
 				return
 			}
-			if c.Backend.Name() != tc.want || c.FlagIgnored != tc.ignored {
-				t.Errorf("got %s (flag ignored %v), want %s (%v)", c.Backend.Name(), c.FlagIgnored, tc.want, tc.ignored)
+			if c.Backend.Name() != tc.want {
+				t.Errorf("got %s, want %s", c.Backend.Name(), tc.want)
 			}
 		})
 	}
@@ -161,9 +152,8 @@ func readVM(t *testing.T, d paths.Dirs, recorded string) *state.VM {
 func TestForWithoutTheDefault(t *testing.T) {
 	d := testDirs(t)
 	r := testRegistry(t, "vz")
-	_, err := r.For(d, readVM(t, d, ""), "")
-	if got, want := msg.NamesOf(err), "backend_unknown backends=vz name=lima"; got != want {
-		t.Errorf("got %q, want %q", got, want)
+	if _, err := r.For(d, readVM(t, d, "")); err == nil {
+		t.Error("For a new VM without lima: want an error")
 	}
 }
 
@@ -172,20 +162,9 @@ func TestForStateWithoutBackend(t *testing.T) {
 	if _, err := state.CreateVM(d, "devvm-x-0123456789abcd", state.NewVM{Image: "base"}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := testRegistry(t, "lima").For(d, readVM(t, d, ""), "")
+	_, err := testRegistry(t, "lima").For(d, readVM(t, d, ""))
 	var ce *state.CorruptError
 	if !errors.As(err, &ce) || ce.Path != d.VM("devvm-x-0123456789abcd").State() {
 		t.Errorf("got %v, want a CorruptError for the VM's state", err)
-	}
-}
-
-// A new VM's default that can't be read fails, as it was read.
-func TestForBadDefault(t *testing.T) {
-	d := testDirs(t)
-	r := testRegistry(t, "lima")
-	bad := &state.CorruptError{Path: "/c/config.toml", Line: 1, Reason: "x"}
-	r.DefaultBackend = func() (string, string, error) { return "", "", bad }
-	if _, err := r.For(d, readVM(t, d, ""), ""); !errors.Is(err, bad) {
-		t.Errorf("got %v, want %v", err, bad)
 	}
 }

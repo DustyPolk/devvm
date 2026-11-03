@@ -27,7 +27,6 @@ devvm [flags]
 
 ```text
       --agents LIST         the LIST of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)
-      --backend NAME        the backend NAME to use (default: devvm setup's, else lima)
       --clone               create the VM with its own clone of this repo instead of mounting the folder
       --cpus N              the N CPUs the VM gets (default: devvm size -g, else the image's)
       --disk GiB            the VM's disk in GiB, at least the image's (default: devvm size -g, else the image's)
@@ -79,7 +78,7 @@ devvm [flags]
 - [devvm retention](devvm_retention.md): Show or change what devvm deletes on its own
 - [devvm rm](devvm_rm.md): Delete this folder's VM
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
-- [devvm setup](devvm_setup.md): Choose the default backend, base's features, and new VMs' size, network policy and coding agents
+- [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network policy and coding agents
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM

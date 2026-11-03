@@ -20,40 +20,31 @@ import (
 
 // newImagesCmd is devvm images, and devvm images rm.
 func newImagesCmd(u *ui.UI) *cobra.Command {
-	var (
-		asJSON bool
-		only   string
-	)
+	var asJSON bool
 	c := &cobra.Command{
 		Use:   "images",
 		Short: "List the images and the shared tools",
-		Long: "List the images on every backend, with whether each is current, stale, unfinished or being built and the disk it takes, " +
+		Long: "List the images, with whether each is current, stale, unfinished or being built and the disk it takes, " +
 			"then the shared tools devvm has built, with how many VMs have each. " +
 			"It ends with what they take in all.",
 		Example: examples(
 			"devvm images", "list the images and the shared tools",
-			"devvm images --backend lima", "only the lima backend's",
 			"devvm images --json", "the same lists as JSON, for scripts",
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			b, err := builder(u, only)
+			b, err := builder(u)
 			var imgs []listedImage
 			var ts []tools.Listed
 			if err == nil {
 				b.From = fromRef("")
 				var l imageListing
 				if l, err = listImages(cmd.Context(), u, b); err == nil {
-					l = l.only(only)
 					imgs, ts, err = l.images, l.tools, l.failUnlisted()
 				}
 			}
 			fail(u, err, msg.ImagesFailed)
-			ts = toolsOn(only, ts)
 			nix := nixCacheOf(u, b.Dirs)
-			if only != "" {
-				nix = nixCacheJSON{}
-			}
 			if asJSON {
 				err = printJSON(u, imagesJSON(imgs, ts, nix))
 			} else {
@@ -66,7 +57,6 @@ func newImagesCmd(u *ui.UI) *cobra.Command {
 			return nil
 		},
 	}
-	addBackendFilterFlag(c.Flags(), &only)
 	jsonFlag(c, &asJSON)
 	c.AddCommand(newImagesRmCmd(u))
 	return c
@@ -98,7 +88,7 @@ func newImagesRmCmd(u *ui.UI) *cobra.Command {
 			return joined(toComplete, (&build.Env{Dirs: dirs}).Layers()), cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			b, err := builder(u, f.backend)
+			b, err := builder(u)
 			if err == nil {
 				b.From = fromRef(f.from)
 				err = from.Check(b.From)
@@ -122,43 +112,6 @@ func newImagesRmCmd(u *ui.UI) *cobra.Command {
 	f.add(c)
 	addForceFlag(c.Flags(), &force)
 	return c
-}
-
-// only is the listing of the backend named alone, or all of it when name
-// is "". Shared tool images are left to toolsOn, which knows their
-// targets.
-func (l imageListing) only(name string) imageListing {
-	if name == "" {
-		return l
-	}
-	out := imageListing{tools: l.tools}
-	for _, i := range l.images {
-		if i.Backend == name {
-			out.images = append(out.images, i)
-		}
-	}
-	for _, x := range l.unlisted {
-		if x.backend == name {
-			out.unlisted = append(out.unlisted, x)
-		}
-	}
-	return out
-}
-
-// toolsOn is the shared tool images the backend named built, as their
-// records say, or all of them when name is "". One without a record is
-// never one.
-func toolsOn(name string, ts []tools.Listed) []tools.Listed {
-	if name == "" {
-		return ts
-	}
-	var out []tools.Listed
-	for _, t := range ts {
-		if t.Backend == name {
-			out = append(out, t)
-		}
-	}
-	return out
 }
 
 // nixCacheJSON is what the shared Nix cache holds: its files, the bytes
@@ -372,30 +325,28 @@ func (l imageListing) failUnlisted() error {
 	return nil
 }
 
-// writeImages writes the images, then the shared tools with the backend
-// that built each and the C library it's built for, as their records say,
-// as tables, each with a header; a value one lacks is -. States are
+// writeImages writes the images, then the shared tools with the C
+// library each is built for, as their records say, as tables, each with a header; a value one lacks is -. States are
 // colored by what they mean, digests and keys dim.
 func writeImages(tab *ui.Table, imgs []listedImage, ts []tools.Listed) error {
-	tab.Header("IMAGE", "FROM", "DIGEST", "KEY", "STATE", "SIZE", "BACKEND")
+	tab.Header("IMAGE", "FROM", "DIGEST", "KEY", "STATE", "SIZE")
 	for _, l := range imgs {
 		size := ""
 		if l.Sized {
 			size = humanSize(l.Size)
 		}
-		tab.Row(cell(l.Name), cell(l.Origin), dim(l.DigestID), dim(l.Key), cellAs(l.State, imageStates), cell(size), cell(l.Backend))
+		tab.Row(cell(l.Name), cell(l.Origin), dim(l.DigestID), dim(l.Key), cellAs(l.State, imageStates), cell(size))
 	}
 	if err := tab.Break(); err != nil {
 		return err
 	}
-	tab.Header("NAME", "TOOL", "VERSION", "BACKEND", "LIBC", "SIZE", "VMS", "STATE")
+	tab.Header("NAME", "TOOL", "VERSION", "LIBC", "SIZE", "VMS", "STATE")
 	for _, t := range ts {
-		size, vms, be, libc := "", "", "", ""
+		size, vms, libc := "", "", ""
 		if t.Built {
-			size, vms = humanSize(t.Size), strconv.Itoa(t.VMs)
-			be, libc = t.Backend, t.Target.Libc
+			size, vms, libc = humanSize(t.Size), strconv.Itoa(t.VMs), t.Target.Libc
 		}
-		tab.Row(cell(t.Name), cell(t.Tool), cell(t.Version), cell(be), cell(libc), cell(size), cell(vms), cellAs(t.State, toolStates))
+		tab.Row(cell(t.Name), cell(t.Tool), cell(t.Version), cell(libc), cell(size), cell(vms), cellAs(t.State, toolStates))
 	}
 	return tab.Flush()
 }

@@ -189,29 +189,9 @@ func ArgsTooMany(args string, command string, given string) M {
 	return M{id: "args_too_many", vals: []val{{"args", args}, {"command", command}, {"given", given}}}
 }
 
-// BackendFlagIgnored is [backend_flag_ignored]: "--backend applies only to new VMs, so {{.vm}} stays on {{.backend}}."
-func BackendFlagIgnored(backend string, vm string) M {
-	return M{id: "backend_flag_ignored", vals: []val{{"backend", backend}, {"vm", vm}}}
-}
-
-// BackendHelp is [backend_help]: "Default backend for new VMs (up/down to choose, enter to confirm):"
-func BackendHelp() M {
-	return M{id: "backend_help"}
-}
-
 // BackendLacks is [backend_lacks]: "{{.vm}} needs {{.feature}}, and the {{.backend}} backend doesn't have it. Run devvm doctor to see which backends do."
 func BackendLacks(backend string, feature string, vm string) M {
 	return M{id: "backend_lacks", vals: []val{{"backend", backend}, {"feature", feature}, {"vm", vm}}}
-}
-
-// BackendUnknown is [backend_unknown]: "There's no {{.name}} backend. Choose one of {{.backends}}."
-func BackendUnknown(backends string, name string) M {
-	return M{id: "backend_unknown", vals: []val{{"backends", backends}, {"name", name}}}
-}
-
-// BackendUnknownDefault is [backend_unknown_default]: "{{.file}} sets the backend to {{.name}}, which doesn't exist. Change it to one of {{.backends}}."
-func BackendUnknownDefault(backends string, file string, name string) M {
-	return M{id: "backend_unknown_default", vals: []val{{"backends", backends}, {"file", file}, {"name", name}}}
 }
 
 // BackendUnknownVM is [backend_unknown_vm]: "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have. Use the devvm that made it."
@@ -519,11 +499,6 @@ func DefaultAgentsNone() M {
 	return M{id: "default_agents_none"}
 }
 
-// DefaultBackend is [default_backend]: "new VMs get the {{.backend}} backend"
-func DefaultBackend(backend string) M {
-	return M{id: "default_backend", vals: []val{{"backend", backend}}}
-}
-
 // DeleteAnyway is [delete_anyway]: "Delete anyway?"
 func DeleteAnyway() M {
 	return M{id: "delete_anyway"}
@@ -787,11 +762,6 @@ func DockerMissing() M {
 // DockerOnly is [docker_only]: "{{.from}} is a container image only Docker has, such as one built and never pushed, or a private one. Start Docker and try again."
 func DockerOnly(from string) M {
 	return M{id: "docker_only", vals: []val{{"from", from}}}
-}
-
-// DoctorBackendFrom is [doctor_backend_from]: "New VMs get the {{.backend}} backend, which {{.file}} sets."
-func DoctorBackendFrom(backend string, file string) M {
-	return M{id: "doctor_backend_from", vals: []val{{"backend", backend}, {"file", file}}}
 }
 
 // DoctorFailed is [doctor_failed]: "Checking what devvm needs failed: {{.reason}}."
@@ -3053,11 +3023,7 @@ var specs = map[string]spec{
 	"arg_not_choice":                   {fields: []string{"choices", "command", "given"}},
 	"args_none":                        {fields: []string{"command", "given"}},
 	"args_too_many":                    {fields: []string{"args", "command", "given"}},
-	"backend_flag_ignored":             {fields: []string{"backend", "vm"}},
-	"backend_help":                     {},
 	"backend_lacks":                    {fields: []string{"backend", "feature", "vm"}},
-	"backend_unknown":                  {fields: []string{"backends", "name"}},
-	"backend_unknown_default":          {fields: []string{"backends", "file", "name"}},
 	"backend_unknown_vm":               {fields: []string{"backend", "vm"}},
 	"backend_unreviewed":               {fields: []string{"backend", "feature", "vm"}},
 	"backend_unreviewed_used":          {fields: []string{"backend", "feature", "vm"}},
@@ -3119,7 +3085,6 @@ var specs = map[string]spec{
 	"custom_layer_remove":              {fields: []string{"layer", "vm"}},
 	"default_agents":                   {fields: []string{"agents"}},
 	"default_agents_none":              {},
-	"default_backend":                  {fields: []string{"backend"}},
 	"delete_anyway":                    {},
 	"delete_failed":                    {fields: []string{"vm"}},
 	"delete_other_folder_vm":           {fields: []string{"vm", "was"}},
@@ -3173,7 +3138,6 @@ var specs = map[string]spec{
 	"docker_image_changed":             {fields: []string{"from"}},
 	"docker_missing":                   {},
 	"docker_only":                      {fields: []string{"from"}},
-	"doctor_backend_from":              {fields: []string{"backend", "file"}},
 	"doctor_failed":                    {fields: []string{"reason"}},
 	"doctor_ok":                        {fields: []string{"backend", "version"}},
 	"doctor_proxy_ca":                  {fields: []string{"dir"}},

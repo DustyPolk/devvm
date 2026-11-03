@@ -3,7 +3,7 @@ title: Backends
 weight: 8
 ---
 
-This page explains how a backend gives devvm what it needs to run a VM, what devvm does when a backend lacks something, and how devvm names VMs. devvm runs its VMs on [Lima](../backends/lima.md), and another backend plugs in the same way, through the features below.
+This page explains how a backend gives devvm what it needs to run a VM, what devvm does when a backend lacks something, and how devvm names VMs. devvm runs its VMs on [Lima](../backends/lima.md), and another backend would plug in the same way, through the features below ([how a backend plugs in](../contributing/_index.md#how-a-backend-plugs-in)).
 
 ## Features
 
@@ -15,7 +15,7 @@ Each thing devvm needs from a backend is a feature, such as building images, mou
 
 devvm uses an emulation only once its review has passed, and until then it refuses the emulation. A review takes a [design note](design.md#emulated-features), a threat check with the security-audit skill, and end-to-end checks that prove the guarantee.
 
-`devvm doctor` lists the features of every backend devvm has, and it shows an emulation whose review hasn't passed as `unreviewed`.
+`devvm doctor` lists Lima's features, and `devvm doctor --json` those of every backend devvm has. Both show an emulation whose review hasn't passed as `unreviewed`.
 
 ### The feature table
 
@@ -71,8 +71,8 @@ A project VM's name is `devvm-<folder>-<hash>`. The folder part is up to 20 char
 
 A backend may need shorter names, and then devvm cuts the folder's part to fit. When fewer than 4 characters of it would fit, devvm refuses (`vm_name_no_room`). On Lima the room for a name depends on the Lima home's path, because Lima keeps each VM's ssh socket under it, so there the fix is a shorter Lima home (`lima_home_too_long`, [limits](../backends/lima.md#limits)).
 
-Only a new VM gets a name, which fits the limit of the backend that makes it. devvm finds a folder's VM by the hash of the folder's path, which also names the VM's folder in devvm's data folder (`vms/<hash>/`), so an existing VM keeps the name and the backend its state records, whichever backend a command asks for.
+Only a new VM gets a name, which fits the limit of the backend that makes it. devvm finds a folder's VM by the hash of the folder's path, which also names the VM's folder in devvm's data folder (`vms/<hash>/`), so an existing VM keeps the name and the backend its state records, whichever backend new VMs get.
 
 ## Which backends a launch asks
 
-A launch asks a backend about its VMs only when some VM's state names that backend. It asks them to write the [ssh config](../using/ssh.md) and to check the SSH agent's folders. So a backend that no VM uses never runs during a launch, even when it isn't running or isn't installed ([choosing a backend](../backends/_index.md#choosing-a-backend)).
+A launch asks a backend about its VMs only when some VM's state names that backend. It asks them to write the [ssh config](../using/ssh.md) and to check the SSH agent's folders. So a backend that no VM uses never runs during a launch, even when it isn't running or isn't installed ([a VM's backend](../backends/_index.md#a-vms-backend)).

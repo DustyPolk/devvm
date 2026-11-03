@@ -3,29 +3,28 @@ title: What devvm keeps on this machine
 weight: 11
 ---
 
-devvm, the tools it runs and its backends keep files on this machine outside your project folders. This page lists each of them: what it is, who makes it, where it is, whether devvm can make it again, and how it's cleaned up. Most of it is in devvm's data folder, `~/.local/share/devvm`, and devvm can make all of that again except your exports. The backends' own caches hold more, and they can also hold your own downloads.
+devvm, the tools it runs and Lima keep files on this machine outside your project folders. This page lists each of them: what it is, who makes it, where it is, whether devvm can make it again, and how it's cleaned up. Most of it is in devvm's data folder, `~/.local/share/devvm`, and devvm can make all of that again except your exports. Lima's own caches hold more, and they can also hold your own downloads.
 
 ## devvm space
 
-`devvm space` shows what devvm keeps on this machine, on every backend, and how much disk each kind of thing takes. It changes nothing and starts no VM, and it gives each backend 30 seconds to answer. `devvm space --json` prints the same as JSON, for scripts ([devvm space --json](#devvm-space---json)). `devvm space --backend NAME` shows only that backend's rows and caches, with their total, and asks no other backend. The first table has a row for each kind of thing devvm has, followed by a total:
+`devvm space` shows what devvm keeps on this machine and how much disk each kind of thing takes. It changes nothing and starts no VM, and it gives Lima 30 seconds to answer. `devvm space --json` prints the same as JSON, for scripts ([devvm space --json](#devvm-space---json)). The first table has a row for each kind of thing devvm has, followed by a total:
 
 | Column | |
 | --- | --- |
 | `WHAT` | `VMs`, `images`, `tools gnu` or `tools musl` for the shared tools' builds for each C library, `history` for the exports of agents' history, `network logs` for the VMs' logs and the daily tools check's log, `run logs`, `mise`, `Nix cache` for the [shared Nix cache](toolchains.md#nix-projects), `leftover state` for the whole folder of each VM that its backend no longer has, and `state` for the rest of devvm's data folder, which includes the rest of the VMs' folders |
-| `BACKEND` | the backend that has them, for VMs, images and shared tools |
 | `COUNT`, `SIZE` | how many there are and the disk they take, in powers of 1024 (`2.1G`) |
 | `KEPT` | `remade` when devvm makes it again when it's needed, `only copy` for VMs and exports, which nothing else has, `log` for logs, `state` for what devvm knows of its VMs and images, and `leftover` |
 | `GC` | what `devvm gc` frees of it now, which for the Nix cache is what it takes beyond its cap |
-| `FREED BY` | what frees the rest, such as `devvm rm`, `gc --backend lima`, which deletes all of a backend's images, or `gc --nix-cache` |
+| `FREED BY` | what frees the rest, such as `devvm rm`, `images rm`, which deletes images that are current, or `gc --nix-cache` |
 | `RETAIN` | the [retention setting](settings.md#retention) that applies to the row when it's on, such as `30d`, with what it would delete now in brackets, and `-` when none is on |
 
-Sizes count each file's blocks once, as `du` does. On macOS a Lima VM's disk shares its image's blocks until the VM writes them, so those blocks count for both the VM and its image, and the total can be more than the disk they take. A shared tool's build shows `-` as its backend when devvm can't tell which backend it's for. When a backend that one of your VMs uses doesn't answer, devvm says so, and its VMs and images aren't counted.
+Sizes count each file's blocks once, as `du` does. On macOS a Lima VM's disk shares its image's blocks until the VM writes them, so those blocks count for both the VM and its image, and the total can be more than the disk they take. When Lima doesn't answer while one of your VMs uses it, devvm says so, and its VMs and images aren't counted.
 
 ### The backends' caches
 
-The second table lists the caches that belong to the backends, with the backend, what each cache holds, how many entries it has, its size and where it is. That's Lima's download cache. devvm's builds fill them, but they can also hold your own downloads, so they aren't in the total. The sections below say what each one holds.
+The second table lists the caches that belong to Lima, with what each cache holds, how many entries it has, its size and where it is. That's Lima's download cache. devvm's builds fill it, but it can also hold your own downloads, so it isn't in the total. The [Lima](#lima) section below says what it holds.
 
-devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's share of them, which is what devvm's builds put there and nothing of devvm's needs. For each backend in turn, it lists the entries it would delete with their sizes and asks. Without a terminal it refuses unless you give `--force`, which frees them without asking. With `--backend NAME`, it asks only about that backend's cache.
+devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's share of them, which is what devvm's builds put there and nothing of devvm's needs. It lists the entries it would delete with their sizes and asks. Without a terminal it refuses unless you give `--force`, which frees them without asking.
 
 ### devvm space --json
 
@@ -33,7 +32,8 @@ devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's sh
 
 | Field | |
 | --- | --- |
-| `what`, `backend`, `count`, `size` | the row's `WHAT`, `BACKEND`, `COUNT` and `SIZE`, with `backend` left out when the row has none |
+| `what`, `count`, `size` | the row's `WHAT`, `COUNT` and `SIZE` |
+| `backend` | the backend that has them, `lima`, for VMs, images and shared tools, left out for the other rows and for a shared tool's build when devvm can't tell which backend it's for |
 | `sized` | whether devvm knows the size, which `SIZE` shows as `-` when it doesn't |
 | `kept` | the row's `KEPT` |
 | `gc` | what `devvm gc` frees of it now |
@@ -152,7 +152,7 @@ A VM can also be the other way around: the backend has it, with devvm's label, b
 
 ## Lima
 
-The Lima backend's VMs and images are in devvm's Lima home, `~/.local/share/devvm/lima`. Each image is a stopped VM named `devvm-img-<key>`, and each project VM is a clone of one. On macOS a clone's disk shares its image's blocks until the VM writes them, so `du` counts those blocks twice. On Linux hosts a VM's disk is an overlay of its image's. `devvm rm` deletes a VM, `devvm gc` and `devvm images rm` delete images, and `devvm gc --backend lima` deletes all of them.
+The Lima backend's VMs and images are in devvm's Lima home, `~/.local/share/devvm/lima`. Each image is a stopped VM named `devvm-img-<key>`, and each project VM is a clone of one. On macOS a clone's disk shares its image's blocks until the VM writes them, so `du` counts those blocks twice. On Linux hosts a VM's disk is an overlay of its image's. `devvm rm` deletes a VM, `devvm gc` deletes stale and unfinished images, and `devvm images rm` deletes any image you name.
 
 Lima keeps a download cache of its own, `~/Library/Caches/lima` on macOS and `~/.cache/lima` on Linux, or `$XDG_CACHE_HOME/lima` when `XDG_CACHE_HOME` is set. When devvm builds base, Lima downloads Ubuntu's cloud image into that cache, which is 600 to 900 MB for each release, and on macOS it also keeps a copy converted to a raw disk, which takes about 2.4 GB more. The cache is Lima's and it isn't in devvm's Lima home, so your own Lima VMs' downloads share it. devvm deletes something in it only when you run `devvm gc --caches`. Lima keeps each download in a folder named by the SHA-256 of its address, and gc frees only the folders of Ubuntu's cloud images at the address devvm downloads base from, for its Ubuntu release, that no image record of devvm's names and that haven't changed in the last hour. A cloud image that one of your own Lima VMs downloaded from that same address can be among them, and Lima downloads it again the next time it needs it. No VM needs its entry once it's made, because Lima copies the disk out of the cache. `limactl prune` deletes the whole cache, your own downloads included, so devvm never runs it.
 

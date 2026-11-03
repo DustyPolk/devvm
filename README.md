@@ -64,7 +64,7 @@ The docs are at [devvm.dev](https://devvm.dev/), and their source is in `docs/`:
 - [Getting started](https://devvm.dev/docs/getting-started/): installing devvm, your first VM and the commands you use most.
 - [Using devvm](https://devvm.dev/docs/using/): images and tools, clones, links between VMs, ports and size, coding agents, SSH and editors, and troubleshooting.
 - [Staying safe](https://devvm.dev/docs/safety/): the habits that keep you safe, network policy, `.git` protection and attack vectors.
-- [Backends](https://devvm.dev/docs/backends/): what runs the VMs, and choosing one.
+- [Backends](https://devvm.dev/docs/backends/): Lima, which runs the VMs, and what it gives them.
 - [CLI reference](https://devvm.dev/docs/cli/): every command, with its arguments and flags.
 - [How it works](https://devvm.dev/docs/internals/): how devvm does what it does, for checking a claim or reviewing its security.
 - [Contributing](https://devvm.dev/docs/contributing/): building, testing and writing docs.

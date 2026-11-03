@@ -20,9 +20,8 @@ import (
 // features.
 const featuresNone = "none"
 
-// newSetupCmd is devvm setup [--backend NAME] [--features LIST|none]
-// [--agents LIST|none]. Its --backend is its own, in place of the root's
-// for new VMs, and its --agents chooses new VMs' default.
+// newSetupCmd is devvm setup [--features LIST|none] [--agents LIST|none].
+// Its --agents chooses new VMs' default.
 func newSetupCmd(u *ui.UI) *cobra.Command {
 	var (
 		features, agents string
@@ -30,9 +29,9 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Choose the default backend, base's features, and new VMs' size, network policy and coding agents",
-		Long: "Choose the backend new VMs get by default, the features base gets, and new VMs' CPUs, memory, network policy and coding agents. " +
-			"In a terminal devvm asks for each, starting from the current choice, and --backend, --features and --agents choose without asking. " +
+		Short: "Choose base's features, and new VMs' size, network policy and coding agents",
+		Long: "Choose the features base gets, and new VMs' CPUs, memory, network policy and coding agents. " +
+			"In a terminal devvm asks for each, starting from the current choice, and --features and --agents choose without asking. " +
 			"A new choice of features rebuilds base and the images on it when they're next used.",
 		Example: examples(
 			"devvm setup", "answer every question", "devvm setup --features omb,fzf", "give base oh-my-bash and fzf, without asking",
@@ -53,28 +52,24 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.StringVar(&features, "features", "", "the `LIST` of features base gets, such as fzf,omb, or none")
-	f.StringVar(&c.backend, "backend", "", "the backend `NAME` new VMs get by default")
 	addAgentsFlag(f, &agents, "the `LIST` of coding agents new VMs get by default, such as claude,codex, or none")
 	return cmd
 }
 
 // setupChoice is what devvm setup's flags choose: base's features and new
-// VMs' agents (nil for none given) and the default backend ("" for none
-// given).
+// VMs' agents (nil for none given).
 type setupChoice struct {
 	features *string
 	agents   *[]string
-	backend  string
 }
 
 // none reports whether no flag chose anything.
 func (c setupChoice) none() bool {
-	return c.features == nil && c.agents == nil && c.backend == ""
+	return c.features == nil && c.agents == nil
 }
 
 // setup is devvm setup's run: the UI it prints through, whether it's in a
-// terminal, how it asks for the backend, the size, the network policy and
-// the agents, and the host the size is checked against.
+// terminal, how it asks for the size, the network policy and the agents, and the host the size is checked against.
 type setup struct {
 	ui       *ui.UI
 	terminal func() bool
@@ -96,7 +91,7 @@ func newSetup(u *ui.UI) setup {
 	}
 }
 
-// run saves what c chooses: the default backend, base's features, then
+// run saves what c chooses: base's features, then
 // new VMs' agents. With nothing chosen, it asks in a terminal for those,
 // with new VMs' size and network policy before the agents; without one,
 // it keeps the features (every one until they're chosen) and saves them.
@@ -113,11 +108,6 @@ func (s setup) run(c setupChoice) error {
 		return err
 	}
 	ask := c.none() && s.terminal()
-	if c.backend != "" || ask {
-		if err := s.saveBackend(dirs, def, c.backend); err != nil {
-			return err
-		}
-	}
 	if c.features != nil || c.none() {
 		if err := s.saveFeatures(dirs, def, c.features); err != nil {
 			return err
@@ -176,28 +166,6 @@ func (s setup) saveNetwork(dirs paths.Dirs) error {
 	return vm.NetworkChoice{Dirs: dirs, Info: s.ui.Info}.Set(mode)
 }
 
-// saveBackend saves name as the default backend, asking for it when "",
-// unless config.toml sets it.
-func (s setup) saveBackend(dirs paths.Dirs, def settings.Defaults, name string) error {
-	if name == "" && s.inConfig(dirs, def, settings.KeyBackend) {
-		return nil
-	}
-	reg, err := newRegistry(dirs, assets.FS, s.ui)
-	if err != nil {
-		return err
-	}
-	if name == "" {
-		name = s.pickBackend(reg, def.Backend.Value)
-	} else if _, ok := reg.Lookup(name); !ok {
-		return msg.BackendUnknown(strings.Join(reg.Names(), ", "), name)
-	}
-	if _, err := settings.Save(dirs, settings.Values{Backend: &name}); err != nil {
-		return err
-	}
-	s.ui.Info(msg.DefaultBackend(name))
-	return nil
-}
-
 // saveFeatures saves base's features: features' list, or asked for when
 // nil, unless config.toml sets them.
 func (s setup) saveFeatures(dirs paths.Dirs, def settings.Defaults, features *string) error {
@@ -225,21 +193,6 @@ func (s setup) saveFeatures(dirs paths.Dirs, def settings.Defaults, features *st
 		s.ui.Say(msg.GCOldHint())
 	}
 	return nil
-}
-
-// pickBackend asks which backend new VMs get by default, starting from
-// current, the one in effect (backend.Default when it's one devvm doesn't
-// have).
-func (s setup) pickBackend(reg *backend.Registry, current string) string {
-	if _, ok := reg.Lookup(current); !ok {
-		current = backend.Default
-	}
-	names := reg.Names()
-	choices := make([]ui.Choice, len(names))
-	for i, n := range names {
-		choices[i] = ui.Choice{Name: n, On: n == current}
-	}
-	return names[s.pickOne(msg.BackendHelp(), choices)]
 }
 
 // splitList splits a comma-separated list, dropping empty items.

@@ -1,7 +1,6 @@
-# doctor: what the backend new VMs get needs on this machine and how to
-# get what's missing, each backend's features, and whether Docker is
-# there. --json prints what it found as JSON, for scripts, and nothing
-# else.
+# doctor: what Lima needs on this machine and how to get what's missing,
+# the features Lima gives VMs, and whether Docker is there. --json prints
+# what it found as JSON, for scripts, and nothing else.
 env ALL=$PATH
 chmod 0755 brew/brew
 chmod 0755 broken/limactl
@@ -11,7 +10,7 @@ chmod 0755 qemu/qemu-img
 
 # Everything there: only limactl --version runs.
 exec devvm doctor
-stdout '^FEATURE +LIMA\n'
+stdout '^FEATURE +SUPPORT\n'
 stdout '^build-image +native\n'
 stdout '^egress-proxy +native\n'
 stdout '^ports +emulated\n'
@@ -29,30 +28,16 @@ stdout '^{\n  "version": 1,\n  "backend": "lima",\n  "backend_source": "built-in
 stdout '^      "ports": "emulated",$'
 ! stderr .
 
-# Where the backend came from: a file that sets it is named, and --json
-# says which, or flag for --backend.
-exec devvm setup --backend lima
-exec devvm doctor
-stdout '^doctor_backend_from backend=lima file=\S*/data/devvm/settings\.json$'
-exec devvm doctor --json
-stdout '"backend_source": "settings.json",'
-cp lima.toml $CFG/config.toml
-exec devvm doctor
-stdout '^doctor_backend_from backend=lima file=\S*/config/devvm/config\.toml$'
-exec devvm doctor --json --backend lima
-stdout '"backend_source": "flag",'
-rm $CFG/config.toml
-
-# Another backend, or one devvm doesn't have.
-! exec devvm doctor --backend nope
-stderr '^devvm: backend_unknown backends=lima name=nope$'
+# No flag or file chooses the backend.
+! exec devvm doctor --backend lima
+stderr '^devvm: flag_unknown command=devvm doctor flag=--backend$'
 ! stdout .
 
 # No Lima, no Homebrew, no Docker: what to install, and it fails.
 # QEMU's there, which only Linux checks.
 env PATH=$WORK/qemu${:}$DEVVM_BIN
 ! exec devvm doctor
-stdout '^FEATURE +LIMA\n'
+stdout '^FEATURE +SUPPORT\n'
 stdout '^docker_missing\n'
 ! stdout doctor_ok
 stderr '^devvm: lima_missing$'
@@ -94,8 +79,6 @@ stderr '^devvm: lima_global_config files=\S+/_config/default.yaml$'
 exec devvm doctor --json
 stdout '^  "problems": \[\n    {\n      "key": "lima-config",\n      "fix": null,\n      "message": "lima_global_config files=\S+/_config/default.yaml"\n    }\n  \],$'
 
--- lima.toml --
-backend = "lima"
 -- brew/brew --
 #!/bin/sh
 -- broken/limactl --

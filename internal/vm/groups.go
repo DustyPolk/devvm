@@ -297,7 +297,7 @@ func (e Groups) change(ctx context.Context, st *state.VM, group string, before, 
 		}
 		e.warnUnenforced(ctx, st, tst)
 	}
-	c, err := e.Registry.For(e.Dirs, st, "")
+	c, err := e.Registry.For(e.Dirs, st)
 	if err != nil {
 		e.Warn(msg.LinksUpdateFailed(vm).Because(err))
 		return nil
@@ -547,7 +547,7 @@ func (e Groups) checkJoin(t *found, group, as string) ([]*state.VM, error) {
 		return nil, err
 	}
 	for _, m := range members {
-		c, err := e.Registry.For(e.Dirs, m, "")
+		c, err := e.Registry.For(e.Dirs, m)
 		if err != nil {
 			return nil, err
 		}

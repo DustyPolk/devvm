@@ -1,14 +1,12 @@
 package cli
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -26,26 +24,22 @@ import (
 
 // newDoctorCmd is devvm doctor.
 func newDoctorCmd(u *ui.UI) *cobra.Command {
-	var (
-		asJSON  bool
-		backend string
-	)
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check what devvm needs on this machine",
-		Long: "Check what the backend new VMs get needs on this machine, and say how to get what's missing, " +
-			"because devvm never installs it itself. Then list what each backend can do. " +
+		Long: "Check what Lima needs on this machine, and say how to get what's missing, " +
+			"because devvm never installs it itself. Then list the features Lima gives VMs. " +
 			"doctor fails when something is missing, but never for a warning, such as one about low free space.",
 		Example: examples(
-			"devvm doctor", "check the backend new VMs get", "devvm doctor --json", "the same as JSON, for scripts",
+			"devvm doctor", "check what devvm needs", "devvm doctor --json", "the same as JSON, for scripts",
 		),
 		Args:              noArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			reg, b, from, err := doctorBackend(u, backend)
+			reg, b, err := doctorBackend(u)
 			fail(u, err, msg.DoctorFailed)
 			d := doctor{
-				From: from,
 				Path: onPath{LookPath: exec.LookPath, Executable: os.Executable},
 				Free: reg.Host.FreeSpace,
 				Host: func() (vm.Host, error) { return vm.ThisHost(reg.Host) },
@@ -60,16 +54,14 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 			if asJSON {
 				return printJSON(u, d.report(cmd.Context(), reg.All(), b))
 			}
-			err = d.run(cmd.Context(), u, reg.All(), b)
+			err = d.run(cmd.Context(), u, b)
 			if m, ok := errors.AsType[msg.M](err); ok {
 				u.Die(m)
 			}
 			return err
 		},
 	}
-	f := cmd.Flags()
-	addBackendFlag(f, &backend)
-	f.BoolVar(&asJSON, "json", false, "print what it found as JSON, and succeed whatever is missing")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print what it found as JSON, and succeed whatever is missing")
 	return cmd
 }
 
@@ -78,8 +70,8 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 // backend's features.
 type doctorOutput struct {
 	Backend string `json:"backend"`
-	// BackendSource is where Backend came from: flag, config.toml,
-	// settings.json or built-in.
+	// BackendSource is where Backend came from: built-in, as no setting
+	// chooses it.
 	BackendSource string        `json:"backend_source"`
 	Problems      []problemJSON `json:"problems"`
 	Warnings      []string      `json:"warnings"`
@@ -101,7 +93,7 @@ type problemJSON struct {
 // nothing.
 func (d doctor) report(ctx context.Context, all []backend.Backend, b backend.Backend) doctorOutput {
 	out := doctorOutput{
-		Backend: b.Name(), BackendSource: string(cmp.Or(d.From.Source, settings.FromBuiltin)),
+		Backend: b.Name(), BackendSource: string(settings.FromBuiltin),
 		Problems: []problemJSON{}, Warnings: []string{}, Features: map[string]map[string]string{},
 	}
 	for _, p := range b.Problems(ctx) {
@@ -152,8 +144,6 @@ const (
 
 // doctor is devvm doctor's checks of this machine; tests set its fields.
 type doctor struct {
-	// From is where the backend it checks came from.
-	From backendFrom
 	Path onPath
 	Free func(path string) (uint64, error) // free bytes on path's volume
 	Host func() (vm.Host, error)
@@ -162,17 +152,14 @@ type doctor struct {
 	Policies func() []msg.M
 }
 
-// run checks b, the backend new VMs get, and lists all's features. It
+// run checks b, the backend new VMs get, and lists its features. It
 // returns the last problem's message when b has problems, having warned
 // the others. Warnings (another devvm on PATH, low free space, a small
 // host) never change what it returns.
-func (d doctor) run(ctx context.Context, u *ui.UI, all []backend.Backend, b backend.Backend) error {
+func (d doctor) run(ctx context.Context, u *ui.UI, b backend.Backend) error {
 	problems := b.Problems(ctx)
-	if err := writeFeatures(u.Table(), all); err != nil {
+	if err := writeFeatures(u.Table(), b); err != nil {
 		return err
-	}
-	if d.From.File != "" {
-		u.Say(msg.DoctorBackendFrom(b.Name(), d.From.File))
 	}
 	if _, err := exec.LookPath("docker"); err == nil {
 		u.Say(msg.DockerFound())
@@ -231,33 +218,21 @@ func sayProxyCA(u *ui.UI) {
 	}
 }
 
-// doctorBackend returns devvm's backends and the one new VMs get: flag's
-// (--backend), else the default, with where it came from.
-func doctorBackend(u *ui.UI, flag string) (*backend.Registry, backend.Backend, backendFrom, error) {
-	var from backendFrom
+// doctorBackend returns devvm's backends and the one new VMs get.
+func doctorBackend(u *ui.UI) (*backend.Registry, backend.Backend, error) {
 	dirs, err := paths.FromEnv()
 	if err != nil {
-		return nil, nil, from, err
+		return nil, nil, err
 	}
 	reg, err := newRegistry(dirs, assets.FS, u)
 	if err != nil {
-		return nil, nil, from, err
+		return nil, nil, err
 	}
-	c, err := reg.For(dirs, new(state.VM), flag)
+	c, err := reg.For(dirs, new(state.VM))
 	if err != nil {
-		return nil, nil, from, err
+		return nil, nil, err
 	}
-	def, err := settings.Read(dirs)
-	from.Source = def.Backend.With(flag).Source
-	from.File = from.Source.File(dirs)
-	return reg, c.Backend, from, err
-}
-
-// backendFrom is where the backend devvm doctor checks came from, and the
-// file that set it, if one did.
-type backendFrom struct {
-	Source settings.Source
-	File   string
+	return reg, c.Backend, nil
 }
 
 // onPath finds the devvm first on PATH; tests set its fields.
@@ -287,21 +262,12 @@ func (p onPath) other() (msg.M, bool) {
 	return msg.DevvmOtherFirst(first, self), true
 }
 
-// writeFeatures writes a table of every feature, with a column for each
-// backend saying how it has it: native green, emulated yellow, unreviewed
-// and none red.
-func writeFeatures(tab *ui.Table, bs []backend.Backend) error {
-	header := []string{"FEATURE"}
-	for _, b := range bs {
-		header = append(header, strings.ToUpper(b.Name()))
-	}
-	tab.Header(header...)
+// writeFeatures writes a table of every feature and how b has it: native
+// green, emulated yellow, unreviewed red and none dim.
+func writeFeatures(tab *ui.Table, b backend.Backend) error {
+	tab.Header("FEATURE", "SUPPORT")
 	for _, f := range backend.Features {
-		row := []ui.Cell{cell(string(f))}
-		for _, b := range bs {
-			row = append(row, supportCell(b.Caps()[f]))
-		}
-		tab.Row(row...)
+		tab.Row(cell(string(f)), supportCell(b.Caps()[f]))
 	}
 	return tab.Flush()
 }

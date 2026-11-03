@@ -22,9 +22,9 @@ exec sh -c 'for i in $(seq 60); do grep -qx "devvm links: 127\.77\.0\.1:5432: ca
 exec sh -c 'kill -0 "$(cat "$APP_dir"/run/links.pid)"'
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
 exec devvm ls
-stdout '^NAME +STATUS +IMAGE +TOOLS +GIT +NET +LINKS +BACKEND +FOLDER$'
-stdout '^devvm-app-[0-9a-f]{14} +Running +base +- +off +off +1 +lima '
-stdout '^devvm-db-[0-9a-f]{14} +Running +base +- +off +off +- +lima '
+stdout '^NAME +STATUS +IMAGE +TOOLS +GIT +NET +LINKS +FOLDER$'
+stdout '^devvm-app-[0-9a-f]{14} +Running +base +- +off +off +1 +/'
+stdout '^devvm-db-[0-9a-f]{14} +Running +base +- +off +off +- +/'
 exec devvm ls --json
 stdout '"links": 1'
 
@@ -65,7 +65,7 @@ stderr '^net_off_log vm=devvm-app-[0-9a-f]{14}$'
 exec sh -c 'kill -9 "$(cat "$APP_dir"/run/links.pid)"'
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
 exec devvm space
-stdout '^leftover state +- +[12] '
+stdout '^leftover state +[12] '
 rm $DB_dir/state
 exec devvm gc --orphans --force
 stdout '^gc_dead_links count=1$'

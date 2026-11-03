@@ -13,7 +13,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 )
@@ -23,7 +22,6 @@ type Source string
 
 // The sources, in the order the first that sets a default wins.
 const (
-	FromFlag     Source = "flag"
 	FromConfig   Source = "config.toml"
 	FromSettings Source = "settings.json"
 	FromBuiltin  Source = "built-in"
@@ -38,39 +36,15 @@ func (s Source) Label(d paths.Dirs) string {
 		return d.ConfigFile()
 	case FromSettings:
 		return "devvm: settings.json"
-	case FromFlag:
-		return "flag"
 	case FromBuiltin:
 	}
 	return "devvm: default"
-}
-
-// File is the file that set a default from s: config.toml's or
-// settings.json's path, "" for a flag or devvm's built-in default.
-func (s Source) File(d paths.Dirs) string {
-	switch s {
-	case FromConfig:
-		return d.ConfigFile()
-	case FromSettings:
-		return d.Settings()
-	case FromFlag, FromBuiltin:
-	}
-	return ""
 }
 
 // Value is a default in effect and where it came from.
 type Value struct {
 	Value  string
 	Source Source
-}
-
-// With is v with flag in its place when flag is set: a flag wins over
-// every file.
-func (v Value) With(flag string) Value {
-	if flag != "" {
-		return Value{flag, FromFlag}
-	}
-	return v
 }
 
 // List is a default list in effect: base's features or new VMs' agents.
@@ -84,8 +58,6 @@ type List struct {
 
 // Defaults are the defaults in effect, each with where it came from.
 type Defaults struct {
-	// Backend is new VMs' backend, backend.Default unless a file sets one.
-	Backend Value
 	// Network is new VMs' network policy: NetworkAsk unless set.
 	Network Value
 	// Ports is what new VMs forward (ParsePorts): PortsAll unless set.
@@ -103,7 +75,6 @@ type Defaults struct {
 // given to Save is a change: what it sets is saved, a retention key set
 // to "" turned off.
 type Values struct {
-	Backend   *string           `json:"backend,omitempty"`
 	Network   *string           `json:"network,omitempty"`
 	Ports     *string           `json:"ports,omitempty"`
 	Size      SizeValues        `json:"size,omitzero"`
@@ -124,7 +95,6 @@ func Of[T any](v T) *T { return &v }
 
 // The keys of Values, as config.toml names them.
 const (
-	KeyBackend  = "backend"
 	KeyNetwork  = "network"
 	KeyPorts    = "ports"
 	KeyCPUs     = "size.cpus"
@@ -147,7 +117,6 @@ func (v *Values) scalars() []struct {
 		key string
 		p   **string
 	}{
-		{KeyBackend, &v.Backend},
 		{KeyNetwork, &v.Network},
 		{KeyPorts, &v.Ports},
 		{KeyCPUs, &v.Size.CPUs},
@@ -194,7 +163,7 @@ func (v Values) Set() []string {
 // set to "" passes only with off.
 func (v Values) check(off bool) (key string, err error) {
 	checks := map[string]func(string) error{
-		KeyBackend: checkBackend, KeyNetwork: checkNetwork, KeyPorts: func(s string) error { _, err := ParsePorts(s); return err },
+		KeyNetwork: checkNetwork, KeyPorts: func(s string) error { _, err := ParsePorts(s); return err },
 		KeyCPUs:   func(s string) error { _, err := ParseCPUs("cpus", s); return err },
 		KeyMemory: func(s string) error { _, err := ParseGiB("memory", s); return err },
 		KeyDisk:   func(s string) error { _, err := ParseGiB("disk", s); return err },
@@ -264,7 +233,6 @@ func resolve(config, saved Values) Defaults {
 		return List{Source: FromBuiltin}
 	}
 	d := Defaults{
-		Backend:  pick(config.Backend, saved.Backend, backend.Default),
 		Network:  pick(config.Network, saved.Network, NetworkAsk),
 		Ports:    pick(config.Ports, saved.Ports, PortsAll),
 		CPUs:     pick(config.Size.CPUs, saved.Size.CPUs, ""),
@@ -349,12 +317,10 @@ func (v *Values) merge(change Values) {
 	}
 }
 
-// Source is where the default key names (KeyBackend…, or a retention
+// Source is where the default key names (KeyNetwork…, or a retention
 // setting's under KeyRetention) came from.
 func (d Defaults) Source(key string) Source {
 	switch key {
-	case KeyBackend:
-		return d.Backend.Source
 	case KeyNetwork:
 		return d.Network.Source
 	case KeyPorts:

@@ -35,7 +35,6 @@ func write(t *testing.T, path, data string) {
 
 // fullConfig sets every key config.toml has.
 const fullConfig = `# every key
-backend = "qemu"
 network = "off"
 ports = "5173, 8000-8010"
 features = ["fzf", "omb"]
@@ -64,7 +63,7 @@ func TestReadConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Defaults{
-		Backend: Value{"lima", FromBuiltin}, Network: Value{"ask", FromBuiltin}, Ports: Value{"all", FromBuiltin},
+		Network: Value{"ask", FromBuiltin}, Ports: Value{"all", FromBuiltin},
 		CPUs: Value{"", FromBuiltin}, Memory: Value{"", FromBuiltin}, Disk: Value{"", FromBuiltin},
 		Features: List{Source: FromBuiltin}, Agents: List{Source: FromBuiltin},
 		Retention: Retention{Raw: map[string]string{}, Sources: map[string]Source{}},
@@ -81,7 +80,6 @@ func TestReadConfig(t *testing.T) {
 		got Value
 		v   string
 	}{
-		{KeyBackend, def.Backend, "qemu"},
 		{KeyNetwork, def.Network, "off"},
 		{KeyPorts, def.Ports, "5173,8000-8010"},
 		{KeyCPUs, def.CPUs, "6"},
@@ -126,13 +124,12 @@ func TestConfigRefused(t *testing.T) {
 		line       int
 		reason     string
 	}{
-		{"unknown key", "backend = \"lima\"\nbakend = \"lima\"\n", 2, `unknown key "bakend"`},
+		{"unknown key", "network = \"on\"\nbackend = \"lima\"\n", 2, `unknown key "backend"`},
 		{"unknown table", "[sizes]\ncpus = 2\n", 1, `unknown key "sizes"`},
 		{"unknown key in a table", "[size]\ncpus = 2\nswap = 1\n", 3, `unknown key "size.swap"`},
 		{"unknown retention key", "[retention]\nlogs.network = 3\n", 2, `unknown key "retention.logs.network"`},
 		{"dotted unknown key", "size.swap = 1\n", 1, `unknown key "size.swap"`},
 		{"bad network", "network = \"maybe\"\n", 1, `"maybe" isn't one of ask, on, off`},
-		{"bad backend", "backend = \"Lima VM\"\n", 1, "not a backend's name"},
 		{"bad ports", "\nports = \"5173,,80\"\n", 2, "port_invalid"},
 		{"bad cpus", "[size]\ncpus = 1.5\n", 2, "cpus_not_number flag=cpus"},
 		{"bad memory", "[size]\nmemory = \"16M\"\n", 2, "size_not_gib flag=memory"},
@@ -144,8 +141,8 @@ func TestConfigRefused(t *testing.T) {
 		{"bad count", "[retention]\nhistory.count = 0\n", 2, "a count is a whole number"},
 		{"bad age", "[retention]\nhistory.age = \"30\"\n", 2, "bad_duration"},
 		{"bad size", "[retention]\nnix-cache.size = \"20g\"\n", 2, "a size is a whole number"},
-		{"bad TOML", "backend = lima\n", 1, ""},
-		{"a key twice", "backend = \"lima\"\nbackend = \"qemu\"\n", 2, ""},
+		{"bad TOML", "network = on\n", 1, ""},
+		{"a key twice", "network = \"on\"\nnetwork = \"off\"\n", 2, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			write(t, d.ConfigFile(), tc.file)
@@ -163,7 +160,7 @@ func TestConfigRefused(t *testing.T) {
 func TestPrecedence(t *testing.T) {
 	d := testDirs(t)
 	saved := Values{
-		Backend: Of("qemu"), Network: Of("on"), Ports: Of("none"),
+		Network: Of("on"), Ports: Of("none"),
 		Size: SizeValues{CPUs: Of("2"), Memory: Of("4"), Disk: Of("50")}, Features: Of([]string{}), Agents: Of([]string{"codex"}),
 		Retention: map[string]string{RetainHistoryAge: "1d", RetainRunLogs: "3"},
 	}
@@ -179,7 +176,6 @@ func TestPrecedence(t *testing.T) {
 		got  Value
 		want Value
 	}{
-		{def.Backend, Value{"qemu", FromSettings}},
 		{def.Network, Value{"off", FromConfig}},
 		{def.Ports, Value{"none", FromSettings}},
 		{def.CPUs, Value{"2", FromSettings}},
@@ -196,12 +192,6 @@ func TestPrecedence(t *testing.T) {
 	if def.Retention.Raw[RetainHistoryAge] != "2d" || def.Retention.Source(RetainHistoryAge) != FromConfig ||
 		def.Retention.Source(RetainRunLogs) != FromSettings || def.Retention.Source(RetainOrphansAge) != FromBuiltin {
 		t.Errorf("retention = %+v", def.Retention)
-	}
-	if v := (Value{"lima", FromConfig}).With("qemu"); v != (Value{"qemu", FromFlag}) {
-		t.Errorf("With a flag: %+v", v)
-	}
-	if v := (Value{"lima", FromConfig}).With(""); v != (Value{"lima", FromConfig}) {
-		t.Errorf("With no flag: %+v", v)
 	}
 }
 
@@ -227,21 +217,21 @@ func TestSave(t *testing.T) {
 	if _, err := os.Stat(d.Settings()); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("a refused change wrote settings.json: %v", err)
 	}
-	if _, err := Save(d, Values{Backend: Of("qemu"), Retention: map[string]string{RetainRunLogs: "5", RetainOrphansAge: "1d"}}); err != nil {
+	if _, err := Save(d, Values{Network: Of("on"), Retention: map[string]string{RetainRunLogs: "5", RetainOrphansAge: "1d"}}); err != nil {
 		t.Fatal(err)
 	}
 	def, err := Save(d, Values{Size: SizeValues{CPUs: Of("3")}, Retention: map[string]string{RetainRunLogs: ""}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if def.Backend.Value != "qemu" || def.CPUs.Value != "3" || def.Retention.RunLogs != 0 || def.Retention.OrphansAge != 24*time.Hour {
+	if def.Network.Value != "on" || def.CPUs.Value != "3" || def.Retention.RunLogs != 0 || def.Retention.OrphansAge != 24*time.Hour {
 		t.Errorf("after two saves: %+v", def)
 	}
 	data, err := os.ReadFile(d.Settings())
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "{\n  \"backend\": \"qemu\",\n  \"size\": {\n    \"cpus\": \"3\"\n  },\n  \"retention\": {\n    \"orphans.age\": \"1d\"\n  }\n}\n"
+	want := "{\n  \"network\": \"on\",\n  \"size\": {\n    \"cpus\": \"3\"\n  },\n  \"retention\": {\n    \"orphans.age\": \"1d\"\n  }\n}\n"
 	if string(data) != want {
 		t.Errorf("settings.json:\n%s\nwant\n%s", data, want)
 	}
@@ -254,9 +244,9 @@ func TestSave(t *testing.T) {
 // the file and the field, a value devvm can't use.
 func TestReadSaved(t *testing.T) {
 	d := testDirs(t)
-	write(t, d.Settings(), `{"backend": "qemu", "later": {"x": 1}, "retention": {"logs.later": "1", "logs.runs": "4"}}`)
+	write(t, d.Settings(), `{"network": "on", "later": {"x": 1}, "retention": {"logs.later": "1", "logs.runs": "4"}}`)
 	def, err := Read(d)
-	if err != nil || def.Backend != (Value{"qemu", FromSettings}) || def.Retention.RunLogs != 4 {
+	if err != nil || def.Network != (Value{"on", FromSettings}) || def.Retention.RunLogs != 4 {
 		t.Errorf("unknown fields: %+v, %v", def, err)
 	}
 	for data, reason := range map[string]string{
@@ -279,15 +269,10 @@ func TestReadSaved(t *testing.T) {
 func TestLabels(t *testing.T) {
 	d := paths.Dirs{Config: "/c", Data: "/d"}
 	for s, want := range map[Source]string{
-		FromConfig: "/c/config.toml", FromSettings: "devvm: settings.json", FromBuiltin: "devvm: default", FromFlag: "flag",
+		FromConfig: "/c/config.toml", FromSettings: "devvm: settings.json", FromBuiltin: "devvm: default",
 	} {
 		if got := s.Label(d); got != want {
 			t.Errorf("%s: %q, want %q", s, got, want)
-		}
-	}
-	for s, want := range map[Source]string{FromConfig: "/c/config.toml", FromSettings: "/d/settings.json", FromBuiltin: "", FromFlag: ""} {
-		if got := s.File(d); got != want {
-			t.Errorf("%s's file: %q, want %q", s, got, want)
 		}
 	}
 }

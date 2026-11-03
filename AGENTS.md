@@ -49,7 +49,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 
 ## Rules
 
-- **The gate:** `mise run fmt && mise run lint && mise run test`, all passing, before starting a task and before marking it done; a gate failing at the start gets fixed first. Anything touching VMs also passes `tests/e2e.sh` in the background: the sections for what changed (`--only`, `--backend`).
+- **The gate:** `mise run fmt && mise run lint && mise run test`, all passing, before starting a task and before marking it done; a gate failing at the start gets fixed first. Anything touching VMs also passes `tests/e2e.sh` in the background: the sections for what changed (`--only`).
 - **Nothing in project folders:** state goes in `~/.local/share/devvm` and `~/.config/devvm`.
 - **devvm's own files never get a shared copy on disk:** the proxy reads them from the binary, base.yaml and scripts go on stdin, `--from`'s build writes its scripts into its own temp folder.
 - **Credentials never go into images.** Host agent history never goes into VMs.

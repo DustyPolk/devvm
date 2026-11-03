@@ -432,7 +432,7 @@ func TestUpRefusesLowSpace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.DefaultBackend = fakeDefault
+	reg.NewVMs = "fake"
 	e.Registry = reg
 	for _, tc := range []struct {
 		free uint64

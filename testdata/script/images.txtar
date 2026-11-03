@@ -1,16 +1,16 @@
-# images: the images on every backend, by name, unfinished builds last,
-# each with what its base started from, its digest, key, state, size and
-# backend; then the shared tool images by the name images have them by,
-# each with the backend and C library it's built for; then the total.
-# Project VMs aren't images. Listing never resolves the tools lock.
+# images: the images, by name, unfinished builds last, each with what its
+# base started from, its digest, key, state and size; then the shared tool
+# images by the name images have them by, each with the C library it's
+# built for; then the total. Project VMs aren't images. Listing never
+# resolves the tools lock.
 env IMAGES=$XDG_DATA_HOME/devvm/images
 env SHARE=$XDG_DATA_HOME/devvm/tools
 
 # Nothing built: the headers, and every name not installed.
 exec devvm images
-stdout '^IMAGE +FROM +DIGEST +KEY +STATE +SIZE +BACKEND\n\nNAME +TOOL +VERSION +BACKEND +LIBC +SIZE +VMS +STATE\n'
-stdout '^node +- +- +- +- +- +- +not installed$'
-stdout '^opencode +- +- +- +- +- +- +not installed$'
+stdout '^IMAGE +FROM +DIGEST +KEY +STATE +SIZE\n\nNAME +TOOL +VERSION +LIBC +SIZE +VMS +STATE\n'
+stdout '^node +- +- +- +- +- +not installed$'
+stdout '^opencode +- +- +- +- +- +not installed$'
 stderr '^images_total size=0B$'
 ! stderr images_unused
 stub_calls
@@ -23,16 +23,16 @@ exec devvm build foo
 exec sh -c 'printf "devvm-img-000000000000\ndevvm-proj-12345612345601\n" >> "$STUB_DIR/instances"'
 exec sh -c 'for i in base foo; do grep -lxF "  \"name\": \"$i\"," "$IMAGES"/*/record.json | xargs dirname | xargs basename > "$i.key"; done'
 exec devvm images
-stdout '^base +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+ +lima\nfoo +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+ +lima\n- +- +- +000000000000 +unfinished +- +lima\n\n'
+stdout '^base +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+\nfoo +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+\n- +- +- +000000000000 +unfinished +-\n\n'
 ! stdout devvm-proj
 # An edited script: foo is stale.
 exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
 exec devvm images
-stdout '^foo +ubuntu .* +stale +'
+stdout '^foo +ubuntu .* +stale +\S+$'
 
-# --backend: that backend's images alone.
-exec devvm images --backend lima
-stdout '^foo +ubuntu .* +stale +\S+ +lima$'
+# --backend is no flag of devvm's.
+! exec devvm images --backend lima
+stderr '^devvm: flag_unknown command=devvm images flag=--backend$'
 
 # Shared tools: each version newest first, how many VMs list it, and
 # whether it's the lock's; the lock's go, not built, and an older one no
@@ -47,11 +47,10 @@ mkdir $VMS/12345612345602
 exec sh -c 'printf "name=devvm-p-12345612345602\nimage=base\ndir=/p\nbackend=lima\nlibc=musl\ntool_names=claude go\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345602/state"'
 stub_reset
 exec devvm images
-# The lock's go isn't built; the old go has the backend and C library its
-# record names, the oldest, without a record, none; claude's build says
-# its own.
-stdout '^go +go +1\.27\.2 +- +- +- +- +not built\ngo +go +1\.20\.0 +lima +musl +\S+ +1 +in use\ngo +go +1\.9\.0 +- +- +\S+ +0 +unused\n'
-stdout '^claude +claude +2\.1\.295 +lima +gnu +\S+ +1 +current$'
+# The lock's go isn't built; the old go has the C library its record
+# names, the oldest, without a record, none; claude's build says its own.
+stdout '^go +go +1\.27\.2 +- +- +- +not built\ngo +go +1\.20\.0 +musl +\S+ +1 +in use\ngo +go +1\.9\.0 +- +\S+ +0 +unused\n'
+stdout '^claude +claude +2\.1\.295 +gnu +\S+ +1 +current$'
 stderr '^images_total size=\S+$'
 stdout '^node +- '
 stub_calls

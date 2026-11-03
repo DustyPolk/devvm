@@ -7,7 +7,7 @@ Check what devvm needs on this machine
 
 ## Synopsis
 
-Check what the backend new VMs get needs on this machine, and say how to get what's missing, because devvm never installs it itself. Then list what each backend can do. doctor fails when something is missing, but never for a warning, such as one about low free space.
+Check what Lima needs on this machine, and say how to get what's missing, because devvm never installs it itself. Then list the features Lima gives VMs. doctor fails when something is missing, but never for a warning, such as one about low free space.
 
 ```text
 devvm doctor [flags]
@@ -16,16 +16,15 @@ devvm doctor [flags]
 ## Examples
 
 ```text
-  devvm doctor         # check the backend new VMs get
+  devvm doctor         # check what devvm needs
   devvm doctor --json  # the same as JSON, for scripts
 ```
 
 ## Options
 
 ```text
-      --backend NAME   the backend NAME to use (default: devvm setup's, else lima)
-  -h, --help           help for doctor
-      --json           print what it found as JSON, and succeed whatever is missing
+  -h, --help   help for doctor
+      --json   print what it found as JSON, and succeed whatever is missing
 ```
 
 ## Options inherited from parent commands

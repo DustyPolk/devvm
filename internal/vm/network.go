@@ -33,7 +33,7 @@ type NetworkShown struct {
 // Network returns the folder's VM's network policy and its allowlist.
 func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 	var s NetworkShown
-	t, err := e.existing(ctx, "")
+	t, err := e.existing(ctx)
 	if err != nil {
 		return s, err
 	}
@@ -87,7 +87,7 @@ func (c NetworkChoice) Set(mode string) error {
 // while the VM is in a group, whose VMs all have network policy or none
 // do.
 func (e Net) SetNetwork(ctx context.Context, on bool) error {
-	t, err := e.existing(ctx, "")
+	t, err := e.existing(ctx)
 	if err != nil {
 		return err
 	}
@@ -187,7 +187,7 @@ func (e Net) LogBlocks(ctx context.Context) ([]netpolicy.Block, error) {
 // without network policy logs only its links' connections, and devvm says
 // so.
 func (e Net) netLog(ctx context.Context, follow bool) (*netpolicy.Log, string, error) {
-	t, err := e.findExisting(ctx, "")
+	t, err := e.findExisting(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -209,7 +209,7 @@ func (e Net) netLog(ctx context.Context, follow bool) (*netpolicy.Log, string, e
 // policyVM finds the folder's VM for devvm network allow, deny and rm,
 // which must exist and be made for this folder.
 func (e Net) policyVM(ctx context.Context) (*found, error) {
-	t, err := e.find(ctx, "")
+	t, err := e.find(ctx)
 	if err != nil {
 		return nil, err
 	}

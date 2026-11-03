@@ -56,7 +56,7 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 // and allowlist. Its .git is locked as new at its next launch. Only the
 // VM named for this path is adopted, never a parent folder's.
 func (e Lifecycle) Adopt(ctx context.Context, force bool) error {
-	t, _, err := e.lookup(ctx, "", false)
+	t, _, err := e.lookup(ctx, false)
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ type RmOptions struct {
 // never answers, and never without one; the earlier folder's isn't
 // exported, as its folder is gone.
 func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
-	t, err := e.findExisting(ctx, "")
+	t, err := e.findExisting(ctx)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 // Export saves the folder's VM's agents' history to file (absolute), or
 // to the exports folder when it's empty, starting the VM if it's stopped.
 func (e Lifecycle) Export(ctx context.Context, file string) error {
-	t, err := e.existing(ctx, "")
+	t, err := e.existing(ctx)
 	if err != nil {
 		return err
 	}

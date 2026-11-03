@@ -76,15 +76,3 @@ func checkNetwork(v string) error {
 	}
 	return nil
 }
-
-// backendName is what a backend's name can be (backend.Registry.Register);
-// which backends there are, the registry checks when it chooses one.
-var backendName = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
-
-// checkBackend refuses a backend default that can't be a backend's name.
-func checkBackend(v string) error {
-	if !backendName.MatchString(v) {
-		return errText("not a backend's name: " + strconv.Quote(v))
-	}
-	return nil
-}

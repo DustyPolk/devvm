@@ -24,10 +24,9 @@ devvm images rm IMAGE|KEY... [flags]
 ## Options
 
 ```text
-      --backend NAME   the backend NAME to use (default: devvm setup's, else lima)
-  -f, --force          don't ask to confirm, which devvm needs without a terminal
-      --from IMAGE     the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
-  -h, --help           help for rm
+  -f, --force        don't ask to confirm, which devvm needs without a terminal
+      --from IMAGE   the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
+  -h, --help         help for rm
 ```
 
 ## Options inherited from parent commands

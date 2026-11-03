@@ -16,17 +16,18 @@ import (
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// The features table has a column per backend; a feature a backend
-// doesn't list is none.
+// The features table has a row per feature with the backend's support; a
+// feature the backend doesn't list is none.
 func TestWriteFeatures(t *testing.T) {
-	a := backendtest.New("lima", backend.Caps{backend.FeatureSSH: backend.Native, backend.FeatureDisk: backend.Native})
-	b := backendtest.New("vmx", backend.Caps{backend.FeatureSSH: backend.Emulated(true), backend.FeatureDisk: backend.Emulated(false)})
-	out, colored := tables(t, func(tab *ui.Table) error { return writeFeatures(tab, []backend.Backend{a, b}) })
+	b := backendtest.New("lima", backend.Caps{
+		backend.FeatureSSH: backend.Native, backend.FeatureDisk: backend.Emulated(false), backend.FeaturePorts: backend.Emulated(true),
+	})
+	out, colored := tables(t, func(tab *ui.Table) error { return writeFeatures(tab, b) })
 	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
 	if len(lines) != len(backend.Features)+1 {
 		t.Fatalf("%d lines:\n%s", len(lines), out)
 	}
-	for _, want := range []string{"FEATURE LIMA VMX", "ssh native emulated", "disk native unreviewed", "cpus none none"} {
+	for _, want := range []string{"FEATURE SUPPORT", "ssh native", "disk unreviewed", "ports emulated", "cpus none"} {
 		found := false
 		for _, l := range lines {
 			found = found || strings.Join(strings.Fields(l), " ") == want
@@ -186,7 +187,7 @@ func TestDoctorSmallHostWarnsOnly(t *testing.T) {
 				Free: func(string) (uint64, error) { return 1 << 40, nil },
 				Host: func() (vm.Host, error) { return c.host, nil },
 			}
-			err := d.run(t.Context(), u, []backend.Backend{b}, b)
+			err := d.run(t.Context(), u, b)
 			if err != nil && msg.IDOf(err) == "" {
 				t.Fatal(err)
 			}

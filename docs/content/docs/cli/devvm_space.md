@@ -7,7 +7,7 @@ Show what devvm keeps on this machine and the space it takes
 
 ## Synopsis
 
-Show each kind of thing devvm keeps on this machine, on every backend, with the disk it takes, what devvm gc frees of it now and what frees the rest, then the backends' own caches apart. It changes nothing and starts no VM.
+Show each kind of thing devvm keeps on this machine, with the disk it takes, what devvm gc frees of it now and what frees the rest, then Lima's own caches apart. It changes nothing and starts no VM.
 
 ```text
 devvm space [flags]
@@ -23,9 +23,8 @@ devvm space [flags]
 ## Options
 
 ```text
-      --backend NAME   act only on the backend NAME (default: every backend)
-  -h, --help           help for space
-      --json           print it as one JSON object, for scripts
+  -h, --help   help for space
+      --json   print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

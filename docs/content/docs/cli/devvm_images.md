@@ -7,7 +7,7 @@ List the images and the shared tools
 
 ## Synopsis
 
-List the images on every backend, with whether each is current, stale, unfinished or being built and the disk it takes, then the shared tools devvm has built, with how many VMs have each. It ends with what they take in all.
+List the images, with whether each is current, stale, unfinished or being built and the disk it takes, then the shared tools devvm has built, with how many VMs have each. It ends with what they take in all.
 
 ```text
 devvm images [flags]
@@ -16,17 +16,15 @@ devvm images [flags]
 ## Examples
 
 ```text
-  devvm images                 # list the images and the shared tools
-  devvm images --backend lima  # only the lima backend's
-  devvm images --json          # the same lists as JSON, for scripts
+  devvm images         # list the images and the shared tools
+  devvm images --json  # the same lists as JSON, for scripts
 ```
 
 ## Options
 
 ```text
-      --backend NAME   act only on the backend NAME (default: every backend)
-  -h, --help           help for images
-      --json           print it as one JSON object, for scripts
+  -h, --help   help for images
+      --json   print it as one JSON object, for scripts
 ```
 
 ## Options inherited from parent commands

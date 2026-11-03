@@ -19,7 +19,7 @@ import (
 // Restart stops the folder's VM, then opens it as Up does: what changes
 // only when it starts (its mounts, size, ports) applies.
 func (e Launch) Restart(ctx context.Context, o Options) error {
-	t, err := e.existing(ctx, o.Backend)
+	t, err := e.existing(ctx)
 	if err != nil {
 		return err
 	}
@@ -42,9 +42,6 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	}
 	if o.Clone && !isClone(st) {
 		return msg.CloneNeedsNewVM(vm)
-	}
-	if t.flagIgnored {
-		e.Warn(msg.BackendFlagIgnored(b.Name(), vm))
 	}
 	if o.From != "" && o.From != st.Get(state.KeyFrom) {
 		e.Warn(msg.FromIgnored(vm))

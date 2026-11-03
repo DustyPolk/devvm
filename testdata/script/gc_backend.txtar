@@ -1,5 +1,6 @@
-# gc --backend: one backend's images, current ones too, and its unused
-# tool images, and nothing else. Never a VM.
+# gc and the backend: gc deletes the stale images and the unused tool
+# images, whichever backend a tool image's record names or none, and never
+# a current image or a VM. No flag chooses a backend.
 env SHARE=$XDG_DATA_HOME/devvm/tools
 
 # base and foo on Lima, foo made stale.
@@ -17,31 +18,22 @@ exec devvm rm --force --no-export
 exec sh -c 'cd "$SHARE" && for v in 1.2.0 1.3.0; do echo x > go-$v-0123456789ab.erofs; done'
 json_set $SHARE/go-1.2.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
 
-# Plain gc: the stale image and the unused tool images.
+# --backend is no flag of gc's, and refusing it deletes nothing.
 stub_reset
+! exec devvm gc --backend lima --force
+stderr '^devvm: flag_unknown command=devvm gc flag=--backend$'
+! stub_calls
+exists $SHARE/go-1.2.0-0123456789ab.erofs
+
+# gc: the stale image and both unused tool images; base stays.
 exec devvm gc --force
 stdout '^gc_image image=foo key=[0-9a-f]{12}$'
 stdout '^gc_tools count=2 '
 ! stdout 'image=base'
-
-# Again for Lima alone: its base, current, and its own tool image, not
-# one whose backend nobody can tell.
-exec sh -c 'cd "$SHARE" && echo x > go-1.2.0-0123456789ab.erofs && echo x > go-1.3.0-0123456789ab.erofs'
-json_set $SHARE/go-1.2.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
-stub_reset
-exec devvm gc --backend lima --force
-stdout '^gc_image image=base key=[0-9a-f]{12}$'
-stdout -count=1 '^gc_image '
-stdout '^gc_tools count=1 '
-! stdout gc_mise
 ! exists $SHARE/go-1.2.0-0123456789ab.erofs
-exists $SHARE/go-1.3.0-0123456789ab.erofs
+! exists $SHARE/go-1.3.0-0123456789ab.erofs
 exec devvm images
-! stdout '^base .* current '
-
-# An unknown backend is refused.
-! exec devvm --backend nope gc
-stderr '^devvm: backend_unknown '
+stdout '^base .* current '
 
 -- foo.sh --
 #!/bin/bash

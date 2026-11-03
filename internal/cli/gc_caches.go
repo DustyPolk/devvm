@@ -13,8 +13,7 @@ import (
 // --caches): what each backend can tell only devvm's builds put there and
 // no image or VM of devvm's needs. It lists each backend's apart and asks
 // for each; it never runs a backend's own prune, which reaches the user's
-// own entries too. With only, that backend alone; never one gc skipped,
-// as it couldn't list its images.
+// own entries too. Never one gc skipped, as it couldn't list its images.
 func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map[string]bool) error {
 	reg, err := newRegistry(b.Dirs, b.Assets, u)
 	if err != nil {
@@ -22,7 +21,7 @@ func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map
 	}
 	for _, be := range reg.All() {
 		c, ok := be.(backend.CacheCleaner)
-		if !ok || (o.only != "" && be.Name() != o.only) || skipped[be.Name()] {
+		if !ok || skipped[be.Name()] {
 			continue
 		}
 		entries, ok := cacheEntries(ctx, be, c)

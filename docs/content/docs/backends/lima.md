@@ -3,7 +3,7 @@ title: Lima
 weight: 1
 ---
 
-[Lima](https://lima-vm.io) is devvm's default backend, so every new VM uses it unless you [choose another](_index.md#choosing-a-backend). Each project gets a full VM with a kernel of its own, which runs on Apple's Virtualization framework (`vz`) on macOS and on QEMU on Linux. [How it works › Lima](../internals/lima.md) explains how devvm sets up, confines and clones Lima's VMs.
+[Lima](https://lima-vm.io) is devvm's backend, so every new VM runs on it ([a VM's backend](_index.md#a-vms-backend)). Each project gets a full VM with a kernel of its own, which runs on Apple's Virtualization framework (`vz`) on macOS and on QEMU on Linux. [How it works › Lima](../internals/lima.md) explains how devvm sets up, confines and clones Lima's VMs.
 
 ## Requirements
 
@@ -61,7 +61,7 @@ Set the variables in the VM's shell or in your project's scripts, before the too
 
 ## Cleaning up
 
-`devvm gc --backend lima` deletes all of devvm's Lima images, except on Linux hosts one whose disk VMs use, and the shared tools built for Lima that no VM has and that aren't current, and it leaves your VMs as they are ([cleaning up](../using/images.md#cleaning-up)). Lima also keeps a download cache of its own, which holds Ubuntu's cloud images that devvm's builds downloaded, and which your own Lima VMs share. `devvm gc --caches` deletes the cloud images that devvm downloads and that no image of devvm's names, after listing them and asking, and devvm never runs `limactl prune`, which empties the whole cache ([what devvm keeps](../using/space.md#lima)).
+`devvm gc` deletes devvm's stale and unfinished Lima images and the shared tools that no VM has and that aren't current, and it leaves your VMs as they are. `devvm images rm` deletes an image that's current, except on Linux hosts one whose disk VMs use ([cleaning up](../using/images.md#cleaning-up)). Lima also keeps a download cache of its own, which holds Ubuntu's cloud images that devvm's builds downloaded, and which your own Lima VMs share. `devvm gc --caches` deletes the cloud images that devvm downloads and that no image of devvm's names, after listing them and asking, and devvm never runs `limactl prune`, which empties the whole cache ([what devvm keeps](../using/space.md#lima)).
 
 ## Limits
 

@@ -9,7 +9,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/settings"
 )
 
 // Overrides are a test build's stand-ins for the backends, each the value
@@ -43,25 +42,19 @@ func New(d paths.Dirs, assets fs.FS, u UI, o Overrides) (*backend.Registry, erro
 	if o.KVM != "" {
 		l.KVM = o.KVM
 	}
-	r, err := backend.NewRegistry(l)
+	return build(u, host, o.Unreviewed, l)
+}
+
+// build returns the registry of bs, on host, warning through u, with the
+// unreviewed emulations unreviewed lets through (DEVVM_UNREVIEWED's
+// form); a backend whose name is bad or taken fails it.
+func build(u UI, host platform.Host, unreviewed string, bs ...backend.Backend) (*backend.Registry, error) {
+	r, err := backend.NewRegistry(bs...)
 	if err != nil {
 		return nil, err
 	}
 	r.Host = host
-	r.Unreviewed = backend.ParseUnreviewed(o.Unreviewed)
+	r.Unreviewed = backend.ParseUnreviewed(unreviewed)
 	r.Warn = u.Warn
-	r.DefaultBackend = func() (string, string, error) { return defaultBackend(d) }
 	return r, nil
 }
-
-// defaultBackend is the backend new VMs get without --backend, as d's
-// config.toml or settings.json names it, with that file; backend.Default
-// and "" when neither does.
-func defaultBackend(d paths.Dirs) (name, file string, err error) {
-	def, err := settings.Read(d)
-	return def.Backend.Value, def.Backend.Source.File(d), err
-}
-
-// Names are every backend's name, sorted, as New registers them: what
-// --backend takes.
-func Names() []string { return []string{lima.Name} }

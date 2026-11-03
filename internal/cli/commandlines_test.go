@@ -43,9 +43,6 @@ var (
 	// placeholderWord is a word that stands for what to fill in, such as
 	// IMAGE, [--cpus, TOOL..., IMAGE|KEY or a shell variable.
 	placeholderWord = regexp.MustCompile(`[A-Z]{2,}|\.\.\.|[\[\]|<>$*]|^N$|^GiB$`)
-	// e2eFlags is tests/e2e.sh's array of a backend's flags, as in
-	// "$D" ${S[*]} build.
-	e2eFlags = regexp.MustCompile(`^\$\{[A-Z]\[[*@]\]\}$`)
 	// placeholderName is a placeholder in an argument, such as TOOL in
 	// TOOL... or KEY=VALUE.
 	placeholderName = regexp.MustCompile(`[A-Z][A-Z_]+(?:=[A-Z]+)?`)
@@ -291,9 +288,6 @@ func wordsAfter(text string, code bool) []string {
 			w, _, _ = strings.Cut(w, "](")
 		}
 		switch {
-		case code && e2eFlags.MatchString(w):
-			// e2e's backend flags, --backend NAME
-			continue
 		case code && strings.HasSuffix(w, ")") && !strings.Contains(w, "("):
 			return append(words, strings.TrimSuffix(w, ")"))
 		case w == "", w == "|", w == "||", w == "&&", w == `\`, w == "-->", w == "devvm", strings.ContainsAny(w[:1], "#<>;&)({`\"'"):

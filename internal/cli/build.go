@@ -63,22 +63,21 @@ func newRebuildCmd(u *ui.UI) *cobra.Command {
 }
 
 // imageFlags are the flags of the commands that build or delete an image
-// by its name: the backend it's on and the container image its base
-// starts from; rebuild's --force too.
+// by its name: the container image its base starts from; rebuild's
+// --force too.
 type imageFlags struct {
-	backend, from string
-	force         bool
+	from  string
+	force bool
 }
 
 func (f *imageFlags) add(cmd *cobra.Command) {
-	addBackendFlag(cmd.Flags(), &f.backend)
 	addFromFlag(cmd.Flags(), &f.from)
 }
 
 // imageCmd runs do on the builds of the backend new VMs get, once the
 // name is one and the backend can run.
 func imageCmd(ctx context.Context, u *ui.UI, f imageFlags, name string, do func(build.Builds, context.Context, string) error) error {
-	b, err := builder(u, f.backend)
+	b, err := builder(u)
 	if err == nil {
 		b.From, b.Force = fromRef(f.from), f.force
 		err = from.Check(b.From)
@@ -96,9 +95,8 @@ func imageCmd(ctx context.Context, u *ui.UI, f imageFlags, name string, do func(
 	return nil
 }
 
-// builder returns what builds images on the backend new VMs get: flag's (--backend),
-// else the default.
-func builder(u *ui.UI, flag string) (*build.Env, error) {
+// builder returns what builds images on the backend new VMs get.
+func builder(u *ui.UI) (*build.Env, error) {
 	dirs, err := paths.FromEnv()
 	if err != nil {
 		return nil, err
@@ -107,7 +105,7 @@ func builder(u *ui.UI, flag string) (*build.Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := reg.For(dirs, new(state.VM), flag)
+	c, err := reg.For(dirs, new(state.VM))
 	if err != nil {
 		return nil, err
 	}

@@ -1,14 +1,14 @@
-# space: each kind of thing devvm keeps, on every backend, with its count,
-# size, whether devvm makes it again, what gc frees of it now and what
-# frees the rest, then a total; the backends' caches apart. It changes
-# nothing: no backend command but listings.
+# space: each kind of thing devvm keeps, with its count, size, whether
+# devvm makes it again, what gc frees of it now and what frees the rest,
+# then a total; Lima's caches apart. It changes nothing: no Lima command
+# but listings.
 env SHARE=$XDG_DATA_HOME/devvm/tools
 
 # Nothing yet: devvm's state and the total.
 exec devvm space
-stdout '^WHAT +BACKEND +COUNT +SIZE +KEPT +GC +FREED BY +RETAIN\n'
-stdout '^state +- +1 +\S+ +state +- +- +-\n'
-stdout '^total +- +- +\S+ +- +- +- +-\n'
+stdout '^WHAT +COUNT +SIZE +KEPT +GC +FREED BY +RETAIN\n'
+stdout '^state +1 +\S+ +state +- +- +-\n'
+stdout '^total +- +\S+ +- +- +- +-\n'
 ! stdout '^images'
 ! stderr .
 
@@ -35,32 +35,24 @@ exec sh -c 'echo x > "$DATA/exports/devvm-old-12345612345612-20260101-000000.tar
 exec sh -c 'echo x > "$VMS/12345612345601/logs/network.jsonl" && echo x > "$VMS/12345612345601/logs/proxy.log" && echo x > "$VMS/12345612345602/logs/proxy.log"'
 stub_reset
 exec devvm space
-stdout '^VMs +lima +1 +\S+ +only copy +- +devvm rm +-$'
-stdout '^images +lima +2 +\S+ +remade +\S+ +gc --backend lima +-$'
-stdout '^tools gnu +lima +\d+ +\S+ +remade +- +gc --tool-images +-$'
-stdout '^tools - +- +1 +\S+ +remade +\S+ +gc --tool-images +-$'
-stdout '^history +- +1 +\S+ +only copy +- +gc --history +-$'
-stdout '^network logs +- +2 +\S+ +log +- +devvm rm +-$'
-stdout '^run logs +- +\d+ +\S+ +log +- +the newest 20 stay +-$'
-stdout '^mise +- +1 +'
-stdout '^leftover state +- +1 +\S+ +leftover +- +gc --orphans +-$'
-stdout '^total +- +- +\S+ +- +\S+ +- +-$'
+stdout '^VMs +1 +\S+ +only copy +- +devvm rm +-$'
+stdout '^images +2 +\S+ +remade +\S+ +images rm +-$'
+stdout '^tools gnu +\d+ +\S+ +remade +- +gc --tool-images +-$'
+stdout '^tools - +1 +\S+ +remade +\S+ +gc --tool-images +-$'
+stdout '^history +1 +\S+ +only copy +- +gc --history +-$'
+stdout '^network logs +2 +\S+ +log +- +devvm rm +-$'
+stdout '^run logs +\d+ +\S+ +log +- +the newest 20 stay +-$'
+stdout '^mise +1 +'
+stdout '^leftover state +1 +\S+ +leftover +- +gc --orphans +-$'
+stdout '^total +- +\S+ +- +\S+ +- +-$'
 ! stdout '^devvm.s files'
 ! stderr .
 stub_calls
 ! stdout 'create|clone|delete|start|stop|edit|rm |prune|shell'
 
-# --backend: that backend's rows alone, with their total, and no other
-# backend asked.
-stub_reset
-exec devvm space --backend lima
-stdout '^VMs +lima +1 +'
-stdout '^images +lima +2 +'
-stdout '^tools gnu +lima +'
-! stdout '^(history|state|mise|tools -) '
-stdout '^total +- +- +\S+ +- +\S+ +- +-$'
-! exec devvm space --backend nope
-stderr '^devvm: backend_unknown '
+# --backend is no flag of space's.
+! exec devvm space --backend lima
+stderr '^devvm: flag_unknown command=devvm space flag=--backend$'
 
 # --json, for scripts.
 exec devvm space --json
@@ -93,7 +85,7 @@ env DEVVM_TEST_LIST_TIMEOUT=10m
 [darwin] mkdir $HOME/Library/Caches/lima/download/by-url-sha256/0123
 [darwin] exec sh -c 'echo x > "$HOME/Library/Caches/lima/download/by-url-sha256/0123/data"'
 [darwin] exec devvm space
-[darwin] stdout '^BACKEND +CACHE +COUNT +SIZE +PATH\nlima +download cache +1 +\S+ +\S+/Library/Caches/lima\n'
+[darwin] stdout '^CACHE +COUNT +SIZE +PATH\ndownload cache +1 +\S+ +\S+/Library/Caches/lima\n'
 [darwin] stderr '^space_caches_note$'
 
 -- foo.sh --

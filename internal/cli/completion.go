@@ -46,10 +46,9 @@ func newCompletionCmd(u *ui.UI) *cobra.Command {
 
 // addCompletions sets how the shell completes root's commands' arguments
 // and flags: image names for IMAGE, the toolchains, agents and layers for
-// --tools, --agents and --layers, backend names for --backend, and no
-// file names, which none of them take.
-func addCompletions(root *cobra.Command, u *ui.UI) {
-	backendNames := completeBackend(u)
+// --tools, --agents and --layers, and no file names, which none of them
+// take.
+func addCompletions(root *cobra.Command) {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.CompletionOptions.SetDefaultShellCompDirective(cobra.ShellCompDirectiveNoFileComp)
 	for _, c := range root.Commands() {
@@ -64,19 +63,7 @@ func addCompletions(root *cobra.Command, u *ui.UI) {
 	for _, flag := range []string{"tools", "agents", "layers"} {
 		_ = root.RegisterFlagCompletionFunc(flag, completeParts(flag))
 	}
-	completeBackendFlags(root, backendNames)
 	_ = root.RegisterFlagCompletionFunc("ports", cobra.FixedCompletions([]string{"all", "none"}, cobra.ShellCompDirectiveNoFileComp))
-}
-
-// completeBackendFlags completes --backend with backend names on c and
-// every command under it that takes it.
-func completeBackendFlags(c *cobra.Command, names cobra.CompletionFunc) {
-	if c.Flags().Lookup("backend") != nil {
-		_ = c.RegisterFlagCompletionFunc("backend", names)
-	}
-	for _, sub := range c.Commands() {
-		completeBackendFlags(sub, names)
-	}
 }
 
 // completeImage completes IMAGE: base and the layers, after the layers
@@ -139,22 +126,6 @@ func completeFeatures(_ *cobra.Command, _ []string, toComplete string) ([]cobra.
 	}
 	features, _ := (&build.Env{Dirs: dirs, Assets: assets.FS}).Features()
 	return joinedBy(",", toComplete, features), cobra.ShellCompDirectiveNoFileComp
-}
-
-// completeBackend returns what completes --backend with the backends'
-// names.
-func completeBackend(u *ui.UI) cobra.CompletionFunc {
-	return func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
-		dirs, err := paths.FromEnv()
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-		reg, err := newRegistry(dirs, assets.FS, u)
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-		return reg.Names(), cobra.ShellCompDirectiveNoFileComp
-	}
 }
 
 // joined completes the last of the +-joined parts in toComplete with the
