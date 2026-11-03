@@ -560,6 +560,10 @@ other = "There's no command devvm {{.word}}. Run devvm --help to see the command
 description = "command is the devvm command closest to word"
 other = "There's no command devvm {{.word}}. Did you mean devvm {{.command}}?"
 
+[no_command_part]
+description = "word is what was typed after devvm: a toolchain's, an agent's or a layer's name, or several joined with + or a comma; flags is the --tools, --agents and --layers flags that choose them, such as --tools node --agents claude"
+other = "There's no command devvm {{.word}}. To make a new VM with {{.word}}, run devvm {{.flags}}."
+
 [layer_exists]
 other = "{{.file}} already exists. Edit it, or choose another name."
 

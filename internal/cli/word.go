@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -10,9 +11,14 @@ import (
 )
 
 // checkWord refuses devvm WORD: WORD isn't a command, which the parser
-// would have run, and devvm takes no other word. It suggests the closest
-// command when one is close.
+// would have run, and devvm takes no other word. When WORD, or each of
+// its names joined with + or a comma, is a toolchain, an agent or a
+// layer, it points to the flags that choose them; otherwise it suggests
+// the closest command when one is close.
 func checkWord(root *cobra.Command, word string) error {
+	if flags := partsLine(word); flags != "" {
+		return msg.NoCommandPart(flags, word)
+	}
 	// Cobra's suggestions, by distance or as a prefix: the closest first.
 	if s := root.SuggestionsFor(word); len(s) > 0 {
 		command := s[0]
@@ -22,6 +28,30 @@ func checkWord(root *cobra.Command, word string) error {
 		return msg.NoCommandLike(command, word)
 	}
 	return msg.NoCommand(word)
+}
+
+// partsLine is the flags that choose word's names for a new VM, such as
+// --tools node --agents claude for node+claude, or "" when any of them
+// is no part's.
+func partsLine(word string) string {
+	parts := partNames()
+	chosen := map[string][]string{}
+	for _, n := range strings.FieldsFunc(word, func(r rune) bool { return r == '+' || r == ',' }) {
+		flag := partFlagOf(parts, n)
+		if flag == "" {
+			return ""
+		}
+		if !slices.Contains(chosen[flag], n) {
+			chosen[flag] = append(chosen[flag], n)
+		}
+	}
+	var line []string
+	for _, f := range partFlags() {
+		if names := chosen[f]; len(names) > 0 {
+			line = append(line, f, strings.Join(names, ","))
+		}
+	}
+	return strings.Join(line, " ")
 }
 
 // wordPanic is what the root's help panics with for devvm WORD --help

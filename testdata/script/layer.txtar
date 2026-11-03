@@ -60,7 +60,7 @@ exists $LAYERS/log.sh
 exec devvm __complete build l
 stdout '^log$'
 ! exec devvm log
-stderr '^devvm: no_command'
+stderr '^devvm: no_command_part flags=--layers log word=log$'
 exec devvm layer new stop
 exec devvm stop --help
 stdout 'devvm stop \[flags\]'

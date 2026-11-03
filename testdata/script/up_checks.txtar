@@ -81,7 +81,7 @@ stub_reset
 stderr '^devvm: no_command word=stray$'
 stderr '^usage_help command=devvm$'
 ! exec devvm --no-network-policy node
-stderr '^devvm: no_command_like command=code word=node$'
+stderr '^devvm: no_command_part flags=--tools node word=node$'
 ! exec devvm --no-network-policy --layers stray
 stderr '^devvm: unknown_part flag=--layers given=stray names=docker foo nix$'
 stderr '^usage_help command=devvm$'

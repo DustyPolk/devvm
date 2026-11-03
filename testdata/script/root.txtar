@@ -32,18 +32,29 @@ cmp stderr build-args.txt
 ! stdout .
 ! stub_calls
 
-# devvm takes no word but a command's: an image's or a shared tool's name,
-# as devvm IMAGE once took, is an unknown command, a usage error naming
-# devvm's --help, with a did-you-mean when a command is close; nothing
-# runs.
+# devvm takes no word but a command's. A toolchain's, an agent's or a
+# layer's name, or several joined with + or a comma, is a usage error
+# naming devvm's --help that points to the flags choosing them; any other
+# word gets a did-you-mean when a command is close. Nothing runs.
 ! exec devvm node
-stderr '^devvm: no_command_like command=code word=node$'
-stderr '^usage_help command=devvm$'
-! exec devvm node+claude
-stderr '^devvm: no_command word=node\+claude$'
+stderr '^devvm: no_command_part flags=--tools node word=node$'
 stderr '^usage_help command=devvm$'
 ! exec devvm claude
-stderr '^devvm: no_command word=claude$'
+stderr '^devvm: no_command_part flags=--agents claude word=claude$'
+! exec devvm docker
+stderr '^devvm: no_command_part flags=--layers docker word=docker$'
+! exec devvm node+claude
+stderr '^devvm: no_command_part flags=--tools node --agents claude word=node\+claude$'
+stderr '^usage_help command=devvm$'
+mkdir $XDG_CONFIG_HOME/devvm/layers
+cp $WORK/pg.sh $XDG_CONFIG_HOME/devvm/layers/pg.sh
+! exec devvm pg,node
+stderr '^devvm: no_command_part flags=--tools node --layers pg word=pg,node$'
+! exec devvm node+nope
+stderr '^devvm: no_command word=node\+nope$'
+! exec devvm stpo
+stderr '^devvm: no_command_like command=stop word=stpo$'
+stderr '^usage_help command=devvm$'
 ! stdout .
 ! stub_calls
 
@@ -80,3 +91,5 @@ usage_help command=devvm
 -- build-args.txt --
 devvm: args_too_many args=IMAGE command=devvm build given=a b
 usage_help command=devvm build
+-- pg.sh --
+set -euo pipefail

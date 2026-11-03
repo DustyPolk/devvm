@@ -2194,6 +2194,11 @@ func NoCommandLike(command string, word string) M {
 	return M{id: "no_command_like", vals: []val{{"command", command}, {"word", word}}}
 }
 
+// NoCommandPart is [no_command_part]: "There's no command devvm {{.word}}. To make a new VM with {{.word}}, run devvm {{.flags}}."
+func NoCommandPart(flags string, word string) M {
+	return M{id: "no_command_part", vals: []val{{"flags", flags}, {"word", word}}}
+}
+
 // NoDevcontainerFlagIgnored is [no_devcontainer_flag_ignored]: "The --no-devcontainer flag applies only to new VMs."
 func NoDevcontainerFlagIgnored() M {
 	return M{id: "no_devcontainer_flag_ignored"}
@@ -3799,6 +3804,7 @@ var specs = map[string]spec{
 	"no_code_command":                  {fields: []string{"host"}},
 	"no_command":                       {fields: []string{"word"}},
 	"no_command_like":                  {fields: []string{"command", "word"}},
+	"no_command_part":                  {fields: []string{"flags", "word"}},
 	"no_devcontainer_flag_ignored":     {},
 	"no_digest":                        {fields: []string{"from"}},
 	"no_feature":                       {fields: []string{"feature", "features"}},

@@ -403,6 +403,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"flags_exclusive":                  "using/troubleshooting#a-command-is-refused-before-it-runs",
 	"no_command":                       "getting-started/commands#devvm-itself",
 	"no_command_like":                  "getting-started/commands#devvm-itself",
+	"no_command_part":                  "using/images#what-a-new-vm-gets",
 	"unknown_part":                     "using/images#what-a-new-vm-gets",
 	"unknown_part_like":                "using/images#what-a-new-vm-gets",
 	"part_none_alone":                  "using/images#what-a-new-vm-gets",

@@ -169,20 +169,39 @@ func checkPartFlag(flag, value string) error {
 	if value == partsNone {
 		return nil
 	}
-	layers := image.Builtins
-	if dirs, err := paths.FromEnv(); err == nil {
-		layers = (&build.Env{Dirs: dirs}).Layers()[1:]
-	}
-	parts := map[string][]string{"--tools": image.Toolchains, "--agents": image.Agents, "--layers": layers}
+	parts := partNames()
 	for _, n := range names {
 		if slices.Contains(parts[flag], n) {
 			continue
 		}
-		for _, other := range []string{"--tools", "--agents", "--layers"} {
-			if other != flag && slices.Contains(parts[other], n) {
-				return msg.PartOtherFlag(flag, n, other)
-			}
+		if other := partFlagOf(parts, n); other != "" {
+			return msg.PartOtherFlag(flag, n, other)
 		}
 	}
 	return vm.CheckPart(flag, names, parts[flag])
+}
+
+// partFlags are the flags of a new VM's parts, in the order a command
+// line names them.
+func partFlags() []string { return []string{"--tools", "--agents", "--layers"} }
+
+// partNames is each part's flag and the names it takes: the shared
+// tools' toolchains and agents, and the layers, devvm's own and the
+// user's.
+func partNames() map[string][]string {
+	layers := image.Builtins
+	if dirs, err := paths.FromEnv(); err == nil {
+		layers = (&build.Env{Dirs: dirs}).Layers()[1:]
+	}
+	return map[string][]string{"--tools": image.Toolchains, "--agents": image.Agents, "--layers": layers}
+}
+
+// partFlagOf is the flag that takes name, or "" when no part has it.
+func partFlagOf(parts map[string][]string, name string) string {
+	for _, f := range partFlags() {
+		if slices.Contains(parts[f], name) {
+			return f
+		}
+	}
+	return ""
 }

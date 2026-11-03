@@ -56,10 +56,11 @@ func TestCommandNames(t *testing.T) {
 }
 
 // devvm WORD, devvm WORD --help and devvm help WORD, for a word that isn't
-// a command, fail alike: a usage error suggesting the closest command,
-// naming devvm --help, and nothing runs. An image's or a shared tool's
-// name is no command either, nor is a layer of the user's: devvm takes
-// no word, and a layer may have a command's name.
+// a command, fail alike: a usage error naming devvm --help, and nothing
+// runs. A toolchain's, an agent's or a layer's name, the user's layers
+// included, or several joined with + or a comma, points to the flags
+// that choose them; any other word gets the closest command, when one is
+// close. devvm takes no word, and a layer may have a command's name.
 func TestUnknownWord(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	cfg := t.TempDir()
@@ -82,12 +83,18 @@ func TestUnknownWord(t *testing.T) {
 		{[]string{"help", "stoop"}, "no_command_like command=stop word=stoop"},
 		{[]string{"imagse"}, "no_command_like command=images word=imagse"},
 		{[]string{"xyzzy"}, "no_command word=xyzzy"},
-		{[]string{"node"}, "no_command_like command=code word=node"},
-		{[]string{"claude"}, "no_command word=claude"},
+		{[]string{"node"}, "no_command_part flags=--tools node word=node"},
+		{[]string{"node", "--help"}, "no_command_part flags=--tools node word=node"},
+		{[]string{"help", "node"}, "no_command_part flags=--tools node word=node"},
+		{[]string{"claude"}, "no_command_part flags=--agents claude word=claude"},
+		{[]string{"docker"}, "no_command_part flags=--layers docker word=docker"},
+		{[]string{"pg"}, "no_command_part flags=--layers pg word=pg"},
+		{[]string{"node+claude"}, "no_command_part flags=--tools node --agents claude word=node+claude"},
+		{[]string{"docker,go+node+codex+node"}, "no_command_part flags=--tools go,node --agents codex --layers docker word=docker,go+node+codex+node"},
 		{[]string{"base"}, "no_command word=base"},
-		{[]string{"docker"}, "no_command_like command=doctor word=docker"},
-		{[]string{"pg"}, "no_command_like command=gc word=pg"},
-		{[]string{"node+claude"}, "no_command word=node+claude"},
+		{[]string{"node+nope"}, "no_command word=node+nope"},
+		{[]string{"nodee"}, "no_command_like command=code word=nodee"},
+		{[]string{"pgg"}, "no_command_like command=gc word=pgg"},
 		{[]string{"help", "tools", "nope"}, "no_subcommand command=devvm tools commands=add, rm, update given=nope"},
 	} {
 		s := stubbed(nil)
