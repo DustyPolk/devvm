@@ -34,6 +34,10 @@ const miseURL = "https://github.com/jdx/mise/releases/download/v%[1]s/mise-v%[1]
 // downloadTimeout bounds mise's download, start to end.
 const downloadTimeout = 10 * time.Minute
 
+// downloadRetries is how many times mise's download is tried again after
+// a failure that may pass.
+const downloadRetries = 3
+
 // newClient is the client mise is downloaded with: redirects to https
 // only.
 func newClient() *fetch.Client { return fetch.NewClient(downloadTimeout, fetch.HTTPSOnly) }
@@ -66,10 +70,15 @@ func (t Versions) HostMise(ctx context.Context) (string, error) {
 	stop := t.Status(msg.DownloadingMise(miseVersion))
 	defer stop()
 	// fetch keeps the download only once its SHA-256 is the pin's, and
-	// leaves nothing when it fails.
+	// leaves nothing when it fails; a failure that may pass (no answer,
+	// 408, 429, 5xx) is tried again.
 	tmp := path + ".tmp"
 	defer func() { _ = os.Remove(tmp) }()
-	err := fetch.Download(ctx, t.Client, fmt.Sprintf(t.miseURL, miseVersion, platform), tmp, t.miseSums[platform])
+	url := fmt.Sprintf(t.miseURL, miseVersion, platform)
+	err := fetch.Retry(ctx, downloadRetries, t.RetryDelay, func() (bool, error) {
+		err := fetch.Download(ctx, t.Client, url, tmp, t.miseSums[platform])
+		return fetch.Transient(err), err
+	})
 	switch {
 	case errors.Is(err, fetch.ErrChecksum):
 		return "", msg.MiseChecksum(miseVersion)

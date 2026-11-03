@@ -63,7 +63,10 @@ type Env struct {
 	OS, Arch string
 	Getenv   func(string) string
 	Client   *fetch.Client
-	Now      func() time.Time
+	// RetryDelay is the wait before a download's first retry; it doubles
+	// after each.
+	RetryDelay time.Duration
+	Now        func() time.Time
 	// Detach starts the daily check, which outlives the run
 	// (daemon.Detach).
 	Detach daemon.Starter
@@ -126,7 +129,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Env {
 	}
 	return &Env{
 		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Arch: runtime.GOARCH,
-		Getenv: os.Getenv, Client: newClient(), Now: time.Now, Detach: daemon.Detach,
+		Getenv: os.Getenv, Client: newClient(), RetryDelay: time.Second, Now: time.Now, Detach: daemon.Detach,
 		ShareNote: 3 * time.Second, miseURL: miseURL, miseSums: miseSHA256,
 		Info: u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		LogNote: u.LogNote, Status: u.Status, LoggedCmd: u.LoggedCmd, AddCleanup: u.AddCleanup,

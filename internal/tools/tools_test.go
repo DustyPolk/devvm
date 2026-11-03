@@ -129,6 +129,7 @@ func newEnv(t *testing.T) env {
 	tl.Getenv = func(string) string { return "" }
 	tl.Mise = repo(t, "testdata", "stubs", "mise")
 	tl.ShareNote = time.Millisecond
+	tl.RetryDelay = time.Millisecond
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Info = func(m msg.M) { said = append(said, "==> "+m.Names()) }
 	tl.Warn = func(m msg.M) { said = append(said, "devvm: "+m.Names()) }
@@ -1376,6 +1377,49 @@ func TestHostMiseRedirect(t *testing.T) {
 	}
 	if ents, _ := os.ReadDir(filepath.Join(e.Dirs.Mise(), miseVersion)); len(ents) != 0 {
 		t.Errorf("left %v", ents)
+	}
+}
+
+// mise's download is tried again after failures that may pass, and not
+// after an answer that won't change.
+func TestHostMiseRetry(t *testing.T) {
+	body := []byte("#!/bin/sh\necho mise\n")
+	sum, err := image.SHA256File(writeTemp(t, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name     string
+		codes    []int // the answers before the file, one per request
+		want     string
+		requests int
+	}{
+		{"two server errors", []int{http.StatusInternalServerError, http.StatusBadGateway}, "", 3},
+		{"too many requests", []int{http.StatusTooManyRequests}, "", 2},
+		{"not found", []int{http.StatusNotFound}, "mise_download_failed version=" + miseVersion, 1},
+		{"forbidden", []int{http.StatusForbidden}, "mise_download_failed version=" + miseVersion, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests++
+				if requests <= len(tc.codes) {
+					w.WriteHeader(tc.codes[requests-1])
+					return
+				}
+				_, _ = w.Write(body)
+			}))
+			defer srv.Close()
+			e := newEnv(t)
+			e.Mise = ""
+			e.OS, e.Arch = "linux", "amd64"
+			e.miseURL = srv.URL + "/v%[1]s/mise-v%[1]s-%[2]s"
+			e.miseSums = map[string]string{"linux-x64": sum}
+			_, err := e.HostMise(t.Context())
+			if got := msg.NamesOf(err); got != tc.want || requests != tc.requests {
+				t.Errorf("HostMise = %q (%v) after %d requests, want %q after %d", got, err, requests, tc.want, tc.requests)
+			}
+		})
 	}
 }
 
