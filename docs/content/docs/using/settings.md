@@ -7,7 +7,7 @@ devvm writes nothing into your project folders. It keeps the settings you edit i
 
 ## Your settings
 
-`~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds what you edit, and it's the only folder of devvm's that you should change by hand. devvm never rewrites a file there. It reads `config.toml` and your own layers, features and CAs, it creates a new layer's files when you run `devvm layer new`, and it changes single lines of `policy` when you add or remove a rule for every VM.
+`~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds what you edit, and it's the only folder of devvm's that you should change by hand. devvm never rewrites a file there. It reads `config.toml` and your own layers, features and CAs, it creates a new layer's files when you run `devvm layer new`, it changes single lines of `policy` when you add or remove a rule for every VM, and it writes `version` when the folder has none.
 
 | File | What it holds | Written by |
 | --- | --- | --- |
@@ -16,6 +16,7 @@ devvm writes nothing into your project folders. It keeps the settings you edit i
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new`, then you |
 | `features/` | your own [features](customizing.md#your-own-features) | you |
 | `ca/` | your [company's CA certificates](#a-companys-ca), which VMs and builds trust | you |
+| `version` | the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders), which says how devvm keeps its files here | devvm, when it's missing |
 
 Edit the files in `~/.config/devvm`, and never edit the ones in `~/.local/share/devvm`. devvm writes those itself and rewrites them whole, so a change you make there can be lost, or can stop devvm from reading the file. To set a default by hand, put it in `config.toml` instead.
 

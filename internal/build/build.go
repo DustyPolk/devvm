@@ -45,6 +45,8 @@ type Env struct {
 	// From is the container image base starts from (--from); "" for the
 	// backend's own Ubuntu. Its images are apart from other bases'.
 	From string
+	// Version is devvm's version, which each image's record keeps.
+	Version string
 	// Lookup looks up From's digest when building; nil for the internet's
 	// (from.NewLookup).
 	Lookup *from.Lookup
@@ -350,7 +352,7 @@ func (b Builds) build(ctx context.Context, name string) error {
 	}
 	// The record is written last: an image without one didn't finish.
 	// Every image on a --from base records it and its digest.
-	rec := state.Image{Name: name, Chain: chain.String(), From: b.From, Digest: digest, Libc: libc, Built: time.Now().UTC().Truncate(time.Second)}
+	rec := state.Image{Name: name, Chain: chain.String(), From: b.From, Digest: digest, Libc: libc, Built: time.Now().UTC().Truncate(time.Second), MadeBy: b.Version}
 	if name == image.Base {
 		rec.Libc = out.Libc
 		if b.From == "" {

@@ -102,6 +102,7 @@ devvm writes nothing into the project folder. It keeps what you edit in `~/.conf
 
 | Path in `~/.local/share/devvm` | Holds |
 | --- | --- |
+| `version`, `version.lock` | the folder's [layout version](#the-layout-version), and the lock each devvm checking it holds |
 | `settings.json` | the defaults devvm's commands save, below `config.toml`'s ([where a default comes from](../using/settings.md#where-a-default-comes-from)) |
 | `ssh_config`, `known_hosts` | the [ssh config](security.md#ssh-into-vms) for running VMs, and their pinned host keys |
 | `agent-keys.json` | the keys added to [devvm's own SSH agent](../using/ssh.md#devvms-own-agent): each one's file, fingerprint, `confirm` and `lifetime` |
@@ -125,7 +126,7 @@ devvm writes nothing into the project folder. It keeps what you edit in `~/.conf
 
 [What devvm keeps on this machine](../using/space.md) says how each of these is cleaned up, and lists what the backends keep outside this folder.
 
-A VM's state is `vm.json`, a JSON file that only devvm writes. It starts with the fields every VM has: the file's `version`, the VM's random `id`, its `name` and its ssh `alias`, the `image` the VM came from with its build `chain` and the `from` image its base started from, its project folder (`dir`) and that folder's identity (`folder`), its `backend` and where that backend kept it (`backend_at`), and `created`, the time its backend finished making it. A VM without `created` never starts, because its creation didn't finish. After those fields comes one section for each part of devvm that keeps something of the VM's:
+A VM's state is `vm.json`, a JSON file that only devvm writes. It starts with the fields every VM has: the file's `version`, the VM's random `id`, its `name` and its ssh `alias`, the `image` the VM came from with its build `chain` and the `from` image its base started from, its project folder (`dir`) and that folder's identity (`folder`), its `backend` and where that backend kept it (`backend_at`), `created`, the time its backend finished making it, and `made_by`, the version of the devvm that made it, which later changes keep. A VM without `created` never starts, because its creation didn't finish. After those fields comes one section for each part of devvm that keeps something of the VM's:
 
 | Section | Kept by | Holds |
 | --- | --- | --- |
@@ -150,3 +151,15 @@ Reading a VM's state takes no lock, because each write replaces the file whole. 
 No VM's folder holds a socket, because a unix socket's path is at most 104 characters and ssh adds 17 to a control socket's while it makes it. The sockets that VMs need are in `run/`, named by hashes: each port forwarder's control socket, `run/<backend>-<hash>.ctl`, and each link session's `run/link-<hash>.sock` and `run/link-<hash>.ctl`. With the default data folder, every socket fits for a home folder of up to 37 characters, and the ssh control sockets are the longest.
 
 Each write replaces a file whole, so a file is never left half written. devvm makes its files readable only by you (mode 600), and the programs it keeps to run, such as its mise and QEMU wrapper, are mode 700, as are its folders. Before every command, devvm makes the data folder and `~/.config/devvm` when they're missing and sets both to mode 700, whatever mode they had. A wider mode on anything beneath them then opens nothing to others, and when devvm can't set a folder's mode, it warns and goes on. The folders that hold history, logs, keys or secrets (`exports/`, `logs/`, `logs/runs/`, `run/`, `ca/`, `secrets/`, and the `run/`, `logs/` and `backend/` folders in each VM's folder) are set to mode 700 again whenever devvm writes an export, a log, a key or a secret into them, whatever mode they had before. devvm refuses to use one of those folders when it's a symbolic link or not a folder at all, so it never sets the mode of whatever a link points to. The data folder and `~/.config/devvm` may be symbolic links, such as into a dotfiles repo, and devvm follows them. When a file can't be read, devvm names the file and the line, and you fix the line or delete the file.
+
+### The layout version
+
+The layout version says which folders and files devvm keeps in its two folders, and in which formats. This devvm's is 1. The data folder and `~/.config/devvm` each record theirs in a file named `version`, which holds the number alone. Before every command, after it makes both folders private, devvm takes `version.lock` in the data folder with an OS file lock and reads both files:
+
+- When both have this devvm's version, the command runs.
+- When a folder has no `version` file, as a new folder doesn't, devvm writes its own version there.
+- When either one is older, devvm changes the folders to its own layout, one version at a time, and then writes its version into both files. A change that fails stops the command and leaves the versions as they were, so the next command tries again.
+- When either one is newer, a newer devvm changed the folders, so this one would misread them. The command stops before it does anything, with a message that names the file and both versions ([a newer devvm changed devvm's folders](../using/troubleshooting.md#a-newer-devvm-changed-devvms-folders)).
+- A `version` file that doesn't hold a whole number from 1 up stops the command too, naming the file.
+
+Help, completion, `devvm --version` and the commands that devvm runs itself, such as the proxy, skip the check. Each VM's `vm.json`, each image's record and each shared tool image's record also hold `made_by`, the version of the devvm that made it, so a file from another devvm can be told apart.

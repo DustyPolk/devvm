@@ -52,7 +52,7 @@ func TestVMRoundTrip(t *testing.T) {
 	}
 	created := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	create(t, d, v, func(v *VM) {
-		v.Alias, v.Chain, v.From, v.Folder, v.BackendAt, v.Created = "devvm-p", "base=abc", "debian:12", "1:2:3", "/lima", created
+		v.Alias, v.Chain, v.From, v.Folder, v.BackendAt, v.Created, v.MadeBy = "devvm-p", "base=abc", "debian:12", "1:2:3", "/lima", created, "0.1.0"
 		if err := SetSection(v, "count", counter{N: 3, Seen: []string{"a<b"}}); err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +63,7 @@ func TestVMRoundTrip(t *testing.T) {
 	}
 	if back.Name() != vmP || back.ID == "" || back.ID != v.ID || back.Alias != "devvm-p" || back.Chain != "base=abc" ||
 		back.From != "debian:12" || back.Folder != "1:2:3" || back.BackendAt != "/lima" || !back.Created.Equal(created) ||
-		back.Image != "base" || back.Dir != "/p" || back.Backend != "lima" || !back.Exists() || !back.Finished() {
+		back.Image != "base" || back.Dir != "/p" || back.Backend != "lima" || back.MadeBy != "0.1.0" || !back.Exists() || !back.Finished() {
 		t.Errorf("read back %+v", back)
 	}
 	if c, err := Section[counter](back, "count"); err != nil || c.N != 3 || !slices.Equal(c.Seen, []string{"a<b"}) {
@@ -80,13 +80,14 @@ func TestVMRoundTrip(t *testing.T) {
 	if err != nil || byHash.Name() != vmP || byHash.Image != "base" {
 		t.Errorf("ReadHash = %+v, %v", byHash, err)
 	}
-	// A newer devvm's fields and sections are kept by this one's writes.
-	write(t, d.VM(vmP).State(), strings.Replace(file, `"version": 1,`, `"version": 1, "newer": {"x": 1}, "made_by": "9.9",`, 1))
+	// A newer devvm's fields and sections are kept by this one's writes,
+	// and so is the version of the devvm that made the VM.
+	write(t, d.VM(vmP).State(), strings.Replace(file, `"version": 1,`, `"version": 1, "newer": {"x": 1},`, 1))
 	if err := back.Update(t.Context(), func(v *VM) error { return SetSection(v, "count", counter{N: 4}) }); err != nil {
 		t.Fatal(err)
 	}
-	if got := read(t, d.VM(vmP).State()); !strings.Contains(got, `"newer": {`) || !strings.Contains(got, `"made_by": "9.9"`) {
-		t.Errorf("unknown fields lost:\n%s", got)
+	if got := read(t, d.VM(vmP).State()); !strings.Contains(got, `"newer": {`) || !strings.Contains(got, `"made_by": "0.1.0"`) {
+		t.Errorf("unknown fields or made_by lost:\n%s", got)
 	}
 	// A section set to its zero value goes.
 	if err := back.Update(t.Context(), func(v *VM) error { return SetSection(v, "count", counter{}) }); err != nil {

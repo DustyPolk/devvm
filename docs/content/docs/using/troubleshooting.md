@@ -79,6 +79,10 @@ On Lima, base starts from a pinned, dated release of Ubuntu's cloud image. Ubunt
 
 When devvm can't read one of its settings or state files, it names the file, and the line when the problem is on one. Fix the line or delete the file. [Settings and files](settings.md) lists what each file holds.
 
+## A newer devvm changed devvm's folders
+
+devvm's data folder, `~/.local/share/devvm`, and its settings folder, `~/.config/devvm`, each record their layout version in a file named `version`, which says how devvm keeps its files there, and devvm checks both before each command. When either one has a newer version than this devvm's, a newer devvm has changed the folders, so this one refuses to run rather than misread them, and it names the file and both versions. Run the newer devvm, or upgrade this one to it, for example after going back to an older version by mistake. `devvm --version`, help and completion still run. An older version is never refused, because devvm changes the folders to its own layout before the command runs, and a folder without a `version` file gets this devvm's ([the layout version](../internals/overview.md#the-layout-version)).
+
 ## devvm names set-id files
 
 On a Linux host, root in a VM can set the set-user-id and set-group-id bits on files in the project folder, and those bits reach this machine, so such a file runs as its owner for anyone who runs it. devvm names these files at each launch and stop, and it names the ones that root owns apart from the rest, because those run as root.

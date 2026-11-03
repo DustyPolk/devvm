@@ -89,11 +89,12 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 
 | Path | What it is | How it's cleaned up |
 | --- | --- | --- |
+| `version`, `version.lock` | the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders), and an empty file that each devvm checking it locks | they stay, and take no space |
 | `settings.json` | the defaults that `devvm setup`, `devvm size -g`, `devvm ports -g`, `devvm network -g` and `devvm retention` save, below [`config.toml`](settings.md#configtoml)'s | it stays, and takes almost no space |
 | `ssh_config`, `known_hosts` | the [ssh config](ssh.md#ssh-access-by-name) for running VMs and their host keys | devvm takes a VM out when it stops or deletes the VM |
 | `agent-keys.json` | the keys in [devvm's own SSH agent](ssh.md#devvms-own-agent) and their options | `devvm ssh-agent rm` takes a key out |
 | `secrets/` | on Linux hosts, your [secrets](../safety/network.md#saving-and-binding-secrets), one file each | `devvm secret rm` deletes one |
-| `vms/<hash>/` | one folder for each VM, which holds everything devvm keeps for it in its data folder. `<hash>` is the hash of the project folder's path that the VM's name ends with. The folder holds the VM's [state](settings.md#devvms-state) in `state`, which records the VM's name, its ssh alias, its image, folder, backend and settings, and the VM's own network rules in `policy`. Its backend's files are in `backend/`, the files of its proxy, link session and sandbox are in `run/`, and its logs are in `logs/` | `devvm rm` deletes the whole folder with the VM |
+| `vms/<hash>/` | one folder for each VM, which holds everything devvm keeps for it in its data folder. `<hash>` is the hash of the project folder's path that the VM's name ends with. The folder holds the VM's [state](settings.md#devvms-state) in `vm.json`, which records the VM's name, its ssh alias, its image, folder, backend and settings and the version of the devvm that made it, and the VM's own network rules in `policy`. Its backend's files are in `backend/`, the files of its proxy, link session and sandbox are in `run/`, and its logs are in `logs/` | `devvm rm` deletes the whole folder with the VM |
 | `images/` | a folder for each image, named by its key, which holds the image's record, `record.json`; the [rebuild counters](images.md#rebuilding) in `rebuilds.json`, one for each backend, each image that base starts from and each image; and in `locks/` an empty file for each image that the devvm building it locks, and one, `rebuilds`, that a devvm changing a rebuild counter locks | `devvm gc` and `devvm images rm` delete an image's folder and its lock file with the image |
 | `tools/` | the [shared tools](images.md#shared-tools), one read-only image per tool version, each with a record beside it, `<image>.json`, which holds its checksum, the backend that built it, the C library it's built for, when it was built and, once retention finds that no VM has it, since when | `devvm gc` deletes the versions that no VM has and that aren't the current ones, `devvm gc --tool-images` also the current ones that no VM has, except those built in the last hour, and `devvm gc --tool-images --recent` those too, each with its record |
 | `mise.lock`, `mise.lock.toml`, `mise.lock.checked` | the tools lock, which holds the tools' versions and their checksums, the config it was resolved from, and when devvm last checked upstream for newer versions | devvm replaces them when it checks again |
@@ -146,9 +147,18 @@ Once a VM's state is gone, `devvm gc` treats its shared tools like any others. `
 
 A VM can also be the other way around: the backend has it, with devvm's label, but devvm has no state for it. Usually it belongs to another devvm, such as one run with another `XDG_DATA_HOME` for a test or a sandbox. `devvm space` names each one, with the data folder its label names, and devvm never deletes it, because the other devvm may still use it. To delete one yourself, run `devvm limactl delete NAME`.
 
+### What devvm doctor finds in `vms/`
+
+`vms/` should hold only VMs' folders, each named by a hash of 14 hexadecimal digits and holding the VM's `vm.json`. `devvm doctor` warns about anything else it finds there, says what to do, and changes nothing:
+
+- **An entry that isn't a VM's folder,** such as a file or a folder with another name, which devvm never uses. Move it out of `vms/` or delete it.
+- **A VM's folder without `vm.json`,** which a devvm that stopped while making or deleting a VM leaves, for example one holding only the VM's `lock`. No VM uses the folder, so delete it.
+
+These warnings never make doctor fail, and `devvm doctor --json` lists them in `warnings`.
+
 ## Your settings
 
-`~/.config/devvm` holds what you edit: `config.toml`, your network policy rules, your own layers and features, and your company's CA certificates. [Your settings](settings.md#your-settings) lists each file. devvm never deletes any of them.
+`~/.config/devvm` holds what you edit: `config.toml`, your network policy rules, your own layers and features, and your company's CA certificates. devvm also writes the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders) into `version` there when the file is missing. [Your settings](settings.md#your-settings) lists each file. devvm never deletes any of them.
 
 ## Lima
 

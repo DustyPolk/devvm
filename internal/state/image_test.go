@@ -15,7 +15,7 @@ import (
 func TestImage(t *testing.T) {
 	d := testDirs(t)
 	built := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
-	want := Image{Name: "base", Chain: "base=0123456789ab", From: "alpine:3", Digest: "alpine@sha256:aa", Libc: "musl", Built: built}
+	want := Image{Name: "base", Chain: "base=0123456789ab", From: "alpine:3", Digest: "alpine@sha256:aa", Libc: "musl", Built: built, MadeBy: "0.1.0"}
 	if err := WriteImage(d, "0123456789ab", want); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestImage(t *testing.T) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 	data := read(t, filepath.Join(d.Images(), "0123456789ab", "record.json"))
-	for _, line := range []string{`"name": "base"`, `"from": "alpine:3"`, `"built": "2026-11-02T10:00:00Z"`} {
+	for _, line := range []string{`"name": "base"`, `"from": "alpine:3"`, `"built": "2026-11-02T10:00:00Z"`, `"made_by": "0.1.0"`} {
 		if !strings.Contains(data, "\n  "+line) {
 			t.Errorf("record.json lacks the line %s:\n%s", line, data)
 		}
@@ -46,7 +46,7 @@ func TestImage(t *testing.T) {
 // Fields a record doesn't know are ignored: a newer devvm's read.
 func TestImageUnknownFields(t *testing.T) {
 	d := testDirs(t)
-	write(t, d.ImageRecord("0123456789ab"), `{"name": "base", "libc": "gnu", "made_by": "9.9.9", "new": {"x": 1}}`)
+	write(t, d.ImageRecord("0123456789ab"), `{"name": "base", "libc": "gnu", "newer": "9.9.9", "new": {"x": 1}}`)
 	got, err := ReadImage(d, "0123456789ab")
 	if err != nil || got.Name != "base" || got.Libc != "gnu" {
 		t.Errorf("got %+v, %v", got, err)
@@ -254,7 +254,7 @@ func TestToolImage(t *testing.T) {
 	d := testDirs(t)
 	const file = "go-1.2.0-0123456789ab.erofs"
 	built := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
-	want := ToolImage{SHA256: "aa", Libc: "gnu", Format: "plain-0123456789ab", Backend: "qemu", Built: built}
+	want := ToolImage{SHA256: "aa", Libc: "gnu", Format: "plain-0123456789ab", Backend: "qemu", Built: built, MadeBy: "0.1.0"}
 	if err := WriteToolImage(d, file, want); err != nil {
 		t.Fatal(err)
 	}

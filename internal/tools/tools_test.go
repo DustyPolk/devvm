@@ -124,7 +124,7 @@ func newEnv(t *testing.T) env {
 	}
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
 	var said, detached []string
-	tl := New(d, os.DirFS(root), quietUI{}, platform.Host{})
+	tl := New(d, os.DirFS(root), "0.1.0-test", quietUI{}, platform.Host{})
 	tl.Self = "/devvm"
 	tl.Arch = "arm64"
 	tl.Getenv = func(string) string { return "" }
@@ -558,7 +558,7 @@ func (e env) checkHashes(t *testing.T, files []string) {
 		}
 		rec, err := state.ReadToolImage(e.Dirs, f)
 		if err != nil || rec.SHA256 != sum || rec.Libc != gnuT.Libc || rec.Format != gnuT.Format || rec.Backend != "fake" ||
-			time.Since(rec.Built) > time.Minute {
+			rec.MadeBy != "0.1.0-test" || time.Since(rec.Built) > time.Minute {
 			t.Errorf("%s's record: %+v, %v", f, rec, err)
 		}
 	}

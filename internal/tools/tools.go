@@ -57,8 +57,9 @@ type Env struct {
 	// Assets holds devvm's own files (assets.FS): shared-tools/mise.toml
 	// and shared-tools/build.sh.
 	Assets fs.FS
-	// Self is devvm's binary, which the daily check runs.
-	Self string
+	// Self is devvm's binary, which the daily check runs; Version its
+	// version, which each tool image's record keeps.
+	Self, Version string
 	// OS and Arch are the host's, as Go names them.
 	OS, Arch string
 	Getenv   func(string) string
@@ -119,8 +120,9 @@ type UI interface {
 }
 
 // New returns the shared tools in devvm's folders, with devvm's own files
-// (assets), on u, checking host's free space before a build.
-func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Env {
+// (assets), for devvm's version, on u, checking host's free space before
+// a build.
+func New(d paths.Dirs, assets fs.FS, version string, u UI, host platform.Host) *Env {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -128,7 +130,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host) *Env {
 		}
 	}
 	return &Env{
-		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Arch: runtime.GOARCH,
+		Dirs: d, Assets: assets, Self: self, Version: version, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Getenv: os.Getenv, Client: newClient(), RetryDelay: time.Second, Now: time.Now, Detach: daemon.Detach,
 		ShareNote: 3 * time.Second, miseURL: miseURL, miseSums: miseSHA256,
 		Info: u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },

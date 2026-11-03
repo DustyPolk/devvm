@@ -105,7 +105,7 @@ func newEnv(u *ui.UI) (*vm.Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	e, err := vm.NewEnv(dirs, assets.FS, self, reg, u)
+	e, err := vm.NewEnv(dirs, assets.FS, self, devvmVersion(), reg, u)
 	if err != nil {
 		return nil, err
 	}

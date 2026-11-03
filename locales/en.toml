@@ -707,6 +707,22 @@ other = "Another devvm is applying the retention settings. Run devvm gc --retent
 description = "data is devvm's data folder and config its settings folder, which devvm makes mode 700 on every run"
 other = "The folders {{.data}} and {{.config}} can't be made yours alone, so others may be able to read devvm's files in them. Check that you own both folders."
 
+[layout_newer]
+description = "path is a version file, version the layout version it records and current this devvm's"
+other = "{{.path}} says devvm's folders have layout version {{.version}}, newer than this devvm's {{.current}}, so a newer devvm changed them. Run that devvm, or upgrade this one."
+
+[layout_unchecked]
+description = "reason is why devvm couldn't read or write a layout version file, which it names"
+other = "Checking the layout version of devvm's folders failed: {{.reason}}. Fix the file it names, or delete it."
+
+[vms_stray]
+description = "doctor's warning for an entry in the VMs' folder, vms, that isn't a VM's folder"
+other = "{{.path}} isn't a VM's folder, so devvm doesn't use it. Move it out of {{.vms}}, or delete it."
+
+[vm_folder_stateless]
+description = "doctor's warning for a VM's folder without vm.json, which a devvm that stopped part way leaves"
+other = "A devvm that stopped while making or deleting a VM left {{.path}}, which has no vm.json, so no VM uses it. Delete the folder."
+
 [retention_unreadable]
 other = "The retention settings can't be read, so devvm applies none. Fix or delete the line it names, then run devvm retention to check them."
 

@@ -339,13 +339,10 @@ func lockRetention(d paths.Dirs) (unlock func(), ok bool) {
 }
 
 // skipsRetention reports whether a command never applies retention on its
-// own: devvm's internal commands, completion, gc (which has --retention),
-// space (which shows what the settings would free) and retention (which
-// shows and changes them).
+// own: those that skip the layout check (skipsLayout), gc (which has
+// --retention), space (which shows what the settings would free) and
+// retention (which shows and changes them).
 func skipsRetention(cmd *cobra.Command) bool {
 	path := strings.Fields(cmd.CommandPath())
-	if len(path) < 2 {
-		return false
-	}
-	return strings.HasPrefix(path[1], "_") || slices.Contains([]string{"completion", "gc", "space", "retention", "version", "help", "__complete"}, path[1])
+	return skipsLayout(cmd) || len(path) >= 2 && slices.Contains([]string{"gc", "space", "retention"}, path[1])
 }

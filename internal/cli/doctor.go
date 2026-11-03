@@ -49,6 +49,14 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 					}
 					return netpolicy.NotRules(dirs)
 				},
+				Folders: func() []msg.M {
+					dirs, err := paths.FromEnv()
+					if err != nil {
+						return nil
+					}
+					ms, _ := state.VMFolderProblems(dirs)
+					return ms
+				},
 			}
 			if asJSON {
 				return printJSON(u, d.report(cmd.Context(), reg.All(), b))
@@ -116,7 +124,7 @@ func (d doctor) report(ctx context.Context, all []backend.Backend, b backend.Bac
 
 // warnings are doctor's warnings, which never make it fail: another devvm
 // first on PATH, low free space, a small host, policy files' lines that
-// aren't rules.
+// aren't rules, and what in the VMs' folder isn't a VM's.
 func (d doctor) warnings(b backend.Backend) []msg.M {
 	var ms []msg.M
 	if m, ok := d.Path.other(); ok {
@@ -128,6 +136,9 @@ func (d doctor) warnings(b backend.Backend) []msg.M {
 	ms = append(ms, smallHost(d.Host)...)
 	if d.Policies != nil {
 		ms = append(ms, d.Policies()...)
+	}
+	if d.Folders != nil {
+		ms = append(ms, d.Folders()...)
 	}
 	return ms
 }
@@ -146,6 +157,9 @@ type doctor struct {
 	// Policies are the warnings for your policy files' lines that aren't
 	// rules (netpolicy.NotRules); nil for none.
 	Policies func() []msg.M
+	// Folders are the warnings for what in the VMs' folder isn't a VM's
+	// (state.VMFolderProblems); nil for none.
+	Folders func() []msg.M
 }
 
 // run checks b, the backend new VMs get, and lists its features. It

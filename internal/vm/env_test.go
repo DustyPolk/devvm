@@ -53,6 +53,9 @@ func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { retur
 
 func (testUI) AddCleanup(func(context.Context)) func() { return func() {} }
 
+// testVersion is upEnv's devvm's version.
+const testVersion = "0.1.0-test"
+
 // upEnv is up on a fake backend, in a temporary sandbox, with a project
 // folder named web.
 func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend.Command) {
@@ -69,7 +72,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	// The shared tools' versions come from the stub mise: the fixture lock.
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
-	tl := tools.New(d, assets.FS, testUI{t}, platform.Host{})
+	tl := tools.New(d, assets.FS, testVersion, testUI{t}, platform.Host{})
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Mise = filepath.Join(repo, "testdata", "stubs", "mise")
 	dir := filepath.Join(root, "web")
@@ -86,7 +89,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	var execs []backend.Command
 	d.Home = filepath.Join(root, "home")
 	e := &Env{
-		Dirs: d, Assets: assets.FS, Registry: reg, Tools: tl, Proxy: testProxy(t, d), Dir: dir, OS: "darwin",
+		Dirs: d, Assets: assets.FS, Registry: reg, Tools: tl, Proxy: testProxy(t, d), Dir: dir, OS: "darwin", Version: testVersion,
 		Host: func() (Host, error) { return Host{CPUs: 8, MemoryGiB: 32}, nil },
 		Protector: func(dir string) *gitprotect.Protector {
 			p := gitprotect.New(dir, d.Home, quiet)

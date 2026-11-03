@@ -40,3 +40,40 @@ func TestExecuteExitCodes(t *testing.T) {
 		}
 	}
 }
+
+// The layout check runs before every command that reads devvm's folders,
+// and retention after it; what reads none, and devvm's own hidden
+// commands, skip both.
+func TestSkipsLayout(t *testing.T) {
+	u, _, _ := testUI()
+	root := NewRoot(u)
+	root.InitDefaultHelpCmd() // as Execute does
+	for _, tc := range []struct {
+		args              []string
+		layout, retention bool // skipped
+	}{
+		{nil, false, false},
+		{[]string{"ls"}, false, false},
+		{[]string{"doctor"}, false, false},
+		{[]string{"network", "allow"}, false, false},
+		{[]string{"gc"}, false, true},
+		{[]string{"space"}, false, true},
+		{[]string{"retention"}, false, true},
+		{[]string{"version"}, true, true},
+		{[]string{"completion", "bash"}, true, true},
+		{[]string{"help"}, true, true},
+		{[]string{"_proxy"}, true, true},
+		{[]string{"_msg"}, true, true},
+	} {
+		cmd, _, err := root.Find(tc.args)
+		if err != nil {
+			t.Fatalf("%q: %v", tc.args, err)
+		}
+		if got := skipsLayout(cmd); got != tc.layout {
+			t.Errorf("skipsLayout(%q) = %v", tc.args, got)
+		}
+		if got := skipsRetention(cmd); got != tc.retention {
+			t.Errorf("skipsRetention(%q) = %v", tc.args, got)
+		}
+	}
+}

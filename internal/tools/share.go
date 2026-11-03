@@ -180,7 +180,7 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 			return err
 		}
 		// Its file name doesn't say what it's built for: the record does.
-		rec := state.ToolImage{SHA256: sum, Libc: tg.Libc, Format: tg.Format, Backend: b.Name(), Built: t.Now().UTC().Truncate(time.Second)}
+		rec := state.ToolImage{SHA256: sum, Libc: tg.Libc, Format: tg.Format, Backend: b.Name(), Built: t.Now().UTC().Truncate(time.Second), MadeBy: t.Version}
 		if err := state.WriteToolImage(t.Dirs, f, rec); err != nil {
 			return err
 		}

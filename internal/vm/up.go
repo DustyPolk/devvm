@@ -209,6 +209,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 		return err
 	}
 	st.Image, st.Dir, st.Folder, st.Chain, st.From, st.Backend = n.img, f.Dir, id, chain.String(), o.From, b.Name()
+	st.MadeBy = e.Version
 	st.BackendAt, _ = backend.LocationOf(b)
 	if err := n.record(st, tg.Libc, files); err != nil {
 		return err

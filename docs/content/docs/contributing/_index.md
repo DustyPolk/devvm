@@ -155,6 +155,18 @@ A review of a body of work, and the review before a release, look across the cod
 
 Each copy gets one of three outcomes: extend the owner, make one owner, or leave it. Leave it when the only shared helper would be the wrong one, because a copy costs less than the wrong helper, and wait for a third copy before making one. The pass is part of those reviews, not a step every change runs.
 
+## Changing the state layout
+
+The data folder and the config folder each hold a `version` file with their layout version, `state.Layout` in `internal/state/layout.go`. Before each command that reads them, `state.CheckLayout` takes `version.lock` in the data folder and compares both files with `state.Layout`. A folder without the file gets this devvm's version, the same version goes on, and a newer one stops the command with `layout_newer`, because a newer devvm changed the folders. An older one runs the migrations from that version to this one, in order, and then writes `state.Layout` into both files. `skipsLayout` in `internal/cli/root.go` lists the commands that skip the check: help, completion, the version and devvm's own hidden commands.
+
+`testdata/script/layout.txtar` makes two VMs with network policy, a forwarded port, a link and a secret, lists every file and folder under the data and config folders, and compares the lists with the ones at the end of the script, one for macOS and one for Linux. A change to the layout, such as a new file, a renamed folder or a file that moves, changes a listing, so the test fails until you update it. When it does, decide whether the change needs a new layout version:
+
+1. A change that an older devvm would read wrongly, or a file that moves, raises `state.Layout` by one.
+2. It adds a `state.Migration` at the end of `migrations()`, which changes the folders from the version before to the new one. A migration takes `paths.Dirs`, and a run that it fails stops before the versions change, so the next run tries it again. `TestMigrations` checks that there's one migration for each version before this one, and `TestCheckLayout` runs fake ones.
+3. It updates the listings in `layout.txtar`.
+
+A new file that an older devvm doesn't need to know about, or a field added to a JSON file, which an older devvm ignores, keeps the version and changes only the listings.
+
 ## How a backend plugs in
 
 devvm runs every VM on Lima, but the rest of devvm reaches Lima only through the `backend.Backend` interface in `internal/backend`, so another backend is an addition rather than a change to the callers. A backend lives in a package of its own under `internal/backend`, and it does four things:

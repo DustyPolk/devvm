@@ -1469,6 +1469,16 @@ func LayersHelp() M {
 	return M{id: "layers_help"}
 }
 
+// LayoutNewer is [layout_newer]: "{{.path}} says devvm's folders have layout version {{.version}}, newer than this devvm's {{.current}}, so a newer devvm changed them. Run that devvm, or upgrade this one."
+func LayoutNewer(current string, path string, version string) M {
+	return M{id: "layout_newer", vals: []val{{"current", current}, {"path", path}, {"version", version}}}
+}
+
+// LayoutUnchecked is [layout_unchecked]: "Checking the layout version of devvm's folders failed: {{.reason}}. Fix the file it names, or delete it."
+func LayoutUnchecked(reason string) M {
+	return M{id: "layout_unchecked", vals: []val{{"reason", reason}}}
+}
+
 // LimaArchUnsupported is [lima_arch_unsupported]: "The lima backend doesn't run on {{.arch}}. Use an arm64 or x86_64 machine."
 func LimaArchUnsupported(arch string) M {
 	return M{id: "lima_arch_unsupported", vals: []val{{"arch", arch}}}
@@ -2939,6 +2949,11 @@ func VMCreateFailed(vm string) M {
 	return M{id: "vm_create_failed", vals: []val{{"vm", vm}}}
 }
 
+// VMFolderStateless is [vm_folder_stateless]: "A devvm that stopped while making or deleting a VM left {{.path}}, which has no vm.json, so no VM uses it. Delete the folder."
+func VMFolderStateless(path string) M {
+	return M{id: "vm_folder_stateless", vals: []val{{"path", path}}}
+}
+
 // VMHasNetworks is [vm_has_networks]: "{{.vm}} has a network that devvm didn't give it. Remove the networks from {{.file}}."
 func VMHasNetworks(file string, vm string) M {
 	return M{id: "vm_has_networks", vals: []val{{"file", file}, {"vm", vm}}}
@@ -2997,6 +3012,11 @@ func VMToolsNow(tools string, vm string) M {
 // VMUnfinished is [vm_unfinished]: "Creating {{.vm}} didn't finish. Run devvm rm to delete it, then devvm to make it again."
 func VMUnfinished(vm string) M {
 	return M{id: "vm_unfinished", vals: []val{{"vm", vm}}}
+}
+
+// VMsStray is [vms_stray]: "{{.path}} isn't a VM's folder, so devvm doesn't use it. Move it out of {{.vms}}, or delete it."
+func VMsStray(path string, vms string) M {
+	return M{id: "vms_stray", vals: []val{{"path", path}, {"vms", vms}}}
 }
 
 // WidenParentVM is [widen_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside, and {{.cmd}} gives it more access. Change it?"
@@ -3304,6 +3324,8 @@ var specs = map[string]spec{
 	"layer_name_reserved":              {fields: []string{"layer"}},
 	"layer_new_failed":                 {fields: []string{"reason"}},
 	"layers_help":                      {},
+	"layout_newer":                     {fields: []string{"current", "path", "version"}},
+	"layout_unchecked":                 {fields: []string{"reason"}},
 	"lima_arch_unsupported":            {fields: []string{"arch"}},
 	"lima_broken":                      {},
 	"lima_broken_fix":                  {fields: []string{"fix"}},
@@ -3598,6 +3620,7 @@ var specs = map[string]spec{
 	"vm_adopted":                       {fields: []string{"dir", "vm"}},
 	"vm_already_here":                  {fields: []string{"vm"}},
 	"vm_create_failed":                 {fields: []string{"vm"}},
+	"vm_folder_stateless":              {fields: []string{"path"}},
 	"vm_has_networks":                  {fields: []string{"file", "vm"}},
 	"vm_lacks":                         {fields: []string{"has", "tool", "vm"}},
 	"vm_name_no_room":                  {fields: []string{"backend", "max"}},
@@ -3610,6 +3633,7 @@ var specs = map[string]spec{
 	"vm_size":                          {fields: []string{"size", "vm"}},
 	"vm_tools_now":                     {fields: []string{"tools", "vm"}},
 	"vm_unfinished":                    {fields: []string{"vm"}},
+	"vms_stray":                        {fields: []string{"path", "vms"}},
 	"widen_parent_vm":                  {fields: []string{"cmd", "dir", "vm"}},
 	"widen_parent_vm_refused":          {fields: []string{"cmd", "dir", "vm"}},
 }

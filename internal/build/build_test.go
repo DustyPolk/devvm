@@ -67,15 +67,19 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 		write(t, filepath.Join(root, "shared-tools", name), string(data))
 	}
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
-	tl := tools.New(d, os.DirFS(root), quietUI{}, platform.Host{})
+	tl := tools.New(d, os.DirFS(root), testVersion, quietUI{}, platform.Host{})
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Getenv = func(string) string { return "" }
 	tl.Mise = filepath.Join(repo, "testdata", "stubs", "mise")
-	return quiet(&Env{Dirs: d, Assets: os.DirFS(root), Backend: f, Tools: tl}), f
+	return quiet(&Env{Dirs: d, Assets: os.DirFS(root), Backend: f, Tools: tl, Version: testVersion}), f
 }
 
+// testVersion is testEnv's devvm's version.
+const testVersion = "0.1.0-test"
+
 // record reads the record of the image with key, which must say it was
-// built in the last minute, and returns it without that time.
+// built in the last minute by testEnv's devvm, and returns it without
+// that time and version.
 func record(t *testing.T, b *Env, key string) state.Image {
 	t.Helper()
 	rec, err := state.ReadImage(b.Dirs, key)
@@ -85,7 +89,10 @@ func record(t *testing.T, b *Env, key string) state.Image {
 	if since := time.Since(rec.Built); since < -time.Second || since > time.Minute {
 		t.Errorf("%s was built at %s", key, rec.Built)
 	}
-	rec.Built = time.Time{}
+	if rec.MadeBy != testVersion {
+		t.Errorf("%s was made by %q, want %q", key, rec.MadeBy, testVersion)
+	}
+	rec.Built, rec.MadeBy = time.Time{}, ""
 	return rec
 }
 

@@ -49,7 +49,10 @@ type Env struct {
 	Proxy    *netpolicy.Proxy // VMs' network policy proxies
 	Dir      string           // the folder devvm runs in, a physical path
 	OS       string           // the host's, as Go names it
-	Host     func() (Host, error)
+	// Version is devvm's version, which a new VM's state and each image's
+	// record keep.
+	Version string
+	Host    func() (Host, error)
 	// Protector returns the .git protection for a project folder.
 	Protector func(dir string) *gitprotect.Protector
 	// Exec runs the shell in devvm's place; it returns only on failure.
@@ -131,9 +134,9 @@ type UI interface {
 }
 
 // NewEnv returns the environment up runs in here, with devvm's own files
-// (assets), devvm being self, on u. Its caller sets PickFeatures and
-// PickParts.
-func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI) (*Env, error) {
+// (assets), devvm being self at version, on u. Its caller sets
+// PickFeatures and PickParts.
+func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Registry, u UI) (*Env, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -142,9 +145,9 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 		return nil, err
 	}
 	e := &Env{
-		Dirs: d, Assets: assets, Registry: reg, Tools: tools.New(d, assets, u, reg.Host),
+		Dirs: d, Assets: assets, Registry: reg, Tools: tools.New(d, assets, version, u, reg.Host),
 		Proxy: netpolicy.NewProxy(d, assets, self, secrets.NewStore(d, u.Warn), u),
-		Dir:   wd, OS: runtime.GOOS,
+		Dir:   wd, OS: runtime.GOOS, Version: version,
 		Host: func() (Host, error) { return ThisHost(reg.Host) }, Exec: execShell, OpenURL: openURL, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
 		SSHAdd: func(ctx context.Context, args ...string) int { return sshAdd(ctx, u.Stderr(), args...) },
@@ -165,7 +168,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self string, reg *backend.Registry, u UI
 // fromRef ("" for the backend's own).
 func (e *Env) builder(b backend.Backend, fromRef string) *build.Env {
 	return &build.Env{
-		Dirs: e.Dirs, Assets: e.Assets, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef,
+		Dirs: e.Dirs, Assets: e.Assets, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef, Version: e.Version,
 		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,
 		Terminal: e.Terminal, LogNote: e.LogNote, FreeSpace: e.FreeSpace,
 	}

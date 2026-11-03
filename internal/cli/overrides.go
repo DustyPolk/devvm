@@ -56,7 +56,7 @@ func thisHost() platform.Host { return platform.NewHost(readOverrides(os.Getenv)
 // newTools returns the shared tools in devvm's folders, on u, checking
 // host's free space before a build, with this build's mise.
 func newTools(d paths.Dirs, assets fs.FS, u tools.UI, host platform.Host) *tools.Env {
-	t := tools.New(d, assets, u, host)
+	t := tools.New(d, assets, devvmVersion(), u, host)
 	t.Mise = readOverrides(os.Getenv).HostMise
 	return t
 }

@@ -71,6 +71,17 @@ func xdg(getenv func(string) string, name, home string, def ...string) string {
 	return filepath.Join(append([]string{home}, def...)...)
 }
 
+// Version holds the data folder's layout version: which layout of its
+// folders and files it has. ConfigVersion is the config folder's.
+func (d Dirs) Version() string { return filepath.Join(d.Data, "version") }
+
+// ConfigVersion holds the config folder's layout version.
+func (d Dirs) ConfigVersion() string { return filepath.Join(d.Config, "version") }
+
+// VersionLock is held while a run checks the layout versions, and
+// changes the folders to this devvm's layout when they're older.
+func (d Dirs) VersionLock() string { return filepath.Join(d.Data, "version.lock") }
+
 // VMs is the folder of the VMs' folders, one each (VMDir).
 func (d Dirs) VMs() string { return filepath.Join(d.Data, "vms") }
 

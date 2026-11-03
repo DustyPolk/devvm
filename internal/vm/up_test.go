@@ -52,6 +52,9 @@ func TestUp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if st.MadeBy != testVersion {
+		t.Errorf("made by %q, want %q", st.MadeBy, testVersion)
+	}
 	// Without network policy too, its ssh port is devvm's: recorded, made
 	// with it and started on it.
 	c, _ := start.Args[1].(backend.Confinement)

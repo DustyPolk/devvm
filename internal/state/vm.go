@@ -102,6 +102,9 @@ type VM struct {
 	// Created is when its backend finished making it: zero for a VM whose
 	// creation didn't finish, which never starts.
 	Created time.Time
+	// MadeBy is the version of the devvm that made the VM. Later
+	// changes keep it.
+	MadeBy string
 
 	// name is the VM's name, chosen when it's made for the backend it's
 	// made on (project.New), and never again: a folder's VM is found by
@@ -129,11 +132,12 @@ type core struct {
 	Backend   string    `json:"backend"`
 	BackendAt string    `json:"backend_at,omitempty"`
 	Created   time.Time `json:"created,omitzero"`
+	MadeBy    string    `json:"made_by"`
 }
 
 // coreFields are the names of core's fields, which no section takes.
 func coreFields() []string {
-	return []string{"version", "id", "name", "alias", "image", "chain", "from", "dir", "folder", "backend", "backend_at", "created"}
+	return []string{"version", "id", "name", "alias", "image", "chain", "from", "dir", "folder", "backend", "backend_at", "created", "made_by"}
 }
 
 // New is a new VM's state, not written yet: Create writes it, once its
@@ -217,7 +221,7 @@ func (v *VM) decode(data []byte) error {
 	}
 	*v = VM{
 		ID: c.ID, Alias: c.Alias, Image: c.Image, Chain: c.Chain, From: c.From, Dir: c.Dir, Folder: c.Folder,
-		Backend: c.Backend, BackendAt: c.BackendAt, Created: c.Created,
+		Backend: c.Backend, BackendAt: c.BackendAt, Created: c.Created, MadeBy: c.MadeBy,
 		name: c.Name, sections: all, file: v.file, claims: v.claims, exists: true,
 	}
 	return nil
@@ -228,7 +232,7 @@ func (v *VM) decode(data []byte) error {
 func (v *VM) encode() ([]byte, error) {
 	c, err := json.Marshal(core{
 		Version: vmVersion, ID: v.ID, Name: v.name, Alias: v.Alias, Image: v.Image, Chain: v.Chain, From: v.From,
-		Dir: v.Dir, Folder: v.Folder, Backend: v.Backend, BackendAt: v.BackendAt, Created: v.Created,
+		Dir: v.Dir, Folder: v.Folder, Backend: v.Backend, BackendAt: v.BackendAt, Created: v.Created, MadeBy: v.MadeBy,
 	})
 	if err != nil {
 		return nil, err

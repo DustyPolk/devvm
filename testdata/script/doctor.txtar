@@ -28,6 +28,22 @@ stdout '^{\n  "version": 1,\n  "backend": "lima",\n  "problems": \[\],\n  "warni
 stdout '^      "ports": "emulated",$'
 ! stderr .
 
+# What in the VMs' folder isn't a VM's, warned about and left as it is:
+# a file, a folder that isn't named by a hash, and a VM's folder without
+# vm.json, as a devvm that stopped part way leaves.
+mkdir $VMS/devvm-old $VMS/0123456789abcd
+cp default.yaml $VMS/notes.txt
+cp default.yaml $VMS/0123456789abcd/lock
+exec devvm doctor
+stderr '^devvm: vm_folder_stateless path=\S+/vms/0123456789abcd$'
+stderr '^devvm: vms_stray path=\S+/vms/devvm-old vms=\S+/vms$'
+stderr '^devvm: vms_stray path=\S+/vms/notes.txt vms=\S+/vms$'
+stdout '^doctor_ok '
+exec devvm doctor --json
+stdout '^  "warnings": \[\n    "vm_folder_stateless path=\S+/vms/0123456789abcd",\n    "vms_stray path=\S+/vms/devvm-old vms=\S+/vms",\n    "vms_stray path=\S+/vms/notes.txt vms=\S+/vms"\n  \],$'
+exists $VMS/devvm-old $VMS/notes.txt $VMS/0123456789abcd/lock
+rm $VMS
+
 # No flag or file chooses the backend.
 ! exec devvm doctor --backend lima
 stderr '^devvm: flag_unknown command=devvm doctor flag=--backend$'

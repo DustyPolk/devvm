@@ -117,7 +117,7 @@ func builder(u *ui.UI) (*build.Env, error) {
 // u.
 func newBuilder(u *ui.UI, dirs paths.Dirs, be backend.Backend, rv backend.Review, t *tools.Env, fromRef string) *build.Env {
 	return &build.Env{
-		Dirs: dirs, Assets: assets.FS, Backend: be, Review: rv, Tools: t, From: fromRef,
+		Dirs: dirs, Assets: assets.FS, Backend: be, Review: rv, Tools: t, From: fromRef, Version: devvmVersion(),
 		Info: u.Info, Warn: u.Warn, Say: u.Say, Confirm: func(m msg.M) bool { return u.Confirm(m) },
 		Pick: pickFeatures(u), Terminal: u.StdinIsTerminal, LogNote: u.LogNote, FreeSpace: thisHost().FreeSpace,
 	}

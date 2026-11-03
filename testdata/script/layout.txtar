@@ -1,0 +1,242 @@
+# devvm's folders: their layout version, checked before every command
+# that reads them, and every file devvm keeps for a VM with network
+# policy, ports, a link and a secret, against the listings below. A
+# change to the layout changes a listing: consider the layout version
+# then (Contributing's state layout).
+
+# The first run gives both folders this devvm's version.
+exec devvm ls
+cmp $DATA/version want/version
+cmp $CFG/version want/version
+
+# A newer devvm's folders are refused, before the command runs, and so
+# is a version file devvm can't read; help, completion and the version
+# still run.
+cp want/newer $DATA/version
+! exec devvm ls
+stderr '^devvm: layout_newer current=1 path=\S+/data/devvm/version version=2$'
+! stdout .
+exec devvm --version
+exec devvm version
+exec devvm help
+exec devvm completion bash
+cmp $DATA/version want/newer
+cp want/version $DATA/version
+cp want/newer $CFG/version
+! exec devvm doctor
+stderr '^devvm: layout_newer current=1 path=\S+/config/devvm/version version=2$'
+cp want/corrupt $CFG/version
+! exec devvm ls
+stderr '^devvm: layout_unchecked reason=\S+/config/devvm/version: not a layout version$'
+rm $CFG/version
+exec devvm ls
+cmp $CFG/version want/version
+
+# A target VM that publishes a port, and a client VM with a link to it
+# and a secret, both with network policy and forwarding a port.
+exec devvm ports -g 3000
+project db
+exec devvm --network-policy --no-git-protect
+exec devvm link publish 5432
+project app
+exec devvm --network-policy --no-git-protect
+exec devvm link add db 5432
+stdin $WORK/github.token
+exec devvm secret set github --stdin
+exec devvm secret use github
+vm_name APP app
+vm_name DB db
+vm_state $APP_dir/vm.json
+stdout '^made_by=\S+$'
+
+# Every file and folder, with the VMs' hashes named and other hashes,
+# times and versions left out.
+exec sh $WORK/list.sh $CFG
+cmp stdout $WORK/config.txt
+exec sh $WORK/list.sh $DATA
+[darwin] cmp stdout $WORK/data.txt
+[!darwin] cmp stdout $WORK/data-linux.txt
+
+-- want/version --
+1
+-- want/newer --
+2
+-- want/corrupt --
+one
+-- github.token --
+ghp_testfake
+-- list.sh --
+# list.sh FOLDER: every path under FOLDER, sorted, with APP's and DB's
+# hashes named and other hashes, times, versions and QEMU's architecture
+# as X.
+cd "$1" || exit 1
+find . -mindepth 1 | sed -E \
+	-e 's|^\./||' -e 's/qemu-system-[a-z0-9_]+/qemu-system-X/' \
+	-e "s/${APP##*-}/APP/g" -e "s/${DB##*-}/DB/g" \
+	-e 's/[0-9a-f]{12,}/X/g' -e 's/[0-9]{8}-[0-9]{6}-[0-9]+/X/g' -e 's/[0-9]+\.[0-9]+\.[0-9]+/X/g' |
+	LC_ALL=C sort -u
+-- config.txt --
+version
+-- data.txt --
+ca
+ca/ca.key
+ca/ca.pem
+groups.lock
+images
+images/X
+images/X/record.json
+images/locks
+images/locks/X
+known_hosts
+logs
+logs/runs
+logs/runs/X.log
+making.lock
+run
+run/builds
+run/builds/devvm-img-X
+run/builds/devvm-img-X/run
+run/builds/devvm-img-X/run/sandbox.sb
+run/builds/devvm-img-X/run/started
+run/claims.lock
+run/link-X.ctl
+run/link-X.sock
+settings.json
+ssh_config
+tools
+version
+version.lock
+vms
+vms/APP
+vms/APP/backend
+vms/APP/backend/ports
+vms/APP/backend/ports.known_hosts
+vms/APP/backend/ports.lock
+vms/APP/backend/ports.log
+vms/APP/backend/ports.pid
+vms/APP/backend/ports.status
+vms/APP/lock
+vms/APP/logs
+vms/APP/logs/links.log
+vms/APP/logs/network.jsonl
+vms/APP/logs/proxy.log
+vms/APP/run
+vms/APP/run/links.json
+vms/APP/run/links.pid
+vms/APP/run/proxy.auth
+vms/APP/run/proxy.bin
+vms/APP/run/proxy.ca
+vms/APP/run/proxy.pid
+vms/APP/run/proxy.policy
+vms/APP/run/proxy.status
+vms/APP/run/sandbox.sb
+vms/APP/run/secrets.json
+vms/APP/run/secrets.policy
+vms/APP/run/started
+vms/APP/vm.json
+vms/DB
+vms/DB/backend
+vms/DB/backend/ports
+vms/DB/backend/ports.known_hosts
+vms/DB/backend/ports.lock
+vms/DB/backend/ports.log
+vms/DB/backend/ports.pid
+vms/DB/backend/ports.status
+vms/DB/lock
+vms/DB/logs
+vms/DB/logs/network.jsonl
+vms/DB/logs/proxy.log
+vms/DB/run
+vms/DB/run/proxy.auth
+vms/DB/run/proxy.bin
+vms/DB/run/proxy.ca
+vms/DB/run/proxy.pid
+vms/DB/run/proxy.policy
+vms/DB/run/proxy.status
+vms/DB/run/sandbox.sb
+vms/DB/run/secrets.json
+vms/DB/run/secrets.policy
+vms/DB/run/started
+vms/DB/vm.json
+-- data-linux.txt --
+ca
+ca/ca.key
+ca/ca.pem
+groups.lock
+images
+images/X
+images/X/record.json
+images/locks
+images/locks/X
+known_hosts
+logs
+logs/runs
+logs/runs/X.log
+making.lock
+run
+run/builds
+run/builds/devvm-img-X
+run/builds/devvm-img-X/run
+run/builds/devvm-img-X/run/started
+run/claims.lock
+run/link-X.ctl
+run/link-X.sock
+run/qemu
+run/qemu/qemu-system-X
+secrets
+secrets/github
+settings.json
+ssh_config
+tools
+version
+version.lock
+vms
+vms/APP
+vms/APP/backend
+vms/APP/backend/ports
+vms/APP/backend/ports.known_hosts
+vms/APP/backend/ports.lock
+vms/APP/backend/ports.log
+vms/APP/backend/ports.pid
+vms/APP/backend/ports.status
+vms/APP/lock
+vms/APP/logs
+vms/APP/logs/links.log
+vms/APP/logs/network.jsonl
+vms/APP/logs/proxy.log
+vms/APP/run
+vms/APP/run/links.json
+vms/APP/run/links.pid
+vms/APP/run/proxy.auth
+vms/APP/run/proxy.bin
+vms/APP/run/proxy.ca
+vms/APP/run/proxy.pid
+vms/APP/run/proxy.policy
+vms/APP/run/proxy.status
+vms/APP/run/secrets.json
+vms/APP/run/secrets.policy
+vms/APP/run/started
+vms/APP/vm.json
+vms/DB
+vms/DB/backend
+vms/DB/backend/ports
+vms/DB/backend/ports.known_hosts
+vms/DB/backend/ports.lock
+vms/DB/backend/ports.log
+vms/DB/backend/ports.pid
+vms/DB/backend/ports.status
+vms/DB/lock
+vms/DB/logs
+vms/DB/logs/network.jsonl
+vms/DB/logs/proxy.log
+vms/DB/run
+vms/DB/run/proxy.auth
+vms/DB/run/proxy.bin
+vms/DB/run/proxy.ca
+vms/DB/run/proxy.pid
+vms/DB/run/proxy.policy
+vms/DB/run/proxy.status
+vms/DB/run/secrets.json
+vms/DB/run/secrets.policy
+vms/DB/run/started
+vms/DB/vm.json

@@ -30,7 +30,8 @@ stdout '^  "name": "base",$'
 stdout '^  "chain": "base=[0-9a-f]{12}",$'
 stdout '^  "digest": "file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img sha256:[0-9a-f]{64}",$'
 stdout '^  "libc": "gnu",$'
-stdout '^  "built": "\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"$'
+stdout '^  "built": "\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ",$'
+stdout '^  "made_by": "\S+"$'
 
 # Each step is numbered in the run log, and the count is what ran.
 catg $DATA/logs/runs/*.log

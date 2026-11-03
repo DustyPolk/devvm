@@ -16,6 +16,7 @@ type ToolImage struct {
 	Format  string    `json:"format"`  // its backend's ToolFormat: "" for shared-tools/build.sh's own
 	Backend string    `json:"backend"` // the backend that built it
 	Built   time.Time `json:"built"`   // when it was moved in
+	MadeBy  string    `json:"made_by"` // the version of the devvm that built it
 	// IdleSince is when retention first found it current with no VM:
 	// zero while a VM has it.
 	IdleSince time.Time `json:"idle_since,omitzero"`

@@ -4,6 +4,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -41,6 +42,9 @@ func NewRoot(u *ui.UI) *cobra.Command {
 				u.DataOnly() // stdout is the JSON's alone
 			}
 			makePrivate(u)
+			if !skipsLayout(cmd) {
+				checkLayout(cmd.Context(), u)
+			}
 			if !skipsRetention(cmd) {
 				autoRetain(cmd.Context(), u)
 			}
@@ -78,6 +82,37 @@ func makePrivate(u *ui.UI) {
 	if err := state.MakePrivate(d); err != nil {
 		u.Warn(msg.FoldersNotPrivate(d.Config, d.Data).Because(err))
 	}
+}
+
+// checkLayout checks the layout version of devvm's folders before the
+// command runs (state.CheckLayout), and ends the run when a newer devvm
+// changed them or a version file can't be read. Without a HOME there
+// are no folders, and the command says so itself.
+func checkLayout(ctx context.Context, u *ui.UI) {
+	d, err := paths.FromEnv()
+	if err != nil {
+		return
+	}
+	err = state.CheckLayout(ctx, d)
+	if err == nil {
+		return
+	}
+	if m, ok := errors.AsType[msg.M](err); ok {
+		u.Die(m)
+	}
+	u.Die(msg.LayoutUnchecked(err.Error()).Because(err))
+}
+
+// skipsLayout reports whether cmd runs without checking the layout
+// version: what reads none of devvm's folders (help, completion, the
+// version, the messages), and devvm's own hidden commands, which a devvm
+// that checked it runs.
+func skipsLayout(cmd *cobra.Command) bool {
+	path := strings.Fields(cmd.CommandPath())
+	if len(path) < 2 {
+		return false
+	}
+	return strings.HasPrefix(path[1], "_") || slices.Contains([]string{"completion", "version", "help", "__complete", "__completeNoDesc"}, path[1])
 }
 
 // Execute runs devvm with args on u and returns its exit code: 0, 1 for a
