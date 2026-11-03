@@ -76,11 +76,10 @@ func (p Proc) Start(start Starter, c Cmd) (int, error) {
 }
 
 // Stop stops the process, if it runs: SIGTERM, then after wait SIGKILL,
-// then up to wait more, looking every twentieth of it. Each look reads the
-// pid file and the process's arguments again, so a process given the pid
-// since is never signalled. Once it's stopped its pid file goes, unless a
-// start since has written another pid there. It reports whether none runs
-// then.
+// then up to wait more, looking every twentieth of it. A process given
+// the pid since is never signalled. Once it has ended its pid file goes,
+// unless a start since has written another pid there. It reports whether
+// none runs then.
 func (p Proc) Stop(wait time.Duration) bool {
 	pid, ok := p.PID()
 	if !ok {
@@ -93,7 +92,7 @@ func (p Proc) Stop(wait time.Duration) bool {
 	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
 		_ = signal(pid, sig)
 		for range 20 {
-			if !p.runs(pid) {
+			if p.ended(pid) {
 				if cur, ok := readLine(p.PIDFile); ok && cur == pid {
 					_ = os.Remove(p.PIDFile)
 				}
@@ -103,6 +102,19 @@ func (p Proc) Stop(wait time.Duration) bool {
 		}
 	}
 	return false
+}
+
+// ended reports whether the process pid, which was this one, has ended:
+// no process has the pid, or another one does now. One whose arguments
+// can't be read is still ending: its memory goes before its files, so a
+// port it listens on is still its own a moment after (macOS's
+// kern.procargs2 fails first).
+func (p Proc) ended(pid int) bool {
+	if !Alive(pid) {
+		return true
+	}
+	args, err := p.Args(pid)
+	return err == nil && !p.Is(args)
 }
 
 // Ready waits for the process pid, which Start started with status, to

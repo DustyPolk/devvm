@@ -36,3 +36,26 @@ func TestProcessArgs(t *testing.T) {
 	}
 	t.Errorf("ProcessArgs = %q, %v", got, err)
 }
+
+// A process that has ended but isn't reaped yet (a zombie) has no
+// arguments to read, as one that's ending has none: an error, never an
+// empty list taken for another process's.
+func TestProcessArgsEnded(t *testing.T) {
+	cmd := exec.CommandContext(t.Context(), "true")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cmd.Wait() }()
+	pid := cmd.Process.Pid
+	// It's a zombie once its arguments are no longer true's.
+	var got []string
+	var err error
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if got, err = ProcessArgs(pid); err != nil || !slices.Equal(got, []string{"true"}) && !slices.Equal(got, os.Args) {
+			break
+		}
+	}
+	if err == nil {
+		t.Errorf("ProcessArgs of an ended process = %q", got)
+	}
+}

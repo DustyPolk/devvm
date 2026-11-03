@@ -282,6 +282,46 @@ func TestProcStop(t *testing.T) {
 	}
 }
 
+// A process that's ending still has its files, a listening socket among
+// them, after its arguments can no longer be read (macOS's kern.procargs2
+// fails first): Stop waits until it's gone, so its port is free when Stop
+// returns.
+func TestProcStopWaitsForTheEnd(t *testing.T) {
+	p, start, ours := proc(t)
+	ending := map[int]bool{}
+	args := p.Args
+	p.Args = func(pid int) ([]string, error) {
+		if ending[pid] {
+			return nil, errors.New("ending")
+		}
+		return args(pid)
+	}
+	p.Signal = func(pid int, sig syscall.Signal) error {
+		ending[pid] = true
+		return Signal(pid, sig)
+	}
+	out := filepath.Join(t.TempDir(), "out")
+	f, err := os.Create(out) //nolint:gosec // the test's own file
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	pid, err := p.Start(start, Cmd{Path: "/bin/sh", Args: []string{"-c", `trap "sleep 0.5; exit 0" TERM; echo ready; while :; do sleep 0.05; done`}, Out: f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	output(t, out, "ready")
+	if !ours[pid] {
+		t.Fatal("not the test's")
+	}
+	if !p.Stop(2 * time.Second) {
+		t.Fatal("not stopped")
+	}
+	if Alive(pid) {
+		t.Error("Stop returned while the process was still ending")
+	}
+}
+
 // A start removes the status file an earlier start left, so readiness is
 // this start's alone; the process says it's ready there, with its pid,
 // and is waited for: ready while it runs, never once it has ended, nor

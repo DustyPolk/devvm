@@ -357,7 +357,9 @@ hb=$!
 trap 'kill $hb 2>/dev/null; cleanup' EXIT
 
 pass=0 fail=0 failed=()
-# check LABEL CMD...: run CMD, count and print the result (and CMD's last output lines on failure).
+# check LABEL CMD...: run CMD, count and print the result; on failure, CMD's lines that start with
+# "failed: " (the step that failed), then its last other lines: 5, or $check_lines when the call
+# sets it (check_lines=40 check ...).
 check() {
   local label=$1 r dur left; shift
   if "$@" >"$work/check.log" 2>&1; then r=PASS; pass=$((pass + 1)); else r=FAIL; fail=$((fail + 1)); failed+=("$label"); fi
@@ -367,7 +369,8 @@ check() {
   left=$(awk -F'\t' -v l="$label" 'found { s += $2 } $1 == l { found = 1 } END { if (found) print s }' "$timings" 2>/dev/null)
   [[ $total == "?" ]] || (( ncheck <= total )) || total="?"   # more checks than last time
   echo "  $r  [$ncheck/$total] $label ($(mins "$dur"); $(mins $((SECONDS - started))) in${left:+, about $(mins "$left") left})"
-  [[ $r == PASS ]] || tail -5 "$work/check.log" | sed 's/^/        /'
+  [[ $r == PASS ]] || { grep '^failed: ' "$work/check.log"; grep -v '^failed: ' "$work/check.log" | tail -n "${check_lines:-5}"; } |
+    sed 's/^/        /'
 }
 # skip LABEL WHY: a check this run has nothing for (counted, so runs compare their counts).
 skip() {
@@ -2091,35 +2094,50 @@ kill "$listener" 2>/dev/null; listener=""
 # VM's next launch with HTTPS_PROXY and HTTP_PROXY in devvm's environment starts its proxy again
 # through it, which sends an allowed host there by name, and refuses one the VM's policy doesn't
 # allow before it gets there. The launch after, without them, starts it again going directly.
+# Each step says what failed ("failed: ..."), then corp_why shows the VM's status, the launch's
+# output, the end of the VM's proxy's log and events, and the company proxy's own log and events.
+# step WHAT CMD...: CMD, or "failed: WHAT" and false.
+step() { local what=$1; shift; "$@" || { echo "failed: $what"; return 1; }; }
+corp_why() {
+  echo "the VM: $(status_of "$vm"); its proxy: $(corp_proxy_args | cut -c1-60 | paste -sd ' ' -)"
+  echo "the launch:"; tail -n 20 "$work/last.log"
+  echo "the proxy log:"; tail -n 10 "$XDG_DATA_HOME/devvm/logs/$vm.proxy.log"
+  echo "its events:"; tail -n 5 "$events"
+  echo "the company proxy's log (it runs: $(kill -0 "${corp:-0}" 2>/dev/null && echo yes || echo no)):"; tail -n 5 "$work/corp.log"
+  echo "its events:"; tail -n 5 "$work/corp.jsonl"; }
+# corp_proxy_args: the command line of each process of the VM's proxy.
+corp_proxy_args() { local p
+  p=$(pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $vm " | paste -sd , -) && ps -ww -o command= -p "$p"; }
+corp_launch() { (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$@" "$D" >"$work/last.log" 2>&1); }
+corp_upstream() { grep -q -- ' -upstream ' <<<"$(corp_proxy_args)"; }
+corp_saw() { grep -q "$1" "$work/corp.jsonl"; }
+corp_through() {
+  if ! { step "the launch" corp_launch env HTTPS_PROXY="$corpurl" HTTP_PROXY="$corpurl" &&
+    step "the VM's proxy doesn't go upstream" corp_upstream &&
+    step "github.com in the VM" in_vm "$vm" 'curl -fsS -m 30 -o /dev/null https://github.com' &&
+    step "the company proxy didn't carry github.com" corp_saw '"event":"tunnel","host":"github.com","port":443' &&
+    step "the VM's events show no upstream for github.com" grep -q '"host":"github.com".*"upstream":"127.0.0.1:18766"' "$events" &&
+    step "example.com wasn't refused" grep -q 403 <<<"$(in_vm "$vm" 'curl -sS -m 20 -o /dev/null https://example.com' 2>&1)" &&
+    step "example.com reached the company proxy" lk_not corp_saw '"host":"example.com"'; }; then
+    corp_why; return 1
+  fi; }
+corp_direct() { local n0
+  if ! { step "the launch" corp_launch env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy &&
+    step "the VM's proxy still goes upstream" lk_not corp_upstream &&
+    n0=$(grep -c . "$work/corp.jsonl") &&
+    step "github.com in the VM" in_vm "$vm" 'curl -fsS -m 30 -o /dev/null https://github.com' &&
+    step "the company proxy saw it" test "$(grep -c . "$work/corp.jsonl")" = "$n0"; }; then
+    corp_why; return 1
+  fi; }
 corp_start
-check "behind a company proxy, an allowed host goes through it by name, and a blocked one never reaches it" bash -c "
-  (cd '$n' && printf 'exit\n' | HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake HTTPS_PROXY='$corpurl' HTTP_PROXY='$corpurl' \
-    '$D' >'$work/last.log' 2>&1) &&
-  grep -q -- ' -upstream ' <(ps -axww -o command= | grep -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') &&
-  limactl shell --workdir / $vm bash -lc 'curl -fsS -m 30 -o /dev/null https://github.com' </dev/null &&
-  grep -q '\"event\":\"tunnel\",\"host\":\"github.com\",\"port\":443' '$work/corp.jsonl' &&
-  grep '\"host\":\"github.com\"' '$events' | grep -q '\"upstream\":\"127.0.0.1:18766\"' &&
-  limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://example.com' </dev/null 2>&1 | grep -q 403 &&
-  ! grep -q '\"host\":\"example.com\"' '$work/corp.jsonl'"
+check_lines=60 check "behind a company proxy, an allowed host goes through it by name, and a blocked one never reaches it" corp_through
 # The password is read from its file, never written into the check: its own arguments would hold it.
 check "the company proxy's password is in no process's arguments, log or VM" bash -c "
   ! ps -axww -o command= | grep -qFf '$work/corp.auth' &&
   ! grep -rqFf '$work/corp.auth' '$XDG_DATA_HOME/devvm/logs' &&
   ! limactl shell --workdir / $vm sudo grep -rqsFf /dev/stdin /etc /home /root <'$work/corp.auth' &&
   ! limactl shell --workdir / $vm bash -lc env </dev/null | grep -qFf '$work/corp.auth'"
-# On a failure it says which step failed, then shows the launch's output, the VM's status and the
-# end of the proxy's own log.
-check "without them, the next launch starts the VM's proxy again, going directly" bash -c "
-  { { (cd '$n' && printf 'exit\n' | HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy \
-      '$D' >'$work/last.log' 2>&1) || { echo the launch failed; false; }; } &&
-    { ! grep -q -- ' -upstream ' <(ps -axww -o command= | grep -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') || { echo the proxy still goes upstream; false; }; } &&
-    n0=\$(grep -c . '$work/corp.jsonl') &&
-    { limactl shell --workdir / $vm bash -lc 'curl -fsS -m 30 -o /dev/null https://github.com' </dev/null || { echo github.com failed in the VM; false; }; } &&
-    { [[ \$(grep -c . '$work/corp.jsonl') == \"\$n0\" ]] || { echo the company proxy saw it; false; }; }
-  } || {
-    echo \"the VM: \$(status_of '$vm')\"; echo the launch:; tail -n 30 '$work/last.log'
-    echo the proxy log:; tail -n 30 '$XDG_DATA_HOME/devvm/logs/$vm.proxy.log'; false
-  }"
+check_lines=60 check "without them, the next launch starts the VM's proxy again, going directly" corp_direct
 corp_stop
 check "the proxy refuses anything on the host without the VM's password" bash -c "
   [[ \$(curl -s -o /dev/null -w '%{http_code}' -x http://127.0.0.1:$pp http://devvm.proxy/blocked) == 407 ]]"
