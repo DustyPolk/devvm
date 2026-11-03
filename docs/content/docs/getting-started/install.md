@@ -11,7 +11,7 @@ To install devvm, run the command for your system:
 
 {{< install >}}
 
-The install script needs `curl` and `tar`, and it never needs sudo for devvm itself. It takes options after `bash -s --`, such as `curl -fsSL … | bash -s -- --yes`:
+The install script needs `curl`, `tar`, and `sha256sum` or `shasum` to check what it downloads, and it never needs sudo for devvm itself. It takes options after `bash -s --`, such as `curl -fsSL … | bash -s -- --yes`:
 
 - `--yes`: answer yes to every question.
 - `--version 0.1.0`: install that release. `DEVVM_VERSION=0.1.0` does the same.

@@ -17,8 +17,11 @@ stub_calls
 ! stdout 'limactl (start|stop|edit)'
 stdout 'exec ''curl'' ''--noproxy'''
 # Started outside devvm: unenforced, so without a terminal to ask in,
-# devvm stops it. devvm starts it again confined.
-exec sh -c 'limactl stop "$NET" && limactl start --tty=false "$NET"'
+# devvm stops it. devvm starts it again confined. (The exit keeps
+# limactl start sh's child, so its hostagent is sh, soon gone: bash 5.2
+# and newer as sh, Fedora's, runs a last command in sh's place, which would
+# make the runner, which lasts, its hostagent.)
+exec sh -c 'limactl stop "$NET" && limactl start --tty=false "$NET"; exit $?'
 stub_reset
 ! exec devvm
 stderr '^devvm: net_unenforced_stop vm=devvm-net-[0-9a-f]{14}$'

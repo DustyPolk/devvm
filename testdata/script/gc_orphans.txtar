@@ -7,7 +7,7 @@ env DEVVM_DOCKER_KIND=linux
 
 mkdir $VMS $DATA/logs $DATA/run $DATA/lima-vms
 # This run's Lima home, as a VM's state records it.
-exec sh -c 'printf %s "$DEVVM_LIMA_HOME" | shasum -a 256 | cut -c1-16 > at'
+exec sh -c 'printf %s "$DEVVM_LIMA_HOME" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16 > at'
 # A Lima VM that exists, and one limactl deleted, with its logs, run and
 # port files; one made in another Lima home, and one that doesn't say
 # where it was made while this run's home isn't the default; one being

@@ -94,6 +94,6 @@ os=$(uname -s | tr '[:upper:]' '[:lower:]')
 case $(uname -m) in arm64 | aarch64) arch=arm64 ;; *) arch=amd64 ;; esac
 mkdir -p "dist/devvm_${os}_$arch"
 git archive --prefix="devvm-$DEVVM_VERSION/" HEAD | gzip -n > "dist/devvm-$DEVVM_VERSION.tar.gz"
-(cd dist && shasum -a 256 "devvm-$DEVVM_VERSION.tar.gz" > SHA256SUMS)
+(cd dist && { sha256sum "devvm-$DEVVM_VERSION.tar.gz" 2>/dev/null || shasum -a 256 "devvm-$DEVVM_VERSION.tar.gz"; } > SHA256SUMS)
 printf '#!/bin/sh\necho %s\n' "${GR_VERSION:-$DEVVM_VERSION}" > "dist/devvm_${os}_$arch/devvm"
 chmod 755 "dist/devvm_${os}_$arch/devvm"

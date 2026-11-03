@@ -30,7 +30,10 @@ trap 'rm -rf "$tmp"' EXIT
 fetch() { curl -fsSL --retry 3 "$@"; }
 gh_latest() { fetch "https://api.github.com/repos/$1/releases/latest" | jq -r .tag_name; }
 gh_head() { fetch "https://api.github.com/repos/$1/commits/${2:-master}" | jq -r .sha; }
-sha_of() { fetch -o "$tmp/dl" "$1"; shasum -a 256 "$tmp/dl" | cut -c1-64; rm -f "$tmp/dl"; }
+# sha256 FILE: its SHA-256, with sha256sum (coreutils) or shasum (macOS's; Perl's, which Fedora
+# lacks), whichever there is.
+sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -c1-64; }
+sha_of() { fetch -o "$tmp/dl" "$1"; sha256 "$tmp/dl"; rm -f "$tmp/dl"; }
 
 # get FILE VAR / set_var FILE VAR VALUE: a `VAR=value` line in a pinned script (a trailing comment
 # stays); in a .go file, the quoted value of `const VAR = "…"` (get_const) or of a map entry
@@ -100,7 +103,7 @@ ubuntu_image() {
   auth="Authorization: Bearer $(fetch "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/ubuntu:pull" | jq -r .token)"
   fetch -H "$auth" -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
     "$hub/manifests/26.04" > "$tmp/ubuntu-index"
-  ubuntu_digest=sha256:$(shasum -a 256 "$tmp/ubuntu-index" | cut -c1-64)
+  ubuntu_digest=sha256:$(sha256 "$tmp/ubuntu-index")
   ubuntu_built=""
   for a in arm64 amd64; do
     m=$(jq -r --arg a "$a" '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a)][0].digest // ""' "$tmp/ubuntu-index")

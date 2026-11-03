@@ -19,6 +19,9 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 die() { echo "release: $*" >&2; exit 1; }
+# sha256 [FILE]: FILE's SHA-256, else its input's, with sha256sum (coreutils) or shasum (macOS's;
+# Perl's, which Fedora lacks), whichever there is.
+sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi | cut -c1-64; }
 
 v=$(tr -d '[:space:]' < VERSION)
 [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "VERSION isn't x.y.z: '$v'"
@@ -80,7 +83,7 @@ if [[ $ref == HEAD ]]; then snap=(--snapshot); else export GORELEASER_CURRENT_TA
 # byte (Go's builds are reproducible: the same commit, Go, flags and -trimpath).
 (cd "$src" && DEVVM_VERSION=$v goreleaser build --clean --id devvm ${snap[@]+"${snap[@]}"}) || die "goreleaser's Linux builds failed"
 linux_sum() { local b
-  for b in "$src"/dist/devvm_linux_"$1"*/devvm; do [[ -f $b ]] && { shasum -a 256 "$b" | cut -d' ' -f1; return; }; done
+  for b in "$src"/dist/devvm_linux_"$1"*/devvm; do [[ -f $b ]] && { sha256 "$b"; return; }; done
   die "no Linux $1 build"; }
 arm64=$(linux_sum arm64) amd64=$(linux_sum amd64)
 (cd "$src" && DEVVM_VERSION=$v DEVVM_RELEASE_URL=$url DEVVM_LINUX_SHA256_ARM64=$arm64 DEVVM_LINUX_SHA256_AMD64=$amd64 \
@@ -92,7 +95,7 @@ mv "$src/dist" "$out"
 # Each Linux archive's devvm is the build whose SHA-256 the macOS builds have.
 for a in arm64 amd64; do
   want=$arm64; [[ $a == arm64 ]] || want=$amd64
-  got=$(tar -xzOf "$out/devvm-$v-linux-$a.tar.gz" "devvm-$v-linux-$a/devvm" | shasum -a 256 | cut -d' ' -f1)
+  got=$(tar -xzOf "$out/devvm-$v-linux-$a.tar.gz" "devvm-$v-linux-$a/devvm" | sha256)
   [[ $got == "$want" ]] || die "devvm-$v-linux-$a.tar.gz's devvm isn't the build the macOS builds pin"
 done
 

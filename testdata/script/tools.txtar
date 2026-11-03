@@ -33,7 +33,7 @@ stdout '^backend_at=[0-9a-f]{16}$'
 stdout '^tools=node-24\.21\.0-[0-9a-f]{12}\.erofs pnpm-\S+ bun-1\.4\.2-[0-9a-f]{12}\.erofs claude-2\.1\.295-[0-9a-f]{12}\.erofs$'
 # Each image in the share with its hash and what it's built for; nothing
 # left of the build.
-exec sh -c 'cd "$SHARE" && for f in *.erofs; do [ "$(cat "$f.sha256")" = "$(shasum -a 256 < "$f" 2>/dev/null | cut -c1-64 || sha256sum < "$f" | cut -c1-64)" ] || echo "bad $f"; grep -qx libc=gnu "$f.target" || echo "bad target $f"; done; ls | wc -l'
+exec sh -c 'cd "$SHARE" && for f in *.erofs; do [ "$(cat "$f.sha256")" = "$({ sha256sum 2>/dev/null || shasum -a 256; } < "$f" | cut -c1-64)" ] || echo "bad $f"; grep -qx libc=gnu "$f.target" || echo "bad target $f"; done; ls | wc -l'
 ! stdout bad
 stdout '^ *12$'
 ! exists $SHARE/.lock

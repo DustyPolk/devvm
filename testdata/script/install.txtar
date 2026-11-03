@@ -19,6 +19,12 @@ env UN=FreeBSD:arm64
 stderr '^install: devvm runs on macOS and Linux$'
 env UN=
 
+# Checksums with sha256sum or shasum, whichever the host has (Fedora has
+# no shasum, macOS may have no sha256sum); with neither, it stops first.
+! exec bash sums.sh
+cmp stdout sums.want
+stderr '^install: needs sha256sum or shasum$'
+
 # Which release: --version, else this script's own, else the latest. A
 # version goes into URLs and paths, so it has to look like one.
 exec bash version.sh
@@ -253,6 +259,35 @@ rosetta darwin-arm64
 -- bad_host.sh --
 . "$WORK/lib.sh"
 check_host
+-- sums.sh --
+# A PATH of only what check_host and sha256 run, and the made-up sums.
+. "$WORK/lib.sh"
+host=$PATH o=$WORK/only
+mkdir -p "$o"
+for c in cut uname curl tar; do ln -sf "$(command -v "$c")" "$o/$c"; done
+chmod 755 "$WORK/sums/shasum" "$WORK/sums/sha256sum"
+echo x > "$WORK/f"
+ln -s "$WORK/sums/shasum" "$o/shasum"
+PATH=$o; check_host; echo "shasum $(sha256 "$WORK/f")"; PATH=$host
+ln -s "$WORK/sums/sha256sum" "$o/sha256sum"
+PATH=$o; check_host; echo "both $(sha256 "$WORK/f")"; PATH=$host
+rm "$o/shasum"
+PATH=$o; check_host; echo "sha256sum $(sha256 "$WORK/f")"; PATH=$host
+rm "$o/sha256sum"
+PATH=$o; check_host; echo "not reached"
+-- sums.want --
+shasum aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+both bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+sha256sum bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+-- sums/shasum --
+#!/bin/sh
+# macOS's shasum -a 256 FILE, with a made-up sum.
+[ "$1 $2" = "-a 256" ] || exit 1
+echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  $3"
+-- sums/sha256sum --
+#!/bin/sh
+# coreutils' sha256sum FILE, with a made-up sum.
+echo "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  $1"
 -- version.sh --
 . "$WORK/lib.sh"
 curl() { echo "https://github.com/w3cj/devvm/releases/tag/v0.3.0"; }

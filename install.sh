@@ -81,6 +81,7 @@ check_host() {
   platform >/dev/null
   command -v curl >/dev/null || die "needs curl"
   command -v tar >/dev/null || die "needs tar"
+  command -v sha256sum >/dev/null || command -v shasum >/dev/null || die "needs sha256sum or shasum"
 }
 
 # Where Homebrew installs, when neither the brew on PATH nor HOMEBREW_CELLAR/HOMEBREW_PREFIX has a
@@ -107,6 +108,8 @@ check_brew() {
   done
 }
 
+# sha256 FILE: its SHA-256, with sha256sum (Linux's coreutils) or shasum (macOS's; Perl's, which
+# Fedora lacks), whichever there is.
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -c1-64; }
 
 # latest_release REPO_URL: the version of a GitHub repo's latest release, from where releases/latest

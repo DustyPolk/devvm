@@ -27,7 +27,10 @@ vm_name NET net
 exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$RUN/$NET.started"'
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +on +- +lima '
-exec sh -c 'limactl stop "$NET" && limactl start --tty=false "$NET"'
+# (The exit keeps limactl start sh's child, so its hostagent is sh, soon
+# gone: bash 5.2 and newer as sh, Fedora's, runs a last command in sh's
+# place, which would make the runner, which lasts, its hostagent.)
+exec sh -c 'limactl stop "$NET" && limactl start --tty=false "$NET"; exit $?'
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +unenforced +- +lima '
 exec limactl stop $NET

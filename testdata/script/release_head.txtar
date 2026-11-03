@@ -93,7 +93,7 @@ grep "^minisign_key=\"$(sed -n 2p keys/test.pub)\"$" repo/dist/install.sh >/dev/
 trusted
 -- formula.sh --
 # The formula's URL and checksum, against the source tarball's.
-sha=$(shasum -a 256 repo/dist/devvm-1.2.3.tar.gz | cut -c1-64)
+sha=$({ sha256sum 2>/dev/null || shasum -a 256; } < repo/dist/devvm-1.2.3.tar.gz | cut -c1-64)
 grep -q "^  sha256 \"$sha\"$" repo/dist/devvm.rb && echo checksum
 grep '^  url ' repo/dist/devvm.rb
 ! grep '@' repo/dist/devvm.rb
@@ -130,7 +130,7 @@ for a in arm64 amd64; do
 done
 rm -rf dist/x
 git archive --prefix="devvm-$DEVVM_VERSION/" HEAD | gzip -n > "dist/devvm-$DEVVM_VERSION.tar.gz"
-(cd dist && shasum -a 256 "devvm-$DEVVM_VERSION.tar.gz" > SHA256SUMS)
+(cd dist && { sha256sum "devvm-$DEVVM_VERSION.tar.gz" 2>/dev/null || shasum -a 256 "devvm-$DEVVM_VERSION.tar.gz"; } > SHA256SUMS)
 if [[ $os != linux ]]; then
   mkdir -p "dist/devvm-darwin_${os}_$arch"
   printf '#!/bin/sh\necho %s\n' "${GR_VERSION:-$DEVVM_VERSION}" > "dist/devvm-darwin_${os}_$arch/devvm"
