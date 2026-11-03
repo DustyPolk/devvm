@@ -20,23 +20,25 @@ import (
 // features.
 const featuresNone = "none"
 
-// newSetupCmd is devvm setup [--features LIST|none] [--agents LIST|none].
-// Its --agents chooses new VMs' default.
+// newSetupCmd is devvm setup [--features LIST|none] [--agents LIST|none]
+// [--layers LIST|none]. Its --agents and --layers choose new VMs'
+// defaults.
 func newSetupCmd(u *ui.UI) *cobra.Command {
 	var (
-		features, agents string
-		c                setupChoice
+		features, agents, layers string
+		c                        setupChoice
 	)
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Choose base's features, and new VMs' size, network policy and coding agents",
-		Long: "Choose the features base gets, and new VMs' CPUs, memory, network policy and coding agents. " +
-			"In a terminal devvm asks for each, starting from the current choice, and --features and --agents choose without asking. " +
-			"A new choice of features rebuilds base and the images on it when they're next used.",
+		Short: "Choose base's features, and new VMs' size, network policy, coding agents and layers",
+		Long: "Choose the features base gets, and new VMs' CPUs, memory, network policy, coding agents and layers. " +
+			"In a terminal devvm asks for each, starting from the current choice, and --features, --agents and --layers choose without asking. " +
+			"A new choice of features rebuilds base and the images on it when they're next used, and VMs you already have keep their agents and layers.",
 		Example: examples(
 			"devvm setup", "answer every question", "devvm setup --features omb,fzf", "give base oh-my-bash and fzf, without asking",
 			"devvm setup --features none", "give base no features",
 			"devvm setup --agents claude,codex", "give new VMs Claude Code and Codex, without asking",
+			"devvm setup --layers docker", "give new VMs the docker layer, without asking",
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -46,6 +48,9 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 			if cmd.Flags().Changed("agents") {
 				c.agents = partFlag(agents)
 			}
+			if cmd.Flags().Changed("layers") {
+				c.layers = partFlag(layers)
+			}
 			fail(u, newSetup(u).run(c), msg.SetupFailed)
 			return nil
 		},
@@ -53,19 +58,20 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&features, "features", "", "the `LIST` of features base gets, such as fzf,omb, or none")
 	addAgentsFlag(f, &agents, "the `LIST` of coding agents new VMs get by default, such as claude,codex, or none")
+	addLayersFlag(f, &layers, "the `LIST` of layers new VMs' images get by default, bottom first, such as docker,mine, or none")
 	return cmd
 }
 
 // setupChoice is what devvm setup's flags choose: base's features and new
-// VMs' agents (nil for none given).
+// VMs' agents and layers (nil for none given).
 type setupChoice struct {
-	features *string
-	agents   *[]string
+	features       *string
+	agents, layers *[]string
 }
 
 // none reports whether no flag chose anything.
 func (c setupChoice) none() bool {
-	return c.features == nil && c.agents == nil
+	return c.features == nil && c.agents == nil && c.layers == nil
 }
 
 // setup is devvm setup's run: the UI it prints through, whether it's in a
@@ -91,12 +97,12 @@ func newSetup(u *ui.UI) setup {
 	}
 }
 
-// run saves what c chooses: base's features, then
-// new VMs' agents. With nothing chosen, it asks in a terminal for those,
-// with new VMs' size and network policy before the agents; without one,
-// it keeps the features (every one until they're chosen) and saves them.
-// A change to the features says base rebuilds, and that devvm gc deletes
-// the old images. What config.toml sets isn't asked for, said, and a flag
+// run saves what c chooses: base's features, then new VMs' agents and
+// layers. With nothing chosen, it asks in a terminal for those, with new
+// VMs' size and network policy before the agents; without one, it keeps
+// the features (every one until they're chosen) and saves them. A change
+// to the features says base rebuilds, and that devvm gc deletes the old
+// images. What config.toml sets isn't asked for, said, and a flag
 // choosing it is refused (set_in_config).
 func (s setup) run(c setupChoice) error {
 	dirs, err := paths.FromEnv()
@@ -114,8 +120,14 @@ func (s setup) run(c setupChoice) error {
 		}
 	}
 	agents := vm.AgentsChoice{Dirs: dirs, Pick: s.pick, Info: s.ui.Info}
+	layers := vm.LayersChoice{Dirs: dirs, Layers: (&build.Env{Dirs: dirs}).Layers()[1:], Pick: s.pick, Info: s.ui.Info}
 	if c.agents != nil {
-		return agents.Set(*c.agents)
+		if err := agents.Set(*c.agents); err != nil {
+			return err
+		}
+	}
+	if c.layers != nil {
+		return layers.Set(*c.layers)
 	}
 	if !ask {
 		return nil
@@ -131,7 +143,10 @@ func (s setup) run(c setupChoice) error {
 	if err := s.saveNetwork(dirs); err != nil {
 		return err
 	}
-	return agents.Ask()
+	if err := agents.Ask(); err != nil {
+		return err
+	}
+	return layers.Ask()
 }
 
 // inConfig reports whether config.toml sets key, saying devvm setup

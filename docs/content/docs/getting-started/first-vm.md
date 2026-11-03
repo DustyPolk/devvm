@@ -28,11 +28,12 @@ Coding agents, which you start in the VM's shell
   [ ] codex
   [ ] opencode
 Layers, which a VM gets only when devvm makes it
+  [ ] desktop    an Xfce desktop, which devvm desktop opens
   [ ] docker     Docker's engine, CLI, BuildKit and Compose
   [ ] nix        Nix, direnv and nix-direnv
 ```
 
-Check Claude Code, Codex or opencode to give the VM a coding agent. You can add toolchains and agents later, but a VM gets layers only when devvm makes it. To choose without the list, give `--tools`, `--agents` and `--layers`, such as `devvm --agents claude`, and each one you leave out keeps what the list would have checked ([what a new VM gets](../using/images.md#what-a-new-vm-gets)).
+Check Claude Code, Codex or opencode to give the VM a coding agent. You can add toolchains and agents later, but a VM gets layers only when devvm makes it. To have a layer checked for every new VM, such as `desktop`, choose it with [`devvm setup --layers`](../using/settings.md#layers-for-new-vms). To choose without the list, give `--tools`, `--agents` and `--layers`, such as `devvm --agents claude`, and each one you leave out keeps what the list would have checked ([what a new VM gets](../using/images.md#what-a-new-vm-gets)).
 
 The first time, devvm asks for the CPUs and memory that new VMs get. It shows how many CPUs and how much memory this machine has, and offers the base image's 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them. Press Enter to keep each value, or type another, and devvm asks again when this machine can't give what you typed. devvm saves what you type as the size new VMs get, which you can change later with `devvm setup` or `devvm size -g`, and when you keep both values it saves nothing ([choosing new VMs' size](../using/ports-size.md#choosing-new-vms-size)). It also asks which coding agents new VMs get, which the list then checks for every new VM, and you can change them later with `devvm setup --agents`.
 

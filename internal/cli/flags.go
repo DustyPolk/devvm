@@ -23,6 +23,12 @@ func addAgentsFlag(f *pflag.FlagSet, p *string, usage string) {
 	f.StringVar(p, "agents", "", usage)
 }
 
+// addLayersFlag adds --layers, a list of layers: a new VM's, or new VMs'
+// default with devvm setup. usage says whose.
+func addLayersFlag(f *pflag.FlagSet, p *string, usage string) {
+	f.StringVar(p, "layers", "", usage)
+}
+
 // addForceFlag adds -f/--force, which only skips a confirmation.
 func addForceFlag(f *pflag.FlagSet, p *bool) {
 	f.BoolVarP(p, "force", "f", false, "don't ask to confirm, which devvm needs without a terminal")

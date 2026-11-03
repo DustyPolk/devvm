@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/image"
@@ -51,12 +52,13 @@ func listOrNone(names []string) string {
 // partsDefault is what a new VM gets of each part when its flag is left
 // out, and why: the toolchains the folder's files call for and those its
 // devcontainer.json's features map to, the agents devvm setup chose, and
-// the layers the devcontainer.json's features map to. why names the file
-// that calls for each toolchain or layer.
+// the layers devvm setup chose, then those the devcontainer.json's
+// features map to. why names the file that calls for each toolchain or
+// layer; setup and setupLayers are devvm setup's agents and layers.
 type partsDefault struct {
 	Parts
-	why   map[string]string
-	setup []string
+	why                map[string]string
+	setup, setupLayers []string
 }
 
 // defaults works out a new VM's default parts for the folder dir with
@@ -89,13 +91,48 @@ func (e creation) defaults(dir string, dc *devcontainer.Plan, def settings.Defau
 	return d
 }
 
+// addSetupLayers puts devvm setup's layers (def's) under d's, those of
+// the user's whose script is gone (not one of b's) left out with a
+// warning naming each: a VM is made without it rather than not at all.
+func (e creation) addSetupLayers(d *partsDefault, vm string, def settings.Defaults, b *build.Env) {
+	layers := b.Layers()
+	for _, l := range def.Layers.Names {
+		if !slices.Contains(layers, l) {
+			e.Warn(msg.DefaultLayerGone(b.Dirs.Layers(), l, vm))
+			continue
+		}
+		d.setupLayers = append(d.setupLayers, l)
+	}
+	d.Layers = slices.Concat(d.setupLayers, d.Layers)
+}
+
+// requireSetupLayers refuses a layer of devvm setup's the VM gets that
+// b's backend can't run (docker-layer, nix-layer), naming the layer and
+// both ways out, before the VM's other needs are checked.
+func (e creation) requireSetupLayers(vm string, layers []string, d partsDefault, b *build.Env) error {
+	for _, l := range layers {
+		if !slices.Contains(d.setupLayers, l) {
+			continue
+		}
+		for _, f := range backend.ImageFeatures(l) {
+			if err := e.Registry.Require(b.Backend, vm, f); err != nil {
+				return msg.DefaultLayerLacks(b.Backend.Name(), string(f), l, vm).Because(err)
+			}
+		}
+	}
+	return nil
+}
+
 // chooseParts chooses what a new VM gets of each part: the flags', each
 // the exact list for its part, and the defaults for those left out (def's
-// agents). In a terminal without any of the flags, the picker shows the
-// defaults checked; otherwise an info line says what the VM gets. The
-// layers are checked against b's.
+// agents and layers). In a terminal without any of the flags, the picker
+// shows the defaults checked; otherwise an info line says what the VM
+// gets. The layers are checked against b's.
 func (e creation) chooseParts(o Options, vm, dir string, dc *devcontainer.Plan, b *build.Env, def settings.Defaults) (Parts, error) {
 	d := e.defaults(dir, dc, def)
+	if o.Layers == nil {
+		e.addSetupLayers(&d, vm, def, b)
+	}
 	p := d.Parts
 	given := false
 	for _, f := range []struct {
@@ -111,6 +148,9 @@ func (e creation) chooseParts(o Options, vm, dir string, dc *devcontainer.Plan, 
 	}
 	p.Layers = image.LayersOf(p.image())
 	if err := b.CheckLayers(p.image()); err != nil {
+		return Parts{}, err
+	}
+	if err := e.requireSetupLayers(vm, p.Layers, d, b); err != nil {
 		return Parts{}, err
 	}
 	if given || !e.CanPick() || e.PickParts == nil {
@@ -135,13 +175,17 @@ func (e creation) pickNew(vm string, d partsDefault, b *build.Env) Parts {
 	for _, a := range image.Agents {
 		r := PickRow{Name: a, On: slices.Contains(d.Agents, a)}
 		if slices.Contains(d.setup, a) {
-			r.Desc = msg.PickSetupAgent().Line()
+			r.Desc = msg.PickFromSetup().Line()
 		}
 		agents = append(agents, r)
 	}
 	for _, l := range b.Layers()[1:] {
 		desc := why(l)
-		if desc == "" {
+		switch {
+		case desc != "":
+		case slices.Contains(d.setupLayers, l):
+			desc = msg.PickFromSetup().Line()
+		default:
 			desc = layerDesc(l)
 		}
 		layers = append(layers, PickRow{Name: l, Desc: desc, On: slices.Contains(d.Layers, l)})
@@ -149,7 +193,25 @@ func (e creation) pickNew(vm string, d partsDefault, b *build.Env) Parts {
 	got := e.PickParts(msg.PickNewHelp(vm), []PickPart{
 		{msg.PickToolchains(), toolchains}, {msg.PickAgents(), agents}, {msg.PickLayers(), layers},
 	})
-	return Parts{Toolchains: checked(got[0]), Agents: checked(got[1]), Layers: checked(got[2])}
+	return Parts{Toolchains: checked(got[0]), Agents: checked(got[1]), Layers: inOrder(d.Layers, checked(got[2]))}
+}
+
+// inOrder is the layers chosen, those of was first in its order, bottom
+// first, then the others as the picker lists them: a picker shows layers
+// sorted, but an image's name joins them bottom first.
+func inOrder(was, chosen []string) []string {
+	var out []string
+	for _, l := range was {
+		if slices.Contains(chosen, l) && !slices.Contains(out, l) {
+			out = append(out, l)
+		}
+	}
+	for _, l := range chosen {
+		if !slices.Contains(out, l) {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // layerDesc is what a layer is, as the picker says it.
@@ -228,6 +290,59 @@ func (c AgentsChoice) say(agents []string) {
 		return
 	}
 	c.Info(msg.DefaultAgents(strings.Join(agents, " ")))
+}
+
+// LayersChoice chooses the layers new VMs get by default, which the
+// picker checks and a VM made without --layers gets: from a flag (Set),
+// or asked for (Ask). Existing VMs keep their layers.
+type LayersChoice struct {
+	Dirs paths.Dirs
+	// Layers are the layers there are, the built-in ones and the user's
+	// (build.Env's Layers, without base).
+	Layers []string
+	// Pick shows the question and returns the rows as chosen; Info says
+	// what's saved.
+	Pick func(msg.M, []PickPart) []PickPart
+	Info func(msg.M)
+}
+
+// Set saves layers as new VMs' layers, bottom first as given: none for
+// none. A name that isn't a layer's is refused, and so is a choice
+// config.toml makes (set_in_config).
+func (c LayersChoice) Set(layers []string) error {
+	if err := CheckPart("--layers", layers, c.Layers); err != nil {
+		return err
+	}
+	bottomUp := append([]string{}, image.LayersOf(image.Of(layers))...)
+	if _, err := settings.Save(c.Dirs, settings.Values{Layers: &bottomUp}); err != nil {
+		return err
+	}
+	if len(bottomUp) == 0 {
+		c.Info(msg.DefaultLayersNone())
+	} else {
+		c.Info(msg.DefaultLayers(strings.Join(bottomUp, " ")))
+	}
+	return nil
+}
+
+// Ask asks which layers new VMs get, starting from the ones in effect,
+// and saves the answer, the layers kept in their order; when config.toml
+// chooses them, it says so and asks nothing.
+func (c LayersChoice) Ask() error {
+	def, err := settings.Read(c.Dirs)
+	if err != nil {
+		return err
+	}
+	if def.Layers.Source == settings.FromConfig {
+		c.Info(msg.SetupInConfig(c.Dirs.ConfigFile(), settings.KeyLayers))
+		return nil
+	}
+	rows := make([]PickRow, len(c.Layers))
+	for i, l := range c.Layers {
+		rows[i] = PickRow{Name: l, Desc: layerDesc(l), On: slices.Contains(def.Layers.Names, l)}
+	}
+	got := c.Pick(msg.LayersHelp(), []PickPart{{Rows: rows}})
+	return c.Set(inOrder(def.Layers.Names, checked(got[0])))
 }
 
 // CheckAgents refuses a name that isn't an agent's, as --agents does.

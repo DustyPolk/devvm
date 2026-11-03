@@ -13,11 +13,11 @@ $EDITOR ~/.config/devvm/layers/mailpit.sh
 devvm --layers mailpit     # a new VM with your layer; or devvm build mailpit
 ```
 
-In a terminal, a new VM's list also shows your layers under Layers, so you can check `mailpit` there instead of giving `--layers` ([what a new VM gets](images.md#what-a-new-vm-gets)).
+In a terminal, a new VM's list also shows your layers under Layers, so you can check `mailpit` there instead of giving `--layers` ([what a new VM gets](images.md#what-a-new-vm-gets)). To give every new VM your layer, choose it with `devvm setup --layers mailpit`, or add it to the `layers` key in `config.toml` ([layers for new VMs](settings.md#layers-for-new-vms)). When you delete a layer's script that you chose there, new VMs are made without it, and devvm warns you.
 
 A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, that bash runs once as the VM's user, who has sudo, in an image on top of its parent. `devvm layer new NAME` writes a starter script, and also `NAME.policy` next to it unless that file exists. It refuses to overwrite a script that exists.
 
-- **Names** are made of lowercase letters, digits and dashes, and start with a letter or digit. A name can't be `base`, a [built-in layer's](images.md#built-in-layers) name (`docker` or `nix`) or a shared tool's name (`node`, `claude` and so on). A command's name, such as `log`, is fine, because devvm takes layers only through `--layers`, the list and image names.
+- **Names** are made of lowercase letters, digits and dashes, and start with a letter or digit. A name can't be `base`, a [built-in layer's](images.md#built-in-layers) name (`desktop`, `docker` or `nix`) or a shared tool's name (`node`, `claude` and so on). A command's name, such as `log`, is fine, because devvm takes layers only through `--layers`, the list and image names.
 - Built-in layers go in the same image names as yours, bottom first, as in `devvm --layers docker,mailpit`, which makes the image `docker+mailpit`.
 - Put PATH changes in `~/.profile`.
 - Download files with `devvm-fetch URL SHA256 OUT`, which `base` installs. It fails when the file's checksum doesn't match.

@@ -37,7 +37,7 @@ devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 
 ### Built-in layers
 
-devvm ships three layers, `desktop`, `docker` and `nix`. You choose them like any other layer, in the list devvm shows for a new VM or as in `devvm --layers docker`, and you build one with `devvm build nix`. Like any layer, only a new VM gets them ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Their names are reserved, so devvm refuses `devvm layer new docker` and never reads a `desktop.sh`, `docker.sh` or `nix.sh` of yours. The hosts that each layer needs are in its own [allowlist](../safety/network.md#allowlists).
+devvm ships three layers, `desktop`, `docker` and `nix`. You choose them like any other layer, in the list devvm shows for a new VM or as in `devvm --layers docker`, and you build one with `devvm build nix`. To give every new VM one, choose it with [`devvm setup --layers`](settings.md#layers-for-new-vms). Like any layer, only a new VM gets them ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Their names are reserved, so devvm refuses `devvm layer new docker` and never reads a `desktop.sh`, `docker.sh` or `nix.sh` of yours. The hosts that each layer needs are in its own [allowlist](../safety/network.md#allowlists).
 
 #### desktop
 
@@ -72,7 +72,7 @@ A new VM gets the tools chosen for it when devvm makes it, and keeps those versi
 
 ```mermaid
 flowchart TD
-  run["devvm in a folder<br>without a VM"] --> defaults["the defaults: the folder's toolchains,<br>devvm setup's agents, no layers"]
+  run["devvm in a folder<br>without a VM"] --> defaults["the defaults: the folder's toolchains,<br>devvm setup's agents and layers"]
   defaults --> flags{{"--tools, --agents<br>or --layers given?"}}
   flags -- "yes" --> replace["each flag given<br>replaces its part"] --> say
   flags -- "no" --> term{{"a terminal,<br>without --no-input?"}}
@@ -87,7 +87,7 @@ Each part has a default:
 
 - **Toolchains:** the ones the folder's files call for, each row naming its file, such as `package.json`.
 - **Coding agents:** the ones you chose with [devvm setup](settings.md#coding-agents-for-new-vms), with a row saying so. Until you choose some, there are none.
-- **Layers:** none. A layer that a project file calls for, such as `nix` for a `flake.nix`, names the file in its row but isn't checked, so you check it when you want it.
+- **Layers:** the ones you chose with [devvm setup](settings.md#layers-for-new-vms), bottom first, with a row saying so. Until you choose some, there are none. A layer that a project file calls for, such as `nix` for a `flake.nix`, names the file in its row but isn't checked unless devvm setup chose it, so you check it when you want it.
 
 Three flags choose the parts on the command line, and any of them skips the list. `--tools` takes the toolchains, as in `--tools node,python`, `--agents` takes the coding agents, as in `--agents claude,codex`, and `--layers` takes the layers bottom first, as in `--layers docker,mine`. Each is the exact list for its part and replaces that part's default, and `none` chooses none of it, as in `--agents none`. A part whose flag you leave out takes its default. devvm checks each name before it does anything. For a name that belongs to another part, such as `--tools claude`, it names the flag that takes it, and for a name it doesn't know, it suggests the closest one.
 
@@ -102,11 +102,11 @@ devvm looks at the folder's top level for the files that call for a toolchain, i
 | rust | `Cargo.toml` |
 | go | `go.mod` |
 
-If more than one toolchain matches, they're all checked, so `package.json` and `pyproject.toml` give node and python. A Nix project's files call for the [`nix` layer](#nix), whose row names them. Those files are `flake.nix`, `shell.nix` and `devenv.nix`, and a `default.nix` that makes a shell with `mkShell`. In a folder with none of these files, the default is no toolchains, so a VM made without a terminal or flags gets base with devvm setup's agents.
+If more than one toolchain matches, they're all checked, so `package.json` and `pyproject.toml` give node and python. A Nix project's files call for the [`nix` layer](#nix), whose row names them. Those files are `flake.nix`, `shell.nix` and `devenv.nix`, and a `default.nix` that makes a shell with `mkShell`. In a folder with none of these files, the default is no toolchains, so a VM made without a terminal or flags gets devvm setup's layers and agents.
 
-A folder's `devcontainer.json` adds what its features map to, such as toolchains or the `docker` layer, to the defaults, each row naming the file ([`devcontainer.json`](devcontainer.md)).
+A folder's `devcontainer.json` adds what its features map to, such as toolchains or the `docker` layer, to the defaults, each row naming the file ([`devcontainer.json`](devcontainer.md)). Its layers go on top of devvm setup's.
 
-The VM's image is base with its layers, in the order you give them, bottom first, so `--layers docker,mine` makes the image `docker+mine`. Its shared tools are a list of their own, the toolchains first, then the agents.
+The VM's image is base with its layers, in the order you give them, bottom first, so `--layers docker,mine` makes the image `docker+mine`. When you check layers in the list, devvm setup's stay in their order at the bottom, and the ones you add go on top in the list's order. Its shared tools are a list of their own, the toolchains first, then the agents.
 
 If the image isn't built yet, devvm builds it first, then the shared tools the share lacks, and the VM is a copy of the image with its shared tools mounted. A VM keeps the image and tools it was made from, and the three flags change nothing on a VM that exists: devvm warns and names `devvm tools`, which [changes its shared tools](toolchains.md#adding-and-removing-tools).
 

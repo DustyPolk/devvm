@@ -100,10 +100,50 @@ func TestSetupAgents(t *testing.T) {
 	if err := s.run(setupChoice{}); err != nil {
 		t.Fatal(err)
 	}
-	if n := len(*asked); n == 0 || (*asked)[n-1] != "agents_help" {
-		t.Errorf("asked %q, want agents_help last", *asked)
+	if n := len(*asked); n < 2 || (*asked)[n-2] != "agents_help" {
+		t.Errorf("asked %q, want agents_help before layers_help", *asked)
 	}
 	if got := defaults(t, d).Agents.Names; !slices.Equal(got, []string{"claude"}) {
+		t.Errorf("saved %q", got)
+	}
+}
+
+// devvm setup --layers sets new VMs' layers without asking, bottom first
+// as given, none for none, and with --agents sets both; in a terminal
+// without flags, it asks for them last, starting from the saved ones
+// and keeping their order.
+func TestSetupLayers(t *testing.T) {
+	s, d, asked := setupSandbox(t, true)
+	for _, tc := range []struct {
+		c    setupChoice
+		want []string
+	}{
+		{setupChoice{layers: partFlag("nix,docker,nix")}, []string{"nix", "docker"}},
+		{setupChoice{layers: partFlag("none")}, []string{}},
+		{setupChoice{agents: partFlag("codex"), layers: partFlag("docker")}, []string{"docker"}},
+	} {
+		if err := s.run(tc.c); err != nil {
+			t.Fatal(err)
+		}
+		if got := defaults(t, d).Layers; !got.Chosen || !slices.Equal(got.Names, tc.want) {
+			t.Errorf("%+v: saved %+v", tc.c, got)
+		}
+	}
+	if got := defaults(t, d).Agents.Names; !slices.Equal(got, []string{"codex"}) {
+		t.Errorf("--agents with --layers saved agents %q", got)
+	}
+	if len(*asked) > 0 {
+		t.Errorf("asked %q", *asked)
+	}
+	if err := s.run(setupChoice{}); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(*asked); n == 0 || (*asked)[n-1] != "layers_help" {
+		t.Errorf("asked %q, want layers_help last", *asked)
+	}
+	// The picker checked desktop as well as docker: docker stays at the
+	// bottom.
+	if got := defaults(t, d).Layers.Names; !slices.Equal(got, []string{"docker", "desktop"}) {
 		t.Errorf("saved %q", got)
 	}
 }
@@ -162,7 +202,7 @@ func TestSetupAsks(t *testing.T) {
 				wantSized = []string{
 					"size_cpus_prompt cpus=4", "size_memory_prompt memory=8",
 					"network *ask:network_default_ask on:network_default_on off:network_default_off",
-					"agents_help",
+					"agents_help", "layers_help",
 				}
 			}
 			if !slices.Equal(*sized, wantSized) {
@@ -188,7 +228,7 @@ func TestSetupConfigSets(t *testing.T) {
 	s, d, sized := setupSandbox(t, true)
 	u, said, _ := testUI()
 	s.ui = u
-	config := "network = \"on\"\nfeatures = []\nagents = [\"codex\"]\n[size]\ncpus = 2\n"
+	config := "network = \"on\"\nfeatures = []\nagents = [\"codex\"]\nlayers = [\"docker\"]\n[size]\ncpus = 2\n"
 	if err := os.MkdirAll(d.Config, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +241,7 @@ func TestSetupConfigSets(t *testing.T) {
 	if !slices.Equal(*sized, []string{"size_memory_prompt memory=8"}) {
 		t.Errorf("asked %q", *sized)
 	}
-	for _, key := range []string{"features", "size.cpus", "network", "agents"} {
+	for _, key := range []string{"features", "size.cpus", "network", "agents", "layers"} {
 		if want := "setup_in_config file=" + d.ConfigFile() + " key=" + key; !strings.Contains(said.String(), want) {
 			t.Errorf("said\n%s\nwant %s", said, want)
 		}
@@ -209,7 +249,7 @@ func TestSetupConfigSets(t *testing.T) {
 	if _, err := os.Stat(d.Settings()); err == nil {
 		t.Error("saved settings.json")
 	}
-	for _, c := range []setupChoice{{features: &[]string{"none"}[0]}, {agents: partFlag("claude")}} {
+	for _, c := range []setupChoice{{features: &[]string{"none"}[0]}, {agents: partFlag("claude")}, {layers: partFlag("nix")}} {
 		if err := s.run(c); msg.IDOf(err) != "set_in_config" {
 			t.Errorf("%+v: %v", c, msg.NamesOf(err))
 		}

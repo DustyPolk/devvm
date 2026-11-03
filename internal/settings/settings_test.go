@@ -39,6 +39,7 @@ network = "off"
 ports = "5173, 8000-8010"
 features = ["fzf", "omb"]
 agents = ["codex", "claude"]
+layers = ["nix", "docker", "mine"]
 
 [size]
 cpus = 6
@@ -65,7 +66,7 @@ func TestReadConfig(t *testing.T) {
 	want := Defaults{
 		Network: Value{"ask", FromBuiltin}, Ports: Value{"all", FromBuiltin},
 		CPUs: Value{"", FromBuiltin}, Memory: Value{"", FromBuiltin}, Disk: Value{"", FromBuiltin},
-		Features: List{Source: FromBuiltin}, Agents: List{Source: FromBuiltin},
+		Features: List{Source: FromBuiltin}, Agents: List{Source: FromBuiltin}, Layers: List{Source: FromBuiltin},
 		Retention: Retention{Raw: map[string]string{}, Sources: map[string]Source{}},
 	}
 	if !reflect.DeepEqual(def, want) {
@@ -95,6 +96,11 @@ func TestReadConfig(t *testing.T) {
 	}
 	if !slices.Equal(def.Agents.Names, []string{"codex", "claude"}) || def.Source(KeyAgents) != FromConfig {
 		t.Errorf("agents = %+v", def.Agents)
+	}
+	// Layers keep their order, bottom first: whether each exists is new
+	// VMs' to check.
+	if !slices.Equal(def.Layers.Names, []string{"nix", "docker", "mine"}) || !def.Layers.Chosen || def.Source(KeyLayers) != FromConfig {
+		t.Errorf("layers = %+v", def.Layers)
 	}
 	r := def.Retention
 	if r.RunLogs != 30 || r.ExportsAge != 90*24*time.Hour || r.ExportsCount != 5 || r.ToolsAge != 30*24*time.Hour ||
@@ -138,6 +144,11 @@ func TestConfigRefused(t *testing.T) {
 		{"a bad feature", "features = [\"Fzf\"]\n", 1, "not a feature's name"},
 		{"features not a list", "features = \"fzf\"\n", 1, "not a list of names"},
 		{"not an agent", "agents = [\"python\"]\n", 1, `"python" isn't a coding agent`},
+		{"a layer twice", "layers = [\"nix\", \"nix\"]\n", 1, `"nix" is listed twice`},
+		{"base as a layer", "layers = [\"base\"]\n", 1, `not a layer's name: "base"`},
+		{"a tool as a layer", "layers = [\"node\"]\n", 1, `not a layer's name: "node"`},
+		{"a bad layer", "layers = [\"Mine\"]\n", 1, `not a layer's name: "Mine"`},
+		{"layers not a list", "layers = \"nix\"\n", 1, "not a list of names"},
 		{"bad count", "[retention]\nhistory.count = 0\n", 2, "a count is a whole number"},
 		{"bad age", "[retention]\nhistory.age = \"30\"\n", 2, "bad_duration"},
 		{"bad size", "[retention]\nnix-cache.size = \"20g\"\n", 2, "a size is a whole number"},
@@ -162,6 +173,7 @@ func TestPrecedence(t *testing.T) {
 	saved := Values{
 		Network: Of("on"), Ports: Of("none"),
 		Size: SizeValues{CPUs: Of("2"), Memory: Of("4"), Disk: Of("50")}, Features: Of([]string{}), Agents: Of([]string{"codex"}),
+		Layers:    Of([]string{"nix", "docker"}),
 		Retention: map[string]string{RetainHistoryAge: "1d", RetainRunLogs: "3"},
 	}
 	if _, err := Save(d, saved); err != nil {
@@ -188,6 +200,9 @@ func TestPrecedence(t *testing.T) {
 	}
 	if !def.Features.Chosen || len(def.Features.Names) != 0 || def.Features.Source != FromSettings {
 		t.Errorf("features = %+v", def.Features)
+	}
+	if !slices.Equal(def.Layers.Names, []string{"nix", "docker"}) || def.Layers.Source != FromSettings {
+		t.Errorf("layers = %+v", def.Layers)
 	}
 	if def.Retention.Raw[RetainHistoryAge] != "2d" || def.Retention.Source(RetainHistoryAge) != FromConfig ||
 		def.Retention.Source(RetainRunLogs) != FromSettings || def.Retention.Source(RetainOrphansAge) != FromBuiltin {
@@ -252,6 +267,7 @@ func TestReadSaved(t *testing.T) {
 	for data, reason := range map[string]string{
 		`{"network": "maybe"}`:              "network: ",
 		`{"agents": ["claude", "claude"]}`:  "agents: ",
+		`{"layers": ["base"]}`:              "layers: ",
 		`{"retention": {"logs.runs": "0"}}`: "retention.logs.runs: ",
 		`{"ports": 5173}`:                   "cannot unmarshal",
 		`not json`:                          "invalid character",

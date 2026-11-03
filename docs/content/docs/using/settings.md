@@ -38,6 +38,9 @@ features = ["cli-tools", "fzf", "omb"]
 # The coding agents new VMs get, or [] for none.
 agents = ["claude", "codex"]
 
+# The layers new VMs get, bottom first, or [] for none.
+layers = ["docker"]
+
 # New VMs' CPUs, and their memory and disk in GiB.
 [size]
 cpus = 4
@@ -54,7 +57,7 @@ orphans.age = "30d"
 nix-cache.size = "20G"
 ```
 
-Each key takes what its command takes. `network` is `ask`, `on` or `off`, as `devvm network -g` sets it ([turning it on or off](../safety/network.md#turning-it-on-or-off)). `ports` is `all`, `none` or a list, as `devvm ports -g` takes it ([size and ports](ports-size.md#size-and-ports)). `features` lists the [features](customizing.md#choosing-features) that base gets, and `agents` the [coding agents](#coding-agents-for-new-vms) that new VMs get. `cpus` is a whole number, and `memory` and `disk` are a number of GiB, such as `8`, `8.5` or `"8G"`, as `devvm size -g` takes them. The `[retention]` keys are the [retention settings](#retention), with a duration such as `"90d"` or a size such as `"20G"` in quotes, and a count as a number.
+Each key takes what its command takes. `network` is `ask`, `on` or `off`, as `devvm network -g` sets it ([turning it on or off](../safety/network.md#turning-it-on-or-off)). `ports` is `all`, `none` or a list, as `devvm ports -g` takes it ([size and ports](ports-size.md#size-and-ports)). `features` lists the [features](customizing.md#choosing-features) that base gets, `agents` the [coding agents](#coding-agents-for-new-vms) that new VMs get, and `layers` the [layers](#layers-for-new-vms) that new VMs get, bottom first. `cpus` is a whole number, and `memory` and `disk` are a number of GiB, such as `8`, `8.5` or `"8G"`, as `devvm size -g` takes them. The `[retention]` keys are the [retention settings](#retention), with a duration such as `"90d"` or a size such as `"20G"` in quotes, and a count as a number.
 
 ### Where a default comes from
 
@@ -84,27 +87,48 @@ devvm reads all of `config.toml` each time it needs a default, and it checks eve
 
 ## devvm setup
 
-`devvm setup` chooses what new VMs get. In a terminal, it asks four questions, each starting from the current choice, and saves each answer in `~/.local/share/devvm/settings.json`, as the command for that setting saves it. It skips a question that [`config.toml`](#configtoml) answers, saying so, and it refuses a flag that would change what `config.toml` sets.
+`devvm setup` chooses what new VMs get. In a terminal, it asks five questions, each starting from the current choice, and saves each answer in `~/.local/share/devvm/settings.json`, as the command for that setting saves it. It skips a question that [`config.toml`](#configtoml) answers, saying so, and it refuses a flag that would change what `config.toml` sets.
 
 1. The [features](customizing.md#choosing-features) that base gets.
 2. The [CPUs and memory](ports-size.md#choosing-new-vms-size) that new VMs get, as `devvm size -g` saves them.
 3. The [network policy](../safety/network.md) that new VMs get, as `devvm network -g` saves it. With `ask`, the default, devvm asks for each new VM in a terminal, and a new VM gets network policy when there's no terminal to ask in. With `on` or `off`, devvm makes every new VM that way without asking. `--network-policy` and `--no-network-policy` choose for one VM and win over the saved choice.
 4. The [coding agents](#coding-agents-for-new-vms) that new VMs get.
+5. The [layers](#layers-for-new-vms) that new VMs get.
 
 ```sh
-devvm setup                          # asks all four questions
+devvm setup                          # asks all five questions
 devvm setup --features fzf,omb       # base's features, without asking
 devvm setup --features none          # base gets no features
 devvm setup --agents claude,codex    # new VMs' coding agents, without asking
+devvm setup --layers docker          # new VMs' layers, without asking
 ```
 
-`devvm setup` has two flags of its own, and each one chooses without asking anything. `--features LIST` chooses base's features, as a comma-separated list or `none` for none, and devvm refuses an empty `--features ''`. `--agents LIST` chooses new VMs' coding agents in the same way. With any of the flags, what the flags leave out stays as it is. Without a terminal and without flags, `devvm setup` asks nothing and keeps base's features, saving every feature when none was chosen yet. To change new VMs' size without asking, use `devvm size -g` ([choosing new VMs' size](ports-size.md#choosing-new-vms-size)), and to change their network policy, use `devvm network -g` ([turning it on or off](../safety/network.md#turning-it-on-or-off)).
+`devvm setup` has three flags of its own, and each one chooses without asking anything. `--features LIST` chooses base's features, as a comma-separated list or `none` for none, and devvm refuses an empty `--features ''`. `--agents LIST` chooses new VMs' coding agents in the same way, and `--layers LIST` chooses new VMs' layers. With any of the flags, what the flags leave out stays as it is. Without a terminal and without flags, `devvm setup` asks nothing and keeps base's features, saving every feature when none was chosen yet. To change new VMs' size without asking, use `devvm size -g` ([choosing new VMs' size](ports-size.md#choosing-new-vms-size)), and to change their network policy, use `devvm network -g` ([turning it on or off](../safety/network.md#turning-it-on-or-off)).
 
 ### Coding agents for new VMs
 
 The coding agents you choose in `devvm setup` are the ones checked for a new VM in the list devvm shows in a terminal, each row saying it comes from devvm setup, and the ones a new VM gets without a terminal ([what a new VM gets](images.md#what-a-new-vm-gets)). `--agents` chooses others for one VM. The choice is for new VMs only, so a VM that exists keeps its agents, and `devvm tools` changes them.
 
 devvm asks for them on its first run in a terminal, together with the size and base's features, until you've chosen them. Until then, and when you choose `none`, new VMs get no agents by default. `devvm setup --agents claude,codex` and `devvm setup --agents none` choose them without asking, and devvm refuses a name that isn't an agent's, suggesting the closest.
+
+### Layers for new VMs
+
+The layers you choose in `devvm setup` are the ones every new VM gets unless you choose others for it. They can be devvm's [built-in layers](images.md#built-in-layers), `desktop`, `docker` and `nix`, and [your own](customizing.md#your-own-layers). In the list devvm shows for a new VM in a terminal, they're checked under Layers, each row saying it comes from devvm setup, and you can uncheck any of them for that VM. Without a terminal, a new VM gets them, and devvm says so in one line ([what a new VM gets](images.md#what-a-new-vm-gets)).
+
+```sh
+devvm setup --layers docker,desktop   # every new VM gets docker, with desktop on top
+devvm setup --layers none             # new VMs get no layers
+devvm --layers nix                    # this VM gets nix alone, not setup's layers
+devvm --layers none                   # this VM gets no layers
+```
+
+`devvm setup --layers` takes the layers bottom first, in the order the image's name joins them, so `--layers docker,desktop` gives new VMs the image `docker+desktop`. It refuses a name that isn't a layer's, suggesting the closest, and changes nothing. Until you choose some, new VMs get no layers by default, and devvm doesn't ask for them on its first run. In a terminal, `devvm setup` asks for them last, after the coding agents. To set them by hand, use the `layers` key in [`config.toml`](#configtoml), which `devvm setup --layers` then refuses to change.
+
+`--layers` on `devvm` is the exact list of one VM's layers, so it replaces setup's layers, and `--layers none` makes a VM without any. A `devcontainer.json`'s layers go on top of setup's ([`devcontainer.json`](devcontainer.md)).
+
+The choice is for new VMs only. A VM that exists keeps the layers it was made with, and `devvm setup` says so when it saves the choice.
+
+When a layer of yours that you chose in `devvm setup` has no script in `~/.config/devvm/layers`, such as after you delete it, a new VM is made without it, and devvm warns, naming the layer. Run `devvm setup --layers` to choose the layers again. When the VM's backend can't run a layer you chose, such as `docker` on a backend without Docker's engine, devvm makes no VM and names the layer. Then choose other layers for that VM with `--layers`, or change new VMs' layers with `devvm setup --layers`.
 
 ## Retention
 

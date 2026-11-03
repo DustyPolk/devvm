@@ -47,9 +47,9 @@ type Value struct {
 	Source Source
 }
 
-// List is a default list in effect: base's features or new VMs' agents.
-// Chosen is false while nothing sets it (FromBuiltin), and then Names is
-// nil; once chosen, Names may be empty.
+// List is a default list in effect: base's features, or new VMs' agents
+// or layers. Chosen is false while nothing sets it (FromBuiltin), and then
+// Names is nil; once chosen, Names may be empty.
 type List struct {
 	Names  []string
 	Chosen bool
@@ -65,9 +65,11 @@ type Defaults struct {
 	// CPUs, Memory and Disk are new VMs' size (ParseCPUs, ParseGiB, in
 	// GiB): "" for the image's.
 	CPUs, Memory, Disk Value
-	// Features are base's features; Agents new VMs' coding agents.
-	Features, Agents List
-	Retention        Retention
+	// Features are base's features; Agents new VMs' coding agents; Layers
+	// the layers new VMs' images get, bottom first, in the order an image's
+	// name joins them.
+	Features, Agents, Layers List
+	Retention                Retention
 }
 
 // Values are what config.toml or settings.json sets, as settings.json
@@ -80,6 +82,7 @@ type Values struct {
 	Size      SizeValues        `json:"size,omitzero"`
 	Features  *[]string         `json:"features,omitempty"`
 	Agents    *[]string         `json:"agents,omitempty"`
+	Layers    *[]string         `json:"layers,omitempty"`
 	Retention map[string]string `json:"retention,omitempty"`
 }
 
@@ -102,6 +105,7 @@ const (
 	KeyDisk     = "size.disk"
 	KeyFeatures = "features"
 	KeyAgents   = "agents"
+	KeyLayers   = "layers"
 	// KeyRetention is the table the retention settings' keys are in:
 	// retention.history.age.
 	KeyRetention = "retention"
@@ -134,7 +138,7 @@ func (v *Values) lists() []struct {
 	return []struct {
 		key string
 		p   **[]string
-	}{{KeyFeatures, &v.Features}, {KeyAgents, &v.Agents}}
+	}{{KeyFeatures, &v.Features}, {KeyAgents, &v.Agents}, {KeyLayers, &v.Layers}}
 }
 
 // Set returns the keys v sets, as config.toml names them: retention's
@@ -175,14 +179,12 @@ func (v Values) check(off bool) (key string, err error) {
 			}
 		}
 	}
-	if v.Features != nil {
-		if err := checkFeatures(*v.Features); err != nil {
-			return KeyFeatures, err
-		}
-	}
-	if v.Agents != nil {
-		if err := checkAgents(*v.Agents); err != nil {
-			return KeyAgents, err
+	lists := map[string]func([]string) error{KeyFeatures: checkFeatures, KeyAgents: checkAgents, KeyLayers: checkLayers}
+	for _, l := range v.lists() {
+		if *l.p != nil {
+			if err := lists[l.key](**l.p); err != nil {
+				return l.key, err
+			}
 		}
 	}
 	for k, val := range v.Retention {
@@ -239,6 +241,7 @@ func resolve(config, saved Values) Defaults {
 		Memory:   pick(config.Size.Memory, saved.Size.Memory, ""),
 		Disk:     pick(config.Size.Disk, saved.Size.Disk, ""),
 		Features: list(config.Features, saved.Features), Agents: list(config.Agents, saved.Agents),
+		Layers:    list(config.Layers, saved.Layers),
 		Retention: Retention{Raw: map[string]string{}, Sources: map[string]Source{}},
 	}
 	// Each was checked as it was read.
@@ -335,6 +338,8 @@ func (d Defaults) Source(key string) Source {
 		return d.Features.Source
 	case KeyAgents:
 		return d.Agents.Source
+	case KeyLayers:
+		return d.Layers.Source
 	}
 	if k, ok := cutRetention(key); ok {
 		return d.Retention.Source(k)

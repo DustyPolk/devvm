@@ -489,6 +489,26 @@ func DefaultAgentsNone() M {
 	return M{id: "default_agents_none"}
 }
 
+// DefaultLayerGone is [default_layer_gone]: "{{.vm}} doesn't get the default layer {{.layer}}, because {{.dir}} has no script for it. To change new VMs' layers, run devvm setup --layers."
+func DefaultLayerGone(dir string, layer string, vm string) M {
+	return M{id: "default_layer_gone", vals: []val{{"dir", dir}, {"layer", layer}, {"vm", vm}}}
+}
+
+// DefaultLayerLacks is [default_layer_lacks]: "{{.vm}} can't get the default layer {{.layer}}, because the {{.backend}} backend doesn't have {{.feature}}. Give it other layers with --layers, or change new VMs' layers with devvm setup --layers."
+func DefaultLayerLacks(backend string, feature string, layer string, vm string) M {
+	return M{id: "default_layer_lacks", vals: []val{{"backend", backend}, {"feature", feature}, {"layer", layer}, {"vm", vm}}}
+}
+
+// DefaultLayers is [default_layers]: "New VMs get these layers: {{.layers}}, and VMs you already have keep theirs. To change them, run devvm setup --layers."
+func DefaultLayers(layers string) M {
+	return M{id: "default_layers", vals: []val{{"layers", layers}}}
+}
+
+// DefaultLayersNone is [default_layers_none]: "New VMs get no layers, and VMs you already have keep theirs. To choose some, run devvm setup --layers."
+func DefaultLayersNone() M {
+	return M{id: "default_layers_none"}
+}
+
 // DeleteAnyway is [delete_anyway]: "Delete anyway?"
 func DeleteAnyway() M {
 	return M{id: "delete_anyway"}
@@ -574,7 +594,7 @@ func DesktopFailed(reason string) M {
 	return M{id: "desktop_failed", vals: []val{{"reason", reason}}}
 }
 
-// DesktopNoLayer is [desktop_no_layer]: "{{.vm}} has no desktop, because its image has no desktop layer. Save any work in it, then run devvm rm and devvm --layers desktop."
+// DesktopNoLayer is [desktop_no_layer]: "{{.vm}} has no desktop, because its image has no desktop layer. Save any work in it, then run devvm rm and devvm --layers desktop, or devvm setup --layers to give every new VM one."
 func DesktopNoLayer(vm string) M {
 	return M{id: "desktop_no_layer", vals: []val{{"vm", vm}}}
 }
@@ -1444,6 +1464,11 @@ func LayerNewFailed(reason string) M {
 	return M{id: "layer_new_failed", vals: []val{{"reason", reason}}}
 }
 
+// LayersHelp is [layers_help]: "Pick the layers new VMs get. Use up and down to move, space to toggle and enter to confirm."
+func LayersHelp() M {
+	return M{id: "layers_help"}
+}
+
 // LimaArchUnsupported is [lima_arch_unsupported]: "The lima backend doesn't run on {{.arch}}. Use an arm64 or x86_64 machine."
 func LimaArchUnsupported(arch string) M {
 	return M{id: "lima_arch_unsupported", vals: []val{{"arch", arch}}}
@@ -2099,6 +2124,11 @@ func PickCalledFor(file string) M {
 	return M{id: "pick_called_for", vals: []val{{"file", file}}}
 }
 
+// PickFromSetup is [pick_from_setup]: "from devvm setup"
+func PickFromSetup() M {
+	return M{id: "pick_from_setup"}
+}
+
 // PickLayerDesktop is [pick_layer_desktop]: "an Xfce desktop, which devvm desktop opens"
 func PickLayerDesktop() M {
 	return M{id: "pick_layer_desktop"}
@@ -2127,11 +2157,6 @@ func PickLayers() M {
 // PickNewHelp is [pick_new_help]: "Choose what {{.vm}} gets. Use up and down to move, space to toggle and enter to confirm."
 func PickNewHelp(vm string) M {
 	return M{id: "pick_new_help", vals: []val{{"vm", vm}}}
-}
-
-// PickSetupAgent is [pick_setup_agent]: "from devvm setup"
-func PickSetupAgent() M {
-	return M{id: "pick_setup_agent"}
 }
 
 // PickToolchains is [pick_toolchains]: "Toolchains"
@@ -3078,6 +3103,10 @@ var specs = map[string]spec{
 	"custom_layer_remove":              {fields: []string{"layer", "vm"}},
 	"default_agents":                   {fields: []string{"agents"}},
 	"default_agents_none":              {},
+	"default_layer_gone":               {fields: []string{"dir", "layer", "vm"}},
+	"default_layer_lacks":              {fields: []string{"backend", "feature", "layer", "vm"}},
+	"default_layers":                   {fields: []string{"layers"}},
+	"default_layers_none":              {},
 	"delete_anyway":                    {},
 	"delete_failed":                    {fields: []string{"vm"}},
 	"delete_other_folder_vm":           {fields: []string{"vm", "was"}},
@@ -3269,6 +3298,7 @@ var specs = map[string]spec{
 	"layer_name_invalid":               {fields: []string{"layer"}},
 	"layer_name_reserved":              {fields: []string{"layer"}},
 	"layer_new_failed":                 {fields: []string{"reason"}},
+	"layers_help":                      {},
 	"lima_arch_unsupported":            {fields: []string{"arch"}},
 	"lima_broken":                      {},
 	"lima_broken_fix":                  {fields: []string{"fix"}},
@@ -3400,13 +3430,13 @@ var specs = map[string]spec{
 	"parts_flags_ignored":              {fields: []string{"vm"}},
 	"pick_agents":                      {},
 	"pick_called_for":                  {fields: []string{"file"}},
+	"pick_from_setup":                  {},
 	"pick_layer_desktop":               {},
 	"pick_layer_docker":                {},
 	"pick_layer_nix":                   {},
 	"pick_layer_yours":                 {},
 	"pick_layers":                      {},
 	"pick_new_help":                    {fields: []string{"vm"}},
-	"pick_setup_agent":                 {},
 	"pick_toolchains":                  {},
 	"pick_vm_help":                     {fields: []string{"vm"}},
 	"policy_broken_deny":               {fields: []string{"file", "line", "rule"}},

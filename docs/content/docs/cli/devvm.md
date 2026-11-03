@@ -33,7 +33,7 @@ devvm [flags]
       --from IMAGE          the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
   -h, --help                help for devvm
       --here                create a VM for this folder even when a folder it's inside has one
-      --layers LIST         the LIST of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: none)
+      --layers LIST         the LIST of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: devvm setup's)
       --memory GiB          the VM's memory in GiB, such as 16 or 16G (default: devvm size -g, else the image's)
       --network-policy      create the VM with network policy (default: devvm network -g, else asked in a terminal, and on without one)
       --no-devcontainer     create the VM without reading the folder's devcontainer.json
@@ -78,7 +78,7 @@ devvm [flags]
 - [devvm retention](devvm_retention.md): Show or change what devvm deletes on its own
 - [devvm rm](devvm_rm.md): Delete this folder's VM
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
-- [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network policy and coding agents
+- [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network policy, coding agents and layers
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM

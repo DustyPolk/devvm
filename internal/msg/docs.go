@@ -44,6 +44,8 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"ubuntu_checksum_unpinned":         "internals/images#ubuntus-cloud-image",
 	"ubuntu_unsigned":                  "internals/images#ubuntus-cloud-image",
 	"unknown_layer":                    "using/images#layers",
+	"default_layer_gone":               "using/settings#layers-for-new-vms",
+	"default_layer_lacks":              "using/settings#layers-for-new-vms",
 	"layer_name_invalid":               "using/customizing#your-own-layers",
 	"layer_name_reserved":              "using/customizing#your-own-layers",
 	"layer_created":                    "using/customizing#your-own-layers",

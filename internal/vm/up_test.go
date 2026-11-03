@@ -263,8 +263,18 @@ func TestUpParts(t *testing.T) {
 		o                    Options
 		img, tools, gets     string
 		setup                []string // devvm setup's agents; nil for unset
+		setupLayers          []string // devvm setup's layers; nil for unset
+		warned               string   // what's warned, when anything is
 		withFlake, withLayer bool
 	}{
+		{name: "setup's layers", setupLayers: []string{"nix", "mine"}, img: "nix+mine", tools: "node go", gets: "layers=nix mine tools=node go", withLayer: true},
+		{name: "--layers replaces setup's", o: Options{Layers: &[]string{"docker"}}, setupLayers: []string{"nix"}, img: "docker", tools: "node go", gets: "layers=docker tools=node go"},
+		{name: "--layers none", o: Options{Layers: &[]string{}}, setupLayers: []string{"nix"}, img: "base", tools: "node go", gets: "layers=none tools=node go"},
+		{
+			name: "setup's layer gone", setupLayers: []string{"mine", "nix"}, img: "nix", tools: "node go", gets: "layers=nix tools=node go",
+			warned: "default_layer_gone dir=LAYERS layer=mine vm=VM",
+		},
+		{name: "a gone layer --layers replaces", o: Options{Layers: &[]string{}}, setupLayers: []string{"mine"}, img: "base", tools: "node go", gets: "layers=none tools=node go"},
 		{name: "the defaults", img: "base", tools: "node go", gets: "layers=none tools=node go", withFlake: true},
 		{name: "setup's agents", setup: []string{"codex"}, img: "base", tools: "node go codex", gets: "layers=none tools=node go codex"},
 		{name: "setup's none", setup: []string{}, img: "base", tools: "node go", gets: "layers=none tools=node go"},
@@ -299,8 +309,13 @@ func TestUpParts(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			var said msg.Recorder
-			e.Info = said.Add
+			if tc.setupLayers != nil {
+				if _, err := settings.Save(e.Dirs, settings.Values{Layers: &tc.setupLayers}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var said, warned msg.Recorder
+			e.Info, e.Warn = said.Add, warned.Add
 			o := tc.o
 			o.NoNetworkPolicy, o.Ports = true, "none"
 			if err := (Launch{e}).Up(t.Context(), o); err != nil {
@@ -314,15 +329,46 @@ func TestUpParts(t *testing.T) {
 			if !slices.Contains(said.Names(), "new_vm_gets "+tc.gets+" vm="+spec.Name) {
 				t.Errorf("said %q, want new_vm_gets %s", said.Names(), tc.gets)
 			}
+			want := strings.NewReplacer("LAYERS", e.Dirs.Layers(), "VM", spec.Name).Replace(tc.warned)
+			var layerWarnings []string
+			for _, w := range warned.Names() {
+				if strings.HasPrefix(w, "default_layer") {
+					layerWarnings = append(layerWarnings, w)
+				}
+			}
+			if got := strings.Join(layerWarnings, "\n"); got != want {
+				t.Errorf("warned %q, want %q", got, want)
+			}
 		})
 	}
 }
 
+// A layer of devvm setup's that the backend can't run fails before
+// anything is built, naming the layer; --layers without it makes the VM.
+func TestUpSetupLayerLacks(t *testing.T) {
+	caps := allNative()
+	delete(caps, backend.FeatureDockerLayer)
+	e, f, _ := upEnv(t, caps)
+	if _, err := settings.Save(e.Dirs, settings.Values{Layers: &[]string{"docker"}}); err != nil {
+		t.Fatal(err)
+	}
+	err := Launch{e}.Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"})
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "default_layer_lacks backend=fake feature=docker-layer layer=docker vm=devvm-web-") {
+		t.Errorf("Up = %v", got)
+	}
+	if ms := f.Methods(); slices.Contains(ms, "BuildImage") {
+		t.Errorf("calls = %q", ms)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{Layers: &[]string{}, NoNetworkPolicy: true, Ports: "none"}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+}
+
 // In a terminal without the flags, the picker shows the defaults checked,
-// each detected toolchain naming its file and setup's agents saying so,
-// the layers unchecked but the nix layer naming the flake.nix; what's
-// checked is what the VM gets, and no line says it. On the first run it
-// asks for setup's agents first.
+// each detected toolchain naming its file and setup's agents and layers
+// saying so, the nix layer naming the flake.nix, and the other layers
+// unchecked; what's checked is what the VM gets, and no line says it. On
+// the first run it asks for setup's agents first.
 func TestUpPicker(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	for _, file := range []string{"package.json", "flake.nix"} {
@@ -331,6 +377,9 @@ func TestUpPicker(t *testing.T) {
 		}
 	}
 	e.CanPick = func() bool { return true }
+	if _, err := settings.Save(e.Dirs, settings.Values{Layers: &[]string{"nix", "desktop"}}); err != nil {
+		t.Fatal(err)
+	}
 	var asked []string
 	var shown []PickPart
 	e.PickParts = func(help msg.M, parts []PickPart) []PickPart {
@@ -378,21 +427,22 @@ func TestUpPicker(t *testing.T) {
 		t.Errorf("layers %q", layers)
 	}
 	for name, want := range map[string]PickRow{
-		"desktop": {Name: "desktop", Desc: "pick_layer_desktop"},
+		"desktop": {Name: "desktop", Desc: "pick_from_setup", On: true},
 		"node":    {Name: "node", Desc: "pick_called_for file=package.json", On: true},
 		"python":  {Name: "python"},
-		"codex":   {Name: "codex", Desc: "pick_setup_agent", On: true},
+		"codex":   {Name: "codex", Desc: "pick_from_setup", On: true},
 		"claude":  {Name: "claude"},
 		"docker":  {Name: "docker", Desc: "pick_layer_docker"},
-		"nix":     {Name: "nix", Desc: "pick_called_for file=flake.nix"},
+		"nix":     {Name: "nix", Desc: "pick_called_for file=flake.nix", On: true},
 	} {
 		if rows[name] != want {
 			t.Errorf("row %s = %+v, want %+v", name, rows[name], want)
 		}
 	}
+	// setup's layers keep their order, bottom first, under the one added.
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	st, _ := state.ReadVM(e.Dirs, spec.Name)
-	if st.Get(state.KeyImage) != "docker" || st.Get(state.KeyToolNames) != "node python codex" {
+	if st.Get(state.KeyImage) != "nix+desktop+docker" || st.Get(state.KeyToolNames) != "node python codex" {
 		t.Errorf("image=%q tool_names=%q", st.Get(state.KeyImage), st.Get(state.KeyToolNames))
 	}
 	if slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets") }) {

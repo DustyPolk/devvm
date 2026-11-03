@@ -22,6 +22,7 @@ type configFile struct {
 	Ports    opt[portsKind]    `toml:"ports"`
 	Features list[featureKind] `toml:"features"`
 	Agents   list[agentKind]   `toml:"agents"`
+	Layers   list[layerKind]   `toml:"layers"`
 	Size     struct {
 		CPUs   opt[cpusKind]   `toml:"cpus"`
 		Memory opt[memoryKind] `toml:"memory"`
@@ -53,7 +54,7 @@ func (c *configFile) values() Values {
 	v := Values{
 		Network: c.Network.ptr(), Ports: c.Ports.ptr(),
 		Size:     SizeValues{CPUs: c.Size.CPUs.ptr(), Memory: c.Size.Memory.ptr(), Disk: c.Size.Disk.ptr()},
-		Features: c.Features.ptr(), Agents: c.Agents.ptr(),
+		Features: c.Features.ptr(), Agents: c.Agents.ptr(), Layers: c.Layers.ptr(),
 		Retention: map[string]string{},
 	}
 	for k, o := range map[string]interface{ ptr() *string }{
@@ -222,6 +223,7 @@ type (
 	diskKind     struct{}
 	featureKind  struct{}
 	agentKind    struct{}
+	layerKind    struct{}
 	countKind    struct{}
 	durationKind struct{}
 	nixSizeKind  struct{}
@@ -268,6 +270,10 @@ func (agentKind) parse(v any) (string, error) {
 	return checked(text(v))(func(s string) error { return checkAgents([]string{s}) })
 }
 
+func (layerKind) parse(v any) (string, error) {
+	return checked(text(v))(func(s string) error { return checkLayers([]string{s}) })
+}
+
 func (countKind) parse(v any) (string, error) {
 	return checked(number(v))(func(s string) error { _, err := count(s); return err })
 }
@@ -312,6 +318,21 @@ func checkAgents(names []string) error {
 		switch {
 		case !slices.Contains(image.Agents, n):
 			return errText(fmt.Sprintf("%q isn't a coding agent: %s", n, strings.Join(image.Agents, ", ")))
+		case slices.Contains(names[:i], n):
+			return errText(strconv.Quote(n) + " is listed twice")
+		}
+	}
+	return nil
+}
+
+// checkLayers refuses a name a layer can't have (base and a shared tool's
+// among them), and a repeat. Whether the layer exists is new VMs' to
+// check: a layer of the user's that's gone is skipped, with a warning.
+func checkLayers(names []string) error {
+	for i, n := range names {
+		switch {
+		case !image.LayerName(n):
+			return errText("not a layer's name: " + strconv.Quote(n))
 		case slices.Contains(names[:i], n):
 			return errText(strconv.Quote(n) + " is listed twice")
 		}

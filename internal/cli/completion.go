@@ -58,6 +58,7 @@ func addCompletions(root *cobra.Command) {
 		case "setup":
 			_ = c.RegisterFlagCompletionFunc("features", completeFeatures)
 			_ = c.RegisterFlagCompletionFunc("agents", completeParts("agents"))
+			_ = c.RegisterFlagCompletionFunc("layers", completeParts("layers"))
 		}
 	}
 	for _, flag := range []string{"tools", "agents", "layers"} {

@@ -65,6 +65,7 @@ func TestFlagNames(t *testing.T) {
 		"json":   "devvm doctor's also says it succeeds whatever is missing",
 		"as":     "the name a VM reaches another by: devvm link add's for the link's target, devvm group join's for this VM in the others",
 		"agents": "the coding agents a list of them gives: a new VM's, or with devvm setup new VMs' default",
+		"layers": "the layers a list of them gives: a new VM's, or with devvm setup new VMs' default",
 	}
 	u, _, _ := testUI()
 	root := NewRoot(u)
@@ -216,7 +217,7 @@ func writeLayer(t *testing.T, cfg, name string) {
 }
 
 // devvm's flags are its own, --cpus, --memory and --disk are only its and
-// devvm size's, and --agents only its and devvm setup's.
+// devvm size's, and --agents and --layers only its and devvm setup's.
 func TestUpFlagsAreUpsAlone(t *testing.T) {
 	u, _, _ := testUI()
 	root := NewRoot(u)
@@ -230,7 +231,7 @@ func TestUpFlagsAreUpsAlone(t *testing.T) {
 			if c.Flags().Lookup(name) == nil {
 				continue
 			}
-			ok := c == root || (c.Name() == "size" && slices.Contains(sizeFlags, name)) || (c.Name() == "setup" && name == "agents")
+			ok := c == root || (c.Name() == "size" && slices.Contains(sizeFlags, name)) || (c.Name() == "setup" && (name == "agents" || name == "layers"))
 			if !ok {
 				t.Errorf("%s takes --%s", c.CommandPath(), name)
 			}

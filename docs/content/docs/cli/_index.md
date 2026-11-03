@@ -48,7 +48,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm secret set](devvm_secret_set.md): Save the Claude Code token or GitHub token on this machine
 - [devvm secret unuse](devvm_secret_unuse.md): Stop this folder's VM using a secret
 - [devvm secret use](devvm_secret_use.md): Let this folder's VM use a secret
-- [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network policy and coding agents
+- [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network policy, coding agents and layers
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM

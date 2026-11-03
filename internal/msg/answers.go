@@ -17,6 +17,8 @@ func AnswerFor(id string) string {
 		return "devvm setup --features"
 	case "agents_help":
 		return "devvm setup --agents"
+	case "layers_help":
+		return "devvm setup --layers"
 	case "pick_new_help":
 		return "--tools, --agents and --layers"
 	case "pick_vm_help":

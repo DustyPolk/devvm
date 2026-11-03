@@ -262,6 +262,75 @@ func TestAgentsChoice(t *testing.T) {
 	}
 }
 
+// New VMs' default layers: set bottom first as given, refused with a
+// did-you-mean, and asked for from the saved ones, each row saying what
+// its layer is; config.toml's are refused and not asked for.
+func TestLayersChoice(t *testing.T) {
+	e, _, _ := upEnv(t, allNative())
+	var said msg.Recorder
+	c := LayersChoice{Dirs: e.Dirs, Layers: []string{"desktop", "docker", "mine", "nix"}, Info: said.Add}
+	if err := c.Set([]string{"nix", "docker", "nix"}); err != nil {
+		t.Fatal(err)
+	}
+	if def, _ := settings.Read(e.Dirs); !slices.Equal(def.Layers.Names, []string{"nix", "docker"}) {
+		t.Errorf("saved %q", def.Layers.Names)
+	}
+	for given, want := range map[string]string{
+		"dokcer": "unknown_part_like flag=--layers given=dokcer like=docker",
+		"zzz":    "unknown_part flag=--layers given=zzz names=desktop docker mine nix",
+	} {
+		if err := c.Set([]string{given}); msg.NamesOf(err) != want {
+			t.Errorf("Set(%s) = %v", given, msg.NamesOf(err))
+		}
+	}
+	c.Pick = func(help msg.M, parts []PickPart) []PickPart {
+		var on, descs []string
+		for _, r := range parts[0].Rows {
+			descs = append(descs, r.Desc)
+			if r.On {
+				on = append(on, r.Name)
+			}
+		}
+		if help.ID() != "layers_help" || !slices.Equal(on, []string{"docker", "nix"}) ||
+			!slices.Equal(descs, []string{"pick_layer_desktop", "pick_layer_docker", "pick_layer_yours", "pick_layer_nix"}) {
+			t.Errorf("asked %s with %+v", help.Names(), parts)
+		}
+		parts[0].Rows[0].On, parts[0].Rows[1].On = true, false // desktop, not docker
+		return parts
+	}
+	if err := c.Ask(); err != nil {
+		t.Fatal(err)
+	}
+	if def, _ := settings.Read(e.Dirs); !slices.Equal(def.Layers.Names, []string{"nix", "desktop"}) {
+		t.Errorf("saved %+v", def.Layers)
+	}
+	if err := c.Set(nil); err != nil {
+		t.Fatal(err)
+	}
+	if def, _ := settings.Read(e.Dirs); !def.Layers.Chosen || len(def.Layers.Names) != 0 {
+		t.Errorf("saved %+v", def.Layers)
+	}
+	if want := []string{"default_layers layers=nix docker", "default_layers layers=nix desktop", "default_layers_none"}; !slices.Equal(said.Names(), want) {
+		t.Errorf("said %q, want %q", said.Names(), want)
+	}
+	if err := os.MkdirAll(e.Dirs.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(e.Dirs.ConfigFile(), []byte("layers = [\"nix\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Set([]string{"docker"}); msg.NamesOf(err) != "set_in_config file="+e.Dirs.ConfigFile()+" key=layers" {
+		t.Errorf("Set with config.toml's: %v", msg.NamesOf(err))
+	}
+	c.Pick = func(msg.M, []PickPart) []PickPart { t.Error("asked"); return nil }
+	if err := c.Ask(); err != nil {
+		t.Fatal(err)
+	}
+	if got := said.Names()[len(said.Names())-1]; got != "setup_in_config file="+e.Dirs.ConfigFile()+" key=layers" {
+		t.Errorf("said %q", got)
+	}
+}
+
 // tools rm and update open the VM after changing its tools; restart stops
 // it first.
 func TestRemoveUpdateRestart(t *testing.T) {

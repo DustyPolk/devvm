@@ -1202,7 +1202,7 @@ other = "Layers, which a VM gets only when devvm makes it"
 description = "file is the project's file that calls for the toolchain or layer, such as package.json"
 other = "for {{.file}}"
 
-[pick_setup_agent]
+[pick_from_setup]
 other = "from devvm setup"
 
 [pick_layer_desktop]
@@ -1226,6 +1226,24 @@ other = "New VMs get these coding agents: {{.agents}}. To change them, run devvm
 
 [default_agents_none]
 other = "New VMs get no coding agents. To choose some, run devvm setup --agents."
+
+[layers_help]
+other = "Pick the layers new VMs get. Use up and down to move, space to toggle and enter to confirm."
+
+[default_layers]
+description = "layers is a space-separated list of layers, bottom first"
+other = "New VMs get these layers: {{.layers}}, and VMs you already have keep theirs. To change them, run devvm setup --layers."
+
+[default_layers_none]
+other = "New VMs get no layers, and VMs you already have keep theirs. To choose some, run devvm setup --layers."
+
+[default_layer_gone]
+description = "layer is one of the user's layers, which devvm setup or config.toml chose for new VMs; dir is the user's layers folder"
+other = "{{.vm}} doesn't get the default layer {{.layer}}, because {{.dir}} has no script for it. To change new VMs' layers, run devvm setup --layers."
+
+[default_layer_lacks]
+description = "feature is a feature's name as the backends page lists it (docker-layer); backend is a backend's name (lima)"
+other = "{{.vm}} can't get the default layer {{.layer}}, because the {{.backend}} backend doesn't have {{.feature}}. Give it other layers with --layers, or change new VMs' layers with devvm setup --layers."
 
 [unknown_part]
 description = "flag is --tools, --agents or --layers; names is a space-separated list of what it takes"
@@ -1437,7 +1455,7 @@ description = "reason is an error from the system, in English"
 other = "Opening this folder's VM's desktop failed: {{.reason}}."
 
 [desktop_no_layer]
-other = "{{.vm}} has no desktop, because its image has no desktop layer. Save any work in it, then run devvm rm and devvm --layers desktop."
+other = "{{.vm}} has no desktop, because its image has no desktop layer. Save any work in it, then run devvm rm and devvm --layers desktop, or devvm setup --layers to give every new VM one."
 
 [desktop_start_failed]
 other = "{{.vm}}'s desktop didn't start."

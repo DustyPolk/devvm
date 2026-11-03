@@ -42,7 +42,7 @@ func addUpFlags(root *cobra.Command, uf *upFlags) {
 	f := root.Flags()
 	f.StringVar(&uf.tools, "tools", "", "the `LIST` of toolchains a new VM gets, such as node,python, or none (default: those the folder's files call for)")
 	addAgentsFlag(f, &uf.agents, "the `LIST` of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)")
-	f.StringVar(&uf.layers, "layers", "", "the `LIST` of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: none)")
+	addLayersFlag(f, &uf.layers, "the `LIST` of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: devvm setup's)")
 	addFromFlag(f, &uf.from)
 	f.BoolVar(&uf.networkPolicy, "network-policy", false, "create the VM with network policy (default: devvm network -g, else asked in a terminal, and on without one)")
 	f.BoolVar(&uf.noNetworkPolicy, "no-network-policy", false, "create the VM without network policy")

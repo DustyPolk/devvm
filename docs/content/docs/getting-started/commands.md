@@ -62,7 +62,7 @@ These options are for a new VM, and only `devvm` takes them. Another command giv
 | --- | --- |
 | `--tools LIST\|none` | the toolchains the VM gets, such as `--tools node,python`, in place of those the folder's files call for ([details](#what-a-new-vm-gets)) |
 | `--agents LIST\|none` | the coding agents the VM gets, such as `--agents claude,codex`, in place of those `devvm setup` chose ([details](#what-a-new-vm-gets)) |
-| `--layers LIST\|none` | the layers the VM's image gets, bottom first, such as `--layers docker` ([details](#what-a-new-vm-gets)) |
+| `--layers LIST\|none` | the layers the VM's image gets, bottom first, such as `--layers docker`, in place of those `devvm setup` chose ([details](#what-a-new-vm-gets)) |
 | `--network-policy` | create the VM with [network policy](../safety/network.md), which is the default: it reaches only the hosts you allow, through a proxy on this machine, and your secrets stay on this machine |
 | `--no-network-policy` | create the VM without network policy, so it reaches anything this machine can |
 | `--clone` | create the VM with its own clone of the repo instead of mounting the folder ([details](../using/clone.md)) |
@@ -79,7 +79,7 @@ Options that take a value also work with an equals sign, such as `--cpus=N`.
 
 ### What a new VM gets
 
-In a terminal, devvm lists what a new VM can get under three headings, and you check what you want with the arrow keys and space, then press enter. The toolchains are node, python, rust and go, and those your folder's files call for are checked, each naming its file, such as `package.json`. The coding agents are claude, codex and opencode, and those you chose in `devvm setup` are checked. The layers are desktop, docker, nix and your own, and none is checked, because a layer goes into the VM's image, which devvm builds when it makes the VM. A layer a project file calls for, such as nix for a `flake.nix`, names the file but stays unchecked. The list comes before the network policy question.
+In a terminal, devvm lists what a new VM can get under three headings, and you check what you want with the arrow keys and space, then press enter. The toolchains are node, python, rust and go, and those your folder's files call for are checked, each naming its file, such as `package.json`. The coding agents are claude, codex and opencode, and those you chose in `devvm setup` are checked. The layers are desktop, docker, nix and your own, and those you chose in `devvm setup` are checked. A layer goes into the VM's image, which devvm builds when it makes the VM. A layer a project file calls for, such as nix for a `flake.nix`, names the file but stays unchecked unless you chose it in `devvm setup`. The list comes before the network policy question.
 
 `--tools`, `--agents` and `--layers` choose without the list, and any one of them skips it. Each is the exact list of its part, such as `--tools node,go`, or `none` for none of it, and a part whose flag you leave out gets what the list would have checked. Without a terminal, or with `--no-input`, devvm shows no list and doesn't fail: the VM gets those same defaults, with each flag you gave in place of its part, and devvm says in one line what the VM got and which flags choose otherwise. devvm checks each name before it does anything, and for a name it doesn't know, it suggests the closest one. [What a new VM gets](../using/images.md#what-a-new-vm-gets) has the details.
 
@@ -243,7 +243,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 | | |
 | --- | --- |
-| `devvm setup [--features LIST\|none] [--agents LIST\|none]` | choose base's features and the coding agents new VMs get, and in a terminal also new VMs' size and network policy ([details](../using/settings.md#devvm-setup)) |
+| `devvm setup [--features LIST\|none] [--agents LIST\|none] [--layers LIST\|none]` | choose base's features and the coding agents and layers new VMs get, and in a terminal also new VMs' size and network policy ([details](../using/settings.md#devvm-setup)) |
 | `devvm doctor` | check what devvm needs on this machine and say how to get what's missing ([details](install.md#checking-what-devvm-needs)) |
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
 | `devvm limactl ARGS...` | run Lima's `limactl` on the VMs and images in devvm's own Lima home, not `~/.lima`, for debugging, which starts VMs without network policy ([details](../backends/lima.md#running-limactl)) |
@@ -277,6 +277,7 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 | whether to use the VM of a folder this one is inside | `--here` for a new VM, or `devvm` run in that folder |
 | the CPUs and memory new VMs get, on the first run | `--cpus` and `--memory`, or `devvm size -g` |
 | the coding agents new VMs get, on the first run and in `devvm setup` | `devvm setup --agents LIST` or `devvm setup --agents none` |
+| the layers new VMs get, in `devvm setup` | `devvm setup --layers LIST` or `devvm setup --layers none` |
 | a VM's toolchains and agents, in `devvm tools` | `devvm tools add` and `devvm tools rm`, or `--json` to show them |
 | base's features, on the first build | `devvm setup --features LIST` or `devvm setup --features none` |
 | new VMs' network policy, in `devvm setup` | `devvm network -g` |

@@ -1,8 +1,8 @@
-# setup: base's features, and new VMs' size and network policy (all asked
-# in a terminal, which Go tests cover; without one, the size and network
-# policy aren't asked and the features are kept, or every one until
-# they're chosen; --features without asking), each saved in
-# settings.json. A new choice of features says base rebuilds, and once
+# setup: base's features, and new VMs' size, network policy, agents and
+# layers (all asked in a terminal, which Go tests cover; without one, the
+# size and network policy aren't asked and the features are kept, or
+# every one until they're chosen; --features, --agents and --layers
+# without asking), each saved in settings.json. A new choice of features says base rebuilds, and once
 # images are built that devvm gc deletes the old ones.
 env SAVED=$DATA/settings.json
 
@@ -107,6 +107,51 @@ catg $AGENTS_dir/state
 stdout '^tool_names=codex$'
 cd $WORK
 
+# --layers: the layers new VMs get, bottom first as given, without
+# asking; none for none. A name that isn't a layer is a usage error, with
+# a did-you-mean, and changes nothing.
+exec devvm setup --layers nix,docker
+stdout '^==> default_layers layers=nix docker$'
+grep '^  "layers": \[\n    "nix",\n    "docker"\n  \]$' $SAVED
+! exec devvm setup --layers dokcer
+stderr '^devvm: unknown_part_like flag=--layers given=dokcer like=docker$'
+stderr '^usage_help command=devvm setup$'
+! exec devvm setup --layers node
+stderr '^devvm: part_other_flag flag=--layers given=node other=--tools$'
+grep '^  "layers": \[\n    "nix",\n    "docker"\n  \]$' $SAVED
+exec devvm setup --layers none
+stdout '^==> default_layers_none$'
+grep '^  "layers": \[\]$' $SAVED
+# A new VM made without a terminal gets setup's layers, and says so;
+# --layers replaces them, and --layers none gives it none.
+exec devvm setup --layers desktop
+project layers git
+exec devvm --no-network-policy --no-git-protect
+stdout '^==> new_vm_gets layers=desktop tools=codex vm=devvm-layers-[0-9a-f]{14}$'
+vm_name LAYERS layers
+catg $LAYERS_dir/state
+stdout '^image=desktop$'
+project layersflag git
+exec devvm --no-network-policy --no-git-protect --layers docker
+stdout '^==> new_vm_gets layers=docker tools=codex vm=devvm-layersflag-[0-9a-f]{14}$'
+project layersnone git
+exec devvm --no-network-policy --no-git-protect --layers none
+stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-layersnone-[0-9a-f]{14}$'
+cd $WORK
+# A default layer of yours whose script is gone: warned, naming it, and
+# the VM is made without it.
+mkdir $CFG/layers
+cp mailpit.sh $CFG/layers/mailpit.sh
+exec devvm setup --layers mailpit
+stdout '^==> default_layers layers=mailpit$'
+rm $CFG/layers/mailpit.sh
+project gone git
+exec devvm --no-network-policy --no-git-protect
+stderr '^devvm: default_layer_gone dir=\S*/config/devvm/layers layer=mailpit vm=devvm-gone-[0-9a-f]{14}$'
+stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-gone-[0-9a-f]{14}$'
+cd $WORK
+exec devvm setup --layers none
+
 # What config.toml sets wins over settings.json, and devvm setup's flags
 # can't change it: refused, naming the file and the key, with nothing
 # saved.
@@ -115,11 +160,19 @@ cp config.toml $CFG/config.toml
 stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=features$'
 ! exec devvm setup --agents claude
 stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=agents$'
-grep '^  "agents": \[\n    "codex"\n  \]$' $SAVED
+grep '^  "agents": \[\n    "codex"\n  \],$' $SAVED
+! exec devvm setup --layers docker
+stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=layers$'
+grep '^  "layers": \[\]$' $SAVED
 # Without a terminal, setup keeps config.toml's features, saying so.
 exec devvm setup
 stdout '^==> setup_in_config file=\S*/config/devvm/config\.toml key=features$'
 ! stdout base_features
+# A new VM gets config.toml's layers.
+project configlayers git
+exec devvm --no-network-policy --no-git-protect
+stdout '^==> new_vm_gets layers=nix tools=opencode vm=devvm-configlayers-[0-9a-f]{14}$'
+cd $WORK
 rm $CFG/config.toml
 
 # config.toml has no backend key: a file that sets one is refused.
@@ -137,6 +190,10 @@ cmp $SAVED bad.json
 -- config.toml --
 features = ["fzf"]
 agents = ["opencode"]
+layers = ["nix"]
+-- mailpit.sh --
+#!/bin/bash
+# mailpit: a layer of the user's
 -- backend.toml --
 backend = "lima"
 -- bad.json --
