@@ -125,7 +125,22 @@ func (p Proc) ended(pid int) bool {
 // Ready waits for the process pid, which Start started with status, to
 // say it's ready there (WaitReady), while it runs as this one.
 func (p Proc) Ready(status string, pid int, tick time.Duration, tries int) (string, bool) {
-	return WaitReady(status, pid, func() bool { return p.runs(pid) }, tick, tries)
+	return WaitReady(status, pid, func() bool { return p.starting(pid) }, tick, tries)
+}
+
+// starting reports whether pid, which Start just started, still runs as
+// this one, as runs does, except that one whose arguments can't be read
+// yet still counts: Linux lets the parent go on as exec replaces the
+// process's memory, then shows its new arguments only once the program
+// is loaded, so for a moment they read as none. One that has ended is
+// reaped (Detach), so it no longer counts once it's gone.
+func (p Proc) starting(pid int) bool {
+	cur, ok := readLine(p.PIDFile)
+	if !ok || cur != pid || !Alive(pid) {
+		return false
+	}
+	args, err := p.Args(pid)
+	return err != nil || p.Is(args)
 }
 
 // writeLine writes s as a file's one line, mode 600, in a single write:

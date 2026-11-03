@@ -412,6 +412,34 @@ func TestReady(t *testing.T) {
 	}
 }
 
+// A process just started whose arguments can't be read yet (Linux's
+// moment between exec letting its parent go on and the program loaded)
+// is still waited for; one whose arguments are another program's isn't.
+func TestReadyArgsUnread(t *testing.T) {
+	p, start, ours := proc(t)
+	status := filepath.Join(t.TempDir(), "v.status")
+	script := `sleep 0.1; printf '%s\n%s\n' $$ 127.0.0.1:3128 > "$` + StatusEnv + `"; exec sleep 30`
+	pid, err := p.Start(start, Cmd{Path: "/bin/sh", Args: []string{"-c", script}, Status: status})
+	if err != nil {
+		t.Fatal(err)
+	}
+	args, unread := p.Args, 3
+	p.Args = func(pid int) ([]string, error) {
+		if unread > 0 {
+			unread--
+			return nil, errors.New("no arguments yet")
+		}
+		return args(pid)
+	}
+	if got, ok := p.Ready(status, pid, 20*time.Millisecond, 100); !ok || got != "127.0.0.1:3128" || unread != 0 {
+		t.Errorf("Ready = %q, %v; %d unread looks left", got, ok, unread)
+	}
+	delete(ours, pid)
+	if _, ok := p.Ready(status, pid, time.Millisecond, 10); ok {
+		t.Error("ready as another program")
+	}
+}
+
 // Ready writes the status file its start named, with its own pid, and
 // takes the name out of its environment; without one it does nothing.
 func TestReadyWrites(t *testing.T) {
