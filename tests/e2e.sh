@@ -398,6 +398,46 @@ keys_of() { grep -lx "name=$1" "$images"/* 2>/dev/null | while read -r f; do bas
 owned() { local k; for k in $(keys_of "$1"); do created+=("devvm-img-$k"); done; }
 status_of() { limactl list --format '{{.Status}}' "$1" 2>/dev/null; }
 export -f keys_of status_of; export images
+# no_leak PATH... <STRINGS: none of STRINGS' lines is in a regular file under PATH..., read byte for
+# byte like grep -raF but only where the file has data: a VM's disk is sparse, 100G of mostly holes
+# that grep reads as zeros (over an hour on a slow Mac), and SEEK_DATA/SEEK_HOLE (3 and 4 on Linux,
+# 4 and 3 on macOS) skip them. A file it finds one in, or can't read, fails it; a missing PATH has none.
+no_leak() {
+  perl -MFile::Find -e '
+    use strict; use warnings;
+    my ($data, $hole) = $^O eq "darwin" ? (4, 3) : (3, 4);
+    my @s = grep { length } map { chomp; $_ } <STDIN>;
+    @s or die "no_leak: no strings\n";
+    my $keep = 0; for (@s) { $keep = length if length > $keep }
+    $keep--;
+    my $bad = 0;
+    $SIG{__WARN__} = sub { print STDERR "no_leak: ", @_; $bad = 1 };
+    sub extent { my ($fh, $f, $at, $end) = @_; my $tail = "";
+      sysseek($fh, $at, 0) or die "no_leak: $f: $!\n";
+      while ($at < $end) {
+        my $want = $end - $at; $want = 8 << 20 if $want > 8 << 20;
+        my $n = sysread($fh, my $buf, $want);
+        defined $n or die "no_leak: $f: $!\n";
+        last if $n == 0;
+        $at += $n; $buf = $tail . $buf;
+        for (@s) { die "no_leak: found in $f\n" if index($buf, $_) >= 0 }
+        $tail = $keep > 0 && length($buf) > $keep ? substr($buf, -$keep) : "";
+      } }
+    sub scan { my $f = shift; my $fh;
+      open($fh, "<:raw", $f) or do { warn "$f: $!\n"; return };
+      my ($at, $size) = (0, -s $fh);
+      while ($at < $size) {
+        my $start = sysseek($fh, $at, $data);
+        if (!defined $start) { last if $!{ENXIO}; extent($fh, $f, $at, $size); last }
+        my $end = sysseek($fh, $start, $hole); $end = $size unless defined $end;
+        extent($fh, $f, $start, $end); $at = $end;
+      }
+      close $fh; }
+    find({ no_chdir => 1, wanted => sub { scan($_) if -f $_ && !-l $_ } }, grep { -e } @ARGV);
+    exit $bad;
+  ' "$@"
+}
+export -f no_leak
 # newproj NAME: a new, empty project folder, as devvm sees it (its physical path).
 newproj() {
   [[ "$(uname -s)" != Darwin || ! -e "$projects/$1" ]] || chflags -R nouchg "$projects/$1"
@@ -1412,7 +1452,8 @@ rm -f "$layers/e2ejava.sh"
 # build's, sudo keeping them, and its image keeps none of it (Lima writes the settings it
 # propagates into the guest's /etc/environment). The host's proxy is a closed port with a password
 # of this run's, and NO_PROXY=* keeps every tool off the proxies, as the layer needs no network.
-# Its disk and Lima's files for it are read whole, free space included.
+# Its disk and Lima's files for it are read wherever they have data, free space included, skipping
+# only the disk's holes.
 pxpass=e2e-proxy-pw-$$-$(date +%s)
 pxtoken=e2e-proxy-seen-$$-$(date +%s)
 printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\necho %s\n' \
@@ -1429,7 +1470,7 @@ owned e2eproxy
 kp=$(keys_of e2eproxy | head -1)
 check "its image keeps none of them: not its disk, Lima's files for it or devvm's logs" bash -c "
   [[ -n '$kp' && -d '$LIMA_HOME/devvm-img-$kp' ]] &&
-  ! LC_ALL=C grep -rqaF -D skip '$pxpass' '$LIMA_HOME/devvm-img-$kp' '$XDG_DATA_HOME/devvm/logs'"
+  printf '%s\n' '$pxpass' | no_leak '$LIMA_HOME/devvm-img-$kp' '$XDG_DATA_HOME/devvm/logs'"
 rm -f "$layers/e2eproxy.sh"
 
 # A failed script keeps its image's VM, stopped and without a record, for inspection.
@@ -2398,7 +2439,7 @@ check "built behind a company proxy, the layer leaves no proxy settings for nix-
   env HTTPS_PROXY='$corpurl' HTTP_PROXY='$corpurl' '$D' build e2enix </dev/null >'$work/last.log' 2>&1 &&
   k=\$(keys_of e2enix | head -1) && [[ -n \$k && -d '$LIMA_HOME/devvm-img-'\$k ]] &&
   grep -q 'releases\.nixos\.org' '$work/corp.jsonl' &&
-  ! LC_ALL=C grep -rqaF -D skip -e 'Environment=http_proxy=' -e 'Environment=https_proxy=' -e '$corppw' '$LIMA_HOME/devvm-img-'\$k"
+  printf '%s\n' 'Environment=http_proxy=' 'Environment=https_proxy=' '$corppw' | no_leak '$LIMA_HOME/devvm-img-'\$k"
 owned e2enix
 corp_stop
 rm -f "$layers/e2enix.sh"
@@ -2600,8 +2641,8 @@ check "what the builds' commands and sudo have is devvm's proxy for the build, w
   ! grep -qF ':18766' \"\$log\""
 check "the company proxy's password is in no converted disk, image, log, build file or process's arguments" bash -c "
   [[ -n '$kac' && -n '$kcl' && -d '$LIMA_HOME/devvm-img-$kac' && -d '$LIMA_HOME/devvm-img-$kcl' ]] &&
-  ! LC_ALL=C grep -rqaF -D skip -f '$work/corp.auth' '$LIMA_HOME/devvm-img-$kac' '$LIMA_HOME/devvm-img-$kcl' \
-    '$XDG_DATA_HOME/devvm/logs' '$XDG_DATA_HOME/devvm/run' &&
+  no_leak '$LIMA_HOME/devvm-img-$kac' '$LIMA_HOME/devvm-img-$kcl' \
+    '$XDG_DATA_HOME/devvm/logs' '$XDG_DATA_HOME/devvm/run' <'$work/corp.auth' &&
   ! ps -axww -o command= | grep -qFf '$work/corp.auth' &&
   [[ -z \$(ls -A '$XDG_DATA_HOME/devvm/run/builds' 2>/dev/null) ]] &&
   ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
