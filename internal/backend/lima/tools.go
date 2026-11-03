@@ -61,8 +61,7 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 		steps++
 	}
 	ctx = l.WithSteps(ctx, steps)
-	if err := l.Runner.Run(ctx, msg.CloningImage("base"), l.limactl(ctx, "clone", "--tty=false", "--mount-none",
-		"--set", mounts, base, ToolsVM)); err != nil {
+	if err := l.Runner.Run(ctx, msg.CloningImage("base"), l.limactl(ctx, toolsArgs(base, mounts)...)); err != nil {
 		return backend.Logged(msg.VMCreateFailed(ToolsVM))
 	}
 	// Behind a company proxy, through a proxy of devvm's (buildproxy.go).
@@ -88,6 +87,12 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	proxyDone(true)
 	done()
 	return nil
+}
+
+// toolsArgs are limactl clone's arguments for ToolsVM: a clone of base's
+// instance with mounts (mountsSet's) and nothing else from the host.
+func toolsArgs(base, mounts string) []string {
+	return []string{"clone", "--tty=false", "--mount-none", "--set", mounts, base, ToolsVM}
 }
 
 // ToolFormat is build.sh's own: Lima's guests mount compressed EROFS.

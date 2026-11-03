@@ -85,6 +85,12 @@ The tests run a test build of devvm, which is one made with `-ldflags "-X github
 
 The settings that the [environment table](../using/settings.md#environment) lists, such as `DEVVM_LIMA_HOME`, `DEVVM_SECRET_SERVICE` and `DEVVM_NO_TOOL_CHECK`, are yours to set, so every build reads them.
 
+## Tests on real Lima
+
+Most Go tests run the `limactl` stub, which can't tell whether real Lima accepts what devvm gives it. The tests in `internal/backend/lima/real_test.go` run the real `limactl` instead, on dummy instances, as Lima's own tests do. A dummy instance's image is a small local file, so it can't boot, but `limactl` still creates, clones, edits, lists and deletes it. The tests run in a sandbox of their own, with a Lima home under `/tmp` and a `HOME` of their own, so they never touch your VMs or your Lima home, and they never start a VM. They run in `mise run test` wherever `limactl` is on `PATH`, and where it isn't, they skip and say why.
+
+Each test walks through `scenario`, which makes every kind of Lima config devvm makes, through the same code devvm runs. It makes base from Ubuntu's image and from a `--from` conversion, a layer, the shared tools' build VM, the conversion's VM, and a project VM with its mounts, ports, size and environment. Then it changes the project VM's settings and makes the edits each start makes: a build's, one with network policy and the proxy's password, one without network policy and one with no network. Last, it deletes everything. `TestLimaConfigsValid` runs `limactl validate` on every instance's `lima.yaml` after each step. That covers the proxy's password too, which devvm writes into `lima.yaml` itself, so `limactl edit` never checks it.
+
 ## Unreviewed emulations
 
 devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a [test build](#test-builds), `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A release ignores it:

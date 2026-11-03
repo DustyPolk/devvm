@@ -113,6 +113,14 @@ func (f *fakeRunner) lines() []string {
 // Lima's socket paths), with the stubs first on PATH.
 func sandbox(t *testing.T) (paths.Dirs, *stubtest.Stubs) {
 	t.Helper()
+	stubs := stubtest.New(t)
+	return sandboxDirs(t), stubs
+}
+
+// sandboxDirs is sandbox without the stubs: HOME, devvm's folders and its
+// Lima home in a new folder under /tmp.
+func sandboxDirs(t *testing.T) paths.Dirs {
+	t.Helper()
 	root, err := os.MkdirTemp("/tmp", "dvl.")
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +135,6 @@ func sandbox(t *testing.T) (paths.Dirs, *stubtest.Stubs) {
 			t.Fatal(err)
 		}
 	}
-	stubs := stubtest.New(t)
 	t.Setenv("HOME", filepath.Join(root, "home"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
@@ -138,7 +145,7 @@ func sandbox(t *testing.T) (paths.Dirs, *stubtest.Stubs) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return d, stubs
+	return d
 }
 
 // testLima returns the backend on a sandbox, as on host os, with the fake

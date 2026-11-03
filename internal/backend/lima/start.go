@@ -62,15 +62,8 @@ func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) erro
 			return err
 		}
 	}
-	if sets, fill := l.startSets(in.Config, c, sshPort); len(sets) > 0 {
-		if err := l.edit(ctx, vm, sets...); err != nil {
-			return err
-		}
-		if fill {
-			if err := l.fillPassword(vm, c); err != nil {
-				return err
-			}
-		}
+	if err := configure(ctx, l, vm, in.Config, c, sshPort); err != nil {
+		return err
 	}
 	// Its profile, wrapper and records: the user's alone.
 	for _, d := range []string{l.Dirs.Run(), l.Dirs.VM(vm).Run()} {
@@ -197,6 +190,23 @@ func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding
 		return nil, env, nil
 	}
 	return nil, nil, msg.LimaHostUnsupported(l.OS)
+}
+
+// configure edits a stopped VM's config (cfg, as limactl list has it) to
+// match how it starts with c and sshPort, when it doesn't already
+// (startSets), then fills in the proxy's password.
+func configure(ctx context.Context, l *Lima, vm string, cfg *config, c backend.Confinement, sshPort int) error {
+	sets, fill := l.startSets(cfg, c, sshPort)
+	if len(sets) == 0 {
+		return nil
+	}
+	if err := l.edit(ctx, vm, sets...); err != nil {
+		return err
+	}
+	if fill {
+		return l.fillPassword(vm, c)
+	}
+	return nil
 }
 
 // passwordStandIn stands for the proxy's password in the edit that sets

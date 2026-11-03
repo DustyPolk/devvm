@@ -1,0 +1,269 @@
+package lima
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/w3cj/devvm/assets"
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ubuntu"
+)
+
+// These tests run the real limactl on dummy instances, as Lima's own
+// tests do: an instance whose image is a small local file, which can't
+// boot, but which limactl creates, clones, edits, lists and deletes. They
+// run in a sandbox of their own (a Lima home under /tmp, devvm's folders,
+// HOME), never start a VM, and skip when limactl isn't on PATH.
+
+// realLima returns the backend on a sandbox with the real limactl, and
+// the folders and files its dummy instances use.
+func realLima(t *testing.T) (*Lima, fixture) {
+	t.Helper()
+	if _, err := exec.LookPath("limactl"); err != nil {
+		t.Skip("limactl isn't on PATH: these tests run real Lima")
+	}
+	return dummyLima(t, sandboxDirs(t), realRunner{t})
+}
+
+// dummyLima returns the backend on d, running its commands with r, and
+// the fixture it makes in d's home.
+func dummyLima(t *testing.T, d paths.Dirs, r Runner) (*Lima, fixture) {
+	t.Helper()
+	fx := newFixture(t, d.Home)
+	l := New(d, assets.FS, testUI{}, platform.Host{}, "")
+	// Project VMs' disks aren't overlays here: those are qemu-img's,
+	// not limactl's.
+	l.Runner, l.OS = r, "darwin"
+	l.Getenv = func(string) string { return "" }
+	l.Ubuntu = func(context.Context) (ubuntu.Image, error) { return fx.ubuntu, nil }
+	return l, fx
+}
+
+// fixture is what dummy instances use: the image (as Ubuntu's, with its
+// digest), a --from conversion's files, and the folders VMs mount.
+type fixture struct {
+	ubuntu    ubuntu.Image
+	converted string // disk.raw, kernel and initrd
+	project   string
+	agents    []string
+	tools     string
+	out       string // the tools build's and the conversion's output
+	scripts   string // the conversion's scripts
+}
+
+// newFixture makes a fixture in dir.
+func newFixture(t *testing.T, dir string) fixture {
+	t.Helper()
+	fx := fixture{
+		converted: filepath.Join(dir, "converted"),
+		project:   filepath.Join(dir, "work", "web"),
+		agents:    []string{filepath.Join(dir, ".claude"), filepath.Join(dir, ".codex")},
+		tools:     filepath.Join(dir, "tools"),
+		out:       filepath.Join(dir, "out"),
+		scripts:   filepath.Join(dir, "oci"),
+	}
+	for _, d := range append([]string{fx.converted, fx.project, fx.tools, fx.out, fx.scripts}, fx.agents...) {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	img := []byte("not a disk\n")
+	for _, f := range []string{
+		filepath.Join(dir, "ubuntu.img"), filepath.Join(fx.converted, "disk.raw"),
+		filepath.Join(fx.converted, "kernel"), filepath.Join(fx.converted, "initrd"),
+	} {
+		if err := os.WriteFile(f, img, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sum := sha256.Sum256(img)
+	fx.ubuntu = ubuntu.Image{URL: filepath.Join(dir, "ubuntu.img"), Digest: "sha256:" + hex.EncodeToString(sum[:])}
+	return fx
+}
+
+// The instances the scenario makes.
+const (
+	dummyBase  = ImagePrefix + "0123456789ab"
+	dummyFrom  = ImagePrefix + "0123456789ac"
+	dummyLayer = ImagePrefix + "0123456789ad"
+	dummyVM    = "devvm-web-0123456789abcd"
+)
+
+// step is one thing devvm does with limactl, as it does it.
+type step struct {
+	name string
+	do   func(ctx context.Context, l *Lima) error
+}
+
+// scenario is every kind of config devvm gives an instance, step by step,
+// on dummy instances: base from Ubuntu's image and from a --from
+// conversion, a layer, the tools build VM and the conversion's VM, a
+// project VM with its mounts, ports, size and environment, its settings
+// changed, the edits each start makes (a build's networks, network policy
+// with the proxy's password, none), and everything deleted.
+func scenario(fx fixture) []step {
+	size := backend.Size{CPUs: 2, MemoryGiB: 3}
+	sshPort := 50022
+	start := func(vm string, c backend.Confinement) func(context.Context, *Lima) error {
+		return func(ctx context.Context, l *Lima) error {
+			in, err := l.inspect(ctx, vm)
+			if err != nil {
+				return err
+			}
+			return configure(ctx, l, vm, in.Config, c, sshPort)
+		}
+	}
+	proxy := backend.Confinement{
+		Net: backend.NetProxy, ProxyPort: 3128, ProxyPassword: "pAss-0123_word",
+		Env: map[string]string{"NODE_EXTRA_CA_CERTS": "/etc/ssl/devvm.pem", "NO_PROXY": "localhost,127.0.0.1,::1"},
+	}
+	env := map[string]string{"LANG": "C.UTF-8"}
+	return []step{
+		{"base from Ubuntu's image", func(ctx context.Context, l *Lima) error {
+			_, err := l.createFromUbuntu(ctx, dummyBase, size)
+			return err
+		}},
+		{"base's build start", start(dummyBase, backend.Confinement{Net: backend.NetInternet})},
+		{"base from a conversion", func(ctx context.Context, l *Lima) error {
+			return l.create(ctx, msg.M{}, dummyFrom, createArgs(dummyFrom, convertedImages(fx.converted, "root=/dev/vda rw console=hvc0", l.Arch), size))
+		}},
+		{"a layer", func(ctx context.Context, l *Lima) error {
+			return l.Runner.Run(ctx, msg.M{}, l.limactl(ctx, layerArgs(dummyBase, dummyLayer)...))
+		}},
+		{"the layer's build start", start(dummyLayer, backend.Confinement{Net: backend.NetNone})},
+		{"the tools build VM", func(ctx context.Context, l *Lima) error {
+			mounts, err := mountsSet([]mount{{Location: fx.out, MountPoint: ptr("/mnt/devvm-tools"), Writable: ptr(true)}})
+			if err != nil {
+				return err
+			}
+			return l.Runner.Run(ctx, msg.M{}, l.limactl(ctx, toolsArgs(dummyBase, mounts)...))
+		}},
+		{"the conversion's VM", func(ctx context.Context, l *Lima) error {
+			mounts, err := mountsSet([]mount{{Location: fx.out, Writable: ptr(true)}, {Location: fx.scripts, Writable: ptr(false)}})
+			if err != nil {
+				return err
+			}
+			_, err = l.createFromUbuntu(ctx, OCIVM, size, "--set", mounts)
+			return err
+		}},
+		{"a project VM", func(ctx context.Context, l *Lima) error {
+			return l.CreateVM(ctx, strings.TrimPrefix(dummyLayer, ImagePrefix), backend.VMSpec{
+				Name: dummyVM, Project: fx.project, AgentDirs: fx.agents, Tools: fx.tools, ToolsAt: "/mnt/devvm-tools",
+				AgentForwarding: true, Size: backend.Size{CPUs: 3, MemoryGiB: 5, DiskGiB: 120},
+				Ports: backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3001}}}, SSHPort: sshPort, Env: env,
+			})
+		}},
+		{"its first start", start(dummyVM, backend.Confinement{Net: backend.NetDirect, Env: env})},
+		{"its agents' folders", func(ctx context.Context, l *Lima) error { return l.SetAgentDirs(ctx, dummyVM, fx.agents[:1]) }},
+		{"its agent forwarding", func(ctx context.Context, l *Lima) error { return l.SetAgentForwarding(ctx, dummyVM, false) }},
+		{"its size", func(ctx context.Context, l *Lima) error {
+			return l.SetSize(ctx, dummyVM, backend.Size{CPUs: 4, MemoryGiB: 6.5, DiskGiB: 130})
+		}},
+		{"a start with network policy", start(dummyVM, proxy)},
+		{"the same start again", start(dummyVM, proxy)},
+		{"a start without network policy", start(dummyVM, backend.Confinement{Net: backend.NetDirect, Env: env})},
+		{"a start with no network", start(dummyVM, backend.Confinement{Net: backend.NetNone})},
+		{"the build VMs deleted", func(ctx context.Context, l *Lima) error {
+			if err := l.deleteIfThere(ctx, ToolsVM); err != nil {
+				return err
+			}
+			return l.deleteIfThere(ctx, OCIVM)
+		}},
+		{"the project VM deleted", func(ctx context.Context, l *Lima) error { return l.Delete(ctx, dummyVM) }},
+		{"the images deleted", func(ctx context.Context, l *Lima) error {
+			for _, inst := range []string{dummyLayer, dummyFrom, dummyBase} {
+				if err := l.DeleteImage(ctx, strings.TrimPrefix(inst, ImagePrefix)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}},
+	}
+}
+
+// realRunner runs commands as they are, logging a failed one's output.
+type realRunner struct{ t *testing.T }
+
+func (r realRunner) Run(_ context.Context, _ msg.M, cmd *exec.Cmd) error {
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		r.t.Logf("%s: %v\n%s", strings.Join(cmd.Args, " "), err, out)
+	}
+	return err
+}
+
+func (r realRunner) Output(cmd *exec.Cmd) ([]byte, error) {
+	var errOut bytes.Buffer
+	cmd.Stderr = &errOut
+	out, err := cmd.Output()
+	if err != nil {
+		r.t.Logf("%s: %v\n%s", strings.Join(cmd.Args, " "), err, errOut.String())
+	}
+	return out, err
+}
+
+func (realRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
+
+// validate runs limactl validate on the Lima config of each instance in
+// l's Lima home, and returns those it found.
+func validate(t *testing.T, l *Lima) []string {
+	t.Helper()
+	ins, err := l.list(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, in := range ins {
+		names = append(names, in.Name)
+		yaml := filepath.Join(l.Dirs.LimaVM(in.Name), "lima.yaml")
+		if err := l.Runner.Run(t.Context(), msg.M{}, l.limactl(t.Context(), "validate", yaml)); err != nil {
+			data, _ := os.ReadFile(yaml) //nolint:gosec // the test's own instance
+			t.Errorf("%s isn't valid: %v\n%s", in.Name, err, data)
+		}
+	}
+	return names
+}
+
+// Every Lima config devvm makes passes limactl validate, step by step:
+// what limactl create, clone and edit write, and the proxy's password
+// devvm writes into lima.yaml itself.
+func TestLimaConfigsValid(t *testing.T) {
+	l, fx := realLima(t)
+	for _, s := range scenario(fx) {
+		if err := s.do(t.Context(), l); err != nil {
+			t.Fatalf("%s: %v", s.name, err)
+		}
+		names := validate(t, l)
+		t.Logf("%s: %s valid", s.name, strings.Join(names, ", "))
+		if s.name == "a start with network policy" {
+			data, err := os.ReadFile(filepath.Join(l.Dirs.LimaVM(dummyVM), "lima.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Contains(data, []byte(":pAss-0123_word@")) || bytes.Contains(data, []byte(passwordStandIn)) {
+				t.Errorf("the proxy's password isn't filled in:\n%s", data)
+			}
+		}
+	}
+	if names := validate(t, l); len(names) > 0 {
+		t.Errorf("left behind: %q", names)
+	}
+	// limactl validate reads what it checks.
+	bad := filepath.Join(l.Dirs.Home, "bad.yaml")
+	if err := os.WriteFile(bad, []byte("cpus: many\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Runner.Run(t.Context(), msg.M{}, l.limactl(t.Context(), "validate", bad)); err == nil {
+		t.Error("limactl validate passed a config with cpus: many")
+	}
+}

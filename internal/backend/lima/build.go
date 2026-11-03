@@ -117,20 +117,14 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 			if conv, err = l.convert(ctx, spec.From, size, spec.Trust.Add); err != nil {
 				return backend.Built{}, err
 			}
-			// base.yaml's settings, booting the converted disk.
-			images := []limaImage{{
-				Location: filepath.Join(conv.dir, "disk.raw"), Arch: limaArch(l.Arch),
-				Kernel: &limaKernel{Location: filepath.Join(conv.dir, "kernel"), Cmdline: conv.cmdline},
-				Initrd: &limaFile{Location: filepath.Join(conv.dir, "initrd")},
-			}}
-			if err := l.create(ctx, msg.Creating(inst), inst, createArgs(inst, images, size)); err != nil {
+			if err := l.create(ctx, msg.Creating(inst), inst, createArgs(inst, convertedImages(conv.dir, conv.cmdline, l.Arch), size)); err != nil {
 				return backend.Built{}, err
 			}
 			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc}
 		}
 		built.Fitted = backend.Fitted(want, size)
 	} else if err := l.Runner.Run(ctx, msg.CloningImage(image.Parent(spec.Image)),
-		l.limactl(ctx, "clone", "--tty=false", "--mount-none", parent, inst)); err != nil {
+		l.limactl(ctx, layerArgs(parent, inst)...)); err != nil {
 		return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
 	}
 	created.Store(true)
@@ -220,6 +214,23 @@ type limaKernel struct {
 
 type limaFile struct {
 	Location string `json:"location"`
+}
+
+// convertedImages are a --from base's images: base.yaml's settings
+// booting the converted disk in dir with its kernel (and cmdline) and
+// initrd.
+func convertedImages(dir, cmdline, goarch string) []limaImage {
+	return []limaImage{{
+		Location: filepath.Join(dir, "disk.raw"), Arch: limaArch(goarch),
+		Kernel: &limaKernel{Location: filepath.Join(dir, "kernel"), Cmdline: cmdline},
+		Initrd: &limaFile{Location: filepath.Join(dir, "initrd")},
+	}}
+}
+
+// layerArgs are limactl clone's arguments for a layer's instance (inst):
+// a clone of its parent's, with nothing from the host mounted.
+func layerArgs(parent, inst string) []string {
+	return []string{"clone", "--tty=false", "--mount-none", parent, inst}
 }
 
 // createFromUbuntu creates a VM from Ubuntu's newest cloud image, with
