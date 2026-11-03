@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"path/filepath"
 	"strconv"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -37,11 +36,9 @@ import (
 //     image has no sshd starts without ssh, warned.
 const sshGuestPort = 22
 
-// sshKey is the key devvm's ssh logs in to one VM with, beside its record,
-// made at its first start with ssh.
-func (s *Smolvm) sshKey(vm string) string {
-	return filepath.Join(filepath.Dir(s.Dirs.SmolvmVM(vm)), vm+".key")
-}
+// sshKey is the key devvm's ssh logs in to one VM with, in its backend
+// folder, made at its first start with ssh.
+func (s *Smolvm) sshKey(vm string) string { return s.Dirs.VM(vm).Key() }
 
 // sshForward is the host loopback port a VM's ssh is forwarded from at a
 // start that runs it: c.SSHPort when the caller chose one (devvm records

@@ -181,9 +181,11 @@ func WriteRules(w io.Writer, files []RuleFile) error {
 // you edit: every VM's, your layers' and each VM's own.
 func NotRules(d paths.Dirs) []msg.M {
 	files := []string{d.Policy()}
-	for _, pattern := range []string{filepath.Join(d.Layers(), "*.policy"), filepath.Join(d.VMs(), "*.policy")} {
-		m, _ := filepath.Glob(pattern)
-		files = append(files, m...)
+	layers, _ := filepath.Glob(filepath.Join(d.Layers(), "*.policy"))
+	files = append(files, layers...)
+	vms, _ := state.VMNames(d)
+	for _, vm := range vms {
+		files = append(files, d.VM(vm).Policy())
 	}
 	return PolicyWarnings(files)
 }

@@ -118,7 +118,7 @@ func TestLinkFiles(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for _, n := range names {
-		if seen[n] || filepath.Dir(n) != l.Dir || len(n) > controlMax || strings.ContainsAny(filepath.Base(n), ": ") {
+		if seen[n] || filepath.Dir(n) != l.Dir || len(n) > ControlMax || strings.ContainsAny(filepath.Base(n), ": ") {
 			t.Errorf("%s: a repeat, elsewhere, or too long (%d)", n, len(n))
 		}
 		seen[n] = true

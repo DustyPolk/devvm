@@ -23,13 +23,26 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
+// testVM is the name of the test VM of a folder named f: each folder name
+// has a hash of its own, as VMs that shared one would share a folder.
+func testVM(f string) string {
+	h := map[string]string{
+		"app": "abc1", "db": "abc2", "api": "abc3", "web": "abc4", "web2": "abc5", "cache": "abc6",
+		"local": "abc7", "x": "abc8", "cl": "abc9", "half": "abce", "b": "abcb", "img-foo": "abcc",
+	}[f]
+	if h == "" {
+		h = "abcd"
+	}
+	return "devvm-" + f + "-0123456789" + h
+}
+
 // linkVMs makes the states of project VMs by folder name, each finished
 // (its network choice made, off), on the fake backend.
 func linkVMs(t *testing.T, d paths.Dirs, folders ...string) []*state.VM {
 	t.Helper()
 	var out []*state.VM
 	for _, f := range folders {
-		st, err := state.CreateVM(d, "devvm-"+f+"-0123456789abcd", state.NewVM{Image: "base", Backend: "fake"})
+		st, err := state.CreateVM(d, testVM(f), state.NewVM{Image: "base", Backend: "fake"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -263,7 +276,7 @@ func linkRunsEnv(t *testing.T, logged string) (linkRuns, *[][]string) {
 // A client's link session is started once, found by its pid file and
 // arguments, waited for to say what came of its links, and stopped.
 func TestLinkRuns(t *testing.T) {
-	vm := "devvm-app-0123456789abcd"
+	vm := "devvm-app-0123456789abc1"
 	db := Link{Name: "db", Port: 5432, Addr: netip.MustParseAddr("127.77.0.1")}
 	api := Link{Name: "api", Port: 3000, Addr: netip.MustParseAddr("127.77.0.2")}
 	r, started := linkRunsEnv(t, "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.2:3000: refused by the VM: exit status 255\n")
@@ -291,14 +304,14 @@ func TestLinkRuns(t *testing.T) {
 		t.Errorf("warned %q of an earlier line", warned.Names())
 	}
 	// Another process with the pid file's pid isn't the session.
-	if err := os.WriteFile(linksPID(r.Dirs, vm), []byte("1\n"), 0o600); err != nil {
+	if err := os.WriteFile(r.Dirs.VM(vm).LinksPID(), []byte("1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := r.pid(vm); ok {
 		t.Error("pid 1 is the session")
 	}
 	// Nor is this test, which stopping the session never signals.
-	if err := os.WriteFile(linksPID(r.Dirs, vm), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(r.Dirs.VM(vm).LinksPID(), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	signal := r.Proxy.Signal
@@ -324,7 +337,7 @@ func TestLinkRuns(t *testing.T) {
 	if _, ok := r.pid(vm); ok || daemon.Alive(pid) && !zombie(pid) {
 		t.Errorf("still running: %d", pid)
 	}
-	if _, err := os.Stat(linksPID(r.Dirs, vm)); !os.IsNotExist(err) {
+	if _, err := os.Stat(r.Dirs.VM(vm).LinksPID()); !os.IsNotExist(err) {
 		t.Errorf("its pid file: %v", err)
 	}
 }

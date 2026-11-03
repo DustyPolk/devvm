@@ -59,16 +59,12 @@ const ConnectCmd = "_docker-connect"
 // connection runs, else "none".
 const sshdProbe = `if [ -x ` + sshdPath + ` ]; then echo sshd; else echo none; fi`
 
-// vmFile is one of a VM's files beside its record.
-func (d *Docker) vmFile(vm, ext string) string {
-	return filepath.Join(filepath.Dir(d.Dirs.DockerVM(vm)), vm+ext)
-}
-
 // sshKey is the key devvm's ssh logs in to a VM with, made at its first
 // start with ssh (vmssh.EnsureKey); knownHosts is its sshd's host key, as
-// its last start read it, which devvm's own sessions pin.
-func (d *Docker) sshKey(vm string) string     { return d.vmFile(vm, ".key") }
-func (d *Docker) knownHosts(vm string) string { return d.vmFile(vm, ".known_hosts") }
+// its last start read it, which devvm's own sessions pin. Both are in its
+// backend folder.
+func (d *Docker) sshKey(vm string) string     { return d.Dirs.VM(vm).Key() }
+func (d *Docker) knownHosts(vm string) string { return d.Dirs.VM(vm).KnownHosts() }
 
 // connectEnv are the variables of the user's that name Docker's engine,
 // which a connection is given as devvm had them: an editor may start

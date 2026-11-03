@@ -22,23 +22,15 @@ func (l *Lima) Location() (string, bool) {
 }
 
 // Forget deletes what devvm keeps for a VM its Lima home no longer has:
-// its port records and forwarder's files, its sandbox profile and start
-// record. A VM the home has is refused.
+// its backend folder, its port record and forwarder's files, its
+// forwarder stopped first. A VM the home has is refused.
 func (l *Lima) Forget(ctx context.Context, vm string) error {
 	if _, err := l.inspect(ctx, vm); err == nil {
 		return fmt.Errorf("lima: %s exists", vm)
 	} else if !errors.Is(err, backend.ErrNotFound) {
 		return err
 	}
-	if err := l.Forwards.forget(vm); err != nil {
-		return err
-	}
-	for _, f := range []string{l.profileFile(vm), l.startedFile(vm)} {
-		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
+	return l.Forwards.Forget(vm)
 }
 
 // Strays are the VMs in devvm's Lima home it has no state for.
@@ -49,7 +41,7 @@ func (l *Lima) Strays(ctx context.Context) ([]backend.Stray, error) {
 	}
 	var out []backend.Stray
 	for _, in := range vms {
-		if _, err := os.Stat(l.Dirs.VMState(in.Name)); errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(l.Dirs.VM(in.Name).State()); errors.Is(err, os.ErrNotExist) {
 			out = append(out, backend.Stray{Name: in.Name, Data: l.Dirs.Data})
 		}
 	}

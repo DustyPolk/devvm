@@ -80,7 +80,7 @@ stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
 ! stdout vm_size
 stub_calls
 ! stdout 'limactl edit'
-catg $VMS/$WEB
+catg $WEB_dir/state
 stdout '^cpus=1$'
 stdout '^memory=3$'
 exec devvm size

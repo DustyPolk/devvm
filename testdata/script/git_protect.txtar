@@ -35,7 +35,7 @@ stub_calls
 ! stdout chflags
 exec devvm git-protect
 stdout '\Aon\n\z'
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
 stdout '^git_protect_next=off$'
 # devvm stop applies it.
 exec devvm stop
@@ -44,7 +44,7 @@ stub_calls
 stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
 exec devvm git-protect
 stdout '\Aoff\n\z'
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
 ! stdout '^git_protect_next=.'
 # Stopped outside devvm: the next launch applies it before the VM starts.
 exec devvm
@@ -91,7 +91,7 @@ exec devvm git-protect --json
 stdout '\A{\n  "version": 1,\n  "mode": "strict"\n}\n\z'
 ! exec devvm git-protect --json off
 stderr '^devvm: json_shows_only command=devvm git-protect$'
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
 stdout '^git_protect=strict$'
 stdout '^git_inode=[0-9]+$'
 
@@ -143,7 +143,7 @@ exec devvm git-protect on
 stdout '^==> git_lock_later vm=devvm-nogit-[0-9a-f]{14}$'
 
 # A --clone VM mounts no .git: shown as clone, never changed.
-exec sh -c 'echo mode=clone >> "$VMS/$NOGIT"'
+exec sh -c 'echo mode=clone >> "$NOGIT_dir/state"'
 exec devvm git-protect
 stdout '\Aclone\n\z'
 ! exec devvm git-protect on

@@ -32,11 +32,15 @@ import (
 // (lower case, one trailing dot), and the list names each link's short name and its long one
 // (NAME.devvm.internal). Its bytes pass as they are: no TLS check or interception, no secret put
 // in, no rule asked, and no event of the proxy's own, as devvm _links logs the connection. A
-// request names a host and a port, never a socket: the socket is the one the list's folder has for
-// this VM's link at that address and port (LinkSocket), so a list holding anything else is
-// ignored, and no request reaches another VM's link or any other socket.
+// request names a host and a port, never a socket: the socket is the one the link sockets' folder
+// (-link-sockets, devvm's run folder) has for this VM's link at that address and port
+// (LinkSocket), so a list holding anything else is ignored, and no request reaches another VM's
+// link or any other socket. Without that folder, no link is reached.
 
-var linksFile = "" // -links: the VM's links list, which devvm _links writes; empty: none
+var (
+	linksFile   = "" // -links: the VM's links list, which devvm _links writes; empty: none
+	linkSockets = "" // -link-sockets: the folder of the links' sockets; empty: none
+)
 
 // LinkList is the file devvm _links writes for the VM's proxy: the links it carries now.
 type LinkList struct {
@@ -109,7 +113,7 @@ func readLinkList(path string) (LinkList, error) {
 // with the socket it must have. A host and port on no entry, an entry whose socket isn't this VM's
 // link's, and a list that can't be read give none, so the request is the policy's.
 func linkFor(host string, port int) (LinkEntry, bool) {
-	if linksFile == "" {
+	if linksFile == "" || linkSockets == "" {
 		return LinkEntry{}, false
 	}
 	l, err := readLinkList(linksFile)
@@ -125,7 +129,7 @@ func linkFor(host string, port int) (LinkEntry, bool) {
 		}
 		a, err := netip.ParseAddr(e.Addr)
 		if err != nil || a.String() != e.Addr || !IsLinkAddr(a) || a != a.Unmap() || port < 1 || port > 65535 ||
-			e.Socket != LinkSocket(filepath.Dir(linksFile), vmName, a, port) {
+			e.Socket != LinkSocket(linkSockets, vmName, a, port) {
 			logf("links: %s:%d: not this VM's link's socket", host, port)
 			continue
 		}

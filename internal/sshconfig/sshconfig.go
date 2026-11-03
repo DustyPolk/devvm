@@ -20,7 +20,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vmname"
@@ -58,15 +57,40 @@ func New(d paths.Dirs, reg *backend.Registry) *Config {
 	return &Config{Dirs: d, Backends: func() ([]backend.Backend, error) { return reg.Used(d) }, Review: reg.Review}
 }
 
-// Alias is the name ssh and editors reach vm by: devvm-<folder>, or the
-// VM's own name when another of all (every VM's name) has the same
-// folder name.
-func Alias(vm string, all []string) string {
-	slug := project.Folder{Name: vm}.Slug()
-	if len(project.Matching(slug, all)) > 1 {
-		return vm
+// ChooseAlias is the name ssh and editors will reach a new VM, vm, by
+// besides its own: devvm-<folder>, as its name has the folder's name,
+// unless another VM's state records that alias; then the VM's own name.
+// It's chosen once, as the VM is made (state.KeyAlias), so a VM's alias
+// never changes when others come and go.
+func ChooseAlias(d paths.Dirs, vm string) (string, error) {
+	slug, _ := vmname.SlugOf(vm)
+	short := vmname.Prefix + slug
+	names, err := state.VMNames(d)
+	if err != nil {
+		return "", err
 	}
-	return vmname.Prefix + slug
+	for _, n := range names {
+		if n == vm {
+			continue
+		}
+		st, err := state.ReadVM(d, n)
+		if err != nil {
+			return "", err
+		}
+		if st.Get(state.KeyAlias) == short {
+			return vm, nil
+		}
+	}
+	return short, nil
+}
+
+// Host is the name ssh and editors reach vm by: the alias its state
+// records, else its own name.
+func (c *Config) Host(vm string) string {
+	if st, err := state.ReadVM(c.Dirs, vm); err == nil && st.Get(state.KeyAlias) != "" {
+		return st.Get(state.KeyAlias)
+	}
+	return vm
 }
 
 type running struct {
@@ -74,15 +98,13 @@ type running struct {
 	in backend.Instance
 }
 
-// projectVMs returns the project VMs of the backends some VM's state
-// names: their names, and those running. A backend that can't list runs
-// nothing to reach.
-func (c *Config) projectVMs(ctx context.Context) ([]string, []running, error) {
+// running returns the running project VMs of the backends some VM's
+// state names. A backend that can't list runs nothing to reach.
+func (c *Config) running(ctx context.Context) ([]running, error) {
 	bs, err := c.Backends()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	var all []string
 	var up []running
 	for _, b := range bs {
 		ins, err := b.List(ctx)
@@ -90,40 +112,30 @@ func (c *Config) projectVMs(ctx context.Context) ([]string, []running, error) {
 			continue
 		}
 		for _, in := range ins {
-			if !vmname.IsVM(in.Name) {
-				continue
-			}
-			all = append(all, in.Name)
-			if in.Status == backend.StatusRunning {
+			if vmname.IsVM(in.Name) && in.Status == backend.StatusRunning {
 				up = append(up, running{b, in})
 			}
 		}
 	}
-	return all, up, nil
-}
-
-// Host is the name ssh and editors reach vm by: its Alias among the
-// project VMs of the backends some VM's state names (none when their
-// states can't be read).
-func (c *Config) Host(ctx context.Context, vm string) string {
-	all, _, _ := c.projectVMs(ctx)
-	return Alias(vm, all)
+	return up, nil
 }
 
 // Write rewrites the ssh config with every running project VM, each by
-// its alias and its full name (which never changes), checked against its
-// own host keys. A VM whose host keys can't be read gets no entry: a
-// stopped VM's port is free for anything on the host to take, so ssh
-// must check it reaches the VM. Nor does one whose backend's ssh isn't
-// usable (an emulation not yet reviewed).
+// its alias (Host) and its full name, neither of which ever changes,
+// checked against its own host keys. A VM whose host keys can't be read
+// gets no entry: a stopped VM's port is free for anything on the host to
+// take, so ssh must check it reaches the VM. Nor does one whose backend's
+// ssh isn't usable (an emulation not yet reviewed). An alias an earlier
+// entry has (two VMs made at once) is left out: ssh would take the first.
 func (c *Config) Write(ctx context.Context) error {
-	all, up, err := c.projectVMs(ctx)
+	up, err := c.running(ctx)
 	if err != nil {
 		return err
 	}
 	slices.SortFunc(up, func(a, b running) int { return strings.Compare(a.in.Name, b.in.Name) })
 	var buf strings.Builder
 	buf.WriteString(header)
+	taken := map[string]bool{}
 	for _, r := range up {
 		if !c.Review.Allowed(r.b, backend.FeatureSSH) {
 			continue
@@ -141,7 +153,12 @@ func (c *Config) Write(ctx context.Context) error {
 			return err
 		}
 		if ok {
-			if err := c.entry(&buf, Alias(r.in.Name, all), r.in, t, start); err != nil {
+			alias := c.Host(r.in.Name)
+			if taken[alias] {
+				alias = r.in.Name
+			}
+			taken[alias] = true
+			if err := c.entry(&buf, alias, r.in, t, start); err != nil {
 				return err
 			}
 		}

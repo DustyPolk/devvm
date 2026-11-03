@@ -33,6 +33,9 @@ import (
 
 // sandbox returns devvm's folders in a temporary folder, and a VM's state
 // there with that image.
+// vmV is a VM's name, for tests of a VM the sandbox's isn't.
+const vmV = "devvm-v-0123456789abc6"
+
 func sandbox(t *testing.T, img string, tools ...string) (paths.Dirs, *state.VM) {
 	t.Helper()
 	t.Setenv("DEVVM_MESSAGES", "names")
@@ -60,7 +63,7 @@ func TestNoProxy(t *testing.T) {
 // A VM's policies: devvm's built-in ones by name, then the user's files.
 func TestPolicies(t *testing.T) {
 	d := paths.Dirs{Data: "/d", Config: "/c", Lima: "/l"}
-	user := []string{"/c/policy", "/d/vms/vm1.policy", "/d/run/vm1.secrets.policy"}
+	user := []string{"/c/policy", "/d/vms/0123456789abc1/policy", "/d/vms/0123456789abc1/run/secrets.policy"}
 	for _, c := range []struct {
 		img           string
 		tools         []string
@@ -73,7 +76,7 @@ func TestPolicies(t *testing.T) {
 		{"docker", []string{"node"}, []string{"layers/base.policy", "shared-tools/node.policy", "layers/docker.policy"}, user},
 		{"base", nil, []string{"layers/base.policy"}, user},
 	} {
-		builtin, files := Policies(d, "vm1", c.img, c.tools)
+		builtin, files := Policies(d, "devvm-vm1-0123456789abc1", c.img, c.tools)
 		if !slices.Equal(builtin, c.builtin) || !slices.Equal(files, c.file) {
 			t.Errorf("Policies(%s, %q) = %q, %q; want %q, %q", c.img, c.tools, builtin, files, c.builtin, c.file)
 		}
@@ -82,7 +85,7 @@ func TestPolicies(t *testing.T) {
 	// user's layers, and a name that's no shared tool's names none of
 	// devvm's.
 	for _, bad := range []string{"../x", "pg+../../etc/x", "a/b", "X", ".x"} {
-		builtin, files := Policies(d, "vm1", bad, []string{"../x", "X"})
+		builtin, files := Policies(d, "devvm-vm1-0123456789abc1", bad, []string{"../x", "X"})
 		if got := slices.Concat(builtin, files); slices.ContainsFunc(got, func(f string) bool {
 			return strings.Contains(f, "x.policy") || strings.Contains(f, "b.policy") || strings.Contains(f, "X.policy")
 		}) {
@@ -100,7 +103,7 @@ func TestEveryPartHasAPolicy(t *testing.T) {
 		if image.IsTool(p) {
 			img, tools = "base", []string{p}
 		}
-		builtin, _ := Policies(d, "vm1", img, tools)
+		builtin, _ := Policies(d, "devvm-vm1-0123456789abc1", img, tools)
 		if p != "base" {
 			builtin = builtin[1:]
 		}
@@ -117,7 +120,7 @@ func TestEveryPartHasAPolicy(t *testing.T) {
 // of its placeholders), kept.
 func TestKeyAndSalt(t *testing.T) {
 	d, a := sandbox(t, "base")
-	b, err := state.CreateVM(d, "devvm-api-0123456789abcd", state.NewVM{Image: "base", Dir: "/a", Backend: "fake"})
+	b, err := state.CreateVM(d, "devvm-api-0123456789abc7", state.NewVM{Image: "base", Dir: "/a", Backend: "fake"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,9 +369,10 @@ func TestPrepare(t *testing.T) {
 	var excluded []string
 	p.OS = "darwin"
 	p.ExcludeFromBackup = func(_ context.Context, dir string) error { excluded = append(excluded, dir); return nil }
-	// The run, logs and CA folders are the user's alone after, whatever
-	// mode they had.
-	for _, dir := range []string{d.Run(), d.Logs(), d.CA()} {
+	// The run, the VM's run and logs, and CA folders are the user's alone
+	// after, whatever mode they had.
+	files := d.VM(st.Name())
+	for _, dir := range []string{d.Run(), files.Run(), files.Logs(), d.CA()} {
 		if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // the test's own folder
 			t.Fatal(err)
 		}
@@ -407,10 +411,10 @@ func TestPrepare(t *testing.T) {
 	for _, want := range []string{
 		"/bin/sh _proxy -listen 127.0.0.1:" + strconv.Itoa(pp) + " -vm " + st.Name() +
 			" -builtin-policy layers/base.policy,shared-tools/node.policy,shared-tools/claude.policy -policy " + d.Policy() + ",",
-		" -log " + d.Logs() + "/" + st.Name() + ".jsonl -proxy-log " + d.Logs() + "/" + st.Name() + ".proxy.log -lifeline /lima/vm/ha.pid -ca " + d.CA() + "/ca.pem -cakey " + d.CA() + "/ca.key",
-		" -secrets " + d.Run() + "/" + st.Name() + ".secrets.json -secret-cmd /bin/sh -auth-file " + d.Run() + "/" + st.Name() + ".proxy.auth",
-		// Its links' list: in the run folder, devvm's alone, named by the VM.
-		" -links " + d.Run() + "/" + st.Name() + ".links.json",
+		" -log " + files.Logs() + "/network.jsonl -proxy-log " + files.Logs() + "/proxy.log -lifeline /lima/vm/ha.pid -ca " + d.CA() + "/ca.pem -cakey " + d.CA() + "/ca.key",
+		" -secrets " + files.Run() + "/secrets.json -secret-cmd /bin/sh -auth-file " + files.Run() + "/proxy.auth",
+		// Its links' list: in its run folder, devvm's alone.
+		" -links " + files.Run() + "/links.json -link-sockets " + d.Run(),
 	} {
 		if !strings.Contains(args, want) {
 			t.Errorf("the proxy's arguments %q lack %q", args, want)
@@ -424,14 +428,14 @@ func TestPrepare(t *testing.T) {
 	if conf.Decider != "" || conf.DeciderToken != "" || strings.Contains(args, "-decider") || st.Get(KeyDeciderPort) != "" {
 		t.Errorf("a decider without a backend that uses one: %+v, %q", conf, args)
 	}
-	auth := filepath.Join(d.Run(), st.Name()+".proxy.auth")
+	auth := files.Proxy(".auth")
 	b, err := os.ReadFile(auth) //nolint:gosec // the test's own folder
 	if err != nil || strings.TrimSpace(string(b)) != key {
 		t.Errorf("auth file = %q, %v", b, err)
 	}
 	for path, mode := range map[string]os.FileMode{
-		auth: 0o600, d.Run(): 0o700, d.Logs(): 0o700, ProxyLog(d, st.Name()): 0o600,
-		secrets.BindingsFile(d, st.Name()): 0o600, d.CA(): 0o700,
+		auth: 0o600, d.Run(): 0o700, files.Run(): 0o700, files.Logs(): 0o700, files.ProxyLog(): 0o600,
+		files.Secrets(): 0o600, d.CA(): 0o700,
 	} {
 		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != mode {
 			t.Errorf("%s: %v, want %v (%v)", path, fi.Mode().Perm(), mode, err)
@@ -462,7 +466,7 @@ func TestPrepareWaitsForTheProxy(t *testing.T) {
 	p, f := testProxy(t, d)
 	f.quiet = true
 	_, err := p.Prepare(t.Context(), lifelined(), st, false)
-	if want := "proxy_start_failed log=" + ProxyLog(d, st.Name()) + " vm=" + st.Name(); msg.NamesOf(err) != want {
+	if want := "proxy_start_failed log=" + d.VM(st.Name()).ProxyLog() + " vm=" + st.Name(); msg.NamesOf(err) != want {
 		t.Errorf("Prepare = %v, want %s", msg.NamesOf(err), want)
 	}
 }
@@ -488,7 +492,7 @@ func TestPrepareDecider(t *testing.T) {
 	}
 	pid, _ := p.PID(st.Name())
 	args := strings.Join(f.args[pid], " ")
-	file := filepath.Join(d.Run(), st.Name()+".proxy.decider")
+	file := d.VM(st.Name()).Proxy(".decider")
 	want := " -decider 127.0.0.1:" + dp + " -decider-to proxy.test:" + st.Get(KeyProxyPort) + " -decider-token-file " + file
 	if !strings.Contains(args, want) || strings.Contains(args, tok) {
 		t.Errorf("the proxy's arguments %q: want %q, and not the token", args, want)
@@ -568,7 +572,7 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 		t.Fatalf("a running VM's proxy started again: %d starts", f.count())
 	}
 	for i, change := range []func(){
-		func() { _ = os.WriteFile(filepath.Join(d.Run(), st.Name()+".proxy.bin"), []byte("old\n"), 0o600) },
+		func() { _ = os.WriteFile(d.VM(st.Name()).Proxy(".bin"), []byte("old\n"), 0o600) },
 		func() {
 			_ = os.WriteFile(filepath.Join(d.CA(), "ca.pem"), []byte("rotated\n"), 0o600)
 			p.InitCA = func(string) error { return nil }
@@ -589,9 +593,9 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	}
 	// What it started with: both lists, a line each.
 	want := "layers/base.policy,shared-tools/node.policy,shared-tools/claude.policy\n" +
-		filepath.Join(d.Layers(), "pg.policy") + "," + d.Policy() + "," + VMPolicyFile(d, st.Name()) + "," + secrets.PolicyFile(d, st.Name()) + "\n"
-	if b, _ := os.ReadFile(filepath.Join(d.Run(), st.Name()+".proxy.policy")); string(b) != want {
-		t.Errorf(".proxy.policy = %q, want %q", b, want)
+		filepath.Join(d.Layers(), "pg.policy") + "," + d.Policy() + "," + d.VM(st.Name()).Policy() + "," + d.VM(st.Name()).SecretsPolicy() + "\n"
+	if b, _ := os.ReadFile(d.VM(st.Name()).Proxy(".policy")); string(b) != want {
+		t.Errorf("proxy.policy = %q, want %q", b, want)
 	}
 	prepare(false)
 	if f.count() != 6 {
@@ -627,7 +631,7 @@ func TestPrepareUpstream(t *testing.T) {
 	if err := prepare(false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	file := filepath.Join(d.Run(), st.Name()+".proxy.upstream")
+	file := d.VM(st.Name()).Proxy(".upstream")
 	pid, _ := p.PID(st.Name())
 	args := strings.Join(f.args[pid], " ")
 	if !strings.Contains(args, " -upstream "+file) || strings.Contains(args, "pa55") {
@@ -709,16 +713,13 @@ func TestPrepareWarnsPolicy(t *testing.T) {
 	p, _ := testProxy(t, d)
 	var warned msg.Recorder
 	p.Warn = warned.Add
-	if err := os.MkdirAll(filepath.Dir(VMPolicyFile(d, st.Name())), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(VMPolicyFile(d, st.Name()), []byte("ok.test\n! bad.test\na b\n"), 0o600); err != nil {
+	f := d.VM(st.Name()).Policy()
+	if err := os.WriteFile(f, []byte("ok.test\n! bad.test\na b\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	f := VMPolicyFile(d, st.Name())
 	want := []string{"policy_broken_deny file=" + f + " line=2 rule=! bad.test", "policy_not_rule file=" + f + " line=3 rule=a b"}
 	if !slices.Equal(warned.Names(), want) {
 		t.Errorf("warned %q; want %q", warned.Names(), want)
@@ -730,7 +731,8 @@ func TestPrepareWarnsPolicy(t *testing.T) {
 func TestWriteUpstreamAtOnce(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
-	if err := os.MkdirAll(d.Run(), 0o700); err != nil {
+	run := d.VM(st.Name()).Run()
+	if err := os.MkdirAll(run, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup
@@ -749,12 +751,12 @@ func TestWriteUpstreamAtOnce(t *testing.T) {
 			t.Fatalf("writeUpstream: %v", err)
 		}
 	}
-	es, _ := os.ReadDir(d.Run())
+	es, _ := os.ReadDir(run)
 	var left []string
 	for _, e := range es {
 		left = append(left, e.Name())
 	}
-	if want := []string{st.Name() + ".proxy.cas", st.Name() + ".proxy.upstream"}; !slices.Equal(left, want) {
+	if want := []string{"proxy.cas", "proxy.upstream"}; !slices.Equal(left, want) {
 		t.Errorf("the run folder holds %q; want %q", left, want)
 	}
 	up := p.run(st.Name(), ".upstream")
@@ -770,7 +772,7 @@ func TestPrepareWriteFails(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
 	// A folder where the password goes: renaming over it fails.
-	auth := filepath.Join(d.Run(), st.Name()+".proxy.auth")
+	auth := d.VM(st.Name()).Proxy(".auth")
 	if err := os.MkdirAll(filepath.Join(auth, "x"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -778,7 +780,7 @@ func TestPrepareWriteFails(t *testing.T) {
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); !errors.As(err, &le) || le.New != auth {
 		t.Fatalf("Prepare: %v; want the password's rename failing", err)
 	}
-	es, _ := os.ReadDir(d.Run())
+	es, _ := os.ReadDir(filepath.Dir(auth))
 	for _, e := range es {
 		if strings.Contains(e.Name(), "tmp") {
 			t.Errorf("left in the run folder: %s", e.Name())
@@ -797,7 +799,7 @@ func TestPID(t *testing.T) {
 	if !ok {
 		t.Fatal("no proxy")
 	}
-	f.args[pid] = []string{"/bin/sh", "_proxy", "-vm", "devvm-other-0123456789abcd"}
+	f.args[pid] = []string{"/bin/sh", "_proxy", "-vm", "devvm-other-0123456789abc9"}
 	if _, ok := p.PID(st.Name()); ok {
 		t.Error("another VM's proxy counts")
 	}
@@ -813,7 +815,7 @@ func TestPID(t *testing.T) {
 	}
 	// Nor does a pid file that names no pid, or this test's own.
 	for _, pidFile := range []string{"x\n", "0\n", "-1\n", strconv.Itoa(os.Getpid()) + "\n"} {
-		if err := os.WriteFile(filepath.Join(d.Run(), st.Name()+".proxy.pid"), []byte(pidFile), 0o600); err != nil {
+		if err := os.WriteFile(d.VM(st.Name()).Proxy(".pid"), []byte(pidFile), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if _, ok := p.PID(st.Name()); ok || !p.Stop(st.Name()) || len(signalled) != 0 {
@@ -822,37 +824,20 @@ func TestPID(t *testing.T) {
 	}
 }
 
-// Forget stops a VM's proxy and removes what it left; another VM's stay.
-func TestForget(t *testing.T) {
+// Stop stops a VM's proxy; its files stay in its folder, which goes
+// with the VM.
+func TestStopKeepsFiles(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
 		t.Fatal(err)
 	}
 	pid, _ := p.PID(st.Name())
-	other := filepath.Join(d.Run(), "devvm-other-0123456789abcd.sb")
-	// A write that never finished left its temporary file.
-	tmp := filepath.Join(d.Run(), "."+st.Name()+".proxy.auth.tmp-123")
-	for _, f := range []string{VMPolicyFile(d, st.Name()), other, tmp} {
-		if err := os.WriteFile(f, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := p.Forget(st.Name()); err != nil {
-		t.Fatal(err)
-	}
-	left, _ := filepath.Glob(filepath.Join(d.Run(), st.Name()+".*"))
-	if _, err := os.Stat(VMPolicyFile(d, st.Name())); !errors.Is(err, os.ErrNotExist) || len(left) > 0 {
-		t.Errorf("left: %q, policy %v", left, err)
-	}
-	if _, err := os.Stat(tmp); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("a temporary file left: %v", err)
-	}
-	if _, err := os.Stat(other); err != nil {
-		t.Errorf("another VM's file: %v", err)
-	}
-	if daemon.Alive(pid) {
+	if !p.Stop(st.Name()) || daemon.Alive(pid) {
 		t.Error("the proxy still runs")
+	}
+	if _, err := os.Stat(d.VM(st.Name()).Proxy(".auth")); err != nil {
+		t.Errorf("its files: %v", err)
 	}
 }
 
@@ -865,7 +850,7 @@ func TestRefreshSecrets(t *testing.T) {
 	if err := st.Set(secrets.KeySecrets, "github"); err != nil {
 		t.Fatal(err)
 	}
-	other, err := state.CreateVM(d, "devvm-other-0123456789abcd", state.NewVM{Image: "base", Tools: []string{"node"}, Dir: "/o", Backend: "fake"})
+	other, err := state.CreateVM(d, "devvm-other-0123456789abc9", state.NewVM{Image: "base", Tools: []string{"node"}, Dir: "/o", Backend: "fake"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -880,20 +865,20 @@ func TestRefreshSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A bindings file whose VM devvm no longer has is left alone.
-	if err := os.WriteFile(secrets.BindingsFile(d, "devvm-gone-0123456789abcd"), []byte("[]\n"), 0o600); err != nil {
+	if err := state.WriteFile(d.VM("devvm-gone-0123456789abc8").Secrets(), []byte("[]\n")); err != nil {
 		t.Fatal(err)
 	}
 	if err := p.RefreshSecrets(ctx); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(secrets.BindingsFile(d, st.Name()))
+	data, _ := os.ReadFile(d.VM(st.Name()).Secrets())
 	if !strings.Contains(string(data), `"devvm-proxy-managed-github-`+salt+`"`) || strings.Contains(string(data), "ghp_testfake") {
 		t.Errorf("bindings = %s", data)
 	}
-	if _, err := os.Stat(secrets.BindingsFile(d, other.Name())); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(d.VM(other.Name()).Secrets()); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("a VM without a proxy got files: %v", err)
 	}
-	if data, _ := os.ReadFile(secrets.BindingsFile(d, "devvm-gone-0123456789abcd")); string(data) != "[]\n" {
+	if data, _ := os.ReadFile(d.VM("devvm-gone-0123456789abc8").Secrets()); string(data) != "[]\n" {
 		t.Errorf("a gone VM's = %s", data)
 	}
 	if err := p.RefreshSecrets(ctx, other.Name()); err != nil {
@@ -905,32 +890,32 @@ func TestRefreshSecrets(t *testing.T) {
 // returned; a stop that fails is returned instead.
 func TestUnproxied(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	why := msg.ProxyStartFailed("/log", "V")
+	why := msg.ProxyStartFailed("/log", vmV)
 	f := backendtest.New("fake", nil)
-	f.Instances["V"] = backend.Instance{Name: "V", Status: backend.StatusRunning}
+	f.Instances[vmV] = backend.Instance{Name: vmV, Status: backend.StatusRunning}
 	var warned msg.Recorder
 	p := &Proxy{Warn: warned.Add}
-	if err := p.Unproxied(t.Context(), f, "V", why); msg.NamesOf(err) != "proxy_start_failed log=/log vm=V" ||
-		f.Instances["V"].Status != backend.StatusStopped {
-		t.Errorf("Unproxied = %v, VM %s", msg.NamesOf(err), f.Instances["V"].Status)
+	if err := p.Unproxied(t.Context(), f, vmV, why); msg.NamesOf(err) != "proxy_start_failed log=/log vm="+vmV ||
+		f.Instances[vmV].Status != backend.StatusStopped {
+		t.Errorf("Unproxied = %v, VM %s", msg.NamesOf(err), f.Instances[vmV].Status)
 	}
-	if !slices.Equal(warned.Names(), []string{"net_proxy_down_stopped vm=V"}) {
+	if !slices.Equal(warned.Names(), []string{"net_proxy_down_stopped vm=" + vmV}) {
 		t.Errorf("warned %q", warned.Names())
 	}
 	// Interrupted (its context cancelled), it still stops the VM.
-	f.Instances["V"] = backend.Instance{Name: "V", Status: backend.StatusRunning}
+	f.Instances[vmV] = backend.Instance{Name: vmV, Status: backend.StatusRunning}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	cs := ctxStopper{Fake: f}
-	if err := p.Unproxied(ctx, &cs, "V", why); msg.NamesOf(err) != "proxy_start_failed log=/log vm=V" || cs.err != nil ||
-		f.Instances["V"].Status != backend.StatusStopped {
-		t.Errorf("interrupted: %v, stop's context %v, VM %s", msg.NamesOf(err), cs.err, f.Instances["V"].Status)
+	if err := p.Unproxied(ctx, &cs, vmV, why); msg.NamesOf(err) != "proxy_start_failed log=/log vm="+vmV || cs.err != nil ||
+		f.Instances[vmV].Status != backend.StatusStopped {
+		t.Errorf("interrupted: %v, stop's context %v, VM %s", msg.NamesOf(err), cs.err, f.Instances[vmV].Status)
 	}
 	stopErr := errors.New("stop failed")
 	f.Errs = map[string]error{"Stop": stopErr}
 	warned.Reset()
-	if err := p.Unproxied(t.Context(), f, "V", why); !errors.Is(err, stopErr) ||
-		!slices.Equal(warned.Names(), []string{"proxy_start_failed log=/log vm=V"}) {
+	if err := p.Unproxied(t.Context(), f, vmV, why); !errors.Is(err, stopErr) ||
+		!slices.Equal(warned.Names(), []string{"proxy_start_failed log=/log vm=" + vmV}) {
 		t.Errorf("a failed stop: %v, warned %q", err, warned.Names())
 	}
 }
@@ -958,21 +943,21 @@ func TestSelfCheck(t *testing.T) {
 		stops, restarts              bool
 	}{
 		{name: "enforced", check: "ok"},
-		{name: "a direct route", direct: true, want: "net_direct_route vm=V", check: "unenforced", stops: true},
-		{name: "unconfined, no terminal", unconfined: true, want: "net_unenforced_stop vm=V", check: "unenforced", stops: true},
+		{name: "a direct route", direct: true, want: "net_direct_route vm=" + vmV, check: "unenforced", stops: true},
+		{name: "unconfined, no terminal", unconfined: true, want: "net_unenforced_stop vm=" + vmV, check: "unenforced", stops: true},
 		{name: "unconfined, restarted", unconfined: true, tty: true, yes: true, fixed: true, check: "ok", stops: true, restarts: true},
-		{name: "unconfined, restarted, still", unconfined: true, tty: true, yes: true, want: "net_unenforced_stop vm=V", check: "unenforced", stops: true, restarts: true},
+		{name: "unconfined, restarted, still", unconfined: true, tty: true, yes: true, want: "net_unenforced_stop vm=" + vmV, check: "unenforced", stops: true, restarts: true},
 		{name: "unconfined, declined", unconfined: true, tty: true, check: "unenforced"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := paths.Dirs{Data: t.TempDir()}
-			st, err := state.CreateVM(d, "V", state.NewVM{Image: "base"})
+			st, err := state.CreateVM(d, vmV, state.NewVM{Image: "base"})
 			if err != nil {
 				t.Fatal(err)
 			}
 			_ = st.Set(KeyNet, "on")
 			f := backendtest.New("fake", nil)
-			f.Instances["V"] = backend.Instance{Name: "V", Status: backend.StatusRunning}
+			f.Instances[vmV] = backend.Instance{Name: vmV, Status: backend.StatusRunning}
 			f.Unconfined = tc.unconfined
 			f.ExecFunc = func(_ string, argv []string, _ backend.ExecOpts) error {
 				if tc.direct && slices.Equal(argv, directArgv) {
@@ -985,7 +970,7 @@ func TestSelfCheck(t *testing.T) {
 			err = p.SelfCheck(t.Context(), f, st, func(context.Context) error {
 				restarted = true
 				f.Unconfined = !tc.fixed
-				return f.Start(t.Context(), "V", backend.Confinement{Net: backend.NetProxy})
+				return f.Start(t.Context(), vmV, backend.Confinement{Net: backend.NetProxy})
 			})
 			if msg.NamesOf(err) != tc.want {
 				t.Errorf("SelfCheck = %v, want %q", msg.NamesOf(err), tc.want)
@@ -996,14 +981,14 @@ func TestSelfCheck(t *testing.T) {
 			if got := slices.Contains(f.Methods(), "Stop"); got != tc.stops || restarted != tc.restarts {
 				t.Errorf("stopped %v, restarted %v: %q", got, restarted, f.Methods())
 			}
-			if tc.want != "" && f.Instances["V"].Status != backend.StatusStopped {
+			if tc.want != "" && f.Instances[vmV].Status != backend.StatusStopped {
 				t.Error("the VM it doesn't hold is left running")
 			}
 		})
 	}
 	// Without network policy, nothing is checked.
 	d := paths.Dirs{Data: t.TempDir()}
-	st, _ := state.CreateVM(d, "V", state.NewVM{Image: "base"})
+	st, _ := state.CreateVM(d, vmV, state.NewVM{Image: "base"})
 	f := backendtest.New("fake", nil)
 	if err := (&Proxy{}).SelfCheck(t.Context(), f, st, nil); err != nil || len(f.Calls()) > 0 {
 		t.Errorf("no policy: %v, %q", err, f.Methods())
@@ -1030,7 +1015,7 @@ func TestListed(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := paths.Dirs{Data: t.TempDir()}
-			st, _ := state.CreateVM(d, "V", state.NewVM{Image: "base"})
+			st, _ := state.CreateVM(d, vmV, state.NewVM{Image: "base"})
 			for k, v := range map[string]string{KeyNet: tc.net, KeyCheck: tc.check} {
 				if v != "" {
 					_ = st.Set(k, v)

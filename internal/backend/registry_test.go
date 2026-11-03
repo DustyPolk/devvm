@@ -2,7 +2,6 @@ package backend_test
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -76,7 +75,7 @@ func TestFor(t *testing.T) {
 		{name: "--backend naming its own", recorded: "smolvm", flag: "smolvm", want: "smolvm"},
 		{name: "an unknown --backend", flag: "sbx", want: "backend_unknown backends=docker, lima, smolvm name=sbx"},
 		{name: "an unknown default", file: "sbx", want: "backend_unknown_default backends=docker, lima, smolvm file=/c/config.toml name=sbx"},
-		{name: "an existing VM on a backend not here", recorded: "qemu", want: "backend_unknown_vm backend=qemu vm=devvm-x"},
+		{name: "an existing VM on a backend not here", recorded: "qemu", want: "backend_unknown_vm backend=qemu vm=devvm-x-0123456789abcd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testDirs(t)
@@ -112,18 +111,19 @@ func TestUsed(t *testing.T) {
 		{name: "one backend's", vms: []string{"lima", "lima"}, want: "lima"},
 		{name: "two backends', sorted", vms: []string{"smolvm", "docker", "lima"}, want: "docker lima smolvm"},
 		{name: "unrecorded and unknown backends", vms: []string{"", "qemu", "smolvm"}, want: "smolvm"},
-		{name: "a VM's policy file", vms: []string{"lima"}, files: "devvm-0.policy", want: "lima"},
+		{name: "a VM's policy file", vms: []string{"lima"}, files: "0123456789abc0/policy", want: "lima"},
+		{name: "a folder that isn't a VM's", vms: []string{"lima"}, files: "other/state", want: "lima"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testDirs(t)
 			r := testRegistry(t, "lima", "smolvm", "docker")
 			for i, b := range tc.vms {
-				if _, err := state.CreateVM(d, "devvm-"+strconv.Itoa(i), state.NewVM{Image: "base", Backend: b}); err != nil {
+				if _, err := state.CreateVM(d, "devvm-x-0123456789abc"+strconv.Itoa(i), state.NewVM{Image: "base", Backend: b}); err != nil {
 					t.Fatal(err)
 				}
 			}
 			if tc.files != "" {
-				if err := os.WriteFile(filepath.Join(d.VMs(), tc.files), []byte("backend=docker\n"), 0o600); err != nil {
+				if err := state.WriteFile(filepath.Join(d.VMs(), tc.files), []byte("backend=docker\n")); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -147,11 +147,11 @@ func TestUsed(t *testing.T) {
 func readVM(t *testing.T, d paths.Dirs, recorded string) *state.VM {
 	t.Helper()
 	if recorded != "" {
-		if _, err := state.CreateVM(d, "devvm-x", state.NewVM{Image: "base", Backend: recorded}); err != nil {
+		if _, err := state.CreateVM(d, "devvm-x-0123456789abcd", state.NewVM{Image: "base", Backend: recorded}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	vm, err := state.ReadVM(d, "devvm-x")
+	vm, err := state.ReadVM(d, "devvm-x-0123456789abcd")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,12 +169,12 @@ func TestForWithoutTheDefault(t *testing.T) {
 
 func TestForStateWithoutBackend(t *testing.T) {
 	d := testDirs(t)
-	if _, err := state.CreateVM(d, "devvm-x", state.NewVM{Image: "base"}); err != nil {
+	if _, err := state.CreateVM(d, "devvm-x-0123456789abcd", state.NewVM{Image: "base"}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := testRegistry(t, "lima").For(d, readVM(t, d, ""), "")
 	var ce *state.CorruptError
-	if !errors.As(err, &ce) || ce.Path != d.VMState("devvm-x") {
+	if !errors.As(err, &ce) || ce.Path != d.VM("devvm-x-0123456789abcd").State() {
 		t.Errorf("got %v, want a CorruptError for the VM's state", err)
 	}
 }

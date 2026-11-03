@@ -50,7 +50,8 @@ stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14}
 stdout '^ssh -F /\S*/data/devvm/ssh_config -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/\S*/data/devvm/known_hosts -o GlobalKnownHostsFile=/dev/null -o HostKeyAlias=devvm-web-[0-9a-f]{14} -o ForwardAgent=no -o ClearAllForwardings=yes devvm-web-[0-9a-f]{14} git-receive-pack ''/\S*/web''$'
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 ! stdout chflags
-catg $VMS/devvm-web-*
+vm_name WEB web
+catg $WEB_dir/state
 stdout '^mode=clone$'
 stdout '^clone_remote=devvm$'
 stdout '^seeded=yes$'
@@ -88,8 +89,7 @@ exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)" commit -q --allow-empty -m from-vm'
 ! exec devvm rm --force
 stdout '^unfetched_commits refs="main"$'
 stderr '^devvm: no_terminal_fetch remote=devvm-web$'
-exec sh -c 'ls "$VMS"'
-stdout devvm-web-
+vm_name WEB web
 exec git remote get-url devvm-web
 
 # Fetched: rm then finds uncommitted changes in the clone, shows them,

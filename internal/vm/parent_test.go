@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
@@ -123,13 +122,9 @@ func TestLookupParents(t *testing.T) {
 
 func vmNames(t *testing.T, e *Env) []string {
 	t.Helper()
-	es, err := os.ReadDir(e.Dirs.VMs())
+	ns, err := state.VMNames(e.Dirs)
 	if err != nil {
 		t.Fatal(err)
-	}
-	var ns []string
-	for _, x := range es {
-		ns = append(ns, x.Name())
 	}
 	return ns
 }
@@ -400,7 +395,7 @@ func reread(t *testing.T, e *Env, vm string) *state.VM {
 // policyHas reports whether vm's own policy file has rule.
 func policyHas(t *testing.T, e *Env, vm, rule string) bool {
 	t.Helper()
-	data, err := os.ReadFile(netpolicy.VMPolicyFile(e.Dirs, vm))
+	data, err := os.ReadFile(e.Dirs.VM(vm).Policy())
 	if errors.Is(err, os.ErrNotExist) {
 		return false
 	} else if err != nil {

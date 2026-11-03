@@ -367,17 +367,6 @@ func (s *Store) Logins(tools []string) []string {
 	return kinds
 }
 
-// BindingsFile is the VM's secret bindings, for its proxy (-secrets): names,
-// hosts, headers and placeholders, never values.
-func BindingsFile(d paths.Dirs, vm string) string {
-	return filepath.Join(d.Run(), vm+".secrets.json")
-}
-
-// PolicyFile is the allowlist the VM's secrets imply: their hosts, on 443.
-func PolicyFile(d paths.Dirs, vm string) string {
-	return filepath.Join(d.Run(), vm+".secrets.policy")
-}
-
 // binding is one entry of the bindings file, as the proxy reads it.
 type binding struct {
 	Name        string   `json:"name"`
@@ -414,7 +403,7 @@ func (s *Store) WriteFiles(ctx context.Context, st *state.VM, salt string) error
 // they come from the login files in the home of the devvm that started
 // its proxy.
 func (s *Store) RefreshFiles(ctx context.Context, st *state.VM, salt string) error {
-	data, err := os.ReadFile(BindingsFile(s.Dirs, st.Name()))
+	data, err := os.ReadFile(s.Dirs.VM(st.Name()).Secrets())
 	if err != nil {
 		return err
 	}
@@ -474,15 +463,19 @@ func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, login
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.Dirs.Run(), 0o700); err != nil {
+	// The VM's secret bindings, for its proxy (-secrets): names, hosts,
+	// headers and placeholders, never values; and the allowlist they
+	// imply: their hosts, on 443.
+	files := s.Dirs.VM(st.Name())
+	if err := state.PrivateDir(files.Run()); err != nil {
 		return err
 	}
-	if err := state.WriteFile(BindingsFile(s.Dirs, st.Name()), append(data, '\n')); err != nil {
+	if err := state.WriteFile(files.Secrets(), append(data, '\n')); err != nil {
 		return err
 	}
 	var pol []byte
 	for _, h := range hosts {
 		pol = append(pol, h+"\n"...)
 	}
-	return state.WriteFile(PolicyFile(s.Dirs, st.Name()), pol)
+	return state.WriteFile(files.SecretsPolicy(), pol)
 }

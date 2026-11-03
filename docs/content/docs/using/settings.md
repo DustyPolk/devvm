@@ -186,7 +186,7 @@ A CA in the folder can read every TLS connection a VM makes, as it can this mach
 - `ssh_config` and `known_hosts`, the [ssh config](ssh.md#ssh-access-by-name) for running VMs and their host keys, which devvm writes on each launch and stop;
 - `agent-keys.json`, the keys in [devvm's own SSH agent](ssh.md#devvms-own-agent) and their options, which `devvm ssh-agent add` and `rm` write;
 - on Linux hosts, your [secrets](../safety/network.md#saving-and-binding-secrets), in files under `secrets/` that only you can read (on macOS they're in the Keychain);
-- each VM's state, its own allowlist and its network logs;
+- a folder for each VM in `vms/`, with the VM's state, its own allowlist and its network logs;
 - the images and their records, and the shared tools;
 - the [run logs](troubleshooting.md#a-command-fails) in `logs/runs/`;
 - the agents' history that `devvm history export` and `devvm rm` save, in `exports/`;

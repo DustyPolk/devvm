@@ -29,7 +29,7 @@ func devvm() rules {
 			"internal/backend/smolvm.Smolvm":    {79, "a backend: backend.Backend's 28 methods, DiskDirs, Floors, Usage, Location, Forget, Strays, DevvmCache, DeleteCache and smolvm's own"},
 			"internal/backend/docker.Docker":    {86, "a backend: backend.Backend's 28 methods, the optional ones it implements and Docker's own, its ssh, ports, agent and docker layer emulations among them; its docker commands are its client's"},
 			"internal/backend/backendtest.Fake": {35, "backend.Backend's 28 methods and what tests ask of it"},
-			"internal/paths.Dirs":               {41, "one method per folder or file devvm uses: a list"},
+			"internal/paths.Dirs":               {42, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":                    {46, "the one terminal: messages and where they go, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: map[string]string{
@@ -149,13 +149,13 @@ func devvm() rules {
 				to: []string{"..."},
 			},
 			{
-				name: "internal/paths imports only internal/msg",
-				from: []string{"internal/paths"}, exceptTo: []string{"internal/msg"},
+				name: "internal/paths imports only internal/msg and internal/vmname",
+				from: []string{"internal/paths"}, exceptTo: []string{"internal/msg", "internal/vmname"},
 				to: []string{"..."},
 			},
 			{
-				name: "internal/state imports only internal/msg and internal/paths",
-				from: []string{"internal/state"}, exceptTo: []string{"internal/msg", "internal/paths"},
+				name: "internal/state imports only internal/msg, internal/paths and internal/vmname",
+				from: []string{"internal/state"}, exceptTo: []string{"internal/msg", "internal/paths", "internal/vmname"},
 				to: []string{"..."},
 			},
 			{

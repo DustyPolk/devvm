@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 )
@@ -65,28 +67,32 @@ func TestEntriesIn(t *testing.T) {
 	}
 }
 
-// Leftovers are a VM's state, run files and backend records, with the
-// temporary files of its unfinished writes, never another VM's whose name
-// starts the same.
-func TestLeftoverFiles(t *testing.T) {
-	dir := t.TempDir()
-	d := paths.Dirs{Data: dir}
-	files := []string{
-		d.VMState("devvm-a-1"), filepath.Join(d.Run(), "devvm-a-1.proxy.pid"), filepath.Join(d.LimaVMs(), "devvm-a-1.ports"),
-		filepath.Join(d.Run(), ".devvm-a-1.proxy.auth.tmp-123"), filepath.Join(d.Run(), "devvm-a-12.proxy.pid"),
-		filepath.Join(d.Run(), ".devvm-a-12.proxy.auth.tmp-123"),
-	}
-	for _, f := range files {
-		if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
+// An orphan's leftover state is its whole folder: its state, logs, run
+// and backend files, the temporary files of its unfinished writes; a VM
+// its backend has is none, and its logs are network logs. A VM whose
+// backend didn't answer is never an orphan.
+func TestLeftoverFolders(t *testing.T) {
+	d := paths.Dirs{Data: t.TempDir()}
+	const orphan, live, unasked = "devvm-a-0123456789abc1", "devvm-b-0123456789abc2", "devvm-c-0123456789abc3"
+	for vm, be := range map[string]string{orphan: "fake", live: "fake", unasked: "other"} {
+		v := d.VM(vm)
+		for _, f := range []string{v.Logs() + "/network.jsonl", v.Proxy(".pid"), v.Ports(), filepath.Join(v.Run(), ".proxy.auth.tmp-1")} {
+			if err := state.WriteFile(f, []byte(strings.Repeat("x", 5000))); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := state.CreateVM(d, vm, state.NewVM{Image: "base", Backend: be}); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(f, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
 	}
-	got := leftoverFiles(d, "devvm-a-1")
-	if len(got) != 4 || strings.Contains(strings.Join(got, " "), "devvm-a-12") {
-		t.Errorf("leftoverFiles = %v", got)
+	e := spaceEnv{b: &build.Env{Dirs: d}, vms: map[string]map[string]bool{"fake": {live: true}}, now: time.Now()}
+	row, err := e.leftovers(t.Context())
+	if err != nil || row.Count != 1 || row.Size != du(d.VM(orphan).Dir) || row.Size == 0 {
+		t.Errorf("leftovers = %+v, %v; want %s's folder, %d", row, err, orphan, du(d.VM(orphan).Dir))
+	}
+	logs, err := e.vmLogs()
+	if want := du(d.VM(live).EventLog()) + du(d.VM(unasked).EventLog()); err != nil || logs.count != 2 || logs.size != want {
+		t.Errorf("vmLogs = %+v, %v; want 2, %d", logs, err, want)
 	}
 }
 

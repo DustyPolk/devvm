@@ -50,7 +50,7 @@ func (e Launch) reach(ctx context.Context) (string, *found, error) {
 		return "", nil, err
 	}
 	c := e.sshConfig()
-	host := c.Host(ctx, t.f.Name)
+	host := c.Host(t.f.Name)
 	if _, err := c.EnsureInclude(e.Dirs.Home); err != nil {
 		return "", nil, err
 	}

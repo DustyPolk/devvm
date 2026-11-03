@@ -153,8 +153,8 @@ func (e env) calls(t *testing.T) string {
 func (e env) locked(t *testing.T, lock []byte) {
 	t.Helper()
 	write(t, e.Dirs.ToolLock(), lock)
-	write(t, e.lockConfig(), read(t, e.configFile()))
-	write(t, e.checkedFile(), nil)
+	write(t, e.Dirs.ToolLockConfig(), read(t, e.configFile()))
+	write(t, e.Dirs.ToolLockChecked(), nil)
 }
 
 func TestMiseArch(t *testing.T) {
@@ -175,10 +175,10 @@ func TestLockResolvesOnce(t *testing.T) {
 	if !bytes.Equal(lock, fixture(t)) || !bytes.Equal(read(t, e.Dirs.ToolLock()), fixture(t)) {
 		t.Error("the lock isn't what mise wrote")
 	}
-	if !bytes.Equal(read(t, e.lockConfig()), read(t, e.configFile())) {
+	if !bytes.Equal(read(t, e.Dirs.ToolLockConfig()), read(t, e.configFile())) {
 		t.Error("the lock's mise.toml isn't shared-tools/mise.toml")
 	}
-	if _, err := os.Stat(e.checkedFile()); err != nil {
+	if _, err := os.Stat(e.Dirs.ToolLockChecked()); err != nil {
 		t.Error("not marked checked")
 	}
 	if c := e.calls(t); !strings.Contains(c, "mise lock --platform linux-arm64,linux-arm64-musl\n") {
@@ -206,14 +206,14 @@ func TestLockResolvesAgainWhenConfigChanges(t *testing.T) {
 	if _, err := e.Lock(t.Context()); msg.NamesOf(err) != "tools_need_resolve" {
 		t.Errorf("Lock with a tool mise didn't lock = %v", msg.NamesOf(err))
 	}
-	if !bytes.Equal(read(t, e.Dirs.ToolLock()), fixture(t)) || !bytes.Equal(read(t, e.lockConfig()), config) {
+	if !bytes.Equal(read(t, e.Dirs.ToolLock()), fixture(t)) || !bytes.Equal(read(t, e.Dirs.ToolLockConfig()), config) {
 		t.Error("the lock changed")
 	}
 	write(t, e.configFile(), append(config, "# a comment\n"...))
 	if _, err := e.Lock(t.Context()); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if !bytes.Equal(read(t, e.lockConfig()), read(t, e.configFile())) || !strings.Contains(e.calls(t), "mise lock") {
+	if !bytes.Equal(read(t, e.Dirs.ToolLockConfig()), read(t, e.configFile())) || !strings.Contains(e.calls(t), "mise lock") {
 		t.Error("not resolved again")
 	}
 }
@@ -273,7 +273,7 @@ func TestCheckDue(t *testing.T) {
 		t.Error("due when checked now")
 	}
 	old := time.Now().Add(-25 * time.Hour)
-	if err := os.Chtimes(e.checkedFile(), old, old); err != nil {
+	if err := os.Chtimes(e.Dirs.ToolLockChecked(), old, old); err != nil {
 		t.Fatal(err)
 	}
 	if !e.CheckDue() {
@@ -290,7 +290,7 @@ func TestCheckDue(t *testing.T) {
 		t.Error("due with DEVVM_NO_TOOL_CHECK")
 	}
 	e.Getenv = getenv
-	if err := os.Remove(e.checkedFile()); err != nil {
+	if err := os.Remove(e.Dirs.ToolLockChecked()); err != nil {
 		t.Fatal(err)
 	}
 	if !e.CheckDue() {
@@ -307,7 +307,7 @@ func TestRefreshDaily(t *testing.T) {
 		t.Fatalf("checked today, yet %v %q", err, *e.detach)
 	}
 	old := time.Now().Add(-48 * time.Hour)
-	if err := os.Chtimes(e.checkedFile(), old, old); err != nil {
+	if err := os.Chtimes(e.Dirs.ToolLockChecked(), old, old); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.RefreshDaily(); err != nil {

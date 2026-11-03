@@ -3,9 +3,11 @@ package paths
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // Dirs holds the folders devvm keeps its state in. Every file devvm writes
@@ -24,22 +26,30 @@ type Dirs struct {
 	// never follows LIMA_HOME, so Lima settings meant for other VMs don't
 	// reach devvm's.
 	Lima string
+	// UserCache is the user's cache folder, as os.UserCacheDir finds it
+	// but from Home: where Lima and smolvm keep their own caches, which
+	// devvm space shows. devvm's own is Cache.
+	UserCache string
 }
 
 // FromEnv finds devvm's folders from the environment.
 func FromEnv() (Dirs, error) {
-	return fromEnv(os.Getenv)
+	return fromEnv(os.Getenv, runtime.GOOS)
 }
 
-func fromEnv(getenv func(string) string) (Dirs, error) {
+func fromEnv(getenv func(string) string, goos string) (Dirs, error) {
 	home := getenv("HOME")
 	if !filepath.IsAbs(home) {
 		return Dirs{}, msg.HomeNotAbsolute()
 	}
 	d := Dirs{
-		Home:   filepath.Clean(home),
-		Data:   filepath.Join(xdg(getenv, "XDG_DATA_HOME", home, ".local", "share"), "devvm"),
-		Config: filepath.Join(xdg(getenv, "XDG_CONFIG_HOME", home, ".config"), "devvm"),
+		Home:      filepath.Clean(home),
+		Data:      filepath.Join(xdg(getenv, "XDG_DATA_HOME", home, ".local", "share"), "devvm"),
+		Config:    filepath.Join(xdg(getenv, "XDG_CONFIG_HOME", home, ".config"), "devvm"),
+		UserCache: xdg(getenv, "XDG_CACHE_HOME", home, ".cache"),
+	}
+	if goos == "darwin" {
+		d.UserCache = filepath.Join(d.Home, "Library", "Caches")
 	}
 	d.Lima = filepath.Join(d.Data, "lima")
 	if l := getenv("DEVVM_LIMA_HOME"); l != "" {
@@ -61,11 +71,24 @@ func xdg(getenv func(string) string, name, home string, def ...string) string {
 	return filepath.Join(append([]string{home}, def...)...)
 }
 
-// VMs is the folder of per-VM state files.
+// VMs is the folder of the VMs' folders, one each (VMDir).
 func (d Dirs) VMs() string { return filepath.Join(d.Data, "vms") }
 
-// VMState is one VM's state file.
-func (d Dirs) VMState(vm string) string { return filepath.Join(d.VMs(), vm) }
+// VMDir is the folder of the project VM whose hash is hash
+// (vmname.HashOf): every file devvm keeps for it, so deleting the VM
+// deletes the folder.
+func (d Dirs) VMDir(hash string) string { return filepath.Join(d.VMs(), hash) }
+
+// VM is the files devvm keeps for the VM named vm: a project VM's in its
+// folder (VMDir, by the hash its name ends with), any other's (an image's
+// build VM, the shared tools' build VM) in a folder of its own in the run
+// folder's builds.
+func (d Dirs) VM(vm string) VM {
+	if h, ok := vmname.HashOf(vm); ok {
+		return VM{Dir: d.VMDir(h)}
+	}
+	return VM{Dir: filepath.Join(d.Run(), "builds", vm)}
+}
 
 // Images is the folder of images' records, one folder per image key.
 func (d Dirs) Images() string { return filepath.Join(d.Data, "images") }
@@ -97,11 +120,18 @@ func (d Dirs) Cache() string { return filepath.Join(d.Data, "cache") }
 // reference.
 func (d Dirs) FromDigests() string { return filepath.Join(d.Cache(), "from-digests.json") }
 
-// Run holds files for running VMs: sandbox profiles, proxy pids, the QEMU
-// wrapper.
+// Run holds what running VMs need that isn't one VM's, or whose path
+// must be short: the QEMU wrapper, the ports lock, the port forwarders'
+// and link sessions' sockets, named by hashes (a socket's path is at most
+// SocketMax characters), and build VMs' folders (VM).
 func (d Dirs) Run() string { return filepath.Join(d.Data, "run") }
 
-// Logs holds each VM's network policy decisions and proxy log.
+// SocketMax is the longest unix socket path macOS takes (Linux takes
+// 108). ssh adds 17 characters to a control socket's while it makes it.
+const SocketMax = 104
+
+// Logs holds the logs that aren't one VM's: the runs' (RunLogs) and the
+// daily tools check's.
 func (d Dirs) Logs() string { return filepath.Join(d.Data, "logs") }
 
 // RunLogs holds the logs of devvm's runs: builds and the commands they ran.
@@ -119,6 +149,16 @@ func (d Dirs) ToolLock() string { return filepath.Join(d.Data, "mise.lock") }
 // ToolRecord is the record beside a tool image in the share: its hash,
 // what it's built for, when, and since when no VM has had it.
 func (d Dirs) ToolRecord(file string) string { return filepath.Join(d.Tools(), file+".json") }
+
+// ToolLockConfig is the shared tools' mise.toml the lock was resolved
+// from.
+func (d Dirs) ToolLockConfig() string { return d.ToolLock() + ".toml" }
+
+// ToolLockChecked is touched whenever the lock is resolved.
+func (d Dirs) ToolLockChecked() string { return d.ToolLock() + ".checked" }
+
+// ToolsCheckLog is the daily tools check's output.
+func (d Dirs) ToolsCheckLog() string { return filepath.Join(d.Logs(), "tools-check.log") }
 
 // Mise holds the mise versions devvm runs on the host.
 func (d Dirs) Mise() string { return filepath.Join(d.Cache(), "mise") }
@@ -148,26 +188,16 @@ func (d Dirs) MakingLock() string { return filepath.Join(d.Data, "making.lock") 
 // LimaVM is a VM's folder in devvm's Lima home.
 func (d Dirs) LimaVM(vm string) string { return filepath.Join(d.Lima, vm) }
 
-// LimaVMs holds the Lima backend's own files for each VM, outside Lima's
-// home: which ports it forwards, and its port forwarder's.
-func (d Dirs) LimaVMs() string { return filepath.Join(d.Data, "lima-vms") }
-
-// Smolvm holds the smolvm backend's files: its images (packs), what it set
-// on each VM, and on Linux smolvm's own state.
+// Smolvm holds the smolvm backend's files that aren't one VM's: its images
+// (packs), and on Linux smolvm's own state.
 func (d Dirs) Smolvm() string { return filepath.Join(d.Data, "smolvm") }
 
 // SmolvmImage is an image's folder on smolvm: its pack.
 func (d Dirs) SmolvmImage(key string) string { return filepath.Join(d.Smolvm(), "images", key) }
 
-// SmolvmVM is the record of what the smolvm backend set on a VM.
-func (d Dirs) SmolvmVM(vm string) string { return filepath.Join(d.Smolvm(), "vms", vm+".json") }
-
-// Docker holds the Docker backend's files: what it set on each VM, and
-// which shared tools it unpacked into its tools volume.
+// Docker holds the Docker backend's files that aren't one VM's: which
+// shared tools it unpacked into its tools volume, its proxies' sockets.
 func (d Dirs) Docker() string { return filepath.Join(d.Data, "docker") }
-
-// DockerVM is the record of what the Docker backend set on a VM.
-func (d Dirs) DockerVM(vm string) string { return filepath.Join(d.Docker(), "vms", vm+".json") }
 
 // ConfigFile is config.toml, the defaults you set by hand: devvm reads it
 // and never writes it.

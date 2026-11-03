@@ -20,14 +20,12 @@ import (
 // entry whose url doesn't hash to its name.
 func TestDevvmCache(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	dir, err := downloadCache()
-	if err != nil {
-		t.Fatal(err)
-	}
-	d := paths.Dirs{Data: filepath.Join(home, "data"), Lima: filepath.Join(home, "lima")}
+	d := paths.Dirs{Data: filepath.Join(home, "data"), Lima: filepath.Join(home, "lima"), UserCache: filepath.Join(home, ".cache")}
 	l := &Lima{Dirs: d, Getenv: func(string) string { return "" }}
+	dir, err := l.downloadCache()
+	if err != nil || dir != filepath.Join(home, ".cache", "lima", "download", "by-url-sha256") {
+		t.Fatal(dir, err)
+	}
 	cloud := func(date string) string {
 		return ubuntu.DefaultURL + "/release-" + date + "/ubuntu-" + ubuntu.Version + "-server-cloudimg-arm64.img"
 	}

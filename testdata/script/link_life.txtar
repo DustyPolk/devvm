@@ -8,7 +8,9 @@ exec devvm --no-network-policy --no-git-protect
 exec devvm link publish 5432,80
 project app
 exec devvm --no-network-policy --no-git-protect
-exec sh -c 'ls "$RUN" | grep "links.pid" || true'
+vm_name APP app
+vm_name DB db
+exec sh -c 'ls "$VMS"/*/run | grep "links.pid" || true'
 ! stdout .
 
 # add on a running client: its setup sent again with the link's name, and
@@ -16,8 +18,8 @@ exec sh -c 'ls "$RUN" | grep "links.pid" || true'
 exec devvm link add db 5432
 stdout '^==> link_added name=db port=5432 '
 ! stdout links_next_start
-exec sh -c 'for i in $(seq 60); do grep -qx "devvm links: 127\.77\.0\.1:5432: carried" "$XDG_DATA_HOME"/devvm/logs/devvm-app-*.links.log && exit 0; sleep 0.5; done; exit 1'
-exec sh -c 'kill -0 "$(cat "$RUN"/devvm-app-*.links.pid)"'
+exec sh -c 'for i in $(seq 60); do grep -qx "devvm links: 127\.77\.0\.1:5432: carried" "$APP_dir"/logs/links.log && exit 0; sleep 0.5; done; exit 1'
+exec sh -c 'kill -0 "$(cat "$APP_dir"/run/links.pid)"'
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
 exec devvm ls
 stdout '^NAME +STATUS +IMAGE +TOOLS +GIT +NET +LINKS +BACKEND +FOLDER$'
@@ -37,7 +39,7 @@ rm $STUB_DIR/link-taken
 # Stopped, its session goes with it, and its sockets; a stopped client
 # gets a change at its next start.
 exec devvm stop
-exec sh -c 'pid=$(cat "$RUN"/devvm-app-*.links.pid 2>/dev/null) || exit 0; ! kill -0 "$pid" 2>/dev/null'
+exec sh -c 'pid=$(cat "$APP_dir"/run/links.pid 2>/dev/null) || exit 0; ! kill -0 "$pid" 2>/dev/null'
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$" || true'
 ! stdout .
 exec devvm link rm db 80
@@ -50,7 +52,7 @@ exec devvm stop
 cd $WORK/app
 exec devvm
 stderr -count=1 '^devvm: link_target_stopped target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
-exec sh -c 'kill -0 "$(cat "$RUN"/devvm-app-*.links.pid)"'
+exec sh -c 'kill -0 "$(cat "$APP_dir"/run/links.pid)"'
 exec devvm ls
 stdout '^devvm-db-[0-9a-f]{14} +Stopped '
 
@@ -60,11 +62,11 @@ stderr '^net_off_log vm=devvm-app-[0-9a-f]{14}$'
 
 # A session killed leaves its sockets: gc --orphans deletes them, and the
 # links to a VM whose state is gone.
-exec sh -c 'kill -9 "$(cat "$RUN"/devvm-app-*.links.pid)"'
+exec sh -c 'kill -9 "$(cat "$APP_dir"/run/links.pid)"'
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
 exec devvm space
 stdout '^leftover state +- +[12] '
-exec sh -c 'rm "$VMS"/devvm-db-*'
+rm $DB_dir/state
 exec devvm gc --orphans --force
 stdout '^gc_dead_links count=1$'
 stdout '^gc_dead_link name=db port=5432 target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
@@ -73,10 +75,9 @@ stdout '^==> links_target_gone count=1 vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0
 stdout '^==> deleted_link_sockets count=[12]$'
 exec sh -c 'ls "$RUN" | grep "^link-" || true'
 ! stdout .
-catg $VMS/devvm-app-*
+exec cat $APP_dir/state
 stdout '^links=$'
 
 # devvm rm of the client stops its session and takes its links with it.
 exec devvm rm --force --no-export
-exec sh -c 'ls "$RUN" "$XDG_DATA_HOME"/devvm/logs | grep "^devvm-app-.*links" || true'
-! stdout .
+! exists $APP_dir

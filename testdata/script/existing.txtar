@@ -28,12 +28,12 @@ stderr '^devvm: ports_flag_ignored$'
 ! stderr backend_flag_ignored
 exec devvm --no-git-protect
 stderr '^devvm: git_protect_flag_ignored$'
-exec grep -c '^net=off$' $VMS/$WEB
+exec grep -c '^net=off$' $WEB_dir/state
 stdout '^1$'
 
 # A size its state asks for: a running VM's waits for its next start; a
 # stopped one's is applied once.
-exec sh -c 'printf "cpus=6\n" >> "$VMS/$WEB"'
+exec sh -c 'printf "cpus=6\n" >> "$WEB_dir/state"'
 stub_reset
 exec devvm
 stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
@@ -75,7 +75,7 @@ stderr '^devvm: args_none command=devvm restart given=base$'
 exec devvm --tools go --layers docker
 stderr '^devvm: parts_flags_ignored vm=devvm-web-[0-9a-f]{14}$'
 ! stdout new_vm_gets
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
 stdout '^image=base$'
 ! stdout '^tool_names=.'
 # Without them, nothing is said.
@@ -84,7 +84,7 @@ exec devvm
 
 # A VM without a network choice didn't finish being made: never started
 # (it would start without network policy); rm deletes it.
-exec sh -c 'f="$VMS/$WEB"; grep -v "^net=" "$f" > "$f.new" && mv "$f.new" "$f"'
+exec sh -c 'f="$WEB_dir/state"; grep -v "^net=" "$f" > "$f.new" && mv "$f.new" "$f"'
 exec limactl stop $WEB
 stub_reset
 ! exec devvm
@@ -99,8 +99,9 @@ stub_calls
 # locks taken off.
 project api
 exec devvm --no-network-policy
+vm_name API api
 cd $WORK/web
-exec sh -c 'l="$DATA/logs/$WEB" && touch "$l.jsonl" "$l.jsonl.1" "$l.proxy.log" "$l.proxy.log.1"'
+exec sh -c 'l="$WEB_dir/logs" && mkdir -p "$l" && touch "$l/network.jsonl" "$l/network.jsonl.1" "$l/proxy.log" "$l/proxy.log.1"'
 stub_reset
 exec devvm rm --force
 stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
@@ -110,11 +111,8 @@ stdout '^limactl delete -f devvm-web-[0-9a-f]{14}$'
 ! stdout 'delete -f devvm-api'
 ! stdout 'limactl (start|shell)'
 [darwin] stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
-exec sh -c 'ls "$VMS"'
-! stdout devvm-web
-stdout devvm-api
-exec sh -c 'ls "$XDG_DATA_HOME/devvm/logs"'
-! stdout devvm-web
+! exists $WEB_dir
+exists $API_dir/state
 exec cat $KNOWN
 ! stdout devvm-web
 stdout devvm-api
@@ -137,8 +135,7 @@ cd $WORK/api
 exec sh -c ': > "$STUB_DIR/delete-fails"'
 exec devvm rm --force --no-export
 stdout '^==> deleted vm=devvm-api-[0-9a-f]{14}$'
-exec sh -c 'ls "$VMS"'
-! stdout devvm-api
+! exists $API_dir
 rm $STUB_DIR/delete-fails
 
 # A folder made again at the same path: rm and adopt ask first, so
@@ -160,5 +157,5 @@ stderr '^devvm: vm_other_folder_adopt vm=devvm-site-[0-9a-f]{14} was=/\S*/site$'
 stderr '^devvm: vm_other_folder '
 stub_calls
 ! stdout 'limactl (delete|stop|start)'
-exec sh -c 'ls "$VMS"'
-stdout devvm-site
+vm_name SITE site
+exists $SITE_dir/state

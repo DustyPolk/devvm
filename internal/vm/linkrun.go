@@ -22,15 +22,10 @@ import (
 
 // linkRuns starts and stops client VMs' link sessions: devvm _links VM,
 // one detached process for each running client with links, its output in
-// its log (LinksLog). The proxies' seams start, find and signal them
+// its log (paths.VM.LinksLog), its pid in its run folder
+// (paths.VM.LinksPID). The proxies' seams start, find and signal them
 // (Proxy.Start, Args and Signal), through daemon.Proc.
 type linkRuns struct{ *Env }
-
-// LinksLog is a client VM's link session's own output.
-func LinksLog(d paths.Dirs, vm string) string { return filepath.Join(d.Logs(), vm+".links.log") }
-
-// linksPID is where the pid of a client VM's link session is kept.
-func linksPID(d paths.Dirs, vm string) string { return filepath.Join(d.Run(), vm+".links.pid") }
 
 // linksLogMax is the most a link session's log keeps: one over it is
 // emptied when the next session starts.
@@ -44,7 +39,7 @@ const linksReportWait = 10 * time.Second
 // run folder, and devvm _links VM its arguments.
 func (e linkRuns) proc(vm string) daemon.Proc {
 	return daemon.Proc{
-		PIDFile: linksPID(e.Dirs, vm), Args: e.Proxy.Args, Signal: e.Proxy.Signal,
+		PIDFile: e.Dirs.VM(vm).LinksPID(), Args: e.Proxy.Args, Signal: e.Proxy.Signal,
 		Is: func(args []string) bool { return len(args) == 3 && args[1] == "_links" && args[2] == vm },
 	}
 }
@@ -88,7 +83,7 @@ func (e linkRuns) removeSockets(ctx context.Context, vm string) {
 // logSize is how long vm's link session's log is now: what's written
 // after it is new.
 func (e linkRuns) logSize(vm string) int64 {
-	fi, err := os.Stat(LinksLog(e.Dirs, vm))
+	fi, err := os.Stat(e.Dirs.VM(vm).LinksLog())
 	if err != nil {
 		return 0
 	}
@@ -109,9 +104,10 @@ func (e linkRuns) ensure(vm string) (bool, int64, error) {
 // start starts vm's link session, detached, its output in its log, and
 // returns how long that log was before.
 func (e linkRuns) start(vm string) (int64, error) {
-	logPath := LinksLog(e.Dirs, vm)
-	for _, dir := range []string{e.Dirs.Logs(), e.Dirs.Run()} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+	files := e.Dirs.VM(vm)
+	logPath := files.LinksLog()
+	for _, dir := range []string{files.Logs(), files.Run(), e.Dirs.Run()} {
+		if err := state.PrivateDir(dir); err != nil {
 			return 0, err
 		}
 	}
@@ -145,7 +141,7 @@ func (e linkRuns) report(ctx context.Context, vm string, links []Link, from int6
 	var r vmssh.LinksReport
 	deadline := time.Now().Add(linksReportWait)
 	for {
-		data, _ := os.ReadFile(LinksLog(e.Dirs, vm))
+		data, _ := os.ReadFile(e.Dirs.VM(vm).LinksLog())
 		if int64(len(data)) < from {
 			from = 0 // emptied since
 		}

@@ -135,7 +135,7 @@ func TestSaveDelete(t *testing.T) {
 // stays with an image that has it.
 func TestBind(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "base", Tools: []string{"node", "claude"}})
+	st, err := state.CreateVM(d, vm1, state.NewVM{Image: "base", Tools: []string{"node", "claude"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestGet(t *testing.T) {
 func TestNamesAndLogins(t *testing.T) {
 	s, _ := testStore(t, true, nil)
 	d := paths.Dirs{Data: t.TempDir()}
-	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "base", Tools: []string{"node", "claude"}})
+	st, err := state.CreateVM(d, vm1, state.NewVM{Image: "base", Tools: []string{"node", "claude"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestWriteFiles(t *testing.T) {
 	s, kc := testStore(t, true, nil)
 	kc["devvm/github"] = "ghp_secret"
 	d := s.Dirs
-	st, err := state.CreateVM(d, "vm1", state.NewVM{Image: "base", Tools: []string{"node", "codex", "claude"}})
+	st, err := state.CreateVM(d, vm1, state.NewVM{Image: "base", Tools: []string{"node", "codex", "claude"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestWriteFiles(t *testing.T) {
 	if err := s.WriteFiles(t.Context(), st, salt); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(BindingsFile(d, "vm1"))
+	data, err := os.ReadFile(d.VM(vm1).Secrets())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestWriteFiles(t *testing.T) {
 	if len(got) != 2 || got[0] != want[0] || !strings.HasPrefix(got[1], "codex-key api.openai.com Authorization ") || !strings.Contains(got[1], salt) {
 		t.Errorf("bindings = %q", got)
 	}
-	pol, err := os.ReadFile(PolicyFile(d, "vm1"))
+	pol, err := os.ReadFile(d.VM(vm1).SecretsPolicy())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestWriteFiles(t *testing.T) {
 	if string(pol) != wantPol {
 		t.Errorf("policy = %q, want %q", pol, wantPol)
 	}
-	for _, f := range []string{BindingsFile(d, "vm1"), PolicyFile(d, "vm1")} {
+	for _, f := range []string{d.VM(vm1).Secrets(), d.VM(vm1).SecretsPolicy()} {
 		if fi, err := os.Stat(f); err != nil || fi.Mode().Perm() != 0o600 {
 			t.Errorf("%s: %v %v", f, fi.Mode(), err)
 		}
@@ -333,22 +333,22 @@ func TestWriteFiles(t *testing.T) {
 	if err := s.RefreshFiles(t.Context(), st, salt); err != nil {
 		t.Fatal(err)
 	}
-	data, _ = os.ReadFile(BindingsFile(d, "vm1"))
+	data, _ = os.ReadFile(d.VM(vm1).Secrets())
 	if strings.Contains(string(data), `"github"`) || !strings.Contains(string(data), `"codex-key"`) {
 		t.Errorf("refreshed bindings = %s", data)
 	}
-	if pol, _ := os.ReadFile(PolicyFile(d, "vm1")); string(pol) != "api.anthropic.com:443\napi.openai.com:443\n" {
+	if pol, _ := os.ReadFile(d.VM(vm1).SecretsPolicy()); string(pol) != "api.anthropic.com:443\napi.openai.com:443\n" {
 		t.Errorf("refreshed policy = %q", pol)
 	}
 	// No secrets at all: an empty list.
-	none, err := state.CreateVM(d, "vm2", state.NewVM{Image: "base", Tools: []string{"node"}})
+	none, err := state.CreateVM(d, vm2, state.NewVM{Image: "base", Tools: []string{"node"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := s.WriteFiles(t.Context(), none, salt); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ := os.ReadFile(BindingsFile(d, "vm2")); string(data) != "[]\n" {
+	if data, _ := os.ReadFile(d.VM(vm2).Secrets()); string(data) != "[]\n" {
 		t.Errorf("no bindings = %q", data)
 	}
 }
@@ -436,24 +436,30 @@ func TestSaveAtOnce(t *testing.T) {
 func TestWriteFilesFailing(t *testing.T) {
 	s, kc := testStore(t, true, nil)
 	kc["devvm/github"] = "ghp_secret"
-	st, err := state.CreateVM(s.Dirs, "vm1", state.NewVM{Image: "base"})
+	st, err := state.CreateVM(s.Dirs, vm1, state.NewVM{Image: "base"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = st.Set(KeySecrets, "github")
 	// A folder where the bindings go: renaming over it fails.
-	in := filepath.Join(BindingsFile(s.Dirs, "vm1"), "x")
+	in := filepath.Join(s.Dirs.VM(vm1).Secrets(), "x")
 	if err := os.MkdirAll(in, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	var le *os.LinkError
-	if err := s.WriteFiles(t.Context(), st, strings.Repeat("ab", 16)); !errors.As(err, &le) || le.New != BindingsFile(s.Dirs, "vm1") {
+	if err := s.WriteFiles(t.Context(), st, strings.Repeat("ab", 16)); !errors.As(err, &le) || le.New != s.Dirs.VM(vm1).Secrets() {
 		t.Fatalf("WriteFiles over a folder: %v; want its rename failing", err)
 	}
-	if left := dirNames(t, s.Dirs.Run()); !slices.Equal(left, []string{filepath.Base(BindingsFile(s.Dirs, "vm1"))}) {
+	if left := dirNames(t, s.Dirs.VM(vm1).Run()); !slices.Equal(left, []string{filepath.Base(s.Dirs.VM(vm1).Secrets())}) {
 		t.Errorf("the run folder holds %q", left)
 	}
 }
+
+// Two VMs' names, for tests of their secret files.
+const (
+	vm1 = "devvm-vm1-0123456789abc1"
+	vm2 = "devvm-vm2-0123456789abc2"
+)
 
 func dirNames(t *testing.T, dir string) []string {
 	t.Helper()

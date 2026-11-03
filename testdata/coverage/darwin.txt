@@ -3,8 +3,8 @@
 cmd/devvm 100.0
 internal/backend 95.9
 internal/backend/backendtest 46.3
-internal/backend/docker 81.2
-internal/backend/lima 88.1
+internal/backend/docker 81.5
+internal/backend/lima 88.5
 internal/backend/registry 92.0
 internal/backend/smolvm 73.9
 internal/backend/vmssh 87.5
@@ -21,10 +21,10 @@ internal/hostgit 100.0
 internal/image 97.5
 internal/msg 66.8
 internal/msg/gen 92.5
-internal/netpolicy 87.2
-internal/paths 97.1
+internal/netpolicy 87.4
+internal/paths 98.0
 internal/platform 85.5
-internal/project 91.7
+internal/project 91.8
 internal/proxy 88.3
 internal/secrets 90.8
 internal/settings 95.7

@@ -20,7 +20,7 @@ exec sh -c 'grep "^$NET " "$STUB_DIR/instances"'
 stdout ' Stopped$'
 exec sh -c 'pgrep -f "[_]proxy .* -vm $NET " || echo none'
 stdout '^none$'
-catg $VMS/devvm-net-*
+exec cat $NET_dir/state
 stdout '^net=on$'
 stdout '^image=base$'
 stdout '^tool_names=claude$'

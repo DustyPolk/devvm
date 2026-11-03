@@ -98,8 +98,8 @@ func TestRm(t *testing.T) {
 	if _, ok := f.Instances[vm]; ok {
 		t.Error("not deleted")
 	}
-	if _, err := os.Stat(e.Dirs.VMState(vm)); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("state: %v", err)
+	if _, err := os.Stat(e.Dirs.VM(vm).Dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its folder: %v", err)
 	}
 
 	// Another folder at the same path.

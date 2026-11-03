@@ -241,11 +241,11 @@ func (e Lifecycle) export(ctx context.Context, t *found, file string, failed err
 	return nil
 }
 
-// delete deletes the VM and what devvm keeps for it: its state, its proxy
-// and its rules, run files and logs, .git's locks or the repo's remote
-// for its clone, its host keys and its ssh config entry. A delete that
-// failed but left no VM (it was half gone already) goes on like one that
-// worked.
+// delete deletes the VM, then what devvm keeps for it (teardown): its
+// folder, its proxy and link session, .git's locks or the repo's remote
+// for its clone, other VMs' links to it, its host keys and its ssh config
+// entry. A delete that failed but left no VM (it was half gone already)
+// goes on like one that worked.
 func (e Lifecycle) delete(ctx context.Context, t *found) error {
 	vm := t.f.Name
 	if err := t.b.Delete(ctx, vm); err != nil {
@@ -254,39 +254,5 @@ func (e Lifecycle) delete(ctx context.Context, t *found) error {
 		}
 	}
 	e.Info(msg.Deleted(vm))
-	return e.forget(ctx, t)
-}
-
-// forget deletes what devvm keeps for a VM its backend no longer has: its
-// clone's remote or .git's locks, its proxy and its rules, its link
-// session, run files, state (its own links with it) and logs, its host
-// keys and its ssh config entry. Other VMs' links to it go too
-// (unlinkTarget), and it leaves its group.
-func (e Lifecycle) forget(ctx context.Context, t *found) error {
-	vm := t.f.Name
-	if isClone(t.st) {
-		clones(e).removeRemote(ctx, t.f.Dir, vm, t.st.Get(KeyCloneRemote))
-	} else if m := t.st.Get(gitprotect.KeyGitProtect); m == gitprotect.On || m == gitprotect.Strict {
-		e.Protector(t.f.Dir).Unlock(ctx)
-	}
-	linkRuns(e).stop(ctx, vm)
-	if err := e.Proxy.Forget(vm); err != nil {
-		return err
-	}
-	if err := Groups(e).forget(ctx, vm); err != nil {
-		return err
-	}
-	logs, err := filepath.Glob(filepath.Join(e.Dirs.Logs(), vm+".*"))
-	if err != nil {
-		return err
-	}
-	for _, f := range logs {
-		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	if err := e.sshConfig().ForgetHostKeys(vm); err != nil {
-		return err
-	}
-	return e.sshConfig().Write(ctx)
+	return vmFolders(e).teardown(ctx, t, false)
 }

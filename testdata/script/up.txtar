@@ -30,7 +30,7 @@ stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14}
 ! stdout 'limactl edit --tty=false devvm-web'
 ! stdout 'devvm-tools-build'
 stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}\nlimactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\n'
-stdout '^ssh -F none -M -S \S+/data/devvm/run/lima-[0-9a-f]{16}\.ctl -T .* -o IdentityFile=\S+/lima/_config/user .* -o UserKnownHostsFile=\S+/data/devvm/lima-vms/devvm-web-[0-9a-f]{14}\.ports\.known_hosts .* -o HostKeyAlias=devvm-web-[0-9a-f]{14} .* -p 60022 -l stub 127\.0\.0\.1 sh -s$'
+stdout '^ssh -F none -M -S \S+/data/devvm/run/lima-[0-9a-f]{16}\.ctl -T .* -o IdentityFile=\S+/lima/_config/user .* -o UserKnownHostsFile=\S+/data/devvm/vms/[0-9a-f]{14}/backend/ports\.known_hosts .* -o HostKeyAlias=devvm-web-[0-9a-f]{14} .* -p 60022 -l stub 127\.0\.0\.1 sh -s$'
 ! stdout '^(docker|smolvm) '
 stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/'' && exec ''bash'' ''-c'' ''d=\$\(mktemp -d\); tar -xf - .*''\n(limactl list --json\n)+limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 exists $XDG_DATA_HOME/devvm/tools
@@ -40,9 +40,11 @@ exists $XDG_DATA_HOME/devvm/tools
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/config$'
 [linux] ! stdout chflags
 # The forwarder pins the host key devvm pinned; the VM forwards every port.
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports; grep -c "^devvm-web-[0-9a-f]* $(cut -d" " -f2- "$XDG_DATA_HOME"/devvm/lima-vms/devvm-web-*.ports.known_hosts)$" "$XDG_DATA_HOME"/devvm/known_hosts'
+vm_name WEB web
+exec sh -c 'cat "$WEB_dir/backend/ports.known_hosts" "$WEB_dir/backend/ports"; grep -c "^$WEB $(cut -d" " -f2- "$WEB_dir/backend/ports.known_hosts")$" "$XDG_DATA_HOME"/devvm/known_hosts'
 stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 \S+\nall\n1\n\z'
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
+stdout '^name=devvm-web-[0-9a-f]{14}$'
 stdout '^image=base$'
 stdout '^dir=/\S*/web$'
 stdout '^folder=[0-9]+:[0-9]+'
@@ -57,7 +59,7 @@ stdout '^libc=gnu$'
 ! stdout 'cpus=|memory=|disk=|ports='
 # Its ssh port is devvm's, recorded before the clone that sets it, so
 # other VMs' forwarders never take it.
-exec sh -c 'p=$(sed -n "s/^ssh_port=//p" "$VMS"/devvm-web-*) && grep -c -- "^limactl clone .* --set \.ssh\.localPort=$p " "$STUB_LOG"'
+exec sh -c 'p=$(sed -n "s/^ssh_port=//p" "$WEB_dir/state") && grep -c -- "^limactl clone .* --set \.ssh\.localPort=$p " "$STUB_LOG"'
 stdout '^1$'
 # limactl ran from devvm's data folder, never the project folder.
 exec cat $STUB_DIR/limactl-env
@@ -82,7 +84,8 @@ stderr '^devvm: ssh_remote_hint vm=devvm-api-[0-9a-f]{14}$'
 ! stderr git_protect_needs_macos_new
 stub_calls
 ! stdout chflags
-catg $VMS/devvm-api-*
+vm_name API api
+catg $API_dir/state
 stdout '^git_protect=off$'
 
 # Launches ask only the backends a VM's state names: with only Lima's VMs,
@@ -119,9 +122,9 @@ stdout '^limactl delete -f devvm-slow-[0-9a-f]{14}$'
 ! stdout 'delete -f devvm-(web|api)'
 ! stdout 'nouchg /\S*/(web|api)/'
 ! stdout 'limactl shell --workdir'
-exec sh -c 'ls "$VMS"'
+exec sh -c 'cat "$VMS"/*/state'
 ! stdout devvm-slow
-stdout devvm-web
+stdout '^name=devvm-web-'
 exec sh -c 'grep -c devvm-slow "$STUB_DIR/instances" || true'
 stdout '^0$'
 rm $STUB_DIR/start-hangs
@@ -149,7 +152,7 @@ stderr '^devvm: unknown_part flag=--layers given=mailpit names=docker nix$'
 ! exec devvm --layers none,docker
 stderr '^devvm: part_none_alone flag=--layers$'
 ! stub_calls
-! exists $VMS/devvm-parts-*
+! vm_name PARTS parts
 
 # Without a terminal a new VM gets the defaults, said in one line: the
 # toolchains the folder's files call for, devvm setup's agents, no
@@ -160,7 +163,8 @@ exec devvm setup --agents codex
 exec devvm --no-network-policy --no-git-protect --no-input
 stdout '^==> new_vm_gets layers=none tools=node codex vm=devvm-dflt-[0-9a-f]{14}$'
 stdout -count=1 new_vm_gets
-catg $VMS/devvm-dflt-*
+vm_name DFLT dflt
+catg $DFLT_dir/state
 stdout '^image=base$'
 stdout '^tool_names=node codex$'
 
@@ -170,7 +174,8 @@ project flags git
 exec sh -c 'echo "{}" > package.json'
 exec devvm --no-network-policy --no-git-protect --tools go --agents none
 stdout '^==> new_vm_gets layers=none tools=go vm=devvm-flags-[0-9a-f]{14}$'
-catg $VMS/devvm-flags-*
+vm_name FLAGS flags
+catg $FLAGS_dir/state
 stdout '^image=base$'
 stdout '^tool_names=go$'
 project nonetools git

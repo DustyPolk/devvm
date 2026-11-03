@@ -202,15 +202,7 @@ func (s *Smolvm) remove(ctx context.Context, vm string) error {
 	if err := s.Runner.Run(ctx, msg.Deleting(vm), s.smolvm(ctx, "machine", "delete", "--name", vm, "-f")); err != nil {
 		return backend.Logged(msg.DeleteFailed(vm))
 	}
-	if err := s.Forwards.Remove(vm); err != nil {
-		return err
-	}
-	for _, f := range []string{s.Dirs.SmolvmVM(vm), s.proxyFile(vm), s.sshKey(vm)} {
-		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
+	return s.Forwards.Forget(vm)
 }
 
 // removeIfThere deletes one of devvm's machines if smolvm has it.

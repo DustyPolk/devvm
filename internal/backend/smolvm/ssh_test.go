@@ -14,11 +14,11 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// A VM's key is beside its record, one per VM.
+// A VM's key is beside its record, in its backend folder, one per VM.
 func TestSSHKey(t *testing.T) {
 	s := newSandbox(t)
-	a, b := "devvm-a-0123456789abcd", "devvm-b-0123456789abcd"
-	if filepath.Dir(s.sshKey(a)) != filepath.Dir(s.Dirs.SmolvmVM(a)) || s.sshKey(a) == s.sshKey(b) {
+	a, b := "devvm-a-0123456789abcd", "devvm-b-0123456789abce"
+	if filepath.Dir(s.sshKey(a)) != filepath.Dir(s.Dirs.VM(a).Record()) || s.sshKey(a) == s.sshKey(b) {
 		t.Errorf("keys: %s, %s", s.sshKey(a), s.sshKey(b))
 	}
 }

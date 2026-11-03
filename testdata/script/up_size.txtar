@@ -42,9 +42,10 @@ exec devvm --no-network-policy --cpus 2 --memory=3G --disk 120GiB --ports '5173,
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},'
 stdout '^limactl edit --tty=false devvm-sized-[0-9a-f]{14} --cpus 2 --memory 3 --disk 120$'
-catg $DATA/lima-vms/devvm-sized-*.ports
+vm_name SIZED sized
+catg $SIZED_dir/backend/ports
 stdout '\A5173,8000-8010\n\z'
-catg $VMS/devvm-sized-*
+catg $SIZED_dir/state
 stdout '^cpus=2$'
 stdout '^memory=3$'
 stdout '^disk=120$'
@@ -62,7 +63,8 @@ exec devvm --no-network-policy --cpus 2
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
 stdout '^limactl edit --tty=false devvm-defaults-[0-9a-f]{14} --cpus 2 --memory 5$'
-catg $VMS/devvm-defaults-*
+vm_name DEFAULTS defaults
+catg $DEFAULTS_dir/state
 stdout '^cpus=2$'
 stdout '^memory=5$'
 ! stdout 'disk='
@@ -75,9 +77,10 @@ exec devvm --no-network-policy
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
 ! stdout 'limactl edit --tty=false devvm-all'
-exec sh -c 'cat "$XDG_DATA_HOME"/devvm/lima-vms/devvm-all-*.ports "$XDG_DATA_HOME"/devvm/lima-vms/devvm-defaults-*.ports'
+vm_name ALL all
+exec cat $ALL_dir/backend/ports $DEFAULTS_dir/backend/ports
 stdout '\Aall\nnone\n\z'
-catg $VMS/devvm-all-*
+catg $ALL_dir/state
 ! stdout 'ports|cpus|memory|disk'
 
 # The first run, before base's features are chosen, asks for new VMs'

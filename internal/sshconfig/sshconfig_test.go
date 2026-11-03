@@ -25,23 +25,56 @@ const (
 	imgish = "devvm-img-foo-abc123abc123ab" // a project folder named img-foo
 )
 
-func TestAlias(t *testing.T) {
-	for _, tc := range []struct {
-		vm   string
-		all  []string
-		want string
-	}{
-		{web, []string{web, api}, "devvm-web"},
-		// Two folders with the same name: the hash tells them apart.
-		{web, []string{web, web2, api}, web},
-		{api, []string{web, web2, api}, "devvm-api"},
-		{imgish, []string{imgish, "devvm-img-0123456789ab"}, "devvm-img-foo"},
-		// A folder whose name has a dash is another folder.
-		{web, []string{web, "devvm-web-app-dddddddddddddd"}, "devvm-web"},
-	} {
-		if got := Alias(tc.vm, tc.all); got != tc.want {
-			t.Errorf("Alias(%s, %q) = %s, want %s", tc.vm, tc.all, got, tc.want)
+// made makes each VM's state, with the alias ChooseAlias gives it then,
+// as up does, in order.
+func made(t *testing.T, d paths.Dirs, vms ...string) {
+	t.Helper()
+	for _, vm := range vms {
+		alias, err := ChooseAlias(d, vm)
+		if err != nil {
+			t.Fatal(err)
 		}
+		if _, err := state.CreateVM(d, vm, state.NewVM{Image: "base", Alias: alias}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// A VM's alias is devvm-<folder> unless another VM holds that; it's
+// chosen once, so the first VM of a folder's name keeps it when a second
+// comes, and the second keeps its full name when the first goes.
+func TestChooseAlias(t *testing.T) {
+	c, _ := testConfig(t)
+	d := c.Dirs
+	dashed := "devvm-web-app-dddddddddddddd" // a folder whose name has a dash is another folder
+	made(t, d, web, api, imgish, dashed)
+	for vm, want := range map[string]string{web: "devvm-web", api: "devvm-api", imgish: "devvm-img-foo", dashed: "devvm-web-app"} {
+		if got := c.Host(vm); got != want {
+			t.Errorf("Host(%s) = %s, want %s", vm, got, want)
+		}
+	}
+	// Another folder with the same name: the hash tells them apart.
+	made(t, d, web2)
+	if c.Host(web) != "devvm-web" || c.Host(web2) != web2 {
+		t.Errorf("with two web folders: %s, %s", c.Host(web), c.Host(web2))
+	}
+	st, err := state.ReadVM(d, web)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if c.Host(web2) != web2 {
+		t.Errorf("once the first is gone: %s", c.Host(web2))
+	}
+	// Made again, the VM of a folder takes the alias no other VM holds.
+	if got, err := ChooseAlias(d, web); err != nil || got != "devvm-web" {
+		t.Errorf("ChooseAlias(%s) again = %s, %v", web, got, err)
+	}
+	// A VM without state, or one recording none, is reached by its name.
+	if got := c.Host("devvm-none-eeeeeeeeeeeeee"); got != "devvm-none-eeeeeeeeeeeeee" {
+		t.Errorf("Host without state = %s", got)
 	}
 }
 
@@ -177,6 +210,7 @@ func TestWrite(t *testing.T) {
 		"devvm-img-0123456789ab": {Name: "devvm-img-0123456789ab", Status: backend.StatusRunning},
 		"devvm-tools-build":      {Name: "devvm-tools-build", Status: backend.StatusRunning},
 	}
+	made(t, c.Dirs, web, api, imgish)
 	setAgent(t, c, imgish, sshagent.On)
 	if err := c.Write(t.Context()); err != nil {
 		t.Fatal(err)
@@ -251,13 +285,29 @@ Host devvm-web ` + web + `
 		t.Errorf("known hosts changed: %q", read(t, kh))
 	}
 
-	// Two web folders: each by its full name only.
-	f.Instances[web2] = backend.Instance{Name: web2, Status: backend.StatusStopped}
+	// Two web folders: the first keeps its alias, the second has its full
+	// name only. Two that record the same alias (made at once) give it to
+	// the first entry alone.
+	made(t, c.Dirs, web2)
+	f.Instances[web2] = backend.Instance{Name: web2, Status: backend.StatusRunning}
 	if err := c.Write(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if got := read(t, c.Dirs.SSHConfig()); !strings.Contains(got, "\nHost "+web+"\n") {
+	if got := read(t, c.Dirs.SSHConfig()); !strings.Contains(got, "\nHost devvm-web "+web+"\n") || !strings.Contains(got, "\nHost "+web2+"\n") {
 		t.Errorf("ssh config with two web folders:\n%s", got)
+	}
+	if st, err := state.ReadVM(c.Dirs, web2); err != nil || st.Set(state.KeyAlias, "devvm-web") != nil {
+		t.Fatal(err)
+	}
+	if err := c.Write(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, c.Dirs.SSHConfig()); strings.Count(got, "Host devvm-web ") != 1 || !strings.Contains(got, "\nHost "+web2+"\n") {
+		t.Errorf("ssh config with one alias twice:\n%s", got)
+	}
+	delete(f.Instances, web2)
+	if err := c.ForgetHostKeys(web2); err != nil {
+		t.Fatal(err)
 	}
 
 	// Forgotten keys are read again; forgetting keeps the others.
@@ -317,6 +367,7 @@ func TestWriteUnreviewed(t *testing.T) {
 	t.Parallel()
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	made(t, c.Dirs, web)
 	for _, tc := range []struct {
 		caps backend.Caps
 		let  map[string]bool
@@ -347,6 +398,7 @@ func TestEntriesWithRealSSH(t *testing.T) {
 	}
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	made(t, c.Dirs, web)
 	if err := c.Write(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -373,6 +425,7 @@ func TestEntriesWithRealSSH(t *testing.T) {
 func TestWriteProxyCommand(t *testing.T) {
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	made(t, c.Dirs, web)
 	proxy := "'/bin/devvm' '_docker-connect' '-data' '/a b' '" + web + "'"
 	f.Target = backend.SSHTarget{Host: web, User: "u", ProxyCommand: proxy}
 	if err := c.Write(t.Context()); err != nil {

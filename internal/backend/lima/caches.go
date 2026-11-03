@@ -35,7 +35,7 @@ const cacheRecent = time.Hour
 // anything else in the cache (your own downloads). Lima copies a VM's
 // disk out of the cache when it makes the VM, so no VM needs an entry.
 func (l *Lima) DevvmCache(context.Context) ([]backend.CacheEntry, error) {
-	dir, err := downloadCache()
+	dir, err := l.downloadCache()
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func (l *Lima) DevvmCache(context.Context) ([]backend.CacheEntry, error) {
 
 // DeleteCache deletes entries DevvmCache listed, each one checked again.
 func (l *Lima) DeleteCache(_ context.Context, entries []backend.CacheEntry) error {
-	dir, err := downloadCache()
+	dir, err := l.downloadCache()
 	if err != nil {
 		return err
 	}

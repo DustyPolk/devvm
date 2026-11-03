@@ -16,7 +16,8 @@ stderr '^devvm: unknown_tool tool=nope '
 project tl
 exec devvm --tools node --agents claude,codex --no-network-policy --no-git-protect
 exec devvm rm --force --no-export
-exec sh -c 'printf "image=base\ndir=/p\nbackend=lima\ntool_names=claude\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-gone-12345612345612"'
+mkdir $VMS/12345612345612
+exec sh -c 'printf "name=devvm-gone-12345612345612\nimage=base\ndir=/p\nbackend=lima\ntool_names=claude\ntools=%s\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345612/state"'
 json_set $SHARE/node-*.erofs.json built=2020-01-01T00:00:00Z
 json_set $SHARE/pnpm-*.erofs.json built=2020-01-01T00:00:00Z
 json_set $SHARE/bun-*.erofs.json built=2020-01-01T00:00:00Z

@@ -55,11 +55,13 @@ stdout '^==> creating_from image=base vm=devvm-my-app-[0-9a-f]{14}$'
 project a-very-long-folder-name-for-a-project
 exec devvm --no-network-policy
 stdout '^==> creating_from image=base vm=devvm-a-very-long-folder-n-[0-9a-f]{14}$'
-# A Lima home too long for any folder's name is refused.
+# A Lima home too long for any folder's name is refused for a new VM.
+project roomless
 env DEVVM_LIMA_HOME=/tmp/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-! exec devvm
+! exec devvm --no-network-policy
 stderr '^devvm: vm_name_no_room backend=lima max=[0-9]+$'
 env DEVVM_LIMA_HOME=$LIMA_HOME
+! vm_name ROOMLESS roomless
 
 # Without a terminal, a new VM gets the defaults: nothing detected is base
 # with no shared tools, said in one line naming the flags. --no-input is
@@ -68,7 +70,8 @@ project empty
 exec devvm --no-network-policy --no-input
 stdout '^==> new_vm_gets layers=none tools=none vm=devvm-empty-[0-9a-f]{14}$'
 stdout '^==> creating_from image=base vm=devvm-empty-[0-9a-f]{14}$'
-catg $VMS/devvm-empty-*
+vm_name EMPTY empty
+catg $EMPTY_dir/state
 stdout '^image=base$'
 stdout '^tool_names=$'
 
@@ -95,13 +98,14 @@ stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
 stderr '^devvm: part_none_alone flag=--tools$'
 stub_calls
 ! stdout 'create|clone|start'
-! exists $VMS/devvm-node-*
+! vm_name NODE node
 # Each flag is the exact list of its part: --layers alone keeps the
 # toolchains the folder calls for.
 exec devvm --no-network-policy --layers foo
 stdout '^==> new_vm_gets layers=foo tools=node vm=devvm-node-[0-9a-f]{14}$'
 stdout '^==> creating_from image=foo vm=devvm-node-[0-9a-f]{14}$'
-catg $VMS/devvm-node-*
+vm_name NODE node
+catg $NODE_dir/state
 stdout '^image=foo$'
 stdout '^tool_names=node$'
 stdout '^chain=base=[0-9a-f]{12} foo=[0-9a-f]{12}$'
@@ -116,14 +120,16 @@ exec devvm setup --agents claude
 exec devvm --no-network-policy --no-git-protect
 stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-flake-[0-9a-f]{14}$'
 stdout '^==> creating_from image=base vm=devvm-flake-[0-9a-f]{14}$'
-catg $VMS/devvm-flake-*
+vm_name FLAKE flake
+catg $FLAKE_dir/state
 stdout '^tool_names=node claude$'
 stdout '^chain=base=[0-9a-f]{12}$'
 project flake2
 cp $WORK/package.json package.json
 exec devvm --no-network-policy --no-git-protect --tools none --layers nix
 stdout '^==> new_vm_gets layers=nix tools=claude vm=devvm-flake2-[0-9a-f]{14}$'
-catg $VMS/devvm-flake2-*
+vm_name FLAKE2 flake2
+catg $FLAKE2_dir/state
 stdout '^image=nix$'
 stdout '^tool_names=claude$'
 

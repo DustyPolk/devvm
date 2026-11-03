@@ -29,6 +29,7 @@ import (
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/ubuntu"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // testBuildFlag makes a test build (internal/testbuild), as tests/e2e.sh
@@ -528,9 +529,9 @@ func jsonSet(ts *testscript.TestScript, neg bool, args []string) {
 	}
 }
 
-// vmName sets VAR to the name of the one VM made for the folder NAME:
-// the one state file in $VMS named devvm-NAME-ID. Negated, it fails when
-// there's exactly one.
+// vmName sets VAR to the name of the one VM made for the folder NAME, the
+// one whose state in $VMS records the name devvm-NAME-ID, and VAR_dir to
+// its folder there ($VMS/ID). Negated, it fails when there's exactly one.
 func vmName(ts *testscript.TestScript, neg bool, args []string) {
 	if len(args) != 2 {
 		ts.Fatalf("usage: vm_name VAR NAME")
@@ -544,20 +545,22 @@ func vmName(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Fatalf("%d VMs for the folder %s, not one: %q", len(found), args[1], found)
 	default:
 		ts.Setenv(args[0], found[0])
+		ts.Setenv(args[0]+"_dir", filepath.Join(ts.Getenv("VMS"), found[0][len(found[0])-vmname.HashLen:]))
 	}
 }
 
-// vmsFor returns the names of the VMs in $VMS made for the folder name.
+// vmsFor returns the names of the VMs whose states in $VMS record a name
+// made for the folder name.
 func vmsFor(ts *testscript.TestScript, name string) []string {
-	entries, err := os.ReadDir(ts.Getenv("VMS"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	states, err := filepath.Glob(filepath.Join(ts.Getenv("VMS"), "*", "state"))
+	if err != nil {
 		ts.Fatalf("%v", err)
 	}
-	re := regexp.MustCompile(`^devvm-` + regexp.QuoteMeta(name) + `-[0-9a-f]+$`)
+	re := regexp.MustCompile(`(?m)^name=(devvm-` + regexp.QuoteMeta(name) + `-[0-9a-f]+)$`)
 	var found []string
-	for _, e := range entries {
-		if re.MatchString(e.Name()) {
-			found = append(found, e.Name())
+	for _, s := range states {
+		if m := re.FindStringSubmatch(ts.ReadFile(s)); m != nil {
+			found = append(found, m[1])
 		}
 	}
 	return found

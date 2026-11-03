@@ -1,6 +1,5 @@
 # network log: what this folder's VM's proxy allowed and blocked, the last N, or
 # the blocks by host with the command that allows each.
-env LOGS=$XDG_DATA_HOME/devvm/logs
 
 # No VM: nothing to show.
 project net
@@ -9,6 +8,8 @@ stderr '^devvm: no_vm dir=\S*/net$'
 
 # A VM with network policy that logged nothing yet.
 exec devvm --network-policy --no-git-protect
+vm_name NET net
+env LOG=$NET_dir/logs/network.jsonl
 exec devvm network log
 stdout '^==> log_empty vm=devvm-net-[0-9a-f]{14}$'
 ! stderr .
@@ -18,7 +19,7 @@ stdout '\A{\n  "version": 1,\n  "events": \[\]\n}\n\z'
 
 # Allowed and blocked connections and requests, oldest first, the last 50
 # or the last N.
-exec sh -c 'cp "$WORK/events.jsonl" "$LOGS/$(basename "$XDG_DATA_HOME"/devvm/vms/devvm-net-*).jsonl"'
+exec sh -c 'mkdir -p "$NET_dir/logs" && cp "$WORK/events.jsonl" "$LOG"'
 exec devvm network log
 cmp stdout $WORK/log.txt
 ! stderr .
@@ -54,18 +55,18 @@ stderr '^devvm: flag_unknown command=devvm network log flag=-f$'
 
 # A log its proxy rotated: the old file's events come first, so the
 # history and the blocks are the same; one just rotated isn't empty.
-exec sh -c 'l=$(echo "$LOGS"/devvm-net-*.jsonl) && head -n 5 "$WORK/events.jsonl" > "$l.1" && tail -n +6 "$WORK/events.jsonl" > "$l"'
+exec sh -c 'head -n 5 "$WORK/events.jsonl" > "$LOG.1" && tail -n +6 "$WORK/events.jsonl" > "$LOG"'
 exec devvm network log
 cmp stdout $WORK/log.txt
 exec devvm network log --blocked
 cmp stdout $WORK/blocked.txt
-exec sh -c 'l=$(echo "$LOGS"/devvm-net-*.jsonl) && cp "$WORK/events.jsonl" "$l.1" && : > "$l"'
+exec sh -c 'cp "$WORK/events.jsonl" "$LOG.1" && : > "$LOG"'
 exec devvm network log -n 1
 stdout '\A2026-10-09T10:02:00Z  BLOCKED  db.test:5432  not on the allowlist\n\z'
-exec sh -c 'rm "$LOGS"/devvm-net-*.jsonl.1'
+rm $LOG.1
 
 # A host and reason from the VM with control characters: dropped.
-exec sh -c 'cp "$WORK/evil.jsonl" "$LOGS/$(basename "$XDG_DATA_HOME"/devvm/vms/devvm-net-*).jsonl"'
+cp $WORK/evil.jsonl $LOG
 exec devvm network log --blocked
 cmp stdout $WORK/evil-blocked.txt
 exec devvm network log

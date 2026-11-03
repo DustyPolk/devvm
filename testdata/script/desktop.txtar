@@ -19,7 +19,7 @@ cp $WORK/no-feature $STUB_DIR/shell-fails-on
 ! exec devvm desktop --no-open
 stderr '^devvm: desktop_no_feature vm=devvm-desk-[0-9a-f]{14}$'
 ! stdout desktop_ready
-catg $VMS/devvm-desk-*
+catg $DESK_dir/state
 ! stdout 'desktop_(port|password)='
 rm $STUB_DIR/shell-fails-on
 
@@ -28,7 +28,7 @@ rm $STUB_DIR/shell-fails-on
 exec limactl stop $DESK
 stub_reset
 ! exec devvm desktop --no-open &d&
-exec sh $WORK/waitfor 'grep -q "^desktop_port=" "$VMS"/devvm-desk-* && nc -z 127.0.0.1 "$(sed -n "s/^desktop_port=//p" "$VMS"/devvm-desk-*)"'
+exec sh $WORK/waitfor 'grep -q "^desktop_port=" "$DESK_dir/state" && nc -z 127.0.0.1 "$(sed -n "s/^desktop_port=//p" "$DESK_dir/state")"'
 kill -INT d
 wait d
 stdout '^==> starting vm=devvm-desk-[0-9a-f]{14}$'
@@ -37,7 +37,7 @@ stub_calls
 stdout '^limactl start --tty=false devvm-desk-[0-9a-f]{14}$'
 stdout 'exec ''/usr/local/bin/devvm-desktop'' ''start'' ''off''$'
 ! stdout '^open '
-exec sh -c 'grep "^desktop_" "$VMS"/devvm-desk-*'
+exec sh -c 'grep "^desktop_" "$DESK_dir/state"'
 stdout '^desktop_password=[a-z2-9]{8}$'
 stdout '^desktop_port=[0-9]+$'
 cp stdout $WORK/state1
@@ -56,7 +56,7 @@ stub_calls
 stdout 'exec ''/usr/local/bin/devvm-desktop'' ''start'' ''on''$'
 [darwin] stdout '^open vnc://127\.0\.0\.1:[0-9]+$'
 [!darwin] ! stdout '^open '
-exec sh -c 'grep "^desktop_" "$VMS"/devvm-desk-*'
+exec sh -c 'grep "^desktop_" "$DESK_dir/state"'
 cmp stdout $WORK/state1
 [darwin] exec sh -c ': > "$STUB_DIR/open-fails" && : > "$STUB_LOG"'
 [darwin] ! exec devvm desktop &d&

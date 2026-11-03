@@ -43,11 +43,12 @@ devvm link add ../api 8080                      # name the target by its folder'
 devvm link add devvm-api-71a99b1076d92c 8080    # or by its VM's name
 ```
 
-TARGET takes one of three forms:
+TARGET takes one of four forms:
 
-- **A folder's name,** as VM names have it, such as `db` for `devvm-db-71a99b1076d92c`. When more than one VM has a folder of that name, devvm refuses and lists each VM with its folder, so you can give the VM's name or the folder's path instead.
+- **A folder's name,** as VM names have it, such as `db` for `devvm-db-71a99b1076d92c`. devvm matches it against the folder that each VM was made for, so a VM whose backend needed a shorter name still matches its whole folder name. When more than one VM has a folder of that name, devvm refuses and lists each VM with its folder, so you can give the VM's name or the folder's path instead.
 - **A folder's path,** which starts with `.` or holds a `/`, such as `../api` or `/Users/you/code/api`.
 - **A VM's name,** as `devvm ls` lists it.
+- **A VM's ssh alias,** such as `devvm-db`, as you'd give it to ssh ([SSH access by name](ssh.md#ssh-access-by-name)).
 
 devvm refuses a target that has no VM, the client's own VM, and a port that the target doesn't publish. It also refuses a link that [network policy](#links-and-network-policy) doesn't allow. When devvm makes the link, it says what the client reaches it as, and that the link joins the two VMs' trust.
 

@@ -26,23 +26,16 @@ func (s *Smolvm) Location() (string, bool) {
 }
 
 // Forget deletes what devvm keeps for a machine smolvm no longer has (or
-// has as someone else's): its record, proxy file, ssh key and port
-// forwarder's files. One of devvm's machines that smolvm has is refused.
+// has as someone else's): its backend folder, with its record, proxy
+// file, ssh key and port forwarder's files, its forwarder stopped first.
+// One of devvm's machines that smolvm has is refused.
 func (s *Smolvm) Forget(ctx context.Context, vm string) error {
 	if _, err := s.inspect(ctx, vm); err == nil {
 		return fmt.Errorf("smolvm: %s exists", vm)
 	} else if !errors.Is(err, backend.ErrNotFound) && !errors.Is(err, errForeign) {
 		return err
 	}
-	if err := s.Forwards.Remove(vm); err != nil {
-		return err
-	}
-	for _, f := range []string{s.Dirs.SmolvmVM(vm), s.proxyFile(vm), s.sshKey(vm)} {
-		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
+	return s.Forwards.Forget(vm)
 }
 
 // Strays are the project machines with devvm's label that this devvm has
@@ -62,7 +55,7 @@ func (s *Smolvm) Strays(ctx context.Context) ([]backend.Stray, error) {
 		}
 		if data != s.Dirs.Data {
 			out = append(out, backend.Stray{Name: m.Name, Data: data})
-		} else if _, err := os.Stat(s.Dirs.VMState(m.Name)); errors.Is(err, os.ErrNotExist) {
+		} else if _, err := os.Stat(s.Dirs.VM(m.Name).State()); errors.Is(err, os.ErrNotExist) {
 			out = append(out, backend.Stray{Name: m.Name, Data: data})
 		}
 	}

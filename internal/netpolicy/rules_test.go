@@ -199,8 +199,10 @@ func TestNotRules(t *testing.T) {
 	files := map[string]string{
 		d.Policy():                                "ok.test\na b\n",
 		filepath.Join(d.Layers(), "pg.policy"):    "# pg\n*\n",
-		VMPolicyFile(d, "devvm-x-0123456789abcd"): "!!x.test\nfine.test\n",
+		d.VM("devvm-x-0123456789abcd").State():    "name=devvm-x-0123456789abcd\n",
+		d.VM("devvm-x-0123456789abcd").Policy():   "!!x.test\nfine.test\n",
 		filepath.Join(d.Layers(), "pg.sh"):        "not a policy\n",
+		filepath.Join(d.VMs(), "other", "policy"): "!!not.a.vm\n",
 	}
 	for f, s := range files {
 		if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
@@ -217,7 +219,7 @@ func TestNotRules(t *testing.T) {
 	want := []string{
 		"policy_not_rule file=" + d.Policy() + " line=2 rule=a b",
 		"policy_not_rule file=" + filepath.Join(d.Layers(), "pg.policy") + " line=2 rule=*",
-		"policy_broken_deny file=" + VMPolicyFile(d, "devvm-x-0123456789abcd") + " line=1 rule=!!x.test",
+		"policy_broken_deny file=" + d.VM("devvm-x-0123456789abcd").Policy() + " line=1 rule=!!x.test",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("NotRules =\n%q\nwant\n%q", got, want)

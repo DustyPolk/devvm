@@ -37,11 +37,11 @@ func linkSessionEnv(t *testing.T) (Links, *backendtest.Fake, *state.VM, *state.V
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, err := state.CreateVM(d, "devvm-app-0123456789abcd", state.NewVM{Image: "base", Backend: "fake"})
+	client, err := state.CreateVM(d, "devvm-app-0123456789abc1", state.NewVM{Image: "base", Backend: "fake"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := state.CreateVM(d, "devvm-db-0123456789abcd", state.NewVM{Image: "base", Backend: "fake"})
+	target, err := state.CreateVM(d, "devvm-db-0123456789abc2", state.NewVM{Image: "base", Backend: "fake"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,13 +390,13 @@ func TestSessionLinks(t *testing.T) {
 // log reads it, whether or not the client has network policy.
 func TestLinkEvents(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	le := linkEvents{path: netpolicy.EventLog(d, "devvm-app-0123456789abcd"), vm: "devvm-app-0123456789abcd", mu: new(sync.Mutex)}
-	le.add(vmssh.EventLinkRefused, vmssh.Link{Name: "db", Target: "devvm-db-0123456789abcd", Port: 5432}, LinkUnpublished)
-	events, err := netpolicy.NewLog(d, "devvm-app-0123456789abcd").Events(5)
+	le := linkEvents{path: d.VM("devvm-app-0123456789abc1").EventLog(), vm: "devvm-app-0123456789abc1", mu: new(sync.Mutex)}
+	le.add(vmssh.EventLinkRefused, vmssh.Link{Name: "db", Target: "devvm-db-0123456789abc2", Port: 5432}, LinkUnpublished)
+	events, err := netpolicy.NewLog(d, "devvm-app-0123456789abc1").Events(5)
 	if err != nil || len(events) != 1 {
 		t.Fatalf("Events = %+v, %v", events, err)
 	}
-	if ev := events[0]; ev.Event != "link_refused" || ev.Host != "db" || ev.Port != 5432 || ev.Target != "devvm-db-0123456789abcd" || ev.Reason != "unpublished" {
+	if ev := events[0]; ev.Event != "link_refused" || ev.Host != "db" || ev.Port != 5432 || ev.Target != "devvm-db-0123456789abc2" || ev.Reason != "unpublished" {
 		t.Errorf("the event: %+v", ev)
 	}
 }

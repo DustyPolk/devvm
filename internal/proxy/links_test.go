@@ -120,9 +120,12 @@ func linkProxy(t *testing.T) (dir string, events *syncBuffer, addr string) {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	oldVM, oldOut, oldAuth := vmName, logOut, proxyAuth
 	events = &syncBuffer{}
-	vmName, linksFile, logOut, proxyAuth = linkVM, filepath.Join(dir, linkVM+".links.json"), events, ""
+	// The list is in the VM's own run folder; the sockets are in devvm's.
+	list := filepath.Join(dir, "vm", "run", "links.json")
+	must(t, os.MkdirAll(filepath.Dir(list), 0o700))
+	vmName, linksFile, linkSockets, logOut, proxyAuth = linkVM, list, dir, events, ""
 	pol = writePolicy(t, "")
-	t.Cleanup(func() { vmName, linksFile, logOut, proxyAuth = oldVM, "", oldOut, oldAuth })
+	t.Cleanup(func() { vmName, linksFile, linkSockets, logOut, proxyAuth = oldVM, "", "", oldOut, oldAuth })
 	p := httptest.NewServer(http.HandlerFunc(handler))
 	t.Cleanup(p.Close)
 	return dir, events, p.Listener.Addr().String()
@@ -317,8 +320,12 @@ func TestLinkListRefused(t *testing.T) {
 	for name, e := range map[string]LinkEntry{
 		"another VM's socket": {Hosts: []string{"db"}, Addr: "127.77.0.1", Port: 5432, Socket: other},
 		"outside the folder":  {Hosts: []string{"db"}, Addr: "127.77.0.1", Port: 5432, Socket: "/var/run/docker.sock"},
-		"another port's":      {Hosts: []string{"db"}, Addr: "127.77.0.1", Port: 5432, Socket: LinkSocket(dir, linkVM, netip.MustParseAddr("127.77.0.1"), 5433)},
-		"an address unread":   {Hosts: []string{"db"}, Addr: "127.77.000.1", Port: 5432, Socket: good.Socket},
+		"in the list's folder": {
+			Hosts: []string{"db"}, Addr: "127.77.0.1", Port: 5432,
+			Socket: LinkSocket(filepath.Dir(linksFile), linkVM, netip.MustParseAddr("127.77.0.1"), 5432),
+		},
+		"another port's":    {Hosts: []string{"db"}, Addr: "127.77.0.1", Port: 5432, Socket: LinkSocket(dir, linkVM, netip.MustParseAddr("127.77.0.1"), 5433)},
+		"an address unread": {Hosts: []string{"db"}, Addr: "127.77.000.1", Port: 5432, Socket: good.Socket},
 		"a mapped address": {
 			Hosts: []string{"db"}, Addr: "::ffff:127.77.0.1", Port: 5432,
 			Socket: LinkSocket(dir, linkVM, netip.MustParseAddr("::ffff:127.77.0.1"), 5432),
@@ -355,6 +362,14 @@ func TestLinkListRefused(t *testing.T) {
 	if code, _ := tunnel(t, addr, "db:5432", nil); code != http.StatusForbidden {
 		t.Errorf("a list others may write: %d", code)
 	}
+	// Without the sockets' folder, no link is reached.
+	must(t, os.Chmod(linksFile, 0o600))
+	old := linkSockets
+	linkSockets = ""
+	if code, _ := tunnel(t, addr, "db:5432", nil); code != http.StatusForbidden {
+		t.Errorf("without -link-sockets: %d", code)
+	}
+	linkSockets = old
 	for name, data := range map[string]string{
 		"another version": `{"version":2,"links":[{"hosts":["db"],"addr":"127.77.0.1","port":5432,"socket":"` + good.Socket + `"}]}`,
 		"not JSON":        "db 5432 " + good.Socket,

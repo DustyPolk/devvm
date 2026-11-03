@@ -6,7 +6,8 @@
 project off
 exec devvm --no-network-policy --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
-catg $VMS/devvm-off-*
+vm_name OFF off
+exec cat $OFF_dir/state
 stdout '^net=off$'
 ! stdout 'proxy_|net_check'
 stub_calls
@@ -22,7 +23,8 @@ stub_reset
 exec devvm --network-policy --no-git-protect
 stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
 exists $DATA/ca/ca.pem $DATA/ca/ca.key
-catg $VMS/devvm-net-*
+vm_name NET net
+exec cat $NET_dir/state
 stdout '^net=on$'
 stdout '^net_check=ok$'
 stdout '^proxy_key=[0-9a-f]{64}$'
@@ -37,16 +39,16 @@ stdout '^limactl start --tty=false devvm-net-[0-9a-f]{14}\nlimactl shell --workd
 stdout '^limactl shell --workdir /\S*/net devvm-net-[0-9a-f]{14}\n\z'
 # The password is in no command's arguments: devvm wrote it into lima.yaml,
 # the user's alone.
-exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$VMS"/devvm-net-*); ! grep -qF "$key" "$STUB_LOG" && grep -qF "\"HTTPS_PROXY\":\"http://devvm:$key@" "$LIMA_HOME"/devvm-net-*/lima.yaml && ! grep -q devvm-proxy-password "$LIMA_HOME"/devvm-net-*/lima.yaml && ls -l "$LIMA_HOME"/devvm-net-*/lima.yaml'
+exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$NET_dir/state"); ! grep -qF "$key" "$STUB_LOG" && grep -qF "\"HTTPS_PROXY\":\"http://devvm:$key@" "$LIMA_HOME"/devvm-net-*/lima.yaml && ! grep -q devvm-proxy-password "$LIMA_HOME"/devvm-net-*/lima.yaml && ls -l "$LIMA_HOME"/devvm-net-*/lima.yaml'
 stdout '^-rw-------\S* '
 # macOS: the hostagent's profile lets it reach the proxy's port.
-[darwin] exec sh -c 'grep -F "localhost:$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*)" "$RUN"/devvm-net-*.sb'
+[darwin] exec sh -c 'grep -F "localhost:$(sed -n "s/^proxy_port=//p" "$NET_dir/state")" "$NET_dir/run/sandbox.sb"'
 # The proxy said it listens on that port, for that VM; its password is in
 # a file, never in its arguments.
-exec sh -c 'grep -F "listening on 127.0.0.1:$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*) for devvm-net-" "$DATA"/logs/devvm-net-*.proxy.log'
-catg $RUN/devvm-net-*.proxy.auth
+exec sh -c 'grep -F "listening on 127.0.0.1:$(sed -n "s/^proxy_port=//p" "$NET_dir/state") for devvm-net-" "$NET_dir/logs/proxy.log"'
+exec cat $NET_dir/run/proxy.auth
 stdout '^[0-9a-f]{64}$'
-catg $RUN/devvm-net-*.secrets.json
+exec cat $NET_dir/run/secrets.json
 stdout '^\[\]$'
 # The run log never holds the key.
 exec sh -c 'cat "$DATA"/logs/runs/*.log'
@@ -64,14 +66,15 @@ stub_calls
 stdout '^limactl stop devvm-leak-[0-9a-f]{14}$'
 ! stdout 'tar -xf'
 ! stdout 'limactl shell --workdir /\S*/leak'
-catg $VMS/devvm-leak-*
+vm_name LEAK leak
+exec cat $LEAK_dir/state
 stdout '^net_check=unenforced$'
 rm $STUB_DIR/net-direct
 
 # A running VM whose proxy is gone and can't start again (another program
 # took its port) is stopped, never left running without it.
 cd $WORK/net
-exec sh -c 'pp=$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-net-*); pkill -f -- "_proxy -listen 127.0.0.1:$pp "; sleep 0.5; echo k > "$WORK/squat.key"; devvm _proxy -listen "127.0.0.1:$pp" -auth-file "$WORK/squat.key" -lifeline "$WORK/squat.none" >/dev/null 2>&1 & echo $! > "$WORK/squat.pid"; sleep 1'
+exec sh -c 'pp=$(sed -n "s/^proxy_port=//p" "$NET_dir/state"); pkill -f -- "_proxy -listen 127.0.0.1:$pp "; sleep 0.5; echo k > "$WORK/squat.key"; devvm _proxy -listen "127.0.0.1:$pp" -auth-file "$WORK/squat.key" -lifeline "$WORK/squat.none" >/dev/null 2>&1 & echo $! > "$WORK/squat.pid"; sleep 1'
 stub_reset
 ! exec devvm
 stderr '^devvm: net_proxy_down_stopped vm=devvm-net-[0-9a-f]{14}$'
@@ -86,16 +89,17 @@ exec sh -c 'kill "$(cat "$WORK/squat.pid")"'
 project agent
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
 exec devvm --network-policy --no-git-protect --agents claude
-catg $RUN/devvm-agent-*.secrets.json
+vm_name AGENT agent
+exec cat $AGENT_dir/run/secrets.json
 stdout '^\[\{"name":"claude","hosts":\["api\.anthropic\.com"\],"header":"Authorization","placeholder":"sk-ant-oat01-devvm-proxy-managed-[0-9a-f]{32}"\}\]$'
 ! stdout testfake
-exec sh -c 'grep -F "$(sed -n "s/^proxy_salt=//p" "$VMS"/devvm-agent-*)" "$RUN"/devvm-agent-*.secrets.json'
-catg $RUN/devvm-agent-*.secrets.policy
+exec sh -c 'grep -F "$(sed -n "s/^proxy_salt=//p" "$AGENT_dir/state")" "$AGENT_dir/run/secrets.json"'
+exec cat $AGENT_dir/run/secrets.policy
 stdout '^api\.anthropic\.com:443$'
 # Its proxy's policies: base's and claude's built in, read from the
 # binary, then the files: the user's, the VM's own and its secrets' hosts.
-catg $RUN/devvm-agent-*.proxy.policy
-stdout '\Alayers/base\.policy,shared-tools/claude\.policy\n\S*/config/devvm/policy,\S*/data/devvm/vms/devvm-agent-[0-9a-f]{14}\.policy,\S*/data/devvm/run/devvm-agent-[0-9a-f]{14}\.secrets\.policy\n\z'
+exec cat $AGENT_dir/run/proxy.policy
+stdout '\Alayers/base\.policy,shared-tools/claude\.policy\n\S*/config/devvm/policy,\S*/data/devvm/vms/[0-9a-f]{14}/policy,\S*/data/devvm/vms/[0-9a-f]{14}/run/secrets\.policy\n\z'
 ! exists $XDG_DATA_HOME/devvm/assets
 env CLAUDE_CODE_OAUTH_TOKEN=
 
@@ -105,10 +109,11 @@ mkdir $HOME/.codex
 cp $WORK/codex.json $HOME/.codex/auth.json
 project codex
 exec devvm --network-policy --no-git-protect --agents codex
-catg $RUN/devvm-codex-*.secrets.json
+vm_name CODEX codex
+exec cat $CODEX_dir/run/secrets.json
 stdout '"name":"codex-key","hosts":\["api\.openai\.com"\]'
 ! stdout sk-testfake
-catg $RUN/devvm-codex-*.secrets.policy
+exec cat $CODEX_dir/run/secrets.policy
 stdout '^api\.openai\.com:443$'
 
 # devvm network: on, off or unenforced, as devvm ls shows it. on and off
@@ -124,7 +129,7 @@ stdout '^off$'
 exec devvm network on
 stdout '^==> net_set_running state=on vm=devvm-off-[0-9a-f]{14}$'
 stderr '^net_on_old_tokens vm=devvm-off-[0-9a-f]{14}$'
-catg $VMS/devvm-off-*
+exec cat $OFF_dir/state
 stdout '^net=on$'
 exec devvm network on
 stdout '^==> net_already state=on vm=devvm-off-[0-9a-f]{14}$'
@@ -136,7 +141,6 @@ exec devvm network off
 stdout '^==> net_set_running state=off vm=devvm-off-[0-9a-f]{14}$'
 ! stderr .
 # Stopped, it changes at its next start.
-vm_name OFF off
 exec limactl stop $OFF
 exec devvm network on
 stdout '^==> net_set_stopped state=on vm=devvm-off-[0-9a-f]{14}$'
@@ -148,7 +152,8 @@ project default
 exec devvm --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-default-[0-9a-f]{14}$'
 ! stderr 'net_about|net_ask|net_off_'
-catg $VMS/devvm-default-*
+vm_name DEFAULT default
+exec cat $DEFAULT_dir/state
 stdout '^net=on$'
 stdout '^net_check=ok$'
 
@@ -178,17 +183,18 @@ stdout '\A{\n  "version": 1,\n  "policy": "off",\n  "source": "settings.json"\n}
 project offsaved
 exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
-catg $VMS/devvm-offsaved-*
+vm_name OFFSAVED offsaved
+exec cat $OFFSAVED_dir/state
 stdout '^net=off$'
 project offflag
 exec devvm --network-policy --no-git-protect
-catg $VMS/devvm-offflag-*
+vm_name OFFFLAG offflag
+exec cat $OFFFLAG_dir/state
 stdout '^net=on$'
 cd $WORK/default
-vm_name DEFAULT default
 exec limactl stop $DEFAULT
 exec devvm
-catg $VMS/devvm-default-*
+exec cat $DEFAULT_dir/state
 stdout '^net=on$'
 stdout '^net_check=ok$'
 
@@ -198,11 +204,13 @@ stdout '^==> network_default mode=on$'
 project onsaved
 exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
-catg $VMS/devvm-onsaved-*
+vm_name ONSAVED onsaved
+exec cat $ONSAVED_dir/state
 stdout '^net=on$'
 project onflag
 exec devvm --no-network-policy --no-git-protect
-catg $VMS/devvm-onflag-*
+vm_name ONFLAG onflag
+exec cat $ONFLAG_dir/state
 stdout '^net=off$'
 
 # ask again. config.toml's network wins over what devvm saved, devvm
@@ -222,7 +230,8 @@ grep '^  "network": "ask",?$' $DATA/settings.json
 project configon
 exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
-catg $VMS/devvm-configon-*
+vm_name CONFIGON configon
+catg $CONFIGON_dir/state
 stdout '^net=on$'
 
 # A config.toml edited by hand with a typo: every command that reads it is

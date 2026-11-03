@@ -22,8 +22,8 @@ json_set $SHARE/go-1.2.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima 
 
 # A smolvm VM whose machine is gone, so smolvm is used; then smolvm
 # stops answering.
-mkdir $VMS
-exec sh -c 'printf "image=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/devvm-smol-12345612345612" && touch -t 202001010000 "$VMS/devvm-smol-12345612345612"'
+mkdir $VMS/12345612345612
+exec sh -c 'printf "name=devvm-smol-12345612345612\nimage=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/12345612345612/state" && touch -t 202001010000 "$VMS/12345612345612/state"'
 exec sh -c 'touch "$STUB_DIR/smolvm-ls-fails"'
 
 exec devvm gc --force --orphans
@@ -33,7 +33,7 @@ stderr '^gc_orphans_unknown backend=smolvm$'
 stdout '^gc_image image=foo key=[0-9a-f]{12}$'
 stdout '^gc_tools count=1 '
 ! stdout '^gc_orphan'
-exists $VMS/devvm-smol-12345612345612
+exists $VMS/12345612345612/state
 exists $SHARE/go-1.1.0-0123456789ab.erofs
 ! exists $SHARE/go-1.2.0-0123456789ab.erofs
 exists $SHARE/go-1.3.0-0123456789ab.erofs

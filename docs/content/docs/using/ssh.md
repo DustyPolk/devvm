@@ -7,7 +7,7 @@ You can reach each running VM by name from ssh and from editors such as VS Code,
 
 ## SSH access by name
 
-Each running project VM can be reached as `devvm-<folder>`, as in `ssh devvm-website` or VS Code's *Remote-SSH: Connect to Host*. The name keeps its hash suffix only when two folders share a name, and the VM's full name (`devvm-website-<hash>`) always works as well.
+Each running project VM can be reached as `devvm-<folder>`, as in `ssh devvm-website` or VS Code's *Remote-SSH: Connect to Host*. devvm chooses this alias once, when it makes the VM, and records it, so it never changes. A VM gets `devvm-<folder>` unless another VM already has that alias, and then its alias is its full name. So when two folders share a name, the first VM made keeps `devvm-website`, and the second one's alias is its full name, whichever of them you delete first. The VM's full name (`devvm-website-<hash>`) always works as well.
 
 devvm writes these entries to `~/.local/share/devvm/ssh_config` each time it launches or stops a VM, because a VM's SSH port can change each time it starts. To use them, add this line to the top of `~/.ssh/config`, before any `Host` block:
 

@@ -27,6 +27,23 @@ var vm = regexp.MustCompile(`^` + regexp.QuoteMeta(Prefix) + `.+-[0-9a-f]{` + st
 // (devvm-img-…-<hash>).
 func IsVM(name string) bool { return vm.MatchString(name) }
 
+// HashOf returns the hash a project VM's name ends with, which names its
+// folder in devvm's data folder (paths.Dirs.VMDir), and whether name is
+// one's (IsVM).
+func HashOf(name string) (string, bool) {
+	if !IsVM(name) {
+		return "", false
+	}
+	return name[len(name)-HashLen:], true
+}
+
+// IsHash reports whether s is a project VM's hash, as HashOf returns it:
+// HashLen lowercase hex digits.
+func IsHash(s string) bool { return hash.MatchString(s) }
+
+// hash matches a project VM's hash.
+var hash = regexp.MustCompile(`^[0-9a-f]{` + strconv.Itoa(HashLen) + `}$`)
+
 // SlugOf returns the folder part of a name made as devvm-<folder>-<hash>,
 // which is also a project VM's hostname, and whether it has one: the name
 // starts with Prefix, and a dash follows a folder part that isn't empty.

@@ -34,25 +34,25 @@ func TestCheckGroupName(t *testing.T) {
 // A link its group made reads back as one, with the user's beside it.
 func TestReadGroupLinks(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	st, err := state.CreateVM(d, "devvm-app-0123456789abcd", state.NewVM{Image: "base"})
+	st, err := state.CreateVM(d, "devvm-app-0123456789abc1", state.NewVM{Image: "base"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	a := netip.MustParseAddr("127.77.0.1")
 	want := []Link{
-		{Name: "db", Port: 5432, Target: "devvm-db-0123456789abcd", TargetID: "i1", Addr: a},
-		{Name: "db", Port: 8000, Target: "devvm-db-0123456789abcd", TargetID: "i1", Addr: a, Group: true},
+		{Name: "db", Port: 5432, Target: "devvm-db-0123456789abc2", TargetID: "i1", Addr: a},
+		{Name: "db", Port: 8000, Target: "devvm-db-0123456789abc2", TargetID: "i1", Addr: a, Group: true},
 	}
 	if err := writeLinks(st, want); err != nil {
 		t.Fatal(err)
 	}
-	if v := st.Get(KeyLinks); v != "db,5432,devvm-db-0123456789abcd,i1,127.77.0.1 db,8000,devvm-db-0123456789abcd,i1,127.77.0.1,group" {
+	if v := st.Get(KeyLinks); v != "db,5432,devvm-db-0123456789abc2,i1,127.77.0.1 db,8000,devvm-db-0123456789abc2,i1,127.77.0.1,group" {
 		t.Errorf("links = %q", v)
 	}
 	if got, err := ReadLinks(st); err != nil || !slices.Equal(got, want) {
 		t.Errorf("ReadLinks = %v, %v", got, err)
 	}
-	for _, bad := range []string{"db,8000,devvm-db-0123456789abcd,i1,127.77.0.1,other", "db,8000,devvm-db-0123456789abcd,i1,127.77.0.1,group,x"} {
+	for _, bad := range []string{"db,8000,devvm-db-0123456789abc2,i1,127.77.0.1,other", "db,8000,devvm-db-0123456789abc2,i1,127.77.0.1,group,x"} {
 		if err := st.Set(KeyLinks, bad); err != nil {
 			t.Fatal(err)
 		}
@@ -85,10 +85,10 @@ func member(t *testing.T, d paths.Dirs, name, publish, as string) *state.VM {
 func TestGroupLinks(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
 	a := netip.MustParseAddr
-	app := member(t, d, "devvm-app-0123456789abcd", "", "")
-	db := member(t, d, "devvm-db-0123456789abcd", "5432,8000-8002", "")
-	api := member(t, d, "devvm-api-0123456789abcd", "80", "web2")
-	none := member(t, d, "devvm-cache-0123456789abcd", "", "")
+	app := member(t, d, "devvm-app-0123456789abc1", "", "")
+	db := member(t, d, "devvm-db-0123456789abc2", "5432,8000-8002", "")
+	api := member(t, d, "devvm-api-0123456789abc3", "80", "web2")
+	none := member(t, d, "devvm-cache-0123456789abc6", "", "")
 	dbID, apiID := db.Get(state.KeyID), api.Get(state.KeyID)
 	others := []*state.VM{api, db, none}
 
@@ -117,7 +117,7 @@ func TestGroupLinks(t *testing.T) {
 	// another VM takes the name from api, whose links go.
 	own := []Link{
 		{Name: "pg", Port: 5432, Target: db.Name(), TargetID: dbID, Addr: a("127.77.0.2")},
-		{Name: "web2", Port: 9000, Target: "devvm-x-0123456789abcd", TargetID: "i9", Addr: a("127.77.0.3")},
+		{Name: "web2", Port: 9000, Target: "devvm-x-0123456789abc8", TargetID: "i9", Addr: a("127.77.0.3")},
 	}
 	links, clashes = groupLinks(app, own, slices.Concat(want, own), others)
 	got := []string{}
@@ -126,7 +126,7 @@ func TestGroupLinks(t *testing.T) {
 	}
 	if strings.Join(got, " ") != "pg,5432,"+db.Name()+","+dbID+",127.77.0.2 pg,8000,"+db.Name()+","+dbID+",127.77.0.2,group "+
 		"pg,8001,"+db.Name()+","+dbID+",127.77.0.2,group pg,8002,"+db.Name()+","+dbID+",127.77.0.2,group "+
-		"web2,9000,devvm-x-0123456789abcd,i9,127.77.0.3" {
+		"web2,9000,devvm-x-0123456789abc8,i9,127.77.0.3" {
 		t.Errorf("with the user's links: %v", got)
 	}
 	if !slices.Equal(clashes, []groupClash{{Name: "web2", Target: api.Name()}}) {
@@ -139,8 +139,8 @@ func TestGroupLinks(t *testing.T) {
 
 	// A member whose name is the client's own hostname, or localhost,
 	// which joins refuse, gets no links there.
-	twin := member(t, d, "devvm-app-fedcba98765432", "3000", "")
-	local := member(t, d, "devvm-local-0123456789abcd", "3000", "localhost")
+	twin := member(t, d, "devvm-app-fedcba98765433", "3000", "")
+	local := member(t, d, "devvm-local-0123456789abc7", "3000", "localhost")
 	links, clashes = groupLinks(app, nil, nil, []*state.VM{twin, local})
 	if links != nil || clashes != nil {
 		t.Errorf("own hostname: %v, %v", links, clashes)
@@ -153,24 +153,24 @@ func TestGroupLinks(t *testing.T) {
 func TestCheckJoinName(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	d := paths.Dirs{Data: t.TempDir()}
-	db := member(t, d, "devvm-db-0123456789abcd", "", "")
-	api := member(t, d, "devvm-api-0123456789abcd", "", "web2")
+	db := member(t, d, "devvm-db-0123456789abc2", "", "")
+	api := member(t, d, "devvm-api-0123456789abc3", "", "web2")
 	members := []*state.VM{api, db}
 	for _, c := range []struct{ vm, as, want string }{
-		{"devvm-app-0123456789abcd", "", ""},
-		{"devvm-app-0123456789abcd", "pg", ""},
+		{"devvm-app-0123456789abc1", "", ""},
+		{"devvm-app-0123456789abc1", "pg", ""},
 		// A second VM in a folder called api: api's name is web2.
-		{"devvm-api-fedcba98765432", "api2", ""},
-		{"devvm-app-0123456789abcd", "localhost", "group_name_host vm=devvm-app-0123456789abcd"},
+		{"devvm-api-fedcba98765431", "api2", ""},
+		{"devvm-app-0123456789abc1", "localhost", "group_name_host vm=devvm-app-0123456789abc1"},
 		// The joiner's own hostname is a member's folder part, or the name
 		// it joined with: no name it joins as helps.
 		{"devvm-db-fedcba98765432", "", "group_name_hostname group=web member=" + db.Name() + " name=db vm=devvm-db-fedcba98765432"},
 		{"devvm-db-fedcba98765432", "db2", "group_name_hostname group=web member=" + db.Name() + " name=db vm=devvm-db-fedcba98765432"},
-		{"devvm-web2-0123456789abcd", "other", "group_name_hostname group=web member=" + api.Name() + " name=web2 vm=devvm-web2-0123456789abcd"},
+		{"devvm-web2-0123456789abc5", "other", "group_name_hostname group=web member=" + api.Name() + " name=web2 vm=devvm-web2-0123456789abc5"},
 		// Its name is a member's, or a member's own hostname.
-		{"devvm-app-0123456789abcd", "db", "group_name_taken group=web member=" + db.Name() + " name=db"},
-		{"devvm-app-0123456789abcd", "web2", "group_name_taken group=web member=" + api.Name() + " name=web2"},
-		{"devvm-app-0123456789abcd", "api", "group_name_taken group=web member=" + api.Name() + " name=api"},
+		{"devvm-app-0123456789abc1", "db", "group_name_taken group=web member=" + db.Name() + " name=db"},
+		{"devvm-app-0123456789abc1", "web2", "group_name_taken group=web member=" + api.Name() + " name=web2"},
+		{"devvm-app-0123456789abc1", "api", "group_name_taken group=web member=" + api.Name() + " name=api"},
 	} {
 		if got := msg.NamesOf(checkJoinName("web", c.vm, c.as, members)); got != c.want {
 			t.Errorf("checkJoinName(%s, %q) = %q; want %q", c.vm, c.as, got, c.want)
@@ -274,8 +274,8 @@ func TestGroupJoinsAtOnce(t *testing.T) {
 // one left behind carries nothing.
 func TestCheckGroupLink(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	app := member(t, d, "devvm-app-0123456789abcd", "", "")
-	db := member(t, d, "devvm-db-0123456789abcd", "5432", "")
+	app := member(t, d, "devvm-app-0123456789abc1", "", "")
+	db := member(t, d, "devvm-db-0123456789abc2", "5432", "")
 	l := Link{Name: "db", Port: 5432, Target: db.Name(), TargetID: db.Get(state.KeyID), Group: true}
 	check := func(want string) {
 		t.Helper()
@@ -302,9 +302,9 @@ func TestCheckGroupLink(t *testing.T) {
 // A group's members are the VMs whose state names it.
 func TestGroupMembers(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	member(t, d, "devvm-db-0123456789abcd", "", "")
-	member(t, d, "devvm-app-0123456789abcd", "", "pg")
-	other := member(t, d, "devvm-api-0123456789abcd", "", "")
+	member(t, d, "devvm-db-0123456789abc2", "", "")
+	member(t, d, "devvm-app-0123456789abc1", "", "pg")
+	other := member(t, d, "devvm-api-0123456789abc3", "", "")
 	if err := other.Set(KeyGroup, "other"); err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func TestGroupMembers(t *testing.T) {
 	for _, m := range ms {
 		got = append(got, m.Name()+"="+memberName(m))
 	}
-	if strings.Join(got, " ") != "devvm-app-0123456789abcd=pg devvm-db-0123456789abcd=db" {
+	if strings.Join(got, " ") != "devvm-app-0123456789abc1=pg devvm-db-0123456789abc2=db" {
 		t.Errorf("members = %v", got)
 	}
 	if ms, err := groupMembers(d, ""); ms != nil || err != nil {

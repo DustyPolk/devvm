@@ -24,7 +24,7 @@ exec devvm rm --force --no-export
 cd $WORK
 exec sh -c 'for i in base foo; do grep -lxF "  \"name\": \"$i\"," "$IMAGES"/*/record.json | xargs dirname | xargs basename > "$i.key"; done'
 exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
-exec sh -c 'printf "devvm-img-000000000000\ndevvm-img-111111111111\ndevvm-img-node\ndevvm-img-foo-12345612345612\ndevvm-web-12345612345612\n" >> "$STUB_DIR/instances"'
+exec sh -c 'printf "devvm-img-000000000000\ndevvm-img-111111111111\ndevvm-img-node\ndevvm-img-foo-12345612345601\ndevvm-web-12345612345602\n" >> "$STUB_DIR/instances"'
 mkdir $IMAGES/111111111111
 exec sh -c 'echo "not a record" > "$IMAGES/111111111111/record.json"'
 
@@ -35,9 +35,9 @@ exec sh -c 'cd "$SHARE" && for f in go-1.20.0 go-1.19.0 go-1.9.0; do echo x > $f
 json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
 json_set $SHARE/go-1.19.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
 json_set $SHARE/go-1.9.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
-mkdir $VMS
-exec sh -c 'printf "image=go\ndir=/p\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/devvm-p-12345612345612"'
-exec sh -c 'printf "image=go\ndir=/q\ntools=go-1.19.0-0123456789ab.erofs\n" > "$VMS/devvm-gone-12345612345612"'
+mkdir $VMS/12345612345603 $VMS/12345612345604
+exec sh -c 'printf "name=devvm-p-12345612345603\nimage=go\ndir=/p\ntools=go-1.20.0-0123456789ab.erofs\n" > "$VMS/12345612345603/state"'
+exec sh -c 'printf "name=devvm-gone-12345612345604\nimage=go\ndir=/q\ntools=go-1.19.0-0123456789ab.erofs\n" > "$VMS/12345612345604/state"'
 
 # The builds wrote none of devvm's own files out: they stay in the binary.
 ! exists $XDG_DATA_HOME/devvm/assets
@@ -78,7 +78,7 @@ cmp stdout deleted
 # that are current or listed; nothing in the share is locked.
 exec sh -c 'grep -c . "$STUB_DIR/instances"'
 stdout '^3$'
-exec sh -c 'grep -q "^devvm-img-$(cat base.key) " "$STUB_DIR/instances" && grep -q "^devvm-img-foo-12345612345612" "$STUB_DIR/instances" && grep -q "^devvm-web-12345612345612" "$STUB_DIR/instances"'
+exec sh -c 'grep -q "^devvm-img-$(cat base.key) " "$STUB_DIR/instances" && grep -q "^devvm-img-foo-12345612345601" "$STUB_DIR/instances" && grep -q "^devvm-web-12345612345602" "$STUB_DIR/instances"'
 exec sh -c 'test -f "$IMAGES/$(cat base.key)/record.json" && ! test -e "$IMAGES/$(cat foo.key)" && ! test -e "$IMAGES/111111111111"'
 ! exists $SHARE/go-1.9.0-0123456789ab.erofs
 ! exists $SHARE/go-1.9.0-0123456789ab.erofs.json

@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -43,10 +42,10 @@ const forwarderCmd = "_docker-ports"
 const aliveEvery = 30 * time.Second
 
 // newForwards is how Docker's VMs' forwarders run: devvm _docker-ports,
-// self, their files beside the VMs' records.
+// self, their files in each VM's backend folder.
 func newForwards(d paths.Dirs, self string) vmssh.Forwards {
 	return vmssh.Forwards{
-		Dir: filepath.Join(d.Docker(), "vms"), Run: d.Run(), Prefix: "docker", Cmd: forwarderCmd, Self: self,
+		Dirs: d, Prefix: "docker", Cmd: forwarderCmd, Self: self,
 		Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
 	}
 }

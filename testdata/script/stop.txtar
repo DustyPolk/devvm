@@ -17,7 +17,7 @@ exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
 exec devvm --network-policy
 catg $DATA/ssh_config
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}$'
-exec sh -c 'cat "$RUN"/devvm-web-*.proxy.pid > "$WORK/pid" && kill -0 "$(cat "$WORK/pid")"'
+exec sh -c 'cat "$VMS"/*/run/proxy.pid > "$WORK/pid" && kill -0 "$(cat "$WORK/pid")"'
 stub_reset
 exec devvm stop
 stdout '^==> stopped vm=devvm-web-[0-9a-f]{14}$'

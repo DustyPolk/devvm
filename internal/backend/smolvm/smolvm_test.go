@@ -214,13 +214,13 @@ func TestCreateVM(t *testing.T) {
 	s := newSandbox(t)
 	s.image(t, "0123456789ab")
 	spec := backend.VMSpec{
-		Name: "devvm-p-0123456789abcd", Project: "/p", AgentDirs: []string{"/h/.claude"}, Tools: "/t", ToolsAt: "/mnt/devvm-tools",
+		Name: "devvm-p-0123456789abc5", Project: "/p", AgentDirs: []string{"/h/.claude"}, Tools: "/t", ToolsAt: "/mnt/devvm-tools",
 		AgentForwarding: true, Size: backend.Size{CPUs: 2}, Ports: backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}}},
 	}
 	if err := s.CreateVM(t.Context(), "0123456789ab", spec); err != nil {
 		t.Fatal(err)
 	}
-	want := "smolvm machine create --name devvm-p-0123456789abcd --label devvm.data=" + s.Dirs.Data +
+	want := "smolvm machine create --name devvm-p-0123456789abc5 --label devvm.data=" + s.Dirs.Data +
 		" --from " + s.packFile("0123456789ab") + " --cpus 2 --mem 8192 --storage 100 -v /var/lib/docker" +
 		" -v /p:/p -v /h/.claude:/h/.claude:ro -v /t:/mnt/devvm-tools:ro --ssh-agent"
 	if got := s.calls(t); !slices.Equal(got, []string{want}) {
@@ -239,10 +239,10 @@ func TestCreateVM(t *testing.T) {
 	if err := s.CreateVM(t.Context(), "0123456789ab", spec); err == nil {
 		t.Error("made twice")
 	}
-	s.machine(t, "devvm-q-0123456789abcd", "created 4 8192 null false")
-	s.stubs.Touch(t, "smolvm-foreign-devvm-q-0123456789abcd")
-	spec.Name = "devvm-q-0123456789abcd"
-	if err := s.CreateVM(t.Context(), "0123456789ab", spec); msg.NamesOf(err) != "smolvm_machine_foreign vm=devvm-q-0123456789abcd" {
+	s.machine(t, "devvm-q-0123456789abc6", "created 4 8192 null false")
+	s.stubs.Touch(t, "smolvm-foreign-devvm-q-0123456789abc6")
+	spec.Name = "devvm-q-0123456789abc6"
+	if err := s.CreateVM(t.Context(), "0123456789ab", spec); msg.NamesOf(err) != "smolvm_machine_foreign vm=devvm-q-0123456789abc6" {
 		t.Errorf("foreign: %v", err)
 	}
 	if err := s.CreateVM(t.Context(), "ba9876543210", spec); msg.NamesOf(err) != "image_missing key=ba9876543210" {
@@ -257,17 +257,17 @@ func TestOnlyOurs(t *testing.T) {
 	s.machine(t, "devvm-a-0123456789abcd", "running 4 8192 20 true")
 	s.machine(t, "devvm-img-0123456789ab", "stopped 4 8192 100 true")
 	s.machine(t, ToolsVM, "stopped 4 8192 100 true")
-	s.machine(t, "devvm-b-0123456789abcd", "running 4 8192 20 true")
-	s.stubs.Touch(t, "smolvm-foreign-devvm-b-0123456789abcd")
+	s.machine(t, "devvm-b-0123456789abc2", "running 4 8192 20 true")
+	s.stubs.Touch(t, "smolvm-foreign-devvm-b-0123456789abc2")
 	ins, err := s.List(t.Context())
 	if err != nil || len(ins) != 1 || ins[0].Name != "devvm-a-0123456789abcd" || ins[0].Status != backend.StatusRunning {
 		t.Fatalf("List = %+v, %v", ins, err)
 	}
 	for _, f := range []func() error{
-		func() error { _, err := s.Inspect(t.Context(), "devvm-b-0123456789abcd"); return err },
-		func() error { return s.Stop(t.Context(), "devvm-b-0123456789abcd") },
-		func() error { return s.Delete(t.Context(), "devvm-b-0123456789abcd") },
-		func() error { return s.Start(t.Context(), "devvm-b-0123456789abcd", backend.Confinement{}) },
+		func() error { _, err := s.Inspect(t.Context(), "devvm-b-0123456789abc2"); return err },
+		func() error { return s.Stop(t.Context(), "devvm-b-0123456789abc2") },
+		func() error { return s.Delete(t.Context(), "devvm-b-0123456789abc2") },
+		func() error { return s.Start(t.Context(), "devvm-b-0123456789abc2", backend.Confinement{}) },
 	} {
 		if err := f(); !errors.Is(err, backend.ErrNotFound) {
 			t.Errorf("someone else's: %v", err)
@@ -322,7 +322,7 @@ func TestStart(t *testing.T) {
 	}
 
 	// Forwarding: the agent it's given, or none.
-	fw := "devvm-f-0123456789abcd"
+	fw := "devvm-f-0123456789abc3"
 	s.machine(t, fw, "stopped 4 8192 20 true")
 	if err := s.writeRecord(fw, record{Forwarding: true}); err != nil {
 		t.Fatal(err)
@@ -369,7 +369,7 @@ func TestStart(t *testing.T) {
 // warned.
 func TestStartListedNoSSH(t *testing.T) {
 	s := newSandbox(t)
-	vm := "devvm-p-0123456789abcd"
+	vm := "devvm-p-0123456789abc5"
 	s.machine(t, vm, "stopped 4 8192 20 true")
 	listed := []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8002}}
 	if err := s.writeRecord(vm, record{Listed: listed}); err != nil {
@@ -419,7 +419,7 @@ func TestAgentToggle(t *testing.T) {
 		}
 		return ""
 	}
-	vm := "devvm-t-0123456789abcd"
+	vm := "devvm-t-0123456789abc7"
 	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: vm, AgentToggle: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +473,7 @@ func TestAgentToggle(t *testing.T) {
 		t.Errorf("running: %v", err)
 	}
 	// Made without forwarding: off stays off, on is refused.
-	fixed := "devvm-x-0123456789abcd"
+	fixed := "devvm-x-0123456789abc8"
 	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: fixed}); err != nil {
 		t.Fatal(err)
 	}
@@ -487,7 +487,7 @@ func TestAgentToggle(t *testing.T) {
 		t.Errorf("on: %v", err)
 	}
 	// Made forwarding (--ssh-agent): on.
-	fw := "devvm-f-0123456789abcd"
+	fw := "devvm-f-0123456789abc3"
 	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: fw, AgentForwarding: true, AgentToggle: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -534,7 +534,7 @@ func TestAgentToggle(t *testing.T) {
 func TestStartConfined(t *testing.T) {
 	s := newSandbox(t)
 	t.Setenv("SMOLVM_INTERCEPTOR_TOKEN", strings.Repeat("cd", 32)) // the user's own: never passed on
-	vm := "devvm-n-0123456789abcd"
+	vm := "devvm-n-0123456789abc4"
 	s.machine(t, vm, "stopped 4 8192 20 false")
 	tok := strings.Repeat("ab", 32)
 	c := backend.Confinement{
@@ -704,13 +704,13 @@ func TestBuildBase(t *testing.T) {
 		t.Errorf("Images = %q, %v", keys, err)
 	}
 	// A VM made from it keeps it.
-	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: "devvm-p-0123456789abcd"}); err != nil {
+	if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: "devvm-p-0123456789abc5"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteImage(t.Context(), "0123456789ab"); msg.NamesOf(err) != "image_in_use key=0123456789ab vms=devvm-p-0123456789abcd" {
+	if err := s.DeleteImage(t.Context(), "0123456789ab"); msg.NamesOf(err) != "image_in_use key=0123456789ab vms=devvm-p-0123456789abc5" {
 		t.Errorf("in use: %v", err)
 	}
-	if err := s.Delete(t.Context(), "devvm-p-0123456789abcd"); err != nil {
+	if err := s.Delete(t.Context(), "devvm-p-0123456789abc5"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteImage(t.Context(), "0123456789ab"); err != nil {
@@ -741,7 +741,7 @@ func TestSmallHost(t *testing.T) {
 	if got := s.calls(t); len(got) == 0 || !strings.Contains(got[0], "machine create ") || !strings.Contains(got[0], " --cpus 2 --mem 4096 ") {
 		t.Errorf("calls:\n%s\nwant base made with --cpus 2 --mem 4096", strings.Join(got, "\n"))
 	}
-	for vm, size := range map[string]backend.Size{"devvm-p-0123456789abcd": {}, "devvm-q-0123456789abcd": {CPUs: 1}} {
+	for vm, size := range map[string]backend.Size{"devvm-p-0123456789abc5": {}, "devvm-q-0123456789abc6": {CPUs: 1}} {
 		if err := s.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: vm, Size: size}); err != nil {
 			t.Fatal(err)
 		}

@@ -164,12 +164,6 @@ func (t *Env) platform(libc string) string {
 // config is devvm's shared-tools/mise.toml.
 func (t *Env) config() ([]byte, error) { return fs.ReadFile(t.Assets, "shared-tools/mise.toml") }
 
-// lockConfig is the mise.toml the lock was resolved from.
-func (t Versions) lockConfig() string { return t.Dirs.ToolLock() + ".toml" }
-
-// checkedFile is touched whenever the lock is resolved.
-func (t Versions) checkedFile() string { return t.Dirs.ToolLock() + ".checked" }
-
 // Lock returns the tools lock, resolving it first when there's none yet or
 // shared-tools/mise.toml changed since (a devvm upgrade).
 func (t Versions) Lock(ctx context.Context) (Lock, error) {
@@ -178,7 +172,7 @@ func (t Versions) Lock(ctx context.Context) (Lock, error) {
 		return nil, err
 	}
 	lock, lerr := os.ReadFile(t.Dirs.ToolLock())
-	from, ferr := os.ReadFile(t.lockConfig())
+	from, ferr := os.ReadFile(t.Dirs.ToolLockConfig())
 	if lerr == nil && ferr == nil && bytes.Equal(from, want) {
 		return Lock(lock), nil
 	}
@@ -198,11 +192,11 @@ func (t Versions) Lock(ctx context.Context) (Lock, error) {
 
 func (t Versions) touchChecked() error {
 	now := t.Now()
-	err := os.Chtimes(t.checkedFile(), now, now)
+	err := os.Chtimes(t.Dirs.ToolLockChecked(), now, now)
 	if errors.Is(err, fs.ErrNotExist) {
-		err = state.WriteFile(t.checkedFile(), nil)
+		err = state.WriteFile(t.Dirs.ToolLockChecked(), nil)
 		if err == nil {
-			err = os.Chtimes(t.checkedFile(), now, now)
+			err = os.Chtimes(t.Dirs.ToolLockChecked(), now, now)
 		}
 	}
 	return err
@@ -217,12 +211,9 @@ func (t Versions) CheckDue() bool {
 	if _, err := os.Stat(t.Dirs.ToolLock()); err != nil {
 		return false
 	}
-	fi, err := os.Stat(t.checkedFile())
+	fi, err := os.Stat(t.Dirs.ToolLockChecked())
 	return err != nil || t.Now().Sub(fi.ModTime()) >= checkEvery
 }
-
-// checkLog is where the daily check's output goes.
-func (t Versions) checkLog() string { return filepath.Join(t.Dirs.Logs(), "tools-check.log") }
 
 // RefreshDaily starts devvm _refresh-tools in the background once a day,
 // when the check is due, so a later launch knows of newer versions. It
@@ -237,7 +228,7 @@ func (t Versions) RefreshDaily() error {
 	if err := state.PrivateDir(t.Dirs.Logs()); err != nil {
 		return err
 	}
-	out, err := os.OpenFile(t.checkLog(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:forbidigo // the check's log, which it writes as it runs: each check's starts empty
+	out, err := os.OpenFile(t.Dirs.ToolsCheckLog(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:forbidigo // the check's log, which it writes as it runs: each check's starts empty
 	if err != nil {
 		return err
 	}
@@ -258,7 +249,7 @@ func (t Versions) Refresh(ctx context.Context) error {
 		return err
 	}
 	defer unlock()
-	if err := os.Rename(next+".toml", t.lockConfig()); err != nil {
+	if err := os.Rename(next+".toml", t.Dirs.ToolLockConfig()); err != nil {
 		return err
 	}
 	if err := os.Rename(next, t.Dirs.ToolLock()); err != nil {

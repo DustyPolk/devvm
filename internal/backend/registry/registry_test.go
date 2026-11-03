@@ -2,8 +2,10 @@ package registry
 
 import (
 	"context"
+	"net/netip"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/docker"
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/backend/smolvm"
+	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -148,5 +151,69 @@ func TestDefaultBackendFiles(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%q: got %q, want %q", tc.file, got, tc.want)
 		}
+	}
+}
+
+// homeMax is the longest home folder whose data folder (the default,
+// ~/.local/share/devvm) keeps every socket devvm makes within the limit:
+// a VM's folder holds none, and those in the run folder and Docker's are
+// named by hashes, so no VM's name lengthens them.
+const homeMax = 35
+
+// Every socket devvm makes for a VM, the longest VM name's included, fits
+// a socket's path under the longest home: devvm's agent, the port
+// forwarders' control sockets (ssh adds 17 to those), a link session's
+// sockets and control sockets, and Docker's proxy socket.
+func TestSocketsFit(t *testing.T) {
+	home := "/" + strings.Repeat("h", homeMax-1)
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("DEVVM_LIMA_HOME", "")
+	d, err := paths.FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := New(d, assets.FS, quietUI{}, Overrides{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vm := "devvm-" + strings.Repeat("a", 20) + "-0123456789abcd" // the longest folder part
+	target := "devvm-" + strings.Repeat("b", 20) + "-0123456789abce"
+	lb, _ := r.Lookup("lima")
+	sb, _ := r.Lookup("smolvm")
+	db, _ := r.Lookup("docker")
+	l, s, dk := lb.(*lima.Lima), sb.(*smolvm.Smolvm), db.(*docker.Docker)
+	links := vmssh.Links{VM: vm, Dir: d.Run()}
+	ctls := []string{
+		l.Forwards.Control(vm), s.Forwards.Control(vm), dk.Forwards.Control(vm),
+		links.Control("", ""), links.Control(target, "12345 2026-11-03T00:00:00.000000000Z"),
+	}
+	for _, p := range ctls {
+		if len(p) > vmssh.ControlMax {
+			t.Errorf("%s: %d characters, over %d", p, len(p), vmssh.ControlMax)
+		}
+	}
+	socks := []string{d.AgentSock(), links.Socket(vmssh.Link{Addr: netip.MustParseAddr("127.77.255.255"), Port: 65535}), dk.ProxySocket(vm)}
+	for _, p := range socks {
+		if len(p) >= paths.SocketMax {
+			t.Errorf("%s: %d characters, %d at most", p, len(p), paths.SocketMax-1)
+		}
+	}
+	// None of them is in the VM's folder, and none's length is the VM
+	// name's: the same for the shortest name.
+	for _, p := range slices.Concat(ctls, socks) {
+		if strings.HasPrefix(p, d.VMs()) || strings.Contains(p, vm) {
+			t.Errorf("%s: in a VM's folder, or named by the VM", p)
+		}
+	}
+	short := vmssh.Links{VM: "devvm-a-0123456789abcd", Dir: d.Run()}
+	if len(short.Control("", "")) != len(links.Control("", "")) || len(l.Forwards.Control("devvm-a-0123456789abcd")) != len(l.Forwards.Control(vm)) {
+		t.Error("a control socket's length depends on the VM's name")
+	}
+	// One more character of home and a control socket is too long.
+	if over := len(l.Forwards.Control(vm)) + 1; over <= vmssh.ControlMax && len(links.Control(target, "x"))+1 <= vmssh.ControlMax &&
+		len(s.Forwards.Control(vm))+1 <= vmssh.ControlMax {
+		t.Errorf("homeMax %d isn't the longest: raise it", homeMax)
 	}
 }

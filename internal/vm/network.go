@@ -258,7 +258,7 @@ func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, glo
 			}
 		}
 		vm = t.f.Name
-		file = netpolicy.VMPolicyFile(e.Dirs, vm)
+		file = e.Dirs.VM(vm).Policy()
 	}
 	// The file's lines that aren't rules, once it's changed (or not).
 	defer func() {

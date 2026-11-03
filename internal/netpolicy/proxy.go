@@ -90,20 +90,11 @@ func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u U
 	}
 }
 
-func (p *Proxy) run(vm, ext string) string { return filepath.Join(p.Dirs.Run(), vm+".proxy"+ext) }
+// run is one of the VM's proxy's files in its run folder (paths.VM.Proxy).
+func (p *Proxy) run(vm, ext string) string { return p.Dirs.VM(vm).Proxy(ext) }
 
-// EventLog is a VM's log of its proxy's decisions (JSON lines).
-func EventLog(d paths.Dirs, vm string) string { return filepath.Join(d.Logs(), vm+".jsonl") }
-
-// LinkList is the list of a client VM's links that its link session
-// writes and its proxy reads (proxy.LinkList), in the run folder.
-func LinkList(d paths.Dirs, vm string) string { return filepath.Join(d.Run(), vm+".links.json") }
-
-// ProxyLog is a VM's proxy's own output.
-func ProxyLog(d paths.Dirs, vm string) string { return filepath.Join(d.Logs(), vm+".proxy.log") }
-
-// proc is the VM's proxy as a background process: its pid file in the run
-// folder, and devvm _proxy -vm VM in its arguments.
+// proc is the VM's proxy as a background process: its pid file in the
+// VM's run folder, and devvm _proxy -vm VM in its arguments.
 func (p *Proxy) proc(vm string) daemon.Proc {
 	return daemon.Proc{
 		PIDFile: p.run(vm, ".pid"), Args: p.Args, Signal: p.Signal,
@@ -119,31 +110,6 @@ func (p *Proxy) PID(vm string) (int, bool) { return p.proc(vm).PID() }
 // SIGKILL, waiting up to two more for it to end. It reports whether no
 // proxy of the VM's runs then.
 func (p *Proxy) Stop(vm string) bool { return p.proc(vm).Stop(4 * p.Tick) }
-
-// Forget removes what a VM of this name left behind when it was deleted
-// some other way: its proxy, its own rules and its files in the run folder.
-func (p *Proxy) Forget(vm string) error {
-	p.Stop(vm)
-	if err := os.Remove(VMPolicyFile(p.Dirs, vm)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	// Its files, and the temporary files of a write that never finished
-	// (state.WriteFile's, named .<file>.tmp-*).
-	files, err := filepath.Glob(filepath.Join(p.Dirs.Run(), vm+".*"))
-	if err != nil {
-		return err
-	}
-	tmps, err := filepath.Glob(filepath.Join(p.Dirs.Run(), "."+vm+".*.tmp-*"))
-	if err != nil {
-		return err
-	}
-	for _, f := range append(files, tmps...) {
-		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
-}
 
 // Prepare readies a VM with network policy to start on b, or a running one
 // to go on: devvm's CA, the VM's secret files, its ports, and its proxy
@@ -233,7 +199,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		conf.Decider = "127.0.0.1:" + strconv.Itoa(dp)
 	}
 	// The logs hold each VM's requests: the user's alone.
-	for _, d := range []string{p.Dirs.Run(), p.Dirs.Logs()} {
+	for _, d := range []string{p.Dirs.Run(), p.Dirs.VM(vm).Run(), p.Dirs.VM(vm).Logs()} {
 		if err := state.PrivateDir(d); err != nil {
 			return none, err
 		}
@@ -322,16 +288,14 @@ func (p *Proxy) port(ctx context.Context, st *state.VM, key string, up, running 
 // wrote them.
 func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
 	if len(vms) == 0 {
-		files, err := filepath.Glob(secrets.BindingsFile(p.Dirs, "*"))
+		all, err := state.VMNames(p.Dirs)
 		if err != nil {
 			return err
 		}
-		for _, f := range files {
-			vms = append(vms, strings.TrimSuffix(filepath.Base(f), ".secrets.json"))
-		}
+		vms = all
 	}
 	for _, vm := range vms {
-		if _, err := os.Stat(secrets.BindingsFile(p.Dirs, vm)); err != nil {
+		if _, err := os.Stat(p.Dirs.VM(vm).Secrets()); err != nil {
 			continue
 		}
 		st, err := state.ReadVM(p.Dirs, vm)
@@ -396,7 +360,8 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 		}
 		decider = append(decider, "-listen-unix", sock)
 	}
-	logPath := ProxyLog(p.Dirs, vm)
+	files := p.Dirs.VM(vm)
+	logPath := files.ProxyLog()
 	out, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own log
 	if err != nil {
 		return err
@@ -405,9 +370,9 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 	ca := p.Dirs.CA()
 	addr := "127.0.0.1:" + strconv.Itoa(conf.ProxyPort)
 	args := append([]string{
-		"_proxy", "-listen", addr, "-vm", vm, "-builtin-policy", policies.builtin, "-policy", policies.files, "-log", EventLog(p.Dirs, vm), "-proxy-log", logPath, "-lifeline", lifeline,
+		"_proxy", "-listen", addr, "-vm", vm, "-builtin-policy", policies.builtin, "-policy", policies.files, "-log", files.EventLog(), "-proxy-log", logPath, "-lifeline", lifeline,
 		"-ca", filepath.Join(ca, "ca.pem"), "-cakey", filepath.Join(ca, "ca.key"),
-		"-secrets", secrets.BindingsFile(p.Dirs, vm), "-secret-cmd", p.Self, "-auth-file", auth, "-links", LinkList(p.Dirs, vm),
+		"-secrets", files.Secrets(), "-secret-cmd", p.Self, "-auth-file", auth, "-links", files.LinkList(), "-link-sockets", p.Dirs.Run(),
 	}, decider...)
 	for _, f := range [][2]string{{".cas", "-upstream-cas"}, {".upstream", "-upstream"}} {
 		if _, err := os.Stat(p.run(vm, f[0])); err == nil {
@@ -469,18 +434,13 @@ func (p *Proxy) freePort(ctx context.Context) (int, error) {
 // one avoids, and what a VM's port forwarder never takes (smolvm's,
 // Docker's), self being that VM.
 func UsedPorts(d paths.Dirs, self string) (map[int]bool, error) {
-	ents, err := os.ReadDir(d.VMs())
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	} else if err != nil {
+	names, err := state.VMNames(d)
+	if err != nil {
 		return nil, err
 	}
 	used := map[int]bool{}
-	for _, e := range ents {
-		if !e.Type().IsRegular() || strings.Contains(e.Name(), ".") {
-			continue
-		}
-		st, err := state.ReadVM(d, e.Name())
+	for _, name := range names {
+		st, err := state.ReadVM(d, name)
 		if err != nil {
 			continue // not a VM's state
 		}
@@ -489,7 +449,7 @@ func UsedPorts(d paths.Dirs, self string) (map[int]bool, error) {
 				used[n] = true
 			}
 		}
-		if e.Name() == self {
+		if name == self {
 			continue
 		}
 		for n := range forwarded(st) {

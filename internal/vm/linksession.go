@@ -74,9 +74,9 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 	if err != nil {
 		return err
 	}
-	events := linkEvents{path: netpolicy.EventLog(e.Dirs, vm), vm: vm, mu: &sync.Mutex{}}
+	events := linkEvents{path: e.Dirs.VM(vm).EventLog(), vm: vm, mu: &sync.Mutex{}}
 	s := &vmssh.Links{
-		VM: vm, SSH: ssh, Dir: e.Dirs.Run(), Log: log, List: netpolicy.LinkList(e.Dirs, vm),
+		VM: vm, SSH: ssh, Dir: e.Dirs.Run(), Log: log, List: e.Dirs.VM(vm).LinkList(),
 		Every: linkAliveEvery, Sync: linkSyncEvery, Tick: 2 * time.Second,
 		Alive: func(ctx context.Context) bool {
 			id, err := b.StartID(ctx, vm)

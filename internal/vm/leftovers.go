@@ -98,7 +98,7 @@ func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
 			r.Elsewhere = append(r.Elsewhere, n)
 			continue
 		}
-		fi, err := os.Stat(e.Dirs.VMState(n))
+		fi, err := os.Stat(e.Dirs.VM(n).State())
 		if err != nil {
 			return r, err
 		}
@@ -216,10 +216,9 @@ func madeHere(st *state.VM, b backend.Backend) bool {
 }
 
 // Forget deletes what devvm keeps for an orphan, as devvm rm does after
-// deleting a VM, after asking its backend once more that it has no such
-// VM: its backend's own files (backend.Forgetter), its clone's remote or
-// .git's locks, its proxy, rules, run files, state and logs, its host
-// keys and its ssh config entry.
+// deleting a VM (teardown), after asking its backend once more that it
+// has no such VM, its backend's own leftovers (backend.Forgetter) with
+// it.
 func (e Leftovers) Forget(ctx context.Context, o Orphan) error {
 	st, err := state.ReadVM(e.Dirs, o.Name)
 	if err != nil {
@@ -234,11 +233,6 @@ func (e Leftovers) Forget(ctx context.Context, o Orphan) error {
 	} else if !isGone {
 		return fmt.Errorf("%s: its backend has it", o.Name)
 	}
-	if f, ok := b.(backend.Forgetter); ok {
-		if err := f.Forget(ctx, o.Name); err != nil {
-			return err
-		}
-	}
 	t := &found{f: project.Folder{Name: o.Name, Dir: st.Get(state.KeyDir)}, st: st, b: b}
-	return Lifecycle(e).forget(ctx, t)
+	return vmFolders(e).teardown(ctx, t, true)
 }

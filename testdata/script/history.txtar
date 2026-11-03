@@ -46,8 +46,8 @@ exec cat out/h.tar.gz
 stdout '^before$'
 exec ls -A out
 stdout '^h\.tar\.gz\n\z'
-exec sh -c 'ls "$VMS"'
-stdout devvm-web
+vm_name WEB web
+exists $WEB_dir/state
 
 # history lists the exports folder's: its own export with its folder, one
 # devvm has no folder for as -, and never another file there or one of

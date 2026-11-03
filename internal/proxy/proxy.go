@@ -111,6 +111,7 @@ func newFlags() *flag.FlagSet {
 	fs.StringVar(&nixCacheDir, "nix-cache", "", "serve http://devvm.proxy/nix/, the Nix cache shared with other VMs, from this folder (nixcache.go)")
 	fs.Int64Var(&nixCacheMax, "nix-cache-max", NixCacheDefault, "with -nix-cache: the cache's cap, in bytes")
 	fs.StringVar(&linksFile, "links", "", "the VM's links list, which devvm _links writes: reach them through their sockets, before any rule (links.go)")
+	fs.StringVar(&linkSockets, "link-sockets", "", "with -links: the folder of the links' sockets, devvm's run folder")
 	return fs
 }
 

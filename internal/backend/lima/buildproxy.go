@@ -3,7 +3,6 @@ package lima
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -64,7 +63,7 @@ func buildProxy(ctx context.Context, l *Lima, vm string, n backend.Net) (backend
 	if ctx.Err() != nil {
 		return c, backend.HostProxy{}, none, ctx.Err()
 	}
-	dir := filepath.Join(l.Dirs.Run(), "builds", vm)
+	dir := l.Dirs.VM(vm).BuildProxy()
 	starter := backend.ProxyStarter{Self: l.Self, Spawn: l.Spawn, Tick: l.Tick}
 	// The build VM reaches internal addresses directly anyway, so names this
 	// machine can't resolve go on to the company proxy.

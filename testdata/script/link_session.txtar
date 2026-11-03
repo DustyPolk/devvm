@@ -29,5 +29,5 @@ exec sh -c 'grep "^ssh .*link-" "$STUB_LOG" || true; ls "$XDG_DATA_HOME"/devvm/r
 
 # A stopped client is refused.
 exec devvm stop
-! exec sh -c 'devvm _links "$(cd "$VMS" && ls | grep "^devvm-app-[0-9a-f]*$")"'
+! exec devvm _links $APP
 stderr '^devvm: vm_not_running vm=devvm-app-[0-9a-f]{14}$'

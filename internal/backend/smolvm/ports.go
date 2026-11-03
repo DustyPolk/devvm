@@ -2,7 +2,6 @@ package smolvm
 
 import (
 	"net/netip"
-	"path/filepath"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend/vmssh"
@@ -12,10 +11,10 @@ import (
 )
 
 // newForwards is how smolvm's VMs' forwarders run: devvm _smolvm-ports,
-// self, its files beside the VMs' records.
+// self, its files in each VM's backend folder.
 func newForwards(d paths.Dirs, self string) vmssh.Forwards {
 	return vmssh.Forwards{
-		Dir: filepath.Join(d.Smolvm(), "vms"), Run: d.Run(), Prefix: "smolvm", Cmd: forwarderCmd, Self: self,
+		Dirs: d, Prefix: "smolvm", Cmd: forwarderCmd, Self: self,
 		Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
 	}
 }

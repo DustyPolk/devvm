@@ -80,7 +80,8 @@ stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/\S*/web'' 
 exec tar -xOf $STUB_DIR/sync.tar env
 stdout '\Aexport GREETING=''it''\\''''s web''\nexport PATH="\$\{PATH\}"'':/opt/web''\n'
 # Its state.
-catg $VMS/devvm-web-*
+vm_name WEB web
+catg $WEB_dir/state
 stdout '^devcontainer=[0-9a-f]{64} \.devcontainer/devcontainer\.json$'
 stdout '^from=node@sha256:a{64}$'
 stdout '^image=docker\+extra$'
@@ -147,7 +148,8 @@ project skip
 cp $WORK/build.json .devcontainer.json
 exec devvm --no-network-policy --no-devcontainer
 ! stdout devcontainer_using
-catg $VMS/devvm-skip-*
+vm_name SKIP skip
+catg $SKIP_dir/state
 stdout '^devcontainer=off$'
 cp $WORK/web.json .devcontainer.json
 exec devvm
@@ -156,7 +158,8 @@ exec devvm
 # A VM made without a file: one that appears is warned about.
 project plain
 exec devvm --no-network-policy
-catg $VMS/devvm-plain-*
+vm_name PLAIN plain
+catg $PLAIN_dir/state
 stdout '^devcontainer=none$'
 cp $WORK/web.json .devcontainer.json
 exec devvm
@@ -169,7 +172,8 @@ cp $WORK/web.json .devcontainer.json
 exec devvm --no-network-policy --from $PIN --ports 8080
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=from key=image$'
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=ports key=forwardPorts$'
-catg $VMS/devvm-flags-*
+vm_name FLAGS flags
+catg $FLAGS_dir/state
 stdout '^from=node:24@sha256:a{64}$'
 stdout '^ports=8080$'
 

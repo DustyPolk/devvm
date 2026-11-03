@@ -62,7 +62,7 @@ The VM's proxy reads devvm's built-in policies first and then your policy files,
 - devvm's rules for each [built-in layer](../using/images.md#built-in-layers) in the VM's image, so the `docker` layer allows Docker's packages and the container registries Docker Hub and ghcr.io, and the `nix` layer allows Nix's binary cache, channels and flake registry;
 - `~/.config/devvm/layers/<name>.policy`, for each of your own layers in the VM's image;
 - `~/.config/devvm/policy`, your own rules for every VM, which `devvm network allow`, `deny` and `rm` change with `-g`;
-- `~/.local/share/devvm/vms/<vm>.policy`, the rules for that VM only, which [`devvm network allow`, `deny` and `rm`](#changing-rules) change;
+- `~/.local/share/devvm/vms/<hash>/policy`, the rules for that VM only, in the VM's own folder, which is named by the hash that the VM's name ends with, which [`devvm network allow`, `deny` and `rm`](#changing-rules) change;
 - the hosts of the VM's secrets and logins, on port 443, which devvm adds.
 
 The first three are built in: they come with devvm, inside its binary, so you can't edit them, and an upgrade of devvm is what changes them. To change what a VM reaches, add your own rules, and to keep a VM from a host that devvm's rules allow, add a deny, which beats any allow. devvm leaves storage and paste sites out of its defaults on purpose, because they're easy ways to send data out. Rules never come from the project folder, because the VM can write it. The proxy reads each of your files again when it changes, so an edit applies at once, from the next connection. [How it works](../internals/network.md#policy-files) lists where each policy comes from.
@@ -97,7 +97,7 @@ on
 # devvm: layers/base.policy
   ports.ubuntu.com
   github.com
-# /Users/you/.local/share/devvm/vms/devvm-some-project-71a99b1076d92c.policy
+# /Users/you/.local/share/devvm/vms/71a99b1076d92c/policy
   example.com
   example.com:x  # not a rule, skipped (line 2)
 ```
@@ -111,7 +111,7 @@ on
 
 A rule is what [Rules](#rules) lists, without spaces or a comment. devvm refuses anything else before it adds any rule, and it also refuses `allow !RULE`. A rule that's already in the file, in any case, isn't added again. Each change applies at once, from the next connection. For a VM without network policy, devvm notes that the rules don't apply. When `devvm network log --blocked` or a blocked request in the VM suggests a `devvm network allow` command, its rule is one that `devvm network allow` takes.
 
-If a VM was deleted outside devvm, a new VM with its name never gets its rules.
+If a VM was deleted outside devvm, devvm deletes what it kept for that VM when it makes a new VM for the same project folder, so the new VM never gets the old one's rules.
 
 ### devvm network --json
 
@@ -139,7 +139,7 @@ If a VM was deleted outside devvm, a new VM with its name never gets its rules.
       "not_rules": []
     },
     {
-      "file": "/Users/you/.local/share/devvm/vms/devvm-some-project-71a99b1076d92c.policy",
+      "file": "/Users/you/.local/share/devvm/vms/71a99b1076d92c/policy",
       "rules": [
         "example.com"
       ],

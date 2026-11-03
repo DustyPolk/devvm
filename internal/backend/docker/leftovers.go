@@ -35,11 +35,11 @@ func (d *Docker) Location() (string, bool) {
 }
 
 // Forget deletes what devvm keeps for a VM whose container the engine no
-// longer has, as Delete does after removing it: its port forwarder's
-// files, its relay and networks, its ssh key and host keys, and its
-// volumes (its home, a --clone VM's clone, the docker layer's engine
-// files), each only if it has devvm's label, and the image its last
-// change was committed to. A VM whose container is there is refused.
+// longer has, as Delete does after removing it: what it has in the engine
+// (removeLeaves: its relay and networks, its volumes, each only if it has
+// devvm's label, and the image its last change was committed to), then
+// its backend folder, with its record, keys and port forwarder's files.
+// A VM whose container is there is refused.
 func (d *Docker) Forget(ctx context.Context, vm string) error {
 	if _, err := d.vm(ctx, vm); err == nil {
 		return fmt.Errorf("docker: %s exists", vm)
@@ -50,26 +50,11 @@ func (d *Docker) Forget(ctx context.Context, vm string) error {
 	if err != nil {
 		return err
 	}
-	if err := d.Forwards.Remove(vm); err != nil {
+	d.Forwards.Stop(vm)
+	if err := d.removeLeaves(ctx, vm, r); err != nil {
 		return err
 	}
-	if err := (egress{d}).forget(ctx, vm); err != nil {
-		return err
-	}
-	for _, f := range []string{d.sshKey(vm), d.knownHosts(vm), d.Dirs.DockerVM(vm)} {
-		if err := os.Remove(f); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-	}
-	for _, v := range append([]string{homeVolume(vm), cloneVolume(vm)}, engineVolumes(vm)...) {
-		if err := d.removeVolume(ctx, v); err != nil {
-			return err
-		}
-	}
-	if r.Commit != "" {
-		return d.removeImage(ctx, r.Commit)
-	}
-	return nil
+	return d.Forwards.Forget(vm)
 }
 
 // Leftovers are what Forget deletes of Docker's own for a VM, as the
@@ -123,7 +108,7 @@ func (d *Docker) Strays(ctx context.Context) ([]backend.Stray, error) {
 	}
 	var out []backend.Stray
 	for _, in := range vms {
-		if _, err := os.Stat(d.Dirs.VMState(in.Name)); errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Stat(d.Dirs.VM(in.Name).State()); errors.Is(err, fs.ErrNotExist) {
 			out = append(out, backend.Stray{Name: in.Name, Data: d.Data})
 		}
 	}

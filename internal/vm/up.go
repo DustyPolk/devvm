@@ -12,12 +12,14 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/from"
+	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/sshagent"
+	"github.com/w3cj/devvm/internal/sshconfig"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/trust"
@@ -175,12 +177,22 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 
 	e.Info(msg.CreatingFrom(n.img, vm))
 	e.LogNote()
+	// What a VM made for this folder before, deleted some other way, left
+	// in its folder: the new one's state replaces it.
+	if err := (vmFolders{e.Env}).clear(ctx, vm); err != nil {
+		return err
+	}
+	// Its alias, chosen now for good, as its name was.
+	alias, err := sshconfig.ChooseAlias(e.Dirs, vm)
+	if err != nil {
+		return err
+	}
 	var locking atomic.Bool
 	done := e.AddCleanup(e.undoCreate(b, f, &locking))
 	// The state first, with the network choice: if a later step fails,
 	// the VM never starts without it.
 	st, err := state.CreateVM(e.Dirs, vm, state.NewVM{
-		Image: n.img, Tools: n.tools, Dir: f.Dir, Folder: id, Chain: chain.String(), From: o.From, Backend: b.Name(),
+		Image: n.img, Tools: n.tools, Dir: f.Dir, Folder: id, Chain: chain.String(), From: o.From, Backend: b.Name(), Alias: alias,
 	})
 	if err != nil {
 		return err
@@ -189,11 +201,6 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 		if err := st.Set(KeyBackendAt, at); err != nil {
 			return err
 		}
-	}
-	// What a VM by this name deleted some other way left: its proxy, its
-	// own rules, its run files.
-	if err := e.Proxy.Forget(vm); err != nil {
-		return err
 	}
 	if err := n.record(st, tg.Libc, files); err != nil {
 		return err
@@ -452,8 +459,9 @@ func (n newVM) record(st *state.VM, libc string, files []string) error {
 }
 
 // undoCreate is create's cleanup. Until its first shell nothing of
-// anyone's is in the VM: an interrupt deletes it and its state, and
-// takes off .git's locks (once locking is set), or removes the repo's
+// anyone's is in the VM: an interrupt deletes it, then what devvm keeps
+// for it (teardown), and takes off .git's locks (once locking is set,
+// whether or not its state records them yet), or removes the repo's
 // remote for its clone.
 func (e creation) undoCreate(b backend.Backend, f project.Folder, locking *atomic.Bool) func(context.Context) {
 	vm := f.Name
@@ -462,18 +470,21 @@ func (e creation) undoCreate(b backend.Backend, f project.Folder, locking *atomi
 			return
 		}
 		e.Info(msg.InterruptedVM(vm))
+		deleted := true
 		if err := b.Delete(ctx, vm); err != nil && !errors.Is(err, backend.ErrNotFound) {
 			e.Warn(msg.DeleteFailed(vm))
+			deleted = false
 		}
-		if locking.Load() {
+		st, err := state.ReadVM(e.Dirs, vm)
+		if err != nil {
+			st = new(state.VM)
+		}
+		if m := st.Get(gitprotect.KeyGitProtect); locking.Load() && m != gitprotect.On && m != gitprotect.Strict {
 			e.Protector(f.Dir).Unlock(ctx)
 		}
-		if st, err := state.ReadVM(e.Dirs, vm); err == nil && isClone(st) {
-			clones{e.Env}.removeRemote(ctx, f.Dir, vm, st.Get(KeyCloneRemote))
+		if deleted {
+			_ = vmFolders{e.Env}.teardown(ctx, &found{f: f, st: st, b: b}, false)
 		}
-		_ = e.sshConfig().ForgetHostKeys(vm)
-		_ = e.Proxy.Forget(vm)
-		_ = os.Remove(e.Dirs.VMState(vm))
 	}
 }
 

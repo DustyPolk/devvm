@@ -133,11 +133,10 @@ func (s *Smolvm) DeleteCache(ctx context.Context, entries []backend.CacheEntry) 
 // freeSeeds are the pack disks in smolvm's cache that are devvm's and no
 // machine of devvm's was made from, by path, each with its image's key.
 func (s packCache) freeSeeds(ctx context.Context) (map[string]string, error) {
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return nil, err
+	if s.Dirs.UserCache == "" {
+		return nil, errors.New("smolvm: no cache folder")
 	}
-	dir := filepath.Join(base, "smolvm", "vms", packSeeds)
+	dir := filepath.Join(s.Dirs.UserCache, "smolvm", "vms", packSeeds)
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil

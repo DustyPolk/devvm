@@ -88,7 +88,8 @@ grep '^  "features": \[\]$' $SAVED
 exec devvm network -g off
 project off git
 exec devvm --no-git-protect
-catg $VMS/devvm-off-*
+vm_name OFF off
+catg $OFF_dir/state
 stdout '^net=off$'
 cd $WORK
 
@@ -111,7 +112,8 @@ exec devvm setup --agents codex
 project agents git
 exec devvm --no-network-policy --no-git-protect
 stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-agents-[0-9a-f]{14}$'
-catg $VMS/devvm-agents-*
+vm_name AGENTS agents
+catg $AGENTS_dir/state
 stdout '^tool_names=codex$'
 cd $WORK
 

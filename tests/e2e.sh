@@ -206,7 +206,14 @@ cloud_release=$(cloud_pin CloudRelease)
 cloud_sums="$(cloud_pin CloudSHA256Arm64)|$(cloud_pin CloudSHA256Amd64)"
 images=$XDG_DATA_HOME/devvm/images   # the image records, one per key
 layers=$XDG_CONFIG_HOME/devvm/layers
-vms=$XDG_DATA_HOME/devvm/vms         # the VMs' state, one per VM
+vms=$XDG_DATA_HOME/devvm/vms         # the VMs' folders, one per VM, named by its name's hash
+# vmdir VM: the folder devvm keeps a VM's files in: its state, policy, backend/, run/ and logs/. A
+# project VM's (devvm-FOLDER-HASH) is vms/HASH; a build VM's is run/builds/NAME.
+vmdir() { if [[ $1 =~ ^devvm-.+-[0-9a-f]{14}$ ]]; then echo "$XDG_DATA_HOME/devvm/vms/${1: -14}"
+  else echo "$XDG_DATA_HOME/devvm/run/builds/$1"; fi; }
+export -f vmdir
+# A VM's state the port checks write by hand: another VM's listed ports, with no VM behind it.
+rsv_vm=devvm-e2e-reserved-00000000000e2e
 projects=$work/p                     # the project folders, this run's
 share=$XDG_DATA_HOME/devvm/tools     # the shared tool images
 lock=$XDG_DATA_HOME/devvm/mise.lock  # the shared tools' versions, resolved at the start of each run
@@ -286,19 +293,19 @@ cleanup() {
     if [[ $backend == smolvm ]]; then
       # Only a machine with the sandbox's label, and the image's pack.
       [[ -z $(smol_status "$n") ]] || SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1
-      rm -f "$XDG_DATA_HOME/devvm/smolvm/vms/$n.json" "$XDG_DATA_HOME/devvm/smolvm/vms/$n.proxy" "$XDG_DATA_HOME/devvm/smolvm/vms/$n.ports."*
+      rm -rf "$(vmdir "$n")/backend"
       [[ $n != devvm-img-* ]] || rm -rf "$XDG_DATA_HOME/devvm/smolvm/images/${n#devvm-img-}"
     elif [[ $backend == docker ]]; then
       # Only what has the sandbox's label: the VM's container, volumes and commits; an image's tag and
       # build container.
       if [[ $n == devvm-img-* ]]; then
         d_rm "$n-$dns"; ! d_img "devvm-$dns:${n#devvm-img-}" || docker image rm "devvm-$dns:${n#devvm-img-}" >/dev/null 2>&1
-      else d_rm "$n"; rm -f "$XDG_DATA_HOME/devvm/docker/vms/$n.json"; fi
+      else d_rm "$n"; rm -rf "$(vmdir "$n")/backend"; fi
     else
       limactl delete -f "$n" >/dev/null 2>&1
     fi
     [[ $n != devvm-img-?* ]] || rm -rf "${images:?}/${n#devvm-img-}"
-    rm -f "$vms/$n"
+    rm -rf "$(vmdir "$n")"
   done
   rm -f "$layers"/e2e*.sh "$layers"/e2e*.policy
   ! $d_desktop || d_purge
@@ -453,7 +460,8 @@ newproj() {
   rm -rf "${projects:?}/$1"; mkdir -p "$projects/$1"; (cd "$projects/$1" && pwd -P)
 }
 # vm_of DIR: the VM devvm made for that folder, from its state.
-vm_of() { grep -lx "dir=$1" "$vms"/* 2>/dev/null | head -1 | xargs basename 2>/dev/null; }
+vm_of() { local f; f=$(grep -lx "dir=$1" "$vms"/*/state 2>/dev/null | head -1)
+  [[ -z $f ]] || sed -n 's/^name=//p' "$f"; }
 # launch DIR INPUT ARGS...: devvm ARGS in DIR, with INPUT for the shell it opens (which then ends);
 # sets $vm and records it for cleanup. Its output is in $work/last.log.
 launch() {
@@ -827,7 +835,7 @@ lk_ssh() { env -u SSH_AUTH_SOCK ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -o Batc
 # lk_addr VM NAME: the address its links named NAME listen on, from its state. lk_hash PARTS...: the
 # hash devvm names a link session's files by. lk_sock VM ADDR PORT: a link's socket; lk_ctl VM: the
 # session's control socket. lk_mode PATH: its mode, in octal.
-lk_addr() { sed -n 's/^links=//p' "$vms/$1" 2>/dev/null | tr ' ' '\n' | awk -F, -v n="$2" '$1 == n { print $5; exit }'; }
+lk_addr() { sed -n 's/^links=//p' "$(vmdir "$1")/state" 2>/dev/null | tr ' ' '\n' | awk -F, -v n="$2" '$1 == n { print $5; exit }'; }
 lk_hash() { local s=$1; shift
   { printf '%s' "$s"; for s in "$@"; do printf '\0%s' "$s"; done; } | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16; }
 lk_sock() { echo "$XDG_DATA_HOME/devvm/run/link-$(lk_hash "$1" socket "$2" "$3").sock"; }
@@ -839,8 +847,8 @@ lk_session() { local p; p=$(pgrep -f -- "[_]links $1\$" | head -1); [[ -n $p ]] 
 lk_master() { local p; p=$(pgrep -f -- "[-]M -S $(lk_ctl "$1") " | head -1); [[ -n $p ]] && echo "$p"; }
 lk_desc() { local p c; for p in "$@"; do echo "$p"; for c in $(pgrep -P "$p" 2>/dev/null); do lk_desc "$c"; done; done; }
 # lk_sshport VM: the host loopback port devvm's ssh reaches it on ("" through a ProxyCommand: Docker).
-lk_sshport() { local p; p=$(sed -n 's/^ssh_port=//p' "$vms/$1" 2>/dev/null)
-  [[ -n $p ]] || p=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$1.json" 2>/dev/null)
+lk_sshport() { local p; p=$(sed -n 's/^ssh_port=//p' "$(vmdir "$1")/state" 2>/dev/null)
+  [[ -n $p ]] || p=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$(vmdir "$1")/backend/record.json" 2>/dev/null)
   echo "$p"; }
 # lk_host_tcp PIDS: those processes' TCP sockets on this machine, "LOCAL (LISTEN)" or "LOCAL->PEER (STATE)".
 lk_host_tcp() {
@@ -875,10 +883,10 @@ lk_vm_clean() { local vm=$1 l p bad; shift
     [[ -z $bad ]] || { echo "on $p: $bad"; return 1; }
   done; }
 # lk_event VM EVENT NAME PORT [TEXT]: its event log has that event for the link NAME:PORT, with TEXT.
-lk_event() { grep -F "\"event\":\"$2\",\"host\":\"$3\",\"port\":$4," "$XDG_DATA_HOME/devvm/logs/$1.jsonl" 2>/dev/null | grep -qF -- "${5:-}"; }
+lk_event() { grep -F "\"event\":\"$2\",\"host\":\"$3\",\"port\":$4," "$(vmdir "$1")/logs/network.jsonl" 2>/dev/null | grep -qF -- "${5:-}"; }
 # lk_set_net VM on|off: its state's network policy set by hand, as nothing devvm runs would: the rule
 # broken under devvm, which checks it again on every connection and at each launch.
-lk_set_net() { local s; s=$(sed "s/^net=.*/net=$2/" "$vms/$1") && printf '%s\n' "$s" > "$vms/$1"; }
+lk_set_net() { local s; s=$(sed "s/^net=.*/net=$2/" "$(vmdir "$1")/state") && printf '%s\n' "$s" > "$(vmdir "$1")/state"; }
 # lk_hostile VM [gateway]: root in the client loosens its sshd (any listen address, all forwarding;
 # with gateway, GatewayPorts yes too) and makes it read that; lk_honest VM puts it back.
 lk_hostile_sh='if [ -f /etc/devvm/ssh/sshd_config ]; then c=/etc/devvm/ssh/sshd_config
@@ -989,8 +997,8 @@ link_section() {
 }
 lk_made() { local v
   for v in "$lk_v1" "$lk_v2" "$lk_vc"; do
-    if ! { [[ -n $v ]] && lk_running "$v" && grep -qx net=off "$vms/$v"; }; then echo "${v:-a VM} wasn't made"; return 1; fi; done
-  grep -qx ports=none "$vms/$lk_v1" && grep -qx ports=none "$vms/$lk_v2" && ! grep -q '^ports=' "$vms/$lk_vc"; }
+    if ! { [[ -n $v ]] && lk_running "$v" && grep -qx net=off "$(vmdir "$v")/state"; }; then echo "${v:-a VM} wasn't made"; return 1; fi; done
+  grep -qx ports=none "$(vmdir "$lk_v1")/state" && grep -qx ports=none "$(vmdir "$lk_v2")/state" && ! grep -q '^ports=' "$(vmdir "$lk_vc")/state"; }
 lk_sshd_t() { local vm t want
   for vm in "$@"; do
     t=$(lk_root "$vm" 's=$(command -v sshd || echo /usr/sbin/sshd); c=/etc/devvm/ssh/sshd_config; if [ -f $c ]; then $s -T -f $c; else $s -T; fi') ||
@@ -1009,7 +1017,7 @@ lk_publish() {
     lk_shows "$lk_p1" '^  "version": 1,$' link publish --json &&
     lk_shows "$lk_p1" '^  "ports": "80,47240-47242,47244,47243"$' link publish --json; }
 lk_unpublished_add() {
-  ! lk_dv "$lk_pc" link add "${lk_x}db" 47249 && lk_said "devvm: link_not_published port=47249 vm=$lk_v1" && ! grep -q '^links=' "$vms/$lk_vc"; }
+  ! lk_dv "$lk_pc" link add "${lk_x}db" 47249 && lk_said "devvm: link_not_published port=47249 vm=$lk_v1" && ! grep -q '^links=' "$(vmdir "$lk_vc")/state"; }
 lk_add_applies() { local s=$SECONDS
   lk_dv "$lk_pc" link add "${lk_x}db" 47240 --as db && lk_said "==> link_added name=db port=47240 target=$lk_v1 vm=$lk_vc" || return 1
   lk_until 15 lk_curls "$lk_vc" http://db:47240/ "$lk_w1-47240" || return 1
@@ -1035,7 +1043,7 @@ lk_on_refused() { local r=0
   lk_dv "$lk_pc" network on && r=1
   cat "$work/last.log"
   (( r == 0 )) && grep -Eq "^devvm: network_on_linked targets=.*$lk_v1.* vm=$lk_vc\$" "$work/last.log" &&
-    grep -Eq "^devvm: network_on_linked targets=.*$lk_v2.* vm=$lk_vc\$" "$work/last.log" && grep -qx net=off "$vms/$lk_vc"; }
+    grep -Eq "^devvm: network_on_linked targets=.*$lk_v2.* vm=$lk_vc\$" "$work/last.log" && grep -qx net=off "$(vmdir "$lk_vc")/state"; }
 lk_not_linked() { local a; a=$(lk_raw "$lk_vc" db 47244 2>&1); echo "db:47244: ${a:-nothing}"
   ! lk_raw "$lk_vc" db 47244 >/dev/null 2>&1; }
 lk_unpublish() {
@@ -1071,10 +1079,10 @@ lk_port_taken() {
 lk_cap() { local out s r=0
   lk_dv "$lk_pc" link add "${lk_x}db" 47241 || { cat "$work/last.log"; return 1; }
   out=$(lk_user "$lk_vc" 'LC_ALL=C perl /var/tmp/e2e-link.pl conns db 47241 257' 2>&1 | grep -E '^(closed:|connection )'); echo "$out"
-  echo "events for db:47241: $(grep -F '"host":"db","port":47241,' "$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl" | sed 's/.*"event":"\([a-z_]*\)".*/\1/' | sort | uniq -c | paste -sd ' ' -)"
-  echo "their reasons: $(grep -F '"host":"db","port":47241,' "$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl" | grep -v '"event":"link",' |
+  echo "events for db:47241: $(grep -F '"host":"db","port":47241,' "$(vmdir "$lk_vc")/logs/network.jsonl" | sed 's/.*"event":"\([a-z_]*\)".*/\1/' | sort | uniq -c | paste -sd ' ' -)"
+  echo "their reasons: $(grep -F '"host":"db","port":47241,' "$(vmdir "$lk_vc")/logs/network.jsonl" | grep -v '"event":"link",' |
     sed -n 's/.*"event":"\([a-z_]*\)".*"reason":"\([^"]*\)".*/\1: \2/p' | sort | uniq -c | cut -c1-200 | paste -sd '|' -)"
-  echo "the session's log: $(tail -3 "$XDG_DATA_HOME/devvm/logs/$lk_vc.links.log" | paste -sd '|' -)"
+  echo "the session's log: $(tail -3 "$(vmdir "$lk_vc")/logs/links.log" | paste -sd '|' -)"
   [[ $out == "closed: 257" ]] && lk_event "$lk_vc" link_limit db 47241 '"reason":"256"' &&
     lk_shows "$lk_pc" "  REFUSED  db:47241  256 connections carried already\$" network log -n 100000 || r=1
   # Their relays end once the target's server lets them go. The link goes whatever came of the
@@ -1128,21 +1136,21 @@ lk_restarted() { local k0 k1
 lk_rm_target() { local s
   s=$(lk_session "$lk_vc")
   lk_dv "$lk_p2" rm --force --no-export && lk_said "==> links_target_gone count=1 vm=$lk_v2 vms=$lk_vc" || return 1
-  ! grep "^links=" "$vms/$lk_vc" | grep -qF "$lk_v2" && lk_until 15 lk_not lk_resolves "$lk_vc" "$lk_n2" &&
+  ! grep "^links=" "$(vmdir "$lk_vc")/state" | grep -qF "$lk_v2" && lk_until 15 lk_not lk_resolves "$lk_vc" "$lk_n2" &&
     lk_until 15 lk_not test -e "$(lk_sock "$lk_vc" 127.77.0.2 47240)" && [[ ! -e $(lk_sock "$lk_vc" 127.77.0.2 80) ]] &&
     [[ -n $s && $(lk_session "$lk_vc") == "$s" ]] && lk_gets "$lk_vc" db 47240 "$lk_w1-47240"; }
 lk_made_again() { local id0
-  id0=$(grep "^links=" "$vms/$lk_vc")
+  id0=$(grep "^links=" "$(vmdir "$lk_vc")/state")
   launch "$lk_p2" exit ${lk_cli[@]+"${lk_cli[@]}"} --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none
   if ! { [[ $vm == "$lk_v2" ]] && lk_running "$lk_v2"; }; then echo "not made again: ${vm:-none}"; return 1; fi
   ! lk_shows "$lk_pc" "$lk_v2" link && ! lk_resolves "$lk_vc" "$lk_n2" &&
-    [[ $(grep "^links=" "$vms/$lk_vc") == "$id0" ]] && lk_dv "$lk_p2" link publish 47240 && lk_serve "$lk_v2" "$lk_w2" 47240; }
+    [[ $(grep "^links=" "$(vmdir "$lk_vc")/state") == "$id0" ]] && lk_dv "$lk_p2" link publish 47240 && lk_serve "$lk_v2" "$lk_w2" 47240; }
 # The target gets network policy first, while it runs: until its next start it runs outside its
 # proxy, its servers still up, and the client's link to it is refused then, and warned of by
 # devvm link add and the client's launch (lk_policy_unenforced).
 lk_policy_on() {
-  if ! { lk_dv "$lk_p1" network on && grep -qx net=on "$vms/$lk_v1"; }; then echo "$lk_v1:"; tail -5 "$work/last.log"; return 1; fi
-  if ! { lk_dv "$lk_pc" network on && lk_up "$lk_pc" restart && grep -qx net=on "$vms/$lk_vc" && grep -qx net_check=ok "$vms/$lk_vc"; }; then
+  if ! { lk_dv "$lk_p1" network on && grep -qx net=on "$(vmdir "$lk_v1")/state"; }; then echo "$lk_v1:"; tail -5 "$work/last.log"; return 1; fi
+  if ! { lk_dv "$lk_pc" network on && lk_up "$lk_pc" restart && grep -qx net=on "$(vmdir "$lk_vc")/state" && grep -qx net_check=ok "$(vmdir "$lk_vc")/state"; }; then
     echo "$lk_vc:"; tail -5 "$work/last.log"; return 1
   fi; }
 lk_policy_unenforced() {
@@ -1154,7 +1162,7 @@ lk_policy_unenforced() {
     lk_said "devvm: link_target_unenforced target=$lk_v1 vm=$lk_vc" || return 1
   lk_up "$lk_pc" && lk_said "devvm: link_target_unenforced target=$lk_v1 vm=$lk_vc"; }
 lk_policy_target() {
-  if ! { lk_up "$lk_p1" restart && grep -qx net_check=ok "$vms/$lk_v1"; }; then echo "$lk_v1:"; tail -5 "$work/last.log"; return 1; fi
+  if ! { lk_up "$lk_p1" restart && grep -qx net_check=ok "$(vmdir "$lk_v1")/state"; }; then echo "$lk_v1:"; tail -5 "$work/last.log"; return 1; fi
   lk_serve "$lk_v1" "$lk_w1" 47240 80; }
 # The client got its link before its restart with network policy; lk_proxy_added adds one while it
 # runs.
@@ -1184,7 +1192,7 @@ lk_proxy_added() { local b0 b1 k0 k1 n
   echo "boot and init before: $(paste -sd ' ' - <<<"$b0"), after: $(paste -sd ' ' - <<<"$b1")"
   [[ -n $b0 && $b0 == "$b1" && $k0 == "$k1" ]] && [[ $(lk_user "$lk_vc" 'printf "%s" "$NO_PROXY"') == localhost,127.0.0.1,::1 ]] &&
     lk_event "$lk_vc" link db 47242 "\"target\":\"$lk_v1\""; }
-lk_proxy_own() { local u c l0 l1 log=$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl
+lk_proxy_own() { local u c l0 l1 log; log=$(vmdir "$lk_vc")/logs/network.jsonl
   l0=$(grep -c '"event":"link' "$log" 2>/dev/null)
   for u in "http://${lk_x}db:47240/" http://db:47244/ http://db:47243/ http://db.devvm.internal.devvm.internal:47240/ \
     http://devvm.internal:47240/ http://127.77.0.1:47240/; do
@@ -1198,8 +1206,8 @@ lk_proxy_own() { local u c l0 l1 log=$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl
   [[ $c == 403 && $l0 == "$l1" ]] && lk_via_gets "$lk_vc" http://db:47240/ "$lk_w1-47240"; }
 lk_log_on() { local t0 last
   t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && grep -qx net=on "$vms/$lk_vc" || return 1
-  last=$(cat "$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl".1 "$XDG_DATA_HOME/devvm/logs/$lk_vc.jsonl" 2>/dev/null |
+  lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && grep -qx net=on "$(vmdir "$lk_vc")/state" || return 1
+  last=$(cat "$(vmdir "$lk_vc")/logs/network.jsonl.1" "$(vmdir "$lk_vc")/logs/network.jsonl" 2>/dev/null |
     grep -F '"event":"link","host":"db","port":47240,' | tail -1)
   echo "the last: ${last:-none}, since $t0"
   [[ $(sed -n 's/^{"time":"\([^"]*\)".*/\1/p' <<<"$last") > "$t0" || $(sed -n 's/^{"time":"\([^"]*\)".*/\1/p' <<<"$last") == "$t0" ]] &&
@@ -1207,7 +1215,7 @@ lk_log_on() { local t0 last
 lk_mismatch_add() {
   ! lk_dv "$lk_pc" link add "$lk_n2" 47240 && lk_said "devvm: link_policy_mismatch target=$lk_v2 vm=$lk_vc" && ! lk_resolves "$lk_vc" "$lk_n2"; }
 lk_off_refused() {
-  ! lk_dv "$lk_p1" network off && lk_said "devvm: network_off_linked vm=$lk_v1 vms=$lk_vc" && grep -qx net=on "$vms/$lk_v1"; }
+  ! lk_dv "$lk_p1" network off && lk_said "devvm: network_off_linked vm=$lk_v1 vms=$lk_vc" && grep -qx net=on "$(vmdir "$lk_v1")/state"; }
 lk_policy_broken() {
   lk_set_net "$lk_v1" off || return 1
   lk_gets "$lk_vc" db 47240 "" && lk_until 5 lk_event "$lk_vc" link_refused db 47240 '"reason":"policy"' &&
@@ -1219,7 +1227,7 @@ lk_policy_back() {
 lk_alpine() { local pa va r=0
   pa=$(newproj "${lk_x}alp")
   nd launch "$pa" exit --from alpine:3 --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none base; va=$vm
-  if ! { [[ -n $va ]] && grep -qx libc=musl "$vms/$va"; }; then echo "no Alpine VM"; tail -5 "$work/last.log"; return 1; fi
+  if ! { [[ -n $va ]] && grep -qx libc=musl "$(vmdir "$va")/state"; }; then echo "no Alpine VM"; tail -5 "$work/last.log"; return 1; fi
   lk_dv "$pa" link add "${lk_x}db" 80 && lk_said "==> link_added name=${lk_x}db port=80 target=$lk_v1 vm=$va" || r=1
   (( r == 0 )) && echo "its ip_unprivileged_port_start: $(lk_root "$va" 'cat /proc/sys/net/ipv4/ip_unprivileged_port_start')" &&
     lk_until 20 lk_gets "$va" "${lk_x}db" 80 "$lk_w1-80" || r=1
@@ -1258,8 +1266,8 @@ gp_publish() {
 # Only a member is refused: outside the group, network on would turn the second target's policy on,
 # failing the checks after this one that need it off.
 gp_refused() {
-  grep -qx "group=$lk_g" "$vms/$lk_v2" || { echo "$lk_v2 isn't in $lk_g: network on not tried"; return 1; }
-  ! lk_dv "$lk_p2" network on &&lk_said "devvm: group_policy_mixed group=$lk_g vm=$lk_v2" && grep -qx net=off "$vms/$lk_v2" &&
+  grep -qx "group=$lk_g" "$(vmdir "$lk_v2")/state" || { echo "$lk_v2 isn't in $lk_g: network on not tried"; return 1; }
+  ! lk_dv "$lk_p2" network on &&lk_said "devvm: group_policy_mixed group=$lk_g vm=$lk_v2" && grep -qx net=off "$(vmdir "$lk_v2")/state" &&
     ! lk_dv "$lk_p2" group join "${lk_x}other" && lk_said "devvm: group_other group=$lk_g vm=$lk_v2" &&
     ! lk_dv "$lk_pc" link rm "$lk_n2" 47240 && lk_said "devvm: link_from_group group=$lk_g name=$lk_n2 port=47240 vm=$lk_vc"; }
 # Each leaves, whatever comes of the checks, so the sections after run without a group.
@@ -1284,7 +1292,7 @@ gp_hostname() { local r=0 g=${lk_x}h n1=${lk_x}db
   lk_dv "$lk_pc" group join "$g" --as "$n1" && lk_said "==> group_made group=$g vm=$lk_vc" || r=1
   (( r == 0 )) && ! lk_dv "$lk_p1" group join "$g" && lk_said "devvm: group_name_hostname group=$g member=$lk_vc name=$n1 vm=$lk_v1" &&
     ! lk_dv "$lk_p1" group join "$g" --as "${n1}2" && lk_said "devvm: group_name_hostname group=$g member=$lk_vc name=$n1 vm=$lk_v1" &&
-    ! grep -q "^group=$g" "$vms/$lk_v1" || r=1
+    ! grep -q "^group=$g" "$(vmdir "$lk_v1")/state" || r=1
   lk_dv "$lk_pc" group leave && lk_said "==> group_gone group=$g" || r=1
   return "$r"; }
 # All or none, with the client and the first target with network policy and the second without.
@@ -1292,18 +1300,17 @@ gp_policy() { local r=0 on=${lk_x}on off=${lk_x}off
   lk_dv "$lk_pc" group join "$on" && lk_said "==> group_made group=$on vm=$lk_vc" || r=1
   (( r == 0 )) && ! lk_dv "$lk_p2" group join "$on" && lk_said "devvm: group_policy_on group=$on vm=$lk_v2" || r=1
   (( r == 0 )) && lk_dv "$lk_p2" group join "$off" && ! lk_dv "$lk_p1" group join "$off" &&
-    lk_said "devvm: group_policy_off group=$off vm=$lk_v1" && ! grep -q "^group=$off" "$vms/$lk_v1" || r=1
+    lk_said "devvm: group_policy_off group=$off vm=$lk_v1" && ! grep -q "^group=$off" "$(vmdir "$lk_v1")/state" || r=1
   # The client's own links to db are 47240 and 47242 (lk_proxy_added).
   (( r == 0 )) && lk_dv "$lk_p1" group join "$on" && lk_said "==> group_links_added group=$on links=db:80,47241,47244 vm=$lk_vc" &&
     lk_until 15 lk_gets "$lk_vc" db 80 "$lk_w1-80" && lk_curls "$lk_vc" http://db:80/ "$lk_w1-80" || r=1
   lk_dv "$lk_p1" group leave; lk_dv "$lk_pc" group leave; lk_dv "$lk_p2" group leave
-  (( r == 0 )) && ! grep -q '^group=.' "$vms/$lk_v1" "$vms/$lk_vc" "$vms/$lk_v2"; }
+  (( r == 0 )) && ! grep -q '^group=.' "$(vmdir "$lk_v1")/state" "$(vmdir "$lk_vc")/state" "$(vmdir "$lk_v2")/state"; }
 lk_rm_client() {
   lk_dv "$lk_pc" rm --force --no-export || { tail -5 "$work/last.log"; return 1; }
   lk_until 10 lk_not lk_session "$lk_vc" || { echo "its session runs"; return 1; }
   [[ -z $(lk_session "$lk_vc") ]] && ! ls "$XDG_DATA_HOME/devvm/run/"link-* >/dev/null 2>&1 &&
-    [[ ! -e $XDG_DATA_HOME/devvm/run/$lk_vc.links.pid && ! -e $vms/$lk_vc ]] && ! ls "$XDG_DATA_HOME/devvm/logs/$lk_vc".* >/dev/null 2>&1 &&
-    ! grep -l "^links=.*$lk_vc" "$vms"/* >/dev/null 2>&1; }
+    [[ ! -e $(vmdir "$lk_vc") ]] && ! grep -l "^links=.*$lk_vc" "$vms"/*/state >/dev/null 2>&1; }
 
 if $clean; then
   section "cleaning cached images"
@@ -1473,12 +1480,12 @@ check "a build's commands get a proxy of devvm's for the build, never the host's
     '$D' build e2eproxy </dev/null >'$work/last.log' 2>&1 &&
   grep -qx '$pxtoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log &&
   ! ps -axww -o command= | grep -q -- '[_]proxy -listen 127.0.0.1:0 -vm devvm-img-' &&
-  [[ -z \$(ls -A '$XDG_DATA_HOME/devvm/run/builds' 2>/dev/null) ]]"
+  [[ -z \$(ls -d '$XDG_DATA_HOME'/devvm/run/builds/*/run/build-proxy 2>/dev/null) ]]"
 owned e2eproxy
 kp=$(keys_of e2eproxy | head -1)
 check "its image keeps none of them: not its disk, Lima's files for it or devvm's logs" bash -c "
   [[ -n '$kp' && -d '$LIMA_HOME/devvm-img-$kp' ]] &&
-  printf '%s\n' '$pxpass' | no_leak '$LIMA_HOME/devvm-img-$kp' '$XDG_DATA_HOME/devvm/logs'"
+  printf '%s\n' '$pxpass' | no_leak '$LIMA_HOME/devvm-img-$kp' '$XDG_DATA_HOME/devvm/logs' '$(vmdir "devvm-img-$kp")/logs'"
 rm -f "$layers/e2eproxy.sh"
 
 # A failed script keeps its image's VM, stopped and without a record, for inspection.
@@ -1523,13 +1530,13 @@ launch "$p" 'pwd; echo e2e-shell-ran' --no-network-policy --cpus 2 --memory 3 --
 cp "$work/last.log" "$work/web-launch.log"
 check "devvm creates the VM from base, and opens a shell in the folder" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx '$p' '$work/last.log' && grep -qx e2e-shell-ran '$work/last.log' &&
-  grep -qx image=base '$vms/$vm' && grep -qx net=off '$vms/$vm' && grep -qx 'dir=$p' '$vms/$vm'"
+  grep -qx image=base '$(vmdir "$vm")/state' && grep -qx net=off '$(vmdir "$vm")/state' && grep -qx 'dir=$p' '$(vmdir "$vm")/state'"
 # Without a terminal, devvm in a subfolder opens the folder's VM there, says so, and makes none.
 mkdir -p "$p/src/lib"
 check "devvm in a subfolder opens the folder's VM in the subfolder" bash -c "
   cd '$p/src/lib' && printf 'pwd\n' | '$D' >'$work/last.log' 2>&1 &&
   grep -qx '$p/src/lib' '$work/last.log' && grep -qF \"\$(m using_parent_vm dir='$p' vm='$vm')\" '$work/last.log' &&
-  ! grep -qE '^dir=$p/src(/lib)?\$' '$vms'/*"
+  ! grep -qE '^dir=$p/src(/lib)?\$' '$vms'/*/state"
 check "it gets --cpus, --memory and --disk" in_vm "$vm" \
   '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
 check "devvm size shows it" bash -c "cd '$p' && [[ \$('$D' size 2>&1) == 'cpus=2 memory=3GiB disk=120GiB' ]]"
@@ -1559,10 +1566,10 @@ check "hostname is the folder" bash -c "[[ \$(limactl shell --workdir / $vm host
 check "Lima forwards nothing itself; devvm's forwarder runs, with the host key devvm pinned" bash -c "
   [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $vm) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]] &&
   pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
-  grep -qxF \"\$(cut -d' ' -f2- '$XDG_DATA_HOME/devvm/lima-vms/$vm.ports.known_hosts' | sed 's/^/$vm /')\" '$XDG_DATA_HOME/devvm/known_hosts'"
+  grep -qxF \"\$(cut -d' ' -f2- '$(vmdir "$vm")/backend/ports.known_hosts' | sed 's/^/$vm /')\" '$XDG_DATA_HOME/devvm/known_hosts'"
 # Without network policy too: so no other VM's forwarder takes it before Lima binds it.
 check "its ssh port is the one its state records, on this machine's loopback alone" bash -c "
-  sp=\$(sed -n 's/^ssh_port=//p' '$vms/$vm') && [[ -n \$sp ]] && ! grep -qx net=on '$vms/$vm' &&
+  sp=\$(sed -n 's/^ssh_port=//p' '$(vmdir "$vm")/state') && [[ -n \$sp ]] && ! grep -qx net=on '$(vmdir "$vm")/state' &&
   [[ \$(limactl list --format '{{.SSHLocalPort}}' $vm) == \"\$sp\" ]] && loopback_only \"\$sp\""
 perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => shift, Listen => 5, ReuseAddr => 1) or die;
   while ($c = $s->accept) { print $c "host-program\n"; close $c }' 47161 &
@@ -1575,7 +1582,7 @@ check "through devvm's forwarder alone: Lima's hostagent has none of its ports, 
 check "the forward listens on this machine's loopback alone" loopback_only 47160
 check "a port a program here has on every address keeps its localhost connections while the VM listens on it" bash -c "sleep 3
   out=\$(nc -w 2 127.0.0.1 47161 </dev/null); echo \"47161 answered by: \${out:-nothing}\"; [[ \$out == host-program ]] &&
-  grep -q 'port 47161: not forwarded' '$XDG_DATA_HOME/devvm/lima-vms/$vm.ports.log'"
+  grep -q 'port 47161: not forwarded' '$(vmdir "$vm")/backend/ports.log'"
 kill "$hostprog" 2>/dev/null; wait "$hostprog" 2>/dev/null; hostprog=""
 # A server on a link's address (127.77.0.0/16) is never forwarded, while the VM's own on 127.0.0.1
 # with the same port is (the control).
@@ -1586,7 +1593,7 @@ check "a server on a link's address isn't forwarded, the VM's own on 127.0.0.1 w
   limactl shell --workdir / $vm ss -Hltn 'sport = :47163' </dev/null | grep -q '127\.77\.0\.1:47163' &&
   for i in \$(seq 20); do [[ \$(nc -w 2 127.0.0.1 47164 </dev/null) == own ]] && break; sleep 1; done &&
   [[ \$(nc -w 2 127.0.0.1 47164 </dev/null) == own ]] && sleep 3 && ! nc -z 127.0.0.1 47163 && ! nc -z ::1 47163 &&
-  ! grep -q 'port 47163' '$XDG_DATA_HOME/devvm/lima-vms/$vm.ports.log'"
+  ! grep -q 'port 47163' '$(vmdir "$vm")/backend/ports.log'"
 in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4716"; pkill -f "[d]evvm-e2e-udp"; pkill -f "[d]evvm-e2e-say"' >/dev/null 2>&1
 check "Exec's arguments, folder and input reach the guest as given" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/lima |
@@ -1650,11 +1657,11 @@ check "the entry turns off X11, tunnels and adding keys to an agent, whatever Ho
 
 section ".git protection"
 if [[ "$(uname -s)" != Darwin ]]; then
-  check "off on Linux (no chflags), and says so" bash -c "grep -qx git_protect=off '$vms/$vm' &&
+  check "off on Linux (no chflags), and says so" bash -c "grep -qx git_protect=off '$(vmdir "$vm")/state' &&
     grep -qF \"\$(m git_protect_needs_macos_new)\" '$work/web-launch.log'"
 else
   check "hooks and config are locked" bash -c "ls -lOd '$p/.git/config' | grep -q uchg && ls -lOd '$p/.git/hooks' | grep -q uchg &&
-    grep -qx git_protect=on '$vms/$vm'"
+    grep -qx git_protect=on '$(vmdir "$vm")/state'"
   check "root in the VM can't add a hook" bash -c "! limactl shell --workdir / $vm sudo sh -c 'echo x > $p/.git/hooks/pre-commit' </dev/null && [[ ! -e '$p/.git/hooks/pre-commit' ]]"
   check "root in the VM can't change the config" bash -c "! limactl shell --workdir / $vm sudo sh -c 'echo x >> $p/.git/config' </dev/null"
   check "git in the VM can commit" in_vm "$vm" "cd $p && for i in 1 2 3 4 5 6 7 8 9 10; do git status >/dev/null 2>&1 && break; sleep 1; done &&
@@ -1668,12 +1675,12 @@ check "devvm stop stops it and its port forwarder, and drops its ssh config entr
 # A program here that took its ssh port while it was stopped, on 127.0.0.1 alone and accepting
 # nothing (SO_REUSEADDR, as the port's last connections may still be in TIME_WAIT): the VM gets a
 # new one, recorded, and the program keeps its own.
-old_sp=$(sed -n 's/^ssh_port=//p' "$vms/$vm")
+old_sp=$(sed -n 's/^ssh_port=//p' "$(vmdir "$vm")/state")
 perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalAddr => "127.0.0.1", LocalPort => shift, Listen => 1, ReuseAddr => 1) or die "$!\n"; sleep 600' "$old_sp" &
 hostprog=$!; sleep 0.5
 check "stopped, devvm starts it again, on a new ssh port when a program here has its own" bash -c "[[ -n '$old_sp' && \$(status_of $vm) == Stopped ]] && kill -0 '$hostprog' &&
   cd '$p' && printf 'echo e2e-again\n' | '$D' >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] && grep -qx e2e-again '$work/last.log' &&
-  sp=\$(sed -n 's/^ssh_port=//p' '$vms/$vm') && [[ -n \$sp && \$sp != '$old_sp' ]] &&
+  sp=\$(sed -n 's/^ssh_port=//p' '$(vmdir "$vm")/state') && [[ -n \$sp && \$sp != '$old_sp' ]] &&
   [[ \$(limactl list --format '{{.SSHLocalPort}}' $vm) == \"\$sp\" ]] && kill -0 '$hostprog'"
 kill "$hostprog" 2>/dev/null; wait "$hostprog" 2>/dev/null; hostprog=""
 check "running, devvm opens it as it is" bash -c "cd '$p' && printf 'echo e2e-running\n' | '$D' 2>&1 | grep -qx e2e-running"
@@ -1758,9 +1765,9 @@ else
     grep -qF \"\$(m git_protect_on_needs_macos | head -1)\""
 fi
 check "rm deletes only this VM, with its state and ssh config entry, and unlocks" bash -c "cd '$p' && '$D' rm --force </dev/null >'$work/last.log' 2>&1 &&
-  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! grep -q '^Host devvm-web ' '$XDG_DATA_HOME/devvm/ssh_config' &&
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! grep -q '^Host devvm-web ' '$XDG_DATA_HOME/devvm/ssh_config' &&
   ! grep -q '^$vm ' '$kh' && { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$p/.git/config' | grep -q uchg; } &&
-  ! ls '$XDG_DATA_HOME/devvm/lima-vms/$vm'.* >/dev/null 2>&1 && ! pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
+  ! pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
   [[ -z \$(ls '$XDG_DATA_HOME/devvm/exports' 2>/dev/null) ]]"
 
 section "a devcontainer.json"
@@ -1778,7 +1785,7 @@ launch "$dc" 'echo "dc-env=$E2E_DC"' --no-network-policy
 "$D" ports -g all </dev/null >/dev/null 2>&1
 check "devvm makes the VM as its devcontainer.json says, and says so" bash -c "[[ -n '$vm' && \$(status_of '$vm') == Running ]] &&
   grep -qF \"\$(m devcontainer_using file=.devcontainer/devcontainer.json vm=$vm)\" '$work/last.log' &&
-  grep -Eqx 'devcontainer=[0-9a-f]{64} \.devcontainer/devcontainer\.json' '$vms/$vm' && grep -qx ports=none '$vms/$vm'"
+  grep -Eqx 'devcontainer=[0-9a-f]{64} \.devcontainer/devcontainer\.json' '$(vmdir "$vm")/state' && grep -qx ports=none '$(vmdir "$vm")/state'"
 check "its forwardPorts don't widen your ports: said, not added" \
   grep -qF "$(m devcontainer_ports_not_forwarded file=.devcontainer/devcontainer.json ports=47180)" "$work/last.log"
 check "its shell has the file's variables" grep -qx dc-env=dc-dc "$work/last.log"
@@ -1796,12 +1803,12 @@ check "restarted: postStartCommand runs again, postCreateCommand doesn't" bash -
 printf '%s\n' '{"forwardPorts": [47182], "postCreateCommand": "touch ~/dc-changed"}' > "$dc/.devcontainer/devcontainer.json"
 check "a changed file is warned about, and changes nothing" bash -c "cd '$dc' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m devcontainer_changed file=.devcontainer/devcontainer.json vm=$vm | head -1)\" '$work/last.log' &&
-  grep -qx ports=none '$vms/$vm' && limactl shell --workdir / $vm bash -c '[[ ! -e ~/dc-changed ]]' </dev/null"
+  grep -qx ports=none '$(vmdir "$vm")/state' && limactl shell --workdir / $vm bash -c '[[ ! -e ~/dc-changed ]]' </dev/null"
 check "rm deletes it" bash -c "cd '$dc' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 && ! limactl list -q | grep -qx $vm"
 printf '%s\n' '{"image": "localhost:5000/app:1"}' > "$dc/.devcontainer/devcontainer.json"
 check "an image on this machine's registry is refused, nothing made" bash -c "cd '$dc' && ! '$D' --no-network-policy </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m devcontainer_image_not_public file=.devcontainer/devcontainer.json from=localhost:5000/app:1)\" '$work/last.log' &&
-  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]]"
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]]"
 
 section "agent folders and the VM's setup"
 # A home of its own: a fake agent config, history and git identity, and a fake token; nothing of
@@ -1904,9 +1911,9 @@ check "the VM has its own clone, with every branch, only the shared tools mounte
   [[ -n '$vm' && \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm) == '$share ' ]] &&
   [[ \$(limactl shell --workdir / $vm git -C '$c' branch --format='%(refname:short)' </dev/null | tr '\n' ' ') == 'main other ' ]] &&
   limactl shell --workdir / $vm git -C '$c' log --oneline </dev/null | grep -q one &&
-  grep -qx '$c' '$work/last.log' && grep -qx main '$work/last.log' && grep -qx mode=clone '$vms/$vm'"
+  grep -qx '$c' '$work/last.log' && grep -qx main '$work/last.log' && grep -qx mode=clone '$(vmdir "$vm")/state'"
 check "the repo has a devvm remote, by the VM's name" bash -c "[[ \$(git -C '$c' remote get-url devvm) == '$vm:$c' ]]"
-check "nothing of .git is locked or watched" bash -c "! grep -q '^git_protect=' '$vms/$vm' &&
+check "nothing of .git is locked or watched" bash -c "! grep -q '^git_protect=' '$(vmdir "$vm")/state' &&
   { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$c/.git/config' | grep -q uchg; }"
 in_vm "$vm" "cd '$c' && echo b > b && git add b && git -c user.email=e@e -c user.name=e commit -qm from-vm" >/dev/null 2>&1
 check "rm without a terminal refuses with unfetched commits, even with --force, and keeps it" bash -c "cd '$c' && ! HOME='$ch' '$D' rm --force </dev/null >'$work/last.log' 2>&1 &&
@@ -1922,7 +1929,7 @@ check "then rm refuses with uncommitted changes in a worktree in the clone, show
   grep -qF \"\$(m no_terminal_delete | head -1)\" '$work/last.log' && limactl list -q | grep -qx $vm"
 check "rm --no-clone-check deletes it unchecked after a warning, the worktree's change with it, and the remote fully; the fetched work stays as a local branch" bash -c "cd '$c' && HOME='$ch' '$D' rm --force --no-export --no-clone-check </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m clone_check_skipped vm=$vm | head -1)\" '$work/last.log' && ! grep -qF \"\$(m clone_worktree_dirty path='$c/.worktrees/a' | head -1)\" '$work/last.log' &&
-  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! git -C '$c' remote | grep -q devvm &&
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! git -C '$c' remote | grep -q devvm &&
   [[ -z \$(git -C '$c' for-each-ref refs/remotes) ]] && git -C '$c' log --oneline saved/devvm/main | grep -q from-vm &&
   grep -qF \"\$(m saved_branches 'branches=\"saved/devvm/main\"' | head -1)\" '$work/last.log' && [[ ! -e '$ch/.ssh/config' ]]"
 unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
@@ -1933,7 +1940,7 @@ section "gc"
 # A folder named img-*: its VM is named like an image (devvm-img-keep-<hash>), and isn't one.
 g=$(newproj img-keep)
 launch "$g" exit --no-network-policy
-kg=$(sed -n 's/^chain=base=\([0-9a-f]*\)$/\1/p' "$vms/$vm" 2>/dev/null)
+kg=$(sed -n 's/^chain=base=\([0-9a-f]*\)$/\1/p' "$(vmdir "$vm")/state" 2>/dev/null)
 gfix=$layers/e2egc.sh
 printf '#!/bin/bash\necho gc\n' > "$gfix"
 check "a fixture layer, edited after its build, is stale" bash -c "'$D' build e2egc </dev/null >'$work/last.log' 2>&1 &&
@@ -1955,13 +1962,13 @@ fi
 check "gc again finds nothing to clean up" bash -c "'$D' gc </dev/null 2>&1 | grep -qxF \"==> \$(m nothing_to_clean)\""
 check "space lists the Lima VM and images, and changes nothing" bash -c "'$D' space </dev/null 2>/dev/null >'$work/last.log' &&
   grep -qE '^VMs +lima +[0-9]+ ' '$work/last.log' && grep -qE '^images +lima +[0-9]+ ' '$work/last.log' &&
-  [[ \$(status_of $vm) == Running && -f '$vms/$vm' ]]"
+  [[ \$(status_of $vm) == Running && -f '$(vmdir "$vm")/state' ]]"
 # The img-* VM deleted outside devvm, its state an hour old: gc --orphans forgets what devvm kept.
 quiet limactl delete -f "$vm"
-touch -t 202001010000 "$vms/$vm"
+touch -t 202001010000 "$(vmdir "$vm")/state"
 check "gc --orphans forgets a VM limactl deleted, and nothing of base's" bash -c "'$D' gc --orphans --force </dev/null >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m forgot_orphan vm=$vm)\" '$work/last.log' && [[ ! -e '$vms/$vm' ]] &&
-  ! ls '$XDG_DATA_HOME/devvm/lima-vms/$vm'.* >/dev/null 2>&1 && [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg/record.json' ]]"
+  grep -qF \"\$(m forgot_orphan vm=$vm)\" '$work/last.log' && [[ ! -e '$(vmdir "$vm")' ]] &&
+  [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg/record.json' ]]"
 check "retention sets a setting, shows it, and KEY=off turns it off again" bash -c "
   '$D' retention orphans.age=30d </dev/null >'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=30d # devvm: settings.json' &&
   '$D' retention orphans.age=off </dev/null >>'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=off # devvm: default'"
@@ -1976,10 +1983,10 @@ t=$(newproj tools); echo '{}' > "$t/package.json"
 # deletes them), as base does.
 launch "$t" exit --no-network-policy --no-git-protect
 check "a node VM, with node's shared tools in its state and the share" bash -c "
-  [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx image=base '$vms/$vm' && grep -qx tool_names=node '$vms/$vm' &&
-  grep -qx libc=gnu '$vms/$vm' &&
-  for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"lima\",' '$share'/\$f.json || exit 1; done &&
-  grep -q '^tools=node-$(lockv node)-.* pnpm-$(lockv pnpm)-.* bun-$(lockv bun)-' '$vms/$vm'"
+  [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx image=base '$(vmdir "$vm")/state' && grep -qx tool_names=node '$(vmdir "$vm")/state' &&
+  grep -qx libc=gnu '$(vmdir "$vm")/state' &&
+  for f in \$(sed -n 's/^tools=//p' '$(vmdir "$vm")/state'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"lima\",' '$share'/\$f.json || exit 1; done &&
+  grep -q '^tools=node-$(lockv node)-.* pnpm-$(lockv pnpm)-.* bun-$(lockv bun)-' '$(vmdir "$vm")/state'"
 check "node, npm, pnpm, bun and yarn work, node at the locked version" in_vm "$vm" \
   "[[ \$(node -v) == v$(lockv node) ]] && npm -v && pnpm -v && bun -v && yarn -v"
 check "each tool is a read-only image from the share" in_vm "$vm" \
@@ -2013,7 +2020,7 @@ check "the tools are mounted at boot" bash -c "limactl stop $vm >/dev/null 2>&1 
 limactl stop "$vm" >/dev/null 2>&1   # two VMs at once starve a nested Linux host
 # A tool image gone from the share stops the launch, named, and mise downloads nothing in its place;
 # back in the share, the next launch mounts it.
-nodef=$(sed -n 's/^tools=//p' "$vms/$vm" | tr ' ' '\n' | grep '^node-')
+nodef=$(sed -n 's/^tools=//p' "$(vmdir "$vm")/state" | tr ' ' '\n' | grep '^node-')
 mv "$share/$nodef" "$work/$nodef"
 check "a tool missing from the share stops the launch, named, and isn't downloaded" bash -c "cd '$t' &&
   ! printf 'node -v\n' | '$D' --no-network-policy --no-git-protect >'$work/last.log' 2>&1 &&
@@ -2041,18 +2048,18 @@ check "devvm tools update: checks upstream; the newest unless the lock changed" 
   grep -qF \"\$(m tools_newest vm=$vm | head -1)\" <<<\"\$out\" ||
     { [[ \$(cksum < '$lock') != \"\$before\" ]] && grep -qF \"\$(m tools_switch vm=$vm | head -1)\" <<<\"\$out\"; }"
 check "devvm tools rm takes node out of the VM" bash -c "cd '$t2' && printf 'exit\n' | '$D' tools rm node >'$work/last.log' 2>&1 &&
-  grep -qx image=base '$vms/$vm' && ! grep -q '^tools=.*node' '$vms/$vm' && ! grep -q '^tool_names=.*node' '$vms/$vm' &&
+  grep -qx image=base '$(vmdir "$vm")/state' && ! grep -q '^tools=.*node' '$(vmdir "$vm")/state' && ! grep -q '^tool_names=.*node' '$(vmdir "$vm")/state' &&
   limactl shell --workdir / $vm bash -lc '! command -v node' </dev/null"
 check "devvm node is an unknown command: a usage error in one line, nothing changed" bash -c "cd '$t2' &&
   ! DEVVM_MESSAGES=names '$D' node </dev/null >'$work/last.log' 2>&1; cat '$work/last.log'
   [[ \$(grep -c '^devvm: ' '$work/last.log') -eq 1 ]] && grep -q '^devvm: no_command' '$work/last.log' &&
-  grep -qx 'usage_help command=devvm' '$work/last.log' && ! grep -q '^tool_names=.*node' '$vms/$vm'"
+  grep -qx 'usage_help command=devvm' '$work/last.log' && ! grep -q '^tool_names=.*node' '$(vmdir "$vm")/state'"
 check "--tools on it adds nothing: warned, naming devvm tools, and opened as it is" bash -c "cd '$t2' &&
   printf 'exit\n' | DEVVM_MESSAGES=names '$D' --tools node >'$work/last.log' 2>&1 &&
-  grep -qx 'devvm: parts_flags_ignored vm=$vm' '$work/last.log' && ! grep -q '^tool_names=.*node' '$vms/$vm'"
+  grep -qx 'devvm: parts_flags_ignored vm=$vm' '$work/last.log' && ! grep -q '^tool_names=.*node' '$(vmdir "$vm")/state'"
 check "devvm tools add node mounts it again, nothing built" bash -c "cd '$t2' && n=\$(find '$share' -name '*.erofs' | wc -l) &&
   printf 'node -v\nexit\n' | '$D' tools add node >'$work/last.log' 2>&1 && grep -qx v$(lockv node) '$work/last.log' &&
-  grep -qx image=base '$vms/$vm' && grep -qx tool_names=node '$vms/$vm' && (( \$(find '$share' -name '*.erofs' | wc -l) == n ))"
+  grep -qx image=base '$(vmdir "$vm")/state' && grep -qx tool_names=node '$(vmdir "$vm")/state' && (( \$(find '$share' -name '*.erofs' | wc -l) == n ))"
 fi
 
 if want network; then
@@ -2069,18 +2076,18 @@ ps_watch
 (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" --network-policy --no-git-protect --agents claude,codex >"$work/last.log" 2>&1)
 ps_unwatch
 vm=$(vm_of "$n"); [[ -z $vm ]] || created+=("$vm")
-pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
-salt=$(sed -n 's/^proxy_salt=//p' "$vms/$vm" 2>/dev/null)
-events=$XDG_DATA_HOME/devvm/logs/$vm.jsonl
+pp=$(sed -n 's/^proxy_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
+salt=$(sed -n 's/^proxy_salt=//p' "$(vmdir "$vm")/state" 2>/dev/null)
+events=$(vmdir "$vm")/logs/network.jsonl
 # pgrep -f looks for [_]proxy: Linux's pgrep also matches the check's own shell, whose command line
 # holds the pattern.
 check "--network-policy: the VM runs behind its proxy, and the self-check passed" bash -c "
-  [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
+  [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx net=on '$(vmdir "$vm")/state' && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
   pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ' >/dev/null"
 # The control: the launch set the VM's environment (limactl edit, the password's stand-in in the
 # run log), and the guest has the password.
 check "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it" bash -c "
-  key=\$(sed -n 's/^proxy_key=//p' '$vms/$vm') && [[ \${#key} -eq 64 ]] && [[ -s '$work/ps.log' ]] &&
+  key=\$(sed -n 's/^proxy_key=//p' '$(vmdir "$vm")/state') && [[ \${#key} -eq 64 ]] && [[ -s '$work/ps.log' ]] &&
   ! grep -qFf <(echo \"\$key\") '$work/ps.log' && ! ps -axww -o command= | grep -qFf <(echo \"\$key\") &&
   grep -l 'limactl edit .*devvm:devvm-proxy-password@' '$XDG_DATA_HOME'/devvm/logs/runs/*.log >/dev/null &&
   limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -qF \":\$key@\""
@@ -2088,7 +2095,7 @@ check "ssh devvm-net reaches it, confined, its host key checked" bash -c "
   grep -q '^Host devvm-net $vm\$' '$XDG_DATA_HOME/devvm/ssh_config' &&
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_DATA_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]]"
 check "devvm host runs the self-check, which passes, and names it" bash -c "cd '$n' &&
-  HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake '$D' host </dev/null >'$work/last.log' 2>&1 && grep -qx net_check=ok '$vms/$vm' &&
+  HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake '$D' host </dev/null >'$work/last.log' 2>&1 && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
   grep -qF \"\$(m ssh_host_info dir=$n host=devvm-net | head -1)\" '$work/last.log'"
 check "direct connections fail, even as root: an address, other ports" bash -c "
   ! limactl shell --workdir / $vm sudo curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null &&
@@ -2119,12 +2126,12 @@ check "devvm network allow applies at once to the running VM's proxy, devvm netw
 # allow command, devvm network rm warns of it, and once it's gone the allowed host works again.
 # The VM's own file is put back whatever happens, so the checks after this one see its rules.
 check "a deny that isn't a rule makes the running proxy refuse everything until it's gone" bash -c "cd '$n' &&
-  cp '$vms/$vm.policy' '$work/vm.policy' && echo '! example.org' >> '$vms/$vm.policy' &&
+  cp '$(vmdir "$vm")/policy' '$work/vm.policy' && echo '! example.org' >> '$(vmdir "$vm")/policy' &&
   { [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://github.com/' </dev/null) == 403 ]] &&
     '$D' network log | grep -q '  BLOCKED  github.com:80  .*reads as a deny' &&
     '$D' network log --blocked | grep -Eq ' github\.com:80 +-\$' &&
     DEVVM_MESSAGES=names '$D' network rm nothere.test </dev/null 2>&1 | grep -q '^devvm: policy_broken_deny '; ok=\$?; } ;
-  cp '$work/vm.policy' '$vms/$vm.policy' && [[ \${ok:-1} == 0 ]] &&
+  cp '$work/vm.policy' '$(vmdir "$vm")/policy' && [[ \${ok:-1} == 0 ]] &&
   limactl shell --workdir / $vm bash -lc 'curl -fsS -m 20 -o /dev/null https://github.com' </dev/null"
 check "DNS fails at once, not after a timeout" in_vm "$vm" 'timeout 3 getent hosts example.com; [ $? -eq 2 ]'
 # Lima's network's DNS (192.168.5.3) and the host's address on it, asked directly, as root could:
@@ -2172,7 +2179,7 @@ step() { local what=$1; shift; "$@" || { echo "failed: $what"; return 1; }; }
 corp_why() {
   echo "the VM: $(status_of "$vm"); its proxy: $(corp_proxy_args | cut -c1-60 | paste -sd ' ' -)"
   echo "the launch:"; tail -n 20 "$work/last.log"
-  echo "the proxy log:"; tail -n 10 "$XDG_DATA_HOME/devvm/logs/$vm.proxy.log"
+  echo "the proxy log:"; tail -n 10 "$(vmdir "$vm")/logs/proxy.log"
   echo "its events:"; tail -n 5 "$events"
   echo "the company proxy's log (it runs: $(kill -0 "${corp:-0}" 2>/dev/null && echo yes || echo no)):"; tail -n 5 "$work/corp.log"
   echo "its events:"; tail -n 5 "$work/corp.jsonl"; }
@@ -2205,7 +2212,7 @@ check_lines=60 check "behind a company proxy, an allowed host goes through it by
 # The password is read from its file, never written into the check: its own arguments would hold it.
 check "the company proxy's password is in no process's arguments, log or VM" bash -c "
   ! ps -axww -o command= | grep -qFf '$work/corp.auth' &&
-  ! grep -rqFf '$work/corp.auth' '$XDG_DATA_HOME/devvm/logs' &&
+  ! grep -rqsFf '$work/corp.auth' '$XDG_DATA_HOME/devvm/logs' '$(vmdir "$vm")/logs' &&
   ! limactl shell --workdir / $vm sudo grep -rqsFf /dev/stdin /etc /home /root <'$work/corp.auth' &&
   ! limactl shell --workdir / $vm bash -lc env </dev/null | grep -qFf '$work/corp.auth'"
 check_lines=60 check "without them, the next launch starts the VM's proxy again, going directly" corp_direct
@@ -2243,7 +2250,7 @@ check "devvm secret set saves a token, and devvm reads it back, never to a termi
   echo ghp_E2EFAKE | HOME='$nh' '$D' secret set github --stdin >/dev/null && [[ \$(HOME='$nh' '$D' secret get github | cat) == ghp_E2EFAKE ]] &&
   { [[ \$(uname -s) != Darwin ]] || [[ \$(security find-generic-password -s '$DEVVM_SECRET_SERVICE' -a github -w) == ghp_E2EFAKE ]]; }"
 check "secret use github: its proxy gets the binding at once, the VM its own placeholder on its next launch" bash -c "cd '$n' &&
-  HOME='$nh' '$D' secret use github >/dev/null && grep -q '\"name\":\"github\"' '$XDG_DATA_HOME/devvm/run/$vm.secrets.json' &&
+  HOME='$nh' '$D' secret use github >/dev/null && grep -q '\"name\":\"github\"' '$(vmdir "$vm")/run/secrets.json' &&
   printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'echo \$GH_TOKEN' </dev/null) == devvm-proxy-managed-github-$salt ]] &&
   ! limactl shell --workdir / $vm bash -lc 'env; cat ~/.config/devvm/env' </dev/null | grep -q ghp_E2EFAKE &&
@@ -2252,7 +2259,7 @@ check "the proxy puts the GitHub token in for its host" bash -c "
   limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.github.com/user -H \"Authorization: token \$GH_TOKEN\"' </dev/null &&
   grep '\"path\":\"/user\"' '$events' | grep -q '\"secrets\":\[\"github\"\]'"
 check "secret unuse and rm take the binding and the token away at once" bash -c "cd '$n' &&
-  HOME='$nh' '$D' secret unuse github >/dev/null && ! grep -q '\"name\":\"github\"' '$XDG_DATA_HOME/devvm/run/$vm.secrets.json' &&
+  HOME='$nh' '$D' secret unuse github >/dev/null && ! grep -q '\"name\":\"github\"' '$(vmdir "$vm")/run/secrets.json' &&
   HOME='$nh' '$D' secret rm --force github >/dev/null && ! HOME='$nh' '$D' secret get github >/dev/null 2>&1 &&
   { [[ \$(uname -s) != Darwin ]] || ! security find-generic-password -s '$DEVVM_SECRET_SERVICE' -a github >/dev/null 2>&1; }"
 check "the self-check passes on the VM devvm started confined" bash -c "cd '$root' &&
@@ -2261,25 +2268,25 @@ check "the self-check passes on the VM devvm started confined" bash -c "cd '$roo
 check "a VM started outside devvm is unenforced, and the self-check stops it" bash -c "
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$root' &&
   DEVVM_E2E_VM=$vm DEVVM_E2E_WANT='net_unenforced_stop vm=$vm' CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2ESelfCheck\$' ./internal/netpolicy |
-  grep -q -- '--- PASS: TestE2ESelfCheck' && [[ \$(status_of '$vm') == Stopped ]] && grep -qx net_check=unenforced '$vms/$vm'"
+  grep -q -- '--- PASS: TestE2ESelfCheck' && [[ \$(status_of '$vm') == Stopped ]] && grep -qx net_check=unenforced '$(vmdir "$vm")/state'"
 check "devvm starts it again confined, and the self-check passes" bash -c "cd '$n' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
-  [[ \$(status_of '$vm') == Running ]] && grep -qx net_check=ok '$vms/$vm'"
+  [[ \$(status_of '$vm') == Running ]] && grep -qx net_check=ok '$(vmdir "$vm")/state'"
 check "devvm stop stops it and its proxy at once, and devvm starts both again" bash -c "cd '$n' &&
   pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && HOME='$nh' '$D' stop </dev/null >/dev/null 2>&1 &&
   [[ \$(status_of '$vm') == Stopped ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$(status_of '$vm') == Running ]] &&
-  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && grep -qx net_check=ok '$vms/$vm'"
+  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && grep -qx net_check=ok '$(vmdir "$vm")/state'"
 # macOS: the hostagent's Seatbelt profile denies it every bind but its ssh port's, so Lima forwards
 # nothing even without its ignore rules. A limactl first on PATH puts Lima's own rule (forward
 # everything) back for one start, inside the sandbox devvm starts limactl in: Lima tries the guest's
 # ports (its log says so), the sandbox refuses them, and devvm's forwarder has them.
 if [[ "$(uname -s)" == Darwin ]]; then
-  sp=$(sed -n 's/^ssh_port=//p' "$vms/$vm"); ha=$DEVVM_LIMA_HOME/$vm/ha.stderr.log
+  sp=$(sed -n 's/^ssh_port=//p' "$(vmdir "$vm")/state"); ha=$DEVVM_LIMA_HOME/$vm/ha.stderr.log
   # ha_listens: the hostagent's TCP listeners and UDP sockets, one per line.
   ha_listens() { lsof -nP -a -p "$(cat "$DEVVM_LIMA_HOME/$vm/ha.pid")" -iTCP -sTCP:LISTEN -iUDP 2>/dev/null | awk 'NR > 1 { print $8, $9 }'; }
   export -f ha_listens in_vm; export vm sp ha
   check "the hostagent's profile denies every bind but its ssh port's (TCP) and its own unix sockets'; it has no other" bash -c "
-    sb='$XDG_DATA_HOME/devvm/run/$vm.sb' && [[ -n '$sp' && \$(grep -c network-bind \"\$sb\") == 3 ]] &&
+    sb='$(vmdir "$vm")/run/sandbox.sb' && [[ -n '$sp' && \$(grep -c network-bind \"\$sb\") == 3 ]] &&
     grep -qxF '(deny network-bind)' \"\$sb\" && grep -qxF '(allow network-bind (local tcp \"localhost:$sp\"))' \"\$sb\" &&
     grep -qxF \"(allow network-bind (local unix-socket (subpath \\\"\$(cd '$DEVVM_LIMA_HOME/$vm' && pwd -P)\\\")))\" \"\$sb\" &&
     bind='import socket; socket.socket().bind((\"127.0.0.1\", 47197))' && python3 -c \"\$bind\" &&
@@ -2299,7 +2306,7 @@ EOF
   check "with Lima's own forwards on, the sandbox refuses the hostagent a VM server's port, TCP or UDP" bash -c "cd '$n' &&
     HOME='$nh' '$D' stop </dev/null >/dev/null 2>&1 &&
     printf 'exit\n' | PATH='$work/lima-bypass':\$PATH HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$(status_of '$vm') == Running ]] &&
-    grep -qx 'portForwards: \[\]' '$DEVVM_LIMA_HOME/$vm/lima.yaml' && [[ \$(sed -n 's/^ssh_port=//p' '$vms/$vm') == '$sp' ]] &&
+    grep -qx 'portForwards: \[\]' '$DEVVM_LIMA_HOME/$vm/lima.yaml' && [[ \$(sed -n 's/^ssh_port=//p' '$(vmdir "$vm")/state') == '$sp' ]] &&
     in_vm '$vm' \"setsid -f python3 -m http.server -b 0.0.0.0 47195 </dev/null >/dev/null 2>&1; setsid -f python3 -c 'import socket,time; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.bind((\\\"0.0.0.0\\\",47196)); time.sleep(600)' devvm-e2e-udp </dev/null >/dev/null 2>&1\" &&
     refused() { grep -q 'listen tcp 127.0.0.1:47195: bind: operation not permitted' \"\$ha\" &&
       grep -Eq 'listen udp [0-9.]+:47196: bind: operation not permitted' \"\$ha\"; } &&
@@ -2312,12 +2319,12 @@ EOF
     { ! lima_listens tcp 47195 || { echo 'limactl listens'; false; }; } &&
     { [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_DATA_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]] || { echo 'ssh failed'; false; }; } &&
     { in_vm '$vm' 'curl -fsS -m 20 -o /dev/null https://github.com' || { echo 'the proxy failed'; false; }; } &&
-    { grep -qx net_check=ok '$vms/$vm' || { echo 'no self-check:'; grep '^net' '$vms/$vm'; false; }; }"
+    { grep -qx net_check=ok '$(vmdir "$vm")/state' || { echo 'no self-check:'; grep '^net' '$(vmdir "$vm")/state'; false; }; }"
   in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4719"; pkill -f "[d]evvm-e2e-udp"' >/dev/null 2>&1
   check "the next start puts Lima's ignore rules back" bash -c "cd '$n' &&
     HOME='$nh' '$D' stop </dev/null >/dev/null 2>&1 && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
     [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $vm) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]] &&
-    grep -qx net_check=ok '$vms/$vm'"
+    grep -qx net_check=ok '$(vmdir "$vm")/state'"
 else
   skip "the hostagent's profile denies every bind but its ssh port's (TCP) and its own unix sockets'; it has no other" "Seatbelt is macOS's"
   skip "with Lima's own forwards on, the sandbox refuses the hostagent a VM server's port, TCP or UDP" "Seatbelt is macOS's"
@@ -2358,7 +2365,7 @@ check "devvm network off: its next start is direct, without a proxy" bash -c "cd
 check "devvm network on while it runs: unenforced until devvm restart starts it confined" bash -c "cd '$n' &&
   '$D' network on </dev/null >/dev/null 2>&1 && [[ \$('$D' network | head -1) == unenforced ]] &&
   printf 'exit\n' | HOME='$nh' '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == on ]] &&
-  grep -qx net_check=ok '$vms/$vm' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  grep -qx net_check=ok '$(vmdir "$vm")/state' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
 check "devvm network off while it runs confined: launched, it keeps its proxy until it next starts" bash -c "cd '$n' &&
   '$D' network off </dev/null >/dev/null && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
@@ -2366,7 +2373,7 @@ check "devvm network off while it runs confined: launched, it keeps its proxy un
   pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
 check "rm --force deletes it, its proxy and its state" bash -c "cd '$n' && HOME='$nh' '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-  ! limactl list -q | grep -qx $vm && [[ ! -e '$vms/$vm' ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
 fi
 
 if want desktop; then
@@ -2383,15 +2390,15 @@ desktop_serve "$p"
 ps_unwatch
 check "devvm desktop serves its desktop on this machine's 127.0.0.1 alone, its port and password kept" bash -c "
   [[ -n '$vm' && -n '$desk_port' ]] && loopback_only '$desk_port' &&
-  grep -qx 'desktop_port=$desk_port' '$vms/$vm' && grep -qx 'desktop_password=$desk_pw' '$vms/$vm'"
+  grep -qx 'desktop_port=$desk_port' '$(vmdir "$vm")/state' && grep -qx 'desktop_password=$desk_pw' '$(vmdir "$vm")/state'"
 check "a viewer with a wrong password is refused, one with the password gets the VM's desktop" desktop_view
 check "the VM's server listens on its user's own socket, on no TCP port, the clipboard off" in_vm "$vm" "$desktop_in_vm"
 check "the password is in no file of the VM's" bash -c 'printf "%s\n" "$1" | limactl shell --workdir / "$2" sudo sh -c "$3"' \
   _ "$desk_pw" "$vm" "$desktop_secret"
 check "... nor any run log, nor any host process's arguments while devvm desktop started" bash -c "
-  [[ -s '$work/ps.log' ]] && ! grep -rlF '$desk_pw' '$XDG_DATA_HOME/devvm/logs' && ! grep -F '$desk_pw' '$work/ps.log'"
+  [[ -s '$work/ps.log' ]] && ! grep -rqsF '$desk_pw' '$XDG_DATA_HOME/devvm/logs' '$(vmdir "$vm")/logs' && ! grep -F '$desk_pw' '$work/ps.log'"
 check "with network policy, the VM still reaches only its proxy, and not the desktop's port here" bash -c "
-  grep -qx net_check=ok '$vms/$vm' &&
+  grep -qx net_check=ok '$(vmdir "$vm")/state' &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null &&
   ! limactl shell --workdir / $vm timeout 5 bash -c '</dev/tcp/host.lima.internal/$desk_port' </dev/null"
 # Root's own server in its place: no password, its socket anyone's, everything that reaches it
@@ -2434,7 +2441,7 @@ check "Ctrl+C ends devvm desktop, its port closed" bash -c "[[ -n '$desk_port' ]
 in_vm "$vm" "sudo pkill -f '[f]ake-rfb.py'; sudo rm -f /run/devvm-desktop/vnc.sock /tmp/devvm-e2e-rfb.*" >/dev/null 2>&1
 desktop_serve "$p" --clipboard
 check "devvm desktop --clipboard starts its server again, on the same port, the clipboard on" bash -c "
-  [[ -n '$desk_port' && '$desk_port' == \$(sed -n 's/^desktop_port=//p' '$vms/$vm') ]] &&
+  [[ -n '$desk_port' && '$desk_port' == \$(sed -n 's/^desktop_port=//p' '$(vmdir "$vm")/state') ]] &&
   limactl shell --workdir / $vm bash -lc 'DISPLAY=:1 XAUTHORITY=\$HOME/.Xauthority vncconfig -get AcceptCutText | grep -qx on' </dev/null"
 check "... and a viewer with the password gets it" desktop_view
 desktop_end
@@ -2478,8 +2485,8 @@ nv=$(sed -n 's/^nix_version=//p' "$root/assets/layers/nix.sh")
 dv=$(sed -n 's/^direnv_version=//p' "$root/assets/layers/nix.sh")
 check "a flake.nix and a package.json: a node VM with the nix layer and network policy, Nix and direnv at their pins" bash -c "
   [[ -n '$vm' ]] && grep -qF \"\$(m new_vm_gets layers=nix tools=node vm=$vm)\" '$work/last.log' &&
-  grep -qx image=nix '$vms/$vm' && grep -qx tool_names=node '$vms/$vm' &&
-  grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
+  grep -qx image=nix '$(vmdir "$vm")/state' && grep -qx tool_names=node '$(vmdir "$vm")/state' &&
+  grep -qx net=on '$(vmdir "$vm")/state' && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
   in_vm '$vm' '[[ \$(nix --version) == \"nix (Nix) $nv\" && \$(direnv version) == $dv ]]'"
 check "Nix's store is root's, builds are sandboxed, only root is trusted, and the user's own caches are ignored" in_vm "$vm" '
   [[ -z $(sudo find /nix/store -mindepth 1 -maxdepth 1 ! -user root -print -quit) ]] &&
@@ -2496,7 +2503,7 @@ check "the VM's Nix tries the shared cache first, then cache.nixos.org, trusting
 check "nix run nixpkgs#hello works with network policy, through the shared cache" in_vm "$vm" \
   "nix run nixpkgs#hello 2>/tmp/hello.err | grep -qx 'Hello, world!' && grep -q 'from .http://devvm.proxy/nix' /tmp/hello.err &&
    nix build --no-link github:NixOS/nixpkgs/$nixpkgs_rev#hello"
-nixev=$XDG_DATA_HOME/devvm/logs/$vm.jsonl
+nixev=$(vmdir "$vm")/logs/network.jsonl
 check "... which the host fetched into the shared cache, each file the user's alone" bash -c "
   grep -q '\"event\":\"nix-cache\".*\"reason\":\"fetched\"' '$nixev' &&
   ls '$nixcache'/*.narinfo >/dev/null && ls '$nixcache'/nar/*.nar* >/dev/null &&
@@ -2524,7 +2531,7 @@ nixvm2=$vm
 check "a second VM gets the paths the first fetched as hits from the shared cache, fetching none again" bash -c "
   [[ -n '$nixvm2' && '$nixvm2' != '$nixvm1' ]] &&
   in_vm '$nixvm2' \"nix build --no-link github:NixOS/nixpkgs/$nixpkgs_rev#hello 2>/tmp/hello.err && grep -q 'from .http://devvm.proxy/nix' /tmp/hello.err\" &&
-  ev='$XDG_DATA_HOME/devvm/logs/$nixvm2.jsonl' &&
+  ev='$(vmdir "$nixvm2")/logs/network.jsonl' &&
   grep -q '\"event\":\"nix-cache\",.*\"path\":\"/nix/nar/[^\"]*\".*\"reason\":\"hit\"' \"\$ev\" &&
   ! grep -q '\"event\":\"nix-cache\".*\"reason\":\"fetched\"' \"\$ev\""
 limactl stop "$nixvm2" >/dev/null 2>&1
@@ -2577,7 +2584,7 @@ HOME=$fh nd launch "$f" exit --from node:24 --no-network-policy --tools node,pyt
 nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo ok > $out" ]; }'
 check "a VM with node, python, Claude Code and the docker and nix layers from node:24 (Debian 12) boots, its base keyed by the registry's digest" bash -c "
   [[ -n '$vm' ]] && limactl shell --workdir / '$vm' cat /etc/os-release </dev/null | grep -qx VERSION_CODENAME=bookworm &&
-  grep -qx from=node:24 '$vms/$vm' && grep -qx libc=gnu '$vms/$vm' &&
+  grep -qx from=node:24 '$(vmdir "$vm")/state' && grep -qx libc=gnu '$(vmdir "$vm")/state' &&
   rec \"\$(from_record node:24)\" digest | grep -qE '^node@sha256:[0-9a-f]{64}$'"
 check "its node, claude and every feature work" in_vm "$vm" \
   'node --version && claude --version && eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'
@@ -2595,7 +2602,7 @@ check "the nix layer's Nix runs in it (systemd): nix run nixpkgs#hello, and a bu
 # the nix layer's daemon as an OpenRC service of devvm's.
 al=$(newproj fromalpine); echo '{}' > "$al/package.json"
 nd launch "$al" exit --from alpine:3 --no-network-policy --layers docker,nix
-check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && grep -qx libc=musl '$vms/$vm' && [[ \$(rec \"\$(from_record alpine:3)\" libc) == musl ]]"
+check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && grep -qx libc=musl '$(vmdir "$vm")/state' && [[ \$(rec \"\$(from_record alpine:3)\" libc) == musl ]]"
 check "and node, pnpm work there" in_vm "$vm" \
   "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
 check "the docker layer's Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'
@@ -2612,7 +2619,7 @@ check "the nix layer's Nix runs in it (OpenRC, musl): nix run nixpkgs#hello, and
 nix_fetch='derivation { name = "e2e"; system = builtins.currentSystem; builder = "builtin:fetchurl"; url = "https://example.com/devvm-e2e"; outputHashMode = "flat"; outputHashAlgo = "sha256"; outputHash = "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="; }'
 check "devvm network on: after devvm restart, its nix-daemon goes through the proxy" bash -c "cd '$al' &&
   nd '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | nd '$D' restart >'$work/last.log' 2>&1 &&
-  grep -qx net_check=ok '$vms/$vm' && in_vm '$vm' 'sudo grep -q \"^export http_proxy=http://devvm:\" /etc/conf.d/nix-daemon &&
+  grep -qx net_check=ok '$(vmdir "$vm")/state' && in_vm '$vm' 'sudo grep -q \"^export http_proxy=http://devvm:\" /etc/conf.d/nix-daemon &&
     ! nix build --no-link --impure --expr '\''$nix_fetch'\'' 2>/tmp/fetch.err && grep -q \"response 403\" /tmp/fetch.err'"
 (cd "$al" && quiet "$D" rm --force --no-export)
 
@@ -2652,9 +2659,9 @@ check "what the builds' commands and sudo have is devvm's proxy for the build, w
 check "the company proxy's password is in no converted disk, image, log, build file or process's arguments" bash -c "
   [[ -n '$kac' && -n '$kcl' && -d '$LIMA_HOME/devvm-img-$kac' && -d '$LIMA_HOME/devvm-img-$kcl' ]] &&
   no_leak '$LIMA_HOME/devvm-img-$kac' '$LIMA_HOME/devvm-img-$kcl' \
-    '$XDG_DATA_HOME/devvm/logs' '$XDG_DATA_HOME/devvm/run' <'$work/corp.auth' &&
+    '$XDG_DATA_HOME/devvm/logs' '$XDG_DATA_HOME/devvm/run' '$vms' <'$work/corp.auth' &&
   ! ps -axww -o command= | grep -qFf '$work/corp.auth' &&
-  [[ -z \$(ls -A '$XDG_DATA_HOME/devvm/run/builds' 2>/dev/null) ]] &&
+  [[ -z \$(ls -d '$XDG_DATA_HOME'/devvm/run/builds/*/run/build-proxy 2>/dev/null) ]] &&
   ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"
 corp_stop
 rm -f "$layers/e2ecorp.sh"
@@ -2760,7 +2767,7 @@ p=$(newproj smolweb); git -C "$p" init -q
 launch "$p" 'pwd; id -un; echo e2e-shell-ran' "${S[@]}" --no-network-policy --ports 47180,47184 --cpus 2 --memory 3 --disk 120
 check "devvm creates the VM from base's pack, labelled, and opens a shell in the folder as you" bash -c "
   [[ -n '$vm' && \$(smol_status '$vm') == running ]] && grep -qx '$p' '$work/last.log' && grep -qx '$me' '$work/last.log' &&
-  grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=smolvm '$vms/$vm' && grep -qx net=off '$vms/$vm'"
+  grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=smolvm '$(vmdir "$vm")/state' && grep -qx net=off '$(vmdir "$vm")/state'"
 check "it gets --cpus, --memory and --disk" in_smol "$vm" \
   '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
 check "ls lists it on smolvm" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +- +\S+ +off +- +smolvm +$p\$'"
@@ -2784,8 +2791,8 @@ check "devvm desktop serves its desktop on this machine's 127.0.0.1 alone" bash 
 check "a viewer with a wrong password is refused, one with the password gets the VM's desktop" desktop_view
 check "the VM's server listens on its user's own socket, on no TCP port, the clipboard off" in_smol "$vm" "$desktop_in_vm"
 check "the password is in no file of the VM's nor any run log" bash -c '
-  printf "%s\n" "$1" | SMOLVM_USAGE=0 smolvm machine exec --name "$2" -i -- sh -c "$3" && ! grep -rlF "$1" "$4"' \
-  _ "$desk_pw" "$vm" "$desktop_secret" "$XDG_DATA_HOME/devvm/logs"
+  printf "%s\n" "$1" | SMOLVM_USAGE=0 smolvm machine exec --name "$2" -i -- sh -c "$3" && ! grep -rqsF "$1" "${@:4}"' \
+  _ "$desk_pw" "$vm" "$desktop_secret" "$XDG_DATA_HOME/devvm/logs" "$(vmdir "$vm")/logs"
 desktop_end
 check "Ctrl+C ends devvm desktop, its port closed" bash -c "[[ -n '$desk_port' ]] && ! nc -z 127.0.0.1 '$desk_port'"
 check "without the docker layer, it has no Docker" in_smol "$vm" '! command -v dockerd && ! command -v docker && [[ ! -e /run/docker.pid ]]'
@@ -2804,10 +2811,10 @@ check "a listed port's server on the VM's loopback alone reaches this machine's,
   for i in $(seq 20); do [[ $(nc -w 2 127.0.0.1 47184 </dev/null 2>/dev/null) == vm-47184 ]] && exit 0; sleep 1; done; exit 1'
 check "an unlisted port's doesn't" bash -c 'sleep 3; ! nc -z 127.0.0.1 47185'
 check "made ready to turn agent forwarding on later, and given none: smolvm's socket reaches no agent" bash -c "
-  grep -qx agent_toggle=on '$vms/$vm' && grep -qx ssh_agent=off '$vms/$vm' &&
+  grep -qx agent_toggle=on '$(vmdir "$vm")/state' && grep -qx ssh_agent=off '$(vmdir "$vm")/state' &&
   SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- sh -c 'SSH_AUTH_SOCK=/tmp/ssh-agent.sock ssh-add -l' </dev/null 2>&1 |
   grep -qi 'communication with agent failed\|error connecting to agent'"
-check "smolvm publishes none of its ports: its process listens on its ssh forward alone" smol_listens_only "$vm" "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")"
+check "smolvm publishes none of its ports: its process listens on its ssh forward alone" smol_listens_only "$vm" "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$(vmdir "$vm")/backend/record.json")"
 check "... and devvm's forwarder forwards the listed ones alone" bash -c "ps -axww -o command= | grep -- '[_]smolvm-ports -vm $vm ' | grep -q -- ' -only 47180,47184\$'"
 # smol_serve VM PORTS...: a server in the VM on each port, every address, left running.
 smol_serve() { local p; for p in "${@:2}"; do SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- perl -MIO::Socket::INET -e \
@@ -2825,7 +2832,7 @@ check "a smaller disk is refused" bash -c "cd '$p' && ! DEVVM_MESSAGES=names '$D
 check "devvm stop stops it, and devvm starts it again" bash -c "cd '$p' && '$D' stop </dev/null >/dev/null 2>&1 &&
   [[ \$(smol_status $vm) == stopped ]] && printf 'echo again\n' | '$D' 2>&1 | grep -qx again && [[ \$(smol_status $vm) == running ]]"
 check "rm deletes only this VM, with its state" bash -c "cd '$p' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-  [[ -z \$(smol_status $vm) && ! -e '$vms/$vm' && ! -e '$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json' ]]"
+  [[ -z \$(smol_status $vm) && ! -e '$(vmdir "$vm")' ]]"
 
 section "smolvm: SSH agent forwarding"
 # Turning it on or off later is emulated (agent-toggle), and reviewed. Its guarantee: a VM set to
@@ -2880,7 +2887,7 @@ g=$(newproj smolagent)
 vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
 check "a new VM is made ready to change it, unwarned, and recorded so" bash -c "[[ -n '$vm' ]] &&
   ! grep -q 'backend_unreviewed' '$work/last.log' &&
-  grep -qx agent_toggle=on '$vms/$vm' && grep -qx ssh_agent=off '$vms/$vm'"
+  grep -qx agent_toggle=on '$(vmdir "$vm")/state' && grep -qx ssh_agent=off '$(vmdir "$vm")/state'"
 check "off: started from your shell, with your agent, the VM reaches no agent, and can't add to one" smol_no_agent "$vm"
 check "devvm's own shell has no agent's keys either" bash -c "! grep -q 'e2e-smolvm' '$work/last.log'"
 check "ssh-agent add loads a throwaway key into devvm's own agent" bash -c "
@@ -2899,7 +2906,7 @@ check "on, after a restart: your agent's key alone, never devvm's" smol_switch "
 check "  root in the VM can add a key to it then (the add check's control)" smol_vm_adds "$vm"
 check "off while it runs, stopped, then started by devvm history export (no launch, its record still forwarding yours): no agent" bash -c "cd '$g' &&
   as_ua '$D' ssh-agent off </dev/null >/dev/null 2>&1 && as_ua '$D' stop </dev/null >/dev/null 2>&1 &&
-  ! grep -q agent_off '$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json' &&
+  ! grep -q agent_off '$(vmdir "$vm")/backend/record.json' &&
   { as_ua '$D' history export '$work/smol-export.tar.gz' </dev/null >'$work/last.log' 2>&1; rm -f '$work/smol-export.tar.gz'; true; } &&
   [[ \$(smol_status '$vm') == running ]] && smol_no_agent '$vm'"
 check "off, after a restart: no agent again, your agent and devvm's untouched" smol_switch "$g" off smol_no_agent "$vm"
@@ -3042,7 +3049,7 @@ smolssh_nosshd() {
 # smolssh_otherkey VM OTHER: OTHER's key doesn't log in to VM; VM's own does, the same way (the control).
 smolssh_otherkey() {
   smolssh_with_key() { env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile="$kh" -o HostKeyAlias="$1" -o StrictHostKeyChecking=yes \
-      -o BatchMode=yes -o IdentitiesOnly=yes -i "$XDG_DATA_HOME/devvm/smolvm/vms/$2.key" -p "$(smolssh_port "$1")" "$me@127.0.0.1" true </dev/null 2>/dev/null; }
+      -o BatchMode=yes -o IdentitiesOnly=yes -i "$(vmdir "$2")/backend/key" -p "$(smolssh_port "$1")" "$me@127.0.0.1" true </dev/null 2>/dev/null; }
   if smolssh_with_key "$1" "$2"; then echo "$2's key logged in to $1"; return 1; fi
   smolssh_with_key "$1" "$1" || { echo "its own key didn't"; return 1; }; }
 q=$(newproj smolssh); git -C "$q" init -q
@@ -3096,7 +3103,7 @@ qa=$(newproj smolalpine)
 (cd "$qa" && printf 'exit\n' | HOME=$sc/home "${UR[@]}" "$D" "${S[@]}" --from alpine:3 --no-network-policy --ports none >"$work/last.log" 2>&1)
 vma=$(vm_of "$qa"); [[ -z $vma ]] || created+=("$vma")
 check "a VM --from alpine:3 is made, and ssh devvm-smolalpine reaches it, on Alpine, as the VM's user" bash -c "
-  [[ -n '$vma' ]] && grep -qx libc=musl '$vms/$vma' &&
+  [[ -n '$vma' ]] && grep -qx libc=musl '$(vmdir "$vma")/state' &&
   out=\$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' -o BatchMode=yes devvm-smolalpine '. /etc/os-release; echo \$ID; id -un' </dev/null) &&
   [[ \$out == alpine\$'\n''$me' ]] || { echo \"\${out:-}\"; tail -5 '$work/last.log'; false; }"
 (cd "$qa" && quiet "${UR[@]}" "$D" rm --force --no-export)
@@ -3119,7 +3126,7 @@ vm=$(vm_of "$c"); [[ -z $vm ]] || created+=("$vm")
 cgit="GIT_SSH_COMMAND='ssh -F $dsc' git -C '$c'"
 # smolclone_seeded VM: its own clone, every branch pushed in over ssh, nothing of the folder mounted.
 smolclone_seeded() {
-  [[ -n $1 ]] && grep -qx mode=clone "$vms/$1" && grep -qx "$c" "$work/last.log" && grep -qx main "$work/last.log" &&
+  [[ -n $1 ]] && grep -qx mode=clone "$(vmdir "$1")/state" && grep -qx "$c" "$work/last.log" && grep -qx main "$work/last.log" &&
   [[ $(in_smol "$1" "git -C '$c' branch --format='%(refname:short)'" | tr '\n' ' ') == 'main other ' ]] &&
   in_smol "$1" "git -C '$c' log --oneline" | grep -q one && in_smol "$1" "[ ! -e '$c/untracked' ]"; }
 check "the VM has its own clone, every branch pushed in over ssh, nothing of the folder mounted, and the shell opens in it" smolclone_seeded "$vm"
@@ -3129,7 +3136,7 @@ check "fetching through devvm's ssh config brings the VM's commit" bash -c "$cgi
 check "pushing a branch into it works too" bash -c "git -C '$c' branch pushed other && $cgit push -q devvm pushed &&
   SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -- git -C '$c' rev-parse -q --verify refs/heads/pushed </dev/null >/dev/null"
 check "rm --force deletes it and the remote fully; the fetched work stays as a local branch" bash -c "cd '$c' && HOME='$ch' '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-  [[ -z \$(smol_status '$vm') && ! -e '$vms/$vm' ]] && ! git -C '$c' remote | grep -q devvm &&
+  [[ -z \$(smol_status '$vm') && ! -e '$(vmdir "$vm")' ]] && ! git -C '$c' remote | grep -q devvm &&
   git -C '$c' log --oneline saved/devvm/main | grep -q from-vm"
 unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 
@@ -3372,7 +3379,7 @@ smolnet_widened() {
     cat "$work/last.log"; return 1
   fi
   (cd "$2" && printf 'exit\n' | "${U[@]}" "$D" >"$work/last.log" 2>&1) && [[ $(smol_status "$1") == running ]] &&
-  grep -qx net_check=ok "$vms/$1" && smolnet_lists "$1"
+  grep -qx net_check=ok "$(vmdir "$1")/state" && smolnet_lists "$1"
 }
 # The proxy's lifeline-following process for VM, if it runs.
 smolnet_proxy() { pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 " 2>/dev/null; }
@@ -3386,8 +3393,8 @@ smolnet_via_open() { local a; a=$(smolnet_via "$1" 1.1.1.1:80); echo "got: ${a:-
 # smolnet_ssh VM: ssh reaches it on its network policy's port; its sessions, a login's or not, get the
 # proxy's settings, and an allowed host works through the proxy from one.
 smolnet_ssh() { local key out
-  key=$(sed -n 's/^proxy_key=//p' "$vms/$1")
-  [[ -n $(smolssh_port "$1") && $(smolssh_port "$1") == "$(sed -n 's/^ssh_port=//p' "$vms/$1")" ]] || { echo "not its ssh_port"; return 1; }
+  key=$(sed -n 's/^proxy_key=//p' "$(vmdir "$1")/state")
+  [[ -n $(smolssh_port "$1") && $(smolssh_port "$1") == "$(sed -n 's/^ssh_port=//p' "$(vmdir "$1")/state")" ]] || { echo "not its ssh_port"; return 1; }
   out=$(sshn "$1" 'printenv HTTPS_PROXY; printenv NO_PROXY; bash -lc "printenv https_proxy"' </dev/null)
   [[ $out == "http://devvm:$key@100.96.0.1:"*$'\n'"localhost,127.0.0.1,::1"$'\n'"http://devvm:$key@100.96.0.1:"* ]] || { echo "sessions: ${out//$key/KEY}"; return 1; }
   sshn "$1" 'curl -fsS -m 20 -o /dev/null https://github.com' </dev/null; }
@@ -3409,20 +3416,20 @@ ps_watch
 (cd "$np" && printf 'exit\n' | "${U[@]}" DEVVM_MESSAGES=names "$D" "${S[@]}" --network-policy --ports none --no-git-protect --layers docker >"$work/last.log" 2>&1)
 ps_unwatch
 vm=$(vm_of "$np"); [[ -z $vm ]] || created+=("$vm")
-pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
-dp=$(sed -n 's/^decider_port=//p' "$vms/$vm" 2>/dev/null)
+pp=$(sed -n 's/^proxy_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
+dp=$(sed -n 's/^decider_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
 check "--network-policy: the VM runs behind its proxy, which decides for it, and the self-check passed" bash -c "
-  [[ -n '$vm' && -n '$dp' && \$(smol_status '$vm') == running ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
+  [[ -n '$vm' && -n '$dp' && \$(smol_status '$vm') == running ]] && grep -qx net=on '$(vmdir "$vm")/state' && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
   ! grep -q 'backend_unreviewed' '$work/last.log' &&
   pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm .* -decider 127.0.0.1:$dp -decider-to 100.96.0.1:$pp ' >/dev/null"
 # The control: the guest has the password, from the VM's proxy file, in a login and in Docker's
 # daemon, which devvm's services exec started with no login.
 check "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it" bash -c "
-  key=\$(sed -n 's/^proxy_key=//p' '$vms/$vm') && { [[ \${#key} -eq 64 ]] || { echo no key; false; }; } &&
+  key=\$(sed -n 's/^proxy_key=//p' '$(vmdir "$vm")/state') && { [[ \${#key} -eq 64 ]] || { echo no key; false; }; } &&
   { [[ -s '$work/ps.log' ]] || { echo nothing sampled; false; }; } &&
   { ! grep -qFf <(echo \"\$key\") '$work/ps.log' || { echo in a process while devvm launched it; false; }; } &&
   { ! ps -axww -o command= | grep -qFf <(echo \"\$key\") || { echo in a process now; false; }; } &&
-  { grep -qF \":\$key@\" '$XDG_DATA_HOME/devvm/smolvm/vms/$vm.proxy' || { echo no proxy file; false; }; } &&
+  { grep -qF \":\$key@\" '$(vmdir "$vm")/backend/proxy' || { echo no proxy file; false; }; } &&
   { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -u '$me' -e 'HOME=/home/$me.guest' -- bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -qF \":\$key@\" || { echo not in a login; false; }; } &&
   { SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- sh -c 'tr \"\\\\0\" \"\\\\n\" < /proc/\$(cat /run/docker.pid)/environ' </dev/null |
     grep -qF \"https_proxy=http://devvm:\$key@\" || { echo not in the daemon devvm started; false; }; }"
@@ -3454,7 +3461,7 @@ else
   skip "... while a UDP allow added live lets the probe's NTP request out (the control), until it's removed" "nettop is macOS's"
 fi
 check "the decider's token is in no host process's arguments, and never reaches the VM" bash -c "
-  tok=\$(sed -n 's/^decider_token=//p' '$vms/$vm') && [[ \${#tok} -eq 64 ]] &&
+  tok=\$(sed -n 's/^decider_token=//p' '$(vmdir "$vm")/state') && [[ \${#tok} -eq 64 ]] &&
   ! ps -axww -o command= | grep -qFf <(echo \"\$tok\") &&
   ! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- bash -c \"grep -rqsF \$tok /etc /run /root /home /tmp /var/log\" </dev/null &&
   ! SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- bash -c \"cat /proc/[0-9]*/environ 2>/dev/null | tr '\\\\0' '\\\\n' | grep -qF \$tok\" </dev/null"
@@ -3477,7 +3484,7 @@ check "started outside devvm, with a decider of someone else's: devvm stops it a
   ! printf 'echo e2e-opened\n' | ${U[*]} DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 &&
   grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && ! grep -q e2e-opened '$work/last.log' && [[ \$(smol_status '$vm') == stopped ]]"
 check "devvm starts it again confined, and the self-check passes" bash -c "cd '$np' &&
-  printf 'exit\n' | ${U[*]} '$D' >'$work/last.log' 2>&1 && [[ \$(smol_status '$vm') == running ]] && grep -qx net_check=ok '$vms/$vm' &&
+  printf 'exit\n' | ${U[*]} '$D' >'$work/last.log' 2>&1 && [[ \$(smol_status '$vm') == running ]] && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
   pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && [[ \$('$D' network 2>/dev/null | head -1) == on ]]"
 check "devvm network off: its next start is smolvm's own network, without an allow list, a decider or a proxy" bash -c "cd '$np' &&
   ${U[*]} '$D' network off </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${U[*]} '$D' restart >'$work/last.log' 2>&1 &&
@@ -3499,10 +3506,10 @@ else
 fi
 check "devvm network on: devvm restart starts it confined again" bash -c "cd '$np' &&
   ${U[*]} '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${U[*]} '$D' restart >'$work/last.log' 2>&1 &&
-  [[ \$('$D' network | head -1) == on ]] && grep -qx net_check=ok '$vms/$vm' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
+  [[ \$('$D' network | head -1) == on ]] && grep -qx net_check=ok '$(vmdir "$vm")/state' && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
 check "... its allow list and DNS closed again, and direct connections fail" smolnet_closed "$vm"
 check "rm --force deletes it, its proxy and its state" bash -c "cd '$np' && ${U[*]} '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-  [[ -z \$(smol_status '$vm') && ! -e '$vms/$vm' ]] && sleep 4 && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
+  [[ -z \$(smol_status '$vm') && ! -e '$(vmdir "$vm")' ]] && sleep 4 && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
 # Alpine with the docker layer: launching adds devvm's proxy to Docker's settings, so it restarts
 # Docker's daemon, with no init system (not through OpenRC, which isn't running).
 na=$(newproj smolnetalp)
@@ -3510,7 +3517,7 @@ na=$(newproj smolnetalp)
 rc=$?
 va=$(vm_of "$na"); [[ -z $va ]] || created+=("$va")
 check "a VM --from alpine:3 with the docker layer and network policy is made, and the self-check passed" bash -c "
-  [[ $rc -eq 0 && -n '$va' && \$(smol_status '$va') == running ]] && grep -qx net_check=ok '$vms/$va' && grep -qx libc=musl '$vms/$va' ||
+  [[ $rc -eq 0 && -n '$va' && \$(smol_status '$va') == running ]] && grep -qx net_check=ok '$(vmdir "$va")/state' && grep -qx libc=musl '$(vmdir "$va")/state' ||
   { tail -5 '$work/last.log'; false; }"
 check "... its Docker, restarted by devvm, pulls through the proxy" in_smol "$va" \
   'for i in $(seq 30); do sudo docker info >/dev/null 2>&1 && break; sleep 1; done; sudo docker run --rm hello-world | grep -q Hello'
@@ -3541,7 +3548,7 @@ smolpa_closed() { for _ in $(seq 10); do
   echo "port $1 still answers"; return 1; }
 # smolpa_forwarder VM: its forwarder's pid. smolpa_log VM: its forwarder's log.
 smolpa_forwarder() { pgrep -f -- "[_]smolvm-ports -vm $1 " | head -1; }
-smolpa_log() { cat "$XDG_DATA_HOME/devvm/smolvm/vms/$1.ports.log" 2>/dev/null; }
+smolpa_log() { cat "$(vmdir "$1")/backend/ports.log" 2>/dev/null; }
 # smolpa_loopback VM PORT...: its forwarder listens on each PORT, and everything it listens on is on
 # this machine's loopback alone.
 smolpa_loopback() { local vm=$1 pid l p; shift
@@ -3561,7 +3568,7 @@ vm=$(vm_of "$pa"); [[ -z $vm ]] || created+=("$vm")
 check "the VM forwards every port (the default), with a forwarder of devvm's, none of smolvm's but its ssh's" bash -c "
   [[ -n '$vm' && \$(smol_status '$vm') == running ]] && ! grep -q backend_unreviewed '$work/last.log' &&
   ! grep -qE 'ports_(no_ssh|forward_failed)' '$work/last.log' && [[ -n \$(smolpa_forwarder '$vm') ]] && smolpa_log '$vm' | grep -q \"forwarding $vm's ports\""
-check "... its machine's process listening on its ssh forward alone" smol_listens_only "$vm" "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")"
+check "... its machine's process listening on its ssh forward alone" smol_listens_only "$vm" "$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$(vmdir "$vm")/backend/record.json")"
 check "... its ssh master reading no config of yours, the VM's key alone, its host key pinned, no forwarding asked for" smolpa_master "$vm"
 smolpa_serve "$vm" 127.0.0.1 47391; smolpa_serve "$vm" ::1 47392; smolpa_serve "$vm" 0.0.0.0 47393; smolpa_serve "$vm" :: 47394
 check "a server on the VM's loopback alone reaches this machine's, at 127.0.0.1 and ::1" smolpa_answers 47391 vm-47391
@@ -3612,12 +3619,12 @@ smolpa_not_loopback() { local vm=$1 ip r=0
   ip=$(SMOLVM_USAGE=0 smolvm machine exec --name "$vm" -- perl -MIO::Socket::INET -e \
     'print IO::Socket::INET->new(PeerAddr => "100.96.0.1:9", Proto => "udp")->sockhost' </dev/null 2>/dev/null)
   [[ $ip =~ ^[0-9.]+$ && $ip != 127.* ]] || { echo "the VM's address: ${ip:-none}"; return 1; }
-  printf 'net=off\nports=47406\n' > "$vms/devvm-e2e-reserved"
+  mkdir -p "$(vmdir "$rsv_vm")" && printf 'name=%s\nnet=off\nports=47406\n' "$rsv_vm" > "$(vmdir "$rsv_vm")/state"
   smolpa_serve "$vm" "$ip" 47404; smolpa_serve "$vm" 0.0.0.0 47406; sleep 2; smolpa_serve "$vm" 127.0.0.1 47405
   smolpa_answers 47405 vm-47405 || { echo "the control isn't forwarded"; r=1; }
   smolpa_closed 47404 && smolpa_closed 47406 || r=1
   ! smolpa_log "$vm" | grep -E 'port (47404|47406)' || r=1
-  rm -f "$vms/devvm-e2e-reserved"; return "$r"; }
+  rm -rf "$(vmdir "$rsv_vm")"; return "$r"; }
 check "a server on the VM's own address alone isn't forwarded, nor a port another VM lists, while it's free (a loopback server is, the control)" smolpa_not_loopback "$vm"
 check "a server that stops: its forward goes; the others stay" bash -c "
   SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -- pkill -f '0.0.0.0 47393' </dev/null &&
@@ -3629,7 +3636,7 @@ check "started again, it has a new forwarder, which forwards a server started th
   SMOLVM_USAGE=0 smolvm machine exec --name '$vm' -d -- perl -MIO::Socket::IP -e '\$s = IO::Socket::IP->new(LocalHost => q(127.0.0.1), LocalPort => 47396, Listen => 5) or die; while (\$c = \$s->accept) { print \$c qq(vm-47396\n); close \$c }' </dev/null >/dev/null 2>&1 &&
   smolpa_answers 47396 vm-47396"
 check "rm deletes it, its forwarder and its files" bash -c "cd '$pa' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-  [[ -z \$(smol_status '$vm') && -z \$(smolpa_forwarder '$vm') ]] && ! ls '$XDG_DATA_HOME/devvm/smolvm/vms/$vm'.ports.* 2>/dev/null && smolpa_closed 47396"
+  [[ -z \$(smol_status '$vm') && -z \$(smolpa_forwarder '$vm') ]] && [[ ! -e '$(vmdir "$vm")' ]] && smolpa_closed 47396"
 
 # With network policy: forwarding works, and opens the VM no way out; the forwarder never takes the
 # VM's proxy or decider port, even with the proxy gone. A service on this machine's own loopback
@@ -3640,11 +3647,11 @@ listener=$!
 pn=$(newproj smolallnet)
 (cd "$pn" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" "${S[@]}" --network-policy --no-git-protect >"$work/last.log" 2>&1)
 vm=$(vm_of "$pn"); [[ -z $vm ]] || created+=("$vm")
-pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
-dp=$(sed -n 's/^decider_port=//p' "$vms/$vm" 2>/dev/null)
+pp=$(sed -n 's/^proxy_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
+dp=$(sed -n 's/^decider_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
 smolpa_serve "$vm" 127.0.0.1 47397
 check "with network policy, every port forwarded too, and the self-check passed" bash -c "
-  [[ -n '$vm' && -n '$pp' && -n '$dp' ]] && grep -qx net_check=ok '$vms/$vm' && smolpa_answers 47397 vm-47397"
+  [[ -n '$vm' && -n '$pp' && -n '$dp' ]] && grep -qx net_check=ok '$(vmdir "$vm")/state' && smolpa_answers 47397 vm-47397"
 check "... direct connections still fail while it forwards, even as root: an address, other ports, IPv6, the host's loopback" smolnet_direct "$vm"
 # smolpa_reserved VM: with its proxy and decider gone, the VM listens on their ports: neither is
 # forwarded (nothing answers there); the next devvm starts the proxy on them again.
@@ -3660,7 +3667,7 @@ smolpa_reserved() {
   if nc -z 127.0.0.1 "$pp" 2>/dev/null || nc -z 127.0.0.1 "$dp" 2>/dev/null || smolpa_log "$1" | grep -qE "port ($pp|$dp): forwarded"; then
     echo "the proxy's or decider's port was forwarded"; smolpa_log "$1" | tail -5; return 1
   fi
-  (cd "$pn" && printf 'exit\n' | "$D" >"$work/last.log" 2>&1) && grep -qx net_check=ok "$vms/$1" &&
+  (cd "$pn" && printf 'exit\n' | "$D" >"$work/last.log" 2>&1) && grep -qx net_check=ok "$(vmdir "$1")/state" &&
   pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 " >/dev/null; }
 check "with its proxy and decider gone, the VM listening on their ports: neither is forwarded (a port of its own is, the control); devvm starts the proxy on them again" smolpa_reserved "$vm"
 # smolpa_listed_net VM DIR: with network policy and listed ports, 22 among them (the guest port of
@@ -3671,8 +3678,8 @@ check "with its proxy and decider gone, the VM listening on their ports: neither
 smolpa_listed_net() { local vm=$1 sp
   (cd "$2" && "$D" stop </dev/null >/dev/null 2>&1 && "$D" ports 22,47399 </dev/null >/dev/null 2>&1 &&
     printf 'exit\n' | "$D" >"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }
-  grep -qx net_check=ok "$vms/$vm" || { echo "no self-check"; return 1; }
-  sp=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$XDG_DATA_HOME/devvm/smolvm/vms/$vm.json")
+  grep -qx net_check=ok "$(vmdir "$vm")/state" || { echo "no self-check"; return 1; }
+  sp=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$(vmdir "$vm")/backend/record.json")
   [[ $sp =~ ^[0-9]+$ && $sp != 22 && $sp != 47399 ]] || { echo "ssh port: ${sp:-none}"; return 1; }
   smol_listens_only "$vm" "$sp" || return 1
   env -u SSH_AUTH_SOCK ssh -F "$XDG_DATA_HOME/devvm/ssh_config" -o BatchMode=yes "$vm" true </dev/null || { echo "ssh by name failed"; return 1; }
@@ -3689,8 +3696,8 @@ section "smolvm: shared tools"
 t=$(newproj smoltools); echo '{}' > "$t/package.json"
 launch "$t" 'node -v' "${S[@]}" --no-network-policy --ports none --no-git-protect
 check "a node VM: its tools built uncompressed for smolvm, from the share, at the locked versions" bash -c "
-  [[ -n '$vm' ]] && grep -qx image=base '$vms/$vm' && grep -qx tool_names=node '$vms/$vm' && grep -qx v$(lockv node) '$work/last.log' &&
-  for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"smolvm\",' '$share'/\$f.json || exit 1; done"
+  [[ -n '$vm' ]] && grep -qx image=base '$(vmdir "$vm")/state' && grep -qx tool_names=node '$(vmdir "$vm")/state' && grep -qx v$(lockv node) '$work/last.log' &&
+  for f in \$(sed -n 's/^tools=//p' '$(vmdir "$vm")/state'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"smolvm\",' '$share'/\$f.json || exit 1; done"
 check "node, npm, pnpm and bun work, each a read-only image" in_smol "$vm" \
   "npm -v && pnpm -v && bun -v && [[ \$(findmnt -no FSTYPE /opt/devvm/tools/node/$(lockv node)) == erofs ]] && ! touch /opt/devvm/tools/node/$(lockv node)/x 2>/dev/null"
 check "the tools build left no machine behind" bash -c "[[ -z \$(smol_status devvm-tools-build) ]]"
@@ -3705,7 +3712,7 @@ nx=$(newproj smolnix)
 launch "$nx" exit "${S[@]}" --network-policy --ports none --no-git-protect --layers nix
 nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo ok > $out" ]; }'
 check "a nix VM with network policy: nix-daemon runs, with the VM's proxy" bash -c "
-  [[ -n '$vm' ]] && grep -qx image=nix '$vms/$vm' && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
+  [[ -n '$vm' ]] && grep -qx image=nix '$(vmdir "$vm")/state' && grep -qx net=on '$(vmdir "$vm")/state' && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
   in_smol '$vm' '[[ \$(cat /proc/\$(cat /run/nix-daemon.pid)/comm) == nix-daemon ]] &&
     sudo grep -qx \"export http_proxy=\$HTTP_PROXY https_proxy=\$HTTP_PROXY no_proxy=localhost,127.0.0.1,::1\" /etc/conf.d/nix-daemon'"
 check "nix run nixpkgs#hello works through the proxy, and a build runs in Nix's sandbox" in_smol "$vm" "
@@ -3752,7 +3759,7 @@ docker_project() {
   launch "$p" 'pwd; id -un; echo e2e-shell-ran' "${B[@]}" --no-network-policy --ports none --cpus 2 --memory 3
   check "devvm makes the VM a container from base, labelled, and opens a shell in the folder as you" bash -c "
     [[ -n '$vm' && \$(d_state '$vm') == running ]] && grep -qx '$p' '$work/last.log' && grep -qx '$me' '$work/last.log' &&
-    grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=docker '$vms/$vm' && grep -qx net=off '$vms/$vm' &&
+    grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=docker '$(vmdir "$vm")/state' && grep -qx net=off '$(vmdir "$vm")/state' &&
     [[ \$(docker container inspect -f '{{index .Config.Labels \"devvm.kind\"}}' '$vm') == vm ]]"
   check "it gets --cpus and --memory" in_d "$vm" '[[ $(nproc) == 2 && $(cat /sys/fs/cgroup/memory.max) == 3221225472 ]]'
   check "ls lists it on docker" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +- +\S+ +off +- +docker +$p\$'"
@@ -3780,7 +3787,7 @@ docker_project() {
   # Its containers can't make the namespaces Nix's build sandbox needs.
   check "the nix layer is refused in one line, nothing made" refused "$q" nix-layer --no-network-policy --ports none --layers nix
   check "rm deletes its container, its home volume and its state" bash -c "cd '$p' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-    [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-home' && [[ ! -e '$vms/$vm' && ! -e '$XDG_DATA_HOME/devvm/docker/vms/$vm.json' ]]"
+    [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-home' && [[ ! -e '$(vmdir "$vm")' ]]"
 }
 
 # docker_agents NAME: an agent VM's folders, read-only; one added or removed makes its container again
@@ -3817,8 +3824,8 @@ docker_tools() {
   local t; t=$(newproj "$1"); echo '{}' > "$t/package.json"
   launch "$t" 'node -v' "${B[@]}" --no-network-policy --ports none --no-git-protect
   check "a node VM: its tools at the locked versions, in the share, recorded" bash -c "
-    [[ -n '$vm' ]] && grep -qx image=base '$vms/$vm' && grep -qx tool_names=node '$vms/$vm' && grep -qx v$(lockv node) '$work/last.log' &&
-    for f in \$(sed -n 's/^tools=//p' '$vms/$vm'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"docker\",' '$share'/\$f.json || exit 1; done"
+    [[ -n '$vm' ]] && grep -qx image=base '$(vmdir "$vm")/state' && grep -qx tool_names=node '$(vmdir "$vm")/state' && grep -qx v$(lockv node) '$work/last.log' &&
+    for f in \$(sed -n 's/^tools=//p' '$(vmdir "$vm")/state'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"docker\",' '$share'/\$f.json || exit 1; done"
   check "node, npm, pnpm and bun work, each linked from Docker's tools volume, read-only even for root" bash -c "
     in_d() { docker exec -u '$me' -e HOME=/home/$me.guest -e USER=$me '$vm' bash -lc \"\$1\" </dev/null; }
     in_d 'npm -v && pnpm -v && bun -v' && in_d '[[ \$(readlink /opt/devvm/tools/node/$(lockv node)) == /mnt/devvm-tools/node-$(lockv node)-*.erofs ]]' &&
@@ -3922,9 +3929,9 @@ d_layer_ipv6() { local br ll out
 # other, still running, no network or engine's volumes of the layer's).
 d_layer_refused_existing() { local d=$1 vm=$2
   (cd "$d" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" --layers docker >"$work/last.log" 2>&1); cat "$work/last.log"
-  echo "state: $(grep -E '^(image|docker_layer|net)=' "$vms/$vm" | xargs)"
+  echo "state: $(grep -E '^(image|docker_layer|net)=' "$(vmdir "$vm")/state" | xargs)"
   [[ $(grep -c '^devvm: ' "$work/last.log") -eq 1 ]] && grep -qx "devvm: parts_flags_ignored vm=$vm" "$work/last.log" &&
-    grep -qx image=base "$vms/$vm" && ! grep -q '^docker_layer=.' "$vms/$vm" && [[ $(d_state "$vm") == running ]] &&
+    grep -qx image=base "$(vmdir "$vm")/state" && ! grep -q '^docker_layer=.' "$(vmdir "$vm")/state" && [[ $(d_state "$vm") == running ]] &&
     d_plain_vm "$vm" && ! d_vol "$vm-docker" && ! d_vol "$vm-containerd" && ! d_net "$vm-docker-net"; }
 # d_engine_kept DIR VM: devvm restart in DIR starts VM's Docker engine again, with the image d_inner
 # pulled; else what its engine logged.
@@ -3961,7 +3968,7 @@ docker_layer() {
   check "under Sysbox: its runtime, not privileged, said, unwarned, its engine's volumes, its own network alone, no network policy (said)" bash -c "
     [[ -n '$vm' ]] && grep -qE '^==> docker_layer_runtime backend=docker runtime=sysbox vm=$vm\$' '$work/last.log' &&
     ! grep -q backend_unreviewed '$work/last.log' && grep -qx 'devvm: net_off_docker_layer backend=docker vm=$vm' '$work/last.log' &&
-    d_layer_vm '$vm' && grep -qx docker_layer=sysbox '$vms/$vm' && grep -qx net=off '$vms/$vm' || { tail -5 '$work/last.log'; false; }"
+    d_layer_vm '$vm' && grep -qx docker_layer=sysbox '$(vmdir "$vm")/state' && grep -qx net=off '$(vmdir "$vm")/state' || { tail -5 '$work/last.log'; false; }"
   check "... root in it isn't root here: a user namespace of its own" in_root "$vm" \
     '! grep -qE "^ *0 +0 +4294967295\$" /proc/self/uid_map && cat /proc/self/uid_map'
   check "... root has every capability in its own namespaces, NET_ADMIN and NET_RAW among them" in_root "$vm" \
@@ -3979,7 +3986,7 @@ docker_layer() {
     grep -E '^(==> |devvm: )?setid_root_files ' '$work/last.log' | grep -q e2e-setid"
   check "... ls shows it" bash -c "cd '$s' && '$D' ls 2>/dev/null | grep -Eq '^$vm +Running +.* +docker \(sysbox\) +$s\$'"
   check "... network policy can't be turned on" bash -c "cd '$s' && ! DEVVM_MESSAGES=names '$D' network on </dev/null 2>'$work/last.log' &&
-    grep -qx 'devvm: net_docker_layer backend=docker vm=$vm' '$work/last.log' && grep -qx net=off '$vms/$vm'"
+    grep -qx 'devvm: net_docker_layer backend=docker vm=$vm' '$work/last.log' && grep -qx net=off '$(vmdir "$vm")/state'"
   # Its shell, a login, has the docker group the layer adds.
   check "... Docker's engine runs in it, for the VM's user in its shell" bash -c "cd '$s' &&
     printf 'for _ in \$(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done\ndocker run --rm alpine:3 echo e2e-inner-ran\n' |
@@ -4054,7 +4061,7 @@ d_closed() { for _ in $(seq 15); do
 d_started() { docker container inspect -f '{{.State.StartedAt}}' "$1" 2>/dev/null; }
 # d_fwd VM: its forwarder's pid. d_fwdlog VM: its log.
 d_fwd() { pgrep -f -- "[_]docker-ports -vm $1 " | head -1; }
-d_fwdlog() { cat "$XDG_DATA_HOME/devvm/docker/vms/$1.ports.log" 2>/dev/null; }
+d_fwdlog() { cat "$(vmdir "$1")/backend/ports.log" 2>/dev/null; }
 # d_listens PID: what that process listens on (TCP), ADDRESS:PORT lines.
 d_listens() { if command -v lsof >/dev/null; then lsof -nP -a -p "$1" -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }'
   else ss -ltnpH 2>/dev/null | awk -v p="pid=$1," 'index($0, p) { print $4 }'; fi | sort -u; }
@@ -4115,12 +4122,12 @@ d_hosts_kept() { local vm=$1 p ports=47401 all
 d_not_loopback() { local vm=$1 ip r=0
   ip=$(docker container inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$vm" 2>/dev/null | awk '{ print $1 }')
   [[ $ip =~ ^[0-9.]+$ && $ip != 127.* ]] || { echo "the VM's address: ${ip:-none}"; return 1; }
-  printf 'net=off\nports=47406\n' > "$vms/devvm-e2e-reserved"
+  mkdir -p "$(vmdir "$rsv_vm")" && printf 'name=%s\nnet=off\nports=47406\n' "$rsv_vm" > "$(vmdir "$rsv_vm")/state"
   d_serve "$vm" "$ip" 47404; d_serve "$vm" 0.0.0.0 47406; sleep 2; d_serve "$vm" 127.0.0.1 47405
   d_answers 47405 vm-47405 || { echo "the control isn't forwarded"; r=1; }
   d_closed 47404 && d_closed 47406 || r=1
   ! d_fwdlog "$vm" | grep -E 'port (47404|47406)' || r=1
-  rm -f "$vms/devvm-e2e-reserved"; return "$r"; }
+  rm -rf "$(vmdir "$rsv_vm")"; return "$r"; }
 
 # docker_ssh NAME: ssh for editors' emulation.
 docker_ssh() {
@@ -4153,8 +4160,8 @@ docker_ssh() {
   fi
   check "the VM's server listens on its user's own socket, on no TCP port, the clipboard off" in_d "$vm" "$desktop_in_vm"
   check "the password is in no file of the VM's nor any run log" bash -c '
-    printf "%s\n" "$1" | docker exec -i -u 0 "$2" sh -c "$3" && ! grep -rlF "$1" "$4"' \
-    _ "$desk_pw" "$vm" "$desktop_secret" "$XDG_DATA_HOME/devvm/logs"
+    printf "%s\n" "$1" | docker exec -i -u 0 "$2" sh -c "$3" && ! grep -rqsF "$1" "${@:4}"' \
+    _ "$desk_pw" "$vm" "$desktop_secret" "$XDG_DATA_HOME/devvm/logs" "$(vmdir "$vm")/logs"
   desktop_end
   check "Ctrl+C ends devvm desktop, its port closed" bash -c "[[ -n '$desk_port' ]] && ! nc -z 127.0.0.1 '$desk_port'"
   check "agent forwarding stays off, whatever Host * says; ssh -A forwards it (the control)" bash -c "
@@ -4211,7 +4218,7 @@ docker_ssh() {
     [[ -n '$vm2' ]] && a=\$(dssh_key '$vm') && b=\$(dssh_key '$vm2') && [[ -n \$a && -n \$b && \$a != \$b ]] && dsh devvm-${1}2 true"
   check "... and a key of its own: its key doesn't log in to the other VM, the other's own does (the control)" bash -c "
     with_key() { env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile='$kh' -o HostKeyAlias='$vm' -o StrictHostKeyChecking=yes \
-      -o BatchMode=yes -o IdentitiesOnly=yes -i '$XDG_DATA_HOME/devvm/docker/vms/'\$1.key -o ProxyCommand=\"\$(dssh_proxy devvm-$1)\" -l '$me' '$vm' true </dev/null 2>/dev/null; }
+      -o BatchMode=yes -o IdentitiesOnly=yes -i \"\$(vmdir \"\$1\")/backend/key\" -o ProxyCommand=\"\$(dssh_proxy devvm-$1)\" -l '$me' '$vm' true </dev/null 2>/dev/null; }
     ! with_key '$vm2' && with_key '$vm'"
   check "an image without sshd (root moved it away): the next start runs without ssh, warned, and the VM runs" bash -c "cd '$q2' &&
     docker exec -u 0 '$vm2' mv /usr/sbin/sshd /usr/sbin/sshd.away </dev/null &&
@@ -4223,7 +4230,7 @@ docker_ssh() {
   (cd "$qa" && printf 'exit\n' | "$D" "${B[@]}" --from alpine:3 --no-network-policy --ports none >"$work/last.log" 2>&1)
   vma=$(vm_of "$qa"); [[ -z $vma ]] || created+=("$vma")
   check "a VM --from alpine:3 is made, and ssh devvm-${1}alpine reaches it, on Alpine, as the VM's user" bash -c "
-    [[ -n '$vma' ]] && grep -qx libc=musl '$vms/$vma' &&
+    [[ -n '$vma' ]] && grep -qx libc=musl '$(vmdir "$vma")/state' &&
     out=\$(dsh -o BatchMode=yes devvm-${1}alpine '. /etc/os-release; echo \$ID; id -un') &&
     [[ \$out == alpine\$'\n''$me' ]] || { echo \"\${out:-}\"; tail -5 '$work/last.log'; false; }"
   (cd "$qa" && quiet "$D" rm --force --no-export)
@@ -4232,7 +4239,7 @@ docker_ssh() {
     ! DEVVM_MESSAGES=names '$D' _docker-connect -docker \"\$(command -v docker)\" -data '$XDG_DATA_HOME/devvm' '$vm' </dev/null 2>'$work/e' &&
     grep -qx 'devvm: vm_not_running vm=$vm' '$work/e'"
   check "rm deletes it, its entry, its key and its pinned keys" bash -c "cd '$q' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-    [[ -z \$(d_state '$vm') ]] && ! grep -q '$vm' '$dsc' && ! grep -q '^$vm ' '$kh' && ! ls '$XDG_DATA_HOME/devvm/docker/vms/$vm'.* 2>/dev/null"
+    [[ -z \$(d_state '$vm') ]] && ! grep -q '$vm' '$dsc' && ! grep -q '^$vm ' '$kh' && [[ ! -e '$(vmdir "$vm")' ]]"
 }
 
 # docker_ports NAME: ports' and every port's emulation.
@@ -4285,7 +4292,7 @@ docker_ports() {
   check "docker stop outside devvm ends its forwarder" bash -c "docker stop -t 1 '$vm' >/dev/null &&
     for _ in \$(seq 40); do [[ -z \$(d_fwd '$vm') ]] && break; sleep 1; done; [[ -z \$(d_fwd '$vm') ]] && d_closed 47516"
   check "rm deletes it, its forwarder and its files" bash -c "cd '$pa' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-    [[ -z \$(d_state '$vm') && -z \$(d_fwd '$vm') ]] && ! ls '$XDG_DATA_HOME/devvm/docker/vms/$vm'.* 2>/dev/null"
+    [[ -z \$(d_state '$vm') && -z \$(d_fwd '$vm') && ! -e '$(vmdir "$vm")' ]]"
   # Listed ports: the same forwarder, those alone.
   pl=$(newproj "${1}list")
   (cd "$pl" && printf 'exit\n' | "$D" "${B[@]}" --no-network-policy --no-git-protect --ports 47521,47180-47181 >"$work/last.log" 2>&1)
@@ -4374,7 +4381,7 @@ docker_clone() {
   vm=$(vm_of "$c"); [[ -z $vm ]] || created+=("$vm")
   cgit="GIT_SSH_COMMAND='ssh -F $dsc' git -C '$c'"
   check "the VM has its own clone in a volume of its own, every branch pushed in over ssh, nothing of the folder mounted, and the shell opens in it" bash -c "
-    [[ -n '$vm' ]] && grep -qx mode=clone '$vms/$vm' && grep -qx '$c' '$work/last.log' && grep -qx main '$work/last.log' &&
+    [[ -n '$vm' ]] && grep -qx mode=clone '$(vmdir "$vm")/state' && grep -qx '$c' '$work/last.log' && grep -qx main '$work/last.log' &&
     mounted '$vm' '$c' volume true && ! mounted '$vm' '$c' bind true &&
     [[ \$(in_d '$vm' \"git -C '$c' branch --format='%(refname:short)'\" | tr '\n' ' ') == 'main other ' ]] &&
     in_d '$vm' \"git -C '$c' log --oneline\" | grep -q one && in_d '$vm' \"[ ! -e '$c/untracked' ]\""
@@ -4384,7 +4391,7 @@ docker_clone() {
   check "pushing a branch into it works too" bash -c "git -C '$c' branch pushed other && $cgit push -q devvm pushed &&
     in_d '$vm' \"git -C '$c' rev-parse -q --verify refs/heads/pushed\" >/dev/null"
   check "rm --force deletes it, its clone's volume and the remote; the fetched work stays as a local branch" bash -c "cd '$c' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-    [[ -z \$(d_state '$vm') && ! -e '$vms/$vm' ]] && ! d_vol '$vm-clone' && ! git -C '$c' remote | grep -q devvm &&
+    [[ -z \$(d_state '$vm') && ! -e '$(vmdir "$vm")' ]] && ! d_vol '$vm-clone' && ! git -C '$c' remote | grep -q devvm &&
     git -C '$c' log --oneline saved/devvm/main | grep -q from-vm"
   unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 }
@@ -4448,8 +4455,8 @@ dn_launch() { (cd "$1" && printf '%s\n' "${2:-exit}" | env HOME="$nu_home" DEVVM
 export -f dn_nets dn_closed dn_open dn_proxy dn_gone dn_confined dn_launch
 # dn_secret VM DIR: a fake GitHub token, bound to it: the VM gets its own placeholder and never the
 # token, nor does its relay; the proxy puts it in for its host; unbound and deleted at once.
-dn_secret() { local salt events=$XDG_DATA_HOME/devvm/logs/$1.jsonl
-  salt=$(sed -n 's/^proxy_salt=//p' "$vms/$1")
+dn_secret() { local salt events; events=$(vmdir "$1")/logs/network.jsonl
+  salt=$(sed -n 's/^proxy_salt=//p' "$(vmdir "$1")/state")
   if ! { echo ghp_E2EFAKE | "${NU[@]}" "$D" secret set github --stdin >/dev/null && (cd "$2" && "${NU[@]}" "$D" secret use github >/dev/null) &&
     dn_launch "$2"; }; then cat "$work/last.log"; return 1; fi
   # shellcheck disable=SC2016  # $GH_TOKEN is the VM's
@@ -4460,7 +4467,7 @@ dn_secret() { local salt events=$XDG_DATA_HOME/devvm/logs/$1.jsonl
   if ! in_d "$1" 'curl -sS -m 20 -o /dev/null https://api.github.com/user -H "Authorization: token $GH_TOKEN"' ||
     ! grep '"path":"/user"' "$events" | grep -q '"secrets":\["github"\]'; then echo "not put in"; return 1; fi
   (cd "$2" && "${NU[@]}" "$D" secret unuse github >/dev/null && "${NU[@]}" "$D" secret rm --force github >/dev/null) &&
-  ! grep -q '"name":"github"' "$XDG_DATA_HOME/devvm/run/$1.secrets.json"
+  ! grep -q '"name":"github"' "$(vmdir "$1")/run/secrets.json"
 }
 # dn_caps VM: its container is made without NET_RAW and given nothing: NET_RAW isn't in its bounding
 # set, so even root opens no raw socket, IPv4 or packet (AF_PACKET).
@@ -4479,7 +4486,7 @@ dn_net() { local o
 # dn_members VM: its network's members, by ID, are the VM's container and its relay's, the one its
 # record names.
 dn_members() { local rec want got
-  rec=$(sed -n 's/^ *"relay_id": "\([0-9a-f]*\)",*$/\1/p' "$XDG_DATA_HOME/devvm/docker/vms/$1.json")
+  rec=$(sed -n 's/^ *"relay_id": "\([0-9a-f]*\)",*$/\1/p' "$(vmdir "$1")/backend/record.json")
   want=$(docker container inspect -f '{{.Id}}' "$1" "$1-proxy" | sort | xargs)
   got=$(docker network inspect -f '{{range $id, $c := .Containers}}{{$id}} {{end}}' "$1-net" | xargs -n1 | sort | xargs)
   echo "members: $got; the VM and its relay: $want; the record's relay: $rec"
@@ -4598,10 +4605,10 @@ docker_netpolicy() {
   (cd "$np" && printf 'exit\n' | "${NU[@]}" DEVVM_MESSAGES=names "$D" "${B[@]}" --network-policy --ports none --no-git-protect >"$work/last.log" 2>&1)
   ps_unwatch
   vm=$(vm_of "$np"); [[ -z $vm ]] || created+=("$vm")
-  pp=$(sed -n 's/^proxy_port=//p' "$vms/$vm" 2>/dev/null)
+  pp=$(sed -n 's/^proxy_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
   export pp d_desktop
   check "--network-policy: the VM runs on an internal network of its own, beside its relay alone, its proxy runs, and the self-check passed" bash -c "
-    [[ -n '$vm' && -n '$pp' ]] && grep -qx net=on '$vms/$vm' && grep -qx net_check=ok '$vms/$vm' &&
+    [[ -n '$vm' && -n '$pp' ]] && grep -qx net=on '$(vmdir "$vm")/state' && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
     ! grep -q backend_unreviewed '$work/last.log' || { tail -5 '$work/last.log'; false; }"
   check "... so" dn_confined "$vm"
   check "the relay: devvm's Linux build, read-only, in an empty image, no capabilities, on the VM's network alone, publishing nothing; the VM gets no capability" dn_relay "$vm"
@@ -4610,7 +4617,7 @@ docker_netpolicy() {
   check "its network's members, by ID, are the VM and the relay its record names, alone" dn_members "$vm"
   # The key is read inside the check, never in its own arguments, which ps would see.
   check "the proxy's password was in no host process's arguments while devvm launched it, nor in the relay's; the VM's proxy settings have it" bash -c "
-    key=\$(sed -n 's/^proxy_key=//p' '$vms/$vm') && { [[ -n \$key && -s '$work/ps.log' ]] || { echo no key or nothing sampled; false; }; } &&
+    key=\$(sed -n 's/^proxy_key=//p' '$(vmdir "$vm")/state') && { [[ -n \$key && -s '$work/ps.log' ]] || { echo no key or nothing sampled; false; }; } &&
     { ! grep -qFf <(echo \"\$key\") '$work/ps.log' || { echo in a process while devvm launched it; false; }; } &&
     { ! ps -axww -o command= | grep -qFf <(echo \"\$key\") || { echo in a process now; false; }; } &&
     { ! docker container inspect -f '{{.Args}} {{.Config.Env}}' '$vm-proxy' | grep -qFf <(echo \"\$key\") || { echo in the relay; false; }; } &&
@@ -4638,7 +4645,7 @@ docker_netpolicy() {
     ! printf 'echo e2e-opened\n' | ${NU[*]} DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 &&
     grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && ! grep -q e2e-opened '$work/last.log' && [[ \$(d_state '$vm') == exited ]]"
   check "devvm starts it confined again: its own network alone, and the self-check passes" bash -c "
-    dn_launch '$np' && grep -qx net_check=ok '$vms/$vm'"
+    dn_launch '$np' && grep -qx net_check=ok '$(vmdir "$vm")/state'"
   check "... so" dn_confined "$vm"
   check "its relay replaced by another container by its name, on its network: unenforced, and its next launch stops it; the one after starts it confined" bash -c "
     docker container rm -f '$vm-proxy' >/dev/null && docker run -d --name '$vm-proxy' --label 'devvm.data=$XDG_DATA_HOME/devvm' --label devvm.kind=proxy \
@@ -4664,9 +4671,9 @@ docker_netpolicy() {
   check "... and ping works as the VM's user, without NET_RAW (ICMP datagram sockets)" dn_ping "$vm"
   check "devvm network on: devvm restart starts it confined again, and direct connections fail" bash -c "cd '$np' &&
     ${NU[*]} '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${NU[*]} '$D' restart >'$work/last.log' 2>&1 &&
-    [[ \$('$D' network | head -1) == on ]] && grep -qx net_check=ok '$vms/$vm' && dn_confined '$vm' && dn_closed '$vm'"
+    [[ \$('$D' network | head -1) == on ]] && grep -qx net_check=ok '$(vmdir "$vm")/state' && dn_confined '$vm' && dn_closed '$vm'"
   check "rm --force deletes it, its relay, its network, its proxy and its state" bash -c "cd '$np' && ${NU[*]} '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-    [[ -z \$(d_state '$vm') && -z \$(d_state '$vm-proxy') && ! -e '$vms/$vm' ]] && ! d_net '$vm-net' && dn_gone '$vm'"
+    [[ -z \$(d_state '$vm') && -z \$(d_state '$vm-proxy') && ! -e '$(vmdir "$vm")' ]] && ! d_net '$vm-net' && dn_gone '$vm'"
   kill "$listener" "${d_hostprogs[@]}" 2>/dev/null; wait "$listener" "${d_hostprogs[@]}" 2>/dev/null; listener="" d_hostprogs=()
   d_cap_stop
   rm -f "$work/listener.auth" "$nh/Library/Keychains"; rm -rf "$nh"

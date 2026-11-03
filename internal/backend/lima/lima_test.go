@@ -570,7 +570,7 @@ func TestPortsRecord(t *testing.T) {
 			t.Errorf("%+v read as %+v, %v", p, got, err)
 		}
 	}
-	if err := os.WriteFile(f.file("v"), []byte("x\n"), 0o600); err != nil {
+	if err := os.WriteFile(f.Dirs.VM("v").Ports(), []byte("x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.read("v"); err == nil {
@@ -724,7 +724,12 @@ func TestStubLifecycle(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("calls %q, want %q", got, want)
 	}
-	if _, err := os.Stat(l.startedFile(vm)); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("Delete left its start record: %v", err)
+	// Its backend folder goes; the rest of its folder, its start record
+	// with it, is its teardown's.
+	if _, err := os.Stat(l.Dirs.VM(vm).Backend()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Delete left its backend folder: %v", err)
+	}
+	if _, err := os.Stat(l.Dirs.VM(vm).Started()); err != nil {
+		t.Errorf("its start record: %v", err)
 	}
 }

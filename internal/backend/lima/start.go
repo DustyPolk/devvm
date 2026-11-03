@@ -27,12 +27,8 @@ import (
 // /etc/hosts reaches it too.
 const limaHost = "192.168.5.2"
 
-func (l *Lima) profileFile(vm string) string { return filepath.Join(l.Dirs.Run(), vm+".sb") }
-
-// startedFile records the hostagent a VM was started on, and how it was
-// confined: "<pid> <net>".
-func (l *Lima) startedFile(vm string) string { return filepath.Join(l.Dirs.Run(), vm+".started") }
-
+// haPIDFile is the pid file of the VM's hostagent, in Lima's own folder
+// for it.
 func (l *Lima) haPIDFile(vm string) string { return filepath.Join(l.Dirs.LimaVM(vm), "ha.pid") }
 
 // Start starts a stopped VM confined as c asks, and returns once it
@@ -77,14 +73,17 @@ func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) erro
 		}
 	}
 	// Its profile, wrapper and records: the user's alone.
-	if err := state.PrivateDir(l.Dirs.Run()); err != nil {
-		return err
+	for _, d := range []string{l.Dirs.Run(), l.Dirs.VM(vm).Run()} {
+		if err := state.PrivateDir(d); err != nil {
+			return err
+		}
 	}
 	wrap, env, err := l.confine(vm, c, sshPort, in.backend().AgentForwarding)
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(l.startedFile(vm)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	// The record of its last start: "<hostagent's pid> <net>".
+	if err := os.Remove(l.Dirs.VM(vm).Started()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	cmd := l.limactl(ctx, "start", "--tty=false", vm)
@@ -174,10 +173,10 @@ func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding
 			// A build's own proxy, behind a company proxy (buildproxy.go).
 			p.Internet, p.ProxyPort = true, c.ProxyPort
 		}
-		if err := writeProfile(l.profileFile(vm), p); err != nil {
+		if err := writeProfile(l.Dirs.VM(vm).Profile(), p); err != nil {
 			return nil, nil, err
 		}
-		return []string{sandboxExec, "-f", l.profileFile(vm)}, env, nil
+		return []string{sandboxExec, "-f", l.Dirs.VM(vm).Profile()}, env, nil
 	case "linux":
 		switch c.Net {
 		case backend.NetDirect, backend.NetInternet:
@@ -340,14 +339,14 @@ func (l *Lima) recordStart(vm string, n backend.Net) error {
 	} else if err != nil {
 		return err
 	}
-	return state.WriteFile(l.startedFile(vm), fmt.Appendf(nil, "%s %d\n", strings.TrimSpace(string(pid)), n))
+	return state.WriteFile(l.Dirs.VM(vm).Started(), fmt.Appendf(nil, "%s %d\n", strings.TrimSpace(string(pid)), n))
 }
 
 // Confined reports whether the VM runs on the hostagent Start started
 // with NetProxy: anything else (limactl start) is a new hostagent,
 // unconfined.
 func (l *Lima) Confined(_ context.Context, vm string) (bool, error) {
-	rec, err := os.ReadFile(l.startedFile(vm))
+	rec, err := os.ReadFile(l.Dirs.VM(vm).Started())
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	} else if err != nil {

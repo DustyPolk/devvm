@@ -246,25 +246,22 @@ func (e *Env) find(ctx context.Context, flag string) (*found, error) {
 // nearest parent folder with state of its own (project.Parents, stopping
 // before home and the root) when its backend has it and it was made for
 // that folder (sameFolder), else nil.
-// The VMs' names fit a new VM's backend; a VM that exists keeps the
-// backend its state records.
+// A folder's VM is found by its path's hash (project.Hash), which names
+// its folder in devvm's data folder: one that exists has the name and
+// the backend its state records, whichever backend is asked now. Only a
+// new VM gets a name, fitting its backend's.
 func (e *Env) lookup(ctx context.Context, flag string, parents bool) (*found, *found, error) {
-	first, err := e.Registry.For(e.Dirs, new(state.VM), flag)
+	f, st, err := vmFolders{e}.state(e.Dir)
 	if err != nil {
 		return nil, nil, err
 	}
-	nameMax := first.Backend.NameMax()
-	f, err := project.New(e.Dir, nameMax)
-	if bad, ok := errors.AsType[*project.BadPathError](err); ok {
-		return nil, nil, msg.BadPath(bad.Dir)
-	} else if errors.Is(err, project.ErrNoRoom) {
-		return nil, nil, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(nameMax))
-	} else if err != nil {
-		return nil, nil, err
-	}
-	st, err := state.ReadVM(e.Dirs, f.Name)
-	if err != nil {
-		return nil, nil, err
+	if !st.Exists() {
+		if f, err = (vmFolders{e}).newName(e.Dir, flag); err != nil {
+			return nil, nil, err
+		}
+		if st, err = state.ReadVM(e.Dirs, f.Name); err != nil {
+			return nil, nil, err
+		}
 	}
 	// A folder with state of its own has a VM, even one its backend has
 	// lost: never a parent's in its place.
@@ -272,11 +269,46 @@ func (e *Env) lookup(ctx context.Context, flag string, parents bool) (*found, *f
 	if err != nil || t.exists || st.Exists() || !parents {
 		return t, nil, err
 	}
-	p, err := e.parentVM(ctx, nameMax, flag)
+	p, err := e.parentVM(ctx, flag)
 	if err != nil {
 		return nil, nil, err
 	}
 	return t, p, nil
+}
+
+// state reads the state of dir's VM, by its path's hash, and returns the
+// folder with the name it records ("" for none).
+func (e vmFolders) state(dir string) (project.Folder, *state.VM, error) {
+	if _, err := project.New(dir, 0); err != nil {
+		if bad, ok := errors.AsType[*project.BadPathError](err); ok {
+			return project.Folder{}, nil, msg.BadPath(bad.Dir)
+		}
+		return project.Folder{}, nil, err
+	}
+	h := project.Hash(dir)
+	st, err := state.ReadHash(e.Dirs, h)
+	if err != nil {
+		return project.Folder{}, nil, err
+	}
+	if st.Exists() && !vmname.IsVM(st.Name()) {
+		return project.Folder{}, nil, &state.CorruptError{Path: paths.VM{Dir: e.Dirs.VMDir(h)}.State(), Reason: "no " + state.KeyName + "="}
+	}
+	return project.Folder{Dir: dir, Name: st.Name()}, st, nil
+}
+
+// newName is the name a new VM for dir gets: fitting the names of the
+// backend it would be made on (flag is --backend).
+func (e vmFolders) newName(dir, flag string) (project.Folder, error) {
+	first, err := e.Registry.For(e.Dirs, new(state.VM), flag)
+	if err != nil {
+		return project.Folder{}, err
+	}
+	nameMax := first.Backend.NameMax()
+	f, err := project.New(dir, nameMax)
+	if errors.Is(err, project.ErrNoRoom) {
+		return project.Folder{}, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(nameMax))
+	}
+	return f, err
 }
 
 // parentVM finds the VM of the nearest parent folder with state of its own
@@ -286,17 +318,16 @@ func (e *Env) lookup(ctx context.Context, flag string, parents bool) (*found, *f
 // gives nil unless its backend has its VM and it was made for that folder.
 // A VM in an outer folder can replace a nested folder through its mount,
 // and devvm then never skips the nested folder's VM for the outer one's.
-func (e *Env) parentVM(ctx context.Context, nameMax int, flag string) (*found, error) {
+func (e *Env) parentVM(ctx context.Context, flag string) (*found, error) {
 	repo := ""
 	if hasGit(e.Dir) {
 		repo = e.Dir
 	}
 	for _, dir := range project.Parents(e.Dir, e.Dirs.Home) {
-		pf, err := project.New(dir, nameMax)
-		if err != nil {
+		if _, err := project.New(dir, 0); err != nil {
 			continue // a folder no VM can be made for
 		}
-		pst, err := state.ReadVM(e.Dirs, pf.Name)
+		pf, pst, err := vmFolders{e}.state(dir)
 		if err != nil {
 			return nil, err
 		}

@@ -52,16 +52,17 @@ exec devvm --backend smolvm --from $PIN --no-network-policy
 stub_calls
 stdout '^smolvm machine create( --state-dir \S+)? --name devvm-all-[0-9a-f]{14} .* -v \S+:/mnt/devvm-tools:ro --ssh-agent$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-all-[0-9a-f]{14} -- cat /etc/ssh/ssh_host_ed25519_key\.pub$'
-stdout '^ssh -F none -M -S \S+/data/devvm/run/smolvm-[0-9a-f]{16}\.ctl -T .* -o IdentityFile=\S+/smolvm/vms/devvm-all-[0-9a-f]{14}\.key .* -o HostKeyAlias=devvm-all-[0-9a-f]{14} .* -o PermitRemoteOpen=none -o ClearAllForwardings=yes .* -p [0-9]+ -l \S+ 127\.0\.0\.1 sh -s$'
-catg $DATA/smolvm/vms/devvm-all-*.ports.known_hosts
+stdout '^ssh -F none -M -S \S+/data/devvm/run/smolvm-[0-9a-f]{16}\.ctl -T .* -o IdentityFile=\S+/data/devvm/vms/[0-9a-f]{14}/backend/key .* -o HostKeyAlias=devvm-all-[0-9a-f]{14} .* -o PermitRemoteOpen=none -o ClearAllForwardings=yes .* -p [0-9]+ -l \S+ 127\.0\.0\.1 sh -s$'
+vm_name ALL all
+catg $ALL_dir/backend/ports.known_hosts
 stdout '^devvm-all-[0-9a-f]{14} ssh-ed25519 AAAAstub$'
-catg $DATA/smolvm/vms/devvm-all-*.ports.log
+catg $ALL_dir/backend/ports.log
 stdout '^devvm ports: port '$UNLISTED': forwarded$'
 stdout '^devvm ports: forwarding devvm-all-[0-9a-f]{14}''s ports$'
 ! stdout 'port 80'
 exec devvm stop
 exec devvm rm --force --no-export
-! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-all-*'
+! exists $ALL_dir
 rm $STUB_DIR/guest-ports
 project web
 
@@ -81,7 +82,8 @@ stdout '^smolvm machine start( --state-dir \S+)? --name devvm-web-[0-9a-f]{14}$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm NODE_EXTRA_CA_CERTS PIP_CERT REQUESTS_CA_BUNDLE SSL_CERT_FILE UV_SYSTEM_CERTS$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-web-[0-9a-f]{14} -i( -t)? -u \S+ -w \S+/web .* bash -l$'
 ! stderr 'backend_unreviewed'
-catg $DATA/smolvm/vms/devvm-web-*.ports.log
+vm_name WEB web
+catg $WEB_dir/backend/ports.log
 stdout '^devvm ports: port '$LISTED': forwarded$'
 stdout '^devvm ports: forwarding devvm-web-[0-9a-f]{14}''s ports$'
 ! stdout 'port '$UNLISTED':'
@@ -97,14 +99,14 @@ listen_any TAKEN
 exec devvm stop
 exec devvm ports add $TAKEN
 stub_reset
-exec sh -c 'printf "0100007F:%04X\n0100007F:%04X\n" "$LISTED" "$TAKEN" >"$STUB_DIR/guest-ports"; : > "$(ls "$DATA"/smolvm/vms/devvm-web-*.ports.log)"'
+exec sh -c 'printf "0100007F:%04X\n0100007F:%04X\n" "$LISTED" "$TAKEN" >"$STUB_DIR/guest-ports"; : > "$WEB_dir/backend/ports.log"'
 exec devvm
 stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
 ! stderr 'ports_forward_failed'
 stub_calls
 ! stdout '^smolvm machine (create|update) .* -p '
 ! stdout '--remove-port'
-catg $DATA/smolvm/vms/devvm-web-*.ports.log
+catg $WEB_dir/backend/ports.log
 stdout '^devvm ports: port '$LISTED': forwarded$'
 ! stdout 'port '$TAKEN
 exec devvm ports
@@ -122,7 +124,7 @@ rm $STUB_DIR/guest-ports
 
 # Its agent forwarding can be turned on later (emulated, reviewed): made
 # forwarding, and given no agent, a path no socket can be at.
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
 stdout '^net=off$'
 stdout '^ssh_agent=off$'
 stdout '^agent_toggle=on$'
@@ -130,10 +132,10 @@ catg $STUB_DIR/smolvm-agent-devvm-web-*
 stdout '^/dev/null/devvm-no-agent$'
 
 # rm deletes the machine and what the backend recorded for it.
-exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.json'
+exists $WEB_dir/backend/record.json
 exec devvm rm --force --no-export
 stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
-! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-web-*.json'
+! exists $WEB_dir
 exec devvm ls
 ! stdout devvm-web
 
@@ -146,7 +148,8 @@ project pol
 stub_reset
 exec devvm --backend smolvm --from $PIN --network-policy --ports none
 ! stderr 'backend_unreviewed'
-catg $VMS/devvm-pol-*
+vm_name POL pol
+catg $POL_dir/state
 stdout '^net=on$'
 stdout '^net_check=ok$'
 stdout '^decider_port=[0-9]+$'
@@ -155,20 +158,20 @@ stub_calls
 stdout '^smolvm machine update( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --reset-allow-list --allow-cidr 100\.96\.0\.1/32 --allow-host-pattern devvm\.invalid -p [0-9]+:22$'
 ! stdout ' -e HTTPS?_PROXY='
 stdout '^smolvm machine start( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --mediated-egress --egress-interceptor 127\.0\.0\.1:[0-9]+$'
-stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --secret-file HTTP_PROXY=\S+/smolvm/vms/devvm-pol-[0-9a-f]{14}\.proxy .* curl --noproxy \* -sS -m 3 -o /dev/null https://1\.1\.1\.1$'
+stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-pol-[0-9a-f]{14} --secret-file HTTP_PROXY=\S+/data/devvm/vms/[0-9a-f]{14}/backend/proxy.* curl --noproxy \* -sS -m 3 -o /dev/null https://1\.1\.1\.1$'
 # The proxy's URL is in the machine's proxy file (mode 600), which each exec
 # names: never in smolvm's arguments.
-exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$VMS"/devvm-pol-*); f=$(ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-pol-*.proxy); grep -qE "^http://devvm:$key@100\.96\.0\.1:[0-9]+$" "$f" && ! grep -qF "$key" "$STUB_LOG" && ls -l "$f"'
+exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$POL_dir/state"); f="$POL_dir/backend/proxy"; grep -qE "^http://devvm:$key@100\.96\.0\.1:[0-9]+$" "$f" && ! grep -qF "$key" "$STUB_LOG" && ls -l "$f"'
 stdout '^-rw-------\S* '
 # The password is in no run log.
-exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$VMS"/devvm-pol-*); ! grep -rqF "$key" "$XDG_DATA_HOME"/devvm/logs/runs'
-exec sh -c 'grep -F "deciding on 127.0.0.1:$(sed -n "s/^decider_port=//p" "$VMS"/devvm-pol-*) for devvm-pol-" "$XDG_DATA_HOME"/devvm/logs/devvm-pol-*.proxy.log'
+exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$POL_dir/state"); ! grep -rqF "$key" "$XDG_DATA_HOME"/devvm/logs/runs'
+exec sh -c 'grep -F "deciding on 127.0.0.1:$(sed -n "s/^decider_port=//p" "$POL_dir/state") for devvm-pol-" "$POL_dir/logs/proxy.log"'
 catg $STUB_DIR/smolvm-decider-devvm-pol-*
 stdout '^127\.0\.0\.1:[0-9]+ [0-9a-f]{64}$'
-exec sh -c 'tok=$(sed -n "s/^decider_token=//p" "$VMS"/devvm-pol-*); [ "$(cat "$XDG_DATA_HOME"/devvm/run/devvm-pol-*.proxy.decider)" = "$tok" ] && ! grep -qF "$tok" "$STUB_LOG" && ! grep -rqF "$tok" "$XDG_DATA_HOME"/devvm/logs'
+exec sh -c 'tok=$(sed -n "s/^decider_token=//p" "$POL_dir/state"); [ "$(cat "$POL_dir/run/proxy.decider")" = "$tok" ] && ! grep -qF "$tok" "$STUB_LOG" && ! grep -rqF "$tok" "$XDG_DATA_HOME"/devvm/logs "$POL_dir/logs"'
 # Running, with its proxy gone and the decider's port taken by another
 # program: stopped, never left running without it.
-exec sh -c 'pp=$(sed -n "s/^proxy_port=//p" "$VMS"/devvm-pol-*); dp=$(sed -n "s/^decider_port=//p" "$VMS"/devvm-pol-*); pkill -f -- "_proxy -listen 127.0.0.1:$pp "; sleep 0.5; echo k > "$WORK/squat.key"; devvm _proxy -listen "127.0.0.1:$dp" -auth-file "$WORK/squat.key" -lifeline "$WORK/squat.none" >/dev/null 2>&1 & echo $! > "$WORK/squat.pid"; sleep 1'
+exec sh -c 'pp=$(sed -n "s/^proxy_port=//p" "$POL_dir/state"); dp=$(sed -n "s/^decider_port=//p" "$POL_dir/state"); pkill -f -- "_proxy -listen 127.0.0.1:$pp "; sleep 0.5; echo k > "$WORK/squat.key"; devvm _proxy -listen "127.0.0.1:$dp" -auth-file "$WORK/squat.key" -lifeline "$WORK/squat.none" >/dev/null 2>&1 & echo $! > "$WORK/squat.pid"; sleep 1'
 stub_reset
 ! exec devvm
 stderr '^devvm: net_proxy_down_stopped vm=devvm-pol-[0-9a-f]{14}$'
@@ -191,12 +194,13 @@ exec devvm --backend smolvm --from $PIN --no-network-policy --ports 5173
 stub_calls
 stdout '^smolvm machine update( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} --net -p [0-9]+:22$'
 stdout '^smolvm machine exec( --state-dir \S+)? --name devvm-sshd-[0-9a-f]{14} -i -- sh -s -- ssh \S+ ssh-ed25519 \S+ devvm NODE_EXTRA_CA_CERTS PIP_CERT REQUESTS_CA_BUNDLE SSL_CERT_FILE UV_SYSTEM_CERTS$'
-exec sh -c 'ls -l "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-sshd-*.key'
+vm_name SSHD sshd
+exec ls -l $SSHD_dir/backend/key
 stdout '^-rw-------\S* '
 grep '^Host devvm-sshd devvm-sshd-[0-9a-f]{14}$' $DATA/ssh_config
 grep '^  Hostname 127\.0\.0\.1$' $DATA/ssh_config
 grep '^  Port [0-9]+$' $DATA/ssh_config
-grep '^  IdentityFile ".+/smolvm/vms/devvm-sshd-[0-9a-f]{14}\.key"$' $DATA/ssh_config
+grep '^  IdentityFile ".+/data/devvm/vms/[0-9a-f]{14}/backend/key"$' $DATA/ssh_config
 grep '^  ForwardX11 no$' $DATA/ssh_config
 grep '^  AddKeysToAgent no$' $DATA/ssh_config
 grep '^  IdentitiesOnly yes$' $DATA/ssh_config
@@ -218,7 +222,7 @@ stderr '^devvm: vm_no_sshd vm=devvm-sshd-[0-9a-f]{14}$'
 rm $STUB_DIR/no-sshd
 exec devvm rm --force --no-export
 stdout '^==> deleted vm=devvm-sshd-[0-9a-f]{14}$'
-! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/smolvm/vms/devvm-sshd-*.key'
+! exists $SSHD_dir
 
 # Any number of listed ports, 22 among them: all the forwarder's, none of
 # smolvm's.
@@ -246,7 +250,7 @@ exec devvm --backend smolvm --from $PIN --no-network-policy --ports none
 stub_calls
 stdout '^smolvm machine create( --state-dir \S+)? --name devvm-agent-[0-9a-f]{14} .* --ssh-agent$'
 vm_name AGENT agent
-catg $VMS/devvm-agent-*
+catg $AGENT_dir/state
 stdout '^ssh_agent=off$'
 stdout '^agent_toggle=on$'
 catg $STUB_DIR/smolvm-agent-devvm-agent-*

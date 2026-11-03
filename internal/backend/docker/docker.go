@@ -335,7 +335,7 @@ func (r record) dockerLayer() bool { return r.Runtime != "" }
 
 func (d *Docker) readRecord(vm string) (record, error) {
 	var r record
-	b, err := os.ReadFile(d.Dirs.DockerVM(vm))
+	b, err := os.ReadFile(d.Dirs.VM(vm).Record())
 	if errors.Is(err, fs.ErrNotExist) {
 		return r, nil
 	} else if err != nil {
@@ -345,14 +345,11 @@ func (d *Docker) readRecord(vm string) (record, error) {
 }
 
 func (d *Docker) writeRecord(vm string, r record) error {
-	if err := os.MkdirAll(filepath.Dir(d.Dirs.DockerVM(vm)), 0o700); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return err
 	}
-	return state.WriteFile(d.Dirs.DockerVM(vm), append(b, '\n'))
+	return state.WriteFile(d.Dirs.VM(vm).Record(), append(b, '\n'))
 }
 
 // List lists devvm's VMs: its containers labelled as VMs.
@@ -412,8 +409,9 @@ func (d *Docker) Stop(ctx context.Context, vm string) error {
 }
 
 // Delete deletes one of devvm's VMs, stopping it first: its container,
-// its volumes (its Docker engine's too), its own commit, its forwarder, its keys, its relay and
-// network (egress.go) and its record.
+// its volumes (its Docker engine's too), its own commit, its relay and
+// network (egress.go), then its forwarder and backend folder, with its
+// keys and record.
 func (d *Docker) Delete(ctx context.Context, vm string) error {
 	c, err := d.vm(ctx, vm)
 	if err != nil {
@@ -426,19 +424,23 @@ func (d *Docker) Delete(ctx context.Context, vm string) error {
 	if err != nil {
 		return err
 	}
-	if err := d.Forwards.Remove(vm); err != nil {
-		return err
-	}
+	d.Forwards.Stop(vm)
 	if err := d.removeContainer(ctx, msg.Deleting(vm), vm); err != nil {
 		return err
 	}
-	if err := (egress{d}).forget(ctx, vm); err != nil {
+	if err := d.removeLeaves(ctx, vm, r); err != nil {
 		return err
 	}
-	for _, f := range []string{d.sshKey(vm), d.knownHosts(vm)} {
-		if err := os.Remove(f); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
+	return d.Forwards.Forget(vm)
+}
+
+// removeLeaves deletes what a VM has in its Docker engine besides its
+// container: its relay and network (egress.go), its volumes (each only if
+// it has devvm's label) and the image its last change was committed to,
+// as its record r has it.
+func (d *Docker) removeLeaves(ctx context.Context, vm string, r record) error {
+	if err := (egress{d}).forget(ctx, vm); err != nil {
+		return err
 	}
 	for _, v := range append([]string{homeVolume(vm), cloneVolume(vm)}, engineVolumes(vm)...) {
 		if err := d.removeVolume(ctx, v); err != nil {
@@ -446,12 +448,7 @@ func (d *Docker) Delete(ctx context.Context, vm string) error {
 		}
 	}
 	if r.Commit != "" {
-		if err := d.removeImage(ctx, r.Commit); err != nil {
-			return err
-		}
-	}
-	if err := os.Remove(d.Dirs.DockerVM(vm)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
+		return d.removeImage(ctx, r.Commit)
 	}
 	return nil
 }
@@ -556,9 +553,7 @@ func (d *Docker) Confined(ctx context.Context, vm string) (bool, error) {
 
 // Lifeline is the pid file of a VM's docker container wait, which a start
 // through devvm's proxy runs and which ends when the container stops.
-func (d *Docker) Lifeline(_ context.Context, vm string) string {
-	return strings.TrimSuffix(d.Dirs.DockerVM(vm), ".json") + ".lifeline"
-}
+func (d *Docker) Lifeline(_ context.Context, vm string) string { return d.Dirs.VM(vm).Lifeline() }
 
 // StartID is a running VM's container and the time it last started.
 func (d *Docker) StartID(ctx context.Context, vm string) (string, error) {

@@ -16,14 +16,8 @@ import (
 // else's pack, a recent one, a machine's folder or another cache.
 func TestDevvmCache(t *testing.T) {
 	s := newSandbox(t)
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	base, err := os.UserCacheDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	seeds := filepath.Join(base, "smolvm", "vms", packSeeds)
+	s.Dirs.UserCache = filepath.Join(t.TempDir(), ".cache")
+	seeds := filepath.Join(s.Dirs.UserCache, "smolvm", "vms", packSeeds)
 	// Packs: a (no machine), b (a VM was made from it), and c, deleted
 	// but recorded.
 	for _, k := range []string{"aaaaaaaaaaaa", "bbbbbbbbbbbb"} {
@@ -67,10 +61,10 @@ func TestDevvmCache(t *testing.T) {
 		return p
 	}
 	free, deleted := seed("v2-"+sa+"-auto", false), seed("v2-"+sc+"-auto", false)
-	seed("v2-"+sb+"-auto", false)                                                                        // a VM's
-	seed("v2-"+"dd"+sa[2:]+"-auto", false)                                                               // someone else's pack
-	seed("v2-"+sa[:62]+"ee-auto", true)                                                                  // not ours
-	if err := os.MkdirAll(filepath.Join(base, "smolvm", "vms", "3d40063296df941a"), 0o700); err != nil { // a machine's
+	seed("v2-"+sb+"-auto", false)                                                                                    // a VM's
+	seed("v2-"+"dd"+sa[2:]+"-auto", false)                                                                           // someone else's pack
+	seed("v2-"+sa[:62]+"ee-auto", true)                                                                              // not ours
+	if err := os.MkdirAll(filepath.Join(s.Dirs.UserCache, "smolvm", "vms", "3d40063296df941a"), 0o700); err != nil { // a machine's
 		t.Fatal(err)
 	}
 	got, err := s.DevvmCache(t.Context())

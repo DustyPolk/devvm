@@ -207,11 +207,11 @@ func existingVM(t *testing.T, e *Env, o Options) *state.VM {
 
 func vmName(t *testing.T, e *Env) string {
 	t.Helper()
-	es, err := os.ReadDir(e.Dirs.VMs())
-	if err != nil || len(es) == 0 {
+	names, err := state.VMNames(e.Dirs)
+	if err != nil || len(names) == 0 {
 		t.Fatalf("no VM state: %v", err)
 	}
-	return es[0].Name()
+	return names[0]
 }
 
 // answers gives e's questions a terminal and these answers.

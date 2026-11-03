@@ -344,7 +344,7 @@ func (l *Lima) stop(ctx context.Context, vm string, opts ...string) error {
 	return nil
 }
 
-// Delete deletes a VM, stopping it first, and its files in the run folder.
+// Delete deletes a VM, stopping it first, and its backend folder.
 func (l *Lima) Delete(ctx context.Context, vm string) error {
 	if _, err := l.inspect(ctx, vm); err != nil {
 		return err
@@ -352,19 +352,13 @@ func (l *Lima) Delete(ctx context.Context, vm string) error {
 	return l.delete(ctx, vm)
 }
 
+// delete deletes a VM or an image's instance, and its files
+// (vmssh.Forwards.Forget).
 func (l *Lima) delete(ctx context.Context, vm string) error {
 	if err := l.Runner.Run(ctx, msg.Deleting(vm), l.limactl(ctx, "delete", "-f", vm)); err != nil {
 		return backend.Logged(msg.DeleteFailed(vm))
 	}
-	if err := l.Forwards.forget(vm); err != nil {
-		return err
-	}
-	for _, f := range []string{l.profileFile(vm), l.startedFile(vm)} {
-		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
+	return l.Forwards.Forget(vm)
 }
 
 // List lists the VMs in devvm's Lima home, without images.

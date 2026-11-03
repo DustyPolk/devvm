@@ -83,7 +83,7 @@ func freeVolumes(ctx context.Context, d *Docker) ([]string, error) {
 func hasState(dirs paths.Dirs, volume string) bool {
 	for _, suffix := range []string{"-home", "-clone", "-docker", "-containerd"} {
 		if vm, ok := strings.CutSuffix(volume, suffix); ok {
-			if _, err := os.Stat(dirs.VMState(vm)); err == nil {
+			if _, err := os.Stat(dirs.VM(vm).State()); err == nil {
 				return true
 			}
 		}

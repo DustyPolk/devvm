@@ -30,9 +30,9 @@ type Log struct {
 	Tick time.Duration
 }
 
-// NewLog returns vm's event log (EventLog).
+// NewLog returns vm's event log (paths.VM.EventLog).
 func NewLog(d paths.Dirs, vm string) *Log {
-	return &Log{Path: EventLog(d, vm), Tick: 250 * time.Millisecond}
+	return &Log{Path: d.VM(vm).EventLog(), Tick: 250 * time.Millisecond}
 }
 
 // Old is the log's previous file, which the proxy renamed it to when it

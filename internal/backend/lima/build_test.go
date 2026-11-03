@@ -100,7 +100,7 @@ func TestBuildImageBase(t *testing.T) {
 			` --set .images = [{"location":"https://example.com/r/ubuntu.img","arch":"aarch64","digest":"sha256:1111"}]` +
 			" --cpus=4 --memory=8 -",
 		"limactl edit --tty=false " + inst + " --set .ssh.localPort=",
-		"sandbox-exec -f " + l.profileFile(inst) + " ",
+		"sandbox-exec -f " + l.Dirs.VM(inst).Profile() + " ",
 		"limactl shell " + inst + " bash -s",
 		"limactl shell --workdir / " + inst + " sync",
 		"limactl stop " + inst,
@@ -113,7 +113,7 @@ func TestBuildImageBase(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(l.Dirs.Data, "assets")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("devvm's files written out: %v", err)
 	}
-	if p, err := os.ReadFile(l.profileFile(inst)); err != nil || !strings.Contains(string(p), `(deny network-outbound (remote ip "localhost:*"))`) {
+	if p, err := os.ReadFile(l.Dirs.VM(inst).Profile()); err != nil || !strings.Contains(string(p), `(deny network-outbound (remote ip "localhost:*"))`) {
 		t.Errorf("the build's profile: %s, %v", p, err)
 	}
 }
@@ -199,7 +199,7 @@ func TestBuildImageHostProxy(t *testing.T) {
 				t.Fatalf("proxies: %v", *spawned)
 			}
 			p := strings.Join((*spawned)[0], " ")
-			dir := filepath.Join(l.Dirs.Run(), "builds", inst)
+			dir := l.Dirs.VM(inst).BuildProxy()
 			if !strings.Contains(p, " -lifeline "+l.haPIDFile(inst)+" ") || !strings.Contains(p, " -upstream-unresolved") ||
 				!strings.HasSuffix(p, " -upstream "+filepath.Join(dir, "upstream")) ||
 				strings.Contains(p, "pa55") {
@@ -235,7 +235,7 @@ func TestBuildImageHostProxy(t *testing.T) {
 				t.Error("the build VM gets the host's proxy settings from Lima")
 			}
 			if goos == "darwin" {
-				b, err := os.ReadFile(l.profileFile(inst))
+				b, err := os.ReadFile(l.Dirs.VM(inst).Profile())
 				if err != nil || !strings.Contains(string(b), `(deny network-outbound (remote ip "localhost:*"))`) ||
 					!strings.HasSuffix(strings.TrimSpace(string(b)), `(allow network-outbound (remote ip "localhost:40000"))`) {
 					t.Errorf("profile: %s %v", b, err)

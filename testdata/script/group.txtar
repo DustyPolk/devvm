@@ -44,6 +44,9 @@ exec devvm --no-network-policy --no-git-protect
 exec devvm link publish 3000
 project cache
 exec devvm --network-policy --no-git-protect
+vm_name APP app
+vm_name DB db
+vm_name CACHE cache
 
 # Not in a group: said, and an empty list in JSON.
 cd $WORK/app
@@ -58,7 +61,7 @@ stderr '^devvm: group_none vm=devvm-app-[0-9a-f]{14}$'
 exec devvm group join web
 stdout '^==> group_made group=web vm=devvm-app-[0-9a-f]{14}$'
 stderr '^group_trust group=web$'
-catg $VMS/devvm-app-*
+exec cat $APP_dir/state
 stdout '^group=web$'
 exec devvm group join web
 stdout '^==> group_already group=web vm=devvm-app-[0-9a-f]{14}$'
@@ -74,9 +77,7 @@ exec devvm group join web
 stdout '^==> group_joined group=web vm=devvm-db-[0-9a-f]{14}$'
 stdout '^==> group_links_added group=web links=db:5432,8000-8001 vm=devvm-app-[0-9a-f]{14}$'
 ! stdout 'group_links_added .* vm=devvm-db-'
-vm_name DB db
-vm_name APP app
-exec sh -c 'id=$(sed -n "s/^id=//p" "$VMS/$DB"); grep -x "links=db,5432,$DB,$id,127.77.0.1,group db,8000,$DB,$id,127.77.0.1,group db,8001,$DB,$id,127.77.0.1,group" "$VMS/$APP"'
+exec sh -c 'id=$(sed -n "s/^id=//p" "$DB_dir/state"); grep -x "links=db,5432,$DB,$id,127.77.0.1,group db,8000,$DB,$id,127.77.0.1,group db,8001,$DB,$id,127.77.0.1,group" "$APP_dir/state"'
 
 # All or none: cache, with network policy, can't join a group whose VMs
 # have none, and a group of its own refuses those without.
@@ -92,7 +93,7 @@ stderr '^devvm: group_policy_on group=safe vm=devvm-api-[0-9a-f]{14}$'
 cd $WORK/cache
 ! exec devvm network off
 stderr '^devvm: group_policy_mixed group=safe vm=devvm-cache-[0-9a-f]{14}$'
-catg $VMS/devvm-cache-*
+exec cat $CACHE_dir/state
 stdout '^net=on$'
 cd $WORK/db
 ! exec devvm network on
@@ -115,7 +116,7 @@ cd $WORK/y/api
 stderr '^devvm: group_name_hostname group=web member=devvm-api-[0-9a-f]{14} name=api vm=devvm-api-[0-9a-f]{14}$'
 ! exec devvm group join web --as api2
 stderr '^devvm: group_name_hostname group=web member=devvm-api-[0-9a-f]{14} name=api vm=devvm-api-[0-9a-f]{14}$'
-exec sh -c 'grep -l "^group=web$" "$VMS"/devvm-api-* | wc -l'
+exec sh -c 'grep -l "^group=web$" $(grep -l "^name=devvm-api-" "$VMS"/*/state) | wc -l'
 stdout '^ *1$'
 cd $WORK/x/api
 exec devvm group leave
@@ -163,7 +164,7 @@ exec devvm link add db 8000 --as pg
 stdout '^==> link_added name=pg port=8000 '
 stdout '^==> group_links_removed group=web links=db:5432,8000-8001 vm=devvm-app-'
 stdout '^==> group_links_added group=web links=pg:5432,8001 vm=devvm-app-'
-exec sh -c 'grep -o "pg,8000,[^ ]*" "$VMS"/devvm-app-*'
+exec sh -c 'grep -o "pg,8000,[^ ]*" "$APP_dir/state"'
 stdout '^pg,8000,devvm-db-[0-9a-f]{14},[0-9a-f]{32},127\.77\.0\.1$'
 exec devvm link rm pg 8000
 stdout '^==> link_removed name=pg port=8000 '
@@ -200,7 +201,7 @@ exec devvm link add db 7000
 exec devvm group leave
 stdout '^==> group_left group=web vm=devvm-app-[0-9a-f]{14}$'
 stdout '^==> group_links_removed group=web links=api1:80, api2:3000, db:5432,8000-8001 vm=devvm-app-[0-9a-f]{14}$'
-catg $VMS/devvm-app-*
+exec cat $APP_dir/state
 stdout '^links=db,7000,devvm-db-[0-9a-f]{14},[0-9a-f]{32},127\.77\.0\.1$'
 stdout '^group=$'
 exec devvm group
@@ -220,14 +221,14 @@ stdout '^==> group_left group=web '
 cd $WORK/db
 exec devvm group leave
 stdout '^==> group_gone group=web$'
-exec sh -c 'grep -l "^group=web$" "$VMS"/* || true'
+exec sh -c 'grep -l "^group=web$" "$VMS"/*/state || true'
 ! stdout .
 
 # Two VMs joining one group at once, app without network policy and
 # cache with it: they take turns, so only one gets in.
 exec sh -c '(cd "$WORK/app" && devvm group join race) & (cd "$WORK/cache" && devvm group join race) & wait; true'
 stderr 'devvm: group_policy_o(n|ff) group=race '
-exec sh -c 'grep -l "^group=race$" "$VMS"/* | wc -l'
+exec sh -c 'grep -l "^group=race$" "$VMS"/*/state | wc -l'
 stdout '^ *1$'
 exec sh -c 'for d in app cache; do (cd "$WORK/$d" && devvm group leave) || true; done'
 stdout '^==> group_gone group=race$'

@@ -38,7 +38,7 @@ When a build fails, devvm keeps its machine, stopped (`smolvm_script_failed`), s
 - **Size:** a VM gets the size you ask for, or base's. Its disk only grows.
 - **Ports:** devvm's forwarder forwards them, and smolvm forwards none of them ([below](#ports)). The only port smolvm forwards is the VM's [ssh](#ssh-for-editors).
 - **SSH agent forwarding:** you choose it when the VM is made (`--ssh-agent`), and each start gives the VM an agent ([below](#ssh-agent-forwarding)).
-- **Environment:** with network policy, the VM gets the proxy's settings, as on Lima. The proxy variables come from the VM's proxy file, `~/.local/share/devvm/smolvm/vms/<vm>.proxy` (mode 600), which devvm writes at each start with network policy and removes at a start without it. Each of devvm's commands in the VM names the file (`smolvm machine exec --secret-file`) and smolvm reads it, so the proxy's password is in no process's arguments. A `smolvm machine exec` of your own gets the variables only in a login shell. `machine create --secret-file` would last, but smolvm ignores it for a VM made from a pack.
+- **Environment:** with network policy, the VM gets the proxy's settings, as on Lima. The proxy variables come from the VM's proxy file, `proxy` in the VM's backend folder, `~/.local/share/devvm/vms/<hash>/backend/` (mode 600), which devvm writes at each start with network policy and removes at a start without it. Each of devvm's commands in the VM names the file (`smolvm machine exec --secret-file`) and smolvm reads it, so the proxy's password is in no process's arguments. A `smolvm machine exec` of your own gets the variables only in a login shell. `machine create --secret-file` would last, but smolvm ignores it for a VM made from a pack.
 
 ## Network policy
 
@@ -58,7 +58,7 @@ devvm starts an sshd of its own after each start of the VM ([below](#no-init-sys
 
 The VM gets a new ed25519 host key at each start, so no two VMs made from one image share one. devvm reads the key through smolvm (`smolvm machine exec`), not over the network, and pins it in `~/.local/share/devvm/known_hosts`, as on Lima. ssh refuses a key that doesn't match.
 
-Only the VM's own key logs in, and only as the VM's user. The key is `~/.local/share/devvm/smolvm/vms/<vm>.key` (mode 600), which devvm makes at the VM's first start with ssh. Its public half is that VM's only authorized key, so the key logs in to no other VM. Passwords, root and other users can't log in. The ssh config entries offer only that key (`IdentitiesOnly yes`), and never your agent's keys.
+Only the VM's own key logs in, and only as the VM's user. The key is `key` in the VM's backend folder, `~/.local/share/devvm/vms/<hash>/backend/` (mode 600), which devvm makes at the VM's first start with ssh. Its public half is that VM's only authorized key, so the key logs in to no other VM. Passwords, root and other users can't log in. The ssh config entries offer only that key (`IdentitiesOnly yes`), and never your agent's keys.
 
 Port 22 in the VM is forwarded from a port on the host's `127.0.0.1` and `::1` alone. devvm chooses that port at the start and keeps it while it stays free on every address, so it's never one a program on the host has on any address, and never one of the VM's listed ports. If the port is one of them anyway, devvm refuses the start (`smolvm_ssh_port_forwarded`). With network policy, it's the port devvm records for the VM. The ssh config names the port, so connect by name. devvm answers for the port only once that start's sshd runs.
 

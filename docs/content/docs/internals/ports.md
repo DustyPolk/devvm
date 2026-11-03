@@ -38,15 +38,17 @@ How the forwarder logs in, and when it ends, differs by backend, as the Ports se
 
 ## Its process and files
 
-The forwarder runs as a hidden devvm command, one process for each VM. devvm starts it after each start of the VM and again with the new ports when you change a running VM's ports, and `devvm stop` stops it. devvm keeps which ports a VM forwards in its own record for the VM, so `devvm ports` changes that record and never the backend's config. The forwarder's log is `<vm>.ports.log` beside that record.
+The forwarder runs as a hidden devvm command, one process for each VM. devvm starts it after each start of the VM and again with the new ports when you change a running VM's ports, and `devvm stop` stops it. devvm keeps which ports a VM forwards in its own record for the VM, so `devvm ports` changes that record and never the backend's config. That record is in the VM's `backend/` folder, `~/.local/share/devvm/vms/<hash>/backend/`, and the forwarder's files are beside it: its log `ports.log`, and `ports.pid`, `ports.status`, `ports.known_hosts` and `ports.lock`. Its control socket is `~/.local/share/devvm/run/<backend>-<hash>.ctl`, outside the VM's folder, because a unix socket's path is at most 104 characters.
 
 devvm reads every list of ports the same way, whether it comes from `--ports`, the VM's state or the backend's record. Each entry is a port from 1 to 65535 or a range of them, such as `8000-8010`. When the VM's state holds a list that devvm can't read this way, such as a file edited by hand, the VM doesn't start and devvm names the value it couldn't read with `port_invalid`, so a bad entry never becomes a port the VM didn't ask for.
 
 | Backend | Process | Ports record | Log |
 | --- | --- | --- | --- |
-| Lima | `devvm _lima-ports` | `~/.local/share/devvm/lima-vms/<vm>.ports`, which holds `all`, `none` or a list | `~/.local/share/devvm/lima-vms/<vm>.ports.log` |
-| smolvm | `devvm _smolvm-ports` | `~/.local/share/devvm/smolvm/vms/<vm>.json` | `~/.local/share/devvm/smolvm/vms/<vm>.ports.log` |
-| Docker | `devvm _docker-ports` | `~/.local/share/devvm/docker/vms/<vm>.json` | `~/.local/share/devvm/docker/vms/<vm>.ports.log` |
+| Lima | `devvm _lima-ports` | `vms/<hash>/backend/ports`, which holds `all`, `none` or a list | `vms/<hash>/backend/ports.log` |
+| smolvm | `devvm _smolvm-ports` | `vms/<hash>/backend/record.json` | `vms/<hash>/backend/ports.log` |
+| Docker | `devvm _docker-ports` | `vms/<hash>/backend/record.json` | `vms/<hash>/backend/ports.log` |
+
+The paths in the table are in devvm's data folder, `~/.local/share/devvm`.
 
 ## When it can't forward
 
@@ -67,7 +69,7 @@ The addresses are internal to devvm. `devvm link` and its JSON never show them, 
 
 ### The link session
 
-For each running client with links, devvm runs a hidden command, `devvm _links VM`, as one detached process on this machine. Its pid is in `~/.local/share/devvm/run/<vm>.links.pid`, and its log is `~/.local/share/devvm/logs/<vm>.links.log`. It keeps an ssh connection of its own to the client, never the forwarder's, which starts with no forwards and asks for each link as a remote forward from `127.77.x.y:PORT` in the client to a unix socket on this machine. That's the only remote forward devvm asks a VM for. It reads the client's links again every second and adds or cancels one forward at a time as they change, and a cancel leaves the connections that are open. A link whose address and port a program in the client already holds fails alone, with `link_port_taken` in the session's log, which the next launch shows. Each line that the session's ssh processes print starts with `ssh:` in its log, so no line of theirs reads as one of the session's own, and devvm link add and the launch read only the session's own lines.
+For each running client with links, devvm runs a hidden command, `devvm _links VM`, as one detached process on this machine. Its pid is in `links.pid` in the VM's run folder, `~/.local/share/devvm/vms/<hash>/run/`, and its log is `links.log` in the VM's logs folder, `~/.local/share/devvm/vms/<hash>/logs/`. It keeps an ssh connection of its own to the client, never the forwarder's, which starts with no forwards and asks for each link as a remote forward from `127.77.x.y:PORT` in the client to a unix socket on this machine. That's the only remote forward devvm asks a VM for. It reads the client's links again every second and adds or cancels one forward at a time as they change, and a cancel leaves the connections that are open. A link whose address and port a program in the client already holds fails alone, with `link_port_taken` in the session's log, which the next launch shows. Each line that the session's ssh processes print starts with `ssh:` in its log, so no line of theirs reads as one of the session's own, and devvm link add and the launch read only the session's own lines.
 
 The process ends once the client no longer runs the start it was made for, or has no links left, and `devvm stop` stops it with the client, which ends its connections and removes its sockets.
 

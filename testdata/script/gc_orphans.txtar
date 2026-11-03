@@ -5,68 +5,66 @@
 # be being made). Never part of gc's default run.
 env DEVVM_DOCKER_KIND=linux
 
-mkdir $VMS $DATA/logs $DATA/run $DATA/lima-vms
+# Each VM's folder is its name's last 14 characters.
+mkdir $VMS/12345612345601 $VMS/12345612345602 $VMS/12345612345603 $VMS/12345612345604 $VMS/12345612345605 $VMS/12345612345606 $VMS/12345612345607 $VMS/12345612345608
 # This run's Lima home, as a VM's state records it.
 exec sh -c 'printf %s "$DEVVM_LIMA_HOME" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16 > at'
 # A Lima VM that exists, and one limactl deleted, with its logs, run and
 # port files; one made in another Lima home, and one that doesn't say
 # where it was made while this run's home isn't the default; one being
 # made.
-exec sh -c 'echo devvm-live-12345612345612 >> "$STUB_DIR/instances"'
-exec sh -c 'for v in live gone new; do printf "image=base\ndir=/p/$v\nbackend=lima\nnet=off\nbackend_at=%s\n" "$(cat at)" > "$VMS/devvm-$v-12345612345612"; done'
-exec sh -c 'printf "image=base\ndir=/p/moved\nbackend=lima\nnet=off\nbackend_at=0000000000000000\n" > "$VMS/devvm-moved-12345612345612"'
-exec sh -c 'printf "image=base\ndir=/p/norec\nbackend=lima\nnet=off\n" > "$VMS/devvm-norec-12345612345612"'
-exec sh -c 'cd "$DATA" && for v in live gone; do echo x > logs/devvm-$v-12345612345612.jsonl; echo x > run/devvm-$v-12345612345612.sb; echo x > lima-vms/devvm-$v-12345612345612.ports; done'
-exec sh -c 'cd "$VMS" && touch -t 202001010000 devvm-live-* devvm-gone-* devvm-moved-* devvm-norec-*'
+exec sh -c 'echo devvm-live-12345612345601 >> "$STUB_DIR/instances"'
+exec sh -c 'for v in live:01 gone:02 new:03; do printf "name=devvm-${v%:*}-123456123456${v#*:}\nimage=base\ndir=/p/${v%:*}\nbackend=lima\nnet=off\nbackend_at=%s\n" "$(cat at)" > "$VMS/123456123456${v#*:}/state"; done'
+exec sh -c 'printf "name=devvm-moved-12345612345604\nimage=base\ndir=/p/moved\nbackend=lima\nnet=off\nbackend_at=0000000000000000\n" > "$VMS/12345612345604/state"'
+exec sh -c 'printf "name=devvm-norec-12345612345605\nimage=base\ndir=/p/norec\nbackend=lima\nnet=off\n" > "$VMS/12345612345605/state"'
+exec sh -c 'cd "$VMS" && for h in 12345612345601 12345612345602; do mkdir $h/logs $h/run $h/backend && echo x > $h/logs/network.jsonl && echo x > $h/run/sandbox.sb && echo x > $h/backend/ports; done'
+exec sh -c 'cd "$VMS" && touch -t 202001010000 12345612345601/state 12345612345602/state 12345612345604/state 12345612345605/state'
 # A Docker VM whose container docker rm deleted, its home volume, its
 # network and the commit of its last change left: gc names each before
 # it asks.
-exec sh -c 'printf "image=base\ndir=/p/dock\nbackend=docker\nnet=off\n" > "$VMS/devvm-dock-12345612345612" && touch -t 202001010000 "$VMS/devvm-dock-12345612345612"'
-mkdir $STUB_DIR/docker/volumes/devvm-dock-12345612345612-home $STUB_DIR/docker/networks/devvm-dock-12345612345612-net $STUB_DIR/docker/images/devvm-x:devvm-dock-12345612345612-1 $DATA/docker/vms
-exec sh -c 'for d in volumes/devvm-dock-12345612345612-home networks/devvm-dock-12345612345612-net images/devvm-x:devvm-dock-12345612345612-1; do echo "devvm.data=$DATA" > "$STUB_DIR/docker/$d/labels"; done'
-exec sh -c 'echo "{\"image\":\"0123456789ab\",\"commit\":\"devvm-x:devvm-dock-12345612345612-1\"}" > "$DATA/docker/vms/devvm-dock-12345612345612.json"'
+exec sh -c 'printf "name=devvm-dock-12345612345606\nimage=base\ndir=/p/dock\nbackend=docker\nnet=off\n" > "$VMS/12345612345606/state" && touch -t 202001010000 "$VMS/12345612345606/state"'
+mkdir $STUB_DIR/docker/volumes/devvm-dock-12345612345606-home $STUB_DIR/docker/networks/devvm-dock-12345612345606-net $STUB_DIR/docker/images/devvm-x:devvm-dock-12345612345606-1 $VMS/12345612345606/backend
+exec sh -c 'for d in volumes/devvm-dock-12345612345606-home networks/devvm-dock-12345612345606-net images/devvm-x:devvm-dock-12345612345606-1; do echo "devvm.data=$DATA" > "$STUB_DIR/docker/$d/labels"; done'
+exec sh -c 'echo "{\"image\":\"0123456789ab\",\"commit\":\"devvm-x:devvm-dock-12345612345606-1\"}" > "$VMS/12345612345606/backend/record.json"'
 # A VM of a backend this devvm doesn't have (a newer devvm's), which
 # can't be asked; a smolvm VM whose machine is gone.
-exec sh -c 'printf "image=base\ndir=/p/other\nbackend=nope\nnet=off\n" > "$VMS/devvm-other-12345612345612" && touch -t 202001010000 "$VMS/devvm-other-12345612345612"'
-exec sh -c 'printf "image=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/devvm-smol-12345612345612" && touch -t 202001010000 "$VMS/devvm-smol-12345612345612"'
+exec sh -c 'printf "name=devvm-other-12345612345607\nimage=base\ndir=/p/other\nbackend=nope\nnet=off\n" > "$VMS/12345612345607/state" && touch -t 202001010000 "$VMS/12345612345607/state"'
+exec sh -c 'printf "name=devvm-smol-12345612345608\nimage=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/12345612345608/state" && touch -t 202001010000 "$VMS/12345612345608/state"'
 
 # The default run leaves them.
 exec devvm gc --force
-exists $VMS/devvm-gone-12345612345612
+exists $VMS/12345612345602/state
 
 stub_reset
 exec devvm gc --force --orphans
 stdout '^gc_orphans count=3$'
-stdout '^gc_orphan backend=lima dir=/p/gone vm=devvm-gone-12345612345612$'
-stdout '^gc_orphan backend=docker dir=/p/dock vm=devvm-dock-12345612345612\ngc_orphan_network network=devvm-dock-12345612345612-net\ngc_orphan_volume volume=devvm-dock-12345612345612-home\ngc_orphan_image image=devvm-x:devvm-dock-12345612345612-1$'
+stdout '^gc_orphan backend=lima dir=/p/gone vm=devvm-gone-12345612345602$'
+stdout '^gc_orphan backend=docker dir=/p/dock vm=devvm-dock-12345612345606\ngc_orphan_network network=devvm-dock-12345612345606-net\ngc_orphan_volume volume=devvm-dock-12345612345606-home\ngc_orphan_image image=devvm-x:devvm-dock-12345612345606-1$'
 stdout -count=3 '^gc_orphan_'
-stdout '^gc_orphan backend=smolvm dir=/p/smol vm=devvm-smol-12345612345612$'
+stdout '^gc_orphan backend=smolvm dir=/p/smol vm=devvm-smol-12345612345608$'
 stderr '^gc_orphans_unknown backend=nope$'
-stderr '^gc_orphan_elsewhere vm=devvm-moved-12345612345612$'
-stderr '^gc_orphan_elsewhere vm=devvm-norec-12345612345612$'
-stderr '^gc_orphan_recent vm=devvm-new-12345612345612$'
-stdout '^==> forgot_orphan vm=devvm-gone-12345612345612$'
-stdout '^==> forgot_orphan vm=devvm-dock-12345612345612$'
+stderr '^gc_orphan_elsewhere vm=devvm-moved-12345612345604$'
+stderr '^gc_orphan_elsewhere vm=devvm-norec-12345612345605$'
+stderr '^gc_orphan_recent vm=devvm-new-12345612345603$'
+stdout '^==> forgot_orphan vm=devvm-gone-12345612345602$'
+stdout '^==> forgot_orphan vm=devvm-dock-12345612345606$'
 
-# Gone: the orphans' state, logs, run and port files, the Docker one's
-# volume. Left: everything else's.
-! exists $VMS/devvm-gone-12345612345612
-! exists $DATA/logs/devvm-gone-12345612345612.jsonl
-! exists $DATA/run/devvm-gone-12345612345612.sb
-! exists $DATA/lima-vms/devvm-gone-12345612345612.ports
-! exists $VMS/devvm-dock-12345612345612
-! exists $STUB_DIR/docker/volumes/devvm-dock-12345612345612-home
-! exists $STUB_DIR/docker/networks/devvm-dock-12345612345612-net
-! exists $STUB_DIR/docker/images/devvm-x:devvm-dock-12345612345612-1
-exists $VMS/devvm-live-12345612345612
-exists $DATA/logs/devvm-live-12345612345612.jsonl
-exists $DATA/run/devvm-live-12345612345612.sb
-exists $DATA/lima-vms/devvm-live-12345612345612.ports
-exists $VMS/devvm-moved-12345612345612
-exists $VMS/devvm-new-12345612345612
-exists $VMS/devvm-norec-12345612345612
-exists $VMS/devvm-other-12345612345612
-! exists $VMS/devvm-smol-12345612345612
+# Gone: the orphans' folders (state, logs, run and port files), the Docker
+# one's volume. Left: everything else's.
+! exists $VMS/12345612345602
+! exists $VMS/12345612345606
+! exists $STUB_DIR/docker/volumes/devvm-dock-12345612345606-home
+! exists $STUB_DIR/docker/networks/devvm-dock-12345612345606-net
+! exists $STUB_DIR/docker/images/devvm-x:devvm-dock-12345612345606-1
+exists $VMS/12345612345601/state
+exists $VMS/12345612345601/logs/network.jsonl
+exists $VMS/12345612345601/run/sandbox.sb
+exists $VMS/12345612345601/backend/ports
+exists $VMS/12345612345604/state
+exists $VMS/12345612345603/state
+exists $VMS/12345612345605/state
+exists $VMS/12345612345607/state
+! exists $VMS/12345612345608
 exec sh -c 'grep -c . "$STUB_DIR/instances"'
 stdout '^1$'
 stub_calls
@@ -74,10 +72,11 @@ stub_calls
 
 # When a backend a VM's state names doesn't answer, gc warns, leaves its
 # VMs' state alone, and goes on with the others.
-exec sh -c 'printf "image=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/devvm-smol-12345612345612" && touch -t 202001010000 "$VMS/devvm-smol-12345612345612"'
+mkdir $VMS/12345612345608
+exec sh -c 'printf "name=devvm-smol-12345612345608\nimage=base\ndir=/p/smol\nbackend=smolvm\nnet=off\n" > "$VMS/12345612345608/state" && touch -t 202001010000 "$VMS/12345612345608/state"'
 exec sh -c 'touch "$STUB_DIR/smolvm-ls-fails"'
 exec devvm gc --force --orphans
 stderr '^devvm: gc_backend_skipped backend=smolvm$'
 stderr '^gc_orphans_unknown backend=smolvm$'
-exists $VMS/devvm-smol-12345612345612
-exists $VMS/devvm-moved-12345612345612
+exists $VMS/12345612345608/state
+exists $VMS/12345612345604/state

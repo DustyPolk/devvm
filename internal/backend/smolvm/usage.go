@@ -48,20 +48,20 @@ func (s *Smolvm) Usage(ctx context.Context) (backend.Usage, error) {
 		}
 	}
 	if s.OS == "darwin" {
-		u.Caches = cacheUsage()
+		u.Caches = cacheUsage(s.Dirs.UserCache)
 	}
 	return u, nil
 }
 
-// cacheUsage is smolvm's caches on macOS, each by entry.
-func cacheUsage() []backend.Cache {
-	base, err := os.UserCacheDir()
-	if err != nil {
+// cacheUsage is smolvm's caches on macOS, each by entry, in the user's
+// cache folder (paths.Dirs.UserCache).
+func cacheUsage(cache string) []backend.Cache {
+	if cache == "" {
 		return nil
 	}
 	var out []backend.Cache
 	for _, c := range caches() {
-		dir := filepath.Join(base, c.path)
+		dir := filepath.Join(cache, c.path)
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			continue

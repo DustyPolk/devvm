@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -57,7 +58,7 @@ func TestMakePrivate(t *testing.T) {
 func TestBackendsAndTools(t *testing.T) {
 	d := testDirs(t)
 	for i, b := range []string{"lima", "smolvm", ""} {
-		if _, err := CreateVM(d, "devvm-x-"+string(rune('a'+i)), NewVM{Image: "base", Backend: b, Tools: []string{"node", "claude"}}); err != nil {
+		if _, err := CreateVM(d, "devvm-x-0123456789abc"+string(rune('a'+i)), NewVM{Image: "base", Backend: b, Tools: []string{"node", "claude"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -65,11 +66,11 @@ func TestBackendsAndTools(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(used, map[string]bool{"lima": true, "smolvm": true}) {
 		t.Errorf("Backends = %v, %v", used, err)
 	}
-	st, err := ReadVM(d, "devvm-x-a")
+	st, err := ReadVM(d, "devvm-x-0123456789abca")
 	if err != nil || !reflect.DeepEqual(st.ToolNames(), []string{"node", "claude"}) {
 		t.Errorf("ToolNames = %q, %v", st.ToolNames(), err)
 	}
-	if none, _ := ReadVM(d, "devvm-none"); none.ToolNames() != nil {
+	if none, _ := ReadVM(d, "devvm-none-0123456789abcf"); none.ToolNames() != nil {
 		t.Errorf("no state: %q", none.ToolNames())
 	}
 	for e, want := range map[*CorruptError]string{{"/f", 3, "bad"}: "/f:3: bad", {"/f", 0, "bad"}: "/f: bad"} {
@@ -93,7 +94,7 @@ func TestBackendsAndTools(t *testing.T) {
 		t.Errorf("RemoveImage of none: %v", err)
 	}
 	// A state file that can't be read stops Backends.
-	write(t, d.VMState("devvm-x-d"), "not key value\n")
+	write(t, d.VM("devvm-x-0123456789abcd").State(), "not key value\n")
 	if _, err := Backends(d); err == nil {
 		t.Error("Backends with a bad state: want an error")
 	}
@@ -263,7 +264,7 @@ func TestPrivateDir(t *testing.T) {
 
 func TestWriteFileIsAtomicAndPrivate(t *testing.T) {
 	d := testDirs(t)
-	path := d.VMState("devvm-p-1")
+	path := d.VM(vmP).State()
 	for _, data := range []string{"a=1\n", "a=2\n"} {
 		if err := writeFile(path, []byte(data)); err != nil {
 			t.Fatal(err)
@@ -272,14 +273,14 @@ func TestWriteFileIsAtomicAndPrivate(t *testing.T) {
 			t.Errorf("got %q, want %q", got, data)
 		}
 	}
-	entries, err := os.ReadDir(d.VMs())
+	entries, err := os.ReadDir(filepath.Dir(path))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) != 1 {
 		t.Errorf("want only the state file, got %v", entries)
 	}
-	for path, want := range map[string]fs.FileMode{path: 0o600, d.VMs(): 0o700} {
+	for path, want := range map[string]fs.FileMode{path: 0o600, filepath.Dir(path): 0o700, d.VMs(): 0o700} {
 		fi, err := os.Stat(path)
 		if err != nil {
 			t.Fatal(err)
@@ -293,7 +294,7 @@ func TestWriteFileIsAtomicAndPrivate(t *testing.T) {
 func TestVMSetGet(t *testing.T) {
 	d := testDirs(t)
 	name := "devvm-x-00000000000000"
-	v, err := CreateVM(d, name, NewVM{Image: "foo", Dir: "/p", Chain: "base=abc foo=def", Backend: "lima", Tools: []string{"node", "claude"}})
+	v, err := CreateVM(d, name, NewVM{Image: "foo", Dir: "/p", Chain: "base=abc foo=def", Backend: "lima", Alias: "devvm-x", Tools: []string{"node", "claude"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,8 +315,45 @@ func TestVMSetGet(t *testing.T) {
 			t.Errorf("%s = %q, want %q", key, got, want)
 		}
 	}
-	if n := strings.Count(read(t, d.VMState(name)), "ssh_agent="); n != 1 {
+	if n := strings.Count(read(t, d.VM(name).State()), "ssh_agent="); n != 1 {
 		t.Errorf("ssh_agent is in the file %d times, want 1", n)
+	}
+	// Its name and alias are recorded, and the folder its hash names finds
+	// it by that name.
+	byHash, err := ReadHash(d, "00000000000000")
+	if err != nil || byHash.Name() != name || byHash.Get(KeyAlias) != "devvm-x" || byHash.Get(KeyImage) != "foo" {
+		t.Errorf("ReadHash = %+v, %v", byHash, err)
+	}
+}
+
+// vmP is a project VM's name, for tests of a VM's state.
+const vmP = "devvm-p-00000000000000"
+
+// A folder's state is read by the name it records alone: another name
+// with the same hash (made for the folder by another backend) reads as no
+// state, and is never written.
+func TestVMOtherName(t *testing.T) {
+	d := testDirs(t)
+	if _, err := CreateVM(d, vmP, NewVM{Image: "base"}); err != nil {
+		t.Fatal(err)
+	}
+	other, err := ReadVM(d, "devvm-pp-00000000000000")
+	if err != nil || other.Exists() || other.Get(KeyImage) != "" {
+		t.Fatalf("ReadVM with another name = %+v, %v", other, err)
+	}
+	if err := other.Set("net", "on"); err == nil {
+		t.Error("Set through another name: want an error")
+	}
+	if err := other.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := ReadVM(d, vmP); err != nil || !st.Exists() || st.Get("net") != "" {
+		t.Errorf("the VM's own after: %+v, %v", st, err)
+	}
+	for _, h := range []string{"", "vm", "../00000000000000", "0000000000000"} {
+		if _, err := ReadHash(d, h); err == nil {
+			t.Errorf("ReadHash(%q): want an error", h)
+		}
 	}
 }
 
@@ -324,16 +362,16 @@ func TestVMSetGet(t *testing.T) {
 func TestVMID(t *testing.T) {
 	d := testDirs(t)
 	hex32 := regexp.MustCompile(`^[0-9a-f]{32}$`)
-	a, err := CreateVM(d, "vm", NewVM{Image: "base"})
+	a, err := CreateVM(d, vmP, NewVM{Image: "base"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	first := a.Get(KeyID)
-	again, err := CreateVM(d, "vm", NewVM{Image: "base"})
+	again, err := CreateVM(d, vmP, NewVM{Image: "base"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	back, err := ReadVM(d, "vm")
+	back, err := ReadVM(d, vmP)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,11 +382,11 @@ func TestVMID(t *testing.T) {
 
 func TestVMSetKeepsOtherWriters(t *testing.T) {
 	d := testDirs(t)
-	a, err := CreateVM(d, "vm", NewVM{Image: "base"})
+	a, err := CreateVM(d, vmP, NewVM{Image: "base"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := ReadVM(d, "vm")
+	b, err := ReadVM(d, vmP)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,10 +416,14 @@ func TestVMMissing(t *testing.T) {
 	if !v.Exists() {
 		t.Error("after Set: want the state file")
 	}
+	// It records its name, so it's a VM VMNames lists.
+	if names, err := VMNames(d); err != nil || !slices.Equal(names, []string{v.Name()}) {
+		t.Errorf("after Set: VMNames = %q, %v", names, err)
+	}
 	if err := v.Remove(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(d.VMState(v.Name())); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(d.VM(v.Name()).State()); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("after Remove: %v", err)
 	}
 	if err := v.Remove(); err != nil {
@@ -394,15 +436,17 @@ func TestVMNames(t *testing.T) {
 	if names, err := VMNames(d); err != nil || names != nil {
 		t.Fatalf("no state folder: %v, %v", names, err)
 	}
-	write(t, d.VMState("devvm-b-00000000000000"), "net=off\n")
-	write(t, d.VMState("devvm-a-00000000000000"), "net=off\n")
-	write(t, d.VMState(".devvm-c-00000000000000.tmp-1"), "")
-	write(t, d.VMState("devvm-a-00000000000000.policy"), "example.com\n")
-	if err := os.MkdirAll(filepath.Join(d.VMs(), "folder"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	// Each VM's folder records its name; one named by another hash, a
+	// folder without state, a file and a folder not named by a hash
+	// aren't VMs.
+	write(t, d.VM("devvm-b-00000000000001").State(), "name=devvm-b-00000000000001\nnet=off\n")
+	write(t, d.VM("devvm-a-00000000000002").State(), "name=devvm-a-00000000000002\nnet=off\n")
+	write(t, d.VM("devvm-a-00000000000002").Policy(), "example.com\n")
+	write(t, filepath.Join(d.VMDir("00000000000003"), ".state.tmp-1"), "")
+	write(t, filepath.Join(d.VMs(), "00000000000004"), "name=devvm-c-00000000000004\n")
+	write(t, filepath.Join(d.VMs(), "folder", "state"), "name=devvm-d-00000000000005\n")
 	names, err := VMNames(d)
-	want := []string{"devvm-a-00000000000000", "devvm-b-00000000000000"}
+	want := []string{"devvm-a-00000000000002", "devvm-b-00000000000001"}
 	if err != nil || !reflect.DeepEqual(names, want) {
 		t.Errorf("VMNames = %v, %v; want %v", names, err, want)
 	}
@@ -410,14 +454,16 @@ func TestVMNames(t *testing.T) {
 
 func TestVMCorrupt(t *testing.T) {
 	d := testDirs(t)
-	write(t, d.VMState("vm"), "image=base\ngarbage\n")
-	_, err := ReadVM(d, "vm")
-	wantCorrupt(t, err, d.VMState("vm"), 2)
+	write(t, d.VM(vmP).State(), "image=base\ngarbage\n")
+	_, err := ReadVM(d, vmP)
+	wantCorrupt(t, err, d.VM(vmP).State(), 2)
+	_, err = VMNames(d)
+	wantCorrupt(t, err, d.VM(vmP).State(), 2)
 }
 
 func TestVMRefuses(t *testing.T) {
 	d := testDirs(t)
-	for _, name := range []string{"", ".", "..", ".hidden", "a/b", "../x"} {
+	for _, name := range []string{"", ".", "..", ".hidden", "a/b", "../x", "vm", "devvm-img-0123456789ab", "devvm-tools-build", "devvm-p/../00000000000000"} {
 		if _, err := ReadVM(d, name); err == nil {
 			t.Errorf("ReadVM(%q): want an error", name)
 		}
@@ -425,7 +471,7 @@ func TestVMRefuses(t *testing.T) {
 			t.Errorf("CreateVM(%q): want an error", name)
 		}
 	}
-	v, err := CreateVM(d, "vm", NewVM{Image: "base"})
+	v, err := CreateVM(d, vmP, NewVM{Image: "base"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +480,7 @@ func TestVMRefuses(t *testing.T) {
 			t.Errorf("Set(%q, %q): want an error", kv[0], kv[1])
 		}
 	}
-	if _, err := CreateVM(d, "vm2", NewVM{Dir: "/a\nb"}); err == nil {
+	if _, err := CreateVM(d, "devvm-q-00000000000001", NewVM{Dir: "/a\nb"}); err == nil {
 		t.Error("CreateVM with a line break: want an error")
 	}
 }

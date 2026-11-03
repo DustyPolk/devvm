@@ -397,10 +397,16 @@ func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The VMs' logs, and the daily tools check's: not the runs'.
 	logs, err := filesIn(d.Logs(), func(string) bool { return true })
 	if err != nil {
 		return nil, err
 	}
+	vmLogs, err := e.vmLogs()
+	if err != nil {
+		return nil, err
+	}
+	logs.count, logs.size = logs.count+vmLogs.count, logs.size+vmLogs.size
 	runs, err := filesIn(d.RunLogs(), func(n string) bool { return strings.HasSuffix(n, ".log") })
 	if err != nil {
 		return nil, err
@@ -421,7 +427,7 @@ func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	other := otherState(d) - left.Size
+	other := otherState(d) - left.Size - vmLogs.size
 	exportsRow := spaceRow{
 		What: "history", Count: len(es), Size: exportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --history",
 		Retain: e.retainOf(settings.RetainHistoryAge, settings.RetainHistoryCount), RetainFrees: exportsSize(exportsToRetire(es, e.ret, e.now)),
@@ -465,30 +471,60 @@ func (e spaceEnv) leftovers(ctx context.Context) (spaceRow, error) {
 		return row, err
 	}
 	row.Count = len(socks)
-	names, err := state.VMNames(e.b.Dirs)
+	orphans, _, err := e.vmFolders()
 	if err != nil {
 		return row, err
 	}
-	for _, n := range names {
-		st, err := state.ReadVM(e.b.Dirs, n)
-		if err != nil {
-			return row, err
-		}
-		have, asked := e.vms[st.Get(state.KeyBackend)]
-		if !asked || have[n] {
-			continue
-		}
+	for _, n := range orphans {
 		row.Count++
-		var n64 int64
-		for _, f := range leftoverFiles(e.b.Dirs, n) {
-			n64 += du(f)
-		}
+		files := e.b.Dirs.VM(n)
+		n64 := du(files.Dir)
 		row.Size += n64
-		if fi, err := os.Stat(e.b.Dirs.VMState(n)); err == nil && e.ret.OrphansAge > 0 && e.now.Sub(fi.ModTime()) >= e.ret.OrphansAge {
+		if fi, err := os.Stat(files.State()); err == nil && e.ret.OrphansAge > 0 && e.now.Sub(fi.ModTime()) >= e.ret.OrphansAge {
 			row.RetainFrees += n64
 		}
 	}
 	return row, nil
+}
+
+// vmFolders sorts the VMs that have state into those whose backend
+// answered without them (orphans, whose whole folder is leftover state)
+// and the rest.
+func (e spaceEnv) vmFolders() (orphans, rest []string, err error) {
+	names, err := state.VMNames(e.b.Dirs)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, n := range names {
+		st, err := state.ReadVM(e.b.Dirs, n)
+		if err != nil {
+			return nil, nil, err
+		}
+		if have, asked := e.vms[st.Get(state.KeyBackend)]; asked && !have[n] {
+			orphans = append(orphans, n)
+		} else {
+			rest = append(rest, n)
+		}
+	}
+	return orphans, rest, nil
+}
+
+// vmLogs are the logs of the VMs that aren't orphans: their network logs,
+// their proxies' and link sessions' output.
+func (e spaceEnv) vmLogs() (counted, error) {
+	var c counted
+	_, rest, err := e.vmFolders()
+	if err != nil {
+		return c, err
+	}
+	for _, n := range rest {
+		l, err := filesIn(e.b.Dirs.VM(n).Logs(), func(string) bool { return true })
+		if err != nil {
+			return c, err
+		}
+		c.count, c.size = c.count+l.count, c.size+l.size
+	}
+	return c, nil
 }
 
 // oldestBeyond is the disk the run logs in dir take beyond the newest
@@ -527,27 +563,15 @@ func (e spaceEnv) retainOf(keys ...string) string {
 	return strings.Join(on, ", ")
 }
 
-// leftoverFiles are the files devvm keeps for a VM besides its logs: its
-// state, its run files and its backends' records, with the temporary files
-// of a write that never finished (.<file>.tmp-*).
-func leftoverFiles(d paths.Dirs, vm string) []string {
-	files := []string{d.VMState(vm)}
-	for _, dir := range []string{d.Run(), d.LimaVMs(), filepath.Join(d.Smolvm(), "vms"), filepath.Join(d.Docker(), "vms")} {
-		m, _ := filepath.Glob(filepath.Join(dir, vm+".*"))
-		tmps, _ := filepath.Glob(filepath.Join(dir, "."+vm+".*.tmp-*"))
-		files = append(append(files, m...), tmps...)
-	}
-	return files
-}
-
-// otherState is the disk devvm's other state takes: its VMs' and images'
-// records, run files, CA, backend records, the tools lock and the --from
-// digests in the cache.
+// otherState is the disk devvm's other state takes: the VMs' folders (their
+// logs and the orphans' are counted apart, by the caller), images'
+// records, run files, CA, the backends' own files, the tools lock and the
+// --from digests in the cache.
 func otherState(d paths.Dirs) int64 {
 	var n int64
 	for _, p := range []string{
-		d.VMs(), d.Images(), d.FromDigests(), d.Run(), d.CA(), d.LimaVMs(), d.Docker(), d.Smolvm(),
-		d.ToolLock(), d.ToolLock() + ".toml", d.ToolLock() + ".checked",
+		d.VMs(), d.Images(), d.FromDigests(), d.Run(), d.CA(), d.Docker(), d.Smolvm(),
+		d.ToolLock(), d.ToolLockConfig(), d.ToolLockChecked(),
 	} {
 		n += du(p)
 	}

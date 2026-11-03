@@ -65,7 +65,7 @@ exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
 free_port P Q
 exec devvm --no-network-policy --no-git-protect
 vm_name WEB web
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
 ! stdout '^ports'
 exec devvm ports
 stdout '\Aall\n\z'
@@ -99,7 +99,7 @@ exec devvm ports add 8000-8010
 stdout '^==> ports_now ports='$P',8000-8010 vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl edit'
-catg $DATA/lima-vms/devvm-web-*.ports
+catg $WEB_dir/backend/ports
 stdout '\A'$P',8000-8010\n\z'
 exec devvm ports
 stdout '\A'$P',8000-8010\n\z'
@@ -109,7 +109,7 @@ exec devvm ports rm $P
 stdout '^==> ports_now ports=8000-8010 vm=devvm-web-[0-9a-f]{14}$'
 exec devvm ports rm 8000-8010
 stdout '^==> ports_now ports=none vm=devvm-web-[0-9a-f]{14}$'
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
 stdout '^ports=none$'
 ! exec devvm ports rm 5173
 stderr '^devvm: port_not_listed port=5173 ports=none$'
@@ -123,7 +123,7 @@ stderr '^devvm: ports_all_already$'
 stderr '^devvm: ports_rm_all$'
 stub_calls
 ! stdout 'limactl edit'
-catg $DATA/lima-vms/devvm-web-*.ports
+catg $WEB_dir/backend/ports
 stdout '\Aall\n\z'
 
 # --ports on it is ignored, with a warning naming devvm ports.

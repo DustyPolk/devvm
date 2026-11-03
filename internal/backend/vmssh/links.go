@@ -234,7 +234,7 @@ func (l *Links) Run(ctx context.Context) error {
 	if err := state.PrivateDir(l.Dir); err != nil {
 		return err
 	}
-	if ctl := l.Control("", ""); len(ctl) > controlMax || strings.ContainsAny(ctl, ": \t\n") {
+	if ctl := l.Control("", ""); len(ctl) > ControlMax || strings.ContainsAny(ctl, ": \t\n") {
 		return fmt.Errorf("%s: its path is too long for a socket, or has a colon or a space", ctl)
 	}
 	ctx, cancel := context.WithCancel(ctx)

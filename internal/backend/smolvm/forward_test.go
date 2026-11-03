@@ -64,7 +64,7 @@ func TestStartForwarder(t *testing.T) {
 	if !r.PortsAll || !slices.Equal(args, want) {
 		t.Errorf("forwarder:\n%q\nwant\n%q", args, want)
 	}
-	if !strings.HasPrefix(filepath.Base(s.Forwards.Control(vm)), "smolvm-") || filepath.Dir(s.Forwards.KnownHosts(vm)) != filepath.Dir(s.Dirs.SmolvmVM(vm)) {
+	if !strings.HasPrefix(filepath.Base(s.Forwards.Control(vm)), "smolvm-") || filepath.Dir(s.Forwards.KnownHosts(vm)) != s.Dirs.VM(vm).Backend() {
 		t.Errorf("its files: %s, %s", s.Forwards.Control(vm), s.Forwards.KnownHosts(vm))
 	}
 	if b, err := os.ReadFile(s.Forwards.KnownHosts(vm)); err != nil || string(b) != vm+" ssh-ed25519 AAAAstub\n" {
@@ -110,10 +110,10 @@ func TestStartForwarder(t *testing.T) {
 	if err := s.Delete(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
-	for _, ext := range []string{".ports.pid", ".ports.known_hosts", ".ports.log"} {
-		if _, err := os.Stat(filepath.Join(s.Forwards.Dir, vm+ext)); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("%s left: %v", ext, err)
-		}
+	// Its backend folder goes with it: the forwarder's files, its record
+	// and key.
+	if _, err := os.Stat(s.Dirs.VM(vm).Backend()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its backend folder left: %v", err)
 	}
 }
 

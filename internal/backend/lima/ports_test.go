@@ -86,7 +86,7 @@ func TestStartForwarder(t *testing.T) {
 	if b, err := os.ReadFile(l.Forwards.KnownHosts(vm)); err != nil || string(b) != vm+" ssh-ed25519 AAAAkey\n" {
 		t.Errorf("known_hosts: %q, %v", b, err)
 	}
-	if !strings.HasPrefix(filepath.Base(l.Forwards.Control(vm)), "lima-") || filepath.Dir(l.Forwards.Log(vm)) != l.Dirs.LimaVMs() {
+	if !strings.HasPrefix(filepath.Base(l.Forwards.Control(vm)), "lima-") || filepath.Dir(l.Forwards.Log(vm)) != l.Dirs.VM(vm).Backend() {
 		t.Errorf("its files: %s, %s", l.Forwards.Control(vm), l.Forwards.Log(vm))
 	}
 	if !l.Forwards.Running(vm) {
@@ -156,7 +156,7 @@ func TestStartForwarder(t *testing.T) {
 	if err := l.Delete(ctx, vm); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{l.Forwards.file(vm), l.Forwards.KnownHosts(vm), l.Forwards.Log(vm)} {
+	for _, f := range []string{l.Dirs.VM(vm).Ports(), l.Forwards.KnownHosts(vm), l.Forwards.Log(vm), l.Dirs.VM(vm).Backend()} {
 		if _, err := os.Stat(f); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s left: %v", f, err)
 		}

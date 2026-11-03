@@ -20,7 +20,7 @@ stdout '^limactl list --json\nsmolvm machine ls( --state-dir \S+)? --json\n\z'
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 exec devvm build foo
-exec sh -c 'printf "devvm-img-000000000000\ndevvm-proj-12345612345612\n" >> "$STUB_DIR/instances"'
+exec sh -c 'printf "devvm-img-000000000000\ndevvm-proj-12345612345601\n" >> "$STUB_DIR/instances"'
 exec sh -c 'for i in base foo; do grep -lxF "  \"name\": \"$i\"," "$IMAGES"/*/record.json | xargs dirname | xargs basename > "$i.key"; done'
 exec devvm images
 stdout '^base +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+ +lima\nfoo +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+ +lima\n- +- +- +000000000000 +unfinished +- +lima\n\n'
@@ -46,8 +46,8 @@ exec devvm rm --force --no-export
 cd $WORK
 exec sh -c 'cd "$SHARE" && : > go-1.20.0-0123456789ab.erofs && : > go-1.9.0-0123456789ab.erofs'
 json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=musl format=plain-0123456789ab backend=smolvm built=2020-01-01T00:00:00Z
-mkdir $VMS
-exec sh -c 'printf "image=base\ndir=/p\nbackend=smolvm\nlibc=musl\ntool_names=claude go\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/devvm-p-12345612345612"'
+mkdir $VMS/12345612345602
+exec sh -c 'printf "name=devvm-p-12345612345602\nimage=base\ndir=/p\nbackend=smolvm\nlibc=musl\ntool_names=claude go\ntools=%s go-1.20.0-0123456789ab.erofs\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345602/state"'
 stub_reset
 exec devvm images
 # The lock's go isn't built; the old go has the backend and C library its

@@ -288,18 +288,27 @@ func (e Links) publishUnenforced(ctx context.Context, t *found, old string) erro
 	return nil
 }
 
-// projectVMs returns the project VMs that have state.
-func (e Links) projectVMs() ([]string, error) {
+// projectVMs returns the project VMs that have state, as their states
+// record them.
+func (e Links) projectVMs() ([]project.Recorded, error) {
 	names, err := state.VMNames(e.Dirs)
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(names, func(n string) bool { return !vmname.IsVM(n) }), nil
+	var out []project.Recorded
+	for _, n := range names {
+		st, err := state.ReadVM(e.Dirs, n)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, project.Recorded{Name: n, Alias: st.Get(state.KeyAlias), Dir: st.Get(state.KeyDir)})
+	}
+	return out, nil
 }
 
 // resolve returns the VM a link's TARGET names: a folder's path (relative
-// to the folder devvm runs in), a VM's name, or a folder's name, which
-// must match one VM alone.
+// to the folder devvm runs in), a VM's name or alias, or a folder's name,
+// which must match one VM alone.
 func (e Links) resolve(target string) (string, error) {
 	all, err := e.projectVMs()
 	if err != nil {
@@ -312,7 +321,11 @@ func (e Links) resolve(target string) (string, error) {
 			dir = filepath.Join(e.Dir, dir)
 		}
 		if dir, err = filepath.EvalSymlinks(dir); err == nil {
-			vms = project.ForDir(dir, all)
+			names := make([]string, len(all))
+			for i, v := range all {
+				names[i] = v.Name
+			}
+			vms = project.ForDir(dir, names)
 		}
 	} else {
 		vms = project.Targets(target, all)

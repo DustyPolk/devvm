@@ -19,7 +19,8 @@ exec git init -q
 exec git remote add origin git@github.com:o/r.git
 exec devvm --no-network-policy --no-git-protect
 stderr '^devvm: ssh_remote_hint vm=devvm-web-[0-9a-f]{14}$'
-catg $VMS/devvm-web-*
+vm_name WEB web
+exec cat $WEB_dir/state
 stdout '^ssh_agent=off$'
 stub_calls
 stdout '^limactl clone .* --set \.ssh\.forwardAgent=false '
@@ -45,7 +46,8 @@ stub_reset
 exec devvm --no-network-policy --no-git-protect --ssh-agent
 ! stderr ssh_remote_hint
 stderr '^devvm: no_ssh_agent$'
-catg $VMS/devvm-fwd-*
+vm_name FWD fwd
+exec cat $FWD_dir/state
 stdout '^ssh_agent=on$'
 stub_calls
 stdout '^limactl clone .* --set \.ssh\.forwardAgent=true '

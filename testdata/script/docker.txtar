@@ -99,7 +99,8 @@ stdout '^ssh -F none -T .* -o IdentityAgent=none .* -o ForwardAgent=no .* cd -- 
 exists $STUB_DIR/sync.tar
 exec devvm ls
 stdout '^devvm-web-[0-9a-f]{14} +Running .*image=base +- +\S+ +off +- +docker +\S+/web$'
-catg $VMS/devvm-web-*
+vm_name WEB web
+catg $WEB_dir/state
 stdout '^backend=docker$'
 ! stdout '^disk='
 
@@ -130,9 +131,32 @@ stub_calls
 stdout '^docker container rm -f -v devvm-web-[0-9a-f]{14}$'
 stdout '^docker volume rm devvm-web-[0-9a-f]{14}-home$'
 ! stdout 'volume rm devvm-tools'
-! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/docker/vms/devvm-web-*'
+! exists $WEB_dir
 exec devvm ls
 ! stdout devvm-web
+
+# A folder's VM is found by its path, whatever names the default backend
+# fits: one made with --backend docker, its name longer than Lima's allow
+# (a long Lima home here), opens on docker from devvm without the flag,
+# and nothing is made again.
+env DEVVM_LIMA_HOME=$LIMA_HOME/xxxxxxxxxxxxxxxxxxxx
+project a-very-long-folder-name-for-docker
+exec devvm --backend docker --from $PIN --no-network-policy --ports none
+stdout '^==> creating_from image=base vm=devvm-a-very-long-folder-n-[0-9a-f]{14}$'
+stub_reset
+exec devvm
+! stdout creating_from
+! stderr .
+stub_calls
+! stdout 'container create'
+! stdout limactl
+stdout '^ssh -F none -T .* cd -- ''\S+/a-very-long-folder-name-for-docker'' && exec bash -l$'
+vm_name LONG a-very-long-folder-n
+catg $LONG_dir/state
+stdout '^backend=docker$'
+exec devvm rm --force --no-export
+! exists $LONG_dir
+env DEVVM_LIMA_HOME=$LIMA_HOME
 
 # Under Sysbox, where the engine has it, emulated and reviewed, so
 # unwarned: the VM runs under its runtime, said, recorded, on a network of
@@ -163,7 +187,8 @@ stdout '^docker network create --label devvm\.data=\S+ --label devvm\.kind=vm de
 stdout '^docker container create --name devvm-sysbox-[0-9a-f]{14} .* --network devvm-sysbox-[0-9a-f]{14}-docker-net .* --mount type=volume,src=devvm-sysbox-[0-9a-f]{14}-containerd,dst=/var/lib/containerd --runtime sysbox-runc devvm-[0-9a-f]{8}:[0-9a-f]{12} infinity$'
 ! stdout 'container create --name devvm-sysbox-.* --cap-drop'
 stdout '^docker exec -i -u 0 -e DEVVM_LOOP=off -e DEVVM_SSHD=inetd devvm-sysbox-[0-9a-f]{14} sh -s -- ssh '
-catg $VMS/devvm-sysbox-*
+vm_name SYSBOX sysbox
+catg $SYSBOX_dir/state
 stdout '^docker_layer=sysbox$'
 stdout '^net=off$'
 exec devvm ls
@@ -212,9 +237,10 @@ stub_calls
 stdout '^docker exec -u 0 devvm-emu-[0-9a-f]{14} sh -c if \[ -x /usr/sbin/sshd \]; then echo sshd; else echo none; fi$'
 stdout '^docker exec -i -u 0 -e DEVVM_DOCKERD=off -e DEVVM_LOOP=off -e DEVVM_SSHD=inetd devvm-emu-[0-9a-f]{14} sh -s -- ssh \S+ ssh-ed25519 \S+ devvm$'
 stdout '^docker exec -u 0 devvm-emu-[0-9a-f]{14} cat /etc/ssh/ssh_host_ed25519_key\.pub$'
-stdout '^ssh -F none -M -S \S+/data/devvm/run/docker-[0-9a-f]{16}\.ctl -T .* -o IdentityAgent=none -o IdentityFile=\S+/docker/vms/devvm-emu-[0-9a-f]{14}\.key .* -o HostKeyAlias=devvm-emu-[0-9a-f]{14} .* -o ForwardAgent=no .* -o ProxyCommand=''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}'' -l \S+ devvm-emu-[0-9a-f]{14} sh -s$'
+stdout '^ssh -F none -M -S \S+/data/devvm/run/docker-[0-9a-f]{16}\.ctl -T .* -o IdentityAgent=none -o IdentityFile=\S+/data/devvm/vms/[0-9a-f]{14}/backend/key.* -o HostKeyAlias=devvm-emu-[0-9a-f]{14} .* -o ForwardAgent=no .* -o ProxyCommand=''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}'' -l \S+ devvm-emu-[0-9a-f]{14} sh -s$'
 stdout '^ssh -F none -T -o ControlMaster=no -o ControlPath=none .* -o IdentityAgent=SSH_AUTH_SOCK .* -o ForwardAgent=yes .* -o ProxyCommand=.* -l \S+ devvm-emu-[0-9a-f]{14} cd -- ''\S+/emu'' && exec bash -l$'
-catg $DATA/docker/vms/devvm-emu-*.ports.log
+vm_name EMU emu
+catg $EMU_dir/backend/ports.log
 stdout '^devvm ports: port '$PORT': forwarded$'
 grep '^Host devvm-emu devvm-emu-[0-9a-f]{14}$' $DATA/ssh_config
 grep '^  ProxyCommand ''\S+'' ''_docker-connect'' ''-docker'' ''\S+/docker'' ''-data'' ''\S+/data/devvm'' ''devvm-emu-[0-9a-f]{14}''$' $DATA/ssh_config
@@ -249,7 +275,7 @@ exec devvm ports $PORT,9-10
 stub_reset
 exec devvm
 stub_calls
-catg $DATA/docker/vms/devvm-emu-*.ports.log
+catg $EMU_dir/backend/ports.log
 stdout '^devvm ports: forwarding devvm-emu-[0-9a-f]{14}''s ports$'
 exec sh -c 'ps -axww -o command= | grep "[_]docker-ports -vm devvm-emu-" | grep -F -- "-key $XDG_DATA_HOME/devvm/"'
 stdout ' -only '$PORT',9-10$'
@@ -266,7 +292,7 @@ stdout ' -only '$PORT'$'
 
 # rm deletes its forwarder, its keys and its entry.
 exec devvm rm --force --no-export
-! exec sh -c 'ls "$XDG_DATA_HOME"/devvm/docker/vms/devvm-emu-*'
+! exists $EMU_dir
 ! grep devvm-emu $DATA/ssh_config
 rm $STUB_DIR/guest-ports
 
@@ -295,7 +321,8 @@ stderr '^devvm: backend_lacks backend=docker feature=egress-proxy vm=devvm-other
 exec devvm --backend docker --from $PIN --ports none
 stderr '^devvm: net_off_backend backend=docker vm=devvm-other-[0-9a-f]{14}$'
 ! stderr 'net_about|net_ask'
-catg $VMS/devvm-other-*
+vm_name OTHER other
+catg $OTHER_dir/state
 stdout '^net=off$'
 exec devvm rm --force --no-export
 env DEVVM_DOCKER_KIND=desktop

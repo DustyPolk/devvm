@@ -43,7 +43,7 @@ exec sh -c 'mkdir -p "$HOME/.ssh" && echo "Include $DATA/ssh_config" > "$HOME/.s
 [exec:/usr/bin/ssh] stdout '^hostname 127\.0\.0\.1$'
 [exec:/usr/bin/ssh] stdout '^userknownhostsfile \S*/data/devvm/known_hosts$'
 [exec:/usr/bin/ssh] stdout '^hostkeyalias devvm-web-[0-9a-f]{14}$'
-exec sh -c 'echo cpus=6 >> "$VMS/$WEB"'
+exec sh -c 'echo cpus=6 >> "$WEB_dir/state"'
 stub_reset
 exec devvm host
 ! stdout 'starting|ssh_include'
@@ -90,7 +90,7 @@ env PATH=$SAVED_PATH
 project leak
 exec devvm --network-policy --no-git-protect
 vm_name LEAK leak
-exec sh -c 'echo $PPID > "$LIMA_HOME/$LEAK/ha.pid"; echo "$PPID 1" > "$RUN/$LEAK.started"'
+exec sh -c 'echo $PPID > "$LIMA_HOME/$LEAK/ha.pid"; echo "$PPID 1" > "$LEAK_dir/run/started"'
 stub_reset
 exec sh -c ': > "$STUB_DIR/net-direct"'
 ! exec devvm host

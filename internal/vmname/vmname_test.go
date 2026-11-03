@@ -30,6 +30,32 @@ func TestIsVM(t *testing.T) {
 	}
 }
 
+func TestHashOf(t *testing.T) {
+	for _, c := range []struct {
+		name, hash string
+		ok         bool
+	}{
+		{"devvm-web-0123456789abcd", "0123456789abcd", true},
+		{"devvm-a-b-0123456789abcd", "0123456789abcd", true},
+		{"devvm-img-0123456789ab", "", false},
+		{"devvm-tools-build", "", false},
+		{"0123456789abcd", "", false},
+		{"", "", false},
+	} {
+		if h, ok := HashOf(c.name); h != c.hash || ok != c.ok {
+			t.Errorf("HashOf(%q) = %q, %v; want %q, %v", c.name, h, ok, c.hash, c.ok)
+		}
+		if c.ok && !IsHash(c.hash) {
+			t.Errorf("IsHash(%q) = false", c.hash)
+		}
+	}
+	for _, s := range []string{"", "0123456789abc", "0123456789abcde", "0123456789ABCD", "devvm-web-0123456789abcd", "../123456789abc"} {
+		if IsHash(s) {
+			t.Errorf("IsHash(%q) = true", s)
+		}
+	}
+}
+
 func TestSlugOf(t *testing.T) {
 	for _, c := range []struct {
 		name, slug string

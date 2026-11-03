@@ -25,7 +25,8 @@ stdout '^limactl shell --workdir / devvm-tools-build bash -s -- node 24\.21\.0 n
 stdout '^limactl delete -f devvm-tools-build$'
 # The VM is made from base's image, with the share read-only.
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[.*\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
-catg $VMS/devvm-web-*
+vm_name WEB web
+catg $WEB_dir/state
 stdout '^image=base$'
 stdout '^tool_names=node claude$'
 stdout '^libc=gnu$'
@@ -60,13 +61,13 @@ stdout '^TOOL +VERSION +NEWER +BUILT$'
 stdout '^claude +2\.1\.295 '
 exec devvm tools rm claude
 stdout '^==> vm_tools_now tools=node vm=devvm-web-[0-9a-f]{14}$'
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
 stdout '^tool_names=node$'
 ! stdout 'claude-'
 exec devvm tools add claude
 ! stdout 'building_tools|resolving_tools'
 stdout '^==> vm_tools_now tools=node claude vm=devvm-web-[0-9a-f]{14}$'
-catg $VMS/devvm-web-*
+catg $WEB_dir/state
 stdout '^tool_names=node claude$'
 stdout '^tools=.*claude-2\.1\.295-[0-9a-f]{12}\.erofs'
 stub_calls

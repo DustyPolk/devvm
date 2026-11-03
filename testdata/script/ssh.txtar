@@ -48,18 +48,22 @@ catg $DATA/known_hosts
 stdout '^devvm-web-'
 stdout '^devvm-img-foo-'
 
-# Two folders named web: each VM by its full name only.
+# A second folder named web: its VM by its full name only, as the first
+# VM keeps devvm-web, chosen when it was made.
+vm_name WEB web
 exec sh -c 'sed "s/^\(devvm-web-[0-9a-f]*\) Stopped$/\1 Running/" "$STUB_DIR/instances" > "$STUB_DIR/i" && mv "$STUB_DIR/i" "$STUB_DIR/instances"'
 mkdir $WORK/other/web
 cd $WORK/other/web
 exec devvm --no-network-policy --no-git-protect
 catg $DATA/ssh_config
-stdout -count=2 '^Host devvm-web-[0-9a-f]{14}$'
-! stdout '^Host devvm-web '
+stdout -count=1 '^Host devvm-web-[0-9a-f]{14}$'
+stdout '^Host devvm-web '$WEB'$'
+! stdout '^Host '$WEB'$'
 
 # A VM made again under a name whose host keys devvm has: they're read
 # again once it starts, not trusted.
-exec sh -c 'n=$(ls "$XDG_DATA_HOME/devvm/vms" | grep "^devvm-img-foo-") && limactl delete -f "$n" && rm "$XDG_DATA_HOME/devvm/vms/$n" && sed "s/^\($n\) .*/\1 ssh-ed25519 AAAAold/" "$DATA/known_hosts" > "$WORK/kh" && cp "$WORK/kh" "$DATA/known_hosts"'
+vm_name IMG img-foo
+exec sh -c 'limactl delete -f "$IMG" && rm -r "$IMG_dir" && sed "s/^\($IMG\) .*/\1 ssh-ed25519 AAAAold/" "$DATA/known_hosts" > "$WORK/kh" && cp "$WORK/kh" "$DATA/known_hosts"'
 cd $WORK/img-foo
 exec devvm --no-network-policy --no-git-protect
 catg $DATA/known_hosts

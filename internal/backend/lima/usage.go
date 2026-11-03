@@ -2,6 +2,7 @@ package lima
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -11,14 +12,14 @@ import (
 
 var _ backend.UsageReporter = (*Lima)(nil)
 
-// downloadCache is Lima's own download cache, outside its homes: every
-// Lima home of the user's shares it, devvm's and their own.
-func downloadCache() (string, error) {
-	dir, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
+// downloadCache is Lima's own download cache, in the user's cache folder,
+// outside its homes: every Lima home of the user's shares it, devvm's and
+// their own. An error when there's no cache folder to look in.
+func (l *Lima) downloadCache() (string, error) {
+	if l.Dirs.UserCache == "" {
+		return "", errors.New("lima: no cache folder")
 	}
-	return filepath.Join(dir, "lima", "download", "by-url-sha256"), nil
+	return filepath.Join(l.Dirs.UserCache, "lima", "download", "by-url-sha256"), nil
 }
 
 // Usage is the disk each VM's folder in devvm's Lima home takes (a clone
@@ -35,7 +36,7 @@ func (l *Lima) Usage(ctx context.Context) (backend.Usage, error) {
 			u.VMs[in.Name] = n
 		}
 	}
-	if c, ok := cacheUsage(); ok {
+	if c, ok := l.cacheUsage(); ok {
 		u.Caches = append(u.Caches, c)
 	}
 	return u, nil
@@ -43,8 +44,8 @@ func (l *Lima) Usage(ctx context.Context) (backend.Usage, error) {
 
 // cacheUsage is Lima's download cache, by entry; ok is false when there's
 // none to read.
-func cacheUsage() (backend.Cache, bool) {
-	dir, err := downloadCache()
+func (l *Lima) cacheUsage() (backend.Cache, bool) {
+	dir, err := l.downloadCache()
 	if err != nil {
 		return backend.Cache{}, false
 	}

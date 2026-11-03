@@ -14,6 +14,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // A start with ssh probes for sshd, has services.sh write its config with
@@ -73,7 +74,7 @@ func TestStartSSH(t *testing.T) {
 	if tgt.Host != vm || tgt.Port != 0 || tgt.User != "u" || tgt.ProxyCommand != proxy || !slices.Equal(tgt.Options, wantOpts) {
 		t.Errorf("SSH = %+v", tgt)
 	}
-	if fi, err := os.Stat(s.sshKey(vm)); err != nil || fi.Mode().Perm() != 0o600 || filepath.Dir(s.sshKey(vm)) != filepath.Dir(s.Dirs.DockerVM(vm)) {
+	if fi, err := os.Stat(s.sshKey(vm)); err != nil || fi.Mode().Perm() != 0o600 || filepath.Dir(s.sshKey(vm)) != s.Dirs.VM(vm).Backend() {
 		t.Errorf("key: %v, %v", fi, err)
 	}
 	if strings.Contains(s.field(t, "containers/"+vm+"/mounts"), ".sock") {
@@ -415,7 +416,7 @@ func TestStopStopsForwarder(t *testing.T) {
 	s.createVM(t, backend.VMSpec{Project: "/p/web"})
 	var asked []int
 	s.Forwards.Args = func(pid int) ([]string, error) { asked = append(asked, pid); return nil, errors.New("gone") }
-	if err := os.WriteFile(filepath.Join(s.Forwards.Dir, vm+".ports.pid"), []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o600); err != nil {
+	if err := state.WriteFile(s.Dirs.VM(vm).Forwarder(".pid"), []byte(fmt.Sprintf("%d\n", os.Getpid()))); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Stop(t.Context(), vm); err != nil {

@@ -1,6 +1,7 @@
 package paths
 
 import (
+	"cmp"
 	"path/filepath"
 	"testing"
 
@@ -15,42 +16,49 @@ func TestFromEnv(t *testing.T) {
 	tests := []struct {
 		name string
 		env  map[string]string
+		goos string // linux when empty
 		want Dirs
 	}{
 		{
 			name: "defaults under HOME",
 			env:  map[string]string{"HOME": "/h"},
-			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima"},
+			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima", UserCache: "/h/.cache"},
 		},
 		{
 			name: "HOME cleaned",
 			env:  map[string]string{"HOME": "/h//x/../"},
-			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima"},
+			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima", UserCache: "/h/.cache"},
 		},
 		{
 			name: "XDG folders, LIMA_HOME ignored",
-			env:  map[string]string{"HOME": "/h", "XDG_DATA_HOME": "/d", "XDG_CONFIG_HOME": "/c/", "LIMA_HOME": "/elsewhere"},
-			want: Dirs{Home: "/h", Data: "/d/devvm", Config: "/c/devvm", Lima: "/d/devvm/lima"},
+			env:  map[string]string{"HOME": "/h", "XDG_DATA_HOME": "/d", "XDG_CONFIG_HOME": "/c/", "XDG_CACHE_HOME": "/k", "LIMA_HOME": "/elsewhere"},
+			want: Dirs{Home: "/h", Data: "/d/devvm", Config: "/c/devvm", Lima: "/d/devvm/lima", UserCache: "/k"},
+		},
+		{
+			name: "macOS's cache folder, whatever XDG_CACHE_HOME says",
+			env:  map[string]string{"HOME": "/h", "XDG_CACHE_HOME": "/k"},
+			goos: "darwin",
+			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima", UserCache: "/h/Library/Caches"},
 		},
 		{
 			name: "DEVVM_LIMA_HOME moves the Lima home",
 			env:  map[string]string{"HOME": "/h", "XDG_DATA_HOME": "/d", "DEVVM_LIMA_HOME": "/short", "LIMA_HOME": "/elsewhere"},
-			want: Dirs{Home: "/h", Data: "/d/devvm", Config: "/h/.config/devvm", Lima: "/short"},
+			want: Dirs{Home: "/h", Data: "/d/devvm", Config: "/h/.config/devvm", Lima: "/short", UserCache: "/h/.cache"},
 		},
 		{
 			name: "a relative DEVVM_LIMA_HOME is made absolute",
 			env:  map[string]string{"HOME": "/h", "DEVVM_LIMA_HOME": "lt"},
-			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: filepath.Join(cwd, "lt")},
+			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: filepath.Join(cwd, "lt"), UserCache: "/h/.cache"},
 		},
 		{
 			name: "relative XDG folders are ignored",
-			env:  map[string]string{"HOME": "/h", "XDG_DATA_HOME": "d", "XDG_CONFIG_HOME": "c"},
-			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima"},
+			env:  map[string]string{"HOME": "/h", "XDG_DATA_HOME": "d", "XDG_CONFIG_HOME": "c", "XDG_CACHE_HOME": "k"},
+			want: Dirs{Home: "/h", Data: "/h/.local/share/devvm", Config: "/h/.config/devvm", Lima: "/h/.local/share/devvm/lima", UserCache: "/h/.cache"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := fromEnv(func(k string) string { return tt.env[k] })
+			got, err := fromEnv(func(k string) string { return tt.env[k] }, cmp.Or(tt.goos, "linux"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -68,7 +76,7 @@ func TestFromEnvNeedsHome(t *testing.T) {
 				return home
 			}
 			return ""
-		})
+		}, "linux")
 		if msg.IDOf(err) != "home_not_absolute" {
 			t.Errorf("HOME=%q: got %v, want home_not_absolute", home, err)
 		}
@@ -78,7 +86,14 @@ func TestFromEnvNeedsHome(t *testing.T) {
 func TestFiles(t *testing.T) {
 	d := Dirs{Data: "/d", Config: "/c", Lima: "/l"}
 	tests := []struct{ got, want string }{
-		{d.VMState("devvm-p-1"), "/d/vms/devvm-p-1"},
+		{d.VMDir("0123456789abcd"), "/d/vms/0123456789abcd"},
+		{d.VM("devvm-p-0123456789abcd").Dir, "/d/vms/0123456789abcd"},
+		{d.VM("devvm-a-long-cut-0123456789abcd").Dir, "/d/vms/0123456789abcd"},
+		{d.VM("devvm-img-0123456789ab").Dir, "/d/run/builds/devvm-img-0123456789ab"},
+		{d.VM("devvm-tools-build").Dir, "/d/run/builds/devvm-tools-build"},
+		{d.ToolLockConfig(), "/d/mise.lock.toml"},
+		{d.ToolLockChecked(), "/d/mise.lock.checked"},
+		{d.ToolsCheckLog(), "/d/logs/tools-check.log"},
 		{d.Image("abc"), "/d/images/abc"},
 		{d.ImageRecord("abc"), "/d/images/abc/record.json"},
 		{d.ImageLocks(), "/d/images/locks"},

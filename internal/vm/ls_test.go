@@ -19,11 +19,11 @@ func TestList(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
 	d := paths.Dirs{Data: t.TempDir()}
 	const (
-		web   = "devvm-web-0123456789abcd"
-		img   = "devvm-img-foo-0123456789abcd" // a folder named img-foo
-		clone = "devvm-cl-0123456789abcd"
-		half  = "devvm-half-0123456789abcd"
-		other = "devvm-api-0123456789abcd"
+		web   = "devvm-web-0123456789abc4"
+		img   = "devvm-img-foo-0123456789abcc" // a folder named img-foo
+		clone = "devvm-cl-0123456789abc9"
+		half  = "devvm-half-0123456789abce"
+		other = "devvm-api-0123456789abc3"
 	)
 	for _, v := range []struct {
 		name string

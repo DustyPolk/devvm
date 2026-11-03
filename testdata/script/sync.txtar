@@ -78,8 +78,9 @@ exec sh -c 'tar -xOf "$STUB_DIR/sync.tar" home/.claude/settings.json home/.codex
 stdout devvm-redacted
 stdout '"OPENAI_API_KEY": *"sk-devvm-proxy-managed'
 ! stdout projects
-exec sh -c 'salt=$(sed -n "s/^proxy_salt=//p" "$DATA"/vms/devvm-net-*); tar -xOf "$STUB_DIR/sync.tar" env | grep -Fx "export CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-devvm-proxy-managed-$salt''"'
-exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$DATA"/vms/devvm-net-*); tar -xOf "$STUB_DIR/sync.tar" vm | grep -E "^DEVVM_PROXY=''http://devvm:$key@[0-9.]+:[0-9]+''$"'
+vm_name NET net
+exec sh -c 'salt=$(sed -n "s/^proxy_salt=//p" "$NET_dir/state"); tar -xOf "$STUB_DIR/sync.tar" env | grep -Fx "export CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-devvm-proxy-managed-$salt''"'
+exec sh -c 'key=$(sed -n "s/^proxy_key=//p" "$NET_dir/state"); tar -xOf "$STUB_DIR/sync.tar" vm | grep -E "^DEVVM_PROXY=''http://devvm:$key@[0-9.]+:[0-9]+''$"'
 cmp $HOME/.codex/auth.json $WORK/codex.json
 cmp $HOME/.claude.json $WORK/claude.json
 
@@ -97,6 +98,7 @@ rm $STUB_DIR/shell-fails
 # A shared tool the VM couldn't mount stops the launch, named by the VM's
 # own tool list: a line naming any other file doesn't count, and with
 # none left it's the setup that failed.
+vm_name FAILS fails
 exec bash $WORK/unmounted.sh '' ../../etc/passwd
 ! exec devvm --no-network-policy --no-git-protect
 stderr '^devvm: tools_unmounted tools=claude [0-9][0-9.]* vm=devvm-fails-[0-9a-f]{14}$'
@@ -111,7 +113,7 @@ exec devvm --no-network-policy --no-git-protect
 # The report tools.sh writes when it fails, listing each file named ('' for
 # the VM's first tool image) after lines of its own, and with a last line
 # cut short.
-first=$(sed -n 's/^tools=//p' "$DATA"/vms/devvm-fails-*)
+first=$(sed -n 's/^tools=//p' "$FAILS_dir/state")
 {
   echo "devvm-tools: can't mount something"
   printf '%s\n' "${first%% *} and more"

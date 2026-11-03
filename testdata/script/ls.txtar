@@ -24,7 +24,7 @@ stdout '^devvm-img-foo-[0-9a-f]{14} +Running +base +- +off +off +- +lima +/\S*/i
 project net
 exec devvm --network-policy --no-git-protect
 vm_name NET net
-exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$RUN/$NET.started"'
+exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$NET_dir/run/started"'
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +on +- +lima '
 # (The exit keeps limactl start sh's child, so its hostagent is sh, soon
@@ -36,19 +36,20 @@ stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +unenforced +- +lima '
 exec limactl stop $NET
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +on +- +lima '
-exec sh -c '{ grep -v ^net_check= "$VMS/$NET"; echo net_check=unenforced; } > "$WORK/st" && mv "$WORK/st" "$VMS/$NET"'
+exec sh -c '{ grep -v ^net_check= "$NET_dir/state"; echo net_check=unenforced; } > "$WORK/st" && mv "$WORK/st" "$NET_dir/state"'
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +unenforced +- +lima '
 
 # A --clone VM shows clone in GIT, a base from a container image its
 # label, and a VM whose creation didn't finish - for what it lacks.
-cp $WORK/clone.state $VMS/devvm-cl-0123456789abcd
-cp $WORK/from.state $VMS/devvm-from-0123456789abcd
-exec sh -c 'printf "devvm-cl-0123456789abcd\ndevvm-from-0123456789abcd Running\ndevvm-half-0123456789abcd\ndevvm-tools-build\n" >> "$STUB_DIR/instances"'
+mkdir $VMS/0123456789ab01 $VMS/0123456789ab02
+cp $WORK/clone.state $VMS/0123456789ab01/state
+cp $WORK/from.state $VMS/0123456789ab02/state
+exec sh -c 'printf "devvm-cl-0123456789ab01\ndevvm-from-0123456789ab02 Running\ndevvm-half-0123456789ab03\ndevvm-tools-build\n" >> "$STUB_DIR/instances"'
 exec devvm ls
-stdout '^devvm-cl-0123456789abcd +Stopped +base +node,claude +clone +on +- +lima +/p/cl\n'
-stdout '^devvm-from-0123456789abcd +Running +image_from from=node:24 image=base +- +on +off +- +lima +/p/from\n'
-stdout '^devvm-half-0123456789abcd +Stopped +- +- +- +- +- +lima +-\n'
+stdout '^devvm-cl-0123456789ab01 +Stopped +base +node,claude +clone +on +- +lima +/p/cl\n'
+stdout '^devvm-from-0123456789ab02 +Running +image_from from=node:24 image=base +- +on +off +- +lima +/p/from\n'
+stdout '^devvm-half-0123456789ab03 +Stopped +- +- +- +- +- +lima +-\n'
 ! stdout devvm-tools-build
 # Sorted by name.
 stdout '\ndevvm-cl-.*\ndevvm-from-.*\ndevvm-half-.*\ndevvm-img-foo-.*\ndevvm-net-'
@@ -56,9 +57,9 @@ stdout '\ndevvm-cl-.*\ndevvm-from-.*\ndevvm-half-.*\ndevvm-img-foo-.*\ndevvm-net
 # for what a VM lacks, and nothing else on stdout.
 exec devvm ls --json
 stdout '^{\n  "version": 1,\n  "vms": \[\n'
-stdout '^      "name": "devvm-cl-0123456789abcd",\n      "status": "Stopped",\n      "image": "base",\n      "tools": \[\n        "node",\n        "claude"\n      \],\n'
-stdout '^      "name": "devvm-from-0123456789abcd",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "off",\n      "backend": "lima",\n      "folder": "/p/from",\n      "links": 0\n'
-stdout '^      "name": "devvm-half-0123456789abcd",\n      "status": "Stopped",\n      "image": "",\n      "tools": \[\],\n      "git": "",\n'
+stdout '^      "name": "devvm-cl-0123456789ab01",\n      "status": "Stopped",\n      "image": "base",\n      "tools": \[\n        "node",\n        "claude"\n      \],\n'
+stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "off",\n      "backend": "lima",\n      "folder": "/p/from",\n      "links": 0\n'
+stdout '^      "name": "devvm-half-0123456789ab03",\n      "status": "Stopped",\n      "image": "",\n      "tools": \[\],\n      "git": "",\n'
 ! stdout '^NAME'
 
 # Lima can't list (not installed): fails, as a VM's state names it; with
@@ -81,6 +82,7 @@ cmp stdout $WORK/none.json
 -- header.txt --
 NAME  STATUS  IMAGE  TOOLS  GIT  NET  LINKS  BACKEND  FOLDER
 -- clone.state --
+name=devvm-cl-0123456789ab01
 image=base
 tool_names=node claude
 dir=/p/cl
@@ -88,6 +90,7 @@ backend=lima
 net=on
 mode=clone
 -- from.state --
+name=devvm-from-0123456789ab02
 image=base
 dir=/p/from
 from=node:24

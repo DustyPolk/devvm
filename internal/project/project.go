@@ -45,16 +45,13 @@ func (f Folder) Slug() string {
 	return s
 }
 
-// Matching returns the project VMs among all (VM names) whose folder part
-// is slug, in all's order: how ssh aliases and links name VMs by folder.
-func Matching(slug string, all []string) []string {
-	var out []string
-	for _, vm := range all {
-		if vmname.IsVM(vm) && (Folder{Name: vm}).Slug() == slug {
-			out = append(out, vm)
-		}
-	}
-	return out
+// Hash is the hash of dir, a physical path, that its VM's name ends with
+// (vmname.HashOf): 56 bits of its SHA-1, in hex. It names the VM's folder
+// in devvm's data folder, so a folder's VM is found by its path alone,
+// whatever name its backend gave it.
+func Hash(dir string) string {
+	sum := sha1.Sum([]byte(dir)) //nolint:gosec // see the import
+	return hex.EncodeToString(sum[:])[:vmname.HashLen]
 }
 
 // IsPath reports whether a link's TARGET is a folder's path: it has a / or
@@ -67,31 +64,44 @@ func IsPath(target string) bool {
 // physical path: those whose name ends with its path's hash, whatever
 // length of its folder's name their backend gave them.
 func ForDir(dir string, all []string) []string {
-	sum := sha1.Sum([]byte(dir)) //nolint:gosec // see the import
-	suffix := "-" + hex.EncodeToString(sum[:])[:vmname.HashLen]
 	var out []string
 	for _, vm := range all {
-		if vmname.IsVM(vm) && strings.HasSuffix(vm, suffix) {
+		if h, ok := vmname.HashOf(vm); ok && h == Hash(dir) {
 			out = append(out, vm)
 		}
 	}
 	return out
 }
 
-// Targets returns the project VMs among all (VM names) that a link's
-// TARGET names when it isn't a path (IsPath): the VM itself for a project
-// VM's name, else those whose folder part is the folder name's Slug, as
-// New makes it.
-func Targets(target string, all []string) []string {
-	if vmname.IsVM(target) {
-		for _, vm := range all {
-			if vm == target {
-				return []string{vm}
-			}
+// Recorded is a project VM as its state records it: its name, the alias
+// ssh reaches it by, and its project folder.
+type Recorded struct{ Name, Alias, Dir string }
+
+// Targets returns the project VMs among vms that a link's TARGET names
+// when it isn't a path (IsPath), in vms's order: the VM itself for a VM's
+// name or alias, else those whose folder's name has the same Slug, as New
+// makes it, whatever their backend left of it in their names.
+func Targets(target string, vms []Recorded) []string {
+	for _, v := range vms {
+		if vmname.IsVM(v.Name) && (target == v.Name || target == v.Alias) {
+			return []string{v.Name}
 		}
+	}
+	if vmname.IsVM(target) {
 		return nil
 	}
-	return Matching(Slug(target, slugMax), all)
+	want := Slug(target, slugMax)
+	var out []string
+	for _, v := range vms {
+		slug := Folder{Name: v.Name}.Slug()
+		if v.Dir != "" {
+			slug = Slug(filepath.Base(v.Dir), slugMax)
+		}
+		if vmname.IsVM(v.Name) && slug == want {
+			out = append(out, v.Name)
+		}
+	}
+	return out
 }
 
 // BadPathError is a folder whose path Lima can't mount: it has a comma
@@ -113,8 +123,7 @@ func New(dir string, nameMax int) (Folder, error) {
 	if room < slugMin {
 		return Folder{}, ErrNoRoom
 	}
-	sum := sha1.Sum([]byte(dir)) //nolint:gosec // see the import
-	return Folder{Dir: dir, Name: vmname.Prefix + Slug(filepath.Base(dir), room) + "-" + hex.EncodeToString(sum[:])[:vmname.HashLen]}, nil
+	return Folder{Dir: dir, Name: vmname.Prefix + Slug(filepath.Base(dir), room) + "-" + Hash(dir)}, nil
 }
 
 // Slug is a folder's name as it goes into its VM's name: lowercase, each

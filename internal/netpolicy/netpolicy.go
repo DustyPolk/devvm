@@ -14,7 +14,6 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -127,11 +126,8 @@ func Policies(d paths.Dirs, vm, img string, tools []string) (builtin, files []st
 		// A part that's no layer's name (../x) names no file: its path
 		// would leave the user's layers, so it adds no rules.
 	}
-	return builtin, append(files, d.Policy(), VMPolicyFile(d, vm), secrets.PolicyFile(d, vm))
+	return builtin, append(files, d.Policy(), d.VM(vm).Policy(), d.VM(vm).SecretsPolicy())
 }
-
-// VMPolicyFile holds the rules of one VM's own.
-func VMPolicyFile(d paths.Dirs, vm string) string { return d.VMState(vm) + ".policy" }
 
 // Env is the guest environment a VM with network policy gets besides the
 // proxy's address: no proxy for the VM itself, and Node told to use the

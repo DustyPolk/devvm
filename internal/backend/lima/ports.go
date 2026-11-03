@@ -2,7 +2,6 @@ package lima
 
 import (
 	"context"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -43,7 +42,8 @@ const (
 )
 
 // forwards is how Lima's VMs' ports are forwarded: each VM's record of
-// which ports it forwards, and its forwarder, their files in Dir.
+// which ports it forwards, and its forwarder, their files in its backend
+// folder.
 type forwards struct {
 	vmssh.Forwards
 	// Key is Lima's own ssh key, which the forwarder logs in with.
@@ -51,21 +51,18 @@ type forwards struct {
 }
 
 // newForwards is how Lima's VMs' ports are forwarded: devvm _lima-ports,
-// self, their files in LimaVMs.
+// self, their files in each VM's backend folder.
 func newForwards(d paths.Dirs, self string) forwards {
 	return forwards{
 		Forwards: vmssh.Forwards{
-			Dir: d.LimaVMs(), Run: d.Run(), Prefix: "lima", Cmd: forwarderCmd, Self: self,
+			Dirs: d, Prefix: "lima", Cmd: forwarderCmd, Self: self,
 			Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
 		},
 		Key: filepath.Join(d.Lima, "_config", "user"),
 	}
 }
 
-// file is the record of which ports a VM forwards.
-func (f forwards) file(vm string) string { return filepath.Join(f.Dir, vm+".ports") }
-
-// write records which ports a VM forwards.
+// write records which ports a VM forwards (paths.VM.Ports).
 func (f forwards) write(vm string, p backend.Ports) error {
 	v := portsNone
 	switch {
@@ -74,16 +71,13 @@ func (f forwards) write(vm string, p backend.Ports) error {
 	case len(p.Ranges) > 0:
 		v = backend.FormatPortRanges(p.Ranges)
 	}
-	if err := os.MkdirAll(f.Dir, 0o700); err != nil {
-		return err
-	}
-	return state.WriteFile(f.file(vm), []byte(v+"\n"))
+	return state.WriteFile(f.Dirs.VM(vm).Ports(), []byte(v+"\n"))
 }
 
 // read returns which ports a VM forwards, as its record has them. A VM
 // without a record forwards none (an error): CreateVM writes one.
 func (f forwards) read(vm string) (backend.Ports, error) {
-	b, err := os.ReadFile(f.file(vm))
+	b, err := os.ReadFile(f.Dirs.VM(vm).Ports())
 	if err != nil {
 		return backend.Ports{}, err
 	}
@@ -133,17 +127,6 @@ func (f forwards) start(ctx context.Context, vm string, c backend.Confinement, s
 		Args: []string{"-lifeline", lifeline, "-port", strconv.Itoa(t.Port)},
 	}
 	return f.Start(vm, spec) == nil
-}
-
-// forget stops the VM's forwarder and deletes its files and its record.
-func (f forwards) forget(vm string) error {
-	if err := f.Remove(vm); err != nil {
-		return err
-	}
-	if err := os.Remove(f.file(vm)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return nil
 }
 
 // ForwardMain runs a VM's forwarder (devvm _lima-ports) with its

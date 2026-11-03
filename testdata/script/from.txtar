@@ -52,7 +52,7 @@ exec sh -c 'ls "$TMPDIR"'
 ! stdout .
 # The builds' proxies are gone, with their files.
 ! exists $XDG_DATA_HOME/devvm/run/builds/devvm-oci-build
-exec sh -c 'ls "$XDG_DATA_HOME/devvm/run/builds"'
+exec find $XDG_DATA_HOME/devvm/run/builds -name '*proxy*'
 ! stdout .
 # Its record: what it came from, and musl from the image.
 catg $IMAGES/????????????/record.json
@@ -93,7 +93,8 @@ project web
 exec devvm --from $PIN --no-network-policy
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 ! stdout building_image
-catg $VMS/devvm-web-*
+vm_name WEB web
+catg $WEB_dir/state
 stdout '^from=node:24@sha256:a{64}$'
 stub_reset
 exec devvm --from debian:13

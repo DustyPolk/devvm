@@ -16,23 +16,27 @@ cmp stdout calls
 
 # catg cats the one file a glob matches; a glob matching none or two
 # fails it.
-mkdir $VMS
-cp state $VMS/devvm-web-0123456789abcd
-catg $VMS/devvm-web-*
+mkdir $VMS/0123456789abcd
+cp state $VMS/0123456789abcd/state
+catg $VMS/*/state
 cmp stdout state
-! catg $VMS/devvm-api-*
-cp state $VMS/devvm-web-0123456789abcd.policy
-! catg $VMS/devvm-web-*
-catg $VMS/devvm-web-*[0-9a-f]
+! catg $VMS/*/policy
+cp state $VMS/0123456789abcd/policy
+! catg $VMS/0123456789abcd/*
+catg $VMS/*/state
 cmp stdout state
 
-# vm_name sets a variable to the one VM made for a folder, leaving out the
-# VM's other files; no VM, or two, fails it.
+# vm_name sets a variable to the one VM whose state records a name made
+# for a folder, and VAR_dir to its folder; a folder without state, another
+# folder's VM, no VM or two fail it.
+mkdir $VMS/0123456789abce
+cp policy $VMS/0123456789abce/state
 vm_name WEB web
-exec echo $WEB
-stdout '^devvm-web-0123456789abcd$'
+exec echo $WEB $WEB_dir
+stdout '^devvm-web-0123456789abcd .*/vms/0123456789abcd$'
 ! vm_name API api
-cp state $VMS/devvm-web-fedcba98765432
+mkdir $VMS/fedcba98765432
+cp other $VMS/fedcba98765432/state
 ! vm_name WEB web
 
 # project makes a folder in $WORK and goes to it; with git, a repo.
@@ -48,4 +52,10 @@ exists .git
 -- calls --
 gpgv y
 -- state --
+name=devvm-web-0123456789abcd
+image=base
+-- policy --
+example.com
+-- other --
+name=devvm-web-fedcba98765432
 image=base

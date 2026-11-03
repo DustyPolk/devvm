@@ -17,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
@@ -658,8 +659,8 @@ func TestStartRemakes(t *testing.T) {
 	if s.exists("containers/"+vm) || s.exists("volumes/"+vm+"-home") || s.exists("images/"+s.commitRef(vm, 2)) {
 		t.Error("Delete left something")
 	}
-	if _, err := os.Stat(s.Dirs.DockerVM(vm)); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("record: %v", err)
+	if _, err := os.Stat(s.Dirs.VM(vm).Backend()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its backend folder, with its record: %v", err)
 	}
 }
 
@@ -870,7 +871,7 @@ func TestDevvmCacheVolumes(t *testing.T) {
 	s := newSandbox(t)
 	s.createVM(t, backend.VMSpec{Project: "/p/web"})
 	vols := filepath.Join(s.stub, "docker", "volumes")
-	for _, v := range []string{"devvm-gone-12345612345612-home", "devvm-new-12345612345612-home", "theirs", s.toolsVolume()} {
+	for _, v := range []string{"devvm-gone-12345612345612-home", "devvm-new-12345612345613-home", "theirs", s.toolsVolume()} {
 		if err := os.MkdirAll(filepath.Join(vols, v), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -879,10 +880,7 @@ func TestDevvmCacheVolumes(t *testing.T) {
 		}
 	}
 	s.stubs.Touch(t, "docker-foreign-theirs")
-	if err := os.MkdirAll(s.Dirs.VMs(), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(s.Dirs.VMState("devvm-new-12345612345612"), []byte("backend=docker\n"), 0o600); err != nil {
+	if err := state.WriteFile(s.Dirs.VM("devvm-new-12345612345613").State(), []byte("name=devvm-new-12345612345613\nbackend=docker\n")); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.DevvmCache(t.Context())
@@ -895,7 +893,7 @@ func TestDevvmCacheVolumes(t *testing.T) {
 	if err := s.DeleteCache(t.Context(), append(got, backend.CacheEntry{Name: homeVolume(vm)})); err != nil {
 		t.Fatal(err)
 	}
-	for v, want := range map[string]bool{"devvm-gone-12345612345612-home": false, homeVolume(vm): true, "theirs": true, s.toolsVolume(): true, "devvm-new-12345612345612-home": true} {
+	for v, want := range map[string]bool{"devvm-gone-12345612345612-home": false, homeVolume(vm): true, "theirs": true, s.toolsVolume(): true, "devvm-new-12345612345613-home": true} {
 		if _, err := os.Stat(filepath.Join(vols, v)); (err == nil) != want {
 			t.Errorf("%s: there %v, want %v", v, err == nil, want)
 		}

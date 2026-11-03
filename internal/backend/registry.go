@@ -103,7 +103,7 @@ func (r *Registry) For(d paths.Dirs, vm *state.VM, flag string) (Choice, error) 
 	if vm.Exists() {
 		name := vm.Get(state.KeyBackend)
 		if name == "" {
-			return Choice{}, &state.CorruptError{Path: d.VMState(vm.Name()), Reason: "no " + state.KeyBackend + "="}
+			return Choice{}, &state.CorruptError{Path: d.VM(vm.Name()).State(), Reason: "no " + state.KeyBackend + "="}
 		}
 		b, ok := r.Lookup(name)
 		if !ok {

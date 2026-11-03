@@ -108,11 +108,11 @@ func TestStartConfined(t *testing.T) {
 			// Only the proxy's VMs have their binds denied: builds keep
 			// Lima's host resolver, which binds loopback ports.
 			if tc.wrapped {
-				sb, err := os.ReadFile(l.profileFile("v"))
+				sb, err := os.ReadFile(l.Dirs.VM("v").Profile())
 				if err != nil || strings.Contains(string(sb), "(deny network-bind)") != (tc.c.Net == backend.NetProxy) {
 					t.Errorf("profile (%v):\n%s", err, sb)
 				}
-				if fi, err := os.Stat(l.profileFile("v")); err != nil || fi.Mode().Perm() != 0o600 {
+				if fi, err := os.Stat(l.Dirs.VM("v").Profile()); err != nil || fi.Mode().Perm() != 0o600 {
 					t.Errorf("profile: %v, %v", fi.Mode(), err)
 				}
 			}
@@ -283,7 +283,7 @@ func checkStartCall(t *testing.T, l *Lima, s call, wrapped bool) {
 	}
 	if wrapped {
 		lc := s.argv[3]
-		if !slices.Equal(s.argv[1:3], []string{"-f", l.profileFile("v")}) || !filepath.IsAbs(lc) || filepath.Base(lc) != "limactl" {
+		if !slices.Equal(s.argv[1:3], []string{"-f", l.Dirs.VM("v").Profile()}) || !filepath.IsAbs(lc) || filepath.Base(lc) != "limactl" {
 			t.Errorf("sandbox-exec's arguments: %q", s.argv)
 		}
 	}
@@ -449,7 +449,7 @@ func TestProfileAgent(t *testing.T) {
 		if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyPassword: "pw", SSHPort: 2, AgentSocket: tc.socket}); err != nil {
 			t.Fatal(err)
 		}
-		b, err := os.ReadFile(l.profileFile("v"))
+		b, err := os.ReadFile(l.Dirs.VM("v").Profile())
 		if err != nil {
 			t.Fatal(err)
 		}

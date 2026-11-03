@@ -50,34 +50,34 @@ func TestLinkArgs(t *testing.T) {
 func TestLinkAddr(t *testing.T) {
 	a := netip.MustParseAddr
 	links := []Link{
-		{Name: "db", Port: 5432, Target: "devvm-db-0123456789abcd", TargetID: "i1", Addr: a("127.77.0.1")},
-		{Name: "db", Port: 8000, Target: "devvm-db-0123456789abcd", TargetID: "i1", Addr: a("127.77.0.1")},
-		{Name: "api", Port: 80, Target: "devvm-api-0123456789abcd", TargetID: "i2", Addr: a("127.77.0.3")},
+		{Name: "db", Port: 5432, Target: "devvm-db-0123456789abc2", TargetID: "i1", Addr: a("127.77.0.1")},
+		{Name: "db", Port: 8000, Target: "devvm-db-0123456789abc2", TargetID: "i1", Addr: a("127.77.0.1")},
+		{Name: "api", Port: 80, Target: "devvm-api-0123456789abc3", TargetID: "i2", Addr: a("127.77.0.3")},
 	}
 	for _, tc := range []struct {
 		target, id string
 		want       string
 	}{
-		{"devvm-db-0123456789abcd", "i1", "127.77.0.1"},  // its own, shared by its ports
-		{"devvm-api-0123456789abcd", "i2", "127.77.0.3"}, // its own
-		{"devvm-web-0123456789abcd", "i3", "127.77.0.2"}, // the lowest free
-		{"devvm-db-0123456789abcd", "i9", "127.77.0.2"},  // db made again: another VM
+		{"devvm-db-0123456789abc2", "i1", "127.77.0.1"},  // its own, shared by its ports
+		{"devvm-api-0123456789abc3", "i2", "127.77.0.3"}, // its own
+		{"devvm-web-0123456789abc4", "i3", "127.77.0.2"}, // the lowest free
+		{"devvm-db-0123456789abc2", "i9", "127.77.0.2"},  // db made again: another VM
 	} {
 		if got, err := linkAddr(links, tc.target, tc.id); err != nil || got != a(tc.want) {
 			t.Errorf("linkAddr(%s, %s) = %v, %v; want %s", tc.target, tc.id, got, err, tc.want)
 		}
 	}
-	if got, _ := linkAddr(nil, "devvm-db-0123456789abcd", "i1"); got != a("127.77.0.1") {
+	if got, _ := linkAddr(nil, "devvm-db-0123456789abc2", "i1"); got != a("127.77.0.1") {
 		t.Errorf("the first address = %v", got)
 	}
 	var full []Link
 	for i := uint16(1); i < 0xffff; i++ {
 		full = append(full, Link{Target: "t", TargetID: "x", Addr: proxy.LinkAddr(i)})
 	}
-	if got, _ := linkAddr(full, "devvm-db-0123456789abcd", "i1"); got.IsValid() {
+	if got, _ := linkAddr(full, "devvm-db-0123456789abc2", "i1"); got.IsValid() {
 		t.Errorf("with every address taken: %v", got)
 	}
-	if got, _ := linkAddr(full[:300], "devvm-db-0123456789abcd", "i1"); got != a("127.77.1.45") {
+	if got, _ := linkAddr(full[:300], "devvm-db-0123456789abc2", "i1"); got != a("127.77.1.45") {
 		t.Errorf("after 300: %v", got)
 	}
 }
@@ -86,7 +86,7 @@ func TestLinkAddr(t *testing.T) {
 // else is refused.
 func TestReadLinks(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	st, err := state.CreateVM(d, "devvm-app-0123456789abcd", state.NewVM{Image: "base"})
+	st, err := state.CreateVM(d, "devvm-app-0123456789abc1", state.NewVM{Image: "base"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,27 +94,27 @@ func TestReadLinks(t *testing.T) {
 		t.Errorf("no links: %v, %v", ls, err)
 	}
 	want := []Link{
-		{Name: "api", Port: 80, Target: "devvm-api-0123456789abcd", TargetID: "i2", Addr: netip.MustParseAddr("127.77.0.2")},
-		{Name: "db", Port: 5432, Target: "devvm-db-0123456789abcd", TargetID: "i1", Addr: netip.MustParseAddr("127.77.0.1")},
-		{Name: "db", Port: 6379, Target: "devvm-db-0123456789abcd", TargetID: "i1", Addr: netip.MustParseAddr("127.77.0.1")},
+		{Name: "api", Port: 80, Target: "devvm-api-0123456789abc3", TargetID: "i2", Addr: netip.MustParseAddr("127.77.0.2")},
+		{Name: "db", Port: 5432, Target: "devvm-db-0123456789abc2", TargetID: "i1", Addr: netip.MustParseAddr("127.77.0.1")},
+		{Name: "db", Port: 6379, Target: "devvm-db-0123456789abc2", TargetID: "i1", Addr: netip.MustParseAddr("127.77.0.1")},
 	}
 	if err := writeLinks(st, []Link{want[2], want[0], want[1]}); err != nil {
 		t.Fatal(err)
 	}
-	if v := st.Get(KeyLinks); v != "api,80,devvm-api-0123456789abcd,i2,127.77.0.2 db,5432,devvm-db-0123456789abcd,i1,127.77.0.1 db,6379,devvm-db-0123456789abcd,i1,127.77.0.1" {
+	if v := st.Get(KeyLinks); v != "api,80,devvm-api-0123456789abc3,i2,127.77.0.2 db,5432,devvm-db-0123456789abc2,i1,127.77.0.1 db,6379,devvm-db-0123456789abc2,i1,127.77.0.1" {
 		t.Errorf("links = %q", v)
 	}
 	if got, err := ReadLinks(st); err != nil || !slices.Equal(got, want) {
 		t.Errorf("ReadLinks = %v, %v", got, err)
 	}
 	for _, bad := range []string{
-		"db,5432,devvm-db-0123456789abcd,i1",
-		"DB,5432,devvm-db-0123456789abcd,i1,127.77.0.1",
-		"db,0,devvm-db-0123456789abcd,i1,127.77.0.1",
+		"db,5432,devvm-db-0123456789abc2,i1",
+		"DB,5432,devvm-db-0123456789abc2,i1,127.77.0.1",
+		"db,0,devvm-db-0123456789abc2,i1,127.77.0.1",
 		"db,5432,base,i1,127.77.0.1",
-		"db,5432,devvm-db-0123456789abcd,,127.77.0.1",
-		"db,5432,devvm-db-0123456789abcd,i1,127.0.0.1",
-		"db,5432,devvm-db-0123456789abcd,i1,::ffff:127.77.0.1",
+		"db,5432,devvm-db-0123456789abc2,,127.77.0.1",
+		"db,5432,devvm-db-0123456789abc2,i1,127.0.0.1",
+		"db,5432,devvm-db-0123456789abc2,i1,::ffff:127.77.0.1",
 	} {
 		if err := st.Set(KeyLinks, bad); err != nil {
 			t.Fatal(err)
@@ -129,11 +129,11 @@ func TestReadLinks(t *testing.T) {
 // its published ports and the two VMs' network policy.
 func TestCheckLink(t *testing.T) {
 	d := paths.Dirs{Data: filepath.Join(t.TempDir(), "data")}
-	client, err := state.CreateVM(d, "devvm-app-0123456789abcd", state.NewVM{Image: "base"})
+	client, err := state.CreateVM(d, "devvm-app-0123456789abc1", state.NewVM{Image: "base"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := state.CreateVM(d, "devvm-db-0123456789abcd", state.NewVM{Image: "base"})
+	target, err := state.CreateVM(d, "devvm-db-0123456789abc2", state.NewVM{Image: "base"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,8 +183,8 @@ func TestCheckLink(t *testing.T) {
 // the client's hostname.
 func TestLinkNameFor(t *testing.T) {
 	t.Setenv("DEVVM_MESSAGES", "names")
-	client := &found{f: project.Folder{Name: "devvm-app-0123456789abcd"}}
-	db, api := "devvm-db-0123456789abcd", "devvm-api-0123456789abcd"
+	client := &found{f: project.Folder{Name: "devvm-app-0123456789abc1"}}
+	db, api := "devvm-db-0123456789abc2", "devvm-api-0123456789abc3"
 	links := []Link{{Name: "pg", Port: 5432, Target: db, TargetID: "i1"}}
 	for _, tc := range []struct {
 		target, id, as string
@@ -192,16 +192,16 @@ func TestLinkNameFor(t *testing.T) {
 	}{
 		{target: db, id: "i1", want: "pg"},
 		{target: db, id: "i1", as: "pg", want: "pg"},
-		{target: db, id: "i1", as: "db", err: "link_target_named name=pg target=" + db + " vm=devvm-app-0123456789abcd"},
+		{target: db, id: "i1", as: "db", err: "link_target_named name=pg target=" + db + " vm=devvm-app-0123456789abc1"},
 		{target: api, id: "i2", want: "api"},
-		{target: api, id: "i2", as: "pg", err: "link_name_taken name=pg target=" + db + " vm=devvm-app-0123456789abcd"},
-		{target: api, id: "i2", as: "app", err: "link_name_host name=app vm=devvm-app-0123456789abcd"},
-		{target: api, id: "i2", as: "localhost", err: "link_name_host name=localhost vm=devvm-app-0123456789abcd"},
+		{target: api, id: "i2", as: "pg", err: "link_name_taken name=pg target=" + db + " vm=devvm-app-0123456789abc1"},
+		{target: api, id: "i2", as: "app", err: "link_name_host name=app vm=devvm-app-0123456789abc1"},
+		{target: api, id: "i2", as: "localhost", err: "link_name_host name=localhost vm=devvm-app-0123456789abc1"},
 		// db made again: another VM, which the old link's name doesn't name.
 		{target: db, id: "i9", want: "db"},
-		{target: db, id: "i9", as: "pg", err: "link_name_taken name=pg target=" + db + " vm=devvm-app-0123456789abcd"},
+		{target: db, id: "i9", as: "pg", err: "link_name_taken name=pg target=" + db + " vm=devvm-app-0123456789abc1"},
 		// A client whose folder part is another's: its own hostname.
-		{target: "devvm-app-fedcba98765432", id: "i3", err: "link_name_host name=app vm=devvm-app-0123456789abcd"},
+		{target: "devvm-app-fedcba98765433", id: "i3", err: "link_name_host name=app vm=devvm-app-0123456789abc1"},
 	} {
 		got, err := linkNameFor(client, links, tc.target, tc.id, tc.as)
 		if got != tc.want || msg.NamesOf(err) != tc.err {

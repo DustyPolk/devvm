@@ -221,7 +221,7 @@ func (s *Smolvm) ToolFormat() string {
 }
 
 // record is what devvm set on one of its machines, which smolvm machine ls
-// doesn't show: kept in devvm's data folder (paths.Dirs.SmolvmVM).
+// doesn't show: kept in the VM's backend folder (paths.VM.Record).
 type record struct {
 	Image     string   `json:"image"` // its image's key
 	Project   string   `json:"project,omitempty"`
@@ -264,9 +264,7 @@ type record struct {
 // devvm's execs name it (machine exec --secret-file), so smolvm reads it
 // and only its path is in smolvm's arguments. Not create's --secret-file:
 // smolvm ignores that for a machine made from a pack.
-func (s *Smolvm) proxyFile(vm string) string {
-	return filepath.Join(filepath.Dir(s.Dirs.SmolvmVM(vm)), vm+".proxy")
-}
+func (s *Smolvm) proxyFile(vm string) string { return s.Dirs.VM(vm).ProxyURL() }
 
 // setProxyFile writes the machine's proxy URL, or removes its file for "".
 func (s *Smolvm) setProxyFile(vm, u string) error {
@@ -284,7 +282,7 @@ func (s *Smolvm) setProxyFile(vm, u string) error {
 // when it has none.
 func (s *Smolvm) proxyArgs(vm string) []string {
 	f := s.proxyFile(vm)
-	if fi, err := os.Stat(f); err != nil || fi.Size() == 0 {
+	if fi, err := os.Stat(f); err != nil || fi.Size() == 0 { //nolint:gosec // devvm's own file, in the VM's folder: the hash its name ends with
 		return nil
 	}
 	var args []string
@@ -296,7 +294,7 @@ func (s *Smolvm) proxyArgs(vm string) []string {
 
 func (s *Smolvm) readRecord(vm string) (record, error) {
 	var r record
-	b, err := os.ReadFile(s.Dirs.SmolvmVM(vm))
+	b, err := os.ReadFile(s.Dirs.VM(vm).Record())
 	if errors.Is(err, fs.ErrNotExist) {
 		return r, nil
 	} else if err != nil {
@@ -306,14 +304,11 @@ func (s *Smolvm) readRecord(vm string) (record, error) {
 }
 
 func (s *Smolvm) writeRecord(vm string, r record) error {
-	if err := os.MkdirAll(filepath.Dir(s.Dirs.SmolvmVM(vm)), 0o700); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return err
 	}
-	return state.WriteFile(s.Dirs.SmolvmVM(vm), append(b, '\n'))
+	return state.WriteFile(s.Dirs.VM(vm).Record(), append(b, '\n'))
 }
 
 // imageKey returns the key of an image's build machine, and whether it is
