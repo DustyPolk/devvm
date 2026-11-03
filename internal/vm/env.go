@@ -51,11 +51,6 @@ const (
 	// KeyAgentToggle is set when its backend emulates turning its SSH agent
 	// forwarding on or off (made ready for it), which its starts rely on.
 	KeyAgentToggle = "agent_toggle"
-	// KeyDockerLayer is the runtime it runs the docker layer under, on a
-	// backend that makes VMs for it (backend.DockerLayerVM): sysbox; unset
-	// for a VM that runs it as any VM, or doesn't have it. A VM with it set
-	// gets no network policy.
-	KeyDockerLayer = "docker_layer"
 )
 
 // Env is what the commands on a folder's VM run with, shared by Launch,
@@ -691,7 +686,7 @@ func (e *Env) sshConfig() *sshconfig.Config {
 
 // checkSetID names set-id files in the folder on Linux hosts, where they
 // reach the host (macOS's virtiofs drops the bits): those running as root
-// (root in a Docker VM writes as the host's root) apart.
+// apart.
 func (e *Env) checkSetID(dir string) {
 	if e.OS != "linux" {
 		return

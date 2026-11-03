@@ -30,11 +30,9 @@ import (
 
 // The forwarder forwards a VM's ports to the host's loopback, by the same
 // rules on every backend: Lima's own forwards share a port a host program
-// has (SO_REUSEADDR), smolvm's are at most 64 and reach only servers on
-// all of the guest's addresses, and Docker's need publishing, and then
-// reach only servers on the container's network address. It runs on the
-// host, detached (devvm _lima-ports, _smolvm-ports, _docker-ports;
-// Forwards), one per VM:
+// has (SO_REUSEADDR), and smolvm's are at most 64 and reach only servers
+// on all of the guest's addresses. It runs on the host, detached (devvm
+// _lima-ports, _smolvm-ports; Forwards), one per VM:
 //
 //   - it reaches the VM only through the VM's sshd, as the VM's user with
 //     its own key, the host key read through the backend at the start and
@@ -450,65 +448,28 @@ func dialAddr(a netip.Addr) (netip.Addr, bool) {
 }
 
 // SSH is how the forwarder reaches a VM's sshd, as the VM's user with its
-// key, its pinned host key, and the master's control socket: on a host
-// loopback port (Port: smolvm's forward), or through a command that
-// connects to it (Proxy: Docker's docker exec).
+// key, its pinned host key, and the master's control socket, on a host
+// loopback port (Port).
 type SSH struct {
 	VM, User, Key, KnownHosts, Control string
 	Port                               int
-	// Proxy is ssh's ProxyCommand for the VM, its words quoted for the
-	// shell; "" for none.
-	Proxy string
 }
 
 // connArgs are ssh's options for reaching the VM: no configuration of the
 // user's, the VM's key alone and no agent, its host key pinned, and
 // nothing forwarded either way.
-func (o SSH) connArgs() []string { return o.args("none", "no") }
-
-// args are connArgs with the agent ssh uses (IdentityAgent) and forwards
-// (ForwardAgent) as given.
-func (o SSH) args(identity, forward string) []string {
-	args := []string{
+func (o SSH) connArgs() []string {
+	return []string{
 		"-o", "BatchMode=yes",
-		"-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=" + identity, "-o", "IdentityFile=" + o.Key,
+		"-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "IdentityFile=" + o.Key,
 		"-o", "PreferredAuthentications=publickey", "-o", "AddKeysToAgent=no",
 		"-o", "UserKnownHostsFile=" + o.KnownHosts, "-o", "GlobalKnownHostsFile=/dev/null",
 		"-o", "HostKeyAlias=" + o.VM, "-o", "StrictHostKeyChecking=yes", "-o", "UpdateHostKeys=no",
-		"-o", "ForwardAgent=" + forward, "-o", "ForwardX11=no", "-o", "Tunnel=no", "-o", "PermitRemoteOpen=none",
+		"-o", "ForwardAgent=no", "-o", "ForwardX11=no", "-o", "Tunnel=no", "-o", "PermitRemoteOpen=none",
 		"-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no", "-o", "ProxyJump=none",
 		"-o", "ConnectTimeout=10", "-o", "LogLevel=ERROR",
+		"-o", "ProxyCommand=none", "-p", strconv.Itoa(o.Port), "-l", o.User, "127.0.0.1",
 	}
-	if o.Proxy != "" {
-		return append(args, "-o", "ProxyCommand="+o.Proxy, "-l", o.User, o.VM)
-	}
-	return append(args, "-o", "ProxyCommand=none", "-p", strconv.Itoa(o.Port), "-l", o.User, "127.0.0.1")
-}
-
-// AgentUser is the agent a session forwards for the user's own
-// (SSH_AUTH_SOCK): SessionArgs's agent.
-const AgentUser = "user"
-
-// SessionArgs are ssh's arguments for a session in the VM running command,
-// with a terminal or not, forwarding agent: none (""), the user's
-// (AgentUser), or the agent at that socket (devvm's). Like the forwarder's
-// connections, it reads no configuration of the user's, offers the VM's
-// key alone, pins its host key, and forwards nothing else, either way.
-func (o SSH) SessionArgs(agent string, tty bool, command string) []string {
-	identity, forward := "none", "no"
-	switch agent {
-	case "":
-	case AgentUser:
-		identity, forward = "SSH_AUTH_SOCK", "yes"
-	default:
-		identity = `"` + agent + `"`
-		forward = identity
-	}
-	t := "-T"
-	if tty {
-		t = "-t"
-	}
-	return slices.Concat([]string{"-F", "none", t, "-o", "ControlMaster=no", "-o", "ControlPath=none"}, o.args(identity, forward), []string{command})
 }
 
 // masterArgs are ssh's arguments for the master connection, ports.sh run
@@ -580,8 +541,8 @@ func pipeSSH(ctx context.Context, conn net.Conn, args []string) {
 }
 
 // Flags are the forwarder's flags every backend's command has; each adds
-// its own, for how it reaches its VM (SSH's Port or Proxy) and how it
-// knows the VM runs (Forwarder's Alive).
+// its own, for how it reaches its VM (SSH's Port) and how it knows the VM
+// runs (Forwarder's Alive).
 type Flags struct {
 	SSH
 	reserve, only string
@@ -598,12 +559,12 @@ func (f *Flags) Register(fs *flag.FlagSet) {
 	fs.StringVar(&f.only, "only", "", "the ports forwarded, as devvm ports lists them (5173,8000-8010); every one from 1024 up without it")
 }
 
-// Forwarder returns the forwarder the parsed flags (with SSH's Port or
-// Proxy set) make, ports.sh being script, reserved the ports devvm records
+// Forwarder returns the forwarder the parsed flags (with SSH's Port set)
+// make, ports.sh being script, reserved the ports devvm records
 // for VMs but vm's own listed ones, its lines going to log. Its caller
 // sets Alive and Every.
 func (f *Flags) Forwarder(script []byte, reserved func(vm string) (map[int]bool, error), log io.Writer) (*Forwarder, error) {
-	if f.VM == "" || f.User == "" || f.Key == "" || f.KnownHosts == "" || f.Control == "" || f.Port <= 0 && f.Proxy == "" {
+	if f.VM == "" || f.User == "" || f.Key == "" || f.KnownHosts == "" || f.Control == "" || f.Port <= 0 {
 		return nil, errors.New("-vm, -user, -key, -known-hosts, -control and how to reach the VM are needed")
 	}
 	own := map[int]bool{}

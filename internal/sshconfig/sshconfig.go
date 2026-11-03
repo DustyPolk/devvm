@@ -141,7 +141,7 @@ func (c *Config) Write(ctx context.Context) error {
 			continue
 		}
 		t, err := r.b.SSH(ctx, r.in.Name)
-		if err != nil || t.Host == "" || t.Port == 0 && t.ProxyCommand == "" || strings.ContainsAny(t.ProxyCommand, "\r\n") {
+		if err != nil || t.Host == "" || t.Port == 0 {
 			continue
 		}
 		start, err := r.b.StartID(ctx, r.in.Name)
@@ -182,12 +182,6 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 	if err != nil {
 		return err
 	}
-	// A backend's own way in (Docker's docker exec), else none, whatever a
-	// Host * of the user's says.
-	proxy := "none"
-	if t.ProxyCommand != "" {
-		proxy = t.ProxyCommand
-	}
 	forward, identity := "no", ""
 	switch sshagent.Running(st, start) {
 	case sshagent.On:
@@ -218,26 +212,23 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 	lines = append(lines,
 		// Nothing else of the host's for the VM, whatever a Host * says:
 		// no X11 display, tunnel or remote SOCKS forward, none of its
-		// keys added to an agent, no hop through another host, and no
-		// host keys the VM offers later (devvm reads them itself). A
-		// RemoteForward can't be turned off here without refusing -R on
-		// the command line too. PermitRemoteOpen needs OpenSSH 8.7 or
-		// newer. No IgnoreUnknown: its first value wins, and would replace
-		// a Host * one of the user's.
+		// keys added to an agent, no hop through another host or a
+		// command, and no host keys the VM offers later (devvm reads them
+		// itself). A RemoteForward can't be turned off here without
+		// refusing -R on the command line too. PermitRemoteOpen needs
+		// OpenSSH 8.7 or newer. No IgnoreUnknown: its first value wins,
+		// and would replace a Host * one of the user's.
 		"  ForwardX11 no",
 		"  ForwardX11Trusted no",
 		"  Tunnel no",
 		"  PermitRemoteOpen none",
 		"  AddKeysToAgent no",
 		"  ProxyJump none",
-		"  ProxyCommand "+proxy,
+		"  ProxyCommand none",
 		"  UpdateHostKeys no",
 		"  HashKnownHosts no",
 	)
-	lines = append(lines, "  Hostname "+t.Host)
-	if t.Port > 0 {
-		lines = append(lines, "  Port "+strconv.Itoa(t.Port))
-	}
+	lines = append(lines, "  Hostname "+t.Host, "  Port "+strconv.Itoa(t.Port))
 	if t.User != "" {
 		lines = append(lines, "  User "+t.User)
 	}

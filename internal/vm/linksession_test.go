@@ -89,18 +89,13 @@ func TestLinkConn(t *testing.T) {
 		t.Errorf("the target: %+v, want %+v", got, want)
 	}
 
-	// The target's ssh: through its backend's command, else on the
-	// host's loopback alone, and with its host key pinned.
-	f.Target.ProxyCommand = "'/devvm' '_docker-connect' 'devvm-db'"
-	f.Target.Host, f.Target.Port = target.Name(), 0
-	if got := check("", ""); got.Proxy != f.Target.ProxyCommand {
-		t.Errorf("through a command: %+v", got)
-	}
-	f.Target.ProxyCommand = "x\nProxyCommand y"
+	// The target's ssh: on the host's loopback alone, on a port, and with
+	// its host key pinned.
+	f.Target.Host, f.Target.Port = "10.0.0.2", 22
 	check(vmssh.EventLinkRefused, LinkNoSSH)
-	f.Target.ProxyCommand, f.Target.Host, f.Target.Port = "", "10.0.0.2", 22
+	f.Target.Host, f.Target.Port = "127.0.0.1", 0
 	check(vmssh.EventLinkRefused, LinkNoSSH)
-	f.Target.Host = "127.0.0.1"
+	f.Target.Port = 62022
 	if err := os.WriteFile(e.Dirs.KnownHosts(), []byte(client.Name()+" ssh-ed25519 AAAA\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

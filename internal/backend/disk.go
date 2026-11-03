@@ -35,9 +35,8 @@ func count(n int) uint64 {
 
 // ToolImages is the free space building n shared tool images wants in
 // devvm's data folder, where the images come out on every backend: the
-// images alone, measured with statfs (the folder on its own tmpfs in
-// Docker's e2e run: 184 MB for claude, 194 MB for node, pnpm and bun).
-// Ten tools came to 1.5 GiB as images on Lima, rust alone, the largest,
+// images alone, measured with statfs (the folder on its own tmpfs: 184 MB
+// for claude, 194 MB for node, pnpm and bun). Ten tools came to 1.5 GiB as images on Lima, rust alone, the largest,
 // to 0.6 GiB, and seven to 2.6 GiB uncompressed for smolvm, whose own
 // floors are checked on that disk too.
 func ToolImages(n int) uint64 { return 512<<20 + count(n)*(256<<20) }
@@ -45,8 +44,8 @@ func ToolImages(n int) uint64 { return 512<<20 + count(n)*(256<<20) }
 // Storage is a backend whose images and VMs are files on the host's own
 // disks. DiskDirs returns a folder on each volume it writes them to,
 // made or not, and Floors the free space it wants on them. A backend
-// whose disks are elsewhere (Docker's, in its engine's storage) doesn't
-// implement it, and its free space isn't checked.
+// whose disks are elsewhere doesn't implement it, and its free space isn't
+// checked.
 type Storage interface {
 	DiskDirs() []string
 	Floors() Floors

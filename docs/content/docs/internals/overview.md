@@ -55,7 +55,7 @@ When you run `devvm` in a folder whose VM exists, devvm opens the VM as it is an
 7. The [self-check](network.md#the-self-check) runs, and devvm stops a VM whose network policy doesn't hold.
 8. devvm sets the VM up and opens the shell, as for a new VM. A `--clone` VM whose clone wasn't made yet gets it first. On the first launch after the VM started, the `postStartCommand` of the `devcontainer.json` that the VM was made from runs before the shell opens ([commands](../using/devcontainer.md#commands)).
 
-Steps 4 to 7, apart from the `devcontainer.json` check, are what every start of an existing VM by devvm does. So when an export or `devvm rm`'s check of a `--clone` VM needs the VM running, devvm checks `.git`, matches the VM's size and SSH agent forwarding to its state, starts it and runs the self-check in the same way, and it refuses a VM whose state has both network policy and the docker layer, as a launch does.
+Steps 4 to 7, apart from the `devcontainer.json` check, are what every start of an existing VM by devvm does. So when an export or `devvm rm`'s check of a `--clone` VM needs the VM running, devvm checks `.git`, matches the VM's size and SSH agent forwarding to its state, starts it and runs the self-check in the same way.
 
 devvm never starts a VM whose creation didn't finish, because the VM would start without network policy (`vm_unfinished`). That happens when devvm was stopped after it made the VM but before it recorded the network choice. `devvm rm` deletes such a VM.
 
@@ -67,7 +67,7 @@ devvm never starts a VM whose creation didn't finish, because the VM would start
 
 `devvm rm` deletes this folder's VM and what devvm keeps for it: its state, its own allowlist and secret files, its network log, its `.git` locks, its pinned host keys and its ssh config entry. Other VMs, images and the project folder stay.
 
-After the backend deletes the VM, which also deletes the VM's `backend/` folder, devvm tears down the rest in one order, which `devvm gc --orphans` follows too. It stops the VM's proxy and link session first. Then it deletes what devvm keeps for the VM outside its folder: a clone's remote or the `.git` locks, other VMs' links to it and the links its group made, its pinned host keys, and for `devvm gc --orphans` the backend's own leftovers, such as Docker's volumes. Then it deletes the VM's folder, with every file devvm keeps for it there, and last its ssh config entry.
+After the backend deletes the VM, which also deletes the VM's `backend/` folder, devvm tears down the rest in one order, which `devvm gc --orphans` follows too. It stops the VM's proxy and link session first. Then it deletes what devvm keeps for the VM outside its folder: a clone's remote or the `.git` locks, other VMs' links to it and the links its group made, its pinned host keys, and for `devvm gc --orphans` the backend's own leftovers. Then it deletes the VM's folder, with every file devvm keeps for it there, and last its ssh config entry.
 
 For a `--clone` VM, devvm first checks the clone for commits that this repo hasn't fetched and for uncommitted changes, in the clone and in the worktrees inside it ([deleting the VM](../using/clone.md#deleting-the-vm)). The repo's remote for the VM goes with the VM, and devvm keeps the work fetched from it as local branches, which [saved branches](#saved-branches) names. When the VM's image has an agent, devvm then exports the agents' history from the VM, starting it if it's stopped ([history](../using/coding-agents.md#history)), and it keeps the VM if the export fails. `devvm rm` asks first in a terminal (`rm_confirm`), and without one it refuses unless `--force` (`force_needed`). `devvm rm --no-export` deletes the VM without the export, the clone's checks still run and ask only in a terminal, and a VM whose creation didn't finish gets neither, because it never ran.
 
@@ -122,11 +122,11 @@ devvm writes nothing into the project folder. It keeps what you edit in `~/.conf
 | `exports/` | the agents' history that `devvm history export` and `devvm rm` save |
 | `agent.sock` | the socket of [devvm's own SSH agent](../using/ssh.md#devvms-own-agent) |
 | `lima/` | devvm's own [Lima home](lima.md#a-lima-home-of-its-own), unless `DEVVM_LIMA_HOME` moves it |
-| `smolvm/`, `docker/` | the backends' own files that aren't one VM's, such as smolvm's images and the shared tools that Docker unpacked |
+| `smolvm/` | the smolvm backend's own files that aren't one VM's, such as its images |
 
 [What devvm keeps on this machine](../using/space.md) says how each of these is cleaned up, and lists what the backends keep outside this folder.
 
-A VM's state file records the VM's name and its ssh alias, the image the VM came from, its project folder, its backend and its settings, one `key=value` per line. devvm finds a folder's VM by the hash of the folder's path, so an existing VM has the name and the backend its state records, whichever backend you ask for: `devvm --backend docker` and then `devvm` in the same folder open the one VM. Only a new VM gets a name, which fits its backend's limit. The VM's folder lasts as long as the VM, because `devvm rm` also deletes it, so the next devvm in that folder starts fresh.
+A VM's state file records the VM's name and its ssh alias, the image the VM came from, its project folder, its backend and its settings, one `key=value` per line. devvm finds a folder's VM by the hash of the folder's path, so an existing VM has the name and the backend its state records, whichever backend you ask for: `devvm --backend smolvm` and then `devvm` in the same folder open the one VM. Only a new VM gets a name, which fits its backend's limit. The VM's folder lasts as long as the VM, because `devvm rm` also deletes it, so the next devvm in that folder starts fresh.
 
 No VM's folder holds a socket, because a unix socket's path is at most 104 characters and ssh adds 17 to a control socket's while it makes it. The sockets that VMs need are in `run/`, named by hashes: each port forwarder's control socket, `run/<backend>-<hash>.ctl`, and each link session's `run/link-<hash>.sock` and `run/link-<hash>.ctl`. With the default data folder, every socket fits for a home folder of up to 35 characters, and the ssh control sockets are the longest.
 

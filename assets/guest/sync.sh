@@ -33,8 +33,7 @@ if [[ -n "$DEVVM_HOSTNAME" && "$(hostname)" != "$DEVVM_HOSTNAME" ]]; then
 fi
 # link_hosts FILE HOSTS: replace (or remove) the block of the VM's links in FILE with HOSTS, a line
 # per target: its address, its names and NAME.devvm.internal. Written in place, never renamed over,
-# and only when it changed: Docker's /etc/hosts is a bind mount of Docker's, which it writes again at
-# every start, so the setup that follows each start writes the block again there.
+# so the file keeps its mode, and only when it changed.
 link_hosts() {
   local tmp
   tmp=$(mktemp)
@@ -46,7 +45,7 @@ link_hosts() {
 link_hosts /etc/hosts "$s/hosts"
 # A link listens on its target's own port, so one below 1024 needs them open to the VM's user, whose
 # sshd binds it. 1024 is the kernel's default (Lima's Alpine VMs, smolvm); Lima's Ubuntu and Debian
-# VMs and Docker's containers have 0, and Docker's runc keeps /proc/sys read-only.
+# VMs have 0.
 ports=/proc/sys/net/ipv4/ip_unprivileged_port_start
 if [[ "$(cat "$ports" 2>/dev/null)" == 1024 ]]; then
   echo 0 | sudo tee "$ports" >/dev/null || echo "devvm: links to ports below 1024 can't listen in this VM" >&2
@@ -253,7 +252,7 @@ if [[ "$nix_before" != "$(cat "$nix_conf" "$nix_cache" 2>/dev/null || true)" ]];
   if $systemd; then sudo systemctl daemon-reload && sudo systemctl try-restart nix-daemon.service
   elif [[ -x $nixd && -e /run/openrc/softlevel ]]; then sudo rc-service nix-daemon restart >/dev/null
   elif [[ -x $nixd ]]; then
-    # No init system (smolvm, Docker): stopped, then started as assets/container/services.sh starts it.
+    # No init system (smolvm): stopped, then started as assets/container/services.sh starts it.
     sudo sh -c 'pid=$(cat /run/nix-daemon.pid 2>/dev/null || true)
       if [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = nix-daemon ] && kill "$pid"; then
         i=0; while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 1; i=$((i + 1)); done

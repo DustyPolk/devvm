@@ -1,5 +1,5 @@
 // Package backend is what runs devvm's VMs: one interface every backend
-// implements (Lima, smolvm, Docker), the features each one has (Caps), the
+// implements (Lima, smolvm), the features each one has (Caps), the
 // registry of backends and the choice of backend for a VM.
 //
 // A backend only runs what it's told. What a VM is made of (its image, its
@@ -136,24 +136,6 @@ func UsesDecider(b Backend) bool {
 	return ok && d.UsesDecider()
 }
 
-// ProxySocket is a backend whose VMs reach devvm's proxy through a unix
-// socket on the host rather than its loopback port (Docker's, through a
-// relay on the VM's own network): the proxy listens on that socket too.
-// A backend whose VMs reach the port doesn't implement it.
-type ProxySocket interface {
-	// ProxySocket is the socket's path for the VM; "" for none.
-	ProxySocket(vm string) string
-}
-
-// ProxySocketOf is the socket b's VM reaches devvm's proxy through
-// (ProxySocket); "" on other backends.
-func ProxySocketOf(b Backend, vm string) string {
-	if s, ok := b.(ProxySocket); ok {
-		return s.ProxySocket(vm)
-	}
-	return ""
-}
-
 // AgentStarter is a backend whose VM forwards whatever SSH agent the
 // command that starts it names (smolvm's machine start), so a VM started
 // some other way than by Start can have one devvm didn't choose for it. A
@@ -174,22 +156,6 @@ func AgentUnchosen(ctx context.Context, b Backend, vm string) (bool, error) {
 		return false, nil
 	}
 	return a.AgentUnchosen(ctx, vm)
-}
-
-// DiskUser is a backend whose VMs' disks have no size of their own
-// (FeatureDisk none): it says how much one holds instead, which devvm size
-// shows, and the size it's meant to stay under, past which launches warn.
-type DiskUser interface {
-	// DiskUsed is what the VM's disk holds, in bytes, and the size it's
-	// meant to stay under.
-	DiskUsed(ctx context.Context, vm string) (used, limit int64, err error)
-}
-
-// Reporter is a backend that tells devvm doctor more about what it runs
-// on (Docker's engine, which folders it can mount), once Problems found
-// none.
-type Reporter interface {
-	Report(ctx context.Context) []msg.M
 }
 
 // Problem is something a backend needs that the host lacks, as devvm
@@ -306,9 +272,6 @@ type VMSpec struct {
 	// SSHPort is the host port the VM's ssh is forwarded from, as devvm
 	// records it (Confinement.SSHPort at each start); 0 for none yet.
 	SSHPort int
-	// DockerLayer is set when its image has the docker layer, on a backend
-	// that makes VMs for it (DockerLayerVM).
-	DockerLayer bool
 	// Env is the guest environment a start without network policy gives
 	// it (Confinement.Env): a backend that keeps it in the VM's config
 	// sets it at create, so the first start changes nothing.
@@ -457,10 +420,6 @@ type SSHTarget struct {
 	// ConfigFile is an ssh config the backend keeps for the VM, with its
 	// identity; "" when it has none.
 	ConfigFile string
-	// ProxyCommand is the command ssh connects through instead of Host and
-	// Port (ssh's ProxyCommand), a line for the user's shell, its words
-	// quoted, no % tokens; "" for none.
-	ProxyCommand string
 }
 
 // SSHOption is an ssh config option: IdentityFile "/path".

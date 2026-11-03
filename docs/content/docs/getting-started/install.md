@@ -42,7 +42,7 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 | 8 GiB of memory and 4 CPUs, recommended | `sysctl hw.memsize hw.ncpu` | | {{< no >}} doesn't |
 | Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | {{< yes >}} offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
 | OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | macOS 13's has it | {{< no >}} doesn't |
-| Docker Desktop with Docker 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker Desktop | {{< no >}} doesn't |
+| Docker Desktop, only for `--from` with an image only Docker has | `docker version` | Docker Desktop | {{< no >}} doesn't |
 
 {{< /os-tab >}}
 {{< os-tab name="Linux" >}}
@@ -55,12 +55,12 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 | QEMU | `qemu-img --version` | your package manager: apt, dnf, pacman or zypper | {{< yes >}} offers it, with sudo |
 | Access to `/dev/kvm` | `ls -l /dev/kvm` | `sudo usermod -aG kvm $USER`, then log out and back in | {{< yes >}} offers it, with sudo |
 | OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | Ubuntu 22.04's has it | {{< no >}} doesn't |
-| Docker's engine 29.1 or newer, only for the Docker backend or `--from` with an image only Docker has | `docker version` | Docker's engine | {{< no >}} doesn't |
+| Docker's engine, only for `--from` with an image only Docker has | `docker version` | Docker's engine | {{< no >}} doesn't |
 
 {{< /os-tab >}}
 {{< /os-tabs >}}
 
-The Homebrew formula installs Lima along with devvm. ssh and editors reach VMs through devvm's ssh config, and OpenSSH versions older than 8.7 refuse its `PermitRemoteOpen` ([SSH access by name](../using/ssh.md#ssh-access-by-name)). Docker on this machine is optional, because only the [Docker backend](../backends/docker.md#requirements) and `--from` with an [image only Docker has](../using/from.md#images-only-docker-has) need it. The experimental [smolvm](../backends/smolvm.md#requirements) backend has requirements of its own.
+The Homebrew formula installs Lima along with devvm. ssh and editors reach VMs through devvm's ssh config, and OpenSSH versions older than 8.7 refuse its `PermitRemoteOpen` ([SSH access by name](../using/ssh.md#ssh-access-by-name)). Docker on this machine is optional, because only `--from` with an [image only Docker has](../using/from.md#images-only-docker-has) needs it. The experimental [smolvm](../backends/smolvm.md#requirements) backend has requirements of its own.
 
 devvm also runs on a smaller machine, because it fits base to the machine. Base asks for 4 CPUs and 8 GiB of memory. On a machine with fewer than 4 CPUs, base gets as many CPUs as the machine has, and when 8 GiB would leave the machine less than 2 GiB of its own, base gets half of the machine's memory, which is 4 GiB on an 8 GiB machine. The VMs made from base get the same unless you give them a size, as [size and ports](../using/ports-size.md#size-and-ports) explains. When devvm builds base on such a machine, it says how many CPUs and how much memory base gets. `devvm size -g` sets the size that new VMs get instead, and `devvm doctor` warns when this machine has less than 8 GiB of memory or fewer than 4 CPUs.
 
@@ -74,7 +74,7 @@ On Linux hosts, devvm has a few limits, such as no `.git` protection, that [Know
 
 devvm never installs anything on this machine itself. Every command that needs the backend checks it first, and stops at the first thing that's missing.
 
-`devvm doctor` checks the backend new VMs get, or another one with `--backend NAME`. It lists everything that backend lacks, each with what to do, which is the command that installs it when there's one to run. For the docker backend, it also says which engine devvm uses, and on Docker Desktop which folders Desktop shares ([which engine devvm uses](../backends/docker.md#which-engine-devvm-uses)). It then lists what each backend can do, which it calls the backend's [features](../internals/backends.md#features), each as `native`, `emulated`, `unreviewed` for an emulation that devvm refuses until it's reviewed, or `none`. It also says whether Docker is installed, which only `--from` with [an image only Docker has](../using/from.md#images-only-docker-has) needs. When `HTTPS_PROXY` is set and `~/.config/devvm/ca` has no CA certificates, it says that a proxy that inspects TLS needs its CA there ([a company's CA](../using/settings.md#a-companys-ca)). It warns when another devvm comes first on your `PATH` ([One devvm](#one-devvm)), when the disk that devvm's images and VMs go on has less free space than building base needs, when this machine has less than the 8 GiB of memory or the 4 CPUs that devvm recommends ([Requirements](#requirements)), and for each line of your policy files that isn't a rule, which VMs' proxies skip ([rules](../safety/network.md#rules)). Then it says devvm has everything it needs, or it fails. The warnings never make it fail, so a small machine with everything installed passes.
+`devvm doctor` checks the backend new VMs get, or another one with `--backend NAME`. It lists everything that backend lacks, each with what to do, which is the command that installs it when there's one to run. It then lists what each backend can do, which it calls the backend's [features](../internals/backends.md#features), each as `native`, `emulated`, `unreviewed` for an emulation that devvm refuses until it's reviewed, or `none`. It also says whether Docker is installed, which only `--from` with [an image only Docker has](../using/from.md#images-only-docker-has) needs. When `HTTPS_PROXY` is set and `~/.config/devvm/ca` has no CA certificates, it says that a proxy that inspects TLS needs its CA there ([a company's CA](../using/settings.md#a-companys-ca)). It warns when another devvm comes first on your `PATH` ([One devvm](#one-devvm)), when the disk that devvm's images and VMs go on has less free space than building base needs, when this machine has less than the 8 GiB of memory or the 4 CPUs that devvm recommends ([Requirements](#requirements)), and for each line of your policy files that isn't a rule, which VMs' proxies skip ([rules](../safety/network.md#rules)). Then it says devvm has everything it needs, or it fails. The warnings never make it fail, so a small machine with everything installed passes.
 
 When `devvm doctor` finds nothing missing, you're ready for [your first VM](first-vm.md). Before you make it, read [staying safe](../safety/_index.md#the-habits), which lists the habits that close most of what devvm leaves open.
 
@@ -111,10 +111,9 @@ Images whose inputs changed are built again the next time you use them. Existing
 
 1. Delete your VMs: `devvm ls`, then `devvm rm` in each folder. For a `--clone` VM, this also removes the `devvm` git remote from the repo.
 2. Delete the images: `devvm gc`, then `devvm images rm` with every name `devvm images` lists. Images built `--from` a container image need the same `--from`: `devvm images rm --from node:24 base`.
-3. On Docker, delete the volumes and networks that devvm's label is still on, such as the shared tools' volume. `docker volume ls --filter label=devvm.data=$HOME/.local/share/devvm` and `docker network ls --filter label=devvm.data=$HOME/.local/share/devvm` list them, and `docker volume rm` and `docker network rm` delete them by name.
-4. Free the backends' caches. In a terminal, `devvm gc --caches` frees devvm's share of them and of Docker's labelled volumes, after asking for each backend. If you don't use a backend yourself, you can also empty its cache: Lima keeps Ubuntu's cloud images in `~/Library/Caches/lima` on macOS and `~/.cache/lima` on Linux, and `limactl prune` deletes that whole cache. On macOS, smolvm keeps its caches and its machines in `~/Library/Caches/smolvm`, so delete that folder only once `smolvm machine ls` lists no machine you want to keep ([what devvm keeps](../using/space.md#smolvm)).
-5. Delete your saved secrets: `devvm secret rm NAME` for each one `devvm secret` lists. On macOS they're in the Keychain under the service `devvm`, and on Linux in `~/.local/share/devvm/secrets/`.
-6. Remove devvm itself, with the command for the way you installed it:
+3. Free the backends' caches. In a terminal, `devvm gc --caches` frees devvm's share of them, after asking for each backend. If you don't use a backend yourself, you can also empty its cache: Lima keeps Ubuntu's cloud images in `~/Library/Caches/lima` on macOS and `~/.cache/lima` on Linux, and `limactl prune` deletes that whole cache. On macOS, smolvm keeps its caches and its machines in `~/Library/Caches/smolvm`, so delete that folder only once `smolvm machine ls` lists no machine you want to keep ([what devvm keeps](../using/space.md#smolvm)).
+4. Delete your saved secrets: `devvm secret rm NAME` for each one `devvm secret` lists. On macOS they're in the Keychain under the service `devvm`, and on Linux in `~/.local/share/devvm/secrets/`.
+5. Remove devvm itself, with the command for the way you installed it:
 
    {{< os-tabs >}}
    {{< os-tab name="macOS" >}}
@@ -135,5 +134,5 @@ Images whose inputs changed are built again the next time you use them. Existing
    {{< /os-tab >}}
    {{< /os-tabs >}}
 
-7. Remove its state: `rm -rf ~/.local/share/devvm ~/.config/devvm`. That includes your layers and features, in `~/.config/devvm/layers` and `~/.config/devvm/features`, so copy them somewhere first to keep them. It also includes your exports, the agents' history that `devvm rm` saved. On macOS, the Time Machine exclusion that devvm set on its CA folder goes with the folder.
-8. If you let devvm add it, remove the `Include ~/.local/share/devvm/ssh_config` line from `~/.ssh/config`.
+6. Remove its state: `rm -rf ~/.local/share/devvm ~/.config/devvm`. That includes your layers and features, in `~/.config/devvm/layers` and `~/.config/devvm/features`, so copy them somewhere first to keep them. It also includes your exports, the agents' history that `devvm rm` saved. On macOS, the Time Machine exclusion that devvm set on its CA folder goes with the folder.
+7. If you let devvm add it, remove the `Include ~/.local/share/devvm/ssh_config` line from `~/.ssh/config`.

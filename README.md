@@ -2,7 +2,7 @@
 
 One VM for every project: an isolated sandbox with your project's toolchain, ready for you or an agent to start coding.
 
-Each project folder gets a VM of its own. devvm detects the project's toolchain from its files, so a folder with `package.json` gets node, and the VM mounts only the project folder, at the same path as on your machine. New VMs get network policy by default, so they reach only the hosts you allow, and your secrets, such as your GitHub token and Claude Code token, stay on your machine. Claude Code, Codex and opencode run in the VM, with your settings, skills and MCP servers, and you start them in the VM's shell. devvm runs its VMs on [Lima](https://lima-vm.io) by default, or on the experimental smolvm and Docker backends.
+Each project folder gets a VM of its own. devvm detects the project's toolchain from its files, so a folder with `package.json` gets node, and the VM mounts only the project folder, at the same path as on your machine. New VMs get network policy by default, so they reach only the hosts you allow, and your secrets, such as your GitHub token and Claude Code token, stay on your machine. Claude Code, Codex and opencode run in the VM, with your settings, skills and MCP servers, and you start them in the VM's shell. devvm runs its VMs on [Lima](https://lima-vm.io) by default, or on the experimental smolvm backend.
 
 ## Install
 

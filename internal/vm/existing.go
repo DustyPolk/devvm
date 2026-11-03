@@ -99,15 +99,10 @@ func (t *found) shellDir(ctx context.Context, log io.Writer) string {
 // launch takes a VM that exists, made for this folder, through what each
 // launch of it does before its setup: the folder's devcontainer.json
 // compared with the one it was made from, then what every start of it
-// does (startChecked), then its disk use warned about. It returns the
-// confinement the VM runs with.
+// does (startChecked). It returns the confinement the VM runs with.
 func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, error) {
 	devcontainers(e).check(t.st, t.f.Dir)
-	conf, err := e.startChecked(ctx, t)
-	if err == nil {
-		e.warnDisk(ctx, t.b, t.f.Name)
-	}
-	return conf, err
+	return e.startChecked(ctx, t)
 }
 
 // startChecked takes a VM that exists, made for this folder, through
@@ -204,12 +199,8 @@ func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backe
 		return backend.Confinement{}, msg.VMUnfinished(vm)
 	}
 	conf := backend.Confinement{Net: backend.NetProxy}
-	switch {
-	case !netpolicy.On(st):
+	if !netpolicy.On(st) {
 		conf.Net = backend.NetDirect
-	case st.Get(KeyDockerLayer) != "":
-		// Its state edited by hand: root in it could change its network.
-		return conf, msg.NetDockerLayer(b.Name(), vm)
 	}
 	if err := e.Registry.Require(b, vm, conf.Features()...); err != nil {
 		return conf, err

@@ -38,7 +38,7 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 			"doctor fails when something is missing, but never for a warning, such as one about low free space.",
 		Example: examples(
 			"devvm doctor", "check the backend new VMs get",
-			"devvm doctor --backend docker", "check the docker backend",
+			"devvm doctor --backend smolvm", "check the smolvm backend",
 			"devvm doctor --json", "the same as JSON, for scripts",
 		),
 		Args:              noArgs,
@@ -186,11 +186,6 @@ func (d doctor) run(ctx context.Context, u *ui.UI, all []backend.Backend, b back
 		u.Warn(m)
 	}
 	if len(problems) == 0 {
-		if r, ok := b.(backend.Reporter); ok {
-			for _, m := range r.Report(ctx) {
-				u.Say(m)
-			}
-		}
 		u.Say(msg.DoctorOK(b.Name(), devvmVersion()))
 		return nil
 	}

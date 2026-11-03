@@ -8,7 +8,7 @@ import (
 
 // Locator is a backend whose VMs live somewhere that can change between
 // runs of devvm: Lima's home (DEVVM_LIMA_HOME), smolvm's user on macOS
-// (HOME), Docker's engine (DOCKER_HOST, DOCKER_CONTEXT). A VM records
+// (HOME). A VM records
 // where it was made (LocationOf), so a run that looks elsewhere never
 // takes it for one its backend lost. A backend whose VMs can't move
 // doesn't implement it.
@@ -32,41 +32,13 @@ func LocationOf(b Backend) (string, bool) {
 }
 
 // Forgetter is a backend that keeps files or resources of its own for a
-// VM besides the VM (its port records, its ssh key, Docker's volumes and
-// networks), which devvm gc --orphans deletes once the backend no longer
+// VM besides the VM (its port records, its ssh key), which devvm gc
+// --orphans deletes once the backend no longer
 // has the VM, as Delete does after deleting it.
 type Forgetter interface {
 	// Forget deletes what the backend keeps for vm, which it must not
 	// have: a VM it has is refused, and nothing is deleted.
 	Forget(ctx context.Context, vm string) error
-}
-
-// LeftoverKind is the kind of a backend's own resource that Forget
-// deletes.
-type LeftoverKind int
-
-// The kinds of Leftover.
-const (
-	LeftoverContainer LeftoverKind = iota // a container of the VM's besides the VM, such as Docker's relay
-	LeftoverNetwork
-	LeftoverVolume
-	LeftoverImage
-)
-
-// Leftover is one of a backend's own resources that Forget deletes.
-type Leftover struct {
-	Kind LeftoverKind
-	Name string
-}
-
-// LeftoverLister is a Forgetter whose Forget deletes resources of the
-// backend's own, such as Docker's volumes, which it names first, so
-// devvm gc --orphans lists each before it asks.
-type LeftoverLister interface {
-	// Leftovers are the resources Forget deletes for vm, as the backend
-	// has them now. One Forget would refuse (someone else's by that name)
-	// fails it.
-	Leftovers(ctx context.Context, vm string) ([]Leftover, error)
 }
 
 // Stray is a VM with devvm's label that this devvm has no state for: one

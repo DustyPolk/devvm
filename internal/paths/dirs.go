@@ -195,10 +195,6 @@ func (d Dirs) Smolvm() string { return filepath.Join(d.Data, "smolvm") }
 // SmolvmImage is an image's folder on smolvm: its pack.
 func (d Dirs) SmolvmImage(key string) string { return filepath.Join(d.Smolvm(), "images", key) }
 
-// Docker holds the Docker backend's files that aren't one VM's: which
-// shared tools it unpacked into its tools volume, its proxies' sockets.
-func (d Dirs) Docker() string { return filepath.Join(d.Data, "docker") }
-
 // ConfigFile is config.toml, the defaults you set by hand: devvm reads it
 // and never writes it.
 func (d Dirs) ConfigFile() string { return filepath.Join(d.Config, "config.toml") }

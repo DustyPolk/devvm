@@ -17,7 +17,7 @@ devvm doctor [flags]
 
 ```text
   devvm doctor                   # check the backend new VMs get
-  devvm doctor --backend docker  # check the docker backend
+  devvm doctor --backend smolvm  # check the smolvm backend
   devvm doctor --json            # the same as JSON, for scripts
 ```
 

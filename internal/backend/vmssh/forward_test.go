@@ -386,7 +386,7 @@ func TestForwarderReservedUnknown(t *testing.T) {
 // The master asks for nothing to be forwarded, reads no configuration of
 // the user's and offers the VM's key alone; a relay is a channel of it,
 // and without it connects to the VM the same way, never elsewhere: on a
-// host port, or through the VM's ProxyCommand.
+// host port.
 func TestForwarderSSH(t *testing.T) {
 	o := SSH{VM: "devvm-v", User: "u", Key: "/k", KnownHosts: "/kh", Control: "/c.ctl", Port: 61022}
 	conn := []string{
@@ -394,16 +394,12 @@ func TestForwarderSSH(t *testing.T) {
 		"HostKeyAlias=devvm-v", "StrictHostKeyChecking=yes", "ForwardAgent=no", "ForwardX11=no", "Tunnel=no",
 		"PermitRemoteOpen=none", "ClearAllForwardings=yes",
 	}
-	p := o
-	p.Port, p.Proxy = 0, "'/devvm' '_docker-connect' 'devvm-v'"
 	for name, tc := range map[string]struct {
 		args []string
 		want []string
 	}{
-		"master":       {o.masterArgs(), append([]string{"-F none -M -S /c.ctl -T ", "ProxyCommand=none -p 61022 -l u 127.0.0.1 sh -s"}, conn...)},
-		"relay":        {o.relayArgs("::1", 5173), append([]string{"-F none -S /c.ctl -o ControlMaster=no -W [::1]:5173 ", "ProxyCommand=none -p 61022 -l u 127.0.0.1"}, conn...)},
-		"proxy master": {p.masterArgs(), append([]string{"-o ProxyCommand='/devvm' '_docker-connect' 'devvm-v' -l u devvm-v sh -s"}, conn...)},
-		"proxy relay":  {p.relayArgs("127.0.0.1", 80), append([]string{"-W 127.0.0.1:80 ", "-o ProxyCommand='/devvm' '_docker-connect' 'devvm-v' -l u devvm-v"}, conn...)},
+		"master": {o.masterArgs(), append([]string{"-F none -M -S /c.ctl -T ", "ProxyCommand=none -p 61022 -l u 127.0.0.1 sh -s"}, conn...)},
+		"relay":  {o.relayArgs("::1", 5173), append([]string{"-F none -S /c.ctl -o ControlMaster=no -W [::1]:5173 ", "ProxyCommand=none -p 61022 -l u 127.0.0.1"}, conn...)},
 	} {
 		got := strings.Join(tc.args, " ")
 		for _, want := range tc.want {
@@ -420,35 +416,6 @@ func TestForwarderSSH(t *testing.T) {
 	if got := o.relayArgs("::1", 5173); got[len(got)-1] != "127.0.0.1" {
 		t.Errorf("relay runs a command: %q", got)
 	}
-	if got := p.relayArgs("::1", 5173); got[len(got)-1] != "devvm-v" {
-		t.Errorf("proxy relay runs a command: %q", got)
-	}
-}
-
-// A session forwards the agent asked for and nothing else, reads no
-// configuration of the user's, and offers the VM's key alone.
-func TestSessionArgs(t *testing.T) {
-	o := SSH{VM: "devvm-v", User: "u", Key: "/k", KnownHosts: "/kh", Proxy: "'/devvm' 'x'"}
-	for agent, want := range map[string][]string{
-		"":        {"IdentityAgent=none", "ForwardAgent=no"},
-		AgentUser: {"IdentityAgent=SSH_AUTH_SOCK", "ForwardAgent=yes"},
-		"/a.sock": {`IdentityAgent="/a.sock"`, `ForwardAgent="/a.sock"`},
-	} {
-		args := o.SessionArgs(agent, true, "cd -- '/p' && exec bash -l")
-		got := strings.Join(args, " ")
-		if !strings.HasPrefix(got, "-F none -t -o ControlMaster=no -o ControlPath=none ") || args[len(args)-1] != "cd -- '/p' && exec bash -l" ||
-			args[len(args)-2] != "devvm-v" || !strings.Contains(got, "ClearAllForwardings=yes") || !strings.Contains(got, "IdentitiesOnly=yes") {
-			t.Errorf("agent %q: %q", agent, args)
-		}
-		for _, w := range want {
-			if !slices.Contains(args, w) {
-				t.Errorf("agent %q lacks %s: %q", agent, w, args)
-			}
-		}
-	}
-	if args := o.SessionArgs("", false, "x"); args[2] != "-T" {
-		t.Errorf("no terminal: %q", args)
-	}
 }
 
 func newFlagSet(fl *Flags) *flag.FlagSet {
@@ -459,8 +426,7 @@ func newFlagSet(fl *Flags) *flag.FlagSet {
 }
 
 // The forwarder's flags: each backend's command adds its own, and reaches
-// its VM one way or another; listed ports are read as devvm ports lists
-// them.
+// its VM on a port; listed ports are read as devvm ports lists them.
 func TestFlags(t *testing.T) {
 	var fl Flags
 	fs := newFlagSet(&fl)
@@ -470,7 +436,7 @@ func TestFlags(t *testing.T) {
 	if _, err := fl.Forwarder(nil, func(string) (map[int]bool, error) { return nil, nil }, io.Discard); err == nil {
 		t.Error("no way to the VM: taken")
 	}
-	fl.Proxy = "'x'"
+	fl.Port = 61022
 	f, err := fl.Forwarder(nil, func(vm string) (map[int]bool, error) { return map[int]bool{3: vm == "v"}, nil }, io.Discard)
 	if err != nil {
 		t.Fatal(err)

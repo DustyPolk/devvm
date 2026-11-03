@@ -3,21 +3,19 @@ title: Backends
 weight: 40
 ---
 
-A backend is the program that runs devvm's VMs and builds their images. devvm decides what goes into a VM, such as its image, its folders, its size and its network policy, and the backend runs it. [Lima](lima.md) is the default backend, and [smolvm](smolvm.md) and [Docker](docker.md) are experimental.
+A backend is the program that runs devvm's VMs and builds their images. devvm decides what goes into a VM, such as its image, its folders, its size and its network policy, and the backend runs it. [Lima](lima.md) is the default backend, and [smolvm](smolvm.md) is experimental.
 
 ## Comparing the backends
 
-| | Lima | smolvm {{< experimental >}} | Docker {{< experimental >}} |
-| --- | --- | --- | --- |
-| Each project gets | a full VM with a kernel of its own | a microVM that runs the image as a container, with no init system | a container, not a VM, which shares a kernel with every other Docker VM ([isolation](docker.md#isolation-a-container-is-not-a-vm)) |
-| Hosts | macOS 13 or newer, or Linux, on arm64 or x86_64 | an arm64 Mac, or Linux on arm64 or x86_64, but only the Mac is tested | macOS with Docker Desktop, or Linux with Docker's engine |
-| You need | Lima 2.0 or newer, and on Linux QEMU and access to `/dev/kvm` ([requirements](lima.md#requirements)) | smolvm 1.32 or newer, and on Linux access to `/dev/kvm` ([requirements](smolvm.md#requirements)) | Docker 29.1 or newer with its engine running, and on Linux the `docker` group ([requirements](docker.md#requirements)) |
-| Network policy | {{< yes >}} yes | {{< yes >}} yes | yes on Docker Desktop and on an engine on this Linux machine, but not with the docker layer |
-| The docker layer | {{< yes >}} yes | {{< yes >}} yes | only under Sysbox, on a Linux engine ([the docker layer](docker.md#the-docker-layer)) |
-| The nix layer | {{< yes >}} yes | {{< yes >}} yes | no ([what Docker VMs can't do](docker.md#what-docker-vms-cant-do)) |
-| Limits | paths with commas, and shrinking a disk ([limits](lima.md#limits)) | paths with colons, and with SSH agent forwarding on, the agent is in the VM the whole time it runs ([what's different](smolvm.md#whats-different)) | a disk size, raw packet tools, firewalls and VPNs, mounting and nested virtualization ([what Docker VMs can't do](docker.md#what-docker-vms-cant-do)) |
-
-Read [Isolation: a container is not a VM](docker.md#isolation-a-container-is-not-a-vm) before you choose Docker. On Linux every Docker VM shares your machine's kernel, and on macOS Docker Desktop runs all of them in one VM, so a kernel flaw reaches your machine on Linux and every other VM on both.
+| | Lima | smolvm {{< experimental >}} |
+| --- | --- | --- |
+| Each project gets | a full VM with a kernel of its own | a microVM that runs the image as a container, with no init system |
+| Hosts | macOS 13 or newer, or Linux, on arm64 or x86_64 | an arm64 Mac, or Linux on arm64 or x86_64, but only the Mac is tested |
+| You need | Lima 2.0 or newer, and on Linux QEMU and access to `/dev/kvm` ([requirements](lima.md#requirements)) | smolvm 1.32 or newer, and on Linux access to `/dev/kvm` ([requirements](smolvm.md#requirements)) |
+| Network policy | {{< yes >}} yes | {{< yes >}} yes |
+| The docker layer | {{< yes >}} yes | {{< yes >}} yes |
+| The nix layer | {{< yes >}} yes | {{< yes >}} yes |
+| Limits | paths with commas, and shrinking a disk ([limits](lima.md#limits)) | paths with colons, and with SSH agent forwarding on, the agent is in the VM the whole time it runs ([what's different](smolvm.md#whats-different)) |
 
 `.git` protection uses your machine's file flags, so it works the same on every backend.
 
@@ -32,15 +30,9 @@ To choose, follow the comparison above:
 ```mermaid
 flowchart TD
   start{{"fine with an<br>experimental backend?"}} -- "no" --> lima["Lima, the default"]
-  start -- "yes" --> kernel{{"fine with a kernel<br>shared with other VMs?"}}
-  kernel -- "no" --> arm{{"an arm64 Mac,<br>or Linux?"}}
+  start -- "yes" --> arm{{"an arm64 Mac,<br>or Linux?"}}
   arm -- "yes" --> smolvm["smolvm"]
   arm -- "no" --> lima
-  kernel -- "yes" --> layer{{"need the<br>docker layer?"}}
-  layer -- "no" --> docker["Docker"]
-  layer -- "yes" --> sysbox{{"a Linux engine<br>with Sysbox?"}}
-  sysbox -- "yes" --> dockerSysbox["Docker, without<br>network policy"]
-  sysbox -- "no" --> arm
 ```
 
 A new VM gets the first of:

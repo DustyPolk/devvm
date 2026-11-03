@@ -37,19 +37,9 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 			}
 			fail(u, err, msg.LsFailed)
 			if asJSON {
-				err = printJSON(u, lsJSON(ls))
-			} else {
-				err = writeList(u.Table(), ls)
+				return printJSON(u, lsJSON(ls))
 			}
-			if err != nil {
-				return err
-			}
-			for _, l := range ls {
-				if l.DiskOver != nil {
-					u.Warn(*l.DiskOver)
-				}
-			}
-			return nil
+			return writeList(u.Table(), ls)
 		},
 	}
 	jsonFlag(cmd, &asJSON)
@@ -72,9 +62,7 @@ type vmJSON struct {
 	Git     string   `json:"git"`
 	Net     string   `json:"net"`
 	Backend string   `json:"backend"`
-	// DockerLayer is the runtime a docker VM runs the docker layer under.
-	DockerLayer string `json:"docker_layer,omitempty"`
-	Folder      string `json:"folder"`
+	Folder  string   `json:"folder"`
 	// Links is how many links the VM has to other VMs' ports.
 	Links int `json:"links"`
 }
@@ -84,7 +72,7 @@ func lsJSON(ls []vm.Listed) lsOutput {
 	for _, l := range ls {
 		out.VMs = append(out.VMs, vmJSON{
 			Name: l.Name, Status: l.Status, Image: l.Image, Tools: append([]string{}, l.Tools...), From: l.From, Git: l.Git, Net: l.Net,
-			Backend: l.Backend, DockerLayer: l.DockerLayer, Folder: l.Folder, Links: l.Links,
+			Backend: l.Backend, Folder: l.Folder, Links: l.Links,
 		})
 	}
 	return out
@@ -105,10 +93,6 @@ func listVMs(cmd *cobra.Command, u *ui.UI, dirs paths.Dirs) ([]vm.Listed, error)
 func writeList(tab *ui.Table, ls []vm.Listed) error {
 	tab.Header("NAME", "STATUS", "IMAGE", "TOOLS", "GIT", "NET", "LINKS", "BACKEND", "FOLDER")
 	for _, l := range ls {
-		backend := l.Backend
-		if l.DockerLayer != "" {
-			backend += " (" + l.DockerLayer + ")"
-		}
 		image := l.Image
 		if l.From != "" {
 			image = msg.ImageFrom(l.From, l.Image).Line()
@@ -118,7 +102,7 @@ func writeList(tab *ui.Table, ls []vm.Listed) error {
 			links = strconv.Itoa(l.Links)
 		}
 		tab.Row(cell(l.Name), cellAs(l.Status, vmStatuses), cell(image), cell(strings.Join(l.Tools, ",")), cellAs(l.Git, gitModes),
-			cellAs(l.Net, netModes), cell(links), cell(backend), cell(l.Folder))
+			cellAs(l.Net, netModes), cell(links), cell(l.Backend), cell(l.Folder))
 	}
 	return tab.Flush()
 }

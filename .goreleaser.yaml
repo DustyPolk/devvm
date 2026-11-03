@@ -4,42 +4,24 @@ version: 2
 project_name: devvm
 
 builds:
-  # Linux's, built first on their own (release.sh's first pass), so their SHA-256s are known
-  # before the macOS builds.
+  # macOS's and Linux's.
   - id: devvm
     main: ./cmd/devvm
     binary: devvm
     env:
       - CGO_ENABLED=0
-    goos: [linux]
+    goos: [darwin, linux]
     goarch: [arm64, amd64]
     flags: [-trimpath]
     # devvm reads its version from internal/cli, not main.
     ldflags:
       - -s -w -X github.com/w3cj/devvm/internal/cli.version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}"
-  # macOS's, with their processor's Linux build's address (its Linux archive) and the SHA-256 of the
-  # devvm in it, which the Docker backend fetches and checks before use. release.sh sets
-  # DEVVM_RELEASE_URL and DEVVM_LINUX_SHA256_ARM64/_AMD64; without them this build fails.
-  - id: devvm-darwin
-    main: ./cmd/devvm
-    binary: devvm
-    env:
-      - CGO_ENABLED=0
-    goos: [darwin]
-    goarch: [arm64, amd64]
-    flags: [-trimpath]
-    ldflags:
-      - >-
-        -s -w -X github.com/w3cj/devvm/internal/cli.version={{ .Version }}
-        -X github.com/w3cj/devvm/internal/backend/registry.linuxURL={{ .Env.DEVVM_RELEASE_URL }}/devvm-{{ .Version }}-linux-{{ .Arch }}.tar.gz
-        -X github.com/w3cj/devvm/internal/backend/registry.linuxSHA256={{ if eq .Arch "arm64" }}{{ .Env.DEVVM_LINUX_SHA256_ARM64 }}{{ else }}{{ .Env.DEVVM_LINUX_SHA256_AMD64 }}{{ end }}
-    mod_timestamp: "{{ .CommitTimestamp }}"
 
 # One archive per platform: the binary (its own files embedded), the README, changelog and license.
 archives:
   - id: devvm
-    ids: [devvm, devvm-darwin]
+    ids: [devvm]
     formats: [tar.gz]
     name_template: devvm-{{ .Version }}-{{ .Os }}-{{ .Arch }}
     wrap_in_directory: true

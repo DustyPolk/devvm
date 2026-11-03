@@ -179,17 +179,6 @@ func ImageFeatures(img string) []Feature {
 	return fs
 }
 
-// DockerLayerVM is a backend whose VMs run the docker layer only when made
-// for it, under a runtime that gives root in them more than its other VMs
-// get (Docker's: Sysbox, FeatureDockerLayer). Root in one can change its
-// own network, so it gets no network policy.
-type DockerLayerVM interface {
-	// DockerLayer names the runtime a VM (vm) with the docker layer runs
-	// under (sysbox), or says why the backend can't run it here, in a
-	// message naming vm.
-	DockerLayer(vm string) (string, error)
-}
-
 // Features returns what the tools build needs.
 func (s ToolsSpec) Features() []Feature {
 	return append([]Feature{FeatureBuildImage}, s.Net.Features()...)

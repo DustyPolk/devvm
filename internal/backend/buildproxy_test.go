@@ -31,7 +31,7 @@ func TestProxyStarter(t *testing.T) {
 		return h, err
 	}}
 	up := []byte("HTTPS_PROXY=" + corpProxy + "\nHTTP_PROXY=\nNO_PROXY=\n")
-	p, err := s.Start("devvm-img-x", dir, "/run/ha.pid", up, "-listen-unix", "/s.sock")
+	p, err := s.Start("devvm-img-x", dir, "/run/ha.pid", up, "-upstream-unresolved")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestProxyStarter(t *testing.T) {
 	line := strings.Join(args, " ")
 	for _, want := range []string{
 		"/devvm _proxy -listen 127.0.0.1:0 -vm devvm-img-x -policy " + filepath.Join(dir, "policy"),
-		"-auth-file " + filepath.Join(dir, "auth"), "-lifeline /run/ha.pid", "-listen-unix /s.sock",
+		"-auth-file " + filepath.Join(dir, "auth"), "-lifeline /run/ha.pid -upstream-unresolved",
 		"-upstream " + filepath.Join(dir, "upstream"),
 	} {
 		if !strings.Contains(line, want) {

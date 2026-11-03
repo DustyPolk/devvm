@@ -36,10 +36,8 @@ func readOverrides(getenv func(string) string) Overrides {
 				FreeGiB: getenv(platform.TestFreeGiB), ListTimeout: getenv(platform.TestListWait),
 			},
 			Unreviewed: getenv("DEVVM_UNREVIEWED"),
-			DockerKind: getenv("DEVVM_DOCKER_KIND"), DockerProcSys: getenv("DEVVM_DOCKER_PROC_SYS"),
-			LinuxBuildURL: getenv("DEVVM_LINUX_BUILD_URL"), LinuxBuildSHA256: getenv("DEVVM_LINUX_BUILD_SHA256"),
-			KVM:       getenv("DEVVM_KVM"),
-			UbuntuURL: getenv("DEVVM_UBUNTU_URL"),
+			KVM:        getenv("DEVVM_KVM"),
+			UbuntuURL:  getenv("DEVVM_UBUNTU_URL"),
 		},
 		HostMise: getenv("DEVVM_HOST_MISE"),
 	}

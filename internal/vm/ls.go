@@ -8,7 +8,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
@@ -26,15 +25,9 @@ type Listed struct {
 	Git     string   // its .git protection: on, off, or clone for a --clone VM
 	Net     string   // its network policy: on, off or unenforced (netpolicy.Listed)
 	Backend string
-	// DockerLayer is the runtime it runs the docker layer under, where its
-	// backend makes VMs for it (KeyDockerLayer).
-	DockerLayer string
-	Folder      string
+	Folder  string
 	// Links is how many links it has to other VMs' ports, as a client.
 	Links int
-	// DiskOver warns that its disk holds more than VMs get elsewhere, on
-	// a backend that sizes no disks (backend.DiskUser); nil otherwise.
-	DiskOver *msg.M
 }
 
 // List lists the project VMs on every backend, sorted by name. A backend
@@ -80,7 +73,7 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 	}
 	l := Listed{
 		Name: in.Name, Status: string(in.Status), Image: st.Get(state.KeyImage), Tools: st.ToolNames(),
-		Git: st.Get(gitprotect.KeyGitProtect), Backend: b.Name(), DockerLayer: st.Get(KeyDockerLayer),
+		Git: st.Get(gitprotect.KeyGitProtect), Backend: b.Name(),
 		Folder: st.Get(state.KeyDir), Links: len(strings.Fields(st.Get(KeyLinks))),
 	}
 	if l.Image != "" {
@@ -88,13 +81,6 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 	}
 	if isClone(st) {
 		l.Git = ModeClone
-	}
-	if du, ok := b.(backend.DiskUser); ok {
-		// One it can't measure goes unsaid: ls lists it all the same.
-		if used, limit, err := du.DiskUsed(ctx, in.Name); err == nil && limit > 0 && used > limit {
-			m := msg.DiskOver(b.Name(), gibText(limit), gibText(used), in.Name)
-			l.DiskOver = &m
-		}
 	}
 	l.Net, err = netpolicy.Listed(ctx, b, st, in.Status == backend.StatusRunning)
 	return l, err

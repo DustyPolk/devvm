@@ -48,8 +48,8 @@ func TestRegistry(t *testing.T) {
 	if b, ok := r.Lookup("smolvm"); !ok || b.Name() != "smolvm" {
 		t.Errorf("Lookup(smolvm): %v, %v", b, ok)
 	}
-	if _, ok := r.Lookup("docker"); ok {
-		t.Error("Lookup(docker): found")
+	if _, ok := r.Lookup("fake"); ok {
+		t.Error("Lookup(fake): found")
 	}
 	for _, name := range []string{"lima", "", "Lima", "a b", "a=b", "a/b"} {
 		if err := r.Register(backendtest.New(name, nil)); err == nil {
@@ -69,17 +69,17 @@ func TestFor(t *testing.T) {
 	}{
 		{name: "a new VM, nothing set", want: "lima"},
 		{name: "a new VM, the default file", file: "smolvm", want: "smolvm"},
-		{name: "a new VM, --backend", file: "smolvm", flag: "docker", want: "docker"},
-		{name: "an existing VM keeps its backend", file: "docker", recorded: "smolvm", want: "smolvm"},
-		{name: "an existing VM ignores --backend", recorded: "smolvm", flag: "docker", want: "smolvm", ignored: true},
+		{name: "a new VM, --backend", file: "smolvm", flag: "fake", want: "fake"},
+		{name: "an existing VM keeps its backend", file: "fake", recorded: "smolvm", want: "smolvm"},
+		{name: "an existing VM ignores --backend", recorded: "smolvm", flag: "fake", want: "smolvm", ignored: true},
 		{name: "--backend naming its own", recorded: "smolvm", flag: "smolvm", want: "smolvm"},
-		{name: "an unknown --backend", flag: "sbx", want: "backend_unknown backends=docker, lima, smolvm name=sbx"},
-		{name: "an unknown default", file: "sbx", want: "backend_unknown_default backends=docker, lima, smolvm file=/c/config.toml name=sbx"},
+		{name: "an unknown --backend", flag: "sbx", want: "backend_unknown backends=fake, lima, smolvm name=sbx"},
+		{name: "an unknown default", file: "sbx", want: "backend_unknown_default backends=fake, lima, smolvm file=/c/config.toml name=sbx"},
 		{name: "an existing VM on a backend not here", recorded: "qemu", want: "backend_unknown_vm backend=qemu vm=devvm-x-0123456789abcd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testDirs(t)
-			r := testRegistry(t, "lima", "smolvm", "docker")
+			r := testRegistry(t, "lima", "smolvm", "fake")
 			if tc.file != "" {
 				r.DefaultBackend = func() (string, string, error) { return tc.file, "/c/config.toml", nil }
 			}
@@ -109,21 +109,21 @@ func TestUsed(t *testing.T) {
 	}{
 		{name: "no VMs", want: ""},
 		{name: "one backend's", vms: []string{"lima", "lima"}, want: "lima"},
-		{name: "two backends', sorted", vms: []string{"smolvm", "docker", "lima"}, want: "docker lima smolvm"},
+		{name: "two backends', sorted", vms: []string{"smolvm", "fake", "lima"}, want: "fake lima smolvm"},
 		{name: "unrecorded and unknown backends", vms: []string{"", "qemu", "smolvm"}, want: "smolvm"},
 		{name: "a VM's policy file", vms: []string{"lima"}, files: "0123456789abc0/policy", want: "lima"},
 		{name: "a folder that isn't a VM's", vms: []string{"lima"}, files: "other/state", want: "lima"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := testDirs(t)
-			r := testRegistry(t, "lima", "smolvm", "docker")
+			r := testRegistry(t, "lima", "smolvm", "fake")
 			for i, b := range tc.vms {
 				if _, err := state.CreateVM(d, "devvm-x-0123456789abc"+strconv.Itoa(i), state.NewVM{Image: "base", Backend: b}); err != nil {
 					t.Fatal(err)
 				}
 			}
 			if tc.files != "" {
-				if err := state.WriteFile(filepath.Join(d.VMs(), tc.files), []byte("backend=docker\n")); err != nil {
+				if err := state.WriteFile(filepath.Join(d.VMs(), tc.files), []byte("backend=fake\n")); err != nil {
 					t.Fatal(err)
 				}
 			}

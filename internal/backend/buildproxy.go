@@ -11,9 +11,8 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// A build that reaches the internet through a company proxy, or on Docker
-// Desktop through any proxy, goes through a proxy of devvm's own on the
-// host, one per build: devvm _proxy with any host on ports 80 and 443 but
+// A build that reaches the internet through a company proxy goes through
+// a proxy of devvm's own on the host, one per build: devvm _proxy with any host on ports 80 and 443 but
 // the host's own and internal addresses, through the company proxy (its
 // -upstream file), and a password made for the build. The build gets only
 // that proxy's address with that password, so the company proxy's

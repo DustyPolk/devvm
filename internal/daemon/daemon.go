@@ -48,7 +48,7 @@ func Detach(c Cmd) (int, error) {
 // Spawn is Detach, returning the process itself (a Handle): signals sent
 // through it reach that process alone, never another given its pid later.
 func Spawn(c Cmd) (*Handle, error) {
-	cmd := exec.Command(c.Path, c.Args...) //nolint:gosec,noctx // devvm's own binary, or docker; it outlives the run's context
+	cmd := exec.Command(c.Path, c.Args...) //nolint:gosec,noctx // devvm's own binary; it outlives the run's context
 	// Without a file, the null device, as for its input.
 	if c.Out != nil {
 		cmd.Stdout, cmd.Stderr = c.Out, c.Out

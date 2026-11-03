@@ -5,7 +5,7 @@ weight: 4
 
 This page explains how devvm's forwarder forwards a VM's ports to this machine, which ports it never takes, and how it runs on each backend. [Ports and size](../using/ports-size.md#ports) covers choosing a VM's ports with `--ports` and `devvm ports`.
 
-devvm's forwarder forwards ports by the same rules on every backend, and devvm uses no backend's own forwards for a VM's ports. [Lima](lima.md#ports), [smolvm](smolvm.md#ports) and [Docker](docker.md#ports) each explain why, and what devvm sets on the backend instead.
+devvm's forwarder forwards ports by the same rules on every backend, and devvm uses no backend's own forwards for a VM's ports. [Lima](lima.md#ports) and [smolvm](smolvm.md#ports) each explain why, and what devvm sets on the backend instead.
 
 ## What it forwards
 
@@ -34,7 +34,7 @@ flowchart TD
   sshd -- "127.0.0.1:5173,<br>its own loopback" --> server["your server, in the VM"]
 ```
 
-How the forwarder logs in, and when it ends, differs by backend, as the Ports sections of [Lima](lima.md#ports), [smolvm](smolvm.md#ports) and [Docker](docker.md#ports) describe.
+How the forwarder logs in, and when it ends, differs by backend, as the Ports sections of [Lima](lima.md#ports) and [smolvm](smolvm.md#ports) describe.
 
 ## Its process and files
 
@@ -46,7 +46,6 @@ devvm reads every list of ports the same way, whether it comes from `--ports`, t
 | --- | --- | --- | --- |
 | Lima | `devvm _lima-ports` | `vms/<hash>/backend/ports`, which holds `all`, `none` or a list | `vms/<hash>/backend/ports.log` |
 | smolvm | `devvm _smolvm-ports` | `vms/<hash>/backend/record.json` | `vms/<hash>/backend/ports.log` |
-| Docker | `devvm _docker-ports` | `vms/<hash>/backend/record.json` | `vms/<hash>/backend/ports.log` |
 
 The paths in the table are in devvm's data folder, `~/.local/share/devvm`.
 
@@ -61,9 +60,9 @@ A [link between VMs](../using/links.md) carries a client VM's connections to a p
 
 ### The addresses
 
-Each target that a client links to gets an address of its own in `127.77.0.0/16` in that client, starting at `127.77.0.1`. devvm chooses it when the client's first link to that target is made and keeps it for every port of that target, so two targets can share a port. The client's `/etc/hosts` holds a block between `# devvm links begin` and `# devvm links end`, with a line `127.77.x.y NAME NAME.devvm.internal` for each target. The VM's setup replaces the block whole at each launch, and again when links change on a running client. Docker writes a container's `/etc/hosts` again at every start and refuses a rename over it, so on Docker the setup writes the file in place.
+Each target that a client links to gets an address of its own in `127.77.0.0/16` in that client, starting at `127.77.0.1`. devvm chooses it when the client's first link to that target is made and keeps it for every port of that target, so two targets can share a port. The client's `/etc/hosts` holds a block between `# devvm links begin` and `# devvm links end`, with a line `127.77.x.y NAME NAME.devvm.internal` for each target. The VM's setup replaces the block whole at each launch, and again when links change on a running client. The setup writes the file in place, never renaming over it, and only when the block changed.
 
-A link listens at its target's address on the target's own port, never on the client's `127.0.0.1` or `::1`. At each start, the setup sets `net.ipv4.ip_unprivileged_port_start` to `0` where it's `1024`, which is on Lima's Alpine VMs and on smolvm, so a link to a port below 1024 listens on that port too. Lima's Ubuntu and Debian VMs and Docker's containers already have `0`.
+A link listens at its target's address on the target's own port, never on the client's `127.0.0.1` or `::1`. At each start, the setup sets `net.ipv4.ip_unprivileged_port_start` to `0` where it's `1024`, which is on Lima's Alpine VMs and on smolvm, so a link to a port below 1024 listens on that port too. Lima's Ubuntu and Debian VMs already have `0`.
 
 The addresses are internal to devvm. `devvm link` and its JSON never show them, and the forwarder never forwards them ([above](#what-it-forwards)).
 
@@ -89,7 +88,7 @@ flowchart TD
 
 1. The client's sshd carries the connection over the link session to this machine, where ssh connects it to the link's unix socket. The socket is mode 600, in `~/.local/share/devvm/run` (mode 700), and named by a hash of the client, the address and the port, because a socket's path is at most 104 characters.
 2. `devvm _links` checks the link again. The link must still exist, the target must be the VM it was made for, by its ID, the port must be published, the [network policy rule](../using/links.md#links-and-network-policy) must hold, and the target must be running, as its backend says. For a client with network policy, the target's network policy must also be enforced as the target runs, as `devvm ls` shows it, because a target that got network policy while it ran stays outside its proxy until its next start, and one whose self-check failed may reach the internet directly. devvm never starts the target for a connection. The link session asks the target's backend whether the target is running and how its ssh reaches it, and the connections to that target share that answer for one second, so a burst of connections asks the backend once and devvm notices a target that stops within a second. An answer that a connection closing cut short isn't shared, so the other connections ask again. devvm makes every other check again for each connection, including the check of the target's network policy as it runs.
-3. It carries the connection over one ssh connection that it keeps to each target, with the target's key and pinned host key, and the target's sshd connects to `127.0.0.1:PORT` in the target. That connection to a target ends when the target stops, and the next one reads the target's host keys again, because smolvm and Docker VMs get new ones at each start.
+3. It carries the connection over one ssh connection that it keeps to each target, with the target's key and pinned host key, and the target's sshd connects to `127.0.0.1:PORT` in the target. That connection to a target ends when the target stops, and the next one reads the target's host keys again, because smolvm VMs get new ones at each start.
 
 With network policy, an HTTP client that uses the VM's proxy settings sends `db:5432` to the VM's proxy instead, and the proxy connects to the same link socket on this machine ([links through the proxy](network.md#links-through-the-proxy)). Steps 2 and 3 are the same for it, so the link's checks, its cap and its events hold for both ways in.
 

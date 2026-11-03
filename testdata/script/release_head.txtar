@@ -43,13 +43,6 @@ env DEVVM_MINISIGN_PUB=$WORK/keys/other.pub
 stderr '^release: SHA256SUMS.minisig doesn''t verify with packaging/minisign.pub$'
 env DEVVM_MINISIGN_PUB=$WORK/keys/test.pub
 
-# The macOS builds pin the Linux builds of the first pass: the second pass's
-# must be the same, else refused.
-env GR_LINUX_DIFFERS=1
-! exec repo/scripts/release.sh --head
-stderr 'the Linux builds came out different the second time'
-env GR_LINUX_DIFFERS=
-
 # A binary that doesn't say the release's version: refused.
 env GR_VERSION=0.0.0
 ! exec repo/scripts/release.sh --head
@@ -101,38 +94,27 @@ grep '^  url ' repo/dist/devvm.rb
 checksum
   url "https://github.com/w3cj/devvm/releases/download/v1.2.3/devvm-1.2.3.tar.gz"
 -- log.want --
-build --clean --id devvm --snapshot DEVVM_VERSION=1.2.3 GORELEASER_CURRENT_TAG= pins=
-release --clean --skip=publish --snapshot DEVVM_VERSION=1.2.3 GORELEASER_CURRENT_TAG= pins=https://github.com/w3cj/devvm/releases/download/v1.2.3 9d4df1b6a86d9aa77faf886ad10e7bd22323ea804436e09e84c3064ef51369ab 47d502c70742eca43dde84fb28383fac1fad6325378ddca9f7b05441fe159bab
+release --clean --skip=publish --snapshot DEVVM_VERSION=1.2.3 GORELEASER_CURRENT_TAG=
 -- bin/goreleaser --
 #!/bin/bash
-# Logs its call and writes a dist/ like GoReleaser's. Every call: the Linux
-# builds, each a script naming its processor and printing $GR_VERSION, else
-# $DEVVM_VERSION (another line with $GR_LINUX_DIFFERS, on release). release: also the source tarball,
-# the Linux archives, SHA256SUMS and this host's binary, which prints
-# $GR_VERSION, else $DEVVM_VERSION. The log has the Linux builds' pins the
-# macOS builds get.
+# Logs its call and writes a dist/ like GoReleaser's: each system's and
+# processor's build, a script printing $GR_VERSION, else $DEVVM_VERSION, the
+# Linux archives, the source tarball and SHA256SUMS.
 set -eu
-echo "$* DEVVM_VERSION=$DEVVM_VERSION GORELEASER_CURRENT_TAG=${GORELEASER_CURRENT_TAG:-}" \
-  "pins=${DEVVM_RELEASE_URL:-}${DEVVM_LINUX_SHA256_ARM64:+ $DEVVM_LINUX_SHA256_ARM64 $DEVVM_LINUX_SHA256_AMD64}" >> "$WORK/log"
+echo "$* DEVVM_VERSION=$DEVVM_VERSION GORELEASER_CURRENT_TAG=${GORELEASER_CURRENT_TAG:-}" >> "$WORK/log"
 rm -rf dist
-for a in arm64 amd64; do
-  mkdir -p "dist/devvm_linux_$a" "dist/x/devvm-$DEVVM_VERSION-linux-$a"
-  printf '#!/bin/sh\n# %s\necho %s\n' "$a" "${GR_VERSION:-$DEVVM_VERSION}" > "dist/devvm_linux_$a/devvm"
-  [[ $1 != release || -z ${GR_LINUX_DIFFERS:-} ]] || echo "# differs" >> "dist/devvm_linux_$a/devvm"
-  chmod 755 "dist/devvm_linux_$a/devvm"
+for os in darwin linux; do
+  for a in arm64 amd64; do
+    mkdir -p "dist/devvm_${os}_$a"
+    printf '#!/bin/sh\necho %s\n' "${GR_VERSION:-$DEVVM_VERSION}" > "dist/devvm_${os}_$a/devvm"
+    chmod 755 "dist/devvm_${os}_$a/devvm"
+  done
 done
-[[ $1 == release ]] || exit 0
-os=$(uname -s | tr '[:upper:]' '[:lower:]')
-case $(uname -m) in arm64 | aarch64) arch=arm64 ;; *) arch=amd64 ;; esac
 for a in arm64 amd64; do
+  mkdir -p "dist/x/devvm-$DEVVM_VERSION-linux-$a"
   cp "dist/devvm_linux_$a/devvm" "dist/x/devvm-$DEVVM_VERSION-linux-$a/devvm"
   tar -czf "dist/devvm-$DEVVM_VERSION-linux-$a.tar.gz" -C dist/x "devvm-$DEVVM_VERSION-linux-$a"
 done
 rm -rf dist/x
 git archive --prefix="devvm-$DEVVM_VERSION/" HEAD | gzip -n > "dist/devvm-$DEVVM_VERSION.tar.gz"
 (cd dist && { sha256sum "devvm-$DEVVM_VERSION.tar.gz" 2>/dev/null || shasum -a 256 "devvm-$DEVVM_VERSION.tar.gz"; } > SHA256SUMS)
-if [[ $os != linux ]]; then
-  mkdir -p "dist/devvm-darwin_${os}_$arch"
-  printf '#!/bin/sh\necho %s\n' "${GR_VERSION:-$DEVVM_VERSION}" > "dist/devvm-darwin_${os}_$arch/devvm"
-  chmod 755 "dist/devvm-darwin_${os}_$arch/devvm"
-fi

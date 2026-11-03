@@ -16,7 +16,7 @@ The rest of this page sorts the attacks by how much of each one devvm stops:
 | [Narrowed, not closed](#narrowed-not-closed) | devvm closes part of the attack, and the entry says what's still open. |
 | [Left to you](#left-to-you) | devvm doesn't stop the attack, and the entry says what to do instead. |
 
-Some protections hold only with [network policy](network.md) or only on macOS, and each entry names its conditions. Everything here rests on the VM's boundary. On the experimental [Docker](../backends/docker.md) backend a VM is a container, which shares a kernel with other code ([isolation](../backends/docker.md#isolation-a-container-is-not-a-vm)). How devvm does each of these is in the [security model](../internals/security.md).
+Some protections hold only with [network policy](network.md) or only on macOS, and each entry names its conditions. Everything here rests on the VM's boundary. How devvm does each of these is in the [security model](../internals/security.md).
 
 ## Blocked
 
@@ -40,7 +40,7 @@ Some protections hold only with [network policy](network.md) or only on macOS, a
 - **DNS tunnelling.** An attacker can encode data into names and look them up at a DNS server of their own. A VM sends no DNS queries of its own, because names resolve in the proxy on this machine. smolvm leaves [one narrow channel](#network).
 - **Services on this machine and your network.** Code in a VM could attack what developers leave open on `localhost`, such as databases, dev servers, Docker's API and other VMs' ports. It could also attack your router, a NAS, or a cloud provider's metadata service at `169.254.169.254`. The proxy refuses this machine's own addresses and internal ones, such as loopback, private, link-local and CGNAT ranges, unless a rule names the address ([the proxy](../internals/network.md#the-proxy)).
 - **DNS rebinding and address tricks.** A name can resolve to a public address when it's checked and to an internal one when it's dialed, and an internal address can hide in an IPv6 or NAT64 form. The proxy dials only the address it checked, and it sees through NAT64 forms ([the proxy](../internals/network.md#the-proxy)).
-- **Going around the proxy.** Root in a VM can change its routes and firewall, but devvm confines the VM from outside it, so nothing in the VM reaches anything but the proxy ([confinement](../internals/lima.md#confinement)). devvm catches a VM started outside devvm, or one given a second network, with [the self-check](../internals/network.md#the-self-check), and stops it. On smolvm and Docker, network policy is emulated and reviewed.
+- **Going around the proxy.** Root in a VM can change its routes and firewall, but devvm confines the VM from outside it, so nothing in the VM reaches anything but the proxy ([confinement](../internals/lima.md#confinement)). devvm catches a VM started outside devvm, or one given a second network, with [the self-check](../internals/network.md#the-self-check), and stops it. On smolvm, network policy is emulated and reviewed.
 
 ### Spreading beyond the VM
 
@@ -84,7 +84,7 @@ The attacks in this section run the attacker's code, and devvm doesn't stop that
 
 - **Worms that use your GitHub token.** Shai-Hulud (2025) spread through npm install scripts. It collected npm, GitHub and cloud credentials, then used them to publish repos and new versions of packages. A VM holds no npm or cloud credentials, and with network policy its GitHub token is a placeholder. The proxy still puts the real GitHub token into every request to GitHub's hosts, so a worm in the VM can push, make repos and do whatever else the GitHub token's scope allows. Use a fine-grained GitHub token scoped to the repos the VM needs, or bind none ([saving and binding secrets](network.md#saving-and-binding-secrets)).
 - **Minting credentials with a secret.** A VM that can use a secret can use it to make another credential that outlasts it. The proxy refuses GitHub REST calls that add an SSH key, a deploy key, a self-hosted runner or a webhook with `403`, but it can't refuse everything, such as GitHub's GraphQL API, an OAuth app grant or other services. If a VM may have done this, rotate the secret and check the service's keys, access tokens and runners.
-- **Your SSH agent.** While [agent forwarding](../using/ssh.md#agent-forwarding) is on, anything in the VM can use the agent's keys to push or log in to servers, though it can't copy them. The VM has the agent while you're connected, on smolvm the whole time the VM runs, and on Docker only in ssh sessions. `devvm ssh-agent devvm` limits it to the keys you add to [devvm's own agent](../using/ssh.md#devvms-own-agent), and an agent that asks you to approve each use, such as 1Password's or Secretive, narrows it further.
+- **Your SSH agent.** While [agent forwarding](../using/ssh.md#agent-forwarding) is on, anything in the VM can use the agent's keys to push or log in to servers, though it can't copy them. The VM has the agent while you're connected, and on smolvm the whole time the VM runs. `devvm ssh-agent devvm` limits it to the keys you add to [devvm's own agent](../using/ssh.md#devvms-own-agent), and an agent that asks you to approve each use, such as 1Password's or Secretive, narrows it further.
 
 ### Git
 
@@ -129,6 +129,5 @@ The VM can write anything in the project folder, and devvm locks only `.git`. An
 
 - **`.git` on Linux hosts.** Linux has no flag a user can set to lock a file, so VMs on Linux hosts have no `.git` protection, and the VM can change hooks and config that run on the host. Use `--clone` there ([Linux hosts](git-protection.md#linux-hosts)).
 - **Escaping the VM.** A bug in Lima, Apple's Virtualization framework or QEMU, or on smolvm in smolvm or libkrun, could let code out of the VM.
-- **Escaping a container, on Docker.** On Linux a Docker VM shares this machine's kernel, and on macOS it shares Docker Desktop's VM with every other container. Whoever can run `docker` can get into any of them as root. A Docker VM with the docker layer has no network policy ([the docker layer](../backends/docker.md#the-docker-layer)).
 
 Found a way out of a VM? See [SECURITY.md](https://github.com/w3cj/devvm/blob/main/SECURITY.md).

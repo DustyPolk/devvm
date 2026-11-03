@@ -49,7 +49,7 @@ When an image's build fails in its script, or as the build VM starts or stops, d
 devvm limactl shell --start devvm-img-<key>
 ```
 
-`--start` starts the VM first, outside the build's confinement. On smolvm, start and open the machine with smolvm's own commands ([looking inside](../backends/smolvm.md#looking-inside)). On Docker, start the container and open a shell in it with Docker's own commands ([looking inside](../backends/docker.md#looking-inside)).
+`--start` starts the VM first, outside the build's confinement. On smolvm, start and open the machine with smolvm's own commands ([looking inside](../backends/smolvm.md#looking-inside)).
 
 The next build of that image deletes the VM and starts over, and `devvm gc` also deletes it. A build whose create or clone fails deletes the image, once devvm has shown the end of the log, because there's nothing in the image to look at.
 
@@ -81,7 +81,7 @@ When devvm can't read one of its settings or state files, it names the file and 
 
 ## devvm names set-id files
 
-On a Linux host, root in a VM can set the set-user-id and set-group-id bits on files in the project folder, and those bits reach this machine, so such a file runs as its owner for anyone who runs it. devvm names these files at each launch and stop, and it names the ones that root owns apart from the rest. Those come from a Docker VM, where root writes files as this machine's root, so they run as root.
+On a Linux host, root in a VM can set the set-user-id and set-group-id bits on files in the project folder, and those bits reach this machine, so such a file runs as its owner for anyone who runs it. devvm names these files at each launch and stop, and it names the ones that root owns apart from the rest, because those run as root.
 
 - For a file that root owns, don't run it, and delete it with `sudo rm FILE`.
 - For any other file, `chmod u-s,g-s FILE` clears its bits.
@@ -110,7 +110,7 @@ When this machine reaches the internet only through a company proxy and nothing 
 
 When devvm says that `HTTPS_PROXY` or `HTTP_PROXY` names an `https://` or `socks5://` proxy, ask your IT team for the proxy's `http://` address, and set that. A company proxy that inspects TLS also needs its CA, as the next section describes.
 
-Builds behind a company proxy go through a proxy of devvm's, which allows any host. On Docker Desktop, that proxy refuses a name that this machine can't look up, so when a build on Docker Desktop fails to reach a host behind a company proxy, check that this machine resolves the host's name, as `host github.com` shows. If it doesn't, ask your IT team for a DNS server that resolves outside names. Builds on Lima and on a Linux Docker engine send such names on to the company proxy.
+Builds behind a company proxy go through a proxy of devvm's, which allows any host. It sends a name that this machine can't look up on to the company proxy, which resolves it.
 
 ## TLS errors behind a company proxy
 
@@ -141,7 +141,3 @@ When a VM can't mount one of its shared tools, devvm stops the launch with an er
 Run `devvm tools update` in the project folder. It builds the tools that are missing and then opens the shell. When the VM has the newest versions, devvm builds those, and otherwise it builds the newest versions and moves the VM to them. If the launch still stops, the run log says why the VM couldn't mount the image ([a command fails](#a-command-fails)).
 
 A tool that doesn't mount never keeps the VM from booting. The VM mounts the tools it can and boots as usual, and only devvm's launch stops ([the share](../internals/images.md#the-share)).
-
-## Docker on macOS can't get devvm's Linux build
-
-On macOS, the Docker backend runs devvm's Linux build in containers, and a release fetches it the first time a Docker VM or build needs it. When the download fails, check your connection and run devvm again. When the download doesn't match the SHA-256 that devvm has of it, devvm doesn't use it, so reinstall devvm ([requirements](../backends/docker.md#requirements)).

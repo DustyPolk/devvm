@@ -262,7 +262,7 @@ func commandLinesIn(path string, text []byte) []commandLine {
 // script_test.go adds to testscript's.
 func isScriptCmd(line string) bool {
 	word, _, _ := strings.Cut(line, " ")
-	_, ok := scriptCmds(linuxBuild{})[word]
+	_, ok := scriptCmds()[word]
 	return ok
 }
 

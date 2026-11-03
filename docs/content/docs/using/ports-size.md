@@ -70,7 +70,6 @@ devvm size -g                      # cpus=, memory= and disk= lines, empty for t
 - `devvm size -g` ends each line with where its value came from, after a `#`: the path of [`config.toml`](settings.md#configtoml), `devvm: settings.json` for what `devvm size -g` or `devvm setup` saved, or `devvm: default` for the image's. When `config.toml` sets `cpus`, `memory` or `disk`, `devvm size -g` refuses to change that one and names the file, so edit `config.toml` instead ([where a default comes from](settings.md#where-a-default-comes-from)).
 - A stopped VM changes at once. A running VM keeps its size until it next starts, for example with `devvm restart`, and until then `devvm size` shows what the VM has now and says what changes.
 - Disks grow but never shrink, so devvm refuses a disk smaller than the VM's.
-- On the [Docker backend](../backends/docker.md#what-docker-vms-cant-do), a VM's disk has no size of its own. devvm refuses `--disk`, a default disk size doesn't apply, and `devvm size` shows how much the VM holds instead (`cpus=4 memory=8GiB disk_used=1.2GiB`), with a warning past 100 GiB. The number counts what the VM wrote and its Docker volumes, which hold its home, a `--clone` VM's clone and, with the docker layer, its own Docker engine's files, and `devvm space` shows the same for each VM.
 
 ### Choosing new VMs' size
 
@@ -109,7 +108,7 @@ devvm rounds each number up to whole GiB, so building one shared tool with Lima 
 
 The numbers leave a margin over what each step took when devvm's tests measured the free space before, during and after it. Most of a step's space is only needed while it runs. On Lima on macOS, base took about 1 GiB with Ubuntu's cloud image already downloaded, and downloading the image takes up to another 0.9 GiB. base's features add up to 2.5 GiB. A build of all ten shared tools took 6 GiB at its peak and kept 1.5 GiB of images. On macOS, an image built on another and a new VM take only what they write. On Linux hosts, an image and the VM that builds shared tools start as a full copy of their parent's disk, but a new VM's disk holds only its own changes. On smolvm, building base or the docker layer, and making a VM from the docker layer, each took about 2 GiB while it ran but kept less than 0.5 GiB, so its numbers are the same for every step. A VM then grows as you work in it, and its disk never shrinks.
 
-devvm checks the disk that holds the backend's images and VMs. On Lima, that's the disk of devvm's Lima home. On smolvm, it's the disk of devvm's data folder, and on macOS also that of your home folder, where smolvm keeps its machines. Shared tool images come out into devvm's data folder on every backend, so a tools build also checks that folder's disk, which needs 0.5 GiB and 0.25 GiB for each tool, rounded up: 1 GiB for one tool and 3 GiB for all ten. The Docker backend keeps its images and VMs in the engine's own storage, which on Docker Desktop is a disk inside Desktop's VM, so devvm checks only the data folder's disk, for shared tool images. When devvm's data folder is on a small temporary disk, such as a tmpfs `/tmp` on Linux, devvm checks that disk.
+devvm checks the disk that holds the backend's images and VMs. On Lima, that's the disk of devvm's Lima home. On smolvm, it's the disk of devvm's data folder, and on macOS also that of your home folder, where smolvm keeps its machines. Shared tool images come out into devvm's data folder on every backend, so a tools build also checks that folder's disk, which needs 0.5 GiB and 0.25 GiB for each tool, rounded up: 1 GiB for one tool and 3 GiB for all ten. When devvm's data folder is on a small temporary disk, such as a tmpfs `/tmp` on Linux, devvm checks that disk.
 
 `devvm doctor` also warns when that disk has less free space than building base needs, but the warning doesn't make doctor fail. When devvm refuses, see [Not enough free space](troubleshooting.md#not-enough-free-space) for how to make room.
 
@@ -117,7 +116,7 @@ devvm checks the disk that holds the backend's images and VMs. On Lima, that's t
 
 `devvm size --json` and `devvm ports --json` print what the commands show as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. With `-g`, they print the same fields for new VMs. With `--json` they only show, so devvm refuses `--cpus`, `--memory`, `--disk` or a list of ports with it.
 
-`devvm size --json` has `cpus`, `memory_gib` and `disk_gib`, and leaves out what isn't set. For `-g`, that's what new VMs take from the image. A Docker VM has no `disk_gib`, because its disk has no size of its own, and it has `disk_used_gib` instead, to a tenth of a GiB. When the VM's size changes at its next start, `pending` has the `cpus`, `memory_gib` and `disk_gib` that change.
+`devvm size --json` has `cpus`, `memory_gib` and `disk_gib`, and leaves out what isn't set. For `-g`, that's what new VMs take from the image. When the VM's size changes at its next start, `pending` has the `cpus`, `memory_gib` and `disk_gib` that change.
 
 ```json
 {

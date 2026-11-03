@@ -27,7 +27,7 @@ const keyFormat = "devvm image key 1"
 // Inputs is everything an image key hashes apart from the image's name.
 // The files are read when a key is computed.
 type Inputs struct {
-	// Backend is the backend that builds the image: lima, smolvm, docker.
+	// Backend is the backend that builds the image: lima, smolvm.
 	Backend string
 	// BackendFiles are the backend's own files that go into base
 	// (backend.KeyFiles), by name. Nil for none.

@@ -295,155 +295,9 @@ other = "{{.vm}} runs without ssh, so devvm forwards none of its ports."
 [ports_forward_failed]
 other = "Forwarding {{.vm}}'s ports didn't start. Check {{.log}} for the reason."
 
-[docker_host_unsupported]
-description = "host is Go's names for the host's system and processor (windows/amd64)"
-other = "The docker backend doesn't run on {{.host}}. Use macOS or Linux."
-
-[docker_not_installed]
-other = "Docker isn't installed. Install Docker Desktop, or Docker's engine on Linux, with Docker 29.1 or newer."
-
-[docker_down]
-other = "Docker's engine isn't running, or docker can't reach it. Start Docker Desktop, or Docker's service."
-
-[docker_access]
-description = "fix is a command, such as sudo usermod -aG docker alice"
-other = "You can't reach Docker's engine. Run {{.fix}}, then log in again."
-
-[docker_old]
-other = "Docker {{.version}} is too old. Upgrade to Docker 29.1 or newer."
-
-[docker_not_linux]
-description = "os is the containers' system, as Docker names it (windows)"
-other = "Docker's engine runs {{.os}} containers. Switch it to Linux containers."
-
-[docker_arch]
-description = "engine and host are processors, as uname names them (x86_64, aarch64)"
-other = "Docker's engine runs {{.engine}} containers, but this machine is {{.host}}. Use an engine that runs {{.host}} containers."
-
-[docker_engine_desktop]
-other = "Docker's engine is Docker Desktop {{.version}}, which runs every VM in its one Linux VM."
-
-[docker_engine_linux]
-other = "Docker's engine is Docker {{.version}} on this machine, and every VM shares its kernel."
-
-[docker_engine_other]
-description = "name is the engine's own (OrbStack, Ubuntu 26.04 LTS)"
-other = "Docker's engine is Docker {{.version}} ({{.name}}), which is neither Docker Desktop nor this machine's own. devvm can't confine builds on it."
-
-[docker_sysbox]
-other = "Sysbox is installed, so VMs with the docker layer run under it."
-
-[docker_layer_no_sysbox]
-other = "{{.vm}} needs Sysbox on this Docker engine for the docker layer. Install Sysbox, or use --backend lima."
-
-[docker_layer_needs_vm]
-other = "{{.vm}} can't run the docker layer on this Docker engine. Use --backend lima."
-
-[docker_route_localnet]
-other = "The docker layer isn't safe for {{.vm}} on this Docker engine with \"userland-proxy\": false. Turn the userland proxy back on, or use --backend lima."
-
-[docker_bridge_unreadable]
-description = "bridge is a network interface's name (br-0123456789ab)"
-other = "Reading the settings of Docker's bridge {{.bridge}} for {{.vm}} failed."
-
-[docker_layer_runtime]
-description = "backend is a backend's name (docker); runtime is the runtime's name (sysbox)"
-other = "{{.vm}} runs the docker layer under {{.runtime}} on {{.backend}}, so it has no network policy."
-
-[net_docker_layer]
-description = "backend is a backend's name (docker)"
-other = "{{.vm}} can't have network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
-
-[net_off_docker_layer]
-description = "backend is a backend's name (docker)"
-other = "{{.vm}} gets no network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
-
 [net_off_backend]
-description = "backend is a backend's name (docker)"
+description = "backend is a backend's name (smolvm)"
 other = "{{.vm}} gets no network policy, because the {{.backend}} backend can't confine it to its proxy here."
-
-[docker_file_sharing]
-description = "dirs is a space-separated list of host folders"
-other = "Docker Desktop mounts only folders under {{.dirs}}."
-
-[docker_not_shared]
-other = "Docker Desktop doesn't share {{.path}} with containers. Add it in Settings > Resources > File sharing."
-
-[docker_mount_path]
-other = "Docker can't mount {{.path}}, because the path has a comma or a quote."
-
-[docker_ssh_path]
-other = "The ssh config devvm writes can't name {{.path}}, because it has a quote, a backslash, a percent sign or a control character."
-
-[docker_container_foreign]
-other = "Docker has a container named {{.name}} that isn't this devvm's. Remove or rename it with docker."
-
-[docker_volume_foreign]
-other = "Docker has a volume named {{.name}} that isn't this devvm's. Remove it with docker."
-
-[docker_volume_failed]
-other = "Making or deleting Docker's volume {{.name}} failed."
-
-[docker_network_foreign]
-other = "Docker has a network named {{.name}} that isn't this devvm's. Remove it with docker."
-
-[docker_network_failed]
-other = "Making, changing or deleting Docker's network {{.name}} failed."
-
-[docker_network_shared]
-other = "Docker's network {{.name}} has containers devvm didn't put there. Take them off it with docker network disconnect {{.name}} CONTAINER, then try again."
-
-[docker_relay_image_failed]
-other = "Making the empty image that devvm's proxy's relays run in failed."
-
-[docker_linux_build_missing]
-other = "There's no Linux build of devvm at {{.path}}, and only a release of devvm fetches its own. Build devvm for Linux there, as this one was built, or install a release."
-
-[docker_linux_build_fetching]
-other = "Fetching devvm's Linux build, which Docker runs in containers, from {{.url}}."
-
-[docker_linux_build_fetch_failed]
-other = "Fetching devvm's Linux build from {{.url}} failed. Check the connection, then run devvm again."
-
-[docker_linux_build_mismatch]
-other = "The Linux build of devvm from {{.url}} doesn't match the SHA-256 this devvm has, so devvm didn't use it. Reinstall devvm."
-
-[docker_linux_build_other]
-other = "{{.path}} isn't this devvm's Linux build. Reinstall devvm."
-
-[docker_image_rm_failed]
-other = "Deleting Docker's image {{.image}} failed."
-
-[docker_script_failed]
-other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run docker start {{.vm}}, then docker exec -it {{.vm}} bash."
-
-[committing_image]
-other = "committing {{.vm}}"
-
-[docker_commit_failed]
-other = "Committing {{.vm}} failed."
-
-[pulling_image]
-other = "pulling {{.image}}"
-
-[docker_pull_failed]
-other = "Pulling {{.image}} failed."
-
-[docker_update_failed]
-other = "Changing {{.vm}}'s Docker settings failed."
-
-[docker_remaking]
-other = "Making {{.vm}}'s container again for its new mounts or capabilities. Its disk and home stay as they are."
-
-[unpacking_tools]
-other = "unpacking the shared tools"
-
-[docker_tools_failed]
-other = "Unpacking the shared tools into Docker's volume {{.volume}} failed."
-
-[disk_over]
-description = "used and limit are sizes in GiB; backend is a backend's name (docker)"
-other = "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB that VMs get on other backends, and the {{.backend}} backend doesn't limit it. Free some space in the VM."
 
 [disk_low]
 description = "free and need are sizes in GiB; name is the image, shared tools or VM being made"
@@ -455,9 +309,6 @@ other = "the disk holding {{.dir}} has {{.free}} GiB free, less than the {{.need
 
 [disk_free_unknown]
 other = "couldn't read the free space on the disk holding {{.dir}}"
-
-[size_disk_default_unused]
-other = "The default disk size for new VMs doesn't apply to {{.vm}}, because the {{.backend}} backend doesn't size disks."
 
 [creating_from_image]
 other = "creating {{.vm}} from {{.image}}"
@@ -880,22 +731,6 @@ other = "What devvm keeps for {{.count}} VMs their backend no longer has:"
 description = "dir is the VM's project folder"
 other = "  {{.vm}} ({{.backend}}), for {{.dir}}"
 
-[gc_orphan_volume]
-description = "volume is a volume of the backend's (Docker's) that gc --orphans deletes with the VM above it, such as its home folder's"
-other = "    volume {{.volume}}"
-
-[gc_orphan_network]
-description = "network is a network of the backend's (Docker's) that gc --orphans deletes with the VM above it"
-other = "    network {{.network}}"
-
-[gc_orphan_container]
-description = "container is a container of the backend's besides the VM, such as Docker's relay, that gc --orphans deletes with the VM above it"
-other = "    container {{.container}}"
-
-[gc_orphan_image]
-description = "image is the image the VM above it last committed its changes to, which gc --orphans deletes with it"
-other = "    image {{.image}}"
-
 [forgot_orphan]
 other = "deleted what devvm kept for {{.vm}}"
 
@@ -923,7 +758,7 @@ other = "{{.backend}} can't list its images, so devvm gc leaves its images, shar
 other = "{{.backend}} didn't answer, so devvm gc --orphans leaves its VMs' state alone."
 
 [gc_orphan_elsewhere]
-other = "{{.vm}} was made in another Lima home, HOME or Docker engine than this run's, so its state stays."
+other = "{{.vm}} was made in another Lima home or HOME than this run's, so its state stays."
 
 [gc_orphan_recent]
 other = "{{.vm}}'s state changed in the last hour, so it stays in case the VM is still being made."
@@ -2133,10 +1968,6 @@ other = "The port forwarder failed: {{.reason}}."
 [link_session_failed]
 description = "reason is an error from the system, in English"
 other = "Carrying the VM's links failed: {{.reason}}."
-
-[docker_connect_failed]
-description = "reason is an error from the system, docker or the flag parser, in English"
-other = "Reaching {{.vm}}'s sshd through Docker failed: {{.reason}}."
 
 [bad_secret_service]
 other = "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'."

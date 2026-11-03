@@ -418,40 +418,20 @@ func TestEntriesWithRealSSH(t *testing.T) {
 	}
 }
 
-// A backend that reaches its VMs through a command of its own (Docker's)
-// gets it as ProxyCommand, in place of none, and no Port; ssh reads it so,
-// whatever a Host * of the user's says. One whose command has a newline
-// gets no entry.
-func TestWriteProxyCommand(t *testing.T) {
+// A running VM whose backend gives no host or no port gets no entry.
+func TestWriteNoAddress(t *testing.T) {
+	t.Parallel()
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
 	made(t, c.Dirs, web)
-	proxy := "'/bin/devvm' '_docker-connect' '-data' '/a b' '" + web + "'"
-	f.Target = backend.SSHTarget{Host: web, User: "u", ProxyCommand: proxy}
-	if err := c.Write(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	got := read(t, c.Dirs.SSHConfig())
-	want := strings.Replace(pinned, "  ProxyCommand none\n", "  ProxyCommand "+proxy+"\n", 1) + "  Hostname " + web + "\n  User u\n"
-	if !strings.HasSuffix(got, want) || strings.Contains(got, "  Port ") || strings.Count(got, "  ProxyCommand ") != 1 {
-		t.Errorf("ssh config:\n%s", got)
-	}
-	if sshPath, err := exec.LookPath("ssh"); err == nil {
-		user := filepath.Join(t.TempDir(), "config")
-		if err := os.WriteFile(user, []byte("Include "+c.Dirs.SSHConfig()+"\nHost *\n  ProxyCommand nc %h %p\n"), 0o600); err != nil {
+	for _, target := range []backend.SSHTarget{{Host: "127.0.0.1", User: "u"}, {Port: 60022, User: "u"}} {
+		f.Target = target
+		if err := c.Write(t.Context()); err != nil {
 			t.Fatal(err)
 		}
-		out, err := exec.CommandContext(t.Context(), sshPath, "-G", "-F", user, "devvm-web").CombinedOutput() //nolint:gosec // the test's own config
-		if err != nil || !slices.Contains(strings.Split(string(out), "\n"), "proxycommand "+proxy) {
-			t.Errorf("ssh -G: %v\n%s", err, out)
+		if got := read(t, c.Dirs.SSHConfig()); got != header {
+			t.Errorf("%+v: %q", target, got)
 		}
-	}
-	f.Target.ProxyCommand = "x\ny"
-	if err := c.Write(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if got := read(t, c.Dirs.SSHConfig()); got != header {
-		t.Errorf("a newline: %q", got)
 	}
 }
 
@@ -487,6 +467,66 @@ func TestHostKey(t *testing.T) {
 	}
 	if got, err := c.HostKey(t.Context(), f, web); err == nil {
 		t.Errorf("unreadable: %q", got)
+	}
+}
+
+// In a terminal, the Include line is added once said yes to, at the top
+// of the user's config, before its Host blocks, and its ~/.ssh made the
+// user's alone; no leaves the file as it was. --ssh-config adds it
+// unasked, and a linked config stays linked, its file written.
+func TestEnsureIncludeAsked(t *testing.T) {
+	t.Parallel()
+	c, _ := testConfig(t)
+	c.Terminal = func() bool { return true }
+	home := t.TempDir()
+	cfg := filepath.Join(home, ".ssh", "config")
+	asked, answer := 0, false
+	c.Confirm = func(msg.M) bool { asked++; return answer }
+	if ok, err := c.EnsureInclude(home); ok || err != nil || asked != 1 {
+		t.Errorf("no: %v, %v, asked %d", ok, err, asked)
+	}
+	if _, err := os.Stat(cfg); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("no wrote the config: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	mine := "Host *\n  ForwardAgent no\n"
+	if err := os.WriteFile(cfg, []byte(mine), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	answer = true
+	if ok, err := c.EnsureInclude(home); !ok || err != nil || asked != 2 {
+		t.Errorf("yes: %v, %v, asked %d", ok, err, asked)
+	}
+	if got := read(t, cfg); got != c.IncludeLine()+"\n"+mine {
+		t.Errorf("~/.ssh/config: %q", got)
+	}
+	if fi, err := os.Stat(filepath.Dir(cfg)); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("~/.ssh: %v, %v", fi, err)
+	}
+
+	home2 := t.TempDir()
+	target := filepath.Join(t.TempDir(), "dotfiles-config")
+	if err := os.WriteFile(target, []byte(mine), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(home2, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home2, ".ssh", "config")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	c.AddInclude, c.Terminal = true, func() bool { return false }
+	if ok, err := c.EnsureInclude(home2); !ok || err != nil || asked != 2 {
+		t.Errorf("--ssh-config: %v, %v, asked %d", ok, err, asked)
+	}
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the link: %v, %v", fi, err)
+	}
+	if got := read(t, target); got != c.IncludeLine()+"\n"+mine {
+		t.Errorf("the linked file: %q", got)
 	}
 }
 

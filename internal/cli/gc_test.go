@@ -58,14 +58,14 @@ func TestDeleteStaleKeepsImagesInUse(t *testing.T) {
 // the backend is named once among those that couldn't be asked.
 func TestWithoutSkipped(t *testing.T) {
 	r := vm.LeftoverReport{
-		Orphans: []vm.Orphan{{Name: "a", Backend: "lima"}, {Name: "b", Backend: "smolvm"}, {Name: "c", Backend: "smolvm"}, {Name: "d", Backend: "docker"}},
-		Unknown: []string{"docker"},
+		Orphans: []vm.Orphan{{Name: "a", Backend: "lima"}, {Name: "b", Backend: "smolvm"}, {Name: "c", Backend: "smolvm"}, {Name: "d", Backend: "fake"}},
+		Unknown: []string{"fake"},
 	}
-	got := withoutSkipped(r, map[string]bool{"smolvm": true, "docker": true})
+	got := withoutSkipped(r, map[string]bool{"smolvm": true, "fake": true})
 	if len(got.Orphans) != 1 || got.Orphans[0].Name != "a" {
 		t.Errorf("orphans %+v, want a alone", got.Orphans)
 	}
-	if !slices.Equal(got.Unknown, []string{"docker", "smolvm"}) {
+	if !slices.Equal(got.Unknown, []string{"fake", "smolvm"}) {
 		t.Errorf("unknown %v", got.Unknown)
 	}
 	if got := withoutSkipped(r, nil); len(got.Orphans) != 4 || len(got.Unknown) != 1 {

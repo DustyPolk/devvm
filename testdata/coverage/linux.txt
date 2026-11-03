@@ -3,7 +3,6 @@
 cmd/devvm 100.0
 internal/backend 95.7
 internal/backend/backendtest 46.3
-internal/backend/docker 81.2
 internal/backend/lima 87.6
 internal/backend/registry 90.5
 internal/backend/smolvm 73.2

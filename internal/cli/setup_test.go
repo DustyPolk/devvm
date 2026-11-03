@@ -212,7 +212,6 @@ func TestSetupAsksForTheBackend(t *testing.T) {
 				t.Fatalf("asked %v, want %v", a != nil, tc.ask)
 			} else if a != nil {
 				want := []ui.Choice{
-					{Name: "docker", Desc: "backend_experimental", On: tc.start == "docker"},
 					{Name: "lima", On: tc.start == "lima"},
 					{Name: "smolvm", Desc: "backend_experimental", On: tc.start == "smolvm"},
 				}
@@ -236,7 +235,7 @@ func TestSetupConfigSets(t *testing.T) {
 	s, d, shown, sized := setupSandbox(t, true, "smolvm")
 	u, said, _ := testUI()
 	s.ui = u
-	config := "backend = \"docker\"\nnetwork = \"on\"\nfeatures = []\nagents = [\"codex\"]\n[size]\ncpus = 2\n"
+	config := "backend = \"lima\"\nnetwork = \"on\"\nfeatures = []\nagents = [\"codex\"]\n[size]\ncpus = 2\n"
 	if err := os.MkdirAll(d.Config, 0o700); err != nil {
 		t.Fatal(err)
 	}

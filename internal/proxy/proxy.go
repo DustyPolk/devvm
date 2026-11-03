@@ -22,8 +22,6 @@
 //
 // On a backend that asks the host about each connection a VM opens (smolvm), the proxy is also
 // that decider (-decider, decider.go): it takes over connections to itself and refuses the rest.
-// On one whose VMs can't reach the host's loopback (Docker), it also listens on a unix socket
-// (-listen-unix), which a relay on the VM's own network reaches (-relay, relay.go).
 //
 // It exits when the VM's hostagent does (-lifeline). Standard library only, and internal/daemon,
 // which is too: it prints nothing itself, but writes to the streams devvm hands Main.
@@ -78,9 +76,6 @@ var (
 func newFlags() *flag.FlagSet {
 	fs := flag.NewFlagSet("devvm _proxy", flag.ContinueOnError)
 	fs.StringVar(&listen, "listen", "127.0.0.1:0", "address to listen on")
-	fs.StringVar(&listenUnix, "listen-unix", "", "also listen on this unix socket, only the user's (relay.go)")
-	fs.StringVar(&relayAddr, "relay", "", "relay mode: listen on this address and pass each connection, unread, to -relay-to (relay.go)")
-	fs.StringVar(&relayTo, "relay-to", "", "with -relay: the proxy's unix socket")
 	fs.StringVar(&vmName, "vm", "vm", "VM name, for logs")
 	fs.StringVar(&builtins, "builtin-policy", "", "built-in policies, comma-separated paths in devvm's own files (IO.FS): read once, ahead of -policy's; a missing one refuses to start")
 	fs.StringVar(&policies, "policy", "", "the user's policy files, comma-separated, re-read on change (missing files have no rules)")
@@ -739,9 +734,6 @@ func Main(args []string, std IO) error {
 	if initCADir != "" {
 		return initCA(initCADir)
 	}
-	if relayAddr != "" {
-		return runRelay(relayAddr, relayTo)
-	}
 	if caFile != "" {
 		if err := loadCA(caFile, caKeyF); err != nil {
 			return err
@@ -803,18 +795,6 @@ func Main(args []string, std IO) error {
 		return err
 	}
 	srv := &http.Server{Handler: http.HandlerFunc(handler), ReadHeaderTimeout: 30 * time.Second}
-	if listenUnix != "" {
-		uln, err := listenOn(listenUnix)
-		if err != nil {
-			_ = ln.Close()
-			if h != nil {
-				_ = h.Close()
-			}
-			return err
-		}
-		defer func() { _ = uln.Close() }()
-		go func() { _ = srv.Serve(uln) }()
-	}
 	if h != nil {
 		defer func() { _ = h.Close() }()
 		logf("deciding on %s for %s, taking over %s", h.Addr(), vmName, to)

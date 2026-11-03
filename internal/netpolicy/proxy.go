@@ -352,14 +352,6 @@ func (p *Proxy) start(st *state.VM, b backend.Backend, conf backend.Confinement,
 		}
 		decider = []string{"-decider", conf.Decider, "-decider-to", u.Host, "-decider-token-file", tok}
 	}
-	// A VM that reaches the proxy through a socket of the host's: in a
-	// folder of its own, the user's alone.
-	if sock := backend.ProxySocketOf(b, vm); sock != "" {
-		if err := state.PrivateDir(filepath.Dir(sock)); err != nil {
-			return err
-		}
-		decider = append(decider, "-listen-unix", sock)
-	}
 	files := p.Dirs.VM(vm)
 	logPath := files.ProxyLog()
 	out, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own log
@@ -431,8 +423,8 @@ func (p *Proxy) freePort(ctx context.Context) (int, error) {
 
 // UsedPorts returns the ssh, proxy, decider and desktop ports VMs have, and the
 // ports they list to forward, but self's (a VM's name, or ""): what a new
-// one avoids, and what a VM's port forwarder never takes (smolvm's,
-// Docker's), self being that VM.
+// one avoids, and what a VM's port forwarder never takes (smolvm's), self
+// being that VM.
 func UsedPorts(d paths.Dirs, self string) (map[int]bool, error) {
 	names, err := state.VMNames(d)
 	if err != nil {

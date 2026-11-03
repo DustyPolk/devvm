@@ -15,7 +15,7 @@ devvm setup --features omb,fzf,cli-tools,desktop
 
 The new choice rebuilds `base`, and the images built on it, the next time they're used. A VM keeps the image it was made from, so a VM made before you chose the desktop has none, and `devvm desktop` says so. To give it one, save any work the VM holds outside the project folder, then run `devvm rm` and `devvm` to make a new VM.
 
-The desktop works on every backend, Lima, smolvm and Docker, and on a base made `--from` a Debian, Ubuntu or Alpine image.
+The desktop works on every backend, Lima and smolvm, and on a base made `--from` a Debian, Ubuntu or Alpine image.
 
 ## Opening it
 

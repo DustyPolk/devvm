@@ -175,8 +175,8 @@ func (s *Smolvm) NameMax() int { return 0 }
 // script is one of devvm's scripts for smolvm: smolvm/<name> in Assets.
 func (s *Smolvm) script(name string) ([]byte, error) { return fs.ReadFile(s.Assets, "smolvm/"+name) }
 
-// containerScript is one of the scripts smolvm shares with Docker, for
-// images run as containers: container/<name> in Assets.
+// containerScript is one of smolvm's scripts for images run as
+// containers: container/<name> in Assets.
 func (s *Smolvm) containerScript(name string) ([]byte, error) {
 	return fs.ReadFile(s.Assets, "container/"+name)
 }

@@ -11,7 +11,6 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/docker"
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/backend/smolvm"
 	"github.com/w3cj/devvm/internal/backend/vmssh"
@@ -42,16 +41,15 @@ func (quietUI) StdinIsTerminal() bool                                     { retu
 func TestOverrides(t *testing.T) {
 	for k, v := range map[string]string{
 		"DEVVM_KVM": "/x/kvm", "DEVVM_UBUNTU_URL": "file:///x/ubuntu", "DEVVM_UNREVIEWED": "smolvm:egress-proxy",
-		"DEVVM_DOCKER_KIND": "linux", platform.TestCPUs: "1234",
+		platform.TestCPUs: "1234",
 	} {
 		t.Setenv(k, v)
 	}
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
 	o := Overrides{
 		Host:       platform.Overrides{CPUs: "1234", MemoryGiB: "4321", FreeGiB: "0"},
-		Unreviewed: "smolvm:egress-proxy", DockerKind: "linux", DockerProcSys: "/x/sys",
-		LinuxBuildURL: "http://127.0.0.1/devvm.tar.gz", LinuxBuildSHA256: "ab",
-		KVM: "/x/kvm", UbuntuURL: "file:///x/ubuntu/",
+		Unreviewed: "smolvm:egress-proxy",
+		KVM:        "/x/kvm", UbuntuURL: "file:///x/ubuntu/",
 	}
 	for _, c := range []struct {
 		o    Overrides
@@ -63,15 +61,11 @@ func TestOverrides(t *testing.T) {
 		}
 		lb, _ := r.Lookup("lima")
 		sb, _ := r.Lookup("smolvm")
-		db, _ := r.Lookup("docker")
-		l, s, dk := lb.(*lima.Lima), sb.(*smolvm.Smolvm), db.(*docker.Docker)
+		l, s := lb.(*lima.Lima), sb.(*smolvm.Smolvm)
 		mem, _ := r.Host.Memory()
 		free, _ := r.Host.FreeSpace(t.TempDir())
 		for what, got := range map[string]bool{
 			"let through":           r.Unreviewed["smolvm:egress-proxy"],
-			"docker's kind":         dk.Kind == "linux",
-			"docker's /proc/sys":    dk.ProcSys == "/x/sys",
-			"docker's Linux build":  dk.LinuxURL == o.LinuxBuildURL && dk.LinuxSHA256 == "ab" && dk.LinuxOS == "darwin",
 			"lima's KVM":            l.KVM == "/x/kvm",
 			"smolvm's KVM":          s.KVM == "/x/kvm",
 			"lima's Ubuntu":         l.UbuntuURL == "file:///x/ubuntu",
@@ -117,6 +111,16 @@ func TestLimaIsTheDefault(t *testing.T) {
 	}
 }
 
+// smolvm is experimental, and Lima and a name that isn't a backend aren't.
+func TestExperimental(t *testing.T) {
+	t.Parallel()
+	for name, want := range map[string]bool{"smolvm": true, "lima": false, "nope": false, "": false} {
+		if got := Experimental(name); got != want {
+			t.Errorf("Experimental(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
 // A new VM's backend is settings.json's, then config.toml's over it, and
 // one that isn't registered names the file that set it.
 func TestDefaultBackendFiles(t *testing.T) {
@@ -137,8 +141,8 @@ func TestDefaultBackendFiles(t *testing.T) {
 		t.Errorf("settings.json's: %+v, %v", c, err)
 	}
 	for _, tc := range []struct{ file, want string }{
-		{"backend = \"docker\"\n", "docker"},
-		{"backend = \"qemu\"\n", "backend_unknown_default backends=docker, lima, smolvm file=" + d.ConfigFile() + " name=qemu"},
+		{"backend = \"lima\"\n", "lima"},
+		{"backend = \"qemu\"\n", "backend_unknown_default backends=lima, smolvm file=" + d.ConfigFile() + " name=qemu"},
 	} {
 		if err := os.WriteFile(d.ConfigFile(), []byte(tc.file), 0o600); err != nil {
 			t.Fatal(err)
@@ -156,14 +160,14 @@ func TestDefaultBackendFiles(t *testing.T) {
 
 // homeMax is the longest home folder whose data folder (the default,
 // ~/.local/share/devvm) keeps every socket devvm makes within the limit:
-// a VM's folder holds none, and those in the run folder and Docker's are
-// named by hashes, so no VM's name lengthens them.
+// a VM's folder holds none, and those in the run folder are named by
+// hashes, so no VM's name lengthens them.
 const homeMax = 35
 
 // Every socket devvm makes for a VM, the longest VM name's included, fits
 // a socket's path under the longest home: devvm's agent, the port
-// forwarders' control sockets (ssh adds 17 to those), a link session's
-// sockets and control sockets, and Docker's proxy socket.
+// forwarders' control sockets (ssh adds 17 to those), and a link session's
+// sockets and control sockets.
 func TestSocketsFit(t *testing.T) {
 	home := "/" + strings.Repeat("h", homeMax-1)
 	t.Setenv("HOME", home)
@@ -182,11 +186,10 @@ func TestSocketsFit(t *testing.T) {
 	target := "devvm-" + strings.Repeat("b", 20) + "-0123456789abce"
 	lb, _ := r.Lookup("lima")
 	sb, _ := r.Lookup("smolvm")
-	db, _ := r.Lookup("docker")
-	l, s, dk := lb.(*lima.Lima), sb.(*smolvm.Smolvm), db.(*docker.Docker)
+	l, s := lb.(*lima.Lima), sb.(*smolvm.Smolvm)
 	links := vmssh.Links{VM: vm, Dir: d.Run()}
 	ctls := []string{
-		l.Forwards.Control(vm), s.Forwards.Control(vm), dk.Forwards.Control(vm),
+		l.Forwards.Control(vm), s.Forwards.Control(vm),
 		links.Control("", ""), links.Control(target, "12345 2026-11-03T00:00:00.000000000Z"),
 	}
 	for _, p := range ctls {
@@ -194,7 +197,7 @@ func TestSocketsFit(t *testing.T) {
 			t.Errorf("%s: %d characters, over %d", p, len(p), vmssh.ControlMax)
 		}
 	}
-	socks := []string{d.AgentSock(), links.Socket(vmssh.Link{Addr: netip.MustParseAddr("127.77.255.255"), Port: 65535}), dk.ProxySocket(vm)}
+	socks := []string{d.AgentSock(), links.Socket(vmssh.Link{Addr: netip.MustParseAddr("127.77.255.255"), Port: 65535})}
 	for _, p := range socks {
 		if len(p) >= paths.SocketMax {
 			t.Errorf("%s: %d characters, %d at most", p, len(p), paths.SocketMax-1)

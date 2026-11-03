@@ -13,7 +13,6 @@ import (
 	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/project"
@@ -112,18 +111,16 @@ func useParent(e *Env, p *found) bool {
 // newVM is what create checked and chose for a new VM before building
 // anything.
 type newVM struct {
-	img   string   // its image: base and its layers
-	tools []string // its shared tools
-	size  Size
-	ports string
-	net   bool
-	agent string // sshagent.On or Off
-	mode  string // ModeClone, or ""
-	// dockerLayer is how it runs the docker layer (KeyDockerLayer).
-	dockerLayer string
-	spec        backend.VMSpec
-	conf        backend.Confinement
-	builder     *build.Env
+	img     string   // its image: base and its layers
+	tools   []string // its shared tools
+	size    Size
+	ports   string
+	net     bool
+	agent   string // sshagent.On or Off
+	mode    string // ModeClone, or ""
+	spec    backend.VMSpec
+	conf    backend.Confinement
+	builder *build.Env
 }
 
 // creation makes a new VM: its plan, its build and its cleanup.
@@ -304,12 +301,6 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 		return newVM{}, err
 	}
 	n := newVM{size: size.Or(defaultSize(def)), ports: ports, agent: sshagent.Off, conf: backend.Confinement{Net: backend.NetDirect}}
-	// A default disk size on a backend that sizes no disks (Docker's) is
-	// left out, said; --disk is refused below.
-	if size.Disk == "" && n.size.Disk != "" && !e.Registry.Allowed(b, backend.FeatureDisk) {
-		e.Warn(msg.SizeDiskDefaultUnused(b.Name(), vm))
-		n.size.Disk = ""
-	}
 	host, err := e.Host()
 	if err != nil {
 		return newVM{}, err
@@ -348,13 +339,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 		AgentForwarding: o.SSHAgent, Size: n.size.Backend(), Ports: forward,
 		Env: trust.GuestEnv(nil),
 	}
-	layerNeeds, err := e.dockerLayer(b, &n)
-	if err != nil {
-		return newVM{}, err
-	}
-	if n.net, err = e.chooseNet(o, n.dockerLayer != "", b, vm, def.Network.Value); err != nil {
-		return newVM{}, err
-	}
+	n.net = e.chooseNet(o, b, vm, def.Network.Value)
 	if o.SSHAgent {
 		n.agent = sshagent.On
 	}
@@ -365,7 +350,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if n.net {
 		n.conf.Net = backend.NetProxy
 	}
-	need := slices.Concat(n.spec.Features(), n.conf.Features(), layerNeeds)
+	need := slices.Concat(n.spec.Features(), n.conf.Features(), backend.ImageFeatures(n.img))
 	if o.Clone {
 		// Its clone is copied in and fetched over ssh.
 		need = append(need, backend.FeatureSSH)
@@ -373,7 +358,6 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err := e.Registry.Require(b, vm, need...); err != nil {
 		return newVM{}, err
 	}
-	dockerLayers{e.Env}.say(b, n.dockerLayer, vm)
 	// Ready for devvm ssh-agent to change later, where it may be changed
 	// (an emulation once it's reviewed); otherwise fixed when it's made.
 	n.spec.AgentToggle = e.Registry.Require(b, vm, backend.FeatureAgentToggle) == nil
@@ -388,46 +372,23 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 // chooseNet returns whether a new VM gets network policy: the flags', else
 // the default's (config.toml's, else devvm network -g's or devvm setup's),
 // else asked for, on by default. A default of off makes the VM without
-// it, unsaid. A VM that can't have it is made without it, unasked and
-// said: root in a VM made for the docker layer (dockerVM), named or from
-// a devcontainer.json's docker-in-docker, can change its own network, and
-// b may not confine a VM to its proxy (egress-proxy). --network-policy on
-// such a VM is refused, here or by Require, never dropped.
-func (e creation) chooseNet(o *Options, dockerVM bool, b backend.Backend, vm, saved string) (bool, error) {
+// it, unsaid. A VM whose backend b may not confine it to its proxy
+// (egress-proxy) is made without it, unasked and said; --network-policy
+// on such a VM is refused by Require, never dropped.
+func (e creation) chooseNet(o *Options, b backend.Backend, vm, saved string) bool {
 	if o.NetworkPolicy || o.NoNetworkPolicy {
 		saved = settings.NetworkAsk
 	}
 	switch {
 	case o.NoNetworkPolicy, saved == settings.NetworkOff:
-		return false, nil
-	case dockerVM && o.NetworkPolicy:
-		return false, msg.NetDockerLayer(b.Name(), vm)
-	case dockerVM:
-		e.Warn(msg.NetOffDockerLayer(b.Name(), vm))
-		return false, nil
+		return false
 	case !o.NetworkPolicy && !e.Registry.Allowed(b, backend.FeatureEgressProxy):
 		e.Warn(msg.NetOffBackend(b.Name(), vm))
-		return false, nil
+		return false
 	case o.NetworkPolicy:
-		return true, nil
+		return true
 	}
-	return e.Proxy.Choose(saved == settings.NetworkOn, false, vm), nil
-}
-
-// dockerLayer chooses the runtime a new VM runs the docker layer under,
-// when its image has it, on a backend that makes VMs for it
-// (dockerLayers.choice), and returns the features its layers need.
-func (e creation) dockerLayer(b backend.Backend, n *newVM) ([]backend.Feature, error) {
-	dl, made := b.(backend.DockerLayerVM)
-	if !made || !image.HasLayer(n.img, image.DockerLayer) {
-		return backend.ImageFeatures(n.img), nil
-	}
-	mode, need, err := dockerLayers{e.Env}.choice(dl, n.spec.Name, n.img)
-	if err != nil {
-		return nil, err
-	}
-	n.spec.DockerLayer, n.dockerLayer = true, mode
-	return need, nil
+	return e.Proxy.Choose(saved == settings.NetworkOn, false, vm)
 }
 
 // record writes a new VM's choices into its state, with the libc and
@@ -440,7 +401,6 @@ func (n newVM) record(st *state.VM, libc string, files []string) error {
 	for _, kv := range [][2]string{
 		{KeyNet, netState},
 		{KeyMode, n.mode},
-		{KeyDockerLayer, n.dockerLayer},
 		{sshagent.Key, n.agent},
 		{KeyLibc, libc},
 		{KeyTools, strings.Join(files, " ")},

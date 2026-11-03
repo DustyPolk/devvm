@@ -48,11 +48,6 @@ func (v VM) Profile() string { return filepath.Join(v.Run(), "sandbox.sb") }
 // confined.
 func (v VM) Started() string { return filepath.Join(v.Run(), "started") }
 
-// Lifeline is the pid file of the process whose end means the VM
-// stopped, where its backend has no such process of its own (Docker's
-// docker container wait).
-func (v VM) Lifeline() string { return filepath.Join(v.Run(), "lifeline.pid") }
-
 // Secrets is the bindings of the VM's secrets that its proxy reads.
 func (v VM) Secrets() string { return filepath.Join(v.Run(), "secrets.json") }
 
@@ -76,7 +71,7 @@ func (v VM) ProxyLog() string { return filepath.Join(v.Logs(), "proxy.log") }
 func (v VM) LinksLog() string { return filepath.Join(v.Logs(), "links.log") }
 
 // Record is what the VM's backend set on it, which the backend itself
-// doesn't show (smolvm's, Docker's).
+// doesn't show (smolvm's).
 func (v VM) Record() string { return filepath.Join(v.Backend(), "record.json") }
 
 // Key is the ssh key devvm logs in to the VM with, on a backend that

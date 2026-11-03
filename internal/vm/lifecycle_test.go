@@ -265,15 +265,6 @@ func TestExportStartsAsLaunch(t *testing.T) {
 		t.Errorf("gets out directly: %v, running %v", msg.NamesOf(err), running())
 	}
 	direct = false
-
-	if err := st.Set(KeyDockerLayer, "sysbox"); err != nil {
-		t.Fatal(err)
-	}
-	stop()
-	before := len(f.Calls())
-	if err := lc.Export(t.Context(), ""); msg.NamesOf(err) != "net_docker_layer backend=fake vm="+vm || slices.Contains(f.Methods()[before:], "Start") {
-		t.Errorf("docker layer: %v, calls %q", msg.NamesOf(err), f.Methods()[before:])
-	}
 }
 
 // adopt gives the folder the VM made for an earlier one at its path,

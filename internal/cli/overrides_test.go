@@ -26,8 +26,8 @@ func TestReleaseReadsNoOverrides(t *testing.T) {
 		t.Errorf("readOverrides = %+v", o)
 	}
 	for _, k := range []string{
-		"DEVVM_HOST_MISE", "DEVVM_KVM", "DEVVM_UBUNTU_URL", "DEVVM_UNREVIEWED", "DEVVM_DOCKER_KIND", "DEVVM_DOCKER_PROC_SYS",
-		"DEVVM_LINUX_BUILD_URL", "DEVVM_LINUX_BUILD_SHA256", platform.TestCPUs, platform.TestMemoryGiB, platform.TestFreeGiB, platform.TestListWait,
+		"DEVVM_HOST_MISE", "DEVVM_KVM", "DEVVM_UBUNTU_URL", "DEVVM_UNREVIEWED",
+		platform.TestCPUs, platform.TestMemoryGiB, platform.TestFreeGiB, platform.TestListWait,
 	} {
 		t.Setenv(k, "1")
 	}

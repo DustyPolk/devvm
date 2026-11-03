@@ -5,7 +5,7 @@
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
 # Tools: apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer
-#   apt: base's package snapshot, Ubuntu's container image smolvm's and Docker's base start from, and
+#   apt: base's package snapshot, Ubuntu's container image smolvm's base starts from, and
 #        Ubuntu's cloud image Lima's base starts from
 #   mise: base's, and the one devvm runs on the host to resolve the shared tools' versions
 # The shared tools themselves (node, claude, ...) aren't pinned: devvm resolves them per user.
@@ -153,8 +153,8 @@ cloud_sum() {
   awk -v f="ubuntu-26.04-server-cloudimg-$1.img" '$2 == f || $2 == "*" f { print $1; exit }' "$tmp/SHA256SUMS"
 }
 
-# The package snapshot base builds from, today's (UTC); Ubuntu's container image smolvm's and Docker's
-# base start from, by digest; and Ubuntu's cloud image Lima's base starts from, by dated release and
+# The package snapshot base builds from, today's (UTC); Ubuntu's container image smolvm's base starts
+# from, by digest; and Ubuntu's cloud image Lima's base starts from, by dated release and
 # SHA-256. They move together, and only to images made before the snapshot: apt can't install what
 # depends on the exact version of a package newer than the snapshot's.
 bump_apt() {

@@ -62,7 +62,7 @@ exec devvm setup --backend lima --features fzf
 stdout '^==> default_backend backend=lima$'
 stdout '^==> base_features features=fzf$'
 ! exec devvm setup --backend nope
-stderr '^devvm: backend_unknown backends=docker, lima, smolvm name=nope$'
+stderr '^devvm: backend_unknown backends=lima, smolvm name=nope$'
 grep '^  "backend": "lima",$' $SAVED
 
 # New VMs' size is devvm size -g's, and without a terminal nothing asks
@@ -134,7 +134,7 @@ exec devvm setup
 stdout '^==> setup_in_config file=\S*/config/devvm/config\.toml key=features$'
 ! stdout base_features
 exec devvm doctor --json
-stdout '"backend": "docker",\n  "backend_source": "config.toml",'
+stdout '"backend": "smolvm",\n  "backend_source": "config.toml",'
 rm $CFG/config.toml
 
 # An unreadable choice stays for you to fix.
@@ -144,7 +144,7 @@ stderr '^devvm: setup_failed reason=\S*/data/devvm/settings\.json: features: not
 cmp $SAVED bad.json
 
 -- config.toml --
-backend = "docker"
+backend = "smolvm"
 features = ["fzf"]
 agents = ["opencode"]
 -- bad.json --

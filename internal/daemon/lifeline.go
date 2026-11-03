@@ -9,10 +9,9 @@ import (
 )
 
 // A lifeline is the file of the process that runs a VM (Lima's hostagent's
-// ha.pid, smolvm's agent.pid, the docker container wait of a Docker VM's
-// start), its pid on the first line, which each start writes anew. A
-// process that follows it runs while the file holds what it held when the
-// process first saw it running, and that process runs.
+// ha.pid, smolvm's agent.pid), its pid on the first line, which each start
+// writes anew. A process that follows it runs while the file holds what it
+// held when the process first saw it running, and that process runs.
 
 // ReadLifeline returns what a lifeline holds, "" when it's gone.
 func ReadLifeline(path string) (string, error) {

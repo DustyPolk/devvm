@@ -6,8 +6,7 @@ import "context"
 // put there: what devvm gc --caches frees.
 type CacheEntry struct {
 	What string // what it is, as gc lists it
-	Path string // the file or folder, "" for one in the backend's engine
-	Name string // its name in the engine (a Docker volume's)
+	Path string // the file or folder
 	Size int64
 }
 

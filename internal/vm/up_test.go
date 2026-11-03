@@ -470,30 +470,22 @@ func TestUpRequiresDockerLayer(t *testing.T) {
 	}
 }
 
-// A default disk size doesn't apply on a backend that sizes no disks:
-// left out, said; --disk is refused.
-func TestUpDefaultDiskUnused(t *testing.T) {
+// A disk size, the default's or --disk's, needs disk of the backend,
+// before anything is built.
+func TestUpDiskNeedsDisk(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureDisk)
 	e, f, _ := upEnv(t, caps)
 	saveSize(t, e.Dirs, Size{CPUs: "2", Disk: "150"})
-	var warned msg.Recorder
-	e.Warn = warned.Add
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"}); err != nil {
-		t.Fatal(msg.NamesOf(err))
+	err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"})
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=disk ") {
+		t.Errorf("the default's: %v", got)
 	}
-	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
-	if spec.Size != (backend.Size{CPUs: 2}) {
-		t.Errorf("size = %+v", spec.Size)
-	}
-	if w := warned.Names(); len(w) != 1 || !strings.HasPrefix(w[0], "size_disk_default_unused backend=fake vm=devvm-web-") {
-		t.Errorf("warned %q", w)
-	}
-	if st, _ := state.ReadVM(e.Dirs, spec.Name); st.Get(KeyDisk) != "" || st.Get(KeyCPUs) != "2" {
-		t.Errorf("state disk=%q cpus=%q", st.Get(KeyDisk), st.Get(KeyCPUs))
+	if ms := f.Methods(); slices.Contains(ms, "BuildImage") || slices.Contains(ms, "CreateVM") {
+		t.Errorf("calls = %q", ms)
 	}
 	e2, _, _ := upEnv(t, caps)
-	err := (Launch{e2}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none", Size: Size{Disk: "150"}})
+	err = (Launch{e2}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none", Size: Size{Disk: "150"}})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=disk ") {
 		t.Errorf("--disk: %v", got)
 	}

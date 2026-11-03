@@ -1,7 +1,6 @@
 # gc --backend: one backend's images, current ones too, and its unused
 # tool images, and nothing else; plain gc acts on every backend whatever
 # the default backend file says. Never a VM.
-env DEVVM_DOCKER_KIND=linux
 env SHARE=$XDG_DATA_HOME/devvm/tools
 env PACKS=$XDG_DATA_HOME/devvm/smolvm/images
 env PIN=ubuntu:26.04@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -11,7 +10,6 @@ mkdir $XDG_CONFIG_HOME/devvm/layers
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 exec devvm build foo
 exec devvm --backend smolvm --from $PIN build base
-exec devvm --backend docker --from $PIN build base
 exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
 
 # Unused tool images: one recorded as smolvm's, one as Lima's, one
@@ -33,8 +31,8 @@ stdout '^gc_tools count=3 '
 ! stdout 'image=base'
 exists $PACKS
 
-# Again for smolvm alone: its base, current, and nothing of Lima's or
-# Docker's; a smolvm tool image would go (none is left).
+# Again for smolvm alone: its base, current, and nothing of Lima's; a
+# smolvm tool image would go (none is left).
 exec sh -c 'cd "$SHARE" && echo x > go-1.1.0-0123456789ab.erofs && echo x > go-1.2.0-0123456789ab.erofs'
 json_set $SHARE/go-1.1.0-0123456789ab.erofs.json sha256=x libc=gnu format=plain-0123456789ab backend=smolvm built=2020-01-01T00:00:00Z
 json_set $SHARE/go-1.2.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
@@ -49,17 +47,10 @@ stdout '^ *0$'
 exists $SHARE/go-1.2.0-0123456789ab.erofs
 ! exists $SHARE/go-1.1.0-0123456789ab.erofs
 stub_calls
-! stdout '^limactl delete|^docker image rm|^docker rmi'
-
-# Docker alone: its base goes; Lima's base stays.
-stub_reset
-exec devvm gc --backend docker --force
-stdout -count=1 '^gc_image image=base '
-stub_calls
 ! stdout '^limactl delete'
 exec devvm images
 stdout '^base +ubuntu 26\.04 .* +current +\S+ +lima$'
-! stdout ' smolvm$| docker$'
+! stdout ' smolvm$'
 
 # An unknown backend is refused.
 ! exec devvm --backend nope gc

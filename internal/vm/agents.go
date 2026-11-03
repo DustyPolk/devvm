@@ -85,7 +85,7 @@ func readDir(dir string) []os.DirEntry {
 // AgentMounts returns the host folders a VM with these shared tools
 // mounts: its agents' folders that exist under the home folder. One with a
 // comma in its path is left out on every backend, with a warning: Lima
-// splits mount options on commas, and Docker reads mounts as CSV.
+// splits mount options on commas.
 func (e Launch) AgentMounts(tools []string) []string {
 	var dirs []string
 	for _, a := range image.AgentsOf(tools) {

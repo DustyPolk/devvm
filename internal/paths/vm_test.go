@@ -21,7 +21,6 @@ func TestVMFiles(t *testing.T) {
 		v.Profile():                   "run/sandbox.sb",
 		v.BuildProxy():                "run/build-proxy",
 		v.Started():                   "run/started",
-		v.Lifeline():                  "run/lifeline.pid",
 		v.Secrets():                   "run/secrets.json",
 		v.SecretsPolicy():             "run/secrets.policy",
 		v.LinksPID():                  "run/links.pid",
@@ -39,8 +38,8 @@ func TestVMFiles(t *testing.T) {
 		v.Forwarder(".lock"):          "backend/ports.lock",
 		filepath.Join(v.Dir, "other"): "other",
 	}
-	if len(want) != 27 {
-		t.Fatalf("%d paths, want 27: two are the same", len(want))
+	if len(want) != 26 {
+		t.Fatalf("%d paths, want 26: two are the same", len(want))
 	}
 	for got, rel := range want {
 		if got != filepath.Join("/d/vms/0123456789abcd", rel) {

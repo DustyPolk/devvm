@@ -42,27 +42,21 @@ exec devvm rebuild foo
 stdout -count=1 '^==> deleted_old_image image=foo key=[0-9a-f]{12}$'
 
 # A rebuild changes the images of its own backend and base alone, the
-# base as given: Lima's and smolvm's bases stay current, and so are kept,
-# after Docker's is rebuilt, and so does a base from ubuntu-26.04, whose
+# base as given: Lima's base stays current, and so is kept, after
+# smolvm's is rebuilt, and so does a base from ubuntu-26.04, whose
 # counter a name made of ubuntu:26.04 would once have been.
-env DEVVM_DOCKER_KIND=linux
 env PIN=ubuntu:26.04@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 env PIN2=ubuntu-26.04@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 exec devvm --backend smolvm --from $PIN build base
 exec devvm --backend smolvm --from $PIN2 build base
-exec devvm --backend docker --from $PIN build base
 exec devvm images
 stdout -count=2 '^base +\S+ .* current +\S+ +smolvm$'
-exec devvm rebuild --backend docker --from $PIN --force base
-stdout -count=1 '^==> deleted_old_image image=base key=[0-9a-f]{12}$'
 exec devvm rebuild --backend smolvm --from $PIN --force base
 stdout -count=1 '^==> deleted_old_image image=base key=[0-9a-f]{12}$'
 exec devvm images
 stdout -count=1 '^base +ubuntu 26\.04 .* current +\S+ +lima$'
 stdout -count=2 '^base +\S+ .* current +\S+ +smolvm$'
-stdout -count=1 '^base +\S+ .* current +\S+ +docker$'
 ! stdout ' stale '
-grep '"backend": "docker",\n      "from": "ubuntu:26.04@sha256:a{64}",\n      "name": "base",' $IMAGES/rebuilds.json
 grep '"backend": "smolvm",\n      "from": "ubuntu:26.04@sha256:a{64}",\n      "name": "base",' $IMAGES/rebuilds.json
 ! grep '"from": "ubuntu-26.04' $IMAGES/rebuilds.json
 

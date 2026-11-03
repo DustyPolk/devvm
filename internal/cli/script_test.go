@@ -1,22 +1,14 @@
 package cli
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -39,7 +31,6 @@ const testBuildFlag = "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes
 // TestScript runs testdata/script/*.txtar against a built devvm, in a sandbox.
 func TestScript(t *testing.T) {
 	bin := buildDevvm(t)
-	release := linuxRelease(t)
 	stubs, err := filepath.Abs(filepath.Join("..", "..", "testdata", "stubs"))
 	if err != nil {
 		t.Fatal(err)
@@ -51,90 +42,28 @@ func TestScript(t *testing.T) {
 		Setup: func(env *testscript.Env) error {
 			return sandbox(env, bin, stubs)
 		},
-		Cmds: scriptCmds(release),
+		Cmds: scriptCmds(),
 	})
 }
 
 // scriptCmds are the commands devvm's scripts add to testscript's own.
 // TestCommandLines leaves their lines out, as they aren't devvm's.
-func scriptCmds(release linuxBuild) map[string]func(ts *testscript.TestScript, neg bool, args []string) {
+func scriptCmds() map[string]func(ts *testscript.TestScript, neg bool, args []string) {
 	return map[string]func(ts *testscript.TestScript, neg bool, args []string){
-		"catg":          catGlob,
-		"free_port":     freePort,
-		"json_set":      jsonSet,
-		"linux_release": release.serve,
-		"listen_any":    listenAny,
-		"project":       project,
-		"stub_calls":    stubCalls,
-		"stub_reset":    stubReset,
-		"vm_name":       vmName,
-		"wait_file":     waitFile,
+		"catg":       catGlob,
+		"free_port":  freePort,
+		"json_set":   jsonSet,
+		"listen_any": listenAny,
+		"project":    project,
+		"stub_calls": stubCalls,
+		"stub_reset": stubReset,
+		"vm_name":    vmName,
+		"wait_file":  waitFile,
 	}
 }
 
 // scriptsDir is where the scripts are.
 func scriptsDir() string { return filepath.Join("..", "..", "testdata", "script") }
-
-// linuxBuild is a release's Linux archive, for the Linux build devvm
-// fetches: the test build of devvm, built for Linux on this machine's
-// processor as the test build itself was, and the devvm in it's SHA-256.
-type linuxBuild struct {
-	archive []byte
-	sum     string
-}
-
-// linuxRelease builds it.
-func linuxRelease(t *testing.T) linuxBuild {
-	t.Helper()
-	dir := t.TempDir()
-	out := filepath.Join(dir, "devvm")
-	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", out, //nolint:gosec // the test's own folder
-		"-ldflags", testBuildFlag, "github.com/w3cj/devvm/cmd/devvm")
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+runtime.GOARCH)
-	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("building devvm for Linux: %v\n%s", err, b)
-	}
-	data, err := os.ReadFile(out) //nolint:gosec // the test's own build
-	if err != nil {
-		t.Fatal(err)
-	}
-	sum := sha256.Sum256(data)
-	var b bytes.Buffer
-	gz := gzip.NewWriter(&b)
-	tw := tar.NewWriter(gz)
-	if err := tw.WriteHeader(&tar.Header{Name: "devvm-0.0.0-linux-" + runtime.GOARCH + "/devvm", Mode: 0o755, Size: int64(len(data)), Typeflag: tar.TypeReg}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tw.Write(data); err != nil {
-		t.Fatal(err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return linuxBuild{archive: b.Bytes(), sum: hex.EncodeToString(sum[:])}
-}
-
-// serve serves the archive on a loopback port until the script ends, and
-// points the test build at it as a release's Linux build: its address in
-// DEVVM_LINUX_BUILD_URL, and in DEVVM_LINUX_BUILD_SHA256 the devvm in it's
-// SHA-256 (match), or another's (mismatch).
-func (l linuxBuild) serve(ts *testscript.TestScript, neg bool, args []string) {
-	if neg || len(args) != 1 || args[0] != "match" && args[0] != "mismatch" {
-		ts.Fatalf("usage: linux_release match|mismatch")
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(l.archive) }))
-	ts.Defer(srv.Close)
-	sum := l.sum
-	if args[0] == "mismatch" {
-		sum = strings.Repeat("0", 64)
-	}
-	ts.Setenv("DEVVM_LINUX_BUILD_URL", srv.URL+"/devvm-0.0.0-linux-"+runtime.GOARCH+".tar.gz")
-	ts.Setenv("DEVVM_LINUX_BUILD_SHA256", sum)
-	ts.Setenv("LINUX_ARCH", runtime.GOARCH)
-}
 
 // buildDevvm builds cmd/devvm, its files embedded, into a temporary folder
 // and returns that folder. It's a test build: the test overrides count
@@ -227,8 +156,6 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		// And Lima's and smolvm's VMs' port forwarders.
 		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_lima-ports -vm .* -lifeline "+root+"/").Run()   //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
 		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_smolvm-ports -vm .* -lifeline "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
-		// And Docker VMs'.
-		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_docker-ports -vm .* -key "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
 		// And client VMs' link sessions, named only by their VM: by their
 		// pid files, then the stub ssh's masters they leave.
 		stopLinkSessions(root)

@@ -39,8 +39,8 @@ func GuestProxyVars() []string {
 	return []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"}
 }
 
-// ClientProxyVars are every proxy variable a backend's own client (limactl,
-// docker) reads from its environment and passes on to a VM, in capitals
+// ClientProxyVars are every proxy variable a backend's own client
+// (limactl) reads from its environment and passes on to a VM, in capitals
 // and lowercase: devvm runs the client without them or sets them empty, so
 // the host's proxy, password and all, stays out of VMs devvm doesn't mean
 // to give it.

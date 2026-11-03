@@ -14,8 +14,8 @@ import (
 )
 
 // Leftovers are what devvm keeps for VMs their backend no longer has, a
-// VM deleted outside devvm (limactl delete, smolvm machine delete, docker
-// rm): devvm gc --orphans.
+// VM deleted outside devvm (limactl delete, smolvm machine delete): devvm
+// gc --orphans.
 type Leftovers struct{ *Env }
 
 // leftoverRecent is how old a VM's state must be before it can be a
@@ -32,9 +32,6 @@ type Orphan struct {
 	Name, Backend string
 	Dir           string    // its project folder
 	Changed       time.Time // when its state last changed
-	// Leaves are its backend's own resources that Forget deletes with it
-	// (backend.LeftoverLister), such as its Docker volumes.
-	Leaves []backend.Leftover
 }
 
 // LeftoverReport is what Find found.
@@ -45,7 +42,7 @@ type LeftoverReport struct {
 	// are never orphans.
 	Unknown []string
 	// Elsewhere are the VMs made where their backend doesn't look in this
-	// run (another Lima home, HOME or Docker engine), and Recent those
+	// run (another Lima home or HOME), and Recent those
 	// whose state changed in the last hour: never orphans.
 	Elsewhere, Recent []string
 	// Links are clients' links to VMs that have no state, and Sockets the
@@ -106,11 +103,7 @@ func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
 			r.Recent = append(r.Recent, n)
 			continue
 		}
-		leaves, err := leftoversOf(ctx, b, n)
-		if err != nil {
-			return r, err
-		}
-		r.Orphans = append(r.Orphans, Orphan{Name: n, Backend: bname, Dir: st.Get(state.KeyDir), Changed: fi.ModTime(), Leaves: leaves})
+		r.Orphans = append(r.Orphans, Orphan{Name: n, Backend: bname, Dir: st.Get(state.KeyDir), Changed: fi.ModTime()})
 	}
 	if r.Links, err = deadLinks(e.Dirs); err != nil {
 		return r, err
@@ -149,18 +142,6 @@ func (e Leftovers) ForgetLinks(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-// leftoversOf are the resources of b's own that Forget deletes for vm;
-// none for a backend that keeps none (not a backend.LeftoverLister).
-func leftoversOf(ctx context.Context, b backend.Backend, vm string) ([]backend.Leftover, error) {
-	l, ok := b.(backend.LeftoverLister)
-	if !ok {
-		return nil, nil
-	}
-	ctx, cancel := context.WithTimeout(ctx, leftoverAsk)
-	defer cancel()
-	return l.Leftovers(ctx, vm)
 }
 
 func (r *LeftoverReport) unknown(b string) {

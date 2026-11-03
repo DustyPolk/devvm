@@ -176,7 +176,7 @@ func TestBumpRebuild(t *testing.T) {
 		t.Errorf("counter %q, then %q", first, second)
 	}
 	lima := counter("lima", "", "foo")
-	bump("docker", "", "foo")
+	bump("fake", "", "foo")
 	bump("lima", "node:24", "foo")
 	bump("lima", "node-24", "foo")
 	bump("lima", "", "base")

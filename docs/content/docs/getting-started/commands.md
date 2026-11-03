@@ -132,14 +132,14 @@ A subfolder that is a git repo of its own is treated as a separate project, and 
 | `GIT` | its [`.git` protection](../safety/git-protection.md), `on`, `strict` or `off`, or `clone` for a [`--clone`](../using/clone.md) VM |
 | `NET` | its [network policy](../safety/network.md), `on`, `off`, or `unenforced` ([the self-check](../internals/network.md#the-self-check)) |
 | `LINKS` | how many [links](../using/links.md) it has to ports of your other VMs, or `-` for none |
-| `BACKEND` | the [backend](../backends/_index.md) that runs it, with the runtime beside it for a Docker VM made for the docker layer, as in `docker (sysbox)` |
+| `BACKEND` | the [backend](../backends/_index.md) that runs it |
 | `FOLDER` | its project folder |
 
-A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't finish shows only its name, status and backend. A [Docker](../backends/docker.md#what-docker-vms-cant-do) VM's disk has no size of its own, so `devvm ls` warns about a Docker VM that holds more than VMs get on the other backends.
+A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't finish shows only its name, status and backend.
 
 ### devvm ls --json
 
-`devvm ls --json` prints the same list as one JSON object, as [output for scripts](#output-for-scripts) describes. `vms` has a VM's columns as fields, sorted by name. `image` is the image alone, `tools` is the list of its shared tools, `[]` for none, and `from` is the container image its base started from, which is left out for a base from Ubuntu's cloud image. `docker_layer` is the runtime a `docker` VM made for the docker layer runs under, and it's left out for other VMs. A value the VM's state doesn't have is `""`. `links` is how many links the VM has, `0` for none.
+`devvm ls --json` prints the same list as one JSON object, as [output for scripts](#output-for-scripts) describes. `vms` has a VM's columns as fields, sorted by name. `image` is the image alone, `tools` is the list of its shared tools, `[]` for none, and `from` is the container image its base started from, which is left out for a base from Ubuntu's cloud image. A value the VM's state doesn't have is `""`. `links` is how many links the VM has, `0` for none.
 
 ```json
 {

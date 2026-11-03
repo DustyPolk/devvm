@@ -62,7 +62,6 @@ func shape(t *testing.T, data []byte) []string {
 // one.
 func TestJSONShapes(t *testing.T) {
 	yes := true
-	used := 1.5
 	fix := "brew install lima"
 	at := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	cases := []struct {
@@ -71,9 +70,9 @@ func TestJSONShapes(t *testing.T) {
 		want    []string
 	}{
 		{
-			"ls", lsJSON([]vm.Listed{{Name: "devvm-a", Status: "Running", Image: "base", Tools: []string{"node"}, From: "node:24", Git: "on", Net: "on", Backend: "docker", DockerLayer: "sysbox", Folder: "/a"}}),
+			"ls", lsJSON([]vm.Listed{{Name: "devvm-a", Status: "Running", Image: "base", Tools: []string{"node"}, From: "node:24", Git: "on", Net: "on", Backend: "lima", Folder: "/a"}}),
 			[]string{
-				"vms[].backend: string", "vms[].docker_layer: string", "vms[].folder: string", "vms[].from: string", "vms[].git: string", "vms[].image: string", "vms[].links: number",
+				"vms[].backend: string", "vms[].folder: string", "vms[].from: string", "vms[].git: string", "vms[].image: string", "vms[].links: number",
 				"vms[].name: string", "vms[].net: string", "vms[].status: string", "vms[].tools[]: string",
 			},
 		},
@@ -99,9 +98,9 @@ func TestJSONShapes(t *testing.T) {
 			[]string{"tools[].newer: string", "tools[].newer_built: bool", "tools[].tool: string", "tools[].version: string"},
 		},
 		{
-			"size", sizeJSON(vm.SizeShown{Size: backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}, DiskUsedGiB: used, DiskMeasured: true, Pending: backend.Size{CPUs: 2, MemoryGiB: 4, DiskGiB: 120}}),
+			"size", sizeJSON(vm.SizeShown{Size: backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}, Pending: backend.Size{CPUs: 2, MemoryGiB: 4, DiskGiB: 120}}),
 			[]string{
-				"cpus: number", "disk_gib: number", "disk_used_gib: number", "memory_gib: number",
+				"cpus: number", "disk_gib: number", "memory_gib: number",
 				"pending.cpus: number", "pending.disk_gib: number", "pending.memory_gib: number",
 			},
 		},
@@ -175,7 +174,7 @@ func TestJSONShapes(t *testing.T) {
 			Rows:  []spaceRow{{What: "VMs", Backend: "lima", Count: 1, Size: 1, Sized: true, Kept: keptOnlyCopy, GC: 1, Rest: "devvm rm", Retain: "30d", RetainFrees: 1}},
 			Total: 1, GC: 1,
 			Caches:  []cacheRow{{Backend: "lima", Name: "images", Path: "/c", Count: 1, Size: 1, Sized: true}},
-			Unknown: []string{"docker"}, Strays: []strayVM{{Backend: "lima", Name: "devvm-b", Data: "/d"}},
+			Unknown: []string{"smolvm"}, Strays: []strayVM{{Backend: "lima", Name: "devvm-b", Data: "/d"}},
 		}, []string{
 			"backends[].backend: string", "backends[].count: number", "backends[].name: string", "backends[].path: string",
 			"backends[].size: number", "backends[].sized: bool",

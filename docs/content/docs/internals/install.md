@@ -18,8 +18,6 @@ At the end, when `~/.local/bin` is on `PATH`, the script looks up which devvm `P
 
 `devvm doctor` makes the same check. It looks up `devvm` on `PATH`, resolves its links and those of the running binary, and when they differ it prints a warning naming both. It skips the check when no devvm is on `PATH`. The warning doesn't change its exit status, and `--json` lists it among the warnings rather than the problems, so the install script doesn't offer it as a fix.
 
-On macOS, the [Docker](../backends/docker.md#requirements) backend fetches one more file the first time a Docker VM or build needs it. That file is the same release's Linux archive, and devvm checks the devvm in it against the SHA-256 that the installed devvm has of it before using it. Homebrew's devvm already has its Linux build, which Homebrew builds from source.
-
 ## The signature and what it trusts
 
 `curl … | bash` trusts everything in the release, and Homebrew checks the source against a checksum kept outside it:
@@ -82,10 +80,6 @@ These are the keys:
 | `kvm` | `/dev/kvm`, on Linux | none: turn on virtualization |
 | `kvm-access` | access to `/dev/kvm` | `sudo usermod -aG kvm USER`, then log in again |
 | `lima-config` | no Lima global configs in devvm's Lima home ([details](lima.md#a-lima-home-of-its-own)) | none: move them out |
-| `docker` | Docker, for the Docker backend | none: install Docker Desktop, or Docker's engine on Linux |
-| `docker-engine` | Docker's engine, running and reachable | none: start it |
-| `docker-access` | access to Docker's socket, on Linux | `sudo usermod -aG docker USER`, then log in again |
-| `docker-version`, `docker-os`, `docker-arch` | Docker 29.1 or newer, running Linux containers of this machine's processor | none |
 
 The install script reads `problems` with `awk`, so it needs no JSON tool on this machine. It relies on the layout that devvm writes, with one field on each line, and it reads a problem's `key`, `fix` and `message` from their lines, with their escapes undone. It offers to fix three of these keys, asking first, and prints the message for the others:
 

@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -213,29 +212,4 @@ func TestIsLinkAddr(t *testing.T) {
 			t.Fatalf("LinkAddr(%d) = %s, IsLinkAddr %v; want %s", i, a, IsLinkAddr(a), want)
 		}
 	}
-}
-
-// The relay, to the proxy's socket.
-func TestRelaySplices(t *testing.T) {
-	sock := filepath.Join(sockDir(t), "p.sock")
-	ln, err := new(net.ListenConfig).Listen(t.Context(), "unix", sock)
-	must(t, err)
-	f := serveFarEnd(t, ln)
-	l, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
-	must(t, err)
-	addr := l.Addr().String()
-	_ = l.Close()
-	go func() { _ = runRelay(addr, sock) }()
-	checkTunnel(t, f, func() (net.Conn, io.Reader) {
-		var c net.Conn
-		var err error
-		for range 100 {
-			if c, err = new(net.Dialer).DialContext(t.Context(), "tcp", addr); err == nil {
-				return c, c
-			}
-			time.Sleep(20 * time.Millisecond)
-		}
-		t.Fatal(err)
-		return nil, nil
-	})
 }

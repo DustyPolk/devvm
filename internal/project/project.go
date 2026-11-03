@@ -299,7 +299,7 @@ func rootSetID(m fs.FileMode, uid, gid uint32) bool {
 // SetIDFiles returns up to five files in dir, on its file system, with the
 // set-user-id or set-group-id bit. On Linux hosts a VM's set-id bits reach
 // the host, and a set-user-id file runs as its owner for anyone who runs
-// it: the user, or root, whom root in a Docker VM writes as.
+// it: the user, or root.
 func SetIDFiles(dir string) []SetIDFile {
 	var files []SetIDFile
 	root, err := os.Stat(dir)

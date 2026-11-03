@@ -449,11 +449,6 @@ func CodexLoginKept(keys string) M {
 	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
 }
 
-// CommittingImage is [committing_image]: "committing {{.vm}}"
-func CommittingImage(vm string) M {
-	return M{id: "committing_image", vals: []val{{"vm", vm}}}
-}
-
 // ConfigNotCopied is [config_not_copied]: "{{.vm}} doesn't get a copy of {{.file}}, because devvm couldn't read it to take its secrets out."
 func ConfigNotCopied(file string, vm string) M {
 	return M{id: "config_not_copied", vals: []val{{"file", file}, {"vm", vm}}}
@@ -779,64 +774,9 @@ func DiskLowWarning(dir string, free string, need string) M {
 	return M{id: "disk_low_warning", vals: []val{{"dir", dir}, {"free", free}, {"need", need}}}
 }
 
-// DiskOver is [disk_over]: "{{.vm}} holds {{.used}} GiB, more than the {{.limit}} GiB that VMs get on other backends, and the {{.backend}} backend doesn't limit it. Free some space in the VM."
-func DiskOver(backend string, limit string, used string, vm string) M {
-	return M{id: "disk_over", vals: []val{{"backend", backend}, {"limit", limit}, {"used", used}, {"vm", vm}}}
-}
-
 // DiskShrink is [disk_shrink]: "{{.vm}}'s disk is {{.have}} GiB, and a disk can't shrink to {{.want}} GiB."
 func DiskShrink(have string, vm string, want string) M {
 	return M{id: "disk_shrink", vals: []val{{"have", have}, {"vm", vm}, {"want", want}}}
-}
-
-// DockerAccess is [docker_access]: "You can't reach Docker's engine. Run {{.fix}}, then log in again."
-func DockerAccess(fix string) M {
-	return M{id: "docker_access", vals: []val{{"fix", fix}}}
-}
-
-// DockerArch is [docker_arch]: "Docker's engine runs {{.engine}} containers, but this machine is {{.host}}. Use an engine that runs {{.host}} containers."
-func DockerArch(engine string, host string) M {
-	return M{id: "docker_arch", vals: []val{{"engine", engine}, {"host", host}}}
-}
-
-// DockerBridgeUnreadable is [docker_bridge_unreadable]: "Reading the settings of Docker's bridge {{.bridge}} for {{.vm}} failed."
-func DockerBridgeUnreadable(bridge string, vm string) M {
-	return M{id: "docker_bridge_unreadable", vals: []val{{"bridge", bridge}, {"vm", vm}}}
-}
-
-// DockerCommitFailed is [docker_commit_failed]: "Committing {{.vm}} failed."
-func DockerCommitFailed(vm string) M {
-	return M{id: "docker_commit_failed", vals: []val{{"vm", vm}}}
-}
-
-// DockerConnectFailed is [docker_connect_failed]: "Reaching {{.vm}}'s sshd through Docker failed: {{.reason}}."
-func DockerConnectFailed(reason string, vm string) M {
-	return M{id: "docker_connect_failed", vals: []val{{"reason", reason}, {"vm", vm}}}
-}
-
-// DockerContainerForeign is [docker_container_foreign]: "Docker has a container named {{.name}} that isn't this devvm's. Remove or rename it with docker."
-func DockerContainerForeign(name string) M {
-	return M{id: "docker_container_foreign", vals: []val{{"name", name}}}
-}
-
-// DockerDown is [docker_down]: "Docker's engine isn't running, or docker can't reach it. Start Docker Desktop, or Docker's service."
-func DockerDown() M {
-	return M{id: "docker_down"}
-}
-
-// DockerEngineDesktop is [docker_engine_desktop]: "Docker's engine is Docker Desktop {{.version}}, which runs every VM in its one Linux VM."
-func DockerEngineDesktop(version string) M {
-	return M{id: "docker_engine_desktop", vals: []val{{"version", version}}}
-}
-
-// DockerEngineLinux is [docker_engine_linux]: "Docker's engine is Docker {{.version}} on this machine, and every VM shares its kernel."
-func DockerEngineLinux(version string) M {
-	return M{id: "docker_engine_linux", vals: []val{{"version", version}}}
-}
-
-// DockerEngineOther is [docker_engine_other]: "Docker's engine is Docker {{.version}} ({{.name}}), which is neither Docker Desktop nor this machine's own. devvm can't confine builds on it."
-func DockerEngineOther(name string, version string) M {
-	return M{id: "docker_engine_other", vals: []val{{"name", name}, {"version", version}}}
 }
 
 // DockerExportFailed is [docker_export_failed]: "Exporting {{.from}} from Docker failed."
@@ -844,19 +784,9 @@ func DockerExportFailed(from string) M {
 	return M{id: "docker_export_failed", vals: []val{{"from", from}}}
 }
 
-// DockerFileSharing is [docker_file_sharing]: "Docker Desktop mounts only folders under {{.dirs}}."
-func DockerFileSharing(dirs string) M {
-	return M{id: "docker_file_sharing", vals: []val{{"dirs", dirs}}}
-}
-
 // DockerFound is [docker_found]: "Docker is installed, so --from can use container images only Docker has."
 func DockerFound() M {
 	return M{id: "docker_found"}
-}
-
-// DockerHostUnsupported is [docker_host_unsupported]: "The docker backend doesn't run on {{.host}}. Use macOS or Linux."
-func DockerHostUnsupported(host string) M {
-	return M{id: "docker_host_unsupported", vals: []val{{"host", host}}}
 }
 
 // DockerImageChanged is [docker_image_changed]: "{{.from}} changed in Docker while devvm built from it, perhaps because of a rebuild. Run devvm again."
@@ -864,154 +794,14 @@ func DockerImageChanged(from string) M {
 	return M{id: "docker_image_changed", vals: []val{{"from", from}}}
 }
 
-// DockerImageRmFailed is [docker_image_rm_failed]: "Deleting Docker's image {{.image}} failed."
-func DockerImageRmFailed(image string) M {
-	return M{id: "docker_image_rm_failed", vals: []val{{"image", image}}}
-}
-
-// DockerLayerNeedsVM is [docker_layer_needs_vm]: "{{.vm}} can't run the docker layer on this Docker engine. Use --backend lima."
-func DockerLayerNeedsVM(vm string) M {
-	return M{id: "docker_layer_needs_vm", vals: []val{{"vm", vm}}}
-}
-
-// DockerLayerNoSysbox is [docker_layer_no_sysbox]: "{{.vm}} needs Sysbox on this Docker engine for the docker layer. Install Sysbox, or use --backend lima."
-func DockerLayerNoSysbox(vm string) M {
-	return M{id: "docker_layer_no_sysbox", vals: []val{{"vm", vm}}}
-}
-
-// DockerLayerRuntime is [docker_layer_runtime]: "{{.vm}} runs the docker layer under {{.runtime}} on {{.backend}}, so it has no network policy."
-func DockerLayerRuntime(backend string, runtime string, vm string) M {
-	return M{id: "docker_layer_runtime", vals: []val{{"backend", backend}, {"runtime", runtime}, {"vm", vm}}}
-}
-
-// DockerLinuxBuildFetchFailed is [docker_linux_build_fetch_failed]: "Fetching devvm's Linux build from {{.url}} failed. Check the connection, then run devvm again."
-func DockerLinuxBuildFetchFailed(url string) M {
-	return M{id: "docker_linux_build_fetch_failed", vals: []val{{"url", url}}}
-}
-
-// DockerLinuxBuildFetching is [docker_linux_build_fetching]: "Fetching devvm's Linux build, which Docker runs in containers, from {{.url}}."
-func DockerLinuxBuildFetching(url string) M {
-	return M{id: "docker_linux_build_fetching", vals: []val{{"url", url}}}
-}
-
-// DockerLinuxBuildMismatch is [docker_linux_build_mismatch]: "The Linux build of devvm from {{.url}} doesn't match the SHA-256 this devvm has, so devvm didn't use it. Reinstall devvm."
-func DockerLinuxBuildMismatch(url string) M {
-	return M{id: "docker_linux_build_mismatch", vals: []val{{"url", url}}}
-}
-
-// DockerLinuxBuildMissing is [docker_linux_build_missing]: "There's no Linux build of devvm at {{.path}}, and only a release of devvm fetches its own. Build devvm for Linux there, as this one was built, or install a release."
-func DockerLinuxBuildMissing(path string) M {
-	return M{id: "docker_linux_build_missing", vals: []val{{"path", path}}}
-}
-
-// DockerLinuxBuildOther is [docker_linux_build_other]: "{{.path}} isn't this devvm's Linux build. Reinstall devvm."
-func DockerLinuxBuildOther(path string) M {
-	return M{id: "docker_linux_build_other", vals: []val{{"path", path}}}
-}
-
 // DockerMissing is [docker_missing]: "Docker isn't installed. Only --from with a container image only Docker has needs it."
 func DockerMissing() M {
 	return M{id: "docker_missing"}
 }
 
-// DockerMountPath is [docker_mount_path]: "Docker can't mount {{.path}}, because the path has a comma or a quote."
-func DockerMountPath(path string) M {
-	return M{id: "docker_mount_path", vals: []val{{"path", path}}}
-}
-
-// DockerNetworkFailed is [docker_network_failed]: "Making, changing or deleting Docker's network {{.name}} failed."
-func DockerNetworkFailed(name string) M {
-	return M{id: "docker_network_failed", vals: []val{{"name", name}}}
-}
-
-// DockerNetworkForeign is [docker_network_foreign]: "Docker has a network named {{.name}} that isn't this devvm's. Remove it with docker."
-func DockerNetworkForeign(name string) M {
-	return M{id: "docker_network_foreign", vals: []val{{"name", name}}}
-}
-
-// DockerNetworkShared is [docker_network_shared]: "Docker's network {{.name}} has containers devvm didn't put there. Take them off it with docker network disconnect {{.name}} CONTAINER, then try again."
-func DockerNetworkShared(name string) M {
-	return M{id: "docker_network_shared", vals: []val{{"name", name}}}
-}
-
-// DockerNotInstalled is [docker_not_installed]: "Docker isn't installed. Install Docker Desktop, or Docker's engine on Linux, with Docker 29.1 or newer."
-func DockerNotInstalled() M {
-	return M{id: "docker_not_installed"}
-}
-
-// DockerNotLinux is [docker_not_linux]: "Docker's engine runs {{.os}} containers. Switch it to Linux containers."
-func DockerNotLinux(os string) M {
-	return M{id: "docker_not_linux", vals: []val{{"os", os}}}
-}
-
-// DockerNotShared is [docker_not_shared]: "Docker Desktop doesn't share {{.path}} with containers. Add it in Settings > Resources > File sharing."
-func DockerNotShared(path string) M {
-	return M{id: "docker_not_shared", vals: []val{{"path", path}}}
-}
-
-// DockerOld is [docker_old]: "Docker {{.version}} is too old. Upgrade to Docker 29.1 or newer."
-func DockerOld(version string) M {
-	return M{id: "docker_old", vals: []val{{"version", version}}}
-}
-
 // DockerOnly is [docker_only]: "{{.from}} is a container image only Docker has, such as one built and never pushed, or a private one. Start Docker and try again."
 func DockerOnly(from string) M {
 	return M{id: "docker_only", vals: []val{{"from", from}}}
-}
-
-// DockerPullFailed is [docker_pull_failed]: "Pulling {{.image}} failed."
-func DockerPullFailed(image string) M {
-	return M{id: "docker_pull_failed", vals: []val{{"image", image}}}
-}
-
-// DockerRelayImageFailed is [docker_relay_image_failed]: "Making the empty image that devvm's proxy's relays run in failed."
-func DockerRelayImageFailed() M {
-	return M{id: "docker_relay_image_failed"}
-}
-
-// DockerRemaking is [docker_remaking]: "Making {{.vm}}'s container again for its new mounts or capabilities. Its disk and home stay as they are."
-func DockerRemaking(vm string) M {
-	return M{id: "docker_remaking", vals: []val{{"vm", vm}}}
-}
-
-// DockerRouteLocalnet is [docker_route_localnet]: "The docker layer isn't safe for {{.vm}} on this Docker engine with \"userland-proxy\": false. Turn the userland proxy back on, or use --backend lima."
-func DockerRouteLocalnet(vm string) M {
-	return M{id: "docker_route_localnet", vals: []val{{"vm", vm}}}
-}
-
-// DockerScriptFailed is [docker_script_failed]: "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run docker start {{.vm}}, then docker exec -it {{.vm}} bash."
-func DockerScriptFailed(script string, vm string) M {
-	return M{id: "docker_script_failed", vals: []val{{"script", script}, {"vm", vm}}}
-}
-
-// DockerSSHPath is [docker_ssh_path]: "The ssh config devvm writes can't name {{.path}}, because it has a quote, a backslash, a percent sign or a control character."
-func DockerSSHPath(path string) M {
-	return M{id: "docker_ssh_path", vals: []val{{"path", path}}}
-}
-
-// DockerSysbox is [docker_sysbox]: "Sysbox is installed, so VMs with the docker layer run under it."
-func DockerSysbox() M {
-	return M{id: "docker_sysbox"}
-}
-
-// DockerToolsFailed is [docker_tools_failed]: "Unpacking the shared tools into Docker's volume {{.volume}} failed."
-func DockerToolsFailed(volume string) M {
-	return M{id: "docker_tools_failed", vals: []val{{"volume", volume}}}
-}
-
-// DockerUpdateFailed is [docker_update_failed]: "Changing {{.vm}}'s Docker settings failed."
-func DockerUpdateFailed(vm string) M {
-	return M{id: "docker_update_failed", vals: []val{{"vm", vm}}}
-}
-
-// DockerVolumeFailed is [docker_volume_failed]: "Making or deleting Docker's volume {{.name}} failed."
-func DockerVolumeFailed(name string) M {
-	return M{id: "docker_volume_failed", vals: []val{{"name", name}}}
-}
-
-// DockerVolumeForeign is [docker_volume_foreign]: "Docker has a volume named {{.name}} that isn't this devvm's. Remove it with docker."
-func DockerVolumeForeign(name string) M {
-	return M{id: "docker_volume_foreign", vals: []val{{"name", name}}}
 }
 
 // DoctorBackendFrom is [doctor_backend_from]: "New VMs get the {{.backend}} backend, which {{.file}} sets."
@@ -1259,34 +1049,14 @@ func GCOrphan(backend string, dir string, vm string) M {
 	return M{id: "gc_orphan", vals: []val{{"backend", backend}, {"dir", dir}, {"vm", vm}}}
 }
 
-// GCOrphanContainer is [gc_orphan_container]: "    container {{.container}}"
-func GCOrphanContainer(container string) M {
-	return M{id: "gc_orphan_container", vals: []val{{"container", container}}}
-}
-
-// GCOrphanElsewhere is [gc_orphan_elsewhere]: "{{.vm}} was made in another Lima home, HOME or Docker engine than this run's, so its state stays."
+// GCOrphanElsewhere is [gc_orphan_elsewhere]: "{{.vm}} was made in another Lima home or HOME than this run's, so its state stays."
 func GCOrphanElsewhere(vm string) M {
 	return M{id: "gc_orphan_elsewhere", vals: []val{{"vm", vm}}}
-}
-
-// GCOrphanImage is [gc_orphan_image]: "    image {{.image}}"
-func GCOrphanImage(image string) M {
-	return M{id: "gc_orphan_image", vals: []val{{"image", image}}}
-}
-
-// GCOrphanNetwork is [gc_orphan_network]: "    network {{.network}}"
-func GCOrphanNetwork(network string) M {
-	return M{id: "gc_orphan_network", vals: []val{{"network", network}}}
 }
 
 // GCOrphanRecent is [gc_orphan_recent]: "{{.vm}}'s state changed in the last hour, so it stays in case the VM is still being made."
 func GCOrphanRecent(vm string) M {
 	return M{id: "gc_orphan_recent", vals: []val{{"vm", vm}}}
-}
-
-// GCOrphanVolume is [gc_orphan_volume]: "    volume {{.volume}}"
-func GCOrphanVolume(volume string) M {
-	return M{id: "gc_orphan_volume", vals: []val{{"volume", volume}}}
 }
 
 // GCOrphans is [gc_orphans]: "What devvm keeps for {{.count}} VMs their backend no longer has:"
@@ -2059,11 +1829,6 @@ func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
 }
 
-// NetDockerLayer is [net_docker_layer]: "{{.vm}} can't have network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
-func NetDockerLayer(backend string, vm string) M {
-	return M{id: "net_docker_layer", vals: []val{{"backend", backend}, {"vm", vm}}}
-}
-
 // NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy apply only to new VMs. To change this VM's network policy, run devvm network on or devvm network off."
 func NetFlagIgnored() M {
 	return M{id: "net_flag_ignored"}
@@ -2072,11 +1837,6 @@ func NetFlagIgnored() M {
 // NetOffBackend is [net_off_backend]: "{{.vm}} gets no network policy, because the {{.backend}} backend can't confine it to its proxy here."
 func NetOffBackend(backend string, vm string) M {
 	return M{id: "net_off_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
-}
-
-// NetOffDockerLayer is [net_off_docker_layer]: "{{.vm}} gets no network policy, because root in a VM with the docker layer on {{.backend}} can change its own network."
-func NetOffDockerLayer(backend string, vm string) M {
-	return M{id: "net_off_docker_layer", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
 // NetOffLog is [net_off_log]: "Network policy is off for {{.vm}}, so devvm logs only the connections of its links to your other VMs. To log the rest of its traffic, run devvm network on."
@@ -2559,11 +2319,6 @@ func Published(ports string, vm string) M {
 	return M{id: "published", vals: []val{{"ports", ports}, {"vm", vm}}}
 }
 
-// PullingImage is [pulling_image]: "pulling {{.image}}"
-func PullingImage(image string) M {
-	return M{id: "pulling_image", vals: []val{{"image", image}}}
-}
-
 // QEMUMissing is [qemu_missing]: "{{.program}} isn't installed. Install QEMU."
 func QEMUMissing(program string) M {
 	return M{id: "qemu_missing", vals: []val{{"program", program}}}
@@ -2827,11 +2582,6 @@ func SizeCpusPrompt(cpus string) M {
 // SizeDefaults is [size_defaults]: "new VMs get {{.size}}"
 func SizeDefaults(size string) M {
 	return M{id: "size_defaults", vals: []val{{"size", size}}}
-}
-
-// SizeDiskDefaultUnused is [size_disk_default_unused]: "The default disk size for new VMs doesn't apply to {{.vm}}, because the {{.backend}} backend doesn't size disks."
-func SizeDiskDefaultUnused(backend string, vm string) M {
-	return M{id: "size_disk_default_unused", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
 // SizeFailed is [size_failed]: "Showing or changing the size failed: {{.reason}}."
@@ -3209,11 +2959,6 @@ func UnknownTool(tool string, tools string) M {
 	return M{id: "unknown_tool", vals: []val{{"tool", tool}, {"tools", tools}}}
 }
 
-// UnpackingTools is [unpacking_tools]: "unpacking the shared tools"
-func UnpackingTools() M {
-	return M{id: "unpacking_tools"}
-}
-
 // Unpublished is [unpublished]: "{{.vm}} doesn't offer {{.ports}} to links any more."
 func Unpublished(ports string, vm string) M {
 	return M{id: "unpublished", vals: []val{{"ports", ports}, {"vm", vm}}}
@@ -3470,7 +3215,6 @@ var specs = map[string]spec{
 	"cloning_image":                    {fields: []string{"parent"}},
 	"code_failed":                      {fields: []string{"reason"}},
 	"codex_login_kept":                 {fields: []string{"keys"}},
-	"committing_image":                 {fields: []string{"vm"}},
 	"config_not_copied":                {fields: []string{"file", "vm"}},
 	"config_redacted":                  {fields: []string{"file", "keys", "vm"}},
 	"configuring":                      {fields: []string{"vm"}},
@@ -3536,53 +3280,12 @@ var specs = map[string]spec{
 	"disk_free_unknown":                {fields: []string{"dir"}},
 	"disk_low":                         {fields: []string{"dir", "free", "name", "need"}},
 	"disk_low_warning":                 {fields: []string{"dir", "free", "need"}},
-	"disk_over":                        {fields: []string{"backend", "limit", "used", "vm"}},
 	"disk_shrink":                      {fields: []string{"have", "vm", "want"}},
-	"docker_access":                    {fields: []string{"fix"}},
-	"docker_arch":                      {fields: []string{"engine", "host"}},
-	"docker_bridge_unreadable":         {fields: []string{"bridge", "vm"}},
-	"docker_commit_failed":             {fields: []string{"vm"}},
-	"docker_connect_failed":            {fields: []string{"reason", "vm"}},
-	"docker_container_foreign":         {fields: []string{"name"}},
-	"docker_down":                      {},
-	"docker_engine_desktop":            {fields: []string{"version"}},
-	"docker_engine_linux":              {fields: []string{"version"}},
-	"docker_engine_other":              {fields: []string{"name", "version"}},
 	"docker_export_failed":             {fields: []string{"from"}},
-	"docker_file_sharing":              {fields: []string{"dirs"}},
 	"docker_found":                     {},
-	"docker_host_unsupported":          {fields: []string{"host"}},
 	"docker_image_changed":             {fields: []string{"from"}},
-	"docker_image_rm_failed":           {fields: []string{"image"}},
-	"docker_layer_needs_vm":            {fields: []string{"vm"}},
-	"docker_layer_no_sysbox":           {fields: []string{"vm"}},
-	"docker_layer_runtime":             {fields: []string{"backend", "runtime", "vm"}},
-	"docker_linux_build_fetch_failed":  {fields: []string{"url"}},
-	"docker_linux_build_fetching":      {fields: []string{"url"}},
-	"docker_linux_build_mismatch":      {fields: []string{"url"}},
-	"docker_linux_build_missing":       {fields: []string{"path"}},
-	"docker_linux_build_other":         {fields: []string{"path"}},
 	"docker_missing":                   {},
-	"docker_mount_path":                {fields: []string{"path"}},
-	"docker_network_failed":            {fields: []string{"name"}},
-	"docker_network_foreign":           {fields: []string{"name"}},
-	"docker_network_shared":            {fields: []string{"name"}},
-	"docker_not_installed":             {},
-	"docker_not_linux":                 {fields: []string{"os"}},
-	"docker_not_shared":                {fields: []string{"path"}},
-	"docker_old":                       {fields: []string{"version"}},
 	"docker_only":                      {fields: []string{"from"}},
-	"docker_pull_failed":               {fields: []string{"image"}},
-	"docker_relay_image_failed":        {},
-	"docker_remaking":                  {fields: []string{"vm"}},
-	"docker_route_localnet":            {fields: []string{"vm"}},
-	"docker_script_failed":             {fields: []string{"script", "vm"}},
-	"docker_ssh_path":                  {fields: []string{"path"}},
-	"docker_sysbox":                    {},
-	"docker_tools_failed":              {fields: []string{"volume"}},
-	"docker_update_failed":             {fields: []string{"vm"}},
-	"docker_volume_failed":             {fields: []string{"name"}},
-	"docker_volume_foreign":            {fields: []string{"name"}},
 	"doctor_backend_from":              {fields: []string{"backend", "file"}},
 	"doctor_failed":                    {fields: []string{"reason"}},
 	"doctor_ok":                        {fields: []string{"backend", "version"}},
@@ -3632,12 +3335,8 @@ var specs = map[string]spec{
 	"gc_old_hint":                      {},
 	"gc_older_than_needs_history":      {},
 	"gc_orphan":                        {fields: []string{"backend", "dir", "vm"}},
-	"gc_orphan_container":              {fields: []string{"container"}},
 	"gc_orphan_elsewhere":              {fields: []string{"vm"}},
-	"gc_orphan_image":                  {fields: []string{"image"}},
-	"gc_orphan_network":                {fields: []string{"network"}},
 	"gc_orphan_recent":                 {fields: []string{"vm"}},
-	"gc_orphan_volume":                 {fields: []string{"volume"}},
 	"gc_orphans":                       {plural: true, fields: []string{"count"}},
 	"gc_orphans_unknown":               {fields: []string{"backend"}},
 	"gc_recent_making":                 {},
@@ -3792,10 +3491,8 @@ var specs = map[string]spec{
 	"net_ask_global":                   {},
 	"net_default_failed":               {fields: []string{"reason"}},
 	"net_direct_route":                 {fields: []string{"vm"}},
-	"net_docker_layer":                 {fields: []string{"backend", "vm"}},
 	"net_flag_ignored":                 {},
 	"net_off_backend":                  {fields: []string{"backend", "vm"}},
-	"net_off_docker_layer":             {fields: []string{"backend", "vm"}},
 	"net_off_log":                      {fields: []string{"vm"}},
 	"net_off_next_start":               {fields: []string{"vm"}},
 	"net_off_policy":                   {fields: []string{"vm"}},
@@ -3892,7 +3589,6 @@ var specs = map[string]spec{
 	"proxy_start_failed":               {fields: []string{"log", "vm"}},
 	"proxy_stop_failed":                {fields: []string{"vm"}},
 	"published":                        {fields: []string{"ports", "vm"}},
-	"pulling_image":                    {fields: []string{"image"}},
 	"qemu_missing":                     {fields: []string{"program"}},
 	"qemu_missing_fix":                 {fields: []string{"fix", "program"}},
 	"qemu_refused":                     {},
@@ -3946,7 +3642,6 @@ var specs = map[string]spec{
 	"share_waiting":                    {fields: []string{"dir"}},
 	"size_cpus_prompt":                 {fields: []string{"cpus"}},
 	"size_defaults":                    {fields: []string{"size"}},
-	"size_disk_default_unused":         {fields: []string{"backend", "vm"}},
 	"size_failed":                      {fields: []string{"reason"}},
 	"size_flags_ignored":               {},
 	"size_memory_prompt":               {fields: []string{"memory"}},
@@ -4022,7 +3717,6 @@ var specs = map[string]spec{
 	"unknown_part":                     {fields: []string{"flag", "given", "names"}},
 	"unknown_part_like":                {fields: []string{"flag", "given", "like"}},
 	"unknown_tool":                     {fields: []string{"tool", "tools"}},
-	"unpacking_tools":                  {},
 	"unpublished":                      {fields: []string{"ports", "vm"}},
 	"unpublished_linked":               {fields: []string{"vm", "vms"}},
 	"unsafe_folder":                    {fields: []string{"dir", "holds"}},

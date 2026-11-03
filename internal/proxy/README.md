@@ -7,15 +7,13 @@ The VM can reach nothing but this proxy. On macOS its Lima hostagent runs under 
 - answers `407` without the VM's password;
 - with `-links`, sends a request for one of the VM's links (`CONNECT db:5432`, `GET http://db:5432/`) to that link's socket on the host before any rule (below);
 - checks `CONNECT host:port` and absolute-form requests (`GET http://host/…`) against the VM's policy, which is devvm's built-in policies, read from the binary, and then the user's policy files, and tunnels or forwards allowed ones untouched;
-- resolves names itself, and refuses the host's own addresses and internal ones (loopback, private, link-local, multicast, unspecified, CGNAT `100.64.0.0/10`) unless a rule names the address; through a company proxy (`-upstream`), which resolves names itself, it refuses a name when the host's resolver answers with such an address, and a name the host can't resolve when only `**` allows it (unless `-upstream-unresolved`, which builds on Lima and a Linux Docker engine get), and it reads at most 64 KiB of the company proxy's answer to `CONNECT`;
+- resolves names itself, and refuses the host's own addresses and internal ones (loopback, private, link-local, multicast, unspecified, CGNAT `100.64.0.0/10`) unless a rule names the address; through a company proxy (`-upstream`), which resolves names itself, it refuses a name when the host's resolver answers with such an address, and a name the host can't resolve when only `**` allows it (unless `-upstream-unresolved`, which builds on Lima get), and it reads at most 64 KiB of the company proxy's answer to `CONNECT`;
 - requires a TLS ClientHello in a tunnel to name the CONNECT host (SNI);
 - for hosts with a bound secret, swaps the placeholder in one header for the real value: it intercepts their `:443` tunnels, and does the same for absolute-form `https://` requests (everything else passes unread);
 - with `-nix-cache`, answers `http://devvm.proxy/nix/` itself, as a Nix binary cache that VMs share and only the host fills (below);
 - logs every decision as JSON lines.
 
 On smolvm, the VM's allow list is the host alone, and smolvm asks the proxy about each connection before making it, which smolvm calls mediated egress. With `-decider`, the proxy is that decider too, on a loopback port of its own. It takes over connections to its own address in the VM (`-decider-to`) and serves them as any other, password and policy included. It refuses the rest and logs them as `blocked`. A connection without the decider token that smolvm was started with (`-decider-token-file`) gets no answer.
-
-On Docker, whose VMs can't reach the host's loopback, it also listens on a unix socket (`-listen-unix`), only the user's: a relay (`devvm _proxy -relay`, in a container on the VM's own network) passes each connection the VM makes to it there, unread, and the proxy serves it as any other.
 
 For a VM whose image has the nix layer, devvm passes `-nix-cache`, and the VM's Nix tries `http://devvm.proxy/nix` before `https://cache.nixos.org`. The proxy takes only `GET` and `HEAD` of `nix-cache-info`, `<32 nix-base32>.narinfo` and `nar/<52 nix-base32>.nar` (bare, `.xz`, `.zst` or `.bz2`), with no query, and answers `400` to anything else. It makes up `nix-cache-info` itself, at priority 30, and fetches the rest from `https://cache.nixos.org` alone, only when the VM's policy allows `cache.nixos.org:443`, through the floor or the company proxy, never following a redirect and sending nothing of the VM's request. Before keeping a narinfo, it checks its signature by the pinned `cache.nixos.org-1` key over its fingerprint (`1;StorePath;NarHash;NarSize;References`), that its StorePath is the one asked for, and that its URL is named by its own `NarHash` or `FileHash`. It fetches a NAR only after a narinfo it checked names it, never for a `HEAD`, each one once however many ask and at most four at once, and keeps it only when its SHA-256 and size are that narinfo's `FileHash` and `FileSize`. Files are written whole and renamed into the folder, mode 600 in folders of 700. Anything that fails answers `404`, and nothing of it is kept, so Nix goes to cache.nixos.org itself. Under a lock (`flock` on `.lock`), the proxy takes each file's room in whole blocks before it writes it (`reserve`), deleting the least recently used files (by modification time, which a hit updates) when the file would take the cache past `-nix-cache-max`, down to nine tenths of it, and `.size` keeps the running total. A NAR being fetched is made its full size at once and counts against the cap, so a fetch that would pass it with them is refused. devvm gc and the retention settings trim it with `TrimNixCache`, under the same lock.
 
@@ -30,9 +28,8 @@ Once it listens, it says so with the address it listens on (`daemon.Ready`) in t
 | `proxy.go` | `Main` and the flags, the listener, CONNECT and absolute-form handling, the address floor, the log (`Event`, `AllowRule`: `devvm network log` reads it), the `devvm.proxy` endpoints, `-init-ca` |
 | `policy.go` | the rule syntax and matching (`ValidRule`: `devvm network allow`, `deny` and `rm` take only these); `ParsePolicy`, the one strict parser of policy files, which `devvm network` and doctor use too: each line that holds more than a comment, with its number and whether it's a rule; the built-in policies are read once (`readBuiltins`), every line a rule, and come first in the union; the user's policy files are re-read when they change, and each line that isn't a rule is logged and skipped, except one that starts with `!` (`BrokenDeny`), which makes the policy deny everything, as refused blocks naming the file and line, until it's fixed |
 | `sni.go` | reads a tunnel's ClientHello to check its server name |
-| `splice.go` | every tunnel the proxy carries itself and every relayed connection: `hijack` takes a `CONNECT`'s connection from the HTTP server and answers `200`, and `splice` passes the bytes both ways as they are, passes on the end of what the client sent, and ends once the server's bytes end or the client has gone |
+| `splice.go` | every tunnel the proxy carries itself: `hijack` takes a `CONNECT`'s connection from the HTTP server and answers `200`, and `splice` passes the bytes both ways as they are, passes on the end of what the client sent, and ends once the server's bytes end or the client has gone |
 | `decider.go` | `-decider`: smolvm's mediated-egress protocol (version 2), connections taken over or refused |
-| `relay.go` | `-listen-unix`, and `-relay`: Docker's relay, bytes passed unread to the proxy's socket |
 | `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA (a day each, never past the CA's end; once the CA has ended, `CONNECT`s to be intercepted answered `403` and logged as refused with `caEndedReason`), header substitution, values from `-secret-cmd` (cached briefly, never logged) |
 | `upstream.go` | `-upstream`: a company proxy that allowed requests go through (`CONNECT` by name for tunnels and interception, absolute form for plain HTTP), `NO_PROXY`, and the floor for names it resolves (`floorUpstream`) |
 | `rotate.go` | the logs' rotation past `LogLimit` (10 MiB): the event log renamed to `<log>.1` under the file's lock, the proxy's own log, which is also its stderr, copied there and emptied; `OpenEventLog`, the event log's writer, which netpolicy's `AppendEvent` uses too, and which opens the log again before a line once the other writer has rotated it |
@@ -49,7 +46,7 @@ Once it listens, it says so with the address it listens on (`daemon.Ready`) in t
 ```text
 devvm _proxy -listen 127.0.0.1:PORT -vm NAME -builtin-policy NAME,NAME,… -policy FILE,FILE,… -log LOG.jsonl -proxy-log PROXY.log -lifeline HA.pid \
   -ca ca.pem -cakey ca.key -secrets BINDINGS.json -secret-cmd PATH/TO/devvm -auth-file KEY -links links.json -link-sockets RUN \
-  [-decider 127.0.0.1:PORT -decider-to 100.96.0.1:PORT -decider-token-file TOKEN] [-listen-unix SOCKET] \
+  [-decider 127.0.0.1:PORT -decider-to 100.96.0.1:PORT -decider-token-file TOKEN] \
   [-upstream-cas CAS.pem] [-upstream UPSTREAM] [-nix-cache DIR -nix-cache-max BYTES]
 ```
 
@@ -58,7 +55,6 @@ Flags take one dash or two.
 | Flag | What |
 | --- | --- |
 | `-listen` | the VM's proxy port, on loopback |
-| `-listen-unix` | Docker only: also listen on this unix socket, mode 600; a socket left there is replaced, anything else refused |
 | `-vm` | the VM's name, for the log |
 | `-builtin-policy` | devvm's built-in policies, comma-separated paths in `IO.FS` (`layers/base.policy`, `shared-tools/node.policy`), in order: read once as the proxy starts, ahead of `-policy`'s files, and never again; one that's missing, or holds a line that isn't a rule, is devvm's bug, so `Main` returns an error and the proxy never listens |
 | `-policy` | the user's policy files, comma-separated, in order, each re-read when it changes; a missing file has no rules |
@@ -89,7 +85,6 @@ Other modes, each doing one thing and returning:
 | `-login … -login-bindings` | print the login's secret bindings (JSON, no values; `-login-salt` as above); with `-login-hosts`, their hosts as allowlist lines (`host:443`) |
 | `-login … -login-get NAME` | print one value, refreshing an OAuth token when it's due |
 | `-redact json\|toml` | copy stdin to stdout with values under secret-looking keys replaced by `devvm-redacted`, their paths on stderr |
-| `-relay ADDR -relay-to SOCKET` | listen on ADDR and pass each connection, both ways and unread, to the proxy's socket, until stopped (Docker's relay containers) |
 
 Inside the VM, `http://devvm.proxy/blocked` lists recent blocks, `/blocked/new` those since the last prompt, `/ca.pem` serves the CA certificate, and with `-nix-cache`, `/nix/` is the shared Nix cache.
 

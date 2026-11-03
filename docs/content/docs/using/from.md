@@ -44,4 +44,4 @@ If the image's tag moves to another image while devvm builds, for example becaus
 
 ## Backends
 
-Every backend can start `base` from a container image. Lima converts the image into a disk, smolvm boots images that a registry gives it, and the Docker backend uses any image that Docker has or pulls ([backends](../internals/backends.md#features)).
+Every backend can start `base` from a container image. Lima converts the image into a disk, and smolvm boots images that a registry gives it ([backends](../internals/backends.md#features)).

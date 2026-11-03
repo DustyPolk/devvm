@@ -163,7 +163,7 @@ func TestConfigRefused(t *testing.T) {
 func TestPrecedence(t *testing.T) {
 	d := testDirs(t)
 	saved := Values{
-		Backend: Of("docker"), Network: Of("on"), Ports: Of("none"),
+		Backend: Of("smolvm"), Network: Of("on"), Ports: Of("none"),
 		Size: SizeValues{CPUs: Of("2"), Memory: Of("4"), Disk: Of("50")}, Features: Of([]string{}), Agents: Of([]string{"codex"}),
 		Retention: map[string]string{RetainHistoryAge: "1d", RetainRunLogs: "3"},
 	}
@@ -179,7 +179,7 @@ func TestPrecedence(t *testing.T) {
 		got  Value
 		want Value
 	}{
-		{def.Backend, Value{"docker", FromSettings}},
+		{def.Backend, Value{"smolvm", FromSettings}},
 		{def.Network, Value{"off", FromConfig}},
 		{def.Ports, Value{"none", FromSettings}},
 		{def.CPUs, Value{"2", FromSettings}},
@@ -197,7 +197,7 @@ func TestPrecedence(t *testing.T) {
 		def.Retention.Source(RetainRunLogs) != FromSettings || def.Retention.Source(RetainOrphansAge) != FromBuiltin {
 		t.Errorf("retention = %+v", def.Retention)
 	}
-	if v := (Value{"lima", FromConfig}).With("docker"); v != (Value{"docker", FromFlag}) {
+	if v := (Value{"lima", FromConfig}).With("smolvm"); v != (Value{"smolvm", FromFlag}) {
 		t.Errorf("With a flag: %+v", v)
 	}
 	if v := (Value{"lima", FromConfig}).With(""); v != (Value{"lima", FromConfig}) {
@@ -254,9 +254,9 @@ func TestSave(t *testing.T) {
 // the file and the field, a value devvm can't use.
 func TestReadSaved(t *testing.T) {
 	d := testDirs(t)
-	write(t, d.Settings(), `{"backend": "docker", "later": {"x": 1}, "retention": {"logs.later": "1", "logs.runs": "4"}}`)
+	write(t, d.Settings(), `{"backend": "smolvm", "later": {"x": 1}, "retention": {"logs.later": "1", "logs.runs": "4"}}`)
 	def, err := Read(d)
-	if err != nil || def.Backend != (Value{"docker", FromSettings}) || def.Retention.RunLogs != 4 {
+	if err != nil || def.Backend != (Value{"smolvm", FromSettings}) || def.Retention.RunLogs != 4 {
 		t.Errorf("unknown fields: %+v, %v", def, err)
 	}
 	for data, reason := range map[string]string{

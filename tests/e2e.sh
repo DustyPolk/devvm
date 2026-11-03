@@ -35,7 +35,7 @@
 #                target, the target's rm and a VM made again, the three in a group (joined, a port
 #                published to it, leaving, a VM refused whose hostname is a member's name), network policy on both and the policy rule's refusals,
 #                a group's all-or-none refusals, the log, and nothing left behind (in the --from tier, an
-#                Alpine client's link to port 80 too). --backend smolvm and docker run it too
+#                Alpine client's link to port 80 too). --backend smolvm runs it too
 #     --only desktop
 #                base with the desktop feature, and a VM with network policy whose desktop devvm
 #                desktop serves on this machine's loopback alone: a wrong password refused, the
@@ -71,71 +71,25 @@
 #                links between VMs (the link section's checks, port 80 on smolvm's kernel too),
 #                and that no machine without the sandbox's label is touched. Its machines share your
 #                smolvm (macOS): it deletes only those it made, with the sandbox's label.
-#     --backend docker [--engine linux|desktop]
-#                the Docker backend's own section instead (experimental), state under
-#                /tmp/devvm-go-e2e-docker. On Linux, on this machine's engine: base and a layer built by
-#                committing containers, confined (no host loopback-only server reached, one on every
-#                address reached), a failed build kept, a project VM's mounts, a file watcher in it
-#                seeing this machine's edits (on Desktop, no deletions), its files the host user's
-#                (uid and gid), its home a volume of its own, size, no Docker inside, what it lacks
-#                (a disk size, the nix layer) refused in one line, agent folders added and removed (its container made again from a
-#                commit, its disk kept), a node VM's shared tools linked from Docker's tools volume;
-#                the docker layer under Sysbox (an emulation, reviewed; refused on an engine without
-#                it, on Docker Desktop saying to use a VM backend): a user namespace of its own, every
-#                capability in it, the folder's files yours (root's set-user-id file root's, named at
-#                the next launch), its engine's own volumes, its own network alone (containers on
-#                Docker's default network and another out of reach even as root, and this machine's
-#                loopback even routed to, the internet not; IPv6 turned on reaches this machine's
-#                servers), Docker running in it after each start, no network policy, ls saying so;
-#                refused for a VM that exists, which stays as it was;
-#                ssh for editors', ports' and agent forwarding's emulations (nothing published or
-#                listening, pinned host keys of each VM's own, its own key alone, no forwarding out even
-#                past a hostile sshd, a VM started outside devvm, devvm host and code, every port and
-#                listed ports through devvm's forwarder, a running VM's changed at once, never a port
-#                of this machine's programs or another VM's, the agent in ssh sessions alone, a --clone VM); network policy's
-#                emulation (the VM without NET_RAW on an internal network of its own, with
-#                inhibit_ipv4, beside its relay alone, by ID; nothing but its proxy reached even as
-#                root, no outside name, no DNS query leaving its network (a capture on the engine's
-#                own network, with a control), no IPv6 it can use; the relay devvm's Linux build in an
-#                empty image, read only, no capabilities, its password in no process's arguments, a
-#                token kept out of the VM and its relay, its proxy following its container,
-#                fail-closed without it, a network added, a relay replaced or a start outside devvm
-#                unenforced and stopped, another container on its network refused, network off and
-#                on, ping without NET_RAW); links between VMs (the link section's checks), on each
-#                engine.
-#                On macOS, the same on a Linux engine in a Lima VM e2e keeps (Lima home
-#                ~/.lt-e2e-go-docker, VM dockerhost: this checkout read-only, devvm built for it here,
-#                Sysbox installed, pinned),
-#                then on Docker Desktop, with devvm's Linux build beside devvm: base, a layer, an
-#                Alpine base and the tools built there through a proxy of their own (the internet
-#                reached, this machine's loopback not, no NET_RAW), a project
-#                VM, an agent VM, a node VM, the emulations and network policy. --engine runs one of
-#                the two. Docker Desktop is yours: only what has the sandbox's label is touched, the
-#                rest must be the same at the end (but the images bases start from, which devvm pulls
-#                by digest and Docker keeps), and everything with the label is deleted then. --clean
-#                deletes the Linux engine's images first.
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e. It refuses
 # to run against ~/.lima or devvm's own Lima home, deletes only the VMs it created, and uses no real
-# tokens. devvm is built from this checkout into the sandbox, with its files next to it (or copied from
-# $DEVVM_E2E_BIN, a test build of it, where there's no Go: the docker host VM).
+# tokens. devvm is built from this checkout into the sandbox, with its files embedded.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sections_all="images project clone gc tools network desktop nix from link"
-usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...] | --backend smolvm | --backend docker [--engine linux|desktop]]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel="images project clone gc tools network nix link" backend=lima engines=""
+usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...] | --backend smolvm]  (sections: $sections_all)" >&2; exit 2; }
+clean=false sel="images project clone gc tools network nix link" backend=lima
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
     --from)  sel=$sections_all ;;
     --only)  [[ -n "${2:-}" ]] || usage; sel=$(tr ',' ' ' <<<"$2"); shift
              for s in $sel; do [[ " $sections_all " == *" $s "* ]] || usage; done ;;
-    --backend) case ${2:-} in smolvm|docker) backend=$2 sel=$2 ;; *) usage ;; esac; shift ;;
-    --engine) [[ ${2:-} == linux || ${2:-} == desktop ]] || usage; engines=$2; shift ;;
+    --backend) case ${2:-} in smolvm) backend=$2 sel=$2 ;; *) usage ;; esac; shift ;;
     *) usage ;;
   esac
   shift
 done
-[[ -z $engines || $backend == docker ]] || usage
 # OpenSSL first on PATH, before anything is built: the CA checks' HTTPS server is openssl s_server,
 # and LibreSSL's (macOS's /usr/bin/openssl) cuts the VM's OpenSSL client off mid-request.
 ossl=$(openssl version 2>/dev/null)
@@ -144,19 +98,12 @@ if [[ $ossl != OpenSSL* ]]; then
   [[ "$(uname -s)" == Darwin ]] || fix="install your distribution's openssl package"
   echo "e2e: openssl is ${ossl:-missing}, and e2e needs OpenSSL: $fix" >&2; exit 1
 fi
-# The Docker engines checked: this machine's on Linux; on macOS a Linux one in a VM, then Desktop's.
-if [[ $backend == docker && -z $engines ]]; then
-  if [[ "$(uname -s)" == Darwin ]]; then engines="linux desktop"; else engines=linux; fi
-fi
 want() { [[ " $sel " == *" $1 "* ]]; }
 
 # Its own Lima home (other sandboxes' images aren't its own), for devvm and for its own limactl calls.
 export DEVVM_LIMA_HOME=${DEVVM_E2E_LIMA_HOME:-$HOME/.lt-e2e-go}
 export LIMA_HOME=$DEVVM_LIMA_HOME
 work=/tmp/devvm-go-e2e
-# The Docker backend's: apart, so it runs beside the others. The same path in the docker host VM, so
-# what the Linux engine's run built carries the label Docker Desktop's run looks for.
-[[ $backend != docker ]] || work=/tmp/devvm-go-e2e-docker
 export XDG_DATA_HOME=$work/data XDG_CONFIG_HOME=$work/config
 export DEVVM_SECRET_SERVICE=devvm-go-e2e   # its Keychain items: fake tokens only, deleted at the end
 unset DEVVM_MESSAGES DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN DEVVM_FROM
@@ -176,21 +123,10 @@ gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
 # A test build: DEVVM_UNREVIEWED and the other test overrides count in it
 # (never in a release).
 testbuild=(build -ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes")
-if [[ -n ${DEVVM_E2E_BIN:-} ]]; then
-  cp "$DEVVM_E2E_BIN" "$src/devvm" || { echo "e2e: no devvm at $DEVVM_E2E_BIN" >&2; exit 1; }
-else
-  (cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" "${testbuild[@]}" -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
-  # On macOS, devvm's Linux build beside it, as a release has it: Docker's network policy relays and
-  # Docker Desktop's builds run it.
-  if [[ $backend == docker && "$(uname -s)" == Darwin ]]; then
-    a=$(cd "$root" && "${gocmd[@]}" env GOARCH)
-    (cd "$root" && CGO_ENABLED=0 GOOS=linux GOARCH=$a "${gocmd[@]}" "${testbuild[@]}" -o "$src/devvm-linux-$a" ./cmd/devvm) ||
-      { echo "e2e: couldn't build devvm for Linux" >&2; exit 1; }
-  fi
-fi
+(cd "$root" && CGO_ENABLED=0 "${gocmd[@]}" "${testbuild[@]}" -o "$src/devvm" ./cmd/devvm) || { echo "e2e: couldn't build devvm" >&2; exit 1; }
 # The features are in base's key, so only a run with from (which checks them) builds them all; desktop,
-# and the smolvm and Docker backends' sections, which check devvm desktop, build desktop alone; every
-# other selection shares one smaller base. config.toml chooses them, so nothing asks.
+# and the smolvm backend's section, which checks devvm desktop, build desktop alone; every other
+# selection shares one smaller base. config.toml chooses them, so nothing asks.
 features=""
 if want from; then for f in "$root"/assets/features/*.sh; do features="$features $(basename "$f" .sh)"; done
 elif want desktop || [[ $backend != lima ]]; then features=desktop; fi
@@ -198,7 +134,7 @@ toml=""
 for f in $features; do toml="$toml${toml:+, }\"$f\""; done
 printf 'features = [%s]\n' "$toml" > "$XDG_CONFIG_HOME/devvm/config.toml"
 D=$src/devvm
-# The digest of Ubuntu's container image smolvm's and Docker's base start from, as devvm pins it.
+# The digest of Ubuntu's container image smolvm's base starts from, as devvm pins it.
 ubuntu_pin=$(sed -n 's/^const ContainerDigest = "\(sha256:[0-9a-f]\{64\}\)"$/\1/p' "$root/internal/ubuntu/ubuntu.go")
 # The dated release of Ubuntu's cloud image Lima's base starts from, and its images' SHA-256s.
 cloud_pin() { sed -n "s/^const $1 = \"\([0-9a-z-]*\)\"$/\1/p" "$root/internal/ubuntu/ubuntu.go"; }
@@ -238,45 +174,6 @@ smol_ls() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 == want { 
 smol_others() { smol_json | awk -F'\t' -v want="$XDG_DATA_HOME/devvm" '$3 != want { print $1, $3 }'; }
 smol_status() { smol_ls | awk -v n="$1" '$1 == n { print $2 }'; }
 export -f smol_json smol_ls smol_others smol_status
-# The Docker backend's: only what has the sandbox's label ($dlabel). dns is its names' hash of the data
-# folder (devvm-$dns:KEY images, devvm-img-KEY-$dns build containers).
-dlabel=label=devvm.data=$XDG_DATA_HOME/devvm
-dns=$(printf %s "$XDG_DATA_HOME/devvm" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-8)
-# d_state NAME: the state of the sandbox's container by that name (running, exited, created), "" for none.
-d_state() { docker container ls -a --filter "$dlabel" --format '{{.Names}} {{.State}}' 2>/dev/null | awk -v n="$1" '$1 == n { print $2 }'; }
-# d_vol NAME, d_img REF: the sandbox's volume, or image, by that name is there.
-d_vol() { docker volume ls -q --filter "$dlabel" 2>/dev/null | grep -qx "$1"; }
-d_img() { docker image ls --filter "$dlabel" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -qx "$1"; }
-# d_net NAME: the sandbox's network by that name is there.
-d_net() { docker network ls -q --filter "$dlabel" --filter "name=^$1\$" 2>/dev/null | grep -q .; }
-# d_rm NAME: the sandbox's container by that name, its relay, network, volumes and commits.
-d_rm() { local n=$1 v i
-  [[ -z $(d_state "$n") ]] || docker container rm -f -v "$n" >/dev/null 2>&1
-  [[ -z $(d_state "$n-proxy") ]] || docker container rm -f -v "$n-proxy" >/dev/null 2>&1
-  ! d_net "$n-net" || docker network rm "$n-net" >/dev/null 2>&1
-  for v in "$n-home" "$n-clone"; do ! d_vol "$v" || docker volume rm "$v" >/dev/null 2>&1; done
-  for i in $(docker image ls --filter "$dlabel" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep "^devvm-$dns:$n-"); do
-    docker image rm "$i" >/dev/null 2>&1; done; }
-# d_purge: everything with the sandbox's label: containers, then networks, volumes and images.
-d_purge() { local x
-  for x in $(docker container ls -a -q --filter "$dlabel" 2>/dev/null); do docker container rm -f -v "$x" >/dev/null 2>&1; done
-  for x in $(docker network ls -q --filter "$dlabel" 2>/dev/null); do docker network rm "$x" >/dev/null 2>&1; done
-  for x in $(docker volume ls -q --filter "$dlabel" 2>/dev/null); do docker volume rm "$x" >/dev/null 2>&1; done
-  for x in $(docker image ls --filter "$dlabel" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null); do docker image rm "$x" >/dev/null 2>&1; done; }
-# d_ours: how many containers, networks, volumes and images have the sandbox's label.
-d_ours() { { docker container ls -a -q --filter "$dlabel"; docker network ls -q --filter "$dlabel"; docker volume ls -q --filter "$dlabel"
-  docker image ls -q --filter "$dlabel"; } 2>/dev/null | grep -c .; }
-# d_others: what Docker has without the sandbox's label: containers (ID and name), images (ID),
-# volumes and networks (name and ID). Yours, on Docker Desktop: the same at the end.
-d_others() {
-  { docker container ls -a --format '{{.ID}} {{.Names}} {{.Label "devvm.data"}}' | awk -v w="$XDG_DATA_HOME/devvm" '$3 != w { print "container", $1, $2 }'
-    comm -23 <(docker image ls -a -q --no-trunc | sort -u) <(docker image ls -a -q --no-trunc --filter "$dlabel" | sort -u) | sed 's/^/image /'
-    docker volume ls --format '{{.Name}} {{.Label "devvm.data"}}' | awk -v w="$XDG_DATA_HOME/devvm" '$2 != w { print "volume", $1 }'
-    docker network ls --no-trunc --format '{{.ID}} {{.Name}} {{.Label "devvm.data"}}' | awk -v w="$XDG_DATA_HOME/devvm" '$3 != w { print "network", $1, $2 }'
-  } 2>/dev/null | sort; }
-export -f d_state d_vol d_img d_ours d_net; export dlabel dns
-d_desktop=false   # set once Docker Desktop's checks start: cleanup then deletes all with the label there
-d_servers=()      # the build confinement check's servers
 created=()   # VMs this run made; the only ones it deletes
 # ps_watch: every host process's command line, sampled every 0.1 s into $work/ps.log until
 # ps_unwatch, for checking a secret was in none while devvm ran.
@@ -295,12 +192,6 @@ cleanup() {
       [[ -z $(smol_status "$n") ]] || SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1
       rm -rf "$(vmdir "$n")/backend"
       [[ $n != devvm-img-* ]] || rm -rf "$XDG_DATA_HOME/devvm/smolvm/images/${n#devvm-img-}"
-    elif [[ $backend == docker ]]; then
-      # Only what has the sandbox's label: the VM's container, volumes and commits; an image's tag and
-      # build container.
-      if [[ $n == devvm-img-* ]]; then
-        d_rm "$n-$dns"; ! d_img "devvm-$dns:${n#devvm-img-}" || docker image rm "devvm-$dns:${n#devvm-img-}" >/dev/null 2>&1
-      else d_rm "$n"; rm -rf "$(vmdir "$n")/backend"; fi
     else
       limactl delete -f "$n" >/dev/null 2>&1
     fi
@@ -308,9 +199,6 @@ cleanup() {
     rm -rf "$(vmdir "$n")"
   done
   rm -f "$layers"/e2e*.sh "$layers"/e2e*.policy
-  ! $d_desktop || d_purge
-  for n in ${d_cap:-} ${d_squat:-}; do [[ -z $(d_state "$n") ]] || docker container rm -f "$n" >/dev/null 2>&1; done
-  for n in ${d_servers[@]+"${d_servers[@]}"}; do kill "$n" 2>/dev/null; done
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
   rm -f "$XDG_DATA_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
@@ -325,12 +213,10 @@ cleanup() {
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
   [[ -z ${user_agent_pid:-} ]] || kill "$user_agent_pid" 2>/dev/null
   pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock" 2>/dev/null   # devvm's own, in the sandbox
-  pkill -f "[_]docker-ports -vm .* -key $XDG_DATA_HOME/" 2>/dev/null       # Docker VMs' forwarders, the sandbox's
   pkill -f "[_]lima-ports -vm .* -lifeline $DEVVM_LIMA_HOME/" 2>/dev/null  # Lima VMs' forwarders, the sandbox's
-  pkill -f "[_]proxy -listen .* -listen-unix $XDG_DATA_HOME/devvm/docker/" 2>/dev/null   # Docker VMs' and builds' proxies
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_DATA_HOME/devvm/agent-keys.json" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
-    "$work/dns-probe.sh" "$work/d-dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log" "$work/lima-bypass" \
+    "$work/dns-probe.sh" "$work/udp-probe.sh" "$work/probe.log" "$work/decisions" "$work/udp.log" "$work/nettop.csv" "$work/listener.auth" "$work/ps.log" "$work/lima-bypass" \
     "$work/corp.auth" "$work/corp.policy" "$work/corp.jsonl" "$work/corp.log"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
@@ -344,9 +230,8 @@ trap 'exit 130' INT TERM
 # Progress: each result shows [n/N], how long it took (since the previous check, so builds count),
 # and the time left as the previous run measured it ($work/timings: "label<TAB>seconds"). A
 # heartbeat every minute says what's happening during long steps.
-# Per selection and Docker engines: they run different checks (on macOS, the Linux engine's are timed by
-# its own run, in the docker host VM).
-timings=$work/timings-$(tr ' ' '-' <<<"$sel${engines:+ $engines}")
+# Per selection: each runs different checks.
+timings=$work/timings-$(tr ' ' '-' <<<"$sel")
 : > "$timings.new"
 total=$(wc -l 2>/dev/null < "$timings" | tr -d ' '); [[ ${total:-0} -gt 0 ]] || total="?"
 started=$SECONDS ncheck=0
@@ -634,10 +519,9 @@ for p in AcceptCutText SendCutText; do [ "$(DISPLAY=:1 XAUTHORITY="$HOME/.Xautho
 # its fixed folders searched. Never on a command line: sudo would log it in the VM's journal.
 desktop_secret='read -r pw && [ -n "$pw" ] && ! grep -rlsF -D skip -- "$pw" /home /root /etc /run /tmp /var/log /usr/local'
 # watch_sees RUN VM DIR BY [NESTED [DELETES [FILES]]]: a watcher in the VM on DIR and a subfolder, as a dev
-# server's (RUN VM CMD runs CMD there: in_vm, in_smol, in_d), sees a file changed in each, one made
+# server's (RUN VM CMD runs CMD there: in_vm, in_smol), sees a file changed in each, one made
 # and one deleted, by this machine (BY host) or the VM (BY vm), each within 5 s; with NESTED no,
-# never the subfolder's (9p's limit); with DELETES no, not the deletion (smolvm's and Docker
-# Desktop's limit); with FILES yes, it watches the two changed files too, and a change counts when
+# never the subfolder's (9p's limit); with DELETES no, not the deletion (smolvm's limit); with FILES yes, it watches the two changed files too, and a change counts when
 # the file's own watch sees it (smolvm's limit: a folder's watch sees a change to a file in it with
 # no name, unless the change comes as the file's creation). The watcher is perl (every base has it) calling inotify itself, so the
 # test VM needs nothing added. It prints its events, and writes them to a file in a folder of
@@ -779,22 +663,19 @@ if ($mode eq "serve" or $mode eq "hold") {
 } else { die "e2e-link.pl: serve, hold, conns or listeners\n" }'
 # lk_user VM CMD: CMD in a login shell as the VM's user, on lk_be; lk_root VM CMD: as root; lk_bg VM
 # CMD: as root, left running; lk_put VM FILE: the input, as FILE in the VM.
-lk_user() { case $lk_be in lima) in_vm "$1" "$2" ;; smolvm) in_smol "$1" "$2" ;; *) in_d "$1" "$2" ;; esac; }
+lk_user() { case $lk_be in lima) in_vm "$1" "$2" ;; *) in_smol "$1" "$2" ;; esac; }
 lk_root() { case $lk_be in
   lima) limactl shell --workdir / "$1" sudo sh -c "$2" </dev/null ;;
-  smolvm) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c "$2" </dev/null ;;
-  *) docker exec -u 0 "$1" sh -c "$2" </dev/null ;; esac; }
+  *) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -- sh -c "$2" </dev/null ;; esac; }
 lk_bg() { case $lk_be in
   lima) lk_root "$1" "setsid -f $2 </dev/null >/dev/null 2>&1" ;;
-  smolvm) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- sh -c "$2" </dev/null >/dev/null 2>&1 ;;
-  *) docker exec -d -u 0 "$1" sh -c "$2" </dev/null >/dev/null 2>&1 ;; esac; }
+  *) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -d -- sh -c "$2" </dev/null >/dev/null 2>&1 ;; esac; }
 lk_put() { case $lk_be in
   lima) limactl shell --workdir / "$1" sudo sh -c 'cat > "$1"' _ "$2" ;;
-  smolvm) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -i -- sh -c 'cat > "$1"' _ "$2" ;;
-  *) docker exec -i -u 0 "$1" sh -c 'cat > "$1"' _ "$2" ;; esac; }
+  *) SMOLVM_USAGE=0 smolvm machine exec --name "$1" -i -- sh -c 'cat > "$1"' _ "$2" ;; esac; }
 # lk_running VM: it runs, as its backend says.
 lk_running() { case $lk_be in
-  lima) [[ $(status_of "$1") == Running ]] ;; smolvm) [[ $(smol_status "$1") == running ]] ;; *) [[ $(d_state "$1") == running ]] ;; esac; }
+  lima) [[ $(status_of "$1") == Running ]] ;; *) [[ $(smol_status "$1") == running ]] ;; esac; }
 # lk_until SECONDS CMD...: CMD, once a second until it passes, for up to SECONDS; lk_not CMD...: CMD fails.
 lk_until() { local n=$1 i; shift; for ((i = 1; i < n; i++)); do "$@" >/dev/null 2>&1 && return 0; sleep 1; done; "$@"; }
 lk_not() { ! "$@"; }
@@ -846,7 +727,7 @@ lk_mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 lk_session() { local p; p=$(pgrep -f -- "[_]links $1\$" | head -1); [[ -n $p ]] && echo "$p"; }
 lk_master() { local p; p=$(pgrep -f -- "[-]M -S $(lk_ctl "$1") " | head -1); [[ -n $p ]] && echo "$p"; }
 lk_desc() { local p c; for p in "$@"; do echo "$p"; for c in $(pgrep -P "$p" 2>/dev/null); do lk_desc "$c"; done; done; }
-# lk_sshport VM: the host loopback port devvm's ssh reaches it on ("" through a ProxyCommand: Docker).
+# lk_sshport VM: the host loopback port devvm's ssh reaches it on.
 lk_sshport() { local p; p=$(sed -n 's/^ssh_port=//p' "$(vmdir "$1")/state" 2>/dev/null)
   [[ -n $p ]] || p=$(sed -n 's/^ *"ssh_port": \([0-9]*\).*/\1/p' "$(vmdir "$1")/backend/record.json" 2>/dev/null)
   echo "$p"; }
@@ -866,13 +747,12 @@ lk_host_clean() { local pid t peer v ok bad=""; pid=$(lk_session "$1") || { echo
   [[ -z $bad ]] || { echo "connected to:$bad"; return 1; }; }
 # lk_listens VM: its TCP listeners, as the helper prints them, read as root and as its user: root in a
 # container may not read the processes of the user's (no CAP_SYS_PTRACE), whose sshd has the links'.
-# On Docker neither can: each connection's sshd (sshd -i) isn't dumpable, so a listener no process
-# shows is counted as sshd's ("sshd?"), which only makes lk_vm_clean stricter. lk_vm_clean VM
-# PORTS...: its sshd listens only on its own port (22) and links' addresses, and on each PORT sshd
-# listens on a link's address and nothing listens anywhere else (127.0.0.1, ::1, every address).
+# lk_vm_clean VM PORTS...: its sshd listens only on its own port (22) and links' addresses, and on
+# each PORT sshd listens on a link's address and nothing listens anywhere else (127.0.0.1, ::1, every
+# address).
 lk_listens() {
   { lk_root "$1" 'perl /var/tmp/e2e-link.pl listeners'; lk_user "$1" 'perl /var/tmp/e2e-link.pl listeners'; } 2>/dev/null |
-    awk -v d="$lk_be" '!($2 in n) || n[$2] == "?" { n[$2] = $1 } END { for (a in n) print (d == "docker" && n[a] == "?" ? "sshd?" : n[a]), a }'; }
+    awk '!($2 in n) || n[$2] == "?" { n[$2] = $1 } END { for (a in n) print n[a], a }'; }
 lk_vm_clean() { local vm=$1 l p bad; shift
   l=$(lk_listens "$vm") || { echo "no listeners read"; return 1; }
   bad=$(awk '$1 ~ /^sshd/ && $2 !~ /:22$/ && $2 !~ /^127\.77\./' <<<"$l")
@@ -910,7 +790,7 @@ lk_reconnect() { local m; m=$(lk_master "$1"); [[ -n $m ]] || { echo "no master"
   kill "$m"; lk_until 30 lk_new_master "$1" "$m" && lk_until 30 lk_gets "$1" "$2" "$3" "$4"; }
 lk_new_master() { local n; n=$(lk_master "$1"); [[ -n $n && $n != "$2" ]]; }
 
-# link_section BACKEND PREFIX: the link checks on BACKEND (lima, smolvm, docker), the folders named
+# link_section BACKEND PREFIX: the link checks on BACKEND (lima, smolvm), the folders named
 # from PREFIX: PREFIXdb and PREFIXapi the targets, PREFIXapp the client. Three small VMs without
 # network policy, then network policy on the client and the first target; ports 47240-47249, and 80.
 # devvm runs with a soft limit of 256 open files, macOS's default (a shell of yours may have more),
@@ -1130,7 +1010,7 @@ lk_restarted() { local k0 k1
   if ! { lk_up "$lk_p2" && lk_running "$lk_v2" && lk_serve "$lk_v2" "$lk_w2" 47240 80; }; then tail -5 "$work/last.log"; return 1; fi
   k1=$(grep "^$lk_v2 " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
   lk_until 20 lk_gets "$lk_vc" "$lk_n2" 47240 "$lk_w2-47240" || return 1
-  # Lima keeps a VM's host keys; smolvm and Docker give it new ones at each start.
+  # Lima keeps a VM's host keys; smolvm gives it new ones at each start.
   if [[ $lk_be == lima ]]; then echo "host key kept: $([[ $k0 == "$k1" ]] && echo yes || echo no)"
   else [[ -n $k1 && $k0 != "$k1" ]] || { echo "the same host key"; return 1; }; fi; }
 lk_rm_target() { local s
@@ -1319,10 +1199,6 @@ if $clean; then
     for n in $(smol_ls | awk '$1 ~ /^devvm-img-/ { print $1 }'); do SMOLVM_USAGE=0 smolvm machine delete --name "$n" -f >/dev/null 2>&1; done
     for k in "$XDG_DATA_HOME"/devvm/smolvm/images/*; do [[ ! -d $k ]] || rm -rf "${images:?}/$(basename "$k")"; done
     rm -rf "$XDG_DATA_HOME/devvm/smolvm/images"
-  elif [[ $backend == docker ]]; then
-    # This engine's, with the sandbox's label (Docker Desktop's are deleted after each run anyway).
-    [[ " $engines " != *" linux "* || "$(uname -s)" == Darwin ]] || d_purge
-    rm -rf "$images" "$share" "$XDG_DATA_HOME/devvm/docker"
   else
     for n in $(limactl list -q 2>/dev/null | grep '^devvm-img-'); do limactl delete -f "$n" >/dev/null 2>&1; done
     rm -rf "$images" "$share"
@@ -3728,1212 +3604,6 @@ section "smolvm: links between VMs"
 link_section smolvm slk
 
 check "no machine without the sandbox's label was touched" bash -c "[[ \"\$(smol_others)\" == '$others_before' ]]"
-fi
-
-if want docker; then
-# The Docker backend (experimental): its native features, and a one-line refusal for the rest.
-B=(--backend docker)
-me=$(id -un)
-# in_d VM CMD: CMD in a login shell as the VM's user, as devvm's shell has it; in_root VM CMD: as root.
-in_d() { docker exec -u "$me" -e "HOME=/home/$me.guest" -e "USER=$me" "$1" bash -lc "$2" </dev/null; }
-in_root() { docker exec -u 0 "$1" sh -c "$2" </dev/null; }
-export -f in_d in_root; export me
-# mounted VM DEST TYPE RW: the VM's container mounts TYPE (bind, volume) at DEST, read-write or not.
-mounted() { docker container inspect -f '{{range .Mounts}}{{.Type}}|{{.Destination}}|{{.RW}} {{end}}' "$1" 2>/dev/null |
-  tr ' ' '\n' | grep -qx "$3|$2|$4"; }
-export -f mounted d_others
-# refused DIR FEATURE ARGS...: devvm ARGS in DIR stops in one line, naming FEATURE, and makes nothing.
-refused() { local d=$1 f=$2 before out; shift 2
-  before=$(d_ours)
-  out=$(cd "$d" && DEVVM_MESSAGES=names "$D" "${B[@]}" "$@" </dev/null 2>&1) && { echo "it ran: $out"; return 1; }
-  echo "$out"
-  [[ $(grep -c '^devvm: ' <<<"$out") -eq 1 ]] && grep -qE "^devvm: backend_lacks backend=docker feature=$f vm=" <<<"$out" &&
-    [[ $(d_ours) == "$before" ]]; }
-# owner_is_me FILE: the host file is the user's, and on Linux its group too.
-owner_is_me() { local o; o=$(stat -c '%u %g' "$1" 2>/dev/null || stat -f '%u %g' "$1")
-  echo "owner: $o"; [[ ${o% *} == "$(id -u)" ]] && { [[ "$(uname -s)" != Linux ]] || [[ ${o#* } == "$(id -g)" ]]; }; }
-
-# docker_project NAME: a base VM's checks, on whichever engine: mounts, its home, the tools, size.
-docker_project() {
-  local p; p=$(newproj "$1"); git -C "$p" init -q
-  launch "$p" 'pwd; id -un; echo e2e-shell-ran' "${B[@]}" --no-network-policy --ports none --cpus 2 --memory 3
-  check "devvm makes the VM a container from base, labelled, and opens a shell in the folder as you" bash -c "
-    [[ -n '$vm' && \$(d_state '$vm') == running ]] && grep -qx '$p' '$work/last.log' && grep -qx '$me' '$work/last.log' &&
-    grep -qx e2e-shell-ran '$work/last.log' && grep -qx backend=docker '$(vmdir "$vm")/state' && grep -qx net=off '$(vmdir "$vm")/state' &&
-    [[ \$(docker container inspect -f '{{index .Config.Labels \"devvm.kind\"}}' '$vm') == vm ]]"
-  check "it gets --cpus and --memory" in_d "$vm" '[[ $(nproc) == 2 && $(cat /sys/fs/cgroup/memory.max) == 3221225472 ]]'
-  check "ls lists it on docker" bash -c "'$D' ls 2>/dev/null | grep -Eq '^$vm +Running +base +- +\S+ +off +- +docker +$p\$'"
-  check "the folder is mounted read-write, and what the VM writes is yours" bash -c "
-    docker exec -u '$me' '$vm' sh -c 'echo from-vm > \"$p/vm.txt\"' </dev/null && grep -qx from-vm '$p/vm.txt'"
-  check "... yours on this machine (and your group on Linux)" owner_is_me "$p/vm.txt"
-  # Docker Desktop's file sharing passes on changes and new files, but no deletions.
-  if $d_desktop; then
-    check "a watcher in the VM sees files changed and made on this machine, but not deleted (Desktop)" watch_sees in_d "$vm" "$p" host yes no
-  else
-    check "a watcher in the VM sees files changed, made and deleted on this machine" watch_sees in_d "$vm" "$p" host
-  fi
-  check "its home is a volume of its own, the shared tools one read-only, even for root" bash -c "
-    mounted '$vm' /home/$me.guest volume true && mounted '$vm' /mnt/devvm-tools volume false && d_vol '$vm-home' &&
-    ! docker exec -u 0 '$vm' touch /mnt/devvm-tools/x </dev/null 2>/dev/null"
-  check "hostname is the folder" in_d "$vm" "[[ \$(hostname) == $1 ]]"
-  check "it has no Docker" in_d "$vm" '! command -v dockerd && ! command -v docker'
-  check "devvm size shows its CPUs, memory and what its disk holds" bash -c "cd '$p' &&
-    [[ \$('$D' size 2>/dev/null) =~ ^cpus=2\ memory=3GiB\ disk_used=[0-9.]+GiB\$ ]]"
-  in_root "$vm" 'echo kept > /var/tmp/e2e-kept'
-  check "devvm stop stops it; devvm starts it again, its disk as it was" bash -c "cd '$p' && '$D' stop </dev/null >/dev/null 2>&1 &&
-    [[ \$(d_state $vm) == exited ]] && printf 'cat /var/tmp/e2e-kept\n' | '$D' 2>&1 | grep -qx kept && [[ \$(d_state $vm) == running ]]"
-  q=$(newproj "$1-no")
-  check "a disk size is refused in one line, nothing made" refused "$q" disk --no-network-policy --ports none --disk 200
-  # Its containers can't make the namespaces Nix's build sandbox needs.
-  check "the nix layer is refused in one line, nothing made" refused "$q" nix-layer --no-network-policy --ports none --layers nix
-  check "rm deletes its container, its home volume and its state" bash -c "cd '$p' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-    [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-home' && [[ ! -e '$(vmdir "$vm")' ]]"
-}
-
-# docker_agents NAME: an agent VM's folders, read-only; one added or removed makes its container again
-# from a commit of its own, its disk and home kept.
-docker_agents() {
-  local ah=$work/agent-home a
-  rm -rf "$ah"; mkdir -p "$ah/.claude/skills/e2e"; ah=$(cd "$ah" && pwd -P)
-  echo '# e2e skill' > "$ah/.claude/skills/e2e/SKILL.md"
-  a=$(newproj "$1")
-  (cd "$a" && HOME=$ah quiet "$D" "${B[@]}" --no-network-policy --ports none --no-git-protect --agents claude)
-  vm=$(vm_of "$a"); [[ -z $vm ]] || created+=("$vm")
-  check "an agent's folder is bind-mounted read-only at its host path, even for root, and linked into the VM's home" bash -c "
-    [[ -n '$vm' ]] && mounted '$vm' '$ah/.claude/skills' bind false && ! docker exec -u 0 '$vm' touch '$ah/.claude/skills/x' </dev/null 2>/dev/null &&
-    docker exec -u '$me' -e HOME=/home/$me.guest '$vm' sh -c 'grep -q e2e ~/.claude/skills/e2e/SKILL.md' </dev/null"
-  in_root "$vm" 'echo kept > /var/tmp/e2e-kept'
-  in_d "$vm" 'echo home > ~/e2e-home'
-  mkdir -p "$ah/.claude/agents"
-  check "a new agent folder is noticed on launch, and waits for a restart" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' 2>&1 |
-    grep -qF \"\$(m mounts_next_start vm=$vm | head -1)\""
-  check "restart makes its container again from a commit of its own, mounting it, its disk and home kept" bash -c "cd '$a' &&
-    printf 'cat /var/tmp/e2e-kept ~/e2e-home\n' | HOME='$ah' '$D' restart >'$work/last.log' 2>&1 &&
-    grep -qF \"\$(m docker_remaking vm=$vm | head -1)\" '$work/last.log' && grep -qx kept '$work/last.log' && grep -qx home '$work/last.log' &&
-    mounted '$vm' '$ah/.claude/agents' bind false && d_img 'devvm-$dns:$vm-1'"
-  rm -rf "$ah/.claude/skills"
-  check "a removed one: made again, the commit before deleted, and it starts" bash -c "cd '$a' &&
-    printf 'cat /var/tmp/e2e-kept\n' | HOME='$ah' '$D' restart >'$work/last.log' 2>&1 && grep -qx kept '$work/last.log' &&
-    ! mounted '$vm' '$ah/.claude/skills' bind false && [[ \$(d_state $vm) == running ]] && d_img 'devvm-$dns:$vm-2' && ! d_img 'devvm-$dns:$vm-1'"
-  check "rm deletes its container, volumes and commit" bash -c "cd '$a' && HOME='$ah' '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-    [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-home' && ! d_img 'devvm-$dns:$vm-2'"
-}
-
-# docker_tools NAME: a node VM's shared tools, unpacked in Docker's tools volume and linked.
-docker_tools() {
-  local t; t=$(newproj "$1"); echo '{}' > "$t/package.json"
-  launch "$t" 'node -v' "${B[@]}" --no-network-policy --ports none --no-git-protect
-  check "a node VM: its tools at the locked versions, in the share, recorded" bash -c "
-    [[ -n '$vm' ]] && grep -qx image=base '$(vmdir "$vm")/state' && grep -qx tool_names=node '$(vmdir "$vm")/state' && grep -qx v$(lockv node) '$work/last.log' &&
-    for f in \$(sed -n 's/^tools=//p' '$(vmdir "$vm")/state'); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"docker\",' '$share'/\$f.json || exit 1; done"
-  check "node, npm, pnpm and bun work, each linked from Docker's tools volume, read-only even for root" bash -c "
-    in_d() { docker exec -u '$me' -e HOME=/home/$me.guest -e USER=$me '$vm' bash -lc \"\$1\" </dev/null; }
-    in_d 'npm -v && pnpm -v && bun -v' && in_d '[[ \$(readlink /opt/devvm/tools/node/$(lockv node)) == /mnt/devvm-tools/node-$(lockv node)-*.erofs ]]' &&
-    ! docker exec -u 0 '$vm' touch /opt/devvm/tools/node/$(lockv node)/x </dev/null 2>/dev/null"
-  check "the tools' build and unpacking left no container behind" bash -c "
-    [[ -z \$(d_state devvm-tools-build-$dns) && -z \$(d_state devvm-tools-unpack-$dns) ]]"
-  check "restarted, the tools are there again" bash -c "cd '$t' && printf 'node -v\n' | '$D' restart 2>&1 | grep -qx v$(lockv node)"
-  (cd "$t" && quiet "$D" rm --force --no-export)
-}
-
-# d_sysbox: the engine has Sysbox's runtime.
-d_sysbox() { docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"sysbox-runc"'; }
-# d_inner VM: Docker's engine in the VM runs a container as the VM's user, which reaches the internet.
-d_inner() { in_d "$1" 'for _ in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done
-  docker run --rm alpine:3 sh -c "wget -q -O /dev/null https://api.github.com && echo e2e-inner-ran"' 2>&1 | tail -3 | tee /dev/stderr | grep -qx e2e-inner-ran; }
-# d_layer_refused DIR NAME ARGS...: devvm ARGS in DIR on docker stops in one line, NAME's message,
-# and makes nothing.
-d_layer_refused() { local d=$1 n=$2 before out; shift 2
-  before=$(d_ours)
-  out=$(cd "$d" && DEVVM_MESSAGES=names "$D" --backend docker "$@" </dev/null 2>&1) && { echo "it ran: $out"; return 1; }
-  echo "$out"
-  [[ $(grep -c '^devvm: ' <<<"$out") -eq 1 ]] && grep -qE "^devvm: $n( |\$)" <<<"$out" && [[ $(d_ours) == "$before" ]]; }
-# d_layer_vm VM: a VM made for the docker layer: under Sysbox's runtime, not privileged, its Docker
-# engine's volumes mounted read-write, on its own network, alone.
-d_layer_vm() { local r m
-  r=$(docker container inspect -f '{{.HostConfig.Privileged}} {{.HostConfig.Runtime}}' "$1"); echo "privileged, runtime: $r"
-  m=$(docker network inspect -f '{{range $id, $c := .Containers}}{{$id}} {{end}}' "$1-docker-net" 2>/dev/null | xargs)
-  echo "networks: $(dn_nets "$1"); members: $m"
-  [[ $r == 'false sysbox-runc' ]] && mounted "$1" /var/lib/docker volume true && mounted "$1" /var/lib/containerd volume true &&
-    d_vol "$1-docker" && d_vol "$1-containerd" && [[ $(dn_nets "$1") == "$1-docker-net" ]] && d_net "$1-docker-net" &&
-    [[ $(docker network inspect -f '{{.Internal}}' "$1-docker-net") == false ]] &&
-    [[ $m == "$(docker container inspect -f '{{.Id}}' "$1")" ]]; }
-# d_plain_vm VM: a VM as any other: Docker's runtime, without NET_RAW, on Docker's default network.
-d_plain_vm() { local r
-  r=$(docker container inspect -f '{{.HostConfig.Runtime}} {{.HostConfig.CapDrop}}' "$1"); echo "runtime, dropped: $r; networks: $(dn_nets "$1")"
-  [[ $r == 'runc [NET_RAW]' || $r == 'runc [CAP_NET_RAW]' ]] && [[ $(dn_nets "$1") == bridge ]]; }
-# d_reach FROM...: FROM (a command prefix) connects to $standin_ip:8080 and reads the stand-in's line.
-d_reach() { "$@" bash -c "exec 3<>/dev/tcp/$standin_ip/8080 && head -1 <&3" 2>&1 | grep -qx e2e-standin; }
-# d_isolated VM: a stand-in container of the sandbox's from VM's image, on Docker's default network,
-# then on another network: VM can't reach it, even as root, while another container on that network
-# can (the control); VM reaches the internet.
-d_isolated() { local img n r=0
-  img=$(docker container inspect -f '{{.Config.Image}}' "$1")
-  docker network create --label "devvm.data=$XDG_DATA_HOME/devvm" "$1-othernet" >/dev/null || return 1
-  for n in bridge "$1-othernet"; do
-    docker run -d --name "$1-standin" --label "devvm.data=$XDG_DATA_HOME/devvm" --network "$n" --entrypoint perl "$img" \
-      -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => 8080, Listen => 5, ReuseAddr => 1) or die;
-        while ($c = $s->accept) { print $c "e2e-standin\n"; close $c }' >/dev/null || { r=1; break; }
-    standin_ip=$(docker container inspect -f "{{(index .NetworkSettings.Networks \"$n\").IPAddress}}" "$1-standin"); export standin_ip
-    sleep 1
-    echo "stand-in on $n at $standin_ip"
-    if d_reach timeout 5 docker exec -u 0 "$1"; then echo "the VM reaches it"; r=1
-    elif d_reach docker run --rm --label "devvm.data=$XDG_DATA_HOME/devvm" --network "$n" --entrypoint timeout "$img" 5; then
-      echo "the VM doesn't reach it; the control does"
-    else echo "the control doesn't reach it"; r=1
-    fi
-    docker rm -f "$1-standin" >/dev/null 2>&1
-  done
-  docker network rm "$1-othernet" >/dev/null 2>&1
-  (( r == 0 )) && in_root "$1" 'curl -sS -m 20 -o /dev/null https://api.github.com' && echo "the internet reached"; }
-# d_netroot VM: root in VM, through Docker's engine in it (a container on the VM's own network
-# namespace, privileged in it, as anyone in the VM's docker group can run), runs the script on its
-# input.
-d_netroot() { docker exec -i -u "$me" -e "HOME=/home/$me.guest" -e "USER=$me" "$1" bash -lc 'docker run --rm -i --privileged --network host alpine:3 sh -s'; }
-# d_udp_host ADDR PORT: a server of this machine's on ADDR, UDP port PORT, in the background, which
-# writes the first datagram it gets to $work/udp-PORT.
-d_udp_host() { rm -f "$work/udp-$2"
-  perl -MIO::Socket::IP -e '($h, $p, $f) = @ARGV; $s = IO::Socket::IP->new(LocalHost => $h, LocalPort => $p, Proto => "udp") or die "$@";
-    $SIG{ALRM} = sub { exit 0 }; alarm 60; $s->recv($m, 100); open(F, ">", $f) or die; print F $m; close F' "$1" "$2" "$work/udp-$2" </dev/null >/dev/null 2>&1 &
-  d_hostprogs+=($!); }
-# d_layer_loopback VM: root in VM sends UDP through its gateway to this machine's server on every
-# address (the control), then routes 127.0.0.1 to its gateway (route_localnet on in the VM, the local
-# table moved behind) and sends to this machine's server on its loopback: only the control's arrives,
-# as the bridge's route_localnet is off.
-d_layer_loopback() { local br out
-  br=br-$(docker network inspect -f '{{.Id}}' "$1-docker-net" | cut -c1-12)
-  d_udp_host 0.0.0.0 47411; d_udp_host 127.0.0.1 47412; sleep 1
-  out=$(printf '%s\n' 'gw=$(ip route | awk "/^default/ { print \$3 }")' 'echo e2e-every | nc -u -w1 "$gw" 47411' \
-    'sysctl -qw net.ipv4.conf.all.route_localnet=1 net.ipv4.conf.eth0.route_localnet=1' \
-    'ip rule add pref 10 to 127.0.0.1 lookup 100 && ip rule del pref 0 && ip rule add pref 20 lookup local &&' \
-    '  ip route add 127.0.0.1/32 via "$gw" dev eth0 table 100 && ip route get 127.0.0.1 | grep -q " via $gw " && echo e2e-routed' \
-    'for _ in 1 2 3; do echo e2e-loopback | nc -u -w1 127.0.0.1 47412; done' \
-    'ip rule add pref 0 lookup local; ip rule del pref 20; ip rule del pref 10' | d_netroot "$1" 2>&1)
-  sleep 2; kill "${d_hostprogs[@]}" 2>/dev/null; wait "${d_hostprogs[@]}" 2>/dev/null; d_hostprogs=()
-  echo "$out"; echo "bridge $br route_localnet: $(cat "/proc/sys/net/ipv4/conf/$br/route_localnet")"
-  echo "every address got: $(cat "$work/udp-47411" 2>/dev/null); loopback got: $(cat "$work/udp-47412" 2>/dev/null)"
-  grep -qx e2e-routed <<<"$out" && grep -qx e2e-every "$work/udp-47411" && [[ ! -s $work/udp-47412 ]]; }
-# d_layer_ipv6 VM: root in VM turns IPv6 on for its interface and reaches this machine's server on ::
-# through the bridge's link-local address (on its own host's servers on every address, IPv4's gateway
-# reaches them too).
-d_layer_ipv6() { local br ll out
-  br=br-$(docker network inspect -f '{{.Id}}' "$1-docker-net" | cut -c1-12)
-  ll=$(ip -6 addr show "$br" | awk '/inet6 fe80/ { sub(/\/.*/, "", $2); print $2; exit }')
-  d_hostserve :: 47413; sleep 1
-  out=$(printf '%s\n' 'sysctl -qw net.ipv6.conf.eth0.disable_ipv6=0; sleep 3' "nc -w3 $ll%eth0 47413 </dev/null" \
-    'sysctl -qw net.ipv6.conf.eth0.disable_ipv6=1' | d_netroot "$1" 2>&1)
-  kill "${d_hostprogs[@]}" 2>/dev/null; wait "${d_hostprogs[@]}" 2>/dev/null; d_hostprogs=()
-  echo "bridge $br at $ll; the VM got: $out"; grep -qx host-47413 <<<"$out"; }
-# d_layer_refused_existing DIR VM: --layers docker for VM (DIR's, a base VM) that exists: warned in
-# one line that it changes nothing, and VM as it was (its image base, no docker_layer, a VM as any
-# other, still running, no network or engine's volumes of the layer's).
-d_layer_refused_existing() { local d=$1 vm=$2
-  (cd "$d" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" --layers docker >"$work/last.log" 2>&1); cat "$work/last.log"
-  echo "state: $(grep -E '^(image|docker_layer|net)=' "$(vmdir "$vm")/state" | xargs)"
-  [[ $(grep -c '^devvm: ' "$work/last.log") -eq 1 ]] && grep -qx "devvm: parts_flags_ignored vm=$vm" "$work/last.log" &&
-    grep -qx image=base "$(vmdir "$vm")/state" && ! grep -q '^docker_layer=.' "$(vmdir "$vm")/state" && [[ $(d_state "$vm") == running ]] &&
-    d_plain_vm "$vm" && ! d_vol "$vm-docker" && ! d_vol "$vm-containerd" && ! d_net "$vm-docker-net"; }
-# d_engine_kept DIR VM: devvm restart in DIR starts VM's Docker engine again, with the image d_inner
-# pulled; else what its engine logged.
-d_engine_kept() {
-  (cd "$1" && printf 'exit\n' | "$D" restart >"$work/last.log" 2>&1) || { tail -5 "$work/last.log"; return 1; }
-  in_d "$2" 'for _ in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done; docker image inspect alpine:3 >/dev/null' && return 0
-  in_root "$2" 'echo "pid file: $(cat /run/docker.pid); processes: $(for p in /proc/[0-9]*; do printf "%s=%s " "${p#/proc/}" "$(cat "$p/comm")"; done)"
-    tail -3 /var/log/dockerd.log'
-  return 1; }
-export -f d_inner d_layer_vm d_plain_vm owner_is_me
-
-# docker_layer NAME: the docker layer, under Sysbox where the engine has it (an emulation, reviewed),
-# for a new VM; refused elsewhere (on Docker Desktop, saying to use a VM backend; on a Linux engine
-# without Sysbox, to install it), with network policy, and for a VM that exists.
-docker_layer() {
-  local q s p n=docker_layer_no_sysbox
-  q=$(newproj "$1-no")
-  p=$(newproj "$1-inplace")
-  launch "$p" exit "${B[@]}" --no-network-policy --ports none
-  if ! d_sysbox; then
-    ! $d_desktop || n=docker_layer_needs_vm
-    check "the docker layer is refused without Sysbox ($n), in one line, nothing made" \
-      d_layer_refused "$q" "$n" --no-network-policy --ports none --layers docker
-    check "... and given to a VM that exists, warned in one line, the VM as it was" d_layer_refused_existing "$p" "$vm"
-    (cd "$p" && quiet "$D" rm --force --no-export)
-    return 0
-  fi
-  check "the docker layer with network policy is refused in one line, nothing made" \
-    d_layer_refused "$q" net_docker_layer --network-policy --ports none --layers docker
-
-  s=$(newproj "$1-sysbox")
-  (cd "$s" && DEVVM_MESSAGES=names "$D" "${B[@]}" --ports none --layers docker </dev/null >"$work/last.log" 2>&1)
-  vm=$(vm_of "$s"); [[ -z $vm ]] || created+=("$vm")
-  check "under Sysbox: its runtime, not privileged, said, unwarned, its engine's volumes, its own network alone, no network policy (said)" bash -c "
-    [[ -n '$vm' ]] && grep -qE '^==> docker_layer_runtime backend=docker runtime=sysbox vm=$vm\$' '$work/last.log' &&
-    ! grep -q backend_unreviewed '$work/last.log' && grep -qx 'devvm: net_off_docker_layer backend=docker vm=$vm' '$work/last.log' &&
-    d_layer_vm '$vm' && grep -qx docker_layer=sysbox '$(vmdir "$vm")/state' && grep -qx net=off '$(vmdir "$vm")/state' || { tail -5 '$work/last.log'; false; }"
-  check "... root in it isn't root here: a user namespace of its own" in_root "$vm" \
-    '! grep -qE "^ *0 +0 +4294967295\$" /proc/self/uid_map && cat /proc/self/uid_map'
-  check "... root has every capability in its own namespaces, NET_ADMIN and NET_RAW among them" in_root "$vm" \
-    'b=$(sed -n "s/^CapBnd:[[:space:]]*//p" /proc/self/status); echo "bounding set: $b"; [ $((0x$b >> 12 & 3)) -eq 3 ]'
-  check "... Docker's engine runs in it, started by devvm, for the VM's user" d_inner "$vm"
-  check "... it reaches the internet, but no container on Docker's default network or another, even as root" d_isolated "$vm"
-  check "... nor this machine's loopback, even as root routing 127.0.0.1 out (its servers on every address, it does)" \
-    d_layer_loopback "$vm"
-  check "... root turning IPv6 on reaches this machine's servers on :: through the bridge's link-local address" d_layer_ipv6 "$vm"
-  check "... what it writes in the folder is yours" bash -c "docker exec -u '$me' '$vm' sh -c 'echo from-vm > \"$s/vm.txt\"' </dev/null &&
-    owner_is_me '$s/vm.txt'"
-  check "... root's set-user-id file in the folder is root's here too, and its next launch names it as root's" bash -c "
-    in_root '$vm' 'cp /bin/true \"$s/e2e-setid\" && chmod 4755 \"$s/e2e-setid\"' && [[ \$(stat -c '%u %a' '$s/e2e-setid') == '0 4755' ]] &&
-    cd '$s' && printf 'exit\n' | DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1; in_root '$vm' 'rm -f \"$s/e2e-setid\"'
-    grep -E '^(==> |devvm: )?setid_root_files ' '$work/last.log' | grep -q e2e-setid"
-  check "... ls shows it" bash -c "cd '$s' && '$D' ls 2>/dev/null | grep -Eq '^$vm +Running +.* +docker \(sysbox\) +$s\$'"
-  check "... network policy can't be turned on" bash -c "cd '$s' && ! DEVVM_MESSAGES=names '$D' network on </dev/null 2>'$work/last.log' &&
-    grep -qx 'devvm: net_docker_layer backend=docker vm=$vm' '$work/last.log' && grep -qx net=off '$(vmdir "$vm")/state'"
-  # Its shell, a login, has the docker group the layer adds.
-  check "... Docker's engine runs in it, for the VM's user in its shell" bash -c "cd '$s' &&
-    printf 'for _ in \$(seq 30); do docker info >/dev/null 2>&1 && break; sleep 1; done\ndocker run --rm alpine:3 echo e2e-inner-ran\n' |
-      '$D' 2>&1 | tail -3 | tee /dev/stderr | grep -qx e2e-inner-ran"
-  check "... restarted, its engine runs again with its images kept" d_engine_kept "$s" "$vm"
-  # 600 MB in the engine's volume, outside the container's own writes: devvm size counts it.
-  check "... devvm size's disk_used counts its engine's volumes" bash -c "
-    used() { cd '$s' && '$D' size 2>/dev/null | sed -n 's/.*disk_used=\([0-9.]*\)GiB.*/\1/p'; }
-    a=\$(used) && in_root '$vm' 'dd if=/dev/urandom of=/var/lib/docker/e2e-fill bs=1M count=600 status=none' &&
-    b=\$(used); in_root '$vm' 'rm -f /var/lib/docker/e2e-fill'; echo \"disk_used: \$a GiB, then \$b GiB\"
-    [[ -n \$a && -n \$b ]] && awk -v a=\"\$a\" -v b=\"\$b\" 'BEGIN { exit !(b - a >= 0.5) }'"
-  check "rm deletes its container, volumes and network" bash -c "cd '$s' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-    [[ -z \$(d_state $vm) ]] && ! d_vol '$vm-docker' && ! d_vol '$vm-containerd' && ! d_net '$vm-docker-net'"
-
-  vm=$(vm_of "$p")
-  check "given to a VM that exists: warned in one line, the VM as it was" d_layer_refused_existing "$p" "$vm"
-  (cd "$p" && quiet "$D" rm --force --no-export)
-}
-
-# Docker's emulations (ssh for editors, ports, agent forwarding). Their guarantees: nothing published
-# or listening, each VM's own host keys pinned and its own key the only login, as the VM's user; no
-# forwarding out that devvm's entry lets through, whatever the VM runs as sshd; ports on this
-# machine's loopback alone, never one of its programs' or another VM's; the agent in ssh sessions
-# alone, as the VM's choice says. A home of the checks' own (Docker's own config kept), with an
-# ~/.ssh/config set up as the docs say, whose Host * forwards the agent; ssh gets no agent but
-# throwaway ones; a stub code.
-# d_emu_begin / d_emu_end: into the checks' home, and out again.
-d_emu_begin() {
-  d_real_home=$HOME
-  export DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-  sc=$work/ssh; rm -rf "$sc"; mkdir -p "$sc/home/.ssh" "$sc/bin"
-  dsc=$XDG_DATA_HOME/devvm/ssh_config kh=$XDG_DATA_HOME/devvm/known_hosts
-  printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$dsc" > "$sc/config"
-  cp "$sc/config" "$sc/home/.ssh/config"
-  printf '#!/bin/sh\necho "$*" > %s/code-args\n' "$sc" > "$sc/bin/code"; chmod +x "$sc/bin/code"
-  agent_pid=$(ssh-agent -a "$sc/agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
-  export HOME=$sc/home sc dsc kh
-}
-d_emu_end() {
-  kill "$agent_pid" 2>/dev/null; agent_pid=""
-  export HOME=$d_real_home
-}
-# dsh ARGS...: ssh through the checks' config, without an agent. dssh_proxy HOST: the ProxyCommand ssh
-# runs for it. dssh_key VM: its pinned host key. d_procs VM: the commands running in the VM.
-dsh() { env -u SSH_AUTH_SOCK ssh -F "$sc/config" "$@" </dev/null; }
-dssh_proxy() { ssh -G -F "$sc/config" "$1" 2>/dev/null | sed -n 's/^proxycommand //p'; }
-dssh_key() { awk -v n="$1" '$1 == n { print $2, $3 }' "$kh"; }
-d_procs() { docker exec -u 0 "$1" sh -c 'for c in /proc/[0-9]*/cmdline; do tr "\0\n" "  " < "$c"; echo; done 2>/dev/null' </dev/null; }
-# d_serve VM HOST PORT: a server in the VM, as root, answering "vm-PORT" on HOST (:: takes IPv4 too),
-# left running. d_unserve VM PORT: it stops.
-d_serve() { docker exec -d -u 0 "$1" perl -MIO::Socket::IP -e '($h, $p) = @ARGV;
-  $s = IO::Socket::IP->new(LocalHost => $h, LocalPort => $p, Listen => 5, ReuseAddr => 1, V6Only => ($h eq "::" ? 0 : 1), GetAddrInfoFlags => 0) or die "$@";
-  while ($c = $s->accept) { print $c "vm-$p\n"; close $c }' "$2" "$3" </dev/null >/dev/null 2>&1; }
-d_unserve() { docker exec -u 0 "$1" sh -c 'for p in /proc/[0-9]*; do tr "\0\n" "  " < $p/cmdline 2>/dev/null | grep -q "^perl .* $1 *\$" && kill ${p#/proc/}; done; true' sh "$2" </dev/null; }
-# d_serve_any VM PORTS...: d_serve on every IPv4 address, for host_port_kept.
-d_serve_any() { local p; for p in "${@:2}"; do d_serve "$1" 0.0.0.0 "$p"; done; }
-# d_v6 VM: the VM has an IPv6 loopback (Docker turns IPv6 off in containers on some engines).
-d_v6() { docker exec "$1" sh -c 'grep -q "^00000000000000000000000000000001 " /proc/net/if_inet6' </dev/null 2>/dev/null; }
-# h_v6: this machine has one.
-h_v6() { perl -MIO::Socket::IP -e 'IO::Socket::IP->new(LocalHost => "::1", LocalPort => 0, Listen => 1) or exit 1' 2>/dev/null; }
-# d_answers PORT WANT [6]: this machine's 127.0.0.1 (and ::1 with 6) answers WANT on PORT, within 20 s.
-d_answers() { local a b; for _ in $(seq 20); do
-    a=$(nc -w 2 127.0.0.1 "$1" </dev/null 2>/dev/null); b=$2
-    [[ -z ${3:-} ]] || b=$(nc -6 -w 2 ::1 "$1" </dev/null 2>/dev/null)
-    [[ $a == "$2" && $b == "$2" ]] && return 0; sleep 1; done
-  echo "127.0.0.1: ${a:-nothing}${3:+, ::1: ${b:-nothing}}"; return 1; }
-# d_closed PORT: nothing answers on this machine's loopback on PORT, within 15 s.
-d_closed() { for _ in $(seq 15); do
-    if ! nc -z 127.0.0.1 "$1" 2>/dev/null && { ! h_v6 || ! nc -6 -z ::1 "$1" 2>/dev/null; }; then return 0; fi; sleep 1; done
-  echo "port $1 still answers"; return 1; }
-# d_started VM: when Docker last started its container.
-d_started() { docker container inspect -f '{{.State.StartedAt}}' "$1" 2>/dev/null; }
-# d_fwd VM: its forwarder's pid. d_fwdlog VM: its log.
-d_fwd() { pgrep -f -- "[_]docker-ports -vm $1 " | head -1; }
-d_fwdlog() { cat "$(vmdir "$1")/backend/ports.log" 2>/dev/null; }
-# d_listens PID: what that process listens on (TCP), ADDRESS:PORT lines.
-d_listens() { if command -v lsof >/dev/null; then lsof -nP -a -p "$1" -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR > 1 { print $9 }'
-  else ss -ltnpH 2>/dev/null | awk -v p="pid=$1," 'index($0, p) { print $4 }'; fi | sort -u; }
-# d_unpublished VM: its container publishes no port.
-d_unpublished() { local b; b=$(docker container inspect -f '{{json .HostConfig.PortBindings}} {{json .NetworkSettings.Ports}}' "$1" 2>/dev/null)
-  echo "published: ${b:-?}"; [[ -n $b ]] && ! grep -q HostPort <<<"$b"; }
-export -f dsh dssh_proxy dssh_key d_procs d_serve d_unserve d_v6 h_v6 d_answers d_closed d_fwd d_fwdlog d_listens d_unpublished
-# d_hostile VM HOST: root in the VM rewrites its sshd's config to allow remote forwarding, X11 and
-# tunnels (with xauth for X11); each connection's sshd reads it. Through a config of the check's own
-# whose Host * asks for X11 and to add keys to the agent, the session gets no display and the agent
-# no key; the same asked on the command line gets both (the controls), and ssh -R now works (not
-# covered: the entry can't refuse it). Then the agent is emptied; the next start writes devvm's
-# config again.
-d_hostile() { local hc=$sc/hostile-config d keys
-  printf 'Include %s\nHost *\n  ForwardX11 yes\n  ForwardX11Trusted yes\n  AddKeysToAgent yes\n' "$dsc" > "$hc"
-  docker exec -u 0 "$1" sh -c 'apt-get update -q >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends xauth >/dev/null 2>&1 &&
-    c=/etc/devvm/ssh/sshd_config && sed -i -e "s/^AllowTcpForwarding .*/AllowTcpForwarding yes/" -e "s/^AllowStreamLocalForwarding .*/AllowStreamLocalForwarding yes/" \
-      -e "s/^X11Forwarding .*/X11Forwarding yes/" -e "s/^PermitTunnel .*/PermitTunnel yes/" -e "s/^PermitListen .*/PermitListen any/" "$c" &&
-    /usr/sbin/sshd -t -f "$c"' </dev/null || { echo "no hostile sshd"; return 1; }
-  sshh() { DISPLAY=:9 SSH_AUTH_SOCK=$sc/agent.sock ssh -F "$hc" -o BatchMode=yes "$@" </dev/null 2>/dev/null; }
-  SSH_AUTH_SOCK=$sc/agent.sock ssh-add -D >/dev/null 2>&1
-  d=$(sshh "$2" 'echo "x=${DISPLAY:-none}"'); keys=$(SSH_AUTH_SOCK=$sc/agent.sock ssh-add -L 2>/dev/null | grep '^ssh-')
-  echo "through Host *: display $d, agent ${keys:-empty}"
-  [[ $d == x=none && -z $keys ]] || return 1
-  d=$(sshh -Y -o AddKeysToAgent=yes "$2" 'echo "x=${DISPLAY:-none}"'); keys=$(SSH_AUTH_SOCK=$sc/agent.sock ssh-add -L 2>/dev/null | grep '^ssh-')
-  echo "asked on the command line: display $d, agent ${keys:-empty}"
-  SSH_AUTH_SOCK=$sc/agent.sock ssh-add -D >/dev/null 2>&1
-  [[ $d != x=none && -n $keys ]] || return 1
-  sshh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 "$2" true || { echo "ssh -R refused by the hostile sshd"; return 1; }; }
-# d_hostserve ADDR PORT: this machine's own program on ADDR (:: takes IPv4 too, as Node's and Go's
-# servers do), answering "host-PORT", left running; its pid in d_hostprogs.
-d_hostprogs=()
-d_hostserve() { perl -MIO::Socket::IP -e '($h, $p) = @ARGV;
-    $s = IO::Socket::IP->new(LocalHost => $h, LocalPort => $p, Listen => 5, ReuseAddr => 1, V6Only => ($h eq "::" ? 0 : 1)) or die "$@";
-    while ($c = $s->accept) { print $c "host-$p\n"; close $c }' "$1" "$2" </dev/null >/dev/null 2>&1 &
-  d_hostprogs+=($!); }
-# d_hosts_kept VM: with this machine's programs on 47401 (127.0.0.1 alone), 47402 (::1 alone) and
-# 47403 (every address, IPv4 and IPv6 at once) and the VM's servers on all its addresses on each,
-# each program keeps its port, the VM's server isn't forwarded, and localhost never reaches two
-# programs. Without IPv6 here, 127.0.0.1 alone.
-d_hosts_kept() { local vm=$1 p ports=47401 all
-  ! h_v6 || ports="47401 47402 47403"
-  for _ in $(seq 15); do
-    all=true; for p in $ports; do d_fwdlog "$vm" | grep -q "port $p: not forwarded" || all=false; done
-    ! $all || break; sleep 1; done
-  d_fwdlog "$vm" | grep -E 'port 4740[123]'
-  for p in $ports; do d_fwdlog "$vm" | grep -q "port $p: not forwarded" || { echo "port $p: no refusal logged"; return 1; }; done
-  if [[ $(nc -w 2 127.0.0.1 47401 </dev/null) != host-47401 ]] || { h_v6 && nc -6 -z ::1 47401 2>/dev/null; }; then
-    echo "47401 not the host's alone"; return 1; fi
-  h_v6 || return 0
-  if [[ $(nc -6 -w 2 ::1 47402 </dev/null) != host-47402 ]] || nc -z 127.0.0.1 47402 2>/dev/null; then
-    echo "47402 not the host's alone"; return 1; fi
-  [[ $(nc -w 2 127.0.0.1 47403 </dev/null) == host-47403 && $(nc -6 -w 2 ::1 47403 </dev/null) == host-47403 ]] ||
-    { echo "47403 not the host's"; return 1; }; }
-# d_not_loopback VM: a server on the VM's own network address alone isn't forwarded, nor a port devvm
-# records for another VM (its listed ports), free on this machine; one on the VM's loopback, started
-# after them, is (the control).
-d_not_loopback() { local vm=$1 ip r=0
-  ip=$(docker container inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$vm" 2>/dev/null | awk '{ print $1 }')
-  [[ $ip =~ ^[0-9.]+$ && $ip != 127.* ]] || { echo "the VM's address: ${ip:-none}"; return 1; }
-  mkdir -p "$(vmdir "$rsv_vm")" && printf 'name=%s\nnet=off\nports=47406\n' "$rsv_vm" > "$(vmdir "$rsv_vm")/state"
-  d_serve "$vm" "$ip" 47404; d_serve "$vm" 0.0.0.0 47406; sleep 2; d_serve "$vm" 127.0.0.1 47405
-  d_answers 47405 vm-47405 || { echo "the control isn't forwarded"; r=1; }
-  d_closed 47404 && d_closed 47406 || r=1
-  ! d_fwdlog "$vm" | grep -E 'port (47404|47406)' || r=1
-  rm -rf "$(vmdir "$rsv_vm")"; return "$r"; }
-
-# docker_ssh NAME: ssh for editors' emulation.
-docker_ssh() {
-  local q q2 vm2 k1 qa vma
-  section "docker: ssh for editors"
-  q=$(newproj "$1"); git -C "$q" init -q
-  (cd "$q" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" "${B[@]}" --no-network-policy --ports none >"$work/last.log" 2>&1)
-  vm=$(vm_of "$q"); [[ -z $vm ]] || created+=("$vm")
-  check "the ssh config lists it by the folder's name, through devvm _docker-connect, with no port" bash -c "
-    [[ -n '$vm' ]] && ! grep -q backend_unreviewed '$work/last.log' &&
-    grep -q '^Host devvm-$1 $vm\$' '$dsc' && [[ \$(dssh_proxy devvm-$1) == *\"'_docker-connect'\"*\"'$vm'\" ]] &&
-    ! awk -v h='$vm' '\$1 == \"Host\" { on = (\$3 == h) } on && \$1 == \"Port\"' '$dsc' | grep -q ."
-  check "its container publishes nothing, and nothing in it listens for ssh, nor runs sshd, between connections" bash -c "
-    d_unpublished '$vm' && ! docker exec '$vm' sh -c 'cat /proc/net/tcp /proc/net/tcp6' </dev/null 2>/dev/null | awk '\$4 == \"0A\" { print \$2 }' | grep -qi ':0016\$' &&
-    ! d_procs '$vm' | grep -q sshd"
-  check "its host key is pinned, as the VM has it: ed25519, its only one" bash -c "
-    vmk=\$(docker exec -u 0 '$vm' sh -c 'cat /etc/ssh/ssh_host_*_key.pub' </dev/null | awk '{ print \$1, \$2 }') &&
-    echo \"the VM's: \$vmk; pinned: \$(dssh_key '$vm')\" && [[ -n \$vmk && \$vmk == \"\$(dssh_key '$vm')\" && \$vmk == 'ssh-ed25519 '* ]]"
-  check "ssh devvm-$1 reaches it, as the VM's user, with the environment devvm's commands get" bash -c "
-    out=\$(dsh devvm-$1 'id -un; hostname; echo \$BASH_ENV') && [[ \$out == '$me'\$'\n''$1'\$'\n'/etc/profile.d/devvm-tools.sh ]] || { echo \"\$out\"; false; }"
-  check "... each connection an sshd of its own, gone with it" bash -c "dsh devvm-$1 true && sleep 1 && ! d_procs '$vm' | grep -q sshd"
-  # Its desktop (base has the desktop feature), with no init system: devvm desktop starts it.
-  desktop_serve "$q"
-  check "devvm desktop serves its desktop on this machine's 127.0.0.1 alone, its container publishing nothing" bash -c "
-    [[ -n '$desk_port' ]] && loopback_only '$desk_port' && d_unpublished '$vm'"
-  if command -v go >/dev/null || command -v mise >/dev/null; then
-    check "a viewer with a wrong password is refused, one with the password gets the VM's desktop" desktop_view
-  else
-    skip "a viewer with a wrong password is refused, one with the password gets the VM's desktop" "no Go here: the Docker Desktop run checks it"
-  fi
-  check "the VM's server listens on its user's own socket, on no TCP port, the clipboard off" in_d "$vm" "$desktop_in_vm"
-  check "the password is in no file of the VM's nor any run log" bash -c '
-    printf "%s\n" "$1" | docker exec -i -u 0 "$2" sh -c "$3" && ! grep -rqsF "$1" "${@:4}"' \
-    _ "$desk_pw" "$vm" "$desktop_secret" "$XDG_DATA_HOME/devvm/logs" "$(vmdir "$vm")/logs"
-  desktop_end
-  check "Ctrl+C ends devvm desktop, its port closed" bash -c "[[ -n '$desk_port' ]] && ! nc -z 127.0.0.1 '$desk_port'"
-  check "agent forwarding stays off, whatever Host * says; ssh -A forwards it (the control)" bash -c "
-    SSH_AUTH_SOCK='$sc/agent.sock' ssh -F '$sc/config' devvm-$1 'test -z \"\${SSH_AUTH_SOCK:-}\"' </dev/null &&
-    SSH_AUTH_SOCK='$sc/agent.sock' ssh -A -F '$sc/config' devvm-$1 'test -S \"\${SSH_AUTH_SOCK:-}\"' </dev/null"
-  check "a changed host key is refused" bash -c "
-    cp '$kh' '$sc/kh' && rm -f '$sc/changed' '$sc/changed.pub' && ssh-keygen -q -t ed25519 -N '' -f '$sc/changed' &&
-    { grep -v '^$vm ' '$sc/kh' || true; echo \"$vm \$(cut -d' ' -f1,2 '$sc/changed.pub')\"; } > '$kh' &&
-    { dsh devvm-$1 true 2>'$sc/err'; r=\$?; cp '$sc/kh' '$kh'; } && (( r == 255 )) && grep -q 'Host key verification failed' '$sc/err'"
-  check "password and keyboard-interactive logins are refused: publickey alone is offered" bash -c "
-    out=\$(env -u SSH_AUTH_SOCK ssh -v -F '$sc/config' -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive \
-      -o BatchMode=yes devvm-$1 true </dev/null 2>&1); r=\$?
-    (( r == 255 )) && grep -qE 'Authentications that can continue: publickey[[:space:]]*\$' <<<\"\$out\" &&
-    ! grep -qE 'Authentications that can continue: .*(password|keyboard)' <<<\"\$out\""
-  check "only devvm's key logs in, as the VM's user: another key, root and another user are refused" bash -c "
-    rm -f '$sc/other' '$sc/other.pub'; ssh-keygen -q -t ed25519 -N '' -f '$sc/other' &&
-    ! env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile='$kh' -o HostKeyAlias='$vm' -o StrictHostKeyChecking=yes \
-      -o BatchMode=yes -o IdentitiesOnly=yes -i '$sc/other' -o ProxyCommand=\"\$(dssh_proxy devvm-$1)\" -l '$me' '$vm' true </dev/null &&
-    ! dsh -o BatchMode=yes -l root devvm-$1 true && ! dsh -o BatchMode=yes -l nobody devvm-$1 true && dsh -o BatchMode=yes devvm-$1 true"
-  d_serve "$vm" 127.0.0.1 47501
-  check "devvm's sshd binds remote forwards only on 127.77.0.0/16 and refuses socket forwards; a local forward to the VM's loopback works" bash -c "
-    rfwd_links devvm-$1 dsh &&
-    for _ in \$(seq 10); do [[ \$(dsh -W 127.0.0.1:47501 devvm-$1 2>/dev/null | head -1) == vm-47501 ]] && exit 0; sleep 1; done; false"
-  check "sshd runs devvm's settings, and its config is root's alone" bash -c "
-    t=\$(docker exec -u 0 '$vm' /usr/sbin/sshd -T -f /etc/devvm/ssh/sshd_config </dev/null) || exit 1
-    for want in 'allowusers $me' 'permitrootlogin no' 'authenticationmethods publickey' 'passwordauthentication no' \
-      'kbdinteractiveauthentication no' 'allowtcpforwarding yes' 'allowstreamlocalforwarding local' 'permitlisten 127.77.*:*' \
-      'gatewayports clientspecified' 'x11forwarding no' 'permittunnel no' 'permituserenvironment no' 'allowagentforwarding yes'; do
-      grep -qxF \"\$want\" <<<\"\$t\" || { echo \"not \$want\"; exit 1; }; done
-    [[ \$(docker exec -u 0 '$vm' stat -c '%U %a' /etc/devvm/ssh/sshd_config </dev/null) == 'root 600' ]]"
-  check "devvm _docker-connect refuses another devvm's container, in one line, running nothing" bash -c "
-    out=\$(DEVVM_MESSAGES=names '$D' _docker-connect -docker \"\$(command -v docker)\" -data /tmp/devvm-e2e-elsewhere '$vm' </dev/null 2>&1)
-    r=\$?; echo \"\$out\"; (( r != 0 )) && grep -qx 'devvm: docker_container_foreign name=$vm' <<<\"\$out\" &&
-    [[ \$(grep -c '^devvm: ' <<<\"\$out\") -eq 1 ]] && ! d_procs '$vm' | grep -q sshd"
-  check "devvm host names it; devvm code opens it over Remote-SSH (a stub code)" bash -c "cd '$q' &&
-    '$D' host </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m ssh_host_info dir=$q host=devvm-$1 | head -1)\" '$work/last.log' &&
-    PATH='$sc/bin':\$PATH '$D' code </dev/null >'$work/last.log' 2>&1 && [[ \$(cat '$sc/code-args') == '--remote ssh-remote+devvm-$1 $q' ]]"
-  check "devvm's shell is an ssh session: SSH_CONNECTION set, in the folder" bash -c "cd '$q' &&
-    out=\$(printf 'pwd; echo \"conn=\${SSH_CONNECTION:+yes}\"\n' | '$D' 2>&1) && grep -qx '$q' <<<\"\$out\" && grep -qx conn=yes <<<\"\$out\" || { echo \"\$out\"; false; }"
-  check "an sshd root made hostile gets no display and no key through a Host * asking for them; asked on the command line, both (the controls), and ssh -R" d_hostile "$vm" "devvm-$1"
-  k1=$(dssh_key "$vm")
-  check "restart: new host keys, pinned again, devvm's sshd config again (a remote forward on 127.0.0.1 refused), and ssh reaches it" bash -c "cd '$q' &&
-    printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(d_state '$vm') == running ]] &&
-    k=\$(dssh_key '$vm') && [[ -n \$k && \$k != '$k1' ]] && ! dsh -o ExitOnForwardFailure=yes -R 0:127.0.0.1:9 devvm-$1 true && dsh devvm-$1 true"
-  check "started outside devvm (docker restart): devvm host says so, its entry goes, and devvm's shell is a docker exec; devvm restart has ssh again" bash -c "cd '$q' &&
-    docker restart -t 1 '$vm' >/dev/null && ! DEVVM_MESSAGES=names '$D' host </dev/null >'$work/e' 2>&1 &&
-    grep -qx 'devvm: vm_no_ssh vm=$vm' '$work/e' && ! grep -q '$vm' '$dsc' &&
-    out=\$(printf 'echo \"conn=\${SSH_CONNECTION:-none}\"\n' | '$D' 2>&1) && grep -qx conn=none <<<\"\$out\" &&
-    printf 'exit\n' | '$D' restart >/dev/null 2>&1 && grep -q '^Host devvm-$1 $vm\$' '$dsc' && dsh devvm-$1 true"
-  q2=$(newproj "${1}2")
-  (cd "$q2" && printf 'exit\n' | "$D" "${B[@]}" --no-network-policy --ports none >"$work/last.log" 2>&1)
-  vm2=$(vm_of "$q2"); [[ -z $vm2 ]] || created+=("$vm2")
-  check "a VM made from the same image has host keys of its own" bash -c "
-    [[ -n '$vm2' ]] && a=\$(dssh_key '$vm') && b=\$(dssh_key '$vm2') && [[ -n \$a && -n \$b && \$a != \$b ]] && dsh devvm-${1}2 true"
-  check "... and a key of its own: its key doesn't log in to the other VM, the other's own does (the control)" bash -c "
-    with_key() { env -u SSH_AUTH_SOCK ssh -F /dev/null -o UserKnownHostsFile='$kh' -o HostKeyAlias='$vm' -o StrictHostKeyChecking=yes \
-      -o BatchMode=yes -o IdentitiesOnly=yes -i \"\$(vmdir \"\$1\")/backend/key\" -o ProxyCommand=\"\$(dssh_proxy devvm-$1)\" -l '$me' '$vm' true </dev/null 2>/dev/null; }
-    ! with_key '$vm2' && with_key '$vm'"
-  check "an image without sshd (root moved it away): the next start runs without ssh, warned, and the VM runs" bash -c "cd '$q2' &&
-    docker exec -u 0 '$vm2' mv /usr/sbin/sshd /usr/sbin/sshd.away </dev/null &&
-    printf 'exit\n' | DEVVM_MESSAGES=names '$D' restart >'$work/last.log' 2>&1 && grep -qx 'devvm: vm_no_sshd vm=$vm2' '$work/last.log' &&
-    [[ \$(d_state '$vm2') == running ]] && ! grep -q '$vm2' '$dsc' &&
-    ! DEVVM_MESSAGES=names '$D' host </dev/null 2>'$work/e' && grep -qx 'devvm: vm_no_sshd vm=$vm2' '$work/e'"
-  (cd "$q2" && quiet "$D" rm --force --no-export)
-  qa=$(newproj "${1}alpine")
-  (cd "$qa" && printf 'exit\n' | "$D" "${B[@]}" --from alpine:3 --no-network-policy --ports none >"$work/last.log" 2>&1)
-  vma=$(vm_of "$qa"); [[ -z $vma ]] || created+=("$vma")
-  check "a VM --from alpine:3 is made, and ssh devvm-${1}alpine reaches it, on Alpine, as the VM's user" bash -c "
-    [[ -n '$vma' ]] && grep -qx libc=musl '$(vmdir "$vma")/state' &&
-    out=\$(dsh -o BatchMode=yes devvm-${1}alpine '. /etc/os-release; echo \$ID; id -un') &&
-    [[ \$out == alpine\$'\n''$me' ]] || { echo \"\${out:-}\"; tail -5 '$work/last.log'; false; }"
-  (cd "$qa" && quiet "$D" rm --force --no-export)
-  check "devvm stop drops its entry; devvm _docker-connect refuses the stopped VM, running nothing" bash -c "cd '$q' &&
-    '$D' stop </dev/null >/dev/null 2>&1 && ! grep -q '$vm' '$dsc' &&
-    ! DEVVM_MESSAGES=names '$D' _docker-connect -docker \"\$(command -v docker)\" -data '$XDG_DATA_HOME/devvm' '$vm' </dev/null 2>'$work/e' &&
-    grep -qx 'devvm: vm_not_running vm=$vm' '$work/e'"
-  check "rm deletes it, its entry, its key and its pinned keys" bash -c "cd '$q' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-    [[ -z \$(d_state '$vm') ]] && ! grep -q '$vm' '$dsc' && ! grep -q '^$vm ' '$kh' && [[ ! -e '$(vmdir "$vm")' ]]"
-}
-
-# docker_ports NAME: ports' and every port's emulation.
-docker_ports() {
-  local pa pl pid hp v6=""
-  section "docker: ports"
-  pa=$(newproj "$1")
-  (cd "$pa" && printf 'exit\n' | DEVVM_MESSAGES=names "$D" "${B[@]}" --no-network-policy --no-git-protect >"$work/last.log" 2>&1)
-  vm=$(vm_of "$pa"); [[ -z $vm ]] || created+=("$vm")
-  check "a VM forwards every port (the default) with a forwarder of devvm's, and publishes nothing" bash -c "
-    [[ -n '$vm' && \$(d_state '$vm') == running ]] && ! grep -q backend_unreviewed '$work/last.log' &&
-    ! grep -q 'ports_' '$work/last.log' && [[ -n \$(d_fwd '$vm') ]] && d_fwdlog '$vm' | grep -q \"forwarding $vm's ports\" && d_unpublished '$vm'"
-  check "... its ssh master reading no config of yours, the VM's key alone, its host key pinned, no forwarding asked for, through devvm _docker-connect" bash -c "
-    m=\$(ps -axww -o command= | grep -- '[s]sh -F none -M .*HostKeyAlias=$vm ' | head -1); echo \"\$m\"
-    [[ \$m == *IdentityAgent=none* && \$m == *StrictHostKeyChecking=yes* && \$m == *ClearAllForwardings=yes* && \$m == *PermitRemoteOpen=none* &&
-      \$m == *ForwardAgent=no* && \$m == *\"ProxyCommand='\"*\"' '_docker-connect' \"* ]] && ! grep -qE ' -[RLDAXY]( |\$)' <<<\"\$m\""
-  ! d_v6 "$vm" || ! h_v6 || v6=6
-  d_serve "$vm" 127.0.0.1 47511; d_serve "$vm" 0.0.0.0 47513
-  [[ -z $v6 ]] || { d_serve "$vm" ::1 47512; d_serve "$vm" :: 47514; }
-  check "a server on the VM's loopback alone reaches this machine's$([[ -z $v6 ]] || echo ", at 127.0.0.1 and ::1")" d_answers 47511 vm-47511 $v6
-  check "... one on all its IPv4 addresses too" d_answers 47513 vm-47513 $v6
-  if [[ -n $v6 ]]; then
-    check "... one on its IPv6 loopback alone, and one on all its addresses" bash -c "d_answers 47512 vm-47512 6 && d_answers 47514 vm-47514 6"
-  else
-    skip "... one on its IPv6 loopback alone, and one on all its addresses" "no IPv6 loopback in the VM or here"
-  fi
-  check "the forwarder listens on this machine's loopback alone" bash -c "
-    l=\$(d_listens \"\$(d_fwd '$vm')\"); echo \"\$l\"; grep -qE '^(127\.0\.0\.1|\[::1\]):47511\$' <<<\"\$l\" && ! grep -vE '^(127\.0\.0\.1|\[::1\]):[0-9]+\$' <<<\"\$l\""
-  perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalAddr => "0.0.0.0:47515", Listen => 5, ReuseAddr => 1) or die;
-    while ($c = $s->accept) { print $c "host-47515\n"; close $c }' </dev/null >/dev/null 2>&1 &
-  hp=$!; sleep 0.5
-  d_serve "$vm" 127.0.0.1 47515; d_serve "$vm" 0.0.0.0 1023
-  check "a port this machine has on any address stays its own, and one below 1024 isn't forwarded" bash -c "
-    for _ in \$(seq 15); do d_fwdlog '$vm' | grep -q 'port 47515: not forwarded' && break; sleep 1; done
-    d_fwdlog '$vm' | grep -q 'port 47515: not forwarded' && [[ \$(nc -w 2 127.0.0.1 47515 </dev/null) == host-47515 ]] &&
-    ! d_fwdlog '$vm' | grep -q 'port 1023' && d_closed 1023"
-  kill "$hp" 2>/dev/null; wait "$hp" 2>/dev/null
-  d_hostserve 127.0.0.1 47401
-  ! h_v6 || { d_hostserve ::1 47402; d_hostserve :: 47403; }
-  sleep 0.5
-  d_serve "$vm" 0.0.0.0 47401; d_serve "$vm" 0.0.0.0 47402; d_serve "$vm" 0.0.0.0 47403
-  check "... so does one on its loopback alone$(h_v6 && echo ", IPv4 or IPv6, and one on every address, IPv4 and IPv6 at once")" d_hosts_kept "$vm"
-  kill "${d_hostprogs[@]}" 2>/dev/null; wait "${d_hostprogs[@]}" 2>/dev/null; d_hostprogs=()
-  check "a server on the VM's own address alone isn't forwarded, nor a port another VM lists, while it's free (a loopback server is, the control)" d_not_loopback "$vm"
-  check "a server that stops: its forward goes; the others stay" bash -c "d_unserve '$vm' 47513 && d_closed 47513 && d_answers 47511 vm-47511"
-  check "devvm stop stops the forwarder, and nothing listens on its ports" bash -c "cd '$pa' && '$D' stop </dev/null >/dev/null 2>&1 &&
-    [[ -z \$(d_fwd '$vm') ]] && d_closed 47511"
-  check "started again, it has a new forwarder, which forwards a server started then" bash -c "cd '$pa' &&
-    printf 'exit\n' | '$D' >'$work/last.log' 2>&1 && [[ -n \$(d_fwd '$vm') ]] && d_serve '$vm' 127.0.0.1 47516 && d_answers 47516 vm-47516"
-  check "docker stop outside devvm ends its forwarder" bash -c "docker stop -t 1 '$vm' >/dev/null &&
-    for _ in \$(seq 40); do [[ -z \$(d_fwd '$vm') ]] && break; sleep 1; done; [[ -z \$(d_fwd '$vm') ]] && d_closed 47516"
-  check "rm deletes it, its forwarder and its files" bash -c "cd '$pa' && '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-    [[ -z \$(d_state '$vm') && -z \$(d_fwd '$vm') && ! -e '$(vmdir "$vm")' ]]"
-  # Listed ports: the same forwarder, those alone.
-  pl=$(newproj "${1}list")
-  (cd "$pl" && printf 'exit\n' | "$D" "${B[@]}" --no-network-policy --no-git-protect --ports 47521,47180-47181 >"$work/last.log" 2>&1)
-  vm=$(vm_of "$pl"); [[ -z $vm ]] || created+=("$vm")
-  d_serve "$vm" 127.0.0.1 47521; d_serve "$vm" 127.0.0.1 47522
-  check "listed ports: through the forwarder too, only those (an unlisted port isn't forwarded), nothing published" bash -c "
-    [[ -n '$vm' ]] && d_answers 47521 vm-47521 && d_closed 47522 && d_unpublished '$vm' &&
-    ps -axww -o command= | grep -- '[_]docker-ports -vm $vm ' | grep -q -- ' -only 47521,47180-47181\$'"
-  check "a port added to a running VM reaches this machine at once, and once removed doesn't, the container never restarted" \
-    ports_live "$pl" "$vm" 47523 d_serve_any d_started
-  check "a listed port a program on this machine has, on every address, stays its own until it's freed" host_port_kept "$pl" "$vm" 47181 47180 d_serve_any
-  (cd "$pl" && quiet "$D" rm --force --no-export)
-}
-
-# docker_agent NAME: agent forwarding's and turning it on or off's emulations. Your agent is a
-# throwaway one (ua_sock); devvm's own has a throwaway key.
-docker_agent() {
-  local g ua da
-  section "docker: SSH agent forwarding"
-  ua=$work/d-agent.sock da=$XDG_DATA_HOME/devvm/agent.sock
-  rm -f "$ua" "$work/d-key" "$work/d-key.pub" "$work/d-dkey" "$work/d-dkey.pub"
-  user_agent_pid=$(ssh-agent -a "$ua" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
-  ssh-keygen -q -t ed25519 -N '' -C e2e-docker-user -f "$work/d-key"
-  ssh-keygen -q -t ed25519 -N '' -C e2e-docker-devvm -f "$work/d-dkey"
-  SSH_AUTH_SOCK=$ua ssh-add -q "$work/d-key" 2>/dev/null
-  # d_shell_keys DIR: what devvm's shell in DIR lists of its agent, devvm run with yours.
-  d_shell_keys() { (cd "$1" && printf 'ssh-add -l 2>&1 || true\n' | SSH_AUTH_SOCK=$ua "$D" 2>&1); }
-  # d_ssh_keys HOST: what ssh HOST lists of its agent, ssh run with yours.
-  d_ssh_keys() { SSH_AUTH_SOCK=$ua ssh -F "$sc/config" "$1" 'ssh-add -l 2>&1 || true' </dev/null 2>&1; }
-  # d_switch DIR MODE: devvm ssh-agent MODE, then devvm restart, run with yours.
-  d_switch() { (cd "$1" && SSH_AUTH_SOCK=$ua "$D" ssh-agent "$2" </dev/null >"$work/last.log" 2>&1 &&
-    printf 'exit\n' | SSH_AUTH_SOCK=$ua "$D" restart >>"$work/last.log" 2>&1) || { cat "$work/last.log"; return 1; }; }
-  # d_only OUT COMMENT: OUT lists that key alone. d_none OUT: no agent at all.
-  d_only() { echo "agent: $1"; [[ $(grep -c 'SHA256:' <<<"$1") -eq 1 ]] && grep -q "$2" <<<"$1"; }
-  d_none() { echo "agent: $1"; grep -qiE 'could not open a connection|error connecting to agent' <<<"$1" && ! grep -q 'SHA256:' <<<"$1"; }
-  export ua work; export -f d_shell_keys d_ssh_keys d_switch d_only d_none
-  g=$(newproj "$1")
-  (cd "$g" && printf 'exit\n' | SSH_AUTH_SOCK=$ua DEVVM_MESSAGES=names "$D" "${B[@]}" --no-network-policy --ports none --ssh-agent >"$work/last.log" 2>&1)
-  vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
-  check "--ssh-agent: no socket is mounted, and nothing outside an ssh session has an agent, even root" bash -c "
-    [[ -n '$vm' ]] && ! grep -q backend_unreviewed '$work/last.log' &&
-    ! docker container inspect -f '{{range .Mounts}}{{.Source}} {{end}}' '$vm' | grep -qiE '\.sock|ssh-agent|ssh-auth' &&
-    docker exec -u 0 '$vm' sh -c 'test -z \"\${SSH_AUTH_SOCK:-}\" && ! ls /tmp/ssh-* >/dev/null 2>&1' </dev/null"
-  check "... devvm's shell, an ssh session, lists your key" bash -c "d_only \"\$(d_shell_keys '$g')\" e2e-docker-user"
-  check "... so does ssh by name" bash -c "d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-user"
-  check "ssh-agent add loads a throwaway key into devvm's own agent" bash -c "
-    SSH_AUTH_SOCK='$ua' '$D' ssh-agent add '$work/d-dkey' </dev/null 2>&1 | grep -qF \"\$(m agent_holds keys=e2e-docker-devvm)\""
-  check "ssh-agent devvm while it runs: devvm's next shell and ssh by name still list yours alone, until a restart" bash -c "cd '$g' &&
-    SSH_AUTH_SOCK='$ua' DEVVM_MESSAGES=names '$D' ssh-agent devvm </dev/null >'$work/e' 2>&1 && grep -q 'agent_set_running mode=devvm vm=$vm\$' '$work/e' &&
-    d_only \"\$(d_shell_keys '$g')\" e2e-docker-user && d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-user"
-  check "devvm, after a restart: the shell and ssh by name list devvm's key alone, never yours" bash -c "
-    d_switch '$g' devvm && d_only \"\$(d_shell_keys '$g')\" e2e-docker-devvm && d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-devvm"
-  check "on, after a restart: yours alone" bash -c "
-    d_switch '$g' on && d_only \"\$(d_shell_keys '$g')\" e2e-docker-user && d_only \"\$(d_ssh_keys devvm-$1)\" e2e-docker-user"
-  check "off, after a restart: no agent, in the shell or by name" bash -c "
-    d_switch '$g' off && d_none \"\$(d_shell_keys '$g')\" &&
-    SSH_AUTH_SOCK='$ua' ssh -F '$sc/config' devvm-$1 'test -z \"\${SSH_AUTH_SOCK:-}\"' </dev/null"
-  check "... your agent holds only its key, devvm's only its own" bash -c "
-    u=\$(SSH_AUTH_SOCK='$ua' ssh-add -l 2>&1); d=\$(SSH_AUTH_SOCK='$da' ssh-add -l 2>&1); echo \"yours: \$u; devvm's: \$d\"
-    [[ \$(grep -c . <<<\"\$u\") -eq 1 ]] && grep -q e2e-docker-user <<<\"\$u\" && ! grep -q e2e-docker-user <<<\"\$d\""
-  (cd "$g" && quiet env SSH_AUTH_SOCK="$ua" "$D" rm --force --no-export)
-  g=$(newproj "${1}on")
-  (cd "$g" && printf 'exit\n' | SSH_AUTH_SOCK=$ua "$D" "${B[@]}" --no-network-policy --ports none >"$work/last.log" 2>&1)
-  vm=$(vm_of "$g"); [[ -z $vm ]] || created+=("$vm")
-  check "a VM made without it: none; turned on while it runs, neither devvm's shell nor ssh by name has one until a restart; then both yours" bash -c "
-    [[ -n '$vm' ]] && d_none \"\$(d_shell_keys '$g')\" &&
-    (cd '$g' && SSH_AUTH_SOCK='$ua' '$D' ssh-agent on </dev/null >'$work/last.log' 2>&1) &&
-    d_none \"\$(d_shell_keys '$g')\" && d_none \"\$(d_ssh_keys devvm-${1}on)\" &&
-    d_switch '$g' on && d_only \"\$(d_shell_keys '$g')\" e2e-docker-user && d_only \"\$(d_ssh_keys devvm-${1}on)\" e2e-docker-user"
-  (cd "$g" && quiet env SSH_AUTH_SOCK="$ua" "$D" rm --force --no-export)
-  kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
-  pkill -f "[s]sh-agent -a $da"
-  rm -f "$work/d-key" "$work/d-key.pub" "$work/d-dkey" "$work/d-dkey.pub" "$ua" "$XDG_DATA_HOME/devvm/agent-keys.json"
-}
-
-# docker_clone NAME: a --clone VM, over its ssh. A throwaway repo, with a branch besides main and a
-# file it doesn't track; host git without your settings.
-docker_clone() {
-  local c cgit
-  section "docker: --clone"
-  export GIT_CONFIG_GLOBAL=$sc/home/.gitconfig GIT_CONFIG_NOSYSTEM=1
-  c=$(newproj "$1")
-  git -C "$c" init -q -b main && echo a > "$c/a" && git -C "$c" add a && git -C "$c" -c user.email=e@e -c user.name=e commit -qm one &&
-    git -C "$c" branch other && echo host-only > "$c/untracked"
-  (cd "$c" && printf 'pwd; git branch --show-current\n' | "$D" "${B[@]}" --clone --no-network-policy --ports none >"$work/last.log" 2>&1)
-  vm=$(vm_of "$c"); [[ -z $vm ]] || created+=("$vm")
-  cgit="GIT_SSH_COMMAND='ssh -F $dsc' git -C '$c'"
-  check "the VM has its own clone in a volume of its own, every branch pushed in over ssh, nothing of the folder mounted, and the shell opens in it" bash -c "
-    [[ -n '$vm' ]] && grep -qx mode=clone '$(vmdir "$vm")/state' && grep -qx '$c' '$work/last.log' && grep -qx main '$work/last.log' &&
-    mounted '$vm' '$c' volume true && ! mounted '$vm' '$c' bind true &&
-    [[ \$(in_d '$vm' \"git -C '$c' branch --format='%(refname:short)'\" | tr '\n' ' ') == 'main other ' ]] &&
-    in_d '$vm' \"git -C '$c' log --oneline\" | grep -q one && in_d '$vm' \"[ ! -e '$c/untracked' ]\""
-  check "the repo has a devvm remote, by the VM's name" bash -c "[[ \$(git -C '$c' remote get-url devvm) == '$vm:$c' ]]"
-  in_d "$vm" "cd '$c' && echo b > b && git add b && git -c user.email=e@e -c user.name=e commit -qm from-vm" >/dev/null 2>&1
-  check "fetching through devvm's ssh config brings the VM's commit" bash -c "$cgit fetch -q devvm && git -C '$c' log --oneline devvm/main | grep -q from-vm"
-  check "pushing a branch into it works too" bash -c "git -C '$c' branch pushed other && $cgit push -q devvm pushed &&
-    in_d '$vm' \"git -C '$c' rev-parse -q --verify refs/heads/pushed\" >/dev/null"
-  check "rm --force deletes it, its clone's volume and the remote; the fetched work stays as a local branch" bash -c "cd '$c' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-    [[ -z \$(d_state '$vm') && ! -e '$(vmdir "$vm")' ]] && ! d_vol '$vm-clone' && ! git -C '$c' remote | grep -q devvm &&
-    git -C '$c' log --oneline saved/devvm/main | grep -q from-vm"
-  unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
-}
-
-# Network policy's emulation (devvm run as NU). Its guarantee: a VM with network policy reaches
-# nothing but its proxy, on this machine, even as root: it's on an internal network of its own with
-# nothing else but its relay, which passes its connections to the proxy's socket alone; no outside
-# name resolves, and no DNS query leaves its network; the proxy follows its container's start and is
-# gone when it stops; anything else devvm didn't set up shows it unenforced, and devvm stops it;
-# tokens stay on this machine, out of the VM and its relay. A home of its own (a base VM reads no
-# login; Docker's own config kept; on macOS the Keychain linked, as the network section does).
-# dn_relay VM: the relay's settings, as Docker has them: the image, read-only, capabilities, user,
-# networks, ports published, mounts. dn_nets NAME: a container's networks.
-dn_nets() { docker container inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$1" 2>/dev/null | xargs; }
-# dn_closed VM: every direct connection fails, even as root: an address, IPv6, a name (DNS), this
-# machine's programs on its loopback and on every address (through Docker's gateway on Linux, its
-# host address on Docker Desktop); the relay answers as the proxy does (407 without the password).
-dn_closed() { local gw u
-  for u in https://1.1.1.1 'https://[2606:4700:4700::1111]'; do
-    if in_root "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null $u"; then echo "$u got through"; return 1; fi
-  done
-  if in_root "$1" "getent hosts example.com"; then echo "a name resolved"; return 1; fi
-  if [[ $d_desktop == true ]]; then set -- "$1" http://192.168.65.254:18765/ http://host.docker.internal:18765/
-  else gw=$(docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}'); set -- "$1" "http://$gw:18767/" "http://$gw:18765/"; fi
-  for u in "${@:2}"; do
-    if in_root "$1" "curl --noproxy '*' -sS -m 5 -o /dev/null $u"; then echo "$u got through"; return 1; fi
-  done
-  [[ $(in_root "$1" "curl --noproxy '*' -s -m 5 -o /dev/null -w %{http_code} http://devvm-proxy:$pp/") == 407 ]] || { echo "the relay"; return 1; }
-}
-# dn_open VM: on Docker's default network the same probes get out (their control).
-dn_open() { in_root "$1" "curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1" && in_root "$1" "getent hosts example.com" >/dev/null; }
-# dn_proxy VM: the pid of its proxy on this machine, if it runs.
-dn_proxy() { pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $1 .* -listen-unix " 2>/dev/null | head -1; }
-# dn_gone VM: its proxy is gone within 15 s.
-dn_gone() { for _ in $(seq 15); do [[ -n $(dn_proxy "$1") ]] || return 0; sleep 1; done; echo "its proxy still runs"; return 1; }
-# dn_confined VM: it runs on its own network alone, which is internal, gives this machine no address
-# and holds nothing but it and its relay; its relay runs; its proxy runs.
-dn_confined() { local n=$1-net
-  [[ $(d_state "$1") == running && $(dn_nets "$1") == "$n" && $(d_state "$1-proxy") == running && -n $(dn_proxy "$1") ]] &&
-  [[ $(docker network inspect -f '{{.Internal}} {{index .Options "com.docker.network.bridge.inhibit_ipv4"}} {{index .Labels "devvm.data"}}' "$n") == "true true $XDG_DATA_HOME/devvm" ]] &&
-  [[ $(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' "$n" | xargs -n1 | sort | xargs) == "$1 $1-proxy" ]] ||
-  { echo "networks: $(dn_nets "$1"); relay $(d_state "$1-proxy"); proxy $(dn_proxy "$1")"; return 1; }
-}
-# dn_relay VM: the relay is devvm's Linux build, read-only, in an empty image of devvm's, its root
-# read-only, with no capabilities and no new privileges, on the VM's network alone, publishing
-# nothing, the proxy's socket its only other mount; the VM has no capability added and isn't
-# privileged.
-dn_relay() { local r=$1-proxy
-  [[ $(docker container inspect -f '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}} {{.HostConfig.CapAdd}} {{.HostConfig.SecurityOpt}} {{.HostConfig.Privileged}} {{json .HostConfig.PortBindings}}' "$r") == \
-     'true [ALL] [] [no-new-privileges] false {}' ]] || { docker container inspect -f '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}} {{.HostConfig.CapAdd}} {{.HostConfig.SecurityOpt}} {{.HostConfig.Privileged}} {{json .HostConfig.PortBindings}}' "$r"; return 1; }
-  [[ $(dn_nets "$r") == "$1-net" && $(docker container inspect -f '{{.Config.Image}} {{.Path}} {{index .Config.Labels "devvm.kind"}}' "$r") == "devvm-$dns:proxy /devvm proxy" ]] &&
-  (( $(docker image inspect -f '{{.Size}}' "devvm-$dns:proxy") < 4096 )) &&
-  docker container inspect -f '{{range .Mounts}}{{.Destination}} {{.RW}}{{"\n"}}{{end}}' "$r" | grep -qx '/devvm false' &&
-  [[ $(docker container inspect -f '{{len .Mounts}}' "$r") == 2 ]] &&
-  [[ $(docker container inspect -f '{{.HostConfig.CapAdd}} {{.HostConfig.Privileged}}' "$1") == '[] false' ]] ||
-  { docker container inspect -f '{{.Config.Image}} {{.Path}} {{.Mounts}} / {{.HostConfig.CapAdd}} {{.HostConfig.Privileged}}' "$r" "$1"; return 1; }
-}
-# dn_launch DIR [INPUT]: devvm in DIR as network policy's checks run it (in their home, nu_home), with
-# INPUT for its shell.
-dn_launch() { (cd "$1" && printf '%s\n' "${2:-exit}" | env HOME="$nu_home" DEVVM_MESSAGES=names "$D" >"$work/last.log" 2>&1); }
-export -f dn_nets dn_closed dn_open dn_proxy dn_gone dn_confined dn_launch
-# dn_secret VM DIR: a fake GitHub token, bound to it: the VM gets its own placeholder and never the
-# token, nor does its relay; the proxy puts it in for its host; unbound and deleted at once.
-dn_secret() { local salt events; events=$(vmdir "$1")/logs/network.jsonl
-  salt=$(sed -n 's/^proxy_salt=//p' "$(vmdir "$1")/state")
-  if ! { echo ghp_E2EFAKE | "${NU[@]}" "$D" secret set github --stdin >/dev/null && (cd "$2" && "${NU[@]}" "$D" secret use github >/dev/null) &&
-    dn_launch "$2"; }; then cat "$work/last.log"; return 1; fi
-  # shellcheck disable=SC2016  # $GH_TOKEN is the VM's
-  [[ $(in_d "$1" 'echo $GH_TOKEN') == devvm-proxy-managed-github-$salt ]] || { echo "no placeholder"; return 1; }
-  if in_root "$1" "grep -rqsF ghp_E2EFAKE /etc /run /root /home /tmp /var/log || cat /proc/[0-9]*/environ 2>/dev/null | tr '\\0' '\\n' | grep -qF ghp_E2EFAKE" ||
-    docker container inspect "$1" "$1-proxy" | grep -qF ghp_E2EFAKE; then echo "the token is in the VM or its relay"; return 1; fi
-  # shellcheck disable=SC2016  # $GH_TOKEN is the VM's
-  if ! in_d "$1" 'curl -sS -m 20 -o /dev/null https://api.github.com/user -H "Authorization: token $GH_TOKEN"' ||
-    ! grep '"path":"/user"' "$events" | grep -q '"secrets":\["github"\]'; then echo "not put in"; return 1; fi
-  (cd "$2" && "${NU[@]}" "$D" secret unuse github >/dev/null && "${NU[@]}" "$D" secret rm --force github >/dev/null) &&
-  ! grep -q '"name":"github"' "$(vmdir "$1")/run/secrets.json"
-}
-# dn_caps VM: its container is made without NET_RAW and given nothing: NET_RAW isn't in its bounding
-# set, so even root opens no raw socket, IPv4 or packet (AF_PACKET).
-dn_caps() { local c b
-  c=$(docker container inspect -f '{{.HostConfig.CapDrop}} {{.HostConfig.CapAdd}} {{.HostConfig.Privileged}}' "$1")
-  b=$(in_root "$1" "sed -n 's/^CapBnd:[[:space:]]*//p' /proc/1/status")
-  echo "dropped, added, privileged: $c; bounding set: $b"
-  [[ $c =~ ^\[(CAP_)?NET_RAW\]\ \[\]\ false$ && $b =~ ^[0-9a-f]+$ ]] && (( (0x$b >> 13 & 1) == 0 )) || return 1
-  if in_root "$1" "perl -MSocket -e 'socket(S, PF_INET, SOCK_RAW, 1) or die qq(raw: \$!\\n)'"; then echo "a raw socket opened"; return 1; fi
-  if in_root "$1" "perl -e 'socket(S, 17, 3, 768) or die qq(packet: \$!\\n)'"; then echo "a packet socket opened"; return 1; fi
-}
-# dn_net VM: its network is the sandbox's, internal, with inhibit_ipv4 and without IPv6.
-dn_net() { local o
-  o=$(docker network inspect -f '{{.Internal}} {{index .Options "com.docker.network.bridge.inhibit_ipv4"}} {{.EnableIPv6}} {{index .Labels "devvm.data"}}' "$1-net")
-  echo "internal, inhibit_ipv4, IPv6, label: $o"; [[ $o == "true true false $XDG_DATA_HOME/devvm" ]]; }
-# dn_members VM: its network's members, by ID, are the VM's container and its relay's, the one its
-# record names.
-dn_members() { local rec want got
-  rec=$(sed -n 's/^ *"relay_id": "\([0-9a-f]*\)",*$/\1/p' "$(vmdir "$1")/backend/record.json")
-  want=$(docker container inspect -f '{{.Id}}' "$1" "$1-proxy" | sort | xargs)
-  got=$(docker network inspect -f '{{range $id, $c := .Containers}}{{$id}} {{end}}' "$1-net" | xargs -n1 | sort | xargs)
-  echo "members: $got; the VM and its relay: $want; the record's relay: $rec"
-  [[ -n $rec && -n $got && $got == "$want" && " $want " == *" $rec "* ]]; }
-# dn_no_names VM: names don't resolve in it, even as root; its relay's does (the resolver's control).
-dn_no_names() { local n
-  for n in example.com github.com "devvm-e2e-$$-$RANDOM.example.com"; do
-    if in_root "$1" "getent hosts $n"; then echo "$n resolved"; return 1; fi
-  done
-  in_root "$1" "getent hosts devvm-proxy" || { echo "the relay's name didn't resolve"; return 1; }; }
-# dn_ipv6 VM: IPv6 in it: off on its network interface (disable_ipv6), and any other but the loopback
-# (a kernel's fallback tunnels) down; ::1 its only address; root can't change either (/proc/sys is
-# read-only, and it has no NET_ADMIN). What its network's bridge has on the engine's side (its IPv6
-# addresses and disable_ipv6, from the capture's container, on the engine's own network) is printed
-# and kept in $work/ipv6.log: without NET_RAW the VM sends nothing that reaches it over IPv6.
-dn_ipv6() { local v br e w i off flags
-  v=$(in_root "$1" 'for f in /proc/sys/net/ipv6/conf/*/disable_ipv6; do i=${f%/disable_ipv6}; i=${i##*/}
-    case $i in lo|all|default) ;; *) echo "if $i $(cat "$f") $(cat "/sys/class/net/$i/flags")" ;; esac; done
-    awk "{ print \"addr\", \$1, \$6 }" /proc/net/if_inet6
-    echo 0 > /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null && echo writable || echo read-only')
-  br=br-$(docker network inspect -f '{{.Id}}' "$1-net" | cut -c1-12)
-  e=$(docker exec "$d_cap" sh -c "awk -v b=$br '\$6 == b { print \$1 }' /proc/net/if_inet6; cat /proc/sys/net/ipv6/conf/$br/disable_ipv6" 2>&1 | xargs)
-  echo "the VM's: $(xargs <<<"$v")"; echo "$br on the engine's side (addresses, disable_ipv6): $e" | tee -a "$work/ipv6.log"
-  # The bridge's engine side: read (its disable_ipv6 last), and no IPv6 address but link-local ones.
-  [[ $e =~ (^|\ )[01]$ ]] || { echo "the bridge's side unread"; return 1; }
-  for w in ${e% *}; do [[ $w == "${e##* }" || $w == fe80* ]] || { echo "$br has $w"; return 1; }; done
-  # Each other interface with IPv6 on is down (IFF_UP, 0x1, clear).
-  while read -r w i off flags; do
-    [[ $w == if && $off == 0 ]] || continue
-    (( (flags & 1) == 0 )) || { echo "$i is up with IPv6 on"; return 1; }
-  done <<<"$v"
-  grep -q '^if eth[0-9]* 1 ' <<<"$v" && ! grep -q '^if eth[0-9]* 0 ' <<<"$v" &&
-    [[ $(grep '^addr ' <<<"$v") == "addr 00000000000000000000000000000001 lo" ]] && grep -qx read-only <<<"$v"; }
-# The capture: DNS (port 53, UDP and TCP) on every interface of the engine's own network namespace:
-# this machine's (the docker host VM's) on a Linux engine, Docker Desktop's VM's there, where Docker's
-# resolver would forward from and every bridge is. A container of the sandbox's (its label), on the
-# host's network, from Alpine's image the run already has, tcpdump added from Alpine's packages;
-# d_cap_stop deletes it, as does the end of the run.
-d_cap=devvm-e2e-cap-$dns
-# d_alpine: Alpine's image by the digest the Alpine base's record names (docker_ssh built it), so no
-# tag is added to Docker Desktop's images; alpine:3 without one.
-d_alpine() { local r f
-  f=$(from_record alpine:3)
-  r=$([[ -z $f ]] || rec "$f" digest)
-  if [[ -n $r ]]; then f=${r%@*}; echo "${f%:*}@${r##*@}"; else echo alpine:3; fi; }
-d_cap_start() { local _
-  [[ -z $(d_state "$d_cap") ]] || docker container rm -f "$d_cap" >/dev/null 2>&1
-  docker run -d --name "$d_cap" --label "devvm.data=$XDG_DATA_HOME/devvm" --network host "$d_alpine_ref" \
-    sh -c 'apk add --no-cache -q tcpdump >/dev/null && exec tcpdump -p -n -l -i any -Z root port 53' >/dev/null || return 1
-  for _ in $(seq 60); do docker logs "$d_cap" 2>&1 | grep -q 'listening on any' && return 0; sleep 1; done
-  docker logs "$d_cap" 2>&1 | tail -5; return 1; }
-d_cap_stop() { [[ -z $(d_state "$d_cap") ]] || docker container rm -f "$d_cap" >/dev/null 2>&1; }
-# d_squat: a container of the sandbox's put on a VM's network by hand.
-d_squat=devvm-e2e-squat-$dns
-# The DNS probe, as root in the VM with a name prefix of the check's own ($1): its resolver, and
-# queries straight to Docker's resolver (127.0.0.11), 1.1.1.1 and 8.8.8.8 (UDP, and TCP to 1.1.1.1)
-# for TXT, ANY, AAAA, HTTPS and an EDNS0 A.
-d_dns_probe='n=$1
-# pkt NAME QTYPE [edns]: a query, as printf escapes.
-pkt() { local q="" l t
-  for l in ${1//./ }; do q+=$(printf "\\\\x%02x" "${#l}")$l; done
-  t=$(printf "\\\\x%02x\\\\x%02x" $(($2 >> 8)) $(($2 & 255)))
-  if [[ -n ${3:-} ]]; then
-    printf "%s" "\\x12\\x34\\x01\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x01$q\\x00$t\\x00\\x01\\x00\\x00\\x29\\x10\\x00\\x00\\x00\\x00\\x00\\x00\\x00"
-  else
-    printf "%s" "\\x12\\x34\\x01\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00$q\\x00$t\\x00\\x01"
-  fi; }
-send() { local p len a; p=$(pkt "$@")
-  for a in 127.0.0.11 1.1.1.1 8.8.8.8; do printf "$p" 2>/dev/null > /dev/udp/$a/53; done 2>/dev/null
-  len=$(printf "$p" | wc -c)
-  { printf "\\x00\\x$(printf %02x "$len")"; printf "$p"; } | timeout 3 bash -c "cat > /dev/tcp/1.1.1.1/53" 2>/dev/null; }
-getent hosts "$n-a.example.com" >/dev/null; echo "resolver rc=$?"
-send "$n-b.example.com" 16; send "$n-c.example.com" 255; send "$n-d.example.com" 28; send "$n-e.example.com" 65
-send "$n-f.example.com" 1 edns
-getent ahosts "$n-g.example.org" >/dev/null; echo "resolver rc=$?"
-true'
-printf '%s\n' "$d_dns_probe" > "$work/d-dns-probe.sh"
-# dn_dns VM: the DNS probe in it, then what the capture saw of its names: lines after "seen:".
-dn_dns() { local n=devvm-e2e-$$-$RANDOM
-  docker exec -i -u 0 "$1" bash -s -- "$n" < "$work/d-dns-probe.sh" 2>&1 | sed 's/^/probe: /'
-  sleep 3; echo "capture: $(d_state "$d_cap")"; docker logs "$d_cap" 2>&1 | grep -iF "$n" | sed 's/^/seen: /'; }
-# dn_dns_kept VM: none of the probe's queries left the VM's network, while the capture ran, and its
-# resolver answered none.
-dn_dns_kept() { local s; s=$(dn_dns "$1"); echo "$s"
-  [[ $(grep -c '^probe: resolver rc=2$' <<<"$s") == 2 ]] && grep -qx 'capture: running' <<<"$s" && ! grep -q '^seen: ' <<<"$s"; }
-# dn_dns_left VM: the probe's lookup through its resolver is seen leaving (the capture's control).
-dn_dns_left() { local s; s=$(dn_dns "$1"); echo "$s"
-  grep -qx 'capture: running' <<<"$s" && grep '^seen: ' <<<"$s" | grep -qiF -- '-a.example.com'; }
-# dn_ping VM: ping works as the VM's user, through ICMP datagram sockets (no NET_RAW): iputils' ping
-# installed as root from the distribution's packages, then a ping to Docker's default network's
-# gateway.
-dn_ping() {
-  in_root "$1" 'export DEBIAN_FRONTEND=noninteractive; apt-get update -q >/dev/null 2>&1; apt-get install -y -q iputils-ping >/dev/null 2>&1' ||
-    { echo "iputils-ping didn't install"; return 1; }
-  in_d "$1" 'echo "ping_group_range: $(cat /proc/sys/net/ipv4/ping_group_range)"; ls -l "$(command -v ping)"
-    gw=$(awk '\''$2 == "00000000" { print $3; exit }'\'' /proc/net/route)
-    gw=$(printf "%d.%d.%d.%d" 0x${gw:6:2} 0x${gw:4:2} 0x${gw:2:2} 0x${gw:0:2}); ping -c 1 -W 5 "$gw"'; }
-export -f dn_caps dn_net dn_members dn_no_names dn_ipv6 dn_dns dn_dns_kept dn_dns_left dn_ping d_cap_stop
-export d_cap d_squat
-docker_netpolicy() {
-  local np nh
-  section "docker: network policy"
-  export DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-  nh=$work/net-home; rm -f "$nh/Library/Keychains"; rm -rf "$nh"; mkdir -p "$nh"
-  if [[ "$(uname -s)" == Darwin ]]; then mkdir -p "$nh/Library" && ln -s "$HOME/Library/Keychains" "$nh/Library/Keychains"; fi
-  NU=(env HOME="$nh")
-  export nu_home=$nh
-  # This machine's own services: on its loopback (a devvm _proxy, which answers 407) and on every address.
-  echo listener-key > "$work/listener.auth"
-  "$D" _proxy -listen 127.0.0.1:18765 -auth-file "$work/listener.auth" >/dev/null 2>&1 & listener=$!
-  d_hostserve 0.0.0.0 18767
-  d_alpine_ref=$(d_alpine); export d_alpine_ref
-  check "a capture of DNS runs on the engine's own network: a container of the sandbox's, on the host's network" d_cap_start
-  np=$(newproj "$1")
-  ps_watch
-  (cd "$np" && printf 'exit\n' | "${NU[@]}" DEVVM_MESSAGES=names "$D" "${B[@]}" --network-policy --ports none --no-git-protect >"$work/last.log" 2>&1)
-  ps_unwatch
-  vm=$(vm_of "$np"); [[ -z $vm ]] || created+=("$vm")
-  pp=$(sed -n 's/^proxy_port=//p' "$(vmdir "$vm")/state" 2>/dev/null)
-  export pp d_desktop
-  check "--network-policy: the VM runs on an internal network of its own, beside its relay alone, its proxy runs, and the self-check passed" bash -c "
-    [[ -n '$vm' && -n '$pp' ]] && grep -qx net=on '$(vmdir "$vm")/state' && grep -qx net_check=ok '$(vmdir "$vm")/state' &&
-    ! grep -q backend_unreviewed '$work/last.log' || { tail -5 '$work/last.log'; false; }"
-  check "... so" dn_confined "$vm"
-  check "the relay: devvm's Linux build, read-only, in an empty image, no capabilities, on the VM's network alone, publishing nothing; the VM gets no capability" dn_relay "$vm"
-  check "the VM's container is made without NET_RAW: not in its bounding set, and root opens no raw or packet socket" dn_caps "$vm"
-  check "its network is internal, with inhibit_ipv4, without IPv6, and the sandbox's" dn_net "$vm"
-  check "its network's members, by ID, are the VM and the relay its record names, alone" dn_members "$vm"
-  # The key is read inside the check, never in its own arguments, which ps would see.
-  check "the proxy's password was in no host process's arguments while devvm launched it, nor in the relay's; the VM's proxy settings have it" bash -c "
-    key=\$(sed -n 's/^proxy_key=//p' '$(vmdir "$vm")/state') && { [[ -n \$key && -s '$work/ps.log' ]] || { echo no key or nothing sampled; false; }; } &&
-    { ! grep -qFf <(echo \"\$key\") '$work/ps.log' || { echo in a process while devvm launched it; false; }; } &&
-    { ! ps -axww -o command= | grep -qFf <(echo \"\$key\") || { echo in a process now; false; }; } &&
-    { ! docker container inspect -f '{{.Args}} {{.Config.Env}}' '$vm-proxy' | grep -qFf <(echo \"\$key\") || { echo in the relay; false; }; } &&
-    { [[ \$(in_d '$vm' 'printenv HTTPS_PROXY') == \"http://devvm:\$key@devvm-proxy:$pp\" ]] || { echo not in the VM; false; }; }"
-  check "an allowed host works, through the proxy" in_d "$vm" "curl -fsS -m 20 -o /dev/null https://github.com"
-  check "another host is blocked by the proxy, and this machine's loopback too (internal addresses need a rule)" bash -c "
-    [[ \$(in_d '$vm' 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/') == 403 ]] &&
-    [[ \$(in_d '$vm' 'curl -s -m 20 -o /dev/null -w %{http_code} --noproxy \"\" --proxy \"\$HTTP_PROXY\" http://127.0.0.1:18765/') == 403 ]]"
-  check "direct connections fail, even as root: an address, IPv6, a name, this machine's programs; the relay is the proxy (407)" dn_closed "$vm"
-  check "no name resolves in it, even as root; its relay's does" dn_no_names "$vm"
-  check "no DNS query leaves its network: none of the probe's names in the capture (resolver, 127.0.0.11, 1.1.1.1, 8.8.8.8; UDP and TCP)" dn_dns_kept "$vm"
-  check "IPv6: off on its every interface but the loopback, which root can't change; ::1 its only address; its bridge's side link-local alone" dn_ipv6 "$vm"
-  echo "  recorded: $(tail -1 "$work/ipv6.log" 2>/dev/null)"
-  check "devvm network log shows the proxy's block" bash -c "cd '$np' && '$D' network log >'$work/e' 2>&1; grep -q '  BLOCKED  example.com:80  ' '$work/e' || { cat '$work/e'; false; }"
-  check "devvm network allow applies at once to its running proxy, and rm takes it back" bash -c "cd '$np' &&
-    '$D' network allow example.com </dev/null >/dev/null && in_d '$vm' 'curl -fsS -m 20 -o /dev/null https://example.com' &&
-    '$D' network rm example.com </dev/null >/dev/null && [[ \$(in_d '$vm' 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/') == 403 ]]"
-  check "a token bound to it stays on this machine: the VM gets its own placeholder, the proxy puts the token in" dn_secret "$vm" "$np"
-  check "with its proxy gone nothing gets out; launched, it gets its proxy back, through the same relay" bash -c "
-    p=\$(dn_proxy '$vm') && [[ -n \$p ]] && kill \$p && dn_gone '$vm' &&
-    ! in_d '$vm' 'curl -fsS -m 10 -o /dev/null https://github.com' && cd '$np' &&
-    printf 'exit\n' | ${NU[*]} '$D' >'$work/last.log' 2>&1 && [[ -n \$(dn_proxy '$vm') ]] && in_d '$vm' 'curl -fsS -m 20 -o /dev/null https://github.com'"
-  check "on another network too (docker network connect): unenforced, and its next launch stops it and opens nothing" bash -c "
-    docker network connect bridge '$vm' && '$D' ls | grep -Eq '^$vm +Running +base +- +\S+ +unenforced +- +docker ' && cd '$np' &&
-    ! printf 'echo e2e-opened\n' | ${NU[*]} DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 &&
-    grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && ! grep -q e2e-opened '$work/last.log' && [[ \$(d_state '$vm') == exited ]]"
-  check "devvm starts it confined again: its own network alone, and the self-check passes" bash -c "
-    dn_launch '$np' && grep -qx net_check=ok '$(vmdir "$vm")/state'"
-  check "... so" dn_confined "$vm"
-  check "its relay replaced by another container by its name, on its network: unenforced, and its next launch stops it; the one after starts it confined" bash -c "
-    docker container rm -f '$vm-proxy' >/dev/null && docker run -d --name '$vm-proxy' --label 'devvm.data=$XDG_DATA_HOME/devvm' --label devvm.kind=proxy \
-      --network '$vm-net' '$d_alpine_ref' sleep 600 >/dev/null && '$D' ls | grep -Eq '^$vm +Running +base +- +\S+ +unenforced +- +docker ' &&
-    ! dn_launch '$np' 'echo e2e-opened' && grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && [[ \$(d_state '$vm') == exited ]] &&
-    dn_launch '$np' && dn_confined '$vm' && dn_members '$vm'"
-  check "docker stop outside devvm: its proxy follows it, and is gone" bash -c "docker stop -t 1 '$vm' >/dev/null && dn_gone '$vm'"
-  check "docker start outside devvm: unenforced, and its next launch stops it" bash -c "
-    docker start '$vm' >/dev/null && '$D' ls | grep -Eq '^$vm +Running +base +- +\S+ +unenforced +- +docker ' &&
-    ! dn_launch '$np' 'echo e2e-opened' && grep -qx 'devvm: net_unenforced_stop vm=$vm' '$work/last.log' && [[ \$(d_state '$vm') == exited ]]"
-  check "another container on its network: its next launch is refused in one line naming the network, before the VM starts; once it's gone, it starts" bash -c "
-    docker run -d --name '$d_squat' --label 'devvm.data=$XDG_DATA_HOME/devvm' --network '$vm-net' '$d_alpine_ref' sleep 600 >/dev/null &&
-    ! dn_launch '$np' 'echo e2e-opened' && grep -qx 'devvm: docker_network_shared name=$vm-net' '$work/last.log' &&
-    [[ \$(grep -c '^devvm: ' '$work/last.log') -eq 1 && \$(d_state '$vm') == exited ]] && ! grep -q e2e-opened '$work/last.log' &&
-    docker container rm -f '$d_squat' >/dev/null && dn_launch '$np' && dn_confined '$vm' || { cat '$work/last.log'; false; }"
-  check "devvm stop stops it, its relay and its proxy" bash -c "dn_launch '$np' && cd '$np' && '$D' stop </dev/null >/dev/null 2>&1 &&
-    [[ \$(d_state '$vm') == exited && \$(d_state '$vm-proxy') == exited ]] && dn_gone '$vm'"
-  check "devvm network off: its next start is on Docker's default network alone, without a relay, network or proxy, nor proxy settings" bash -c "cd '$np' &&
-    ${NU[*]} '$D' network off </dev/null >/dev/null 2>&1 && dn_launch '$np' && [[ \$('$D' network | head -1) == off && \$(dn_nets '$vm') == bridge ]] &&
-    [[ -z \$(d_state '$vm-proxy') ]] && ! d_net '$vm-net' && [[ -z \$(dn_proxy '$vm') ]] && ! in_root '$vm' 'grep -qiE \"^(https?|no|all)_proxy=\" /etc/environment'"
-  check "... where the direct probes get out (their control)" dn_open "$vm"
-  check "... and the capture sees its lookup leave (the DNS check's control)" dn_dns_left "$vm"
-  check "... and ping works as the VM's user, without NET_RAW (ICMP datagram sockets)" dn_ping "$vm"
-  check "devvm network on: devvm restart starts it confined again, and direct connections fail" bash -c "cd '$np' &&
-    ${NU[*]} '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | ${NU[*]} '$D' restart >'$work/last.log' 2>&1 &&
-    [[ \$('$D' network | head -1) == on ]] && grep -qx net_check=ok '$(vmdir "$vm")/state' && dn_confined '$vm' && dn_closed '$vm'"
-  check "rm --force deletes it, its relay, its network, its proxy and its state" bash -c "cd '$np' && ${NU[*]} '$D' rm --force --no-export </dev/null >/dev/null 2>&1 &&
-    [[ -z \$(d_state '$vm') && -z \$(d_state '$vm-proxy') && ! -e '$(vmdir "$vm")' ]] && ! d_net '$vm-net' && dn_gone '$vm'"
-  kill "$listener" "${d_hostprogs[@]}" 2>/dev/null; wait "$listener" "${d_hostprogs[@]}" 2>/dev/null; listener="" d_hostprogs=()
-  d_cap_stop
-  rm -f "$work/listener.auth" "$nh/Library/Keychains"; rm -rf "$nh"
-}
-
-# docker_emulated PREFIX: every emulation's checks, its folders named from PREFIX.
-docker_emulated() {
-  d_emu_begin
-  docker_ssh "${1}ssh"
-  docker_ports "${1}ports"
-  docker_agent "${1}agent"
-  docker_clone "${1}cloned"
-  d_emu_end
-}
-
-# docker_linux: the checks on this machine's engine, a Linux one.
-docker_linux() {
-  local others_before kb fixture token kf kx rc
-  # alpine:3, which docker_ssh builds a base from, and Ubuntu's pinned image, which base starts from,
-  # pulled first: Docker keeps the images devvm pulls.
-  docker image pull -q alpine:3 >/dev/null 2>&1
-  docker image pull -q "docker.io/library/ubuntu@$ubuntu_pin" >/dev/null 2>&1
-  others_before=$(d_others)
-  section "docker: shared tool versions"
-  check "the shared tools resolve to upstream's newest" quiet "$D" _refresh-tools
-
-  section "docker: images"
-  check "devvm doctor finds everything, an engine of this machine's, builds confined, network policy emulated" bash -c "
-    DEVVM_MESSAGES=names '$D' doctor --backend docker </dev/null >'$work/last.log' 2>&1 &&
-    grep -qE '^docker_engine_linux version=' '$work/last.log' && grep -qE '^build-confinement +native ' '$work/last.log' &&
-    grep -qE '^egress-proxy +emulated ' '$work/last.log' && '$D' doctor --backend docker --json </dev/null | grep -qxF '  \"problems\": [],'"
-  check "build base" quiet env DEVVM_MESSAGES=names "$D" "${B[@]}" build base
-  kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
-  [[ -n $kb ]] || kb=$(for k in $(keys_of base); do [[ -z $(rec "$k" from) ]] && d_img "devvm-$dns:$k" && echo "$k"; done | head -1)
-  check "base is an image of devvm's, recorded with Ubuntu's container image by its pinned digest; its build container is gone" bash -c "
-    [[ -n '$kb' && -n '$ubuntu_pin' ]] && d_img 'devvm-$dns:$kb' && [[ \$(rec $kb libc) == gnu ]] &&
-    rec $kb digest | grep -qE '^docker\.io/library/ubuntu:[0-9.]+@$ubuntu_pin$' && [[ -z \$(d_state devvm-img-$kb-$dns) ]]"
-  # Build confinement: servers on this machine, on its loopback and on every address, and a layer that
-  # tries both through the build container's gateway.
-  python3 -m http.server -b 127.0.0.1 47190 >/dev/null 2>&1 & d_servers+=($!)
-  python3 -m http.server -b 0.0.0.0 47191 >/dev/null 2>&1 & d_servers+=($!)
-  sleep 1
-  fixture=$layers/e2edock.sh token=e2e-docker-ran-$$-$(date +%s)
-  cat > "$fixture" <<EOF
-#!/bin/bash
-gw=\$(awk '\$2 == "00000000" { print \$3; exit }' /proc/net/route)
-gw=\$(printf '%d.%d.%d.%d' 0x\${gw:6:2} 0x\${gw:4:2} 0x\${gw:2:2} 0x\${gw:0:2})
-curl -sS -m 5 -o /dev/null "http://\$gw:47190/" && echo e2e-loopback-reached || echo e2e-loopback-refused
-curl -sS -m 5 -o /dev/null "http://\$gw:47191/" && echo e2e-every-reached || echo e2e-every-refused
-curl -sS -m 20 -o /dev/null https://api.github.com && echo e2e-internet-reached || echo e2e-internet-refused
-echo $token
-EOF
-  check "a layer builds from base's image, its script run as the VM's user" bash -c "'$D' ${B[*]} build e2edock </dev/null >'$work/last.log' 2>&1 &&
-    grep -qx '$token' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
-  owned e2edock
-  check "... confined: it reached the internet, and this machine only on every address, never its loopback" bash -c "
-    f=\$(grep -lx '$token' '$XDG_DATA_HOME'/devvm/logs/runs/*.log | tail -1) && grep '^e2e-' \"\$f\" && grep -qx e2e-internet-reached \"\$f\" &&
-    grep -qx e2e-every-reached \"\$f\" && grep -qx e2e-loopback-refused \"\$f\""
-  kill "${d_servers[@]}" 2>/dev/null; d_servers=()
-  kf=$(keys_of e2edock | head -1)
-  check "devvm images lists both on docker" bash -c "out=\$('$D' images </dev/null 2>/dev/null) &&
-    grep -qE '^base +ubuntu [0-9.]+ +[0-9a-f]{12} +$kb +current +[0-9.]+[KMGT] +docker$' <<<\"\$out\" &&
-    grep -qE '^e2edock +ubuntu [0-9.]+ +[0-9a-f]{12} +$kf +current +[0-9.]+[KMGT] +docker$' <<<\"\$out\""
-  echo "# edited" >> "$fixture"
-  check "rebuild makes a new one and deletes the stale one, not base" bash -c "'$D' ${B[*]} rebuild --force e2edock </dev/null >/dev/null 2>&1 &&
-    [[ \$(keys_of e2edock | wc -l) -eq 1 && \$(keys_of e2edock) != $kf ]] && ! d_img 'devvm-$dns:$kf' && d_img 'devvm-$dns:$kb'"
-  owned e2edock
-  check "images rm deletes it" bash -c "'$D' ${B[*]} images rm --force e2edock </dev/null >/dev/null 2>&1 && [[ -z \$(keys_of e2edock) ]]"
-  rm -f "$fixture"
-  # The user's CAs: trusted while a build's scripts run, kept by no image (a container of the image,
-  # the sandbox's, with no network, shows what it holds).
-  e2e_ca
-  mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
-  catoken=e2e-dock-ca-$$-$(date +%s)
-  printf '#!/bin/bash\nset -euo pipefail\n%s\n%s\necho %s\n' \
-    '[[ $NODE_EXTRA_CA_CERTS == /etc/ssl/devvm.pem && $SSL_CERT_FILE == /etc/ssl/certs/ca-certificates.crt ]]' \
-    'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt /etc/ssl/devvm.pem' "$catoken" > "$layers/e2edockca.sh"
-  check "a build trusts the CAs in devvm's CA folder while its scripts run" bash -c "'$D' ${B[*]} build e2edockca </dev/null >'$work/last.log' 2>&1 &&
-    grep -qx '$catoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log"
-  owned e2edockca
-  kc=$(keys_of e2edockca | head -1)
-  rm -rf "$cafolder"
-  check "its image keeps none of them" bash -c "[[ -n '$kc' ]] && d_img 'devvm-$dns:$kc' &&
-    docker run --rm --network none --label 'devvm.data=$XDG_DATA_HOME/devvm' --entrypoint sh 'devvm-$dns:$kc' -c \
-      '! ls /usr/local/share/ca-certificates/devvm-* >/dev/null 2>&1 && [ ! -e /etc/ssl/devvm.pem ] && [ ! -e /var/lib/devvm-ca ] &&
-       ! grep -qF \"\$1\" /etc/ssl/certs/ca-certificates.crt' _ '$(sed -n 4p "$cad/ca.pem")'"
-  rm -f "$layers/e2edockca.sh"
-  printf '#!/bin/bash\nexit 3\n' > "$layers/e2edockfail.sh"
-  DEVVM_MESSAGES=names "$D" "${B[@]}" build e2edockfail </dev/null >"$work/fail.log" 2>&1; rc=$?
-  kx=$(sed -n 's/^==> building_image image=e2edockfail key=\([0-9a-f]*\)$/\1/p' "$work/fail.log")
-  [[ -z $kx ]] || created+=("devvm-img-$kx")
-  check "a failed script keeps its container, stopped, and says how to look inside" bash -c "
-    [[ -n '$kx' && $rc -eq 1 ]] && grep -qE '^devvm: docker_script_failed script=e2edockfail\.sh vm=devvm-img-$kx-$dns$' '$work/fail.log' &&
-    [[ \$(d_state devvm-img-$kx-$dns) == exited ]] && '$D' ${B[*]} images rm --force '$kx' </dev/null >/dev/null 2>&1 && [[ -z \$(d_state devvm-img-$kx-$dns) ]]"
-  rm -f "$layers/e2edockfail.sh"
-
-  section "docker: a base project"
-  docker_project dweb
-  section "docker: agent folders"
-  docker_agents dagents
-  section "docker: shared tools"
-  docker_tools dtools
-  section "docker: the docker layer"
-  docker_layer dlayer
-  docker_emulated d
-  docker_netpolicy dnet
-  section "docker: links between VMs"
-  link_section docker dlk
-  check "nothing without the sandbox's label was touched" bash -c "[[ \"\$(d_others)\" == '$others_before' ]]"
-}
-
-# dh ARGS: limactl on the docker host VM's own Lima home, from outside the repo.
-dh_home=${DEVVM_E2E_DOCKER_LIMA_HOME:-$HOME/.lt-e2e-go-docker}
-dh() { (cd /tmp && LIMA_HOME=$dh_home limactl "$@"); }
-# Sysbox, which the docker host VM's engine runs the docker layer's VMs under: its release's package,
-# pinned.
-sysbox_version=0.7.1
-sysbox_sha256_arm64=04ca894ae0b53f0fa54eaacc173ce40363c9a95ea5450f773716a84ef650a69b
-sysbox_sha256_amd64=9d6d5484f980d0a17f86c492c1262015c2afb66280bdb97215b79fde6a0261c5
-# dockerhost: the docker host VM, made the first time (Ubuntu with Docker's engine from its archive,
-# this checkout mounted read-only, you in the docker group, Sysbox) and kept, running.
-dockerhost() {
-  mkdir -p "$dh_home"
-  if ! dh list -q 2>/dev/null | grep -qx dockerhost; then
-    dh create --name=dockerhost --tty=false --vm-type=vz --cpus=6 --memory=8 --disk=60 --containerd=none \
-      --mount-only "$root" template:ubuntu-26.04 >"$work/dockerhost.log" 2>&1 || return 1
-  fi
-  [[ $(dh list --format '{{.Status}}' dockerhost) == Running ]] || dh start --tty=false dockerhost >>"$work/dockerhost.log" 2>&1 || return 1
-  if ! dh shell --workdir / dockerhost sh -c 'command -v docker >/dev/null && id -nG | grep -qw docker' </dev/null; then
-    dh shell --workdir / dockerhost sudo sh -c 'apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
-      docker.io netcat-openbsd jq perl curl git python3 && usermod -aG docker "$SUDO_USER"' </dev/null >>"$work/dockerhost.log" 2>&1 &&
-      dh stop dockerhost >>"$work/dockerhost.log" 2>&1 && dh start --tty=false dockerhost >>"$work/dockerhost.log" 2>&1 || return 1
-  fi
-  dockerhost_sysbox; }
-# dockerhost_sysbox: Sysbox in the docker host VM, installed once: its package, checked against its
-# pinned SHA-256, and (Ubuntu 25.04 on) fusermount3's AppArmor profile allowing Sysbox's FUSE mounts.
-dockerhost_sysbox() {
-  dh shell --workdir / dockerhost sh -c "docker info --format '{{json .Runtimes}}' | grep -q sysbox-runc" </dev/null && return 0
-  dh shell --workdir / dockerhost sudo env v="$sysbox_version" arm64="$sysbox_sha256_arm64" amd64="$sysbox_sha256_amd64" bash -c '
-    set -eu; a=$(dpkg --print-architecture); case $a in arm64) sum=$arm64 ;; amd64) sum=$amd64 ;; *) exit 1 ;; esac
-    d=$(mktemp -d); trap "rm -rf \"$d\"" EXIT
-    curl -fsSLo "$d/sysbox.deb" "https://github.com/nestybox/sysbox/releases/download/v$v/sysbox-ce_$v.linux_$a.deb"
-    echo "$sum  $d/sysbox.deb" | sha256sum -c
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$d/sysbox.deb"
-    if [ -f /etc/apparmor.d/fusermount3 ]; then
-      printf "%s\n" "mount fstype=fuse options=(nosuid,nodev) options in (ro,rw) -> /var/lib/sysboxfs/**/," \
-        "umount /var/lib/sysboxfs/**/," > /etc/apparmor.d/local/fusermount3
-      apparmor_parser -r /etc/apparmor.d/fusermount3
-    fi' </dev/null >>"$work/dockerhost.log" 2>&1; }
-# in_dh CMD: CMD in the docker host VM.
-in_dh() { dh shell --workdir / dockerhost bash -c "$1"; }
-
-# docker_linux_vm: this script's Linux checks, run in the docker host VM with devvm built here for it;
-# its results count here.
-docker_linux_vm() {
-  local arch out np nf
-  section "docker: a Linux engine, in the docker host VM ($dh_home)"
-  if ! dockerhost; then echo "  the docker host VM didn't start: see $work/dockerhost.log"; fail=$((fail + 1)); failed+=("docker host VM"); return; fi
-  arch=$(cd "$root" && "${gocmd[@]}" env GOARCH)
-  mkdir -p "$work/linux"
-  if ! (cd "$root" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch "${gocmd[@]}" "${testbuild[@]}" -o "$work/linux/devvm" ./cmd/devvm) ||
-    ! dh copy "$work/linux/devvm" dockerhost:/tmp/devvm-e2e-bin >/dev/null; then
-    echo "  couldn't build devvm for it"; fail=$((fail + 1)); failed+=("devvm for the docker host VM"); return
-  fi
-  in_dh "DEVVM_E2E_BIN=/tmp/devvm-e2e-bin bash '$root/tests/e2e.sh' --backend docker $($clean && echo --clean)" </dev/null 2>&1 |
-    tee "$work/linux.log" | while IFS= read -r l; do echo "  linux | $l"; done
-  out=$(grep -E '^e2e: [0-9]+ passed, [0-9]+ failed' "$work/linux.log" | tail -1)
-  np=$(sed -E 's/^e2e: ([0-9]+) passed.*/\1/' <<<"$out") nf=$(sed -E 's/^e2e: [0-9]+ passed, ([0-9]+) failed.*/\1/' <<<"$out")
-  if [[ -z $out ]] || grep -q '^e2e: FAILED' "$work/linux.log"; then nf=$((${nf:-0} + 1)); fi
-  pass=$((pass + ${np:-0})) fail=$((fail + ${nf:-0}))
-  (( ${nf:-0} == 0 )) || failed+=("the Linux engine's (see $work/linux.log)")
-}
-
-# dd_confined_build: a layer built on Docker Desktop reached the internet, through its proxy, and
-# not this machine's loopback: not directly (Desktop's host address, its name), nor through the
-# proxy (127.0.0.1, which its floor refuses); its container had no NET_RAW.
-dd_confined_build() {
-  local fixture=$layers/e2eddock.sh token f
-  token=e2e-ddocker-ran-$$-$(date +%s)
-  cat > "$fixture" <<EOF
-#!/bin/bash
-curl -sS -m 5 -o /dev/null --noproxy '*' http://192.168.65.254:18768/ && echo e2e-host-reached || echo e2e-host-refused
-curl -sS -m 5 -o /dev/null --noproxy '*' http://host.docker.internal:18768/ && echo e2e-name-reached || echo e2e-name-refused
-curl -fsS -m 5 -o /dev/null http://127.0.0.1:18768/ && echo e2e-proxied-reached || echo e2e-proxied-refused
-curl -fsS -m 20 -o /dev/null https://api.github.com && echo e2e-internet-reached || echo e2e-internet-refused
-getent hosts example.com >/dev/null && echo e2e-dns-reached || echo e2e-dns-refused
-b=\$(sed -n 's/^CapBnd:[[:space:]]*//p' /proc/self/status)
-(( (0x\$b >> 13 & 1) == 0 )) && echo e2e-no-net-raw || echo e2e-net-raw
-echo $token
-EOF
-  "$D" "${B[@]}" build e2eddock </dev/null >"$work/last.log" 2>&1 || { tail -5 "$work/last.log"; return 1; }
-  owned e2eddock
-  f=$(grep -lx "$token" "$XDG_DATA_HOME"/devvm/logs/runs/*.log | tail -1) && cat "$f" | grep '^e2e-'
-  grep -qx e2e-internet-reached "$f" && grep -qx e2e-host-refused "$f" && grep -qx e2e-name-refused "$f" &&
-    grep -qx e2e-proxied-refused "$f" && grep -qx e2e-dns-refused "$f" && grep -qx e2e-no-net-raw "$f" &&
-    [[ -z $(d_state "devvm-img-$(keys_of e2eddock)-$dns-proxy") ]] && ! d_net "devvm-img-$(keys_of e2eddock)-$dns-net"
-}
-
-# dd_pulled: the images bases started from, by the digests their records name, which devvm pulled:
-# Docker keeps them (devvm never deletes an image without its label).
-dd_pulled() { local r repo
-  for r in "$images"/*/; do r=${r%/}; rec "${r##*/}" digest; done | sort -u | while read -r r; do
-    repo=${r%@*}; repo=${repo%:*}
-    docker image inspect -f '{{.Id}}' "$repo@${r##*@}" 2>/dev/null | sed 's/^/image /'
-  done | sort -u; }
-# dd_untouched BEFORE: what Docker has without the sandbox's label is BEFORE, but for the images
-# bases started from, pulled (dd_pulled).
-dd_untouched() { local now gone added
-  now=$(d_others); gone=$(comm -23 <(echo "$1") <(echo "$now")); added=$(comm -13 <(echo "$1") <(echo "$now"))
-  echo "pulled: $(dd_pulled | xargs)"; echo "gone: ${gone:-none}"; echo "added: ${added:-none}"
-  [[ -z $gone && -z $(comm -23 <(echo "$added" | grep .) <(dd_pulled)) ]]; }
-export -f dd_pulled dd_untouched
-
-# docker_desktop: the checks on Docker Desktop, yours: only what has the sandbox's label is touched,
-# and it's all deleted at the end; the images bases start from, pulled by digest, are kept, as devvm
-# keeps them. Its builds are confined through a proxy of devvm's each.
-docker_desktop() {
-  local others_before
-  section "docker: Docker Desktop"
-  d_desktop=true
-  others_before=$(d_others)
-  d_purge
-  rm -rf "$images" "$share" "$lock" "$XDG_DATA_HOME/devvm/docker"
-  check "devvm doctor finds Docker Desktop, the folders it shares, devvm's Linux build; builds and network policy emulated" bash -c "
-    DEVVM_MESSAGES=names '$D' doctor --backend docker </dev/null >'$work/last.log' 2>&1 &&
-    grep -qE '^docker_engine_desktop version=' '$work/last.log' && grep -qE '^docker_file_sharing dirs=' '$work/last.log' &&
-    grep -qE '^build-confinement +emulated ' '$work/last.log' && grep -qE '^egress-proxy +emulated ' '$work/last.log' &&
-    ! grep -q docker_linux_build '$work/last.log'"
-  check "the shared tools resolve to upstream's newest" quiet "$D" _refresh-tools
-  check "build base, through a proxy of its own, which is gone at the end" bash -c "DEVVM_MESSAGES=names '$D' ${B[*]} build base </dev/null >'$work/last.log' 2>&1 &&
-    ! grep -q backend_unreviewed '$work/last.log' &&
-    k=\$(keys_of base) && d_img devvm-$dns:\$k && [[ -z \$(d_state devvm-img-\$k-$dns) && -z \$(d_state devvm-img-\$k-$dns-proxy) ]] &&
-    ! d_net devvm-img-\$k-$dns-net && ! pgrep -f -- '[_]proxy .* -vm devvm-img-\$k-$dns ' >/dev/null || { tail -5 '$work/last.log'; false; }"
-  d_hostserve 127.0.0.1 18768
-  check "... confined: a layer reaches the internet through it, and not this machine's loopback, directly or through it, nor a name; no NET_RAW" dd_confined_build
-  kill "${d_hostprogs[@]}" 2>/dev/null; wait "${d_hostprogs[@]}" 2>/dev/null; d_hostprogs=()
-  rm -f "$layers/e2eddock.sh"
-  docker_project ddesk
-  local x; x=$(newproj ddeskx)
-  launch "$x" exit "${B[@]}" --no-network-policy --ports none
-  check "Exec's arguments, folder, input and user reach the VM as given" bash -c "[[ -n '$vm' ]] && cd '$root' &&
-    DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/docker |
-    grep -q -- '--- PASS: TestE2EExecQuoting'"
-  (cd "$x" && quiet "$D" rm --force --no-export)
-  docker_agents ddagents
-  docker_tools ddtools
-  docker_layer ddlayer
-  docker_emulated dd
-  docker_netpolicy ddnet
-  section "docker: links between VMs, on Docker Desktop"
-  link_section docker ddlk
-  d_purge
-  check "all with the sandbox's label is deleted, and nothing else was touched (but the images bases started from, pulled)" bash -c "
-    [[ \$(d_ours) == 0 ]] && dd_untouched '$others_before'"
-  d_desktop=false
-}
-
-if [[ "$(uname -s)" == Linux && " $engines " == *" linux "* ]]; then docker_linux
-elif [[ " $engines " == *" linux "* ]]; then docker_linux_vm; fi
-[[ " $engines " != *" desktop "* ]] || docker_desktop
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run

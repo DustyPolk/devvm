@@ -1,7 +1,7 @@
 #!/bin/sh
 # Run as root in a build machine or container: around devvm's scripts, which enable services the way
-# Lima's guests boot them (systemctl, rc-update). An image run as a container (smolvm's machines,
-# Docker's containers) runs no init system, so while they run, those commands are stand-ins that do
+# Lima's guests boot them (systemctl, rc-update). An image run as a container (smolvm's machines)
+# runs no init system, so while they run, those commands are stand-ins that do
 # nothing, and devvm starts the services itself after each start. Only a command the image lacks
 # gets one, and only devvm's stand-ins are removed.
 #   shims.sh on|off

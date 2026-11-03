@@ -73,22 +73,17 @@ func shapeOfSize(s backend.Size) sizeShape {
 	return sizeShape{CPUs: s.CPUs, MemoryGiB: s.MemoryGiB, DiskGiB: s.DiskGiB}
 }
 
-// sizeOutput is devvm size --json: the VM's size, what its disk holds on
-// a backend that sizes no disks, and what changes at its next start; with
-// -g, the size new VMs get, and sources, where each of cpus, memory and
-// disk came from (a settings.Source).
+// sizeOutput is devvm size --json: the VM's size and what changes at its
+// next start; with -g, the size new VMs get, and sources, where each of
+// cpus, memory and disk came from (a settings.Source).
 type sizeOutput struct {
 	sizeShape
-	DiskUsedGiB *float64          `json:"disk_used_gib,omitempty"`
-	Pending     *sizeShape        `json:"pending,omitempty"`
-	Sources     map[string]string `json:"sources,omitempty"`
+	Pending *sizeShape        `json:"pending,omitempty"`
+	Sources map[string]string `json:"sources,omitempty"`
 }
 
 func sizeJSON(s vm.SizeShown) sizeOutput {
 	out := sizeOutput{sizeShape: shapeOfSize(s.Size), Sources: s.Sources}
-	if s.DiskMeasured {
-		out.DiskUsedGiB = &s.DiskUsedGiB
-	}
 	if s.Pending != (backend.Size{}) {
 		p := shapeOfSize(s.Pending)
 		out.Pending = &p

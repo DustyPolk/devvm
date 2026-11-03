@@ -51,7 +51,7 @@ func optionValues(args []string, name string) []string {
 // clears itself nor connects without the master; a connection is a
 // channel of a target's master to the target's own loopback, and without
 // the master fails (ProxyCommand=/usr/bin/false first, as ssh takes an
-// option's first value), on a host port or behind Docker's ProxyCommand.
+// option's first value).
 func TestLinkArgs(t *testing.T) {
 	o := SSH{VM: "devvm-app", User: "u", Key: "/k", KnownHosts: "/kh", Control: "/s.ctl", Port: 61022}
 	m := o.linkMasterArgs()
@@ -79,21 +79,16 @@ func TestLinkArgs(t *testing.T) {
 			t.Errorf("%s: ProxyCommand %q", op, v)
 		}
 	}
-	docker := SSH{VM: "devvm-db", User: "u", Key: "/k2", KnownHosts: "/kh", Control: "/t.ctl", Proxy: "'/devvm' '_docker-connect' 'devvm-db'"}
-	for name, r := range map[string][]string{"port": o.linkRelayArgs(5432), "proxy": docker.linkRelayArgs(80)} {
-		got := strings.Join(r, " ")
-		if v := optionValues(r, "ProxyCommand"); len(v) < 2 || v[0] != "/usr/bin/false" {
-			t.Errorf("%s relay: ProxyCommand %q", name, v)
-		}
-		if !strings.Contains(got, " -W 127.0.0.1:") || !strings.Contains(got, "ControlMaster=no") || !strings.Contains(got, "IdentityAgent=none") {
-			t.Errorf("%s relay: %s", name, got)
-		}
-		if slices.Contains(r, "-M") || slices.Contains(r, "-R") {
-			t.Errorf("%s relay: %s", name, got)
-		}
+	r := o.linkRelayArgs(5432)
+	got = strings.Join(r, " ")
+	if v := optionValues(r, "ProxyCommand"); len(v) < 2 || v[0] != "/usr/bin/false" {
+		t.Errorf("relay: ProxyCommand %q", v)
 	}
-	if r := docker.linkRelayArgs(80); r[len(r)-1] != "devvm-db" || !slices.Contains(r, "/t.ctl") || !slices.Contains(r, "127.0.0.1:80") {
-		t.Errorf("proxy relay: %q", r)
+	if !strings.Contains(got, " -W 127.0.0.1:5432") || !strings.Contains(got, "ControlMaster=no") || !strings.Contains(got, "IdentityAgent=none") || !slices.Contains(r, "/s.ctl") {
+		t.Errorf("relay: %s", got)
+	}
+	if slices.Contains(r, "-M") || slices.Contains(r, "-R") {
+		t.Errorf("relay: %s", got)
 	}
 }
 

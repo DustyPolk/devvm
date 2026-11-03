@@ -1,13 +1,10 @@
 #!/bin/sh
 # Run as root in a machine or container after each start, for what base's services do at boot on
-# Lima: an image run as a container (smolvm's machines, Docker's containers) runs no init system.
-# Its /dev has no loop devices, which the shared tools' images are mounted with, so they're made
-# first, unless DEVVM_LOOP is off (Docker's containers, whose tools are folders, linked); then the
-# tools are mounted or linked (devvm-tools, once assets/guest/sync.sh installed it; one that fails
-# is the launch's to report), the VM's sshd
-# started when it's asked for, Nix's daemon started in the background where the VM has it (the nix
-# layer), and Docker's where the VM has it (the docker layer), unless DEVVM_DOCKERD is off (Docker's
-# containers not made for it can't run it).
+# Lima: an image run as a container (smolvm's machines) runs no init system. Its /dev has no loop
+# devices, which the shared tools' images are mounted with, so they're made first; then the tools
+# are mounted (devvm-tools, once assets/guest/sync.sh installed it; one that fails is the launch's
+# to report), the VM's sshd started when it's asked for, Nix's daemon started in the background
+# where the VM has it (the nix layer), and Docker's where the VM has it (the docker layer).
 # A pid file whose process isn't dockerd (one an image kept, or a start before this one) doesn't
 # count, and Docker's run folder goes before dockerd starts, as a boot would leave it.
 #   services.sh [ssh USER KEY [VAR...]]
@@ -20,17 +17,13 @@
 # channel only for a forward it asked for); its sessions get /etc/environment and each
 # VAR from this script's environment (the proxy's under network policy), as devvm's own commands
 # do. The config holds them, so it's root's alone. devvm asks for it only once it found sshd there.
-# With DEVVM_SSHD=inetd (Docker's containers) no sshd daemon starts and nothing listens: each
-# connection runs sshd -i on this config, through docker exec (devvm _docker-connect).
 set -eu
-if [ "${DEVVM_LOOP:-}" != off ]; then
-  i=0
-  while [ "$i" -lt 64 ]; do
-    [ -e "/dev/loop$i" ] || mknod -m 660 "/dev/loop$i" b 7 "$i"
-    i=$((i + 1))
-  done
-  [ -e /dev/loop-control ] || mknod -m 660 /dev/loop-control c 10 237
-fi
+i=0
+while [ "$i" -lt 64 ]; do
+  [ -e "/dev/loop$i" ] || mknod -m 660 "/dev/loop$i" b 7 "$i"
+  i=$((i + 1))
+done
+[ -e /dev/loop-control ] || mknod -m 660 /dev/loop-control c 10 237
 # A tool it can't mount doesn't stop the start: the launch's setup runs devvm-tools again and fails.
 if [ -x /usr/local/sbin/devvm-tools ] && [ -d /mnt/devvm-tools ]; then /usr/local/sbin/devvm-tools || true; fi
 if [ "${1:-}" = ssh ]; then
@@ -103,7 +96,7 @@ if [ "${1:-}" = ssh ]; then
   } > "$conf"
   umask 022
   "$sshd" -t -f "$conf"
-  [ "${DEVVM_SSHD:-}" = inetd ] || "$sshd" -f "$conf" -E /var/log/devvm-sshd.log
+  "$sshd" -f "$conf" -E /var/log/devvm-sshd.log
 fi
 # Nix's daemon where the VM has it (the nix layer), with its settings (/etc/conf.d/nix-daemon:
 # guest/sync.sh's proxy under network policy), unless it runs; its pid file counts as Docker's does.
@@ -119,7 +112,7 @@ if [ -x "$nixd" ] && ! { [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null
   )
 fi
 pid=$(cat /run/docker.pid 2>/dev/null || true)
-if [ "${DEVVM_DOCKERD:-}" != off ] && command -v dockerd >/dev/null 2>&1 &&
+if command -v dockerd >/dev/null 2>&1 &&
   ! { [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = dockerd ]; }; then
   # /run outlives a stop here, unlike a boot's: its pid files name processes long gone, whose pids
   # this start's may have, and dockerd refuses to start its containerd over one.

@@ -28,7 +28,7 @@ import (
 )
 
 // spaceTimeout bounds what devvm space asks each backend, so a backend
-// that hangs (Docker's engine starting) never holds it up; a test build
+// that hangs never holds it up; a test build
 // can set it (platform.TestListWait).
 func spaceTimeout(backend string) time.Duration {
 	return thisHost().ListTimeout(backend, 30*time.Second)
@@ -570,7 +570,7 @@ func (e spaceEnv) retainOf(keys ...string) string {
 func otherState(d paths.Dirs) int64 {
 	var n int64
 	for _, p := range []string{
-		d.VMs(), d.Images(), d.FromDigests(), d.Run(), d.CA(), d.Docker(), d.Smolvm(),
+		d.VMs(), d.Images(), d.FromDigests(), d.Run(), d.CA(), d.Smolvm(),
 		d.ToolLock(), d.ToolLockConfig(), d.ToolLockChecked(),
 	} {
 		n += du(p)

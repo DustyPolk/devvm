@@ -12,13 +12,13 @@ A VM's state records its choice as `net=on` or `net=off`. When devvm starts a VM
 1. It makes its CA, unless it has one with over a week left, and on macOS it keeps the CA out of Time Machine.
 2. It writes the VM's [secrets](#secrets) as the VM's proxy sees them.
 3. It starts the VM's [proxy](#the-proxy) on a free port on the host's loopback, and waits for the proxy to say it's listening.
-4. It starts the VM [confined](lima.md#confinement), with the VM's proxy settings pointing at the proxy. On smolvm and Docker the confinement is emulated ([smolvm](smolvm.md#network-policy), [Docker](docker.md#network-policy)).
+4. It starts the VM [confined](lima.md#confinement), with the VM's proxy settings pointing at the proxy. On smolvm the confinement is emulated ([smolvm](smolvm.md#network-policy)).
 5. It runs [the self-check](#the-self-check) before the VM's setup and before its shell.
 6. It sets the VM up, as [the VM's setup](#the-vms-setup) describes. The setup puts devvm's CA in the VM, points the tools that don't read the environment at the proxy, and writes the VM's placeholders and its [agents' logins and settings](#agents-logins-and-settings) with your keys taken out.
 
 ## VMs that can't have it
 
-devvm makes a VM without network policy, and warns you, when the VM's backend can't confine it to its proxy (`net_off_backend`) or when it's a Docker VM with the docker layer (`net_off_docker_layer`).
+devvm makes a VM without network policy, and warns you, when the VM's backend can't confine it to its proxy (`net_off_backend`).
 
 ## The proxy
 
@@ -56,7 +56,7 @@ flowchart TD
 
 A tunnel that the proxy doesn't intercept carries the bytes both ways as they are. When the VM finishes sending, the proxy closes its side of the connection to the far end, so the far end sees the end of what the VM sent and can still answer. The tunnel ends when the far end's bytes end, or when the proxy can't pass them on because the VM's connection has gone, and then the proxy closes both connections. In a tunnel to a host the policy allows, the proxy reads the VM's first five bytes to see whether they start a TLS ClientHello before it passes anything on, so with a protocol whose server speaks first, such as SMTP, the VM gets no answer until it has sent five bytes.
 
-On smolvm the proxy also decides each connection the VM opens, before smolvm makes it. It takes over the connections to itself and refuses the rest ([details](smolvm.md#network-policy)). Docker's VMs can't reach the host's loopback, so on Docker the proxy also listens on a unix socket only you can reach, and a relay on the VM's own network passes the VM's connections to that socket, unread ([details](docker.md#network-policy)).
+On smolvm the proxy also decides each connection the VM opens, before smolvm makes it. It takes over the connections to itself and refuses the rest ([details](smolvm.md#network-policy)).
 
 ### Links through the proxy
 
@@ -89,7 +89,7 @@ The event log's `upstream` field names the company proxy, by host and port, for 
 
 ### How long a proxy runs
 
-The proxy exits when the VM's Lima hostagent does, which it learns from the hostagent's pid file, the VM's lifeline (`-lifeline`). On smolvm it watches the machine's process instead, and on Docker a `docker container wait` on the VM's container. The proxy starts before the VM, so it waits for the lifeline to name a process that runs. What the file held when the proxy started is an earlier start's, and the proxy waits past it, but when a new start writes the file and its process is already gone, the proxy exits. Once it follows a start, it runs while the file holds what it held then and that process runs, so a VM started again gets a new proxy. If the hostagent never appears, the proxy exits 15 minutes after it started, and `devvm stop` stops it at once.
+The proxy exits when the VM's Lima hostagent does, which it learns from the hostagent's pid file, the VM's lifeline (`-lifeline`). On smolvm it watches the machine's process instead. The proxy starts before the VM, so it waits for the lifeline to name a process that runs. What the file held when the proxy started is an earlier start's, and the proxy waits past it, but when a new start writes the file and its process is already gone, the proxy exits. Once it follows a start, it runs while the file holds what it held then and that process runs, so a VM started again gets a new proxy. If the hostagent never appears, the proxy exits 15 minutes after it started, and `devvm stop` stops it at once.
 
 A VM that starts again gets a new proxy on the same port. A running VM also gets a new proxy when its list of policies changed, when its CA was replaced, when its proxy is from another devvm binary, when the [CAs in your CA folder](#a-companys-ca) changed, or when the [company proxy](#through-a-company-proxy) settings in devvm's environment differ from the ones the proxy started with. To start a new proxy, devvm stops the old one with `SIGTERM`, and with `SIGKILL` when it's still running two seconds later. The old proxy counts as stopped only once its process is gone, not once its arguments can no longer be read, because an ending process loses its memory before its files, and for that moment its port still looks taken by another program, which would fail the launch with `proxy_port_taken`. `SIGKILL` goes only to a process whose arguments devvm can still read as the proxy's, so a proxy still ending gets none, and neither does another process given its pid since, even one whose arguments devvm can't read. If it still runs two seconds after that, devvm stops with `proxy_stop_failed` and starts nothing, because the old proxy would go on with its old settings.
 
@@ -247,7 +247,6 @@ What "the process devvm started" is depends on the backend:
 
 - **Lima:** the VM's Lima process, which devvm starts [confined](lima.md#confinement).
 - **smolvm:** the machine's process, through the proxy's decider. `smolvm machine start` refuses the VM without a decider, and a VM started with someone else's decider isn't confined.
-- **Docker:** that start of the container, on its own network alone, with nothing else on that network ([details](docker.md#network-policy)).
 
 ## Log files
 
@@ -268,7 +267,6 @@ devvm runs the proxy as itself, `devvm _proxy`. Its flags take one dash or two, 
 | Flag | What |
 | --- | --- |
 | `-listen` | the address to listen on (default `127.0.0.1:0`) |
-| `-listen-unix` | also listen on this unix socket, only you can reach (mode 600); a socket left there is replaced, anything else refused |
 | `-vm` | the VM's name, for the log |
 | `-builtin-policy` | the built-in policies, comma-separated paths in devvm's own files, read from the binary once as the proxy starts, ahead of `-policy`'s; a missing one refuses to start |
 | `-policy` | your policy files, comma-separated, each read again when it changes; a missing one has no rules |
@@ -299,5 +297,3 @@ These modes each do one thing and exit:
 | `-login claude -login-file F -login-secrets` | print the MCP servers whose settings hold secrets |
 | `-login … -login-get NAME` | print one value, refreshing an OAuth login when it's due |
 | `-redact json\|toml` | copy standard input to standard output with secret-looking values replaced, their paths on standard error |
-
-`-relay ADDR -relay-to SOCKET` runs a relay instead. It listens on `ADDR` and passes each connection, both ways and unread, to the proxy's unix socket until it's stopped, and it decides nothing. Each connection ends as a tunnel does, when the proxy's side of it ends. Docker's relay containers run it.

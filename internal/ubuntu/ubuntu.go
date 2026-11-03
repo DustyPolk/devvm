@@ -37,9 +37,8 @@ const (
 	// Keyring is Ubuntu's cloud image signing key, by its path in devvm's
 	// own files.
 	Keyring = "layers/ubuntu-cloud.gpg"
-	// ContainerRepo is Ubuntu's container image, which smolvm's and
-	// Docker's base start from without --from: Version's, by
-	// ContainerDigest.
+	// ContainerRepo is Ubuntu's container image, which smolvm's base
+	// starts from without --from: Version's, by ContainerDigest.
 	ContainerRepo = "docker.io/library/ubuntu"
 )
 
