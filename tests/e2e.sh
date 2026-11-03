@@ -1058,9 +1058,12 @@ lk_log_off() { local l
   grep -E 'REFUSED|:80 ' <<<"$l" | sort -u -k2 | tail -5
   grep -Eq "  link +db:47240  to $lk_v1\$" <<<"$l" && grep -Eq "  link +$lk_n2:80  to $lk_v2\$" <<<"$l" &&
     grep -Eq "  REFUSED  db:47243  to $lk_v1: unpublished\$" <<<"$l" && lk_event "$lk_vc" link db 47240 "\"target\":\"$lk_v1\""; }
+# The link session reuses what the target's backend said of its run for a second, so a connection
+# within a second of the stop may not see it: lk_stopped connects again until one does.
+lk_stopped_seen() { lk_gets "$lk_vc" "$lk_n2" 47240 "" && lk_event "$lk_vc" link_target_stopped "$lk_n2" 47240; }
 lk_stopped() {
   lk_dv "$lk_p2" stop && lk_until 30 lk_not lk_running "$lk_v2" || return 1
-  lk_gets "$lk_vc" "$lk_n2" 47240 "" && lk_until 5 lk_event "$lk_vc" link_target_stopped "$lk_n2" 47240 || return 1
+  lk_until 5 lk_stopped_seen || return 1
   lk_up "$lk_pc" && lk_said "devvm: link_target_stopped target=$lk_v2 vm=$lk_vc" || return 1
   sleep 5; lk_shows "$lk_pc" "^$lk_n2 +47240 +$lk_v2 +$lk_p2 +Stopped +yes\$" link &&
     lk_shows "$lk_pc" "  REFUSED  $lk_n2:47240  to $lk_v2: it isn't running\$" network log -n 100000 &&

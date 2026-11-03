@@ -82,10 +82,8 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 			id, err := b.StartID(ctx, vm)
 			return err == nil && id == start
 		},
-		Want: func() ([]vmssh.Link, error) { return e.sessionLinks(vm) },
-		Check: func(ctx context.Context, l vmssh.Link) (vmssh.LinkTarget, string, string) {
-			return e.linkConn(ctx, vm, l)
-		},
+		Want:  func() ([]vmssh.Link, error) { return e.sessionLinks(vm) },
+		Check: e.linkCheck(vm),
 		Event: events.add,
 		Failed: func(l vmssh.Link, err error) {
 			e.Warn(Link{Name: l.Name, Port: l.Port}.PortTaken(vm).Because(err))
@@ -114,14 +112,106 @@ func (e Links) sessionLinks(vm string) ([]vmssh.Link, error) {
 	return out, nil
 }
 
+// linkCheck is how client's link session checks each connection: its
+// targets' runs shared among the connections for linkRunFor.
+func (e Links) linkCheck(client string) func(context.Context, vmssh.Link) (vmssh.LinkTarget, string, string) {
+	runs := &targetRuns{For: linkRunFor, Now: time.Now}
+	return func(ctx context.Context, l vmssh.Link) (vmssh.LinkTarget, string, string) {
+		return e.linkConn(ctx, client, l, runs)
+	}
+}
+
+// linkRunFor is how long a link session reuses what a target's backend
+// said of its run, so a burst of connections asks it once, and a target
+// that stops is noticed this long after at most.
+const linkRunFor = time.Second
+
+// targetRun is what a target's backend says of its run, as a link's
+// connections need it: its start ("" when it doesn't run), and how
+// devvm's ssh reaches it, or why it can't (linkSSH).
+type targetRun struct {
+	start  string
+	ssh    vmssh.SSH
+	sshErr error
+}
+
+// targetRuns shares targets' runs among a link session's connections: one
+// lookup in flight for each target, its answer reused for For after it
+// ends (none when For is 0). A connection whose context ends while it
+// waits finds the target stopped.
+type targetRuns struct {
+	For time.Duration
+	Now func() time.Time
+
+	mu sync.Mutex
+	by map[string]*runLookup // by target and its ID
+}
+
+// runLookup is one lookup of a target's run: done once run is set, at.
+type runLookup struct {
+	done chan struct{}
+	run  targetRun
+	at   time.Time
+}
+
+// get returns the run of the target keyed key, from the lookup in flight
+// for it or one that ended less than For ago, else from look.
+func (r *targetRuns) get(ctx context.Context, key string, look func(context.Context) targetRun) targetRun {
+	r.mu.Lock()
+	lk := r.by[key]
+	if lk != nil {
+		select {
+		case <-lk.done:
+			if r.Now().Sub(lk.at) >= r.For {
+				lk = nil
+			}
+		default:
+		}
+	}
+	if lk != nil {
+		r.mu.Unlock()
+		select {
+		case <-lk.done:
+			return lk.run
+		case <-ctx.Done():
+			return targetRun{}
+		}
+	}
+	lk = &runLookup{done: make(chan struct{})}
+	if r.by == nil {
+		r.by = map[string]*runLookup{}
+	}
+	r.by[key] = lk
+	r.mu.Unlock()
+	lk.run = look(ctx)
+	lk.at = r.Now()
+	close(lk.done)
+	return lk.run
+}
+
+// targetRun asks a target's backend whether it runs, its start, and how
+// devvm's ssh reaches it.
+func (e Links) targetRun(ctx context.Context, b backend.Backend, target string) targetRun {
+	if in, err := b.Inspect(ctx, target); err != nil || in.Status != backend.StatusRunning {
+		return targetRun{}
+	}
+	start, err := b.StartID(ctx, target)
+	if err != nil || start == "" {
+		return targetRun{}
+	}
+	ssh, err := e.linkSSH(ctx, b, target)
+	return targetRun{start: start, ssh: ssh, sshErr: err}
+}
+
 // linkConn checks a connection to one of client's links, from the states
 // as they are now: the client still has the link, it applies (CheckLink:
 // the target's ID, its published port, the policy rule), the target's
-// backend has links, and the target runs, as its backend says, its
-// network policy enforced when the client has it (policyEnforced), and is
-// reached as devvm pins it. It returns how to reach the target, or the
-// event and why not. It never starts the target.
-func (e Links) linkConn(ctx context.Context, client string, l vmssh.Link) (vmssh.LinkTarget, string, string) {
+// backend has links, and the target runs, as its backend said within
+// runs' time, its network policy enforced when the client has it
+// (policyEnforced), and is reached as devvm pins it. It returns how to
+// reach the target, or the event and why not. It never starts the
+// target.
+func (e Links) linkConn(ctx context.Context, client string, l vmssh.Link, runs *targetRuns) (vmssh.LinkTarget, string, string) {
 	refused := func(why string, err error) (vmssh.LinkTarget, string, string) {
 		if err != nil {
 			why += ": " + err.Error()
@@ -155,21 +245,19 @@ func (e Links) linkConn(ctx context.Context, client string, l vmssh.Link) (vmssh
 	if err := e.Registry.Require(c.Backend, target, linkFeatures()...); err != nil {
 		return refused(LinkNoSSH, err)
 	}
-	if in, err := c.Backend.Inspect(ctx, target); err != nil || in.Status != backend.StatusRunning {
-		return vmssh.LinkTarget{}, vmssh.EventLinkStopped, ""
-	}
-	start, err := c.Backend.StartID(ctx, target)
-	if err != nil || start == "" {
+	run := runs.get(ctx, target+" "+tst.Get(state.KeyID), func(ctx context.Context) targetRun {
+		return e.targetRun(ctx, c.Backend, target)
+	})
+	if run.start == "" {
 		return vmssh.LinkTarget{}, vmssh.EventLinkStopped, ""
 	}
 	if why, err := policyEnforced(ctx, c.Backend, cst, tst); err != nil || why != "" {
 		return refused(cmp.Or(why, linkUnread), err)
 	}
-	ssh, err := e.linkSSH(ctx, c.Backend, target)
-	if err != nil {
-		return refused(LinkNoSSH, err)
+	if run.sshErr != nil {
+		return refused(LinkNoSSH, run.sshErr)
 	}
-	return vmssh.LinkTarget{SSH: ssh, Start: start}, "", ""
+	return vmssh.LinkTarget{SSH: run.ssh, Start: run.start}, "", ""
 }
 
 // policyEnforced checks the policy rule against a running target as it

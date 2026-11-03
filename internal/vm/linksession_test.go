@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"context"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
@@ -74,7 +76,7 @@ func TestLinkConn(t *testing.T) {
 	conn := vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port}
 	check := func(want, why string) vmssh.LinkTarget {
 		t.Helper()
-		got, ev, w := e.linkConn(t.Context(), client.Name(), conn)
+		got, ev, w := e.linkConn(t.Context(), client.Name(), conn, &targetRuns{Now: time.Now})
 		if ev != want || !strings.HasPrefix(w, why) {
 			t.Errorf("linkConn = %q, %q; want %q, %q", ev, w, want, why)
 		}
@@ -185,6 +187,80 @@ func TestLinkConn(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkGone)
+}
+
+// A burst of a session's connections to one target asks its backend once
+// whether it runs and how ssh reaches it, and each connection is still
+// carried.
+func TestLinkCheckBurst(t *testing.T) {
+	e, f, client, _, l := linkSessionEnv(t)
+	check := e.linkCheck(client.Name())
+	conn := vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port}
+	var wg sync.WaitGroup
+	refused := make(chan string, 256)
+	for range 256 {
+		wg.Go(func() {
+			if got, ev, why := check(t.Context(), conn); ev != "" || got.Start != "start-0" {
+				refused <- ev + ": " + why
+			}
+		})
+	}
+	wg.Wait()
+	close(refused)
+	for r := range refused {
+		t.Errorf("a connection was refused: %s", r)
+	}
+	lookups := map[string]int{}
+	for _, m := range f.Methods() {
+		lookups[m]++
+	}
+	if lookups["Inspect"] != 1 || lookups["SSH"] != 1 {
+		t.Errorf("256 checks asked the backend %v, want one Inspect and one SSH", lookups)
+	}
+}
+
+// What a target's backend said of its run is reused for linkRunFor: a
+// target that stops is noticed once that passes, while each connection's
+// other checks, its policy's as the target runs included, are made again.
+func TestLinkRunReused(t *testing.T) {
+	e, f, client, target, l := linkSessionEnv(t)
+	now := time.Unix(1e9, 0)
+	runs := &targetRuns{For: linkRunFor, Now: func() time.Time { return now }}
+	conn := vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port}
+	check := func(want, why string) {
+		t.Helper()
+		if _, ev, w := e.linkConn(t.Context(), client.Name(), conn, runs); ev != want || !strings.HasPrefix(w, why) {
+			t.Errorf("linkConn = %q, %q; want %q, %q", ev, w, want, why)
+		}
+	}
+	check("", "")
+	f.Instances[target.Name()] = backend.Instance{Name: target.Name(), Status: backend.StatusStopped}
+	check("", "")
+	setNet(t, client, "on")
+	setNet(t, target, "on")
+	f.Unconfined = true
+	check(vmssh.EventLinkRefused, LinkUnenforced)
+	f.Unconfined = false
+	if err := target.Set(KeyPublish, "80"); err != nil {
+		t.Fatal(err)
+	}
+	check(vmssh.EventLinkRefused, LinkUnpublished)
+	if err := target.Set(KeyPublish, "5432"); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(linkRunFor - time.Millisecond)
+	check("", "")
+	now = now.Add(time.Millisecond)
+	check(vmssh.EventLinkStopped, "")
+
+	// A connection whose session ends while it waits on the lookup in
+	// flight finds the target stopped.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	runs.by[target.Name()+" "+target.Get(state.KeyID)] = &runLookup{done: make(chan struct{})}
+	if run := runs.get(ctx, target.Name()+" "+target.Get(state.KeyID), nil); run.start != "" {
+		t.Errorf("a cancelled wait: %+v", run)
+	}
 }
 
 // devvm link add and publish warn, refusing nothing, when a client with
