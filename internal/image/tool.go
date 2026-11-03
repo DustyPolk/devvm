@@ -123,11 +123,6 @@ var (
 	toolVersion = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]*$`)
 )
 
-// ToolName reports whether a shared tool can have that name, as the lock
-// and a tool image's file name have it: a lowercase letter, then
-// lowercase letters and digits.
-func ToolName(s string) bool { return toolName.MatchString(s) }
-
 // ToolVersion reports whether s is shaped like a version as upstream may
 // name one: a letter or digit, then letters, digits and ._+-. It goes into
 // file names, mounts, the build VM's commands and mise's TOML.

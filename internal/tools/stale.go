@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"time"
+
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // builtRecent is how long a new tool image is left alone: the VM it was
@@ -70,7 +72,7 @@ func (t Share) Idle(ls []Listed, age time.Duration, now time.Time) ([]Listed, er
 		}
 		fi, err := os.Stat(p)
 		if errors.Is(err, fs.ErrNotExist) {
-			if err := writeNew(p, ""); err != nil {
+			if err := state.WriteFile(p, nil); err != nil {
 				return nil, err
 			}
 			continue

@@ -322,6 +322,47 @@ func TestProcStopWaitsForTheEnd(t *testing.T) {
 	}
 }
 
+// SIGKILL goes only to a process whose arguments still say it's the one:
+// one whose arguments can't be read after SIGTERM (still ending, or
+// another given the pid) is waited for, never killed.
+func TestProcStopKillsOnlyItsOwn(t *testing.T) {
+	p, start, _ := proc(t)
+	unreadable := map[int]bool{}
+	args := p.Args
+	p.Args = func(pid int) ([]string, error) {
+		if unreadable[pid] {
+			return nil, errors.New("unreadable")
+		}
+		return args(pid)
+	}
+	var signalled []string
+	p.Signal = func(pid int, sig syscall.Signal) error {
+		signalled = append(signalled, sig.String())
+		unreadable[pid] = true
+		return Signal(pid, sig)
+	}
+	out := filepath.Join(t.TempDir(), "out")
+	f, err := os.Create(out) //nolint:gosec // the test's own file
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	pid, err := p.Start(start, Cmd{Path: "/bin/sh", Args: []string{"-c", `trap "" TERM; echo ready; while :; do sleep 0.05; done`}, Out: f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	output(t, out, "ready")
+	if p.Stop(200 * time.Millisecond) {
+		t.Error("stopped, though it ignores SIGTERM")
+	}
+	if !slices.Equal(signalled, []string{"terminated"}) {
+		t.Errorf("signalled %v, want only SIGTERM", signalled)
+	}
+	if !Alive(pid) {
+		t.Error("killed")
+	}
+}
+
 // A start removes the status file an earlier start left, so readiness is
 // this start's alone; the process says it's ready there, with its pid,
 // and is waited for: ready while it runs, never once it has ended, nor

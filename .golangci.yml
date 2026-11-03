@@ -94,7 +94,7 @@ linters:
           msg: read the host's CPUs, memory and free space through platform.Host, which test builds can override.
         - pattern: ^testbuild\.On$
           msg: only internal/cli asks whether this is a test build, in readOverrides; take its overrides as fields.
-        - pattern: ^(os\.FindProcess|syscall\.Kill|unix\.Kill)$
+        - pattern: ^(os\.FindProcess|syscall\.Kill|unix\.Kill|os\.Process\.(Kill|Signal))$
           msg: signal processes through internal/daemon (Proc, Handle, Alive, Signal), which checks a pid is still the process it was.
         - pattern: ^http\.(Client|DefaultClient|DefaultTransport|Get|Head|Post|PostForm)$
           msg: reach the web through internal/fetch (fetch.NewClient, fetch.Client), which sets the timeout, the redirect policy and retries.
@@ -132,9 +132,14 @@ linters:
       - path: ^internal/cli/
         linters: [forbidigo]
         text: testbuild\.On
+      # daemon and platform signal processes; tests signal their own
+      # children (exec.Cmd's Process).
       - path: ^internal/(daemon|platform)/
         linters: [forbidigo]
-        text: os\.FindProcess|syscall\.Kill|unix\.Kill
+        text: signal processes through internal/daemon
+      - path: _test\.go$
+        linters: [forbidigo]
+        text: Process\.(Kill|Signal)`
       # The proxy is the standard library only, and tests make their own
       # servers' clients.
       - path: ^internal/(fetch|proxy)/|_test\.go$

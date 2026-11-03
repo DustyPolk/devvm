@@ -181,10 +181,10 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 		if err := os.Rename(src, dst); err != nil {
 			return err
 		}
-		if err := writeNew(dst+".sha256", sum+"\n"); err != nil {
+		if err := state.WriteFile(dst+".sha256", []byte(sum+"\n")); err != nil {
 			return err
 		}
-		if err := writeNew(dst+targetExt, tg.record()); err != nil {
+		if err := state.WriteFile(dst+targetExt, []byte(tg.record())); err != nil {
 			return err
 		}
 	}
@@ -218,23 +218,6 @@ func (t Share) readTarget(file string) (tg Target, ok bool) {
 		return Target{}, false
 	}
 	return Target{Libc: libc, Format: format}, true
-}
-
-// writeNew writes a file in the share afresh: one there is removed first,
-// so it's never written through a link.
-func writeNew(path, data string) error {
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	h, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // the share, devvm's own
-	if err != nil {
-		return err
-	}
-	_, err = h.WriteString(data)
-	if cerr := h.Close(); err == nil {
-		err = cerr
-	}
-	return err
 }
 
 // Unused returns the tool images of a List that it calls unused: neither

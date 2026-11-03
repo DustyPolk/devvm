@@ -133,11 +133,11 @@ func TestLockHeld(t *testing.T) {
 // shared ones out meanwhile.
 func TestLockFileShared(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "x.lock")
-	one, err := LockFileShared(t.Context(), path)
+	one, err := LockFileSharedWaiting(t.Context(), path, 0, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	two, err := LockFileShared(t.Context(), path)
+	two, err := LockFileSharedWaiting(t.Context(), path, 0, nil)
 	if err != nil {
 		t.Fatalf("a second shared lock: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestLockFileShared(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
-	if _, err := LockFileShared(ctx, path); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := LockFileSharedWaiting(ctx, path, 0, nil); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("shared while tried: %v", err)
 	}
 	unlock()
@@ -175,7 +175,7 @@ func TestLockHolder(t *testing.T) {
 	if path == "" {
 		t.Skip("run by TestLockFileKilled")
 	}
-	if _, err := LockFileShared(t.Context(), path); err != nil {
+	if _, err := LockFileSharedWaiting(t.Context(), path, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stdout.WriteString("held\n"); err != nil { //nolint:forbidigo // the helper process tells its parent

@@ -242,7 +242,7 @@ func (c *sshChannel) Close() error {
 		select {
 		case <-done:
 		case <-time.After(channelClose):
-			_ = c.cmd.Process.Kill()
+			_ = c.cmd.Process.Kill() //nolint:forbidigo // its own child, not yet waited for, so its pid is still its own
 			<-done
 		}
 	})

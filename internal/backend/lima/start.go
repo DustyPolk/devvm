@@ -21,9 +21,11 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// proxyHostDarwin is host loopback as a guest sees it on macOS: Lima's
-// user-mode network's gateway.
-const proxyHostDarwin = "192.168.5.2"
+// limaHost is the host's address on Lima's user-mode network
+// (host.lima.internal), with vz and with QEMU: host loopback as a guest
+// reaches it. An address, not the name, so a chroot with its own
+// /etc/hosts reaches it too.
+const limaHost = "192.168.5.2"
 
 func (l *Lima) profileFile(vm string) string { return filepath.Join(l.Dirs.Run(), vm+".sb") }
 
@@ -307,7 +309,7 @@ func (l *Lima) fillPassword(vm string, c backend.Confinement) error {
 // own port, on Linux QEMU's guestfwd address.
 func (l *Lima) proxyURL(c backend.Confinement) string {
 	if l.OS == "darwin" {
-		return backend.ProxyURL(proxyHostDarwin, c.ProxyPort, c.ProxyPassword)
+		return backend.ProxyURL(limaHost, c.ProxyPort, c.ProxyPassword)
 	}
 	return backend.ProxyURL(guestFwdHost, guestFwdPort, c.ProxyPassword)
 }

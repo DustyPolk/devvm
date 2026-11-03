@@ -30,6 +30,10 @@ func signals(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) } // wan
 
 func finds(pid int) (*os.Process, error) { return os.FindProcess(pid) } // want forbidigo
 
+func kills(p *os.Process) error { return p.Kill() } // want forbidigo
+
+func signalsProcess(p *os.Process) error { return p.Signal(os.Interrupt) } // want forbidigo
+
 func client() any { return &http.Client{} } // want forbidigo
 
 func home() (string, error) { return os.UserHomeDir() } // want forbidigo

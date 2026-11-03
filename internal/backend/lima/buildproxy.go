@@ -25,13 +25,6 @@ import (
 // start instead, fed on its input with the script (in no process's
 // arguments and no file), and sudo keeps them while the build runs.
 
-// buildProxyHost is the host's loopback as a build VM reaches it: the
-// host's address on Lima's user-mode network (host.lima.internal), with
-// vz and with QEMU, whose network a build keeps whole (no restrict=on).
-// An address, not the name, so a chroot with its own /etc/hosts reaches
-// it too.
-const buildProxyHost = "192.168.5.2"
-
 // sudoKeepProxy is the sudoers line that keeps a build's proxy variables
 // for sudo, in the build VM while its scripts run.
 const sudoKeepProxy = `Defaults env_keep += "http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY"`
@@ -88,7 +81,9 @@ func buildProxy(ctx context.Context, l *Lima, vm string, n backend.Net) (backend
 		}
 	}
 	c.ProxyPort = p.Port
-	u := backend.ProxyURL(buildProxyHost, p.Port, p.Password)
+	// A build VM reaches the host's loopback at limaHost with vz and with
+	// QEMU, whose network a build keeps whole (no restrict=on).
+	u := backend.ProxyURL(limaHost, p.Port, p.Password)
 	hp := backend.HostProxy{NoProxy: host.NoProxy}
 	if host.HTTPS != "" {
 		hp.HTTPS = u

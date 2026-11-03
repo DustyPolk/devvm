@@ -77,7 +77,10 @@ func (p Proc) Start(start Starter, c Cmd) (int, error) {
 
 // Stop stops the process, if it runs: SIGTERM, then after wait SIGKILL,
 // then up to wait more, looking every twentieth of it. A process given
-// the pid since is never signalled. Once it has ended its pid file goes,
+// the pid since is never signalled: SIGKILL goes only to a process whose
+// arguments still say it's this one, so not to one still ending, whose
+// arguments can't be read (ended), nor to another given the pid whose
+// arguments can't be read either. Once it has ended its pid file goes,
 // unless a start since has written another pid there. It reports whether
 // none runs then.
 func (p Proc) Stop(wait time.Duration) bool {
@@ -90,7 +93,9 @@ func (p Proc) Stop(wait time.Duration) bool {
 		signal = Signal
 	}
 	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL} {
-		_ = signal(pid, sig)
+		if sig == syscall.SIGTERM || p.runs(pid) {
+			_ = signal(pid, sig)
+		}
 		for range 20 {
 			if p.ended(pid) {
 				if cur, ok := readLine(p.PIDFile); ok && cur == pid {

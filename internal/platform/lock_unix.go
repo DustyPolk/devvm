@@ -30,16 +30,11 @@ func LockFileWaiting(ctx context.Context, path string, after time.Duration, wait
 	return lockFile(ctx, path, syscall.LOCK_EX, after, waiting)
 }
 
-// LockFileShared holds a shared lock on path, as LockFile does: any
+// LockFileSharedWaiting holds a shared lock on path, as LockFile does: any
 // number of processes hold it at once, and it waits only while one holds
-// it exclusively (LockFile, TryLockFile).
-func LockFileShared(ctx context.Context, path string) (unlock func(), err error) {
-	return lockFile(ctx, path, syscall.LOCK_SH, 0, nil)
-}
-
-// LockFileSharedWaiting is LockFileShared that calls waiting once, when
+// it exclusively (LockFile, TryLockFile). It calls waiting once, when
 // another process still holds the lock exclusively after it has waited for
-// after.
+// after; a nil waiting is never called.
 func LockFileSharedWaiting(ctx context.Context, path string, after time.Duration, waiting func()) (unlock func(), err error) {
 	return lockFile(ctx, path, syscall.LOCK_SH, after, waiting)
 }

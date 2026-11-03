@@ -18,9 +18,6 @@ func LockFileWaiting(context.Context, string, time.Duration, func()) (func(), er
 	return nil, noLock()
 }
 
-// LockFileShared is unsupported here.
-func LockFileShared(context.Context, string) (func(), error) { return nil, noLock() }
-
 // LockFileSharedWaiting is unsupported here.
 func LockFileSharedWaiting(context.Context, string, time.Duration, func()) (func(), error) {
 	return nil, noLock()

@@ -11,7 +11,7 @@ internal/backend/vmssh 87.5
 internal/build 87.3
 internal/cli 88.3
 internal/cli/docgen 85.1
-internal/daemon 97.7
+internal/daemon 97.8
 internal/desktop 77.2
 internal/devcontainer 96.8
 internal/fetch 95.2
@@ -33,7 +33,7 @@ internal/sshconfig 84.8
 internal/state 92.6
 internal/stubtest 81.0
 internal/testbuild 100.0
-internal/tools 89.0
+internal/tools 89.2
 internal/trust 93.9
 internal/ubuntu 92.5
 internal/ui 94.0
