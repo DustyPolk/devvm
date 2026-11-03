@@ -3,11 +3,11 @@ title: Settings and files
 weight: 11
 ---
 
-devvm writes nothing into your project folders. It keeps the settings you edit in `~/.config/devvm` and everything it writes itself in `~/.local/share/devvm`, and it reads a few environment variables. [Overview](../internals/overview.md#state-files) describes the state files in full.
+devvm writes nothing into your project folders. It keeps the settings you edit in `~/.config/devvm` and everything it writes itself in `~/.local/share/devvm`, and it reads a few environment variables. [Your settings](#your-settings) lists the files you edit, [devvm's data folder](space.md#devvms-data-folder) lists the ones devvm writes, and [Overview](../internals/overview.md#state-files) explains how devvm keeps them.
 
 ## Your settings
 
-`~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds what you edit, and it's the only folder of devvm's that you should change by hand. devvm never rewrites a file there. It reads `config.toml` and your own layers, features and CAs, it creates a new layer's files when you run `devvm layer new`, it changes single lines of `policy` when you add or remove a rule for every VM, and it writes `version` when the folder has none.
+`~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds what you edit, and it's the only folder of devvm's that you should change by hand. devvm never rewrites a file of yours there. It reads `config.toml` and your own layers, features and CAs, it creates a new layer's files when you run `devvm layer new`, it changes single lines of `policy` when you add or remove a rule for every VM, and it writes `version` when the folder has none and when it changes its folders to a newer layout.
 
 | File | What it holds | Written by |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ devvm writes nothing into your project folders. It keeps the settings you edit i
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new`, then you |
 | `features/` | your own [features](customizing.md#your-own-features) | you |
 | `ca/` | your [company's CA certificates](#a-companys-ca), which VMs and builds trust | you |
-| `version` | the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders), which says how devvm keeps its files here | devvm, when it's missing |
+| `version` | the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders), which says how devvm keeps its files here | devvm, when it's missing or older |
 
 Edit the files in `~/.config/devvm`, and never edit the ones in `~/.local/share/devvm`. devvm writes those itself and rewrites them whole, so a change you make there can be lost, or can stop devvm from reading the file. To set a default by hand, put it in `config.toml` instead.
 
@@ -200,23 +200,13 @@ A CA in the folder can read every TLS connection a VM makes, as it can this mach
 
 ## devvm's state
 
-`~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) holds what devvm makes and keeps for you. devvm writes everything in it, so don't edit it by hand:
+`~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) holds what devvm makes and keeps for you, and devvm writes everything in it, so don't edit it by hand. It holds the defaults that `devvm setup`, `devvm size -g`, `devvm ports -g`, `devvm network -g` and `devvm retention` save in `settings.json`, below [`config.toml`](#configtoml)'s, and a folder for each VM in `vms/`, with the VM's state, its own allowlist and its network logs. It also holds the images and the shared tools, the [run logs](troubleshooting.md#a-command-fails), the agents' history that `devvm history export` and `devvm rm` save, the [ssh config](ssh.md#ssh-access-by-name) for your VMs, and devvm's own Lima home (`lima/`), where the Lima backend's VMs and images live. [devvm's data folder](space.md#devvms-data-folder) lists each file and folder in it, with how each one is cleaned up.
 
-- `settings.json`, the defaults that `devvm setup`, `devvm size -g`, `devvm ports -g`, `devvm network -g` and `devvm retention` save, below [`config.toml`](#configtoml)'s;
-- `ssh_config` and `known_hosts`, the [ssh config](ssh.md#ssh-access-by-name) for running VMs and their host keys, which devvm writes on each launch and stop;
-- `agent-keys.json`, the keys in [devvm's own SSH agent](ssh.md#devvms-own-agent) and their options, which `devvm ssh-agent add` and `rm` write;
-- on Linux hosts, your [secrets](../safety/network.md#saving-and-binding-secrets), in files under `secrets/` that only you can read (on macOS they're in the Keychain);
-- a folder for each VM in `vms/`, with the VM's state, its own allowlist and its network logs;
-- the images and their records, and the shared tools;
-- the [run logs](troubleshooting.md#a-command-fails) in `logs/runs/`;
-- the agents' history that `devvm history export` and `devvm rm` save, in `exports/`;
-- devvm's own Lima home (`lima/`), where the Lima backend's VMs and images live.
-
-[What devvm keeps on this machine](space.md) lists everything in this folder, with how each is cleaned up. On Linux hosts this folder holds your secrets, so keep that in mind when you back it up.
+On Linux hosts this folder also holds your [secrets](../safety/network.md#saving-and-binding-secrets), in files under `secrets/` that only you can read, so keep that in mind when you back it up. On macOS they're in the Keychain.
 
 devvm's Lima home is its own, whatever `LIMA_HOME` says, so Lima settings meant for other VMs never reach devvm's. Set `DEVVM_LIMA_HOME` to move it, for example to a sandbox or to a shorter path.
 
-Only you can read devvm's files. Each time devvm runs, it makes `~/.config/devvm` and `~/.local/share/devvm` yours alone (mode 700), whatever mode they had, so nothing in them is open to others even when a file or folder inside has a wider mode. When devvm can't read one, it names the file and the line ([a file devvm can't read](troubleshooting.md#a-file-devvm-cant-read)).
+Only you can read devvm's files, in either folder, because each time devvm runs, it makes both folders yours alone ([devvm's data folder](space.md#devvms-data-folder)). When devvm can't read one of its files, it names the file and the line ([a file devvm can't read](troubleshooting.md#a-file-devvm-cant-read)).
 
 ## Project folders devvm refuses
 

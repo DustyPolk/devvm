@@ -63,7 +63,7 @@ Flags take one dash or two.
 | `-upstream-cas` | a file of CA certificates (PEM) the proxy's own TLS connections trust besides the system's |
 | `-upstream` | a file (mode 600) of the host's `HTTPS_PROXY=`, `HTTP_PROXY=` and `NO_PROXY=` lines: allowed requests go through that company proxy, which gets host names, and its credentials only in its own `Proxy-Authorization` (in a file because a process's arguments are visible to other users); logs name it by `host:port` |
 | `-auth-file` | a file (mode 600) with the VM's key: requests need it as the proxy password, user `devvm` (in a file because a process's arguments are visible to other users) |
-| `-nix-cache` | the shared Nix cache's folder (`~/.local/share/devvm/nix-cache`), made mode 700 if it isn't there: serve `http://devvm.proxy/nix/` from it; devvm passes it for VMs whose image has the nix layer |
+| `-nix-cache` | the shared Nix cache's folder (`~/.local/share/devvm/cache/nix-cache`), made mode 700 if it isn't there: serve `http://devvm.proxy/nix/` from it; devvm passes it for VMs whose image has the nix layer |
 | `-nix-cache-max` | with `-nix-cache`: the cache's cap, in bytes (devvm passes `nix-cache.size`, 10 GiB when it's off) |
 | `-links` | the VM's links' list, which `devvm _links` writes (`~/.local/share/devvm/vms/<hash>/run/links.json`): reach each link through its socket, before any rule; a missing list has no links |
 | `-link-sockets` | with `-links`: the folder of the links' sockets, devvm's run folder (`~/.local/share/devvm/run`); without it, no link is reached |

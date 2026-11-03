@@ -98,33 +98,48 @@ On the way up, devvm also notes the nearest folder below the parent's that has a
 
 ## State files
 
-devvm writes nothing into the project folder. It keeps what you edit in `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`), which [your settings](../using/settings.md#your-settings) lists file by file, and everything it writes itself in `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`):
+devvm writes nothing into the project folder. It keeps its files in two folders, and the folder a file is in says who writes it:
 
-| Path in `~/.local/share/devvm` | Holds |
+- `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds what you write: `config.toml`, your rules for every VM in `policy`, and your own layers, features and CAs. devvm never rewrites a file of yours there. It changes single lines of `policy` when `devvm network` adds or removes a rule for every VM, it writes a new layer's files when you run `devvm layer new`, and it writes the folder's `version` ([the layout version](#the-layout-version)). [Your settings](../using/settings.md#your-settings) lists the folder file by file.
+- `~/.local/share/devvm` (`$XDG_DATA_HOME/devvm`) holds everything devvm writes itself, and you never edit it. [devvm's data folder](../using/space.md#devvms-data-folder) lists it file by file, with how each one is cleaned up, and [what devvm keeps on this machine](../using/space.md) also lists what Lima keeps outside it.
+
+The two folders use two formats. `config.toml` is TOML, which devvm reads strictly, so a key it doesn't know or a value that a key can't take stops the command, and devvm names the file and the line ([when devvm can't read it](../using/settings.md#when-devvm-cant-read-it)). devvm's own records are JSON: `settings.json`, each VM's `vm.json`, each image's record and each shared tool image's record. devvm ignores a field it doesn't know in them, so a field that a newer devvm adds doesn't stop an older one, and a change that an older devvm would read wrongly goes through the [layout version](#the-layout-version). devvm's other files are small ones of its own, such as pid files, the ssh config and the pinned host keys.
+
+In the data folder, each VM has a folder of its own, `vms/<hash>/` ([a VM's folder](#a-vms-folder)), and the rest is shared by every VM:
+
+- `settings.json` holds the defaults devvm's commands save, below `config.toml`'s ([where a default comes from](../using/settings.md#where-a-default-comes-from)).
+- `ssh_config` is the [ssh config](security.md#ssh-into-vms) for running VMs, and `known_hosts` holds their pinned host keys.
+- `agent-keys.json` lists the keys added to [devvm's own SSH agent](../using/ssh.md#devvms-own-agent), with each one's file, fingerprint, `confirm` and `lifetime`, and `agent.sock` is that agent's socket.
+- `secrets/` holds each [secret](network.md#where-secrets-are-saved) in a file of its own, on hosts without a Keychain.
+- `images/<key>/record.json` is each image's record, and `images/rebuilds.json` holds the [rebuild counters](images.md#rebuilding), by backend, `--from` and image.
+- `tools/` holds the [shared tools](images.md#the-share), each image with its record. Beside it are the tools lock, `mise.lock`, the `mise.toml` it was resolved from, `mise.lock.toml`, and `mise.lock.checked`, which says when devvm last [checked](images.md#versions) for newer versions.
+- `ca/` holds the certificate authority that VMs trust for the proxy.
+- `logs/runs/` holds the [run logs](../using/troubleshooting.md#a-command-fails), and `logs/tools-check.log` the daily tools check's output.
+- `exports/` holds the agents' history that `devvm history export` and `devvm rm` save.
+- `lima/` is devvm's own [Lima home](lima.md#a-lima-home-of-its-own), unless `DEVVM_LIMA_HOME` moves it.
+
+`cache/` holds only what devvm makes again whenever it needs it, so it may be deleted at any time. That's devvm's own mise (`cache/mise/`), the [shared Nix cache](network.md#the-shared-nix-cache) (`cache/nix-cache/`) and the [digests](images.md#digests) of the container images that `--from` bases start from (`cache/from-digests.json`). `run/` holds what running VMs need that isn't one VM's, or whose path must be short: the QEMU wrapper on Linux hosts, the claims lock ([locks](#locks)), the sockets of port forwarders and link sessions, named by hashes, and in `builds/<name>/` each build VM's folder, laid out as a VM's folder is.
+
+Each write replaces a file whole, so a file is never left half written. devvm makes its files readable only by you (mode 600), and the programs it keeps to run, such as its mise and QEMU wrapper, are mode 700, as are its folders. Before every command, devvm makes the data folder and `~/.config/devvm` when they're missing and sets both to mode 700, whatever mode they had. A wider mode on anything beneath them then opens nothing to others, and when devvm can't set a folder's mode, it warns and goes on. The folders that hold history, logs, keys or secrets (`exports/`, `logs/`, `logs/runs/`, `run/`, `ca/`, `secrets/`, and the `run/`, `logs/` and `backend/` folders in each VM's folder) are set to mode 700 again whenever devvm writes an export, a log, a key or a secret into them, whatever mode they had before. devvm refuses to use one of those folders when it's a symbolic link or not a folder at all, so it never sets the mode of whatever a link points to. The data folder and `~/.config/devvm` may be symbolic links, such as into a dotfiles repo, and devvm follows them. When a file can't be read, devvm names the file and the line, and you fix the line or delete the file.
+
+### A VM's folder
+
+Each VM's folder, `vms/<hash>/`, is named by the hash of its project folder's physical path, which also ends the VM's name, and it holds every file that devvm keeps for the VM in the data folder:
+
+| Path in `vms/<hash>/` | Holds |
 | --- | --- |
-| `version`, `version.lock` | the folder's [layout version](#the-layout-version), and the lock each devvm checking it holds |
-| `settings.json` | the defaults devvm's commands save, below `config.toml`'s ([where a default comes from](../using/settings.md#where-a-default-comes-from)) |
-| `ssh_config`, `known_hosts` | the [ssh config](security.md#ssh-into-vms) for running VMs, and their pinned host keys |
-| `agent-keys.json` | the keys added to [devvm's own SSH agent](../using/ssh.md#devvms-own-agent): each one's file, fingerprint, `confirm` and `lifetime` |
-| `secrets/` | on hosts without a Keychain, each [secret](network.md#where-secrets-are-saved) in a file of its own |
-| `vms/<hash>/` | each VM's folder, named by the hash of its project folder's path that ends the VM's name: its state (`vm.json`), the lock each change to its state holds (`lock`), its own network rules (`policy`), its backend's files (`backend/`), its proxy's, link session's and sandbox's files (`run/`) and its logs (`logs/`) |
-| `images/<key>/record.json` | each image's record |
-| `images/rebuilds.json` | the [rebuild counters](images.md#rebuilding), by backend, `--from` and image |
-| `tools/`, `mise.lock` | the [shared tools](images.md#the-share), each image with its record, and the tools lock |
-| `cache/` | what devvm makes again whenever it needs it, so it may be deleted at any time: devvm's own mise (`cache/mise/`), the [shared Nix cache](network.md#the-shared-nix-cache) (`cache/nix-cache/`) and the [digests](images.md#digests) of the container images that `--from` bases start from (`cache/from-digests.json`) |
-| `mise.lock.toml`, `mise.lock.checked` | the `mise.toml` the tools lock was resolved from, and when devvm last [checked](images.md#versions) for newer versions |
-| `ca/` | the certificate authority that VMs trust for the proxy |
-| `oci-build.lock` | the lock a Lima build of a base [from a container image](images.md#how-its-converted) holds |
-| `tools.lock` | the lock a devvm [writing to the share](images.md#building-tools) or swapping the tools lock holds |
-| `images/locks/<key>`, `images/locks/rebuilds` | the lock the devvm [building an image](images.md#building) holds, and the one a devvm [changing a rebuild counter](images.md#rebuilding) holds |
-| `groups.lock` | the lock a devvm [joining or leaving a group](design.md#groups), or working its links out again, holds |
-| `run/` | what running VMs need that isn't one VM's or whose path must be short: the QEMU wrapper, the claims lock (`claims.lock`) and the sockets of port forwarders and link sessions, named by hashes, and in `builds/<name>/` each build VM's folder, laid out as a VM's folder is |
-| `logs/runs/`, `logs/tools-check.log` | the [run logs](../using/troubleshooting.md#a-command-fails) and the daily tools check's output |
-| `exports/` | the agents' history that `devvm history export` and `devvm rm` save |
-| `agent.sock` | the socket of [devvm's own SSH agent](../using/ssh.md#devvms-own-agent) |
-| `lima/` | devvm's own [Lima home](lima.md#a-lima-home-of-its-own), unless `DEVVM_LIMA_HOME` moves it |
+| `vm.json` | the VM's state ([a VM's state](#a-vms-state)) |
+| `lock` | the lock that each change to `vm.json` holds ([locks](#locks)) |
+| `policy` | the VM's own [network policy rules](network.md#policy-files), which `devvm network allow`, `deny` and `rm` change |
+| `backend/` | its backend's files: `ports`, which of the VM's ports devvm forwards, and its [port forwarder](ports.md#its-process-and-files)'s `ports.pid`, `ports.status`, `ports.log`, `ports.lock` and `ports.known_hosts` |
+| `run/` | what the VM's runs leave: its [proxy](network.md#the-proxy)'s `proxy.pid`, `proxy.status` and `proxy.auth`, what the proxy started with (`proxy.policy`, `proxy.bin` and `proxy.ca`, with `proxy.cas` and `proxy.upstream` [behind a company proxy](network.md#through-a-company-proxy)), its [secrets](network.md#how-the-proxy-puts-them-in)' bindings (`secrets.json`, `secrets.policy`), its [link session](ports.md#the-link-session)'s `links.pid` and `links.json`, the hostagent it was started on (`started`), and on macOS the hostagent's [sandbox profile](lima.md#confinement) (`sandbox.sb`) |
+| `logs/` | its proxy's decisions (`network.jsonl`) and its proxy's own output (`proxy.log`), which the [log files](network.md#log-files) describe, and its link session's output (`links.log`) |
 
-[What devvm keeps on this machine](../using/space.md) says how each of these is cleaned up, and lists what the backends keep outside this folder.
+devvm finds a folder's VM by the hash of the folder's path, so an existing VM has the name and the backend its state records, whichever backend you ask for. Only a new VM gets a name, which fits its backend's limit. The VM's folder lasts as long as the VM, because `devvm rm` and `devvm gc --orphans` stop what runs for the VM, delete what devvm keeps for it outside the folder, and then delete the folder whole ([deleting a VM](#deleting-a-vm)), so the next devvm in that folder starts fresh.
+
+No VM's folder holds a socket, because a unix socket's path is at most 104 characters and ssh adds 17 to a control socket's while it makes it. The sockets that VMs need are in `run/`, named by hashes: each port forwarder's control socket, `run/lima-<hash>.ctl`, and each link session's `run/link-<hash>.sock` and `run/link-<hash>.ctl`. With the default data folder, every socket fits for a home folder of up to 37 characters, and the ssh control sockets are the longest.
+
+### A VM's state
 
 A VM's state is `vm.json`, a JSON file that only devvm writes. It starts with the fields every VM has: the file's `version`, the VM's random `id`, its `name` and its ssh `alias`, the `image` the VM came from with its build `chain` and the `from` image its base started from, its project folder (`dir`) and that folder's identity (`folder`), its `backend` and where that backend kept it (`backend_at`), `created`, the time its backend finished making it, and `made_by`, the version of the devvm that made it, which later changes keep. A VM without `created` never starts, because its creation didn't finish. After those fields comes one section for each part of devvm that keeps something of the VM's:
 
@@ -144,13 +159,25 @@ A VM's state is `vm.json`, a JSON file that only devvm writes. It starts with th
 
 Each section keeps what you asked for apart from what devvm made, which sits under the section's `made`. devvm reads fields it doesn't know without complaint and keeps them when it writes the file. A file that isn't JSON, lacks one of `version`, `id`, `name`, `image`, `dir` or `backend`, or holds a section devvm can't read is refused, and devvm names the file.
 
-devvm finds a folder's VM by the hash of the folder's path, so an existing VM has the name and the backend its state records, whichever backend you ask for. Only a new VM gets a name, which fits its backend's limit, and devvm writes its whole state once, with everything you asked for, before its backend makes it. The VM's folder lasts as long as the VM, because `devvm rm` also deletes it, so the next devvm in that folder starts fresh.
+A new VM's whole state is written once, with everything you asked for, before its backend makes the VM.
 
-Reading a VM's state takes no lock, because each write replaces the file whole. Each change takes the VM's `lock` with an OS file lock, reads the file again, makes the change and writes the file once, so a command's changes land together or not at all, and two devvms changing one VM at once lose neither's change. A command holds one VM's lock at a time. A change to other VMs, such as removing every link to a VM that `devvm rm` deletes, lets go of the first VM's lock and then takes each other VM's lock in turn. What no two VMs may have, a new VM's ssh alias and the host ports devvm chooses, is chosen under the claims lock, `run/claims.lock`, which devvm takes after the VM's own lock and holds until the VM's state is written.
+### Locks
 
-No VM's folder holds a socket, because a unix socket's path is at most 104 characters and ssh adds 17 to a control socket's while it makes it. The sockets that VMs need are in `run/`, named by hashes: each port forwarder's control socket, `run/<backend>-<hash>.ctl`, and each link session's `run/link-<hash>.sock` and `run/link-<hash>.ctl`. With the default data folder, every socket fits for a home folder of up to 37 characters, and the ssh control sockets are the longest.
+Reading a VM's state takes no lock, because each write replaces the file whole. Each change takes the VM's `lock`, reads the file again, makes the change and writes the file once, so a command's changes land together or not at all, and two devvms changing one VM at once lose neither's change. A command holds one VM's lock at a time. A change to other VMs, such as removing every link to a VM that `devvm rm` deletes, lets go of the first VM's lock and then takes each other VM's lock in turn, reading each one's state again before it changes it. What no two VMs may have, a new VM's ssh alias and the host ports devvm chooses, is chosen under the claims lock, `run/claims.lock`, which devvm takes after the VM's own lock and holds until the VM's state is written.
 
-Each write replaces a file whole, so a file is never left half written. devvm makes its files readable only by you (mode 600), and the programs it keeps to run, such as its mise and QEMU wrapper, are mode 700, as are its folders. Before every command, devvm makes the data folder and `~/.config/devvm` when they're missing and sets both to mode 700, whatever mode they had. A wider mode on anything beneath them then opens nothing to others, and when devvm can't set a folder's mode, it warns and goes on. The folders that hold history, logs, keys or secrets (`exports/`, `logs/`, `logs/runs/`, `run/`, `ca/`, `secrets/`, and the `run/`, `logs/` and `backend/` folders in each VM's folder) are set to mode 700 again whenever devvm writes an export, a log, a key or a secret into them, whatever mode they had before. devvm refuses to use one of those folders when it's a symbolic link or not a folder at all, so it never sets the mode of whatever a link points to. The data folder and `~/.config/devvm` may be symbolic links, such as into a dotfiles repo, and devvm follows them. When a file can't be read, devvm names the file and the line, and you fix the line or delete the file.
+Every lock devvm takes is an OS file lock on an open file, which the system lets go of when the devvm holding it ends, however it ends. So a lock file is empty, it stays when its lock is let go of, and a devvm that was killed never leaves a lock held. Besides each VM's `lock` and the claims lock, the data folder has these:
+
+| Lock | Held by |
+| --- | --- |
+| `version.lock` | each devvm checking the [layout version](#the-layout-version) |
+| `vms/<hash>/backend/ports.lock` | whatever stops a VM's [port forwarder](ports.md#its-process-and-files) and starts the next one |
+| `images/locks/<key>` | the devvm [building an image](images.md#building) |
+| `images/locks/rebuilds` | a devvm [changing a rebuild counter](images.md#rebuilding) |
+| `oci-build.lock` | a Lima build of a base [from a container image](images.md#how-its-converted) |
+| `tools.lock` | a devvm [writing to the share](images.md#building-tools) or swapping the tools lock |
+| `making.lock` | each devvm making a VM or giving one new shared tools, shared, and `devvm gc --tool-images --force`, alone ([cleaning up](images.md#listing-and-cleaning-up)) |
+| `groups.lock` | a devvm [joining or leaving a group](design.md#groups), or working its links out again |
+| `retention.lock` | the devvm applying the [retention settings](../using/settings.md#retention) |
 
 ### The layout version
 

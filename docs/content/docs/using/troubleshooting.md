@@ -77,7 +77,7 @@ On Lima, base starts from a pinned, dated release of Ubuntu's cloud image. Ubunt
 
 ## A file devvm can't read
 
-When devvm can't read one of its settings or state files, it names the file, and the line when the problem is on one. Fix the line or delete the file. [Settings and files](settings.md) lists what each file holds.
+When devvm can't read one of its settings or state files, it names the file, and the line when the problem is on one. Fix the line or delete the file. [Your settings](settings.md#your-settings) lists what each file you edit holds, and [devvm's data folder](space.md#devvms-data-folder) what each file devvm writes holds.
 
 ## A newer devvm changed devvm's folders
 
