@@ -502,6 +502,13 @@ func (o SSH) connArgs() []string {
 	}
 }
 
+// CommandArgs are ssh's arguments for running command in the VM, without
+// a terminal: no ssh config (-F none), then connArgs, so ssh reaches the
+// VM alone, whatever host its caller was asked for.
+func (o SSH) CommandArgs(command string) []string {
+	return slices.Concat([]string{"-F", "none", "-T"}, o.connArgs(), []string{command})
+}
+
 // masterArgs are ssh's arguments for the master connection, ports.sh run
 // in its session.
 func (o SSH) masterArgs() []string {

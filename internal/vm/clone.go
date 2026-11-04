@@ -20,6 +20,7 @@ import (
 	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/w3cj/devvm/internal/vmssh"
 )
 
 // --clone: the VM works on its own clone of the repo instead of mounting
@@ -120,18 +121,34 @@ func seedRefs(ctx context.Context, dir, branch string, worktree bool) []string {
 	return refs
 }
 
-// gitSSH is host git (hostgit) run in dir with ssh reading devvm's ssh
-// config only, for vm. Whatever host the repo's config rewrites vm's URL
-// to (url.*.insteadOf, remote.URL.url), ssh trusts only the host keys
-// devvm pinned for vm's start (its record, HostKeyAlias), forwards nothing (no agent,
-// no ports), and never asks on the terminal (BatchMode), so a VM's sshd
-// can't prompt for a password.
-func (e clones) gitSSH(ctx context.Context, vm, dir string, args ...string) *exec.Cmd {
+// gitSSH is host git (hostgit) run in dir with its ssh (gitSSHCommand)
+// reaching the running vm alone (ownSSH), on b.
+func (e clones) gitSSH(ctx context.Context, b backend.Backend, vm, dir string, args ...string) (*exec.Cmd, error) {
+	s, err := e.ownSSH(ctx, b, vm)
+	if err != nil {
+		return nil, err
+	}
 	cmd := hostgit.Command(ctx, append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -F "+shell.Quote(e.Dirs.SSHConfig())+" -o BatchMode=yes"+
-		" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="+shell.Quote(e.Dirs.VM(vm).KnownHosts())+" -o GlobalKnownHostsFile=/dev/null"+
-		" -o HostKeyAlias="+shell.Quote(vm)+" -o ForwardAgent=no -o ClearAllForwardings=yes")
-	return cmd
+	cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND="+gitSSHCommand(s, dir))
+	return cmd, nil
+}
+
+// gitSSHCommand is git's ssh for a --clone VM's push and fetch: a shell
+// function, as git runs GIT_SSH_COMMAND through sh -c with its own
+// arguments after it. It ignores the host, port and options git passes,
+// so no url.*.insteadOf or remote URL in the repo's config can send it
+// anywhere else, and connects to the VM alone (vmssh.SSH's CommandArgs:
+// its loopback port and key, the host keys devvm pinned for its start
+// under HostKeyAlias, BatchMode, nothing forwarded). There it runs
+// git-receive-pack or git-upload-pack, whichever git's last argument
+// asks for, on the clone at dir, whatever path git asked for; anything
+// else fails.
+func gitSSHCommand(s vmssh.SSH, dir string) string {
+	run := func(verb string) string {
+		return "exec " + shell.QuoteJoin(append([]string{"ssh"}, s.CommandArgs(verb+" "+shell.Quote(dir))...))
+	}
+	return `f() { for c; do :; done; case $c in "git-receive-pack "*) ` + run("git-receive-pack") +
+		` ;; "git-upload-pack "*) ` + run("git-upload-pack") + ` ;; esac; exit 1; }; f`
 }
 
 // seedClone makes the running VM's clone: a new repo at the folder's path
@@ -166,7 +183,14 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 	}
 	e.Info(msg.CopyingBranches())
 	push := append([]string{"push", "-q", "--no-verify", "--no-recurse-submodules", "--no-signed", cloneURL(vm, dir)}, seedRefs(ctx, dir, branch, worktree)...)
-	if err := e.LoggedCmd(ctx, msg.CopyingBranches(), e.gitSSH(ctx, vm, dir, push...)); err != nil {
+	cmd, err := e.gitSSH(ctx, b, vm, dir, push...)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return msg.CloneSeedFailed(vm).Because(err)
+	}
+	if err := e.LoggedCmd(ctx, msg.CopyingBranches(), cmd); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -240,7 +264,7 @@ func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 		if !e.Terminal() {
 			return false, msg.NoTerminalFetch(remote)
 		}
-		if err := e.fetchUnfetched(ctx, vm, dir, remote, unfetched); err != nil {
+		if err := e.fetchUnfetched(ctx, b, vm, dir, remote, unfetched); err != nil {
 			return false, err
 		}
 	}
@@ -418,7 +442,7 @@ func unfetchedRefs(ctx context.Context, dir string, refs []byte) []string {
 // fetchUnfetched offers to fetch the VM's unfetched branches into new
 // local branches, saved/<remote>/<branch> (savedPrefix), never over one
 // that exists. Branches whose names git refuses are skipped.
-func (e clones) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfetched []string) error {
+func (e clones) fetchUnfetched(ctx context.Context, b backend.Backend, vm, dir, remote string, unfetched []string) error {
 	var good, bad []string
 	for _, br := range unfetched {
 		if validBranch(ctx, dir, br) {
@@ -449,7 +473,14 @@ func (e clones) fetchUnfetched(ctx context.Context, vm, dir, remote string, unfe
 		saved[i] = prefix + "/" + br
 		args = append(args, "refs/heads/"+br+":refs/heads/"+saved[i])
 	}
-	if err := e.LoggedCmd(ctx, msg.Fetching(prefix), e.gitSSH(ctx, vm, dir, args...)); err != nil {
+	cmd, err := e.gitSSH(ctx, b, vm, dir, args...)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return msg.FetchFailed(vm).Because(err)
+	}
+	if err := e.LoggedCmd(ctx, msg.Fetching(prefix), cmd); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

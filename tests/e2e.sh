@@ -14,8 +14,8 @@
 #                devvm git-protect and rm, a VM from a devcontainer.json (its ports, variables, commands
 #                once and at each start, a changed file, an image on this machine's registry refused), an agent VM's folders and history (devvm history export, rm's export), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
-#                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
-#                for unfetched commits and uncommitted changes and the work it keeps; gc deletes a stale
+#                VM of a throwaway repo and checks its clone (pushed past an insteadOf), the remote, fetching, and rm's checks
+#                for unfetched commits and uncommitted changes and the work it keeps, then a git worktree's clone; gc deletes a stale
 #                image and an unused tool image, keeping base and a VM named like an image; tools resolves
 #                the shared tools' newest versions (every other section has tests/e2e-mise.lock's), makes a node
 #                VM and checks its shared tools, devvm tools, tools update, rm and add, devvm node an
@@ -2219,10 +2219,13 @@ export GIT_CONFIG_GLOBAL=$ch/.gitconfig GIT_CONFIG_NOSYSTEM=1   # host git: none
 c=$(newproj cloned)
 git -C "$c" init -q -b main && echo a > "$c/a" && git -C "$c" add a && git -C "$c" -c user.email=e@e -c user.name=e commit -qm one &&
   git -C "$c" branch other
+# The repo's url.*.insteadOf rewrites the VM's URL to another host, which devvm's push ignores.
+git -C "$c" config url.elsewhere.invalid:/x.insteadOf devvm-
 (cd "$c" && printf 'pwd; git branch --show-current\n' | HOME=$ch "$D" --clone --no-network-policy >"$work/last.log" 2>&1)
+git -C "$c" config --unset url.elsewhere.invalid:/x.insteadOf
 vm=$(vm_of "$c"); [[ -z $vm ]] || created+=("$vm")
 cgit="GIT_SSH_COMMAND='ssh -F $XDG_DATA_HOME/devvm/ssh_config' git -C '$c'"
-check "the VM has its own clone, with every branch, only the shared tools mounted, and the shell opens in it" bash -c "
+check "the VM has its own clone, with every branch, though insteadOf sent its URL elsewhere, only the shared tools mounted, and the shell opens in it" bash -c "
   [[ -n '$vm' && \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm) == '$share ' ]] &&
   [[ \$(limactl shell --workdir / $vm git -C '$c' branch --format='%(refname:short)' </dev/null | tr '\n' ' ') == 'main other ' ]] &&
   limactl shell --workdir / $vm git -C '$c' log --oneline </dev/null | grep -q one &&
@@ -2247,6 +2250,17 @@ check "rm --no-clone-check deletes it unchecked after a warning, the worktree's 
   ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! git -C '$c' remote | grep -q devvm &&
   [[ -z \$(git -C '$c' for-each-ref refs/remotes) ]] && git -C '$c' log --oneline saved/devvm/main | grep -q from-vm &&
   grep -qF \"\$(m saved_branches 'branches=\"saved/devvm/main\"' | head -1)\" '$work/last.log' && [[ ! -e '$ch/.ssh/config' ]]"
+# A git worktree of the repo, on a branch of its own whose upstream is main: its VM's clone has
+# only those two, not the repo's other branches.
+w=$(newproj cloned-wt)
+git -C "$c" worktree add -q -b wtb "$w" main && git -C "$w" branch -q --set-upstream-to=main
+(cd "$w" && printf 'git branch --show-current\n' | HOME=$ch "$D" --clone --no-network-policy >"$work/last.log" 2>&1)
+wvm=$(vm_of "$w"); [[ -z $wvm ]] || created+=("$wvm")
+check "a git worktree's VM has a clone of only its branch and that branch's upstream" bash -c "
+  [[ -n '$wvm' && \$(limactl shell --workdir / $wvm git -C '$w' branch --format='%(refname:short)' </dev/null | tr '\n' ' ') == 'main wtb ' ]] &&
+  grep -qx wtb '$work/last.log'"
+(cd "$w" && HOME=$ch "$D" rm --force --no-export </dev/null >/dev/null 2>&1)
+git -C "$c" worktree remove --force "$w"
 unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 fi
 

@@ -45,10 +45,13 @@ stub_calls
 
 # A new VM: nothing mounted but the shared tools; its clone made at the
 # folder's path, every branch pushed into it through devvm's ssh config,
-# main checked out; the remote added. Not a terminal: the Include line
+# main checked out; the remote added. The repo's url.*.insteadOf, which
+# rewrites the VM's URL to another host, doesn't change where the push
+# goes: devvm's ssh connects to the VM alone. Not a terminal: the Include line
 # isn't added, and devvm says how to fetch until it is. Uncommitted
 # changes aren't copied, and devvm says so.
 exec sh -c 'echo x > tracked && git add tracked && git commit -qm two && echo y > tracked'
+exec git config url.elsewhere.example:/x.insteadOf devvm-web-
 stub_reset
 exec devvm --clone --no-network-policy
 stdout '^==> copying_branches$'
@@ -60,7 +63,8 @@ stderr '^devvm: uncommitted_not_copied branch=main dir=/\S*/web remote=devvm$'
 ! stderr 'git_protect|ssh_remote_hint'
 stub_calls
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] '
-stdout '^ssh -F /\S*/data/devvm/ssh_config -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/\S*/data/devvm/vms/[0-9a-f]{14}/run/known_hosts -o GlobalKnownHostsFile=/dev/null -o HostKeyAlias=devvm-web-[0-9a-f]{14} -o ForwardAgent=no -o ClearAllForwardings=yes devvm-web-[0-9a-f]{14} git-receive-pack ''/\S*/web''$'
+stdout '^ssh -F none -T -o BatchMode=yes .* -o UserKnownHostsFile=/\S*/data/devvm/vms/[0-9a-f]{14}/run/known_hosts -o GlobalKnownHostsFile=/dev/null -o HostKeyAlias=devvm-web-[0-9a-f]{14} -o StrictHostKeyChecking=yes .* -o ForwardAgent=no .* -o ClearAllForwardings=yes .* -p 60022 -l stub 127\.0\.0\.1 git-receive-pack ''/\S*/web''$'
+! stdout elsewhere
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 ! stdout chflags
 vm_name WEB web
@@ -69,6 +73,7 @@ stdout '^clone.on=true$'
 stdout '^clone.made.remote=devvm$'
 stdout '^clone.made.seeded=true$'
 stdout '^git.mode=clone$'
+exec git config --unset url.elsewhere.example:/x.insteadOf
 exec git remote get-url devvm
 stdout '^devvm-web-[0-9a-f]{14}:/\S*/web$'
 exec sh -c 'c="$STUB_DIR/vmfs$(pwd -P)"; git -C "$c" branch --show-current && git -C "$c" branch --format="%(refname:short)" && cat "$c/tracked"'

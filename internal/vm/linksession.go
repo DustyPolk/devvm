@@ -68,7 +68,7 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 	if start == "" {
 		return msg.VMNotRunning(vm)
 	}
-	ssh, err := e.linkSSH(ctx, b, vm)
+	ssh, err := e.ownSSH(ctx, b, vm)
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ const linkRunFor = time.Second
 
 // targetRun is what a target's backend says of its run, as a link's
 // connections need it: its start ("" when it doesn't run), and how
-// devvm's ssh reaches it, or why it can't (linkSSH).
+// devvm's ssh reaches it, or why it can't (ownSSH).
 type targetRun struct {
 	start  string
 	ssh    vmssh.SSH
@@ -227,7 +227,7 @@ func (e Links) targetRun(ctx context.Context, b backend.Backend, target string) 
 	if err != nil || run.ID == "" {
 		return targetRun{}
 	}
-	ssh, err := e.linkSSH(ctx, b, target)
+	ssh, err := e.ownSSH(ctx, b, target)
 	return targetRun{start: run.ID, ssh: ssh, sshErr: err}
 }
 
@@ -349,28 +349,6 @@ func (e Links) warnUnenforced(ctx context.Context, client, target *state.VM) {
 	if policyUnenforced(ctx, c.Backend, client, target) {
 		e.Warn(msg.LinkTargetUnenforced(target.Name(), client.Name()))
 	}
-}
-
-// linkSSH is how devvm's own ssh reaches a running VM for links: its
-// backend's ssh (reviewed), with the VM's own key and the host keys devvm
-// pinned for its current start (vmssh.KnownHostsFor), on a host loopback
-// port (vmssh.FromTarget).
-func (e Links) linkSSH(ctx context.Context, b backend.Backend, vm string) (vmssh.SSH, error) {
-	if !e.Registry.Allowed(b, backend.FeatureSSH) {
-		return vmssh.SSH{}, fmt.Errorf("%s: the %s backend's ssh isn't usable", vm, b.Name())
-	}
-	t, err := b.SSH(ctx, vm)
-	if err != nil {
-		return vmssh.SSH{}, err
-	}
-	s, err := vmssh.FromTarget(vm, t)
-	if err != nil {
-		return vmssh.SSH{}, err
-	}
-	if s.KnownHosts, err = vmssh.KnownHostsFor(ctx, e.Dirs, b, vm); err != nil {
-		return vmssh.SSH{}, err
-	}
-	return s, nil
 }
 
 // linkEvents writes a link session's events to its client's event log,

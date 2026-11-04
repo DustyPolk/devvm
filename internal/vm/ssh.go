@@ -2,11 +2,35 @@ package vm
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/vmssh"
 )
+
+// ownSSH is how devvm's own ssh reaches a running VM, for links and a
+// --clone VM's push and fetch: its backend's ssh (reviewed), with the
+// VM's own key and the host keys devvm pinned for its current start
+// (vmssh.KnownHostsFor), on a host loopback port (vmssh.FromTarget).
+func (e *Env) ownSSH(ctx context.Context, b backend.Backend, vm string) (vmssh.SSH, error) {
+	if !e.Registry.Allowed(b, backend.FeatureSSH) {
+		return vmssh.SSH{}, fmt.Errorf("%s: the %s backend's ssh isn't usable", vm, b.Name())
+	}
+	t, err := b.SSH(ctx, vm)
+	if err != nil {
+		return vmssh.SSH{}, err
+	}
+	s, err := vmssh.FromTarget(vm, t)
+	if err != nil {
+		return vmssh.SSH{}, err
+	}
+	if s.KnownHosts, err = vmssh.KnownHostsFor(ctx, e.Dirs, b, vm); err != nil {
+		return vmssh.SSH{}, err
+	}
+	return s, nil
+}
 
 // ShowHost gets the folder's VM ready for ssh and editors (reach), then
 // says the name they reach it by and the folder to open (shellDir).

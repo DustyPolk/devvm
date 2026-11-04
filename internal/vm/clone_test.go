@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/stubtest"
+	"github.com/w3cj/devvm/internal/vmssh"
 )
 
 // gitEnv gives git in the test a config and identity of its own.
@@ -51,9 +53,13 @@ func cloneEnv(t *testing.T) (e *Env, f *backendtest.Fake, vmfs string) {
 	gitIn(t, e.Dir, "init", "-q", "-b", "main")
 	gitIn(t, e.Dir, "commit", "-q", "--allow-empty", "-m", "one")
 	vmfs = stubtest.New(t, "ssh").Path("vmfs")
+	f.Target = backend.SSHTarget{Host: "127.0.0.1", Port: 60022, User: "u", Key: "/k"}
 	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
 		var cmd *exec.Cmd
 		switch {
+		case len(argv) == 3 && strings.Contains(argv[2], "ssh_host_") && o.Stdout != nil:
+			_, err := io.WriteString(o.Stdout, testHostKey+"\n")
+			return err
 		case len(argv) > 4 && argv[0] == "git" && argv[1] == "-C" && argv[3] == "worktree" && argv[4] == "list":
 			// Its paths as the VM's, without vmfs.
 			out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", vmfs + argv[2]}, argv[3:]...)...).Output() //nolint:gosec // the test's own
@@ -110,6 +116,51 @@ func TestUpClone(t *testing.T) {
 	calls := strings.Join((&stubtest.Stubs{Dir: filepath.Dir(vmfs)}).Calls(t), "\n")
 	if n := strings.Count(calls, "git-receive-pack"); n != 1 {
 		t.Errorf("pushed %d times:\n%s", n, calls)
+	}
+}
+
+// The seed push goes to the VM itself, whatever host and path the repo's
+// url.*.insteadOf rewrites the VM's URL to.
+func TestUpCloneInsteadOf(t *testing.T) {
+	e, _, vmfs := cloneEnv(t)
+	gitIn(t, e.Dir, "config", "url.elsewhere.example:/x.insteadOf", "devvm-web-")
+	existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	if got := gitIn(t, vmfs+e.Dir, "branch", "--format=%(refname:short)"); got != "main" {
+		t.Errorf("clone's branches %q", got)
+	}
+	calls := strings.Join((&stubtest.Stubs{Dir: filepath.Dir(vmfs)}).Calls(t), "\n")
+	if !strings.Contains(calls, " -p 60022 -l u 127.0.0.1 git-receive-pack '"+e.Dir+"'") || strings.Contains(calls, "elsewhere") {
+		t.Errorf("ssh calls:\n%s", calls)
+	}
+}
+
+// git's ssh for a --clone VM runs only receive-pack or upload-pack, on
+// the clone, over ssh to the VM; anything else fails without ssh.
+func TestGitSSHCommand(t *testing.T) {
+	stubs := stubtest.New(t, "ssh")
+	s := vmssh.SSH{VM: "devvm-web-0123456789abcd", User: "u", Key: "/k", KnownHosts: "/kh", Port: 60022}
+	cmd := gitSSHCommand(s, "/p/it's")
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-p", "22", "evil.example", "git-upload-pack '/elsewhere'"}, ` 127.0.0.1 git-upload-pack '/p/it'\''s'`},
+		{[]string{"-o", "SendEnv=GIT_PROTOCOL", "evil.example", "git-receive-pack '/elsewhere'"}, ` 127.0.0.1 git-receive-pack '/p/it'\''s'`},
+		{[]string{"evil.example", "touch /tmp/x"}, ""},
+		{nil, ""},
+	} {
+		stubs.Reset(t)
+		err := exec.CommandContext(t.Context(), "sh", append([]string{"-c", cmd + ` "$@"`, "ssh"}, c.args...)...).Run() //nolint:gosec // the test's own
+		calls := strings.Join(stubs.Calls(t), "\n")
+		if c.want == "" {
+			if err == nil || calls != "" {
+				t.Errorf("%q: ran, calls %q", c.args, calls)
+			}
+			continue
+		}
+		if !strings.HasPrefix(calls, "ssh -F none -T ") || !strings.HasSuffix(calls, c.want) || strings.Contains(calls, "evil") {
+			t.Errorf("%q: calls %q", c.args, calls)
+		}
 	}
 }
 
@@ -381,9 +432,9 @@ func TestCloneRmTooManyWorktrees(t *testing.T) {
 
 // Branch names git refuses are skipped, and never asked about.
 func TestFetchUnfetchedInvalid(t *testing.T) {
-	e, _, _ := cloneEnv(t)
+	e, f, _ := cloneEnv(t)
 	got := printed(t, e, true)
-	if err := (clones{e}).fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
+	if err := (clones{e}).fetchUnfetched(t.Context(), f, "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	want := []string{`branch_names_invalid refs="a..b" "x y" "-x:refs/heads/main"`}
@@ -392,7 +443,7 @@ func TestFetchUnfetchedInvalid(t *testing.T) {
 	}
 	gitIn(t, e.Dir, "branch", "saved")
 	*got = nil
-	err := (clones{e}).fetchUnfetched(t.Context(), "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"main"})
+	err := (clones{e}).fetchUnfetched(t.Context(), f, "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"main"})
 	if msg.NamesOf(err) != "saved_names_taken remote=devvm vm=devvm-web-0123456789abcd" || len(*got) > 0 {
 		t.Errorf("no free names: %s, printed %q", msg.NamesOf(err), *got)
 	}

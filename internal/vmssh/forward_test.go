@@ -387,8 +387,9 @@ func TestForwarderSSH(t *testing.T) {
 		args []string
 		want []string
 	}{
-		"master": {o.masterArgs(), append([]string{"-F none -M -S /c.ctl -T ", "ProxyCommand=none -p 61022 -l u 127.0.0.1 sh -s"}, conn...)},
-		"relay":  {o.relayArgs("::1", 5173), append([]string{"-F none -S /c.ctl -o ControlMaster=no -W [::1]:5173 ", "ProxyCommand=none -p 61022 -l u 127.0.0.1"}, conn...)},
+		"master":  {o.masterArgs(), append([]string{"-F none -M -S /c.ctl -T ", "ProxyCommand=none -p 61022 -l u 127.0.0.1 sh -s"}, conn...)},
+		"relay":   {o.relayArgs("::1", 5173), append([]string{"-F none -S /c.ctl -o ControlMaster=no -W [::1]:5173 ", "ProxyCommand=none -p 61022 -l u 127.0.0.1"}, conn...)},
+		"command": {o.CommandArgs("git-upload-pack '/p'"), append([]string{"-F none -T -o BatchMode=yes ", "ProxyCommand=none -p 61022 -l u 127.0.0.1 git-upload-pack '/p'"}, conn...)},
 	} {
 		got := strings.Join(tc.args, " ")
 		for _, want := range tc.want {
