@@ -37,7 +37,7 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 	if err := Groups(e).forget(ctx, vm); err != nil {
 		return err
 	}
-	if err := e.sshConfig().ForgetHostKeys(vm); err != nil {
+	if err := e.sshConfig().ForgetHostKeys(ctx, vm); err != nil {
 		return err
 	}
 	if f, ok := backend.As[backend.Forgetter](t.b); ok && leaves {

@@ -20,6 +20,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vmname"
@@ -272,7 +273,36 @@ func (c *Config) recordHostKeys(ctx context.Context, b backend.Backend, vm strin
 	if keys == "" {
 		return false, nil
 	}
-	return true, state.WriteFile(path, append(data, keys...))
+	return true, c.changeKnownHosts(ctx, func(data []byte) []byte {
+		if hasHost(data, vm) {
+			return data
+		}
+		return append(data, keys...)
+	})
+}
+
+// changeKnownHosts changes the known hosts file under its lock, reading
+// it again inside, so that two devvms changing it at once lose neither's
+// change; change gets the file as it is and returns it as it's to be.
+func (c *Config) changeKnownHosts(ctx context.Context, change func([]byte) []byte) error {
+	if err := state.PrivateDir(c.Dirs.Data); err != nil {
+		return err
+	}
+	unlock, err := platform.LockFile(ctx, c.Dirs.KnownHostsLock())
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	path := c.Dirs.KnownHosts()
+	data, err := os.ReadFile(path) //nolint:gosec // devvm's own file
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	out := change(data)
+	if bytes.Equal(out, data) {
+		return nil
+	}
+	return state.WriteFile(path, out)
 }
 
 // HostKey returns vm's host key as the known hosts file pins it (TYPE
@@ -332,26 +362,27 @@ func hasHost(data []byte, vm string) bool {
 
 // ForgetHostKeys drops vm's host keys, to be read again once it runs: a
 // VM whose backend config changed can get new ones when it boots.
-func (c *Config) ForgetHostKeys(vm string) error {
-	path := c.Dirs.KnownHosts()
-	data, err := os.ReadFile(path) //nolint:gosec // devvm's own file
+func (c *Config) ForgetHostKeys(ctx context.Context, vm string) error {
+	data, err := os.ReadFile(c.Dirs.KnownHosts())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil || !hasHost(data, vm) {
 		return err
 	}
-	var keep []string
-	for l := range strings.SplitSeq(strings.TrimSuffix(string(data), "\n"), "\n") {
-		if !strings.HasPrefix(l, vm+" ") {
-			keep = append(keep, l)
+	return c.changeKnownHosts(ctx, func(data []byte) []byte {
+		var keep []string
+		for l := range strings.SplitSeq(strings.TrimSuffix(string(data), "\n"), "\n") {
+			if !strings.HasPrefix(l, vm+" ") {
+				keep = append(keep, l)
+			}
 		}
-	}
-	out := ""
-	if len(keep) > 0 {
-		out = strings.Join(keep, "\n") + "\n"
-	}
-	return state.WriteFile(path, []byte(out))
+		out := ""
+		if len(keep) > 0 {
+			out = strings.Join(keep, "\n") + "\n"
+		}
+		return []byte(out)
+	})
 }
 
 // IncludeLine is the line ~/.ssh/config needs to read devvm's ssh config.

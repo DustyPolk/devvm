@@ -131,7 +131,7 @@ The two folders use two formats. `config.toml` is TOML, which devvm reads strict
 In the data folder, each VM has a folder of its own, `vms/<hash>/` ([a VM's folder](#a-vms-folder)), and the rest is shared by every VM:
 
 - `settings.json` holds the defaults devvm's commands save, below `config.toml`'s ([where a default comes from](../using/settings.md#where-a-default-comes-from)).
-- `ssh_config` is the [ssh config](security.md#ssh-into-vms) for running VMs, and `known_hosts` holds their pinned host keys.
+- `ssh_config` is the [ssh config](security.md#ssh-into-vms) for running VMs, and `known_hosts` holds their pinned host keys, changed under `known_hosts.lock` ([locks](#locks)).
 - `agent-keys.json` lists the keys added to [devvm's own SSH agent](../using/ssh.md#devvms-own-agent), with each one's file, fingerprint, `confirm` and `lifetime`, and `agent.sock` is that agent's socket.
 - `secrets/` holds each [secret](network.md#where-secrets-are-saved) in a file of its own, on hosts without a Keychain.
 - `images/<key>/record.json` is each image's record, and `images/rebuilds.json` holds the [rebuild counters](images.md#rebuilding), by backend, `--from` and image.
@@ -200,6 +200,7 @@ Every lock devvm takes is an OS file lock on an open file, which the system lets
 | `oci-build.lock` | a Lima build of a base [from a container image](images.md#how-its-converted) |
 | `tools.lock` | a devvm [writing to the share](images.md#building-tools) or swapping the tools lock |
 | `making.lock` | each devvm making a VM or giving one new shared tools, shared, and `devvm gc --tool-images --force`, alone ([cleaning up](images.md#listing-and-cleaning-up)) |
+| `known_hosts.lock` | a devvm pinning a VM's host keys in `known_hosts` or forgetting them, which reads the file again once it holds the lock, so two devvms changing it at once lose neither's change |
 | `groups.lock` | a devvm [joining or leaving a group](design.md#groups), or working its links out again |
 | `retention.lock` | the devvm applying the [retention settings](../using/settings.md#retention) |
 

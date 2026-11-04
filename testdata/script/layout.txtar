@@ -90,6 +90,7 @@ images/X/record.json
 images/locks
 images/locks/X
 known_hosts
+known_hosts.lock
 logs
 logs/runs
 logs/runs/X.log
@@ -157,6 +158,7 @@ images/X/record.json
 images/locks
 images/locks/X
 known_hosts
+known_hosts.lock
 logs
 logs/runs
 logs/runs/X.log

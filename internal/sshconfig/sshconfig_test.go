@@ -1,6 +1,7 @@
 package sshconfig
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -354,24 +355,24 @@ Host devvm-web ` + web + `
 		t.Errorf("ssh config with one alias twice:\n%s", got)
 	}
 	delete(f.Instances, web2)
-	if err := c.ForgetHostKeys(web2); err != nil {
+	if err := c.ForgetHostKeys(t.Context(), web2); err != nil {
 		t.Fatal(err)
 	}
 
 	// Forgotten keys are read again; forgetting keeps the others.
-	if err := c.ForgetHostKeys(web); err != nil {
+	if err := c.ForgetHostKeys(t.Context(), web); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, kh); got != imgish+" ssh-ed25519 AAAAkeydevvmimgfooabc123abc123ab\n" {
 		t.Errorf("known hosts after forgetting %s = %q", web, got)
 	}
-	if err := c.ForgetHostKeys(imgish); err != nil {
+	if err := c.ForgetHostKeys(t.Context(), imgish); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, kh); got != "" {
 		t.Errorf("known hosts after forgetting both = %q", got)
 	}
-	if err := c.ForgetHostKeys(api); err != nil {
+	if err := c.ForgetHostKeys(t.Context(), api); err != nil {
 		t.Errorf("forgetting a VM with no keys: %v", err)
 	}
 }
@@ -515,6 +516,98 @@ func TestHostKey(t *testing.T) {
 	}
 	if got, err := c.HostKey(t.Context(), f, web); err == nil {
 		t.Errorf("unreadable: %q", got)
+	}
+}
+
+// bothRead holds each Exec until two have started, so both callers have
+// read the known hosts file before either writes it.
+type bothRead struct {
+	*backendtest.Fake
+	both sync.WaitGroup
+}
+
+func (b *bothRead) Exec(ctx context.Context, vm string, argv []string, o backend.ExecOpts) error {
+	b.both.Done()
+	b.both.Wait()
+	return b.Fake.Exec(ctx, vm, argv, o)
+}
+
+// Two devvms pinning different VMs' keys at once keep both: each has read
+// the file before either writes, and the write reads it again under the
+// lock.
+func TestHostKeyConcurrent(t *testing.T) {
+	c, f := testConfig(t)
+	b := &bothRead{Fake: f}
+	b.both.Add(2)
+	var wg sync.WaitGroup
+	for _, vm := range []string{web, api} {
+		wg.Go(func() {
+			if _, err := c.HostKey(t.Context(), b, vm); err != nil {
+				t.Errorf("%s: %v", vm, err)
+			}
+		})
+	}
+	wg.Wait()
+	data, err := os.ReadFile(c.Dirs.KnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasHost(data, web) || !hasHost(data, api) {
+		t.Errorf("known hosts lost a pin:\n%s", data)
+	}
+
+	// Two pinning one VM at once pin it once.
+	b = &bothRead{Fake: f}
+	b.both.Add(2)
+	for range 2 {
+		wg.Go(func() {
+			if _, err := c.HostKey(t.Context(), b, imgish); err != nil {
+				t.Errorf("%s: %v", imgish, err)
+			}
+		})
+	}
+	wg.Wait()
+	if got := strings.Count(read(t, c.Dirs.KnownHosts()), imgish+" "); got != 1 {
+		t.Errorf("%s pinned %d times", imgish, got)
+	}
+}
+
+// A change to known hosts that changes nothing writes nothing, and one
+// whose folder or file can't be read fails.
+func TestChangeKnownHosts(t *testing.T) {
+	t.Parallel()
+	c, _ := testConfig(t)
+	same := func(data []byte) []byte { return data }
+	if err := c.changeKnownHosts(t.Context(), same); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(c.Dirs.KnownHosts()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("no change wrote the file: %v", err)
+	}
+	if err := os.Mkdir(c.Dirs.KnownHosts(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.changeKnownHosts(t.Context(), same); err == nil {
+		t.Error("a folder at known_hosts was read")
+	}
+	if err := os.Remove(c.Dirs.KnownHosts()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(c.Dirs.KnownHostsLock()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(c.Dirs.KnownHostsLock(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.changeKnownHosts(t.Context(), same); err == nil {
+		t.Error("a folder at the lock was locked")
+	}
+	c.Dirs.Data = filepath.Join(c.Dirs.KnownHostsLock(), "x")
+	if err := os.WriteFile(c.Dirs.Data, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.changeKnownHosts(t.Context(), same); err == nil {
+		t.Error("a file at the data folder was used")
 	}
 }
 
