@@ -275,10 +275,15 @@ trap 'exit 130' INT TERM
 # Progress: each result shows [n/N], how long it took (since the previous check, so builds count),
 # and the time left as the previous run measured it ($work/timings: "label<TAB>seconds"). A
 # heartbeat every minute says what's happening during long steps.
-# Per selection: each runs different checks.
+# Per selection: each runs different checks. $timings.sum is the checksum of the e2e.sh that made
+# $timings: only a run of that same script compares its count with it, as an edited one may have
+# renamed, added or dropped checks.
 timings=$work/timings-$(tr ' ' '-' <<<"$sel")
 : > "$timings.new"
 total=$(wc -l 2>/dev/null < "$timings" | tr -d ' '); [[ ${total:-0} -gt 0 ]] || total="?"
+script_sum=$(cksum < "$root/tests/e2e.sh" | tr -s ' \t' ' ')
+same_script=false
+[[ $(cat "$timings.sum" 2>/dev/null) != "$script_sum" ]] || same_script=true
 started=$SECONDS ncheck=0
 date +%s > "$work/mark"
 mins() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
@@ -2707,12 +2712,13 @@ link_section lk
 fi
 
 # A script error can end a section early without failing a check: compare with the last complete run
-# (same options). Fewer checks than last time fails the run, and the timings aren't kept.
+# of this same e2e.sh (same options). Fewer checks than it fails the run, and the timings aren't kept.
 short=""
-if [[ $total != "?" ]] && (( ncheck < total )); then
+if $same_script && [[ $total != "?" ]] && (( ncheck < total )); then
   short="ran $ncheck checks, but the last complete run ran $total: a section ended early (look for errors above)"
 else
-  mv "$timings.new" "$timings"   # a complete run: the next one estimates from it
+  mv "$timings.new" "$timings"   # a complete run: the next one estimates from it and compares with it
+  echo "$script_sum" > "$timings.sum"
 fi
 echo
 echo "e2e: $pass passed, $fail failed$( (( skipped == 0 )) || echo ", $skipped skipped") in $(mins $((SECONDS - started)))${failed[*]+: ${failed[*]}}"
