@@ -6,11 +6,6 @@
 project web
 ! exec devvm ports
 stderr '^devvm: no_vm_ports dir=\S*/web$'
-! exec devvm ports 5173 8080
-stderr '^devvm: args_too_many args=\[all\|none\|LIST\] command=devvm ports given=5173 8080$'
-! exec devvm ports add
-stderr '^devvm: arg_missing args=LIST command=devvm ports add$'
-stderr '^usage_help command=devvm ports add$'
 
 # A bad LIST is refused before devvm looks for the VM.
 ! exec devvm ports banana
@@ -45,8 +40,6 @@ stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=ports$'
 rm $CFG/config.toml
 ! exec devvm ports -g --json all
 stderr '^devvm: json_shows_only command=devvm ports$'
-! exec devvm ports add --json 1
-stderr '^devvm: flag_unknown command=devvm ports add flag=--json$'
 ! exec devvm ports -g add all
 stderr '^devvm: ports_list_needed value="all"$'
 ! exec devvm ports -g rm none

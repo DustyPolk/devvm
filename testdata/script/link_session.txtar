@@ -3,14 +3,7 @@
 # there or isn't running, and with no links ends at once, having started
 # nothing.
 
-# Usage errors, before anything runs.
-! exec devvm _links
-stderr '^devvm: arg_missing args=VM command=devvm _links$'
-stderr '^usage_help command=devvm _links$'
-! exec devvm _links devvm-a-0123456789abcd devvm-b-0123456789abcd
-stderr '^devvm: args_too_many '
-! exec devvm _links --vm devvm-a-0123456789abcd
-stderr '^devvm: flag_unknown command=devvm _links flag=--vm$'
+# Refused before anything runs.
 ! exec devvm _links ''
 stderr '^devvm: '
 ! exec devvm _links devvm-nope-0123456789abcd

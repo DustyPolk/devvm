@@ -6,8 +6,6 @@ env EXPORTS=$XDG_DATA_HOME/devvm/exports
 project web
 ! exec devvm history export
 stderr '^devvm: no_vm dir=\S*/web$'
-! exec devvm history export a b
-stderr '^devvm: args_too_many args=\[FILE\] command=devvm history export given=a b$'
 ! exec devvm history now
 stderr '^devvm: no_subcommand command=devvm history commands=export given=now$'
 

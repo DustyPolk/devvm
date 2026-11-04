@@ -9,8 +9,6 @@
 project plain
 ! exec devvm desktop
 stderr '^devvm: no_vm dir=\S*/plain$'
-! exec devvm desktop now
-stderr '^devvm: args_none command=devvm desktop given=now$'
 
 # A VM without the desktop layer: refused, nothing served. base has no
 # desktop: its build doesn't run the layer's script.

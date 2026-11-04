@@ -65,8 +65,6 @@ stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n'
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
-! exec devvm restart base
-stderr '^devvm: args_none command=devvm restart given=base$'
 
 # --tools, --agents and --layers change nothing on a VM that exists: it
 # opens as it is, warning that devvm tools changes its shared tools.

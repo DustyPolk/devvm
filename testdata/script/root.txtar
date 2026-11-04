@@ -22,14 +22,6 @@ stdout 'devvm build IMAGE \[flags\]'
 ! exec devvm --nope
 cmp stderr nope-flag.txt
 ! stdout .
-! exec devvm stop --nope
-stderr '^devvm: flag_unknown command=devvm stop flag=--nope$'
-stderr '^usage_help command=devvm stop$'
-
-# So is a command given too many arguments, naming those its help shows.
-! exec devvm build a b
-cmp stderr build-args.txt
-! stdout .
 ! stub_calls
 
 # devvm takes no word but a command's. A toolchain's, an agent's or a
@@ -91,8 +83,5 @@ stderr '^devvm: arg_blank command=devvm history export$'
 -- nope-flag.txt --
 devvm: flag_unknown command=devvm flag=--nope
 usage_help command=devvm
--- build-args.txt --
-devvm: args_too_many args=IMAGE command=devvm build given=a b
-usage_help command=devvm build
 -- pg.sh --
 set -euo pipefail

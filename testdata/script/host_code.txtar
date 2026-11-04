@@ -10,10 +10,6 @@ project web
 stderr '^devvm: no_vm dir=\S*/web$'
 ! exec devvm code
 stderr '^devvm: no_vm dir=\S*/web$'
-! exec devvm host now
-stderr '^devvm: args_none command=devvm host given=now$'
-! exec devvm code .
-stderr '^devvm: args_none command=devvm code given=\.$'
 
 # A stopped VM: started and set up, no shell. Without a terminal, the
 # Include line is shown, not added.

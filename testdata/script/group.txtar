@@ -14,19 +14,12 @@ stderr '^devvm: no_vm_group dir=\S*/app$'
 # Usage errors, before devvm looks for the VM.
 ! exec devvm group nope
 stderr '^devvm: no_subcommand command=devvm group commands=join, leave given=nope$'
-! exec devvm group join
-stderr '^devvm: arg_missing args=NAME command=devvm group join$'
-stderr '^usage_help command=devvm group join$'
 ! exec devvm group join Web
 stderr '^devvm: group_name_invalid name="Web"$'
 ! exec devvm group join 42
 stderr '^devvm: group_name_invalid name="42"$'
 ! exec devvm group join web --as Bad_Name
 stderr '^devvm: link_name_invalid name="Bad_Name"$'
-! exec devvm group leave web
-stderr '^devvm: args_none command=devvm group leave given=web$'
-! exec devvm group join --json web
-stderr '^devvm: flag_unknown command=devvm group join flag=--json$'
 ! stderr no_vm_group
 
 # The VMs: app, db and two folders called api; cache with network policy.

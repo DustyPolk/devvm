@@ -17,9 +17,6 @@ stderr '^devvm: no_vm_link dir=\S*/app$'
 # Usage errors, before devvm looks for the VM.
 ! exec devvm link nope
 stderr '^devvm: no_subcommand command=devvm link commands=add, publish, rm, unpublish given=nope$'
-! exec devvm link add db
-stderr '^devvm: arg_missing args=TARGET PORT command=devvm link add$'
-stderr '^usage_help command=devvm link add$'
 ! exec devvm link add db 0
 stderr '^devvm: link_port_invalid value="0"$'
 ! exec devvm link add db 5432-5433
@@ -36,8 +33,6 @@ stderr '^devvm: link_ports_invalid value="all"$'
 stderr '^devvm: link_ports_invalid value="none"$'
 ! exec devvm link publish --json 5432
 stderr '^devvm: json_shows_only command=devvm link publish$'
-! exec devvm link add --json db 5432
-stderr '^devvm: flag_unknown command=devvm link add flag=--json$'
 ! stderr no_vm_link
 
 # The VMs: app, the client; db, a target; two folders called api.

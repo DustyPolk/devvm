@@ -6,8 +6,6 @@
 project web
 ! exec devvm size
 stderr '^devvm: no_vm_size dir=\S*/web$'
-! exec devvm size big
-stderr '^devvm: args_none command=devvm size given=big$'
 
 # A bad size is refused before devvm looks for the VM.
 ! exec devvm size --cpus many

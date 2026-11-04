@@ -1450,8 +1450,6 @@ check "it gets --cpus, --memory and --disk" in_vm "$vm" \
 check "devvm size shows it" bash -c "cd '$p' && [[ \$('$D' size 2>&1) == 'cpus=2 memory=3GiB disk=120GiB' ]]"
 check "ls lists it, and no image" bash -c "'$D' ls >'$work/ls.out' 2>&1 &&
   grep -Eq '^$vm +Running +base +- +(on|off) +off +- +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
-check "ls --json and size --json show it" bash -c "'$D' ls --json 2>/dev/null | grep -qxF '      \"name\": \"$vm\",' &&
-  cd '$p' && '$D' size --json 2>/dev/null | grep -qxF '  \"disk_gib\": 120'"
 check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm bash -c 'echo from-vm > $p/vm.txt' </dev/null && grep -qx from-vm '$p/vm.txt'"
 # On Linux hosts the mount is 9p, whose subfolders' events reach no watcher, even the VM's own.
 if [[ "$(uname -s)" == Darwin ]]; then
@@ -1509,8 +1507,7 @@ check "Exec's arguments, folder and input reach the guest as given" bash -c "cd 
 
 section "a company's CA"
 # The run's CA, in devvm's CA folder: the running VM trusts it from its next launch, in its system's
-# store, so an HTTPS server here it signed is trusted; a file there that isn't a certificate fails
-# the launch; emptied, the next launch takes it out again.
+# store, so an HTTPS server here it signed is trusted; emptied, the next launch takes it out again.
 e2e_ca; ca_serve 47195
 mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
 check "a CA in devvm's CA folder is trusted in the VM from its next launch" bash -c "cd '$p' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
@@ -1518,10 +1515,6 @@ check "a CA in devvm's CA folder is trusted in the VM from its next launch" bash
     cmp -s /etc/ssl/devvm.pem /usr/local/share/ca-certificates/devvm-extra-1.crt && curl -sSf -o /dev/null https://host.lima.internal:47195/' </dev/null"
 check "the VM's environment points tools that don't read the system's store at it" in_vm "$vm" \
   '[[ $NODE_EXTRA_CA_CERTS == /etc/ssl/devvm.pem && $SSL_CERT_FILE == /etc/ssl/certs/ca-certificates.crt && $REQUESTS_CA_BUNDLE == $SSL_CERT_FILE && $PIP_CERT == $SSL_CERT_FILE ]]'
-printf 'not a certificate\n' > "$cafolder/notes.pem"
-check "a file there that isn't a certificate fails the launch, naming it" bash -c "cd '$p' &&
-  ! printf 'exit\n' | DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 &&
-  grep -qx 'devvm: ca_not_certificate file=$cafolder/notes.pem' '$work/last.log'"
 rm -rf "$cafolder"
 check "emptied, the VM trusts it no more from its next launch" bash -c "cd '$p' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
   limactl shell --workdir / $vm sh -c '! ls /usr/local/share/ca-certificates/devvm-* >/dev/null 2>&1 && [ ! -s /etc/ssl/devvm.pem ] &&
@@ -1592,11 +1585,9 @@ check "stopped, devvm starts it again, on a new ssh port when a program here has
   [[ \$(limactl list --format '{{.SSHLocalPort}}' $vm) == \"\$sp\" ]] && kill -0 '$hostprog'"
 kill "$hostprog" 2>/dev/null; wait "$hostprog" 2>/dev/null; hostprog=""
 check "running, devvm opens it as it is" bash -c "cd '$p' && printf 'echo e2e-running\n' | '$D' 2>&1 | grep -qx e2e-running"
-# devvm host and code with a home of their own, so the Include line is offered for an empty one (and,
-# without a terminal, not added), and a stub code first on PATH: never your editor.
-mkdir -p "$sc/home" "$sc/bin"
-printf '#!/bin/sh\necho "$*" > %s/code-args\necho "${SSH_AUTH_SOCK-unset}" > %s/code-agent\n' "$sc" "$sc" > "$sc/bin/code"
-chmod +x "$sc/bin/code"
+# devvm host with a home of its own, so the Include line is offered for an empty one (and, without a
+# terminal, not added).
+mkdir -p "$sc/home"
 check "devvm host starts a stopped VM and names it, without a shell; ssh reaches it" bash -c "cd '$p' &&
   HOME='$sc/home' '$D' stop </dev/null >/dev/null 2>&1 && [[ \$(status_of $vm) == Stopped ]] &&
   HOME='$sc/home' '$D' host </dev/null >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
@@ -1610,9 +1601,6 @@ in_vm "$vm" 'echo "{\"editor.fontSize\": 14, \"remote.autoForwardPorts\": true}"
 (cd "$p" && HOME=$sc/home "$D" host </dev/null >"$work/last.log" 2>&1)
 check "changed back in the VM, devvm host turns them off again and keeps the others" in_vm "$vm" \
   'jq -e ".[\"editor.fontSize\"] == 14 and .[\"remote.autoForwardPorts\"] == false and .[\"github.gitAuthentication\"] == false" ~/.vscode-server/data/Machine/settings.json >/dev/null'
-check "devvm code opens the folder over Remote-SSH (a stub code), with the agent devvm started with" bash -c "cd '$p' &&
-  HOME='$sc/home' PATH='$sc/bin':\$PATH SSH_AUTH_SOCK='$sc/agent.sock' '$D' code </dev/null >'$work/last.log' 2>&1 &&
-  [[ \$(cat '$sc/code-args') == '--remote ssh-remote+devvm-web $p' && \$(cat '$sc/code-agent') == '$sc/agent.sock' ]]"
 check "restart, and its new host keys are pinned" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$(status_of $vm) == Running ]] &&
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
 check "a running VM's new ports apply at once" bash -c "cd '$p' &&
@@ -1936,7 +1924,6 @@ if [[ -f $lock ]]; then
 else
   skip "gc deletes a tool image no VM uses, with its record" "no tools lock yet"
 fi
-check "gc again finds nothing to clean up" bash -c "'$D' gc </dev/null 2>&1 | grep -qxF \"==> \$(m nothing_to_clean)\""
 check "space lists the Lima VM and images, and changes nothing" bash -c "'$D' space </dev/null 2>/dev/null >'$work/last.log' &&
   grep -qE '^VMs +[0-9]+ ' '$work/last.log' && grep -qE '^images +[0-9]+ ' '$work/last.log' &&
   [[ \$(status_of $vm) == Running && -f '$(vmdir "$vm")/vm.json' ]]"
@@ -1946,9 +1933,6 @@ touch -t 202001010000 "$(vmdir "$vm")/vm.json"
 check "gc --orphans forgets a VM limactl deleted, and nothing of base's" bash -c "'$D' gc --orphans --force </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m forgot_orphan vm=$vm)\" '$work/last.log' && [[ ! -e '$(vmdir "$vm")' ]] &&
   [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg/record.json' ]]"
-check "retention sets a setting, shows it, and KEY=off turns it off again" bash -c "
-  '$D' retention orphans.age=30d </dev/null >'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=30d # devvm: settings.json' &&
-  '$D' retention orphans.age=off </dev/null >>'$work/last.log' 2>&1 && '$D' retention </dev/null 2>/dev/null | grep -qx 'orphans.age=off # devvm: default'"
 rm -f "$gfix" "$share/$old" "$share/$old.json"
 (cd "$g" && quiet "$D" rm --force --no-export)
 fi

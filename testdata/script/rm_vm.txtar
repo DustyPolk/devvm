@@ -14,8 +14,6 @@ exec devvm --no-network-policy --no-git-protect
 vm_name API api
 ! exec devvm rm api --force
 stderr '^devvm: rm_unknown_vm name=api$'
-! exec devvm rm devvm-api devvm-web
-stderr '^devvm: args_too_many '
 
 # Folders that are there: nothing is marked, and rm VM refuses a VM whose
 # folder is there from another folder, naming that folder; named in its

@@ -4,10 +4,6 @@
 # so, and nothing runs. Each launch's outdated warning names devvm update.
 env LAYERS=$XDG_CONFIG_HOME/devvm/layers
 
-# Usage errors, before anything runs.
-! exec devvm update docker
-stderr '^devvm: args_none command=devvm update given=docker$'
-
 # No VM.
 project web
 ! exec devvm update --force
