@@ -2,13 +2,17 @@ package image
 
 import (
 	"errors"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -213,5 +217,64 @@ func TestSortToolsAndGroups(t *testing.T) {
 	}
 	if !IsTool("rust") || !IsTool("codex") || IsTool("pnpm") || IsTool("base") || !IsAgent("opencode") || IsAgent("node") {
 		t.Error("IsTool or IsAgent is wrong")
+	}
+	if got := GroupTools("nix"); !slices.Equal(got, []string{"nix"}) {
+		t.Errorf("GroupTools(nix) = %q", got)
+	}
+}
+
+// The table's views: the toolchains, then the agents; rust alone needs
+// no download in the lock.
+func TestSharedTools(t *testing.T) {
+	if want := []string{"node", "python", "rust", "go"}; !slices.Equal(Toolchains, want) {
+		t.Errorf("Toolchains = %q, want %q", Toolchains, want)
+	}
+	if want := []string{"claude", "codex", "opencode"}; !slices.Equal(Agents, want) {
+		t.Errorf("Agents = %q, want %q", Agents, want)
+	}
+	for tool, want := range map[string]bool{"rust": true, "node": false, "pnpm": false, "claude": false, "nix": false} {
+		if got := NoDownload(tool); got != want {
+			t.Errorf("NoDownload(%s) = %v, want %v", tool, got, want)
+		}
+	}
+	if _, ok := Def("pnpm"); ok {
+		t.Error("Def(pnpm): a member isn't a shared tool")
+	}
+	seen := map[string]bool{}
+	for i, d := range SharedTools {
+		if i > 0 && d.Kind < SharedTools[i-1].Kind {
+			t.Errorf("%s: an agent before a toolchain", d.Name)
+		}
+		if len(d.Members) == 0 || d.Members[0] != d.Name {
+			t.Errorf("%s's members %q don't start with it", d.Name, d.Members)
+		}
+		if d.Kind == Agent && len(d.Detect) > 0 {
+			t.Errorf("%s: an agent with files that call for it", d.Name)
+		}
+		for _, m := range d.Members {
+			if seen[m] || !ToolName(m) {
+				t.Errorf("member %q: repeated or not a tool's name", m)
+			}
+			seen[m] = true
+		}
+	}
+}
+
+// Each shared tool has its policy in shared-tools/, and every policy
+// there is a shared tool's.
+func TestSharedToolsPolicies(t *testing.T) {
+	files, err := fs.Glob(assets.FS, "shared-tools/*.policy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got, want []string
+	for _, f := range files {
+		got = append(got, strings.TrimSuffix(path.Base(f), ".policy"))
+	}
+	for _, d := range SharedTools {
+		want = append(want, d.Name)
+	}
+	if slices.Sort(want); !slices.Equal(got, want) {
+		t.Errorf("shared-tools' policies are %q, want one per shared tool %q", got, want)
 	}
 }

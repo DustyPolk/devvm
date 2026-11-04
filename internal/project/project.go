@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"github.com/w3cj/devvm/internal/hostgit"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/vmname"
 )
@@ -219,19 +220,26 @@ func physical(path string) string {
 	}
 }
 
-// markers are the files in a folder's top level that call for each
-// toolchain, and for the nix layer, in the order Detect lists them: the
-// same mix always gives the same image.
-var markers = []struct {
+// nixMarkers are a Nix project's own files, which call for the nix layer.
+var nixMarkers = []string{"flake.nix", "shell.nix", "devenv.nix"}
+
+// marker is a part and the files in a folder's top level that call for it.
+type marker struct {
 	part  string
 	files []string
-}{
-	{"node", []string{"package.json", "bun.lock", "bun.lockb"}},
-	{"python", []string{"pyproject.toml", "requirements.txt", "uv.lock", "setup.py", "Pipfile"}},
-	{"rust", []string{"Cargo.toml"}},
-	{"go", []string{"go.mod"}},
-	// The nix layer, after the toolchains: a Nix project's own files.
-	{"nix", []string{"flake.nix", "shell.nix", "devenv.nix"}},
+}
+
+// markers are the files that call for each toolchain (image.SharedTools'
+// Detect), then for the nix layer, in the order DetectFiles lists them:
+// the same mix always gives the same image.
+func markers() []marker {
+	var ms []marker
+	for _, d := range image.SharedTools {
+		if len(d.Detect) > 0 {
+			ms = append(ms, marker{d.Name, d.Detect})
+		}
+	}
+	return append(ms, marker{image.NixLayer, nixMarkers})
 }
 
 // nixShellMax is how much of a default.nix nixShell reads.
@@ -262,7 +270,7 @@ type Found struct{ Name, File string }
 // for it: nix also for a default.nix that makes a shell.
 func DetectFiles(dir string) []Found {
 	var found []Found
-	for _, m := range markers {
+	for _, m := range markers() {
 		file := ""
 		for _, f := range m.files {
 			if _, err := os.Lstat(filepath.Join(dir, f)); err == nil {
@@ -270,7 +278,7 @@ func DetectFiles(dir string) []Found {
 				break
 			}
 		}
-		if file == "" && m.part == "nix" && nixShell(dir) {
+		if file == "" && m.part == image.NixLayer && nixShell(dir) {
 			file = "default.nix"
 		}
 		if file != "" {

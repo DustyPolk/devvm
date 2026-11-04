@@ -271,8 +271,8 @@ func (p *parser) value(key string, raw json.RawMessage, v any) error {
 }
 
 // features maps features to devvm's layers: devcontainers' own
-// docker-in-docker to the docker layer, and their toolchains devvm has
-// (node, python, rust, go) to its own. Their options are ignored; their
+// docker-in-docker to the docker layer, and those named as one of devvm's
+// toolchains (image.Toolchains) to it. Their options are ignored; their
 // scripts are never fetched or run.
 func (p *parser) features(raw json.RawMessage) error {
 	var feats map[string]json.RawMessage

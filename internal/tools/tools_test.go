@@ -1494,11 +1494,16 @@ func TestMounts(t *testing.T) {
 	}
 }
 
-// shared-tools/mise.toml's tools, and the fixture lock has each.
+// shared-tools/mise.toml's tools are the shared tools' members
+// (image.SharedTools), each once, and the fixture lock has each.
 func TestConfigTools(t *testing.T) {
 	got, _ := configTools(read(t, repo(t, "assets", "shared-tools", "mise.toml")))
-	if want := []string{"node", "pnpm", "bun", "python", "uv", "go", "rust", "claude", "codex", "opencode"}; !slices.Equal(got, want) {
-		t.Errorf("configTools = %q, want %q", got, want)
+	var want []string
+	for _, d := range image.SharedTools {
+		want = append(want, d.Members...)
+	}
+	if slices.Sort(want); !slices.Equal(slices.Sorted(slices.Values(got)), want) {
+		t.Errorf("configTools = %q, want the shared tools' members %q", got, want)
 	}
 	if locked := lockTools(fixture(t)); !slices.Equal(slices.Sorted(slices.Values(got)), locked) {
 		t.Errorf("the fixture lock has %q", locked)

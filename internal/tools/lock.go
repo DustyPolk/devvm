@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"strings"
+
+	"github.com/w3cj/devvm/internal/image"
 )
 
 // Lock is a mise lock file as mise writes it: an entry per tool version,
@@ -86,10 +88,10 @@ func (l Lock) VersionEntry(tool, version string) []byte {
 }
 
 // HasDownload reports whether a tool's first entry has a download (a URL,
-// not a build from source) for every one of the platforms. Rust needs
-// none: rustup installs it.
+// not a build from source) for every one of the platforms. A tool whose
+// installer isn't mise needs none (image.NoDownload): rustup installs rust.
 func (l Lock) HasDownload(tool string, platforms []string) bool {
-	if tool == "rust" {
+	if image.NoDownload(tool) {
 		return true
 	}
 	ls := lines(l.Entry(tool))

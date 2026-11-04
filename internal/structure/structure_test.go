@@ -16,6 +16,7 @@ const (
 	ldflags = "set by -ldflags at build time"
 	table   = "a fixed table: set here, only read"
 	fixture = "a test's fixed input: set here, only read"
+	derived = "a fixed table's view, worked out once from it, only read"
 )
 
 // devvm is what the repo is held to.
@@ -166,8 +167,9 @@ func devvmVars() map[string]string {
 		"internal/backend/lima.sshLogin":          table,
 		"internal/cli.shells":                     table,
 		"internal/gitprotect.Modes":               table,
-		"internal/image.Toolchains":               table,
-		"internal/image.Agents":                   table,
+		"internal/image.SharedTools":              table,
+		"internal/image.Toolchains":               derived,
+		"internal/image.Agents":                   derived,
 		"internal/image.Builtins":                 table,
 		"internal/backend/lima.conversionScripts": table,
 		"internal/msg.docs":                       table,
@@ -176,7 +178,7 @@ func devvmVars() map[string]string {
 		"internal/msg/gen.initialisms":            table,
 		"internal/netpolicy.Env":                  table,
 		"internal/netpolicy.directArgv":           table,
-		"internal/project.markers":                table,
+		"internal/project.nixMarkers":             table,
 		"internal/proxy.notPublic":                table,
 		"internal/proxy.nat64":                    table,
 		"internal/proxy.githubMinting":            table,

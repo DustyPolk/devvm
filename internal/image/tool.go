@@ -18,31 +18,111 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// Toolchains are the shared toolchains a VM can have, in the fixed order
-// a VM's list holds them (project.DetectFiles').
-var Toolchains = []string{"node", "python", "rust", "go"}
+// ToolKind is what a shared tool is to a VM: a toolchain or a coding agent.
+type ToolKind int
 
-// Agents are the shared coding agents a VM can have, listed after its
-// toolchains.
-var Agents = []string{"claude", "codex", "opencode"}
+const (
+	// Toolchain is a language's tools: --tools chooses it, a project's
+	// files call for it, and a devcontainer.json's feature of its name
+	// (ghcr.io/devcontainers/features/<name>) maps to it.
+	Toolchain ToolKind = iota
+	// Agent is a coding agent: --agents and devvm setup choose it.
+	Agent
+)
+
+// Installer is what installs a shared tool in its image, in
+// shared-tools/build.sh.
+type Installer int
+
+const (
+	// Mise installs it from the lock's downloads, whose checksums the lock
+	// records per platform.
+	Mise Installer = iota
+	// Rustup installs it: rustup, pinned in build.sh, checks the toolchain
+	// against its own signed manifest, so the lock has no download for it.
+	Rustup
+)
+
+// ToolDef is a shared tool as devvm offers it: what a VM is given by its
+// name.
+type ToolDef struct {
+	// Name is the name a VM chooses it by, and its policy's file name,
+	// shared-tools/<name>.policy.
+	Name string
+	Kind ToolKind
+	// Members are the tools in the lock and in shared-tools/mise.toml
+	// that its name stands for, itself first: node is node, pnpm and bun.
+	Members []string
+	// Detect are the files in a project folder's top level that call for
+	// it, in the order they're looked for: the first found is named.
+	Detect []string
+	// Installer is what installs it.
+	Installer Installer
+}
+
+// SharedTools are the shared tools, in the fixed order a VM's list holds
+// them: the toolchains, then the agents. Every list of shared tools
+// derives from it: Toolchains, Agents, GroupTools, what a project's files
+// call for, and the devcontainer features devvm maps.
+var SharedTools = []ToolDef{
+	{Name: "node", Kind: Toolchain, Members: []string{"node", "pnpm", "bun"}, Detect: []string{"package.json", "bun.lock", "bun.lockb"}},
+	{Name: "python", Kind: Toolchain, Members: []string{"python", "uv"}, Detect: []string{"pyproject.toml", "requirements.txt", "uv.lock", "setup.py", "Pipfile"}},
+	{Name: "rust", Kind: Toolchain, Members: []string{"rust"}, Detect: []string{"Cargo.toml"}, Installer: Rustup},
+	{Name: "go", Kind: Toolchain, Members: []string{"go"}, Detect: []string{"go.mod"}},
+	{Name: "claude", Kind: Agent, Members: []string{"claude"}},
+	{Name: "codex", Kind: Agent, Members: []string{"codex"}},
+	{Name: "opencode", Kind: Agent, Members: []string{"opencode"}},
+}
+
+// Toolchains are the shared toolchains' names, in SharedTools' order.
+var Toolchains = namesOf(Toolchain)
+
+// Agents are the shared coding agents' names, in SharedTools' order,
+// after the toolchains.
+var Agents = namesOf(Agent)
+
+// namesOf is the names of SharedTools' tools of a kind, in its order.
+func namesOf(k ToolKind) []string {
+	var out []string
+	for _, d := range SharedTools {
+		if d.Kind == k {
+			out = append(out, d.Name)
+		}
+	}
+	return out
+}
+
+// Def returns the shared tool named name, false when none is.
+func Def(name string) (ToolDef, bool) {
+	for _, d := range SharedTools {
+		if d.Name == name {
+			return d, true
+		}
+	}
+	return ToolDef{}, false
+}
 
 // IsTool reports whether a name is a shared tool's (a toolchain or an
 // agent) rather than a layer's.
 func IsTool(name string) bool {
-	return slices.Contains(Toolchains, name) || slices.Contains(Agents, name)
+	_, ok := Def(name)
+	return ok
 }
 
 // IsAgent reports whether a name is an agent's.
-func IsAgent(name string) bool { return slices.Contains(Agents, name) }
+func IsAgent(name string) bool {
+	d, ok := Def(name)
+	return ok && d.Kind == Agent
+}
 
 // SortTools returns shared tools' names in a VM's order, each once: the
 // toolchains in their fixed order, then the agents. Names that aren't
 // shared tools are left out.
 func SortTools(names []string) []string {
 	var out []string
-	for _, t := range slices.Concat(Toolchains, Agents) {
-		if slices.Contains(names, t) {
-			out = append(out, t)
+	for _, d := range SharedTools {
+		if slices.Contains(names, d.Name) {
+			out = append(out, d.Name)
 		}
 	}
 	return out
@@ -59,16 +139,25 @@ func AgentsOf(names []string) []string {
 	return out
 }
 
-// GroupTools returns the tools in the lock behind a shared tool's name:
-// node is node, pnpm and bun; python is python and uv.
+// GroupTools returns the tools in the lock behind a shared tool's name,
+// its Members: node is node, pnpm and bun; python is python and uv. Any
+// other name stands for itself.
 func GroupTools(name string) []string {
-	switch name {
-	case "node":
-		return []string{"node", "pnpm", "bun"}
-	case "python":
-		return []string{"python", "uv"}
+	if d, ok := Def(name); ok {
+		return slices.Clone(d.Members)
 	}
 	return []string{name}
+}
+
+// NoDownload reports whether a tool in the lock needs no download there,
+// as its shared tool's installer fetches it: rust, which rustup installs.
+func NoDownload(tool string) bool {
+	for _, d := range SharedTools {
+		if slices.Contains(d.Members, tool) {
+			return d.Installer != Mise
+		}
+	}
+	return false
 }
 
 // Normalize returns an image name's canonical form, so the same layers
