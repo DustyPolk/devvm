@@ -111,6 +111,25 @@ func TestCallLinesWhole(t *testing.T) {
 	}
 }
 
+// A call with a start's limactl edit words, an ssh option and a proxy URL
+// with its password, is logged whole: an endpoint security tool kills a
+// perl with such words on its command line, so stub-log keeps them off it.
+func TestCallLoggedWithEditWords(t *testing.T) {
+	s := New(t)
+	proxy := "http://devvm:devvm-proxy-password@192.168.5.2:3128" //nolint:gosec // devvm's stand-in, not a credential
+	args := []string{
+		"edit", "--set", ".ssh.forwardAgent=false", "--set",
+		`.env = {"HTTPS_PROXY":"` + proxy + `","HTTP_PROXY":"` + proxy + `","NODE_EXTRA_CA_CERTS":"/etc/ssl/devvm.pem",` +
+			`"NO_PROXY":"localhost,127.0.0.1,::1","http_proxy":"` + proxy + `","https_proxy":"` + proxy + `"}`,
+	}
+	if out, err := exec.CommandContext(t.Context(), "open", args...).CombinedOutput(); err != nil {
+		t.Fatalf("open: %v\n%s", err, out)
+	}
+	if got, want := s.Calls(t), []string{"open " + strings.Join(args, " ")}; !slices.Equal(got, want) {
+		t.Errorf("Calls = %q, want %q", got, want)
+	}
+}
+
 // hammer appends the line "x" to log, one write each, until done closes.
 func hammer(log string, done <-chan struct{}) error {
 	f, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600) //nolint:gosec // the test's own call log
