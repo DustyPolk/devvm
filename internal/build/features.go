@@ -59,7 +59,7 @@ func regular(fsys fs.FS, name string) bool {
 // fs.ErrNotExist.
 func (b *Env) FeatureScript(name string) (backend.Script, error) {
 	s := backend.Script{Name: name + ".sh"}
-	own, user := path.Join("features", s.Name), os.DirFS(b.Dirs.Features())
+	own, user := ownFeature(name), os.DirFS(b.Dirs.Features())
 	var err error
 	switch {
 	case regular(b.Assets, own):
@@ -70,6 +70,20 @@ func (b *Env) FeatureScript(name string) (backend.Script, error) {
 		err = fs.ErrNotExist
 	}
 	return s, err
+}
+
+// ownFeature is the file of devvm's own feature by that name, in its
+// files.
+func ownFeature(name string) string { return path.Join("features", name+".sh") }
+
+// featureStep is a feature's step in base's recipe: its script
+// (FeatureScript), devvm's own with the prelude before it.
+func (b *Env) featureStep(name string) (image.Step, error) {
+	s, err := b.FeatureScript(name)
+	if err == nil && regular(b.Assets, ownFeature(name)) {
+		s.Data, err = image.OwnScript(b.Assets, ownFeature(name))
+	}
+	return image.Step{Name: s.Name, Data: s.Data}, err
 }
 
 // chosenFeatures returns the features chosen for base, as config.toml or

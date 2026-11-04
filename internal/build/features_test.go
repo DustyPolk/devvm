@@ -241,9 +241,9 @@ func TestBuildRunsFeatures(t *testing.T) {
 	}
 	want := [][]image.Step{
 		aptSteps(
-			script("base.sh", "#!/bin/bash\n"),
-			script("mine.sh", "#!/bin/bash\n# my tools\n"),
-			script("fzf.sh", "#!/bin/bash\n#fuzzy search  \n"),
+			ownScript("base.sh", "#!/bin/bash\n"),
+			script("mine.sh", "#!/bin/bash\n# my tools\n"), // the user's: no prelude
+			ownScript("fzf.sh", "#!/bin/bash\n#fuzzy search  \n"),
 		),
 		layerSteps(script("foo.sh", "#!/bin/bash\necho foo\n")),
 	}

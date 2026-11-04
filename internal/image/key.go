@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash"
-	"io/fs"
 	"regexp"
 	"slices"
 	"strconv"
@@ -191,16 +190,6 @@ func (k keyHash) field(tag, value string) { k.bytes(tag, []byte(value)) }
 func (k keyHash) bytes(tag string, value []byte) {
 	k.write([]byte(tag))
 	k.write(value)
-}
-
-// own hashes one of devvm's own files, which must be there.
-func (k keyHash) own(fsys fs.FS, name string) error {
-	data, err := fs.ReadFile(fsys, name)
-	if err != nil {
-		return fmt.Errorf("reading devvm's %s: %w", name, err)
-	}
-	k.bytes("file "+name, data)
-	return nil
 }
 
 // step hashes a recipe's step, tagged as an origin step or one of its

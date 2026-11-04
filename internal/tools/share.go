@@ -150,7 +150,7 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 	if err != nil {
 		return err
 	}
-	script, err := fs.ReadFile(t.Assets, "shared-tools/build.sh")
+	script, err := image.OwnScript(t.Assets, "shared-tools/build.sh")
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,94 @@
+# assets/prelude.sh, sourced with each of devvm's scripts' pins: the architecture and C library it
+# finds, and the pin devvm_sha picks for each download, on arm64 and amd64, gnu and musl.
+env STUB_UNAME_M=aarch64
+exec bash pins.sh gnu
+cmp stdout arm64-gnu.want
+exec bash pins.sh musl
+cmp stdout arm64-musl.want
+
+# macOS's name for arm64 too.
+env STUB_UNAME_M=arm64
+exec bash pins.sh gnu
+cmp stdout arm64-gnu.want
+
+env STUB_UNAME_M=x86_64
+exec bash pins.sh gnu
+cmp stdout amd64-gnu.want
+exec bash pins.sh musl
+cmp stdout amd64-musl.want
+
+# Another architecture stops the script.
+env STUB_UNAME_M=riscv64
+! exec bash -c 'source "$DEVVM_REPO/assets/prelude.sh"; echo ran'
+! stdout ran
+stderr '^devvm: devvm''s downloads have no build for riscv64$'
+
+# A download the script doesn't pin fails, naming the pin.
+env STUB_UNAME_M=x86_64
+! exec bash -c 'source "$DEVVM_REPO/assets/prelude.sh"; devvm_sha crane'
+! stdout .
+stderr '^devvm: this script pins no crane_sha256_amd64$'
+
+-- pins.sh --
+# pins.sh LIBC: for each script and download, which of its pins devvm_sha gives. musl is
+# Alpine's: apk on PATH.
+set -euo pipefail
+if [[ $1 == musl ]]; then
+  mkdir -p alpine; printf '#!/bin/sh\n' > alpine/apk; chmod 755 alpine/apk
+  PATH=$PWD/alpine:$PATH
+fi
+source "$DEVVM_REPO/assets/prelude.sh"
+echo "$devvm_arch $devvm_libc"
+while read -r script tools; do
+  (
+    eval "$(grep -E '^[a-z_]+_sha256(_[a-z0-9]+)*=[0-9a-f]{64}$' "$DEVVM_REPO/assets/$script")"
+    for tool in $tools; do
+      sum=$(devvm_sha "$tool")
+      for v in $(compgen -v | grep -E "^${tool}_sha256_"); do
+        [[ ${!v} != "$sum" ]] || echo "$script $tool $v"
+      done
+    done
+  )
+done <<'LIST'
+layers/base.sh mise
+layers/nix.sh nix direnv
+features/cli-tools.sh eza tealdeer
+shared-tools/build.sh rustup
+oci/build.sh crane
+LIST
+-- arm64-gnu.want --
+arm64 gnu
+layers/base.sh mise mise_sha256_arm64
+layers/nix.sh nix nix_sha256_arm64
+layers/nix.sh direnv direnv_sha256_arm64
+features/cli-tools.sh eza eza_sha256_arm64
+features/cli-tools.sh tealdeer tealdeer_sha256_arm64
+shared-tools/build.sh rustup rustup_sha256_arm64
+oci/build.sh crane crane_sha256_arm64
+-- arm64-musl.want --
+arm64 musl
+layers/base.sh mise mise_sha256_arm64_musl
+layers/nix.sh nix nix_sha256_arm64
+layers/nix.sh direnv direnv_sha256_arm64
+features/cli-tools.sh eza eza_sha256_arm64
+features/cli-tools.sh tealdeer tealdeer_sha256_arm64
+shared-tools/build.sh rustup rustup_sha256_arm64_musl
+oci/build.sh crane crane_sha256_arm64
+-- amd64-gnu.want --
+amd64 gnu
+layers/base.sh mise mise_sha256_amd64
+layers/nix.sh nix nix_sha256_amd64
+layers/nix.sh direnv direnv_sha256_amd64
+features/cli-tools.sh eza eza_sha256_amd64
+features/cli-tools.sh tealdeer tealdeer_sha256_amd64
+shared-tools/build.sh rustup rustup_sha256_amd64
+oci/build.sh crane crane_sha256_amd64
+-- amd64-musl.want --
+amd64 musl
+layers/base.sh mise mise_sha256_amd64_musl
+layers/nix.sh nix nix_sha256_amd64
+layers/nix.sh direnv direnv_sha256_amd64
+features/cli-tools.sh eza eza_sha256_amd64
+features/cli-tools.sh tealdeer tealdeer_sha256_amd64
+shared-tools/build.sh rustup rustup_sha256_amd64_musl
+oci/build.sh crane crane_sha256_amd64

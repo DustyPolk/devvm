@@ -2934,9 +2934,9 @@ if begin nix; then
 section "the nix layer"
 # Behind a company proxy, the layer's script (as a layer of the run's own, so it builds each run) gets
 # its build proxy's settings, which Nix's installer would write into nix-daemon's: none is anywhere
-# on its disk.
+# on its disk. A layer of yours gets no prelude, so its copy starts with devvm's.
 corp_start
-cp "$root/assets/layers/nix.sh" "$layers/e2enix.sh"
+cat "$root/assets/prelude.sh" "$root/assets/layers/nix.sh" > "$layers/e2enix.sh"
 check "built behind a company proxy, the layer leaves no proxy settings for nix-daemon in its image" bash -c "
   env HTTPS_PROXY='$corpurl' HTTP_PROXY='$corpurl' '$D' build e2enix </dev/null >'$work/last.log' 2>&1 &&
   k=\$(keys_of e2enix | head -1) && [[ -n \$k && -d '$LIMA_HOME/devvm-img-'\$k ]] &&

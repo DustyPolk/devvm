@@ -49,8 +49,15 @@ const baseScript = "#!/bin/bash\nmise_version=2026.1.0\n"
 func withConfig(script, config string) fstest.MapFS {
 	return fstest.MapFS{
 		"shared-tools/build.sh": {Data: []byte(script)}, "shared-tools/mise.toml": {Data: []byte(config)},
-		"layers/base.sh": {Data: []byte(baseScript)},
+		"layers/base.sh": {Data: []byte(baseScript)}, "prelude.sh": {Data: []byte("# prelude\n")},
 	}
+}
+
+// withPrelude is root with this prelude.sh.
+func withPrelude(root fstest.MapFS, prelude string) fstest.MapFS {
+	out := maps.Clone(root)
+	out["prelude.sh"] = &fstest.MapFile{Data: []byte(prelude)}
+	return out
 }
 
 // withBase is root with this layers/base.sh.
@@ -85,6 +92,7 @@ func TestToolFile(t *testing.T) {
 	}{
 		{"the lock entry", root, func(t *Tool) { t.LockEntry = append(t.LockEntry, "# edit\n"...) }},
 		{"shared-tools/build.sh", toolRoot("#!/bin/bash\n# edit\n"), func(*Tool) {}},
+		{"the prelude", withPrelude(root, "# prelude\n# edit\n"), func(*Tool) {}},
 		{"the libc (an Alpine base)", root, func(t *Tool) { t.Libc = "musl" }},
 		{"the version", root, func(t *Tool) { t.Version = "24.22.0" }},
 		{"the format (plain)", root, func(t *Tool) { t.Format = "plain-0123456789ab" }},

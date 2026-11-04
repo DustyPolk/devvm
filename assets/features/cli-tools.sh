@@ -1,6 +1,8 @@
 #!/bin/bash
 # CLI tools: bat, fd, eza, zoxide (z), btop, tree, tldr
+# shellcheck disable=SC2034  # the checksums are read through devvm_sha
 set -euxo pipefail
+: "${devvm_arch:?}" "${devvm_libc:?}"   # devvm's prelude (prelude.sh) comes before this script
 # Pinned downloads (scripts/bump.sh updates them). eza and tealdeer (tldr) come from their releases:
 # Debian 12 (node:24's base) has no eza, and its tealdeer 1.6 can't read today's pages archive.
 eza_version=0.23.5
@@ -10,8 +12,7 @@ tealdeer_version=1.9.0
 tealdeer_sha256_arm64=a748f181c00933980cb850f4a24199c45900fc523787f6c524232a6bfc66b895
 tealdeer_sha256_amd64=dc7263b550e90c0689ea2cb434e3144469805d5dddecbb1f7fc534e1185b7408
 
-alpine=false; command -v apk >/dev/null && alpine=true
-if $alpine; then
+if [[ $devvm_libc == musl ]]; then
   # Alpine packages eza too (its arm64 release build below is glibc).
   sudo apk add --no-cache bat fd zoxide btop tree eza
 else
@@ -22,17 +23,17 @@ else
 fi
 
 # eza's x86_64 build is the static musl one; its arm64 build is glibc (fine on Debian 12's 2.36).
-case $(uname -m) in
-  aarch64) e=aarch64-unknown-linux-gnu esha=$eza_sha256_arm64 t=aarch64 tsha=$tealdeer_sha256_arm64 ;;
-  x86_64)  e=x86_64-unknown-linux-musl esha=$eza_sha256_amd64 t=x86_64 tsha=$tealdeer_sha256_amd64 ;;
+case $devvm_arch in
+  arm64) e=aarch64-unknown-linux-gnu t=aarch64 ;;
+  amd64) e=x86_64-unknown-linux-musl t=x86_64 ;;
 esac
 tmp=$(mktemp -d)
-if ! $alpine; then
-  devvm-fetch "https://github.com/eza-community/eza/releases/download/v$eza_version/eza_$e.tar.gz" "$esha" "$tmp/eza.tar.gz"
+if [[ $devvm_libc == gnu ]]; then
+  devvm-fetch "https://github.com/eza-community/eza/releases/download/v$eza_version/eza_$e.tar.gz" "$(devvm_sha eza)" "$tmp/eza.tar.gz"
   tar -C "$tmp" -xzf "$tmp/eza.tar.gz"
   sudo install -m 755 "$tmp/eza" /usr/local/bin/eza
 fi
-devvm-fetch "https://github.com/tealdeer-rs/tealdeer/releases/download/v$tealdeer_version/tealdeer-linux-$t-musl" "$tsha" "$tmp/tldr"
+devvm-fetch "https://github.com/tealdeer-rs/tealdeer/releases/download/v$tealdeer_version/tealdeer-linux-$t-musl" "$(devvm_sha tealdeer)" "$tmp/tldr"
 sudo install -m 755 "$tmp/tldr" /usr/local/bin/tldr
 rm -rf "$tmp"
 eza --version

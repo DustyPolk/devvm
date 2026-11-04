@@ -148,7 +148,7 @@ func newEnv(t *testing.T) env {
 	t.Setenv("MISE_STUB_LOCK", repo(t, "testdata", "mise.lock"))
 	t.Setenv("MISE_STUB_FAIL", "")
 	root := filepath.Join(dir, "root")
-	for _, f := range []string{"shared-tools/mise.toml", "shared-tools/build.sh", "layers/base.sh"} {
+	for _, f := range []string{"prelude.sh", "shared-tools/mise.toml", "shared-tools/build.sh", "layers/base.sh"} {
 		write(t, filepath.Join(root, f), read(t, repo(t, "assets", f)))
 	}
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
@@ -781,7 +781,7 @@ func TestBuild(t *testing.T) {
 		"node", lock.Version("node"), all[0], "bun", lock.Version("bun"), all[2], "claude", lock.Version("claude"), all[3],
 	}
 	if spec.Base != baseKey || spec.OutAt != ShareAt || spec.Net != backend.NetInternet || !slices.Equal(spec.Args, wantArgs) ||
-		spec.Script.Name != "build.sh" || !bytes.Equal(spec.Script.Data, read(t, filepath.Join(e.root, "shared-tools", "build.sh"))) {
+		spec.Script.Name != "build.sh" || !bytes.Equal(spec.Script.Data, slices.Concat(read(t, filepath.Join(e.root, "prelude.sh")), read(t, filepath.Join(e.root, "shared-tools", "build.sh")))) {
 		t.Errorf("spec = %+v", spec)
 	}
 	if filepath.Dir(spec.Out) != e.Dirs.Data || !strings.HasPrefix(filepath.Base(spec.Out), "tools-build.") {

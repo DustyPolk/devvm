@@ -77,6 +77,7 @@ func TestWriteScripts(t *testing.T) {
 		"oci/kernel.sh": {Data: []byte("kernel\n")}, "oci/try.sh": {Data: []byte("try\n")},
 		"oci/sub/x.sh": {Data: []byte("x\n")}, "guest/ca.sh": {Data: []byte("ca\n")},
 		"guest/sync.sh": {Data: []byte("sync\n")}, "base.yaml": {Data: []byte("cpus: 4\n")},
+		"prelude.sh": {Data: []byte("prelude\n")},
 	}
 	l, _, _ := testLima(t, "darwin")
 	l.Assets = own
@@ -114,8 +115,11 @@ func TestWriteScripts(t *testing.T) {
 		if !slices.Equal(got, want) {
 			t.Errorf("cas %v: wrote %q, want %q", cas, got, want)
 		}
-		if b, _ := os.ReadFile(filepath.Join(oci, "build.sh")); string(b) != "build\n" { //nolint:gosec // the test's own folder
-			t.Errorf("build.sh = %q", b)
+		// build.sh after the prelude; the scripts it runs as they are.
+		for name, want := range map[string]string{"build.sh": "prelude\nbuild\n", "bootify.sh": "bootify\n", "kernel.sh": "kernel\n"} {
+			if b, _ := os.ReadFile(filepath.Join(oci, name)); string(b) != want { //nolint:gosec // the test's own folder
+				t.Errorf("%s = %q, want %q", name, b, want)
+			}
 		}
 	}
 	// devvm's files lacking ca.sh: an error.

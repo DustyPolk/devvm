@@ -15,24 +15,23 @@
 #   libc      gnu, or musl (Alpine): which builds of the shared tools its VMs run
 #   glibc     for gnu, its glibc version (2.36), which each shared tool's needs are checked against
 # No apt here: the cloud image's first boot may be running it (unattended-upgrades holds its lock).
-# shellcheck disable=SC2034  # the checksums are read through crane_sha
+# shellcheck disable=SC2034  # the checksums are read through devvm_sha
 set -euo pipefail
+: "${devvm_arch:?}"   # devvm's prelude (prelude.sh) comes before this script
 # Pinned downloads (scripts/bump.sh updates them).
 crane_version=0.22.1
 crane_sha256_arm64=898c0cff975f898a33e8c4580bdafb0e7c02c7faa33374e946762f97c4ab7110
 crane_sha256_amd64=0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0
 
 die() { echo "devvm: $*" >&2; exit 1; }
-arch() { case $(uname -m) in aarch64|arm64) echo arm64 ;; x86_64) echo amd64 ;; *) die "unsupported architecture $(uname -m)" ;; esac; }
 
-# crane, checked against its pinned checksum, into ./crane.
+# crane, checked against its pinned checksum, into ./crane. Its releases name amd64 x86_64.
 fetch_crane() {
-  local a f sha
-  a=$(arch); f=$a; [[ $a != amd64 ]] || f=x86_64
-  sha=crane_sha256_$a
+  local sum
+  sum=$(devvm_sha crane)
   curl -fsSL --retry 3 -o crane.tar.gz \
-    "https://github.com/google/go-containerregistry/releases/download/v$crane_version/go-containerregistry_Linux_$f.tar.gz"
-  echo "${!sha}  crane.tar.gz" | sha256sum -c --quiet - >/dev/null || die "crane's download doesn't match its pinned checksum"
+    "https://github.com/google/go-containerregistry/releases/download/v$crane_version/go-containerregistry_Linux_${devvm_arch/amd64/x86_64}.tar.gz"
+  echo "$sum  crane.tar.gz" | sha256sum -c --quiet - >/dev/null || die "crane's download doesn't match its pinned checksum"
   tar -xzf crane.tar.gz crane
   rm crane.tar.gz
 }
@@ -40,10 +39,10 @@ fetch_crane() {
 # export_image IMAGE TAR: the image's flattened filesystem (layers applied, deletions included).
 export_image() {
   if [[ $1 == - ]]; then ./crane export - "$2" < "$out/image.tar"; return; fi
-  ./crane export --platform "linux/$(arch)" "$1" "$2" 2>crane.err && return 0
+  ./crane export --platform "linux/$devvm_arch" "$1" "$2" 2>crane.err && return 0
   cat crane.err >&2
   if grep -q 'no child with platform' crane.err; then
-    die "'$name' has no linux/$(arch) build (it has: $(platforms "$1"))"
+    die "'$name' has no linux/$devvm_arch build (it has: $(platforms "$1"))"
   fi
   die "couldn't download '$name'"
 }
@@ -159,5 +158,5 @@ main() {
   cd /; rm -rf "$work"
 }
 
-# Sourced by the unit tests for its functions; run with arguments in the build VM.
+# Sourced by the unit tests for its functions, after the prelude; run with arguments in the build VM.
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then main "$@"; fi

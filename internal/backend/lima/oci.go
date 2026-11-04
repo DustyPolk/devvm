@@ -172,8 +172,8 @@ var conversionScripts = []string{"oci/build.sh", "oci/bootify.sh", "oci/kernel.s
 const convertArgs = 6
 
 // convertSteps are the conversion's origin steps for f, from devvm's
-// files: build.sh, run as root with what it makes of the image as its
-// arguments (f's digest and reference, the host's user as the image's
+// files: build.sh after the prelude (image.OwnScript), run as root with
+// what it makes of the image as its arguments (f's digest and reference, the host's user as the image's
 // user, its name, uid and home, and the converted disk's size), then the
 // scripts it runs. The conversion runs these as they are.
 func (l *images) convertSteps(f *backend.From) ([]image.Step, error) {
@@ -183,7 +183,13 @@ func (l *images) convertSteps(f *backend.From) ([]image.Step, error) {
 	}
 	steps := make([]image.Step, len(conversionScripts))
 	for i, name := range conversionScripts {
-		if steps[i].Data, err = fs.ReadFile(l.Assets, name); err != nil {
+		// build.sh runs with bash, after the prelude; bootify.sh runs
+		// with the image's own sh, and kernel.sh uses none of it.
+		read := fs.ReadFile
+		if i == 0 {
+			read = image.OwnScript
+		}
+		if steps[i].Data, err = read(l.Assets, name); err != nil {
 			return nil, err
 		}
 		steps[i].Name = name

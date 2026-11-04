@@ -251,7 +251,8 @@ func ToolVersion(s string) bool { return toolVersion.MatchString(s) }
 
 // ToolFile names a tool's image: <tool>-<version>-<key>.erofs. The key is
 // 12 hex digits of a SHA-256 over the tool's lock entry, devvm's
-// shared-tools/build.sh (in assets, devvm's own files), the [settings] of
+// shared-tools/build.sh (in assets, devvm's own files) as its build runs
+// it, after the prelude (OwnScript), the [settings] of
 // devvm's shared-tools/mise.toml, which change what mise installs, the
 // version of mise that installs it (MiseVersion; not for a tool rustup
 // installs), the libc and, unless it's build.sh's own, the format.
@@ -269,9 +270,11 @@ func ToolFile(assets fs.FS, t Tool) (string, error) {
 	k.field("tool", t.Name)
 	k.field("version", t.Version)
 	k.bytes("lock-entry", t.LockEntry)
-	if err := k.own(assets, "shared-tools/build.sh"); err != nil {
+	script, err := OwnScript(assets, "shared-tools/build.sh")
+	if err != nil {
 		return "", err
 	}
+	k.bytes("file shared-tools/build.sh", script)
 	settings, err := miseSettings(assets)
 	if err != nil {
 		return "", err

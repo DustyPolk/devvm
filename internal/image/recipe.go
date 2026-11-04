@@ -1,5 +1,33 @@
 package image
 
+import (
+	"fmt"
+	"io/fs"
+	"slices"
+)
+
+// preludeFile is devvm's prelude, in its own files: $devvm_arch,
+// $devvm_libc and devvm_sha, for the scripts it comes before.
+const preludeFile = "prelude.sh"
+
+// OwnScript is devvm's own script name, from own (devvm's files), as an
+// image's build runs it with bash: the prelude, then the script. Each of
+// devvm's scripts that a build runs with bash is read through it (base.sh,
+// apt.sh, the built-in layers and features, shared-tools/build.sh,
+// oci/build.sh), so the recipes and keys that hold a script hold the
+// prelude too. A user's script gets none.
+func OwnScript(own fs.FS, name string) ([]byte, error) {
+	prelude, err := fs.ReadFile(own, preludeFile)
+	if err != nil {
+		return nil, fmt.Errorf("reading devvm's %s: %w", preludeFile, err)
+	}
+	script, err := fs.ReadFile(own, name)
+	if err != nil {
+		return nil, fmt.Errorf("reading devvm's %s: %w", name, err)
+	}
+	return slices.Concat(prelude, script), nil
+}
+
 // Recipe is what an image is made of, built once (internal/build): its
 // key hashes it (Input), and its backend runs it as it is
 // (backend.ImageSpec).

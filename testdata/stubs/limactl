@@ -35,7 +35,7 @@
 # arguments contain $STUB_DIR/shell-waits-on's text touches $STUB_DIR/waiting,
 # then waits until that file is gone and carries on; and a direct
 # connection (curl --noproxy) fails unless $STUB_DIR/net-direct exists; a script fed
-# to shell's bash -s has its second line appended to $STUB_DIR/scripts, and
+# to shell's bash -s has its second line (past devvm's prelude) appended to $STUB_DIR/scripts, and
 # the tar stream a VM's setup is sent is kept as $STUB_DIR/sync.tar (with
 # $STUB_DIR/sync-fails-with, the setup then fails, and that file is the VM's
 # /run/devvm/tools-unmounted); a base build's packages are kept as
@@ -266,8 +266,12 @@ case ${1:-} in
       export -f sudo
       exec bash -c "$3" "$4" "$STUB_DIR/vmfs$5" "${@:6}"
     fi
-    # A script fed to bash -s: its first line after the shebang.
-    if [[ ${*: -2} == "bash -s" || "$*" == *"exec 'bash' '-s'" ]]; then "${0%/*}/stub-log" "$STUB_DIR/scripts" "$(sed -n 2p)"; fi
+    # A script fed to bash -s: its first line after the shebang, past devvm's prelude (assets/prelude.sh,
+    # which ends with its function's closing brace) when it starts with it.
+    if [[ ${*: -2} == "bash -s" || "$*" == *"exec 'bash' '-s'" ]]; then
+      "${0%/*}/stub-log" "$STUB_DIR/scripts" "$(awk 'NR == 2 && /^# devvm.s prelude/ { p = 1 }
+        p && /^}$/ { p = 0; at = NR + 2; next } !p && NR == (at ? at : 2) { print }')"
+    fi
     # A VM's home folder as a remake reads it: $STUB_DIR/vmhome-<name>'s files
     # (none when it's missing); what a remake puts in a new disk's home is kept
     # as $STUB_DIR/home-in.tgz. Either fails with shell-fails-on's text.

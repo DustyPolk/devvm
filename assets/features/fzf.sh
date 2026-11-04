@@ -1,7 +1,8 @@
 #!/bin/bash
 # fzf: fuzzy Ctrl-R history and Ctrl-T file search
 set -euxo pipefail
-if command -v apk >/dev/null; then sudo apk add --no-cache fzf
+: "${devvm_libc:?}"   # devvm's prelude (prelude.sh) comes before this script
+if [[ $devvm_libc == musl ]]; then sudo apk add --no-cache fzf
 else sudo DEBIAN_FRONTEND=noninteractive apt-get install -y fzf; fi
 # fzf 0.48+ prints its own bash setup; older ones (Debian 12 has 0.38) ship it as files.
 if fzf --bash >/dev/null 2>&1; then

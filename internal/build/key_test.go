@@ -98,6 +98,7 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 	}{
 		{"layers/base.sh", "", func(t *testing.T, b *Env) { edit(t, own(b, "layers/base.sh")) }, all},
 		{"layers/apt.sh", "", func(t *testing.T, b *Env) { edit(t, own(b, "layers/apt.sh")) }, all},
+		{"the prelude", "", func(t *testing.T, b *Env) { edit(t, own(b, "prelude.sh")) }, all},
 		{"the backend", "", func(_ *testing.T, b *Env) { b.Backend = backendtest.New("other", b.Backend.Caps()) }, all},
 		{"a backend's origin step", "", func(_ *testing.T, b *Env) {
 			b.Backend.(*backendtest.Fake).OriginSteps = []image.Step{{Name: "ubuntu.img", Args: []string{"x"}}}

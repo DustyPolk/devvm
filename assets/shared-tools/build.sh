@@ -8,8 +8,9 @@
 # and records its hash. Project VMs mount it at /opt/devvm/tools/<tool>/<version>, where mise finds it
 # as a shared install. For a glibc build, FILE.glibc beside it holds the newest glibc version its
 # programs and libraries need (glibc_needs), which devvm records and checks a --from base against.
-# shellcheck disable=SC2034  # the checksums are read through sha()
+# shellcheck disable=SC2034  # the checksums are read through devvm_sha
 set -euxo pipefail
+: "${devvm_arch:?}" "${devvm_libc:?}"   # devvm's prelude (prelude.sh) comes before this script
 # Pinned downloads (scripts/bump.sh updates them). rustup checks the toolchain against Rust's signed
 # channel manifest.
 rustup_version=1.29.1
@@ -21,12 +22,9 @@ rustup_sha256_amd64_musl=331228566cc931f32cd684f9bebc5956a5e5d7394c8d5de595f196a
 share=/mnt/devvm-tools
 # Where VMs mount the tools: installs record absolute paths (mise's bin links, scripts' shebangs).
 work=/opt/devvm/tools
-case $(uname -m) in aarch64) a=arm64 ;; x86_64) a=amd64 ;; esac
 # On Alpine (musl), the musl builds: mise picks them, and rustup gets the musl toolchain.
-libc=gnu musl=""
-if command -v apk >/dev/null; then libc=musl musl=_musl; fi
-triple=$(uname -m)-unknown-linux-$libc
-sha() { local v="${1}_sha256_$a$musl"; echo "${!v}"; }
+case $devvm_arch in arm64) triple=aarch64 ;; amd64) triple=x86_64 ;; esac
+triple+=-unknown-linux-$devvm_libc
 # The output folder, once it's there: Lima mounts it at boot (cloud-init, nofail), so a mount that
 # failed or came late leaves an empty folder. Waits up to 60 s for the lock devvm put in it,
 # mounting it again from fstab while it isn't mounted, then fails naming it and mount's last error.
@@ -57,7 +55,7 @@ glibc_needs() {
     sort -t. -k1,1n -k2,2n | tail -1
   rm -f "$files" "$elf"
 }
-[[ $libc != gnu ]] || command -v readelf >/dev/null || { echo "build.sh: base has no readelf (binutils)" >&2; exit 1; }
+[[ $devvm_libc != gnu ]] || command -v readelf >/dev/null || { echo "build.sh: base has no readelf (binutils)" >&2; exit 1; }
 
 wait_share
 sudo rm -rf "$work"; sudo mkdir -p "$work"; sudo chown "$USER" "$work"
@@ -71,7 +69,7 @@ while (( $# >= 3 )); do
     # toolchain in). rust-src and rust-analyzer now: components can't be added to a read-only toolchain.
     dir=$work/rust/$version; mkdir -p "$dir"
     devvm-fetch "https://static.rust-lang.org/rustup/archive/$rustup_version/$triple/rustup-init" \
-      "$(sha rustup)" "$dir/rustup-init"
+      "$(devvm_sha rustup)" "$dir/rustup-init"
     chmod 755 "$dir/rustup-init"
     RUSTUP_HOME=$work/rustup CARGO_HOME=$work/cargo "$dir/rustup-init" -y -q --no-modify-path \
       --profile default --default-toolchain "$version" -c rust-src -c rust-analyzer
@@ -85,7 +83,7 @@ while (( $# >= 3 )); do
     # Corepack writes its shims next to node: now, since VMs can't.
     [[ $tool != node ]] || PATH=$dir/bin:$PATH corepack enable yarn
   fi
-  [[ $libc != gnu ]] || glibc_needs "$dir" > "$share/$file.glibc"
+  [[ $devvm_libc != gnu ]] || glibc_needs "$dir" > "$share/$file.glibc"
   # --all-root: the VM's user only reads them. lz4hc: about half the size, fast to read.
   mkfs.erofs -zlz4hc --all-root "$share/$file.tmp" "$dir" >/dev/null
   mv "$share/$file.tmp" "$share/$file"

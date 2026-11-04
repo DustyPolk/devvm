@@ -1,7 +1,8 @@
 #!/bin/bash
 # Essentials, and mise for the shared tools (shared-tools/).
-# shellcheck disable=SC2034  # the checksums are read through sha()
+# shellcheck disable=SC2034  # the checksums are read through devvm_sha
 set -euxo pipefail
+: "${devvm_arch:?}" "${devvm_libc:?}"   # devvm's prelude (prelude.sh) comes before this script
 # Pinned downloads (scripts/bump.sh updates them).
 mise_version=2026.10.7
 mise_sha256_arm64=c7108d85a32ba17e4747d31d4a42f39f0c134f16211e204e8ef0a49d4f518fe1
@@ -12,14 +13,12 @@ mise_sha256_amd64_musl=fc5137a3147494e039c3d5fc3d84de354170d7d8dafdb0b5f0b6f3f19
 export DEBIAN_FRONTEND=noninteractive
 # Alpine (--from alpine): apk, OpenRC and musl. Its packages come from the release's repositories,
 # which have no snapshots: they aren't pinned.
-if command -v apk >/dev/null; then
+if [[ $devvm_libc == musl ]]; then
   # GNU tar: devvm's launch sends files with it (busybox's lacks options it uses).
   sudo apk add --no-cache git curl wget ca-certificates build-base unzip jq ripgrep bash coreutils tar \
     util-linux util-linux-misc losetup findmnt erofs-utils
   echo "devvm: Alpine's packages aren't pinned" >&2
-  musl=_musl
 else
-musl=""
 # The package lists are apt.sh begin's: base's packages are recorded at its first build and replayed
 # from devvm's cache after (layers/apt.sh), and a --from image's come from its own sources, unpinned.
 # erofs-utils: the shared tools' builds make their images with it, in a VM cloned from base.
@@ -42,7 +41,7 @@ fi
 SH
 sudo chmod 755 /usr/local/bin/devvm-fetch
 
-if [[ -z $musl ]]; then
+if [[ $devvm_libc == gnu ]]; then
 # Ubuntu's cloud image is a server's: drop what a dev VM doesn't use (snapd, multipath, modem and disk
 # managers, firmware updates, crash reporting, tracing tools, kernel headers), and apt's background
 # updates, which hold apt's lock and, under network policy, show up as blocks. Measured: 0.9 GB less
@@ -73,9 +72,9 @@ grep -qs bashrc.d ~/.bashrc || echo 'for f in ~/.bashrc.d/*.sh; do [ -r "$f" ] &
 # /opt/devvm/tools by devvm-tools (guest/tools.sh). Each VM's tools and versions are in
 # /etc/mise/config.toml (written by guest/sync.sh); the user's own mise config and a project's version
 # files (.nvmrc, .python-version, ...) come first, and versions that aren't shared install into the VM.
-case $(uname -m) in aarch64) a=arm64 m=arm64 ;; x86_64) a=amd64 m=x64 ;; esac
-sha() { local v="${1}_sha256_$a$musl"; echo "${!v}"; }
-devvm-fetch "https://github.com/jdx/mise/releases/download/v$mise_version/mise-v$mise_version-linux-$m${musl:+-musl}" "$(sha mise)" /tmp/mise
+# mise names amd64 x64, and its musl builds end -musl.
+m=${devvm_arch/amd64/x64}; [[ $devvm_libc == gnu ]] || m+=-musl
+devvm-fetch "https://github.com/jdx/mise/releases/download/v$mise_version/mise-v$mise_version-linux-$m" "$(devvm_sha mise)" /tmp/mise
 sudo install -m 755 /tmp/mise /usr/local/bin/mise
 rm /tmp/mise
 # Every shell finds the tools: login shells through profile.d, interactive ones through mise activate
@@ -92,7 +91,7 @@ SH
 grep -qs devvm-tools /etc/environment || echo 'BASH_ENV=/etc/profile.d/devvm-tools.sh' | sudo tee -a /etc/environment >/dev/null
 echo 'eval "$(mise activate bash)"' > ~/.bashrc.d/mise.sh
 # Mounted at boot, once the share is: devvm-tools reads the VM's list (/etc/devvm/tools).
-if [[ -n $musl ]]; then
+if [[ $devvm_libc == musl ]]; then
   sudo tee /etc/init.d/devvm-tools >/dev/null <<'RC'
 #!/sbin/openrc-run
 description="Mount devvm's shared tools"

@@ -2,10 +2,11 @@
 # desktop: a built-in layer (devvm --layers desktop). An Xfce desktop with a VNC server, which devvm
 # desktop opens (about 400 MB).
 set -euxo pipefail
+: "${devvm_libc:?}"   # devvm's prelude (prelude.sh) comes before this script
 # No downloads of its own: its packages come from the distribution's archive as it is when the layer
 # builds, which base's image has no package lists of (layers/apt.sh), so they aren't pinned. Alpine
 # (--from alpine): Alpine's own packages, from the release's repositories.
-if command -v apk >/dev/null; then
+if [[ $devvm_libc == musl ]]; then
   sudo apk add --no-cache xfce4 xfce4-terminal tigervnc dbus-x11 xauth font-dejavu
 else
   sudo apt-get update --error-on=any

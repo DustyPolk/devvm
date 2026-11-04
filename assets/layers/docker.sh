@@ -2,6 +2,7 @@
 # docker: a built-in layer (devvm --layers docker). Docker's engine, CLI, BuildKit and Compose, the VM's
 # user in the docker group, the daemon started at each boot.
 set -euxo pipefail
+: "${devvm_libc:?}"   # devvm's prelude (prelude.sh) comes before this script
 # Pinned downloads (scripts/bump.sh updates them). Docker's repository has no snapshots: its packages
 # are pinned by version.
 docker_version=29.9.0
@@ -13,7 +14,7 @@ docker_gpg_sha256=1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a5
 
 # Alpine (--from alpine): Docker is Alpine's own package, from the release's repositories, which have
 # no snapshots: not pinned.
-if command -v apk >/dev/null; then
+if [[ $devvm_libc == musl ]]; then
   sudo apk add --no-cache docker docker-cli-buildx docker-cli-compose
   echo "devvm: Alpine's Docker packages aren't pinned" >&2
   sudo rc-update add docker default

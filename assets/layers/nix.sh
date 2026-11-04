@@ -2,8 +2,9 @@
 # nix: a built-in layer (devvm --layers nix). Nix, multi-user, with the VM's own store and
 # daemon and flakes on; direnv and nix-direnv, so a project's .envrc (use flake, use nix) loads its dev
 # shell in the VM's shells.
-# shellcheck disable=SC2034  # the checksums are read through sha()
+# shellcheck disable=SC2034  # the checksums are read through devvm_sha
 set -euxo pipefail
+: "${devvm_arch:?}" "${devvm_libc:?}"   # devvm's prelude (prelude.sh) comes before this script
 # Pinned downloads (scripts/bump.sh updates them). Nix's release tarball, with its own installer;
 # nix-direnv is one script, the same on every architecture.
 nix_version=2.35.4
@@ -15,13 +16,13 @@ direnv_sha256_amd64=148820a187930d36ca6a204504e5cdb30d8396cd1a97e64c3b3f10d793c1
 nix_direnv_version=3.2.0
 nix_direnv_sha256=856e8d0b5247b9edc88d9377b8333a97a2363cc69abaa7760fb857609d597ebe
 
-case $(uname -m) in aarch64) a=arm64 n=aarch64 ;; x86_64) a=amd64 n=x86_64 ;; esac
-sha() { local v="${1}_sha256_$a"; echo "${!v}"; }
+# Nix names the architectures as the kernel does.
+case $devvm_arch in arm64) n=aarch64 ;; amd64) n=x86_64 ;; esac
 
 # Alpine (--from alpine): GNU tar needs xz for the tarball (base has shadow's groupadd and useradd,
 # which the installer uses). Its packages come from the release's repositories: not pinned. Nix's
 # own binaries are static or linked against its store's C library, so they run on musl.
-if command -v apk >/dev/null; then
+if [[ $devvm_libc == musl ]]; then
   sudo apk add --no-cache xz
   echo "devvm: Alpine's packages aren't pinned" >&2
 fi
@@ -30,7 +31,7 @@ fi
 # makes the build users (nixbld) and, with systemd, starts nix-daemon. Its settings: flakes and the nix command on;
 # only root trusted, so the VM's user can't choose other caches (substituters) or keys; and builds
 # fail where the kernel can't sandbox them, rather than run unsandboxed without a word.
-devvm-fetch "https://releases.nixos.org/nix/nix-$nix_version/nix-$nix_version-$n-linux.tar.xz" "$(sha nix)" /tmp/nix.tar.xz
+devvm-fetch "https://releases.nixos.org/nix/nix-$nix_version/nix-$nix_version-$n-linux.tar.xz" "$(devvm_sha nix)" /tmp/nix.tar.xz
 rm -rf /tmp/nix-install; mkdir /tmp/nix-install
 tar -xJf /tmp/nix.tar.xz -C /tmp/nix-install --strip-components=1
 rm /tmp/nix.tar.xz
@@ -91,7 +92,7 @@ esac
 SH
 
 # direnv, and nix-direnv's use flake and use nix for it.
-devvm-fetch "https://github.com/direnv/direnv/releases/download/v$direnv_version/direnv.linux-$a" "$(sha direnv)" /tmp/direnv
+devvm-fetch "https://github.com/direnv/direnv/releases/download/v$direnv_version/direnv.linux-$devvm_arch" "$(devvm_sha direnv)" /tmp/direnv
 sudo install -m 755 /tmp/direnv /usr/local/bin/direnv
 rm /tmp/direnv
 devvm-fetch "https://raw.githubusercontent.com/nix-community/nix-direnv/$nix_direnv_version/direnvrc" "$nix_direnv_sha256" /tmp/nix-direnv

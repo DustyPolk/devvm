@@ -76,9 +76,9 @@ func (b *Env) plan(in inputs, name string) ([]planned, error) {
 		return nil, err
 	}
 	plans := []planned{base}
-	apt, err := fs.ReadFile(b.Assets, "layers/apt.sh")
+	apt, err := image.OwnScript(b.Assets, "layers/apt.sh")
 	if err != nil && len(layers) > 0 {
-		return nil, fmt.Errorf("reading devvm's layers/apt.sh: %w", err)
+		return nil, err
 	}
 	// Each layer's script runs with package lists, which base keeps none
 	// of (packages.go).
@@ -112,20 +112,20 @@ func (b *Env) basePlan(in inputs) (planned, error) {
 	if p.Recipe.Origin, err = b.Backend.Origin(in.from); err != nil {
 		return planned{}, err
 	}
-	data, err := fs.ReadFile(b.Assets, "layers/base.sh")
+	data, err := image.OwnScript(b.Assets, "layers/base.sh")
 	if err != nil {
-		return planned{}, fmt.Errorf("reading devvm's layers/base.sh: %w", err)
+		return planned{}, err
 	}
-	apt, err := fs.ReadFile(b.Assets, "layers/apt.sh")
+	apt, err := image.OwnScript(b.Assets, "layers/apt.sh")
 	if err != nil {
-		return planned{}, fmt.Errorf("reading devvm's layers/apt.sh: %w", err)
+		return planned{}, err
 	}
 	p.Recipe.Steps = []image.Step{{Name: "apt.sh", Data: apt, Args: []string{"begin"}, Root: true}, {Name: "base.sh", Data: data}}
 	for _, f := range in.features {
 		if !image.FeatureName(f) {
 			return planned{}, fmt.Errorf("invalid feature name %q", f)
 		}
-		s, err := b.FeatureScript(f)
+		s, err := b.featureStep(f)
 		if errors.Is(err, fs.ErrNotExist) {
 			p.unknown = append(p.unknown, f)
 			continue
@@ -133,7 +133,7 @@ func (b *Env) basePlan(in inputs) (planned, error) {
 		if err != nil {
 			return planned{}, err
 		}
-		p.Recipe.Steps = append(p.Recipe.Steps, image.Step{Name: s.Name, Data: s.Data})
+		p.Recipe.Steps = append(p.Recipe.Steps, s)
 	}
 	p.Recipe.Steps = append(p.Recipe.Steps, image.Step{Name: "apt.sh", Data: apt, Args: []string{"end"}, Root: true})
 	return b.keyed(in, p), nil

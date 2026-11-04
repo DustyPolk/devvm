@@ -9,7 +9,7 @@ These scripts turn a container image into a disk that Lima boots directly, for `
 | `kernel.sh` | on arm64, turns a distro's `vmlinuz` into the uncompressed `Image` Lima's `vz` needs; elsewhere it copies it as is |
 | `try.sh OUTDIR NAME` | boots a converted image as a throwaway Lima VM and runs the checks devvm relies on: init system, cloud-init, user, sudo, a writable host mount and port forwarding. macOS only (`vz`). The VM is left running: `limactl delete -f NAME` |
 
-As in every image script, the downloads are pinned at the top of `build.sh` with their version and checksum. `build.sh` checks them with `sha256sum`, because the build VM has no `devvm-fetch`.
+As in every image script, the downloads are pinned at the top of `build.sh` with their version and checksum. `build.sh` checks them with `sha256sum`, because the build VM has no `devvm-fetch`. devvm puts its prelude, `assets/prelude.sh`, before `build.sh` in the copy it gives the build VM, and `build.sh` takes its architecture and each pinned checksum from it (`$devvm_arch`, `devvm_sha`).
 
 The container image's own code runs as root in the build VM, so devvm treats everything it writes as hostile. The build VM gets only a `vm/` subfolder of devvm's temp folder, and `build.sh`, `bootify.sh` and `kernel.sh` read-only, which are the scripts base's key hashes. devvm checks what the build VM wrote only once the build VM is deleted. It refuses outputs that aren't regular files, because a symlink could point Lima at a host file. It also refuses a libc other than `gnu` or `musl`, a glibc version that isn't two numbers such as `2.36`, and a kernel command line with anything but letters, digits, spaces and `=,./:_-`.
 
