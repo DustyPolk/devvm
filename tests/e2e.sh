@@ -771,6 +771,7 @@ launch() {
   vm=$(vm_of "$d"); [[ -z $vm ]] || created+=("$vm")
 }
 in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
+export -f in_vm
 # proxy_config FILE VM LISTEN PASSWORD [POLICY [LOG]]: a config of this run's own for devvm _proxy
 # -config, the run's alone (mode 600): VM's proxy on LISTEN with PASSWORD, POLICY's rules (none
 # without one) and its events in LOG (none: its standard output).
