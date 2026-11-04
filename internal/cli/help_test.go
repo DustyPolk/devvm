@@ -79,9 +79,24 @@ func TestHelpGroupsAndDocs(t *testing.T) {
 		}
 		at += i + 1
 	}
+	// layer add and layer rm change the VM, while layer stays in Images.
+	change := help[strings.Index(help, "\nChange your VM:"):strings.Index(help, "\nLinks between VMs:")]
+	images := help[strings.Index(help, "\nImages:"):strings.Index(help, "\nDisk space:")]
+	if !strings.Contains(change, "\n  layer add ") || !strings.Contains(change, "\n  layer rm ") ||
+		!strings.Contains(images, "\n  layer ") || strings.Contains(images, "layer new") {
+		t.Errorf("devvm --help's Change your VM:%s\nand Images:%s", change, images)
+	}
 	wantEnd := "Docs:\n  " + msg.CommandDocURL("devvm") + "\n\nIssues:\n  " + msg.IssuesURL + "\n"
 	if !strings.HasSuffix(help, wantEnd) {
 		t.Errorf("devvm --help ends:\n%s\nwant it to end with:\n%s", help[max(0, len(help)-200):], wantEnd)
+	}
+
+	u, out, _ = testUI()
+	if code := Execute(t.Context(), u, []string{"layer", "--help"}); code != 0 {
+		t.Fatalf("devvm layer --help = %d", code)
+	}
+	if got := out.String(); !regexp.MustCompile(`\nChange your VM:\n  add +\S.*\n  rm +\S.*\n\nImages:\n  new +\S`).MatchString(got) {
+		t.Errorf("devvm layer --help:\n%s\nwant add and rm in Change your VM, new in Images", got)
 	}
 
 	u, out, _ = testUI()

@@ -202,6 +202,17 @@ func (e Tools) Update(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
+	if _, err := e.update(ctx, t); err != nil {
+		return err
+	}
+	return Launch(e).open(ctx, o, t)
+}
+
+// update checks for newer shared tools and records them in t's VM's
+// state, built first (tools.VMs.Update), which they take effect from as
+// devvm opens a shell in it: devvm tools update's, and devvm update's
+// first step. changed is false when it has the newest already.
+func (e Tools) update(ctx context.Context, t *found) (changed bool, err error) {
 	vm, st := t.f.Name, t.st
 	builder := e.builder(t.b, st.From)
 	tg := toolTarget(t.b, st)
@@ -209,7 +220,7 @@ func (e Tools) Update(ctx context.Context, o Options) error {
 	// Held until its state lists the new tools, as a new VM's.
 	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	files, changed, err := tools.VMs{Env: e.Env.Tools}.Update(ctx, buildFn, vm, tools.Names(st), tools.Files(st), tg)
 	if err == nil && changed {
@@ -223,8 +234,5 @@ func (e Tools) Update(ctx context.Context, o Options) error {
 		})
 	}
 	unmaking()
-	if err != nil {
-		return err
-	}
-	return Launch(e).open(ctx, o, t)
+	return changed && err == nil, err
 }

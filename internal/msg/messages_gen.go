@@ -1954,7 +1954,7 @@ func NewVMGets(layers string, tools string, vm string) M {
 	return M{id: "new_vm_gets", vals: []val{{"layers", layers}, {"tools", tools}, {"vm", vm}}}
 }
 
-// NewerTools is [newer_tools]: "There are newer shared tools: {{.tools}}. Run devvm tools update to move this VM to them."
+// NewerTools is [newer_tools]: "There are newer shared tools: {{.tools}}. Run devvm update to move this VM to them."
 func NewerTools(tools string) M {
 	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
 }

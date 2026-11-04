@@ -61,4 +61,4 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm tools add](devvm_tools_add.md): Add shared tools to this folder's VM, then open a shell in it
 - [devvm tools rm](devvm_tools_rm.md): Take shared tools out of this folder's VM, then open a shell in it
 - [devvm tools update](devvm_tools_update.md): Move this folder's VM to the newest shared tools, then open a shell in it
-- [devvm update](devvm_update.md): Make this folder's VM again from its image's new build, then open a shell in it
+- [devvm update](devvm_update.md): Bring this folder's VM up to date, then open a shell in it

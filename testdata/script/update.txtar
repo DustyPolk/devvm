@@ -1,7 +1,9 @@
-# devvm update: the folder's VM made again from its own image's new
-# build, after asking, when that image changed since the VM was made,
-# keeping its settings and its home folder; a current VM is said to be
-# so, and nothing runs. Each launch's outdated warning names devvm update.
+# devvm update: the folder's VM moved to newer shared tools without a
+# question, then made again from its own image's new build, after
+# asking, when that image changed since the VM was made, keeping its
+# settings and its home folder; a current VM is said to be so, and
+# nothing runs. Each launch's outdated and newer-tools warnings name
+# devvm update.
 env LAYERS=$XDG_CONFIG_HOME/devvm/layers
 
 # No VM.
@@ -26,23 +28,49 @@ stdout '^==> vm_current image=foo vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl (stop|rename|clone|delete)'
 
+# Only newer shared tools: each launch warns, naming devvm update, which
+# moves the VM to them and opens a shell, asking nothing, even without a
+# terminal.
+json_set $WEB_dir/vm.json tools.made.files:=["claude-1.0.0-0123456789ab.erofs"]
+exec devvm
+stderr '^devvm: newer_tools tools=claude \S+$'
+stub_reset
+exec devvm update
+stdout '^==> tools_switch vm=devvm-web-[0-9a-f]{14}$'
+! stdout 'vm_current|vm_changed'
+! stderr remake_confirm
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+stdout 'limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n'
+vm_state $WEB_dir/vm.json
+! stdout 'claude-1\.0\.0'
+
 # Its layer's script edited: each launch warns, naming devvm update.
 exec sh -c 'echo "echo again" >> "$LAYERS/foo.sh"'
 exec devvm
 stderr 'vm_outdated changed=foo$'
 
-# Without a terminal it refuses unless --force; in one it asks, and no
-# keeps the VM.
+# Without a terminal it refuses unless --force, before its tools change;
+# in one it asks, and no keeps the VM.
+json_set $WEB_dir/vm.json tools.made.files:=["claude-1.0.0-0123456789ab.erofs"]
 stub_reset
 ! exec devvm update
 stdout '^==> vm_changed changed=foo vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: force_needed command=devvm update$'
+! stdout tools_switch
+vm_state $WEB_dir/vm.json
+stdout 'claude-1\.0\.0'
+# No keeps it with its newer tools, and opens a shell.
 ttyin -stdin $WORK/no.txt
 exec devvm update
+stdout '^==> tools_switch vm=devvm-web-[0-9a-f]{14}$'
 stderr '^remake_confirm image=foo vm=devvm-web-[0-9a-f]{14} \[y/N\] '
 stdout '==> kept vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl (stop|rename|clone|delete)'
+stdout 'limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n'
+vm_state $WEB_dir/vm.json
+! stdout 'claude-1\.0\.0'
 
 # --force: in order, the new build, the history exported, home saved, the
 # VM stopped and set aside, made again from the same image name and

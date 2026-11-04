@@ -115,13 +115,16 @@ func (e Lifecycle) remakeLayers(ctx context.Context, command string, o RemakeOpt
 	return e.remakeTo(ctx, t, img, command, o)
 }
 
-// Update makes the folder's VM again from its own image as it builds now,
-// after the user agrees (remakeTo), when that image or one it's built on
-// changed since the VM was made (outdated: Builds.Outdated, the warning a
-// launch gives), then opens a shell in it. It says which images changed
-// first. A VM that isn't outdated is said to be current, and nothing
-// changes. command is the command as typed. A remake of it that didn't
-// finish is finished first.
+// Update brings the folder's VM up to date, then opens a shell in it.
+// First it moves the VM to any newer shared tools (Tools.update), which
+// needs no remake, as they're mounted. Then, when its own image or one
+// it's built on changed since the VM was made (outdated:
+// Builds.Outdated, the warning a launch gives), it says which changed
+// and makes the VM again from that image as it builds now, after the
+// user agrees (agreed). Without --force or a terminal, an outdated VM is
+// refused before anything changes. A VM with the newest tools that isn't
+// outdated is said to be current, and nothing changes. command is the
+// command as typed. A remake of it that didn't finish is finished first.
 func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) error {
 	t, resumed, release, err := e.toRemake(ctx, command)
 	if err != nil || t == nil {
@@ -133,15 +136,26 @@ func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) 
 	if err != nil {
 		return err
 	}
-	if len(changed) == 0 {
-		if resumed {
-			return Launch(e).open(ctx, Options{}, t)
+	if len(changed) > 0 {
+		e.Info(msg.VMChanged(strings.Join(changed, ", "), vm))
+		if err := e.canRemake(t, st.Image, command, o); err != nil {
+			return err
 		}
-		e.Info(msg.VMCurrent(st.Image, vm))
-		return nil
 	}
-	e.Info(msg.VMChanged(strings.Join(changed, ", "), vm))
-	return e.remakeTo(ctx, t, st.Image, command, o)
+	newer, err := Tools(e).update(ctx, t)
+	if err != nil {
+		return err
+	}
+	switch {
+	case len(changed) > 0 && e.agreed(t, st.Image, o):
+		return e.remakeNow(ctx, t, st.Image, command, o)
+	case newer || resumed:
+		// Its newer tools take effect as its shell opens, kept or not.
+		return Launch(e).open(ctx, Options{}, t)
+	case len(changed) == 0:
+		e.Info(msg.VMCurrent(st.Image, vm))
+	}
+	return nil
 }
 
 // addedImage is the image img makes with layers added on top, in the
@@ -269,25 +283,50 @@ func (e remaking) hold(ctx context.Context, t *found) (release func(), err error
 // which --force skips, and refused without either. Then it opens a shell
 // in it.
 func (e Lifecycle) remakeTo(ctx context.Context, t *found, img, command string, o RemakeOptions) error {
-	vm := t.f.Name
-	r := remaking(e)
-	if err := r.check(t, img); err != nil {
+	if err := e.canRemake(t, img, command, o); err != nil {
 		return err
 	}
-	if !o.Force {
-		if !e.Terminal() {
-			return msg.ForceNeeded(command)
-		}
-		ask := msg.RemakeConfirm(img, vm)
-		if o.CleanHome {
-			ask = msg.RemakeConfirmCleanHome(img, vm)
-		}
-		if !e.Ask(ask) {
-			e.Info(msg.Kept(vm))
-			return nil
-		}
+	if !e.agreed(t, img, o) {
+		return nil
 	}
-	if err := r.remake(ctx, t, remakeInVM{Image: img, Command: command, Home: !o.CleanHome, NoExport: o.NoExport}); err != nil {
+	return e.remakeNow(ctx, t, img, command, o)
+}
+
+// agreed reports whether the user agrees to make t's VM again from img,
+// once canRemake has checked that it can: asked in a terminal ([y/N]),
+// which --force skips. A no is said (kept).
+func (e Lifecycle) agreed(t *found, img string, o RemakeOptions) bool {
+	vm := t.f.Name
+	if o.Force {
+		return true
+	}
+	ask := msg.RemakeConfirm(img, vm)
+	if o.CleanHome {
+		ask = msg.RemakeConfirmCleanHome(img, vm)
+	}
+	if !e.Ask(ask) {
+		e.Info(msg.Kept(vm))
+		return false
+	}
+	return true
+}
+
+// canRemake refuses to make t's VM again from img when remaking.check
+// does, or when there's neither --force nor a terminal to ask in.
+func (e Lifecycle) canRemake(t *found, img, command string, o RemakeOptions) error {
+	if err := remaking(e).check(t, img); err != nil {
+		return err
+	}
+	if !o.Force && !e.Terminal() {
+		return msg.ForceNeeded(command)
+	}
+	return nil
+}
+
+// remakeNow makes t's VM again from img (remaking.remake), then opens a
+// shell in it.
+func (e Lifecycle) remakeNow(ctx context.Context, t *found, img, command string, o RemakeOptions) error {
+	if err := remaking(e).remake(ctx, t, remakeInVM{Image: img, Command: command, Home: !o.CleanHome, NoExport: o.NoExport}); err != nil {
 		return err
 	}
 	return Launch(e).open(ctx, Options{}, t)

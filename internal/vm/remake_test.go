@@ -16,6 +16,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
@@ -804,6 +805,118 @@ func TestUpdate(t *testing.T) {
 	said = nil
 	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{Force: true}); err != nil || !slices.Equal(said, []string{"vm_current image=base vm=" + vm}) {
 		t.Errorf("after: said %q, %v", said, msg.NamesOf(err))
+	}
+}
+
+// staleTools gives st's VM an older version of its first shared tool, as
+// when the tools lock moved on since the VM got it, and returns the tool
+// files it had.
+func staleTools(t *testing.T, st *state.VM) string {
+	t.Helper()
+	had := get(st, KeyTools)
+	files := strings.Fields(had)
+	_, v, ok := image.ParseToolFile(files[0])
+	if !ok {
+		t.Fatalf("tool file %q", files[0])
+	}
+	files[0] = strings.Replace(files[0], "-"+v+"-", "-0.0.1-", 1)
+	if err := set(t, st, KeyTools, strings.Join(files, " ")); err != nil {
+		t.Fatal(err)
+	}
+	return had
+}
+
+// devvm update moves the VM to newer shared tools first, which needs no
+// remake: with only those newer, it records them and opens a shell,
+// asking nothing. With its image outdated too, it asks to make the VM
+// again, naming only the image: no keeps the VM with its newer tools and
+// opens a shell, and yes makes it again with them. Without a terminal or
+// --force, an outdated VM is refused before its tools change.
+func TestUpdateTools(t *testing.T) {
+	e, f, st, _ := remakeEnv(t)
+	vm := st.Name()
+	lc := Lifecycle{e}
+	var said []string
+	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	steps := func(n int) []string {
+		var out []string
+		for _, m := range f.Methods()[n:] {
+			if slices.Contains([]string{"BuildImage", "Stop", "Rename", "CreateVM", "Delete", "Shell"}, m) {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+
+	if err := (Tools{e}).Add(t.Context(), Options{}, []string{"go"}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	said = nil
+
+	// Only the tools newer: recorded, then a shell, with no question.
+	had := staleTools(t, readState(t, e.Dirs, vm))
+	asked := answers(t, e, false)
+	n := len(f.Calls())
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if got := get(readState(t, e.Dirs, vm), KeyTools); got != had {
+		t.Errorf("tools only: tools %q, want %q", got, had)
+	}
+	if len(*asked) > 0 || len(said) > 0 || !slices.Equal(steps(n), []string{"Shell"}) {
+		t.Errorf("tools only: asked %q, said %q, then %q", *asked, said, steps(n))
+	}
+
+	// Both, without a terminal: refused before its tools change.
+	if err := state.BumpRebuild(e.Dirs, f.Name(), "", "base"); err != nil {
+		t.Fatal(err)
+	}
+	staleTools(t, readState(t, e.Dirs, vm))
+	stale := get(readState(t, e.Dirs, vm), KeyTools)
+	e.Terminal = func() bool { return false }
+	said, n = nil, len(f.Calls())
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); msg.NamesOf(err) != "force_needed command=devvm update" {
+		t.Errorf("no terminal: %v", msg.NamesOf(err))
+	}
+	if got := get(readState(t, e.Dirs, vm), KeyTools); got != stale || len(steps(n)) > 0 {
+		t.Errorf("no terminal: tools %q, want %q; then %q", got, stale, steps(n))
+	}
+
+	// Both, declined: kept with its newer tools, and a shell.
+	asked = answers(t, e, false)
+	said, n = nil, len(f.Calls())
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if want := []string{"remake_confirm image=base vm=" + vm}; !slices.Equal(*asked, want) {
+		t.Errorf("declined: asked %q, want %q", *asked, want)
+	}
+	if want := []string{"vm_changed changed=base vm=" + vm, "kept vm=" + vm}; !slices.Equal(said, want) {
+		t.Errorf("declined: said %q, want %q", said, want)
+	}
+	if got := get(readState(t, e.Dirs, vm), KeyTools); got != had || !slices.Equal(steps(n), []string{"Shell"}) {
+		t.Errorf("declined: tools %q, want %q; then %q", got, had, steps(n))
+	}
+
+	// Both, agreed: made again, with its newer tools.
+	staleTools(t, readState(t, e.Dirs, vm))
+	answers(t, e, true)
+	n = len(f.Calls())
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	after := readState(t, e.Dirs, vm)
+	if get(after, KeyTools) != had || remakePending(after) {
+		t.Errorf("agreed: tools %q, want %q; pending %v", get(after, KeyTools), had, remakePending(after))
+	}
+	if want := []string{"BuildImage", "Stop", "Rename", "CreateVM", "Delete", "Shell"}; !slices.Equal(steps(n), want) {
+		t.Errorf("agreed: steps %q, want %q", steps(n), want)
+	}
+
+	// Neither: current, and nothing runs.
+	said, n = nil, len(f.Calls())
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); err != nil || !slices.Equal(said, []string{"vm_current image=base vm=" + vm}) || len(steps(n)) > 0 {
+		t.Errorf("neither: said %q, then %q, %v", said, steps(n), msg.NamesOf(err))
 	}
 }
 

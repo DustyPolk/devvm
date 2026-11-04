@@ -9,7 +9,8 @@ import (
 )
 
 // commandGroup is a section of the root's help: its title and the
-// commands in it, by name.
+// commands in it, by name, a root command's subcommand by both names
+// (layer add).
 type commandGroup struct {
 	id, title string
 	commands  []string
@@ -17,13 +18,15 @@ type commandGroup struct {
 
 // commandGroups are the root's help's sections, in order. help is in
 // Cobra's own section, Additional Commands. A group none of whose commands
-// exist is left out.
+// exist is left out. A subcommand in a group other than its parent's is
+// listed in that one by both names, and its parent's help groups its
+// subcommands the same way.
 func commandGroups() []commandGroup {
 	return []commandGroup{
 		{"vm", "Your VM:", []string{"restart", "stop", "update", "rm", "adopt", "ls", "code", "desktop", "host", "history"}},
-		{"change", "Change your VM:", []string{"tools", "size", "ports", "network", "ssh-agent", "git-protect", "secret"}},
+		{"change", "Change your VM:", []string{"tools", "size", "ports", "network", "ssh-agent", "git-protect", "secret", "layer add", "layer rm"}},
 		{"links", "Links between VMs:", []string{"link", "group"}},
-		{"images", "Images:", []string{"images", "build", "rebuild", "layer"}},
+		{"images", "Images:", []string{"images", "build", "rebuild", "layer", "layer new"}},
 		{"space", "Disk space:", []string{"space", "gc", "retention"}},
 		{"machine", "This machine:", []string{"setup", "doctor", "completion", "limactl"}},
 	}
@@ -45,7 +48,8 @@ Available Commands:{{range $cmds}}{{if (or .IsAvailableCommand (eq .Name "help")
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{range $group := .Groups}}
 
 {{.Title}}{{range $cmds}}{{if (and (eq .GroupID $group.ID) (or .IsAvailableCommand (eq .Name "help")))}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{range $parent := $cmds}}{{if ne $parent.GroupID $group.ID}}{{range $parent.Commands}}{{if (and (eq .GroupID $group.ID) .IsAvailableCommand)}}
+  {{rpad (print $parent.Name " " .Name) $parent.NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
 
 Additional Commands:{{range $cmds}}{{if (and (eq .GroupID "") (or .IsAvailableCommand (eq .Name "help")))}}
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
@@ -68,24 +72,21 @@ Issues:
   {{.}}{{end}}
 `
 
-// addGroups puts root's commands into commandGroups' sections.
+// addGroups puts root's commands into commandGroups' sections, and a
+// subcommand listed by both names into its parent's section of the same
+// group.
 func addGroups(root *cobra.Command) {
-	byName := map[string]*cobra.Command{}
-	for _, c := range root.Commands() {
-		byName[c.Name()] = c
-	}
 	for _, g := range commandGroups() {
 		var cmds []*cobra.Command
-		for _, name := range g.commands {
-			if c, ok := byName[name]; ok {
+		for _, path := range g.commands {
+			if c, _, err := root.Find(strings.Fields(path)); err == nil && c != root && c.CommandPath() == root.Name()+" "+path {
 				cmds = append(cmds, c)
 			}
 		}
-		if len(cmds) == 0 {
-			continue
-		}
-		root.AddGroup(&cobra.Group{ID: g.id, Title: g.title})
 		for _, c := range cmds {
+			if !c.Parent().ContainsGroup(g.id) {
+				c.Parent().AddGroup(&cobra.Group{ID: g.id, Title: g.title})
+			}
 			c.GroupID = g.id
 		}
 	}

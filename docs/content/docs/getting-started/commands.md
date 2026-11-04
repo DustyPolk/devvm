@@ -29,7 +29,7 @@ You start the agent in the VM's shell, whose prompt starts with `(devvm)`, so th
 | `devvm` | open a shell in this folder's VM, at the same path, making the VM first with the toolchains, agents and layers you check in a list, or that `--tools`, `--agents` and `--layers` name ([details](../using/images.md#what-a-new-vm-gets)) |
 | `devvm restart` | stop this folder's VM, start it again and open a shell in it, for changes that apply only when it starts ([details](#restarting-and-stopping)) |
 | `devvm stop` | stop this folder's VM ([details](#restarting-and-stopping)) |
-| `devvm update [--force] [--no-export] [--clean-home]` | make this folder's VM again from its image's new build when the image has changed, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/images.md#outdated-vms)) |
+| `devvm update [--force] [--no-export] [--clean-home]` | move this folder's VM to the newest shared tools, and when its image has changed, make it again from the image's new build, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/images.md#outdated-vms)) |
 | `devvm rm [--force] [--no-export] [--no-clone-check]` | delete this folder's VM after asking, exporting its agents' history first unless `--no-export` ([details](#deleting-a-vm)) |
 | `devvm rm VM [--force] [--no-export] [--no-clone-check]` | delete a VM whose folder is gone, by its name or ssh alias, after asking ([details](#a-vm-whose-folder-is-gone)), or one whose folder is on a disk that isn't connected, only after asking in a terminal ([details](#a-folder-on-a-disk-that-isnt-connected)) |
 | `devvm adopt` | use the VM made for an earlier folder at this path here ([details](#a-folder-made-again)) |
@@ -195,7 +195,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm tools` | in a terminal, check or uncheck this folder's VM's toolchains and agents in a list, then open a shell in it, and otherwise show its shared tools, each with its version and any newer one ([details](#adding-to-a-vm)) |
 | `devvm tools add TOOL...` | add shared tools to this folder's VM, such as `devvm tools add python claude`, then open a shell in it ([details](#adding-to-a-vm)) |
 | `devvm tools rm TOOL...` | take shared tools out of this folder's VM, such as `devvm tools rm python claude`, then open a shell in it |
-| `devvm tools update` | move this folder's VM to the newest shared tools, then open a shell in it ([details](../using/toolchains.md#adding-and-removing-tools)) |
+| `devvm tools update` | move this folder's VM to the newest shared tools, and only those, then open a shell in it ([details](../using/toolchains.md#adding-and-removing-tools)) |
 | `devvm size [--cpus N] [--memory GiB] [--disk GiB]` | show or change this folder's VM's CPUs, memory and disk ([details](../using/ports-size.md#size)) |
 | `devvm size -g ...` | show or change the size new VMs get ([details](../using/ports-size.md#size)) |
 | `devvm ports [all\|none\|LIST]` | show or change which ports this folder's VM forwards to this machine's `localhost`, even while it runs ([details](../using/ports-size.md#ports)) |
@@ -212,6 +212,8 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm secret`, `devvm secret rm NAME` | list the secrets, whether each is saved and the VMs using it, or delete a saved one ([details](../safety/network.md#saving-and-binding-secrets)) |
 | `devvm secret set claude\|github [--stdin]` | save your Claude Code token or GitHub token on this machine, so that with network policy VMs get a placeholder and their proxy puts the secret in ([details](../safety/network.md#saving-and-binding-secrets)) |
 | `devvm secret use\|unuse NAME` | let this folder's VM use a secret, or stop it, though a VM with Claude Code always uses `claude` ([details](../safety/network.md#saving-and-binding-secrets)) |
+| `devvm layer add LAYER... [--force] [--no-export] [--clean-home]` | make this folder's VM again with more layers on top, keeping its home folder and settings, after asking, then open a shell in it ([details](#adding-to-a-vm)) |
+| `devvm layer rm LAYER... [--force] [--no-export] [--clean-home]` | make this folder's VM again without some of its layers, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/images.md#taking-layers-out-of-a-vm)) |
 
 ### Adding to a VM
 
@@ -251,8 +253,6 @@ A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the 
 | `devvm build IMAGE` | build an image and the images under it, unless they're built, such as `devvm build docker` or `devvm build foo+bar`, where IMAGE is base or layers and never a shared tool ([details](../using/images.md#layers)) |
 | `devvm rebuild IMAGE` | build an image of base or layers again from its parent as it is, and delete the stale images no VM uses, while shared tools follow the tools lock instead ([details](../using/images.md#rebuilding)) |
 | `devvm layer new NAME` | start a layer of your own, `~/.config/devvm/layers/NAME.sh`, with its allowlist, `NAME.policy` ([details](../using/customizing.md#your-own-layers)) |
-| `devvm layer add LAYER... [--force] [--no-export] [--clean-home]` | make this folder's VM again with more layers on top, keeping its home folder and settings, after asking, then open a shell in it ([details](#adding-to-a-vm)) |
-| `devvm layer rm LAYER... [--force] [--no-export] [--clean-home]` | make this folder's VM again without some of its layers, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/images.md#taking-layers-out-of-a-vm)) |
 
 `devvm build`, `devvm rebuild` and `devvm images rm` take `--from IMAGE` to work on a base made from that container image ([details](../using/from.md)).
 

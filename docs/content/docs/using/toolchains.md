@@ -92,11 +92,11 @@ What this doesn't cover:
 
 The toolchains are [shared tools](images.md#shared-tools), like the [coding agents](coding-agents.md#supported-agents), so they aren't part of any image. devvm builds each version once and mounts it read-only into every VM that has it, and [mise](https://mise.jdx.dev) runs it, so `node`, `python`, `cargo` and `go` work from any shell in the VM, including `bash -c` from agents and from editors over SSH. Because the shared copy is read-only, a toolchain can't update itself, and anything you install globally goes into your home in the VM, as each section above says.
 
-devvm follows each toolchain's newest release, and Node 24 for node. [Adding and removing tools](#adding-and-removing-tools) explains how `devvm tools update` moves a VM to newer versions, how `devvm tools add` adds a toolchain to an existing VM, and how `devvm tools rm` takes one out. [What a new VM gets](images.md#what-a-new-vm-gets) explains what happens when a folder calls for more than one toolchain.
+devvm follows each toolchain's newest release, and Node 24 for node. [Adding and removing tools](#adding-and-removing-tools) explains how `devvm update` and `devvm tools update` move a VM to newer versions, how `devvm tools add` adds a toolchain to an existing VM, and how `devvm tools rm` takes one out. [What a new VM gets](images.md#what-a-new-vm-gets) explains what happens when a folder calls for more than one toolchain.
 
 ## Adding and removing tools
 
-A new VM gets the shared tools chosen when devvm makes it, the toolchains and the [coding agents](coding-agents.md#supported-agents), and keeps those versions. On each launch, devvm warns when there are newer ones.
+A new VM gets the shared tools chosen when devvm makes it, the toolchains and the [coding agents](coding-agents.md#supported-agents), and keeps those versions. On each launch, devvm warns when there are newer ones and names `devvm update`, which moves the VM to them, and also makes the VM again when its image has changed, after asking ([outdated VMs](images.md#outdated-vms)).
 
 In a terminal, `devvm tools` shows the same list as for a new VM, with this folder's VM's toolchains and agents checked and its layers greyed out, because a VM gets its layers only when devvm makes it. Check and uncheck the tools, and press enter: devvm adds and takes out what changed, as `devvm tools add` and `devvm tools rm` do, then opens a shell in the VM. When a new agent's config folders need the running VM to start again, devvm asks first. When nothing changed, devvm says so and opens nothing.
 
@@ -137,6 +137,7 @@ The commands below change the VM's tools from a script or the command line. They
 
 - `devvm tools add TOOL...` builds the tools that the share lacks and adds them to the VM. A new agent's config folders are mounted too, which needs the VM to start again, so for a running VM devvm asks before restarting it ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)).
 - `devvm tools rm TOOL...` takes tools out. What the VM installed itself, such as other versions or global packages, stays.
-- `devvm tools update` checks upstream for newer versions, builds what's missing, and moves the VM to them. When the VM already has the newest versions, it builds any of them that are missing.
+- `devvm tools update` checks upstream for newer versions, builds what's missing, and moves the VM to them. When the VM already has the newest versions, it builds any of them that are missing. It changes only the shared tools, and never makes the VM again.
+- `devvm update` does the same first, without asking, and then asks to make the VM again only when the VM's image has changed ([outdated VMs](images.md#outdated-vms)).
 
-`--tools`, `--agents` and `--layers` choose only what a new VM gets, so on a VM that exists they change nothing, and devvm warns and names `devvm tools`. Layers aren't shared tools, so `devvm tools` can't add or take out a layer such as `docker` or `nix`. A VM gets its layers when devvm makes it, so to change them, save your work outside the project folder, run `devvm rm`, and make the VM again with the layers you want.
+`--tools`, `--agents` and `--layers` choose only what a new VM gets, so on a VM that exists they change nothing, and devvm warns and names `devvm tools`. Layers aren't shared tools, so `devvm tools` can't add or take out a layer such as `docker` or `nix`. A VM gets its layers when devvm makes it, so `devvm layer add` and `devvm layer rm` change them by making the VM again, after asking ([adding layers to a VM](images.md#adding-layers-to-a-vm)).

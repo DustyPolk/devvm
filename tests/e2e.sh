@@ -2011,6 +2011,11 @@ check "devvm tools update: checks upstream; the newest unless the lock changed" 
   before=\$(cksum < '$lock'); out=\$(printf 'exit\n' | '$D' tools update 2>&1)
   grep -qF \"\$(m tools_newest vm=$vm | head -1)\" <<<\"\$out\" ||
     { [[ \$(cksum < '$lock') != \"\$before\" ]] && grep -qF \"\$(m tools_switch vm=$vm | head -1)\" <<<\"\$out\"; }"
+check "devvm update on a current image never makes the VM again: current, or moved to newer tools" bash -c "cd '$t2' &&
+  before=\$(cksum < '$lock'); out=\$(printf 'exit\n' | '$D' update 2>&1)
+  ! grep -qF \"\$(m vm_changed changed=base vm=$vm)\" <<<\"\$out\" && ! limactl list -q | grep -qx 'devvm-${vm: -14}-old' &&
+  { grep -qF \"\$(m vm_current image=base vm=$vm)\" <<<\"\$out\" ||
+    { [[ \$(cksum < '$lock') != \"\$before\" ]] && grep -qF \"\$(m tools_switch vm=$vm | head -1)\" <<<\"\$out\"; }; }"
 check "devvm tools rm takes node out of the VM" bash -c "cd '$t2' && printf 'exit\n' | '$D' tools rm node >'$work/last.log' 2>&1 &&
   vm_state '$(vmdir "$vm")' | grep -qx image=base && ! vm_state '$(vmdir "$vm")' | grep -q '^tools\.made\.files=.*node' &&
   ! vm_state '$(vmdir "$vm")' | grep -q '^tools\.names=.*node' &&

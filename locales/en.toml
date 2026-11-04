@@ -1967,7 +1967,7 @@ other = "The shared tools' build wrote {{.file}} as something other than a plain
 
 [newer_tools]
 description = "tools lists tools and versions: claude 2.1.295, codex 0.162.0"
-other = "There are newer shared tools: {{.tools}}. Run devvm tools update to move this VM to them."
+other = "There are newer shared tools: {{.tools}}. Run devvm update to move this VM to them."
 
 [vm_lacks]
 description = "has is a space-separated list of the VM's shared tools, or none"

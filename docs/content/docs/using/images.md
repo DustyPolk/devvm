@@ -114,7 +114,7 @@ devvm builds each tool version once and mounts it read-only into every VM that h
 
 devvm doesn't pin the tools' versions, because agents like Claude Code release several times a week. It follows the newest release of each tool, and Node 24 for node. The first time a tool is needed, devvm looks up its newest release, which needs this machine to be online once. When it makes a new VM, devvm also checks for newer releases if its last check was more than a day ago, and `DEVVM_NO_TOOL_CHECK=1` turns that check off.
 
-A new VM gets the tools chosen for it when devvm makes it, and keeps those versions. `devvm tools` shows them, and in a terminal lets you check and uncheck them. `devvm tools add`, `devvm tools rm` and `devvm tools update` change them too, and none of these change the VM's disk ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
+A new VM gets the tools chosen for it when devvm makes it, and keeps those versions. `devvm tools` shows them, and in a terminal lets you check and uncheck them. `devvm tools add`, `devvm tools rm` and `devvm tools update` change them too, as does the first step of `devvm update`, and changing them never changes the VM's disk ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
 
 ## What a new VM gets
 
@@ -164,25 +164,27 @@ When you edit a layer's script, devvm builds that layer again the next time it's
 
 `devvm rebuild IMAGE` builds an image again from its parent as the parent is now, where IMAGE is base or a stack of layers, such as `docker` or `foo+bar`. That's how you get the newest packages that a script installs without a pin. devvm also builds the images on it again, on the new image, the next time they're needed. When there are such images, devvm lists them first and, in a terminal, asks before it goes on. After the build, devvm deletes the old images that no VM uses.
 
-Shared tools aren't images, so `devvm rebuild` refuses a shared tool's name, and `devvm tools update` gets their newer versions. [Rebuilding](../internals/images.md#rebuilding) explains how devvm tells which images to build again.
+Shared tools aren't images, so `devvm rebuild` refuses a shared tool's name, and `devvm update` and `devvm tools update` get their newer versions. [Rebuilding](../internals/images.md#rebuilding) explains how devvm tells which images to build again.
 
 ## Outdated VMs
 
 A VM keeps the image it was made from. When that image, or one it's built on, changes after an edited script, another choice of base's features or a rebuild, the VM is outdated. devvm then warns on each launch, names the images that changed and `devvm update`, and leaves the VM as it is.
 
-`devvm update` makes this folder's VM again from its own image as it builds now, with the same layers, in the same way that `devvm layer add` makes a VM again with more layers. devvm builds the image first, then gives the VM a new disk copied from it, and keeps its home folder, the project folder and its settings ([what a VM made again keeps](#what-a-vm-made-again-keeps)). Everything else on its disk is lost, such as the packages you installed with apt and Docker's images, so in a terminal devvm names the images that changed and asks first, with no as the default. Without a terminal, it refuses unless you give `--force`.
+`devvm update` brings this folder's VM up to date in two steps. First it moves the VM to the newest shared tools, as `devvm tools update` does, and that needs no question, because the shared tools aren't part of the image and nothing on the VM's disk changes ([adding and removing tools](toolchains.md#adding-and-removing-tools)). Then, when the VM is outdated, devvm makes it again from its own image as it builds now, with the same layers, in the same way that `devvm layer add` makes a VM again with more layers. devvm builds the image first, then gives the VM a new disk copied from it, and keeps its home folder, the project folder and its settings ([what a VM made again keeps](#what-a-vm-made-again-keeps)). Everything else on its disk is lost, such as the packages you installed with apt and Docker's images, so in a terminal devvm names the images that changed and asks first, with no as the default.
 
 ```sh
-devvm update               # make this folder's VM again from its image's new build, after asking
+devvm update               # move the VM to the newest shared tools, and to its image's new build after asking
 devvm update --force       # the same without asking, as a script must
 devvm update --clean-home  # the same, with the new image's home folder
 ```
 
-When nothing the VM was made from has changed, devvm says that the VM is current and changes nothing. To make a current VM again with the newest packages that a script installs without a pin, run `devvm rebuild` on its image first, which makes the VM outdated, then `devvm update` ([rebuilding](#rebuilding)). `devvm update` takes the same flags as `devvm layer add`, and it refuses the same VMs, before it changes anything: a `--clone` VM, one whose creation didn't finish, and one whose backend can't run its layers. It exports the agents' history first unless you give `--no-export`, and `--clean-home` gives the VM the new image's home folder instead of its own. In a subfolder of a folder with a VM, devvm asks in a terminal whether to make that folder's VM again, and refuses without one. The steps, and what happens when one fails, are those of [adding layers to a VM](#adding-layers-to-a-vm).
+When only the shared tools are newer, devvm moves the VM to them and opens a shell in it without asking, because newer tools don't need the VM made again. When you answer no, devvm keeps the VM with any newer shared tools it moved to, and opens a shell in it if there were some. Without a terminal, devvm refuses an outdated VM unless you give `--force`, and it refuses before it changes anything, the VM's shared tools included.
+
+When the VM has the newest shared tools and nothing it was made from has changed, devvm says that the VM is current and changes nothing. To make a current VM again with the newest packages that a script installs without a pin, run `devvm rebuild` on its image first, which makes the VM outdated, then `devvm update` ([rebuilding](#rebuilding)). `devvm update` takes the same flags as `devvm layer add`, and it refuses the same VMs, before it changes anything: a `--clone` VM, one whose creation didn't finish, and one whose backend can't run its layers. It exports the agents' history first unless you give `--no-export`, and `--clean-home` gives the VM the new image's home folder instead of its own. In a subfolder of a folder with a VM, devvm asks in a terminal whether to make that folder's VM again, and refuses without one. The steps, and what happens when one fails, are those of [adding layers to a VM](#adding-layers-to-a-vm).
 
 For a VM made with `--from`, devvm tells whether the VM is outdated from the container image's digest that it last recorded, without looking anything up. When devvm makes the VM again, the build looks up the digest as every build does, so a tag that has moved since gives the VM the container image's newer version too, and a pinned digest stays as it is ([`--from`](from.md)).
 
-`devvm update` changes only the VM's image. Its shared tools aren't part of the image, and `devvm tools update` moves the VM to newer ones without making it again ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
+`devvm tools update` moves the VM to newer shared tools alone, and it never makes the VM again, even when the VM is outdated ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
 
 ## Listing images
 
