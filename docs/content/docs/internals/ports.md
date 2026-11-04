@@ -38,13 +38,13 @@ How the forwarder logs in, and when it ends, is up to the backend, as Lima's [Po
 
 ## Its process and files
 
-The forwarder runs as a hidden devvm command, one process for each VM. devvm starts it after each start of the VM and again with the new ports when you change a running VM's ports, and `devvm stop` stops it. devvm keeps which ports a VM forwards in its own record for the VM, so `devvm ports` changes that record and never the backend's config. That record is in the VM's `backend/` folder, `~/.local/share/devvm/vms/<hash>/backend/`, and the forwarder's files are beside it: its log `ports.log`, and `ports.pid`, `ports.status`, `ports.known_hosts` and `ports.lock`. Its control socket is `~/.local/share/devvm/run/lima-<hash>.ctl`, named by a hash of the VM's name, outside the VM's folder, because a unix socket's path is at most 104 characters.
+The forwarder runs as a hidden devvm command, one process for each VM. devvm starts it after each start of the VM and again with the new ports when you change a running VM's ports, and `devvm stop` stops it. Which ports a VM forwards is in the VM's state, and devvm passes them to the backend at each start and when you change a running VM's ports, so `devvm ports` changes the state and never the backend's config. The forwarder's files are in the VM's `backend/` folder, `~/.local/share/devvm/vms/<hash>/backend/`: its log `ports.log`, and `ports.pid`, `ports.status`, `ports.known_hosts` and `ports.lock`. Its control socket is `~/.local/share/devvm/run/lima-<hash>.ctl`, named by a hash of the VM's name, outside the VM's folder, because a unix socket's path is at most 104 characters.
 
-devvm reads every list of ports the same way, whether it comes from `--ports`, the VM's state or devvm's record. Each entry is a port from 1 to 65535 or a range of them, such as `8000-8010`. When the VM's state holds a list that devvm can't read this way, such as a file edited by hand, the VM doesn't start and devvm names the value it couldn't read with `port_invalid`, so a bad entry never becomes a port the VM didn't ask for.
+devvm reads every list of ports the same way, whether it comes from `--ports`, `devvm ports` or the VM's state. Each entry is a port from 1 to 65535 or a range of them, such as `8000-8010`. When the VM's state holds a list that devvm can't read this way, such as a file edited by hand, the VM doesn't start and devvm names the value it couldn't read with `port_invalid`, so a bad entry never becomes a port the VM didn't ask for.
 
-| Backend | Process | Ports record | Log |
-| --- | --- | --- | --- |
-| Lima | `devvm _lima-ports` | `vms/<hash>/backend/ports`, which holds `all`, `none` or a list | `vms/<hash>/backend/ports.log` |
+| Backend | Process | Log |
+| --- | --- | --- |
+| Lima | `devvm _lima-ports` | `vms/<hash>/backend/ports.log` |
 
 The paths in the table are in devvm's data folder, `~/.local/share/devvm`.
 

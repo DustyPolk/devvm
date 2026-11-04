@@ -37,7 +37,7 @@ func TestUpSSHAgent(t *testing.T) {
 		if want := map[bool][]string{true: {"-l"}, false: nil}[on]; !slices.Equal(adds, want) {
 			t.Errorf("--ssh-agent %v: ssh-add calls %q", on, adds)
 		}
-		if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.AgentSocket != "" {
+		if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.AgentSocket != "" {
 			t.Errorf("--ssh-agent %v: started with agent %q", on, c.AgentSocket)
 		}
 	}
@@ -67,7 +67,7 @@ func TestOpenAgentNetworkPolicy(t *testing.T) {
 	if start < 0 {
 		t.Fatalf("%s didn't start: %v", vm, calls)
 	}
-	if c, _ := calls[start].Args[1].(backend.Confinement); c.Net != backend.NetProxy || c.AgentSocket != e.Agent.Socket() || c.ProxyPassword == "" || c.NoAgent {
+	if c, _ := calls[start].Args[2].(backend.Confinement); c.Net != backend.NetProxy || c.AgentSocket != e.Agent.Socket() || c.ProxyPassword == "" || c.NoAgent {
 		t.Errorf("started with %+v, want the proxy and agent %q", c, e.Agent.Socket())
 	}
 	// Off: the proxy's confinement says no agent too.
@@ -80,7 +80,7 @@ func TestOpenAgentNetworkPolicy(t *testing.T) {
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetProxy || c.AgentSocket != "" || !c.NoAgent {
+	if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.Net != backend.NetProxy || c.AgentSocket != "" || !c.NoAgent {
 		t.Errorf("off: started with %+v", c)
 	}
 }
@@ -106,12 +106,15 @@ func TestOpenAgent(t *testing.T) {
 		t.Fatal(msg.NamesOf(err))
 	}
 	calls := f.Calls()[before:]
-	setAt := slices.IndexFunc(calls, func(c backendtest.Call) bool { return c.Method == "SetAgentForwarding" })
 	start := slices.IndexFunc(calls, func(c backendtest.Call) bool { return c.Method == "Start" })
-	if setAt < 0 || start < setAt || calls[setAt].Args[1] != true {
+	if start < 0 {
 		t.Fatalf("calls = %v", calls)
 	}
-	if c, _ := calls[start].Args[1].(backend.Confinement); c.AgentSocket != e.Agent.Socket() {
+	// Its start turns forwarding on.
+	if w, _ := calls[start].Args[1].(backend.Want); !w.AgentForwarding || !f.Instances[vm].AgentForwarding {
+		t.Errorf("started wanting %+v", w)
+	}
+	if c, _ := calls[start].Args[2].(backend.Confinement); c.AgentSocket != e.Agent.Socket() {
 		t.Errorf("started with agent %q, want %q", c.AgentSocket, e.Agent.Socket())
 	}
 	if !slices.Contains(agent.calls, "ssh-add -l") {
@@ -136,7 +139,7 @@ func TestOpenAgent(t *testing.T) {
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if slices.Contains(f.Methods()[before:], "SetAgentForwarding") || !f.Instances[vm].AgentForwarding {
+	if slices.Contains(f.Methods()[before:], "Start") || !f.Instances[vm].AgentForwarding {
 		t.Errorf("running, turned off: calls %q", f.Methods()[before:])
 	}
 	// devvm's connections keep the agent it started with.
@@ -207,7 +210,7 @@ func TestSetSSHAgent(t *testing.T) {
 	if !slices.Contains(agent.calls, "ssh-add -l") {
 		t.Errorf("devvm's agent wasn't started: %q", agent.calls)
 	}
-	if slices.Contains(f.Methods()[before:], "SetAgentForwarding") {
+	if slices.Contains(f.Methods()[before:], "Start") {
 		t.Errorf("calls = %q", f.Methods()[before:])
 	}
 	if err := s.SetSSHAgent(t.Context(), sshagent.Devvm); err != nil {
@@ -268,7 +271,7 @@ func TestAgentToggleEmulated(t *testing.T) {
 	if !slices.Contains(warned.Names(), "backend_unreviewed_used backend=fake feature=agent-toggle vm="+vm) || get(st, KeyAgentToggle) != "on" {
 		t.Errorf("warned %q, state %q", warned.Names(), get(st, KeyAgentToggle))
 	}
-	if c, _ := call(f, "Start").Args[1].(backend.Confinement); !c.NoAgent || c.AgentSocket != "" {
+	if c, _ := call(f, "Start").Args[2].(backend.Confinement); !c.NoAgent || c.AgentSocket != "" {
 		t.Errorf("off: started with %+v", c)
 	}
 	// devvm's own, from its next start.
@@ -278,7 +281,7 @@ func TestAgentToggleEmulated(t *testing.T) {
 	if err := (Launch{e}).Restart(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.NoAgent || c.AgentSocket != e.Agent.Socket() || !f.Instances[vm].AgentForwarding {
+	if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.NoAgent || c.AgentSocket != e.Agent.Socket() || !f.Instances[vm].AgentForwarding {
 		t.Errorf("devvm: started with %+v", c)
 	}
 	// No longer let through: it doesn't start.

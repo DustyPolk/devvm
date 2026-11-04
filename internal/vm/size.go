@@ -156,18 +156,13 @@ func SizeText(s backend.Size) string {
 	return strings.Join(f, " ")
 }
 
-// applySize makes a stopped VM's size what its state asks for, where it
-// differs (disks only grow). A running VM's waits for its next start.
-func (e *Env) applySize(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
-	edit := pendingSize(st, in.Size)
-	if edit == (backend.Size{}) {
-		return nil
-	}
-	if in.Status == backend.StatusRunning {
+// warnSize warns that a running VM gets the size its state asks for, where
+// it differs (disks only grow), at its next start: each start of a
+// stopped VM gives it that size (Env.start's Want).
+func (e *Env) warnSize(st *state.VM, in backend.Instance) {
+	if in.Status == backend.StatusRunning && pendingSize(st, in.Size) != (backend.Size{}) {
 		e.Warn(msg.SizeNextStart(st.Name()))
-		return nil
 	}
-	return b.SetSize(ctx, st.Name(), edit)
 }
 
 // SizeShown is a size as devvm size shows it: the folder's VM's, or with
@@ -242,9 +237,9 @@ func (e Settings) ShowSize(ctx context.Context, global bool) (SizeShown, error) 
 	return s, nil
 }
 
-// SetSize changes the folder's VM's size to what s sets: at once when it's
-// stopped; when it runs, after a restart the user agrees to (restartOr),
-// else from its next start. A disk only grows. With
+// SetSize changes the folder's VM's size to what s sets: from its next
+// start when it's stopped; when it runs, after a restart the user agrees
+// to (restartOr), else from its next start. A disk only grows. With
 // global, it changes the size new VMs get instead.
 func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	s, err := s.Parse()
@@ -281,17 +276,14 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	if err != nil {
 		return err
 	}
-	if in.Status == backend.StatusRunning && pendingSize(st, in.Size) != (backend.Size{}) {
-		return e.restartOr(ctx, vm, e.Warn, msg.SizeNextStart(vm))
-	}
-	if err := e.applySize(ctx, b, st, in); err != nil {
-		return err
-	}
-	if in, err = b.Inspect(ctx, vm); err != nil {
-		return err
-	}
-	if pendingSize(st, in.Size) == (backend.Size{}) {
+	pending := pendingSize(st, in.Size)
+	switch {
+	case pending == (backend.Size{}):
 		e.Info(msg.VMSize(SizeText(in.Size), vm))
+	case in.Status == backend.StatusRunning:
+		return e.restartOr(ctx, vm, e.Warn, msg.SizeNextStart(vm))
+	default:
+		e.Info(msg.SizePending(SizeText(pending), vm))
 	}
 	return nil
 }

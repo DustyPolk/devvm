@@ -88,29 +88,38 @@ func readDir(dir string) []os.DirEntry {
 // comma in its path is left out on every backend, with a warning: Lima
 // splits mount options on commas.
 func (e Launch) AgentMounts(tools []string) []string {
-	var dirs []string
+	dirs, comma := agentMounts(e.Dirs.Home, tools)
+	for _, p := range comma {
+		e.Warn(msg.AgentDirComma(p))
+	}
+	return dirs
+}
+
+// agentMounts returns the host folders under home a VM with these shared
+// tools mounts (AgentMounts), and those it leaves out for a comma.
+func agentMounts(home string, tools []string) (dirs, comma []string) {
 	for _, a := range image.AgentsOf(tools) {
-		for _, rel := range agentDirs(e.Dirs.Home, a) {
-			p := filepath.Join(e.Dirs.Home, rel)
+		for _, rel := range agentDirs(home, a) {
+			p := filepath.Join(home, rel)
 			if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
 				continue
 			}
 			if strings.Contains(p, ",") {
-				e.Warn(msg.AgentDirComma(p))
+				comma = append(comma, p)
 				continue
 			}
 			dirs = append(dirs, p)
 		}
 	}
-	return dirs
+	return dirs, comma
 }
 
-// UpdateAgentDirs makes an existing VM's agent folder mounts match the
-// host's folders, which can appear or go after it's made. A backend
-// changes mounts only while a VM is stopped: a stopped VM is changed at
-// once, a running one after the user agrees to a restart (restartNow:
-// devvm stops it, and the caller starts it again), else at its next
-// start.
+// UpdateAgentDirs says how an existing VM's agent folder mounts change to
+// match the host's folders, which can appear or go after it's made. Each
+// start of a stopped VM mounts the host's (Env.start): a stopped VM's
+// change as its launch starts it, a running one's after the user agrees
+// to a restart (restartNow: devvm stops it, and the caller starts it
+// again), else at its next start.
 func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM) error {
 	vm := st.Name()
 	in, err := b.Inspect(ctx, vm)
@@ -137,9 +146,6 @@ func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *stat
 		if err := b.Stop(ctx, vm); err != nil {
 			return err
 		}
-	}
-	if err := b.SetAgentDirs(ctx, vm, want); err != nil {
-		return err
 	}
 	e.Info(msg.MountsUpdated(vm))
 	return nil

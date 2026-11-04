@@ -93,7 +93,6 @@ func TestUpdateAgentDirs(t *testing.T) {
 		noInput bool
 		have    []string
 		methods []string
-		set     []string
 		printed []string
 	}{
 		{
@@ -102,7 +101,7 @@ func TestUpdateAgentDirs(t *testing.T) {
 		},
 		{
 			name: "a stopped VM gets new folders and loses gone ones", tools: "node claude", status: backend.StatusStopped,
-			have: []string{skills, commands}, methods: []string{"Inspect", "SetAgentDirs"}, set: []string{skills, mine},
+			have: []string{skills, commands}, methods: []string{"Inspect"},
 			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "agent_dirs_removed dirs=" + commands + " vm=" + vm, "mounts_updated vm=" + vm},
 		},
 		{
@@ -115,12 +114,12 @@ func TestUpdateAgentDirs(t *testing.T) {
 		},
 		{
 			name: "a running VM restarts once the user agrees", tools: "node claude", status: backend.StatusRunning, tty: true,
-			have: []string{skills}, methods: []string{"Inspect", "Stop", "SetAgentDirs"}, set: []string{skills, mine},
+			have: []string{skills}, methods: []string{"Inspect", "Stop"},
 			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "asked restart_now vm=" + vm, "mounts_updated vm=" + vm},
 		},
 		{
 			name: "a VM without agents drops leftover agent mounts", tools: "node", status: backend.StatusStopped,
-			have: []string{filepath.Join(home, ".codex/prompts")}, methods: []string{"Inspect", "SetAgentDirs"},
+			have: []string{filepath.Join(home, ".codex/prompts")}, methods: []string{"Inspect"},
 			printed: []string{"agent_dirs_removed dirs=" + filepath.Join(home, ".codex/prompts") + " vm=" + vm, "mounts_updated vm=" + vm},
 		},
 	} {
@@ -139,11 +138,6 @@ func TestUpdateAgentDirs(t *testing.T) {
 			}
 			if ms := f.Methods(); !slices.Equal(ms, tc.methods) {
 				t.Errorf("calls = %q, want %q", ms, tc.methods)
-			}
-			if c := call(f, "SetAgentDirs"); c.Method != "" {
-				if dirs, _ := c.Args[1].([]string); !slices.Equal(dirs, tc.set) {
-					t.Errorf("SetAgentDirs %q, want %q", dirs, tc.set)
-				}
 			}
 			if !slices.Equal(*got, tc.printed) {
 				t.Errorf("printed %q, want %q", *got, tc.printed)

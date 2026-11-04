@@ -1,5 +1,5 @@
-# devvm size: a folder's VM's CPUs, memory and disk, changed at once for a
-# stopped VM, from its next start for a running one; with -g, the size new
+# devvm size: a folder's VM's CPUs, memory and disk, changed from its next
+# start, with a restart offered for a running one; with -g, the size new
 # VMs get (config.toml's, else settings.json's) and where each came from.
 
 # No VM yet.
@@ -102,13 +102,19 @@ stderr '^devvm: too_many_cpus have=8 want=9999$'
 ! exec devvm size --cpus 1.5
 stderr '^devvm: cpus_not_number flag=--cpus value="1\.5"$'
 
-# Stopped: changed at once, only what differs.
+# Stopped: saved, and changed at its next start, only what differs, in
+# that start's one edit.
 exec limactl stop $WEB
 stub_reset
 exec devvm size --cpus 1 --memory 8 --disk 120GiB
-stdout '^==> vm_size size=cpus=1 memory=8GiB disk=120GiB vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> size_pending size=cpus=1 disk=120GiB vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
-stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --cpus 1 --disk 120$'
+! stdout 'limactl edit'
+stub_reset
+exec devvm
+stub_calls
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --cpus 1 --disk 120( |$)'
+! stdout '(?s)limactl edit --tty=false devvm-web.*limactl edit --tty=false devvm-web'
 exec devvm size
 stdout '\Acpus=1 memory=8GiB disk=120GiB\n\z'
 ! stderr .

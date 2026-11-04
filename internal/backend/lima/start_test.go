@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // envOf returns the value the call's environment gives key, and whether
@@ -89,7 +90,7 @@ func TestStartConfined(t *testing.T) {
 			l, f, _ := testLima(t, tc.os)
 			t.Setenv(GuestFwdEnv, "left over")
 			yaml := stoppedWithYAML(t, l, f)
-			if err := l.Start(t.Context(), "v", tc.c); err != nil {
+			if err := l.start(t.Context(), "v", nil, tc.c); err != nil {
 				t.Fatal(err)
 			}
 			if edits := editSets(f); !slices.Equal(edits, tc.edits) {
@@ -330,7 +331,7 @@ func TestStartEditsOnlyWhatDiffers(t *testing.T) {
 	if err := os.WriteFile(l.haPIDFile("v"), []byte("1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.Start(t.Context(), "v", c); err != nil {
+	if err := l.start(t.Context(), "v", nil, c); err != nil {
 		t.Fatal(err)
 	}
 	if slices.ContainsFunc(f.lines(), func(l string) bool { return strings.HasPrefix(l, "limactl edit") }) {
@@ -338,7 +339,7 @@ func TestStartEditsOnlyWhatDiffers(t *testing.T) {
 	}
 	// Started without the proxy, the proxy's settings go.
 	f.calls = nil
-	if err := l.Start(t.Context(), "v", backend.Confinement{SSHPort: 2222}); err != nil {
+	if err := l.start(t.Context(), "v", nil, backend.Confinement{SSHPort: 2222}); err != nil {
 		t.Fatal(err)
 	}
 	want := "limactl edit --tty=false v --set del(.env) --set .propagateProxyEnv=true --set del(.hostResolver) --set del(.dns)"
@@ -347,11 +348,58 @@ func TestStartEditsOnlyWhatDiffers(t *testing.T) {
 	}
 }
 
-// A running VM is left as it is.
+// What a start's Want changes goes in the same edit as its
+// confinement's: one edit, one set of new host keys.
+func TestStartWantInOneEdit(t *testing.T) {
+	l, f, _ := testLima(t, "linux")
+	c := backend.Confinement{Net: backend.NetProxy, ProxyPort: 23456, ProxyPassword: "pw", SSHPort: 2222}
+	u := l.proxyURL(c)
+	matching := `"ssh":{"localPort":2222,"forwardAgent":false},"propagateProxyEnv":false,"portForwards":` + yqJSON(noForwards()) + `,` +
+		`"hostResolver":{"enabled":false},"dns":["127.0.0.1"],"env":{"HTTPS_PROXY":"` + u + `","HTTP_PROXY":"` + u + `",` +
+		`"http_proxy":"` + u + `","https_proxy":"` + u + `"}`
+	f.out["limactl list --json"] = `{"name":"v","status":"Stopped","cpus":4,"memory":8589934592,"disk":107374182400,"config":{` + matching + `}}`
+	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.haPIDFile("v"), []byte("1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w := backend.Want{Size: backend.Size{CPUs: 6, MemoryGiB: 8}, AgentForwarding: true}
+	if err := l.Start(t.Context(), "v", w, c); err != nil {
+		t.Fatal(err)
+	}
+	var edits []string
+	for _, line := range f.lines() {
+		if strings.HasPrefix(line, "limactl edit") {
+			edits = append(edits, line)
+		}
+	}
+	if want := []string{"limactl edit --tty=false v --cpus 6 --set .ssh.forwardAgent=true"}; !slices.Equal(edits, want) {
+		t.Errorf("edits %q, want %q", edits, want)
+	}
+	// Without network policy, both in one edit too.
+	f.calls = nil
+	w.Size = backend.Size{DiskGiB: 120}
+	if err := l.Start(t.Context(), "v", w, backend.Confinement{SSHPort: 2222}); err != nil {
+		t.Fatal(err)
+	}
+	want := "limactl edit --tty=false v --disk 120 --set .ssh.forwardAgent=true --set del(.env) --set .propagateProxyEnv=true --set del(.hostResolver) --set del(.dns)"
+	if got := f.lines(); len(got) == 0 || got[0] != want || strings.Count(strings.Join(got, "\n"), "limactl edit") != 1 {
+		t.Errorf("ran %q, want %q first, alone", got, want)
+	}
+	// A smaller disk: refused before anything runs.
+	f.calls = nil
+	w.Size = backend.Size{DiskGiB: 50}
+	if err := l.Start(t.Context(), "v", w, c); msg.NamesOf(err) != "disk_shrink have=100 vm=v want=50" || len(f.lines()) > 0 {
+		t.Errorf("a smaller disk: %v, ran %q", err, f.lines())
+	}
+}
+
+// A running VM is left as it is, its Want and confinement with it.
 func TestStartLeavesARunningVM(t *testing.T) {
 	l, f, _ := testLima(t, "darwin")
 	f.out["limactl list --json"] = `{"name":"v","status":"Running"}`
-	if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy}); err != nil {
+	if err := l.Start(t.Context(), "v", backend.Want{Size: backend.Size{CPUs: 6}, AgentDirs: []string{"/h/.claude"}}, backend.Confinement{Net: backend.NetProxy}); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.lines(); len(got) > 0 {
@@ -438,7 +486,8 @@ func TestProfileAgent(t *testing.T) {
 			}
 			return ""
 		}
-		f.out["limactl list --json"] = `{"name":"v","status":"Stopped","config":{"ssh":{"forwardAgent":` + map[bool]string{true: "true", false: "false"}[tc.forwarding] + `}}}`
+		// Its Want's forwarding, which its start edits in, not its config's.
+		f.out["limactl list --json"] = `{"name":"v","status":"Stopped","config":{"ssh":{"forwardAgent":` + map[bool]string{true: "false", false: "true"}[tc.forwarding] + `}}}`
 		if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -446,7 +495,8 @@ func TestProfileAgent(t *testing.T) {
 			t.Fatal(err)
 		}
 		editWritesYAML(t, l, f)
-		if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyPassword: "pw", SSHPort: 2, AgentSocket: tc.socket}); err != nil {
+		w := backend.Want{AgentForwarding: tc.forwarding}
+		if err := l.Start(t.Context(), "v", w, backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyPassword: "pw", SSHPort: 2, AgentSocket: tc.socket}); err != nil {
 			t.Fatal(err)
 		}
 		b, err := os.ReadFile(l.Dirs.VM("v").Profile())
@@ -487,7 +537,7 @@ func TestDegradedStart(t *testing.T) {
 	vm := "devvm-img-0123456789ab"
 	stubs.Write(t, "instances", vm+" Stopped\n")
 	stubs.Write(t, "start-fails", "")
-	if err := l.Start(t.Context(), vm, backend.Confinement{}); err != nil {
+	if err := l.start(t.Context(), vm, nil, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"started_with_warnings vm=" + vm}; !slices.Equal(warned.Names(), want) {
@@ -496,7 +546,7 @@ func TestDegradedStart(t *testing.T) {
 	stubs.Write(t, "instances", vm+" Stopped\n")
 	stubs.Write(t, "shell-hangs", "")
 	l.SSHTimeout = 200 * time.Millisecond
-	err := l.Start(t.Context(), vm, backend.Confinement{})
+	err := l.start(t.Context(), vm, nil, backend.Confinement{})
 	le, ok := errors.AsType[*backend.LoggedError](err)
 	if !ok || le.Msg.Names() != "start_no_ssh console="+filepath.Join(l.Dirs.LimaVM(vm), "serial*.log")+" vm="+vm {
 		t.Errorf("no ssh: %v", err)
@@ -507,7 +557,7 @@ func TestDegradedStart(t *testing.T) {
 	// Not running after a failed start: it failed.
 	f := &fakeRunner{out: map[string]string{"limactl list --json": `{"name":"v","status":"Stopped"}`}, fail: []string{"limactl start"}}
 	l.Runner = f
-	err = l.Start(t.Context(), "v", backend.Confinement{})
+	err = l.start(t.Context(), "v", nil, backend.Confinement{})
 	if le, ok := errors.AsType[*backend.LoggedError](err); !ok || le.Msg.ID() != "start_failed" {
 		t.Errorf("a failed start: %v", err)
 	}
@@ -527,7 +577,7 @@ func TestConfined(t *testing.T) {
 		t.Fatal(err)
 	}
 	editWritesYAML(t, l, f)
-	if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyPassword: "pw", SSHPort: 2}); err != nil {
+	if err := l.start(t.Context(), "v", nil, backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyPassword: "pw", SSHPort: 2}); err != nil {
 		t.Fatal(err)
 	}
 	if ok, err := l.Confined(t.Context(), "v"); !ok || err != nil {
@@ -544,7 +594,7 @@ func TestConfined(t *testing.T) {
 	if err := os.WriteFile(l.haPIDFile("v"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.Start(t.Context(), "v", backend.Confinement{Net: backend.NetDirect}); err != nil {
+	if err := l.start(t.Context(), "v", nil, backend.Confinement{Net: backend.NetDirect}); err != nil {
 		t.Fatal(err)
 	}
 	if ok, err := l.Confined(t.Context(), "v"); ok || err != nil {

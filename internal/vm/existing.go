@@ -124,8 +124,9 @@ func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, erro
 // startChecked takes a VM that exists, made for this folder, through
 // what every start of it by devvm does, a launch's or a command's that
 // runs in it: .git checked (and on Linux, set-id files) unless it's a
-// --clone VM, which mounts neither; a stopped VM's size and SSH agent
-// forwarding made what its state asks for; the user's agent checked for
+// --clone VM, which mounts neither; a running VM's size and SSH agent
+// forwarding warned about where they differ from what its state asks for
+// (a stopped VM's start makes them so); the user's agent checked for
 // keys when the VM forwards it; then it's started if it's stopped and
 // its network policy checked (run). It returns the confinement the VM
 // runs with.
@@ -139,10 +140,8 @@ func (e Launch) startChecked(ctx context.Context, t *found) (backend.Confinement
 	if err := checkGit(ctx, e.Env, t, running); err != nil {
 		return backend.Confinement{}, err
 	}
-	if err := e.applySize(ctx, b, st, in); err != nil {
-		return backend.Confinement{}, err
-	}
-	if err := e.applyAgent(ctx, b, st, in); err != nil {
+	e.warnSize(st, in)
+	if err := e.checkAgentForwarding(b, st, in); err != nil {
 		return backend.Confinement{}, err
 	}
 	if sshagent.Mode(st) == sshagent.On {
@@ -176,10 +175,11 @@ func (e Launch) warnIgnored(o Options, vm string) {
 	}
 }
 
-// applyAgent makes a stopped VM's backend forward an SSH agent when its
-// mode says it does, and not otherwise. A running VM's waits for its next
-// start.
-func (e Launch) applyAgent(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) error {
+// checkAgentForwarding checks that the VM's backend can forward an SSH
+// agent when its mode says it does, and not otherwise, which each start
+// of a stopped VM makes it do (Env.start's Want): turning it on or off
+// needs agent-toggle, and a running VM's waits for its next start.
+func (e Launch) checkAgentForwarding(b backend.Backend, st *state.VM, in backend.Instance) error {
 	want := sshagent.Forwards(sshagent.Mode(st))
 	if want {
 		if err := e.Registry.Require(b, st.Name(), backend.FeatureAgentForwarding); err != nil {
@@ -197,9 +197,8 @@ func (e Launch) applyAgent(ctx context.Context, b backend.Backend, st *state.VM,
 	}
 	if in.Status == backend.StatusRunning {
 		e.Warn(msg.AgentNextStart(st.Name()))
-		return nil
 	}
-	return b.SetAgentForwarding(ctx, st.Name(), want)
+	return nil
 }
 
 // run starts the VM if it's stopped, confined as its state says, then

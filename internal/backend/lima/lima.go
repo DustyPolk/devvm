@@ -305,15 +305,23 @@ func (l *Lima) CreateVM(ctx context.Context, image string, spec backend.VMSpec) 
 	if err := l.Runner.Run(ctx, msg.Creating(vm), l.limactl(ctx, args...)); err != nil {
 		return backend.Logged(msg.VMCreateFailed(vm))
 	}
-	if err := l.Forwards.write(vm, spec.Ports); err != nil {
-		return err
-	}
 	if l.overlays() {
 		if err := l.overlay(ctx, src, vm); err != nil {
 			return err
 		}
 	}
-	return l.SetSize(ctx, vm, spec.Size)
+	// Its size, which the clone has from its image, where it differs:
+	// what's left of the spec's (wantEdits), so its first start edits
+	// nothing of it.
+	in, err := l.inspect(ctx, vm)
+	if err != nil {
+		return err
+	}
+	opts, err := wantEdits(in, spec.Want)
+	if err != nil || len(opts) == 0 {
+		return err
+	}
+	return l.edit(ctx, vm, opts...)
 }
 
 // Stop stops a VM; a stopped one is left as it is. One Lima reports as
@@ -475,56 +483,26 @@ func (l *Lima) SSH(ctx context.Context, vm string) (backend.SSHTarget, error) {
 	return t, s.Err()
 }
 
-// stopped returns a VM that must be stopped to be changed.
-func (l *Lima) stopped(ctx context.Context, vm string) (instance, error) {
-	in, err := l.inspect(ctx, vm)
-	if err != nil {
-		return instance{}, err
-	}
-	if backend.Status(in.Status) != backend.StatusStopped {
-		return instance{}, msg.VMNotStopped(vm)
-	}
-	return in, nil
-}
-
-// SetSize changes a stopped VM's size where it differs. Lima can't shrink a
-// disk, so a smaller one is refused.
-func (l *Lima) SetSize(ctx context.Context, vm string, s backend.Size) error {
-	if s == (backend.Size{}) {
-		return nil
-	}
-	in, err := l.stopped(ctx, vm)
-	if err != nil {
-		return err
+// wantEdits returns limactl edit's options that make a stopped VM (in,
+// as limactl list has it) what w wants, none where it already is, after
+// checking w (backend.Validate): its CPUs and memory where w sets them,
+// its disk where w's is larger (Lima can't shrink one), its agent folder
+// mounts, keeping its other mounts (the project folder, the tools
+// share), and its agent forwarding.
+func wantEdits(in instance, w backend.Want) ([]string, error) {
+	if err := backend.Validate(w, in.backend()); err != nil {
+		return nil, err
 	}
 	cur := in.size()
 	var opts []string
-	if s.CPUs > 0 && s.CPUs != cur.CPUs {
+	if s := w.Size; s.CPUs > 0 && s.CPUs != cur.CPUs {
 		opts = append(opts, "--cpus", strconv.Itoa(s.CPUs))
 	}
-	if s.MemoryGiB > 0 && s.MemoryGiB != cur.MemoryGiB {
+	if s := w.Size; s.MemoryGiB > 0 && s.MemoryGiB != cur.MemoryGiB {
 		opts = append(opts, "--memory", gibString(s.MemoryGiB))
 	}
-	if s.DiskGiB > 0 && s.DiskGiB < cur.DiskGiB {
-		return msg.DiskShrink(gibString(cur.DiskGiB), vm, gibString(s.DiskGiB))
-	}
-	if s.DiskGiB > cur.DiskGiB {
+	if s := w.Size; s.DiskGiB > cur.DiskGiB {
 		opts = append(opts, "--disk", gibString(s.DiskGiB))
-	}
-	if len(opts) == 0 {
-		return nil
-	}
-	return l.edit(ctx, vm, opts...)
-}
-
-func gibString(g float64) string { return strconv.FormatFloat(g, 'g', -1, 64) }
-
-// SetAgentDirs replaces a stopped VM's agent folder mounts, keeping its
-// other mounts (the project folder, the tools share).
-func (l *Lima) SetAgentDirs(ctx context.Context, vm string, dirs []string) error {
-	in, err := l.stopped(ctx, vm)
-	if err != nil {
-		return err
 	}
 	var have []string
 	var ms []mount
@@ -535,27 +513,20 @@ func (l *Lima) SetAgentDirs(ctx context.Context, vm string, dirs []string) error
 			ms = append(ms, m)
 		}
 	}
-	if slices.Equal(have, dirs) {
-		return nil
+	if !slices.Equal(have, w.AgentDirs) {
+		set, err := mountsSet(append(ms, readOnly(w.AgentDirs)...))
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, "--set", set)
 	}
-	set, err := mountsSet(append(ms, readOnly(dirs)...))
-	if err != nil {
-		return err
+	if in.backend().AgentForwarding != w.AgentForwarding {
+		opts = append(opts, "--set", ".ssh.forwardAgent="+strconv.FormatBool(w.AgentForwarding))
 	}
-	return l.edit(ctx, vm, "--set", set)
+	return opts, nil
 }
 
-// SetAgentForwarding turns a stopped VM's ssh-agent forwarding on or off.
-func (l *Lima) SetAgentForwarding(ctx context.Context, vm string, on bool) error {
-	in, err := l.stopped(ctx, vm)
-	if err != nil {
-		return err
-	}
-	if in.backend().AgentForwarding == on {
-		return nil
-	}
-	return l.edit(ctx, vm, "--set", ".ssh.forwardAgent="+strconv.FormatBool(on))
-}
+func gibString(g float64) string { return strconv.FormatFloat(g, 'g', -1, 64) }
 
 // overlays reports whether project VMs' disks are overlays of their
 // image's: on Linux hosts, where Lima's QEMU disks are qcow2 files and a

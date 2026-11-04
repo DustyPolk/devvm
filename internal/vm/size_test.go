@@ -97,8 +97,8 @@ func TestSizeText(t *testing.T) {
 	}
 }
 
-// devvm size: a stopped VM's size changes at once, only where it differs;
-// a running one's waits, and shows as pending. A smaller disk, or a size
+// devvm size: a VM's size changes at its next start, only where it
+// differs, and shows as pending until then. A smaller disk, or a size
 // the backend can't set, is refused before the state changes. -g changes
 // the size file and keeps what it leaves unset.
 func TestSetSize(t *testing.T) {
@@ -121,7 +121,7 @@ func TestSetSize(t *testing.T) {
 	if err := s.SetSize(t.Context(), Size{CPUs: "2", Memory: "8G"}, false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if ms := f.Methods()[before:]; slices.Contains(ms, "SetSize") {
+	if ms := f.Methods()[before:]; slices.Contains(ms, "Start") || slices.Contains(ms, "Stop") {
 		t.Errorf("a running VM was changed: %q", ms)
 	}
 	if st, _ := state.ReadVM(e.Dirs, vm); get(st, KeyCPUs) != "2" || get(st, KeyMemory) != "8" {
@@ -149,18 +149,21 @@ func TestSetSize(t *testing.T) {
 	if err := f.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
+	var said msg.Recorder
+	e.Info = said.Add
 	before = len(f.Calls())
 	if err := s.SetSize(t.Context(), Size{Disk: "120"}, false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	var set []backend.Size
-	for _, c := range f.Calls()[before:] {
-		if c.Method == "SetSize" {
-			set = append(set, c.Args[1].(backend.Size))
-		}
+	if ms := f.Methods()[before:]; slices.Contains(ms, "Start") || !slices.Equal(said.Names(), []string{"size_pending size=cpus=2 disk=120GiB vm=" + vm}) {
+		t.Errorf("stopped: calls %q, said %q", ms, said.Names())
 	}
-	if len(set) != 1 || set[0] != (backend.Size{CPUs: 2, DiskGiB: 120}) {
-		t.Errorf("SetSize calls = %+v", set)
+	// Its next start gives it its size.
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if c := call(f, "Start"); c.Args[1].(backend.Want).Size != (backend.Size{CPUs: 2, MemoryGiB: 8, DiskGiB: 120}) {
+		t.Errorf("started wanting %+v", c.Args[1])
 	}
 	if got, err := shown(false); err != nil || got != "cpus=2 memory=8GiB disk=120GiB\n" {
 		t.Errorf("ShowSize = %q, %v", got, msg.NamesOf(err))

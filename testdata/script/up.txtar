@@ -39,10 +39,12 @@ exists $XDG_DATA_HOME/devvm/tools
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/hooks$'
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/config$'
 [linux] ! stdout chflags
-# The forwarder pins the host key devvm pinned; the VM forwards every port.
+# The forwarder pins the host key devvm pinned; the backend keeps no
+# record of the VM's ports.
 vm_name WEB web
-exec sh -c 'cat "$WEB_dir/backend/ports.known_hosts" "$WEB_dir/backend/ports"; grep -c "^$WEB $(cut -d" " -f2- "$WEB_dir/backend/ports.known_hosts")$" "$XDG_DATA_HOME"/devvm/known_hosts'
-stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 \S+\nall\n1\n\z'
+exec sh -c 'cat "$WEB_dir/backend/ports.known_hosts"; grep -c "^$WEB $(cut -d" " -f2- "$WEB_dir/backend/ports.known_hosts")$" "$XDG_DATA_HOME"/devvm/known_hosts'
+stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 \S+\n1\n\z'
+! exists $WEB_dir/backend/ports
 vm_state $WEB_dir/vm.json
 stdout '^version=1$'
 stdout '^id=[0-9a-f]{32}$'

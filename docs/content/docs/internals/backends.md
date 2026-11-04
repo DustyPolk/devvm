@@ -65,6 +65,14 @@ To get the feature, use a backend that has it. A VM keeps its backend, so that m
 
 Network policy is the one exception, because it's on by default, and [When a backend lacks something](../backends/_index.md#when-a-backend-lacks-something) says what devvm does instead.
 
+## What a start changes
+
+A backend makes a VM as devvm asks, and then changes it only when it starts. Each time devvm starts a stopped VM, it tells the backend what the VM's state asks for, which is its size, the agent folders on this machine, whether it forwards your SSH agent and which ports it forwards, together with how the VM is confined. The backend compares that with the VM it has and changes only what differs, so a start that changes nothing leaves the VM's config as it was. Nothing changes a stopped VM's config between starts, so `devvm size` and `devvm ssh-agent` save what you ask for in the VM's state, and the VM gets it when it next starts.
+
+A running VM is left as it is, and devvm says what changes when it next starts. The one exception is its ports, because a running VM's forwarder starts again with the new ones ([port forwarding](ports.md#its-process-and-files)). A disk can't shrink, so a start that asks for a smaller disk than the VM has fails before the backend changes anything (`disk_shrink`).
+
+Which ports a VM forwards stays in the VM's state alone, and the backend keeps only what it needs for the start it made, such as Lima's record of the hostagent it started confined ([confinement](lima.md#confinement)).
+
 ## VM names
 
 A project VM's name is `devvm-<folder>-<hash>`. The folder part is up to 20 characters of the folder's name, in lowercase, with characters other than letters and digits turned into dashes, and the hash part is 14 hex digits of a hash of the folder's path.

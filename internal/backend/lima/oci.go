@@ -122,7 +122,7 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, 
 	if err != nil {
 		return nil, err
 	}
-	if err := l.Start(ctx, OCIVM, conf); err != nil {
+	if err := l.start(ctx, OCIVM, nil, conf); err != nil {
 		return nil, err
 	}
 	if err := l.runScript(ctx, OCIVM, trust, true); err != nil {

@@ -13,14 +13,16 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strconv"
 
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// Backend runs VMs and builds their images. Methods that change a VM's
-// config (CreateVM's spec, the Set methods) take effect at its next start;
-// the Set methods need the VM stopped. Errors are messages (msg.M) where
-// the user can act on them.
+// Backend runs VMs and builds their images. A VM is made as its spec
+// wants (CreateVM), and each start of a stopped VM makes it what the
+// caller wants then (Start's Want), changing only what differs: nothing
+// changes a stopped VM's config in between. Errors are messages (msg.M)
+// where the user can act on them.
 type Backend interface {
 	// Name is the backend's name, as --backend and VM state have it: lima.
 	Name() string
@@ -60,12 +62,16 @@ type Backend interface {
 	// whenever what it makes of them does.
 	ToolFormat() string
 
-	// CreateVM makes a VM from an image, stopped.
+	// CreateVM makes a VM from an image, stopped, as spec wants it.
 	CreateVM(ctx context.Context, image string, spec VMSpec) error
-	// Start starts a VM confined as asked, and returns once it answers.
-	// A running VM is left running; its confinement is checked with
+	// Start starts a stopped VM as w wants it, confined as c says, and
+	// returns once it answers: it first changes what of w and c the VM's
+	// config doesn't have yet, and nothing else, after checking w with
+	// Validate. Its ports are forwarded as w says once it runs. A
+	// running VM is left as it is, w and c unapplied (callers say
+	// what changes at its next start); its confinement is checked with
 	// Confined.
-	Start(ctx context.Context, vm string, c Confinement) error
+	Start(ctx context.Context, vm string, w Want, c Confinement) error
 	// Confined reports whether a running VM still runs confined to
 	// devvm's proxy: started by Start with NetProxy, not some other way
 	// since.
@@ -98,19 +104,12 @@ type Backend interface {
 	// SSH says how ssh and editors reach a running VM.
 	SSH(ctx context.Context, vm string) (SSHTarget, error)
 
-	// SetSize changes a stopped VM's size; zero fields are left as they are.
-	SetSize(ctx context.Context, vm string, s Size) error
-	// SetPorts changes which of a VM's ports are forwarded: a stopped
-	// VM's from its next start, a running one's at once, its forwarder
-	// started again as Start starts it with c (HostKey, ProxyPort, Free)
-	// while the VM runs on. Connections open through its
-	// old forwarder end.
+	// SetPorts changes which of a running VM's ports are forwarded, at
+	// once: its forwarder started again with p as Start starts it with c
+	// (HostKey, ProxyPort, Free) while the VM runs on. Connections open
+	// through its old forwarder end. A stopped VM is left as it is: its
+	// next Start's Want has its ports.
 	SetPorts(ctx context.Context, vm string, p Ports, c Confinement) error
-	// SetAgentDirs replaces a stopped VM's agent folder mounts.
-	SetAgentDirs(ctx context.Context, vm string, dirs []string) error
-	// SetAgentForwarding turns a stopped VM's ssh-agent forwarding on or
-	// off (FeatureAgentToggle).
-	SetAgentForwarding(ctx context.Context, vm string, on bool) error
 }
 
 // KeyFiles is a backend that puts files of its own into base (scripts it
@@ -211,26 +210,51 @@ type Built struct {
 	Fitted Size
 }
 
-// VMSpec is a VM to create from an image. Mounts are at the same path in
-// the VM as on the host, except the tools share.
+// Want is what of a VM can change after it's made: CreateVM makes it so,
+// and each Start of the stopped VM makes it so again where it differs.
+// Agent folders are mounted at the same path in the VM as on the host.
+type Want struct {
+	// Size is its CPUs, memory and disk: zero fields are left as they
+	// are (the image's, when it's made). A disk only grows: a smaller
+	// one is refused (Validate).
+	Size      Size
+	AgentDirs []string // agents' host folders, read-only
+	// AgentForwarding is whether the VM forwards an ssh-agent; changing
+	// it once the VM is made needs FeatureAgentToggle.
+	AgentForwarding bool
+	Ports           Ports // which ports to forward to host loopback
+}
+
+// Validate returns the error a start of the VM in, stopped, would refuse
+// w with, before it changes anything: a disk smaller than its own
+// (disk_shrink).
+func Validate(w Want, in Instance) error {
+	if w.Size.DiskGiB > 0 && w.Size.DiskGiB < in.Size.DiskGiB {
+		return msg.DiskShrink(gibText(in.Size.DiskGiB), in.Name, gibText(w.Size.DiskGiB))
+	}
+	return nil
+}
+
+// gibText is a size in GiB as messages show it: 100, 6.5.
+func gibText(g float64) string { return strconv.FormatFloat(g, 'g', -1, 64) }
+
+// VMSpec is a VM to create from an image, as Want wants it. Mounts are
+// at the same path in the VM as on the host, except the tools share.
 type VMSpec struct {
+	Want
 	Name    string
 	Project string // the project folder, read-write; "" for none (--clone)
 	// CloneAt is where a --clone VM keeps its own clone of the project (the
 	// folder's path); "" for a VM that mounts the folder. A backend may keep
 	// it on a disk of its own.
-	CloneAt   string
-	AgentDirs []string // agents' host folders, read-only
-	Tools     string   // the shared tools folder, read-only at ToolsAt; "" for none
-	ToolsAt   string   // where the tools folder is in the VM
+	CloneAt string
+	Tools   string // the shared tools folder, read-only at ToolsAt; "" for none
+	ToolsAt string // where the tools folder is in the VM
 
-	AgentForwarding bool // forward ssh-agent into the VM
 	// AgentToggle is whether its forwarding may be turned on or off later
 	// (FeatureAgentToggle let through): a backend that sets forwarding
 	// only when a VM is made makes it ready for that.
 	AgentToggle bool
-	Size        Size  // zero fields take the image's
-	Ports       Ports // which ports to forward to host loopback
 	// SSHPort is the host port the VM's ssh is forwarded from, as devvm
 	// records it (Confinement.SSHPort at each start); 0 for none yet.
 	SSHPort int

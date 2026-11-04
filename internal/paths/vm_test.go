@@ -29,14 +29,13 @@ func TestVMFiles(t *testing.T) {
 		v.EventLog():                  "logs/network.jsonl",
 		v.ProxyLog():                  "logs/proxy.log",
 		v.LinksLog():                  "logs/links.log",
-		v.Ports():                     "backend/ports",
 		v.Forwarder(".log"):           "backend/ports.log",
 		v.Forwarder(".known_hosts"):   "backend/ports.known_hosts",
 		v.Forwarder(".lock"):          "backend/ports.lock",
 		filepath.Join(v.Dir, "other"): "other",
 	}
-	if len(want) != 23 {
-		t.Fatalf("%d paths, want 23: two are the same", len(want))
+	if len(want) != 22 {
+		t.Fatalf("%d paths, want 22: two are the same", len(want))
 	}
 	for got, rel := range want {
 		if got != filepath.Join("/d/vms/0123456789abcd", rel) {

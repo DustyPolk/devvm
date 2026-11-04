@@ -72,7 +72,7 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	if err != nil {
 		return err
 	}
-	if err := l.Start(ctx, ToolsVM, conf); err != nil {
+	if err := l.start(ctx, ToolsVM, nil, conf); err != nil {
 		return err
 	}
 	if err := l.runScript(ctx, ToolsVM, spec.Trust.Add, true); err != nil {

@@ -57,7 +57,7 @@ func TestUp(t *testing.T) {
 	}
 	// Without network policy too, its ssh port is devvm's: recorded, made
 	// with it and started on it.
-	c, _ := start.Args[1].(backend.Confinement)
+	c, _ := start.Args[2].(backend.Confinement)
 	if sp := get(st, keySSHPort); c.Net != backend.NetDirect || sp == "" || strconv.Itoa(c.SSHPort) != sp || strconv.Itoa(spec.SSHPort) != sp {
 		t.Errorf("Start confinement = %+v, VMSpec's ssh port %d, state's %q", c, spec.SSHPort, sp)
 	}
@@ -109,7 +109,7 @@ func TestUpNetworkPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, _ := call(f, "Start").Args[1].(backend.Confinement)
+	c, _ := call(f, "Start").Args[2].(backend.Confinement)
 	if c.Net != backend.NetProxy || c.ProxyPassword != get(st, keyProxyKey) ||
 		strconv.Itoa(c.ProxyPort) != get(st, keyProxyPort) || strconv.Itoa(c.SSHPort) != get(st, keySSHPort) {
 		t.Errorf("Start confinement = %+v", c)

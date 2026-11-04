@@ -254,9 +254,6 @@ other = "Image {{.key}} can't be deleted, because these VMs use its disk: {{.vms
 [not_an_image]
 other = "{{.name}} isn't an image, so devvm won't delete it."
 
-[vm_not_stopped]
-other = "{{.vm}} is running. Stop it first."
-
 [vm_not_running]
 other = "{{.vm}} isn't running. Start it first."
 

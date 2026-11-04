@@ -48,7 +48,7 @@ func TestOpenNetworkPolicy(t *testing.T) {
 	if err := l.Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if c, _ := call(f, "Start").Args[1].(backend.Confinement); !slices.Contains(f.Methods()[before:], "Start") || c.Net != backend.NetProxy {
+	if c, _ := call(f, "Start").Args[2].(backend.Confinement); !slices.Contains(f.Methods()[before:], "Start") || c.Net != backend.NetProxy {
 		t.Errorf("calls = %q, confinement %+v", f.Methods()[before:], c)
 	}
 	// Started outside devvm: no terminal to ask in, so it's stopped.
@@ -117,8 +117,13 @@ func TestToolsAdd(t *testing.T) {
 		t.Errorf("state image=%s tool_names=%s tools=%s", st.Image, get(st, keyToolNames), get(st, KeyTools))
 	}
 	ms := f.Methods()[before:]
-	if i, j := slices.Index(ms, "SetAgentDirs"), slices.Index(ms, "Start"); !slices.Contains(ms, "BuildTools") || i < 0 || j < i {
-		t.Errorf("calls = %q", ms)
+	start := slices.Index(ms, "Start")
+	if !slices.Contains(ms, "BuildTools") || start < 0 {
+		t.Fatalf("calls = %q", ms)
+	}
+	// Its start mounts the new agent's folders.
+	if w, _ := f.Calls()[before+start].Args[1].(backend.Want); !slices.Equal(w.AgentDirs, []string{skills}) {
+		t.Errorf("started wanting %+v", w)
 	}
 	if dirs := f.Instances[vm].AgentDirs; !slices.Equal(dirs, []string{skills}) {
 		t.Errorf("agent dirs = %q", dirs)

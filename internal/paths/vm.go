@@ -8,9 +8,8 @@ import "path/filepath"
 //	          devvm made for it (state.VM)
 //	lock      held by each change to vm.json
 //	policy    its own network policy rules
-//	backend/  its backend's files: which ports Lima forwards (ports),
-//	          and its port forwarder's pid, status, log, lock and the
-//	          host key it pins (ports.*)
+//	backend/  its backend's files: its port forwarder's pid, status,
+//	          log, lock and the host key it pins (ports.*)
 //	run/      what its runs leave: pids, its proxy's files, its sandbox
 //	          profile, its secrets' bindings, its links' list
 //	logs/     its proxy's decisions and output, its link session's
@@ -77,10 +76,6 @@ func (v VM) ProxyLog() string { return filepath.Join(v.Logs(), "proxy.log") }
 
 // LinksLog is the VM's link session's own output.
 func (v VM) LinksLog() string { return filepath.Join(v.Logs(), "links.log") }
-
-// Ports records which of the VM's ports its backend forwards, on a
-// backend whose own config doesn't (Lima's).
-func (v VM) Ports() string { return filepath.Join(v.Backend(), "ports") }
 
 // Forwarder is one of the files of the VM's port forwarder, named by ext:
 // .pid, .status, .log, .lock, and .known_hosts, the host key it pins.

@@ -570,7 +570,15 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	if conf.Net == backend.NetProxy {
 		defer e.AddCleanup(undoStart(e, b, vm))()
 	}
-	if err := b.Start(ctx, vm, conf); err != nil {
+	// What its state asks of it, which the start makes it where it
+	// differs: its size, its agents' folders on the host now, its agent
+	// forwarding and its ports.
+	agentDirs, _ := agentMounts(e.Dirs.Home, tools.Names(st))
+	want := backend.Want{
+		Size: sectionOf[Size](st, sizeSection).Backend(), AgentDirs: agentDirs,
+		AgentForwarding: sshagent.Forwards(mode), Ports: forward,
+	}
+	if err := b.Start(ctx, vm, want, conf); err != nil {
 		if conf.Net == backend.NetProxy {
 			e.Proxy.Stop(vm)
 		}

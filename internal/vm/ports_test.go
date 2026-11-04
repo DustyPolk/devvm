@@ -79,7 +79,7 @@ func TestStartPorts(t *testing.T) {
 			var got []backend.PortRange
 			for _, c := range f.Calls() {
 				if c.Method == "Start" {
-					conf := c.Args[1].(backend.Confinement)
+					w, conf := c.Args[1].(backend.Want), c.Args[2].(backend.Confinement)
 					if conf.HostKey == nil {
 						t.Error("started without its host key")
 					}
@@ -87,7 +87,10 @@ func TestStartPorts(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					got = conf.Forwarded(t.Context(), p)
+					if !reflect.DeepEqual(w.Ports, p) {
+						t.Errorf("started wanting ports %+v, want %+v", w.Ports, p)
+					}
+					got = conf.Forwarded(t.Context(), w.Ports)
 				}
 			}
 			if !reflect.DeepEqual(got, tc.want) {
@@ -169,9 +172,9 @@ func TestSetPortsRunning(t *testing.T) {
 		t.Errorf("stopped: SetPorts %v, said %q", args, infos.Names())
 	}
 	// Its backend failing: its state as it was, nothing said.
-	f.Errs = map[string]error{"SetPorts": msg.VMNotStopped(vm)}
+	f.Errs = map[string]error{"SetPorts": msg.VMNotRunning(vm)}
 	infos.Reset()
-	if err := s.SetPorts(t.Context(), PortsChange{List: "5173"}); msg.NamesOf(err) != "vm_not_stopped vm="+vm || len(infos.Names()) != 0 {
+	if err := s.SetPorts(t.Context(), PortsChange{List: "5173"}); msg.NamesOf(err) != "vm_not_running vm="+vm || len(infos.Names()) != 0 {
 		t.Errorf("backend failed: %v, said %q", err, infos.Names())
 	}
 	if now, err := state.ReadVM(e.Dirs, vm); err != nil || get(now, KeyPorts) != "none" {

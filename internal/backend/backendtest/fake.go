@@ -201,24 +201,32 @@ func (f *Fake) CreateVM(_ context.Context, image string, spec backend.VMSpec) er
 	if f.Instances == nil {
 		f.Instances = map[string]backend.Instance{}
 	}
-	f.Instances[spec.Name] = backend.Instance{
-		Name:            spec.Name,
-		Status:          backend.StatusStopped,
-		Size:            spec.Size,
-		AgentDirs:       slices.Clone(spec.AgentDirs),
-		AgentForwarding: spec.AgentForwarding,
-	}
+	in := backend.Instance{Name: spec.Name, Status: backend.StatusStopped}
+	apply(&in, spec.Want)
+	f.Instances[spec.Name] = in
 	return nil
 }
 
-// Start records the call and marks the instance running.
-func (f *Fake) Start(_ context.Context, vm string, c backend.Confinement) error {
+// Start records the call and marks the instance running, made what w
+// wants first when it was stopped (backend.Validate's refusal returned).
+func (f *Fake) Start(_ context.Context, vm string, w backend.Want, c backend.Confinement) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.record("Start", vm, c); err != nil {
+	if err := f.record("Start", vm, w, c); err != nil {
 		return err
 	}
-	if err := f.change(vm, func(in *backend.Instance) { in.Status = backend.StatusRunning }); err != nil {
+	if in, ok := f.Instances[vm]; ok && in.Status != backend.StatusRunning {
+		if err := backend.Validate(w, in); err != nil {
+			return err
+		}
+	}
+	err := f.change(vm, func(in *backend.Instance) {
+		if in.Status != backend.StatusRunning {
+			apply(in, w)
+		}
+		in.Status = backend.StatusRunning
+	})
+	if err != nil {
 		return err
 	}
 	if f.nets == nil {
@@ -368,24 +376,20 @@ func (f *Fake) SSH(_ context.Context, vm string) (backend.SSHTarget, error) {
 	return f.Target, nil
 }
 
-// SetSize records the call and sets the instance's size where s is set.
-func (f *Fake) SetSize(_ context.Context, vm string, s backend.Size) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if err := f.record("SetSize", vm, s); err != nil {
-		return err
+// apply makes an instance what w wants: its size where w sets it, its
+// agent folders and forwarding.
+func apply(in *backend.Instance, w backend.Want) {
+	if w.Size.CPUs > 0 {
+		in.Size.CPUs = w.Size.CPUs
 	}
-	return f.change(vm, func(in *backend.Instance) {
-		if s.CPUs > 0 {
-			in.Size.CPUs = s.CPUs
-		}
-		if s.MemoryGiB > 0 {
-			in.Size.MemoryGiB = s.MemoryGiB
-		}
-		if s.DiskGiB > 0 {
-			in.Size.DiskGiB = s.DiskGiB
-		}
-	})
+	if w.Size.MemoryGiB > 0 {
+		in.Size.MemoryGiB = w.Size.MemoryGiB
+	}
+	if w.Size.DiskGiB > 0 {
+		in.Size.DiskGiB = w.Size.DiskGiB
+	}
+	in.AgentDirs = slices.Clone(w.AgentDirs)
+	in.AgentForwarding = w.AgentForwarding
 }
 
 // SetPorts records the call.
@@ -396,24 +400,4 @@ func (f *Fake) SetPorts(_ context.Context, vm string, p backend.Ports, c backend
 		return err
 	}
 	return f.change(vm, func(*backend.Instance) {})
-}
-
-// SetAgentDirs records the call and sets the instance's agent folders.
-func (f *Fake) SetAgentDirs(_ context.Context, vm string, dirs []string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if err := f.record("SetAgentDirs", vm, slices.Clone(dirs)); err != nil {
-		return err
-	}
-	return f.change(vm, func(in *backend.Instance) { in.AgentDirs = slices.Clone(dirs) })
-}
-
-// SetAgentForwarding records the call and sets the instance's forwarding.
-func (f *Fake) SetAgentForwarding(_ context.Context, vm string, on bool) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if err := f.record("SetAgentForwarding", vm, on); err != nil {
-		return err
-	}
-	return f.change(vm, func(in *backend.Instance) { in.AgentForwarding = on })
 }

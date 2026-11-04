@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 func TestFakeRecordsAndAnswers(t *testing.T) {
@@ -16,16 +17,15 @@ func TestFakeRecordsAndAnswers(t *testing.T) {
 	if _, err := f.BuildImage(ctx, backend.ImageSpec{Image: "base", Key: "k1"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.CreateVM(ctx, "k1", backend.VMSpec{Name: "v", Size: backend.Size{CPUs: 2}}); err != nil {
+	if err := f.CreateVM(ctx, "k1", backend.VMSpec{Name: "v", Want: backend.Want{Size: backend.Size{CPUs: 2}}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.SetSize(ctx, "v", backend.Size{MemoryGiB: 4}); err != nil {
+	// A start makes a stopped VM what it wants; a running one stays.
+	w := backend.Want{Size: backend.Size{MemoryGiB: 4}, AgentDirs: []string{"/h/.claude"}}
+	if err := f.Start(ctx, "v", w, backend.Confinement{Net: backend.NetProxy}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.SetAgentDirs(ctx, "v", []string{"/h/.claude"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Start(ctx, "v", backend.Confinement{Net: backend.NetProxy}); err != nil {
+	if err := f.Start(ctx, "v", backend.Want{}, backend.Confinement{Net: backend.NetProxy}); err != nil {
 		t.Fatal(err)
 	}
 	in, err := f.Inspect(ctx, "v")
@@ -47,12 +47,24 @@ func TestFakeRecordsAndAnswers(t *testing.T) {
 	if err := f.Stop(ctx, "v"); !errors.Is(err, backend.ErrNotFound) {
 		t.Errorf("Stop after Delete: %v", err)
 	}
-	want := []string{"BuildImage", "CreateVM", "SetSize", "SetAgentDirs", "Start", "Inspect", "Shell", "Delete", "Inspect", "Stop"}
+	want := []string{"BuildImage", "CreateVM", "Start", "Start", "Inspect", "Shell", "Delete", "Inspect", "Stop"}
 	if got := f.Methods(); !slices.Equal(got, want) {
 		t.Errorf("calls: %q, want %q", got, want)
 	}
-	if c := f.Calls()[4]; c.Args[0] != "v" || c.Args[1].(backend.Confinement).Net != backend.NetProxy {
+	if c := f.Calls()[2]; c.Args[0] != "v" || c.Args[2].(backend.Confinement).Net != backend.NetProxy || c.Args[1].(backend.Want).Size.MemoryGiB != 4 {
 		t.Errorf("Start's arguments: %v", c.Args)
+	}
+}
+
+// A stopped VM's start refuses a disk smaller than its own, changing
+// nothing.
+func TestFakeStartValidates(t *testing.T) {
+	ctx := t.Context()
+	f := New("fake", nil)
+	f.Instances["v"] = backend.Instance{Name: "v", Status: backend.StatusStopped, Size: backend.Size{DiskGiB: 100}}
+	err := f.Start(ctx, "v", backend.Want{Size: backend.Size{DiskGiB: 50}}, backend.Confinement{})
+	if msg.NamesOf(err) != "disk_shrink have=100 vm=v want=50" || f.Instances["v"].Status != backend.StatusStopped {
+		t.Errorf("Start: %v, %+v", err, f.Instances["v"])
 	}
 }
 

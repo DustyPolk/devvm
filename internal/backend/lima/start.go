@@ -30,15 +30,23 @@ const limaHost = "192.168.5.2"
 // for it.
 func (l *Lima) haPIDFile(vm string) string { return filepath.Join(l.Dirs.LimaVM(vm), "ha.pid") }
 
-// Start starts a stopped VM confined as c asks, and returns once it
-// answers over ssh. A running VM is left as it is.
+// Start starts a stopped VM as w wants it, confined as c asks, and
+// returns once it answers over ssh; its forwarder then forwards w's
+// ports. A running VM is left as it is.
 //
+// What differs of w and c is changed in one limactl edit, none when
+// nothing does: any edit gives the VM new ssh host keys at its next boot.
 // The VM's guest environment (Lima's env:, written to /etc/environment on
 // every boot) is c.Env, plus, for NetProxy, the proxy's address in
 // HTTP_PROXY and HTTPS_PROXY (and lowercase), its password written into
-// lima.yaml by devvm, never in limactl's arguments. Build networks (NetInternet,
-// NetNone) forward no ports.
-func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) error {
+// lima.yaml by devvm, never in limactl's arguments.
+func (l *Lima) Start(ctx context.Context, vm string, w backend.Want, c backend.Confinement) error {
+	return l.start(ctx, vm, &w, c)
+}
+
+// start is Start, for a project VM (w set) or a build's VM (w nil: its
+// config is left as it was made, but for c's, and it forwards no ports).
+func (l *Lima) start(ctx context.Context, vm string, w *backend.Want, c backend.Confinement) error {
 	if err := l.checkGlobalConfigs(); err != nil {
 		return err
 	}
@@ -61,7 +69,7 @@ func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) erro
 			return err
 		}
 	}
-	if err := configure(ctx, l, vm, in.Config, c, sshPort); err != nil {
+	if err := configure(ctx, l, in, w, c, sshPort); err != nil {
 		return err
 	}
 	// Its profile, wrapper and records: the user's alone.
@@ -70,7 +78,12 @@ func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) erro
 			return err
 		}
 	}
-	wrap, env, err := l.confine(vm, c, sshPort, in.backend().AgentForwarding)
+	// It forwards the agent its config now says.
+	forwarding := in.backend().AgentForwarding
+	if w != nil {
+		forwarding = w.AgentForwarding
+	}
+	wrap, env, err := l.confine(vm, c, sshPort, forwarding)
 	if err != nil {
 		return err
 	}
@@ -94,7 +107,7 @@ func (l *Lima) Start(ctx context.Context, vm string, c backend.Confinement) erro
 		return err
 	}
 	// A project VM's ports, through devvm's forwarder (ports.go).
-	if c.HostKey != nil && !l.Forwards.start(ctx, vm, c, l.SSH, l.haPIDFile(vm)) {
+	if w != nil && c.HostKey != nil && !l.Forwards.start(ctx, vm, w.Ports, c, l.SSH, l.haPIDFile(vm)) {
 		l.Warn(msg.PortsForwardFailed(l.Forwards.Log(vm), vm))
 	}
 	return nil
@@ -191,15 +204,25 @@ func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding
 	return nil, nil, msg.LimaHostUnsupported(l.OS)
 }
 
-// configure edits a stopped VM's config (cfg, as limactl list has it) to
-// match how it starts with c and sshPort, when it doesn't already
-// (startSets), then fills in the proxy's password.
-func configure(ctx context.Context, l *Lima, vm string, cfg *config, c backend.Confinement, sshPort int) error {
-	sets, fill := l.startSets(cfg, c, sshPort)
-	if len(sets) == 0 {
+// configure edits a stopped VM's config (in, as limactl list has it) to
+// match what w wants of it (wantEdits; nothing for nil) and how it starts
+// with c and sshPort (startSets), in one edit and only where it doesn't
+// already, then fills in the proxy's password.
+func configure(ctx context.Context, l *Lima, in instance, w *backend.Want, c backend.Confinement, sshPort int) error {
+	var opts []string
+	if w != nil {
+		var err error
+		if opts, err = wantEdits(in, *w); err != nil {
+			return err
+		}
+	}
+	sets, fill := l.startSets(in.Config, c, sshPort)
+	opts = append(opts, sets...)
+	if len(opts) == 0 {
 		return nil
 	}
-	if err := l.edit(ctx, vm, sets...); err != nil {
+	vm := in.Name
+	if err := l.edit(ctx, vm, opts...); err != nil {
 		return err
 	}
 	if fill {

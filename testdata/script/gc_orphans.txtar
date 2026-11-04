@@ -16,7 +16,7 @@ exec sh -c 'echo devvm-live-12345612345601 >> "$STUB_DIR/instances"'
 exec sh -c 'for v in live:01 gone:02 new:03; do sh $WORK/vmjson "devvm-${v%:*}-123456123456${v#*:}" "/p/${v%:*}" lima "$(cat at)"; done'
 exec sh $WORK/vmjson devvm-moved-12345612345604 /p/moved lima 0000000000000000
 exec sh $WORK/vmjson devvm-norec-12345612345605 /p/norec lima
-exec sh -c 'cd "$VMS" && for h in 12345612345601 12345612345602; do mkdir $h/logs $h/run $h/backend && echo x > $h/logs/network.jsonl && echo x > $h/run/sandbox.sb && echo x > $h/backend/ports; done'
+exec sh -c 'cd "$VMS" && for h in 12345612345601 12345612345602; do mkdir $h/logs $h/run $h/backend && echo x > $h/logs/network.jsonl && echo x > $h/run/sandbox.sb && echo x > $h/backend/ports.log; done'
 exec sh -c 'cd "$VMS" && touch -t 202001010000 12345612345601/vm.json 12345612345602/vm.json 12345612345604/vm.json 12345612345605/vm.json'
 # A VM of a backend this devvm doesn't have (a newer devvm's), which
 # can't be asked.
@@ -43,7 +43,7 @@ stdout '^==> forgot_orphan vm=devvm-gone-12345612345602$'
 exists $VMS/12345612345601/vm.json
 exists $VMS/12345612345601/logs/network.jsonl
 exists $VMS/12345612345601/run/sandbox.sb
-exists $VMS/12345612345601/backend/ports
+exists $VMS/12345612345601/backend/ports.log
 exists $VMS/12345612345604/vm.json
 exists $VMS/12345612345603/vm.json
 exists $VMS/12345612345605/vm.json

@@ -91,16 +91,16 @@ stdout '^==> ports_forwarding ports=none vm=devvm-web-[0-9a-f]{14}$'
 exec sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do ps -axww -o command= | grep -q -- "[_]lima-ports -vm $WEB " || exit 0; sleep 0.5; done; exit 1'
 exec devvm ports $P
 
-# Stopped: changed at once, in the VM's record for devvm's forwarder;
-# Lima's config is left alone (its own forwards are off).
+# Stopped: changed at once, in the VM's state, which its next start
+# gives devvm's forwarder; Lima's config is left alone (its own forwards
+# are off).
 exec limactl stop $WEB
 stub_reset
 exec devvm ports add 8000-8010
 stdout '^==> ports_now ports='$P',8000-8010 vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl edit'
-catg $WEB_dir/backend/ports
-stdout '\A'$P',8000-8010\n\z'
+! exists $WEB_dir/backend/ports
 exec devvm ports
 stdout '\A'$P',8000-8010\n\z'
 ! stderr .
@@ -123,7 +123,7 @@ stderr '^devvm: ports_all_already$'
 stderr '^devvm: ports_rm_all$'
 stub_calls
 ! stdout 'limactl edit'
-catg $WEB_dir/backend/ports
+exec devvm ports
 stdout '\Aall\n\z'
 
 # --ports on it is ignored, with a warning naming devvm ports.

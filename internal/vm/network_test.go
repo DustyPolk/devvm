@@ -47,7 +47,7 @@ func TestNetwork(t *testing.T) {
 	if err := l.Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetProxy {
+	if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.Net != backend.NetProxy {
 		t.Errorf("started %+v", c)
 	}
 	shown("on")
@@ -67,7 +67,7 @@ func TestNetwork(t *testing.T) {
 	if err := l.Restart(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Net != backend.NetDirect {
+	if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.Net != backend.NetDirect {
 		t.Errorf("restarted %+v", c)
 	}
 	if _, ok := e.Proxy.PID(vm); ok {

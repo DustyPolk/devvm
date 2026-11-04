@@ -108,21 +108,28 @@ type step struct {
 // scenario is every kind of config devvm gives an instance, step by step,
 // on dummy instances: base from Ubuntu's image and from a --from
 // conversion, a layer, the tools build VM and the conversion's VM, a
-// project VM with its mounts, ports, size and environment, its settings
-// changed, the edits each start makes (a build's networks, network policy
-// with the proxy's password, none), and everything deleted.
+// project VM with its mounts, ports, size and environment, the edits each
+// start makes (a build's networks, network policy with the proxy's
+// password and the VM's Want changed in the same edit, none), and
+// everything deleted.
 func scenario(fx fixture) []step {
 	size := backend.Size{CPUs: 2, MemoryGiB: 3}
 	sshPort := 50022
-	start := func(vm string, c backend.Confinement) func(context.Context, *Lima) error {
+	// A start's edits, w nil for a build's VM.
+	start := func(vm string, w *backend.Want, c backend.Confinement) func(context.Context, *Lima) error {
 		return func(ctx context.Context, l *Lima) error {
 			in, err := l.inspect(ctx, vm)
 			if err != nil {
 				return err
 			}
-			return configure(ctx, l, vm, in.Config, c, sshPort)
+			return configure(ctx, l, in, w, c, sshPort)
 		}
 	}
+	made := backend.Want{
+		AgentDirs: fx.agents, AgentForwarding: true, Size: backend.Size{CPUs: 3, MemoryGiB: 5, DiskGiB: 120},
+		Ports: backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3001}}},
+	}
+	changed := backend.Want{AgentDirs: fx.agents[:min(1, len(fx.agents))], Size: backend.Size{CPUs: 4, MemoryGiB: 6.5, DiskGiB: 130}}
 	proxy := backend.Confinement{
 		Net: backend.NetProxy, ProxyPort: 3128, ProxyPassword: "pAss-0123_word",
 		Env: map[string]string{"NODE_EXTRA_CA_CERTS": "/etc/ssl/devvm.pem", "NO_PROXY": "localhost,127.0.0.1,::1"},
@@ -133,14 +140,14 @@ func scenario(fx fixture) []step {
 			_, err := l.createFromUbuntu(ctx, dummyBase, size)
 			return err
 		}},
-		{"base's build start", start(dummyBase, backend.Confinement{Net: backend.NetInternet})},
+		{"base's build start", start(dummyBase, nil, backend.Confinement{Net: backend.NetInternet})},
 		{"base from a conversion", func(ctx context.Context, l *Lima) error {
 			return l.create(ctx, msg.M{}, dummyFrom, createArgs(dummyFrom, convertedImages(fx.converted, "root=/dev/vda rw console=hvc0", l.Arch), size))
 		}},
 		{"a layer", func(ctx context.Context, l *Lima) error {
 			return l.Runner.Run(ctx, msg.M{}, l.limactl(ctx, layerArgs(dummyBase, dummyLayer)...))
 		}},
-		{"the layer's build start", start(dummyLayer, backend.Confinement{Net: backend.NetNone})},
+		{"the layer's build start", start(dummyLayer, nil, backend.Confinement{Net: backend.NetNone})},
 		{"the tools build VM", func(ctx context.Context, l *Lima) error {
 			mounts, err := mountsSet([]mount{{Location: fx.out, MountPoint: ptr("/mnt/devvm-tools"), Writable: ptr(true)}})
 			if err != nil {
@@ -158,21 +165,15 @@ func scenario(fx fixture) []step {
 		}},
 		{"a project VM", func(ctx context.Context, l *Lima) error {
 			return l.CreateVM(ctx, strings.TrimPrefix(dummyLayer, ImagePrefix), backend.VMSpec{
-				Name: dummyVM, Project: fx.project, AgentDirs: fx.agents, Tools: fx.tools, ToolsAt: "/mnt/devvm-tools",
-				AgentForwarding: true, Size: backend.Size{CPUs: 3, MemoryGiB: 5, DiskGiB: 120},
-				Ports: backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3001}}}, SSHPort: sshPort, Env: env,
+				Name: dummyVM, Project: fx.project, Tools: fx.tools, ToolsAt: "/mnt/devvm-tools",
+				Want: made, SSHPort: sshPort, Env: env,
 			})
 		}},
-		{"its first start", start(dummyVM, backend.Confinement{Net: backend.NetDirect, Env: env})},
-		{"its agents' folders", func(ctx context.Context, l *Lima) error { return l.SetAgentDirs(ctx, dummyVM, fx.agents[:1]) }},
-		{"its agent forwarding", func(ctx context.Context, l *Lima) error { return l.SetAgentForwarding(ctx, dummyVM, false) }},
-		{"its size", func(ctx context.Context, l *Lima) error {
-			return l.SetSize(ctx, dummyVM, backend.Size{CPUs: 4, MemoryGiB: 6.5, DiskGiB: 130})
-		}},
-		{"a start with network policy", start(dummyVM, proxy)},
-		{"the same start again", start(dummyVM, proxy)},
-		{"a start without network policy", start(dummyVM, backend.Confinement{Net: backend.NetDirect, Env: env})},
-		{"a start with no network", start(dummyVM, backend.Confinement{Net: backend.NetNone})},
+		{"its first start", start(dummyVM, &made, backend.Confinement{Net: backend.NetDirect, Env: env})},
+		{"a start with network policy, its agents' folders, forwarding and size changed", start(dummyVM, &changed, proxy)},
+		{"the same start again", start(dummyVM, &changed, proxy)},
+		{"a start without network policy", start(dummyVM, &changed, backend.Confinement{Net: backend.NetDirect, Env: env})},
+		{"a start with no network", start(dummyVM, &changed, backend.Confinement{Net: backend.NetNone})},
 		{"the build VMs deleted", func(ctx context.Context, l *Lima) error {
 			if err := l.deleteIfThere(ctx, ToolsVM); err != nil {
 				return err
@@ -245,7 +246,7 @@ func TestLimaConfigsValid(t *testing.T) {
 		}
 		names := validate(t, l)
 		t.Logf("%s: %s valid", s.name, strings.Join(names, ", "))
-		if s.name == "a start with network policy" {
+		if strings.HasPrefix(s.name, "a start with network policy") {
 			data, err := os.ReadFile(filepath.Join(l.Dirs.LimaVM(dummyVM), "lima.yaml"))
 			if err != nil {
 				t.Fatal(err)

@@ -93,8 +93,8 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **A missing feature fails** in one line naming the VM and what to do; never fall back silently. Callers check the registry's `Review.Require(b, vm, spec.Features()...)` first; backends don't decide what a VM needs.
 - **Every emulation is refused until reviewed:** a design note in `docs/content/docs/internals/design.md`, a threat check with the security-audit skill, and e2e checks proving the guarantee; then it's marked reviewed in `Caps`.
 - Backend-specific code stays in its package; what isn't (`.git` protection, the proxy) stays out.
-- **Backends return errors, they don't die:** a `msg.M`, or `backend.Logged(m)` after a logged command failed. `SetPorts` accepts a running VM (starts its forwarder again); other Set calls on one get `vm_not_stopped`; restart warnings are the callers'.
-- **Lima edits only what differs:** any `limactl edit` gives the VM new ssh host keys at its next boot, so `Start` compares first. `Start` owns `env:`, `propagateProxyEnv`, `dns` and `hostResolver`.
+- **Backends return errors, they don't die:** a `msg.M`, or `backend.Logged(m)` after a logged command failed. A stopped VM changes only at `Start`, which applies what its `Want` asks where it differs (`backend.Validate` first); a running one is left as it is, but `SetPorts` (starts its forwarder again); restart warnings are the callers'.
+- **Lima edits only what differs:** any `limactl edit` gives the VM new ssh host keys at its next boot, so `Start` compares first and makes one edit. `Start` owns `env:`, `propagateProxyEnv`, `dns` and `hostResolver`, and a project VM's size, agent mounts and `forwardAgent`.
 
 ## Messages
 

@@ -107,7 +107,6 @@ version.lock
 vms
 vms/APP
 vms/APP/backend
-vms/APP/backend/ports
 vms/APP/backend/ports.known_hosts
 vms/APP/backend/ports.lock
 vms/APP/backend/ports.log
@@ -134,7 +133,6 @@ vms/APP/run/started
 vms/APP/vm.json
 vms/DB
 vms/DB/backend
-vms/DB/backend/ports
 vms/DB/backend/ports.known_hosts
 vms/DB/backend/ports.lock
 vms/DB/backend/ports.log
@@ -188,7 +186,6 @@ version.lock
 vms
 vms/APP
 vms/APP/backend
-vms/APP/backend/ports
 vms/APP/backend/ports.known_hosts
 vms/APP/backend/ports.lock
 vms/APP/backend/ports.log
@@ -214,7 +211,6 @@ vms/APP/run/started
 vms/APP/vm.json
 vms/DB
 vms/DB/backend
-vms/DB/backend/ports
 vms/DB/backend/ports.known_hosts
 vms/DB/backend/ports.lock
 vms/DB/backend/ports.log

@@ -3,6 +3,7 @@ package lima
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
@@ -249,7 +250,7 @@ func TestStartRefusesGlobalConfigsAndNetworks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfg, "default.yaml"), []byte("networks: [{vzNAT: true}]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err := l.Start(t.Context(), "devvm-img-x", backend.Confinement{Net: backend.NetInternet})
+	err := l.start(t.Context(), "devvm-img-x", nil, backend.Confinement{Net: backend.NetInternet})
 	if msg.IDOf(err) != "lima_global_config" || !strings.Contains(msg.NamesOf(err), "files="+filepath.Join(cfg, "default.yaml")) {
 		t.Errorf("with default.yaml: %v", err)
 	}
@@ -260,7 +261,7 @@ func TestStartRefusesGlobalConfigsAndNetworks(t *testing.T) {
 	if err := os.Remove(filepath.Join(cfg, "default.yaml")); err != nil {
 		t.Fatal(err)
 	}
-	err = l.Start(t.Context(), "devvm-img-x", backend.Confinement{Net: backend.NetInternet})
+	err = l.start(t.Context(), "devvm-img-x", nil, backend.Confinement{Net: backend.NetInternet})
 	if want := "vm_has_networks file=" + filepath.Join(l.Dirs.Lima, "devvm-img-x", "lima.yaml") + " vm=devvm-img-x"; err == nil || msg.NamesOf(err) != want {
 		t.Errorf("with a network: %v, want %s", err, want)
 	}
@@ -435,16 +436,21 @@ func TestDeleteImageInUse(t *testing.T) {
 func TestCreateVM(t *testing.T) {
 	l, f, _ := testLima(t, "darwin")
 	f.out["limactl list --json"] = `{"name":"devvm-img-0123456789ab","status":"Running","cpus":4,"memory":8589934592,"disk":107374182400}
-{"name":"devvm-p-0123456789abcd","status":"Stopped","cpus":4,"memory":8589934592,"disk":107374182400}`
+{"name":"devvm-p-0123456789abcd","status":"Stopped","cpus":4,"memory":8589934592,"disk":107374182400,"config":{"mounts":[` +
+		`{"location":"/my project","mountPoint":"/my project","writable":true},{"location":"/h/.claude","mountPoint":"/h/.claude"},` +
+		`{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}],"ssh":{"forwardAgent":true}}}`
 	err := l.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{
-		Name: "devvm-p-0123456789abcd", Project: "/my project", AgentDirs: []string{"/h/.claude"},
-		Tools: "/d/tools", ToolsAt: "/mnt/devvm-tools", AgentForwarding: true,
-		Size:  backend.Size{CPUs: 6, MemoryGiB: 8, DiskGiB: 150},
-		Ports: backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}}}, SSHPort: 23456,
+		Name: "devvm-p-0123456789abcd", Project: "/my project",
+		Tools: "/d/tools", ToolsAt: "/mnt/devvm-tools", SSHPort: 23456,
+		Want: backend.Want{
+			AgentDirs: []string{"/h/.claude"}, AgentForwarding: true, Size: backend.Size{CPUs: 6, MemoryGiB: 8, DiskGiB: 150},
+			Ports: backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}}},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The clone has its mounts and forwarding; only its size is edited.
 	want := []string{
 		"limactl stop devvm-img-0123456789ab",
 		`limactl clone --tty=false devvm-img-0123456789ab devvm-p-0123456789abcd --mount-none` +
@@ -455,9 +461,14 @@ func TestCreateVM(t *testing.T) {
 	if got := f.lines(); !slices.Equal(got, want) {
 		t.Errorf("ran\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	// Its ports are its record's, for devvm's forwarder.
-	if p, err := l.Forwards.read("devvm-p-0123456789abcd"); err != nil || p.All || !slices.Equal(p.Ranges, []backend.PortRange{{From: 5173, To: 5173}}) {
-		t.Errorf("ports: %+v, %v", p, err)
+	// Its ports are its starts': nothing of them is kept.
+	if _, err := os.Stat(l.Dirs.VM("devvm-p-0123456789abcd").Backend()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its backend folder: %v", err)
+	}
+	// A disk smaller than its image's is refused.
+	err = l.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: "devvm-p-0123456789abcd", Want: backend.Want{Size: backend.Size{DiskGiB: 50}}})
+	if msg.NamesOf(err) != "disk_shrink have=100 vm=devvm-p-0123456789abcd want=50" {
+		t.Errorf("a smaller disk: %v", err)
 	}
 	err = l.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: "devvm-q-0123456789abcd", Project: "/a,b"})
 	if err == nil || msg.NamesOf(err) != "mount_comma path=/a,b" {
@@ -518,31 +529,44 @@ func TestOverlay(t *testing.T) {
 	}
 }
 
-// The Set methods change a stopped VM, only what differs; a running one is
-// refused (it applies at its next start), and so is a smaller disk.
-func TestSetSize(t *testing.T) {
-	l, f, _ := testLima(t, "darwin")
-	f.out["limactl list --json"] = `{"name":"v","status":"Stopped","cpus":4,"memory":8589934592,"disk":107374182400}
-{"name":"r","status":"Running","cpus":4,"memory":8589934592,"disk":107374182400}`
+// A start edits what of a VM's Want differs, and only that: its size
+// (a disk only grows, a smaller one refused), its agent folders, keeping
+// its other mounts, and its agent forwarding.
+func TestWantEdits(t *testing.T) {
+	var in instance
+	if err := json.Unmarshal([]byte(`{"name":"v","status":"Stopped","cpus":4,"memory":8589934592,"disk":107374182400,
+		"config":{"mounts":[{"location":"/p","writable":true},{"location":"/h/.claude","mountPoint":"/h/.claude"},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}],"ssh":{"forwardAgent":false}}}`), &in); err != nil {
+		t.Fatal(err)
+	}
+	claude := []string{"/h/.claude"}
 	for _, tc := range []struct {
-		vm   string
-		size backend.Size
-		want string // the edit, or the error
+		want backend.Want
+		opts string // the edit's options, or the error
 	}{
-		{"v", backend.Size{CPUs: 6, MemoryGiB: 8, DiskGiB: 150}, "limactl edit --tty=false v --cpus 6 --disk 150"},
-		{"v", backend.Size{MemoryGiB: 3.5}, "limactl edit --tty=false v --memory 3.5"},
-		{"v", backend.Size{CPUs: 4, DiskGiB: 100}, ""},
-		{"v", backend.Size{DiskGiB: 50}, "disk_shrink have=100 vm=v want=50"},
-		{"r", backend.Size{CPUs: 6}, "vm_not_stopped vm=r"},
+		{backend.Want{AgentDirs: claude}, ""},
+		{backend.Want{AgentDirs: claude, Size: backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}}, ""},
+		{backend.Want{AgentDirs: claude, Size: backend.Size{CPUs: 6, MemoryGiB: 8, DiskGiB: 150}}, "--cpus 6 --disk 150"},
+		{backend.Want{AgentDirs: claude, Size: backend.Size{MemoryGiB: 3.5}}, "--memory 3.5"},
+		{backend.Want{AgentDirs: claude, Size: backend.Size{DiskGiB: 50}}, "disk_shrink have=100 vm=v want=50"},
+		{
+			backend.Want{AgentDirs: []string{"/h/.codex"}},
+			`--set .mounts = [{"location":"/p","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"},{"location":"/h/.codex","writable":false}]`,
+		},
+		{backend.Want{}, `--set .mounts = [{"location":"/p","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}]`},
+		{backend.Want{AgentDirs: []string{"/h/a,b"}}, "mount_comma path=/h/a,b"},
+		{backend.Want{AgentDirs: claude, AgentForwarding: true}, "--set .ssh.forwardAgent=true"},
+		{
+			backend.Want{AgentForwarding: true, Size: backend.Size{CPUs: 2}},
+			`--cpus 2 --set .mounts = [{"location":"/p","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}] --set .ssh.forwardAgent=true`,
+		},
 	} {
-		f.calls = nil
-		err := l.SetSize(t.Context(), tc.vm, tc.size)
-		got := strings.Join(f.lines(), "\n")
+		opts, err := wantEdits(in, tc.want)
+		got := strings.Join(opts, " ")
 		if err != nil {
 			got = msg.NamesOf(err)
 		}
-		if got != tc.want {
-			t.Errorf("SetSize(%s, %+v): %q, want %q", tc.vm, tc.size, got, tc.want)
+		if got != tc.opts {
+			t.Errorf("wantEdits(%+v): %q, want %q", tc.want, got, tc.opts)
 		}
 	}
 }
@@ -558,65 +582,23 @@ func TestNoForwardsSet(t *testing.T) {
 	}
 }
 
-// A VM's ports record: all, none or a list; none forwarded without one.
-func TestPortsRecord(t *testing.T) {
-	l, _, _ := testLima(t, "darwin")
-	f := l.Forwards
-	if p, err := f.read("v"); err == nil {
-		t.Errorf("no record: %+v, want an error (none forwarded)", p)
-	}
-	for _, p := range []backend.Ports{
-		{}, {All: true}, {Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8010}}},
-	} {
-		if err := f.write("v", p); err != nil {
+// SetPorts never edits a VM's config: a stopped VM's ports are its next
+// start's, a running one's its forwarder's (ports_test.go).
+func TestSetPortsNoEdit(t *testing.T) {
+	l, f, _ := testLima(t, "darwin")
+	f.out["limactl list --json"] = `{"name":"v","status":"Stopped"}
+{"name":"r","status":"Running"}`
+	for _, vm := range []string{"v", "r"} {
+		f.calls = nil
+		if err := l.SetPorts(t.Context(), vm, backend.Ports{All: true}, backend.Confinement{}); err != nil {
 			t.Fatal(err)
 		}
-		got, err := f.read("v")
-		if err != nil || got.All != p.All || !slices.Equal(got.Ranges, p.Ranges) {
-			t.Errorf("%+v read as %+v, %v", p, got, err)
+		if got := f.lines(); len(got) > 0 {
+			t.Errorf("%s: ran %q", vm, got)
 		}
 	}
-	if err := os.WriteFile(f.Dirs.VM("v").Ports(), []byte("x\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.read("v"); err == nil {
-		t.Error("a bad record read")
-	}
-}
-
-func TestSetPortsAgentDirsAndForwarding(t *testing.T) {
-	l, f, _ := testLima(t, "darwin")
-	f.out["limactl list --json"] = `{"name":"v","status":"Stopped","config":{"mounts":[{"location":"/p","writable":true},{"location":"/h/.claude","mountPoint":"/h/.claude"},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}],"ssh":{"forwardAgent":false}}}
-{"name":"r","status":"Running"}`
-	ctx := t.Context()
-	steps := []struct {
-		do   func() error
-		want string
-	}{
-		{func() error { return l.SetPorts(ctx, "v", backend.Ports{All: true}, backend.Confinement{}) }, ""},
-		{func() error { return l.SetAgentDirs(ctx, "v", []string{"/h/.claude"}) }, ""},
-		{
-			func() error { return l.SetAgentDirs(ctx, "v", []string{"/h/.codex"}) },
-			`limactl edit --tty=false v --set .mounts = [{"location":"/p","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"},{"location":"/h/.codex","writable":false}]`,
-		},
-		{func() error { return l.SetAgentDirs(ctx, "v", []string{"/h/a,b"}) }, "mount_comma path=/h/a,b"},
-		{func() error { return l.SetAgentForwarding(ctx, "v", false) }, ""},
-		{func() error { return l.SetAgentForwarding(ctx, "v", true) }, "limactl edit --tty=false v --set .ssh.forwardAgent=true"},
-		// A running VM's: no edit (its forwarder, ports_test.go).
-		{func() error { return l.SetPorts(ctx, "r", backend.Ports{}, backend.Confinement{}) }, ""},
-		{func() error { return l.SetAgentDirs(ctx, "r", nil) }, "vm_not_stopped vm=r"},
-		{func() error { return l.SetAgentForwarding(ctx, "r", true) }, "vm_not_stopped vm=r"},
-	}
-	for i, s := range steps {
-		f.calls = nil
-		err := s.do()
-		got := strings.Join(f.lines(), "\n")
-		if err != nil {
-			got = msg.NamesOf(err)
-		}
-		if got != s.want {
-			t.Errorf("step %d: %q, want %q", i, got, s.want)
-		}
+	if _, err := os.Stat(l.Dirs.VM("v").Backend()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its backend folder: %v", err)
 	}
 }
 
@@ -697,7 +679,7 @@ func TestStubLifecycle(t *testing.T) {
 	stubs.Write(t, "instances", "devvm-p-0123456789abcd Stopped\n")
 	ctx := t.Context()
 	vm := "devvm-p-0123456789abcd"
-	if err := l.Start(ctx, vm, backend.Confinement{}); err != nil {
+	if err := l.Start(ctx, vm, backend.Want{}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
 	if in, err := l.Inspect(ctx, vm); err != nil || in.Status != backend.StatusRunning {
@@ -707,7 +689,7 @@ func TestStubLifecycle(t *testing.T) {
 	if ok, err := l.Confined(ctx, vm); err != nil || ok {
 		t.Errorf("Confined after a direct Start: %v, %v", ok, err)
 	}
-	if err := l.Start(ctx, vm, backend.Confinement{}); err != nil {
+	if err := l.Start(ctx, vm, backend.Want{}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.Stop(ctx, vm); err != nil {

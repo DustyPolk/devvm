@@ -87,7 +87,7 @@ func TestUpLinks(t *testing.T) {
 		t.Fatal(msg.NamesOf(err))
 	}
 	want := "localhost,127.0.0.1,::1"
-	c, _ := call(f, "Start").Args[1].(backend.Confinement)
+	c, _ := call(f, "Start").Args[2].(backend.Confinement)
 	if c.Env["NO_PROXY"] != want || c.Env["no_proxy"] != want {
 		t.Errorf("Start's env = %q", c.Env)
 	}
@@ -128,7 +128,7 @@ func TestUpLinksNoPolicy(t *testing.T) {
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if c, _ := call(f, "Start").Args[1].(backend.Confinement); c.Env["NO_PROXY"] != "" {
+	if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.Env["NO_PROXY"] != "" {
 		t.Errorf("Start's env = %q", c.Env)
 	}
 	if got := staged(t, f); got["hosts"] != "127.77.0.9 api api.devvm.internal\n" {

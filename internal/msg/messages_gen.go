@@ -3019,11 +3019,6 @@ func VMNotRunning(vm string) M {
 	return M{id: "vm_not_running", vals: []val{{"vm", vm}}}
 }
 
-// VMNotStopped is [vm_not_stopped]: "{{.vm}} is running. Stop it first."
-func VMNotStopped(vm string) M {
-	return M{id: "vm_not_stopped", vals: []val{{"vm", vm}}}
-}
-
 // VMOtherFolder is [vm_other_folder]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. Run devvm rm to delete the VM, or devvm adopt to use it here."
 func VMOtherFolder(vm string, was string) M {
 	return M{id: "vm_other_folder", vals: []val{{"vm", vm}, {"was", was}}}
@@ -3684,7 +3679,6 @@ var specs = map[string]spec{
 	"vm_lacks":                         {fields: []string{"has", "tool", "vm"}},
 	"vm_name_no_room":                  {fields: []string{"backend", "max"}},
 	"vm_not_running":                   {fields: []string{"vm"}},
-	"vm_not_stopped":                   {fields: []string{"vm"}},
 	"vm_other_folder":                  {fields: []string{"vm", "was"}},
 	"vm_other_folder_adopt":            {fields: []string{"vm", "was"}},
 	"vm_other_folder_rm":               {fields: []string{"vm", "was"}},

@@ -138,7 +138,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		return backend.Built{}, err
 	}
 	// A failed start leaves it stopped, with its console logs.
-	if err := l.Start(ctx, inst, conf); err != nil {
+	if err := l.start(ctx, inst, nil, conf); err != nil {
 		return backend.Built{}, err
 	}
 	if conv != nil {

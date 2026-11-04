@@ -44,10 +44,9 @@ func fakeForwarders(t *testing.T, l *Lima, vm string) *[][]string {
 // A project VM's start starts its forwarder once it runs: over Lima's ssh
 // (its port, user and key), with the host key devvm pins, following the
 // hostagent, never on its ssh's or proxy's port; its listed ports alone
-// when it lists them, none and no forwarder when it forwards none. A
-// build gets none. One that can't start is warned about, the VM running
-// on, as does one without a ports record. Stopping the VM stops it;
-// deleting it removes its files.
+// when it lists them, none and no forwarder when it forwards none: its
+// Want's. A build gets none. One that can't start is warned about, the
+// VM running on. Stopping the VM stops it; deleting it removes its files.
 func TestStartForwarder(t *testing.T) {
 	l, warned, stubs := stubLima(t)
 	// Confined as on this host: macOS's sandbox-exec runs for real.
@@ -58,21 +57,7 @@ func TestStartForwarder(t *testing.T) {
 	ctx := t.Context()
 	key := func(context.Context) (string, error) { return "ssh-ed25519 AAAAkey", nil }
 	c := backend.Confinement{Net: backend.NetProxy, ProxyPort: 30001, HostKey: key}
-	// Without a ports record (CreateVM writes one): none, warned.
-	if err := l.Start(ctx, vm, c); err != nil {
-		t.Fatal(err)
-	}
-	if len(*starts) != 0 || !slices.Equal(warned.Names(), []string{"ports_forward_failed log=" + l.Forwards.Log(vm) + " vm=" + vm}) {
-		t.Fatalf("no record: started %q, warned %q", *starts, warned.Names())
-	}
-	warned.Reset()
-	if err := l.Stop(ctx, vm); err != nil {
-		t.Fatal(err)
-	}
-	if err := l.Forwards.write(vm, backend.Ports{All: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := l.Start(ctx, vm, c); err != nil {
+	if err := l.Start(ctx, vm, backend.Want{Ports: backend.Ports{All: true}}, c); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
@@ -101,16 +86,13 @@ func TestStartForwarder(t *testing.T) {
 
 	// Listed ports: those Free leaves this start.
 	listed := []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8010}}
-	if err := l.SetPorts(ctx, vm, backend.Ports{Ranges: listed}, backend.Confinement{}); err != nil {
-		t.Fatal(err)
-	}
 	c.Free = func(_ context.Context, rs []backend.PortRange) []backend.PortRange {
 		if !slices.Equal(rs, listed) {
 			t.Errorf("Free asked of %v", rs)
 		}
 		return rs[1:]
 	}
-	if err := l.Start(ctx, vm, c); err != nil {
+	if err := l.Start(ctx, vm, backend.Want{Ports: backend.Ports{Ranges: listed}}, c); err != nil {
 		t.Fatal(err)
 	}
 	if got := (*starts)[len(*starts)-1]; !slices.Equal(got[len(got)-2:], []string{"-only", "8000-8010"}) {
@@ -121,21 +103,15 @@ func TestStartForwarder(t *testing.T) {
 	}
 
 	// None: no forwarder; a build: none either.
-	if err := l.SetPorts(ctx, vm, backend.Ports{}, backend.Confinement{}); err != nil {
-		t.Fatal(err)
-	}
 	c.Free = nil
 	n := len(*starts)
-	if err := l.Start(ctx, vm, c); err != nil {
+	if err := l.Start(ctx, vm, backend.Want{}, c); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.Stop(ctx, vm); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.SetPorts(ctx, vm, backend.Ports{All: true}, backend.Confinement{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := l.Start(ctx, vm, backend.Confinement{Net: backend.NetInternet}); err != nil {
+	if err := l.start(ctx, vm, nil, backend.Confinement{Net: backend.NetInternet}); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.Stop(ctx, vm); err != nil {
@@ -147,7 +123,7 @@ func TestStartForwarder(t *testing.T) {
 
 	// Its host key unknown: warned, the VM runs.
 	c.HostKey = func(context.Context) (string, error) { return "", errors.New("no keys") }
-	if err := l.Start(ctx, vm, c); err != nil {
+	if err := l.Start(ctx, vm, backend.Want{Ports: backend.Ports{All: true}}, c); err != nil {
 		t.Fatal(err)
 	}
 	if len(*starts) != n || !slices.Equal(warned.Names(), []string{"ports_forward_failed log=" + l.Forwards.Log(vm) + " vm=" + vm}) {
@@ -156,7 +132,7 @@ func TestStartForwarder(t *testing.T) {
 	if err := l.Delete(ctx, vm); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{l.Dirs.VM(vm).Ports(), l.Forwards.KnownHosts(vm), l.Forwards.Log(vm), l.Dirs.VM(vm).Backend()} {
+	for _, f := range []string{l.Forwards.KnownHosts(vm), l.Forwards.Log(vm), l.Dirs.VM(vm).Backend()} {
 		if _, err := os.Stat(f); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s left: %v", f, err)
 		}
@@ -173,10 +149,7 @@ func TestSetPortsRunning(t *testing.T) {
 	starts := fakeForwarders(t, l, vm)
 	ctx := t.Context()
 	key := func(context.Context) (string, error) { return "ssh-ed25519 AAAAkey", nil }
-	if err := l.Forwards.write(vm, backend.Ports{All: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := l.Start(ctx, vm, backend.Confinement{HostKey: key}); err != nil {
+	if err := l.Start(ctx, vm, backend.Want{Ports: backend.Ports{All: true}}, backend.Confinement{HostKey: key}); err != nil {
 		t.Fatal(err)
 	}
 	running := false
@@ -197,9 +170,6 @@ func TestSetPortsRunning(t *testing.T) {
 	}
 	if !l.Forwards.Running(vm) {
 		t.Error("no forwarder")
-	}
-	if p, err := l.Forwards.read(vm); err != nil || !slices.Equal(p.Ranges, listed.Ranges) {
-		t.Errorf("record %+v, %v", p, err)
 	}
 	if err := l.SetPorts(ctx, vm, backend.Ports{}, c); err != nil {
 		t.Fatal(err)
