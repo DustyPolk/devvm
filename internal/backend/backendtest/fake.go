@@ -53,6 +53,7 @@ type Fake struct {
 	Missing      []backend.Problem // Problems' answer
 	Format       string            // ToolFormat's answer
 	OriginSteps  []image.Step      // Origin's answer, for any base
+	Pinned       string            // PinOrigin's answer
 	// ExecFunc, when set, is what Exec returns after recording the call
 	// (Errs aside).
 	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
@@ -162,6 +163,16 @@ func (f *images) Origin(*backend.From) ([]image.Step, error) {
 		return nil, err
 	}
 	return f.OriginSteps, nil
+}
+
+// PinOrigin records the call and returns Pinned, or Errs' error for it.
+func (f *images) PinOrigin(_ context.Context, from *backend.From, how backend.Pin) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.record("PinOrigin", from, how); err != nil {
+		return "", err
+	}
+	return f.Pinned, nil
 }
 
 // Usage is none: the fake can't tell what its VMs take.

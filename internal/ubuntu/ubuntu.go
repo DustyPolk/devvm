@@ -1,24 +1,26 @@
-// Package ubuntu pins Ubuntu's container image and cloud image for base.
-// The cloud image is Lima's: a pinned dated release of the series, and its
-// image's SHA-256 for each architecture. Finding it reads that release's
-// SHA256SUMS, which must list the pinned checksum; when gpgv is installed,
-// SHA256SUMS must also be signed by Ubuntu's cloud image key, pinned in
-// devvm's own files (layers/ubuntu-cloud.gpg).
+// Package ubuntu finds Ubuntu's cloud image for base: the newest dated
+// release of the series that has an image for the host, read from
+// cloud-images.ubuntu.com's listing. A release counts only when its
+// SHA256SUMS carry a signature from Ubuntu's cloud image key, pinned in
+// devvm's own files (layers/ubuntu-cloud.gpg), which devvm checks itself
+// (pgp.go), and list the image: the image's SHA-256 is then the one they
+// list. What's found is pinned on this machine (state.UbuntuPin), and
+// base's key hashes the pin.
 //
 // The image itself isn't downloaded here: the backend fetches it and checks
-// it against the digest.
+// it against the pinned digest.
 package ubuntu
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -39,41 +41,16 @@ const (
 	Keyring = "layers/ubuntu-cloud.gpg"
 )
 
-// CloudRelease pins the cloud image base starts from: Series' dated
-// release on DefaultURL. scripts/bump.sh moves it with layers/base.sh's
-// package snapshot, to the newest release dated before the snapshot: an
-// image with newer packages than the snapshot has leaves apt unable to
-// install what depends on their exact versions.
-const CloudRelease = "release-20261016"
-
-// CloudSHA256Arm64 is CloudRelease's arm64 image's SHA-256, from its
-// signed SHA256SUMS.
-const CloudSHA256Arm64 = "8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24"
-
-// CloudSHA256Amd64 is CloudRelease's amd64 image's SHA-256, from its
-// signed SHA256SUMS.
-const CloudSHA256Amd64 = "5645d0318ad21f643ebb1ac4567514620e9893380b07b0201fda163baa5b7eb5"
-
-// CloudDigest is CloudRelease's image's digest for an architecture (arm64,
-// amd64), sha256:<hex>; "" for one without an image.
-func CloudDigest(arch string) string {
-	switch arch {
-	case "arm64":
-		return "sha256:" + CloudSHA256Arm64
-	case "amd64":
-		return "sha256:" + CloudSHA256Amd64
-	}
-	return ""
-}
-
-// CloudPin is the pinned cloud image for an architecture, as base's key on
-// Lima hashes it: "<release> <file> <digest>".
-func CloudPin(arch string) string {
-	return CloudRelease + " " + cloudFile(arch) + " " + CloudDigest(arch)
-}
-
-func cloudFile(arch string) string {
+// File is the cloud image's file name in a release, for an architecture
+// as Go names it (arm64, amd64).
+func File(arch string) string {
 	return "ubuntu-" + Version + "-server-cloudimg-" + arch + ".img"
+}
+
+// PinArg is a pin as base's recipe on Lima holds it, which its key hashes:
+// "<release> <file> <digest>".
+func PinArg(p state.UbuntuPin) string {
+	return p.Release + " " + p.File + " " + p.Digest
 }
 
 const (
@@ -91,16 +68,16 @@ type Image struct {
 // String is how base's record keeps it: "URL sha256:DIGEST".
 func (i Image) String() string { return i.URL + " " + i.Digest }
 
-// Finder looks up the image. New fills it in; tests change its fields.
+// ImageOf is p's image at url, where the dated releases are listed.
+func ImageOf(url string, p state.UbuntuPin) Image {
+	return Image{URL: strings.TrimRight(url, "/") + "/" + p.Release + "/" + p.File, Digest: p.Digest}
+}
+
+// Finder finds the image. New fills it in; tests change its fields.
 type Finder struct {
-	// URL holds the dated releases (release-YYYYMMDD/), each with its
+	// URL lists the dated releases (release-YYYYMMDD/), each with its
 	// SHA256SUMS and SHA256SUMS.gpg. http(s):// or file://.
 	URL string
-	// Release is the dated release to use: CloudRelease.
-	Release string
-	// Digest is the release's image's for Arch, sha256:<hex>: CloudDigest's;
-	// "" when there's none.
-	Digest string
 	// Assets holds devvm's own files, Keyring among them.
 	Assets fs.FS
 	// Arch is the host's, as Go and Ubuntu's image names have it (arm64,
@@ -110,42 +87,20 @@ type Finder struct {
 	Client *fetch.Client
 	// RetryDelay is the wait before the first retry; it doubles after each.
 	RetryDelay time.Duration
-	// GPGV is gpgv's path, "" when it isn't installed.
-	GPGV string
-	// Run runs gpgv into the run log.
-	Run func(ctx context.Context, cmd *exec.Cmd) error
-	// Note prints a note.
-	Note func(msg.M)
-}
-
-// UI is the run log gpgv runs into, and where a Finder prints.
-type UI interface {
-	LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error
-	Note(msg.M)
+	// Now is the time a signature's expiry is checked at.
+	Now func() time.Time
 }
 
 // New returns a Finder with devvm's own files (assets), at url
-// (DefaultURL when it's "", a file:// folder in tests), running gpgv and
-// printing through u.
-func New(assets fs.FS, url string, u UI) *Finder {
-	if url == "" {
-		url = DefaultURL
-	}
-	gpgv, err := exec.LookPath("gpgv")
-	if err != nil {
-		gpgv = ""
-	}
+// (DefaultURL when it's "", a file:// folder in tests).
+func New(assets fs.FS, url string) *Finder {
 	return &Finder{
-		URL:        strings.TrimRight(url, "/"),
-		Release:    CloudRelease,
-		Digest:     CloudDigest(runtime.GOARCH),
+		URL:        strings.TrimRight(cmp.Or(url, DefaultURL), "/"),
 		Assets:     assets,
 		Arch:       runtime.GOARCH,
 		Client:     NewClient(),
 		RetryDelay: time.Second,
-		GPGV:       gpgv,
-		Run:        func(ctx context.Context, cmd *exec.Cmd) error { return u.LoggedCmd(ctx, msg.M{}, cmd) },
-		Note:       u.Note,
+		Now:        time.Now,
 	}
 }
 
@@ -160,37 +115,95 @@ func NewClient() *fetch.Client {
 	return c
 }
 
-// File is the image's file name in a release.
-func (f *Finder) File() string { return cloudFile(f.Arch) }
+// errNoImage is a release whose checksums list no image for the host.
+var errNoImage = errors.New("no image for this host")
 
-// Image returns the pinned release's image for the host, with its pinned
-// digest, once the release's SHA256SUMS (signature-checked when gpgv is
-// installed) lists that digest for it. It fails with no_ubuntu_image when
-// the host's architecture has no pin or the release's SHA256SUMS can't be
-// fetched, ubuntu_bad_signature when they aren't signed by Ubuntu's key,
-// and ubuntu_checksum_unpinned when they list another checksum.
-func (f *Finder) Image(ctx context.Context) (Image, error) {
-	if f.Digest == "" {
-		return Image{}, msg.NoUbuntuImage(f.Release, f.URL, Version)
-	}
-	sums, err := f.fetch(ctx, f.URL+"/"+f.Release+"/SHA256SUMS")
+// Newest returns the newest dated release, older than before
+// (release-YYYYMMDD; "" for any), whose signed checksums list an image for
+// the host, with that image's SHA-256: releases without one are passed
+// over. It fails with ubuntu_unreachable when the listing can't be read,
+// no_ubuntu_release when no release has an image, and with the first
+// release's refusal (no_ubuntu_image, ubuntu_bad_signature) otherwise: a
+// bad signature is never passed over for an older release.
+func (f *Finder) Newest(ctx context.Context, before string) (state.UbuntuPin, error) {
+	releases, err := f.releases(ctx)
 	if err != nil {
-		if ctx.Err() != nil {
-			return Image{}, ctx.Err()
+		return state.UbuntuPin{}, err
+	}
+	for _, r := range releases {
+		if before != "" && r >= before {
+			continue
 		}
-		return Image{}, msg.NoUbuntuImage(f.Release, f.URL, Version)
+		p, err := f.check(ctx, r)
+		if errors.Is(err, errNoImage) {
+			continue
+		}
+		return p, err
 	}
-	if err := f.verify(ctx, f.Release, sums); err != nil {
-		return Image{}, err
-	}
-	file := f.File()
-	if "sha256:"+Checksum(sums, file) != f.Digest {
-		return Image{}, msg.UbuntuChecksumUnpinned(file, f.Release, f.URL)
-	}
-	return Image{URL: f.URL + "/" + f.Release + "/" + file, Digest: f.Digest}, nil
+	return state.UbuntuPin{}, msg.NoUbuntuRelease(f.URL, Version)
 }
 
-var release = regexp.MustCompile(`release-[0-9]{8}`)
+// Release returns release's image for the host, as Newest checks it: a
+// release that has none fails with no_ubuntu_image.
+func (f *Finder) Release(ctx context.Context, release string) (state.UbuntuPin, error) {
+	p, err := f.check(ctx, release)
+	if errors.Is(err, errNoImage) {
+		return state.UbuntuPin{}, msg.NoUbuntuImage(release, f.URL, Version)
+	}
+	return p, err
+}
+
+var (
+	release     = regexp.MustCompile(`release-[0-9]{8}`)
+	releaseName = regexp.MustCompile(`^release-[0-9]{8}$`)
+	// listed is a link to a dated release in the listing: Apache's, or
+	// Go's file server's in tests.
+	listed = regexp.MustCompile(`href="(release-[0-9]{8})/?"`)
+)
+
+// releases lists the dated releases the listing links to, newest first.
+func (f *Finder) releases(ctx context.Context) ([]string, error) {
+	page, err := f.fetch(ctx, f.URL+"/")
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, msg.UbuntuUnreachable(f.URL, Version).Because(err)
+	}
+	var out []string
+	for _, m := range listed.FindAllSubmatch(page, -1) {
+		if r := string(m[1]); !slices.Contains(out, r) {
+			out = append(out, r)
+		}
+	}
+	slices.Sort(out)
+	slices.Reverse(out)
+	return out, nil
+}
+
+// check returns rel's image for the host once rel's SHA256SUMS are signed
+// by Ubuntu's key and list it; errNoImage when they don't list it.
+func (f *Finder) check(ctx context.Context, rel string) (state.UbuntuPin, error) {
+	if !releaseName.MatchString(rel) {
+		return state.UbuntuPin{}, msg.NoUbuntuImage(rel, f.URL, Version)
+	}
+	sums, err := f.fetch(ctx, f.URL+"/"+rel+"/SHA256SUMS")
+	if err != nil {
+		if ctx.Err() != nil {
+			return state.UbuntuPin{}, ctx.Err()
+		}
+		return state.UbuntuPin{}, msg.NoUbuntuImage(rel, f.URL, Version).Because(err)
+	}
+	if err := f.verify(ctx, rel, sums); err != nil {
+		return state.UbuntuPin{}, err
+	}
+	file := File(f.Arch)
+	sum := Checksum(sums, file)
+	if sum == "" {
+		return state.UbuntuPin{}, errNoImage
+	}
+	return state.UbuntuPin{Release: rel, File: file, Digest: "sha256:" + sum, Pinned: f.Now().UTC().Truncate(time.Second)}, nil
+}
 
 // ReleaseDate is the date of the dated release an image's address names
 // (20260101 for …/release-20260101/…), "" when it names none.
@@ -218,48 +231,22 @@ func Checksum(sums []byte, file string) string {
 	return ""
 }
 
-// verify checks that sums, release's SHA256SUMS, is signed by Ubuntu's
-// key, with gpgv in a home of its own, so no other key counts; the key is
-// written beside them. Without gpgv it notes that the signature goes
-// unchecked; the pinned SHA-256 still decides.
-func (f *Finder) verify(ctx context.Context, release string, sums []byte) error {
-	if f.GPGV == "" {
-		f.Note(msg.UbuntuUnsigned())
-		return nil
-	}
-	bad := msg.UbuntuBadSignature(release, f.URL)
-	sig, err := f.fetch(ctx, f.URL+"/"+release+"/SHA256SUMS.gpg")
+// verify checks that sums, rel's SHA256SUMS, carry a valid signature by
+// Ubuntu's key (Keyring) and no other.
+func (f *Finder) verify(ctx context.Context, rel string, sums []byte) error {
+	bad := msg.UbuntuBadSignature(rel, f.URL)
+	sig, err := f.fetch(ctx, f.URL+"/"+rel+"/SHA256SUMS.gpg")
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return bad
+		return bad.Because(err)
 	}
-	dir, err := os.MkdirTemp("", "devvm-ubuntu.")
-	if err != nil {
-		return fmt.Errorf("checking Ubuntu's checksums: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(dir) }()
 	key, err := fs.ReadFile(f.Assets, Keyring)
 	if err != nil {
 		return fmt.Errorf("checking Ubuntu's checksums: %w", err)
 	}
-	sumsFile, sigFile, home := filepath.Join(dir, "SHA256SUMS"), filepath.Join(dir, "SHA256SUMS.gpg"), filepath.Join(dir, "gnupg")
-	keyring := filepath.Join(dir, filepath.Base(Keyring))
-	for file, data := range map[string][]byte{sumsFile: sums, sigFile: sig, keyring: key} {
-		if err := state.WriteFile(file, data); err != nil {
-			return fmt.Errorf("checking Ubuntu's checksums: %w", err)
-		}
-	}
-	if err := os.Mkdir(home, 0o700); err != nil {
-		return fmt.Errorf("checking Ubuntu's checksums: %w", err)
-	}
-	cmd := exec.CommandContext(ctx, f.GPGV, "--keyring", keyring, sigFile, sumsFile) //nolint:gosec // gpgv, found on PATH
-	cmd.Env = append(os.Environ(), "GNUPGHOME="+home)
-	if err := f.Run(ctx, cmd); err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
+	if err := verifyDetached(key, sig, sums, f.Now()); err != nil {
 		return bad
 	}
 	return nil

@@ -251,13 +251,13 @@ func layerArgs(parent, inst string) []string {
 	return []string{"clone", "--tty=false", "--mount-none", parent, inst}
 }
 
-// createFromUbuntu creates a VM from Ubuntu's cloud image, the one base's
-// origin pins, with yaml's settings (base.yaml) and nothing from the host
-// mounted, or the mounts a --set in opts gives it (--set applies after
-// --mount-none). It returns the image it used. It gets size's CPUs and
-// memory (buildSize's).
+// createFromUbuntu creates a VM from Ubuntu's cloud image, the one pinned
+// on this machine, which base's origin holds, with yaml's settings
+// (base.yaml) and nothing from the host mounted, or the mounts a --set in
+// opts gives it (--set applies after --mount-none). It returns the image
+// it used. It gets size's CPUs and memory (buildSize's).
 func (l *images) createFromUbuntu(ctx context.Context, vm string, yaml []byte, size backend.Size, opts ...string) (ubuntu.Image, error) {
-	img, err := l.Ubuntu(ctx)
+	img, err := l.pinnedImage()
 	if err != nil {
 		return ubuntu.Image{}, err
 	}

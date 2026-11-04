@@ -1,24 +1,25 @@
 #!/bin/bash
 # Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, layers/nix.sh, features/*.sh,
-# shared-tools/build.sh, oci/build.sh), internal/tools/mise.go (devvm's host mise) and
-# internal/ubuntu/ubuntu.go (Ubuntu's cloud image), and the end-to-end tests' own pins
-# (tests/e2e-mise.lock, and the --from images' digests in tests/e2e.sh).
+# shared-tools/build.sh, oci/build.sh) and internal/tools/mise.go (devvm's host mise), and the
+# end-to-end tests' own pins (tests/e2e-mise.lock, and in tests/e2e.sh the --from images' digests
+# and Ubuntu's cloud image release).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
-# Tools: apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from
-#   apt: base's package snapshot, and Ubuntu's cloud image base starts from
+# Tools: apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu
+#   apt: base's package snapshot
 #   mise: base's, and the one devvm runs on the host to resolve the shared tools' versions
 #   e2e-tools: the shared tools' versions every e2e section but tools uses
 #   e2e-from: the container images e2e's --from checks start from, by digest
-# The shared tools themselves (node, claude, ...) aren't pinned for users: devvm resolves them per
-# user. Only e2e pins them, so its cached tool images stay valid between runs.
-# Needs curl and jq, and gpgv for apt. Checksums come from upstream's published sums where there are
+#   e2e-ubuntu: the dated release of Ubuntu's cloud image e2e pins base to
+# The shared tools themselves (node, claude, ...) and Ubuntu's cloud image aren't pinned for users:
+# devvm resolves them per user. Only e2e pins them, so its cached images stay valid between runs.
+# Needs curl and jq. Checksums come from upstream's published sums where there are
 # any; otherwise they're computed from the download (said so in the output). Edited scripts change
 # image keys, so the affected images rebuild on next use: test with `devvm build <image>`, then
 # `devvm gc`.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all="apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from"
+all="apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu"
 
 check=false
 if [[ ${1:-} == --check ]]; then check=true; shift; fi
@@ -98,54 +99,20 @@ pin3() {   # pin3 FILE PREFIX VERSION SHA_ARM64 SHA_AMD64
   set_var "$1" "${2}_sha256_amd64" "$5"
 }
 
-# ubuntu_cloud DATE sets cloud_release, the newest dated release of Ubuntu's cloud image (base's)
-# before DATE (YYYYMMDD), and cloud_arm64 and cloud_amd64, its images' SHA-256s from its SHA256SUMS,
-# once gpgv finds them signed by Ubuntu's cloud image key (assets/layers/ubuntu-cloud.gpg), in a home
-# of its own so no other key counts. Else exit.
-ubuntu_cloud() {
-  local u=https://cloud-images.ubuntu.com/releases/resolute r
-  command -v gpgv >/dev/null || { echo "bump: needs gpgv (brew install gnupg, or apt install gpgv)" >&2; exit 1; }
-  fetch "$u/" > "$tmp/cloud-releases"
-  cloud_release=""
-  while read -r r; do
-    if [[ ${r#release-} < $1 ]]; then cloud_release=$r; break; fi
-  done < <(grep -o 'release-[0-9]\{8\}' "$tmp/cloud-releases" | sort -ru || true)
-  if [[ -z $cloud_release ]]; then
-    echo "bump: Ubuntu has no cloud image release before the snapshot's date $1" >&2
-    exit 1
-  fi
-  valid cloud_release "$cloud_release"
-  fetch "$u/$cloud_release/SHA256SUMS" > "$tmp/SHA256SUMS"
-  fetch "$u/$cloud_release/SHA256SUMS.gpg" > "$tmp/SHA256SUMS.gpg"
-  rm -rf "$tmp/gnupg"; mkdir -m 700 "$tmp/gnupg"
-  if ! GNUPGHOME="$tmp/gnupg" gpgv --keyring "$root/assets/layers/ubuntu-cloud.gpg" \
-      "$tmp/SHA256SUMS.gpg" "$tmp/SHA256SUMS" >"$tmp/gpgv.out" 2>&1; then
-    cat "$tmp/gpgv.out" >&2
-    echo "bump: Ubuntu's checksums for $cloud_release aren't signed by Ubuntu's cloud image key" >&2
-    exit 1
-  fi
-  cloud_arm64=$(cloud_sum arm64); cloud_amd64=$(cloud_sum amd64)
-}
-# cloud_sum ARCH: the arch's image's checksum in the fetched SHA256SUMS.
-cloud_sum() {
-  awk -v f="ubuntu-26.04-server-cloudimg-$1.img" '$2 == f || $2 == "*" f { print $1; exit }' "$tmp/SHA256SUMS"
+# The package snapshot base builds from, today's (UTC).
+bump_apt() {
+  local f=assets/layers/base.sh cur new
+  cur=$(get $f apt_snapshot); new=$(date -u +%Y%m%dT000000Z)
+  if report apt "$cur" "$new"; then set_var $f apt_snapshot "$new"; fi
 }
 
-# The package snapshot base builds from, today's (UTC), and Ubuntu's cloud image base starts from, by
-# dated release and SHA-256. They move together, and only to an image made before the snapshot: apt
-# can't install what depends on the exact version of a package newer than the snapshot's.
-bump_apt() {
-  local f=assets/layers/base.sh g=internal/ubuntu/ubuntu.go cur new rel want=false
-  cur=$(get $f apt_snapshot); new=$(date -u +%Y%m%dT000000Z)
-  rel=$(get_const $g CloudRelease)
-  ubuntu_cloud "${new:0:8}"
-  if report apt "$cur" "$new"; then want=true; fi
-  if report ubuntu-cloud "$rel" "$cloud_release"; then want=true; fi
-  $want || return 0
-  set_var $f apt_snapshot "$new"
-  set_var $g CloudRelease "$cloud_release" cloud_release
-  set_var $g CloudSHA256Arm64 "$cloud_arm64" cloud_sha256_arm64
-  set_var $g CloudSHA256Amd64 "$cloud_amd64" cloud_sha256_amd64
+# The dated release of Ubuntu's cloud image that e2e pins base to (tests/e2e.sh's
+# e2e_ubuntu_release), so its images stay cached between runs: the newest that Ubuntu lists. devvm
+# checks its signed checksums when e2e pins it, as it does the newest for users.
+bump_e2e-ubuntu() {
+  local f=tests/e2e.sh new
+  new=$(fetch https://cloud-images.ubuntu.com/releases/resolute/ | grep -o 'release-[0-9]\{8\}' | sort -ru | head -1 || true)
+  if report e2e-ubuntu "$(get $f e2e_ubuntu_release)" "$new"; then set_var $f e2e_ubuntu_release "$new"; fi
 }
 
 # Docker's packages: the newest of each in its repository for base's Ubuntu release, and its signing key.

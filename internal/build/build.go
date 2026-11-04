@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -69,7 +70,10 @@ type Env struct {
 	// same image before it says so; 0 for buildWaitNote.
 	WaitNote time.Duration
 
-	looked bool // From's digest was looked up in this run
+	// looked is set once lookUp has run, which holds lookMu: builds on
+	// one Env may run at once.
+	lookMu sync.Mutex
+	looked bool
 }
 
 // Builds builds images, and builds them again.
@@ -97,20 +101,45 @@ func (b *Env) Chain(name string) (image.Chain, error) {
 	return b.chain(in, name)
 }
 
-// lookUp looks up From's digest, once a run, before any key that builds
-// is worked out: every key holds base's.
+// lookUp looks up From's digest and has the backend pin what base starts
+// from when nothing is pinned yet (PinOrigin), once a run, before any key
+// that builds is worked out: every key holds base's.
 func (b Builds) lookUp(ctx context.Context) error {
-	if b.From == "" || b.looked {
+	b.lookMu.Lock()
+	defer b.lookMu.Unlock()
+	if b.looked {
 		return nil
 	}
-	l := b.Lookup
-	if l == nil {
-		l = from.NewLookup(b.Dirs, b.Warn, b.proxy())
+	if b.From != "" {
+		l := b.Lookup
+		if l == nil {
+			l = from.NewLookup(b.Dirs, b.Warn, b.proxy())
+		}
+		if err := l.Refresh(ctx, b.From); err != nil {
+			return err
+		}
 	}
-	if err := l.Refresh(ctx, b.From); err != nil {
+	if err := b.pin(ctx, backend.PinFirst); err != nil {
 		return err
 	}
 	b.looked = true
+	return nil
+}
+
+// pin has the backend pin what base starts from, as how asks, and says
+// what it pinned.
+func (b Builds) pin(ctx context.Context, how backend.Pin) error {
+	f, err := b.fromAsRecorded(b.From)
+	if err != nil {
+		return err
+	}
+	pinned, err := b.Backend.PinOrigin(ctx, f, how)
+	if err != nil {
+		return err
+	}
+	if pinned != "" {
+		b.Info(msg.OriginPinned(pinned))
+	}
 	return nil
 }
 
@@ -518,7 +547,9 @@ func (b Images) List(ctx context.Context) ([]Image, error) {
 }
 
 // Rebuild builds an image again, from its parent as it is: its rebuild
-// counter changes, so it gets a new key. Then it deletes the stale images
+// counter changes, so it gets a new key, and base first has the backend
+// pin the newest of what it starts from (PinOrigin's PinNewest). Then it
+// deletes the stale images
 // (the old one and those built on it among them) that no VM uses. When
 // images are built on it, it asks first in a terminal, and refuses
 // without one (force_needed), unless Force.
@@ -556,6 +587,12 @@ func (b Builds) Rebuild(ctx context.Context, name string) error {
 		case !b.Confirm(msg.Continue()):
 			b.Info(msg.NothingChanged())
 			return nil
+		}
+	}
+	// Base starts again from the newest of what it starts from.
+	if name == image.Base {
+		if err := b.pin(ctx, backend.PinNewest); err != nil {
+			return err
 		}
 	}
 	if err := b.bumpRebuild(ctx, name); err != nil {

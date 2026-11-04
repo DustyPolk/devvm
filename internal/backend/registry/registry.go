@@ -26,6 +26,10 @@ type Overrides struct {
 	// UbuntuURL (DEVVM_UBUNTU_URL) is where Ubuntu's dated releases are
 	// listed, in place of ubuntu.DefaultURL.
 	UbuntuURL string
+	// UbuntuRelease (DEVVM_UBUNTU_RELEASE) is the dated release of
+	// Ubuntu's cloud image that base is pinned to, in place of the newest:
+	// e2e's, so its runs keep their images.
+	UbuntuRelease string
 }
 
 // UI is what every backend needs of devvm's UI.
@@ -44,6 +48,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, o Overrides, cp *settings.CompanyProx
 	if o.KVM != "" {
 		l.KVM = o.KVM
 	}
+	l.UbuntuRelease = o.UbuntuRelease
 	return build(u, host, o.Unreviewed, l)
 }
 

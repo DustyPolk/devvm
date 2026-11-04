@@ -91,7 +91,27 @@ type Images interface {
 	// back and runs those, not its own files. None for a backend that
 	// puts nothing of its own in.
 	Origin(f *From) ([]image.Step, error)
+	// PinOrigin pins what base from f (nil for the backend's own Ubuntu)
+	// starts from on this machine, as how asks, so Origin has it to put
+	// in base's recipe: callers pin before they key base for a build.
+	// It returns what it pinned, for messages, "" when it pinned nothing:
+	// a pin was there already (PinFirst), or the backend has nothing of
+	// its own to pin. A --from image's digest is devvm's own record.
+	PinOrigin(ctx context.Context, f *From, how Pin) (string, error)
 }
+
+// Pin is how PinOrigin pins base's origin.
+type Pin int
+
+const (
+	// PinFirst pins the newest only when nothing is pinned yet: a build.
+	PinFirst Pin = iota
+	// PinNewest pins the newest again: devvm rebuild base.
+	PinNewest
+	// PinOlder pins the newest older than what's pinned: the fallback
+	// when what's pinned doesn't boot.
+	PinOlder
+)
 
 // Machines makes, starts and reaches VMs. A VM is made as its spec wants
 // (CreateVM), and each start of a stopped VM makes it what the caller

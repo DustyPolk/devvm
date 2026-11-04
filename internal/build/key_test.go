@@ -206,8 +206,11 @@ func TestKeyRefuses(t *testing.T) {
 	if _, err := b.plan(in, image.Base); err == nil {
 		t.Error("feature ../x: no error")
 	}
-	unnamed := *b
-	unnamed.Backend = backendtest.New("", b.Backend.Caps())
+	// b on another backend: Env holds locks, so it isn't copied.
+	on := func(be backend.Backend) *Env {
+		return &Env{Dirs: b.Dirs, Assets: b.Assets, Backend: be, Review: b.Review, Tools: b.Tools, From: b.From, Version: b.Version}
+	}
+	unnamed := on(backendtest.New("", b.Backend.Caps()))
 	if _, err := unnamed.Key(image.Base); err == nil {
 		t.Error("no backend: no error")
 	}
@@ -220,9 +223,7 @@ func TestKeyRefuses(t *testing.T) {
 	// The backend's origin failing.
 	f := backendtest.New("fake", b.Backend.Caps())
 	f.Errs = map[string]error{"Origin": errors.New("no origin")}
-	failing := *b
-	failing.Backend = f
-	if _, err := failing.Key(image.Base); err == nil {
+	if _, err := on(f).Key(image.Base); err == nil {
 		t.Error("no origin: no error")
 	}
 }

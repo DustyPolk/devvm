@@ -99,6 +99,8 @@ func TestFiles(t *testing.T) {
 		{d.ImageLocks(), "/d/images/locks"},
 		{d.Rebuilds(), "/d/images/rebuilds.json"},
 		{d.RebuildsLock(), "/d/images/locks/rebuilds"},
+		{d.UbuntuPin(), "/d/images/ubuntu.json"},
+		{d.UbuntuPinLock(), "/d/images/locks/ubuntu"},
 		{d.Cache(), "/d/cache"},
 		{d.FromDigests(), "/d/cache/from-digests.json"},
 		{d.NixCache(), "/d/cache/nix-cache"},

@@ -81,11 +81,14 @@ type Lima struct {
 	OCINote time.Duration
 	// Getenv reads the environment (SSH_AUTH_SOCK).
 	Getenv func(string) string
-	// Ubuntu finds Ubuntu's cloud image for base, at UbuntuURL, where
-	// Ubuntu's dated releases are listed (ubuntu.DefaultURL, unless a
-	// test build moves it).
-	Ubuntu    func(ctx context.Context) (ubuntu.Image, error)
-	UbuntuURL string
+	// Ubuntu finds Ubuntu's cloud image for base, which PinOrigin pins,
+	// at UbuntuURL, where Ubuntu's dated releases are listed
+	// (ubuntu.DefaultURL, unless a test build moves it). UbuntuRelease is
+	// the dated release a test build pins in place of the newest: e2e's,
+	// so its runs keep their images.
+	Ubuntu        Finder
+	UbuntuURL     string
+	UbuntuRelease string
 	// Memory returns the host's memory in bytes.
 	Memory func() (uint64, error)
 	// CPUs returns the host's CPU count.
@@ -116,7 +119,7 @@ type Lima struct {
 // UI is where the backend prints, the run log its commands run into, and
 // the run's cleanup stack.
 type UI interface {
-	ubuntu.UI
+	LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error
 	Info(msg.M)
 	Warn(msg.M)
 	LogNote()
@@ -154,14 +157,14 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string,
 			self = r
 		}
 	}
-	finder := ubuntu.New(assets, ubuntuURL, u)
+	finder := ubuntu.New(assets, ubuntuURL)
 	if t := finder.Client.Transport(); t != nil {
 		t.Proxy = cp.Route
 	}
 	return withRoles(&Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
-		Ubuntu: finder.Image, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
+		Ubuntu: finder, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: "/dev/kvm",
 		DockerRunning: from.DockerRunning,
 		User:          user.Current,
@@ -174,11 +177,16 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string,
 func (l *Lima) Name() string { return Name }
 
 // Origin is what Lima makes base from, which BuildImage is given back:
-// the pinned Ubuntu cloud image for the host's architecture (which a
-// --from conversion's VM boots too), with f, the conversion's scripts
-// (convertSteps), and then base.yaml, the settings limactl create reads.
+// the Ubuntu cloud image pinned on this machine (PinOrigin; "" before
+// one is), which a --from conversion's VM boots too, with f, the
+// conversion's scripts (convertSteps), and then base.yaml, the settings
+// limactl create reads.
 func (l *images) Origin(f *backend.From) ([]image.Step, error) {
-	steps := []image.Step{{Name: originUbuntu, Args: []string{ubuntu.CloudPin(l.Arch)}}}
+	pin, _, err := l.pinned()
+	if err != nil {
+		return nil, err
+	}
+	steps := []image.Step{{Name: originUbuntu, Args: []string{pin}}}
 	if f != nil {
 		conv, err := l.convertSteps(f)
 		if err != nil {
@@ -207,9 +215,16 @@ type origin struct {
 }
 
 // originOf reads base's origin steps from its recipe, as Origin makes
-// them: the Ubuntu image they pin must be this devvm's for the host, and
-// with f, the conversion's must be there, converting f.
+// them: the Ubuntu image they pin must be the one pinned on this machine,
+// and with f, the conversion's must be there, converting f.
 func (l *images) originOf(steps []image.Step, f *backend.From) (origin, error) {
+	want, ok, err := l.pinned()
+	if err != nil {
+		return origin{}, err
+	}
+	if !ok {
+		return origin{}, errNoPin
+	}
 	var o origin
 	pin := ""
 	for _, s := range steps {
@@ -223,8 +238,8 @@ func (l *images) originOf(steps []image.Step, f *backend.From) (origin, error) {
 		}
 	}
 	switch {
-	case pin != ubuntu.CloudPin(l.Arch):
-		return origin{}, fmt.Errorf("lima: base's recipe pins Ubuntu %q, not %q", pin, ubuntu.CloudPin(l.Arch))
+	case pin != want:
+		return origin{}, fmt.Errorf("lima: base's recipe pins Ubuntu %q, not %q", pin, want)
 	case o.yaml == nil:
 		return origin{}, errors.New("lima: base's recipe has no base.yaml")
 	case (f != nil) != (o.conversion != nil):

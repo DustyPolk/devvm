@@ -353,7 +353,8 @@ func TestBuildChecksCompanyProxy(t *testing.T) {
 }
 
 // Below the free space building base wants, or another image, nothing of
-// it is made: the backend is only asked which images it has.
+// it is made: the backend only pins base's origin and is asked which
+// images it has.
 func TestBuildRefusesLowSpace(t *testing.T) {
 	b, f := testEnv(t)
 	b.Backend = backendtest.Stored{Fake: f, Dirs: []string{"/lima"}}
@@ -367,7 +368,7 @@ func TestBuildRefusesLowSpace(t *testing.T) {
 	if err := (Builds{b}).Build(t.Context(), "foo"); err == nil || msg.NamesOf(err) != "disk_low dir=/lima free=11.9 name=base need=12" {
 		t.Errorf("Build with %d free = %v", free, err)
 	}
-	if ms := f.Methods(); !slices.Equal(ms, []string{"Images", "Images"}) {
+	if ms := f.Methods(); !slices.Equal(ms, []string{"PinOrigin", "Images", "Images"}) {
 		t.Errorf("calls = %q", ms)
 	}
 	free = 12 << 30
@@ -592,6 +593,58 @@ func TestRebuild(t *testing.T) {
 		if _, err := state.ReadImage(b.Dirs, k); err == nil {
 			t.Errorf("%s kept its record", k)
 		}
+	}
+}
+
+// A build has the backend pin what base starts from when nothing is
+// pinned, once a run and before any key, and says what it pinned; a
+// rebuild of base pins the newest, a rebuild of a layer nothing more. A
+// pin that fails builds nothing.
+func TestBuildPinsOrigin(t *testing.T) {
+	b, f := testEnv(t)
+	ctx := t.Context()
+	var said []string
+	b.Info = func(m msg.M) { said = append(said, m.Names()) }
+	f.Pinned = "release-20260101"
+	pins := func() []backend.Pin {
+		var out []backend.Pin
+		for _, c := range f.Calls() {
+			if c.Method == "PinOrigin" {
+				out = append(out, c.Args[1].(backend.Pin))
+			}
+		}
+		return out
+	}
+	if err := (Builds{b}).Build(ctx, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Builds{b}).Build(ctx, "bar"); err != nil {
+		t.Fatal(err)
+	}
+	if got := pins(); !slices.Equal(got, []backend.Pin{backend.PinFirst}) {
+		t.Errorf("builds pinned %v, want one PinFirst", got)
+	}
+	if !slices.Contains(said, "origin_pinned origin=release-20260101") {
+		t.Errorf("said %q", said)
+	}
+	b.Force = true
+	if err := (Builds{b}).Rebuild(ctx, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Builds{b}).Rebuild(ctx, "base"); err != nil {
+		t.Fatal(err)
+	}
+	if got := pins(); !slices.Equal(got, []backend.Pin{backend.PinFirst, backend.PinNewest}) {
+		t.Errorf("rebuilds pinned %v, want PinNewest for base alone", got)
+	}
+
+	b2, f2 := testEnv(t)
+	f2.Errs = map[string]error{"PinOrigin": msg.UbuntuUnreachable("x", "26.04")}
+	if err := (Builds{b2}).Build(ctx, "base"); msg.IDOf(err) != "ubuntu_unreachable" {
+		t.Errorf("a failed pin: %v", err)
+	}
+	if slices.Contains(f2.Methods(), "BuildImage") {
+		t.Errorf("built after a failed pin: %q", f2.Methods())
 	}
 }
 

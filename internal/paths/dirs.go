@@ -122,6 +122,14 @@ func (d Dirs) Rebuilds() string { return filepath.Join(d.Images(), "rebuilds.jso
 // reads Rebuilds and writes it whole.
 func (d Dirs) RebuildsLock() string { return filepath.Join(d.ImageLocks(), "rebuilds") }
 
+// UbuntuPin is the Ubuntu cloud image base starts from on this machine,
+// pinned at its first build: base's key hashes it, so it can't be in an
+// image's folder.
+func (d Dirs) UbuntuPin() string { return filepath.Join(d.Images(), "ubuntu.json") }
+
+// UbuntuPinLock is held by the devvm pinning Ubuntu's cloud image.
+func (d Dirs) UbuntuPinLock() string { return filepath.Join(d.ImageLocks(), "ubuntu") }
+
 // Cache holds what devvm makes again whenever it's needed, which may be
 // deleted at any time: devvm's own mise, the shared Nix cache and the
 // digests --from bases were last looked up at.

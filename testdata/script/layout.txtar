@@ -86,6 +86,8 @@ images/X
 images/X/record.json
 images/locks
 images/locks/X
+images/locks/ubuntu
+images/ubuntu.json
 logs
 logs/runs
 logs/runs/X.log
@@ -159,6 +161,8 @@ images/X
 images/X/record.json
 images/locks
 images/locks/X
+images/locks/ubuntu
+images/ubuntu.json
 logs
 logs/runs
 logs/runs/X.log

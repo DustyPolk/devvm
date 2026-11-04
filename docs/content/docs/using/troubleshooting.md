@@ -75,7 +75,7 @@ devvm deletes an interrupted new VM, with its state, until its first shell opens
 
 ## base can't build on Lima
 
-On Lima, base starts from a pinned, dated release of Ubuntu's cloud image. Ubuntu removes its dated releases after a few months, and once the pinned one is gone, devvm can't find it and can't build base. Check that you're online, and if you are, update devvm to a version with a newer release ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
+On Lima, base starts from a dated release of Ubuntu's cloud image. The first time devvm builds base, it finds the newest release on cloud-images.ubuntu.com and pins it on this machine, so that build needs to reach Ubuntu's list of releases and the release's checksums. When it can't, devvm says so and pins nothing, so check that you're online and run the command again. Once an image is pinned, building base again needs Lima's cached copy of it or the release itself, which Ubuntu removes after a few months, and devvm rebuild base pins the newest again ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
 
 ## A file devvm can't read
 
@@ -169,7 +169,7 @@ devvm warns on each launch when an image the VM was made from has changed, and w
 
 ## A download doesn't check out
 
-devvm checks Ubuntu's cloud image and its own mise against checksums before it uses them, and it refuses a download that doesn't match. Ubuntu's checksums must also carry a valid signature from Ubuntu's cloud image key. When devvm refuses one, try again later, and if it keeps failing, the mirror or the network between may be serving something else. Checking the signature needs `gpgv`, so without it devvm checks only the pinned checksum and says so, and `brew install gnupg` or `apt install gpgv` adds it ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
+devvm checks Ubuntu's cloud image and its own mise against checksums before it uses them, and it refuses a download that doesn't match. Ubuntu's checksums must also carry a valid signature from Ubuntu's cloud image key, which devvm checks itself, with nothing to install. When devvm refuses one, try again later, and if it keeps failing, the server or the network between may be serving something else ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
 
 ## A new tool release isn't there yet
 

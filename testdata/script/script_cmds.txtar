@@ -4,13 +4,13 @@
 exec sh -c 'test "$DEVVM_MESSAGES" = names && test "$DATA" = "$XDG_DATA_HOME/devvm" && test "$VMS" = "$DATA/vms" && test "$RUN" = "$DATA/run" && test "$CFG" = "$XDG_CONFIG_HOME/devvm"'
 
 # stub_reset forgets the stubs' calls, and empties stdout as an exec does.
-exec gpgv x
+exec open x
 stub_calls
-stdout '^gpgv x$'
+stdout '^open x$'
 stub_reset
 ! stdout .
 ! stub_calls
-exec gpgv y
+exec open y
 stub_calls
 cmp stdout calls
 
@@ -70,7 +70,7 @@ stdout '/repo$'
 exists .git
 
 -- calls --
-gpgv y
+open y
 -- vm.json --
 {
   "version": 1,

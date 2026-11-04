@@ -19,44 +19,23 @@ cmp stdout mise-base.want
 exec grep -E 'miseVersion =|"(macos|linux)-' repo/internal/tools/mise.go
 cmp stdout mise-go.want
 
-# apt moves base's snapshot to today, and Ubuntu's cloud image to the
-# newest dated release before the snapshot, with the checksums of its
-# SHA256SUMS, checked with gpgv against Ubuntu's key.
+# apt moves base's snapshot to today.
 exec repo/scripts/bump.sh apt
-stdout '^  ubuntu-cloud +release-[0-9]{8} +-> release-20000101$'
 exec grep '^apt_snapshot=' repo/assets/layers/base.sh
 stdout '^apt_snapshot=[0-9]{8}T000000Z$'
-exec grep '^const Cloud' repo/internal/ubuntu/ubuntu.go
-cmp stdout cloud.want
-stub_calls
-stdout '^gpgv --keyring \S*/repo/assets/layers/ubuntu-cloud\.gpg \S*/SHA256SUMS\.gpg \S*/SHA256SUMS$'
 
-# A cloud release whose checksums aren't signed by Ubuntu's key, no release
-# before the snapshot, or a checksum that isn't one: refused, and nothing is
-# edited.
+# e2e-ubuntu moves the cloud image release e2e pins to the newest Ubuntu
+# lists; with none listed, nothing is edited.
+exec repo/scripts/bump.sh e2e-ubuntu
+stdout '^  e2e-ubuntu +release-[0-9]{8} +-> release-29990101$'
+exec grep '^e2e_ubuntu_release=' repo/tests/e2e.sh
+stdout '^e2e_ubuntu_release=release-29990101$'
 exec bash repo.sh
-cp repo/assets/layers/base.sh base.before
-cp repo/internal/ubuntu/ubuntu.go ubuntu.before
-exec touch $STUB_DIR/gpgv-bad
-! exec repo/scripts/bump.sh apt
-stderr '^bump: Ubuntu''s checksums for release-20000101 aren''t signed by Ubuntu''s cloud image key$'
-cmp repo/assets/layers/base.sh base.before
-cmp repo/internal/ubuntu/ubuntu.go ubuntu.before
-rm $STUB_DIR/gpgv-bad
-cp cloud-listing-future up/cloud-listing
-! exec repo/scripts/bump.sh apt
-stderr '^bump: Ubuntu has no cloud image release before the snapshot''s date [0-9]{8}$'
-cmp repo/internal/ubuntu/ubuntu.go ubuntu.before
-exec bash repo.sh
-cp cloud-sums-hostile up/cloud-sums
-! exec repo/scripts/bump.sh apt
-stderr '^bump: upstream gave cloud_sha256_arm64 an unexpected value: '
-cmp repo/internal/ubuntu/ubuntu.go ubuntu.before
-cp cloud-sums-arm64 up/cloud-sums
-! exec repo/scripts/bump.sh apt
-stderr '^bump: upstream gave cloud_sha256_amd64 an unexpected value: '''''
-cmp repo/internal/ubuntu/ubuntu.go ubuntu.before
-! exists pwned
+cp repo/tests/e2e.sh e2e.before
+cp cloud-listing-none up/cloud-listing
+! exec repo/scripts/bump.sh e2e-ubuntu
+stderr '^bump: upstream gave e2e_ubuntu_release an unexpected value: '''''
+cmp repo/tests/e2e.sh e2e.before
 
 # Upstream values that aren't a version or a checksum are refused, and
 # nothing is edited: a command for a checksum, one in a version, and a
@@ -102,51 +81,35 @@ stderr '^bump: unknown tool ''nope'''
 # A copy of the files bump.sh edits, and upstream's good answers.
 set -eu
 rm -rf repo up
-mkdir -p repo/scripts repo/assets/oci repo/assets/layers repo/internal/tools repo/internal/ubuntu up
+mkdir -p repo/scripts repo/assets/oci repo/assets/layers repo/internal/tools repo/tests up
 cp "$DEVVM_REPO/scripts/bump.sh" repo/scripts/
 cp "$DEVVM_REPO/assets/oci/build.sh" repo/assets/oci/
-cp "$DEVVM_REPO/assets/layers/base.sh" "$DEVVM_REPO/assets/layers/ubuntu-cloud.gpg" repo/assets/layers/
+cp "$DEVVM_REPO/assets/layers/base.sh" repo/assets/layers/
 cp "$DEVVM_REPO/internal/tools/mise.go" repo/internal/tools/
-cp "$DEVVM_REPO/internal/ubuntu/ubuntu.go" repo/internal/ubuntu/
+cp "$DEVVM_REPO/tests/e2e.sh" repo/tests/
 cp latest-good up/crane-latest
 cp sums-good up/crane-sums
 cp mise-latest up/mise-latest
 cp mise-sums up/mise-sums
 cp cloud-listing up/cloud-listing
-cp cloud-sums up/cloud-sums
 -- bin/curl --
 #!/bin/bash
-# Answers crane's and mise's releases and Ubuntu's cloud image release
-# (release-20000101 only) from $WORK/up/; anything else fails.
+# Answers crane's and mise's releases and Ubuntu's list of cloud image
+# releases from $WORK/up/; anything else fails.
 for a in "$@"; do case $a in
   */go-containerregistry/releases/latest) cat "$WORK/up/crane-latest"; exit ;;
   */go-containerregistry/*/checksums.txt) cat "$WORK/up/crane-sums"; exit ;;
   */jdx/mise/releases/latest) cat "$WORK/up/mise-latest"; exit ;;
   */jdx/mise/*/SHASUMS256.txt) cat "$WORK/up/mise-sums"; exit ;;
   https://cloud-images.ubuntu.com/releases/resolute/) cat "$WORK/up/cloud-listing"; exit ;;
-  */resolute/release-20000101/SHA256SUMS) cat "$WORK/up/cloud-sums"; exit ;;
-  */resolute/release-20000101/SHA256SUMS.gpg) echo signature; exit ;;
 esac; done
 exit 22
 -- cloud-listing --
 <a href="release-19991231/">release-19991231/</a>
 <a href="release-20000101/">release-20000101/</a> <a href="release-29990101/">release-29990101/</a>
 <a href="current/">current/</a>
--- cloud-listing-future --
-<a href="release-29990101/">release-29990101/</a>
--- cloud-sums --
-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc *ubuntu-26.04-server-cloudimg-arm64.img
-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee *ubuntu-26.04-server-cloudimg-arm64.img.manifest
-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd *ubuntu-26.04-server-cloudimg-amd64.img
--- cloud-sums-hostile --
-$(touch${IFS}pwned) *ubuntu-26.04-server-cloudimg-arm64.img
-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd *ubuntu-26.04-server-cloudimg-amd64.img
--- cloud-sums-arm64 --
-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc *ubuntu-26.04-server-cloudimg-arm64.img
--- cloud.want --
-const CloudRelease = "release-20000101"
-const CloudSHA256Arm64 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-const CloudSHA256Amd64 = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+-- cloud-listing-none --
+<a href="current/">current/</a>
 -- latest-good --
 {"tag_name":"v9.9.9"}
 -- latest-hostile --

@@ -27,6 +27,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/ubuntu"
 	"github.com/w3cj/devvm/internal/vmname"
@@ -177,7 +178,65 @@ func limaOn(t *testing.T, goos string) (*Lima, *fakeRunner, *msg.Recorder, *stub
 		t.Fatal(err)
 	}
 	l.Warn = warned.Add
+	l.Ubuntu = &testFinder{}
+	pinUbuntu(t, l, testUbuntuURL, testUbuntuSum)
 	return l, f, warned, stubs
+}
+
+// testFinder stands in for ubuntu.Finder: releases, newest last, each with
+// an image for every architecture, or err; it records what it's asked.
+type testFinder struct {
+	releases []string // none: release-20260101 alone
+	err      error
+	asked    []string // "newest <before>" or "release <name>"
+}
+
+func (f *testFinder) pin(rel string) state.UbuntuPin {
+	return state.UbuntuPin{Release: rel, File: ubuntu.File("arm64"), Digest: "sha256:" + strings.Repeat("e", 64), Pinned: time.Now().UTC()}
+}
+
+func (f *testFinder) Newest(_ context.Context, before string) (state.UbuntuPin, error) {
+	f.asked = append(f.asked, "newest "+before)
+	if f.err != nil {
+		return state.UbuntuPin{}, f.err
+	}
+	rels := f.releases
+	if rels == nil {
+		rels = []string{"release-20260101"}
+	}
+	for i := len(rels) - 1; i >= 0; i-- {
+		if before == "" || rels[i] < before {
+			return f.pin(rels[i]), nil
+		}
+	}
+	return state.UbuntuPin{}, msg.NoUbuntuRelease("x", ubuntu.Version)
+}
+
+func (f *testFinder) Release(_ context.Context, rel string) (state.UbuntuPin, error) {
+	f.asked = append(f.asked, "release "+rel)
+	if f.err != nil {
+		return state.UbuntuPin{}, f.err
+	}
+	return f.pin(rel), nil
+}
+
+// The cloud image test Limas have pinned, at a URL nothing answers, and
+// its SHA-256.
+const (
+	testUbuntuURL = "https://example.com/r"
+	testUbuntuSum = "1111111111111111111111111111111111111111111111111111111111111111"
+)
+
+// pinUbuntu pins a cloud image for l's architecture, at url, with sum as
+// its SHA-256, and returns it.
+func pinUbuntu(t *testing.T, l *Lima, url, sum string) ubuntu.Image {
+	t.Helper()
+	l.UbuntuURL = url
+	p := state.UbuntuPin{Release: "release-20260101", File: ubuntu.File(l.Arch), Digest: "sha256:" + sum, Pinned: time.Now().UTC()}
+	if err := state.WriteUbuntuPin(l.Dirs, p); err != nil {
+		t.Fatal(err)
+	}
+	return ubuntu.ImageOf(url, p)
 }
 
 // stubLima is testLima with the real runner, so limactl is the stub.
@@ -325,8 +384,9 @@ func stepNames(steps []image.Step) []string {
 	return names
 }
 
-// Base's origin is the pinned Ubuntu cloud image for the host, one per
-// architecture, and base.yaml; with --from, the conversion's scripts in
+// Base's origin is the Ubuntu cloud image pinned on this machine, for the
+// host ("" before one is, or when the one pinned is another
+// architecture's), and base.yaml; with --from, the conversion's scripts in
 // between, build.sh as root with the user it makes the image's, and none
 // of oci/'s other files. Without the user, or devvm's files, there's
 // none.
@@ -334,22 +394,32 @@ func TestOrigin(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
 	l.User = func() (*user.User, error) { return &user.User{Username: "me", Uid: "501"}, nil }
 	f := &backend.From{Ref: "debian:12", Digest: "debian@sha256:aaaa"}
-	pins := map[string]bool{}
-	for _, arch := range []string{"arm64", "amd64"} {
+	want := "release-20260101 ubuntu-26.04-server-cloudimg-arm64.img sha256:" + testUbuntuSum
+	for arch, pin := range map[string]string{"arm64": want, "amd64": ""} {
 		l.Arch = arch
 		steps, err := l.Origin(nil)
 		if err != nil || !slices.Equal(stepNames(steps), []string{originUbuntu, originConfig}) ||
-			!slices.Equal(steps[0].Args, []string{ubuntu.CloudPin(arch)}) {
+			!slices.Equal(steps[0].Args, []string{pin}) {
 			t.Fatalf("%s: Origin = %+v, %v", arch, steps, err)
 		}
 		if yaml, _ := fs.ReadFile(assets.FS, "base.yaml"); !bytes.Equal(steps[1].Data, yaml) {
 			t.Errorf("%s: base.yaml isn't devvm's", arch)
 		}
-		pins[steps[0].Args[0]] = true
 	}
-	if len(pins) != 2 {
-		t.Errorf("pins: %v, want one per architecture", pins)
+	l.Arch = "arm64"
+	if err := os.Remove(l.Dirs.UbuntuPin()); err != nil {
+		t.Fatal(err)
 	}
+	if steps, err := l.Origin(nil); err != nil || steps[0].Args[0] != "" {
+		t.Errorf("nothing pinned: %+v, %v", steps, err)
+	}
+	if err := os.WriteFile(l.Dirs.UbuntuPin(), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Origin(nil); err == nil {
+		t.Error("a broken pin: no error")
+	}
+	pinUbuntu(t, l, testUbuntuURL, testUbuntuSum)
 	steps, err := l.Origin(f)
 	if want := slices.Concat([]string{originUbuntu}, conversionScripts, []string{originConfig}); err != nil || !slices.Equal(stepNames(steps), want) {
 		t.Fatalf("Origin(--from) = %q, %v; want %q", stepNames(steps), err, want)

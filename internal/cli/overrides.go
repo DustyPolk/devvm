@@ -38,9 +38,10 @@ func readOverrides(getenv func(string) string) Overrides {
 				CPUs: getenv(platform.TestCPUs), MemoryGiB: getenv(platform.TestMemoryGiB),
 				FreeGiB: getenv(platform.TestFreeGiB), ListTimeout: getenv(platform.TestListWait),
 			},
-			Unreviewed: getenv("DEVVM_UNREVIEWED"),
-			KVM:        getenv("DEVVM_KVM"),
-			UbuntuURL:  getenv("DEVVM_UBUNTU_URL"),
+			Unreviewed:    getenv("DEVVM_UNREVIEWED"),
+			KVM:           getenv("DEVVM_KVM"),
+			UbuntuURL:     getenv("DEVVM_UBUNTU_URL"),
+			UbuntuRelease: getenv("DEVVM_UBUNTU_RELEASE"),
 		},
 		HostMise: getenv("DEVVM_HOST_MISE"),
 	}

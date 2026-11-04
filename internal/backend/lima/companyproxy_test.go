@@ -11,7 +11,6 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 // Ubuntu's listing is asked for through config.toml's company proxy when
@@ -32,10 +31,10 @@ func TestUbuntuThroughCompanyProxy(t *testing.T) {
 	}
 	cp := settings.NewCompanyProxy(d, func(string) string { return "" }, nil)
 	l := New(d, assets.FS, testUI{}, platform.Host{}, "http://ubuntu.example", cp)
-	if _, err := l.Ubuntu(t.Context()); err == nil {
+	if _, err := l.Ubuntu.Newest(t.Context(), ""); err == nil {
 		t.Error("a listing the proxy didn't have")
 	}
-	want := "GET http://ubuntu.example/" + ubuntu.CloudRelease + "/SHA256SUMS"
+	want := "GET http://ubuntu.example/"
 	if !slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, want) }) {
 		t.Errorf("the company proxy got %q, want %s", got, want)
 	}

@@ -162,7 +162,7 @@ If the image isn't built yet, devvm builds it first, then the shared tools the s
 
 When you edit a layer's script, devvm builds that layer again the next time it's used, together with every layer built on it, and it reuses the layers below. A new choice of base's features rebuilds base and everything on it in the same way.
 
-`devvm rebuild IMAGE` builds an image again from its parent as the parent is now, where IMAGE is base or a stack of layers, such as `docker` or `foo+bar`. That's how you get the newest packages that a script installs without a pin. devvm also builds the images on it again, on the new image, the next time they're needed. When there are such images, devvm lists them first and, in a terminal, asks before it goes on. After the build, devvm deletes the old images that no VM uses.
+`devvm rebuild IMAGE` builds an image again from its parent as the parent is now, where IMAGE is base or a stack of layers, such as `docker` or `foo+bar`. That's how you get the newest packages that a script installs without a pin. On Lima, `devvm rebuild base` also starts base again from the newest release of Ubuntu's cloud image, which devvm otherwise picks only the first time it builds base on this machine. devvm also builds the images on it again, on the new image, the next time they're needed. When there are such images, devvm lists them first and, in a terminal, asks before it goes on. After the build, devvm deletes the old images that no VM uses.
 
 Shared tools aren't images, so `devvm rebuild` refuses a shared tool's name, and `devvm update` and `devvm tools update` get their newer versions. [Rebuilding](../internals/images.md#rebuilding) explains how devvm tells which images to build again.
 

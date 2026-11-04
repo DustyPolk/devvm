@@ -47,14 +47,22 @@ func dummyLima(t *testing.T, d paths.Dirs, r Runner) (*Lima, fixture) {
 	// not limactl's.
 	l.Runner, l.OS = r, "darwin"
 	l.Getenv = func(string) string { return "" }
-	l.Ubuntu = func(context.Context) (ubuntu.Image, error) { return fx.ubuntu, nil }
+	fx.ubuntu = pinUbuntu(t, l, fx.ubuntuDir, fx.ubuntuSum)
+	if err := os.MkdirAll(filepath.Dir(fx.ubuntu.URL), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(d.Home, "ubuntu.img"), fx.ubuntu.URL); err != nil {
+		t.Fatal(err)
+	}
 	return l, fx
 }
 
 // fixture is what dummy instances use: the image (as Ubuntu's, with its
 // digest), a --from conversion's files, and the folders VMs mount.
 type fixture struct {
-	ubuntu    ubuntu.Image
+	ubuntu    ubuntu.Image // pinned, at ubuntuDir, with ubuntuSum
+	ubuntuDir string
+	ubuntuSum string
 	converted string // disk.raw, kernel and initrd
 	project   string
 	agents    []string
@@ -89,7 +97,7 @@ func newFixture(t *testing.T, dir string) fixture {
 		}
 	}
 	sum := sha256.Sum256(img)
-	fx.ubuntu = ubuntu.Image{URL: filepath.Join(dir, "ubuntu.img"), Digest: "sha256:" + hex.EncodeToString(sum[:])}
+	fx.ubuntuDir, fx.ubuntuSum = filepath.Join(dir, "ubuntu"), hex.EncodeToString(sum[:])
 	return fx
 }
 

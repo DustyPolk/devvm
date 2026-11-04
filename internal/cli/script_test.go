@@ -199,18 +199,10 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	if err := os.WriteFile(filepath.Join(root, "data", "devvm", "settings.json"), []byte(`{"features": []}`+"\n"), 0o600); err != nil {
 		return err
 	}
-	// Ubuntu's cloud images: the pinned dated release in a folder, with the
-	// pinned checksums, never the network.
-	rel := filepath.Join(root, "ubuntu", ubuntu.CloudRelease)
-	if err := os.MkdirAll(rel, 0o750); err != nil {
-		return err
-	}
-	sums := ubuntu.CloudSHA256Arm64 + " *ubuntu-" + ubuntu.Version + "-server-cloudimg-arm64.img\n" +
-		ubuntu.CloudSHA256Amd64 + " *ubuntu-" + ubuntu.Version + "-server-cloudimg-amd64.img\n"
-	if err := os.WriteFile(filepath.Join(rel, "SHA256SUMS"), []byte(sums), 0o600); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(rel, "SHA256SUMS.gpg"), []byte("signature\n"), 0o600); err != nil {
+	// Ubuntu's cloud images: a dated release in a folder, as Ubuntu
+	// published and signed it (internal/ubuntu's fixture), never the
+	// network.
+	if err := os.CopyFS(filepath.Join(root, "ubuntu"), os.DirFS(filepath.Join("..", "ubuntu", "testdata", ubuntu.Series))); err != nil {
 		return err
 	}
 	env.Setenv("DEVVM_UBUNTU_URL", "file://"+filepath.Join(root, "ubuntu"))

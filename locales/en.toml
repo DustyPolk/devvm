@@ -312,19 +312,18 @@ other = "Changing {{.vm}}'s Lima settings failed."
 other = "The arguments for QEMU don't have exactly one -netdev user,id=net0,… for devvm to restrict, so devvm didn't start it."
 
 [no_ubuntu_image]
-description = "release is the pinned dated release's folder name (release-20260101)"
-other = "Finding Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}} failed. Check that you're online, or update devvm if Ubuntu removed the image."
+description = "release is a dated release's folder name (release-20260101)"
+other = "Finding Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}} failed. Check that you're online, then try again."
+
+[no_ubuntu_release]
+other = "{{.url}} lists no release of Ubuntu {{.version}}'s cloud image with an image for this machine, so devvm can't build base."
+
+[ubuntu_unreachable]
+other = "devvm couldn't read the list of Ubuntu {{.version}}'s cloud images at {{.url}}. Check that you're online, then try again."
 
 [ubuntu_bad_signature]
 description = "release is a dated release's folder name (release-20260101)"
 other = "Ubuntu's checksums for {{.release}} at {{.url}} don't have a valid signature from Ubuntu's cloud image key, so devvm didn't use them."
-
-[ubuntu_checksum_unpinned]
-description = "file is the image's file name; release is the pinned dated release's folder name (release-20260101)"
-other = "Ubuntu's checksum for {{.file}} in {{.release}} at {{.url}} isn't the one devvm pins, so devvm didn't use it."
-
-[ubuntu_unsigned]
-other = "gpgv isn't installed, so devvm can't check the signature on Ubuntu's checksums. devvm still checks the image against its pinned checksum. To check the signature too, run brew install gnupg, or apt install gpgv."
 
 [unknown_layer]
 description = "layers is a space-separated list of base, the built-in layers and the user's"
@@ -506,6 +505,10 @@ other = "Another devvm is building image {{.key}}, so devvm leaves it. Run the c
 
 [building_image]
 other = "building image {{.image}} ({{.key}})"
+
+[origin_pinned]
+description = "origin is what base starts from, as the backend pinned it: Ubuntu's dated release (release-20260101)"
+other = "base starts from Ubuntu's cloud image {{.origin}}"
 
 [base_build_time]
 other = "    This takes a few minutes, and the first time, devvm also downloads Ubuntu's cloud image."

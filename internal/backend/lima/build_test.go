@@ -1,7 +1,6 @@
 package lima
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -17,7 +16,6 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 const (
@@ -33,9 +31,6 @@ func buildLima(t *testing.T, os string, parentStatus string) (*Lima, *fakeRunner
 	t.Helper()
 	l, f, _ := testLima(t, os)
 	l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("cpus: 4\nmemory: 8GiB\n")}}
-	l.Ubuntu = func(context.Context) (ubuntu.Image, error) {
-		return ubuntu.Image{URL: "https://example.com/r/ubuntu.img", Digest: "sha256:1111"}, nil
-	}
 	l.Memory = func() (uint64, error) { return 16 * gib, nil }
 	l.CPUs = func() int { return 8 }
 	l.Info = func(msg.M) {}
@@ -115,12 +110,13 @@ func TestBuildImageBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (backend.Built{Origin: "https://example.com/r/ubuntu.img sha256:1111", Libc: "gnu"}); built != want {
+	img := testUbuntuURL + "/release-20260101/ubuntu-26.04-server-cloudimg-arm64.img"
+	if want := (backend.Built{Origin: img + " sha256:" + testUbuntuSum, Libc: "gnu"}); built != want {
 		t.Errorf("Built = %+v, want %+v", built, want)
 	}
 	checkLines(t, f.lines(), []string{
 		"limactl create --tty=false --mount-none --name=" + inst +
-			` --set .images = [{"location":"https://example.com/r/ubuntu.img","arch":"aarch64","digest":"sha256:1111"}]` +
+			` --set .images = [{"location":"` + img + `","arch":"aarch64","digest":"sha256:` + testUbuntuSum + `"}]` +
 			" --cpus=4 --memory=8 -",
 		"limactl edit --tty=false " + inst + " --set .ssh.localPort=",
 		"sandbox-exec -f " + l.Dirs.VM(inst).Profile() + " ",
@@ -409,7 +405,8 @@ func TestBuildImageRefuses(t *testing.T) {
 		"--from":             func(s *backend.ImageSpec) { s.From = &backend.From{Ref: "node:24"} },
 		"a missing parent":   func(s *backend.ImageSpec) { s.Parent = layerKey },
 		"an existing image":  func(s *backend.ImageSpec) { s.Key = baseKey; s.Parent = "" },
-		"no Ubuntu image":    func(*backend.ImageSpec) {},
+		"no Ubuntu pinned":   func(*backend.ImageSpec) {},
+		"another Ubuntu":     func(*backend.ImageSpec) {},
 		"no memory in GiB":   func(*backend.ImageSpec) {},
 		"no CPUs":            func(*backend.ImageSpec) {},
 		"no host memory":     func(*backend.ImageSpec) {},
@@ -422,9 +419,9 @@ func TestBuildImageRefuses(t *testing.T) {
 			}
 			l, f := buildLima(t, "darwin", status)
 			switch name {
-			case "no Ubuntu image":
-				l.Ubuntu = func(context.Context) (ubuntu.Image, error) {
-					return ubuntu.Image{}, msg.NoUbuntuImage("release-20260101", "x", "26.04")
+			case "no Ubuntu pinned":
+				if err := os.Remove(l.Dirs.UbuntuPin()); err != nil {
+					t.Fatal(err)
 				}
 			case "no memory in GiB":
 				l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("cpus: 4\nmemory: 8G\n")}}
@@ -437,6 +434,10 @@ func TestBuildImageRefuses(t *testing.T) {
 			}
 			spec := base
 			spec.Recipe.Origin, _ = l.Origin(nil) // none without base.yaml
+			if name == "another Ubuntu" {
+				// Pinned again since the recipe was made.
+				pinUbuntu(t, l, testUbuntuURL, strings.Repeat("2", 64))
+			}
 			change(&spec)
 			if _, err := l.BuildImage(t.Context(), spec); err == nil {
 				t.Error("BuildImage succeeded")

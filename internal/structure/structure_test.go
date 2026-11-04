@@ -28,7 +28,7 @@ func devvm() rules {
 		// fake's own types each implement.
 		maxMethods: 24,
 		largeTypes: map[string]large{
-			"internal/paths.Dirs": {47, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
+			"internal/paths.Dirs": {49, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":      {47, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: devvmVars(),
@@ -196,9 +196,6 @@ func devvmVars() map[string]string {
 		"internal/build.keyImages":                fixture,
 		"internal/tools.gnuT":                     fixture,
 		"internal/tools.muslT":                    fixture,
-		"internal/ubuntu.sumArm64":                fixture,
-		"internal/ubuntu.sumAmd64":                fixture,
-		"internal/ubuntu.testAssets":              fixture,
 	}
 }
 
@@ -227,7 +224,6 @@ func devvmExecSites() map[string]string {
 		"internal/backend/lima/lima.go":        "qemu-img's command, which Lima's Runner runs",
 		"internal/backend/lima/oci.go":         "docker save's command, which Lima's Runner runs",
 		"internal/tools/mise.go":               "mise's command, in its own folders, which the UI's LoggedCmd runs, or whose output is read",
-		"internal/ubuntu/ubuntu.go":            "gpgv's command, which the Finder's Run runs",
 		"internal/from/from.go":                "docker's answers (an image's ID, whether it runs): output or exit code, nothing to log",
 		"internal/sshagent/sshagent.go":        "OpenSSH's tools on devvm's agent socket, their output read or on the terminal",
 		"internal/vm/sshagent.go":              "ssh-add on the terminal, which may ask for a passphrase",

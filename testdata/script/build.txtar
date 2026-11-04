@@ -6,16 +6,20 @@ mkdir $XDG_CONFIG_HOME/devvm/layers
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 cp bar.sh $XDG_CONFIG_HOME/devvm/layers/bar.sh
 
-# base: Ubuntu's pinned dated release, checked against its signed checksums,
-# without host mounts, confined; its record says which image it came from.
-# base.yaml goes on limactl create's input, from the binary: devvm writes
-# none of its own files out.
+# base: Ubuntu's newest dated release, its signed checksums checked, pinned
+# on this machine first; without host mounts, confined; its record says
+# which image it came from. base.yaml goes on limactl create's input, from
+# the binary: devvm writes none of its own files out.
+! exists $IMAGES/ubuntu.json
 exec devvm build base
+stdout '^==> origin_pinned origin=release-20261016$'
 stdout '^==> building_image image=base key=[0-9a-f]{12}$'
 stdout '^base_build_time$'
 stdout '^==> image_ready image=base$'
+catg $IMAGES/ubuntu.json
+stdout '^  "release": "release-20261016",$'
+stdout '^  "digest": "sha256:[0-9a-f]{64}",$'
 stub_calls
-stdout '^gpgv --keyring /\S*/devvm-ubuntu\.[0-9]+/ubuntu-cloud\.gpg '
 stdout '^limactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} --set \.images = \[\{"location":"file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:[0-9a-f]{64}"\}\] --cpus=4 --memory=8 -$'
 cmp $STUB_DIR/create-template $DEVVM_REPO/assets/base.yaml
 ! exists $XDG_DATA_HOME/devvm/assets
@@ -42,10 +46,11 @@ stdout '^# \[4/5\] running_script script=base\.sh vm=devvm-img-'
 stdout '^# \[5/5\] stopping vm=devvm-img-'
 ! stdout '\[6/5\]'
 
-# Built and recorded: reused.
+# Built and recorded: reused, from the image pinned.
 stub_reset
 exec devvm build base
 ! stdout building_image
+! stdout origin_pinned
 stub_calls
 ! stdout 'create|clone|start'
 

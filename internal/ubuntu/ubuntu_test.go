@@ -6,104 +6,76 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 )
 
-var (
-	sumArm64 = strings.Repeat("1", 64)
-	sumAmd64 = strings.Repeat("2", 64)
-)
+func sumOf(c byte) string { return strings.Repeat(string(c), 64) }
 
-// testUI runs commands as they are, and logs notes.
-type testUI struct{ t *testing.T }
+func line(sum, arch string) string { return sum + " *" + File(arch) + "\n" }
 
-func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
-
-func (u testUI) Note(m msg.M) { u.t.Log(m.Names()) }
-
-// mirror makes a folder of releases: release-20260101 with a checksum for
-// each arch and a signature (which the fake gpgv checks).
-func mirror(t *testing.T) string {
+// publish writes a dated release into dir: its SHA256SUMS, signed by k.
+func publish(t *testing.T, dir, name, sums string, k testKey) {
 	t.Helper()
-	dir := t.TempDir()
-	rel := filepath.Join(dir, "release-20260101")
+	rel := filepath.Join(dir, name)
 	if err := os.MkdirAll(rel, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	sums := sumArm64 + " *ubuntu-" + Version + "-server-cloudimg-arm64.img\n" +
-		sumAmd64 + " *ubuntu-" + Version + "-server-cloudimg-amd64.img\n"
 	write(t, filepath.Join(rel, "SHA256SUMS"), sums)
-	write(t, filepath.Join(rel, "SHA256SUMS.gpg"), "signature")
+	write(t, filepath.Join(rel, "SHA256SUMS.gpg"), string(k.sign(t, []byte(sums), 10, sigBinary, nil)))
+}
+
+// mirror makes a folder of releases signed by k: release-20260101 with an
+// image for each architecture, and release-20260201, newer, with amd64's
+// only.
+func mirror(t *testing.T, k testKey) string {
+	t.Helper()
+	dir := t.TempDir()
+	publish(t, dir, "release-20260101", line(sumOf('1'), "arm64")+line(sumOf('2'), "amd64"), k)
+	publish(t, dir, "release-20260201", line(sumOf('3'), "amd64"), k)
 	return dir
 }
 
 func write(t *testing.T, path, s string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(s), 0o600); err != nil { //nolint:gosec // the test's own files
+	if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// fakeGPGV stands in for gpgv: it records each call and the keyring it
-// was given, and a signature is good unless bad is set.
-type fakeGPGV struct {
-	bad      bool
-	calls    [][]string
-	homes    []string
-	keyrings []string
-}
-
-func (g *fakeGPGV) run(_ context.Context, cmd *exec.Cmd) error {
-	g.calls = append(g.calls, cmd.Args)
-	if i := slices.Index(cmd.Args, "--keyring"); i >= 0 && i+1 < len(cmd.Args) {
-		key, _ := os.ReadFile(cmd.Args[i+1])
-		g.keyrings = append(g.keyrings, string(key))
-	}
-	for _, e := range cmd.Env {
-		if h, ok := strings.CutPrefix(e, "GNUPGHOME="); ok {
-			g.homes = append(g.homes, h)
-		}
-	}
-	if g.bad {
-		return errors.New("exit status 1")
-	}
-	return nil
-}
-
-// served runs each test against the folder as a file:// URL and over HTTP.
-func served(t *testing.T, test func(t *testing.T, dir, url string)) {
+// served runs each test against the folder as a file:// URL and over HTTP,
+// both of which list it as a page of links.
+func served(t *testing.T, test func(t *testing.T, k testKey, dir, url string)) {
 	t.Helper()
+	k := newTestKey(t)
 	t.Run("file", func(t *testing.T) {
-		dir := mirror(t)
-		test(t, dir, "file://"+dir)
+		dir := mirror(t, k)
+		test(t, k, dir, "file://"+dir)
 	})
 	t.Run("http", func(t *testing.T) {
-		dir := mirror(t)
+		dir := mirror(t, k)
 		srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
 		t.Cleanup(srv.Close)
-		test(t, dir, srv.URL)
+		test(t, k, dir, srv.URL)
 	})
 }
 
-// testAssets is devvm's files with a stand-in for Ubuntu's key.
-var testAssets = fstest.MapFS{Keyring: {Data: []byte("key")}}
+// then is the time the tests' Finders check signatures at, and pin.
+func then() time.Time { return time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC) }
 
-func finder(url, arch string, g *fakeGPGV, notes *[]msg.M) *Finder {
-	pin := map[string]string{"arm64": "sha256:" + sumArm64, "amd64": "sha256:" + sumAmd64}[arch]
+func finder(url, arch string, k testKey) *Finder {
 	return &Finder{
-		URL: url, Release: "release-20260101", Digest: pin,
-		Assets: testAssets, Arch: arch, Client: NewClient(), GPGV: "gpgv", Run: g.run,
-		Note: func(m msg.M) { *notes = append(*notes, m) },
+		URL: url, Assets: fstest.MapFS{Keyring: {Data: k.keyring}}, Arch: arch,
+		Client: NewClient(), Now: then,
 	}
 }
 
@@ -117,187 +89,119 @@ func wantMsg(t *testing.T, err error, id string, vals ...string) {
 	}
 }
 
-// The pinned release's image for this host, with its pinned digest, once
-// the release's SHA256SUMS lists it; a newer release is never looked at.
-func TestImage(t *testing.T) {
+func pinOf(rel, arch, sum string) state.UbuntuPin {
+	return state.UbuntuPin{Release: rel, File: File(arch), Digest: "sha256:" + sum, Pinned: then()}
+}
+
+// The newest release with an image for the host, with the checksum its
+// signed SHA256SUMS list; one without an image for the host is passed
+// over, and so is anything not older than before.
+func TestNewest(t *testing.T) {
 	t.Parallel()
-	served(t, func(t *testing.T, dir, url string) {
-		newer := filepath.Join(dir, "release-20260301")
-		if err := os.Mkdir(newer, 0o750); err != nil {
-			t.Fatal(err)
-		}
-		write(t, filepath.Join(newer, "SHA256SUMS"), strings.Repeat("3", 64)+" *ubuntu-"+Version+"-server-cloudimg-arm64.img\n")
-		for arch, sum := range map[string]string{"arm64": sumArm64, "amd64": sumAmd64} {
-			var notes []msg.M
-			img, err := finder(url, arch, &fakeGPGV{}, &notes).Image(t.Context())
+	served(t, func(t *testing.T, k testKey, _, url string) {
+		for _, c := range []struct {
+			arch, before string
+			want         state.UbuntuPin
+		}{
+			{"amd64", "", pinOf("release-20260201", "amd64", sumOf('3'))},
+			{"arm64", "", pinOf("release-20260101", "arm64", sumOf('1'))},
+			{"amd64", "release-20260201", pinOf("release-20260101", "amd64", sumOf('2'))},
+		} {
+			got, err := finder(url, c.arch, k).Newest(t.Context(), c.before)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("%s before %q: %v", c.arch, c.before, err)
 			}
-			want := Image{URL: url + "/release-20260101/ubuntu-" + Version + "-server-cloudimg-" + arch + ".img", Digest: "sha256:" + sum}
-			if img != want {
-				t.Errorf("%s: got %+v, want %+v", arch, img, want)
+			if got != c.want {
+				t.Errorf("%s before %q: got %+v, want %+v", c.arch, c.before, got, c.want)
 			}
-			if img.String() != want.URL+" "+want.Digest {
-				t.Errorf("String: %s", img)
-			}
+		}
+		_, err := finder(url, "arm64", k).Newest(t.Context(), "release-20260101")
+		wantMsg(t, err, "no_ubuntu_release", "url="+url, "version="+Version)
+		_, err = finder(url, "riscv64", k).Newest(t.Context(), "")
+		wantMsg(t, err, "no_ubuntu_release")
+	})
+}
+
+// A named release (e2e's) is checked as the newest is.
+func TestRelease(t *testing.T) {
+	t.Parallel()
+	served(t, func(t *testing.T, k testKey, _, url string) {
+		got, err := finder(url, "amd64", k).Release(t.Context(), "release-20260101")
+		if err != nil || got != pinOf("release-20260101", "amd64", sumOf('2')) {
+			t.Errorf("got %+v, %v", got, err)
+		}
+		_, err = finder(url, "arm64", k).Release(t.Context(), "release-20260201")
+		wantMsg(t, err, "no_ubuntu_image", "release=release-20260201", "url="+url)
+		_, err = finder(url, "arm64", k).Release(t.Context(), "release-20250101")
+		wantMsg(t, err, "no_ubuntu_image", "release=release-20250101")
+		_, err = finder(url, "arm64", k).Release(t.Context(), "../release-20260101")
+		wantMsg(t, err, "no_ubuntu_image")
+	})
+}
+
+// A release whose checksums aren't signed by the pinned key is refused,
+// never passed over for an older one; a checksum that isn't 64 hex digits
+// is no image, as it would go into the backend's config.
+func TestNewestRefused(t *testing.T) {
+	t.Parallel()
+	served(t, func(t *testing.T, k testKey, dir, url string) {
+		other := newTestKey(t)
+		publish(t, dir, "release-20260301", line(sumOf('4'), "amd64"), other)
+		_, err := finder(url, "amd64", k).Newest(t.Context(), "")
+		wantMsg(t, err, "ubuntu_bad_signature", "release=release-20260301", "url="+url)
+
+		if err := os.Remove(filepath.Join(dir, "release-20260301", "SHA256SUMS.gpg")); err != nil {
+			t.Fatal(err)
+		}
+		_, err = finder(url, "amd64", k).Newest(t.Context(), "")
+		wantMsg(t, err, "ubuntu_bad_signature", "release=release-20260301")
+
+		if err := os.Remove(filepath.Join(dir, "release-20260301", "SHA256SUMS")); err != nil {
+			t.Fatal(err)
+		}
+		_, err = finder(url, "amd64", k).Newest(t.Context(), "")
+		wantMsg(t, err, "no_ubuntu_image", "release=release-20260301")
+
+		publish(t, dir, "release-20260301", sumOf('4')+`"}]|.mounts=[{"location":"~","writable":true}] *`+File("amd64")+"\n", k)
+		got, err := finder(url, "amd64", k).Newest(t.Context(), "")
+		if err != nil || got.Release != "release-20260201" {
+			t.Errorf("past a release without a checksum: %+v, %v", got, err)
 		}
 	})
 }
 
-// Anything but the pinned checksum in the pinned release's SHA256SUMS is
-// refused, never put in the backend's config; a missing release, or an
-// architecture without a pin, finds no image.
-func TestImageRefused(t *testing.T) {
+// The listing can't be read: no answer, or nothing there.
+func TestNewestUnreachable(t *testing.T) {
 	t.Parallel()
-	file := " *ubuntu-" + Version + "-server-cloudimg-arm64.img\n"
-	tests := []struct {
-		name, sums string // "" for no SHA256SUMS
-		release    string // the Finder's, when not release-20260101
-		noPin      bool
-		want       string
-	}{
-		{name: "another checksum", sums: strings.Repeat("3", 64) + file, want: "ubuntu_checksum_unpinned"},
-		{name: "the amd64 one only", sums: sumAmd64 + " *ubuntu-" + Version + "-server-cloudimg-amd64.img\n", want: "ubuntu_checksum_unpinned"},
-		{name: "not a checksum", sums: sumArm64 + `"}]|.mounts=[{"location":"~","writable":true}]` + file, want: "ubuntu_checksum_unpinned"},
-		{name: "no release", release: "release-20250101", want: "no_ubuntu_image"},
-		{name: "no pin", noPin: true, want: "no_ubuntu_image"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			served(t, func(t *testing.T, dir, url string) {
-				if tt.sums != "" {
-					write(t, filepath.Join(dir, "release-20260101", "SHA256SUMS"), tt.sums)
-				}
-				var notes []msg.M
-				f := finder(url, "arm64", &fakeGPGV{}, &notes)
-				if tt.release != "" {
-					f.Release = tt.release
-				}
-				if tt.noPin {
-					f.Digest = ""
-				}
-				_, err := f.Image(t.Context())
-				switch tt.want {
-				case "no_ubuntu_image":
-					wantMsg(t, err, tt.want, "release="+f.Release, "url="+url, "version="+Version)
-				default:
-					wantMsg(t, err, tt.want, "file=ubuntu-"+Version+"-server-cloudimg-arm64.img", "release=release-20260101", "url="+url)
-				}
-			})
-		})
-	}
+	k := newTestKey(t)
+	url := "file://" + filepath.Join(t.TempDir(), "gone")
+	_, err := finder(url, "arm64", k).Newest(t.Context(), "")
+	wantMsg(t, err, "ubuntu_unreachable", "url="+url, "version="+Version)
+	empty := "file://" + t.TempDir()
+	_, err = finder(empty, "arm64", k).Newest(t.Context(), "")
+	wantMsg(t, err, "no_ubuntu_release")
 }
 
-// The pins: each architecture's digest, 64 hex digits, and what base's key
-// on Lima hashes; none for another architecture.
-func TestCloudPin(t *testing.T) {
+// Ubuntu's real key checks a real release's signature, and refuses its
+// checksums once they're changed.
+func TestRealRelease(t *testing.T) {
 	t.Parallel()
-	if !release.MatchString(CloudRelease) || ReleaseDate(CloudRelease) == "" {
-		t.Errorf("CloudRelease %q isn't a dated release", CloudRelease)
-	}
-	for arch, sum := range map[string]string{"arm64": CloudSHA256Arm64, "amd64": CloudSHA256Amd64} {
-		if !digest.MatchString(sum) {
-			t.Errorf("%s: %q isn't a SHA-256", arch, sum)
-		}
-		if got := CloudDigest(arch); got != "sha256:"+sum {
-			t.Errorf("CloudDigest(%s) = %q", arch, got)
-		}
-		want := CloudRelease + " ubuntu-" + Version + "-server-cloudimg-" + arch + ".img sha256:" + sum
-		if got := CloudPin(arch); got != want {
-			t.Errorf("CloudPin(%s) = %q, want %q", arch, got, want)
-		}
-	}
-	if CloudPin("arm64") == CloudPin("amd64") {
-		t.Error("both architectures pin the same image")
-	}
-	if got := CloudDigest("riscv64"); got != "" {
-		t.Errorf("riscv64: %q", got)
-	}
-}
-
-// The checksums must be signed by Ubuntu's key, checked with gpgv in a
-// home of its own; without gpgv, a note.
-func TestImageSignature(t *testing.T) {
-	t.Parallel()
-	served(t, func(t *testing.T, dir, url string) {
-		var notes []msg.M
-		g := &fakeGPGV{}
-		if _, err := finder(url, "arm64", g, &notes).Image(t.Context()); err != nil {
-			t.Fatal(err)
-		}
-		if len(g.calls) != 1 || len(g.homes) != 1 {
-			t.Fatalf("gpgv calls %q, homes %q", g.calls, g.homes)
-		}
-		args, tmp := g.calls[0], filepath.Dir(g.homes[0])
-		want := []string{"gpgv", "--keyring", filepath.Join(tmp, "ubuntu-cloud.gpg"), filepath.Join(tmp, "SHA256SUMS.gpg"), filepath.Join(tmp, "SHA256SUMS")}
-		if !slices.Equal(args, want) {
-			t.Errorf("gpgv %q, want %q", args, want)
-		}
-		if !slices.Equal(g.keyrings, []string{"key"}) {
-			t.Errorf("keyrings %q, want devvm's key", g.keyrings)
-		}
-		if _, err := os.Stat(tmp); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("%s is still there: %v", tmp, err)
-		}
-		if len(notes) != 0 {
-			t.Errorf("notes: %v", notes)
-		}
-
-		_, err := finder(url, "arm64", &fakeGPGV{bad: true}, &notes).Image(t.Context())
-		wantMsg(t, err, "ubuntu_bad_signature", "release=release-20260101", "url="+url)
-
-		if err := os.Remove(filepath.Join(dir, "release-20260101", "SHA256SUMS.gpg")); err != nil {
-			t.Fatal(err)
-		}
-		g = &fakeGPGV{}
-		_, err = finder(url, "arm64", g, &notes).Image(t.Context())
-		wantMsg(t, err, "ubuntu_bad_signature", "release=release-20260101", "url="+url)
-		if len(g.calls) != 0 {
-			t.Errorf("gpgv ran without a signature: %q", g.calls)
-		}
-
-		f := finder(url, "arm64", g, &notes)
-		f.GPGV = ""
-		if _, err := f.Image(t.Context()); err != nil {
-			t.Fatal(err)
-		}
-		if len(notes) != 1 || notes[0].ID() != "ubuntu_unsigned" || len(g.calls) != 0 {
-			t.Errorf("without gpgv: notes %v, calls %q", notes, g.calls)
-		}
-
-		// Without gpgv, the pin still decides.
-		write(t, filepath.Join(dir, "release-20260101", "SHA256SUMS"), strings.Repeat("3", 64)+" *ubuntu-"+Version+"-server-cloudimg-arm64.img\n")
-		_, err = f.Image(t.Context())
-		wantMsg(t, err, "ubuntu_checksum_unpinned")
-	})
-}
-
-// Ubuntu's real key, with the real gpgv, checks a real release's signature,
-// and refuses its checksums once they're changed.
-func TestRealSignature(t *testing.T) {
-	t.Parallel()
-	gpgv, err := exec.LookPath("gpgv")
-	if err != nil {
-		t.Skip("gpgv isn't installed")
-	}
 	src, err := filepath.Abs(filepath.Join("testdata", "resolute"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := New(assets.FS, "file://"+src, testUI{t})
-	f.GPGV, f.Arch = gpgv, "arm64"
-	f.Release, f.Digest = "release-20261016", "sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24"
-	img, err := f.Image(t.Context())
+	f := New(assets.FS, "file://"+src)
+	f.Arch = "arm64"
+	got, err := f.Newest(t.Context(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Image{
-		URL:    "file://" + src + "/release-20261016/ubuntu-26.04-server-cloudimg-arm64.img",
-		Digest: "sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24",
+	if got.Release != "release-20261016" || got.Digest != "sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24" {
+		t.Errorf("got %+v", got)
 	}
-	if img != want {
-		t.Errorf("got %+v, want %+v", img, want)
+	if img := ImageOf(f.URL, got); img.URL != "file://"+src+"/release-20261016/ubuntu-26.04-server-cloudimg-arm64.img" ||
+		img.String() != img.URL+" "+got.Digest {
+		t.Errorf("image %+v", img)
 	}
 
 	// The same files with one checksum changed.
@@ -307,27 +211,32 @@ func TestRealSignature(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"SHA256SUMS", "SHA256SUMS.gpg"} {
-		data, err := os.ReadFile(filepath.Join(src, "release-20261016", name)) //nolint:gosec // the test's fixtures
-		if err != nil {
-			t.Fatal(err)
-		}
+		data := readFile(t, filepath.Join(src, "release-20261016", name))
 		if name == "SHA256SUMS" {
 			data = []byte(strings.Replace(string(data), "8eb876c2", "8eb876c3", 1))
 		}
 		write(t, filepath.Join(rel, name), string(data))
 	}
 	f.URL = "file://" + dir
-	_, err = f.Image(t.Context())
+	_, err = f.Newest(t.Context(), "")
 	wantMsg(t, err, "ubuntu_bad_signature", "release=release-20261016")
+}
+
+func TestPinArg(t *testing.T) {
+	t.Parallel()
+	p := pinOf("release-20260101", "arm64", sumOf('1'))
+	if got, want := PinArg(p), "release-20260101 ubuntu-26.04-server-cloudimg-arm64.img sha256:"+sumOf('1'); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
 }
 
 func TestNew(t *testing.T) {
 	t.Parallel()
-	f := New(testAssets, "", testUI{t})
-	if f.URL != DefaultURL || f.Assets == nil || f.Release != CloudRelease || f.Digest != CloudDigest(f.Arch) {
+	f := New(assets.FS, "")
+	if f.URL != DefaultURL || f.Assets == nil || f.Now == nil || f.Client == nil {
 		t.Errorf("default: %+v", f)
 	}
-	f = New(testAssets, "file:///tmp/ubuntu/", testUI{t})
+	f = New(assets.FS, "file:///tmp/ubuntu/")
 	if f.URL != "file:///tmp/ubuntu" {
 		t.Errorf("moved: %s", f.URL)
 	}
@@ -372,26 +281,26 @@ func TestChecksum(t *testing.T) {
 // devvm to a file on disk); one on the same scheme is followed.
 func TestRedirects(t *testing.T) {
 	t.Parallel()
-	dir := mirror(t)
+	k := newTestKey(t)
+	dir := mirror(t, k)
 	files := httptest.NewServer(http.FileServer(http.Dir(dir)))
 	t.Cleanup(files.Close)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/file/" {
+		if strings.HasPrefix(r.URL.Path, "/file/") {
 			http.Redirect(w, r, "file://"+dir+"/", http.StatusFound)
 			return
 		}
 		http.Redirect(w, r, files.URL+strings.TrimPrefix(r.URL.Path, "/same"), http.StatusFound) //nolint:gosec // the test's own server
 	}))
 	t.Cleanup(srv.Close)
-	var notes []msg.M
-	if _, err := finder(srv.URL+"/same", "arm64", &fakeGPGV{}, &notes).Image(t.Context()); err != nil {
+	if _, err := finder(srv.URL+"/same", "arm64", k).Newest(t.Context(), ""); err != nil {
 		t.Errorf("same scheme: %v", err)
 	}
-	f := finder(srv.URL+"/file", "arm64", &fakeGPGV{}, &notes)
+	f := finder(srv.URL+"/file", "arm64", k)
 	if _, err := f.fetch(t.Context(), f.URL+"/"); !errors.Is(err, fetch.ErrRedirect) {
 		t.Errorf("to file://: got %v, want a refused redirect", err)
 	}
-	if _, err := f.Image(t.Context()); err == nil {
+	if _, err := f.Newest(t.Context(), ""); err == nil {
 		t.Error("to file://: found an image")
 	}
 }
@@ -428,8 +337,8 @@ func TestCanceled(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	var notes []msg.M
-	if _, err := finder("file://"+mirror(t), "arm64", &fakeGPGV{}, &notes).Image(ctx); !errors.Is(err, context.Canceled) {
+	k := newTestKey(t)
+	if _, err := finder("file://"+mirror(t, k), "arm64", k).Newest(ctx, ""); !errors.Is(err, context.Canceled) {
 		t.Errorf("got %v, want context.Canceled", err)
 	}
 }

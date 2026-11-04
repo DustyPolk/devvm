@@ -1,5 +1,0 @@
-#!/bin/bash
-# Stand-in for gpgv in tests: logs its arguments to $STUB_LOG; a signature
-# is good unless $STUB_DIR/gpgv-bad exists.
-"${0%/*}/stub-log" "$STUB_LOG" gpgv "$@"
-[[ ! -e $STUB_DIR/gpgv-bad ]]

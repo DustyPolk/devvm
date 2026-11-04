@@ -386,10 +386,11 @@ toml=""
 for f in $features; do toml="$toml${toml:+, }\"$f\""; done
 printf 'features = [%s]\n' "$toml" > "$XDG_CONFIG_HOME/devvm/config.toml"
 D=$src/devvm
-# The dated release of Ubuntu's cloud image base starts from, and its images' SHA-256s.
-cloud_pin() { sed -n "s/^const $1 = \"\([0-9a-z-]*\)\"$/\1/p" "$root/internal/ubuntu/ubuntu.go"; }
-cloud_release=$(cloud_pin CloudRelease)
-cloud_sums="$(cloud_pin CloudSHA256Arm64)|$(cloud_pin CloudSHA256Amd64)"
+# The dated release of Ubuntu's cloud image that base starts from here (scripts/bump.sh e2e-ubuntu),
+# in place of the newest a user's devvm pins, so base stays cached between runs. devvm still checks
+# its signed checksums.
+e2e_ubuntu_release=release-20261016
+export DEVVM_UBUNTU_RELEASE=$e2e_ubuntu_release
 # The container images the --from checks start from, by digest, so the bases made from them stay
 # cached until these pins move (scripts/bump.sh e2e-from). One check keeps a tag, so devvm's registry
 # lookup is checked too: the company proxy's alpine:3.21, converted each run anyway.
@@ -1625,11 +1626,15 @@ kf=$(keys_of e2efix | head -1)
 # A cached base's key: the one the fixture was built on (other selections' bases, with other
 # features, are cached too, and may be newer).
 [[ -n $kb ]] || kb=$(rec "$kf" chain | sed -n 's/^base=\([0-9a-f]*\) e2efix=.*$/\1/p')
+# pinned FIELD: the cloud image pinned in the sandbox, as devvm recorded it.
+pinned() { sed -n "s/^  \"$1\": \"\(.*\)\",\{0,1\}\$/\1/p" "$images/ubuntu.json" 2>/dev/null; }
+export -f pinned
 check "base is a stopped image, recorded with Ubuntu's pinned cloud image and its C library" bash -c "
   [[ -n '$kb' && \$(status_of devvm-img-$kb) == Stopped ]] &&
   [[ \$(rec $kb chain) == 'base=$kb' && \$(rec $kb libc) == gnu && -z \$(rec $kb from) ]] &&
-  rec $kb built | grep -qE '^[0-9-]+T[0-9:]+Z$' && [[ -n '$cloud_release' ]] &&
-  rec $kb digest | grep -qE '^https://cloud-images\.ubuntu\.com/.*/$cloud_release/.*\.img sha256:($cloud_sums)$'"
+  rec $kb built | grep -qE '^[0-9-]+T[0-9:]+Z$' && [[ \$(pinned release) == $e2e_ubuntu_release ]] &&
+  [[ \$(rec $kb digest) == \"https://cloud-images.ubuntu.com/releases/resolute/$e2e_ubuntu_release/\$(pinned file) \$(pinned digest)\" ]] &&
+  pinned digest | grep -qE '^sha256:[0-9a-f]{64}$'"
 check "base mounts nothing from the host" bash -c "[[ -z \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' devvm-img-$kb) ]]"
 check "devvm limactl runs Lima on devvm's Lima home, whatever LIMA_HOME says, with its exit code" bash -c "
   [[ -n '$kb' ]] && LIMA_HOME='$work/no-lima' '$D' limactl list -q </dev/null | grep -qx devvm-img-$kb &&

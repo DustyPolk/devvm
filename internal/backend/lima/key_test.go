@@ -1,6 +1,7 @@
 package lima
 
 import (
+	"cmp"
 	"io/fs"
 	"maps"
 	"os"
@@ -42,6 +43,7 @@ type limaBuild struct {
 	arch string
 	user user.User
 	from string
+	sum  string // the pinned cloud image's SHA-256; "" for testUbuntuSum
 }
 
 // build builds base as lb says, every feature chosen, as devvm does:
@@ -56,6 +58,7 @@ func (lb limaBuild) build(t *testing.T) (sent, key string) {
 	l, f := buildLima(t, "darwin", "")
 	l.Assets, l.Arch = lb.own, lb.arch
 	l.User = func() (*user.User, error) { return &lb.user, nil }
+	pinUbuntu(t, l, testUbuntuURL, cmp.Or(lb.sum, testUbuntuSum))
 	var out []string
 	tmp := "" // the conversion's own folder
 	do := f.do
@@ -110,7 +113,8 @@ func (lb limaBuild) build(t *testing.T) (sent, key string) {
 
 // Every byte and argument Lima sends into base's build changes base's
 // key: each of devvm's files, the host's architecture, the user a --from
-// base's conversion makes, and --from's digest. Each change is checked on
+// base's conversion makes, the cloud image pinned on this machine, and
+// --from's digest. Each change is checked on
 // its own, from Ubuntu and with --from.
 func TestKeyHashesWhatLimaSends(t *testing.T) {
 	debian := "debian:12@sha256:" + strings.Repeat("a", 64)
@@ -141,6 +145,9 @@ func TestKeyHashesWhatLimaSends(t *testing.T) {
 		c = lb
 		c.user = user.User{Username: "you", Uid: "502"}
 		check("another user", c)
+		c = lb
+		c.sum = strings.Repeat("2", 64)
+		check("another pinned cloud image", c)
 		if from != "" {
 			c = lb
 			c.from = "debian:12@sha256:" + strings.Repeat("b", 64)

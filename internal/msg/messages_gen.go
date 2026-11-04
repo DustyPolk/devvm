@@ -2069,9 +2069,14 @@ func NoToken() M {
 	return M{id: "no_token"}
 }
 
-// NoUbuntuImage is [no_ubuntu_image]: "Finding Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}} failed. Check that you're online, or update devvm if Ubuntu removed the image."
+// NoUbuntuImage is [no_ubuntu_image]: "Finding Ubuntu {{.version}}'s cloud image {{.release}} at {{.url}} failed. Check that you're online, then try again."
 func NoUbuntuImage(release string, url string, version string) M {
 	return M{id: "no_ubuntu_image", vals: []val{{"release", release}, {"url", url}, {"version", version}}}
+}
+
+// NoUbuntuRelease is [no_ubuntu_release]: "{{.url}} lists no release of Ubuntu {{.version}}'s cloud image with an image for this machine, so devvm can't build base."
+func NoUbuntuRelease(url string, version string) M {
+	return M{id: "no_ubuntu_release", vals: []val{{"url", url}, {"version", version}}}
 }
 
 // NoVM is [no_vm]: "There's no VM for {{.dir}}. Run devvm to make one."
@@ -2157,6 +2162,11 @@ func OpencodeLoginKept(providers string) M {
 // OpencodeRefreshFailed is [opencode_refresh_failed]: "Refreshing opencode's {{.provider}} login on this machine failed: {{.reason}}. Log in again with opencode on this machine."
 func OpencodeRefreshFailed(provider string, reason string) M {
 	return M{id: "opencode_refresh_failed", vals: []val{{"provider", provider}, {"reason", reason}}}
+}
+
+// OriginPinned is [origin_pinned]: "base starts from Ubuntu's cloud image {{.origin}}"
+func OriginPinned(origin string) M {
+	return M{id: "origin_pinned", vals: []val{{"origin", origin}}}
 }
 
 // OutputFailed is [output_failed]: "Writing the command's output failed: {{.reason}}."
@@ -3044,14 +3054,9 @@ func UbuntuBadSignature(release string, url string) M {
 	return M{id: "ubuntu_bad_signature", vals: []val{{"release", release}, {"url", url}}}
 }
 
-// UbuntuChecksumUnpinned is [ubuntu_checksum_unpinned]: "Ubuntu's checksum for {{.file}} in {{.release}} at {{.url}} isn't the one devvm pins, so devvm didn't use it."
-func UbuntuChecksumUnpinned(file string, release string, url string) M {
-	return M{id: "ubuntu_checksum_unpinned", vals: []val{{"file", file}, {"release", release}, {"url", url}}}
-}
-
-// UbuntuUnsigned is [ubuntu_unsigned]: "gpgv isn't installed, so devvm can't check the signature on Ubuntu's checksums. devvm still checks the image against its pinned checksum. To check the signature too, run brew install gnupg, or apt install gpgv."
-func UbuntuUnsigned() M {
-	return M{id: "ubuntu_unsigned"}
+// UbuntuUnreachable is [ubuntu_unreachable]: "devvm couldn't read the list of Ubuntu {{.version}}'s cloud images at {{.url}}. Check that you're online, then try again."
+func UbuntuUnreachable(url string, version string) M {
+	return M{id: "ubuntu_unreachable", vals: []val{{"url", url}, {"version", version}}}
 }
 
 // UncommittedNotCopied is [uncommitted_not_copied]: "The uncommitted changes in {{.dir}} stay on this machine. To give them to the VM, commit them, then run git push {{.remote}} {{.branch}}."
@@ -3690,6 +3695,7 @@ var specs = map[string]spec{
 	"no_terminal_fetch":                {fields: []string{"remote"}},
 	"no_token":                         {},
 	"no_ubuntu_image":                  {fields: []string{"release", "url", "version"}},
+	"no_ubuntu_release":                {fields: []string{"url", "version"}},
 	"no_vm":                            {fields: []string{"dir"}},
 	"no_vm_git_protect":                {fields: []string{"dir"}},
 	"no_vm_group":                      {fields: []string{"dir"}},
@@ -3707,6 +3713,7 @@ var specs = map[string]spec{
 	"oci_waiting":                      {},
 	"opencode_login_kept":              {fields: []string{"providers"}},
 	"opencode_refresh_failed":          {fields: []string{"provider", "reason"}},
+	"origin_pinned":                    {fields: []string{"origin"}},
 	"output_failed":                    {fields: []string{"reason"}},
 	"part_none_alone":                  {fields: []string{"flag"}},
 	"part_other_flag":                  {fields: []string{"flag", "given", "other"}},
@@ -3884,8 +3891,7 @@ var specs = map[string]spec{
 	"tools_switch":                     {fields: []string{"vm"}},
 	"tools_unmounted":                  {fields: []string{"tools", "vm"}},
 	"ubuntu_bad_signature":             {fields: []string{"release", "url"}},
-	"ubuntu_checksum_unpinned":         {fields: []string{"file", "release", "url"}},
-	"ubuntu_unsigned":                  {},
+	"ubuntu_unreachable":               {fields: []string{"url", "version"}},
 	"uncommitted_not_copied":           {fields: []string{"branch", "dir", "remote"}},
 	"unfetched_commits":                {fields: []string{"refs"}},
 	"unfinished_image":                 {fields: []string{"vm"}},

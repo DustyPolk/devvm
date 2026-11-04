@@ -93,7 +93,8 @@ The tests run a test build of devvm, which is one made with `-ldflags "-X github
 | --- | --- |
 | `DEVVM_HOST_MISE` | devvm's pinned and checked mise on the host |
 | `DEVVM_KVM` | Linux's `/dev/kvm` |
-| `DEVVM_UBUNTU_URL` | `https://cloud-images.ubuntu.com/releases/resolute`, where devvm finds Ubuntu's pinned dated release |
+| `DEVVM_UBUNTU_URL` | `https://cloud-images.ubuntu.com/releases/resolute`, where devvm finds Ubuntu's dated releases |
+| `DEVVM_UBUNTU_RELEASE` | the newest dated release, which devvm pins base to: `tests/e2e.sh` pins its own, `e2e_ubuntu_release`, so its images stay cached between runs, and devvm checks it as it does the newest |
 | `DEVVM_UNREVIEWED` | the refusal of unreviewed emulations ([unreviewed emulations](#unreviewed-emulations)) |
 | `DEVVM_TEST_CPUS`, `DEVVM_TEST_MEMORY_GIB`, `DEVVM_TEST_FREE_GIB`, `DEVVM_TEST_LIST_TIMEOUT` | this machine's size and how long devvm waits for a backend's listings ([a host of any size](#a-host-of-any-size)) |
 
