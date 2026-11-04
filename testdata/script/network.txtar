@@ -18,10 +18,14 @@ stub_calls
 # alone (kept out of Time Machine on macOS), the
 # VM's proxy, then the VM started confined, its environment pointing at
 # the proxy with the VM's key, then the self-check, the setup and the
-# shell.
+# shell. (Its hostagent here: the test's runner, which runs on, so the
+# proxy that follows it is still there for the checks below, however
+# slowly they run.)
 project net
 stub_reset
+exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
 exec devvm --network-policy --no-git-protect
+rm $STUB_DIR/hostagent
 stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
 vm_name NET net
 exists $NET_dir/run/ca/ca.pem $NET_dir/run/ca/next.pem
