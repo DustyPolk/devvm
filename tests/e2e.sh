@@ -2092,6 +2092,10 @@ echo '# e2e skill' > "$ah/.claude/skills/e2e/SKILL.md"
 echo '{"theme":"e2e-settings"}' > "$ah/.claude/settings.json"
 echo '{"prompt":"e2e-history"}' > "$ah/.claude/projects/p/h.jsonl"
 printf '[user]\n\tname = E2E User\n\temail = e2e@example.com\n' > "$ah/.gitconfig"
+# A fake file outside the agent folders, and links to it from inside one: relative and absolute.
+mkdir -p "$ah/outside"; echo e2e-outside-marker > "$ah/outside/e2e-not-a-secret.txt"
+ln -s ../../outside/e2e-not-a-secret.txt "$ah/.claude/skills/escape"
+ln -s "$ah/outside/e2e-not-a-secret.txt" "$ah/.claude/skills/escape-abs"
 a=$(newproj agents)
 (cd "$a" && HOME=$ah TZ=Europe/Paris CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake-plain quiet "$D" --no-network-policy --no-git-protect --agents claude)
 vm=$(vm_of "$a"); [[ -z $vm ]] || created+=("$vm")
@@ -2099,6 +2103,10 @@ check "an agent folder is mounted read-only at its host path, and linked into th
   limactl list --format '{{range .Config.Mounts}}{{.Location}}|{{.Writable}} {{end}}' $vm | grep -qF '$ah/.claude/skills|false ' &&
   ! limactl shell --workdir / $vm sudo touch '$ah/.claude/skills/x' </dev/null &&
   limactl shell --workdir / $vm bash -c 'grep -q e2e ~/.claude/skills/e2e/SKILL.md' </dev/null"
+check "a symlink in an agent folder, relative or absolute, can't reach the host's files outside it" bash -c "
+  s='$ah/.claude/skills' && l=\$(limactl shell --workdir / $vm readlink \"\$s/escape\" \"\$s/escape-abs\" </dev/null) && echo \"links: \$l\" &&
+  o=\$(limactl shell --workdir / $vm sudo cat \"\$s/escape\" \"\$s/escape-abs\" </dev/null 2>&1); echo \"read: \$o\" &&
+  [[ \$l == *outside/e2e-not-a-secret.txt*outside/e2e-not-a-secret.txt && \$o != *e2e-outside-marker* ]]"
 check "its settings are copied in, its history never" bash -c "
   limactl shell --workdir / $vm bash -c 'grep -q e2e-settings ~/.claude/settings.json && [[ ! -e ~/.claude/projects/p ]]' </dev/null &&
   ! limactl shell --workdir / $vm sudo grep -rqs e2e-history /home /root /etc </dev/null"
