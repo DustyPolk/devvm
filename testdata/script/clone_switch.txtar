@@ -1,0 +1,127 @@
+# devvm clone [on|off]: bare, it shows whether the folder's VM has its own
+# clone of the repo. On makes a VM that mounts the folder again with its
+# own clone instead, after asking, keeping its settings: nothing of the
+# folder mounted, the repo's branches copied in as it starts, a git remote
+# for it, and .git's locks taken off. Off checks the clone as devvm rm
+# does, fetching the work this repo lacks first, then makes it again
+# mounting the folder: .git locked as a new VM's, and the remote removed.
+# (The stubs keep the VM's files in $STUB_DIR/vmfs.)
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+mkdir $WORK/web
+cd $WORK/web
+
+# Usage errors, before anything runs.
+! exec devvm clone maybe
+stderr '^devvm: arg_not_choice choices=on, off command=devvm clone given=maybe$'
+! exec devvm clone on off
+stderr '^devvm: args_too_many '
+! exec devvm clone --json on
+stderr '^devvm: json_shows_only command=devvm clone$'
+! exec devvm clone --json --force
+stderr '^devvm: json_shows_only command=devvm clone$'
+
+# No VM.
+! exec devvm clone
+stderr '^devvm: no_vm dir=/\S*/web$'
+! exec devvm clone on --force
+stderr '^devvm: no_vm dir=/\S*/web$'
+
+# A VM that mounts the folder, which is a repo with two branches.
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+exec git branch other
+exec devvm --no-network-policy
+vm_name WEB web
+exec devvm clone
+stdout '\Aoff\n\z'
+exec devvm clone --json
+stdout '\A{\n  "version": 1,\n  "clone": "off"\n}\n\z'
+! exec devvm --clone
+stderr '^devvm: clone_needs_new_vm vm=devvm-web-[0-9a-f]{14}$'
+
+# Without a terminal, on refuses unless --force; in one, it says what
+# changes and asks, and no keeps the VM.
+stub_reset
+! exec devvm clone on
+stderr '^devvm: force_needed command=devvm clone on$'
+ttyin -stdin $WORK/no.txt
+exec devvm clone on
+stdout '^==> clone_switch_on vm=devvm-web-[0-9a-f]{14}$'
+stderr '^remake_confirm image=base vm=devvm-web-[0-9a-f]{14} \[y/N\] '
+stdout '==> kept vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|clone)'
+
+# --force: made again with nothing of the folder mounted, its branches
+# copied into its clone as it starts, the remote added, and on macOS
+# .git's locks taken off.
+stub_reset
+exec devvm clone on --force
+stdout '==> remade image=base vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> clone_ready branch=main remote=devvm$'
+stub_calls
+stdout 'limactl rename --tty=false devvm-web-[0-9a-f]{14} devvm-[0-9a-f]{14}-old\n'
+stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] '
+stdout 'git-receive-pack ''/\S*/web''$'
+stdout 'limactl delete -f devvm-[0-9a-f]{14}-old\n'
+[darwin] stdout 'limactl delete -f devvm-[0-9a-f]{14}-old\n(.*\n)*chflags -R -P nouchg /\S*/web/\.git/config\n'
+vm_state $WEB_dir/vm.json
+stdout '^clone.on=true$'
+stdout '^clone.made.remote=devvm$'
+stdout '^clone.made.seeded=true$'
+stdout '^git.mode=clone$'
+! stdout '^remake'
+exec git remote get-url devvm
+stdout '^devvm-web-[0-9a-f]{14}:/\S*/web$'
+exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)" branch --format="%(refname:short)"'
+stdout '\Amain\nother\n\z'
+exec devvm clone
+stdout '\Aon\n\z'
+
+# Again: said, and nothing made.
+stub_reset
+exec devvm clone on --force
+stdout '^==> clone_on_already vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|clone)'
+
+# Off: the VM's own commit isn't fetched, so without a terminal it
+# refuses, --force or not, and keeps the VM as it is.
+exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)" commit -q --allow-empty -m from-vm'
+stub_reset
+! exec devvm clone off --force
+stdout '^unfetched_commits refs="main"$'
+stderr '^devvm: no_terminal_fetch command=devvm clone off remote=devvm$'
+stub_calls
+! stdout 'limactl (rename|clone)'
+
+# In a terminal, the work is fetched into saved/devvm/*, then the VM is
+# made again mounting the folder: the remote removed, then .git locked,
+# before it starts.
+stub_reset
+ttyin -stdin $WORK/yes.txt
+exec devvm clone off --force
+stdout '^==> clone_switch_off vm=devvm-web-[0-9a-f]{14}$'
+stderr 'fetch_before_delete prefix=saved/devvm'
+stdout '==> saved_branches branches="saved/devvm/main"$'
+stdout '==> removed_remote remote=devvm\n(.*\n)*==> starting vm=devvm-web-[0-9a-f]{14}\n'
+stdout '==> remade image=base vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[.*"location":"/\S*/web","writable":true'
+[darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/config\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n'
+exec git log --format=%s -1 saved/devvm/main
+stdout '^from-vm$'
+! exec git remote get-url devvm
+vm_state $WEB_dir/vm.json
+! stdout '^clone\.(on=true|made)'
+[darwin] stdout '^git.mode=on$'
+[linux] stdout '^git.mode=off$'
+! stdout '^remake'
+exec devvm clone
+stdout '\Aoff\n\z'
+exec devvm rm --force --no-export
+
+-- no.txt --
+n
+-- yes.txt --
+y

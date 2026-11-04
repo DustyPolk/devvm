@@ -65,7 +65,7 @@ devvm layer add desktop --force  # the same without asking, as a script must
 
 Everything on the VM's disk that devvm doesn't keep is lost, so in a terminal devvm names the image and asks first, with no as the default. Without a terminal, it refuses unless you give `--force`. When the VM has a coding agent, devvm first exports the agents' history, as `devvm rm` does, unless you give `--no-export` ([history](coding-agents.md#history)). In a subfolder of a folder with a VM, devvm asks in a terminal whether to make that folder's VM again, and refuses without one.
 
-devvm refuses before it changes anything when a name isn't a layer, or is a shared tool's name, which `devvm tools add` adds instead. It also refuses when the VM's backend can't run one of the layers, when the VM's creation didn't finish, and for a `--clone` VM, whose clone of the repo is on its disk. To give a `--clone` VM more layers, push its work, then run `devvm rm` and `devvm --clone` with the layers you want.
+devvm refuses before it changes anything when a name isn't a layer, or is a shared tool's name, which `devvm tools add` adds instead. It also refuses when the VM's backend can't run one of the layers, when the VM's creation didn't finish, and for a `--clone` VM, whose clone of the repo is on its disk. To give a `--clone` VM more layers, run `devvm clone off`, which offers to fetch the clone's work first, then `devvm layer add` and `devvm clone on` ([switching a VM that exists](clone.md#switching-a-vm-that-exists)).
 
 devvm then works in this order:
 
@@ -87,7 +87,7 @@ Everything else on the VM's disk is lost: the packages you installed with apt, p
 
 ### A remake that stops halfway
 
-If devvm itself is killed while it makes a VM again, such as when this machine loses power, the VM's state records the remake. The next `devvm`, `devvm layer add`, `devvm layer rm` or `devvm update` in the folder finishes it without asking. When the new VM already has its home folder, devvm only deletes the old disk. When the old disk is still set aside otherwise, devvm puts it back and makes the VM again from the start, and when it's gone, devvm makes the new VM with the home folder it saved. Until then, other commands on the VM refuse and name `devvm`, and `devvm rm` deletes the VM together with its old disk.
+If devvm itself is killed while it makes a VM again, such as when this machine loses power, the VM's state records the remake. The next `devvm`, `devvm layer add`, `devvm layer rm`, `devvm update`, `devvm clone on` or `devvm clone off` in the folder finishes it without asking. When the new VM already has its home folder, devvm only deletes the old disk. When the old disk is still set aside otherwise, devvm puts it back and makes the VM again from the start, and when it's gone, devvm makes the new VM with the home folder it saved. Until then, other commands on the VM refuse and name `devvm`, and `devvm rm` deletes the VM together with its old disk.
 
 ## Taking layers out of a VM
 

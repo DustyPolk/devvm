@@ -240,13 +240,21 @@ func remoteURL(ctx context.Context, dir, name string) (string, bool) {
 	return url, err == nil
 }
 
-// cloneRmCheck is rm's check of a --clone VM before deleting it: it offers
-// to fetch the branches whose commits the host's repo lacks, and asks
-// before uncommitted changes in the clone or its worktrees (cloneChanges)
-// are lost, starting the VM if it's stopped. Without a terminal, either
-// refuses. It reports whether to keep the VM. A VM never seeded has
-// nothing of its own.
-func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
+// cloneCheck checks a --clone VM's clone before a command loses it:
+// command, as typed, which its messages name, deletes the VM (devvm rm),
+// or makes it again mounting the folder (remakes: devvm clone off).
+type cloneCheck struct {
+	clones
+	command string
+	remakes bool
+}
+
+// run offers to fetch the branches whose commits the host's repo lacks,
+// and asks before uncommitted changes in the clone or its worktrees
+// (changes) are lost, starting the VM if it's stopped. Without a
+// terminal, either refuses. It reports whether to keep the VM as it is.
+// A VM never seeded has nothing of its own.
+func (e cloneCheck) run(ctx context.Context, t *found) (bool, error) {
 	vm, st, b, dir := t.f.Name, t.st, t.b, t.f.Dir
 	c := sectionOf[cloneInVM](st, cloneSection)
 	if !c.Made.Seeded {
@@ -256,56 +264,56 @@ func (e clones) cloneRmCheck(ctx context.Context, t *found) (bool, error) {
 	if err := e.ensureRunning(ctx, t); err != nil {
 		return false, e.notStarted(ctx, vm, err)
 	}
-	refs, err := e.cloneGit(ctx, b, vm, dir, "for-each-ref", "--format=%(objectname) %(refname)", "refs/heads")
+	refs, err := e.git(ctx, b, vm, dir, "for-each-ref", "--format=%(objectname) %(refname)", "refs/heads")
 	if err != nil {
 		return false, err
 	}
 	if unfetched := unfetchedRefs(ctx, dir, refs); len(unfetched) > 0 {
 		e.Say(msg.UnfetchedCommits(quoted(unfetched)))
 		if !e.Terminal() {
-			return false, msg.NoTerminalFetch(remote)
+			return false, msg.NoTerminalFetch(e.command, remote)
 		}
 		if err := e.fetchUnfetched(ctx, b, vm, dir, remote, unfetched); err != nil {
 			return false, err
 		}
 	}
-	if dirty, err := e.cloneChanges(ctx, b, vm, dir); err != nil || !dirty {
+	if dirty, err := e.changes(ctx, b, vm, dir); err != nil || !dirty {
 		return false, err
 	}
 	if !e.Terminal() {
-		return false, msg.NoTerminalDelete()
+		return false, msg.NoTerminalDelete(e.command)
 	}
-	if !e.Ask(msg.DeleteAnyway()) {
+	if !e.remakes && !e.Ask(msg.DeleteAnyway()) || e.remakes && !e.Ask(msg.RemakeAnyway()) {
 		e.Info(msg.Kept(vm))
 		return true, nil
 	}
 	return false, nil
 }
 
-// notStarted is rm's error when the VM didn't start for its clone check
-// (err): what kept it from starting, said, then the way out, devvm rm
-// --no-clone-check, carrying err. An interrupt, or an error that isn't a
-// message, is err as it is.
-func (e clones) notStarted(ctx context.Context, vm string, err error) error {
+// notStarted is the error when the VM didn't start for its clone check
+// (err): what kept it from starting, said, then the way out, the command
+// with --no-clone-check, carrying err. An interrupt, or an error that
+// isn't a message, is err as it is.
+func (e cloneCheck) notStarted(ctx context.Context, vm string, err error) error {
 	m, ok := errors.AsType[msg.M](err)
 	if ctx.Err() != nil || !ok {
 		return err
 	}
 	e.Warn(m)
-	out := msg.CloneCheckNotStarted(vm).Because(err)
+	out := msg.CloneCheckNotStarted(e.command, vm).Because(err)
 	if _, logged := errors.AsType[*backend.LoggedError](err); logged {
 		return backend.Logged(out)
 	}
 	return out
 }
 
-// cloneChanges shows the uncommitted changes in the VM's clone and in
-// its linked worktrees inside it (cloneWorktrees), each under its
-// heading, at most cloneShown in all, and reports whether there are any.
-// It stops checking once it has shown cloneShown. A clone with more
-// worktrees than devvm checks counts as changed, and devvm says so.
-func (e clones) cloneChanges(ctx context.Context, b backend.Backend, vm, dir string) (bool, error) {
-	list, err := e.cloneGit(ctx, b, vm, dir, "worktree", "list", "--porcelain", "-z")
+// changes shows the uncommitted changes in the VM's clone and in its
+// linked worktrees inside it (cloneWorktrees), each under its heading,
+// at most cloneShown in all, and reports whether there are any. It stops
+// checking once it has shown cloneShown. A clone with more worktrees
+// than devvm checks counts as changed, and devvm says so.
+func (e cloneCheck) changes(ctx context.Context, b backend.Backend, vm, dir string) (bool, error) {
+	list, err := e.git(ctx, b, vm, dir, "worktree", "list", "--porcelain", "-z")
 	if err != nil {
 		return false, err
 	}
@@ -317,9 +325,9 @@ func (e clones) cloneChanges(ctx context.Context, b backend.Backend, vm, dir str
 		}
 		var out []byte
 		if wt == dir {
-			out, err = e.cloneGit(ctx, b, vm, dir, "status", "--porcelain")
+			out, err = e.git(ctx, b, vm, dir, "status", "--porcelain")
 		} else {
-			out, err = e.cloneExec(ctx, b, vm, []string{"sh", "-c", worktreeStatus, "sh", wt})
+			out, err = e.exec(ctx, b, vm, []string{"sh", "-c", worktreeStatus, "sh", wt})
 		}
 		if err != nil {
 			return false, err
@@ -399,21 +407,21 @@ func insideClone(dir, p string) bool {
 	return path.IsAbs(p) && path.Clean(p) == p && paths.Below(p, dir)
 }
 
-// cloneGit runs git on the VM's clone and returns what it printed, at
-// most cloneOutMax bytes.
-func (e clones) cloneGit(ctx context.Context, b backend.Backend, vm, dir string, args ...string) ([]byte, error) {
-	return e.cloneExec(ctx, b, vm, append([]string{"git", "-C", dir}, args...))
+// git runs git on the VM's clone and returns what it printed, at most
+// cloneOutMax bytes.
+func (e cloneCheck) git(ctx context.Context, b backend.Backend, vm, dir string, args ...string) ([]byte, error) {
+	return e.exec(ctx, b, vm, append([]string{"git", "-C", dir}, args...))
 }
 
-// cloneExec runs argv in the VM and returns what it printed, at most
+// exec runs argv in the VM and returns what it printed, at most
 // cloneOutMax bytes.
-func (e clones) cloneExec(ctx context.Context, b backend.Backend, vm string, argv []string) ([]byte, error) {
+func (e cloneCheck) exec(ctx context.Context, b backend.Backend, vm string, argv []string) ([]byte, error) {
 	out := &capped{max: cloneOutMax}
 	if err := b.Exec(ctx, vm, argv, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()}); err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, msg.CloneCheckFailed(vm)
+		return nil, msg.CloneCheckFailed(e.command, vm)
 	}
 	return out.Bytes(), nil
 }
@@ -443,7 +451,7 @@ func unfetchedRefs(ctx context.Context, dir string, refs []byte) []string {
 // fetchUnfetched offers to fetch the VM's unfetched branches into new
 // local branches, saved/<remote>/<branch> (savedPrefix), never over one
 // that exists. Branches whose names git refuses are skipped.
-func (e clones) fetchUnfetched(ctx context.Context, b backend.Backend, vm, dir, remote string, unfetched []string) error {
+func (e cloneCheck) fetchUnfetched(ctx context.Context, b backend.Backend, vm, dir, remote string, unfetched []string) error {
 	var good, bad []string
 	for _, br := range unfetched {
 		if validBranch(ctx, dir, br) {
@@ -460,7 +468,7 @@ func (e clones) fetchUnfetched(ctx context.Context, b backend.Backend, vm, dir, 
 	}
 	prefix, ok := savedPrefix(ctx, dir, remote)
 	if !ok {
-		return msg.SavedNamesTaken(remote, vm)
+		return msg.SavedNamesTaken(e.command, remote, vm)
 	}
 	if !e.Confirm(msg.FetchBeforeDelete(prefix)) {
 		return nil
@@ -479,13 +487,13 @@ func (e clones) fetchUnfetched(ctx context.Context, b backend.Backend, vm, dir, 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return msg.FetchFailed(vm).Because(err)
+		return msg.FetchFailed(e.command, vm).Because(err)
 	}
 	if err := e.LoggedCmd(ctx, msg.Fetching(prefix), cmd); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return backend.Logged(msg.FetchFailed(vm))
+		return backend.Logged(msg.FetchFailed(e.command, vm))
 	}
 	e.Info(msg.SavedBranches(quoted(saved)))
 	return nil
@@ -599,6 +607,170 @@ func (e clones) saveFetched(ctx context.Context, dir, remote string) error {
 	}
 	e.Info(msg.SavedBranches(quoted(saved)))
 	return nil
+}
+
+// SetClone makes the folder's VM again from its image in mode, CloneOn
+// (its own clone of the repo) or CloneOff (the folder mounted), after
+// the user agrees (remakeTo), then opens a shell in it; a VM in that
+// mode already is said to be, and nothing changes. On needs a folder
+// that's a repo's top with a commit and a branch (checkCloneRepo), and
+// the clone is made as its shell opens (seedClone), as a new VM's is.
+// Off checks the clone first as devvm rm does (cloneCheck), unless
+// --no-clone-check, which warns that its work is lost instead. command
+// is the command as typed. A remake of it that didn't finish is finished
+// first.
+func (e Lifecycle) SetClone(ctx context.Context, command, mode string, o RemakeOptions) error {
+	t, resumed, release, err := e.toRemake(ctx, command, true)
+	if err != nil || t == nil {
+		return err
+	}
+	defer release()
+	vm, on := t.f.Name, mode == CloneOn
+	if isClone(t.st) == on {
+		if on {
+			e.Info(msg.CloneOnAlready(vm))
+		} else {
+			e.Info(msg.CloneOffAlready(vm))
+		}
+		if resumed {
+			return Launch(e).open(ctx, Options{}, t)
+		}
+		return nil
+	}
+	p := plan(t.st.Image, command, o)
+	p.Clone = mode
+	if err := e.canSwitch(ctx, t, p, o); err != nil {
+		return err
+	}
+	if !e.agreed(t, p, o) {
+		return nil
+	}
+	if !on && !o.NoCloneCheck {
+		keep, err := cloneCheck{clones: clones(e), command: command, remakes: true}.run(ctx, t)
+		if err != nil || keep {
+			return err
+		}
+	}
+	return e.remakeNow(ctx, t, p)
+}
+
+// canSwitch refuses to make t's VM again in p's clone mode when
+// canRemake does, or, for its own clone, when the folder isn't a repo it
+// can clone (checkCloneRepo). Then it says what changes, and for the
+// folder mounted with --no-clone-check, what's lost.
+func (e Lifecycle) canSwitch(ctx context.Context, t *found, p remakeInVM, o RemakeOptions) error {
+	vm := t.f.Name
+	if p.Clone == CloneOn {
+		if err := checkCloneRepo(ctx, t.f.Dir); err != nil {
+			return err
+		}
+	}
+	if err := e.canRemake(t, p, o); err != nil {
+		return err
+	}
+	switch {
+	case p.Clone == CloneOn:
+		e.Info(msg.CloneSwitchOn(vm))
+	case o.NoCloneCheck:
+		e.Info(msg.CloneSwitchOff(vm))
+		e.Warn(msg.CloneCheckSkipped(p.Command, vm))
+	default:
+		e.Info(msg.CloneSwitchOff(vm))
+	}
+	return nil
+}
+
+// switchedTo sets st's sections for the clone mode a remake made its new
+// machine in (clone: CloneOn, CloneOff, or "" for the VM's): its own
+// clone, made as its shell opens, or the folder mounted, with mode its
+// .git protection (gitprotect.Protector.NewMode). What the old machine's
+// mode left on the host stays recorded until the old machine is gone
+// (leftBehind): .git's locks, or the clone's remote.
+func switchedTo(st *state.VM, clone, mode string) error {
+	switch clone {
+	case CloneOn:
+		return state.SetSection(st, cloneSection, cloneInVM{On: true})
+	case CloneOff:
+		if err := gitprotect.Set(st, gitprotect.InVM{Mode: mode}); err != nil {
+			return err
+		}
+		return edit(st, cloneSection, func(c *cloneInVM) error { c.On = false; return nil })
+	}
+	return nil
+}
+
+// switchedBack sets st's sections back to its old machine's clone mode,
+// once a remake to the other (clone) is undone (putBack): the folder
+// mounted, or its own clone, as it was, with no .git to protect.
+func switchedBack(st *state.VM, clone string) error {
+	switch clone {
+	case CloneOn:
+		return state.SetSection(st, cloneSection, cloneInVM{})
+	case CloneOff:
+		if err := gitprotect.Set(st, gitprotect.InVM{Mode: gitprotect.Clone}); err != nil {
+			return err
+		}
+		return edit(st, cloneSection, func(c *cloneInVM) error { c.On = true; return nil })
+	}
+	return nil
+}
+
+// leftBehind takes what t's VM's old machine had of its clone mode off
+// the host, once a remake to the other (clone) is done and the old
+// machine is gone: .git's locks, for its own clone, once what the old
+// machine did to .git is named as a launch names it (Check), or, for the
+// folder mounted, the repo's remote for the clone, its fetched work kept
+// (removeRemote). Run again, it finds nothing left.
+func (e remaking) leftBehind(ctx context.Context, t *found, clone string) error {
+	st := t.st
+	switch clone {
+	case CloneOn:
+		if m := gitprotect.Mode(st); m == gitprotect.On || m == gitprotect.Strict {
+			p := e.Protector(t.f.Dir)
+			if err := p.Check(ctx, st, false); err != nil {
+				return err
+			}
+			if err := p.Set(ctx, st, gitprotect.Off); err != nil {
+				return err
+			}
+		}
+		return st.Update(ctx, func(st *state.VM) error { return gitprotect.Set(st, gitprotect.InVM{Mode: gitprotect.Clone}) })
+	case CloneOff:
+		// Its remote went before the new machine started (mountFolder).
+		return update(ctx, st, cloneSection, func(c *cloneInVM) error { *c = cloneInVM{}; return nil })
+	}
+	return nil
+}
+
+// mountFolder readies the folder for t's VM's new machine, made by devvm
+// clone off and not yet started: the repo's remote for the old clone goes
+// first, its fetched work kept (removeRemote), as .git/config is about to
+// be locked; then .git is protected as a new VM's is (NewVM). The clone
+// section keeps the remote's name, for putBack (unmountFolder).
+func (e remaking) mountFolder(ctx context.Context, t *found) error {
+	clones(e).removeRemote(ctx, t.f.Dir, t.f.Name, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
+	return e.Protector(t.f.Dir).NewVM(ctx, t.st)
+}
+
+// unmountFolder undoes mountFolder, once putBack has deleted the new
+// machine that mounted the folder: .git's locks come off, and the repo's
+// remote for the clone, which the old machine still has, is added again
+// when it's gone.
+func (e remaking) unmountFolder(ctx context.Context, t *found) {
+	dir, vm := t.f.Dir, t.f.Name
+	if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
+		e.Protector(dir).Unlock(ctx, t.st)
+	}
+	remote := sectionOf[cloneInVM](t.st, cloneSection).Made.Remote
+	if remote == "" {
+		return
+	}
+	if _, ok := remoteURL(ctx, dir, remote); ok {
+		return
+	}
+	if _, err := hostGit(ctx, dir, "remote", "add", remote, cloneURL(vm, dir)); err != nil {
+		e.Warn(msg.RemoteAddFailed(remote))
+	}
 }
 
 // capped keeps the first max bytes written to it, and takes the rest

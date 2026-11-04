@@ -26,6 +26,19 @@ func (e Settings) GitProtect(ctx context.Context) (string, error) {
 	return gitprotect.Mode(t.st), nil
 }
 
+// Clone returns whether the folder's VM has its own clone of the repo,
+// CloneOn, or mounts the folder, CloneOff (devvm clone).
+func (e Settings) Clone(ctx context.Context) (string, error) {
+	t, err := e.folderVM(ctx, msg.NoVM)
+	if err != nil {
+		return "", err
+	}
+	if isClone(t.st) {
+		return CloneOn, nil
+	}
+	return CloneOff, nil
+}
+
 // SetGitProtect turns the folder's VM's .git protection on, strict or
 // off. Locks change only while the VM is stopped, so nothing in it can
 // race them: a running VM's choice is saved, and set when devvm next

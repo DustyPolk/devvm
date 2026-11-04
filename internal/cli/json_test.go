@@ -61,8 +61,7 @@ func shape(t *testing.T, data []byte) []string {
 // fails here is a new jsonVersion. Every command that takes --json has
 // one.
 func TestJSONShapes(t *testing.T) {
-	yes := true
-	fix := "brew install lima"
+	yes, fix := true, "brew install lima"
 	at := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	cases := []struct {
 		command string
@@ -149,6 +148,7 @@ func TestJSONShapes(t *testing.T) {
 			[]string{"keys[].confirm: bool", "keys[].file: string", "keys[].fingerprint: string", "keys[].lifetime: string", "keys[].loaded: bool", "mode: string"},
 		},
 		{"git-protect", map[string]string{"mode": "on"}, []string{"mode: string"}},
+		{"clone", map[string]string{"clone": "on"}, []string{"clone: string"}},
 		{
 			"secret",
 			secretOutput{Secrets: []secretJSON{{Name: "github", Saved: true, UsedBy: []string{"devvm-a"}}}},

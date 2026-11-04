@@ -129,7 +129,7 @@ exec sh -c 'printf "devvm-cl-0123456789ab01 Running\n" >> "$STUB_DIR/instances"'
 ! exec devvm rm devvm-cl-0123456789ab01 --force
 stderr '^devvm: rm_gone_clone dir=/p/cl vm=devvm-cl-0123456789ab01$'
 exec devvm rm devvm-cl-0123456789ab01 --force --no-clone-check --no-export
-stderr '^devvm: clone_check_skipped vm=devvm-cl-0123456789ab01$'
+stderr '^devvm: clone_check_skipped command=devvm rm vm=devvm-cl-0123456789ab01$'
 stdout '^==> deleted vm=devvm-cl-0123456789ab01$'
 ! exists $VMS/0123456789ab01
 

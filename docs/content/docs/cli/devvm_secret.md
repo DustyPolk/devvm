@@ -1,6 +1,6 @@
 ---
 title: devvm secret
-weight: 41
+weight: 42
 ---
 
 List the secrets kept on this machine, for VMs to use

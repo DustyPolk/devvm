@@ -401,7 +401,7 @@ description = "dir is the folder vm was made for, which the folder devvm runs in
 other = "{{.vm}} was made for {{.dir}}, which this folder is inside, and may hold that project's work. Make it again?"
 
 [remake_clone]
-other = "{{.vm}} keeps its clone of the repo on its own disk, so devvm can't make it again. Push its work, then run devvm rm and devvm --clone."
+other = "{{.vm}} keeps its clone of the repo on its own disk, so devvm can't make it again. Run devvm clone off first, which offers to fetch the clone's work into this repo."
 
 [remake_export_failed]
 description = "command is the command as typed, such as devvm layer add"
@@ -1807,7 +1807,23 @@ description = "path is the repo's objects/info/alternates file"
 other = "--clone copies only a repo's own objects, and {{.path}} borrows objects from another repo. Run git repack -a -d, delete that file, then run devvm --clone again."
 
 [clone_needs_new_vm]
-other = "{{.vm}} mounts this folder, and --clone needs a new VM. Save any work in it, then run devvm rm and devvm --clone."
+other = "{{.vm}} mounts this folder, so --clone doesn't change it. To give it its own clone of the repo, run devvm clone on."
+
+[clone_show_failed]
+description = "reason is an error from the system, in English"
+other = "Showing whether this folder's VM has its own clone of the repo failed: {{.reason}}."
+
+[clone_on_already]
+other = "{{.vm}} has its own clone of the repo already"
+
+[clone_off_already]
+other = "{{.vm}} mounts this folder already"
+
+[clone_switch_on]
+other = "devvm makes {{.vm}} again with its own clone of the repo instead of this folder mounted, and copies the repo's branches into it as it starts."
+
+[clone_switch_off]
+other = "devvm makes {{.vm}} again with this folder mounted instead of its own clone, and removes the clone's git remote before the new VM starts."
 
 [copying_branches]
 other = "copying the repo's branches into the VM"
@@ -1836,17 +1852,19 @@ description = "refs is a space-separated list of quoted branch names"
 other = "The VM has commits on {{.refs}} that this repo hasn't fetched."
 
 [no_terminal_fetch]
-other = "There's no terminal to ask in, so the VM stays. Run git fetch {{.remote}} first, or devvm rm in a terminal to choose."
+description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
+other = "There's no terminal to ask in, so devvm kept the VM as it is. Run git fetch {{.remote}} first, or {{.command}} in a terminal to choose."
 
 [branch_names_invalid]
 description = "refs is a space-separated list of quoted branch names"
 other = "These branches have names git refuses, so devvm skips them in the VM: {{.refs}}."
 
 [saved_names_taken]
-other = "This repo has no free branch names from saved/{{.remote}}/* to saved/{{.remote}}-99/* to keep the VM's branches under, so devvm kept {{.vm}}. Rename or delete some of those branches, then run devvm rm again."
+description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
+other = "This repo has no free branch names from saved/{{.remote}}/* to saved/{{.remote}}-99/* to keep the VM's branches under, so devvm kept {{.vm}} as it is. Rename or delete some of those branches, then run {{.command}} again."
 
 [fetch_before_delete]
-other = "Fetch them into local branches {{.prefix}}/* before devvm deletes the VM?"
+other = "Fetch them into local branches {{.prefix}}/* before the clone goes?"
 
 [fetching]
 other = "fetching the VM's branches into {{.prefix}}/*"
@@ -1859,16 +1877,20 @@ other = "devvm kept the VM's branches as the local branches {{.branches}}."
 other = "Keeping the branches fetched from the git remote {{.remote}} as local branches failed, so devvm left the remote in place."
 
 [fetch_failed]
-other = "Fetching the branches in {{.vm}} failed, so devvm kept the VM. Run devvm rm again to retry."
+description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
+other = "Fetching the branches in {{.vm}} failed, so devvm kept the VM as it is. Run {{.command}} again to retry."
 
 [clone_check_failed]
-other = "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
+description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
+other = "Reading the clone in {{.vm}} failed, so devvm kept the VM as it is. To go ahead without the check, losing the clone's unfetched commits and uncommitted changes, run {{.command}} --no-clone-check."
 
 [clone_check_not_started]
-other = "{{.vm}} didn't start for the clone check, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
+description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
+other = "{{.vm}} didn't start for the clone check, so devvm kept the VM as it is. To go ahead without the check, losing the clone's unfetched commits and uncommitted changes, run {{.command}} --no-clone-check."
 
 [clone_check_skipped]
-other = "Without the clone check, deleting {{.vm}} loses the commits on its clone that this repo hasn't fetched, and the clone's uncommitted changes."
+description = "command is the command that loses the clone, as typed: devvm rm, devvm clone off"
+other = "Without the clone check, {{.command}} loses the commits on {{.vm}}'s clone that this repo hasn't fetched, and the clone's uncommitted changes."
 
 [clone_dirty]
 other = "The VM's clone has uncommitted changes, which will be lost:"
@@ -1881,10 +1903,14 @@ other = "The worktree {{.path}} in the VM's clone has uncommitted changes, which
 other = "The VM's clone has more than {{.max}} worktrees, and devvm checked only the first {{.max}} for uncommitted changes."
 
 [no_terminal_delete]
-other = "Deleting the VM loses its clone's uncommitted changes, and there's no terminal to confirm in. Run devvm rm in a terminal to confirm."
+description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
+other = "Going ahead loses the uncommitted changes in the VM's clone, and there's no terminal to confirm in. Run {{.command}} in a terminal to confirm."
 
 [delete_anyway]
 other = "Delete anyway?"
+
+[remake_anyway]
+other = "Make it again anyway?"
 
 [kept]
 other = "kept {{.vm}}"

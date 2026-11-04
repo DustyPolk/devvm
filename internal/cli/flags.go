@@ -37,14 +37,20 @@ func addForceFlag(f *pflag.FlagSet, p *bool) {
 
 // addNoExportFlag adds --no-export, which skips exporting the agents'
 // history before a VM's disk goes (devvm rm, devvm layer add, devvm
-// layer rm, devvm update).
+// layer rm, devvm update, devvm clone).
 func addNoExportFlag(f *pflag.FlagSet, p *bool) {
 	f.BoolVar(p, "no-export", false, "don't export the agents' history first")
 }
 
+// addNoCloneCheckFlag adds --no-clone-check, which skips checking a
+// --clone VM's clone before its disk goes (devvm rm, devvm clone off).
+func addNoCloneCheckFlag(f *pflag.FlagSet, p *bool) {
+	f.BoolVar(p, "no-clone-check", false, "don't check a --clone VM's clone for unfetched commits and uncommitted changes first, which are lost")
+}
+
 // addRemakeFlags adds the flags of a command that makes the folder's VM
-// again (devvm layer add, devvm layer rm, devvm update): --force,
-// --no-export and --clean-home.
+// again (devvm layer add, devvm layer rm, devvm update, devvm clone):
+// --force, --no-export and --clean-home.
 func addRemakeFlags(f *pflag.FlagSet, o *vm.RemakeOptions) {
 	addForceFlag(f, &o.Force)
 	addNoExportFlag(f, &o.NoExport)

@@ -29,7 +29,7 @@ sequenceDiagram
 - The folder is the top folder of a git repo that has at least one commit and a branch checked out, not a detached HEAD.
 - The repo is the folder's own, or the folder is a worktree that `git worktree add` made. devvm refuses a `.git` that points into another repo, because the push would copy that repo's branches into the VM. That includes a `.git` file that isn't a worktree's, a worktree whose link back to this folder doesn't match, a `commondir` that leads to another repo, and objects or refs that are symlinks. devvm also refuses a repo that borrows objects from another repo through `objects/info/alternates`. To use such a repo, run `git repack -a -d` in it, then delete that file.
 - git is installed on this machine. The VM's images already have it.
-- You choose `--clone` when the VM is created. devvm refuses `--clone` for an existing VM that mounts its folder, so to switch, save any work in that VM, then run `devvm rm` and `devvm --clone`. Once a VM is a `--clone` VM it stays one, and you don't need to pass `--clone` again.
+- You choose `--clone` when the VM is created, and once a VM is a `--clone` VM you don't need to pass `--clone` again. devvm refuses `--clone` for an existing VM that mounts its folder, and `devvm clone on` switches that VM instead ([switching a VM that exists](#switching-a-vm-that-exists)).
 
 ## What's copied
 
@@ -90,3 +90,34 @@ The saved branches are named after the remote, as `saved/<remote>/<branch>`, and
 `devvm rm --force` skips only the question whether to delete the VM at all, and both checks still run. `devvm rm --no-export` skips the export of the agents' history, and it also leaves both checks as they are.
 
 `devvm rm --no-clone-check` skips both checks, so the VM goes with the commits this repo hasn't fetched and the uncommitted changes, and devvm warns you of that first. Use it when a check can't read the clone, such as when git in the VM is broken, and devvm refuses and keeps the VM. Use it too when the VM doesn't start for the check, such as when its network policy doesn't hold, because devvm then says what kept it from starting and keeps the VM. devvm still asks whether to delete the VM unless you also give `--force`, and it still keeps the `devvm/*` branches you fetched as `saved/devvm/` branches.
+
+## Switching a VM that exists
+
+`devvm clone` shows whether this folder's VM has its own clone of the repo, which is `on`, or mounts the folder, which is `off`. `devvm clone on` and `devvm clone off` switch the VM by making it again from the image it has, as [`devvm layer add`](images.md#adding-layers-to-a-vm) does, and then open a shell in it:
+
+```sh
+devvm clone       # show on or off
+devvm clone on    # make the VM again with its own clone of the repo, after asking
+devvm clone off   # fetch the clone's work, then make the VM again with this folder mounted
+```
+
+The VM keeps its home folder and its settings, as [a VM made again](images.md#what-a-vm-made-again-keeps) does, and everything else on its disk is lost. So in a terminal devvm asks first, with no as the default, and without one it refuses unless you give `--force`. `--no-export` skips the export of the agents' history, and `--clean-home` gives the VM the image's home folder instead of its own, as for `devvm layer add`. When the VM is in the mode you ask for already, devvm says so and changes nothing.
+
+`devvm clone on` needs a folder that `--clone` takes ([requirements](#requirements)), and devvm refuses before it changes anything when the folder isn't one. Your work is in the folder, so only the VM's disk is lost. The new VM mounts nothing of the folder, and as it starts, devvm copies your branches into its clone and adds [the remote](#the-remote), as for a new `--clone` VM ([what's copied](#whats-copied)). Once the new VM is ready and the old one is deleted, devvm takes the [`.git` locks](../safety/git-protection.md) off the folder, because no VM mounts it any more. First it names what the old VM changed that the locks can't stop, as a launch does ([when devvm reports .git](../safety/git-protection.md#when-devvm-reports-git)).
+
+`devvm clone off` loses the clone, which is on the VM's disk, so first it checks the clone as `devvm rm` does ([deleting the VM](#deleting-the-vm)). It offers to fetch the branches this repo hasn't fetched into `saved/devvm/<branch>` branches, and it asks before the clone's uncommitted changes go. Only a terminal can answer these questions, and `--force` never does, so without a terminal devvm refuses and keeps the VM as it is. `devvm clone off --no-clone-check` skips the check after a warning, and the clone's unfetched commits and uncommitted changes are lost. The new VM mounts the folder again with `.git` protection as a new VM gets it, which is `on` on macOS and `off` on Linux hosts. Before the new VM first starts, and before devvm locks `.git`, it removes the remote and keeps each `devvm/*` branch that has commits no other branch has as a `saved/devvm/` branch, as `devvm rm` does. If the switch is then undone, devvm adds the remote back.
+
+When a step fails, or you press Ctrl+C, before the new VM has its home folder, devvm puts the old VM back as it was, in its old mode, as it does for [any remake](images.md#adding-layers-to-a-vm).
+
+A `--clone` VM keeps its clone on its own disk, so `devvm layer add`, `devvm layer rm` and `devvm update` refuse it. To change its layers or bring it up to date, run `devvm clone off`, then that command, then `devvm clone on`.
+
+### devvm clone --json
+
+`devvm clone --json` prints one JSON object with `clone`, which is `on` or `off`, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. With `--json` the command only shows, so devvm refuses `on` or `off` with it, and the flags that go with them.
+
+```json
+{
+  "version": 1,
+  "clone": "on"
+}
+```

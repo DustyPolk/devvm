@@ -1,6 +1,6 @@
 ---
 title: devvm layer new
-weight: 20
+weight: 21
 ---
 
 Start a layer of your own

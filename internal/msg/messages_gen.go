@@ -334,19 +334,19 @@ func CloneAlternates(path string) M {
 	return M{id: "clone_alternates", vals: []val{{"path", path}}}
 }
 
-// CloneCheckFailed is [clone_check_failed]: "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
-func CloneCheckFailed(vm string) M {
-	return M{id: "clone_check_failed", vals: []val{{"vm", vm}}}
+// CloneCheckFailed is [clone_check_failed]: "Reading the clone in {{.vm}} failed, so devvm kept the VM as it is. To go ahead without the check, losing the clone's unfetched commits and uncommitted changes, run {{.command}} --no-clone-check."
+func CloneCheckFailed(command string, vm string) M {
+	return M{id: "clone_check_failed", vals: []val{{"command", command}, {"vm", vm}}}
 }
 
-// CloneCheckNotStarted is [clone_check_not_started]: "{{.vm}} didn't start for the clone check, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
-func CloneCheckNotStarted(vm string) M {
-	return M{id: "clone_check_not_started", vals: []val{{"vm", vm}}}
+// CloneCheckNotStarted is [clone_check_not_started]: "{{.vm}} didn't start for the clone check, so devvm kept the VM as it is. To go ahead without the check, losing the clone's unfetched commits and uncommitted changes, run {{.command}} --no-clone-check."
+func CloneCheckNotStarted(command string, vm string) M {
+	return M{id: "clone_check_not_started", vals: []val{{"command", command}, {"vm", vm}}}
 }
 
-// CloneCheckSkipped is [clone_check_skipped]: "Without the clone check, deleting {{.vm}} loses the commits on its clone that this repo hasn't fetched, and the clone's uncommitted changes."
-func CloneCheckSkipped(vm string) M {
-	return M{id: "clone_check_skipped", vals: []val{{"vm", vm}}}
+// CloneCheckSkipped is [clone_check_skipped]: "Without the clone check, {{.command}} loses the commits on {{.vm}}'s clone that this repo hasn't fetched, and the clone's uncommitted changes."
+func CloneCheckSkipped(command string, vm string) M {
+	return M{id: "clone_check_skipped", vals: []val{{"command", command}, {"vm", vm}}}
 }
 
 // CloneDetached is [clone_detached]: "--clone needs a branch checked out, and HEAD is detached. Check out a branch, then run devvm --clone again."
@@ -369,7 +369,7 @@ func CloneNeedsGit() M {
 	return M{id: "clone_needs_git"}
 }
 
-// CloneNeedsNewVM is [clone_needs_new_vm]: "{{.vm}} mounts this folder, and --clone needs a new VM. Save any work in it, then run devvm rm and devvm --clone."
+// CloneNeedsNewVM is [clone_needs_new_vm]: "{{.vm}} mounts this folder, so --clone doesn't change it. To give it its own clone of the repo, run devvm clone on."
 func CloneNeedsNewVM(vm string) M {
 	return M{id: "clone_needs_new_vm", vals: []val{{"vm", vm}}}
 }
@@ -384,6 +384,16 @@ func CloneNotTop(dir string) M {
 	return M{id: "clone_not_top", vals: []val{{"dir", dir}}}
 }
 
+// CloneOffAlready is [clone_off_already]: "{{.vm}} mounts this folder already"
+func CloneOffAlready(vm string) M {
+	return M{id: "clone_off_already", vals: []val{{"vm", vm}}}
+}
+
+// CloneOnAlready is [clone_on_already]: "{{.vm}} has its own clone of the repo already"
+func CloneOnAlready(vm string) M {
+	return M{id: "clone_on_already", vals: []val{{"vm", vm}}}
+}
+
 // CloneReady is [clone_ready]: "The VM has its own clone of your branches, without untracked or ignored files.\nTo get its work, run git fetch {{.remote}}, then review it with git log -p {{.branch}}..{{.remote}}/{{.branch}} before you merge."
 func CloneReady(branch string, remote string) M {
 	return M{id: "clone_ready", vals: []val{{"branch", branch}, {"remote", remote}}}
@@ -392,6 +402,21 @@ func CloneReady(branch string, remote string) M {
 // CloneSeedFailed is [clone_seed_failed]: "Copying the repo's branches into {{.vm}} failed. Run devvm again to retry."
 func CloneSeedFailed(vm string) M {
 	return M{id: "clone_seed_failed", vals: []val{{"vm", vm}}}
+}
+
+// CloneShowFailed is [clone_show_failed]: "Showing whether this folder's VM has its own clone of the repo failed: {{.reason}}."
+func CloneShowFailed(reason string) M {
+	return M{id: "clone_show_failed", vals: []val{{"reason", reason}}}
+}
+
+// CloneSwitchOff is [clone_switch_off]: "devvm makes {{.vm}} again with this folder mounted instead of its own clone, and removes the clone's git remote before the new VM starts."
+func CloneSwitchOff(vm string) M {
+	return M{id: "clone_switch_off", vals: []val{{"vm", vm}}}
+}
+
+// CloneSwitchOn is [clone_switch_on]: "devvm makes {{.vm}} again with its own clone of the repo instead of this folder mounted, and copies the repo's branches into it as it starts."
+func CloneSwitchOn(vm string) M {
+	return M{id: "clone_switch_on", vals: []val{{"vm", vm}}}
 }
 
 // CloneWorktreeDirty is [clone_worktree_dirty]: "The worktree {{.path}} in the VM's clone has uncommitted changes, which will be lost:"
@@ -859,14 +884,14 @@ func FeaturesHelp() M {
 	return M{id: "features_help"}
 }
 
-// FetchBeforeDelete is [fetch_before_delete]: "Fetch them into local branches {{.prefix}}/* before devvm deletes the VM?"
+// FetchBeforeDelete is [fetch_before_delete]: "Fetch them into local branches {{.prefix}}/* before the clone goes?"
 func FetchBeforeDelete(prefix string) M {
 	return M{id: "fetch_before_delete", vals: []val{{"prefix", prefix}}}
 }
 
-// FetchFailed is [fetch_failed]: "Fetching the branches in {{.vm}} failed, so devvm kept the VM. Run devvm rm again to retry."
-func FetchFailed(vm string) M {
-	return M{id: "fetch_failed", vals: []val{{"vm", vm}}}
+// FetchFailed is [fetch_failed]: "Fetching the branches in {{.vm}} failed, so devvm kept the VM as it is. Run {{.command}} again to retry."
+func FetchFailed(command string, vm string) M {
+	return M{id: "fetch_failed", vals: []val{{"command", command}, {"vm", vm}}}
 }
 
 // FetchUntil is [fetch_until]: "Until ~/.ssh/config includes devvm's ssh config, fetch the VM's work with GIT_SSH_COMMAND='ssh -F {{.file}}' git fetch {{.remote}}."
@@ -2069,14 +2094,14 @@ func NoSubcommand(command string, commands string, given string) M {
 	return M{id: "no_subcommand", vals: []val{{"command", command}, {"commands", commands}, {"given", given}}}
 }
 
-// NoTerminalDelete is [no_terminal_delete]: "Deleting the VM loses its clone's uncommitted changes, and there's no terminal to confirm in. Run devvm rm in a terminal to confirm."
-func NoTerminalDelete() M {
-	return M{id: "no_terminal_delete"}
+// NoTerminalDelete is [no_terminal_delete]: "Going ahead loses the uncommitted changes in the VM's clone, and there's no terminal to confirm in. Run {{.command}} in a terminal to confirm."
+func NoTerminalDelete(command string) M {
+	return M{id: "no_terminal_delete", vals: []val{{"command", command}}}
 }
 
-// NoTerminalFetch is [no_terminal_fetch]: "There's no terminal to ask in, so the VM stays. Run git fetch {{.remote}} first, or devvm rm in a terminal to choose."
-func NoTerminalFetch(remote string) M {
-	return M{id: "no_terminal_fetch", vals: []val{{"remote", remote}}}
+// NoTerminalFetch is [no_terminal_fetch]: "There's no terminal to ask in, so devvm kept the VM as it is. Run git fetch {{.remote}} first, or {{.command}} in a terminal to choose."
+func NoTerminalFetch(command string, remote string) M {
+	return M{id: "no_terminal_fetch", vals: []val{{"command", command}, {"remote", remote}}}
 }
 
 // NoToken is [no_token]: "You didn't give a secret, so devvm saved nothing."
@@ -2459,7 +2484,12 @@ func Remade(image string, vm string) M {
 	return M{id: "remade", vals: []val{{"image", image}, {"vm", vm}}}
 }
 
-// RemakeClone is [remake_clone]: "{{.vm}} keeps its clone of the repo on its own disk, so devvm can't make it again. Push its work, then run devvm rm and devvm --clone."
+// RemakeAnyway is [remake_anyway]: "Make it again anyway?"
+func RemakeAnyway() M {
+	return M{id: "remake_anyway"}
+}
+
+// RemakeClone is [remake_clone]: "{{.vm}} keeps its clone of the repo on its own disk, so devvm can't make it again. Run devvm clone off first, which offers to fetch the clone's work into this repo."
 func RemakeClone(vm string) M {
 	return M{id: "remake_clone", vals: []val{{"vm", vm}}}
 }
@@ -2729,9 +2759,9 @@ func SavedBranches(branches string) M {
 	return M{id: "saved_branches", vals: []val{{"branches", branches}}}
 }
 
-// SavedNamesTaken is [saved_names_taken]: "This repo has no free branch names from saved/{{.remote}}/* to saved/{{.remote}}-99/* to keep the VM's branches under, so devvm kept {{.vm}}. Rename or delete some of those branches, then run devvm rm again."
-func SavedNamesTaken(remote string, vm string) M {
-	return M{id: "saved_names_taken", vals: []val{{"remote", remote}, {"vm", vm}}}
+// SavedNamesTaken is [saved_names_taken]: "This repo has no free branch names from saved/{{.remote}}/* to saved/{{.remote}}-99/* to keep the VM's branches under, so devvm kept {{.vm}} as it is. Rename or delete some of those branches, then run {{.command}} again."
+func SavedNamesTaken(command string, remote string, vm string) M {
+	return M{id: "saved_names_taken", vals: []val{{"command", command}, {"remote", remote}, {"vm", vm}}}
 }
 
 // SavingHome is [saving_home]: "saving {{.vm}}'s home folder"
@@ -3402,9 +3432,9 @@ var specs = map[string]spec{
 	"claude_token_howto":               {},
 	"claude_token_invalid":             {},
 	"clone_alternates":                 {fields: []string{"path"}},
-	"clone_check_failed":               {fields: []string{"vm"}},
-	"clone_check_not_started":          {fields: []string{"vm"}},
-	"clone_check_skipped":              {fields: []string{"vm"}},
+	"clone_check_failed":               {fields: []string{"command", "vm"}},
+	"clone_check_not_started":          {fields: []string{"command", "vm"}},
+	"clone_check_skipped":              {fields: []string{"command", "vm"}},
 	"clone_detached":                   {},
 	"clone_dirty":                      {},
 	"clone_git_elsewhere":              {fields: []string{"path"}},
@@ -3412,8 +3442,13 @@ var specs = map[string]spec{
 	"clone_needs_new_vm":               {fields: []string{"vm"}},
 	"clone_no_commits":                 {},
 	"clone_not_top":                    {fields: []string{"dir"}},
+	"clone_off_already":                {fields: []string{"vm"}},
+	"clone_on_already":                 {fields: []string{"vm"}},
 	"clone_ready":                      {fields: []string{"branch", "remote"}},
 	"clone_seed_failed":                {fields: []string{"vm"}},
+	"clone_show_failed":                {fields: []string{"reason"}},
+	"clone_switch_off":                 {fields: []string{"vm"}},
+	"clone_switch_on":                  {fields: []string{"vm"}},
 	"clone_worktree_dirty":             {fields: []string{"path"}},
 	"clone_worktrees_unchecked":        {fields: []string{"max"}},
 	"cloning_image":                    {fields: []string{"parent"}},
@@ -3508,7 +3543,7 @@ var specs = map[string]spec{
 	"feature_shadowed":                 {fields: []string{"feature", "file"}},
 	"features_help":                    {},
 	"fetch_before_delete":              {fields: []string{"prefix"}},
-	"fetch_failed":                     {fields: []string{"vm"}},
+	"fetch_failed":                     {fields: []string{"command", "vm"}},
 	"fetch_until":                      {fields: []string{"file", "remote"}},
 	"fetching":                         {fields: []string{"prefix"}},
 	"flag_bad_switch":                  {fields: []string{"flag", "value"}},
@@ -3749,8 +3784,8 @@ var specs = map[string]spec{
 	"no_secret":                        {fields: []string{"secret"}},
 	"no_ssh_agent":                     {},
 	"no_subcommand":                    {fields: []string{"command", "commands", "given"}},
-	"no_terminal_delete":               {},
-	"no_terminal_fetch":                {fields: []string{"remote"}},
+	"no_terminal_delete":               {fields: []string{"command"}},
+	"no_terminal_fetch":                {fields: []string{"command", "remote"}},
 	"no_token":                         {},
 	"no_ubuntu_image":                  {fields: []string{"release", "url", "version"}},
 	"no_ubuntu_release":                {fields: []string{"url", "version"}},
@@ -3827,6 +3862,7 @@ var specs = map[string]spec{
 	"reading_space":                    {},
 	"rebuild_replaces":                 {fields: []string{"above", "image"}},
 	"remade":                           {fields: []string{"image", "vm"}},
+	"remake_anyway":                    {},
 	"remake_clone":                     {fields: []string{"vm"}},
 	"remake_confirm":                   {fields: []string{"image", "vm"}},
 	"remake_confirm_clean_home":        {fields: []string{"image", "vm"}},
@@ -3881,7 +3917,7 @@ var specs = map[string]spec{
 	"run_log_failed":                   {fields: []string{"dir", "reason"}},
 	"running_script":                   {fields: []string{"script", "vm"}},
 	"saved_branches":                   {fields: []string{"branches"}},
-	"saved_names_taken":                {fields: []string{"remote", "vm"}},
+	"saved_names_taken":                {fields: []string{"command", "remote", "vm"}},
 	"saving_home":                      {fields: []string{"vm"}},
 	"script_failed":                    {fields: []string{"script", "vm"}},
 	"secret_failed":                    {fields: []string{"reason"}},

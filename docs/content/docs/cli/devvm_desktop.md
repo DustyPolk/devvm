@@ -1,6 +1,6 @@
 ---
 title: devvm desktop
-weight: 6
+weight: 7
 ---
 
 Open this folder's VM's desktop in a VNC viewer

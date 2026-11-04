@@ -270,7 +270,7 @@ func TestCloneRmStartsAsLaunch(t *testing.T) {
 	before := len(f.Calls())
 	err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true})
 	// What kept it from starting is said, then the way out, carrying it.
-	if msg.NamesOf(err) != "clone_check_not_started vm="+vm {
+	if msg.NamesOf(err) != "clone_check_not_started command=devvm rm vm="+vm {
 		t.Errorf("gets out directly: %v", msg.NamesOf(err))
 	}
 	if !slices.Contains(warned.Names(), "net_direct_route vm="+vm) {
@@ -434,7 +434,8 @@ func TestCloneRmTooManyWorktrees(t *testing.T) {
 func TestFetchUnfetchedInvalid(t *testing.T) {
 	e, f, _ := cloneEnv(t)
 	got := printed(t, e, true)
-	if err := (clones{e}).fetchUnfetched(t.Context(), f, "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
+	check := cloneCheck{clones: clones{e}, command: "devvm clone off", remakes: true}
+	if err := check.fetchUnfetched(t.Context(), f, "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	want := []string{`branch_names_invalid refs="a..b" "x y" "-x:refs/heads/main"`}
@@ -443,8 +444,8 @@ func TestFetchUnfetchedInvalid(t *testing.T) {
 	}
 	gitIn(t, e.Dir, "branch", "saved")
 	*got = nil
-	err := (clones{e}).fetchUnfetched(t.Context(), f, "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"main"})
-	if msg.NamesOf(err) != "saved_names_taken remote=devvm vm=devvm-web-0123456789abcd" || len(*got) > 0 {
+	err := check.fetchUnfetched(t.Context(), f, "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"main"})
+	if msg.NamesOf(err) != "saved_names_taken command=devvm clone off remote=devvm vm=devvm-web-0123456789abcd" || len(*got) > 0 {
 		t.Errorf("no free names: %s, printed %q", msg.NamesOf(err), *got)
 	}
 }

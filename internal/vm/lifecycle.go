@@ -115,7 +115,7 @@ type RmOptions struct {
 // a remake is deleted too, its old machine with it (teardown). Its agents' history
 // is exported first unless --no-export: an export that fails keeps it.
 // A --clone VM's branches the repo lacks and uncommitted changes are
-// checked first (cloneRmCheck), which asks only in a terminal, unless
+// checked first (cloneCheck), which asks only in a terminal, unless
 // --no-clone-check, which warns that they're lost instead. A VM made
 // for an earlier folder at this path, or a parent folder's VM found from
 // a subfolder, is deleted only after asking in a terminal, which --force
@@ -154,7 +154,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 	// A VM whose creation didn't finish never ran: no history, no work.
 	checkClone := st.Finished() && isClone(st) && e.sameFolder(t.f, st)
 	if checkClone && o.NoCloneCheck {
-		e.Warn(msg.CloneCheckSkipped(vm))
+		e.Warn(msg.CloneCheckSkipped("devvm rm", vm))
 		checkClone = false
 	}
 	if confirm && !e.Ask(msg.RmConfirm(vm)) {
@@ -162,7 +162,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 		return nil
 	}
 	if checkClone {
-		keep, err := clones(e).cloneRmCheck(ctx, t)
+		keep, err := cloneCheck{clones: clones(e), command: "devvm rm"}.run(ctx, t)
 		if err != nil || keep {
 			return err
 		}
@@ -239,7 +239,7 @@ func (e Lifecycle) rmGone(ctx context.Context, t *found, folder FolderState, o R
 		return msg.ForceNeeded("devvm rm")
 	}
 	if clone {
-		e.Warn(msg.CloneCheckSkipped(vm))
+		e.Warn(msg.CloneCheckSkipped("devvm rm", vm))
 	}
 	if !e.askRmGone(t, unconnected, o.Force) {
 		e.Info(msg.Kept(vm))

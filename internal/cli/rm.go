@@ -38,6 +38,6 @@ func newRmCmd(u *ui.UI) *cobra.Command {
 	}
 	addForceFlag(cmd.Flags(), &o.Force)
 	addNoExportFlag(cmd.Flags(), &o.NoExport)
-	cmd.Flags().BoolVar(&o.NoCloneCheck, "no-clone-check", false, "delete a --clone VM without checking its clone for unfetched commits and uncommitted changes, which are lost")
+	addNoCloneCheckFlag(cmd.Flags(), &o.NoCloneCheck)
 	return cmd
 }

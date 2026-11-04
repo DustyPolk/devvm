@@ -2261,18 +2261,18 @@ check "nothing of .git is locked or watched" bash -c "vm_state '$(vmdir "$vm")' 
   { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$c/.git/config' | grep -q uchg; }"
 in_vm "$vm" "cd '$c' && echo b > b && git add b && git -c user.email=e@e -c user.name=e commit -qm from-vm" >/dev/null 2>&1
 check "rm without a terminal refuses with unfetched commits, even with --force, and keeps it" bash -c "cd '$c' && ! HOME='$ch' '$D' rm --force </dev/null >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m no_terminal_fetch remote=devvm | head -1)\" '$work/last.log' && limactl list -q | grep -qx $vm"
+  grep -qF \"\$(m no_terminal_fetch 'command=devvm rm' remote=devvm | head -1)\" '$work/last.log' && limactl list -q | grep -qx $vm"
 check "fetching through devvm's ssh config brings the VM's commit" bash -c "$cgit fetch -q devvm && git -C '$c' log --oneline devvm/main | grep -q from-vm"
 in_vm "$vm" "cd '$c' && echo c > c" >/dev/null 2>&1
 check "then rm refuses with uncommitted changes in the clone, and keeps it" bash -c "cd '$c' && ! HOME='$ch' '$D' rm --force </dev/null >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m no_terminal_delete | head -1)\" '$work/last.log' && grep -qx '?? c' '$work/last.log' && limactl list -q | grep -qx $vm"
+  grep -qF \"\$(m no_terminal_delete 'command=devvm rm' | head -1)\" '$work/last.log' && grep -qx '?? c' '$work/last.log' && limactl list -q | grep -qx $vm"
 in_vm "$vm" "cd '$c' && rm c && git worktree add -q .worktrees/a && mkdir -p .git/info && echo .worktrees/ >> .git/info/exclude && echo w > .worktrees/a/w" >/dev/null 2>&1
 check "then rm refuses with uncommitted changes in a worktree in the clone, shown under its path, and keeps it" bash -c "cd '$c' && ! HOME='$ch' '$D' rm --force </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m clone_worktree_dirty path='$c/.worktrees/a' | head -1)\" '$work/last.log' && grep -qx '?? w' '$work/last.log' &&
   ! grep -qF \"\$(m clone_dirty | head -1)\" '$work/last.log' &&
-  grep -qF \"\$(m no_terminal_delete | head -1)\" '$work/last.log' && limactl list -q | grep -qx $vm"
+  grep -qF \"\$(m no_terminal_delete 'command=devvm rm' | head -1)\" '$work/last.log' && limactl list -q | grep -qx $vm"
 check "rm --no-clone-check deletes it unchecked after a warning, the worktree's change with it, and the remote fully; the fetched work stays as a local branch" bash -c "cd '$c' && HOME='$ch' '$D' rm --force --no-export --no-clone-check </dev/null >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m clone_check_skipped vm=$vm | head -1)\" '$work/last.log' && ! grep -qF \"\$(m clone_worktree_dirty path='$c/.worktrees/a' | head -1)\" '$work/last.log' &&
+  grep -qF \"\$(m clone_check_skipped 'command=devvm rm' vm=$vm | head -1)\" '$work/last.log' && ! grep -qF \"\$(m clone_worktree_dirty path='$c/.worktrees/a' | head -1)\" '$work/last.log' &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! git -C '$c' remote | grep -q devvm &&
   [[ -z \$(git -C '$c' for-each-ref refs/remotes) ]] && git -C '$c' log --oneline saved/devvm/main | grep -q from-vm &&
   grep -qF \"\$(m saved_branches 'branches=\"saved/devvm/main\"' | head -1)\" '$work/last.log' && [[ ! -e '$ch/.ssh/config' ]]"
@@ -2287,6 +2287,40 @@ check "a git worktree's VM has a clone of only its branch and that branch's upst
   grep -qx wtb '$work/last.log'"
 (cd "$w" && HOME=$ch "$D" rm --force --no-export </dev/null >/dev/null 2>&1)
 git -C "$c" worktree remove --force "$w"
+# devvm clone on and off: a VM that mounts its folder, made again with its own clone of the repo,
+# then made again mounting the folder, its clone's work fetched first; its home and ID kept.
+s=$(newproj cloned-switch)
+git -C "$s" init -q -b main && echo a > "$s/a" && git -C "$s" add a && git -C "$s" -c user.email=e@e -c user.name=e commit -qm one &&
+  git -C "$s" branch other
+(cd "$s" && printf 'echo in-home > ~/e2e-home.txt\n' | HOME=$ch "$D" --no-network-policy >"$work/last.log" 2>&1)
+svm=$(vm_of "$s"); [[ -z $svm ]] || created+=("$svm")
+saside="devvm-${svm: -14}-old"; created+=("$saside")
+sd=$(vmdir "$svm")
+sid=$(st_get "$sd" id)
+sgit="GIT_SSH_COMMAND='ssh -F $XDG_DATA_HOME/devvm/ssh_config' git -C '$s'"
+check "clone without a terminal refuses on, and shows off" bash -c "cd '$s' &&
+  ! HOME='$ch' '$D' clone on </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m force_needed 'command=devvm clone on')\" '$work/last.log' &&
+  [[ \$(HOME='$ch' '$D' clone </dev/null 2>/dev/null) == off ]]"
+check "clone on --force makes it again with its own clone of every branch, only the shared tools mounted, .git unlocked, its home and ID kept" bash -c "cd '$s' &&
+  printf 'pwd\n' | HOME='$ch' '$D' clone on --force >'$work/last.log' 2>&1 && grep -qx '$s' '$work/last.log' &&
+  [[ \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $svm) == '$share ' ]] &&
+  [[ \$(limactl shell --workdir / $svm git -C '$s' branch --format='%(refname:short)' </dev/null | tr '\n' ' ') == 'main other ' ]] &&
+  [[ \$(st_get '$sd' id) == '$sid' && \$(st_get '$sd' clone.on) == true && \$(st_get '$sd' git.mode) == clone ]] &&
+  [[ \$(git -C '$s' remote get-url devvm) == '$svm:$s' ]] && in_vm '$svm' 'grep -qx in-home ~/e2e-home.txt' &&
+  ! limactl list -q | grep -qx '$saside' && { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$s/.git/config' | grep -q uchg; }"
+in_vm "$svm" "cd '$s' && echo b > b && git add b && git -c user.email=e@e -c user.name=e commit -qm from-vm" >/dev/null 2>&1
+check "clone off without a terminal refuses with unfetched commits, even with --force, and keeps the clone" bash -c "cd '$s' &&
+  ! HOME='$ch' '$D' clone off --force </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m no_terminal_fetch 'command=devvm clone off' remote=devvm | head -1)\" '$work/last.log' &&
+  [[ \$(st_get '$sd' clone.on) == true ]] && limactl list -q | grep -qx $svm"
+check "once fetched, clone off --force mounts the folder again, .git protected, its home and ID kept, the remote gone and its work a local branch" bash -c "cd '$s' &&
+  $sgit fetch -q devvm && printf 'pwd\n' | HOME='$ch' '$D' clone off --force >'$work/last.log' 2>&1 && grep -qx '$s' '$work/last.log' &&
+  limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $svm | grep -qF '$s ' &&
+  [[ \$(st_get '$sd' id) == '$sid' && \$(st_get '$sd' clone.on) != true ]] && in_vm '$svm' 'grep -qx in-home ~/e2e-home.txt && test -f $s/a' &&
+  ! git -C '$s' remote | grep -q devvm && [[ -z \$(git -C '$s' for-each-ref refs/remotes) ]] &&
+  git -C '$s' log --oneline saved/devvm/main | grep -q from-vm && ! limactl list -q | grep -qx '$saside' &&
+  { [[ \$(uname -s) != Darwin ]] || { [[ \$(st_get '$sd' git.mode) == on ]] && ls -lOd '$s/.git/config' | grep -q uchg; }; }"
+(cd "$s" && HOME=$ch "$D" rm --force --no-export </dev/null >/dev/null 2>&1)
 unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 fi
 

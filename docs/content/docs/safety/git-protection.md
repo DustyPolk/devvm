@@ -28,7 +28,7 @@ devvm git-protect on
 - `strict` is `on` plus [strict](#strict).
 - `off` takes the locks off. The VM can then change `.git` hooks and config, which run on your machine.
 
-On an existing VM, devvm ignores `--no-git-protect` and warns you. A `--clone` VM's protection can't be changed.
+On an existing VM, devvm ignores `--no-git-protect` and warns you. A `--clone` VM's protection can't be changed. `devvm clone on` takes the locks off once it has made the VM again with its own clone, and `devvm clone off` makes it mount the folder again with protection as a new VM gets it ([switching a VM that exists](../using/clone.md#switching-a-vm-that-exists)).
 
 ### devvm git-protect --json
 

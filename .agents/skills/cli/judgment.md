@@ -35,10 +35,10 @@ A setting is a value devvm keeps, which a user reads and changes. Each setting i
 
 - **Bare, it shows the value.** devvm size shows the VM's CPUs, memory and disk, devvm ports shows what it forwards, and devvm git-protect shows its `.git` protection.
 - **With a value, it changes it.** devvm ports none, devvm network off, devvm ssh-agent devvm and devvm git-protect strict each set the value. devvm size takes its values as `--cpus`, `--memory` and `--disk`, because it holds three, and devvm retention takes `KEY=VALUE` words, because it holds many.
-- **With `-g`, it shows or changes what new VMs get.** devvm size -g --memory 16, devvm ports -g none and devvm network -g on change the defaults. A setting takes `-g` only when new VMs get a default for it, so devvm git-protect and devvm ssh-agent have none, and devvm retention is about the whole machine.
+- **With `-g`, it shows or changes what new VMs get.** devvm size -g --memory 16, devvm ports -g none and devvm network -g on change the defaults. A setting takes `-g` only when new VMs get a default for it, so devvm git-protect, devvm ssh-agent and devvm clone have none, and devvm retention is about the whole machine.
 - **With `--json`, it only shows.** `showsOnly` refuses a value, so devvm network --json off is a usage error and changes nothing.
 
-The commands that are settings are size, ports, network, ssh-agent, git-protect and retention. tools isn't one, because its value is a list that devvm tools add and devvm tools rm change, and that devvm tools shows in a terminal as a picker whose changes become add and rm. setup isn't one either: it asks the first-run questions, and its flags, `--features` and `--agents`, answer the two that no other command sets.
+The commands that are settings are size, ports, network, ssh-agent, git-protect, clone and retention. devvm clone holds whether the VM has its own clone of the repo, the setting `--clone` gives a new VM, and setting it makes the VM again, as devvm layer add does. tools isn't one, because its value is a list that devvm tools add and devvm tools rm change, and that devvm tools shows in a terminal as a picker whose changes become add and rm. setup isn't one either: it asks the first-run questions, and its flags, `--features` and `--agents`, answer the two that no other command sets.
 
 A command is a setting when its bare form shows one value and the user can type the new value after its name. When the value is a list that grows and shrinks, give it add and rm, as devvm ports has besides devvm ports LIST.
 

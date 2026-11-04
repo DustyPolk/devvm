@@ -113,7 +113,8 @@ func TestPromptsAnswered(t *testing.T) {
 		"delete_other_folder_vm":         "it deletes a VM an earlier folder's project may need",
 		"delete_not_connected_folder_vm": "it deletes a VM whose folder may be on a disk that isn't connected",
 		"delete_anyway":                  "it loses the changes in a clone VM's own repo",
-		"fetch_before_delete":            "devvm rm asks it only in a terminal, before a clone VM's commits are lost",
+		"fetch_before_delete":            "devvm rm and devvm clone off ask it only in a terminal, before a clone VM's commits are lost",
+		"remake_anyway":                  "it loses the changes in a clone VM's own repo",
 		"widen_parent_vm":                "it gives another folder's VM more access",
 		"net_unenforced_restart":         "it's asked only in a terminal, and without one devvm stops the VM",
 	}

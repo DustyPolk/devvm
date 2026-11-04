@@ -18,7 +18,7 @@ type vmFolders struct{ *Env }
 // deleted by devvm rm, by an interrupted creation, or some other way. It's
 // the one place a VM's files go, in order: what runs for it (its proxy,
 // its port forwarder, its link session), then what's
-// outside its folder (its clone's remote or .git's locks, other VMs'
+// outside its folder (its clone's remote and .git's locks, other VMs'
 // links to it and its group, with leaves its backend's own leftovers,
 // backend.Forgetter, and the old machine a remake that didn't finish set
 // aside), then its folder, every file of its in it (its pinned host keys
@@ -29,9 +29,10 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 	e.Proxy.Stop(vm)
 	e.Forwarders.Stop(vm)
 	linkRuns(e).stop(ctx, vm)
-	if isClone(t.st) {
-		clones(e).removeRemote(ctx, t.f.Dir, vm, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
-	} else if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
+	// Both, for a VM devvm clone was switching: its remote, if its clone
+	// made one, and .git's locks, if it locked any.
+	clones(e).removeRemote(ctx, t.f.Dir, vm, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
+	if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
 		e.Protector(t.f.Dir).Unlock(ctx, t.st)
 	}
 	if err := Groups(e).forget(ctx, vm); err != nil {
