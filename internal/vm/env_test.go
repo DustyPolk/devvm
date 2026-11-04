@@ -238,6 +238,16 @@ func testForwarders(t *testing.T, e *Env, f *backendtest.Fake) *[][]string {
 	return starts
 }
 
+// forwarderRuns reports whether the VM's forwarder, one of
+// testForwarders' sleeps, runs: its pid file names a live sleep started
+// for the VM.
+func forwarderRuns(e *Env, vm string) bool {
+	return daemon.Proc{
+		PIDFile: e.Dirs.VM(vm).Forwarder(".pid"), Args: e.Forwarders.Args,
+		Is: func(args []string) bool { return daemon.HasFlag(args, vmssh.Cmd, "-vm", vm) },
+	}.Running()
+}
+
 // testHostKey is a made-up host key line, in ssh's wire format.
 const testHostKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGRldnZtLXRlc3QtaG9zdC1rZXktYWFhYWFhYWFhYWFh root@vm"
 

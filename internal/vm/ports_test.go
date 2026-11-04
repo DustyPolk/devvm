@@ -77,7 +77,7 @@ func TestStartPorts(t *testing.T) {
 			if len(*starts) != tc.starts || tc.starts > 0 && only((*starts)[0]) != tc.only {
 				t.Errorf("forwarders %q, want %d with -only %q", *starts, tc.starts, tc.only)
 			}
-			if tc.starts > 0 && !e.Forwarders.Running(st.Name()) {
+			if tc.starts > 0 && !forwarderRuns(e, st.Name()) {
 				t.Error("its forwarder isn't running")
 			}
 			want := []string(nil)
@@ -91,7 +91,7 @@ func TestStartPorts(t *testing.T) {
 			if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
 				t.Fatal(msg.NamesOf(err))
 			}
-			if e.Forwarders.Running(st.Name()) {
+			if forwarderRuns(e, st.Name()) {
 				t.Error("its forwarder runs with the VM stopped")
 			}
 		})
@@ -147,8 +147,8 @@ func TestSetPortsRunning(t *testing.T) {
 	if err := s.SetPorts(t.Context(), PortsChange{List: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if e.Forwarders.Running(vm) || len(*starts) != before+1 {
-		t.Errorf("none: forwarder running %v, started %q", e.Forwarders.Running(vm), *starts)
+	if forwarderRuns(e, vm) || len(*starts) != before+1 {
+		t.Errorf("none: forwarder running %v, started %q", forwarderRuns(e, vm), *starts)
 	}
 	if err := f.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)

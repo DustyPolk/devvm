@@ -103,14 +103,14 @@ func TestForwardsStart(t *testing.T) {
 	if got := readFile(t, f.Dirs.VM(vm).KnownHosts()); got != startLine+"start-0\n"+vm+" ssh-ed25519 "+keyED+"\n" {
 		t.Errorf("known_hosts: %q", got)
 	}
-	if !f.Running(vm) {
+	if !f.proc(vm).Running() {
 		t.Error("not running")
 	}
 
 	// Listed: the free ones, asked with the old one stopped.
 	asked := false
 	f.InUse = func(_ context.Context, port int) bool {
-		if f.Running(vm) {
+		if f.proc(vm).Running() {
 			t.Error("asked while the old forwarder ran")
 		}
 		asked = true
@@ -131,8 +131,8 @@ func TestForwardsStart(t *testing.T) {
 	for _, list := range []string{"5173", "none"} {
 		forward(list)
 		f.Start(ctx, b, st)
-		if len(*starts) != 2 || f.Running(vm) {
-			t.Errorf("%s: started %q, running %v", list, *starts, f.Running(vm))
+		if len(*starts) != 2 || f.proc(vm).Running() {
+			t.Errorf("%s: started %q, running %v", list, *starts, f.proc(vm).Running())
 		}
 	}
 	warned.Reset()
@@ -161,7 +161,7 @@ func TestForwardsStart(t *testing.T) {
 	} {
 		b.Target = bad
 		f.Start(ctx, b, st)
-		if w := warned.Names(); !slices.Equal(w, failed) || len(*starts) != 2 || f.Running(vm) {
+		if w := warned.Names(); !slices.Equal(w, failed) || len(*starts) != 2 || f.proc(vm).Running() {
 			t.Errorf("%+v: started %q, warned %q", bad, *starts, w)
 		}
 		warned.Reset()

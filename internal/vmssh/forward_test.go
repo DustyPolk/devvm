@@ -535,7 +535,7 @@ func TestForwardsStopReusedPID(t *testing.T) {
 		if err := state.WriteFile(f.Dirs.VM("v").Forwarder(".pid"), []byte(pid+"\n")); err != nil {
 			t.Fatal(err)
 		}
-		if f.Running("v") {
+		if f.proc("v").Running() {
 			t.Errorf("pid %s: a forwarder", pid)
 		}
 		f.Stop("v")
@@ -585,11 +585,11 @@ func TestForwardsRun(t *testing.T) {
 	if !slices.Equal(args, want) || !strings.HasPrefix(f.Control("v"), filepath.Join(short, "run", "port-")) {
 		t.Errorf("forwarder:\n%q\nwant\n%q", args, want)
 	}
-	if f.Running("v") {
+	if f.proc("v").Running() {
 		t.Error("found with other arguments")
 	}
 	running = true
-	if !f.Running("v") || f.Running("w") {
+	if !f.proc("v").Running() || f.proc("w").Running() {
 		t.Error("not found by its arguments")
 	}
 	running = false

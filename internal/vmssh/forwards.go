@@ -250,9 +250,6 @@ func (f Forwards) proc(vm string) daemon.Proc {
 	}
 }
 
-// Running reports whether the VM's forwarder runs.
-func (f Forwards) Running(vm string) bool { return f.proc(vm).Running() }
-
 // Lock holds the VM's forwarder's lock until unlock is called: whatever
 // stops its forwarder, asks which ports are free and starts the next one
 // holds it throughout, so two at once (a start and devvm ports, or two
