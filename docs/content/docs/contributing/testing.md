@@ -41,7 +41,7 @@ Test in a Lima VM with nested virtualization, which needs an M3 or newer and mac
    limactl start --tty=false linuxhost
    ```
 
-   Run it from your checkout of the repo, which the VM mounts at the same path. `--mount` alone keeps the template's home mount, hence the edit. Lima gives the VM's user your Mac's uid unless `user.uid` sets another, and a Mac's first user has uid 501. Most Linux hosts' first user has uid 1000, and so does the user that some container images ship, such as the `ubuntu` user of Ubuntu's images. With the VM's user at uid 1000, the `from` section of `tests/e2e.sh` meets that clash, as devvm does on most Linux hosts.
+   Run it from the main checkout of the repo, which the VM mounts at the same path, and not from a git worktree. A worktree's `.git` is a file that points into the main checkout's `.git` folder, outside the mount, so git in the VM can't read it, and the VM's only mount goes when the worktree does. `--mount` alone keeps the template's home mount, hence the edit. Lima gives the VM's user your Mac's uid unless `user.uid` sets another, and a Mac's first user has uid 501. Most Linux hosts' first user has uid 1000, and so does the user that some container images ship, such as the `ubuntu` user of Ubuntu's images. With the VM's user at uid 1000, the `from` section of `tests/e2e.sh` meets that clash, as devvm does on most Linux hosts.
 
 2. Inside it, install the packages, then Lima and mise from their release tarballs, each checked against its release's checksums (`SHA256SUMS`, `SHASUMS256.txt`) with `sha256sum -c`, and add yourself to the `kvm` group:
 
@@ -60,6 +60,14 @@ Test in a Lima VM with nested virtualization, which needs an M3 or newer and mac
    mise run fmt && mise run lint && mise run test
    tests/e2e.sh --from
    ```
+
+   The copy keeps the checkout's `.git` folder, which the gate needs, because `mise run lint` finds the shell scripts it checks with `git ls-files`, and the docs' build reads each page's git information (`enableGitInfo`). A copy without `.git`, such as one that `git archive` makes, fails the lint. To test a branch that a worktree has checked out, commit it, and clone that branch from the main checkout instead of copying the checkout, because a worktree's branches are the main checkout's too:
+
+   ```sh
+   rm -rf ~/devvm && git clone --branch BRANCH /path/to/your/checkout ~/devvm && cd ~/devvm
+   ```
+
+   A clone has only what's committed, so commit a change before you test it this way.
 
 The first `--from` run builds every image and takes about half an hour on an M3 Max. Later ones reuse them, because every section but `tools` uses the pinned shared tools' versions and `--from` images, and those images stay valid until `scripts/bump.sh e2e-tools` or `scripts/bump.sh e2e-from` moves a pin ([end-to-end tests](_index.md#end-to-end-tests)). Stop the VM when done (`limactl stop linuxhost`); it keeps its images for the next run.
 
