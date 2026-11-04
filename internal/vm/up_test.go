@@ -97,14 +97,24 @@ func noDirect(_ string, argv []string, _ backend.ExecOpts) error {
 func TestUpNetworkPolicy(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
-	f.ExecFunc = noDirect
+	starts := testForwarders(t, e, f)
+	hostKeys := f.ExecFunc
+	f.ExecFunc = func(vm string, argv []string, o backend.ExecOpts) error {
+		if err := noDirect(vm, argv, o); err != nil {
+			return err
+		}
+		return hostKeys(vm, argv, o)
+	}
 	if err := (Launch{e}).Up(t.Context(), Options{NetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
+	if len(*starts) != 1 {
+		t.Errorf("forwarder starts = %q, want one", *starts)
+	}
 	// Its forwarder, once it runs: how to reach it, its host keys for its
-	// start (asked which start, read); then the ssh config's entry, which
-	// reads them again, as this VM shows none.
-	want := []string{"Problems", "Inspect", "Images", "BuildImage", "CreateVM", "Running", "Start", "SSH", "Running", "Exec", "Running", "Running", "Exec", "Exec", "List", "SSH", "Running", "Running", "Exec", "Shell"}
+	// start (asked which start, read, then asked again); then the ssh
+	// config's entry, which finds them pinned for this start.
+	want := []string{"Problems", "Inspect", "Images", "BuildImage", "CreateVM", "Running", "Start", "SSH", "Running", "Exec", "Running", "Running", "Running", "Running", "Exec", "Exec", "List", "SSH", "Running", "Running", "Shell"}
 	if ms := f.Methods(); !slices.Equal(ms, want) {
 		t.Errorf("calls = %q, want %q", ms, want)
 	}
