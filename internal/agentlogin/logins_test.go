@@ -152,6 +152,28 @@ func TestCodexGetRefreshesOnTheHostWhenDue(t *testing.T) {
 	}
 }
 
+// A refresh goes through the route its lookup's context carries (proxy.WithRoute): the company
+// proxy a VM's proxy goes through, its password in Proxy-Authorization only.
+func TestRefreshGoesThroughTheProxysRoute(t *testing.T) {
+	var target, auth string
+	company := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target, auth = r.URL.String(), r.Header.Get("Proxy-Authorization")
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "at-new", "refresh_token": "rt-new"})
+	}))
+	t.Cleanup(company.Close)
+	route, err := proxy.Upstream{HTTP: "http://alice:e2e-not-a-secret@" + company.Listener.Addr().String()}.Route()
+	must(t, err)
+	f := File{Kind: Codex, TokenURL: "http://auth.example/oauth/token", Path: writeFile(t, map[string]any{"tokens": map[string]any{ //nolint:gosec // fake values
+		"access_token": jwtWith(time.Now(), nil), "refresh_token": "rt-old",
+	}})}
+	if v, err := f.Get(proxy.WithRoute(t.Context(), route), "codex"); err != nil || v != "at-new" {
+		t.Fatalf("value = %q, %v", v, err)
+	}
+	if target != "http://auth.example/oauth/token" || auth != "Basic YWxpY2U6ZTJlLW5vdC1hLXNlY3JldA==" {
+		t.Errorf("the company proxy got %q, Proxy-Authorization %q", target, auth)
+	}
+}
+
 // A refresh that started finishes, and is written back, though its caller has gone: the server may
 // have rotated the refresh token already.
 func TestRefreshOutlivesItsCaller(t *testing.T) {

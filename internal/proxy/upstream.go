@@ -42,6 +42,9 @@ type upstreams struct {
 	// unresolved is Config.UpstreamUnresolved: names the host can't resolve go upstream even when
 	// only ** allows them.
 	unresolved bool
+	// host is the same company proxy for the proxy's own requests on the host (Route, with the
+	// password): lookups' (WithRoute). nil: direct.
+	host func(*http.Request) (*url.URL, error)
 }
 
 // ErrUpstreamScheme is ParseUpstream's error for a proxy that isn't http://.
@@ -120,6 +123,13 @@ func newUpstreams(u Upstream, lookup Lookup) (upstreams, error) {
 		return upstreams{}, fmt.Errorf("upstream: HTTP_PROXY: %w", err)
 	}
 	ups.noProxy = parseNoProxy(u.NoProxy)
+	with, err := u.WithPassword(password)
+	if err == nil {
+		ups.host, err = with.Route()
+	}
+	if err != nil {
+		return upstreams{}, err
+	}
 	return ups, nil
 }
 
@@ -219,6 +229,26 @@ func (u Upstream) Route() (func(*http.Request) (*url.URL, error), error) {
 			return plain, nil
 		}
 	}, nil
+}
+
+// direct is the route of a proxy without a company proxy: every request goes directly.
+func direct(*http.Request) (*url.URL, error) { return nil, nil }
+
+// routeKey is the context key of WithRoute's route.
+type routeKey struct{}
+
+// WithRoute is ctx carrying route, the company proxy (Route) that requests a lookup makes on the
+// host go through: a VM's proxy gives each lookup (IO.Secret) its own upstream's, password
+// included, so an agent's OAuth refresh goes where the VM's own requests go.
+func WithRoute(ctx context.Context, route func(*http.Request) (*url.URL, error)) context.Context {
+	return context.WithValue(ctx, routeKey{}, route)
+}
+
+// RouteOf is the route WithRoute put in ctx, as net/http's Transport.Proxy: nil when it has none,
+// for a lookup outside a VM's proxy, which then takes net/http's own, the environment's.
+func RouteOf(ctx context.Context) func(*http.Request) (*url.URL, error) {
+	r, _ := ctx.Value(routeKey{}).(func(*http.Request) (*url.URL, error))
+	return r
 }
 
 // names: the upstreams, by host:port only, for the proxy's log.

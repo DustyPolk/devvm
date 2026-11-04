@@ -120,6 +120,10 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 		l.Printf("%s", up.names())
 	}
 	up.unresolved = c.UpstreamUnresolved
+	s.secrets.route = up.host
+	if s.secrets.route == nil {
+		s.secrets.route = direct
+	}
 	rs, err := readBuiltins(std.FS, c.BuiltinPolicies, l)
 	if err != nil {
 		return nil, err

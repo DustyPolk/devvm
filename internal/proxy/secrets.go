@@ -135,7 +135,10 @@ type secrets struct {
 	// lock is taken before valueMu, never after.
 	file   *watched[[]Binding]
 	lookup Lookup // IO.Secret: each binding's value
-	log    *log.Logger
+	// route is the company proxy each lookup's own requests go through (WithRoute), the one the
+	// VM's requests go through: set as the proxy starts. nil: net/http's own.
+	route func(*http.Request) (*url.URL, error)
+	log   *log.Logger
 	// valueMu holds the values, by binding name, and is held through a lookup, so lookups go one
 	// at a time.
 	valueMu sync.Mutex
@@ -227,6 +230,9 @@ func (s *secrets) value(b Binding) (string, error) {
 	// The value is cached for every request: no one request's end cancels it.
 	ctx, cancel := context.WithTimeout(context.Background(), lookupTimeout) //nolint:forbidigo // shared by every request
 	defer cancel()
+	if s.route != nil {
+		ctx = WithRoute(ctx, s.route)
+	}
 	v, err := s.lookup(ctx, b)
 	if err != nil {
 		return "", fmt.Errorf("secret %s: %w", b.Name, err)

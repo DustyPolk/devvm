@@ -5,7 +5,8 @@
 // into requests for each provider's hosts (File.Bindings), looking each value up in its own process
 // (File.Get).
 // OAuth access tokens are refreshed here, on the host, and written back to the host's file, so the
-// host's login keeps working: a VM never holds a refresh token, so it can't rotate one away.
+// host's login keeps working: a VM never holds a refresh token, so it can't rotate one away. A
+// refresh goes through the company proxy the VM's proxy goes through (proxy.RouteOf).
 // Agents' settings files get their secret-looking values taken out (Redact).
 //
 // Formats (checked against upstream, 2026-10): Codex keeps OPENAI_API_KEY or tokens{id_token,
@@ -449,7 +450,12 @@ func (f File) refresh(ctx context.Context, form bool, fields map[string]string) 
 		return nil, err
 	}
 	req.Header.Set("Content-Type", ctype)
-	resp, err := fetch.NewClient(refreshTimeout, fetch.HTTPSOnly).Do(req)
+	client := fetch.NewClient(refreshTimeout, fetch.HTTPSOnly)
+	if route := proxy.RouteOf(ctx); route != nil {
+		// The VM's proxy's company proxy, password included (proxy.WithRoute).
+		client.Transport().Proxy = route
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

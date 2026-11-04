@@ -192,6 +192,49 @@ func TestUpstreamSecret(t *testing.T) {
 	}
 }
 
+// TestLookupRoute: each lookup's context carries the proxy's own upstream, with the secret's
+// password (WithRoute), so a login's refresh goes where the VM's requests go; a proxy without one
+// routes them directly, never through net/http's environment.
+func TestLookupRoute(t *testing.T) {
+	t.Parallel()
+	routed := func(up *Upstream, target string) string {
+		var route func(*http.Request) (*url.URL, error)
+		lookup := func(ctx context.Context, b Binding) (string, error) {
+			if b.Kind == KindLogin {
+				route = RouteOf(ctx)
+			}
+			return "pw", nil
+		}
+		s, err := newServer(Config{VM: "vm", Upstream: up}, IO{Secret: lookup}, quiet(), io.Discard)
+		must(t, err)
+		if _, err := s.secrets.value(Binding{Name: "codex", Kind: KindLogin, Agent: "codex"}); err != nil {
+			t.Fatal(err)
+		}
+		if route == nil {
+			t.Fatalf("%v: no route", up)
+		}
+		u, err := route(httptest.NewRequestWithContext(t.Context(), http.MethodPost, target, http.NoBody))
+		must(t, err)
+		if u == nil {
+			return ""
+		}
+		return u.String()
+	}
+	up := &Upstream{HTTPS: "http://alice@proxy.corp:3128", NoProxy: ".corp", Secret: UpstreamSecret}
+	if got, want := routed(up, "https://auth.openai.com/oauth/token"), "http://"+url.UserPassword("alice", "pw").String()+"@proxy.corp:3128"; got != want {
+		t.Errorf("through the upstream: %q, want %q", got, want)
+	}
+	if got := routed(up, "https://auth.corp/token"); got != "" {
+		t.Errorf("NO_PROXY: %q", got)
+	}
+	if got := routed(nil, "https://auth.openai.com/oauth/token"); got != "" {
+		t.Errorf("no upstream: %q", got)
+	}
+	if RouteOf(t.Context()) != nil {
+		t.Error("a context without a route has one")
+	}
+}
+
 func TestNoProxy(t *testing.T) {
 	t.Parallel()
 	ups := upstreams{
