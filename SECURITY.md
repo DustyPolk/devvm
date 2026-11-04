@@ -29,5 +29,5 @@ Anything that breaks the security model counts, for example:
 
 ## Out of scope
 
-- What the security model lists under [What it doesn't protect](https://devvm.dev/docs/internals/security/#what-it-doesnt-protect), such as what allowed hosts and secrets permit. That includes VMs without network policy, which a VM gets when you answer no or pass `--no-network-policy`.
+- What [Attack vectors](https://devvm.dev/docs/safety/attack-vectors/) lists under [Narrowed, not closed](https://devvm.dev/docs/safety/attack-vectors/#narrowed-not-closed) and [Left to you](https://devvm.dev/docs/safety/attack-vectors/#left-to-you), such as what allowed hosts and secrets permit. That includes VMs without network policy, which a VM gets when you answer no or pass `--no-network-policy`.
 - Escapes through Lima, QEMU or Apple's Virtualization framework themselves, which you should report upstream. Do tell us if devvm uses them in an unsafe way.

@@ -27,7 +27,7 @@ These settings guard against the host's ssh asking for a forward that devvm's en
 
 **Not covered:**
 
-- A remote forward you ask for (`ssh -R`, a `RemoteForward` of yours) into a VM whose root allowed it, or on an address in `127.77.0.0/16`, which sshd allows for anyone it lets in: sshd's settings are the VM's to change, and the entry can't refuse it. Don't forward into a VM you don't trust.
+- A remote forward you ask for (`ssh -R`, a `RemoteForward` of yours): [remote forwards you add](../safety/attack-vectors.md#the-network) lists what it leaves open.
 - Sessions see the proxy's password, as devvm's own shells do, and VS Code relays what [VS Code](../using/ssh.md#vs-code) describes.
 
 ### Ports on Lima
@@ -126,8 +126,7 @@ A new VM gets what the project's `devcontainer.json` says, as far as devvm does 
 
 **Not covered:**
 
-- **The project's own VM.** The file decides what's in it and runs commands in it from its first start: the VM is the project's ([security](security.md#what-it-doesnt-protect)). Its `image` is any public image, whose code runs as root in the build VM, as with `--from`.
-- **Through a host proxy** (`HTTPS_PROXY`), the lookup reaches what the proxy does: only names are checked, not what the proxy resolves them to.
+- **The project's own VM** and **the lookup through a host proxy** (`HTTPS_PROXY`), where only names are checked, not what the proxy resolves them to: [Attack vectors](../safety/attack-vectors.md) lists both, under its devcontainer.json entries. Its `image` is any public image, whose code runs as root in the build VM, as with `--from`.
 - **A name that resolves to the internet for devvm and to this machine's network for the backend's pull** (DNS rebinding) gets only content with the digest the public registry gave, which only someone who has that content can give.
 
 **Threat check** (the security-audit skill; its local IPC, data isolation and supply chain companions). Leads, each confirmed and fixed, or ruled out:
@@ -175,7 +174,7 @@ The build's policy is `**` alone, so on its own the build's proxy would refuse e
 - `from`: a company proxy of the run's own with a password, and a `--from alpine:3.21` base, with every feature, and a layer on it: the registry, Alpine's mirror and the layer's own download reach the company proxy through the builds' proxies; what the layer's commands and `sudo` have is the build's proxy with a password of its own; and the password is in no converted disk, image, log, build file or process's arguments;
 - `network`: a company proxy of the run's own (a `devvm _proxy` with a password, allowing any host): the VM's next launch with it in devvm's environment starts the VM's proxy again with `-upstream`; an allowed host goes through it by name (its event log) and the VM's event log names it; a host the VM's policy doesn't allow gets `403` and never reaches it; its password is in no process's arguments, no log and nothing of the VM's; the launch after, without it, starts the VM's proxy again going directly.
 
-**Not covered:** `https://` and `socks5://` company proxies, which devvm refuses (`upstream_proxy_scheme`); proxy auto-configuration (PAC) files and the macOS system proxy, which devvm doesn't read; Kerberos or NTLM authentication. A Lima VM without network policy gets the host's settings in its `/etc/environment` by Lima's design, and turning network policy on for it later leaves them in the disk's free space.
+**Not covered:** `https://` and `socks5://` company proxies, which devvm refuses (`upstream_proxy_scheme`); proxy auto-configuration (PAC) files and the macOS system proxy, which devvm doesn't read; Kerberos or NTLM authentication. A Lima VM without network policy gets the host's settings in its `/etc/environment` by Lima's design, and what that and devvm's redaction of its logs leave open is under [your company proxy's password](../safety/attack-vectors.md#this-machine).
 
 ## The desktop
 
@@ -236,8 +235,7 @@ VMs with network policy and the nix layer share their downloads from cache.nixos
 
 **What stays open:**
 
-- **Timing:** a VM can tell whether some VM fetched a public path by how fast the cache answers. The paths are public, and which ones a project needs is in its flake.lock, so this tells a VM that another project on this machine uses a package, nothing more. Hiding it would mean waiting as long as a fetch on every hit, which is the saving.
-- **Filling the cache:** a VM can fetch real paths until the cache reaches its cap, which pushes other VMs' paths out, so they fetch them again from cache.nixos.org. It can't fill the disk past the cap, nor keep anything cache.nixos.org didn't sign.
+- **Timing and filling the cache:** [Attack vectors](../safety/attack-vectors.md#network) lists what one VM learns of another by how fast the cache answers, and how a VM that fills the cache to its cap pushes other VMs' paths out. Hiding the timing would mean waiting as long as a fetch on every hit, which is the saving.
 - **Private caches** (Cachix, a `netrc`) are never shared: only root in the VM can add a substituter, and Nix reaches it through the allowlist directly.
 
 **Options weighed:**
@@ -342,12 +340,12 @@ A link lets a program in one VM, the client, reach a TCP service in another VM, 
 
 **Not covered:**
 
-- **What the client does through the target's service.** A link joins the two VMs' trust, as above, so a compromised client can attack the target through its published port, and run code there where the service allows it.
+- **What the client does through the target's service.** A link joins the two VMs' trust, as above, and [what a VM does through a link](../safety/attack-vectors.md#network) lists what that leaves open.
 - **Programs of yours on the host** can connect to a link's socket and the masters' control sockets, as they can already reach the VMs.
 - **Open connections outlive their link.** `devvm link rm` and `devvm link unpublish` refuse the next connection, while those that are open stay until they close, the client stops or the target does. A target can't lose network policy while a client with it links to it, because `devvm network off` is refused then, so no open connection breaks the policy rule.
 - **A program in the client can take a link's address and port first,** and that link then fails with `link_port_taken` until the program lets it go. Root in the client can also edit its own `/etc/hosts`, which changes only what the client reaches.
 - **A link name hides a name the client would otherwise resolve,** such as `db` under its search domain. devvm refuses `localhost`, the client's own hostname, another link's name and anything that isn't one DNS label.
-- **A remote forward you ask for** into a VM, with `ssh -R` through devvm's ssh config, may bind an address in `127.77.0.0/16` in that VM, as the rule allows it for anyone sshd lets in. Because sshd matches the rule as text and then resolves what it matched, a forward you ask for by a host name that begins with `127.77.` binds whatever address that name resolves to in the VM. devvm's own forwards name addresses only.
+- **A remote forward you ask for** into a VM, with `ssh -R` through devvm's ssh config, may bind an address in `127.77.0.0/16` in that VM, as [remote forwards you add](../safety/attack-vectors.md#the-network) says. sshd matches the rule as text and then resolves what it matched, which is why a host name that begins with `127.77.` binds whatever address it resolves to in the VM. devvm's own forwards name addresses only.
 - **Many connections:** a client can keep 256 connections busy, which refuses its own further connections and makes the host run that many ssh processes.
 - **Network policy's rules don't apply to links,** through the proxy or not, so `devvm network deny db` doesn't stop the link `db`. The published ports and the policy rule between the two VMs decide a link's connections, and `devvm link rm` removes one.
 - **A link's short name before its first session lists it.** Until `devvm _links` has written a client's list once, the proxy doesn't know `db` is a link, so a request for `db:5432` meets the rules, and a rule such as `**` sends it to whatever the host's resolver or a company proxy finds by that name. After that, the list stays until devvm removes the VM, and `NAME.devvm.internal` is never the rules'.
@@ -400,7 +398,7 @@ A group is a named set of VMs that reach each other's published ports by name: y
 
 **Not covered:**
 
-- **Every member trusts every other.** A compromised member can attack each member's published ports, and a member that joins later can too.
+- **Every member trusts every other,** which [what a VM does through a link](../safety/attack-vectors.md#network) lists.
 - **A published range gives a link for each port in it,** in every other member. A wide range means as many forwards in each member and as many sockets on the host, so publish only the ports you mean the group to reach.
 - **`devvm link add` or `devvm link rm` at the same moment as a group's change** can each write the same member's links whole, because those two don't take the groups lock, so the later write wins. A group link left that way is refused as `ungrouped`, and the next change works the links out again from the states.
 
@@ -506,7 +504,7 @@ devvm keeps its state in plain files in two folders, which [State files](overvie
 
 ## Open work and risks
 
-User-facing limits are in [Known limits](../using/limits.md) and [what the security model doesn't protect](security.md#what-it-doesnt-protect).
+User-facing limits are in [Known limits](../using/limits.md), and what devvm leaves open is in [Attack vectors](../safety/attack-vectors.md).
 
 - **`--from`:** a moved tag is noticed only at the next build, not when listing images; devvm doesn't log in to registries, so private images work only through Docker; registries over plain HTTP (`localhost:5000`) aren't supported.
 - **Alpine:** `rc-status` as a normal user shows `acpid` and `syslog` as crashed, as their pid files are root's (`sudo rc-status` is clean).
@@ -522,4 +520,4 @@ User-facing limits are in [Known limits](../using/limits.md) and [what the secur
   - `sandbox-exec` is deprecated. If Apple removes it, macOS needs another way to confine the hostagent: an egress filter upstream (gvisor-tap-vsock#609 and #631; Lima's `hostLoopback: false`, lima#5581), a user-v2 daemon of devvm's own (lima#5464), or QEMU with the Linux mechanism on macOS too (it works there, slower than `vz`). The self-check catches it breaking silently.
   - VMs started outside devvm (`limactl start`, `limactl shell` starting a stopped VM, Lima's start at login) aren't confined: devvm reports them `unenforced`. An `override.yaml` setting a dead `HTTPS_PROXY` might harden this (untested).
   - A Lima upgrade that adds a hostagent connection fails closed: the start hangs until Lima gives up (10 minutes in the experiment). devvm should time-box the start and say it's the sandbox. That includes unix sockets: the profile allows only those in the VM's Lima folder and the forwarded agent's. Allowing every unix socket would let a compromised hostagent reach `docker.sock` or another ssh agent.
-  - Tunnels the proxy doesn't read are decided by the `CONNECT` host and checked against the TLS server name, so domain fronting through a shared CDN may still reach other hosts.
+  - Tunnels the proxy doesn't read are decided by the `CONNECT` host and checked against the TLS server name, so domain fronting through a shared CDN may still reach other hosts ([attack vectors](../safety/attack-vectors.md#network)).

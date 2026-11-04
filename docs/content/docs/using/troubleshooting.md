@@ -104,7 +104,7 @@ On a Linux host, root in a VM can set the set-user-id and set-group-id bits on f
 - For a file that root owns, don't run it, and delete it with `sudo rm FILE`.
 - For any other file, `chmod u-s,g-s FILE` clears its bits.
 
-Either way, don't run programs from the project folder outside the VM ([what devvm doesn't protect](../internals/security.md#what-it-doesnt-protect)).
+Either way, don't run programs from the project folder outside the VM ([files the VM writes](../safety/attack-vectors.md#files-the-vm-writes)).
 
 ## HOME isn't an absolute path
 
