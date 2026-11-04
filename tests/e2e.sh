@@ -2,7 +2,8 @@
 # End-to-end tests with real VMs, in a sandbox. Hosted CI can't run nested VMs on macOS.
 #   tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N]
 #     (default)  every section but from: minutes, more on a first run (base's and the tools' builds, and
-#                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images;
+#                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images, and
+#                builds base again from its recorded packages with the mirror unreachable;
 #                project makes a VM from base in a project folder, opens it from a subfolder in that
 #                subfolder, and checks its mounts, a file watcher in it (the VM's edits seen, none
 #                of this machine's: Lima's mounts pass on no file events), no Docker, every
@@ -1783,6 +1784,26 @@ check "Ctrl+C during a build deletes the unfinished image, and exits 130" bash -
   [[ -n '$ks' && $rc -eq 130 ]] && grep -qx '==> interrupted_image vm=devvm-img-$ks' '$work/slow.log' &&
   [[ -z \$(status_of devvm-img-$ks) ]] && [[ ! -e '$images/$ks' ]] && [[ \$(status_of devvm-img-$kb) == Stopped ]]"
 rm -f "$fixture" "$layers/e2eslow.sh"
+
+# base's packages: its first build recorded each package apt downloaded, kept in devvm's cache under
+# its SHA-256. Built again under the same key, with the mirror set to an address nothing answers on,
+# it installs them from the cache alone: apt reads only the build's own folder.
+set_json=$XDG_DATA_HOME/devvm/packages/sets/$kb.json
+check "base recorded its packages, each in the cache under its own SHA-256" bash -c "
+  [[ -n '$kb' && -f '$set_json' ]] && sums=\$(sed -n 's/^ *\"sha256\": \"\([0-9a-f]*\)\",\$/\1/p' '$set_json') &&
+  [[ -n \$sums ]] && for s in \$sums; do
+    [[ \$({ sha256sum 2>/dev/null || shasum -a 256; } < '$XDG_DATA_HOME/devvm/packages/'\$s.deb | cut -c1-64) == \$s ]] || exit 1
+  done"
+cp "$XDG_CONFIG_HOME/devvm/config.toml" "$work/config.toml.saved"
+printf 'ubuntu-mirror = "http://127.0.0.1:9/ubuntu"\n' >> "$XDG_CONFIG_HOME/devvm/config.toml"
+[[ -z $kb ]] || { limactl delete -f "devvm-img-$kb" >/dev/null 2>&1; rm -rf "${images:?}/$kb"; }
+check "with the mirror unreachable, base builds again under the same key from the cache, no network for its packages" bash -c "
+  [[ -n '$kb' ]] && DEVVM_MESSAGES=names '$D' build base </dev/null >'$work/last.log' 2>&1 &&
+  grep -qx '==> building_image image=base key=$kb' '$work/last.log' &&
+  runlog=\$(sed -n 's/^ *log_details file=//p' '$work/last.log') && [[ -f \$runlog ]] &&
+  grep -q ' file:/var/cache/devvm/packages/in ' \"\$runlog\" && ! grep -qE '^(Get|Hit|Err|Ign):[0-9]+ https?://' \"\$runlog\" &&
+  [[ \$(status_of devvm-img-$kb) == Stopped && -f '$images/$kb/record.json' ]]"
+cp "$work/config.toml.saved" "$XDG_CONFIG_HOME/devvm/config.toml"
 fi
 
 if begin project; then
