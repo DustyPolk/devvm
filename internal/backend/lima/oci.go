@@ -9,15 +9,14 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/from"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
@@ -128,15 +127,12 @@ func (l *images) convert(ctx context.Context, f *backend.From, size backend.Size
 	if err := l.runScript(ctx, OCIVM, trust, true); err != nil {
 		return nil, err
 	}
-	u, err := user.Current()
+	made, err := l.madeArgs()
 	if err != nil {
 		return nil, err
 	}
 	script := filepath.Join(oci, "build.sh")
-	args := []string{
-		"shell", "--workdir", "/", OCIVM, "sudo", "bash", script, oci, vmOut, ref, f.Ref, u.Username,
-		strconv.Itoa(os.Getuid()), "/home/" + u.Username + ".guest", convertedSize,
-	}
+	args := slices.Concat([]string{"shell", "--workdir", "/", OCIVM, "sudo", "bash", script, oci, vmOut, ref, f.Ref}, made)
 	if len(trust.Data) > 0 {
 		args = append(args, filepath.Join(guest, "ca.sh"))
 	}
@@ -167,22 +163,26 @@ func (l *images) convert(ctx context.Context, f *backend.From, size backend.Size
 	return c, nil
 }
 
-// writeScripts writes the conversion's scripts from devvm's own files
-// into out, the conversion's own temporary folder: oci/ whole and, with
-// the user's CAs (cas), guest/ca.sh, beside vm/ rather than in it, as the
-// build VM writes vm/. Files are the user's alone (state.WriteFile). It
-// returns the two folders, which the build VM mounts read-only; the
-// conversion's cleanup deletes them with out.
-func writeScripts(own fs.FS, out string, cas bool) (oci, guest string, err error) {
-	var names []string
-	if err := fs.WalkDir(own, "oci", func(name string, e fs.DirEntry, err error) error {
-		if err == nil && e.Type().IsRegular() {
-			names = append(names, name)
-		}
-		return err
-	}); err != nil {
-		return "", "", err
+// madeArgs are build.sh's arguments that say what it makes of the image:
+// the host's user, as the image's user (name, uid and home), and the
+// converted disk's size. base's key hashes them (KeyFiles).
+func (l *images) madeArgs() ([]string, error) {
+	u, err := l.User()
+	if err != nil {
+		return nil, err
 	}
+	return []string{u.Username, u.Uid, "/home/" + u.Username + ".guest", convertedSize}, nil
+}
+
+// writeScripts writes the conversion's scripts from devvm's own files
+// into out, the conversion's own temporary folder: those base's key
+// hashes (image.ConversionScripts) and, with the user's CAs (cas),
+// guest/ca.sh, beside vm/ rather than in it, as the build VM writes vm/.
+// Files are the user's alone (state.WriteFile). It returns the two
+// folders, which the build VM mounts read-only; the conversion's cleanup
+// deletes them with out.
+func writeScripts(own fs.FS, out string, cas bool) (oci, guest string, err error) {
+	names := slices.Clone(image.ConversionScripts)
 	if cas {
 		names = append(names, "guest/ca.sh")
 	}

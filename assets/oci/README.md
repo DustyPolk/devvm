@@ -11,7 +11,7 @@ These scripts turn a container image into a disk that Lima boots directly, for `
 
 As in every image script, the downloads are pinned at the top of `build.sh` with their version and checksum. `build.sh` checks them with `sha256sum`, because the build VM has no `devvm-fetch`.
 
-The container image's own code runs as root in the build VM, so devvm treats everything it writes as hostile. The build VM gets only a `vm/` subfolder of devvm's temp folder, and `oci/` read-only. devvm checks what the build VM wrote only once the build VM is deleted. It refuses outputs that aren't regular files, because a symlink could point Lima at a host file. It also refuses a libc other than `gnu` or `musl`, and a kernel command line with anything but letters, digits, spaces and `=,./:_-`.
+The container image's own code runs as root in the build VM, so devvm treats everything it writes as hostile. The build VM gets only a `vm/` subfolder of devvm's temp folder, and `build.sh`, `bootify.sh` and `kernel.sh` read-only, which are the scripts base's key hashes. devvm checks what the build VM wrote only once the build VM is deleted. It refuses outputs that aren't regular files, because a symlink could point Lima at a host file. It also refuses a libc other than `gnu` or `musl`, and a kernel command line with anything but letters, digits, spaces and `=,./:_-`.
 
 ## Gotchas
 

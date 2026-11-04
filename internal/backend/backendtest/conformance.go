@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -286,12 +287,16 @@ func checkKeyFiles(_ context.Context, s Subject) error {
 	return nil
 }
 
-// A layer built on the image is held under its key.
+// A layer built on the image is held under its key, its recipe's steps run
+// with their arguments, one as root (a step that fails fails the build).
 func checkBuildImage(ctx context.Context, s Subject) error {
 	const key = "0123456789fe"
 	sp := backend.ImageSpec{
 		Image: "base+conformance", Key: key, Parent: s.Image, Net: backend.NetNone,
-		Scripts: []backend.Script{{Name: "conformance.sh", Data: []byte("true\n")}},
+		Recipe: image.Recipe{Steps: []image.Step{
+			{Name: "conformance.sh", Data: []byte("test \"$1 $2\" = 'an arg'\n"), Args: []string{"an", "arg"}},
+			{Name: "conformance-root.sh", Data: []byte("test \"$(id -u)\" = 0\n"), Root: true},
+		}},
 	}
 	if _, err := s.Backend.BuildImage(ctx, sp); err != nil {
 		return fmt.Errorf("BuildImage: %w", err)

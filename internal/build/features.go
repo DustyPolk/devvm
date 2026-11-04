@@ -3,7 +3,6 @@ package build
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"io/fs"
 	"os"
 	"path"
@@ -184,26 +183,4 @@ func description(script []byte) string {
 		}
 	}
 	return ""
-}
-
-// featureScripts returns the scripts of base's chosen features, in order,
-// skipping any without one.
-func (b Builds) featureScripts() ([]backend.Script, error) {
-	chosen, err := b.chosenFeatures()
-	if err != nil {
-		return nil, err
-	}
-	var out []backend.Script
-	for _, f := range chosen {
-		s, err := b.FeatureScript(f)
-		if errors.Is(err, fs.ErrNotExist) {
-			b.Warn(msg.UnknownFeature(f))
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, s)
-	}
-	return out, nil
 }

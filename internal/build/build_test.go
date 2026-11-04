@@ -18,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/from"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -99,12 +100,14 @@ func record(t *testing.T, b *Env, key string) state.Image {
 // assetsDir is the folder of testEnv's devvm's files, its Assets.
 func assetsDir(b *Env) string { return filepath.Join(filepath.Dir(b.Dirs.Data), "root") }
 
-func script(name, data string) backend.Script { return backend.Script{Name: name, Data: []byte(data)} }
+func script(name, data string) image.Step { return image.Step{Name: name, Data: []byte(data)} }
 
-// sameScripts reports whether two lists of scripts have the same names
-// and contents, in order.
-func sameScripts(a, b []backend.Script) bool {
-	return slices.EqualFunc(a, b, func(x, y backend.Script) bool { return x.Name == y.Name && bytes.Equal(x.Data, y.Data) })
+// sameScripts reports whether two lists of steps have the same names,
+// scripts, arguments and users, in order.
+func sameScripts(a, b []image.Step) bool {
+	return slices.EqualFunc(a, b, func(x, y image.Step) bool {
+		return x.Name == y.Name && bytes.Equal(x.Data, y.Data) && slices.Equal(x.Args, y.Args) && x.Root == y.Root
+	})
 }
 
 // quiet makes b print nothing, keep the features chosen, and answer yes,
@@ -219,14 +222,14 @@ func TestBuild(t *testing.T) {
 		t.Fatalf("built %d images, want 3: %+v", len(specs), specs)
 	}
 	for i, want := range []backend.ImageSpec{
-		{Image: "base", Key: chain[0].Key, Scripts: []backend.Script{script("base.sh", "#!/bin/bash\n")}},
-		{Image: "foo", Key: chain[1].Key, Parent: chain[0].Key, Scripts: []backend.Script{script("foo.sh", "#!/bin/bash\necho foo\n")}},
-		{Image: "foo+bar", Key: chain[2].Key, Parent: chain[1].Key, Scripts: []backend.Script{script("bar.sh", "#!/bin/bash\necho bar\n")}},
+		{Image: "base", Key: chain[0].Key, Recipe: image.Recipe{Steps: []image.Step{script("base.sh", "#!/bin/bash\n")}}},
+		{Image: "foo", Key: chain[1].Key, Parent: chain[0].Key, Recipe: image.Recipe{Steps: []image.Step{script("foo.sh", "#!/bin/bash\necho foo\n")}}},
+		{Image: "foo+bar", Key: chain[2].Key, Parent: chain[1].Key, Recipe: image.Recipe{Steps: []image.Step{script("bar.sh", "#!/bin/bash\necho bar\n")}}},
 	} {
 		want.Net = backend.NetInternet
 		got := specs[i]
 		if got.Image != want.Image || got.Key != want.Key || got.Parent != want.Parent || got.Net != want.Net ||
-			got.From != nil || got.MemoryGiB != 0 || !sameScripts(got.Scripts, want.Scripts) {
+			got.From != nil || got.MemoryGiB != 0 || !sameScripts(got.Recipe.Steps, want.Recipe.Steps) {
 			t.Errorf("build %d: %+v, want %+v", i, got, want)
 		}
 	}
@@ -263,7 +266,7 @@ func TestBuildBuiltinLayer(t *testing.T) {
 		t.Fatalf("last call %s", last.Method)
 	}
 	got := last.Args[0].(backend.ImageSpec)
-	if got.Image != "foo+docker" || !sameScripts(got.Scripts, []backend.Script{script("docker.sh", "#!/bin/bash\necho devvm's\n")}) {
+	if got.Image != "foo+docker" || !sameScripts(got.Recipe.Steps, []image.Step{script("docker.sh", "#!/bin/bash\necho devvm's\n")}) {
 		t.Errorf("built %+v", got)
 	}
 	if data, err := b.LayerData("docker"); err != nil || string(data) != "#!/bin/bash\necho devvm's\n" {

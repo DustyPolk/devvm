@@ -15,6 +15,7 @@ import (
 	"io"
 	"strconv"
 
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -211,26 +212,33 @@ func (e *LoggedError) Error() string { return e.Msg.Error() }
 // Unwrap returns the message, so errors.As finds it.
 func (e *LoggedError) Unwrap() error { return e.Msg }
 
-// ImageSpec is an image to build.
+// ImageSpec is an image to build. Its name, its parent's key, From and
+// its Recipe are what go into it, and its key hashes every one of them;
+// the rest is how its build runs, which the image keeps nothing of.
 type ImageSpec struct {
-	Image   string   // its name: base, or base's layers joined with + (docker+foo)
-	Key     string   // its key (image.Key); the backend stores it under it
-	Parent  string   // its parent's key; "" for base
-	From    *From    // base only: the container image it starts from; nil for Ubuntu
-	Scripts []Script // run in order as the VM's user, who has sudo: the layer's, then base's features
+	Image  string       // its name: base, or base's layers joined with + (docker+foo)
+	Key    string       // its key (image.Input's); the backend stores it under it
+	Parent string       // its parent's key; "" for base
+	From   *From        // base only: the container image it starts from; nil for Ubuntu
+	Recipe image.Recipe // what the build runs, in order, as it is
 
 	MemoryGiB float64 // memory while building; 0 for the backend's default
 	Net       Net     // the network the build gets: NetInternet or NetNone
 	// Trust is the user's CAs for the build VM: added before anything in
 	// it downloads, base's preparation included, and removed once its
-	// scripts are done, before it stops.
+	// steps are done, before it stops.
 	Trust Trust
 }
 
 // Trust is how a build VM trusts the user's own CAs while it builds: Add
 // installs them and Remove takes them out again, so the image doesn't
-// keep them; both are run as root, fed to sh. Empty scripts for none.
-type Trust struct{ Add, Remove Script }
+// keep them; both are run as root, fed to sh. Env exports the variables
+// that point tools at them, which each of the build's steps starts with.
+// Empty for none.
+type Trust struct {
+	Add, Remove Script
+	Env         []byte
+}
 
 // None reports whether there are no CAs to trust.
 func (t Trust) None() bool { return len(t.Add.Data) == 0 }

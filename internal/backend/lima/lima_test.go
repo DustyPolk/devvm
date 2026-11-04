@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -20,7 +21,6 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
-	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -313,29 +313,30 @@ func TestCaps(t *testing.T) {
 	}
 }
 
-// base's key hashes the pinned Ubuntu cloud image for the host: another
-// pin is another key.
+// base's key hashes the pinned Ubuntu cloud image for the host, one per
+// architecture, and the user a --from base's conversion makes.
 func TestKeyFilesPinUbuntu(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
-	keys := map[string]bool{}
-	for _, arch := range []string{"arm64", "amd64", ""} {
-		in := image.Inputs{Backend: Name, Assets: assets.FS}
-		if arch != "" {
-			l.Arch = arch
-			kf := l.KeyFiles()
-			if got, want := string(kf["ubuntu-image"]), ubuntu.CloudPin(arch); len(kf) != 1 || got != want {
-				t.Errorf("%s: KeyFiles = %q, want ubuntu-image %q", arch, kf, want)
-			}
-			in.BackendFiles = kf
+	l.User = func() (*user.User, error) { return &user.User{Username: "me", Uid: "501"}, nil }
+	pins := map[string]bool{}
+	for _, arch := range []string{"arm64", "amd64"} {
+		l.Arch = arch
+		kf := l.KeyFiles()
+		if got, want := string(kf["ubuntu-image"]), ubuntu.CloudPin(arch); len(kf) != 2 || got != want {
+			t.Errorf("%s: KeyFiles = %q, want ubuntu-image %q", arch, kf, want)
 		}
-		key, err := in.Key(image.Base)
-		if err != nil {
-			t.Fatal(err)
+		if got := string(kf["conversion"]); got != "me\x00501\x00/home/me.guest\x00"+convertedSize {
+			t.Errorf("%s: the conversion's %q", arch, got)
 		}
-		keys[key] = true
+		pins[string(kf["ubuntu-image"])] = true
 	}
-	if len(keys) != 3 {
-		t.Errorf("base's keys: %v, want one per pin and one without", keys)
+	if len(pins) != 2 {
+		t.Errorf("pins: %v, want one per architecture", pins)
+	}
+	// Without the user, a conversion fails: nothing to hash.
+	l.User = func() (*user.User, error) { return nil, errors.New("no user") }
+	if kf := l.KeyFiles(); len(kf) != 1 {
+		t.Errorf("KeyFiles without a user = %q", kf)
 	}
 }
 

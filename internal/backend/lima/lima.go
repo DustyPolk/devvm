@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -95,6 +96,9 @@ type Lima struct {
 	// DockerRunning reports whether Docker runs, for --from images only
 	// it has.
 	DockerRunning func(ctx context.Context) bool
+	// User is the host's user, whom a --from base's conversion makes the
+	// image's user (user.Current).
+	User func() (*user.User, error)
 	// Info prints what the backend is doing.
 	Info func(msg.M)
 	// Warn prints a warning, and where the run log has more.
@@ -158,6 +162,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string,
 		Ubuntu: finder.Image, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: "/dev/kvm",
 		DockerRunning: from.DockerRunning,
+		User:          user.Current,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 	})
@@ -167,9 +172,14 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string,
 func (l *Lima) Name() string { return Name }
 
 // KeyFiles is the pinned Ubuntu cloud image base starts from, for the
-// host's architecture.
+// host's architecture, and what a --from base's conversion makes of its
+// image (madeArgs), without which a conversion fails.
 func (l *images) KeyFiles() map[string][]byte {
-	return map[string][]byte{"ubuntu-image": []byte(ubuntu.CloudPin(l.Arch))}
+	files := map[string][]byte{"ubuntu-image": []byte(ubuntu.CloudPin(l.Arch))}
+	if made, err := l.madeArgs(); err == nil {
+		files["conversion"] = []byte(strings.Join(made, "\x00"))
+	}
+	return files
 }
 
 // DiskDirs is devvm's Lima home, which holds every image's and VM's disk.

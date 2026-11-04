@@ -186,6 +186,7 @@ func (c CAs) Build(assets fs.FS) (backend.Trust, error) {
 	return backend.Trust{
 		Add:    backend.Script{Name: "ca.sh", Data: add.Bytes()},
 		Remove: backend.Script{Name: "ca.sh", Data: remove},
+		Env:    c.exports(),
 	}, nil
 }
 
@@ -196,10 +197,18 @@ func (c CAs) Script(s backend.Script) backend.Script {
 	if len(c) == 0 {
 		return s
 	}
+	return backend.Script{Name: s.Name, Data: append(c.exports(), s.Data...)}
+}
+
+// exports are the shell lines that export Env, for the start of a build's
+// scripts (Script, Trust's Env): none for no CAs.
+func (c CAs) exports() []byte {
+	if len(c) == 0 {
+		return nil
+	}
 	var b bytes.Buffer
 	for _, k := range slices.Sorted(maps.Keys(Env)) {
 		b.WriteString("export " + k + "=" + Env[k] + "\n")
 	}
-	b.Write(s.Data)
-	return backend.Script{Name: s.Name, Data: b.Bytes()}
+	return b.Bytes()
 }

@@ -51,6 +51,7 @@ type Fake struct {
 	LifelineFile string            // Running's Lifeline
 	Missing      []backend.Problem // Problems' answer
 	Format       string            // ToolFormat's answer
+	OwnFiles     map[string][]byte // KeyFiles' answer
 	// ExecFunc, when set, is what Exec returns after recording the call
 	// (Errs aside).
 	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
@@ -151,8 +152,8 @@ func (f *host) DiskDirs() []string { return nil }
 // Floors is none.
 func (f *host) Floors() backend.Floors { return backend.Floors{} }
 
-// KeyFiles is none: the fake puts nothing into base.
-func (f *images) KeyFiles() map[string][]byte { return nil }
+// KeyFiles is OwnFiles: none unless a test sets them.
+func (f *images) KeyFiles() map[string][]byte { return f.OwnFiles }
 
 // Usage is none: the fake can't tell what its VMs take.
 func (f *housekeeping) Usage(context.Context) (backend.Usage, error) { return backend.Usage{}, nil }

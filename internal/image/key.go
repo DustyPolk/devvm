@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"hash"
 	"io/fs"
@@ -24,41 +23,62 @@ const Base = "base"
 // changes them all.
 const keyFormat = "devvm image key 1"
 
-// Inputs is everything an image key hashes apart from the image's name.
-// The files are read when a key is computed.
-type Inputs struct {
+// Input is everything an image's key hashes: what its build is given
+// (backend.ImageSpec's name, parent, From and Recipe), what its backend
+// reads itself, the backend, and its rebuild counter.
+type Input struct {
 	// Backend is the backend that builds the image: lima.
 	Backend string
-	// BackendFiles are the backend's own files that go into base
-	// (backend.Images's KeyFiles), by name. Nil for none.
-	BackendFiles map[string][]byte
-	// Assets holds devvm's own files (assets.FS): base.yaml,
-	// layers/base.sh, the built-in layers, features/ and oci/. Files are
-	// hashed by their names in it.
-	Assets fs.FS
-	// Layers holds the user's layers, <name>.sh (paths.Dirs.Layers). Nil
-	// when there are none. A built-in layer's name is never read here.
-	Layers fs.FS
-	// Features holds the user's features, <name>.sh (paths.Dirs.Features).
-	// Nil when there are none. A built-in feature of the same name wins.
-	Features fs.FS
-	// BaseFeatures are the features chosen for base, in order.
-	BaseFeatures []string
-	// From is the image base starts from; empty for Ubuntu's cloud image.
-	From string
-	// FromDigest is From's digest, as recorded when it was looked up.
-	FromDigest string
-	// Rebuilds gives the rebuild counters (paths.Dirs.Rebuilds). Nil when
-	// there are none.
-	Rebuilds Rebuilds
+	// Image is its name: base, foo+bar.
+	Image string
+	// Parent is its parent's key; "" for base.
+	Parent string
+	// From is the container image base starts from, as given, and its
+	// digest; "" for Ubuntu's.
+	From, FromDigest string
+	// Own is base's files that its recipe doesn't hold, by name: the
+	// backend's own (backend.Images's KeyFiles), and devvm's that it
+	// reads itself (base.yaml; with From, ConversionScripts).
+	Own map[string][]byte
+	// Recipe is what its build runs.
+	Recipe Recipe
+	// Missing is the script of a layer the user deleted, which it has
+	// none of: hashed as missing, so the key differs from any contents.
+	Missing string
+	// Rebuild is its rebuild counter; "" for none.
+	Rebuild string
 }
 
-// Rebuilds gives an image's rebuild counter, which its key hashes: the
-// one for the image named name, built on backend, whose base starts from
-// from as given ("" for the backend's own Ubuntu); "" when it has none.
-type Rebuilds interface {
-	Counter(backend, from, name string) string
+// Key is the image's key: 12 hex digits of a SHA-256 over its input, each
+// field length-prefixed.
+func (in Input) Key() string {
+	k := newKeyHash()
+	k.field("backend", in.Backend)
+	k.field("image", in.Image)
+	k.field("parent", in.Parent)
+	if in.From != "" {
+		k.field("from", in.From)
+		k.field("from-digest", in.FromDigest)
+	}
+	for _, name := range slices.Sorted(maps.Keys(in.Own)) {
+		k.bytes("own "+name, in.Own[name])
+	}
+	for _, s := range in.Recipe.Steps {
+		k.step(s)
+	}
+	if in.Missing != "" {
+		k.field("missing", in.Missing)
+	}
+	if in.Rebuild != "" {
+		k.field("rebuild", in.Rebuild)
+	}
+	return k.sum()
 }
+
+// ConversionScripts are the scripts of devvm's that convert a --from
+// image, which its base's key hashes: the conversion is given these and
+// nothing else of oci/.
+var ConversionScripts = []string{"oci/build.sh", "oci/bootify.sh", "oci/kernel.sh"}
 
 // Link is one image in a chain and its key.
 type Link struct {
@@ -96,22 +116,6 @@ func ParseChain(s string) Chain {
 		}
 	}
 	return c
-}
-
-// Outdated returns the images in chain, base first, whose key has changed
-// since it was made: an edited script, other features, a rebuild.
-func (in Inputs) Outdated(chain Chain) ([]string, error) {
-	var changed []string
-	for _, l := range chain {
-		key, err := in.Key(l.Name)
-		if err != nil {
-			return nil, err
-		}
-		if key != l.Key {
-			changed = append(changed, l.Name)
-		}
-	}
-	return changed, nil
 }
 
 // LayerName reports whether a layer can have that name: lowercase letters,
@@ -160,8 +164,9 @@ func Parent(name string) string {
 	}
 }
 
-// layers splits an image name into its layers, checking each.
-func layers(name string) ([]string, error) {
+// Layers splits an image name into its layers, checking each: none for
+// base.
+func Layers(name string) ([]string, error) {
 	if name == Base {
 		return nil, nil
 	}
@@ -172,100 +177,6 @@ func layers(name string) ([]string, error) {
 		}
 	}
 	return parts, nil
-}
-
-// Key is the image's key: 12 hex digits of a SHA-256 over its inputs and
-// its parent's key.
-func (in Inputs) Key(name string) (string, error) {
-	c, err := in.Chain(name)
-	if err != nil {
-		return "", err
-	}
-	return c.Key(), nil
-}
-
-// Chain is the image and every image it's built on, with their keys,
-// base first. A changed key anywhere in it changes every key above.
-func (in Inputs) Chain(name string) (Chain, error) {
-	parts, err := layers(name)
-	if err != nil {
-		return nil, err
-	}
-	if in.Backend == "" {
-		return nil, errors.New("image keys need a backend")
-	}
-	key, err := in.baseKey()
-	if err != nil {
-		return nil, err
-	}
-	chain := Chain{{Base, key}}
-	for i, layer := range parts {
-		img := strings.Join(parts[:i+1], "+")
-		if key, err = in.layerKey(img, layer, key); err != nil {
-			return nil, err
-		}
-		chain = append(chain, Link{img, key})
-	}
-	return chain, nil
-}
-
-// baseKey hashes base: the backend and its own files, base.yaml,
-// layers/base.sh, the image it starts from with its digest and the scripts
-// that convert it, the chosen features and its rebuild counter.
-func (in Inputs) baseKey() (string, error) {
-	k := newKeyHash()
-	k.field("backend", in.Backend)
-	for _, name := range slices.Sorted(maps.Keys(in.BackendFiles)) {
-		k.bytes("backend-file "+name, in.BackendFiles[name])
-	}
-	for _, f := range []string{"base.yaml", "layers/base.sh"} {
-		if err := k.own(in.Assets, f); err != nil {
-			return "", err
-		}
-	}
-	if in.From != "" {
-		k.field("from", in.From)
-		k.field("from-digest", in.FromDigest)
-		for _, f := range []string{"oci/build.sh", "oci/bootify.sh", "oci/kernel.sh"} {
-			if err := k.own(in.Assets, f); err != nil {
-				return "", err
-			}
-		}
-	}
-	for _, f := range in.BaseFeatures {
-		if !FeatureName(f) {
-			return "", fmt.Errorf("invalid feature name %q", f)
-		}
-		k.field("feature", f)
-		builtin, err := k.optional("builtin-feature", in.Assets, "features/"+f+".sh")
-		if err != nil {
-			return "", err
-		}
-		if !builtin {
-			if _, err := k.optional("user-feature", in.Features, f+".sh"); err != nil {
-				return "", err
-			}
-		}
-	}
-	k.rebuild(in, Base)
-	return k.sum(), nil
-}
-
-// layerKey hashes a layer: its parent's key, its name, its script (devvm's
-// for a built-in layer, else the user's) and its rebuild counter.
-func (in Inputs) layerKey(img, layer, parent string) (string, error) {
-	k := newKeyHash()
-	k.field("parent", parent)
-	k.field("layer", layer)
-	if IsBuiltin(layer) {
-		if err := k.own(in.Assets, "layers/"+layer+".sh"); err != nil {
-			return "", err
-		}
-	} else if _, err := k.optional("user-layer", in.Layers, layer+".sh"); err != nil {
-		return "", err
-	}
-	k.rebuild(in, img)
-	return k.sum(), nil
 }
 
 // keyHash hashes a sequence of fields, each a tag and a value, both
@@ -302,33 +213,16 @@ func (k keyHash) own(fsys fs.FS, name string) error {
 	return nil
 }
 
-// optional hashes a file that may be missing (a layer or feature the user
-// deleted): that's hashed as missing, so the key differs from any
-// contents. It reports whether the file is there.
-func (k keyHash) optional(tag string, fsys fs.FS, name string) (bool, error) {
-	if fsys != nil {
-		data, err := fs.ReadFile(fsys, name)
-		if err == nil {
-			k.bytes(tag+" "+name, data)
-			return true, nil
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return false, err
-		}
+// step hashes a recipe's step: its name, its script, how many arguments
+// it has and each one, and whether it runs as root.
+func (k keyHash) step(s Step) {
+	k.field("step", s.Name)
+	k.bytes("script", s.Data)
+	k.field("args", strconv.Itoa(len(s.Args)))
+	for _, a := range s.Args {
+		k.field("arg", a)
 	}
-	k.field("missing", tag+" "+name)
-	return false, nil
-}
-
-// rebuild hashes the image's rebuild counter on in's backend and base,
-// when it has one.
-func (k keyHash) rebuild(in Inputs, img string) {
-	if in.Rebuilds == nil {
-		return
-	}
-	if c := in.Rebuilds.Counter(in.Backend, in.From, img); c != "" {
-		k.field("rebuild", c)
-	}
+	k.field("root", strconv.FormatBool(s.Root))
 }
 
 // keyLen is how many hex digits an image's or a tool image's key has.

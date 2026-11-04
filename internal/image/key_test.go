@@ -2,223 +2,85 @@ package image
 
 import (
 	"io/fs"
-	"os"
-	"path/filepath"
-	"regexp"
 	"slices"
 	"testing"
-	"testing/fstest"
 
 	"github.com/w3cj/devvm/assets"
 )
 
-// env is a copy of the fixtures in testdata, and the inputs that read it.
-type env struct {
-	t   *testing.T
-	dir string
-	in  Inputs
-}
-
-func newEnv(t *testing.T, from string) *env {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.CopyFS(dir, os.DirFS("testdata")); err != nil {
-		t.Fatal(err)
-	}
-	e := &env{t: t, dir: dir, in: Inputs{
-		Backend:      "lima",
-		Assets:       os.DirFS(filepath.Join(dir, "root")),
-		Layers:       os.DirFS(filepath.Join(dir, "layers")),
-		Features:     os.DirFS(filepath.Join(dir, "features")),
-		BaseFeatures: []string{"fzf", "mine"},
-		Rebuilds:     counters{},
-	}}
-	if from != "" {
-		e.in.From = from
-		e.in.FromDigest = "node@sha256:aaaa"
-	}
-	return e
-}
-
-// edit appends a line to a file in the copy, creating it if need be.
-func (e *env) edit(name string) {
-	t := e.t
-	t.Helper()
-	f, err := os.OpenFile(filepath.Join(e.dir, name), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // a fixture in the test's folder
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("# edit\n"); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
+// input is an image's key input with every field set.
+func input() Input {
+	return Input{
+		Backend: "lima", Image: "foo", Parent: "0123456789ab", From: "node:24", FromDigest: "node@sha256:aaaa",
+		Own: map[string][]byte{"base.yaml": []byte("cpus: 4\n")},
+		Recipe: Recipe{Steps: []Step{
+			{Name: "foo.sh", Data: []byte("echo foo\n"), Args: []string{"a", "b"}},
+			{Name: "bar.sh", Data: []byte("echo bar\n"), Root: true},
+		}},
+		Missing: "baz.sh", Rebuild: "1",
 	}
 }
 
-// counters are rebuild counters by backend, from and name.
-type counters map[[3]string]string
-
-func (c counters) Counter(backend, from, name string) string {
-	return c[[3]string{backend, from, name}]
-}
-
-// bump changes the rebuild counter of name on backend, from.
-func (e *env) bump(backend, from, name string) {
-	c := e.in.Rebuilds.(counters)
-	c[[3]string{backend, from, name}] += "1"
-}
-
-func (e *env) remove(name string) {
-	e.t.Helper()
-	if err := os.Remove(filepath.Join(e.dir, name)); err != nil {
-		e.t.Fatal(err)
+// Each field of a key's input, and each part of each step, changes the
+// key; the same input is the same key, 12 hex digits.
+func TestKeyChangesWithEachField(t *testing.T) {
+	first := input().Key()
+	if !IsKey(first) || input().Key() != first {
+		t.Fatalf("key %q, then %q", first, input().Key())
 	}
-}
-
-var images = []string{"base", "foo", "foo+bar"}
-
-func (e *env) keys(t *testing.T) map[string]string {
-	t.Helper()
-	keys := map[string]string{}
-	for _, img := range images {
-		k, err := e.in.Key(img)
-		if err != nil {
-			t.Fatalf("%s: %v", img, err)
-		}
-		keys[img] = k
-	}
-	return keys
-}
-
-func TestKeyChangesWithEachInput(t *testing.T) {
-	all := images
-	above := []string{"foo", "foo+bar"}
-	tests := []struct {
-		name   string
-		from   string
-		change func(e *env)
-		want   []string // the images whose keys change
-	}{
-		{"base.yaml", "", func(e *env) { e.edit("root/base.yaml") }, all},
-		{"layers/base.sh", "", func(e *env) { e.edit("root/layers/base.sh") }, all},
-		{"the backend", "", func(e *env) { e.in.Backend = "qemu" }, all},
-		{"a backend's own file", "", func(e *env) { e.in.BackendFiles = map[string][]byte{"ubuntu.img": []byte("x")} }, all},
-		{"no backend files is none", "", func(e *env) { e.in.BackendFiles = map[string][]byte{} }, nil},
-		{"a chosen built-in feature's script", "", func(e *env) { e.edit("root/features/fzf.sh") }, all},
-		{"a chosen user feature's script", "", func(e *env) { e.edit("features/mine.sh") }, all},
-		{"a chosen user feature deleted", "", func(e *env) { e.remove("features/mine.sh") }, all},
-		{"a feature chosen", "", func(e *env) { e.in.BaseFeatures = append(e.in.BaseFeatures, "omb") }, all},
-		{"a feature dropped", "", func(e *env) { e.in.BaseFeatures = []string{"fzf"} }, all},
-		{"the features' order", "", func(e *env) { e.in.BaseFeatures = []string{"mine", "fzf"} }, all},
-		{"--from", "", func(e *env) { e.in.From = "node:24"; e.in.FromDigest = "node@sha256:aaaa" }, all},
-		{"base's rebuild counter", "", func(e *env) { e.bump("lima", "", "base") }, all},
-		{"a layer's script", "", func(e *env) { e.edit("layers/foo.sh") }, above},
-		{"a layer's script deleted", "", func(e *env) { e.remove("layers/foo.sh") }, above},
-		{"the top layer's script", "", func(e *env) { e.edit("layers/bar.sh") }, []string{"foo+bar"}},
-		{"a layer's rebuild counter", "", func(e *env) { e.bump("lima", "", "foo") }, above},
-		{"the top layer's rebuild counter", "", func(e *env) { e.bump("lima", "", "foo+bar") }, []string{"foo+bar"}},
-
-		{"an unchosen feature's script", "", func(e *env) { e.edit("root/features/omb.sh") }, nil},
-		{"a user feature named like a built-in one", "", func(e *env) { e.edit("features/fzf.sh") }, nil},
-		{"a policy file", "", func(e *env) { e.edit("root/layers/base.policy") }, nil},
-		{"another layer", "", func(e *env) { e.edit("layers/baz.sh") }, nil},
-		{"oci scripts without --from", "", func(e *env) { e.edit("root/oci/build.sh") }, nil},
-		{"the digest without --from", "", func(e *env) { e.in.FromDigest = "x@sha256:bbbb" }, nil},
-		{"a rebuild counter for --from", "", func(e *env) { e.bump("lima", "node:24", "foo") }, nil},
-		{"another backend's rebuild counter", "", func(e *env) { e.bump("qemu", "", "base") }, nil},
-		{"the tools' build script", "", func(e *env) { e.edit("root/shared-tools/build.sh") }, nil},
-
-		{"the --from digest (a moved tag)", "node:24", func(e *env) { e.in.FromDigest = "node@sha256:bbbb" }, all},
-		{"another --from", "node:24", func(e *env) { e.in.From = "node:25" }, all},
-		{"oci/build.sh", "node:24", func(e *env) { e.edit("root/oci/build.sh") }, all},
-		{"oci/bootify.sh", "node:24", func(e *env) { e.edit("root/oci/bootify.sh") }, all},
-		{"oci/kernel.sh", "node:24", func(e *env) { e.edit("root/oci/kernel.sh") }, all},
-		{"a rebuild counter with --from", "node:24", func(e *env) { e.bump("lima", "node:24", "foo") }, above},
-		{"another --from's counter, once written alike", "node:24", func(e *env) { e.bump("lima", "node-24", "foo") }, nil},
-		{"another backend's counter with --from", "node:24", func(e *env) { e.bump("qemu", "node:24", "base") }, nil},
-		{"oci/try.sh", "node:24", func(e *env) { e.edit("root/oci/try.sh") }, nil},
-		{"a rebuild counter without --from", "node:24", func(e *env) { e.bump("lima", "", "foo") }, nil},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e := newEnv(t, tt.from)
-			before := e.keys(t)
-			tt.change(e)
-			after := e.keys(t)
-			for _, img := range images {
-				changed := before[img] != after[img]
-				if want := slices.Contains(tt.want, img); changed != want {
-					t.Errorf("%s: changed %v, want %v", img, changed, want)
-				}
-			}
-		})
-	}
-}
-
-func TestKeyIsStable(t *testing.T) {
-	a := newEnv(t, "")
-	b := newEnv(t, "") // the same files, copied elsewhere
-	first := a.keys(t)
-	for _, keys := range []map[string]string{a.keys(t), b.keys(t)} {
-		for _, img := range images {
-			if keys[img] != first[img] {
-				t.Errorf("%s: %s, then %s", img, first[img], keys[img])
-			}
+	for name, change := range map[string]func(in *Input){
+		"the backend":       func(in *Input) { in.Backend = "qemu" },
+		"the name":          func(in *Input) { in.Image = "bar" },
+		"the parent":        func(in *Input) { in.Parent = "ba9876543210" },
+		"--from":            func(in *Input) { in.From = "node:25" },
+		"--from's digest":   func(in *Input) { in.FromDigest = "node@sha256:bbbb" },
+		"an own file":       func(in *Input) { in.Own["base.yaml"] = []byte("cpus: 2\n") },
+		"another own file":  func(in *Input) { in.Own["x"] = nil },
+		"a step's name":     func(in *Input) { in.Recipe.Steps[0].Name = "x.sh" },
+		"a step's script":   func(in *Input) { in.Recipe.Steps[0].Data = []byte("echo x\n") },
+		"a step's argument": func(in *Input) { in.Recipe.Steps[0].Args = []string{"a", "c"} },
+		"a step more":       func(in *Input) { in.Recipe.Steps = append(in.Recipe.Steps, Step{}) },
+		"the steps' order":  func(in *Input) { slices.Reverse(in.Recipe.Steps) },
+		"a step as root":    func(in *Input) { in.Recipe.Steps[0].Root = true },
+		"a step not root":   func(in *Input) { in.Recipe.Steps[1].Root = false },
+		"what's missing":    func(in *Input) { in.Missing = "" },
+		"the rebuild":       func(in *Input) { in.Rebuild = "2" },
+	} {
+		in := input()
+		change(&in)
+		if in.Key() == first {
+			t.Errorf("%s: the same key", name)
 		}
 	}
-	shape := regexp.MustCompile(`^[0-9a-f]{12}$`)
-	for img, k := range first {
-		if !shape.MatchString(k) {
-			t.Errorf("%s: key %q isn't 12 hex digits", img, k)
-		}
-	}
-	if first["base"] == first["foo"] || first["foo"] == first["foo+bar"] {
-		t.Errorf("keys repeat: %v", first)
-	}
 }
 
-// Moving bytes from one input to the next must change the key: the inputs
+// Moving bytes from one field to the next changes the key: the fields
 // aren't simply joined.
 func TestKeyFieldsAreSeparate(t *testing.T) {
-	key := func(files fstest.MapFS, features []string) string {
-		t.Helper()
-		k, err := Inputs{Backend: "lima", Assets: files, BaseFeatures: features}.Key(Base)
-		if err != nil {
-			t.Fatal(err)
+	steps := func(ss ...Step) string { return Input{Backend: "lima", Image: Base, Recipe: Recipe{Steps: ss}}.Key() }
+	for name, pair := range map[string][2]string{
+		"a line from one script to the next": {
+			steps(Step{Name: "a.sh", Data: []byte("x\n")}, Step{Name: "b.sh", Data: []byte("y\n")}),
+			steps(Step{Name: "a.sh", Data: []byte("x\ny\n")}, Step{Name: "b.sh"}),
+		},
+		"a step's name and its script": {
+			steps(Step{Name: "a", Data: []byte("b")}), steps(Step{Name: "ab"}),
+		},
+		"one argument or two": {
+			steps(Step{Args: []string{"a b"}}), steps(Step{Args: []string{"a", "b"}}),
+		},
+		"an argument or the script": {
+			steps(Step{Data: []byte("a"), Args: []string{}}), steps(Step{Args: []string{"a"}}),
+		},
+		"no step or an empty one": {steps(), steps(Step{})},
+	} {
+		if pair[0] == pair[1] {
+			t.Errorf("%s: the same key", name)
 		}
-		return k
 	}
-	a := key(fstest.MapFS{"base.yaml": {Data: []byte("x\n")}, "layers/base.sh": {Data: []byte("y\n")}}, nil)
-	b := key(fstest.MapFS{"base.yaml": {Data: []byte("x\ny\n")}, "layers/base.sh": {Data: []byte("")}}, nil)
-	if a == b {
-		t.Error("moving a line from base.sh to base.yaml kept the key")
-	}
-	files := fstest.MapFS{
-		"base.yaml": {}, "layers/base.sh": {},
-		"features/a.sh": {Data: []byte("b")}, "features/ab.sh": {},
-	}
-	if key(files, []string{"a"}) == key(files, []string{"ab"}) {
-		t.Error("features a (script b) and ab (empty) have the same key")
-	}
-}
-
-func TestChain(t *testing.T) {
-	e := newEnv(t, "")
-	keys := e.keys(t)
-	c, err := e.in.Chain("foo+bar")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := Chain{{"base", keys["base"]}, {"foo", keys["foo"]}, {"foo+bar", keys["foo+bar"]}}
-	if !slices.Equal(c, want) {
-		t.Fatalf("got %v, want %v", c, want)
-	}
-	if s := c.String(); s != "base="+keys["base"]+" foo="+keys["foo"]+" foo+bar="+keys["foo+bar"] {
-		t.Errorf("String: %q", s)
-	}
-	if c.Key() != keys["foo+bar"] || Chain(nil).Key() != "" {
-		t.Errorf("Key: %q", c.Key())
+	own := func(files map[string][]byte) string { return Input{Backend: "lima", Image: Base, Own: files}.Key() }
+	if own(map[string][]byte{"a": []byte("b")}) == own(map[string][]byte{"ab": nil}) {
+		t.Error("own files a (b) and ab (empty) have the same key")
 	}
 }
 
@@ -230,97 +92,27 @@ func TestParent(t *testing.T) {
 	}
 }
 
-func TestKeyRefuses(t *testing.T) {
-	e := newEnv(t, "")
-	for _, name := range []string{"", "Foo", "foo+", "+foo", "base+foo", "foo+base", "foo/bar", "../x", "-x"} {
-		if _, err := e.in.Key(name); err == nil {
+// Layers splits an image's name, refusing one that isn't base or layers'.
+func TestLayers(t *testing.T) {
+	for name, want := range map[string][]string{"base": nil, "foo": {"foo"}, "foo+bar": {"foo", "bar"}} {
+		if got, err := Layers(name); err != nil || !slices.Equal(got, want) {
+			t.Errorf("Layers(%q) = %q, %v", name, got, err)
+		}
+	}
+	for _, name := range []string{"", "Foo", "foo+", "+foo", "base+foo", "foo+base", "foo/bar", "../x", "-x", "node"} {
+		if _, err := Layers(name); err == nil {
 			t.Errorf("%q: no error", name)
 		}
 	}
-
-	noBackend := e.in
-	noBackend.Backend = ""
-	if _, err := noBackend.Key(Base); err == nil {
-		t.Error("no backend: no error")
-	}
-
-	badFeature := e.in
-	badFeature.BaseFeatures = []string{"../x"}
-	if _, err := badFeature.Key(Base); err == nil {
-		t.Error("feature ../x: no error")
-	}
-
-	e.remove("root/layers/base.sh")
-	if _, err := e.in.Key("foo"); err == nil {
-		t.Error("no layers/base.sh: no error")
-	}
-
-	from := newEnv(t, "node:24")
-	from.remove("root/oci/kernel.sh")
-	if _, err := from.in.Key(Base); err == nil {
-		t.Error("--from without oci/kernel.sh: no error")
-	}
 }
 
-// Without user layers, features or rebuild counters, keys still work, and
-// a missing layer's key differs from an empty one's.
-func TestKeyWithoutUserFolders(t *testing.T) {
-	e := newEnv(t, "")
-	in := e.in
-	in.Layers, in.Features, in.Rebuilds = nil, nil, nil
-	in.BaseFeatures = []string{"fzf"}
-	missing, err := in.Key("foo")
-	if err != nil {
-		t.Fatal(err)
+func TestChainString(t *testing.T) {
+	c := Chain{{"base", "0123456789ab"}, {"foo", "ba9876543210"}}
+	if s := c.String(); s != "base=0123456789ab foo=ba9876543210" {
+		t.Errorf("String: %q", s)
 	}
-	in.Layers = fstest.MapFS{"foo.sh": {}}
-	empty, err := in.Key("foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if missing == empty {
-		t.Error("a missing layer and an empty one have the same key")
-	}
-}
-
-// A built-in layer's key hashes devvm's script, never the user's of the
-// same name; devvm's must be there.
-func TestBuiltinLayerKey(t *testing.T) {
-	e := newEnv(t, "")
-	key := func() string {
-		t.Helper()
-		k, err := e.in.Key("foo+docker")
-		if err != nil {
-			t.Fatal(err)
-		}
-		return k
-	}
-	first := key()
-	e.edit("layers/docker.sh") // the user's, made
-	if key() != first {
-		t.Error("a user's docker.sh changed the built-in layer's key")
-	}
-	e.edit("root/layers/docker.sh")
-	if key() == first {
-		t.Error("devvm's docker.sh didn't change its key")
-	}
-	e.remove("root/layers/docker.sh")
-	if _, err := e.in.Key("docker"); err == nil {
-		t.Error("no layers/docker.sh: no error")
-	}
-}
-
-// devvm's own files, embedded, give base and every built-in layer a key.
-func TestKeyOfTheRealFiles(t *testing.T) {
-	in := Inputs{Backend: "lima", Assets: assets.FS}
-	for _, name := range append([]string{Base}, Builtins...) {
-		key, err := in.Key(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(key) {
-			t.Errorf("%s: key %q", name, key)
-		}
+	if c.Key() != "ba9876543210" || Chain(nil).Key() != "" {
+		t.Errorf("Key: %q", c.Key())
 	}
 }
 
@@ -346,6 +138,15 @@ func TestBuiltins(t *testing.T) {
 	}
 }
 
+// The conversion's scripts are devvm's.
+func TestConversionScripts(t *testing.T) {
+	for _, name := range ConversionScripts {
+		if _, err := fs.Stat(assets.FS, name); err != nil {
+			t.Error(err)
+		}
+	}
+}
+
 func TestParseChain(t *testing.T) {
 	c := Chain{{"base", "0123456789ab"}, {"foo", "ba9876543210"}}
 	if got := ParseChain(c.String()); !slices.Equal(got, c) {
@@ -356,26 +157,6 @@ func TestParseChain(t *testing.T) {
 	}
 	if got := ParseChain(""); got != nil {
 		t.Errorf("ParseChain(\"\") = %v", got)
-	}
-}
-
-// A VM's chain is outdated where a key changed: that image and every one
-// above it, never those below.
-func TestOutdated(t *testing.T) {
-	e := newEnv(t, "")
-	chain, err := e.in.Chain("foo+bar")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, err := e.in.Outdated(chain); err != nil || got != nil {
-		t.Errorf("Outdated before a change = %q, %v", got, err)
-	}
-	e.edit("layers/foo.sh")
-	if got, err := e.in.Outdated(chain); err != nil || !slices.Equal(got, []string{"foo", "foo+bar"}) {
-		t.Errorf("Outdated after editing foo = %q, %v", got, err)
-	}
-	if _, err := e.in.Outdated(Chain{{"Bad", "x"}}); err == nil {
-		t.Error("Outdated took an invalid name")
 	}
 }
 

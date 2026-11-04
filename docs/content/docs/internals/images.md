@@ -24,9 +24,11 @@ devvm builds images in layers and caches them, as Docker does. `base` comes firs
 
 | Image | Its key hashes |
 | --- | --- |
-| `base` | the backend, `assets/base.yaml`, `assets/layers/base.sh`, the chosen features in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it; on Lima, Ubuntu's pinned cloud image for the host (its release and SHA-256) |
+| `base` | the backend, `assets/base.yaml`, `assets/layers/base.sh`, the chosen features that have a script, in order (each name and its script), its rebuild counter, and with `--from`, the image, its digest and the scripts that convert it; on Lima, Ubuntu's pinned cloud image for the host (its release and SHA-256), and the user that a `--from` conversion puts in the image (its name, uid and home folder) with the converted disk's size |
 | a built-in layer | its parent's key, its name, its script (`assets/layers/<name>.sh`) and its rebuild counter |
 | a custom layer | its parent's key, its name, its script (`~/.config/devvm/layers/<name>.sh`) and its rebuild counter |
+
+devvm puts together each image's recipe once, as the ordered list of steps its build runs. A step is a script with its name, its arguments and whether it runs as root, and the recipe of `base` is `base.sh` and then the chosen features' scripts, while a layer's recipe is its own script. The key hashes that recipe, and the backend is given the same recipe and runs it as it is, so nothing reaches a build that its key doesn't hold. A chosen feature without a script isn't in the recipe, and devvm warns about it (`unknown_feature`) when it builds `base`. The user's CAs and a company proxy's variables are added to each step while it runs and taken out again, so they aren't in the recipe, and the image keeps none of them. The files a backend reads itself, such as `base.yaml` and Lima's pinned Ubuntu image, go into `base`'s key beside its recipe.
 
 A key is the first 12 hex digits of a SHA-256. Each input goes into the hash with its length, so different inputs never hash the same bytes. An image's record keeps its chain, which is the key of each image it's built on, from `base` up.
 

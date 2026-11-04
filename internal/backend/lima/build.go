@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -63,9 +64,9 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		}
 	})
 	// Its steps: create or clone, configure (when Start edits it) and
-	// start, each script, stop; with --from, the conversion's first, and
-	// an image only Docker has its export.
-	steps := 3 + len(spec.Scripts)
+	// start, each of its recipe's, stop; with --from, the conversion's
+	// first, and an image only Docker has its export.
+	steps := 3 + len(spec.Recipe.Steps)
 	if edits {
 		steps++
 	}
@@ -175,7 +176,8 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 
 // buildScripts runs a build's scripts in its VM (inst), in order: the
 // user's CAs added and sudo told to keep the build's proxy (hp) as root,
-// spec's scripts with hp's variables, then both taken out again.
+// spec's recipe as it is, each step after the CAs' and hp's variables,
+// then both taken out again.
 func buildScripts(ctx context.Context, l *Lima, inst string, spec backend.ImageSpec, hp backend.HostProxy) error {
 	sudoOn, sudoOff := sudoScripts(hp)
 	for _, s := range []backend.Script{spec.Trust.Add, sudoOn} {
@@ -183,8 +185,8 @@ func buildScripts(ctx context.Context, l *Lima, inst string, spec backend.ImageS
 			return err
 		}
 	}
-	for _, s := range spec.Scripts {
-		if err := l.runScript(ctx, inst, withProxy(hp, s), false); err != nil {
+	for _, s := range spec.Recipe.Steps {
+		if err := l.runStep(ctx, inst, s, slices.Concat(spec.Trust.Env, proxyExports(hp))); err != nil {
 			return err
 		}
 	}
@@ -307,6 +309,25 @@ func (l *images) runScript(ctx context.Context, vm string, s backend.Script, roo
 		cmd = l.limactl(ctx, "shell", "--workdir", "/", vm, "sudo", "sh", "-s")
 	}
 	cmd.Stdin = bytes.NewReader(s.Data)
+	if err := l.Runner.Run(ctx, msg.RunningScript(s.Name, vm), cmd); err != nil {
+		return backend.Logged(msg.ScriptFailed(s.Name, vm))
+	}
+	return nil
+}
+
+// runStep runs a recipe's step in the VM: its script after env (the
+// build's own exports, which the image keeps nothing of), fed on its
+// standard input to bash with its arguments, as the VM's user, or as root.
+func (l *images) runStep(ctx context.Context, vm string, s image.Step, env []byte) error {
+	argv := []string{"shell", vm, "bash", "-s"}
+	if s.Root {
+		argv = []string{"shell", "--workdir", "/", vm, "sudo", "bash", "-s"}
+	}
+	if len(s.Args) > 0 {
+		argv = slices.Concat(argv, []string{"--"}, s.Args)
+	}
+	cmd := l.limactl(ctx, argv...)
+	cmd.Stdin = bytes.NewReader(slices.Concat(env, s.Data))
 	if err := l.Runner.Run(ctx, msg.RunningScript(s.Name, vm), cmd); err != nil {
 		return backend.Logged(msg.ScriptFailed(s.Name, vm))
 	}

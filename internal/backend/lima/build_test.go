@@ -14,6 +14,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/ubuntu"
@@ -98,7 +99,7 @@ func TestBuildImageBase(t *testing.T) {
 	}
 	built, err := l.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base", Key: baseKey, Net: backend.NetInternet,
-		Scripts: []backend.Script{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}},
+		Recipe: image.Recipe{Steps: []image.Step{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +142,12 @@ func TestBuildImageLayer(t *testing.T) {
 	writeTestFile(t, l.disk(inst), "qcow2")
 	built, err := l.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetInternet,
-		Scripts: []backend.Script{{Name: "foo.sh", Data: []byte("#!/bin/bash\necho foo\n")}},
+		Recipe: image.Recipe{Steps: []image.Step{
+			{Name: "foo.sh", Data: []byte("#!/bin/bash\necho foo\n")},
+			{Name: "args.sh", Data: []byte("echo \"$1\"\n"), Args: []string{"a", "b c"}},
+			{Name: "root.sh", Data: []byte("id -u\n"), Root: true},
+		}},
+		Trust: backend.Trust{Add: backend.Script{Name: "ca.sh", Data: []byte("add\n")}, Remove: backend.Script{Name: "ca.sh", Data: []byte("rm\n")}, Env: []byte("export CA=1\n")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -154,10 +160,30 @@ func TestBuildImageLayer(t *testing.T) {
 		"limactl clone --tty=false --mount-none devvm-img-" + baseKey + " " + inst,
 		"limactl edit --tty=false " + inst + " --set .propagateProxyEnv=false --set .portForwards = ",
 		"limactl start --tty=false " + inst,
+		"limactl shell --workdir / " + inst + " sudo sh -s",
 		"limactl shell " + inst + " bash -s",
+		"limactl shell " + inst + " bash -s -- a b c",
+		"limactl shell --workdir / " + inst + " sudo bash -s",
+		"limactl shell --workdir / " + inst + " sudo sh -s",
 		"limactl shell --workdir / " + inst + " sync",
 		"limactl stop " + inst,
 	})
+	// Each step as it is, after the CAs' variables; the CAs' own scripts
+	// without them.
+	var inputs []string
+	for _, c := range f.calls {
+		if slices.Contains(c.argv, "-s") {
+			inputs = append(inputs, c.stdin)
+		}
+	}
+	if want := []string{"add\n", "export CA=1\n#!/bin/bash\necho foo\n", "export CA=1\necho \"$1\"\n", "export CA=1\nid -u\n", "rm\n"}; !slices.Equal(inputs, want) {
+		t.Errorf("inputs %q, want %q", inputs, want)
+	}
+	for _, c := range f.calls {
+		if i := slices.Index(c.argv, "--"); i >= 0 && !slices.Equal(c.argv[i+1:], []string{"a", "b c"}) {
+			t.Errorf("args.sh's arguments: %q", c.argv)
+		}
+	}
 	if fi, err := os.Stat(l.disk(inst)); err != nil || fi.Mode().Perm()&0o222 != 0 {
 		t.Errorf("the image's disk: %v, %v", fi.Mode(), err)
 	}
@@ -220,7 +246,7 @@ func TestBuildImageHostProxy(t *testing.T) {
 			}
 			if _, err := l.BuildImage(t.Context(), backend.ImageSpec{
 				Image: "foo", Key: layerKey, Parent: baseKey, Net: backend.NetInternet,
-				Scripts: []backend.Script{{Name: "foo.sh", Data: []byte("#!/bin/bash\necho foo\n")}},
+				Recipe: image.Recipe{Steps: []image.Step{{Name: "foo.sh", Data: []byte("#!/bin/bash\necho foo\n")}}},
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -349,7 +375,7 @@ func TestBuildImageScriptFails(t *testing.T) {
 	f.fail = []string{"limactl shell " + inst + " bash -s"}
 	_, err := l.BuildImage(t.Context(), backend.ImageSpec{
 		Image: "base", Key: baseKey, Net: backend.NetInternet,
-		Scripts: []backend.Script{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}},
+		Recipe: image.Recipe{Steps: []image.Step{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}}},
 	})
 	e, ok := errors.AsType[*backend.LoggedError](err)
 	if !ok || e.Msg.ID() != "script_failed" {

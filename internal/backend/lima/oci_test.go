@@ -67,11 +67,13 @@ func TestExportIs(t *testing.T) {
 }
 
 // The conversion's scripts are written from devvm's files into its own
-// folder, beside vm/: oci/ whole, owner-only, and guest/ca.sh only with
-// the user's CAs; nothing else of devvm's files.
+// folder, beside vm/, owner-only: the scripts base's key hashes, and
+// guest/ca.sh only with the user's CAs; nothing else of devvm's files,
+// oci/try.sh included.
 func TestWriteScripts(t *testing.T) {
 	own := fstest.MapFS{
 		"oci/build.sh": {Data: []byte("build\n")}, "oci/bootify.sh": {Data: []byte("bootify\n")},
+		"oci/kernel.sh": {Data: []byte("kernel\n")}, "oci/try.sh": {Data: []byte("try\n")},
 		"oci/sub/x.sh": {Data: []byte("x\n")}, "guest/ca.sh": {Data: []byte("ca\n")},
 		"guest/sync.sh": {Data: []byte("sync\n")}, "base.yaml": {Data: []byte("cpus: 4\n")},
 	}
@@ -97,7 +99,7 @@ func TestWriteScripts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := []string{"oci -rwx------", "oci/bootify.sh -rw-------", "oci/build.sh -rw-------", "oci/sub -rwx------", "oci/sub/x.sh -rw-------"}
+		want := []string{"oci -rwx------", "oci/bootify.sh -rw-------", "oci/build.sh -rw-------", "oci/kernel.sh -rw-------"}
 		if cas {
 			want = append([]string{"guest -rwx------", "guest/ca.sh -rw-------"}, want...)
 		}
@@ -108,9 +110,13 @@ func TestWriteScripts(t *testing.T) {
 			t.Errorf("build.sh = %q", b)
 		}
 	}
-	// devvm's files lacking ca.sh: an error.
-	if _, _, err := writeScripts(fstest.MapFS{"oci/build.sh": {Data: []byte("b\n")}}, t.TempDir(), true); err == nil {
+	// devvm's files lacking ca.sh, or a conversion script: an error.
+	delete(own, "guest/ca.sh")
+	if _, _, err := writeScripts(own, t.TempDir(), true); err == nil {
 		t.Error("no ca.sh, no error")
+	}
+	if _, _, err := writeScripts(fstest.MapFS{"oci/build.sh": {Data: []byte("b\n")}}, t.TempDir(), false); err == nil {
+		t.Error("no bootify.sh, no error")
 	}
 }
 

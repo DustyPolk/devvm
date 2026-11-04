@@ -82,51 +82,19 @@ type Images struct{ *Env }
 // Choice is base's features: asking which it gets, or setting them.
 type Choice struct{ *Env }
 
-// Inputs returns what the backend's image keys hash, read from disk:
-// From's digest as last recorded.
-func (b *Env) Inputs() (image.Inputs, error) {
-	digest, err := from.Recorded(b.Dirs, b.From)
-	if err != nil {
-		return image.Inputs{}, err
-	}
-	features, err := b.chosenFeatures()
-	if err != nil {
-		return image.Inputs{}, err
-	}
-	own := b.Backend.KeyFiles()
-	rebuilds, err := state.ReadRebuilds(b.Dirs)
-	if err != nil {
-		return image.Inputs{}, err
-	}
-	return image.Inputs{
-		Backend:      b.Backend.Name(),
-		BackendFiles: own,
-		Assets:       b.Assets,
-		Layers:       os.DirFS(b.Dirs.Layers()),
-		Features:     os.DirFS(b.Dirs.Features()),
-		BaseFeatures: features,
-		Rebuilds:     rebuilds,
-		From:         b.From,
-		FromDigest:   digest,
-	}, nil
-}
-
 // Key returns an image's key as it is now.
 func (b *Env) Key(name string) (string, error) {
-	in, err := b.Inputs()
-	if err != nil {
-		return "", err
-	}
-	return in.Key(name)
+	c, err := b.Chain(name)
+	return c.Key(), err
 }
 
 // Chain returns an image's chain as it is now.
 func (b *Env) Chain(name string) (image.Chain, error) {
-	in, err := b.Inputs()
+	in, err := b.inputs()
 	if err != nil {
 		return nil, err
 	}
-	return in.Chain(name)
+	return b.chain(in, name)
 }
 
 // lookUp looks up From's digest, once a run, before any key that builds
@@ -269,19 +237,26 @@ func (b Builds) build(ctx context.Context, name string) error {
 	if err := b.lookUp(ctx); err != nil {
 		return err
 	}
-	chain, err := b.Chain(name)
+	in, err := b.inputs()
 	if err != nil {
 		return err
+	}
+	plans, err := b.plan(in, name)
+	if err != nil {
+		return err
+	}
+	chain, p := chainOf(plans), plans[len(plans)-1]
+	if p.Missing != "" {
+		// Deleted since CheckLayers.
+		return msg.UnknownLayer(strings.TrimSuffix(p.Missing, ".sh"), strings.Join(b.Layers(), " "))
+	}
+	digest := ""
+	if in.from != nil {
+		digest = in.from.Digest
 	}
 	key := chain.Key()
-	digest, err := from.Recorded(b.Dirs, b.From)
-	if err != nil {
-		return err
-	}
-	spec := backend.ImageSpec{Image: name, Key: key, Net: backend.NetInternet}
-	if name == image.Base && b.From != "" {
-		spec.From = &backend.From{Ref: b.From, Digest: digest}
-	}
+	// What its key hashes is what it's given.
+	spec := backend.ImageSpec{Image: name, Key: key, Parent: p.Parent, From: p.from, Recipe: p.Recipe, Net: backend.NetInternet}
 	// One devvm at a time builds it: another waits, then finds it built,
 	// or left over from a build that didn't finish.
 	unlock, err := b.lockBuild(ctx, name, key)
@@ -304,37 +279,19 @@ func (b Builds) build(ctx context.Context, name string) error {
 			return err
 		}
 	}
-	libc := ""
-	data, err := fs.ReadFile(b.Assets, "layers/base.sh")
-	if err != nil {
-		return err
+	for _, f := range p.unknown {
+		b.Warn(msg.UnknownFeature(f))
 	}
-	script := backend.Script{Name: "base.sh", Data: data}
+	libc := ""
 	if parent := image.Parent(name); parent != "" {
 		if err := b.build(ctx, parent); err != nil {
 			return err
 		}
-		spec.Parent = chain[len(chain)-2].Key
 		rec, err := state.ReadImage(b.Dirs, spec.Parent)
 		if err != nil {
 			return err
 		}
 		libc = rec.Libc
-		layer := name[strings.LastIndex(name, "+")+1:]
-		data, err := b.LayerData(layer)
-		if err != nil {
-			return err
-		}
-		script = backend.Script{Name: layer + ".sh", Data: data}
-	}
-	spec.Scripts = []backend.Script{script}
-	if name == image.Base {
-		// Then its features, in the order chosen.
-		features, err := b.featureScripts()
-		if err != nil {
-			return err
-		}
-		spec.Scripts = append(spec.Scripts, features...)
 	}
 	// The user's CAs, trusted while it builds: the image keeps none of
 	// them, so its key holds none.
@@ -344,9 +301,6 @@ func (b Builds) build(ctx context.Context, name string) error {
 	}
 	if spec.Trust, err = cas.Build(b.Assets); err != nil {
 		return err
-	}
-	for i, s := range spec.Scripts {
-		spec.Scripts[i] = cas.Script(s)
 	}
 	// Before anything of this image is made; its parent is built.
 	need := func(f backend.Floors) uint64 { return f.Image }
@@ -533,7 +487,7 @@ func (b Images) List(ctx context.Context) ([]Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	in, err := b.Inputs()
+	in, err := b.inputs()
 	if err != nil {
 		return nil, err
 	}
@@ -552,11 +506,10 @@ func (b Images) List(ctx context.Context) ([]Image, error) {
 		}
 		img := Image{Key: key, Name: rec.Name, From: rec.From, Digest: rec.Digest, Chain: image.ParseChain(rec.Chain)}
 		// Each against its own base's inputs, as last recorded.
-		in.From = rec.From
-		if in.FromDigest, err = from.Recorded(b.Dirs, rec.From); err != nil {
+		if in.from, err = b.fromAsRecorded(rec.From); err != nil {
 			return nil, err
 		}
-		if k, err := in.Key(rec.Name); err == nil && k == key {
+		if c, err := b.chain(in, rec.Name); err == nil && c.Key() == key {
 			img.Current = true
 		}
 		out = append(out, img)
@@ -641,11 +594,11 @@ func (b Builds) Rebuild(ctx context.Context, name string) error {
 // base first: chain is the VM's, as its state records it. A --from base's
 // digest is the one last recorded, so it looks nothing up.
 func (b Builds) Outdated(chain string) ([]string, error) {
-	in, err := b.Inputs()
+	in, err := b.inputs()
 	if err != nil {
 		return nil, err
 	}
-	return in.Outdated(image.ParseChain(chain))
+	return b.outdated(in, image.ParseChain(chain))
 }
 
 // WarnIfOutdated warns when an image a VM was made from has changed since

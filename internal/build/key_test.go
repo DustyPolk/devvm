@@ -1,0 +1,415 @@
+package build
+
+import (
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/w3cj/devvm/assets"
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/image"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// keyEnv is testEnv with devvm's features fzf and omb, the user's mine,
+// devvm's docker layer and base's policy, the conversion's scripts and
+// try.sh, and the features fzf and mine chosen; with from, base starts
+// from it, its digest recorded.
+func keyEnv(t *testing.T, from string) *Env {
+	t.Helper()
+	b, _ := testEnv(t)
+	own := assetsDir(b)
+	for name, data := range map[string]string{
+		"features/fzf.sh": "# fzf\n", "features/omb.sh": "# omb\n", "layers/docker.sh": "# docker\n",
+		"layers/base.policy": "example.com\n", "oci/build.sh": "# build\n", "oci/bootify.sh": "# bootify\n",
+		"oci/kernel.sh": "# kernel\n", "oci/try.sh": "# try\n",
+	} {
+		write(t, filepath.Join(own, name), data)
+	}
+	write(t, filepath.Join(b.Dirs.Features(), "mine.sh"), "# mine\n")
+	saveFeatures(t, b.Dirs, []string{"fzf", "mine"})
+	if from != "" {
+		b.From = from
+		if err := state.SetFromDigest(b.Dirs, from, "node@sha256:aaaa"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return b
+}
+
+var keyImages = []string{"base", "foo", "foo+bar"}
+
+// keys are b's keys of keyImages.
+func keys(t *testing.T, b *Env) map[string]string {
+	t.Helper()
+	keys := map[string]string{}
+	for _, img := range keyImages {
+		k, err := b.Key(img)
+		if err != nil {
+			t.Fatalf("%s: %v", img, err)
+		}
+		keys[img] = k
+	}
+	return keys
+}
+
+// edit appends a line to a file, making it if need be.
+func edit(t *testing.T, path string) {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec // the test's own folder
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	write(t, path, string(data)+"# edit\n")
+}
+
+func remove(t *testing.T, path string) {
+	t.Helper()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func bump(t *testing.T, b *Env, backendName, from, name string) {
+	t.Helper()
+	if err := state.BumpRebuild(b.Dirs, backendName, from, name); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Each image's key changes with each of its inputs, and with its parent's
+// key, and with nothing else.
+func TestKeyChangesWithEachInput(t *testing.T) {
+	all, above := keyImages, []string{"foo", "foo+bar"}
+	own := func(b *Env, name string) string { return filepath.Join(assetsDir(b), name) }
+	layer := func(b *Env, name string) string { return filepath.Join(b.Dirs.Layers(), name) }
+	feature := func(b *Env, name string) string { return filepath.Join(b.Dirs.Features(), name) }
+	tests := []struct {
+		name   string
+		from   string
+		change func(t *testing.T, b *Env)
+		want   []string // the images whose keys change
+	}{
+		{"base.yaml", "", func(t *testing.T, b *Env) { edit(t, own(b, "base.yaml")) }, all},
+		{"layers/base.sh", "", func(t *testing.T, b *Env) { edit(t, own(b, "layers/base.sh")) }, all},
+		{"the backend", "", func(_ *testing.T, b *Env) { b.Backend = backendtest.New("other", b.Backend.Caps()) }, all},
+		{"a backend's own file", "", func(_ *testing.T, b *Env) {
+			b.Backend.(*backendtest.Fake).OwnFiles = map[string][]byte{"ubuntu.img": []byte("x")}
+		}, all},
+		{"no backend files is none", "", func(_ *testing.T, b *Env) { b.Backend.(*backendtest.Fake).OwnFiles = map[string][]byte{} }, nil},
+		{"a chosen built-in feature's script", "", func(t *testing.T, b *Env) { edit(t, own(b, "features/fzf.sh")) }, all},
+		{"a chosen user feature's script", "", func(t *testing.T, b *Env) { edit(t, feature(b, "mine.sh")) }, all},
+		{"a chosen user feature deleted", "", func(t *testing.T, b *Env) { remove(t, feature(b, "mine.sh")) }, all},
+		{"a feature chosen", "", func(t *testing.T, b *Env) { saveFeatures(t, b.Dirs, []string{"fzf", "mine", "omb"}) }, all},
+		{"a feature dropped", "", func(t *testing.T, b *Env) { saveFeatures(t, b.Dirs, []string{"fzf"}) }, all},
+		{"the features' order", "", func(t *testing.T, b *Env) { saveFeatures(t, b.Dirs, []string{"mine", "fzf"}) }, all},
+		{"--from", "", func(_ *testing.T, b *Env) {
+			b.From = "node:24@sha256:" + strings.Repeat("a", 64)
+		}, all},
+		{"base's rebuild counter", "", func(t *testing.T, b *Env) { bump(t, b, "fake", "", "base") }, all},
+		{"a layer's script", "", func(t *testing.T, b *Env) { edit(t, layer(b, "foo.sh")) }, above},
+		{"a layer's script deleted", "", func(t *testing.T, b *Env) { remove(t, layer(b, "foo.sh")) }, above},
+		{"the top layer's script", "", func(t *testing.T, b *Env) { edit(t, layer(b, "bar.sh")) }, []string{"foo+bar"}},
+		{"a layer's rebuild counter", "", func(t *testing.T, b *Env) { bump(t, b, "fake", "", "foo") }, above},
+		{"the top layer's rebuild counter", "", func(t *testing.T, b *Env) { bump(t, b, "fake", "", "foo+bar") }, []string{"foo+bar"}},
+
+		{"an unchosen feature's script", "", func(t *testing.T, b *Env) { edit(t, own(b, "features/omb.sh")) }, nil},
+		{"a user feature named like a built-in one", "", func(t *testing.T, b *Env) { edit(t, feature(b, "fzf.sh")) }, nil},
+		{"a policy file", "", func(t *testing.T, b *Env) { edit(t, own(b, "layers/base.policy")) }, nil},
+		{"another layer", "", func(t *testing.T, b *Env) { edit(t, layer(b, "baz.sh")) }, nil},
+		{"oci scripts without --from", "", func(t *testing.T, b *Env) { edit(t, own(b, "oci/build.sh")) }, nil},
+		{"a rebuild counter for --from", "", func(t *testing.T, b *Env) { bump(t, b, "fake", "node:24", "foo") }, nil},
+		{"another backend's rebuild counter", "", func(t *testing.T, b *Env) { bump(t, b, "qemu", "", "base") }, nil},
+		{"the tools' build script", "", func(t *testing.T, b *Env) { edit(t, own(b, "shared-tools/build.sh")) }, nil},
+
+		{"the --from digest (a moved tag)", "node:24", func(t *testing.T, b *Env) {
+			if err := state.SetFromDigest(b.Dirs, "node:24", "node@sha256:bbbb"); err != nil {
+				t.Fatal(err)
+			}
+		}, all},
+		{"another --from", "node:24", func(_ *testing.T, b *Env) { b.From = "node:25" }, all},
+		{"oci/build.sh", "node:24", func(t *testing.T, b *Env) { edit(t, own(b, "oci/build.sh")) }, all},
+		{"oci/bootify.sh", "node:24", func(t *testing.T, b *Env) { edit(t, own(b, "oci/bootify.sh")) }, all},
+		{"oci/kernel.sh", "node:24", func(t *testing.T, b *Env) { edit(t, own(b, "oci/kernel.sh")) }, all},
+		{"a rebuild counter with --from", "node:24", func(t *testing.T, b *Env) { bump(t, b, "fake", "node:24", "foo") }, above},
+		{"another --from's counter, once written alike", "node:24", func(t *testing.T, b *Env) { bump(t, b, "fake", "node-24", "foo") }, nil},
+		{"another backend's counter with --from", "node:24", func(t *testing.T, b *Env) { bump(t, b, "qemu", "node:24", "base") }, nil},
+		{"oci/try.sh", "node:24", func(t *testing.T, b *Env) { edit(t, own(b, "oci/try.sh")) }, nil},
+		{"a rebuild counter without --from", "node:24", func(t *testing.T, b *Env) { bump(t, b, "fake", "", "foo") }, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := keyEnv(t, tt.from)
+			before := keys(t, b)
+			tt.change(t, b)
+			after := keys(t, b)
+			for _, img := range keyImages {
+				changed := before[img] != after[img]
+				if want := slices.Contains(tt.want, img); changed != want {
+					t.Errorf("%s: changed %v, want %v", img, changed, want)
+				}
+			}
+		})
+	}
+}
+
+// The same files elsewhere give the same keys, each 12 hex digits, and
+// different images different ones.
+func TestKeyIsStable(t *testing.T) {
+	a, b := keyEnv(t, ""), keyEnv(t, "")
+	first := keys(t, a)
+	for _, ks := range []map[string]string{keys(t, a), keys(t, b)} {
+		for _, img := range keyImages {
+			if ks[img] != first[img] {
+				t.Errorf("%s: %s, then %s", img, first[img], ks[img])
+			}
+		}
+	}
+	for img, k := range first {
+		if !image.IsKey(k) {
+			t.Errorf("%s: key %q isn't 12 hex digits", img, k)
+		}
+	}
+	if first["base"] == first["foo"] || first["foo"] == first["foo+bar"] {
+		t.Errorf("keys repeat: %v", first)
+	}
+}
+
+// A chain is each image's key, base first.
+func TestChain(t *testing.T) {
+	b := keyEnv(t, "")
+	ks := keys(t, b)
+	c, err := b.Chain("foo+bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (image.Chain{{Name: "base", Key: ks["base"]}, {Name: "foo", Key: ks["foo"]}, {Name: "foo+bar", Key: ks["foo+bar"]}}); !slices.Equal(c, want) {
+		t.Fatalf("got %v, want %v", c, want)
+	}
+}
+
+// What a key can't be made of is an error: an image name that isn't
+// one, a backend without a name, a feature's name that isn't one, and
+// devvm's own scripts missing.
+func TestKeyRefuses(t *testing.T) {
+	b := keyEnv(t, "")
+	for _, name := range []string{"", "Foo", "foo+", "+foo", "base+foo", "foo+base", "foo/bar", "../x", "-x"} {
+		if _, err := b.Key(name); err == nil {
+			t.Errorf("%q: no error", name)
+		}
+	}
+	in, err := b.inputs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.features = []string{"../x"}
+	if _, err := b.plan(in, image.Base); err == nil {
+		t.Error("feature ../x: no error")
+	}
+	unnamed := *b
+	unnamed.Backend = backendtest.New("", b.Backend.Caps())
+	if _, err := unnamed.Key(image.Base); err == nil {
+		t.Error("no backend: no error")
+	}
+	for _, name := range []string{"base.yaml", "layers/docker.sh", "layers/base.sh"} {
+		remove(t, filepath.Join(assetsDir(b), name))
+		if _, err := b.Key("foo+docker"); err == nil {
+			t.Errorf("no %s: no error", name)
+		}
+	}
+	from := keyEnv(t, "node:24")
+	remove(t, filepath.Join(assetsDir(from), "oci/kernel.sh"))
+	if _, err := from.Key(image.Base); err == nil {
+		t.Error("--from without oci/kernel.sh: no error")
+	}
+}
+
+// A deleted layer's key differs from an empty one's, and a user's
+// docker.sh changes nothing: a built-in layer is devvm's script.
+func TestKeyOfMissingAndBuiltinLayers(t *testing.T) {
+	b := keyEnv(t, "")
+	remove(t, filepath.Join(b.Dirs.Layers(), "foo.sh"))
+	missing, err := b.Key("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(b.Dirs.Layers(), "foo.sh"), "")
+	if empty, err := b.Key("foo"); err != nil || empty == missing {
+		t.Errorf("a missing layer and an empty one: %s, %s, %v", missing, empty, err)
+	}
+	first, _ := b.Key("foo+docker")
+	edit(t, filepath.Join(b.Dirs.Layers(), "docker.sh"))
+	if k, _ := b.Key("foo+docker"); k != first {
+		t.Error("a user's docker.sh changed the built-in layer's key")
+	}
+}
+
+// devvm's own files, embedded, give base and every built-in layer a key.
+func TestKeyOfTheRealFiles(t *testing.T) {
+	b, _ := testEnv(t)
+	b.Assets = assets.FS
+	for _, name := range append([]string{image.Base}, image.Builtins...) {
+		if key, err := b.Key(name); err != nil || !image.IsKey(key) {
+			t.Errorf("%s: key %q, %v", name, key, err)
+		}
+	}
+}
+
+// A VM's chain is outdated where a key changed: that image and every one
+// above it, never those below.
+func TestOutdated(t *testing.T) {
+	b := keyEnv(t, "")
+	chain, err := b.Chain("foo+bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bs := Builds{b}
+	if got, err := bs.Outdated(chain.String()); err != nil || got != nil {
+		t.Errorf("Outdated before a change = %q, %v", got, err)
+	}
+	edit(t, filepath.Join(b.Dirs.Layers(), "foo.sh"))
+	if got, err := bs.Outdated(chain.String()); err != nil || !slices.Equal(got, []string{"foo", "foo+bar"}) {
+		t.Errorf("Outdated after editing foo = %q, %v", got, err)
+	}
+	if _, err := bs.Outdated("Bad=0123456789ab"); err == nil {
+		t.Error("Outdated took an invalid name")
+	}
+}
+
+// sent builds names on a fresh fake backend named backendName, as b is
+// otherwise, and returns, by image name, what each build sent the backend
+// and the image's key. The user's CAs (Trust) aren't what it sent: the
+// image keeps none of them, so its key holds none.
+func sent(t *testing.T, b *Env, backendName string, names ...string) (sends, keys map[string]string) {
+	t.Helper()
+	f := backendtest.New(backendName, b.Backend.Caps())
+	f.Built = backend.Built{Libc: "gnu"}
+	e := quiet(&Env{Dirs: b.Dirs, Assets: b.Assets, Backend: f, Tools: b.Tools, From: b.From, Lookup: b.Lookup, Version: testVersion})
+	sends, keys = map[string]string{}, map[string]string{}
+	for _, name := range names {
+		if err := (Builds{e}).Build(t.Context(), name); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		chain, err := e.Chain(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range chain {
+			keys[l.Name] = l.Key
+		}
+	}
+	for _, c := range f.Calls() {
+		if c.Method != "BuildImage" {
+			continue
+		}
+		spec := c.Args[0].(backend.ImageSpec)
+		from := backend.From{}
+		if spec.From != nil {
+			from = *spec.From
+		}
+		spec.Key, spec.Trust, spec.From = "", backend.Trust{}, nil
+		sends[spec.Image] = fmt.Sprintf("%#v %#v", spec, from)
+	}
+	return sends, keys
+}
+
+// files lists the regular files under each folder.
+func files(t *testing.T, dirs ...string) []string {
+	t.Helper()
+	var out []string
+	for _, dir := range dirs {
+		err := filepath.WalkDir(dir, func(p string, e fs.DirEntry, err error) error {
+			if err == nil && e.Type().IsRegular() {
+				out = append(out, p)
+			}
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return out
+}
+
+// Every byte and argument a build sends its backend changes the image's
+// key: whatever changes what a build of an image sends (a script of
+// devvm's or the user's, a feature chosen or its order, --from's digest)
+// changes its key, and so does building on another backend. Each change
+// is checked on its own, against the images as they were.
+func TestKeyHashesWhatABuildSends(t *testing.T) {
+	digest, lookups := "sha256:"+strings.Repeat("a", 64), 0
+	for _, from := range []string{"", "node:24"} {
+		b := featureEnv(t)
+		if from != "" {
+			b, _ = fromEnv(t, &digest, &lookups)
+			write(t, filepath.Join(assetsDir(b), "features", "omb.sh"), "#!/bin/bash\n# oh-my-bash: a prompt\n")
+			write(t, filepath.Join(b.Dirs.Features(), "mine.sh"), "#!/bin/bash\n# my tools\n")
+		}
+		write(t, filepath.Join(assetsDir(b), "layers", "docker.sh"), "#!/bin/bash\necho docker\n")
+		saveFeatures(t, b.Dirs, []string{"mine", "omb", "nope"})
+		names := []string{"foo+bar", "docker", "foo+docker"}
+		before, keys := sent(t, b, "fake", names...)
+		if len(before) != 5 {
+			t.Fatalf("%q: built %d images, want 5", from, len(before))
+		}
+		differed := map[string]bool{} // the images some change sent otherwise
+		check := func(change string, after, changed map[string]string) {
+			t.Helper()
+			for img, s := range after {
+				if s == before[img] {
+					continue
+				}
+				differed[img] = true
+				if changed[img] == keys[img] {
+					t.Errorf("%q: %s changes what %s's build sends, not its key %s", from, change, img, keys[img])
+				}
+			}
+		}
+		defer func() {
+			if len(differed) != len(before) {
+				t.Errorf("%q: only %v were sent otherwise by any change", from, differed)
+			}
+		}()
+		// Each file of devvm's and the user's, edited, and then put back.
+		for _, p := range files(t, assetsDir(b), b.Dirs.Layers(), b.Dirs.Features()) {
+			data, err := os.ReadFile(p) //nolint:gosec // the test's own folder
+			if err != nil {
+				t.Fatal(err)
+			}
+			write(t, p, string(data)+"\n# edited\n")
+			after, changed := sent(t, b, "fake", names...)
+			check("editing "+p, after, changed)
+			write(t, p, string(data))
+		}
+		// A feature's script that wasn't there.
+		nope := filepath.Join(b.Dirs.Features(), "nope.sh")
+		write(t, nope, "#!/bin/bash\n")
+		after, changed := sent(t, b, "fake", names...)
+		check("adding nope.sh", after, changed)
+		if err := os.Remove(nope); err != nil {
+			t.Fatal(err)
+		}
+		// The features in another order.
+		saveFeatures(t, b.Dirs, []string{"omb", "mine"})
+		after, changed = sent(t, b, "fake", names...)
+		check("the features' order", after, changed)
+		saveFeatures(t, b.Dirs, []string{"mine", "omb", "nope"})
+		// Another backend sends the same, but builds its own images.
+		if _, other := sent(t, b, "other", names...); other["base"] == keys["base"] {
+			t.Errorf("%q: another backend's base has the same key", from)
+		}
+		if from != "" {
+			// --from's tag moved to another image.
+			old := digest
+			digest = "sha256:" + strings.Repeat("b", 64)
+			after, changed = sent(t, b, "fake", names...)
+			check("--from's digest", after, changed)
+			digest = old
+		}
+	}
+}

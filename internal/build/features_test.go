@@ -11,6 +11,7 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/settings"
@@ -102,9 +103,9 @@ func savedFeatures(d paths.Dirs) ([]string, error) {
 func TestChooseFeatures(t *testing.T) {
 	b := featureEnv(t)
 	saveFeatures(t, b.Dirs, nil)
-	in, err := b.Inputs()
-	if err != nil || !slices.Equal(in.BaseFeatures, []string{"fzf", "omb", "mine"}) {
-		t.Fatalf("unchosen: %q, %v", in.BaseFeatures, err)
+	in, err := b.inputs()
+	if err != nil || !slices.Equal(in.features, []string{"fzf", "omb", "mine"}) {
+		t.Fatalf("unchosen: %q, %v", in.features, err)
 	}
 	before, err := b.Key("base")
 	if err != nil {
@@ -129,8 +130,8 @@ func TestChooseFeatures(t *testing.T) {
 	}
 	saveFeatures(t, b.Dirs, nil)
 	write(t, b.Dirs.ConfigFile(), "features = [\"fzf\"]\n")
-	if in, err := b.Inputs(); err != nil || !slices.Equal(in.BaseFeatures, []string{"fzf"}) {
-		t.Errorf("config.toml's: %q, %v", in.BaseFeatures, err)
+	if in, err := b.inputs(); err != nil || !slices.Equal(in.features, []string{"fzf"}) {
+		t.Errorf("config.toml's: %q, %v", in.features, err)
 	}
 	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
 		t.Fatal(err)
@@ -157,8 +158,8 @@ func TestOwnFeatures(t *testing.T) {
 	if features, shadowed := b.Features(); !slices.Equal(features, want) || shadowed != nil {
 		t.Errorf("Features() = %q, %q; want %q", features, shadowed, want)
 	}
-	if in, err := b.Inputs(); err != nil || !slices.Equal(in.BaseFeatures, want) {
-		t.Errorf("unchosen: %q, %v; want %q", in.BaseFeatures, err, want)
+	if in, err := b.inputs(); err != nil || !slices.Equal(in.features, want) {
+		t.Errorf("unchosen: %q, %v; want %q", in.features, err, want)
 	}
 	if _, err := (Choice{b}).SetFeatures([]string{"desktop"}); msg.IDOf(err) != "no_feature" {
 		t.Errorf("SetFeatures(desktop) = %v, want no_feature", err)
@@ -232,13 +233,13 @@ func TestBuildRunsFeatures(t *testing.T) {
 	if err := (Builds{b}).Build(t.Context(), "foo"); err != nil {
 		t.Fatal(err)
 	}
-	var got [][]backend.Script
+	var got [][]image.Step
 	for _, c := range b.Backend.(*backendtest.Fake).Calls() {
 		if c.Method == "BuildImage" {
-			got = append(got, c.Args[0].(backend.ImageSpec).Scripts)
+			got = append(got, c.Args[0].(backend.ImageSpec).Recipe.Steps)
 		}
 	}
-	want := [][]backend.Script{
+	want := [][]image.Step{
 		{
 			script("base.sh", "#!/bin/bash\n"),
 			script("mine.sh", "#!/bin/bash\n# my tools\n"),
