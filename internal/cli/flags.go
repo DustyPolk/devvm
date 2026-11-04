@@ -34,6 +34,12 @@ func addForceFlag(f *pflag.FlagSet, p *bool) {
 	f.BoolVarP(p, "force", "f", false, "don't ask to confirm, which devvm needs without a terminal")
 }
 
+// addNoExportFlag adds --no-export, which skips exporting the agents'
+// history before a VM's disk goes (devvm rm, devvm layer add).
+func addNoExportFlag(f *pflag.FlagSet, p *bool) {
+	f.BoolVar(p, "no-export", false, "don't export the agents' history first")
+}
+
 // addSSHConfigFlag adds --ssh-config, which answers the question whether
 // to add devvm's Include line to ~/.ssh/config.
 func addSSHConfigFlag(f *pflag.FlagSet, p *bool) {

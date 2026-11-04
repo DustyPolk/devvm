@@ -1,6 +1,6 @@
 ---
 title: devvm rm
-weight: 38
+weight: 39
 ---
 
 Delete this folder's VM, or a VM whose folder is gone
@@ -29,7 +29,7 @@ devvm rm [VM] [flags]
   -f, --force            don't ask to confirm, which devvm needs without a terminal
   -h, --help             help for rm
       --no-clone-check   delete a --clone VM without checking its clone for unfetched commits and uncommitted changes, which are lost
-      --no-export        delete without exporting the agents' history first
+      --no-export        don't export the agents' history first
 ```
 
 ## Options inherited from parent commands

@@ -1,0 +1,168 @@
+# devvm layer add LAYER...: the folder's VM made again from its image with
+# the layers on top, after asking, keeping its settings, its per-VM files
+# and its home folder: built first, its agents' history exported and its
+# home saved, then stopped and set aside, made again and started, its
+# home put back, and the old machine deleted. Refusals come first; an
+# interrupt puts the old VM back; a remake a killed devvm left is
+# finished by the next devvm.
+
+# Usage errors, before anything runs.
+! exec devvm layer add
+stderr '^devvm: arg_missing args=LAYER\.\.\. command=devvm layer add$'
+! exec devvm layer add nope
+stderr '^devvm: unknown_layer layer=nope layers=desktop docker nix$'
+! exec devvm layer add dockr
+stderr '^devvm: unknown_layer_like layer=dockr like=docker$'
+! exec devvm layer add node
+stderr '^devvm: tool_not_layer tool=node$'
+exec devvm __complete layer add d
+stdout '^desktop\ndocker\n'
+
+# No VM.
+project web
+! exec devvm layer add docker --force
+stderr '^devvm: no_vm dir=/\S*/web$'
+
+# A VM with network policy, an agent, ports, a rule, a secret binding,
+# and files in its project folder and its home. (Its hostagent here: the
+# test's runner, which runs on, so the VM stays confined between runs.)
+exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
+exec devvm --network-policy --no-git-protect --agents claude --ports 3000
+vm_name WEB web
+exec devvm ports 3000,5173
+exec devvm network allow example.com
+stdin $WORK/github.token
+exec devvm secret set github --stdin
+exec devvm secret use github
+exec sh -c 'echo kept > notes && mkdir -p "$STUB_DIR/vmhome-$WEB/.config/devvm" && echo ls > "$STUB_DIR/vmhome-$WEB/.bash_history" && echo GH_TOKEN=x > "$STUB_DIR/vmhome-$WEB/.config/devvm/env"'
+
+# Without a terminal it refuses unless --force; in one it asks, and no
+# keeps the VM.
+stub_reset
+! exec devvm layer add docker
+stderr '^devvm: force_needed command=devvm layer add docker$'
+ttyin -stdin $WORK/no.txt
+exec devvm layer add docker
+stderr '^remake_confirm image=docker vm=devvm-web-[0-9a-f]{14} \[y/N\] '
+stdout '==> kept vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+
+# --force: in order, the image built, the history exported, home saved,
+# the VM stopped and set aside, made again and started, home put back,
+# the old machine deleted, then a shell. (Yes in a terminal is the unit
+# tests': a VM started under ttyin leaves the pty open on Linux, in the
+# processes devvm starts for it.)
+stub_reset
+exec devvm layer add docker --force
+stdout '==> exported '
+stdout '==> saving_home vm=devvm-web-[0-9a-f]{14}$'
+stdout '==> creating_from image=docker vm=devvm-web-[0-9a-f]{14}$'
+stdout '==> remade image=docker vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> building_image image=docker '
+stub_calls
+stdout 'tar -czf - --exclude.*\n(.*\n)*.*tar -czf - --one-file-system.*\n(.*\n)*limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl rename --tty=false devvm-web-[0-9a-f]{14} devvm-[0-9a-f]{14}-old\n'
+stdout 'limactl rename --tty=false devvm-web-[0-9a-f]{14} devvm-[0-9a-f]{14}-old\n(.*\n)*limactl clone --tty=false devvm-img-[0-9a-f]+ devvm-web-[0-9a-f]{14} .*\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n(.*\n)*.*tar -xzf - --skip-old-files.*\n(.*\n)*limactl delete -f devvm-[0-9a-f]{14}-old\n(.*\n)*limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n'
+vm_state $WEB_dir/vm.json
+stdout '^image=docker$'
+stdout '^ports.forward=3000,5173$'
+stdout '^secrets.names=github$'
+stdout '^net.on=true$'
+stdout '^tools.names=claude$'
+! stdout '^remake'
+grep '^example\.com$' $WEB_dir/policy
+grep '^kept$' notes
+! exists $WEB_dir/home.tar.gz
+# Its home, without devvm's own files.
+exec tar -tzf $STUB_DIR/home-in.tgz
+stdout '^\.bash_history$'
+! stdout 'devvm'
+exec limactl list --json
+! stdout '-old"'
+
+# Layers it has are said; with all of them, nothing runs.
+stub_reset
+exec devvm layer add docker --force
+stdout '^==> has_layers layers=docker vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|clone)'
+
+# --no-export exports nothing, --clean-home saves and puts back no home.
+stub_reset
+rm $STUB_DIR/home-in.tgz
+exec devvm layer add nix --force --no-export --clean-home
+! stdout exported
+! stdout saving_home
+stub_calls
+! stdout 'tar -czf'
+! stdout 'skip-old-files'
+vm_state $WEB_dir/vm.json
+stdout '^image=docker\+nix$'
+
+# A failed home save keeps the VM as it was, and says how to go ahead.
+exec sh -c 'echo one-file-system > "$STUB_DIR/shell-fails-on"'
+stub_reset
+! exec devvm layer add desktop --force --no-export
+stderr '^devvm: remake_home_failed command=devvm layer add desktop vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|delete -f) devvm-web'
+vm_state $WEB_dir/vm.json
+stdout '^image=docker\+nix$'
+! stdout '^remake'
+rm $STUB_DIR/shell-fails-on
+
+# An interrupt once the old machine is aside puts it back as it was.
+exec sh -c 'echo "clone --tty=false devvm-img" > "$STUB_DIR/interrupt-on"'
+stub_reset
+! exec devvm layer add desktop --force --no-export
+stdout '^==> remake_undone vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout 'limactl rename --tty=false devvm-web-[0-9a-f]{14} devvm-[0-9a-f]{14}-old\n(.*\n)*limactl rename --tty=false devvm-[0-9a-f]{14}-old devvm-web-[0-9a-f]{14}\n'
+vm_state $WEB_dir/vm.json
+stdout '^image=docker\+nix$'
+! stdout '^remake'
+! exists $WEB_dir/home.tar.gz
+exec limactl list --json
+stdout '"name":"devvm-web-[0-9a-f]{14}"'
+! stdout '-old"'
+
+# A remake a killed devvm left, its old machine aside: other commands
+# refuse, and the next devvm puts it back and finishes the remake.
+exec sh -c 'limactl stop "$WEB" && limactl rename --tty=false "$WEB" "devvm-${WEB##*-}-old"'
+json_set $WEB_dir/vm.json 'remake:={"image":"docker+nix+desktop","command":"devvm layer add desktop","home":true}'
+! exec devvm ports
+stderr '^devvm: remake_pending dir=/\S*/web vm=devvm-web-[0-9a-f]{14}$'
+stub_reset
+exec devvm
+stdout '^==> remake_resuming image=docker\+nix\+desktop vm=devvm-web-[0-9a-f]{14}$'
+stdout '==> remade image=docker\+nix\+desktop vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout 'limactl rename --tty=false devvm-[0-9a-f]{14}-old devvm-web-[0-9a-f]{14}\n'
+vm_state $WEB_dir/vm.json
+stdout '^image=docker\+nix\+desktop$'
+! stdout '^remake'
+
+# Refused: a VM whose creation didn't finish, a --clone VM, and a parent
+# folder's VM without a terminal; in one, no changes nothing.
+json_set $WEB_dir/vm.json created:=null
+! exec devvm layer add desktop --force
+stderr '^devvm: vm_unfinished vm=devvm-web-[0-9a-f]{14}$'
+json_set $WEB_dir/vm.json 'created=2026-01-01T00:00:00Z' 'clone:={"on":true}'
+! exec devvm layer add desktop --force
+stderr '^devvm: remake_clone vm=devvm-web-[0-9a-f]{14}$'
+json_set $WEB_dir/vm.json 'clone:={}'
+mkdir sub
+cd sub
+! exec devvm layer add desktop --force
+stderr '^devvm: remake_parent_vm command=devvm layer add desktop dir=/\S*/web vm=devvm-web-[0-9a-f]{14}$'
+stub_reset
+ttyin -stdin $WORK/no.txt
+exec devvm layer add desktop --force
+stderr '^remake_parent_vm_ask dir=/\S*/web vm=devvm-web-[0-9a-f]{14} \[y/N\] '
+stub_calls
+! stdout 'limactl (stop|rename|clone)'
+
+-- github.token --
+ghp_testfake
+-- no.txt --
+n

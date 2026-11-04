@@ -14,15 +14,16 @@ import (
 )
 
 // The sections of a VM's state (state.VM) this package keeps: its size,
-// a --clone VM's clone, its devcontainer.json, its desktop and its links.
-// The others are their packages': netpolicy's, gitprotect's, ports',
-// sshagent's, secrets' and tools'.
+// a --clone VM's clone, its devcontainer.json, its desktop, its links and
+// a remake that hasn't finished. The others are their packages':
+// netpolicy's, gitprotect's, ports', sshagent's, secrets' and tools'.
 const (
 	sizeSection         = "size"
 	cloneSection        = "clone"
 	devcontainerSection = "devcontainer"
 	desktopSection      = "desktop"
 	linksSection        = "links"
+	remakeSection       = "remake"
 )
 
 // cloneInVM is a VM's clone section: whether it was made with --clone,
@@ -115,7 +116,7 @@ func checkState(st *state.VM) error {
 		check(st, secrets.Of), check(st, tools.Of),
 		section[Size](st, sizeSection), section[cloneInVM](st, cloneSection),
 		section[devcontainerInVM](st, devcontainerSection), section[desktopInVM](st, desktopSection),
-		check(st, ReadLinks),
+		section[remakeInVM](st, remakeSection), check(st, ReadLinks),
 	} {
 		if err != nil {
 			return err

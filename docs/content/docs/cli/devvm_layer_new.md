@@ -1,6 +1,6 @@
 ---
 title: devvm layer new
-weight: 19
+weight: 20
 ---
 
 Start a layer of your own
@@ -40,4 +40,4 @@ devvm layer new NAME [flags]
 
 ## See also
 
-- [devvm layer](devvm_layer.md): Make image layers of your own
+- [devvm layer](devvm_layer.md): Make image layers of your own, or add layers to this folder's VM

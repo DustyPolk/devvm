@@ -1,6 +1,6 @@
 ---
 title: devvm link unpublish
-weight: 25
+weight: 26
 ---
 
 Stop offering ports of this folder's VM to links

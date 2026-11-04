@@ -18,7 +18,11 @@ devvm builds the `desktop` image the first time a VM needs it, and VMs that choo
 
 To give every new VM the desktop, choose it with `devvm setup --layers desktop`, or add it to the layers you already chose, such as `devvm setup --layers docker,desktop`. New VMs then get it unless you uncheck it in the list or give `--layers` without it ([layers for new VMs](settings.md#layers-for-new-vms)). VMs that exist keep the layers they were made with.
 
-A VM keeps the layers it was made with, so a VM made without the desktop has none, and `devvm desktop` says so. To give it one, save any work the VM holds outside the project folder, then run `devvm rm`, and make the VM again with `desktop` among its layers.
+A VM made without the desktop has none, and `devvm desktop` says so. To give it one, run `devvm layer add desktop`, which makes the VM again from an image with the desktop on top of its own layers, such as `docker+desktop`. The VM keeps its home folder, the project folder and its settings, and loses the rest of its disk, such as the packages you installed, so devvm asks first ([adding layers to a VM](images.md#adding-layers-to-a-vm)).
+
+```sh
+devvm layer add desktop   # make this folder's VM again with the desktop, after asking
+```
 
 The desktop works on base, and on a base made `--from` a Debian, Ubuntu or Alpine image.
 
@@ -66,7 +70,7 @@ The clipboard isn't shared unless you add `--clipboard`. With sharing on, what y
 
 ## When the desktop doesn't open
 
-- **The VM has no desktop:** it was made without the `desktop` layer. Make the VM again with the layer, as [adding the desktop](#adding-the-desktop) explains.
+- **The VM has no desktop:** it was made without the `desktop` layer. Run `devvm layer add desktop` to make it again with the layer, as [adding the desktop](#adding-the-desktop) explains.
 - **The desktop didn't start:** devvm shows the end of its run log. The desktop's own log is `~/.cache/devvm-desktop.log` in the VM.
 - **Screen Sharing didn't open:** open the address devvm shows in Screen Sharing yourself, by typing it into Finder's Go > Connect to Server, or in another VNC viewer.
 - **Screen Sharing says the password is wrong:** use the password `devvm desktop` shows for this VM. Each VM has its own.

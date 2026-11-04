@@ -89,6 +89,12 @@ type Backend interface {
 	Stop(ctx context.Context, vm string) error
 	// Delete deletes a VM, stopping it first.
 	Delete(ctx context.Context, vm string) error
+	// Rename gives a stopped VM another name, to, which no VM has and
+	// which fits NameMax: a remake keeps the VM's old machine, its disk
+	// included, under to while it makes the new one by the VM's name,
+	// and gives it back if that fails. What the backend keeps for the VM
+	// besides it (Forgetter's) stays the old name's.
+	Rename(ctx context.Context, vm, to string) error
 	// List lists the backend's VMs, without its images.
 	List(ctx context.Context) ([]Instance, error)
 	// Inspect returns one VM, or an error matching ErrNotFound.

@@ -81,7 +81,9 @@ func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
 			r.unknown(bname)
 			continue
 		}
-		if vms[n] {
+		// A VM being made again may have no machine by its name: the
+		// next devvm in its folder finishes it.
+		if vms[n] || remakePending(st) {
 			continue
 		}
 		switch gone, err := gone(ctx, b, n); {

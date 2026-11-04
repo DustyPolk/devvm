@@ -118,6 +118,18 @@ func completeToolNames(_ *cobra.Command, args []string, toComplete string) ([]co
 	return out, cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeLayerNames completes devvm layer add's LAYER...: the layers
+// there are, but those given.
+func completeLayerNames(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	var out []cobra.Completion
+	for _, n := range layerNames(false) {
+		if strings.HasPrefix(n, toComplete) && !slices.Contains(args, n) {
+			out = append(out, n)
+		}
+	}
+	return out, cobra.ShellCompDirectiveNoFileComp
+}
+
 // completeFeatures completes setup's --features: base's features, after
 // the ones already given.
 func completeFeatures(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {

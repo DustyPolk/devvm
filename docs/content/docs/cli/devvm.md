@@ -67,7 +67,7 @@ devvm [flags]
 - [devvm history](devvm_history.md): List the saved exports of agents' history
 - [devvm host](devvm_host.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm images](devvm_images.md): List the images and the shared tools
-- [devvm layer](devvm_layer.md): Make image layers of your own
+- [devvm layer](devvm_layer.md): Make image layers of your own, or add layers to this folder's VM
 - [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs without network policy
 - [devvm link](devvm_link.md): List this folder's VM's links to your other VMs
 - [devvm ls](devvm_ls.md): List the project VMs

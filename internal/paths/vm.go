@@ -13,6 +13,7 @@ import "path/filepath"
 //	          its links' list
 //	logs/     its proxy's decisions and output, its link session's and
 //	          its port forwarder's
+//	home.tar.gz  its home folder, while a remake makes it again
 //
 // None of them is a socket, so none has the socket limit (SocketMax):
 // the sockets VMs need are in the run folder, by hash.
@@ -35,6 +36,10 @@ func (v VM) Run() string { return filepath.Join(v.Dir, "run") }
 
 // Logs is the folder of the VM's logs.
 func (v VM) Logs() string { return filepath.Join(v.Dir, "logs") }
+
+// Home is the VM's home folder as a remake saved it from its old disk,
+// for its new one: there only until the new disk has it.
+func (v VM) Home() string { return filepath.Join(v.Dir, "home.tar.gz") }
 
 // ProxyConfig is the config the VM's network policy proxy runs with
 // (proxy.Config): everything it started with, its password among it.

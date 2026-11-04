@@ -387,6 +387,27 @@ func (l *Lima) delete(ctx context.Context, vm string) error {
 	return os.RemoveAll(l.Dirs.VM(vm).Dir)
 }
 
+// Rename renames a stopped VM's instance (limactl rename), its disk and
+// Lima's files with it; devvm's files for it keep the old name. A name too
+// long for the VM's ssh socket is refused first.
+func (l *Lima) Rename(ctx context.Context, vm, to string) error {
+	if len(to) > l.NameMax() {
+		return msg.LimaHomeTooLong(l.Dirs.Lima, to)
+	}
+	in, err := l.inspect(ctx, vm)
+	if err != nil {
+		return err
+	}
+	// The remake stops it first.
+	if backend.Status(in.Status) != backend.StatusStopped {
+		return fmt.Errorf("lima: %s isn't stopped", vm)
+	}
+	if err := l.Runner.Run(ctx, msg.Renaming(to, vm), l.limactl(ctx, "rename", "--tty=false", vm, to)); err != nil {
+		return backend.Logged(msg.RenameFailed(to, vm))
+	}
+	return nil
+}
+
 // List lists the VMs in devvm's Lima home, without images.
 func (l *Lima) List(ctx context.Context) ([]backend.Instance, error) {
 	ins, err := l.list(ctx)

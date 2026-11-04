@@ -21,7 +21,7 @@ func TestAnswers(t *testing.T) {
 		"net_ask", "use_parent_vm", "use_parent_vm_repo", "size_cpus_prompt", "size_memory_prompt",
 		"features_help", "agents_help", "pick_new_help", "pick_vm_help", "network_default_help", "load_key", "restart_now", "add_it_now",
 		"token_prompt", "continue", "gc_confirm", "gc_cache_confirm", "adopt_vm", "rm_confirm",
-		"images_rm_confirm", "secret_rm_confirm",
+		"images_rm_confirm", "secret_rm_confirm", "remake_confirm", "remake_confirm_clean_home",
 	}
 	for _, id := range questions {
 		if _, ok := specs[id]; !ok {
@@ -109,6 +109,7 @@ func askedID(n ast.Node, prompts []string, ids map[string]string) string {
 func TestPromptsAnswered(t *testing.T) {
 	terminalOnly := map[string]string{
 		"delete_parent_vm":       "it deletes a VM another folder's project may need",
+		"remake_parent_vm_ask":   "it replaces the disk of a VM another folder's project may need",
 		"delete_other_folder_vm": "it deletes a VM an earlier folder's project may need",
 		"delete_anyway":          "it loses the changes in a clone VM's own repo",
 		"fetch_before_delete":    "devvm rm asks it only in a terminal, before a clone VM's commits are lost",

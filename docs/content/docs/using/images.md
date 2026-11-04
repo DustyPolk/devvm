@@ -3,7 +3,7 @@ title: Images and tools
 weight: 1
 ---
 
-Every VM is a copy of an image. An image is `base` with your choice of layers on it, and nothing else. A VM also gets the shared tools you chose for it, such as node or Claude Code, which are mounted into it and are never part of an image. This page covers what base and the layers bring, how the shared tools work, what a new VM gets, and how to rebuild, list and delete images. [Images and caching](../internals/images.md) explains how devvm builds, pins and caches them, and [toolchains](toolchains.md) and [coding agents](coding-agents.md#supported-agents) list the shared tools.
+Every VM is a copy of an image. An image is `base` with your choice of layers on it, and nothing else. A VM also gets the shared tools you chose for it, such as node or Claude Code, which are mounted into it and are never part of an image. This page covers what base and the layers bring, adding layers to a VM, how the shared tools work, what a new VM gets, and how to rebuild, list and delete images. [Images and caching](../internals/images.md) explains how devvm builds, pins and caches them, and [toolchains](toolchains.md) and [coding agents](coding-agents.md#supported-agents) list the shared tools.
 
 ```mermaid
 flowchart TD
@@ -37,7 +37,7 @@ devvm rebuild foo     # builds foo again, and deletes the old foo and foo+bar
 
 ### Built-in layers
 
-devvm ships three layers, `desktop`, `docker` and `nix`. You choose them like any other layer, in the list devvm shows for a new VM or as in `devvm --layers docker`, and you build one with `devvm build nix`. To give every new VM one, choose it with [`devvm setup --layers`](settings.md#layers-for-new-vms). Like any layer, only a new VM gets them ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)). Their names are reserved, so devvm refuses `devvm layer new docker` and never reads a `desktop.sh`, `docker.sh` or `nix.sh` of yours. The hosts that each layer needs are in its own [allowlist](../safety/network.md#allowlists).
+devvm ships three layers, `desktop`, `docker` and `nix`. You choose them like any other layer, in the list devvm shows for a new VM or as in `devvm --layers docker`, and you build one with `devvm build nix`. To give every new VM one, choose it with [`devvm setup --layers`](settings.md#layers-for-new-vms), and to give a VM you have one, run `devvm layer add` ([adding layers to a VM](#adding-layers-to-a-vm)). Their names are reserved, so devvm refuses `devvm layer new docker` and never reads a `desktop.sh`, `docker.sh` or `nix.sh` of yours. The hosts that each layer needs are in its own [allowlist](../safety/network.md#allowlists).
 
 #### desktop
 
@@ -52,6 +52,42 @@ The `docker` layer installs Docker's engine, CLI, BuildKit and Compose from Dock
 The `nix` layer installs [Nix](https://nixos.org) with flakes and the `nix` command turned on, and [direnv](https://direnv.net) with [nix-direnv](https://github.com/nix-community/nix-direnv), so a project's `flake.nix`, `shell.nix` or `devenv.nix` can supply its toolchain. Each VM has a Nix store and daemon of its own, which no other VM and nothing on this machine shares. With network policy, VMs share their downloads from Nix's binary cache through a cache on this machine that only devvm fills. [Nix projects](toolchains.md#nix-projects) explains that cache, and how a flake's dev shell and the shared tools work together.
 
 The `nix` layer works on a base from Ubuntu, Debian or Alpine. On a base made `--from alpine`, it installs Alpine's `xz` package, which isn't pinned, and runs Nix's daemon as an OpenRC service.
+
+## Adding layers to a VM
+
+A VM keeps the layers devvm made it with, because a layer's script changes the VM's disk. `devvm layer add LAYER...` gives a VM more layers by making it again. devvm builds an image with the new layers on top of the VM's own, in the order you give them, and gives the VM a new disk, copied from that image. A VM of `docker` with `desktop` added is made again from `docker+desktop`, so the images it already uses stay as they are. devvm names the layers the VM has already and leaves them where they are, and when the VM has all of them, devvm says so and changes nothing.
+
+```sh
+devvm layer add desktop          # make this folder's VM again with the desktop layer on top
+devvm layer add docker nix       # docker, then nix on top of it
+devvm layer add desktop --force  # the same without asking, as a script must
+```
+
+What devvm doesn't keep of the VM's disk is lost, so in a terminal devvm names the image and asks first, with no as the default. Without a terminal, it refuses unless you give `--force`. When the VM has a coding agent, devvm first exports the agents' history, as `devvm rm` does, unless you give `--no-export` ([history](coding-agents.md#history)). In a subfolder of a folder with a VM, devvm asks in a terminal whether to make that folder's VM again, and refuses without one.
+
+devvm refuses before it changes anything when a name isn't a layer, or is a shared tool's name, which `devvm tools add` adds instead. It also refuses when the VM's backend can't run one of the layers, when the VM's creation didn't finish, and for a `--clone` VM, whose clone of the repo is on its disk. To give a `--clone` VM more layers, push its work, then run `devvm rm` and `devvm --clone` with the layers you want.
+
+devvm then works in this order:
+
+1. It builds the new image, so a build that fails leaves the VM as it was.
+2. It exports the agents' history and saves the VM's home folder on this machine.
+3. It stops the VM and sets its old disk aside under another name.
+4. It makes the VM again from the new image, with the same name and settings, and starts it.
+5. It copies the home folder onto the new disk and deletes the old disk, then opens a shell in the VM.
+
+Until the new VM has started with its home folder, a step that fails, or Ctrl+C, deletes the new disk and puts the old one back as it was. While devvm makes the VM again, the old disk, the new one and the saved home folder take room on this machine at the same time, and devvm checks for free space before it starts.
+
+### What a VM made again keeps
+
+devvm keeps the project folder, which is on this machine, and everything it keeps for the VM: its name, its shared tools, its size, its ports, its network policy and allowlist, its secrets' bindings, its SSH agent choice and its `.git` protection. It also keeps the VM's links, group and published ports, its desktop's password and port, and what its `devcontainer.json` gave it. The commands in its `devcontainer.json` that run once, such as `postCreateCommand`, run again on the new disk. The VM gets new SSH host keys, which devvm pins as it does for any new VM, and it keeps its identity, so [links](links.md#which-vm-a-link-reaches) to it still reach it.
+
+devvm keeps the VM's home folder too. It reads the folder as the VM's user before it stops the VM, and copies it onto the new disk before devvm's own setup runs there. A file that the new image puts in your home itself, such as `~/.bashrc`, stays the image's, so put shell settings of your own in a file of yours in `~/.bashrc.d`. devvm leaves out what the new VM gets from devvm itself: `~/.config/devvm`, `~/.ssh/authorized_keys`, the agents' logins, and the agents' folders and files that devvm links or copies from this machine. It leaves out `~/.cache` too. devvm keeps only files, folders and symlinks, without setuid bits, and nothing from a filesystem mounted inside your home. `--clean-home` gives the VM the new image's home folder instead.
+
+Everything else on the VM's disk is lost: the packages you installed with apt, programs installed outside your home, Docker's images, containers and volumes, the Nix store, and the processes that ran in it. When saving the home folder fails, devvm keeps the VM as it was, and `--clean-home` goes ahead without it.
+
+### A remake that stops halfway
+
+If devvm itself is killed while it makes a VM again, such as when this machine loses power, the VM's state records the remake. The next `devvm` or `devvm layer add` in the folder finishes it without asking. When the old disk is still set aside, devvm puts it back and makes the VM again from the start, and when it's gone, devvm makes the new VM with the home folder it saved. Until then, other commands on the VM refuse and name `devvm`, and `devvm rm` deletes the VM together with its old disk.
 
 ## Shared tools
 
@@ -108,7 +144,7 @@ A folder's `devcontainer.json` adds what its features map to, such as toolchains
 
 The VM's image is base with its layers, in the order you give them, bottom first, so `--layers docker,mine` makes the image `docker+mine`. When you check layers in the list, devvm setup's stay in their order at the bottom, and the ones you add go on top in the list's order. Its shared tools are a list of their own, the toolchains first, then the agents.
 
-If the image isn't built yet, devvm builds it first, then the shared tools the share lacks, and the VM is a copy of the image with its shared tools mounted. A VM keeps the image and tools it was made from, and the three flags change nothing on a VM that exists: devvm warns and names `devvm tools`, which [changes its shared tools](toolchains.md#adding-and-removing-tools).
+If the image isn't built yet, devvm builds it first, then the shared tools the share lacks, and the VM is a copy of the image with its shared tools mounted. A VM keeps the image and tools it was made from, and the three flags change nothing on a VM that exists. devvm warns and names `devvm tools`, which [changes its shared tools](toolchains.md#adding-and-removing-tools), and `devvm layer add`, which [adds layers](#adding-layers-to-a-vm).
 
 ## Rebuilding
 

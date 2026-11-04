@@ -22,7 +22,8 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm host](devvm_host.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm images rm](devvm_images_rm.md): Delete images, by name or by key
-- [devvm layer](devvm_layer.md): Make image layers of your own
+- [devvm layer](devvm_layer.md): Make image layers of your own, or add layers to this folder's VM
+- [devvm layer add](devvm_layer_add.md): Make this folder's VM again with more layers, then open a shell in it
 - [devvm layer new](devvm_layer_new.md): Start a layer of your own
 - [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs without network policy
 - [devvm link](devvm_link.md): List this folder's VM's links to your other VMs

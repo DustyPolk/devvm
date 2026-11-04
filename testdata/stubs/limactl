@@ -25,7 +25,9 @@
 # VM whose name contains its text, it hangs once the VM runs and has its
 # ha.pid, as Lima's start waits for a VM's ssh while its hostagent runs it. clone fails with $STUB_DIR/clone-fails,
 # leaving its instance (a partial clone), and delete with
-# $STUB_DIR/delete-fails, after deleting it. shell fails with $STUB_DIR/shell-fails (or when its
+# $STUB_DIR/delete-fails, after deleting it. rename moves a stopped instance
+# (status, config, size and folder) to its new name, and fails with
+# $STUB_DIR/rename-fails, changing nothing. shell fails with $STUB_DIR/shell-fails (or when its
 # arguments contain $STUB_DIR/shell-fails-on's text) and hangs with
 # $STUB_DIR/shell-hangs (touching $STUB_DIR/hanging first), and a direct
 # connection (curl --noproxy) fails unless $STUB_DIR/net-direct exists; a script fed
@@ -214,6 +216,18 @@ case ${1:-} in
   delete)
     for n in "${names[@]}"; do set_status "$n"; rm -rf "${STUB_DIR:?}/config-$n" "$STUB_DIR/size-$n" "${LIMA_HOME:?}/$n"; done
     [[ ! -e $STUB_DIR/delete-fails ]] || exit 1 ;;
+  rename)
+    # OLD NEW: a stopped instance, its config, size and folder, under its new name.
+    [[ ! -e $STUB_DIR/rename-fails ]] || exit 1
+    old=${names[0]} new=${names[1]}
+    grep -qxE "$old( Stopped)?" "$inst" || { echo "limactl stub: $old isn't there, stopped" >&2; exit 1; }
+    ! grep -q "^$new\( \|$\)" "$inst" || { echo "limactl stub: $new exists" >&2; exit 1; }
+    set_status "$old"
+    set_status "$new" Stopped
+    for f in config size; do
+      [[ ! -e $STUB_DIR/$f-$old ]] || mv "$STUB_DIR/$f-$old" "$STUB_DIR/$f-$new"
+    done
+    [[ ! -d $LIMA_HOME/$old ]] || mv "$LIMA_HOME/$old" "$LIMA_HOME/$new" ;;
   shell)
     echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/shell-agent"
     # A clone's git: Exec's command line is "cd '/' && exec WORDS".
@@ -234,6 +248,21 @@ case ${1:-} in
     fi
     # A script fed to bash -s: its first line after the shebang.
     if [[ ${*: -2} == "bash -s" || "$*" == *"exec 'bash' '-s'" ]]; then "${0%/*}/stub-log" "$STUB_DIR/scripts" "$(sed -n 2p)"; fi
+    # A VM's home folder as a remake reads it: $STUB_DIR/vmhome-<name>'s files
+    # (none when it's missing); what a remake puts in a new disk's home is kept
+    # as $STUB_DIR/home-in.tgz. Either fails with shell-fails-on's text.
+    if [[ "$*" == *"tar -czf - --one-file-system"* || "$*" == *"tar -xzf - --skip-old-files"* ]]; then
+      [[ ! -f $STUB_DIR/shell-fails-on || "$*" != *"$(cat "$STUB_DIR/shell-fails-on")"* ]] || exit 1
+    fi
+    if [[ "$*" == *"tar -czf - --one-file-system"* ]]; then
+      mkdir -p "$STUB_DIR/vmhome-${names[0]}"
+      # macOS's tar adds AppleDouble ._ files, which a VM's GNU tar never has.
+      COPYFILE_DISABLE=1 exec tar -czf - -C "$STUB_DIR/vmhome-${names[0]}" .
+    fi
+    if [[ "$*" == *"tar -xzf - --skip-old-files"* ]]; then
+      cat > "$STUB_DIR/home-in.tgz"
+      exit 0
+    fi
     # A VM's setup: what it was sent.
     if [[ "$*" == *"tar -xf - "* ]]; then
       cat > "$STUB_DIR/sync.tar"

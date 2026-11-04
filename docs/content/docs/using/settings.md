@@ -127,7 +127,7 @@ devvm --layers none                   # this VM gets no layers
 
 `--layers` on `devvm` is the exact list of one VM's layers, so it replaces setup's layers, and `--layers none` makes a VM without any. A `devcontainer.json`'s layers go on top of setup's ([`devcontainer.json`](devcontainer.md)).
 
-The choice is for new VMs only. A VM that exists keeps the layers it was made with, and `devvm setup` says so when it saves the choice.
+The choice is for new VMs only. A VM that exists keeps the layers it was made with, and `devvm setup` says so when it saves the choice. To give that VM more layers, run `devvm layer add` in its folder ([adding layers to a VM](images.md#adding-layers-to-a-vm)).
 
 When a layer of yours that you chose in `devvm setup` has no script in `~/.config/devvm/layers`, such as after you delete it, a new VM is made without it, and devvm warns, naming the layer. Run `devvm setup --layers` to choose the layers again. When the VM's backend can't run a layer you chose, such as `docker` on a backend without Docker's engine, devvm makes no VM and names the layer. Then choose other layers for that VM with `--layers`, or change new VMs' layers with `devvm setup --layers`.
 

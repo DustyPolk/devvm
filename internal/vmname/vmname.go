@@ -37,6 +37,37 @@ func HashOf(name string) (string, bool) {
 	return name[len(name)-HashLen:], true
 }
 
+// asideSuffix ends the name a project VM's old machine has while a remake
+// makes a new one by the VM's name (Aside).
+const asideSuffix = "-old"
+
+// Aside returns the name a project VM's old machine is given while a
+// remake makes the new one by the VM's name, devvm-<hash>-old, and whether
+// name is a project VM's. It isn't a project VM's name itself (IsVM), so
+// nothing takes the old machine for a VM, and it's the same length for
+// every VM, the shortest a project VM's name can be plus two.
+func Aside(name string) (string, bool) {
+	h, ok := HashOf(name)
+	if !ok {
+		return "", false
+	}
+	return Prefix + h + asideSuffix, true
+}
+
+// AsideHash returns the hash of the project VM whose old machine name is,
+// as Aside names it, and whether it's one's.
+func AsideHash(name string) (string, bool) {
+	h, ok := strings.CutPrefix(name, Prefix)
+	if !ok {
+		return "", false
+	}
+	h, ok = strings.CutSuffix(h, asideSuffix)
+	if !ok || !IsHash(h) {
+		return "", false
+	}
+	return h, true
+}
+
 // IsHash reports whether s is a project VM's hash, as HashOf returns it:
 // HashLen lowercase hex digits.
 func IsHash(s string) bool { return hash.MatchString(s) }

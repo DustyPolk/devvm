@@ -1,6 +1,6 @@
 ---
 title: devvm secret unuse
-weight: 42
+weight: 43
 ---
 
 Stop this folder's VM using a secret

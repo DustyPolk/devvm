@@ -1,0 +1,516 @@
+package vm
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/vmname"
+)
+
+// homeFiles is a home folder's tar stream, gzipped, with these entries:
+// name to content, a name ending in / a folder, "-> target" a symlink.
+func homeFiles(t *testing.T, files ...string) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	zw := gzip.NewWriter(&b)
+	tw := tar.NewWriter(zw)
+	for i := 0; i+1 < len(files); i += 2 {
+		name, data := files[i], files[i+1]
+		h := &tar.Header{Name: name, Mode: 0o644, ModTime: time.Unix(1, 0)}
+		switch {
+		case strings.HasSuffix(name, "/"):
+			h.Typeflag, h.Mode = tar.TypeDir, 0o755
+		case strings.HasPrefix(data, "-> "):
+			h.Typeflag, h.Linkname = tar.TypeSymlink, strings.TrimPrefix(data, "-> ")
+		default:
+			h.Typeflag, h.Size = tar.TypeReg, int64(len(data))
+		}
+		if err := tw.WriteHeader(h); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(tw, data); h.Typeflag == tar.TypeReg && err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// entries lists a home folder's gzipped tar stream: one line per entry,
+// its type, mode and name, and a file's content or a link's target.
+func entries(t *testing.T, data []byte) []string {
+	t.Helper()
+	zr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(zr)
+	var out []string
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return out
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(tr)
+		out = append(out, fmt.Sprintf("%c %03o %s %s%s", h.Typeflag, h.Mode, h.Name, body, h.Linkname))
+	}
+}
+
+// A home folder's copy keeps files, folders and symlinks inside it, with
+// their permissions but no setuid bit and no owner, and hard links to a
+// file it kept. It leaves out what a new VM's setup writes itself, the
+// home folder's own entry, paths out of it, special files, and anything
+// under a symlink, which tar would follow.
+func TestCopyHome(t *testing.T) {
+	var in bytes.Buffer
+	zw := gzip.NewWriter(&in)
+	tw := tar.NewWriter(zw)
+	for _, h := range []*tar.Header{
+		{Typeflag: tar.TypeDir, Name: "./", Mode: 0o777},
+		{Typeflag: tar.TypeReg, Name: "./.bash_history", Mode: 0o600, Size: 2, Uid: 1000, Uname: "me"},
+		{Typeflag: tar.TypeDir, Name: "./bin/", Mode: 0o755},
+		{Typeflag: tar.TypeReg, Name: "./bin/tool", Mode: 0o4755, Size: 2},
+		{Typeflag: tar.TypeLink, Name: "./bin/again", Linkname: "./bin/tool"},
+		{Typeflag: tar.TypeLink, Name: "./bin/passwd", Linkname: "/etc/passwd"},
+		{Typeflag: tar.TypeSymlink, Name: "./etc", Linkname: "/etc"},
+		{Typeflag: tar.TypeReg, Name: "./etc/sudoers.d/me", Mode: 0o644, Size: 2},
+		{Typeflag: tar.TypeReg, Name: "../outside", Mode: 0o644, Size: 2},
+		{Typeflag: tar.TypeReg, Name: "/abs", Mode: 0o644, Size: 2},
+		{Typeflag: tar.TypeReg, Name: "./a/../../up", Mode: 0o644, Size: 2},
+		{Typeflag: tar.TypeChar, Name: "./dev", Mode: 0o666},
+		{Typeflag: tar.TypeFifo, Name: "./fifo", Mode: 0o666},
+		{Typeflag: tar.TypeReg, Name: "./.config/devvm/env", Mode: 0o600, Size: 2},
+		{Typeflag: tar.TypeReg, Name: "./.ssh/authorized_keys", Mode: 0o600, Size: 2},
+		{Typeflag: tar.TypeReg, Name: "./.ssh/id_ed25519", Mode: 0o600, Size: 2},
+		{Typeflag: tar.TypeReg, Name: "./.claude/.credentials.json", Mode: 0o600, Size: 2},
+		{Typeflag: tar.TypeReg, Name: "./.cache/pip/x", Mode: 0o644, Size: 2},
+		{Typeflag: tar.TypeReg, Name: "./line\nbreak", Mode: 0o644, Size: 2},
+	} {
+		if err := tw.WriteHeader(h); err != nil {
+			t.Fatal(err)
+		}
+		if h.Size > 0 {
+			if _, err := io.WriteString(tw, "ok"); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := copyHome(&in, &out, homeSkips(t.TempDir(), []string{"claude"})); err != nil {
+		t.Fatal(err)
+	}
+	got := entries(t, out.Bytes())
+	want := []string{
+		"0 600 .bash_history ok",
+		"5 755 bin/ ",
+		"0 755 bin/tool ok",
+		"1 000 bin/again bin/tool",
+		"2 000 etc /etc",
+		"0 600 .ssh/id_ed25519 ok",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("kept\n\t%s\nwant\n\t%s", strings.Join(got, "\n\t"), strings.Join(want, "\n\t"))
+	}
+	zr, _ := gzip.NewReader(bytes.NewReader(out.Bytes()))
+	tr := tar.NewReader(zr)
+	for h, err := tr.Next(); err == nil; h, err = tr.Next() {
+		if h.Uid != 0 || h.Uname != "" {
+			t.Errorf("%s keeps its owner %d %s", h.Name, h.Uid, h.Uname)
+		}
+	}
+	if err := copyHome(strings.NewReader("not gzip"), io.Discard, nil); err == nil {
+		t.Error("copied a stream that isn't gzip")
+	}
+}
+
+// What devvm layer add makes: the VM's layers with the new ones on top in
+// the order given, those it has said and left as they are.
+func TestAddedImage(t *testing.T) {
+	for _, c := range []struct {
+		img    string
+		layers []string
+		want   string
+		had    []string
+	}{
+		{"base", []string{"desktop"}, "desktop", nil},
+		{"docker", []string{"desktop"}, "docker+desktop", nil},
+		{"docker", []string{"nix", "desktop"}, "docker+nix+desktop", nil},
+		{"docker+nix", []string{"desktop", "docker"}, "docker+nix+desktop", []string{"docker"}},
+		{"docker", []string{"docker", "docker"}, "docker", []string{"docker"}},
+		{"base", []string{"nix", "nix"}, "nix", nil},
+	} {
+		got, had := addedImage(c.img, c.layers)
+		if got != c.want || !slices.Equal(had, c.had) {
+			t.Errorf("%s with %q = %s, had %q; want %s, %q", c.img, c.layers, got, had, c.want, c.had)
+		}
+	}
+}
+
+// remakeEnv is upEnv with a VM made, network policy on, whose home the
+// fake keeps: what the old VM's tar sends (homeOut) and what the new
+// one's gets (homeIn, *restored).
+func remakeEnv(t *testing.T) (*Env, *backendtest.Fake, *state.VM, *[]byte) {
+	t.Helper()
+	e, f, _ := upEnv(t, allNative())
+	home := homeFiles(t, ".bash_history", "ls\n", ".config/devvm/env", "GH_TOKEN=x\n")
+	var restored []byte
+	f.ExecFunc = func(vm string, argv []string, o backend.ExecOpts) error {
+		switch {
+		case len(argv) == 3 && argv[2] == homeOut:
+			_, err := o.Stdout.Write(home)
+			return err
+		case len(argv) == 3 && argv[2] == homeIn:
+			var err error
+			restored, err = io.ReadAll(o.Stdin)
+			return err
+		}
+		return noDirect(vm, argv, o)
+	}
+	st := existingVM(t, e, Options{NetworkPolicy: true, Ports: "3000,5173", SSHAgent: true, Size: Size{CPUs: "3", Memory: "6"}})
+	return e, f, st, &restored
+}
+
+// devvm layer add --force makes the VM again from its image with the
+// layer on top: built, then its home saved, stopped, set aside, made
+// again with what its state asks for, started, its home put back, and
+// the old machine deleted, then a shell. Every setting is kept, its
+// ID too, and its per-VM files.
+func TestAddLayers(t *testing.T) {
+	e, f, st, restored := remakeEnv(t)
+	vm := st.Name()
+	aside, _ := vmname.Aside(vm)
+	for k, v := range map[string]string{
+		keyPublish: "8080", keyGroup: "team", keyGroupAs: "api", keyDesktopPass: "Abcdefgh", keyDesktopPort: "47001",
+	} {
+		if err := set(t, st, k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := state.WriteFile(e.Dirs.VM(vm).Policy(), []byte("allow example.com\n")); err != nil {
+		t.Fatal(err)
+	}
+	before, err := state.ReadVM(e.Dirs, vm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := len(f.Calls())
+	if err := (Lifecycle{e}).AddLayers(t.Context(), "devvm layer add docker", []string{"docker"}, RemakeOptions{Force: true}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	after, err := state.ReadVM(e.Dirs, vm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The state keys a remake keeps: every one but the image
+	// (keys_test.go).
+	for _, k := range []string{
+		keyNet, keyProxyKey, keySSHPort, keyProxyPort, keyDesktopPort, keyPorts, keyDir, keyFolder, keyFrom,
+		keyBackend, keyID, keyToolNames, keyTools, keyLibc, keyGitProtect, keyPublish, keyGroup, keyGroupAs, keyLinks,
+		keyCPUs, keyMemory, keyDisk, keyAgent, keyAgentToggle, keyClone, keySecrets, keyDevcontainer, keyDevEnv,
+		keyDesktopPass,
+	} {
+		if get(after, k) != get(before, k) {
+			t.Errorf("%s: %q, was %q", k, get(after, k), get(before, k))
+		}
+	}
+	if after.Image != "docker" || after.Chain == before.Chain || !after.Created.After(before.Created) || remakePending(after) {
+		t.Errorf("image %s, chain %s (was %s), created %v (was %v), pending %v", after.Image, after.Chain, before.Chain, after.Created, before.Created, remakePending(after))
+	}
+	if data, err := os.ReadFile(e.Dirs.VM(vm).Policy()); err != nil || string(data) != "allow example.com\n" {
+		t.Errorf("its policy: %q, %v", data, err)
+	}
+	if _, err := os.Stat(e.Dirs.VM(vm).Home()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its saved home: %v", err)
+	}
+	// What its home was, less devvm's own files.
+	if got := entries(t, *restored); !slices.Equal(got, []string{"0 644 .bash_history ls\n"}) {
+		t.Errorf("restored %q", got)
+	}
+	var steps []string
+	for _, c := range f.Calls()[n:] {
+		switch c.Method {
+		case "BuildImage", "Stop", "CreateVM", "Start", "Shell":
+			steps = append(steps, c.Method)
+		case "Rename", "Delete": //nolint:usestdlibvars // the fake's method names, not HTTP's
+			steps = append(steps, c.Method+" "+strings.Join(strs(c.Args), " "))
+		case "Exec":
+			if argv, _ := c.Args[1].([]string); len(argv) == 3 && (argv[2] == homeOut || argv[2] == homeIn) {
+				steps = append(steps, "Exec "+map[bool]string{true: "out", false: "in"}[argv[2] == homeOut])
+			}
+		}
+	}
+	want := []string{"BuildImage", "Exec out", "Stop", "Rename " + vm + " " + aside, "CreateVM", "Start", "Exec in", "Delete " + aside, "Shell"}
+	if !slices.Equal(steps, want) {
+		t.Errorf("steps %q, want %q", steps, want)
+	}
+	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+	if spec.Name != vm || spec.Project != e.Dir || !spec.AgentForwarding || spec.Size.CPUs != 3 || spec.Size.MemoryGiB != 6 ||
+		spec.SSHPort == 0 || spec.Tools != e.Dirs.Tools() {
+		t.Errorf("made with %+v", spec)
+	}
+	if _, ok := f.Instances[aside]; ok {
+		t.Error("its old machine is still there")
+	}
+}
+
+// strs is a call's string arguments.
+func strs(args []any) []string {
+	var out []string
+	for _, a := range args {
+		if s, ok := a.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// Without a terminal devvm layer add refuses unless --force, and in one
+// it asks, [y/N], naming the image and whether home is kept; no keeps
+// the VM. Layers the VM has are said, and with all of them nothing runs.
+// --clean-home keeps no home, and --no-export exports nothing.
+func TestAddLayersAsks(t *testing.T) {
+	e, f, st := func() (*Env, *backendtest.Fake, *state.VM) {
+		e, f, st, _ := remakeEnv(t)
+		return e, f, st
+	}()
+	vm := st.Name()
+	lc := Lifecycle{e}
+	if err := lc.AddLayers(t.Context(), "devvm layer add nix", []string{"nix"}, RemakeOptions{}); msg.NamesOf(err) != "force_needed command=devvm layer add nix" {
+		t.Errorf("no terminal: %v", msg.NamesOf(err))
+	}
+	asked := answers(t, e, false)
+	var said []string
+	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	n := len(f.Calls())
+	if err := lc.AddLayers(t.Context(), "devvm layer add nix", []string{"nix"}, RemakeOptions{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Equal(*asked, []string{"remake_confirm image=nix vm=" + vm}) || !slices.Contains(said, "kept vm="+vm) {
+		t.Errorf("asked %q, said %q", *asked, said)
+	}
+	if slices.ContainsFunc(f.Methods()[n:], func(m string) bool { return m == "BuildImage" || m == "Stop" || m == "Rename" }) {
+		t.Errorf("declined, then %q", f.Methods()[n:])
+	}
+	*asked = nil
+	if err := lc.AddLayers(t.Context(), "devvm layer add nix", []string{"nix"}, RemakeOptions{CleanHome: true}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Equal(*asked, []string{"remake_confirm_clean_home image=nix vm=" + vm}) {
+		t.Errorf("--clean-home asked %q", *asked)
+	}
+	answers(t, e, true)
+	n = len(f.Calls())
+	if err := lc.AddLayers(t.Context(), "devvm layer add nix", []string{"nix"}, RemakeOptions{CleanHome: true, NoExport: true}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	for _, c := range f.Calls()[n:] {
+		if c.Method != "Exec" {
+			continue
+		}
+		if argv, _ := c.Args[1].([]string); len(argv) == 3 && (argv[2] == homeOut || argv[2] == homeIn || strings.Contains(argv[2], "tar -czf")) {
+			t.Errorf("--clean-home --no-export ran %q", argv[2])
+		}
+	}
+	said = nil
+	n = len(f.Calls())
+	if err := lc.AddLayers(t.Context(), "devvm layer add nix", []string{"nix"}, RemakeOptions{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Equal(said, []string{"has_layers layers=nix vm=" + vm}) || slices.Contains(f.Methods()[n:], "Stop") {
+		t.Errorf("has it: said %q, then %q", said, f.Methods()[n:])
+	}
+}
+
+// What devvm layer add refuses, before anything runs: a --clone VM, one
+// whose creation didn't finish, a layer its backend can't run, a parent
+// folder's VM without a terminal, and no VM.
+func TestAddLayersRefuses(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	lc := Lifecycle{e}
+	add := func() string {
+		return msg.NamesOf(lc.AddLayers(t.Context(), "devvm layer add docker", []string{"docker"}, RemakeOptions{Force: true}))
+	}
+	if got := add(); got != "no_vm dir="+e.Dir {
+		t.Errorf("no VM: %s", got)
+	}
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	vm := st.Name()
+	if err := set(t, st, keyClone, "clone"); err != nil {
+		t.Fatal(err)
+	}
+	if got := add(); got != "remake_clone vm="+vm {
+		t.Errorf("a clone: %s", got)
+	}
+	if err := set(t, st, keyClone, ""); err != nil {
+		t.Fatal(err)
+	}
+	change(t, st, func(st *state.VM) error { st.Created = time.Time{}; return nil })
+	if got := add(); got != "vm_unfinished vm="+vm {
+		t.Errorf("unfinished: %s", got)
+	}
+	change(t, st, func(st *state.VM) error { st.Created = time.Now(); return nil })
+	f.Capabilities = allNative()
+	delete(f.Capabilities, backend.FeatureDockerLayer)
+	if got := add(); !strings.HasPrefix(got, "backend_lacks ") {
+		t.Errorf("no docker: %s", got)
+	}
+	if slices.ContainsFunc(f.Methods(), func(m string) bool { return m == "Rename" }) {
+		t.Errorf("ran %q", f.Methods())
+	}
+}
+
+// A remake that fails once the old machine is set aside puts it back as
+// it was: the new one deleted, the old one renamed back,
+// its state as before, and nothing saved left.
+func TestRemakeUndo(t *testing.T) {
+	e, f, st, _ := remakeEnv(t)
+	vm := st.Name()
+	aside, _ := vmname.Aside(vm)
+	var cleanups []func(context.Context)
+	e.AddCleanup = func(c func(context.Context)) func() {
+		i := len(cleanups)
+		cleanups = append(cleanups, c)
+		return func() { cleanups[i] = nil }
+	}
+	f.Errs = map[string]error{"CreateVM": errors.New("no room")}
+	err := (Lifecycle{e}).AddLayers(t.Context(), "devvm layer add docker", []string{"docker"}, RemakeOptions{Force: true})
+	if err == nil || err.Error() != "no room" {
+		t.Fatalf("AddLayers: %v", err)
+	}
+	if !remakePending(readState(t, e.Dirs, vm)) {
+		t.Error("not pending before its cleanup")
+	}
+	n := len(f.Calls())
+	for _, c := range slices.Backward(cleanups) {
+		if c != nil {
+			c(t.Context())
+		}
+	}
+	if got := f.Methods()[n:]; !slices.Contains(got, "Rename") || !slices.Contains(got, "Delete") {
+		t.Errorf("cleanup ran %q", got)
+	}
+	if _, ok := f.Instances[vm]; !ok {
+		t.Error("its old machine isn't back")
+	}
+	if _, ok := f.Instances[aside]; ok {
+		t.Error("its old machine is still aside")
+	}
+	after := readState(t, e.Dirs, vm)
+	if after.Image != st.Image || remakePending(after) {
+		t.Errorf("image %s, pending %v", after.Image, remakePending(after))
+	}
+	if _, err := os.Stat(e.Dirs.VM(vm).Home()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its saved home: %v", err)
+	}
+}
+
+// A remake a killed devvm left is finished by the next devvm, which asks
+// nothing: with its old machine still aside, that's put back and the
+// remake done again; once it's gone, the new VM is made with the home
+// folder saved for it. Meanwhile other commands refuse, devvm gc
+// --orphans keeps it, and devvm rm deletes it and its old machine.
+func TestRemakePending(t *testing.T) {
+	e, f, st, restored := remakeEnv(t)
+	vm := st.Name()
+	aside, _ := vmname.Aside(vm)
+	pend := func(made bool) {
+		t.Helper()
+		if err := update(t.Context(), st, remakeSection, func(r *remakeInVM) error {
+			*r = remakeInVM{Image: "docker", Command: "devvm layer add docker", Home: true, Made: made}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Killed once its old machine was set aside.
+	pend(false)
+	if err := f.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Rename(t.Context(), vm, aside); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Settings{e}).Ports(t.Context()); msg.NamesOf(err) != "remake_pending dir="+e.Dir+" vm="+vm {
+		t.Errorf("devvm ports: %v", msg.NamesOf(err))
+	}
+	if r, err := (Leftovers{e}).Find(t.Context()); err != nil || len(r.Orphans) > 0 {
+		t.Errorf("orphans %+v, %v", r.Orphans, err)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if st := readState(t, e.Dirs, vm); st.Image != "docker" || remakePending(st) {
+		t.Errorf("image %s, pending %v", st.Image, remakePending(st))
+	}
+	if _, ok := f.Instances[aside]; ok {
+		t.Error("its old machine is still aside")
+	}
+
+	// Killed once the old machine was deleted: the new one, made or not,
+	// is made again with the saved home folder.
+	st = readState(t, e.Dirs, vm)
+	pend(true)
+	if err := os.WriteFile(e.Dirs.VM(vm).Home(), homeFiles(t, "notes", "kept"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	*restored = nil
+	n := len(f.Calls())
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if got := entries(t, *restored); !slices.Equal(got, []string{"0 644 notes kept"}) {
+		t.Errorf("restored %q", got)
+	}
+	if ms := f.Methods()[n:]; slices.Contains(ms, "Rename") || !slices.Contains(ms, "CreateVM") {
+		t.Errorf("finished with %q", ms)
+	}
+	if st := readState(t, e.Dirs, vm); remakePending(st) {
+		t.Error("still pending")
+	}
+
+	// devvm rm of one pending deletes its old machine too.
+	st = readState(t, e.Dirs, vm)
+	pend(false)
+	if err := f.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Rename(t.Context(), vm, aside); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if len(f.Instances) != 0 {
+		t.Errorf("left %v", f.Instances)
+	}
+	if _, err := os.Stat(e.Dirs.VM(vm).Dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its folder: %v", err)
+	}
+}

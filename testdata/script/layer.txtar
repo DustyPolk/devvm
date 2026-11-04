@@ -48,7 +48,7 @@ stderr '^devvm: layer_name_invalid layer=-x$'
 ! exec devvm layer new
 stderr '^devvm: arg_missing args=NAME command=devvm layer new$'
 ! exec devvm layer pg
-stderr '^devvm: no_subcommand command=devvm layer commands=new given=pg$'
+stderr '^devvm: no_subcommand command=devvm layer commands=add, new given=pg$'
 ! exists $LAYERS/node.sh
 ! exists $LAYERS/My_DB.sh
 

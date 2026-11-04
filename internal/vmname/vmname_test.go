@@ -76,3 +76,27 @@ func TestSlugOf(t *testing.T) {
 		}
 	}
 }
+
+// A VM's old machine, set aside while a remake makes the new one, has a
+// name that's neither a VM's nor an image's, which AsideHash reads, and
+// is longer than the shortest VM name by two.
+func TestAside(t *testing.T) {
+	a, ok := Aside("devvm-my-app-0123456789abcd")
+	if !ok || a != "devvm-0123456789abcd-old" {
+		t.Fatalf("Aside = %q, %v", a, ok)
+	}
+	if h, ok := AsideHash(a); IsVM(a) || !ok || h != "0123456789abcd" {
+		t.Errorf("%s: IsVM %v, AsideHash %q, %v", a, IsVM(a), h, ok)
+	}
+	if shortest := "devvm-x-0123456789abcd"; len(a) != len(shortest)+2 || !IsVM(shortest) {
+		t.Errorf("%s is %d long", a, len(a))
+	}
+	if _, ok := Aside("devvm-tools-build"); ok {
+		t.Error("an aside name for a build VM")
+	}
+	for _, s := range []string{"devvm-0123456789abc-old", "devvm-0123456789abcd", "x-0123456789abcd-old", "devvm-0123456789abcd-old-x", "devvm-web-0123456789abcd"} {
+		if _, ok := AsideHash(s); ok {
+			t.Errorf("AsideHash(%q) is one", s)
+		}
+	}
+}

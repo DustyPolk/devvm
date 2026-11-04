@@ -20,7 +20,7 @@ import (
 )
 
 // Lifecycle stops the folder's VM, gives it to the folder, exports its
-// agents' history and deletes it.
+// agents' history, makes it again (remake.go) and deletes it.
 type Lifecycle struct{ *Env }
 
 // Stop stops the folder's VM, its proxy and its link session. Then, the
@@ -111,7 +111,8 @@ type RmOptions struct {
 }
 
 // Rm deletes the folder's VM, after asking in a terminal, or with
-// --force; without either it refuses (force_needed). Its agents' history
+// --force; without either it refuses (force_needed). One in the middle of
+// a remake is deleted too, its old machine with it (teardown). Its agents' history
 // is exported first unless --no-export: an export that fails keeps it.
 // A --clone VM's branches the repo lacks and uncommitted changes are
 // checked first (cloneRmCheck), which asks only in a terminal, unless
@@ -166,7 +167,9 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 			return err
 		}
 	}
-	if !o.NoExport && st.Finished() && len(image.AgentsOf(tools.Names(st))) > 0 {
+	// A remake that didn't finish may have left no machine by its name:
+	// its history was exported then, unless --no-export.
+	if !o.NoExport && t.exists && st.Finished() && len(image.AgentsOf(tools.Names(st))) > 0 {
 		if err := e.export(ctx, t, "", msg.RmExportFailed(vm)); err != nil {
 			return err
 		}

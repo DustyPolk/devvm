@@ -123,7 +123,7 @@ devvm ls                # list every VM
 devvm rm                # delete it after asking, saving its agents' history first
 ```
 
-`devvm tools` shows the VM's layers too, greyed out, because a VM keeps the layers it was made with. When you add an agent to a running VM, devvm asks before it restarts the VM to mount the agent's config.
+`devvm tools` shows the VM's layers too, greyed out, because a VM keeps the layers it was made with, and `devvm layer add` makes the VM again to add one ([adding layers to a VM](../using/images.md#adding-layers-to-a-vm)). When you add an agent to a running VM, devvm asks before it restarts the VM to mount the agent's config.
 
 Each question devvm asks here has a flag that answers it beforehand, such as `--no-network-policy` or `devvm rm --force`, and `--no-input` makes devvm ask nothing at all ([questions devvm asks](commands.md#questions-devvm-asks)).
 

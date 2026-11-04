@@ -599,7 +599,7 @@ func DesktopFailed(reason string) M {
 	return M{id: "desktop_failed", vals: []val{{"reason", reason}}}
 }
 
-// DesktopNoLayer is [desktop_no_layer]: "{{.vm}} has no desktop, because its image has no desktop layer. Save any work in it, then run devvm rm and devvm --layers desktop, or devvm setup --layers to give every new VM one."
+// DesktopNoLayer is [desktop_no_layer]: "{{.vm}} has no desktop, because its image has no desktop layer. Run devvm layer add desktop to make it again with one."
 func DesktopNoLayer(vm string) M {
 	return M{id: "desktop_no_layer", vals: []val{{"vm", vm}}}
 }
@@ -1297,6 +1297,11 @@ func GroupTrust(group string) M {
 // GroupWaiting is [group_waiting]: "waiting for another devvm to finish changing a group"
 func GroupWaiting() M {
 	return M{id: "group_waiting"}
+}
+
+// HasLayers is [has_layers]: "{{.vm}} has {{.layers}} already"
+func HasLayers(layers string, vm string) M {
+	return M{id: "has_layers", vals: []val{{"layers", layers}, {"vm", vm}}}
 }
 
 // HasTools is [has_tools]: "{{.vm}} has {{.tools}} already"
@@ -2124,7 +2129,7 @@ func PartOtherFlag(flag string, given string, other string) M {
 	return M{id: "part_other_flag", vals: []val{{"flag", flag}, {"given", given}, {"other", other}}}
 }
 
-// PartsFlagsIgnored is [parts_flags_ignored]: "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools."
+// PartsFlagsIgnored is [parts_flags_ignored]: "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools, and to add a layer, devvm layer add."
 func PartsFlagsIgnored(vm string) M {
 	return M{id: "parts_flags_ignored", vals: []val{{"vm", vm}}}
 }
@@ -2179,7 +2184,7 @@ func PickToolchains() M {
 	return M{id: "pick_toolchains"}
 }
 
-// PickVMHelp is [pick_vm_help]: "Choose {{.vm}}'s shared tools. Use up and down to move, space to toggle and enter to confirm."
+// PickVMHelp is [pick_vm_help]: "Choose {{.vm}}'s shared tools. Its layers are greyed out, and devvm layer add adds one. Use up and down to move, space to toggle and enter to confirm."
 func PickVMHelp(vm string) M {
 	return M{id: "pick_vm_help", vals: []val{{"vm", vm}}}
 }
@@ -2324,6 +2329,81 @@ func RebuildReplaces(above string, image string) M {
 	return M{id: "rebuild_replaces", vals: []val{{"above", above}, {"image", image}}}
 }
 
+// Remade is [remade]: "made {{.vm}} again from {{.image}}"
+func Remade(image string, vm string) M {
+	return M{id: "remade", vals: []val{{"image", image}, {"vm", vm}}}
+}
+
+// RemakeClone is [remake_clone]: "{{.vm}} keeps its clone of the repo on its own disk, so devvm can't make it again. Push its work, then run devvm rm and devvm --clone."
+func RemakeClone(vm string) M {
+	return M{id: "remake_clone", vals: []val{{"vm", vm}}}
+}
+
+// RemakeConfirm is [remake_confirm]: "devvm makes {{.vm}} again from {{.image}}, keeping its home folder, the project folder and its settings. Everything else on its disk is lost, such as packages you installed, Docker's images and the Nix store. Make it again?"
+func RemakeConfirm(image string, vm string) M {
+	return M{id: "remake_confirm", vals: []val{{"image", image}, {"vm", vm}}}
+}
+
+// RemakeConfirmCleanHome is [remake_confirm_clean_home]: "devvm makes {{.vm}} again from {{.image}}, keeping the project folder and its settings. Everything else on its disk is lost, its home folder included. Make it again?"
+func RemakeConfirmCleanHome(image string, vm string) M {
+	return M{id: "remake_confirm_clean_home", vals: []val{{"image", image}, {"vm", vm}}}
+}
+
+// RemakeExportFailed is [remake_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM as it was. Run {{.command}} --no-export to go ahead without exporting."
+func RemakeExportFailed(command string, vm string) M {
+	return M{id: "remake_export_failed", vals: []val{{"command", command}, {"vm", vm}}}
+}
+
+// RemakeFailed is [remake_failed]: "Making this folder's VM again failed: {{.reason}}."
+func RemakeFailed(reason string) M {
+	return M{id: "remake_failed", vals: []val{{"reason", reason}}}
+}
+
+// RemakeHomeFailed is [remake_home_failed]: "Saving {{.vm}}'s home folder failed, so devvm kept the VM as it was. Run {{.command}} --clean-home to go ahead without it."
+func RemakeHomeFailed(command string, vm string) M {
+	return M{id: "remake_home_failed", vals: []val{{"command", command}, {"vm", vm}}}
+}
+
+// RemakeHomeLost is [remake_home_lost]: "{{.vm}}'s saved home folder is gone, so its new disk has the image's home folder."
+func RemakeHomeLost(vm string) M {
+	return M{id: "remake_home_lost", vals: []val{{"vm", vm}}}
+}
+
+// RemakeParentVM is [remake_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To make it again, run {{.command}} in {{.dir}}, or here in a terminal to confirm."
+func RemakeParentVM(command string, dir string, vm string) M {
+	return M{id: "remake_parent_vm", vals: []val{{"command", command}, {"dir", dir}, {"vm", vm}}}
+}
+
+// RemakeParentVMAsk is [remake_parent_vm_ask]: "{{.vm}} was made for {{.dir}}, which this folder is inside, and may hold that project's work. Make it again?"
+func RemakeParentVMAsk(dir string, vm string) M {
+	return M{id: "remake_parent_vm_ask", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// RemakePending is [remake_pending]: "Making {{.vm}} again didn't finish. Run devvm in {{.dir}} to finish it."
+func RemakePending(dir string, vm string) M {
+	return M{id: "remake_pending", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// RemakeRestoreFailed is [remake_restore_failed]: "Copying {{.vm}}'s home folder onto its new disk failed."
+func RemakeRestoreFailed(vm string) M {
+	return M{id: "remake_restore_failed", vals: []val{{"vm", vm}}}
+}
+
+// RemakeResuming is [remake_resuming]: "finishing making {{.vm}} again from {{.image}}"
+func RemakeResuming(image string, vm string) M {
+	return M{id: "remake_resuming", vals: []val{{"image", image}, {"vm", vm}}}
+}
+
+// RemakeUndoFailed is [remake_undo_failed]: "Putting {{.vm}} back as it was failed. Run devvm in {{.dir}} to finish making it again."
+func RemakeUndoFailed(dir string, vm string) M {
+	return M{id: "remake_undo_failed", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// RemakeUndone is [remake_undone]: "putting {{.vm}} back as it was"
+func RemakeUndone(vm string) M {
+	return M{id: "remake_undone", vals: []val{{"vm", vm}}}
+}
+
 // RemakeUnfinished is [remake_unfinished]: "Creating {{.vm}} didn't finish, so nothing of yours is in it.\nDelete {{.vm}} and make it again?"
 func RemakeUnfinished(vm string) M {
 	return M{id: "remake_unfinished", vals: []val{{"vm", vm}}}
@@ -2349,6 +2429,16 @@ func RemovedRemote(remote string) M {
 	return M{id: "removed_remote", vals: []val{{"remote", remote}}}
 }
 
+// RenameFailed is [rename_failed]: "Renaming {{.vm}} to {{.to}} failed."
+func RenameFailed(to string, vm string) M {
+	return M{id: "rename_failed", vals: []val{{"to", to}, {"vm", vm}}}
+}
+
+// Renaming is [renaming]: "renaming {{.vm}} to {{.to}}"
+func Renaming(to string, vm string) M {
+	return M{id: "renaming", vals: []val{{"to", to}, {"vm", vm}}}
+}
+
 // ResolvingTools is [resolving_tools]: "resolving the shared tools' versions"
 func ResolvingTools() M {
 	return M{id: "resolving_tools"}
@@ -2357,6 +2447,11 @@ func ResolvingTools() M {
 // RestartNow is [restart_now]: "Restarting {{.vm}} applies the change now, and anything running in it stops. Restart it now?"
 func RestartNow(vm string) M {
 	return M{id: "restart_now", vals: []val{{"vm", vm}}}
+}
+
+// RestoringHome is [restoring_home]: "copying {{.vm}}'s home folder onto its new disk"
+func RestoringHome(vm string) M {
+	return M{id: "restoring_home", vals: []val{{"vm", vm}}}
 }
 
 // RetentionBad is [retention_bad]: "That retention setting is refused, and nothing changed: {{.reason}}."
@@ -2502,6 +2597,11 @@ func SavedBranches(branches string) M {
 // SavedNamesTaken is [saved_names_taken]: "This repo has no free branch names from saved/{{.remote}}/* to saved/{{.remote}}-99/* to keep the VM's branches under, so devvm kept {{.vm}}. Rename or delete some of those branches, then run devvm rm again."
 func SavedNamesTaken(remote string, vm string) M {
 	return M{id: "saved_names_taken", vals: []val{{"remote", remote}, {"vm", vm}}}
+}
+
+// SavingHome is [saving_home]: "saving {{.vm}}'s home folder"
+func SavingHome(vm string) M {
+	return M{id: "saving_home", vals: []val{{"vm", vm}}}
 }
 
 // ScriptFailed is [script_failed]: "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run devvm limactl shell --start {{.vm}}."
@@ -2789,7 +2889,7 @@ func ToolNoDownload(tool string, version string) M {
 	return M{id: "tool_no_download", vals: []val{{"tool", tool}, {"version", version}}}
 }
 
-// ToolNotLayer is [tool_not_layer]: "{{.tool}} is a shared tool, and an image holds only base and layers. Choose a VM's shared tools when devvm makes it, or with devvm tools."
+// ToolNotLayer is [tool_not_layer]: "{{.tool}} is a shared tool, and an image holds only base and layers. Choose a VM's shared tools when devvm makes it, or add them with devvm tools add."
 func ToolNotLayer(tool string) M {
 	return M{id: "tool_not_layer", vals: []val{{"tool", tool}}}
 }
@@ -2897,6 +2997,11 @@ func UnknownFeature(feature string) M {
 // UnknownLayer is [unknown_layer]: "There's no layer {{.layer}}. Choose from {{.layers}}."
 func UnknownLayer(layer string, layers string) M {
 	return M{id: "unknown_layer", vals: []val{{"layer", layer}, {"layers", layers}}}
+}
+
+// UnknownLayerLike is [unknown_layer_like]: "There's no layer {{.layer}}. Did you mean {{.like}}?"
+func UnknownLayerLike(layer string, like string) M {
+	return M{id: "unknown_layer_like", vals: []val{{"layer", layer}, {"like", like}}}
 }
 
 // UnknownPart is [unknown_part]: "There's no {{.given}} for {{.flag}}. Choose from {{.names}}, or none."
@@ -3335,6 +3440,7 @@ var specs = map[string]spec{
 	"group_policy_on":                  {fields: []string{"group", "vm"}},
 	"group_trust":                      {fields: []string{"group"}},
 	"group_waiting":                    {},
+	"has_layers":                       {fields: []string{"layers", "vm"}},
 	"has_tools":                        {fields: []string{"tools", "vm"}},
 	"history_failed":                   {fields: []string{"reason"}},
 	"history_not_exported":             {fields: []string{"vm"}},
@@ -3540,13 +3646,31 @@ var specs = map[string]spec{
 	"reading_images":                   {},
 	"reading_space":                    {},
 	"rebuild_replaces":                 {fields: []string{"above", "image"}},
+	"remade":                           {fields: []string{"image", "vm"}},
+	"remake_clone":                     {fields: []string{"vm"}},
+	"remake_confirm":                   {fields: []string{"image", "vm"}},
+	"remake_confirm_clean_home":        {fields: []string{"image", "vm"}},
+	"remake_export_failed":             {fields: []string{"command", "vm"}},
+	"remake_failed":                    {fields: []string{"reason"}},
+	"remake_home_failed":               {fields: []string{"command", "vm"}},
+	"remake_home_lost":                 {fields: []string{"vm"}},
+	"remake_parent_vm":                 {fields: []string{"command", "dir", "vm"}},
+	"remake_parent_vm_ask":             {fields: []string{"dir", "vm"}},
+	"remake_pending":                   {fields: []string{"dir", "vm"}},
+	"remake_restore_failed":            {fields: []string{"vm"}},
+	"remake_resuming":                  {fields: []string{"image", "vm"}},
+	"remake_undo_failed":               {fields: []string{"dir", "vm"}},
+	"remake_undone":                    {fields: []string{"vm"}},
 	"remake_unfinished":                {fields: []string{"vm"}},
 	"remote_add_failed":                {fields: []string{"remote"}},
 	"remote_kept":                      {fields: []string{"remote"}},
 	"remotes_taken":                    {fields: []string{"slug", "vm"}},
 	"removed_remote":                   {fields: []string{"remote"}},
+	"rename_failed":                    {fields: []string{"to", "vm"}},
+	"renaming":                         {fields: []string{"to", "vm"}},
 	"resolving_tools":                  {},
 	"restart_now":                      {fields: []string{"vm"}},
+	"restoring_home":                   {fields: []string{"vm"}},
 	"retention_bad":                    {fields: []string{"reason"}},
 	"retention_busy":                   {},
 	"retention_deleted":                {fields: []string{"exports", "nix_files", "orphans", "tools"}},
@@ -3576,6 +3700,7 @@ var specs = map[string]spec{
 	"running_script":                   {fields: []string{"script", "vm"}},
 	"saved_branches":                   {fields: []string{"branches"}},
 	"saved_names_taken":                {fields: []string{"remote", "vm"}},
+	"saving_home":                      {fields: []string{"vm"}},
 	"script_failed":                    {fields: []string{"script", "vm"}},
 	"secret_failed":                    {fields: []string{"reason"}},
 	"secret_read_failed":               {fields: []string{"reason", "secret"}},
@@ -3655,6 +3780,7 @@ var specs = map[string]spec{
 	"unfinished_image":                 {fields: []string{"vm"}},
 	"unknown_feature":                  {fields: []string{"feature"}},
 	"unknown_layer":                    {fields: []string{"layer", "layers"}},
+	"unknown_layer_like":               {fields: []string{"layer", "like"}},
 	"unknown_part":                     {fields: []string{"flag", "given", "names"}},
 	"unknown_part_like":                {fields: []string{"flag", "given", "like"}},
 	"unknown_tool":                     {fields: []string{"tool", "tools"}},

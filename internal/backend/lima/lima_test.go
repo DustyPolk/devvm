@@ -26,6 +26,7 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/ubuntu"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // testUI prints nothing, runs commands as they are, counts no steps and
@@ -733,5 +734,55 @@ func TestStubLifecycle(t *testing.T) {
 	// A project VM's folder, its start record with it, is its teardown's.
 	if _, err := os.Stat(l.Dirs.VM(vm).Started()); err != nil {
 		t.Errorf("its start record: %v", err)
+	}
+}
+
+// Against the limactl stub: a stopped VM's instance is renamed, its
+// size with it, and a running one, a name too long for its socket or a
+// failed rename is refused. Its old machine, set aside under its VM's
+// aside name, is no stray while its VM has state.
+func TestStubRename(t *testing.T) {
+	l, _, stubs := stubLima(t)
+	ctx := t.Context()
+	vm := "devvm-p-0123456789abcd"
+	aside, _ := vmname.Aside(vm)
+	stubs.Write(t, "instances", vm+" Running\n")
+	stubs.Write(t, "size-"+vm, "2 4294967296 107374182400\n")
+	if err := l.Rename(ctx, vm, aside); err == nil || msg.IDOf(err) != "" {
+		t.Errorf("running: %v", err)
+	}
+	stubs.Write(t, "instances", vm+" Stopped\n")
+	if err := l.Rename(ctx, vm, strings.Repeat("x", l.NameMax()+1)); msg.IDOf(err) != "lima_home_too_long" {
+		t.Errorf("too long: %v", err)
+	}
+	stubs.Touch(t, "rename-fails")
+	if err := l.Rename(ctx, vm, aside); msg.IDOf(err) != "rename_failed" {
+		t.Errorf("failed: %v", err)
+	}
+	if err := os.Remove(stubs.Path("rename-fails")); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Rename(ctx, vm, aside); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Inspect(ctx, vm); !errors.Is(err, backend.ErrNotFound) {
+		t.Errorf("%s after the rename: %v", vm, err)
+	}
+	in, err := l.Inspect(ctx, aside)
+	if err != nil || in.Size.CPUs != 2 || in.Status != backend.StatusStopped {
+		t.Errorf("%s: %+v, %v", aside, in, err)
+	}
+	strays, err := l.Strays(ctx)
+	if err != nil || len(strays) != 1 || strays[0].Name != aside {
+		t.Errorf("without its VM's state, strays %+v, %v", strays, err)
+	}
+	if err := os.MkdirAll(l.Dirs.VM(vm).Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.Dirs.VM(vm).State(), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if strays, err := l.Strays(ctx); err != nil || len(strays) != 0 {
+		t.Errorf("with its VM's state, strays %+v, %v", strays, err)
 	}
 }

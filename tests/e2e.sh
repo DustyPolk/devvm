@@ -1797,6 +1797,49 @@ check "ssh-agent rm takes the key out of devvm's own agent and its record, and l
 check "rm deletes the SSH agent VM" bash -c "cd '$g' && as_user '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 && ! limactl list -q | grep -qx $vm"
 kill "$user_agent_pid" 2>/dev/null; user_agent_pid=""
 pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock"
+
+section "devvm layer add"
+export -f in_vm
+# Two small layers of the sandbox's own, each leaving a file in the system.
+for l in e2eadd e2eadd2; do
+  printf '#!/bin/bash\nset -euo pipefail\necho %s | sudo tee /etc/devvm-%s >/dev/null\n' "$l" "$l" > "$layers/$l.sh"
+  : > "$layers/$l.policy"
+done
+r=$(newproj remade)
+launch "$r" 'echo in-home > ~/e2e-home.txt; echo in-project > e2e-project.txt' --no-network-policy --no-git-protect --ports 3000
+remade=$vm
+aside="devvm-${remade: -14}-old"; created+=("$aside")
+rd=$(vmdir "$remade")
+id=$(st_get "$rd" id)
+check "a VM with ports, a rule and a secret binding" bash -c "cd '$r' &&
+  '$D' ports 3000,5173 </dev/null >/dev/null 2>&1 && '$D' network allow example.com </dev/null >/dev/null 2>&1 &&
+  echo ghp_E2EFAKE | '$D' secret set github --stdin >/dev/null 2>&1 && '$D' secret use github </dev/null >/dev/null 2>&1 &&
+  in_vm '$remade' 'grep -qx in-home ~/e2e-home.txt'"
+check "layer add without a terminal or --force refuses, and changes nothing" bash -c "cd '$r' &&
+  ! '$D' layer add e2eadd </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m force_needed command='devvm layer add e2eadd')\" '$work/last.log' && [[ \$(st_get '$rd' image) == base ]]"
+check "layer add --force makes it again with the layer, in a shell" bash -c "cd '$r' &&
+  printf 'echo e2e-remade-shell\n' | '$D' layer add e2eadd --force >'$work/last.log' 2>&1 &&
+  grep -qx e2e-remade-shell '$work/last.log' && [[ \$(st_get '$rd' image) == e2eadd ]] &&
+  in_vm '$remade' 'grep -qx e2eadd /etc/devvm-e2eadd' && ! limactl list -q | grep -qx '$aside'"
+owned e2eadd
+check "it keeps its ID, ports, rule, secret binding and network choice" bash -c "
+  [[ \$(st_get '$rd' id) == '$id' && \$(st_get '$rd' ports.forward) == 3000,5173 && \$(st_get '$rd' secrets.names) == github ]] &&
+  [[ \$(st_get '$rd' net.on) == false ]] && grep -qx example.com '$rd/policy' && [[ ! -e '$rd/home.tar.gz' ]]"
+check "it keeps the project folder and its home folder" bash -c "
+  grep -qx in-project '$r/e2e-project.txt' && in_vm '$remade' 'grep -qx in-home ~/e2e-home.txt'"
+check "layer add --clean-home adds the next layer on top, with the image's home folder" bash -c "cd '$r' &&
+  printf 'exit\n' | '$D' layer add e2eadd2 --force --clean-home >'$work/last.log' 2>&1 &&
+  [[ \$(st_get '$rd' image) == e2eadd+e2eadd2 ]] && in_vm '$remade' 'grep -qx e2eadd /etc/devvm-e2eadd && grep -qx e2eadd2 /etc/devvm-e2eadd2' &&
+  in_vm '$remade' '[[ ! -e ~/e2e-home.txt ]]' && [[ \$(st_get '$rd' id) == '$id' ]] && grep -qx in-project '$r/e2e-project.txt'"
+owned e2eadd+e2eadd2
+check "layer add of a layer it has changes nothing" bash -c "cd '$r' &&
+  '$D' layer add e2eadd --force </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m has_layers layers=e2eadd vm='$remade')\" '$work/last.log' && [[ \$(st_get '$rd' image) == e2eadd+e2eadd2 ]]"
+check "rm deletes the VM made again" bash -c "cd '$r' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
+  ! limactl list -q | grep -qxE '$remade|$aside'"
+"$D" secret rm github --force </dev/null >/dev/null 2>&1
+rm -f "$layers"/e2eadd*.sh "$layers"/e2eadd*.policy
 fi
 
 if want clone; then

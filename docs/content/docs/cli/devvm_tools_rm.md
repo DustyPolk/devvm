@@ -1,6 +1,6 @@
 ---
 title: devvm tools rm
-weight: 53
+weight: 54
 ---
 
 Take shared tools out of this folder's VM, then open a shell in it

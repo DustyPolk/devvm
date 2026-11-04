@@ -366,6 +366,25 @@ func CheckPart(flag string, given, names []string) error {
 	return nil
 }
 
+// CheckLayers refuses a name given as a layer (devvm layer add's) that
+// isn't one of layers, the built-in layers and the user's: a shared
+// tool's (tool_not_layer), else naming the closest (msg.Closest), else
+// them all.
+func CheckLayers(given, layers []string) error {
+	for _, g := range given {
+		switch {
+		case slices.Contains(layers, g):
+		case image.IsTool(g):
+			return msg.ToolNotLayer(g)
+		case msg.Closest(g, layers) != "":
+			return msg.UnknownLayerLike(g, msg.Closest(g, layers))
+		default:
+			return msg.UnknownLayer(g, strings.Join(layers, " "))
+		}
+	}
+	return nil
+}
+
 // firstRunAgents asks which agents new VMs get on devvm's first run in a
 // terminal, until they're chosen (def), unless --agents chose this VM's.
 func (e creation) firstRunAgents(o Options, def settings.Defaults) error {

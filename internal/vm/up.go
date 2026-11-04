@@ -58,7 +58,8 @@ type Launch struct{ *Env }
 // its image (built if it isn't), with only the folder mounted, .git
 // protected, started; with --clone, nothing mounted but its own clone of
 // the repo (seedClone). A VM that exists is opened as it is, with what's
-// changed since checked (open). When the folder has none but a parent
+// changed since checked (open), and one whose remake didn't finish is
+// finished first (remaking.finishPending). When the folder has none but a parent
 // folder has one, that one is opened in this folder, after asking in a
 // terminal (useParent), unless --here or --clone. On success it doesn't return: the
 // shell takes devvm's place.
@@ -83,6 +84,17 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 	}
 	if parent != nil && useParent(e.Env, parent) {
 		t = parent
+	}
+	// A remake that didn't finish, whose machine may be gone: finished,
+	// never made anew.
+	if remakePending(t.st) {
+		if err := e.checkFolder(t.f, t.st); err != nil {
+			return err
+		}
+		if err := remaking(e).finishPending(ctx, t); err != nil {
+			return err
+		}
+		return e.open(ctx, o, t)
 	}
 	if !t.exists {
 		return creation{e}.create(ctx, o, t.f, t.b, size, ports)

@@ -37,7 +37,7 @@ func newRmCmd(u *ui.UI) *cobra.Command {
 		},
 	}
 	addForceFlag(cmd.Flags(), &o.Force)
-	cmd.Flags().BoolVar(&o.NoExport, "no-export", false, "delete without exporting the agents' history first")
+	addNoExportFlag(cmd.Flags(), &o.NoExport)
 	cmd.Flags().BoolVar(&o.NoCloneCheck, "no-clone-check", false, "delete a --clone VM without checking its clone for unfetched commits and uncommitted changes, which are lost")
 	return cmd
 }

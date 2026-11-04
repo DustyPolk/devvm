@@ -1,6 +1,6 @@
 ---
 title: devvm ports rm
-weight: 34
+weight: 35
 ---
 
 Stop forwarding some ports from this folder's VM

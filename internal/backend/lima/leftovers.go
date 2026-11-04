@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 var (
@@ -26,7 +28,13 @@ func (l *Lima) Strays(ctx context.Context) ([]backend.Stray, error) {
 	}
 	var out []backend.Stray
 	for _, in := range vms {
-		if _, err := os.Stat(l.Dirs.VM(in.Name).State()); errors.Is(err, os.ErrNotExist) {
+		// A VM's old machine, set aside while a remake makes the new one,
+		// is that VM's.
+		st := l.Dirs.VM(in.Name).State()
+		if h, ok := vmname.AsideHash(in.Name); ok {
+			st = paths.VM{Dir: l.Dirs.VMDir(h)}.State()
+		}
+		if _, err := os.Stat(st); errors.Is(err, os.ErrNotExist) {
 			out = append(out, backend.Stray{Name: in.Name, Data: l.Dirs.Data})
 		}
 	}

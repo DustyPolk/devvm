@@ -208,7 +208,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 ### Adding to a VM
 
-`devvm tools` in a terminal shows the same list as a new VM, with the VM's toolchains and agents checked. Its layers are in the list too, greyed out, and the cursor skips them, because a VM keeps the layers it was made with. Check what you want to add, uncheck what you want to take out, and press enter. devvm then makes those changes as `devvm tools add` and `devvm tools rm` would, and opens a shell in the VM. When you change nothing, devvm says so and opens nothing. Without a terminal, or with `--json`, `devvm tools` shows the VM's shared tools instead.
+`devvm tools` in a terminal shows the same list as a new VM, with the VM's toolchains and agents checked. Its layers are in the list too, greyed out, and the cursor skips them, because a VM keeps the layers it was made with until `devvm layer add` makes it again. Check what you want to add, uncheck what you want to take out, and press enter. devvm then makes those changes as `devvm tools add` and `devvm tools rm` would, and opens a shell in the VM. When you change nothing, devvm says so and opens nothing. Without a terminal, or with `--json`, `devvm tools` shows the VM's shared tools instead.
 
 `devvm tools add TOOL...` adds shared tools to the folder's VM without the list, each one a separate word, as in `devvm tools add python claude`, and then opens a shell in it. The tools are mounted rather than installed, so nothing in the VM's disk changes.
 
@@ -216,7 +216,9 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 - devvm mounts a new agent's config folders, which needs the VM to start again. A stopped VM gets them as it starts, and for a running VM devvm asks before restarting it, because anything running in it stops. If you answer no, there's no terminal or you pass `--no-input`, the VM gets them at its next start.
 - devvm says which of the tools the VM has already and leaves those as they are.
 
-`devvm tools rm TOOL...` takes shared tools out again. A layer can't be added to a VM that exists or taken out of one, because its script changes the VM's disk, so only a new VM gets a layer. To add or drop one, save your work outside the project folder, run `devvm rm`, and make the VM again with the layers you want.
+`devvm tools rm TOOL...` takes shared tools out again.
+
+A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the VM more layers by making it again from an image with them on top, as in `devvm layer add desktop`. The VM keeps its home folder, the project folder and its settings, and everything else on its disk is lost, such as the packages you installed and Docker's images. So in a terminal devvm asks first, with no as the default, and without one it refuses unless you give `--force`. It exports the agents' history first unless you give `--no-export`, and `--clean-home` gives the VM the new image's home folder instead of its own ([adding layers to a VM](../using/images.md#adding-layers-to-a-vm)). A layer can't be taken out of a VM. To drop one, save your work outside the project folder, run `devvm rm`, and make the VM again with the layers you want.
 
 ## Links between VMs
 
@@ -242,6 +244,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm build IMAGE` | build an image and the images under it, unless they're built, such as `devvm build docker` or `devvm build foo+bar`, where IMAGE is base or layers and never a shared tool ([details](../using/images.md#layers)) |
 | `devvm rebuild IMAGE` | build an image of base or layers again from its parent as it is, and delete the stale images no VM uses, while shared tools follow the tools lock instead ([details](../using/images.md#rebuilding)) |
 | `devvm layer new NAME` | start a layer of your own, `~/.config/devvm/layers/NAME.sh`, with its allowlist, `NAME.policy` ([details](../using/customizing.md#your-own-layers)) |
+| `devvm layer add LAYER... [--force] [--no-export] [--clean-home]` | make this folder's VM again with more layers on top, keeping its home folder and settings, after asking, then open a shell in it ([details](#adding-to-a-vm)) |
 
 `devvm build`, `devvm rebuild` and `devvm images rm` take `--from IMAGE` to work on a base made from that container image ([details](../using/from.md)).
 

@@ -17,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/ubuntu"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // These tests run the real limactl on dummy instances, as Lima's own
@@ -110,7 +111,8 @@ type step struct {
 // conversion, a layer, the tools build VM and the conversion's VM, a
 // project VM with its mounts, ports, size and environment, the edits each
 // start makes (a build's networks, network policy with the proxy's
-// password and the VM's Want changed in the same edit, none), and
+// password and the VM's Want changed in the same edit, none), the project
+// VM set aside under another name and put back, as a remake does, and
 // everything deleted.
 func scenario(fx fixture) []step {
 	size := backend.Size{CPUs: 2, MemoryGiB: 3}
@@ -173,6 +175,14 @@ func scenario(fx fixture) []step {
 		{"the same start again", start(dummyVM, &changed, proxy)},
 		{"a start without network policy", start(dummyVM, &changed, backend.Confinement{Net: backend.NetDirect, Env: env})},
 		{"a start with no network", start(dummyVM, &changed, backend.Confinement{Net: backend.NetNone})},
+		{"the project VM set aside", func(ctx context.Context, l *Lima) error {
+			aside, _ := vmname.Aside(dummyVM)
+			return l.Rename(ctx, dummyVM, aside)
+		}},
+		{"the project VM put back", func(ctx context.Context, l *Lima) error {
+			aside, _ := vmname.Aside(dummyVM)
+			return l.Rename(ctx, aside, dummyVM)
+		}},
 		{"the build VMs deleted", func(ctx context.Context, l *Lima) error {
 			if err := l.deleteIfThere(ctx, ToolsVM); err != nil {
 				return err

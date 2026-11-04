@@ -2,10 +2,12 @@ package vm
 
 import (
 	"context"
+	"errors"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // vmFolders finds and deletes VMs' folders in devvm's data folder: a
@@ -18,7 +20,8 @@ type vmFolders struct{ *Env }
 // its port forwarder, its link session), then what's
 // outside its folder (its clone's remote or .git's locks, other VMs'
 // links to it and its group, its host keys, with leaves its backend's own
-// leftovers, backend.Forgetter), then its folder, every file of its in
+// leftovers, backend.Forgetter, and the old machine a remake that didn't
+// finish set aside), then its folder, every file of its in
 // it, and last its ssh config entry. leaves is false after the backend
 // deleted the VM itself, which took its leftovers with it.
 func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
@@ -39,6 +42,12 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 	}
 	if f, ok := backend.As[backend.Forgetter](t.b); ok && leaves {
 		if err := f.Forget(ctx, vm); err != nil {
+			return err
+		}
+	}
+	// The old machine a remake that didn't finish set aside.
+	if aside, ok := vmname.Aside(vm); ok && remakePending(t.st) {
+		if err := t.b.Delete(ctx, aside); err != nil && !errors.Is(err, backend.ErrNotFound) {
 			return err
 		}
 	}

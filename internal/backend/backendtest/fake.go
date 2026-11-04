@@ -273,6 +273,29 @@ func (f *Fake) Delete(_ context.Context, vm string) error {
 	return nil
 }
 
+// Rename records the call and gives the instance its new name; one that
+// runs, or a name an instance has, is refused.
+func (f *Fake) Rename(_ context.Context, vm, to string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.record("Rename", vm, to); err != nil {
+		return err
+	}
+	in, ok := f.Instances[vm]
+	switch _, taken := f.Instances[to]; {
+	case !ok:
+		return fmt.Errorf("%s: %w", vm, backend.ErrNotFound)
+	case in.Status != backend.StatusStopped:
+		return fmt.Errorf("%s runs", vm)
+	case taken:
+		return fmt.Errorf("%s exists", to)
+	}
+	delete(f.Instances, vm)
+	in.Name = to
+	f.Instances[to] = in
+	return nil
+}
+
 // List records the call and returns Instances, sorted by name.
 func (f *Fake) List(context.Context) ([]backend.Instance, error) {
 	f.mu.Lock()

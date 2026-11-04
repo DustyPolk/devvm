@@ -369,52 +369,64 @@ func (e *Env) inspect(ctx context.Context, f project.Folder, st *state.VM) (*fou
 	return t, nil
 }
 
-// findExisting finds the folder's VM, which must exist.
+// findExisting finds the folder's VM, which must exist, or be in the
+// middle of a remake (remakePending), whose machine may be gone.
 func (e *Env) findExisting(ctx context.Context) (*found, error) {
 	t, err := e.find(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if !t.exists {
+	if !t.exists && !remakePending(t.st) {
 		return nil, msg.NoVM(t.f.Dir)
 	}
 	return t, nil
 }
 
 // existing finds the folder's VM, which must exist, be made for this
-// folder and have finished being made.
+// folder and have finished being made, and not be in the middle of a
+// remake.
 func (e *Env) existing(ctx context.Context) (*found, error) {
 	t, err := e.findExisting(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := e.checkFolder(t.f, t.st); err != nil {
+	if err := e.checkMade(t); err != nil {
 		return nil, err
-	}
-	if !t.st.Finished() {
-		return nil, msg.VMUnfinished(t.f.Name)
 	}
 	return t, nil
 }
 
 // folderVM finds the folder's VM for a command that shows or changes it,
 // which must exist (else noVM), be made for this folder and have finished
-// being made.
+// being made, and not be in the middle of a remake.
 func (e *Env) folderVM(ctx context.Context, noVM func(dir string) msg.M) (*found, error) {
 	t, err := e.find(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if !t.exists {
+	if !t.exists && !remakePending(t.st) {
 		return nil, noVM(t.f.Dir)
 	}
-	if err := e.checkFolder(t.f, t.st); err != nil {
+	if err := e.checkMade(t); err != nil {
 		return nil, err
 	}
-	if !t.st.Finished() {
-		return nil, msg.VMUnfinished(t.f.Name)
-	}
 	return t, nil
+}
+
+// checkMade refuses a VM made for another folder at the same path, one
+// whose creation didn't finish, and one in the middle of a remake, which
+// devvm finishes first.
+func (e *Env) checkMade(t *found) error {
+	if err := e.checkFolder(t.f, t.st); err != nil {
+		return err
+	}
+	if remakePending(t.st) {
+		return msg.RemakePending(t.f.Dir, t.f.Name)
+	}
+	if !t.st.Finished() {
+		return msg.VMUnfinished(t.f.Name)
+	}
+	return nil
 }
 
 // checkFolder refuses a VM made for another folder at the same path: one

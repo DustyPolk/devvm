@@ -292,6 +292,12 @@ other = "{{.vm}} didn't stop."
 [delete_failed]
 other = "Deleting {{.vm}} failed."
 
+[renaming]
+other = "renaming {{.vm}} to {{.to}}"
+
+[rename_failed]
+other = "Renaming {{.vm}} to {{.to}} failed."
+
 [vm_create_failed]
 other = "Creating {{.vm}} failed."
 
@@ -321,7 +327,7 @@ description = "layers is a space-separated list of base, the built-in layers and
 other = "There's no layer {{.layer}}. Choose from {{.layers}}."
 
 [tool_not_layer]
-other = "{{.tool}} is a shared tool, and an image holds only base and layers. Choose a VM's shared tools when devvm makes it, or with devvm tools."
+other = "{{.tool}} is a shared tool, and an image holds only base and layers. Choose a VM's shared tools when devvm makes it, or add them with devvm tools add."
 
 [layer_name_invalid]
 other = "{{.layer}} can't be a layer's name. Use lowercase letters, digits and dashes, starting with a letter or a digit."
@@ -350,6 +356,74 @@ other = "devvm created {{.script}} and its allowlist {{.policy}}. Edit them, the
 [layer_new_failed]
 description = "reason is an error from the system, in English"
 other = "Creating the layer failed: {{.reason}}."
+
+[unknown_layer_like]
+description = "like is the layer whose name is closest to layer"
+other = "There's no layer {{.layer}}. Did you mean {{.like}}?"
+
+[has_layers]
+description = "layers is a space-separated list of layers: docker nix"
+other = "{{.vm}} has {{.layers}} already"
+
+[remake_confirm]
+description = "image is the image the VM is made again from: docker+desktop"
+other = "devvm makes {{.vm}} again from {{.image}}, keeping its home folder, the project folder and its settings. Everything else on its disk is lost, such as packages you installed, Docker's images and the Nix store. Make it again?"
+
+[remake_confirm_clean_home]
+description = "image is the image the VM is made again from: docker+desktop"
+other = "devvm makes {{.vm}} again from {{.image}}, keeping the project folder and its settings. Everything else on its disk is lost, its home folder included. Make it again?"
+
+[remake_parent_vm]
+description = "dir is the folder vm was made for, which the folder devvm runs in is inside; command is the command as typed, such as devvm layer add"
+other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To make it again, run {{.command}} in {{.dir}}, or here in a terminal to confirm."
+
+[remake_parent_vm_ask]
+description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
+other = "{{.vm}} was made for {{.dir}}, which this folder is inside, and may hold that project's work. Make it again?"
+
+[remake_clone]
+other = "{{.vm}} keeps its clone of the repo on its own disk, so devvm can't make it again. Push its work, then run devvm rm and devvm --clone."
+
+[remake_export_failed]
+description = "command is the command as typed, such as devvm layer add"
+other = "Exporting {{.vm}}'s agent history failed, so devvm kept the VM as it was. Run {{.command}} --no-export to go ahead without exporting."
+
+[remake_home_failed]
+description = "command is the command as typed, such as devvm layer add"
+other = "Saving {{.vm}}'s home folder failed, so devvm kept the VM as it was. Run {{.command}} --clean-home to go ahead without it."
+
+[remake_restore_failed]
+other = "Copying {{.vm}}'s home folder onto its new disk failed."
+
+[saving_home]
+other = "saving {{.vm}}'s home folder"
+
+[restoring_home]
+other = "copying {{.vm}}'s home folder onto its new disk"
+
+[remade]
+description = "image is the image the VM was made again from: docker+desktop"
+other = "made {{.vm}} again from {{.image}}"
+
+[remake_undone]
+other = "putting {{.vm}} back as it was"
+
+[remake_undo_failed]
+other = "Putting {{.vm}} back as it was failed. Run devvm in {{.dir}} to finish making it again."
+
+[remake_resuming]
+description = "image is the image the VM is made again from: docker+desktop"
+other = "finishing making {{.vm}} again from {{.image}}"
+
+[remake_pending]
+other = "Making {{.vm}} again didn't finish. Run devvm in {{.dir}} to finish it."
+
+[remake_home_lost]
+other = "{{.vm}}'s saved home folder is gone, so its new disk has the image's home folder."
+
+[remake_failed]
+description = "reason is an error from the system, in English"
+other = "Making this folder's VM again failed: {{.reason}}."
 
 [features_help]
 other = "Pick the base image features. Use up and down to move, space to toggle and enter to confirm."
@@ -913,7 +987,7 @@ other = "The --ports flag applies only to new VMs. To change this VM's ports, ru
 other = "{{.vm}} gets its new size when it next starts. Run devvm restart to apply it now."
 
 [parts_flags_ignored]
-other = "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools."
+other = "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools, and to add a layer, devvm layer add."
 
 [has_tools]
 description = "tools is a space-separated list of shared tools: python claude"
@@ -1241,7 +1315,7 @@ other = "{{.vm}} gets {{.tools}} as its shared tools and {{.layers}} as its laye
 other = "Choose what {{.vm}} gets. Use up and down to move, space to toggle and enter to confirm."
 
 [pick_vm_help]
-other = "Choose {{.vm}}'s shared tools. Use up and down to move, space to toggle and enter to confirm."
+other = "Choose {{.vm}}'s shared tools. Its layers are greyed out, and devvm layer add adds one. Use up and down to move, space to toggle and enter to confirm."
 
 [pick_toolchains]
 other = "Toolchains"
@@ -1509,7 +1583,7 @@ description = "reason is an error from the system, in English"
 other = "Opening this folder's VM's desktop failed: {{.reason}}."
 
 [desktop_no_layer]
-other = "{{.vm}} has no desktop, because its image has no desktop layer. Save any work in it, then run devvm rm and devvm --layers desktop, or devvm setup --layers to give every new VM one."
+other = "{{.vm}} has no desktop, because its image has no desktop layer. Run devvm layer add desktop to make it again with one."
 
 [desktop_start_failed]
 other = "{{.vm}}'s desktop didn't start."
