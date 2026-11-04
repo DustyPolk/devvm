@@ -1271,7 +1271,7 @@ kf=$(keys_of e2efix | head -1)
 check "base is a stopped image, recorded with Ubuntu's pinned cloud image and its C library" bash -c "
   [[ -n '$kb' && \$(status_of devvm-img-$kb) == Stopped ]] &&
   [[ \$(rec $kb chain) == 'base=$kb' && \$(rec $kb libc) == gnu && -z \$(rec $kb from) ]] &&
-  grep -qE '^  \"built\": \"[0-9-]+T[0-9:]+Z\"$' '$images/$kb/record.json' && [[ -n '$cloud_release' ]] &&
+  rec $kb built | grep -qE '^[0-9-]+T[0-9:]+Z$' && [[ -n '$cloud_release' ]] &&
   rec $kb digest | grep -qE '^https://cloud-images\.ubuntu\.com/.*/$cloud_release/.*\.img sha256:($cloud_sums)$'"
 check "base mounts nothing from the host" bash -c "[[ -z \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' devvm-img-$kb) ]]"
 check "devvm limactl runs Lima on devvm's Lima home, whatever LIMA_HOME says, with its exit code" bash -c "
