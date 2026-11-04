@@ -157,6 +157,15 @@ done
 src=$work/src
 rm -rf "$src"; mkdir -p "$src" "$XDG_CONFIG_HOME/devvm/layers" "$XDG_DATA_HOME"
 gocmd=(go); command -v go >/dev/null || gocmd=(mise exec -- go)
+# go_e2e TEST PACKAGE [VAR=VALUE...]: the Go test TEST in internal/PACKAGE, run from the checkout
+# with each VAR set (exported by the shell, so no value is in a process's arguments), its output
+# printed; it passes when TEST does. Each Go e2e test skips unless its variables are set.
+go_e2e() {
+  local test=$1 pkg=$2 kv; shift 2
+  (cd "$root" && for kv in "$@"; do export "${kv?}"; done
+   CGO_ENABLED=0 "${gocmd[@]}" test -count=1 -v -run "^$test\$" "./internal/$pkg") >"$work/go-e2e.log" 2>&1
+  cat "$work/go-e2e.log"; grep -q -- "^--- PASS: $test (" "$work/go-e2e.log"
+}
 # A test build: DEVVM_UNREVIEWED and the other test overrides count in it
 # (never in a release).
 testbuild=(build -ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes")
@@ -261,7 +270,7 @@ cleanup() {
   pkill -f "[_]ports -vm .* -lifeline $DEVVM_LIMA_HOME/" 2>/dev/null  # VMs' forwarders, the sandbox's
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_DATA_HOME/devvm/agent-keys.json" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
-    "$work/listener.json" "$work/ps.log" "$work/lima-bypass" \
+    "$work/listener.json" "$work/ps.log" "$work/lima-bypass" "$work/go-e2e.log" \
     "$work/corp.auth" "$work/corp.json" "$work/corp.policy" "$work/corp.jsonl" "$work/corp.log"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
@@ -553,11 +562,7 @@ desktop_serve() {
 desktop_end() { [[ -z $desk ]] || { kill -INT "$desk" 2>/dev/null; wait "$desk" 2>/dev/null; desk=""; }; }
 # desktop_view [VAR=VALUE...]: TestE2EDesktop on the desktop devvm desktop serves: a wrong password
 # refused, the password let in (with DEVVM_E2E_CLIPBOARD, a clipboard and a key event sent).
-desktop_view() {
-  (cd "$root" && env DEVVM_E2E_DESKTOP="$desk_addr" DEVVM_E2E_PASSWORD="$desk_pw" "$@" CGO_ENABLED=0 \
-    "${gocmd[@]}" test -count=1 -v -run '^TestE2EDesktop$' ./internal/desktop) >"$work/view.log" 2>&1
-  cat "$work/view.log"; grep -q -- '--- PASS: TestE2EDesktop' "$work/view.log"
-}
+desktop_view() { go_e2e TestE2EDesktop desktop DEVVM_E2E_DESKTOP="$desk_addr" DEVVM_E2E_PASSWORD="$desk_pw" "$@"; }
 # desktop_in_vm: what's checked in a VM whose desktop runs, as its user: its Xvnc has its socket in a
 # folder of the user's own (0700), the socket 0600, none of its sockets listening on TCP, and the
 # clipboard off.
@@ -1501,9 +1506,7 @@ check "a server on a link's address isn't forwarded, the VM's own on 127.0.0.1 w
   [[ \$(nc -w 2 127.0.0.1 47164 </dev/null) == own ]] && sleep 3 && ! nc -z 127.0.0.1 47163 && ! nc -z ::1 47163 &&
   ! grep -q 'port 47163' '$(vmdir "$vm")/logs/ports.log'"
 in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4716"; pkill -f "[d]evvm-e2e-udp"; pkill -f "[d]evvm-e2e-say"' >/dev/null 2>&1
-check "Exec's arguments, folder and input reach the guest as given" bash -c "cd '$root' &&
-  DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/lima |
-  grep -q -- '--- PASS: TestE2EExecQuoting'"
+check "Exec's arguments, folder and input reach the guest as given" go_e2e TestE2EExecQuoting backend/registry DEVVM_E2E_VM="$vm"
 
 section "a company's CA"
 # The run's CA, in devvm's CA folder: the running VM trusts it from its next launch, in its system's
@@ -2270,13 +2273,14 @@ check "secret unuse and rm take the binding and the token away at once" bash -c 
   HOME='$nh' '$D' secret unuse github >/dev/null && ! grep -q '\"name\":\"github\"' '$(vmdir "$vm")/run/secrets.json' &&
   HOME='$nh' '$D' secret rm --force github >/dev/null && HOME='$nh' '$D' secret | grep -Eq '^github +no ' &&
   { [[ \$(uname -s) != Darwin ]] || ! security find-generic-password -s '$DEVVM_SECRET_SERVICE' -a github >/dev/null 2>&1; }"
-check "the self-check passes on the VM devvm started confined" bash -c "cd '$root' &&
-  DEVVM_E2E_VM=$vm DEVVM_E2E_WANT= CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2ESelfCheck\$' ./internal/netpolicy |
-  grep -q -- '--- PASS: TestE2ESelfCheck'"
-check "a VM started outside devvm is unenforced, and the self-check stops it" bash -c "
-  limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 && cd '$root' &&
-  DEVVM_E2E_VM=$vm DEVVM_E2E_WANT='net_unenforced_stop vm=$vm' CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2ESelfCheck\$' ./internal/netpolicy |
-  grep -q -- '--- PASS: TestE2ESelfCheck' && [[ \$(status_of '$vm') == Stopped ]] && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=unenforced"
+check "the self-check passes on the VM devvm started confined" go_e2e TestE2ESelfCheck netpolicy DEVVM_E2E_VM="$vm" DEVVM_E2E_WANT=
+# unenforced_stop VM: VM, started outside devvm, fails the self-check, which stops it.
+unenforced_stop() {
+  limactl stop "$1" >/dev/null 2>&1 && limactl start --tty=false "$1" >/dev/null 2>&1 &&
+    go_e2e TestE2ESelfCheck netpolicy DEVVM_E2E_VM="$1" DEVVM_E2E_WANT="net_unenforced_stop vm=$1" &&
+    [[ $(status_of "$1") == Stopped ]] && vm_state "$(vmdir "$1")" | grep -qx net.made.check=unenforced
+}
+check "a VM started outside devvm is unenforced, and the self-check stops it" unenforced_stop "$vm"
 check "devvm starts it again confined, and the self-check passes" bash -c "cd '$n' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
   [[ \$(status_of '$vm') == Running ]] && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok"
 check "devvm stop stops it and its proxy at once, and devvm starts both again" bash -c "cd '$n' &&
