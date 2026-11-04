@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/image"
@@ -96,8 +97,60 @@ func (s Support) String() string {
 	return "none"
 }
 
-// Caps is how a backend has each feature. A feature it doesn't list is None.
+// BuiltOn returns the feature f is built on, if any: a backend has f no
+// better than its base, so it's emulated wherever its base is, and none
+// wherever its base is none.
+func (f Feature) BuiltOn() (Feature, bool) {
+	switch f {
+	case FeaturePortsAll: // every port, through the listed ports' forwarder
+		return FeaturePorts, true
+	case FeatureAgentToggle: // turning on or off what was chosen when the VM was made
+		return FeatureAgentForwarding, true
+	case FeatureLink: // a link session over ssh to both VMs
+		return FeatureSSH, true
+	case FeatureBuildImage, FeatureBuildConfinement, FeatureFrom, FeatureClone,
+		FeatureProjectMount, FeatureAgentFolders, FeatureToolsShare,
+		FeatureEgressProxy, FeatureSSH, FeaturePorts, FeatureAgentForwarding,
+		FeatureCPUs, FeatureMemory, FeatureDisk, FeatureDockerLayer, FeatureNixLayer:
+	}
+	return "", false
+}
+
+// Caps is how a backend has each feature. Every backend lists every
+// feature, None included (Check); a lookup of one unlisted is None.
 type Caps map[Feature]Support
+
+// Check returns an error naming the first feature c doesn't list, or
+// lists better than the feature it's built on (Feature.BuiltOn): what the registry
+// refuses to register.
+func (c Caps) Check() error {
+	for _, f := range Features {
+		s, ok := c[f]
+		if !ok {
+			return fmt.Errorf("feature %s is not listed", f)
+		}
+		if base, on := f.BuiltOn(); on && s.rank() > c[base].rank() {
+			return fmt.Errorf("feature %s is %s, better than %s, which it is built on (%s)", f, s, base, c[base])
+		}
+	}
+	if len(c) != len(Features) {
+		return fmt.Errorf("%d features listed, %d known", len(c), len(Features))
+	}
+	return nil
+}
+
+// rank orders support: none, unreviewed, emulated, native.
+func (s Support) rank() int {
+	switch {
+	case s.IsNative():
+		return 3
+	case s.Usable():
+		return 2
+	case s.IsEmulated():
+		return 1
+	}
+	return 0
+}
 
 // Review checks backends' features against their review. Its zero value
 // refuses every unreviewed emulation.

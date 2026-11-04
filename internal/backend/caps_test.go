@@ -72,6 +72,50 @@ func TestEveryFeatureIsListed(t *testing.T) {
 	}
 }
 
+// Caps list every feature, none better than what it's built on.
+func TestCapsCheck(t *testing.T) {
+	all := func(s backend.Support) backend.Caps {
+		c := backend.Caps{}
+		for _, f := range backend.Features {
+			c[f] = s
+		}
+		return c
+	}
+	with := func(c backend.Caps, f backend.Feature, s backend.Support) backend.Caps { c[f] = s; return c }
+	without := func(c backend.Caps, f backend.Feature) backend.Caps { delete(c, f); return c }
+	for _, tc := range []struct {
+		name string
+		caps backend.Caps
+		ok   bool
+	}{
+		{"all native", all(backend.Native), true},
+		{"all none", all(backend.None), true},
+		{"one unlisted", without(all(backend.Native), backend.FeatureLink), false},
+		{"an unknown one", with(all(backend.Native), "teleport", backend.Native), false},
+		{"ports-all native on emulated ports", with(all(backend.Native), backend.FeaturePorts, backend.Emulated(true)), false},
+		{"ports-all emulated on emulated ports", with(with(all(backend.Native), backend.FeaturePorts, backend.Emulated(true)), backend.FeaturePortsAll, backend.Emulated(true)), true},
+		{"reviewed on unreviewed", with(with(all(backend.Native), backend.FeaturePorts, backend.Emulated(false)), backend.FeaturePortsAll, backend.Emulated(true)), false},
+		{"agent-toggle without forwarding", with(all(backend.Native), backend.FeatureAgentForwarding, backend.None), false},
+		{"link without ssh", with(all(backend.Native), backend.FeatureSSH, backend.None), false},
+	} {
+		if err := tc.caps.Check(); (err == nil) != tc.ok {
+			t.Errorf("%s: %v", tc.name, err)
+		}
+	}
+}
+
+// The registry refuses a backend whose Caps leave a feature out.
+func TestRegisterChecksCaps(t *testing.T) {
+	f := backendtest.New("fake", nil)
+	delete(f.Capabilities, backend.FeatureDisk)
+	if _, err := backend.NewRegistry(f); err == nil {
+		t.Error("registered a backend without disk listed")
+	}
+	if _, err := backend.NewRegistry(backendtest.New("fake", nil)); err != nil {
+		t.Errorf("the fake lists every feature: %v", err)
+	}
+}
+
 func TestFeaturesNeeded(t *testing.T) {
 	f := func(fs ...backend.Feature) []backend.Feature { return fs }
 	for _, tc := range []struct {

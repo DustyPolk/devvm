@@ -169,15 +169,30 @@ func (l *Lima) Floors() backend.Floors {
 }
 
 // Caps is what Lima has: everything, natively, but its ports, which
-// devvm's forwarder forwards (ports.go).
+// devvm's forwarder forwards (ports.go), an emulation reviewed. A new
+// feature is listed here by hand: the registry refuses Caps without it.
 func (l *Lima) Caps() backend.Caps {
-	caps := backend.Caps{}
-	for _, f := range backend.Features {
-		caps[f] = backend.Native
+	return backend.Caps{
+		backend.FeatureBuildImage:       backend.Native,
+		backend.FeatureBuildConfinement: backend.Native,
+		backend.FeatureFrom:             backend.Native,
+		backend.FeatureClone:            backend.Native,
+		backend.FeatureProjectMount:     backend.Native,
+		backend.FeatureAgentFolders:     backend.Native,
+		backend.FeatureToolsShare:       backend.Native,
+		backend.FeatureEgressProxy:      backend.Native,
+		backend.FeatureSSH:              backend.Native,
+		backend.FeaturePorts:            backend.Emulated(true),
+		backend.FeaturePortsAll:         backend.Emulated(true),
+		backend.FeatureAgentForwarding:  backend.Native,
+		backend.FeatureAgentToggle:      backend.Native,
+		backend.FeatureCPUs:             backend.Native,
+		backend.FeatureMemory:           backend.Native,
+		backend.FeatureDisk:             backend.Native,
+		backend.FeatureDockerLayer:      backend.Native,
+		backend.FeatureNixLayer:         backend.Native,
+		backend.FeatureLink:             backend.Native,
 	}
-	caps[backend.FeaturePorts] = backend.Emulated(true)
-	caps[backend.FeaturePortsAll] = backend.Emulated(true)
-	return caps
 }
 
 // socketMax is the longest unix socket path macOS takes (Linux takes 108).

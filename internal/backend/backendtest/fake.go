@@ -57,9 +57,15 @@ type Fake struct {
 
 var _ backend.Backend = (*Fake)(nil)
 
-// New returns a fake named name with these capabilities.
+// New returns a fake named name with these capabilities, listing every
+// feature caps leaves out as None, as a backend's Caps list every one.
 func New(name string, caps backend.Caps) *Fake {
-	return &Fake{BackendName: name, Capabilities: caps, Instances: map[string]backend.Instance{}}
+	all := backend.Caps{}
+	for _, f := range backend.Features {
+		all[f] = caps[f]
+	}
+	maps.Copy(all, caps)
+	return &Fake{BackendName: name, Capabilities: all, Instances: map[string]backend.Instance{}}
 }
 
 // Calls returns the calls so far.

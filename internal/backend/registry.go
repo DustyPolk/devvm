@@ -39,11 +39,15 @@ func NewRegistry(bs ...Backend) (*Registry, error) {
 	return r, nil
 }
 
-// Register adds a backend under its name, which must be new.
+// Register adds a backend under its name, which must be new, with Caps
+// that list every feature (Caps.Check).
 func (r *Registry) Register(b Backend) error {
 	name := b.Name()
 	if name == "" || strings.ToLower(name) != name || strings.ContainsAny(name, " \t\n=/") {
 		return fmt.Errorf("invalid backend name %q", name)
+	}
+	if err := b.Caps().Check(); err != nil {
+		return fmt.Errorf("backend %s: %w", name, err)
 	}
 	if _, dup := r.byName[name]; dup {
 		return fmt.Errorf("backend %s is registered twice", name)

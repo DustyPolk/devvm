@@ -13,6 +13,8 @@ Each thing devvm needs from a backend is a feature, such as building images, mou
 - **emulated**: devvm builds it from other parts of the backend.
 - **none**: the backend can't do it.
 
+A backend lists every feature, the ones it lacks too, and devvm refuses to use a backend that leaves one out, so a new feature makes each backend say how it has it. Some features are built on others: `ports-all` on `ports`, `agent-toggle` on `agent-forwarding`, and `link` on `ssh`. A backend has such a feature no better than the one it's built on, so the feature is emulated wherever its base is emulated, and none wherever its base is none.
+
 devvm uses an emulation only once its review has passed, and until then it refuses the emulation. A review takes a [design note](design.md#emulated-features), a threat check with the security-audit skill, and end-to-end checks that prove the guarantee.
 
 `devvm doctor` lists Lima's features, and `devvm doctor --json` those of every backend devvm has. Both show an emulation whose review hasn't passed as `unreviewed`.

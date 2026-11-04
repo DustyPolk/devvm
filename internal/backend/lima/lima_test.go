@@ -297,6 +297,9 @@ func TestNameMax(t *testing.T) {
 // emulation, reviewed.
 func TestCaps(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
+	if err := l.Caps().Check(); err != nil {
+		t.Error(err)
+	}
 	for _, f := range backend.Features {
 		c := l.Caps()[f]
 		if f == backend.FeaturePorts || f == backend.FeaturePortsAll {
