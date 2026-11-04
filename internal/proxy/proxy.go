@@ -653,7 +653,9 @@ func (s *server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Some clients half-close after sending; don't treat that as the client going away.
-	s.forwarder(scheme, r.URL.Host, host, port).ServeHTTP(noCloseNotify{w}, r.WithContext(context.WithoutCancel(r.Context())))
+	fwd, done := s.forwarder(scheme, r.URL.Host, host, port)
+	defer done()
+	fwd.ServeHTTP(noCloseNotify{w}, r.WithContext(context.WithoutCancel(r.Context())))
 }
 
 type noCloseNotify struct{ http.ResponseWriter }

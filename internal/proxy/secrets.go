@@ -515,19 +515,12 @@ func (s *server) intercept(ctx context.Context, client net.Conn, host string, po
 	e.Event = "intercept"
 	s.events.record(e)
 	cn := &closeNotifyConn{Conn: tconn, done: make(chan struct{})}
-	fwd := s.forwarder("https", net.JoinHostPort(host, fmt.Sprint(port)), host, port)
+	fwd, done := s.forwarder("https", net.JoinHostPort(host, fmt.Sprint(port)), host, port)
+	defer done()
 	srv := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if h, _ := splitHostPort(r.Host, port); h != host {
 				http.Error(w, "devvm proxy: this connection is for "+host, http.StatusMisdirectedRequest)
-				return
-			}
-			if what := mintsCredential(host, r.Method, r.URL.Path); what != "" {
-				s.events.record(Event{
-					Event: "blocked", Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Refused: true,
-					Reason: "makes " + what + " with your token, which would outlast the VM; do it on the host",
-				})
-				http.Error(w, "devvm proxy: refused: this makes "+what+" with your token (do it on the host)", http.StatusForbidden)
 				return
 			}
 			fwd.ServeHTTP(w, r)
@@ -545,16 +538,33 @@ func (s *server) intercept(ctx context.Context, client net.Conn, host string, po
 
 // GitHub API calls that make a credential of their own with the token the proxy puts in: an SSH or
 // GPG key on your account, a repo's deploy key, a self-hosted runner's registration, a webhook
-// (which sends a repo's events anywhere). Each would keep working after devvm secret unuse.
+// (which sends a repo's events anywhere). Each would keep working after devvm secret unuse. A repo
+// is named by owner and name, or by its ID (/repositories/ID), an org by its name or its ID.
 var githubMinting = []struct {
 	methods string
 	path    *regexp.Regexp
 	what    string
 }{
 	{"POST", regexp.MustCompile(`^/user/(keys|ssh_signing_keys|gpg_keys)$`), "a key on your GitHub account"},
-	{"POST", regexp.MustCompile(`^/repos/[^/]+/[^/]+/keys$`), "a deploy key"},
-	{"POST", regexp.MustCompile(`^/(repos/[^/]+/[^/]+|orgs/[^/]+|enterprises/[^/]+)/actions/runners/(registration-token|generate-jitconfig)$`), "a self-hosted runner"},
-	{"POST PATCH", regexp.MustCompile(`^/(repos/[^/]+/[^/]+|orgs/[^/]+)/hooks(/[^/]+(/config)?)?$`), "a webhook"},
+	{"POST", regexp.MustCompile(`^/(repos/[^/]+/[^/]+|repositories/[^/]+)/keys$`), "a deploy key"},
+	{"POST", regexp.MustCompile(`^/(repos/[^/]+/[^/]+|repositories/[^/]+|orgs/[^/]+|organizations/[^/]+|enterprises/[^/]+)/actions/runners/(registration-token|generate-jitconfig)$`), "a self-hosted runner"},
+	{"POST PATCH", regexp.MustCompile(`^/(repos/[^/]+/[^/]+|repositories/[^/]+|orgs/[^/]+|organizations/[^/]+)/hooks(/[^/]+(/config)?)?$`), "a webhook"},
+}
+
+// refuseMinting answers a request that would make a credential with the token the proxy puts in
+// (mintsCredential) with 403, logged as a refused block, and reports whether it did. Every HTTPS
+// request the proxy forwards asks it first, in a tunnel it intercepts or in absolute form.
+func (s *server) refuseMinting(w http.ResponseWriter, r *http.Request, host string, port int) bool {
+	what := mintsCredential(host, r.Method, r.URL.Path)
+	if what == "" {
+		return false
+	}
+	s.events.record(Event{
+		Event: "blocked", Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Refused: true,
+		Reason: "makes " + what + " with your token, which would outlast the VM; do it on the host",
+	})
+	http.Error(w, "devvm proxy: refused: this makes "+what+" with your token (do it on the host)", http.StatusForbidden)
+	return true
 }
 
 // mintsCredential: what the request would make, or "".
@@ -572,11 +582,13 @@ func mintsCredential(host, method, p string) string {
 }
 
 // forwarder: a streaming reverse proxy to scheme://target, dialing through the floor (or through
-// the upstream), putting secrets in (HTTPS only), and logging each request. The bindings are read
+// the upstream), putting secrets in (HTTPS only, which refuses a request that would make a
+// credential with them first: refuseMinting), and logging each request. The bindings are read
 // for every request, so `devvm secret unuse` applies to connections already open. HTTPS goes over
 // TLS with the system's roots and the user's CAs, through an upstream's CONNECT tunnel when one
 // applies; plain HTTP through an upstream is sent to it in absolute form, with its credentials.
-func (s *server) forwarder(scheme, target, host string, port int) http.Handler {
+// done closes the connections it keeps open for further requests, once its caller has no more.
+func (s *server) forwarder(scheme, target, host string, port int) (fwd http.Handler, done func()) {
 	tlsConf := &tls.Config{RootCAs: s.upstreamCAs, ServerName: host}
 	tr := &http.Transport{
 		DialContext:     func(ctx context.Context, _, _ string) (net.Conn, error) { return s.egress.dialOut(ctx, host, port) },
@@ -602,7 +614,7 @@ func (s *server) forwarder(scheme, target, host string, port int) http.Handler {
 			tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) { return up.dialUpstream(ctx) }
 		}
 	}
-	return &httputil.ReverseProxy{
+	rp := &httputil.ReverseProxy{
 		Transport:     tr,
 		ErrorLog:      s.log,
 		FlushInterval: -1, // stream (SSE) instead of buffering
@@ -637,6 +649,14 @@ func (s *server) forwarder(scheme, target, host string, port int) http.Handler {
 			http.Error(w, "devvm proxy: couldn't reach "+host, http.StatusBadGateway)
 		},
 	}
+	if scheme != "https" {
+		return rp, tr.CloseIdleConnections
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.refuseMinting(w, r, host, port) {
+			rp.ServeHTTP(w, r)
+		}
+	}), tr.CloseIdleConnections
 }
 
 // One already-accepted connection as a listener, for http.Server.Serve.

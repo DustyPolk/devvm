@@ -594,7 +594,9 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		if conf.Net == backend.NetDirect && e.Proxy.Company().ConfigOnly() {
 			e.Warn(msg.ProxyNeedsPolicy(e.Dirs.ConfigFile(), vm))
 		}
-		e.Proxy.Stop(vm)
+		if err := e.Proxy.Unconfined(ctx, vm); err != nil {
+			return conf, err
+		}
 		// Its ssh port, as the proxy's confinement has it: recorded, so
 		// other VMs' forwarders never take it before its backend binds it.
 		sp, err := e.Proxy.Ports().SSH(ctx, st, false)

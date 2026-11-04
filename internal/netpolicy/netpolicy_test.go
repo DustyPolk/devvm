@@ -503,7 +503,7 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 		// Its CA, or its next one, was replaced.
 		func() {
 			_ = os.WriteFile(d.VM(st.Name()).CA().Cert(), []byte("rotated\n"), 0o600)
-			p.InitCA = func(paths.CA) error { return nil }
+			p.InitCA = func(context.Context, paths.CA) error { return nil }
 		},
 		func() { _ = os.WriteFile(d.VM(st.Name()).CA().NextCert(), []byte("rotated\n"), 0o600) },
 		// Its built-in policies change, then its files alone (a layer of
@@ -708,10 +708,44 @@ func TestPrepareStopsTheOldProxy(t *testing.T) {
 	}
 }
 
+// A VM starting without network policy loses its proxy and its CAs, keys
+// and all, but not while a proxy that won't stop may sign with them; one
+// without CAs has nothing to delete.
+func TestUnconfined(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, _ := testProxy(t, d)
+	p.Tick = 20 * time.Millisecond
+	vm, ca := st.Name(), d.VM(st.Name()).CA()
+	if err := p.Unconfined(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	signal := p.Signal
+	p.Signal = func(int, syscall.Signal) error { return nil } // signals that never arrive
+	if err := p.Unconfined(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(ca.Key()); err != nil {
+		t.Errorf("the CAs went while their proxy runs: %v", err)
+	}
+	p.Signal = signal
+	if err := p.Unconfined(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := p.PID(vm); ok {
+		t.Error("the proxy still runs")
+	}
+	if _, err := os.Lstat(ca.Dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the CAs are still there: %v", err)
+	}
+}
+
 func TestPrepareCAFails(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
-	p.InitCA = func(paths.CA) error { return errors.New("disk full") }
+	p.InitCA = func(context.Context, paths.CA) error { return errors.New("disk full") }
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); msg.NamesOf(err) != "proxy_ca_failed dir="+d.VM(st.Name()).CA().Dir {
 		t.Errorf("Prepare = %v", msg.NamesOf(err))
 	}

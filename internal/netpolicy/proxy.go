@@ -2,6 +2,7 @@ package netpolicy
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"runtime"
@@ -42,7 +43,7 @@ type Proxy struct {
 	// ExcludeFromBackup keeps a folder out of backups (macOS).
 	ExcludeFromBackup func(ctx context.Context, dir string) error
 	// InitCA readies a VM's CA and its next one (trust.InitCA).
-	InitCA func(paths.CA) error
+	InitCA func(context.Context, paths.CA) error
 	// Listening reports whether a program has a host loopback port.
 	Listening func(ctx context.Context, port int) bool
 	// PortRange is the range new ports come from (platform.ChoosablePorts,
@@ -104,6 +105,29 @@ func (p *Proxy) PID(vm string) (int, bool) { return p.proc(vm).PID() }
 // proxy of the VM's runs then.
 func (p *Proxy) Stop(vm string) bool { return p.proc(vm).Stop(4 * p.Tick) }
 
+// Unconfined is a VM starting without network policy: its proxy stopped,
+// and its CAs deleted, keys and all, as nothing signs with them any more
+// and the VM's setup takes their certificates out of the VM. Network
+// policy turned on again makes new ones. The CAs stay while a proxy of
+// the VM's still runs, which may sign with them.
+func (p *Proxy) Unconfined(ctx context.Context, vm string) error {
+	if !p.Stop(vm) {
+		return nil
+	}
+	ca := p.Dirs.VM(vm).CA()
+	if _, err := os.Lstat(ca.Dir); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	// Under the CAs' lock, so it never takes them from a launch readying
+	// them (InitCA).
+	unlock, err := platform.LockFile(ctx, ca.Lock())
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return os.RemoveAll(ca.Dir)
+}
+
 // Prepare readies a VM with network policy to start on b, or a running one
 // to go on: the VM's own CA, its secret files, its ports, and its proxy
 // running. It returns the confinement its backend starts it with. The proxy
@@ -121,10 +145,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	// Kept out of backups: a copy of a key elsewhere could impersonate any
 	// site to the VM.
 	ca := p.Dirs.VM(vm).CA()
-	if err := state.PrivateDir(ca.Dir); err != nil {
-		return none, err
-	}
-	if err := p.InitCA(ca); err != nil {
+	if err := p.InitCA(ctx, ca); err != nil {
 		return none, msg.ProxyCAFailed(ca.Dir).Because(err)
 	}
 	if p.OS == "darwin" {

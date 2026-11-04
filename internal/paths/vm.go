@@ -78,6 +78,11 @@ func (c CA) NextCert() string { return filepath.Join(c.Dir, "next.pem") }
 // NextKey is the next CA's key, next.key.
 func (c CA) NextKey() string { return filepath.Join(c.Dir, "next.key") }
 
+// Lock is the lock file each change to the CAs holds (flock), so two
+// launches of the VM at once never leave a key and a certificate of
+// different runs.
+func (c CA) Lock() string { return filepath.Join(c.Dir, "lock") }
+
 // BuildProxy is the folder of a build VM's proxy, behind a company proxy:
 // its files and logs, kept when the build fails.
 func (v VM) BuildProxy() string { return filepath.Join(v.Run(), "build-proxy") }

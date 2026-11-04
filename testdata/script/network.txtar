@@ -213,6 +213,20 @@ exec devvm
 vm_state $DEFAULT_dir/vm.json
 stdout '^net\.on=true$'
 stdout '^net\.made\.check=ok$'
+# Turned off, its next start stops its proxy and deletes its CAs, keys and
+# all; on again, it gets new ones.
+cp $DEFAULT_dir/run/ca/ca.pem $WORK/default-ca.pem
+exec devvm network off
+exec limactl stop $DEFAULT
+exec devvm
+! exists $DEFAULT_dir/run/ca
+exec sh -c 'ps -axww -o command= | grep "[_]proxy -config $DEFAULT_dir/run/proxy.json" || true'
+! stdout .
+exec devvm network on
+exec limactl stop $DEFAULT
+exec devvm
+exists $DEFAULT_dir/run/ca/ca.key $DEFAULT_dir/run/ca/next.key
+! cmp $DEFAULT_dir/run/ca/ca.pem $WORK/default-ca.pem
 
 # A saved on: new VMs get it; --no-network-policy beats it.
 exec devvm network -g on

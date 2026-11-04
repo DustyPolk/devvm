@@ -3096,10 +3096,13 @@ owned e2ecorp
 kac=$(for k in $(keys_of e2ecorp); do rec "$k" chain; done | sed -n 's/^base=\([0-9a-f]*\) e2ecorp=.*$/\1/p' | head -1)
 [[ -z $kac ]] || created+=("devvm-img-$kac")
 kcl=$(keys_of e2ecorp | head -1)
+# The run log writes a proxy key (32 to 64 hex digits) as <key>: its stand-in there says the build's
+# commands had one, and no key of devvm's is left in the log.
 check "what the builds' commands and sudo have is devvm's proxy for the build, with a password of its own" bash -c "
   log=\$(grep -l '^e2e-env: ' '$XDG_DATA_HOME'/devvm/logs/runs/*.log | tail -1) && [[ -n \$log ]] &&
-  grep -qE '^e2e-env: .*HTTPS_PROXY=http://devvm:[0-9a-f]{64}@192\.168\.5\.2:[0-9]+ ' \"\$log\" &&
-  grep -qE '^e2e-sudo: .*HTTPS_PROXY=http://devvm:[0-9a-f]{64}@192\.168\.5\.2:[0-9]+ ' \"\$log\" &&
+  grep -qE '^e2e-env: .*HTTPS_PROXY=http://devvm:<key>@192\.168\.5\.2:[0-9]+ ' \"\$log\" &&
+  grep -qE '^e2e-sudo: .*HTTPS_PROXY=http://devvm:<key>@192\.168\.5\.2:[0-9]+ ' \"\$log\" &&
+  ! grep -qE 'devvm:[0-9a-f]{32,64}@' \"\$log\" &&
   ! grep -qF ':$P18766' \"\$log\""
 check "the company proxy's password is in no converted disk, image, log, build file or process's arguments" bash -c "
   [[ -n '$kac' && -n '$kcl' && -d '$LIMA_HOME/devvm-img-$kac' && -d '$LIMA_HOME/devvm-img-$kcl' ]] &&

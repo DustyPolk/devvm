@@ -2,6 +2,7 @@ package trust
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -9,6 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 )
 
 const day = 24 * time.Hour
@@ -78,7 +81,7 @@ func writeTestCA(t *testing.T, certPath, keyPath string, notBefore, notAfter tim
 // are the user's alone, and no CA names a host.
 func TestInitCA(t *testing.T) {
 	ca := paths.CA{Dir: filepath.Join(t.TempDir(), "ca")}
-	if err := InitCA(ca); err != nil {
+	if err := InitCA(t.Context(), ca); err != nil {
 		t.Fatal(err)
 	}
 	cur, next := both(t, ca)
@@ -105,7 +108,7 @@ func TestInitCA(t *testing.T) {
 			t.Errorf("%s: %v, %v; want %v", name, st.Mode().Perm(), err, want)
 		}
 	}
-	if err := InitCA(ca); err != nil {
+	if err := InitCA(t.Context(), ca); err != nil {
 		t.Fatal(err)
 	}
 	if c, n := both(t, ca); c.SerialNumber.Cmp(cur.SerialNumber) != 0 || n.SerialNumber.Cmp(next.SerialNumber) != 0 {
@@ -121,7 +124,7 @@ func TestInitCASwitch(t *testing.T) {
 	end := now.Add(caRenew - time.Minute)
 	writeTestCA(t, ca.Cert(), ca.Key(), end.Add(-caLife), end)
 	serial := writeTestCA(t, ca.NextCert(), ca.NextKey(), end.Add(-caRenew-caSkew), end.Add(-caRenew+caLife))
-	if err := InitCA(ca); err != nil {
+	if err := InitCA(t.Context(), ca); err != nil {
 		t.Fatal(err)
 	}
 	cur, next := both(t, ca)
@@ -166,7 +169,7 @@ func TestInitCAReplaced(t *testing.T) {
 			if tc.next != nil {
 				ns = writeTestCA(t, dir.NextCert(), dir.NextKey(), tc.next.from, tc.next.to)
 			}
-			if err := InitCA(dir); err != nil {
+			if err := InitCA(t.Context(), dir); err != nil {
 				t.Fatal(err)
 			}
 			cur, next := both(t, dir)
@@ -198,7 +201,7 @@ func TestInitCAReplaced(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := InitCA(dir); err != nil {
+	if err := InitCA(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
 	if cur, next := both(t, dir); cur.SerialNumber.Cmp(next.SerialNumber) == 0 {
@@ -209,7 +212,7 @@ func TestInitCAReplaced(t *testing.T) {
 	if err := os.Remove(dir.Cert()); err != nil {
 		t.Fatal(err)
 	}
-	if err := InitCA(dir); err != nil {
+	if err := InitCA(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
 	both(t, dir)
@@ -217,10 +220,79 @@ func TestInitCAReplaced(t *testing.T) {
 	if err := os.Remove(dir.Key()); err != nil {
 		t.Fatal(err)
 	}
-	if err := InitCA(dir); err != nil {
+	if err := InitCA(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
 	both(t, dir)
+}
+
+// Launches of one VM at once leave a current CA and a next one whose keys and certificates match,
+// each launch's InitCA in turn (the CA folder's lock).
+func TestInitCATogether(t *testing.T) {
+	for round := range 20 {
+		ca := paths.CA{Dir: filepath.Join(t.TempDir(), "ca")}
+		start := make(chan struct{})
+		errs := make(chan error, 8)
+		for range 8 {
+			go func() {
+				<-start
+				errs <- InitCA(t.Context(), ca)
+			}()
+		}
+		close(start)
+		for range 8 {
+			if err := <-errs; err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, f := range [][2]string{{ca.Cert(), ca.Key()}, {ca.NextCert(), ca.NextKey()}} {
+			if _, err := tls.LoadX509KeyPair(f[0], f[1]); err != nil {
+				t.Fatalf("round %d: %s: %v", round, filepath.Base(f[0]), err)
+			}
+		}
+		if cur, next := both(t, ca); !next.NotBefore.Equal(cur.NotAfter.Add(-caRenew - caSkew)) {
+			t.Fatalf("round %d: the next CA doesn't follow the current one", round)
+		}
+	}
+}
+
+// A current CA whose key isn't its certificate's, as a crash between the two writes would leave
+// it, is made again.
+func TestInitCAMismatched(t *testing.T) {
+	ca := paths.CA{Dir: t.TempDir()}
+	if err := InitCA(t.Context(), ca); err != nil {
+		t.Fatal(err)
+	}
+	key, err := os.ReadFile(ca.NextKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ca.Key(), key, 0o600); err != nil { //nolint:gosec // the test's own folder
+
+		t.Fatal(err)
+	}
+	if err := InitCA(t.Context(), ca); err != nil {
+		t.Fatal(err)
+	}
+	both(t, ca)
+}
+
+// InitCA waits for the CA folder's lock no longer than its ctx.
+func TestInitCACancelled(t *testing.T) {
+	ca := paths.CA{Dir: t.TempDir()}
+	unlock, err := platform.LockFile(t.Context(), ca.Lock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	if err := InitCA(ctx, ca); err == nil {
+		t.Fatal("InitCA went on without the lock")
+	}
+	if _, err := os.Stat(ca.Cert()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("InitCA wrote without the lock: %v", err)
+	}
 }
 
 // A CA folder InitCA can't write fails it.
@@ -229,17 +301,17 @@ func TestInitCAFails(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := InitCA(paths.CA{Dir: filepath.Join(file, "ca")}); err == nil {
+	if err := InitCA(t.Context(), paths.CA{Dir: filepath.Join(file, "ca")}); err == nil {
 		t.Error("InitCA wrote under a file")
 	}
-	// A certificate it can't write (a folder in its place) fails it too, the current one's or the
-	// next one's.
-	for _, name := range []string{"ca.pem", "next.pem"} {
+	// A certificate or a key it can't write (a folder in its place) fails it too, the current
+	// one's or the next one's.
+	for _, name := range []string{"ca.pem", "next.pem", "ca.key", "next.key"} {
 		ca := paths.CA{Dir: t.TempDir()}
 		if err := os.Mkdir(filepath.Join(ca.Dir, name), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := InitCA(ca); err == nil {
+		if err := InitCA(t.Context(), ca); err == nil {
 			t.Errorf("InitCA wrote over a folder, %s", name)
 		}
 	}

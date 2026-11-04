@@ -1,6 +1,7 @@
 package trust
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -42,8 +44,24 @@ const (
 // follow the current one (ending after it, starting by the time it's
 // replaced) is made again. Certificates are mode 644 and keys, ECDSA ("EC
 // PRIVATE KEY"), mode 600, each written whole, the key first. A CA valid
-// for longer than caLife is replaced too. No CA names a host.
-func InitCA(ca paths.CA) error {
+// for longer than caLife is replaced too. No CA names a host. It holds the
+// folder's lock (paths.CA.Lock), waiting for another launch's until ctx
+// ends, so two launches at once never leave a key and a certificate of
+// different runs.
+func InitCA(ctx context.Context, ca paths.CA) error {
+	if err := state.PrivateDir(ca.Dir); err != nil {
+		return err
+	}
+	unlock, err := platform.LockFile(ctx, ca.Lock())
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return initCA(ca)
+}
+
+// initCA is InitCA, holding the lock.
+func initCA(ca paths.CA) error {
 	now := time.Now()
 	cur, err := readPair(ca.Cert(), ca.Key())
 	if err != nil || !cur.current(now) {

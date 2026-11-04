@@ -561,6 +561,36 @@ func TestIntercept(t *testing.T) {
 	}
 }
 
+// Every HTTPS request the proxy forwards, in an intercepted tunnel or in absolute form
+// (handleHTTP), is refused before it goes anywhere when it would make a lasting GitHub
+// credential, logged as a refused block; plain HTTP carries no secret.
+func TestForwarderRefusesMinting(t *testing.T) {
+	t.Parallel()
+	s := testServer(t, Config{}, "")
+	var events strings.Builder
+	s.events.out = &events // the handler runs here, alone
+	// Ended: one forwarded instead would fail at once, never reaching GitHub.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	for _, path := range []string{"/user/keys", "/repositories/1/keys"} {
+		events.Reset()
+		r := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://api.github.com"+path, nil)
+		r.Header.Set("Authorization", "Bearer PH")
+		w := httptest.NewRecorder()
+		fwd, done := s.forwarder("https", "api.github.com", "api.github.com", 443)
+		fwd.ServeHTTP(w, r)
+		done()
+		if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "refused") {
+			t.Errorf("POST %s: %d %q", path, w.Code, w.Body.String())
+		}
+		var e Event
+		must(t, json.Unmarshal([]byte(events.String()), &e))
+		if e.Event != "blocked" || !e.Refused || e.Host != "api.github.com" || e.Path != path {
+			t.Errorf("POST %s: logged %+v", path, e)
+		}
+	}
+}
+
 // Calls that make lasting GitHub credentials with the VM's token are refused; ordinary ones aren't.
 func TestMintsCredential(t *testing.T) {
 	t.Parallel()
@@ -574,6 +604,12 @@ func TestMintsCredential(t *testing.T) {
 		{"api.github.com", "POST", "/repos/o/r/actions/runners/generate-jitconfig", "a self-hosted runner"},
 		{"api.github.com", "PATCH", "/repos/o/r/hooks/1/config", "a webhook"},
 		{"api.github.com", "POST", "/orgs/o/hooks", "a webhook"},
+		{"api.github.com", "POST", "/repositories/123/keys", "a deploy key"},
+		{"api.github.com", "POST", "/repositories/123/hooks", "a webhook"},
+		{"api.github.com", "POST", "/repositories/123/actions/runners/registration-token", "a self-hosted runner"},
+		{"api.github.com", "POST", "/organizations/456/hooks", "a webhook"},
+		{"api.github.com", "POST", "/organizations/456/actions/runners/generate-jitconfig", "a self-hosted runner"},
+		{"api.github.com", "GET", "/repositories/123", ""},
 		{"api.github.com", "GET", "/user/keys", ""},
 		{"api.github.com", "DELETE", "/repos/o/r/keys/1", ""},
 		{"api.github.com", "POST", "/repos/o/r/pulls", ""},
