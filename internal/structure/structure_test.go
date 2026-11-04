@@ -25,16 +25,20 @@ func devvm() rules {
 		// its methods do, as vm's Launch, Lifecycle, Settings and Net.
 		maxMethods: 24,
 		largeTypes: map[string]large{
-			"internal/backend/lima.Lima":        {71, "a backend: backend.Backend's 25 methods, KeyFiles, DiskDirs, Floors, Usage, Location, Strays, DevvmCache, DeleteCache and Lima's own"},
-			"internal/backend/backendtest.Fake": {31, "backend.Backend's 25 methods and what tests ask of it"},
+			"internal/backend/lima.Lima":        {70, "a backend: backend.Backend's 24 methods, KeyFiles, DiskDirs, Floors, Usage, Location, Strays, DevvmCache, DeleteCache and Lima's own"},
+			"internal/backend/backendtest.Fake": {30, "backend.Backend's 24 methods and what tests ask of it"},
 			"internal/paths.Dirs":               {49, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":                    {47, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: devvmVars(),
 		// hostgit runs git without the repo's fsmonitor, hooks or filters,
 		// over ssh only, without the environment's GIT_* and prompts.
-		commands: map[string]string{"git": "internal/hostgit"},
-		literals: devvmLiterals(),
+		commands:  map[string]string{"git": "internal/hostgit"},
+		execSites: devvmExecSites(),
+		// The registry's backends are behind its guard: only backend.As
+		// finds their other interfaces.
+		guardOwner: "internal/backend/guard.go",
+		literals:   devvmLiterals(),
 		// paths names every file and folder devvm keeps, so the layout,
 		// its golden listing and a VM's teardown miss none.
 		pathsOwner: "internal/paths",
@@ -202,6 +206,32 @@ func devvmEnvSettings() map[string]envSetting {
 		"DEVVM_MESSAGES":       {[]string{"internal/ui/style.go"}, "names mode, which tests and e2e read messages in: any build has it"},
 		"DEVVM_GUESTFWD":       {[]string{"internal/backend/lima/qemu.go"}, "what devvm gives its own QEMU wrapper, devvm _qemu"},
 		"DEVVM_DAEMON_STATUS":  {[]string{"internal/daemon/status.go"}, "what devvm gives its own background processes: where each says it's ready"},
+	}
+}
+
+// devvmExecSites are the files that make a host command (exec.Command or
+// exec.CommandContext), each with why. Elsewhere a command goes through
+// one of their runners: the UI's LoggedCmd, which a package takes as a
+// field, a backend's Runner, or hostgit.
+func devvmExecSites() map[string]string {
+	return map[string]string{ //nolint:gosec // file paths and why, not credentials (secrets.go)
+		"internal/hostgit/hostgit.go":          "the host git runner: git without the repo's fsmonitor, hooks or filters",
+		"internal/backend/lima/limactl.go":     "limactl's command, which Lima's Runner runs into the run log",
+		"internal/backend/lima/lima.go":        "qemu-img's command, which Lima's Runner runs",
+		"internal/backend/lima/oci.go":         "docker save's command, which Lima's Runner runs",
+		"internal/tools/mise.go":               "mise's command, in its own folders, which the UI's LoggedCmd runs, or whose output is read",
+		"internal/ubuntu/ubuntu.go":            "gpgv's command, which the Finder's Run runs",
+		"internal/from/from.go":                "docker's answers (an image's ID, whether it runs): output or exit code, nothing to log",
+		"internal/sshagent/sshagent.go":        "OpenSSH's tools on devvm's agent socket, their output read or on the terminal",
+		"internal/vm/sshagent.go":              "ssh-add on the terminal, which may ask for a passphrase",
+		"internal/vm/desktop.go":               "ssh -W to the VM's desktop socket: a stream for the viewer's relay",
+		"internal/vm/env.go":                   "macOS's open, for the desktop's viewer",
+		"internal/vmssh/forward.go":            "the port forwarder's ssh master and -W relays: streams that last as long as the forwarder",
+		"internal/vmssh/links.go":              "links' ssh sessions, which last as long as the link, their output to its log",
+		"internal/platform/keychain_darwin.go": "security and tmutil: secrets on stdin and stdout, never in a log",
+		"internal/platform/folder_darwin.go":   "chflags, for .git protection",
+		"internal/proxy/secrets.go":            "devvm secret get, in the proxy (standard library only), its value never logged",
+		"internal/daemon/daemon.go":            "devvm's background processes, which outlive the run and its context",
 	}
 }
 

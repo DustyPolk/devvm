@@ -28,12 +28,9 @@ type Backend interface {
 	Name() string
 	// Caps says which features the backend has, and how.
 	Caps() Caps
-	// Check reports whether the backend can run here: installed, a
-	// version devvm supports, a host it supports. Its error is the first
-	// of Problems.
-	Check(ctx context.Context) error
-	// Problems lists everything the backend needs that this host lacks;
-	// none when it can run here.
+	// Problems lists everything the backend needs that this host lacks
+	// (installed, a version devvm supports, a host it supports); none
+	// when it can run here. Check returns the first.
 	Problems(ctx context.Context) []Problem
 	// NameMax is the longest VM name the backend takes; 0 for no limit.
 	// Callers shorten the names they make to fit.
@@ -140,6 +137,14 @@ type Problem struct {
 	Msg msg.M
 }
 
+// Check reports whether b can run here: the first of its Problems, or nil.
+func Check(ctx context.Context, b Backend) error {
+	if ps := b.Problems(ctx); len(ps) > 0 {
+		return ps[0].Msg
+	}
+	return nil
+}
+
 // ErrNotFound is the error, or wraps it, for a VM the backend doesn't have.
 var ErrNotFound = errors.New("no such VM")
 
@@ -195,6 +200,7 @@ type Script struct {
 // ToolsSpec is a shared tools build: Script, fed to bash with Args, in a
 // VM made from base's image, which mounts nothing from the host but Out.
 type ToolsSpec struct {
+	Name   string // what it builds, as messages name it: its tools
 	Base   string // base's image key
 	Out    string // a host folder of the build's own, writable in the VM at OutAt
 	OutAt  string

@@ -40,7 +40,10 @@ func NewRegistry(bs ...Backend) (*Registry, error) {
 }
 
 // Register adds a backend under its name, which must be new, with Caps
-// that list every feature (Caps.Check).
+// that list every feature (Caps.Check). The registry hands it out behind
+// its guard: CreateVM, Start, BuildImage and BuildTools refuse a spec that
+// needs a feature Require would refuse, or that isn't valid. Find its
+// other interfaces with As.
 func (r *Registry) Register(b Backend) error {
 	name := b.Name()
 	if name == "" || strings.ToLower(name) != name || strings.ContainsAny(name, " \t\n=/") {
@@ -52,7 +55,7 @@ func (r *Registry) Register(b Backend) error {
 	if _, dup := r.byName[name]; dup {
 		return fmt.Errorf("backend %s is registered twice", name)
 	}
-	r.byName[name] = b
+	r.byName[name] = r.guard(b)
 	return nil
 }
 

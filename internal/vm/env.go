@@ -349,7 +349,7 @@ func (e *Env) inspect(ctx context.Context, f project.Folder, st *state.VM) (*fou
 		return nil, err
 	}
 	b := choice.Backend
-	if err := b.Check(ctx); err != nil {
+	if err := backend.Check(ctx, b); err != nil {
 		return nil, err
 	}
 	t := &found{f: f, st: st, b: b}

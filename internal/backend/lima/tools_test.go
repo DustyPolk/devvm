@@ -56,10 +56,6 @@ func TestBuildToolsFails(t *testing.T) {
 
 func TestBuildToolsRefuses(t *testing.T) {
 	for name, change := range map[string]func(*backend.ToolsSpec){
-		"an unconfined net":  func(s *backend.ToolsSpec) { s.Net = backend.NetDirect },
-		"a bad key":          func(s *backend.ToolsSpec) { s.Base = "../x" },
-		"a relative folder":  func(s *backend.ToolsSpec) { s.Out = "out" },
-		"a relative mount":   func(s *backend.ToolsSpec) { s.OutAt = "mnt" },
 		"a missing base":     func(s *backend.ToolsSpec) { s.Base = layerKey },
 		"a comma in its out": func(s *backend.ToolsSpec) { s.Out = "/tmp/a,b" },
 	} {

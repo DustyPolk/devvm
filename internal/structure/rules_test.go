@@ -249,6 +249,91 @@ func runs(p, exec, name string) string {
 	return "package " + p + "\n\nimport " + exec + " \"os/exec\"\n\nfunc f() { _ = " + exec + ".Command(" + name + ") }\n"
 }
 
+// runnerCases break and keep execSites and guardOwner.
+func runnerCases() []ruleCase {
+	sites := rules{execSites: map[string]string{"internal/hostgit/a.go": "the runner"}}
+	guard := rules{guardOwner: "internal/backend/guard.go"}
+	const backendPkg = "package backend\n\ntype Backend interface{ Name() string }\n\ntype KeyFiles interface{ KeyFiles() }\n"
+	asserts := func(p, x string) string {
+		return "package " + p + "\n\nimport \"example.com/m/internal/backend\"\n\nfunc f(b backend.Backend) { " + x + " }\n"
+	}
+	return []ruleCase{
+		{
+			name:  "a host command in a listed file",
+			files: map[string]string{"internal/hostgit/a.go": runs("hostgit", "exec", `"git"`)},
+			r:     sites,
+		},
+		{
+			name: "a host command outside the listed files",
+			files: map[string]string{
+				"internal/hostgit/a.go": runs("hostgit", "exec", `"git"`),
+				"internal/vm/a.go":      "package vm\n\nimport \"os/exec\"\n\nfunc f(p string) { _ = exec.CommandContext(nil, p) }\n",
+			},
+			r:    sites,
+			want: &want{ruleOwners, "makes a host command: run it through the UI's LoggedCmd"},
+		},
+		{
+			name:  "a listed file making none",
+			files: map[string]string{"internal/hostgit/a.go": "package hostgit\n"},
+			r:     sites,
+			want:  &want{ruleOwners, "internal/hostgit/a.go makes no host command: take it out"},
+		},
+		{
+			name: "a host command in a test",
+			files: map[string]string{
+				"internal/hostgit/a.go": runs("hostgit", "exec", `"git"`),
+				"internal/vm/a_test.go": runs("vm", "exec", `"ssh"`),
+			},
+			r: sites,
+		},
+		{
+			name:  "a backend's interface asserted",
+			files: map[string]string{"internal/backend/a.go": backendPkg, "internal/cli/a.go": asserts("cli", "_, _ = b.(backend.KeyFiles)")},
+			r:     guard,
+			want:  &want{ruleOwners, "asserts backend.KeyFiles: a registry's backend is behind its guard, so use backend.As"},
+		},
+		{
+			name: "a backend's own type asserted",
+			files: map[string]string{
+				"internal/backend/a.go":      backendPkg,
+				"internal/backend/lima/a.go": "package lima\n\ntype Lima struct{}\n",
+				"internal/cli/a.go": "package cli\n\nimport (\n\t\"example.com/m/internal/backend\"\n\tl \"example.com/m/internal/backend/lima\"\n)\n\n" +
+					"func f(b backend.Backend) { _, _ = b.(*l.Lima) }\n",
+			},
+			r:    guard,
+			want: &want{ruleOwners, "asserts l.Lima"},
+		},
+		{
+			name: "a backend's interface in a type switch",
+			files: map[string]string{"internal/backend/a.go": backendPkg, "internal/vm/a.go": asserts("vm",
+				"switch b.(type) {\n\tcase backend.KeyFiles:\n\t}")},
+			r:    guard,
+			want: &want{ruleOwners, "asserts backend.KeyFiles"},
+		},
+		{
+			name:  "a backend's interface asserted in its package",
+			files: map[string]string{"internal/backend/a.go": backendPkg + "\nfunc f(b Backend) { _, _ = b.(KeyFiles) }\n"},
+			r:     guard,
+			want:  &want{ruleOwners, "asserts KeyFiles"},
+		},
+		{
+			name:  "the guard asserting",
+			files: map[string]string{"internal/backend/guard.go": backendPkg + "\nfunc f(b Backend) { _, _ = b.(KeyFiles) }\n"},
+			r:     guard,
+		},
+		{
+			name:  "another type asserted",
+			files: map[string]string{"internal/backend/a.go": backendPkg, "internal/cli/a.go": asserts("cli", "_, _ = any(b).(interface{ Close() error })")},
+			r:     guard,
+		},
+		{
+			name:  "a backend's interface asserted in a test",
+			files: map[string]string{"internal/backend/a.go": backendPkg, "internal/cli/a_test.go": asserts("cli", "_, _ = b.(backend.KeyFiles)")},
+			r:     guard,
+		},
+	}
+}
+
 // reads is a file in package p that reads the variable name with call,
 // importing os and the module's internal/platform.
 func reads(p, call, name string) string {
@@ -439,7 +524,7 @@ func pathCases() []ruleCase {
 // what it allows.
 func TestRulesFail(t *testing.T) {
 	var broken []string // the layer violations' texts
-	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases(), ownerCases(), pathCases()) {
+	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases(), ownerCases(), runnerCases(), pathCases()) {
 		t.Run(tc.name, func(t *testing.T) {
 			fsys := fstest.MapFS{"go.mod": {Data: []byte("module example.com/m\n\ngo 1.27\n")}}
 			for name, src := range tc.files {

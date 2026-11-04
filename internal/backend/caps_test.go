@@ -137,9 +137,14 @@ func TestFeaturesNeeded(t *testing.T) {
 		{"a --clone VM forwarding nothing", backend.VMSpec{Name: "v"}.Features(), f(backend.FeatureClone)},
 		{"a VM with everything", backend.VMSpec{
 			Name: "v", Project: "/p", AgentDirs: []string{"/h/.claude"}, Tools: "/t", ToolsAt: "/opt/devvm",
-			AgentForwarding: true, Size: backend.Size{CPUs: 2, MemoryGiB: 4, DiskGiB: 60},
-		}.Features(), f(backend.FeatureClone, backend.FeatureProjectMount, backend.FeatureAgentFolders, backend.FeatureToolsShare,
-			backend.FeatureAgentForwarding, backend.FeatureCPUs, backend.FeatureMemory, backend.FeatureDisk)},
+			AgentForwarding: true, AgentToggle: true, Size: backend.Size{CPUs: 2, MemoryGiB: 4, DiskGiB: 60},
+		}.Features(), f(backend.FeatureClone, backend.FeatureProjectMount, backend.FeatureToolsShare, backend.FeatureAgentToggle,
+			backend.FeatureAgentFolders, backend.FeatureAgentForwarding, backend.FeatureCPUs, backend.FeatureMemory, backend.FeatureDisk)},
+		{"a start wanting nothing", backend.Want{}.Features(), nil},
+		{
+			"a start wanting agents and memory", backend.Want{AgentDirs: []string{"/h/.claude"}, AgentForwarding: true, Size: backend.Size{MemoryGiB: 8}}.Features(),
+			f(backend.FeatureAgentFolders, backend.FeatureAgentForwarding, backend.FeatureMemory),
+		},
 		{"every port", backend.Ports{All: true}.Features(), f(backend.FeaturePorts, backend.FeaturePortsAll)},
 		{"some ports", backend.Ports{Ranges: []backend.PortRange{{5173, 5173}}}.Features(), f(backend.FeaturePorts)},
 		{"no ports", backend.Ports{}.Features(), nil},

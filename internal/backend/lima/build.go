@@ -30,18 +30,8 @@ import (
 // failed create or clone: a cleanup on the ui stack, which runs after the
 // caller has shown the run log's end. Once it exists, a failure keeps it,
 // stopped, for inspection; the next build deletes it (it has no record).
+// The registry's guard has checked spec (ImageSpec.Validate).
 func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.Built, error) {
-	if spec.From != nil && spec.Parent != "" {
-		return backend.Built{}, errors.New("lima: only base starts from a container image")
-	}
-	if spec.Net != backend.NetInternet && spec.Net != backend.NetNone {
-		return backend.Built{}, fmt.Errorf("lima: builds are confined, not started with network %d", spec.Net)
-	}
-	for _, k := range []string{spec.Key, spec.Parent} {
-		if k != "" && !image.IsKey(k) {
-			return backend.Built{}, fmt.Errorf("lima: invalid image key %q", k)
-		}
-	}
 	inst := ImagePrefix + spec.Key
 	if _, err := l.inspect(ctx, inst); err == nil {
 		return backend.Built{}, fmt.Errorf("lima: %s exists already", inst)

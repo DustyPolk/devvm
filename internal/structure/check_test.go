@@ -30,6 +30,13 @@ type rules struct {
 	// commands are the host commands one package runs: a command's name,
 	// then the package folder that runs it.
 	commands map[string]string
+	// execSites are the files that make host commands, from the module's
+	// root, each with why; nil checks none.
+	execSites map[string]string
+	// guardOwner is the one file that asserts a backend's type (backend.As):
+	// elsewhere a type assertion to a type of a backend package fails;
+	// "" checks none.
+	guardOwner string
 	// envOwner is the one file that reads devvm's DEVVM_ variables, and
 	// envSettings the variables read elsewhere, by name.
 	envOwner    string
@@ -155,7 +162,8 @@ func load(fsys fs.FS) (*module, error) {
 
 // check runs every rule on m, the violations sorted.
 func check(m *module, r rules) []violation {
-	vs := slices.Concat(checkMethods(m, r), checkInit(m), checkVars(m, r), checkLayers(m, r), checkCommands(m, r), checkEnv(m, r), checkLiterals(m, r), checkPaths(m, r))
+	vs := slices.Concat(checkMethods(m, r), checkInit(m), checkVars(m, r), checkLayers(m, r), checkCommands(m, r),
+		checkExecSites(m, r), checkGuard(m, r), checkEnv(m, r), checkLiterals(m, r), checkPaths(m, r))
 	slices.SortFunc(vs, func(a, b violation) int { return strings.Compare(a.String(), b.String()) })
 	return vs
 }

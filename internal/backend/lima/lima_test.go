@@ -255,7 +255,7 @@ func TestStartRefusesGlobalConfigsAndNetworks(t *testing.T) {
 		t.Errorf("with default.yaml: %v", err)
 	}
 	f.out["limactl --version"] = "limactl version 2.2.1\n"
-	if err := l.Check(t.Context()); msg.IDOf(err) != "lima_global_config" {
+	if err := backend.Check(t.Context(), l); msg.IDOf(err) != "lima_global_config" {
 		t.Errorf("Check with default.yaml: %v", err)
 	}
 	if err := os.Remove(filepath.Join(cfg, "default.yaml")); err != nil {

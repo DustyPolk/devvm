@@ -4,11 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
-	"path/filepath"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -19,19 +16,8 @@ const ToolsVM = "devvm-tools-build"
 // mount, starts it confined as spec.Net asks, runs the script with its
 // arguments, and deletes it. A ToolsVM left by an earlier run is deleted
 // first, and the VM goes however the run ends (a cleanup on the ui stack).
+// The registry's guard has checked spec (ToolsSpec.Validate).
 func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
-	if spec.Net != backend.NetInternet && spec.Net != backend.NetNone {
-		return fmt.Errorf("lima: builds are confined, not started with network %d", spec.Net)
-	}
-	if spec.Format != l.ToolFormat() {
-		return fmt.Errorf("lima: tool images are build.sh's own, not %q", spec.Format)
-	}
-	if !image.IsKey(spec.Base) {
-		return fmt.Errorf("lima: invalid image key %q", spec.Base)
-	}
-	if !filepath.IsAbs(spec.Out) || !filepath.IsAbs(spec.OutAt) {
-		return fmt.Errorf("lima: the tools build's folders must be absolute: %q at %q", spec.Out, spec.OutAt)
-	}
 	base := ImagePrefix + spec.Base
 	in, err := l.inspect(ctx, base)
 	if errors.Is(err, backend.ErrNotFound) {

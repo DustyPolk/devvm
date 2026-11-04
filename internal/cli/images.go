@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
@@ -94,7 +95,7 @@ func newImagesRmCmd(u *ui.UI) *cobra.Command {
 				err = from.Check(b.From)
 			}
 			if err == nil {
-				err = b.Backend.Check(cmd.Context())
+				err = backend.Check(cmd.Context(), b.Backend)
 			}
 			ok := false
 			if err == nil {
@@ -285,7 +286,7 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Env) (imageListing, erro
 			} else if !used[be.Name()] {
 				continue
 			}
-			if cerr := be.Check(ctx); cerr != nil {
+			if cerr := backend.Check(ctx, be); cerr != nil {
 				err = cerr
 			}
 			out.unlisted = append(out.unlisted, unlisted{backend: be.Name(), err: err})

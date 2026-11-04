@@ -111,13 +111,6 @@ func (f *Fake) Caps() backend.Caps { return f.Capabilities }
 // NameMax returns NameLimit.
 func (f *Fake) NameMax() int { return f.NameLimit }
 
-// Check records the call.
-func (f *Fake) Check(context.Context) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.record("Check")
-}
-
 // Problems records the call and returns Missing.
 func (f *Fake) Problems(context.Context) []backend.Problem {
 	f.mu.Lock()

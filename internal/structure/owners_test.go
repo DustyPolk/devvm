@@ -132,6 +132,121 @@ func checkCommands(m *module, r rules) []violation {
 	return vs
 }
 
+// checkExecSites: outside tests, only the files execSites lists make a
+// host command (exec.Command or exec.CommandContext); the rest run theirs
+// through a runner. A listed file that no longer makes one fails.
+func checkExecSites(m *module, r rules) []violation {
+	if r.execSites == nil {
+		return nil
+	}
+	var vs []violation
+	made := map[string]bool{}
+	for _, f := range m.files {
+		exec := importName(f, "os/exec")
+		if f.test || exec == "" {
+			continue
+		}
+		calls(f, func(call *ast.CallExpr) {
+			if name := callName(call); name != exec+".Command" && name != exec+".CommandContext" {
+				return
+			}
+			made[f.name] = true
+			if _, listed := r.execSites[f.name]; !listed {
+				vs = append(vs, violation{ruleOwners, m.pos(call), "makes a host command: run it through the UI's LoggedCmd, the backend's Runner or hostgit, or list the file in execSites with why"})
+			}
+		})
+	}
+	for _, file := range slices.Sorted(maps.Keys(r.execSites)) {
+		if !made[file] {
+			vs = append(vs, violation{ruleOwners, "execSites", file + " makes no host command: take it out"})
+		}
+	}
+	return vs
+}
+
+// checkGuard: outside tests and guardOwner, no type assertion or type
+// switch names a type of internal/backend or a package below it: the
+// registry's backends are behind its guard, whose type has Backend's
+// methods alone, so an assertion to another interface of theirs is
+// always false.
+func checkGuard(m *module, r rules) []violation {
+	if r.guardOwner == "" {
+		return nil
+	}
+	backendTypes := map[string]bool{} // the types internal/backend declares
+	for _, f := range m.files {
+		if f.dir != "internal/backend" {
+			continue
+		}
+		for _, d := range f.ast.Decls {
+			if gd, ok := d.(*ast.GenDecl); ok && gd.Tok == token.TYPE {
+				for _, s := range gd.Specs {
+					backendTypes[s.(*ast.TypeSpec).Name.Name] = true
+				}
+			}
+		}
+	}
+	var vs []violation
+	for _, f := range m.files {
+		if f.test || f.name == r.guardOwner {
+			continue
+		}
+		check := func(e ast.Expr) {
+			if name, ok := backendType(m, f, e, backendTypes); ok {
+				vs = append(vs, violation{ruleOwners, m.pos(e), "asserts " + name + ": a registry's backend is behind its guard, so use backend.As"})
+			}
+		}
+		ast.Inspect(f.ast, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.TypeAssertExpr:
+				if x.Type != nil {
+					check(x.Type)
+				}
+			case *ast.TypeSwitchStmt:
+				for _, c := range x.Body.List {
+					for _, e := range c.(*ast.CaseClause).List {
+						check(e)
+					}
+				}
+			}
+			return true
+		})
+	}
+	return vs
+}
+
+// backendType reports whether e, a type in f, is one of internal/backend's
+// or a package's below it, and names it.
+func backendType(m *module, f srcFile, e ast.Expr, backendTypes map[string]bool) (string, bool) {
+	if star, ok := e.(*ast.StarExpr); ok {
+		e = star.X
+	}
+	switch x := e.(type) {
+	case *ast.Ident:
+		return x.Name, f.dir == "internal/backend" && backendTypes[x.Name]
+	case *ast.SelectorExpr:
+		pkg, ok := x.X.(*ast.Ident)
+		if !ok {
+			return "", false
+		}
+		for _, imp := range f.ast.Imports {
+			p, err := strconv.Unquote(imp.Path.Value)
+			dir, inModule := strings.CutPrefix(p, m.path+"/")
+			if err != nil || !inModule || (dir != "internal/backend" && !strings.HasPrefix(dir, "internal/backend/")) {
+				continue
+			}
+			name := path.Base(p)
+			if imp.Name != nil {
+				name = imp.Name.Name
+			}
+			if name == pkg.Name {
+				return pkg.Name + "." + x.Sel.Name, true
+			}
+		}
+	}
+	return "", false
+}
+
 // funcName is the name of the function a call calls: F for F(), x.F() and
 // x.y.F().
 func funcName(call *ast.CallExpr) string {

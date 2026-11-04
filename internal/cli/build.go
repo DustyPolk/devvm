@@ -86,7 +86,7 @@ func imageCmd(ctx context.Context, u *ui.UI, f imageFlags, name string, do func(
 		err = b.CheckLayers(image.Normalize(name))
 	}
 	if err == nil {
-		err = b.Backend.Check(ctx)
+		err = backend.Check(ctx, b.Backend)
 	}
 	if err == nil {
 		err = do(build.Builds{Env: b}, ctx, name)

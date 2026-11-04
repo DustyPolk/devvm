@@ -157,7 +157,7 @@ func (r *LeftoverReport) unknown(b string) {
 func backendVMs(ctx context.Context, b backend.Backend) map[string]bool {
 	ctx, cancel := context.WithTimeout(ctx, leftoverAsk)
 	defer cancel()
-	if b.Check(ctx) != nil {
+	if backend.Check(ctx, b) != nil {
 		return nil
 	}
 	ins, err := b.List(ctx)

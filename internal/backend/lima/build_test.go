@@ -353,10 +353,6 @@ func TestBuildImageRefuses(t *testing.T) {
 	base := backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet}
 	for name, change := range map[string]func(*backend.ImageSpec){
 		"--from":             func(s *backend.ImageSpec) { s.From = &backend.From{Ref: "node:24"} },
-		"an unconfined net":  func(s *backend.ImageSpec) { s.Net = backend.NetDirect },
-		"the proxy's net":    func(s *backend.ImageSpec) { s.Net = backend.NetProxy },
-		"a bad key":          func(s *backend.ImageSpec) { s.Key = "../x" },
-		"a bad parent key":   func(s *backend.ImageSpec) { s.Parent = "x y" },
 		"a missing parent":   func(s *backend.ImageSpec) { s.Parent = layerKey },
 		"an existing image":  func(s *backend.ImageSpec) { s.Key = baseKey; s.Parent = "" },
 		"no Ubuntu image":    func(*backend.ImageSpec) {},

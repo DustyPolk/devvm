@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/assets"
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -37,8 +38,9 @@ func TestReleaseReadsNoOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := r.Lookup("lima"); b.(*lima.Lima).KVM != "/dev/kvm" || len(r.Unreviewed) != 0 {
-		t.Errorf("KVM %q, let through %v", b.(*lima.Lima).KVM, r.Unreviewed)
+	b, _ := r.Lookup("lima")
+	if l, _ := backend.As[*lima.Lima](b); l.KVM != "/dev/kvm" || len(r.Unreviewed) != 0 {
+		t.Errorf("KVM %q, let through %v", l.KVM, r.Unreviewed)
 	}
 	if got, want := thisHost().CPUs(), (platform.Host{}).CPUs(); got != want {
 		t.Errorf("the host's CPUs = %d, want %d", got, want)

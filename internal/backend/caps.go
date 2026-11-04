@@ -179,12 +179,21 @@ func ParseUnreviewed(v string) map[string]bool {
 // the refusal for the first one it lacks or only emulates unreviewed,
 // naming vm.
 func (r Review) Require(b Backend, vm string, features ...Feature) error {
+	return r.refusal(b, vm, r.Warn, features)
+}
+
+// refusal is Require's, telling warn of each unreviewed emulation let
+// through, or no one when warn is nil (the guard: the caller's Require
+// told).
+func (r Review) refusal(b Backend, vm string, warn func(msg.M), features []Feature) error {
 	caps := b.Caps()
 	for _, f := range features {
 		switch s := caps[f]; {
 		case s.Usable():
 		case s.IsEmulated() && r.Unreviewed[b.Name()+":"+string(f)]:
-			r.Warn(msg.BackendUnreviewedUsed(b.Name(), string(f), vm))
+			if warn != nil {
+				warn(msg.BackendUnreviewedUsed(b.Name(), string(f), vm))
+			}
 		case s.IsEmulated():
 			return msg.BackendUnreviewed(b.Name(), string(f), vm)
 		default:
@@ -237,22 +246,34 @@ func (s ToolsSpec) Features() []Feature {
 	return append([]Feature{FeatureBuildImage}, s.Net.Features()...)
 }
 
-// Features returns what creating the VM needs.
+// Features returns what creating the VM needs: its Want's, and agent-toggle
+// when it's made ready to change its forwarding.
 func (s VMSpec) Features() []Feature {
 	fs := []Feature{FeatureClone}
 	if s.Project != "" {
 		fs = append(fs, FeatureProjectMount)
 	}
-	if len(s.AgentDirs) > 0 {
-		fs = append(fs, FeatureAgentFolders)
-	}
 	if s.Tools != "" {
 		fs = append(fs, FeatureToolsShare)
 	}
-	if s.AgentForwarding {
+	if s.AgentToggle {
+		fs = append(fs, FeatureAgentToggle)
+	}
+	return append(fs, s.Want.Features()...)
+}
+
+// Features returns what a VM needs to be as w wants it: agent-toggle, to
+// change its forwarding, is the caller's to ask for, as only it knows
+// what the VM had.
+func (w Want) Features() []Feature {
+	var fs []Feature
+	if len(w.AgentDirs) > 0 {
+		fs = append(fs, FeatureAgentFolders)
+	}
+	if w.AgentForwarding {
 		fs = append(fs, FeatureAgentForwarding)
 	}
-	return append(fs, s.Size.Features()...)
+	return append(fs, w.Size.Features()...)
 }
 
 // Features returns what setting the size needs.

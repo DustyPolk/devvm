@@ -13,14 +13,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// Check reports whether Lima can run VMs here: the first of Problems.
-func (l *Lima) Check(ctx context.Context) error {
-	if ps := l.Problems(ctx); len(ps) > 0 {
-		return ps[0].Msg
-	}
-	return nil
-}
-
 // Problems lists what Lima needs that this host lacks: macOS 13 or Linux
 // on arm64 or x86_64, Lima 2 or newer, on Linux QEMU and /dev/kvm, and
 // none of Lima's global configs in devvm's home. A fix is Homebrew's for

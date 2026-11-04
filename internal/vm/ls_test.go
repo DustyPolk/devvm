@@ -10,6 +10,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/gitprotect"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -111,8 +112,8 @@ func TestList(t *testing.T) {
 	if _, err := List(t.Context(), d, reg); err == nil || err.Error() != "list failed" {
 		t.Errorf("used broken backend: %v", err)
 	}
-	broken.Errs["Check"] = errors.New("not installed")
-	if _, err := List(t.Context(), d, reg); err == nil || err.Error() != "not installed" {
+	broken.Missing = []backend.Problem{{Key: "lima", Msg: msg.LimaMissing()}}
+	if _, err := List(t.Context(), d, reg); msg.IDOf(err) != "lima_missing" {
 		t.Errorf("used broken backend, check failing: %v", err)
 	}
 }

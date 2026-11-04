@@ -62,7 +62,7 @@ type Space struct {
 // step makes). A backend that isn't Storage, or a system devvm can't
 // read free space on, isn't checked.
 func (s Space) Check(b Backend, what string, need func(Floors) uint64) error {
-	st, ok := b.(Storage)
+	st, ok := As[Storage](b)
 	if !ok {
 		return nil
 	}
@@ -88,7 +88,7 @@ func (s Space) check(dirs []string, what string, need uint64) error {
 // than building base wants there; false when it has enough, or can't be
 // read.
 func (s Space) Warning(b Backend) (msg.M, bool) {
-	st, ok := b.(Storage)
+	st, ok := As[Storage](b)
 	if !ok {
 		return msg.M{}, false
 	}

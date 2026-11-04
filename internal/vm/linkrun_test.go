@@ -347,7 +347,7 @@ func zombie(pid int) bool {
 func TestLinksAtLaunch(t *testing.T) {
 	r, started := linkRunsEnv(t, "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.1:6379: carried\n"+
 		"devvm links: 127.77.0.3:80: carried\ndevvm links: 127.77.0.4:1: carried\n")
-	f := r.Registry.All()[0].(*backendtest.Fake)
+	f, _ := backend.As[*backendtest.Fake](r.Registry.All()[0])
 	vms := linkVMs(t, r.Dirs, "app", "db", "web", "gone")
 	app, db, web, gone := vms[0], vms[1], vms[2], vms[3]
 	for _, st := range vms {

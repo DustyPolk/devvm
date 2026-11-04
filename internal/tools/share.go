@@ -167,7 +167,7 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 		return err
 	}
 	spec := backend.ToolsSpec{
-		Base: base, Out: out, OutAt: ShareAt, Args: args, Format: tg.Format, Net: backend.NetInternet,
+		Name: Label(files), Base: base, Out: out, OutAt: ShareAt, Args: args, Format: tg.Format, Net: backend.NetInternet,
 		Script: cas.Script(backend.Script{Name: "build.sh", Data: script}), Trust: ca,
 	}
 	if err := b.BuildTools(ctx, spec); err != nil {

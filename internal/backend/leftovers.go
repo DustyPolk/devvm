@@ -21,7 +21,7 @@ type Locator interface {
 // it (a hash, so any path fits), and whether that's b's default; "" and
 // true for a backend that isn't a Locator.
 func LocationOf(b Backend) (string, bool) {
-	l, ok := b.(Locator)
+	l, ok := As[Locator](b)
 	if !ok {
 		return "", true
 	}

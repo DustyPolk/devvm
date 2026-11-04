@@ -20,7 +20,7 @@ func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map
 		return err
 	}
 	for _, be := range reg.All() {
-		c, ok := be.(backend.CacheCleaner)
+		c, ok := backend.As[backend.CacheCleaner](be)
 		if !ok || skipped[be.Name()] {
 			continue
 		}
@@ -55,7 +55,7 @@ func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map
 func cacheEntries(ctx context.Context, be backend.Backend, c backend.CacheCleaner) ([]backend.CacheEntry, bool) {
 	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(be.Name()))
 	defer cancel()
-	if be.Check(ctx) != nil {
+	if backend.Check(ctx, be) != nil {
 		return nil, false
 	}
 	entries, err := c.DevvmCache(ctx)

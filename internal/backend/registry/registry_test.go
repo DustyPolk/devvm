@@ -58,7 +58,7 @@ func TestOverrides(t *testing.T) {
 			t.Fatal(err)
 		}
 		lb, _ := r.Lookup("lima")
-		l := lb.(*lima.Lima)
+		l, _ := backend.As[*lima.Lima](lb)
 		mem, _ := r.Host.Memory()
 		free, _ := r.Host.FreeSpace(t.TempDir())
 		for what, got := range map[string]bool{

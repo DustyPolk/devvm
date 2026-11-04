@@ -46,7 +46,7 @@ func List(ctx context.Context, d paths.Dirs, reg *backend.Registry) ([]Listed, e
 			} else if !used[b.Name()] {
 				continue
 			}
-			if cerr := b.Check(ctx); cerr != nil {
+			if cerr := backend.Check(ctx, b); cerr != nil {
 				return nil, cerr
 			}
 			return nil, err

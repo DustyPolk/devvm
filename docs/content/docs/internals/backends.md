@@ -63,7 +63,7 @@ flowchart TD
   np -- "yes" --> warned["the VM is made<br>without network policy,<br>with a warning"]
 ```
 
-Before devvm builds an image, makes or starts a VM, or changes a VM's settings, it checks that the backend has every feature the image or the VM needs. When the backend lacks one, devvm stops and names the VM, the feature and the backend (`backend_lacks`). It does the same for a feature the backend only emulates when that emulation's review hasn't passed (`backend_unreviewed`). devvm never falls back to something weaker, so a VM that asks for network policy never starts with an open network.
+Before devvm builds an image, makes or starts a VM, or changes a VM's settings, it checks that the backend has every feature the image or the VM needs. The backend itself is behind the same check: every time devvm asks it to build an image or the shared tools, make a VM or start one, devvm checks the features that request needs before the backend sees it, so a request that skipped the first check is refused too. When the backend lacks one, devvm stops and names the VM, the feature and the backend (`backend_lacks`). It does the same for a feature the backend only emulates when that emulation's review hasn't passed (`backend_unreviewed`). devvm never falls back to something weaker, so a VM that asks for network policy never starts with an open network.
 
 To get the feature, use a backend that has it. A VM keeps its backend, so that means making a new VM.
 
