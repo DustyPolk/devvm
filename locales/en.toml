@@ -2050,6 +2050,10 @@ other = "The shared tools' versions changed while devvm waited. Run the command 
 [tool_unbuilt]
 other = "{{.tool}} {{.version}} is a new release with no download for this VM's platform yet. Try again tomorrow."
 
+[tool_needs_glibc]
+description = "needs and has are glibc versions: 2.28, 2.24"
+other = "{{.tool}} {{.version}} needs glibc {{.needs}} or newer, but this VM's container image has glibc {{.has}}. Start it from a newer container image with --from."
+
 [building_tools]
 description = "tools lists tools and versions: node 24.21.0, bun 1.4.2"
 other = "building shared tools: {{.tools}}"

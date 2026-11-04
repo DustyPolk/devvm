@@ -38,6 +38,7 @@ const ociSteps = 5
 // copies the files in.
 type converted struct {
 	dir, cmdline, libc string
+	glibc              string // for gnu, its glibc version: 2.36
 	done               func(context.Context)
 }
 
@@ -151,8 +152,8 @@ func (l *images) convert(ctx context.Context, f *backend.From, o origin, size ba
 	}
 	proxyDone(true)
 	// The build VM is gone, so nothing changes them now.
-	c := &converted{dir: vmOut}
-	if c.libc, c.cmdline, err = checkConverted(vmOut, f.Ref); err != nil {
+	c, err := checkConverted(vmOut, f.Ref)
+	if err != nil {
 		return nil, err
 	}
 	c.done = func(ctx context.Context) {
@@ -292,17 +293,22 @@ var cmdlinePattern = regexp.MustCompile(`^[A-Za-z0-9=,./:_ -]+$`)
 // maxSmallOutput caps what's read of the conversion's text files.
 const maxSmallOutput = 4096
 
-// checkConverted checks what the conversion wrote, and returns its libc
-// and kernel command line. Each file must be a regular file (a link could
-// point Lima or devvm at a host file); what goes into Lima's config must
-// be plain text; the disk must be raw ext4, as build.sh writes it
+// checkConverted checks what the conversion wrote into dir, and returns
+// it: its libc, its glibc version for gnu, and its kernel command line.
+// Each file must be a regular file (a link could point Lima or devvm at a
+// host file); what goes into Lima's config or base's record must be plain
+// text of its shape; the disk must be raw ext4, as build.sh writes it
 // (another format, qcow2 or VMDK, can name host files as its backing file
 // or extents).
-func checkConverted(dir, ref string) (libc, cmdline string, err error) {
+func checkConverted(dir, ref string) (*converted, error) {
 	bad := func(file string) error { return msg.ConvertBadOutput(file, ref) }
+	regular := func(f string) bool {
+		fi, err := os.Lstat(filepath.Join(dir, f))
+		return err == nil && fi.Mode().IsRegular()
+	}
 	for _, f := range []string{"disk.raw", "kernel", "initrd", "cmdline", "libc"} {
-		if fi, err := os.Lstat(filepath.Join(dir, f)); err != nil || !fi.Mode().IsRegular() {
-			return "", "", bad(f)
+		if !regular(f) {
+			return nil, bad(f)
 		}
 	}
 	text := func(f string) string {
@@ -314,16 +320,22 @@ func checkConverted(dir, ref string) (libc, cmdline string, err error) {
 		data, _ := io.ReadAll(io.LimitReader(fh, maxSmallOutput))
 		return strings.TrimRight(string(data), "\n")
 	}
-	if libc = text("libc"); libc != "gnu" && libc != "musl" {
-		return "", "", bad("libc")
+	c := &converted{dir: dir}
+	if c.libc = text("libc"); c.libc != "gnu" && c.libc != "musl" {
+		return nil, bad("libc")
 	}
-	if cmdline = text("cmdline"); !cmdlinePattern.MatchString(cmdline) {
-		return "", "", bad("cmdline")
+	if c.libc == "gnu" {
+		if c.glibc = text("glibc"); !regular("glibc") || !image.ValidGlibc(c.glibc) {
+			return nil, bad("glibc")
+		}
+	}
+	if c.cmdline = text("cmdline"); !cmdlinePattern.MatchString(c.cmdline) {
+		return nil, bad("cmdline")
 	}
 	if !ext4(filepath.Join(dir, "disk.raw")) {
-		return "", "", bad("disk.raw")
+		return nil, bad("disk.raw")
 	}
-	return libc, cmdline, nil
+	return c, nil
 }
 
 // ext4 reports whether a file starts with an ext4 superblock: its magic,

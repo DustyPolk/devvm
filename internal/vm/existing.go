@@ -274,25 +274,29 @@ func (e Launch) reloadAgent(ctx context.Context, b backend.Backend, st *state.VM
 }
 
 // toolTarget is what a VM's tool images are built for: its base's C
-// library and its backend's format.
+// library, with a --from gnu base's glibc version, and its backend's
+// format.
 func toolTarget(b backend.Backend, st *state.VM) tools.Target {
 	t, _ := tools.Of(st)
-	return tools.Target{Libc: t.Made.Libc, Format: b.ToolFormat()}
+	return tools.Target{Libc: t.Made.Libc, Glibc: t.Made.Glibc, Format: b.ToolFormat()}
 }
 
 // buildTools builds the tool images the share lacks of files, from base's
-// image as it is now, built first if it isn't.
+// image as it is now, built first if it isn't, then checks that each runs
+// on tg's base (tools.Share.Runs).
 func (e Launch) buildTools(ctx context.Context, builder *build.Env, tg tools.Target, files []string) error {
 	share := tools.Share{Env: e.Tools}
-	if !slices.ContainsFunc(files, func(f string) bool { return !share.Built(f) }) {
-		return nil
+	if slices.ContainsFunc(files, func(f string) bool { return !share.Built(f) }) {
+		if err := (build.Builds{Env: builder}).Build(ctx, image.Base); err != nil {
+			return err
+		}
+		base, err := builder.Key(image.Base)
+		if err != nil {
+			return err
+		}
+		if err := share.Build(ctx, builder.Review, builder.Backend, base, tg, files); err != nil {
+			return err
+		}
 	}
-	if err := (build.Builds{Env: builder}).Build(ctx, image.Base); err != nil {
-		return err
-	}
-	base, err := builder.Key(image.Base)
-	if err != nil {
-		return err
-	}
-	return share.Build(ctx, builder.Review, builder.Backend, base, tg, files)
+	return share.Runs(files, tg)
 }

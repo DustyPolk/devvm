@@ -230,34 +230,29 @@ func (b *Env) CheckLayers(name string) error {
 	return nil
 }
 
-// BaseLibc is the C library of base as it is now: its record's, gnu when
-// it isn't built. The shared tools are built for it.
-func (b *Env) BaseLibc() (string, error) {
-	key, err := b.Key(image.Base)
-	if err != nil {
-		return "", err
-	}
-	rec, err := state.ReadImage(b.Dirs, key)
-	if _, corrupt := errors.AsType[*state.CorruptError](err); corrupt || errors.Is(err, fs.ErrNotExist) {
-		return "gnu", nil
-	} else if err != nil {
-		return "", err
-	}
-	if rec.Libc == "" {
-		return "gnu", nil
-	}
-	return rec.Libc, nil
-}
-
 // ToolTarget is what the shared tools of a new VM on this backend are
-// built for: base's C library as it is now (BaseLibc), and the backend's
+// built for: base's C library as it is now, its record's (gnu when it
+// isn't built), with the glibc version its record has, and the backend's
 // format.
 func (b *Env) ToolTarget() (tools.Target, error) {
-	libc, err := b.BaseLibc()
+	tg := tools.Target{Libc: "gnu", Format: b.Backend.ToolFormat()}
+	key, err := b.Key(image.Base)
 	if err != nil {
 		return tools.Target{}, err
 	}
-	return tools.Target{Libc: libc, Format: b.Backend.ToolFormat()}, nil
+	rec, err := state.ReadImage(b.Dirs, key)
+	if _, corrupt := errors.AsType[*state.CorruptError](err); corrupt || errors.Is(err, fs.ErrNotExist) {
+		return tg, nil
+	} else if err != nil {
+		return tools.Target{}, err
+	}
+	if rec.Libc != "" {
+		tg.Libc = rec.Libc
+	}
+	if tg.Libc == "gnu" {
+		tg.Glibc = rec.Glibc
+	}
+	return tg, nil
 }
 
 // Build builds an image, and the images under it, unless they're built.
@@ -352,7 +347,7 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 	for _, f := range p.unknown {
 		b.Warn(msg.UnknownFeature(f))
 	}
-	libc := ""
+	libc, glibc := "", ""
 	if parent := image.Parent(name); parent != "" {
 		if err := b.build(ctx, parent); err != nil {
 			return err
@@ -361,7 +356,7 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
-		libc = rec.Libc
+		libc, glibc = rec.Libc, rec.Glibc
 	}
 	// The user's CAs, trusted while it builds: the image keeps none of
 	// them, so its key holds none.
@@ -397,9 +392,9 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 	}
 	// The record is written last: an image without one didn't finish.
 	// Every image on a --from base records it and its digest.
-	rec := state.Image{Name: name, Chain: chain.String(), From: b.From, Digest: digest, Libc: libc, Built: time.Now().UTC().Truncate(time.Second), MadeBy: b.Version}
+	rec := state.Image{Name: name, Chain: chain.String(), From: b.From, Digest: digest, Libc: libc, Glibc: glibc, Built: time.Now().UTC().Truncate(time.Second), MadeBy: b.Version}
 	if name == image.Base {
-		rec.Libc = out.Libc
+		rec.Libc, rec.Glibc = out.Libc, out.Glibc
 		if b.From == "" {
 			rec.Digest = out.Origin
 		}

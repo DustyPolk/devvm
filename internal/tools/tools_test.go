@@ -868,6 +868,7 @@ func TestBuildHostileOutput(t *testing.T) {
 	f.ToolsBuild = func(spec backend.ToolsSpec) error {
 		file := spec.Args[2]
 		write(t, filepath.Join(spec.Out, file), []byte("image"))
+		write(t, filepath.Join(spec.Out, file+".glibc"), nil)
 		// The share is the VM's to write in this scenario, through
 		// whatever it planted.
 		return os.Symlink(victim, e.Dirs.ToolRecord(file))

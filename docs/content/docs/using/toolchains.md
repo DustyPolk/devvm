@@ -92,7 +92,22 @@ What this doesn't cover:
 
 The toolchains are [shared tools](images.md#shared-tools), like the [coding agents](coding-agents.md#supported-agents), so they aren't part of any image. devvm builds each version once and mounts it read-only into every VM that has it, and [mise](https://mise.jdx.dev) runs it, so `node`, `python`, `cargo` and `go` work from any shell in the VM, including `bash -c` from agents and from editors over SSH. Because the shared copy is read-only, a toolchain can't update itself, and anything you install globally goes into your home in the VM, as each section above says.
 
-devvm follows each toolchain's newest release, and Node 24 for node. [Adding and removing tools](#adding-and-removing-tools) explains how `devvm update` and `devvm tools update` move a VM to newer versions, how `devvm tools add` adds a toolchain to an existing VM, and how `devvm tools rm` takes one out. [What a new VM gets](images.md#what-a-new-vm-gets) explains what happens when a folder calls for more than one toolchain.
+devvm follows each toolchain's newest release, and Node 24 for node. [Which bases they run on](#which-bases-they-run-on) says what each one needs from a VM's base. [Adding and removing tools](#adding-and-removing-tools) explains how `devvm update` and `devvm tools update` move a VM to newer versions, how `devvm tools add` adds a toolchain to an existing VM, and how `devvm tools rm` takes one out. [What a new VM gets](images.md#what-a-new-vm-gets) explains what happens when a folder calls for more than one toolchain.
+
+## Which bases they run on
+
+Every toolchain runs on `base` from Ubuntu's own image, and on an Alpine-based image with [`--from`](from.md), which gets musl builds of the tools. On a Debian- or Ubuntu-based image, each tool needs at least the glibc version that its prebuilt release was built against. devvm measures that version from the tool's files whenever it builds a new version, and it refuses a tool whose version is newer than the image's glibc ([shared tools and glibc](from.md#shared-tools-and-glibc)). Today the shared tools need these glibc versions, so Debian 10 and Ubuntu 20.04 and newer images run all of them:
+
+| Shared tool | arm64 | amd64 |
+| --- | --- | --- |
+| node | 2.28 | 2.28 |
+| pnpm and bun, with node | 2.18 and 2.17 | 2.18 and 2.17 |
+| python | 2.17 | 2.17 |
+| uv, with python | 2.28 | 2.17 |
+| rust, with rustup | 2.17 | 2.17 |
+| go | none, because its programs need no glibc | none |
+| claude and opencode | 2.17 | 2.17 |
+| codex | 2.28, for its voice helper | 2.28 |
 
 ## Adding and removing tools
 

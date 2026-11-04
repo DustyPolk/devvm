@@ -3059,6 +3059,11 @@ func ToolBadVersion(tool string, version string) M {
 	return M{id: "tool_bad_version", vals: []val{{"tool", tool}, {"version", version}}}
 }
 
+// ToolNeedsGlibc is [tool_needs_glibc]: "{{.tool}} {{.version}} needs glibc {{.needs}} or newer, but this VM's container image has glibc {{.has}}. Start it from a newer container image with --from."
+func ToolNeedsGlibc(has string, needs string, tool string, version string) M {
+	return M{id: "tool_needs_glibc", vals: []val{{"has", has}, {"needs", needs}, {"tool", tool}, {"version", version}}}
+}
+
 // ToolNoDownload is [tool_no_download]: "{{.tool}} {{.version}} isn't published for every platform, and neither are the versions before it. The next daily check tries again."
 func ToolNoDownload(tool string, version string) M {
 	return M{id: "tool_no_download", vals: []val{{"tool", tool}, {"version", version}}}
@@ -3987,6 +3992,7 @@ var specs = map[string]spec{
 	"too_much_memory":                  {fields: []string{"have", "max", "want"}},
 	"tool_bad_output":                  {fields: []string{"file"}},
 	"tool_bad_version":                 {fields: []string{"tool", "version"}},
+	"tool_needs_glibc":                 {fields: []string{"has", "needs", "tool", "version"}},
 	"tool_no_download":                 {fields: []string{"tool", "version"}},
 	"tool_not_layer":                   {fields: []string{"tool"}},
 	"tool_not_locked":                  {fields: []string{"lock", "tool"}},

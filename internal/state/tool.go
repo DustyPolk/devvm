@@ -11,8 +11,11 @@ import (
 // written once the image is moved in, so an image without one isn't
 // built.
 type ToolImage struct {
-	SHA256  string    `json:"sha256"`  // the image's SHA-256, in hex, as it was moved in
-	Libc    string    `json:"libc"`    // the C library it's built for: gnu, or musl
+	SHA256 string `json:"sha256"` // the image's SHA-256, in hex, as it was moved in
+	Libc   string `json:"libc"`   // the C library it's built for: gnu, or musl
+	// Glibc is, for gnu, the newest glibc version its programs and
+	// libraries need, as its build measured it: "" when they need none.
+	Glibc   string    `json:"glibc,omitempty"`
 	Format  string    `json:"format"`  // its backend's ToolFormat: "" for shared-tools/build.sh's own
 	Backend string    `json:"backend"` // the backend that built it
 	Built   time.Time `json:"built"`   // when it was moved in

@@ -336,6 +336,9 @@ type ToolsSpec struct {
 type Built struct {
 	Origin string // what base started from: the Ubuntu image (URL sha256:DIGEST) or From's digest; "" above base
 	Libc   string // base's C library: gnu, or musl (Alpine); "" above base
+	// Glibc is a --from gnu base's glibc version (image.ValidGlibc);
+	// "" for musl, for base from the backend's own Ubuntu, and above base.
+	Glibc string
 	// Fitted is base's CPUs and memory when fitting them to the host made
 	// either less than base.yaml's (Fitted); zero when it didn't, and
 	// above base.

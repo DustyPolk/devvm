@@ -13,6 +13,7 @@
 #   initrd    the image's initramfs
 #   cmdline   the kernel command line bootify.sh chose
 #   libc      gnu, or musl (Alpine): which builds of the shared tools its VMs run
+#   glibc     for gnu, its glibc version (2.36), which each shared tool's needs are checked against
 # No apt here: the cloud image's first boot may be running it (unattended-upgrades holds its lock).
 # shellcheck disable=SC2034  # the checksums are read through crane_sha
 set -euo pipefail
@@ -118,7 +119,7 @@ make_disk() {
 
 main() {
   oci=$1 out=$2 image=$3 name=$4 user_name=$5 user_uid=$6 user_home=$7 size=$8 ca_sh=${9:-}
-  local work=/var/tmp/devvm-oci os libc
+  local work=/var/tmp/devvm-oci os libc glibc=""
   for c in curl sha256sum tar chroot mount mke2fs truncate; do
     command -v "$c" >/dev/null || die "the build VM has no $c"
   done
@@ -133,6 +134,12 @@ main() {
   os=$(env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin chroot root /bin/sh -c '. /etc/os-release && echo "$ID ${ID_LIKE:-}"' 2>/dev/null) ||
     die "'$name' has no shell or /etc/os-release, so it can't become a VM"
   libc=$(libc_for "$os") || die "'$name' is based on '${os%% *}'; devvm needs a Debian, Ubuntu or Alpine based image"
+  if [[ $libc == gnu ]]; then
+    # getconf prints "glibc 2.36"; devvm checks what's left.
+    glibc=$(env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin chroot root getconf GNU_LIBC_VERSION 2>/dev/null) ||
+      die "'$name' has no getconf to tell its glibc version"
+    glibc=${glibc#glibc }
+  fi
   echo "==> making $name bootable"
   mkdir -p root/tmp/devvm; cp "$oci/bootify.sh" root/tmp/devvm/
   # The user's CAs, which this VM trusts, for bootify.sh's downloads, then gone from the image again.
@@ -148,6 +155,7 @@ main() {
   echo "==> writing disk, kernel and initrd"
   make_disk root
   echo "$libc" > "$out/libc"
+  [[ $libc != gnu ]] || echo "$glibc" > "$out/glibc"
   cd /; rm -rf "$work"
 }
 

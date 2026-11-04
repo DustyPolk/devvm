@@ -141,8 +141,16 @@ func writeConverted(t *testing.T, dir string) {
 func TestCheckConverted(t *testing.T) {
 	dir := t.TempDir()
 	writeConverted(t, dir)
-	if libc, cmdline, err := checkConverted(dir, "node:24"); err != nil || libc != "musl" || cmdline != "root=/dev/vda rw console=hvc0" {
-		t.Fatalf("checkConverted = %q, %q, %v", libc, cmdline, err)
+	if c, err := checkConverted(dir, "node:24"); err != nil || c.libc != "musl" || c.glibc != "" || c.cmdline != "root=/dev/vda rw console=hvc0" || c.dir != dir {
+		t.Fatalf("checkConverted = %+v, %v", c, err)
+	}
+	// gnu: with its glibc version.
+	gnu := t.TempDir()
+	writeConverted(t, gnu)
+	writeTestFile(t, filepath.Join(gnu, "libc"), "gnu\n")
+	writeTestFile(t, filepath.Join(gnu, "glibc"), "2.36\n")
+	if c, err := checkConverted(gnu, "node:24"); err != nil || c.libc != "gnu" || c.glibc != "2.36" {
+		t.Fatalf("checkConverted (gnu) = %+v, %v", c, err)
 	}
 	secret := filepath.Join(t.TempDir(), "secret")
 	writeTestFile(t, secret, "hostile")
@@ -160,6 +168,16 @@ func TestCheckConverted(t *testing.T) {
 		}},
 		{"a missing file", "initrd", func(d string) { _ = os.Remove(filepath.Join(d, "initrd")) }},
 		{"an unknown libc", "libc", func(d string) { writeTestFile(t, filepath.Join(d, "libc"), "gnu\nx\n") }},
+		{"gnu without its glibc version", "glibc", func(d string) { writeTestFile(t, filepath.Join(d, "libc"), "gnu\n") }},
+		{"gnu with a glibc version that isn't one", "glibc", func(d string) {
+			writeTestFile(t, filepath.Join(d, "libc"), "gnu\n")
+			writeTestFile(t, filepath.Join(d, "glibc"), "glibc 2.36\n")
+		}},
+		{"gnu with its glibc version a symlink", "glibc", func(d string) {
+			writeTestFile(t, filepath.Join(d, "libc"), "gnu\n")
+			writeTestFile(t, filepath.Join(d, "v"), "2.36\n")
+			_ = os.Symlink(filepath.Join(d, "v"), filepath.Join(d, "glibc"))
+		}},
 		{"a command line that could change Lima's config", "cmdline", func(d string) {
 			writeTestFile(t, filepath.Join(d, "cmdline"), "root=/dev/vda rw console=hvc0\"\ncopyToHost:\n- guest: /etc/hostname\n")
 		}},
@@ -169,7 +187,7 @@ func TestCheckConverted(t *testing.T) {
 		d := t.TempDir()
 		writeConverted(t, d)
 		c.bad(d)
-		_, _, err := checkConverted(d, "node:24")
+		_, err := checkConverted(d, "node:24")
 		if want := "convert_bad_output file=" + c.file + " from=node:24"; err == nil || msg.NamesOf(err) != want {
 			t.Errorf("%s: %v, want %s", c.name, err, want)
 		}

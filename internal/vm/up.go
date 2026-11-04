@@ -243,7 +243,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	st.Image, st.Dir, st.Folder, st.Chain, st.From, st.Backend = n.img, f.Dir, id, chain.String(), o.From, b.Name()
 	st.MadeBy = e.Version
 	st.BackendAt, _ = backend.LocationOf(b)
-	if err := n.record(st, tg.Libc, files); err != nil {
+	if err := n.record(st, tg, files); err != nil {
 		return err
 	}
 	if err := (devcontainers{e.Env}).record(st, o); err != nil {
@@ -461,8 +461,8 @@ func (e creation) chooseNet(o *Options, b backend.Backend, vm, saved string) boo
 }
 
 // record sets a new VM's choices in its state, before it's written, with
-// the libc and tool files it was given: each package's section.
-func (n newVM) record(st *state.VM, libc string, files []string) error {
+// the target and tool files it was given: each package's section.
+func (n newVM) record(st *state.VM, tg tools.Target, files []string) error {
 	forward := n.ports
 	if forward == settings.PortsAll {
 		forward = ""
@@ -471,7 +471,7 @@ func (n newVM) record(st *state.VM, libc string, files []string) error {
 		netpolicy.Set(st, netpolicy.Net{On: n.net}),
 		gitprotect.Set(st, gitprotect.InVM{Mode: n.git}),
 		sshagent.Set(st, sshagent.InVM{Mode: n.agent}),
-		tools.Set(st, tools.InVM{Names: n.tools, Made: tools.Made{Files: files, Libc: libc}}),
+		tools.Set(st, tools.InVM{Names: n.tools, Made: tools.Made{Files: files, Libc: tg.Libc, Glibc: tg.Glibc}}),
 		ports.Set(st, ports.Ports{Forward: forward}),
 		state.SetSection(st, sizeSection, n.size),
 		state.SetSection(st, cloneSection, cloneInVM{On: n.clone}),

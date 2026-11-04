@@ -23,10 +23,12 @@ type InVM struct {
 }
 
 // Made is the tool images devvm gave a VM: their files in the share, and
-// the C library its base had, which they're built for.
+// the C library its base had, which they're built for, with the glibc
+// version of a --from gnu base (Target's Glibc).
 type Made struct {
 	Files []string `json:"files,omitempty"`
 	Libc  string   `json:"libc,omitempty"`
+	Glibc string   `json:"glibc,omitempty"`
 }
 
 // Of returns a VM's shared tools section.

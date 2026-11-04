@@ -287,10 +287,16 @@ func (t Versions) Check(ctx context.Context) {
 }
 
 // Target is what a VM's tool images are built for: its base's C library
-// and its backend's image format.
+// and its backend's image format, with the glibc version a --from gnu base
+// has, which each tool image's needs are checked against (Runs).
 type Target struct {
 	Libc   string // gnu or musl
 	Format string // the backend's ToolFormat: "" for shared-tools/build.sh's own
+	// Glibc is a --from gnu base's glibc version, as its record has it;
+	// "" when it has none (Ubuntu's own base, musl), which isn't checked.
+	// A gnu tool image is the same whatever glibc its base has, so its
+	// key doesn't hash it.
+	Glibc string
 }
 
 // File returns a tool's image file at the lock's version, for a VM of

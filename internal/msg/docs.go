@@ -245,6 +245,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"tools_check_failed":               "using/images#shared-tools",
 	"newer_tools":                      "using/toolchains#adding-and-removing-tools",
 	"tool_unbuilt":                     "using/troubleshooting#a-new-tool-release-isnt-there-yet",
+	"tool_needs_glibc":                 "using/from#shared-tools-and-glibc",
 	"tool_bad_output":                  "internals/images#building-tools",
 	"custom_layer_remove":              "using/images#taking-layers-out-of-a-vm",
 	"agent_dir_comma":                  "using/coding-agents#mounts",

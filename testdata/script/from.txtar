@@ -219,6 +219,37 @@ cmp $STUB_DIR/instances $WORK/before
 exec sh -c 'ls "$TMPDIR"'
 ! stdout .
 
+# A gnu base records its glibc version, as the conversion read it. A
+# shared tool whose image needs a newer glibc is refused, naming the tool
+# and both versions, and no VM is made; a tool it runs on is given to the
+# VM, which records the base's glibc.
+stub_reset
+rm $STUB_DIR/interrupt-on
+env OLD=debian:9@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+exec sh -c 'echo 2.24 > "$STUB_DIR/build-glibc"; echo 2.28 > "$STUB_DIR/tools-glibc-node"; echo 2.17 > "$STUB_DIR/tools-glibc-go"'
+project old
+! exec devvm --from $OLD --no-network-policy --no-git-protect --tools node
+stderr '^devvm: tool_needs_glibc has=2\.24 needs=2\.28 tool=node version=[0-9.]+$'
+exec cat $STUB_DIR/instances
+! stdout devvm-old-
+exec sh -c 'grep -lxF "  \"from\": \"$OLD\"," "$IMAGES"/????????????/record.json | xargs cat'
+stdout '^  "libc": "gnu",$'
+stdout '^  "glibc": "2\.24",$'
+exec sh -c 'cat "$XDG_DATA_HOME"/devvm/tools/node-*.erofs.json'
+stdout '^  "glibc": "2\.28",$'
+exec devvm --from $OLD --no-network-policy --no-git-protect --tools go
+vm_name OLD old
+vm_state $OLD_dir/vm.json
+stdout '^tools.made.glibc=2\.24$'
+stdout '^tools.made.libc=gnu$'
+stdout '^tools.names=go$'
+# Adding the tool to the VM later is refused the same way.
+! exec devvm tools add node
+stderr '^devvm: tool_needs_glibc has=2\.24 needs=2\.28 tool=node version=[0-9.]+$'
+vm_state $OLD_dir/vm.json
+stdout '^tools.names=go$'
+cd $WORK
+
 -- digests.json --
 {
   "digests": {

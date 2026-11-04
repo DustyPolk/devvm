@@ -215,16 +215,38 @@ func TestToolTarget(t *testing.T) {
 	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
 		t.Fatal(err)
 	}
-	if tg, err := b.ToolTarget(); tg.Libc != "musl" || tg.Format != "" || err != nil {
+	if tg, err := b.ToolTarget(); tg != (tools.Target{Libc: "musl"}) || err != nil {
 		t.Errorf("ToolTarget = %+v, %v", tg, err)
 	}
 }
 
-// Before base is built, its libc is gnu.
-func TestBaseLibcUnbuilt(t *testing.T) {
+// A --from gnu base's glibc version is in its record, and every image's
+// on it, and its VMs' tools are checked against it.
+func TestToolTargetGlibc(t *testing.T) {
+	b, f := testEnv(t)
+	f.Built.Libc, f.Built.Glibc = "gnu", "2.36"
+	if err := (Builds{b}).Build(t.Context(), "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if tg, err := b.ToolTarget(); tg != (tools.Target{Libc: "gnu", Glibc: "2.36"}) || err != nil {
+		t.Errorf("ToolTarget = %+v, %v", tg, err)
+	}
+	for _, name := range []string{"base", "foo"} {
+		key, err := b.Key(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec, err := state.ReadImage(b.Dirs, key); err != nil || rec.Glibc != "2.36" {
+			t.Errorf("%s's record: %+v, %v", name, rec, err)
+		}
+	}
+}
+
+// Before base is built, its libc is gnu, with no glibc version.
+func TestToolTargetUnbuilt(t *testing.T) {
 	b, _ := testEnv(t)
-	if libc, err := b.BaseLibc(); libc != "gnu" || err != nil {
-		t.Errorf("BaseLibc = %q, %v", libc, err)
+	if tg, err := b.ToolTarget(); tg != (tools.Target{Libc: "gnu"}) || err != nil {
+		t.Errorf("ToolTarget = %+v, %v", tg, err)
 	}
 }
 

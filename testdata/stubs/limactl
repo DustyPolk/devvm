@@ -77,7 +77,8 @@ for a in "${@:2}"; do
 done
 # The tools build VM: remember the folder it mounts, and its build.sh writes the images there
 # ($STUB_DIR/tools-symlink: a hostile build leaves a symlink instead; tools-hash-symlink: it plants
-# FILE.json, a tool image's record, as a symlink to that file).
+# FILE.json, a tool image's record, as a symlink to that file), with FILE.glibc, the glibc version
+# the tool needs: $STUB_DIR/tools-glibc-<tool>, else none.
 if [[ ${1:-} == clone && " $* " == *" devvm-tools-build "* ]]; then
   sed -n 's/.*"location": *"\([^"]*\)".*/\1/p' <<<"$*" > "$STUB_DIR/tools-out"
 fi
@@ -85,13 +86,15 @@ if [[ ${1:-} == shell && " $* " == *" devvm-tools-build bash -s -- "* ]]; then
   args=("$@"); out=$(cat "$STUB_DIR/tools-out")
   for ((i = 0; i < ${#args[@]}; i++)); do [[ ${args[i]} == -- ]] && break; done
   for ((i = i + 3; i < ${#args[@]}; i += 3)); do
+    cat "$STUB_DIR/tools-glibc-${args[i - 2]}" 2>/dev/null > "$out/${args[i]}.glibc" || : > "$out/${args[i]}.glibc"
     if [[ -f $STUB_DIR/tools-symlink ]]; then ln -s "$STUB_DIR/tools-symlink" "$out/${args[i]}"
     else echo "image ${args[i]}" > "$out/${args[i]}"; fi
     [[ ! -f $STUB_DIR/tools-hash-symlink ]] || ln -s "$STUB_DIR/tools-hash-symlink" "$out/${args[i]}.json"
   done
 fi
 # The --from build VM's assets/oci/build.sh: it writes what it would in its OUT
-# folder (libc: $STUB_DIR/build-libc, else gnu; cmdline:
+# folder (libc: $STUB_DIR/build-libc, else gnu; for gnu, glibc:
+# $STUB_DIR/build-glibc, else 2.36; cmdline:
 # $STUB_DIR/build-cmdline). disk.raw has ext4's superblock magic (0xEF53 at
 # byte 1080), or is a qcow2 header with $STUB_DIR/build-qcow2. A hostile
 # image: "FILE TARGET" lines in $STUB_DIR/build-symlinks replace FILE with
@@ -101,6 +104,9 @@ if [[ ${1:-} == shell && " $* " == *"/oci/build.sh "* ]]; then
   args=("$@")
   for ((i = 0; i < ${#args[@]}; i++)); do [[ ${args[i]} != */oci/build.sh ]] || out=${args[i + 2]}; done
   cat "$STUB_DIR/build-libc" 2>/dev/null > "$out/libc" || echo gnu > "$out/libc"
+  if [[ $(cat "$out/libc") == gnu ]]; then
+    cat "$STUB_DIR/build-glibc" 2>/dev/null > "$out/glibc" || echo 2.36 > "$out/glibc"
+  fi
   cat "$STUB_DIR/build-cmdline" 2>/dev/null > "$out/cmdline" || echo "root=/dev/vda rw console=hvc0" > "$out/cmdline"
   touch "$out/kernel" "$out/initrd"
   if [[ -f $STUB_DIR/build-qcow2 ]]; then printf 'QFI\373' > "$out/disk.raw"

@@ -6,7 +6,8 @@
 # Each tool is installed at exactly the locked version (checked against the lock's checksums), then
 # packed into one compressed read-only EROFS image, FILE in that folder; devvm moves it into the share
 # and records its hash. Project VMs mount it at /opt/devvm/tools/<tool>/<version>, where mise finds it
-# as a shared install.
+# as a shared install. For a glibc build, FILE.glibc beside it holds the newest glibc version its
+# programs and libraries need (glibc_needs), which devvm records and checks a --from base against.
 # shellcheck disable=SC2034  # the checksums are read through sha()
 set -euxo pipefail
 # Pinned downloads (scripts/bump.sh updates them). rustup checks the toolchain against Rust's signed
@@ -39,6 +40,25 @@ wait_share() {
   echo "build.sh: devvm's output folder isn't mounted at $share (no .build/mise.lock after 60 s)${err:+: $err}" >&2
   return 1
 }
+# glibc_needs DIR: the newest glibc version that DIR's ELF programs and libraries need, from their
+# version needs (GLIBC_2.28), or nothing when none needs one. Test data is left out: Go's has ELF
+# files of other systems that nothing runs. Only files with GLIBC_ in them are read with readelf
+# (base's build-essential has it), which takes no others. The version needs come after readelf's
+# "Version needs section" line, until its next section.
+glibc_needs() {
+  local files elf
+  files=$(mktemp); elf=$(mktemp)
+  find "$1" -name testdata -prune -o -type f -print0 > "$files"
+  # xargs exits 123 when a grep matched nothing.
+  LC_ALL=C xargs -0 -r grep -laZ 'GLIBC_2\.' < "$files" > "$elf" || (( $? == 123 ))
+  { LC_ALL=C xargs -0 -r readelf -W -V < "$elf" 2>/dev/null || (( $? == 123 )); } |
+    awk '/^Version needs section/ { n = 1; next } /^Version [a-z]+ section/ { n = 0 }
+      n && match($0, /Name: GLIBC_[0-9]+\.[0-9]+/) { print substr($0, RSTART + 12, RLENGTH - 12) }' |
+    sort -t. -k1,1n -k2,2n | tail -1
+  rm -f "$files" "$elf"
+}
+[[ $libc != gnu ]] || command -v readelf >/dev/null || { echo "build.sh: base has no readelf (binutils)" >&2; exit 1; }
+
 wait_share
 sudo rm -rf "$work"; sudo mkdir -p "$work"; sudo chown "$USER" "$work"
 cd "$share/.build"
@@ -65,6 +85,7 @@ while (( $# >= 3 )); do
     # Corepack writes its shims next to node: now, since VMs can't.
     [[ $tool != node ]] || PATH=$dir/bin:$PATH corepack enable yarn
   fi
+  [[ $libc != gnu ]] || glibc_needs "$dir" > "$share/$file.glibc"
   # --all-root: the VM's user only reads them. lz4hc: about half the size, fast to read.
   mkfs.erofs -zlz4hc --all-root "$share/$file.tmp" "$dir" >/dev/null
   mv "$share/$file.tmp" "$share/$file"

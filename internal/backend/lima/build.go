@@ -121,7 +121,7 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 			if err := l.create(ctx, msg.Creating(inst), inst, o.yaml, createArgs(inst, convertedImages(conv.dir, conv.cmdline, l.Arch), size)); err != nil {
 				return backend.Built{}, err
 			}
-			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc}
+			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc, Glibc: conv.glibc}
 		}
 		built.Fitted = backend.Fitted(want, size)
 	} else if err := l.Runner.Run(ctx, msg.CloningImage(image.Parent(spec.Image)),

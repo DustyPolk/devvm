@@ -2381,6 +2381,12 @@ check "a node VM, with node's shared tools in its state and the share" bash -c "
   vm_state '$(vmdir "$vm")' | grep -qx tools.names=node && vm_state '$(vmdir "$vm")' | grep -qx tools.made.libc=gnu &&
   for f in \$(st_get '$(vmdir "$vm")' tools.made.files); do [[ -f '$share'/\$f ]] && grep -qxF '  \"backend\": \"lima\",' '$share'/\$f.json || exit 1; done &&
   vm_state '$(vmdir "$vm")' | grep -q '^tools\.made\.files=node-$(lockv node)-.* pnpm-$(lockv pnpm)-.* bun-$(lockv bun)-'"
+check "Ubuntu's base has no glibc version to check, and each tool image records the newest glibc it needs" bash -c "
+  ! vm_state '$(vmdir "$vm")' | grep -q '^tools\.made\.glibc=' &&
+  for f in \$(st_get '$(vmdir "$vm")' tools.made.files); do grep -qE '^  \"glibc\": \"[0-9]+\.[0-9]+\",?\$' '$share'/\$f.json || exit 1; done"
+for f in $(st_get "$(vmdir "$vm")" tools.made.files); do
+  echo "        glibc: $f needs $(sed -n 's/^  "glibc": "\(.*\)",\{0,1\}$/\1/p' "$share/$f.json" | grep . || echo none)"
+done
 check "node, npm, pnpm, bun and yarn work, node at the locked version" in_vm "$vm" \
   "[[ \$(node -v) == v$(lockv node) ]] && npm -v && pnpm -v && bun -v && yarn -v"
 check "each tool is a read-only image from the share" in_vm "$vm" \
@@ -3063,6 +3069,15 @@ check "a VM with node, python, Claude Code and the docker and nix layers from no
   [[ -n '$vm' ]] && limactl shell --workdir / '$vm' cat /etc/os-release </dev/null | grep -qx VERSION_CODENAME=bookworm &&
   vm_state '$(vmdir "$vm")' | grep -qx 'from=$from_node' && vm_state '$(vmdir "$vm")' | grep -qx tools.made.libc=gnu &&
   [[ \$(rec \"\$(from_record '$from_node')\" digest) == '$from_node' ]]"
+# The newest glibc each tool image needs, as its build measured it, in its record.
+glibc_need() { sed -n 's/^  "glibc": "\(.*\)",\{0,1\}$/\1/p' "$share/$1.json"; }
+export -f glibc_need; export share
+check "its base records the image's glibc, as its VM does, and no tool image of the VM needs a newer one" bash -c "
+  g=\$(limactl shell --workdir / '$vm' getconf GNU_LIBC_VERSION </dev/null) && g=\${g#glibc } && [[ -n \$g ]] &&
+  [[ \$(rec \"\$(from_record '$from_node')\" glibc) == \$g ]] && vm_state '$(vmdir "$vm")' | grep -qx \"tools.made.glibc=\$g\" &&
+  for f in \$(st_get '$(vmdir "$vm")' tools.made.files); do n=\$(glibc_need \$f)
+    [[ -z \$n ]] || printf '%s\n%s\n' \"\$n\" \"\$g\" | sort -C -t. -k1,1n -k2,2n || exit 1; done"
+for f in $(st_get "$(vmdir "$vm")" tools.made.files); do echo "        glibc: $f needs $(glibc_need "$f" | grep . || echo none)"; done
 check "its node, claude and every feature work" in_vm "$vm" \
   'node --version && claude --version && eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'
 check "python, python3 and claude are the locked versions" in_vm "$vm" \

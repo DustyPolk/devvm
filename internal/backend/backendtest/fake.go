@@ -69,6 +69,9 @@ type Fake struct {
 	// ToolsBuild, when set, is what BuildTools does after recording the
 	// call, in place of writing the images.
 	ToolsBuild func(backend.ToolsSpec) error
+	// ToolGlibc is the glibc version each tool's build says it needs, by
+	// its name in the lock: none for a tool it doesn't name.
+	ToolGlibc map[string]string
 
 	mu     sync.Mutex
 	calls  []Call
@@ -268,7 +271,8 @@ func (f *images) DeleteImage(_ context.Context, key string) error {
 
 // BuildTools records the call, then runs ToolsBuild on the spec, or
 // writes each image its script would (every third argument, from the
-// third) into spec.Out as "image FILE".
+// third) into spec.Out as "image FILE", with FILE.glibc, the tool's
+// ToolGlibc.
 func (f *images) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -281,6 +285,13 @@ func (f *images) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
 	for i := 2; i < len(spec.Args); i += 3 {
 		file := spec.Args[i]
 		if err := state.WriteFile(filepath.Join(spec.Out, file), []byte("image "+file+"\n")); err != nil {
+			return err
+		}
+		var glibc []byte
+		if v := f.ToolGlibc[spec.Args[i-2]]; v != "" {
+			glibc = []byte(v + "\n")
+		}
+		if err := state.WriteFile(filepath.Join(spec.Out, file+".glibc"), glibc); err != nil {
 			return err
 		}
 	}

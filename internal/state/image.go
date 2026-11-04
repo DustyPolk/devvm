@@ -20,11 +20,15 @@ import (
 // last, once the image is built, so an image without one is left over
 // from a failed build.
 type Image struct {
-	Name   string    `json:"name"`    // the image's name: base, docker, docker+foo
-	Chain  string    `json:"chain"`   // its build chain: name=key pairs, base first, space-separated
-	From   string    `json:"from"`    // the image base started from, if not the default
-	Digest string    `json:"digest"`  // what base started from: the From image's digest, or the cloud image's
-	Libc   string    `json:"libc"`    // the C library: gnu, or musl
+	Name   string `json:"name"`   // the image's name: base, docker, docker+foo
+	Chain  string `json:"chain"`  // its build chain: name=key pairs, base first, space-separated
+	From   string `json:"from"`   // the image base started from, if not the default
+	Digest string `json:"digest"` // what base started from: the From image's digest, or the cloud image's
+	Libc   string `json:"libc"`   // the C library: gnu, or musl
+	// Glibc is the glibc version of a --from gnu base, which every image
+	// on it records: "" for base from Ubuntu's cloud image, which isn't
+	// checked, and for musl.
+	Glibc  string    `json:"glibc,omitempty"`
 	Built  time.Time `json:"built"`   // when its build finished
 	MadeBy string    `json:"made_by"` // the version of the devvm that built it
 }

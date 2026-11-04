@@ -40,7 +40,14 @@ If the image's tag moves to another image while devvm builds, for example becaus
 - **This machine's architecture.** devvm refuses an image without an arm64 build (or amd64), and names the ones it has.
 - **Alpine** uses OpenRC and musl, so its VMs get musl builds of the shared tools, built apart from the others.
 - **Unpinned packages.** While `base` builds, its packages come from the container image's own sources as they are then, apt's or Alpine's, and so do the [desktop layer](images.md#desktop)'s, the [docker layer](images.md#docker)'s on Alpine and the [nix layer](images.md#nix)'s. devvm keeps no copy of them, unlike base from Ubuntu's image, so building the same base again installs the sources' packages of that day, and it needs the network for them.
+- **A glibc new enough for your shared tools.** A Debian or Ubuntu image's glibc must be at least as new as each shared tool needs, which [shared tools and glibc](#shared-tools-and-glibc) covers.
 - **Tested.** The end-to-end tests make VMs from `node:24` (Debian 12, with node, python, claude and the docker and nix layers) and `alpine:3` (with node and the docker, nix and desktop layers), and build `base` from `ubuntu:26.04`.
+
+## Shared tools and glibc
+
+The [shared tools](images.md#shared-tools) are their projects' own prebuilt releases, and each one is built against a glibc version that it needs at least. devvm reads that version from each tool's files when it builds the tool's image, and it reads the container image's glibc version when it converts the image. When a Debian- or Ubuntu-based image has an older glibc than a tool needs, devvm refuses to give that tool to the VM. The error names the tool, the glibc version it needs and the one the image has, and devvm doesn't make the VM. The same happens when `devvm tools add`, `devvm tools update` or `devvm update` would give an existing VM such a tool.
+
+To fix it, start from a newer container image with `--from`, or leave that tool out. Today no shared tool needs a glibc newer than 2.28, so Debian 10 and Ubuntu 20.04 and newer images run all of them, and [toolchains](toolchains.md#which-bases-they-run-on) lists what each one needs. devvm measures it again for every new version it builds. Alpine-based images get musl builds of the tools, which need no glibc. devvm doesn't check base from Ubuntu's own image, whose glibc is newer than any shared tool needs.
 
 ## Backends
 

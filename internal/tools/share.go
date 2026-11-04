@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -193,13 +194,65 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 		if err != nil {
 			return err
 		}
+		// Its file name doesn't say what it's built for: the record does.
+		rec := state.ToolImage{SHA256: sum, Libc: tg.Libc, Format: tg.Format, Backend: b.Name(), Built: t.Now().UTC().Truncate(time.Second), MadeBy: t.Version}
+		if tg.Libc == "gnu" {
+			if rec.Glibc, err = neededGlibc(filepath.Join(out, f+".glibc")); err != nil {
+				return msg.ToolBadOutput(f + ".glibc")
+			}
+		}
 		if err := os.Rename(src, t.Dirs.ToolImage(f)); err != nil {
 			return err
 		}
-		// Its file name doesn't say what it's built for: the record does.
-		rec := state.ToolImage{SHA256: sum, Libc: tg.Libc, Format: tg.Format, Backend: b.Name(), Built: t.Now().UTC().Truncate(time.Second), MadeBy: t.Version}
 		if err := state.WriteToolImage(t.Dirs, f, rec); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// maxGlibcOutput caps what's read of build.sh's FILE.glibc: one version.
+const maxGlibcOutput = 64
+
+// neededGlibc reads what build.sh measured of a gnu tool image, FILE.glibc
+// in the build's folder: the newest glibc version its programs and
+// libraries need, or nothing when they need none. It must be a plain file
+// holding just that (image.ValidGlibc).
+func neededGlibc(path string) (string, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return "", err
+	}
+	if !fi.Mode().IsRegular() || fi.Size() > maxGlibcOutput {
+		return "", errors.New("not a version")
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // devvm's own build folder, checked to be a plain file
+	if err != nil {
+		return "", err
+	}
+	v := strings.TrimSuffix(string(data), "\n")
+	if v != "" && !image.ValidGlibc(v) {
+		return "", errors.New("not a version")
+	}
+	return v, nil
+}
+
+// Runs checks that each of these tool images, built, runs on tg's base:
+// a --from gnu base whose glibc is older than the newest one a tool image
+// needs refuses it (tool_needs_glibc), naming the tool and both versions.
+// A base without a glibc version (Ubuntu's own, musl) isn't checked.
+func (t Share) Runs(files []string, tg Target) error {
+	if tg.Libc != "gnu" || !image.ValidGlibc(tg.Glibc) {
+		return nil
+	}
+	for _, f := range files {
+		rec, err := state.ReadToolImage(t.Dirs, f)
+		if err != nil {
+			return err
+		}
+		if image.ValidGlibc(rec.Glibc) && image.GlibcOlder(tg.Glibc, rec.Glibc) {
+			tool, v, _ := image.ParseToolFile(f)
+			return msg.ToolNeedsGlibc(tg.Glibc, rec.Glibc, tool, v)
 		}
 	}
 	return nil
