@@ -130,7 +130,7 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 	}
 	own := &hostAddrs{}
 	own.load()
-	s.egress = &egress{pol: newPolicy(rs, c.Policies, l), own: own, up: up}
+	s.egress = &egress{pol: newPolicy(rs, c.Policies, l), own: own, up: up, log: l}
 	s.egress.pol.all()
 	maxSize := c.NixCacheMax
 	if maxSize == 0 {
@@ -344,7 +344,16 @@ type egress struct {
 	pol *policy
 	own *hostAddrs
 	up  upstreams
+	log *log.Logger // the proxy's own log: why a name didn't resolve
 }
+
+// reasonUnresolvable and reasonConnectFailed are the reasons the VM gets when a name doesn't
+// resolve or a connection fails. Why goes to the proxy's own log alone: the resolver's error can
+// name the host's DNS server, and the company proxy's names its address.
+const (
+	reasonUnresolvable  = "can't resolve it; see proxy.log on the host"
+	reasonConnectFailed = "connect failed; see proxy.log on the host"
+)
 
 var errFloor = errors.New("resolves to an internal address")
 
@@ -506,7 +515,8 @@ func (e *egress) floorCheck(ctx context.Context, host string, port int, plain bo
 	case errors.Is(err, errUnresolved):
 		return err.Error()
 	default:
-		return "can't resolve it: " + err.Error()
+		e.log.Printf("%s:%d: can't resolve it: %v", host, port, err)
+		return reasonUnresolvable
 	}
 }
 
@@ -558,7 +568,8 @@ func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 func (s *server) tunnel(w http.ResponseWriter, r *http.Request, host string, port int, e Event) {
 	up, err := s.egress.dialOut(r.Context(), host, port)
 	if err != nil {
-		e.Reason = "connect failed: " + err.Error()
+		s.log.Printf("%s:%d: connect failed: %v", host, port, err)
+		e.Reason = reasonConnectFailed
 		s.block(w, e)
 		return
 	}

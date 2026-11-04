@@ -499,10 +499,39 @@ func TestUpstreamNoProxyDirect(t *testing.T) {
 	f := newFakeUpstream(t, "127.0.0.1:9", http.StatusOK)
 	s := testServer(t, Config{}, "allowed.test\n")
 	useUpstream(t, s, f, "*")
+	out := logs(s)
+	addr := listen(t, s)
 	// Direct, it's resolved here: .test names don't resolve, so it's refused, unseen upstream.
-	code, body := roundTrip(t, listen(t, s), "CONNECT allowed.test:443 HTTP/1.1\r\nHost: allowed.test:443\r\n\r\n")
+	code, body := roundTrip(t, addr, "CONNECT allowed.test:443 HTTP/1.1\r\nHost: allowed.test:443\r\n\r\n")
 	if code != http.StatusForbidden || !strings.Contains(body, "can't resolve") || len(f.requests()) != 0 {
 		t.Errorf("NO_PROXY=*: %d %q, upstream saw %q", code, body, f.requests())
+	}
+	// The resolver's error, which can name the host's DNS server, stays in the proxy's own log:
+	// the VM, its /blocked and the event log get the reason alone.
+	_, blocked := roundTrip(t, addr, "GET http://devvm.proxy/blocked HTTP/1.1\r\nHost: devvm.proxy\r\n\r\n")
+	if strings.Contains(body+blocked, "lookup") || !strings.Contains(out.String(), "lookup allowed.test") ||
+		!strings.Contains(out.String(), `"reason":"`+reasonUnresolvable+`"`) {
+		t.Errorf("the VM got %q and %q; the logs %s", body, blocked, out)
+	}
+}
+
+// A tunnel that fails to connect tells the VM only that, and the proxy's own log says why: the
+// company proxy's address and what it answered never reach the VM.
+func TestConnectFailedReason(t *testing.T) {
+	t.Parallel()
+	f := newFakeUpstream(t, "", http.StatusProxyAuthRequired)
+	s := testServer(t, Config{}, "allowed.test\n")
+	useUpstream(t, s, f, "")
+	out := logs(s)
+	addr := listen(t, s)
+	code, body := roundTrip(t, addr, "CONNECT allowed.test:443 HTTP/1.1\r\nHost: allowed.test:443\r\n\r\n")
+	_, blocked := roundTrip(t, addr, "GET http://devvm.proxy/blocked HTTP/1.1\r\nHost: devvm.proxy\r\n\r\n")
+	up := f.ln.Addr().String()
+	if code != http.StatusForbidden || !strings.Contains(body, reasonConnectFailed) || strings.Contains(body+blocked, up) || strings.Contains(body+blocked, "407") {
+		t.Errorf("the VM got %d %q and %q", code, body, blocked)
+	}
+	if l := out.String(); !strings.Contains(l, "allowed.test:443: connect failed: the upstream proxy "+up+" answered 407") || !strings.Contains(l, `"reason":"`+reasonConnectFailed+`"`) {
+		t.Errorf("the logs: %s", l)
 	}
 }
 
@@ -543,12 +572,13 @@ func TestUpstreamPlainHTTP(t *testing.T) {
 		t.Errorf("an odd spelling: %d, the upstream saw %q", code, reqs)
 	}
 
-	// An upstream that refuses: the tunnel is refused, naming it by host:port alone.
+	// An upstream that refuses: the tunnel is refused, and the proxy's own log names it by
+	// host:port alone.
 	f.status = http.StatusProxyAuthRequired
 	code, body := roundTrip(t, addr,
 		"CONNECT allowed.test:443 HTTP/1.1\r\nHost: allowed.test:443\r\nProxy-Authorization: "+authOf("devvm", "k3y")+"\r\n\r\n")
-	if code != http.StatusForbidden || !strings.Contains(body, "answered 407") || strings.Contains(body, upPassword) {
-		t.Errorf("refused upstream: %d %q", code, body)
+	if l := out.String(); code != http.StatusForbidden || !strings.Contains(l, "answered 407") || strings.Contains(body+l, upPassword) {
+		t.Errorf("refused upstream: %d %q, the logs %s", code, body, l)
 	}
 }
 
