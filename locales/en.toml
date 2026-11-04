@@ -430,6 +430,9 @@ other = "finishing making {{.vm}} again from {{.image}}"
 [remake_pending]
 other = "Making {{.vm}} again didn't finish. Run devvm in {{.dir}} to finish it."
 
+[remake_running]
+other = "Another devvm is making {{.vm}} again. Run the command again once it has finished."
+
 [remake_home_lost]
 other = "{{.vm}}'s saved home folder is gone, so its new disk has the image's home folder."
 

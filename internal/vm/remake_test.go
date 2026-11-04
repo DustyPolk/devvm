@@ -17,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vmname"
 )
@@ -619,6 +620,117 @@ func TestRemakePending(t *testing.T) {
 	}
 	if _, err := os.Stat(e.Dirs.VM(vm).Dir); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("its folder: %v", err)
+	}
+}
+
+// While another devvm holds a VM's remake lock, making it again and
+// finishing its remake both refuse, and nothing changes.
+func TestRemakeHeld(t *testing.T) {
+	e, f, st, _ := remakeEnv(t)
+	vm := st.Name()
+	if err := state.PrivateDir(e.Dirs.VM(vm).Run()); err != nil {
+		t.Fatal(err)
+	}
+	unlock, ok, err := platform.TryLockFile(e.Dirs.VM(vm).RemakeLock())
+	if err != nil || !ok {
+		t.Fatalf("lock: %v, %v", ok, err)
+	}
+	defer unlock()
+	want := "remake_running vm=" + vm
+	n := len(f.Calls())
+	err = (Lifecycle{e}).AddLayers(t.Context(), "devvm layer add docker", []string{"docker"}, RemakeOptions{Force: true})
+	if msg.NamesOf(err) != want {
+		t.Errorf("devvm layer add: %v", msg.NamesOf(err))
+	}
+	if err := update(t.Context(), st, remakeSection, func(r *remakeInVM) error {
+		*r = remakeInVM{Image: "docker", Command: "devvm layer add docker", Home: true}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); msg.NamesOf(err) != want {
+		t.Errorf("devvm: %v", msg.NamesOf(err))
+	}
+	for _, m := range f.Methods()[n:] {
+		if slices.Contains([]string{"BuildImage", "Stop", "Rename", "CreateVM", "Start", "Delete", "Exec"}, m) {
+			t.Errorf("ran %s", m)
+		}
+	}
+	if !remakePending(readState(t, e.Dirs, vm)) {
+		t.Error("its remake was ended")
+	}
+}
+
+// Once the new machine has the home folder, the remake is done: when
+// deleting the old machine fails, the cleanup leaves the new one as it
+// is, and the next devvm only deletes the old one and ends the remake.
+func TestRemakeDone(t *testing.T) {
+	e, f, st, _ := remakeEnv(t)
+	vm := st.Name()
+	aside, _ := vmname.Aside(vm)
+	var cleanups []func(context.Context)
+	e.AddCleanup = func(c func(context.Context)) func() {
+		i := len(cleanups)
+		cleanups = append(cleanups, c)
+		return func() { cleanups[i] = nil }
+	}
+	f.Errs = map[string]error{"Delete": errors.New("busy")}
+	err := (Lifecycle{e}).AddLayers(t.Context(), "devvm layer add docker", []string{"docker"}, RemakeOptions{Force: true})
+	if err == nil || err.Error() != "busy" {
+		t.Fatalf("AddLayers: %v", err)
+	}
+	n := len(f.Calls())
+	for _, c := range slices.Backward(cleanups) {
+		if c != nil {
+			c(t.Context())
+		}
+	}
+	if got := f.Methods()[n:]; len(got) > 0 {
+		t.Errorf("cleanup ran %q", got)
+	}
+	after := readState(t, e.Dirs, vm)
+	if p := sectionOf[remakeInVM](after, remakeSection); after.Image != "docker" || !p.Done {
+		t.Errorf("image %s, remake %+v", after.Image, p)
+	}
+	f.Errs = nil
+	n = len(f.Calls())
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if ms := f.Methods()[n:]; slices.Contains(ms, "CreateVM") || slices.Contains(ms, "Rename") {
+		t.Errorf("finished with %q", ms)
+	}
+	if _, ok := f.Instances[aside]; ok {
+		t.Error("its old machine is still aside")
+	}
+	if _, ok := f.Instances[vm]; !ok {
+		t.Error("its new machine is gone")
+	}
+	if st := readState(t, e.Dirs, vm); remakePending(st) || st.Image != "docker" {
+		t.Errorf("image %s, pending %v", st.Image, remakePending(st))
+	}
+	if _, err := os.Stat(e.Dirs.VM(vm).Home()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its saved home: %v", err)
+	}
+}
+
+// A remake whose old machine is gone is checked again before the new
+// machine is made: one of its layers gone refuses, and the machine by
+// the VM's name stays.
+func TestRemakePendingChecked(t *testing.T) {
+	e, f, st, _ := remakeEnv(t)
+	vm := st.Name()
+	if err := update(t.Context(), st, remakeSection, func(r *remakeInVM) error {
+		*r = remakeInVM{Image: "gone", Command: "devvm layer add gone", Made: true}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Launch{e}).Up(t.Context(), Options{}); !strings.HasPrefix(msg.NamesOf(err), "unknown_layer ") {
+		t.Errorf("devvm: %v", msg.NamesOf(err))
+	}
+	if _, ok := f.Instances[vm]; !ok {
+		t.Error("its machine was deleted")
 	}
 }
 

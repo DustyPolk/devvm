@@ -44,8 +44,7 @@ func addNoExportFlag(f *pflag.FlagSet, p *bool) {
 
 // addRemakeFlags adds the flags of a command that makes the folder's VM
 // again (devvm layer add, devvm layer rm, devvm update): --force,
-// --no-export and
-// --clean-home.
+// --no-export and --clean-home.
 func addRemakeFlags(f *pflag.FlagSet, o *vm.RemakeOptions) {
 	addForceFlag(f, &o.Force)
 	addNoExportFlag(f, &o.NoExport)

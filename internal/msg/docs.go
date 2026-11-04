@@ -382,6 +382,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"remake_restore_failed":            "using/images#a-remake-that-stops-halfway",
 	"remake_undo_failed":               "using/images#a-remake-that-stops-halfway",
 	"remake_pending":                   "using/images#a-remake-that-stops-halfway",
+	"remake_running":                   "using/images#a-remake-that-stops-halfway",
 	"remake_home_lost":                 "using/images#a-remake-that-stops-halfway",
 	"rename_failed":                    "using/troubleshooting#a-command-fails",
 	"parts_flags_ignored":              "using/toolchains#adding-and-removing-tools",

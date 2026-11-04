@@ -366,7 +366,8 @@ func CheckPart(flag string, given, names []string) error {
 	return nil
 }
 
-// CheckLayers refuses a name given as a layer (devvm layer add's) that
+// CheckLayers refuses a name given as a layer (devvm layer add's, and
+// devvm layer rm's once it has the VM) that
 // isn't one of layers, the built-in layers and the user's: a shared
 // tool's (tool_not_layer), else naming the closest (msg.Closest), else
 // them all.

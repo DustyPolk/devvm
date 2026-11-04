@@ -88,13 +88,7 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 	// A remake that didn't finish, whose machine may be gone: finished,
 	// never made anew.
 	if remakePending(t.st) {
-		if err := e.checkFolder(t.f, t.st); err != nil {
-			return err
-		}
-		if err := remaking(e).finishPending(ctx, t); err != nil {
-			return err
-		}
-		return e.open(ctx, o, t)
+		return e.finishRemake(ctx, o, t)
 	}
 	if !t.exists {
 		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
@@ -107,6 +101,26 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 			return err
 		}
 		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
+	}
+	return e.open(ctx, o, t)
+}
+
+// finishRemake finishes t's VM's remake that didn't (remaking.finishPending),
+// holding its remake lock, unless another devvm finished it meanwhile,
+// then opens it.
+func (e Launch) finishRemake(ctx context.Context, o Options, t *found) error {
+	if err := e.checkFolder(t.f, t.st); err != nil {
+		return err
+	}
+	release, err := remaking(e).hold(ctx, t)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if remakePending(t.st) {
+		if err := remaking(e).finishPending(ctx, t); err != nil {
+			return err
+		}
 	}
 	return e.open(ctx, o, t)
 }

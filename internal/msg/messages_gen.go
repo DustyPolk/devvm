@@ -2424,6 +2424,11 @@ func RemakeResuming(image string, vm string) M {
 	return M{id: "remake_resuming", vals: []val{{"image", image}, {"vm", vm}}}
 }
 
+// RemakeRunning is [remake_running]: "Another devvm is making {{.vm}} again. Run the command again once it has finished."
+func RemakeRunning(vm string) M {
+	return M{id: "remake_running", vals: []val{{"vm", vm}}}
+}
+
 // RemakeUndoFailed is [remake_undo_failed]: "Putting {{.vm}} back as it was failed. Run devvm in {{.dir}} to finish making it again."
 func RemakeUndoFailed(dir string, vm string) M {
 	return M{id: "remake_undo_failed", vals: []val{{"dir", dir}, {"vm", vm}}}
@@ -3695,6 +3700,7 @@ var specs = map[string]spec{
 	"remake_pending":                   {fields: []string{"dir", "vm"}},
 	"remake_restore_failed":            {fields: []string{"vm"}},
 	"remake_resuming":                  {fields: []string{"image", "vm"}},
+	"remake_running":                   {fields: []string{"vm"}},
 	"remake_undo_failed":               {fields: []string{"dir", "vm"}},
 	"remake_undone":                    {fields: []string{"vm"}},
 	"remake_unfinished":                {fields: []string{"vm"}},

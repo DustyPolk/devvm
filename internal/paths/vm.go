@@ -41,6 +41,11 @@ func (v VM) Logs() string { return filepath.Join(v.Dir, "logs") }
 // for its new one: there only until the new disk has it.
 func (v VM) Home() string { return filepath.Join(v.Dir, "home.tar.gz") }
 
+// RemakeLock is the lock file a devvm holds (flock) while it makes the VM
+// again or finishes doing so, so a second devvm never finishes a remake
+// that's still running.
+func (v VM) RemakeLock() string { return filepath.Join(v.Run(), "remake.lock") }
+
 // ProxyConfig is the config the VM's network policy proxy runs with
 // (proxy.Config): everything it started with, its password among it.
 func (v VM) ProxyConfig() string { return filepath.Join(v.Run(), "proxy.json") }
