@@ -26,6 +26,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -547,12 +548,12 @@ func (p *Protector) embeddedIn(ctx context.Context, e *embeds, gitDir, worktree 
 		default:
 			continue
 		}
-		if !strings.HasPrefix(t, p.Dir+"/") {
+		if !paths.Below(t, p.Dir) {
 			// Nothing to lock here: delegations names it.
 			e.outside = append(e.outside, [2]string{w, t})
 			continue
 		}
-		if !strings.HasPrefix(t, filepath.Join(p.Dir, ".git", "modules")+"/") { // gitDirs has those
+		if !paths.Below(t, filepath.Join(p.Dir, ".git", "modules")) { // gitDirs has those
 			e.inside = append(e.inside, t)
 		}
 		p.embeddedIn(ctx, e, t, w, depth+1)
@@ -668,8 +669,7 @@ func (p *Protector) hooksPathInside(hp string) bool {
 	if r, err := filepath.EvalSymlinks(hp); err == nil && isDir(r) {
 		hp = r
 	}
-	hp = filepath.Clean(hp)
-	return hp == p.Dir || strings.HasPrefix(hp, p.Dir+"/")
+	return paths.Within(filepath.Clean(hp), p.Dir)
 }
 
 // expandHome expands ~ as git does.
@@ -738,17 +738,7 @@ func (p *Protector) delegations(ctx context.Context, emb embeds) []delegation {
 
 // into reports whether path, resolved, is in the project folder.
 func (p *Protector) into(path string) bool {
-	return strings.HasPrefix(resolvedPath(path), p.Dir+"/")
-}
-
-// resolvedPath returns path with its folder's symlinks resolved, or, when
-// the folder doesn't exist (yet: the VM could make it), path with . and ..
-// resolved by name.
-func resolvedPath(path string) string {
-	if d, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
-		return filepath.Join(d, filepath.Base(path))
-	}
-	return filepath.Clean(path)
+	return paths.Below(paths.PhysicalParent(path), p.Dir)
 }
 
 func delegationsSum(ds []delegation) string {
@@ -766,7 +756,7 @@ func delegationsSum(ds []delegation) string {
 // .git: creating a file or setting flags through one would act outside the
 // project, and chflags on a symlink itself does nothing.
 func (p *Protector) realInDir(path string) bool {
-	if !strings.HasPrefix(path, p.Dir+"/") || isLink(path) {
+	if !paths.Below(path, p.Dir) || isLink(path) {
 		return false
 	}
 	parent := filepath.Dir(path)

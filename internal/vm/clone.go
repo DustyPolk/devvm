@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
@@ -395,7 +396,7 @@ func cloneWorktrees(dir string, list []byte) (trees []string, more int) {
 // insideClone reports whether p, a path the VM gave, is a clean absolute
 // path below dir.
 func insideClone(dir, p string) bool {
-	return path.IsAbs(p) && path.Clean(p) == p && strings.HasPrefix(p, dir+"/")
+	return path.IsAbs(p) && path.Clean(p) == p && paths.Below(p, dir)
 }
 
 // cloneGit runs git on the VM's clone and returns what it printed, at
@@ -517,7 +518,7 @@ func savedPrefix(ctx context.Context, dir, remote string) (string, bool) {
 		}
 		free := true
 		for _, h := range heads {
-			if h == p || strings.HasPrefix(h, p+"/") || strings.HasPrefix(p, h+"/") {
+			if paths.Within(h, p) || paths.Below(p, h) {
 				free = false
 				break
 			}
