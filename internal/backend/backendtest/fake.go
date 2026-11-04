@@ -55,6 +55,9 @@ type Fake struct {
 	Format       string            // ToolFormat's answer
 	OriginSteps  []image.Step      // Origin's answer, for any base
 	Pinned       string            // PinOrigin's answer
+	// BuildErr, when set, is what each BuildImage fails with, if
+	// anything, after recording the call.
+	BuildErr func(backend.ImageSpec) error
 	// PackagesOut is the tar stream a build's packages give back, read by
 	// its Take (none: empty); PackagesSent is what the last build's Send
 	// wrote.
@@ -202,6 +205,11 @@ func (f *images) BuildImage(_ context.Context, spec backend.ImageSpec) (backend.
 	defer f.mu.Unlock()
 	if err := f.record("BuildImage", spec); err != nil {
 		return backend.Built{}, err
+	}
+	if f.BuildErr != nil {
+		if err := f.BuildErr(spec); err != nil {
+			return backend.Built{}, err
+		}
 	}
 	if p := spec.Packages; p != nil {
 		var sent bytes.Buffer

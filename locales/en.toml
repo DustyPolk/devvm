@@ -321,6 +321,10 @@ other = "{{.url}} lists no release of Ubuntu {{.version}}'s cloud image with an 
 [ubuntu_unreachable]
 other = "devvm couldn't read the list of Ubuntu {{.version}}'s cloud images at {{.url}}. Check that you're online, then try again."
 
+[ubuntu_newest_older]
+description = "newest is the newest dated release Ubuntu's list has; pinned is the one pinned on this machine, which is newer"
+other = "Ubuntu's list of cloud images ends at {{.newest}}, older than {{.pinned}}, which base starts from, so devvm keeps {{.pinned}}."
+
 [ubuntu_bad_signature]
 description = "release is a dated release's folder name (release-20260101)"
 other = "Ubuntu's checksums for {{.release}} at {{.url}} don't have a valid signature from Ubuntu's cloud image key, so devvm didn't use them."
@@ -505,6 +509,10 @@ other = "Another devvm is building image {{.key}}, so devvm leaves it. Run the c
 
 [building_image]
 other = "building image {{.image}} ({{.key}})"
+
+[origin_no_boot]
+description = "origin is what base was to start from, as the backend pinned it: Ubuntu's dated release (release-20260101)"
+other = "base didn't boot from Ubuntu's cloud image {{.origin}}, so devvm tries the release before it."
 
 [origin_pinned]
 description = "origin is what base starts from, as the backend pinned it: Ubuntu's dated release (release-20260101)"

@@ -77,7 +77,7 @@ devvm deletes an interrupted new VM, with its state, until its first shell opens
 
 ## base can't build on Lima
 
-On Lima, base starts from a dated release of Ubuntu's cloud image. The first time devvm builds base, it finds the newest release on cloud-images.ubuntu.com and pins it on this machine, so that build needs to reach Ubuntu's list of releases and the release's checksums. When it can't, devvm says so and pins nothing, so check that you're online and run the command again. Once an image is pinned, building base again needs Lima's cached copy of it or the release itself, which Ubuntu removes after a few months, and devvm rebuild base pins the newest again ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
+On Lima, base starts from a dated release of Ubuntu's cloud image. The first time devvm builds base, it finds the newest release on cloud-images.ubuntu.com and pins it on this machine, so that build needs to reach Ubuntu's list of releases and the release's checksums. When it can't, devvm says so and pins nothing, so check that you're online and run the command again. When the newest release doesn't boot, devvm says so and builds base from the release before it. Once an image is pinned, building base again needs Lima's cached copy of it or the release itself, which Ubuntu removes after a few months, and devvm rebuild base pins the newest again ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
 
 Building the same base again also needs the copies of its packages that devvm kept from its first build. When one of them is gone or changed, devvm names it and builds nothing, and `devvm rebuild base` makes a new base with the newest packages ([base's packages](../internals/images.md#bases-packages)).
 
@@ -177,7 +177,7 @@ devvm warns on each launch when an image the VM was made from has changed, and w
 
 ## A download doesn't check out
 
-devvm checks Ubuntu's cloud image and its own mise against checksums before it uses them, and it refuses a download that doesn't match. Ubuntu's checksums must also carry a valid signature from Ubuntu's cloud image key, which devvm checks itself, with nothing to install. When devvm refuses one, try again later, and if it keeps failing, the server or the network between may be serving something else ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
+devvm checks Ubuntu's cloud image and its own mise against checksums before it uses them, and it refuses a download that doesn't match. Ubuntu's checksums must also carry a valid signature from Ubuntu's cloud image key, which devvm checks itself, with nothing to install. When devvm refuses one, try again later, and if it keeps failing, the server or the network between may be serving something else. In the same way, when `devvm rebuild base` finds Ubuntu's list of releases ending before the release that base starts from, it says so and keeps that release ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
 
 ## A new tool release isn't there yet
 

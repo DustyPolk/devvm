@@ -663,6 +663,63 @@ func TestBuildPinsOrigin(t *testing.T) {
 	}
 }
 
+// base that doesn't boot from what the backend pinned in this run says
+// so, pins the newest older one and builds on that, once; one that
+// doesn't boot from what was pinned before, or that fails otherwise,
+// fails as it is.
+func TestBuildFallsBack(t *testing.T) {
+	booted := backend.Logged(msg.StartFailed("devvm-img-x"))
+	for _, c := range []struct {
+		name   string
+		pinned string // what PinOrigin pins in this run
+		fails  int    // how many builds fail
+		err    error
+		ok     bool
+		pins   []backend.Pin
+		builds int
+	}{
+		{"pinned now, then the older", "release-20260201", 1, &backend.BootError{Err: booted}, true, []backend.Pin{backend.PinFirst, backend.PinOlder}, 2},
+		{"the older doesn't boot either", "release-20260201", 2, &backend.BootError{Err: booted}, false, []backend.Pin{backend.PinFirst, backend.PinOlder}, 2},
+		{"pinned before", "", 1, &backend.BootError{Err: booted}, false, []backend.Pin{backend.PinFirst}, 1},
+		{"another failure", "release-20260201", 1, booted, false, []backend.Pin{backend.PinFirst}, 1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b, f := testEnv(t)
+			var warned []string
+			b.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+			f.Pinned = c.pinned
+			n := 0
+			f.BuildErr = func(backend.ImageSpec) error {
+				if n++; n <= c.fails {
+					return c.err
+				}
+				return nil
+			}
+			err := (Builds{b}).Build(t.Context(), "base")
+			if (err == nil) != c.ok {
+				t.Fatalf("got %v, want ok %v", err, c.ok)
+			}
+			if !c.ok {
+				if _, logged := errors.AsType[*backend.LoggedError](err); !logged {
+					t.Errorf("lost the logged error: %v", err)
+				}
+			}
+			var pins []backend.Pin
+			for _, call := range f.Calls() {
+				if call.Method == "PinOrigin" {
+					pins = append(pins, call.Args[1].(backend.Pin))
+				}
+			}
+			if !slices.Equal(pins, c.pins) || n != c.builds {
+				t.Errorf("pins %v and %d builds, want %v and %d", pins, n, c.pins, c.builds)
+			}
+			if fell := slices.Contains(warned, "origin_no_boot origin="+c.pinned); fell != (len(c.pins) == 2) {
+				t.Errorf("warned %q", warned)
+			}
+		})
+	}
+}
+
 // A rebuild on one backend changes that backend's key alone: another
 // backend's images on the same data folder stay current, so its VMs
 // aren't outdated.

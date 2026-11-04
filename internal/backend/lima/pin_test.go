@@ -94,6 +94,22 @@ func TestPinOriginFails(t *testing.T) {
 	}
 }
 
+// A listing whose newest is older than what's pinned (it lost releases:
+// it isn't signed) keeps the pin, with a warning.
+func TestPinNewestKeepsNewer(t *testing.T) {
+	l, _, warned := testLima(t, "darwin")
+	l.Ubuntu = &testFinder{releases: []string{"release-20251201"}}
+	if got, err := l.PinOrigin(t.Context(), nil, backend.PinNewest); err != nil || got != "" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if p, _ := state.ReadUbuntuPin(l.Dirs); p.Release != "release-20260101" {
+		t.Errorf("pinned %s", p.Release)
+	}
+	if !slices.Contains(warned.Names(), "ubuntu_newest_older newest=release-20251201 pinned=release-20260101") {
+		t.Errorf("warned %q", warned.Names())
+	}
+}
+
 // A pin for another architecture (a data folder from another machine)
 // counts as none: the next build pins one for this host.
 func TestPinAnotherArch(t *testing.T) {

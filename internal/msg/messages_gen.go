@@ -2179,6 +2179,11 @@ func OpencodeRefreshFailed(provider string, reason string) M {
 	return M{id: "opencode_refresh_failed", vals: []val{{"provider", provider}, {"reason", reason}}}
 }
 
+// OriginNoBoot is [origin_no_boot]: "base didn't boot from Ubuntu's cloud image {{.origin}}, so devvm tries the release before it."
+func OriginNoBoot(origin string) M {
+	return M{id: "origin_no_boot", vals: []val{{"origin", origin}}}
+}
+
 // OriginPinned is [origin_pinned]: "base starts from Ubuntu's cloud image {{.origin}}"
 func OriginPinned(origin string) M {
 	return M{id: "origin_pinned", vals: []val{{"origin", origin}}}
@@ -3094,6 +3099,11 @@ func UbuntuMirrorInvalid(setting string) M {
 	return M{id: "ubuntu_mirror_invalid", vals: []val{{"setting", setting}}}
 }
 
+// UbuntuNewestOlder is [ubuntu_newest_older]: "Ubuntu's list of cloud images ends at {{.newest}}, older than {{.pinned}}, which base starts from, so devvm keeps {{.pinned}}."
+func UbuntuNewestOlder(newest string, pinned string) M {
+	return M{id: "ubuntu_newest_older", vals: []val{{"newest", newest}, {"pinned", pinned}}}
+}
+
 // UbuntuUnreachable is [ubuntu_unreachable]: "devvm couldn't read the list of Ubuntu {{.version}}'s cloud images at {{.url}}. Check that you're online, then try again."
 func UbuntuUnreachable(url string, version string) M {
 	return M{id: "ubuntu_unreachable", vals: []val{{"url", url}, {"version", version}}}
@@ -3756,6 +3766,7 @@ var specs = map[string]spec{
 	"oci_waiting":                      {},
 	"opencode_login_kept":              {fields: []string{"providers"}},
 	"opencode_refresh_failed":          {fields: []string{"provider", "reason"}},
+	"origin_no_boot":                   {fields: []string{"origin"}},
 	"origin_pinned":                    {fields: []string{"origin"}},
 	"output_failed":                    {fields: []string{"reason"}},
 	"packages_missing":                 {fields: []string{"name", "version"}},
@@ -3939,6 +3950,7 @@ var specs = map[string]spec{
 	"tools_unmounted":                  {fields: []string{"tools", "vm"}},
 	"ubuntu_bad_signature":             {fields: []string{"release", "url"}},
 	"ubuntu_mirror_invalid":            {fields: []string{"setting"}},
+	"ubuntu_newest_older":              {fields: []string{"newest", "pinned"}},
 	"ubuntu_unreachable":               {fields: []string{"url", "version"}},
 	"uncommitted_not_copied":           {fields: []string{"branch", "dir", "remote"}},
 	"unfetched_commits":                {fields: []string{"refs"}},

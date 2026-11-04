@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
@@ -64,6 +65,12 @@ func (l *images) PinOrigin(ctx context.Context, f *backend.From, how backend.Pin
 	}
 	if err != nil {
 		return "", err
+	}
+	// The listing isn't signed: one that has lost what's pinned's newer
+	// releases keeps the pin, rather than move base back.
+	if how == backend.PinNewest && l.UbuntuRelease == "" && ok && p.Release < was.Release {
+		l.Warn(msg.UbuntuNewestOlder(p.Release, was.Release))
+		return "", nil
 	}
 	if err := state.WriteUbuntuPin(l.Dirs, p); err != nil {
 		return "", err

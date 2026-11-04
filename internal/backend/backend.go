@@ -256,6 +256,19 @@ type ImageSpec struct {
 	Packages *Packages
 }
 
+// ErrBoot marks a build whose VM didn't boot from what base starts from
+// (BootError): the caller may pin an older one (PinOlder) and try again.
+var ErrBoot = errors.New("the build VM didn't boot")
+
+// BootError is a build that failed as its VM started, with why: errors.Is
+// finds ErrBoot, and errors.As the error it wraps (a LoggedError).
+type BootError struct{ Err error }
+
+func (e *BootError) Error() string { return e.Err.Error() }
+
+// Unwrap returns the error and ErrBoot.
+func (e *BootError) Unwrap() []error { return []error{e.Err, ErrBoot} }
+
 // ExitUnreachable is the exit code of a recipe's step that reached none of
 // what it downloads from (assets/layers/apt.sh: no package source
 // answered), which the backend reports as build_sources_unreachable, not

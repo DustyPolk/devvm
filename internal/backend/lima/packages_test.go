@@ -92,6 +92,23 @@ func TestBuildImagePackagesFail(t *testing.T) {
 	}
 }
 
+// base from Ubuntu's image whose VM doesn't start is a BootError, which
+// keeps the logged failure; a layer's isn't.
+func TestBuildImageNoBoot(t *testing.T) {
+	l, f := buildLima(t, "darwin", "")
+	f.fail = []string{"sandbox-exec"}
+	_, err := l.BuildImage(t.Context(), baseSpec(t, l))
+	if _, logged := errors.AsType[*backend.LoggedError](err); !errors.Is(err, backend.ErrBoot) || !logged || msg.IDOf(err) != "start_failed" {
+		t.Errorf("base: %v", err)
+	}
+	l, f = buildLima(t, "darwin", "Stopped")
+	f.fail = []string{"sandbox-exec"}
+	spec := backend.ImageSpec{Image: "docker", Key: layerKey, Parent: baseKey, Net: backend.NetInternet}
+	if _, err := l.BuildImage(t.Context(), spec); err == nil || errors.Is(err, backend.ErrBoot) {
+		t.Errorf("a layer: %v", err)
+	}
+}
+
 // A step that reached no package source (it exits 75) fails the build
 // with build_sources_unreachable, not as a script that failed.
 func TestBuildImageSourcesUnreachable(t *testing.T) {

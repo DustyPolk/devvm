@@ -134,8 +134,13 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 	if err != nil {
 		return backend.Built{}, err
 	}
-	// A failed start leaves it stopped, with its console logs.
+	// A failed start leaves it stopped, with its console logs. Base from
+	// Ubuntu's cloud image that doesn't boot says so: the caller may try
+	// an older image.
 	if err := l.start(ctx, inst, nil, conf); err != nil {
+		if spec.Parent == "" && spec.From == nil && ctx.Err() == nil {
+			return backend.Built{}, &backend.BootError{Err: err}
+		}
 		return backend.Built{}, err
 	}
 	if conv != nil {

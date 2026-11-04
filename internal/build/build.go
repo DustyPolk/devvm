@@ -74,6 +74,13 @@ type Env struct {
 	// one Env may run at once.
 	lookMu sync.Mutex
 	looked bool
+	// fresh is what the backend pinned for base in this run, "" for
+	// nothing; fellBack is set once a build that didn't boot from it
+	// pinned an older one (fallBack), which happens once a run. mu
+	// guards both.
+	mu       sync.Mutex
+	fresh    string
+	fellBack bool
 }
 
 // Builds builds images, and builds them again.
@@ -139,8 +146,35 @@ func (b Builds) pin(ctx context.Context, how backend.Pin) error {
 	}
 	if pinned != "" {
 		b.Info(msg.OriginPinned(pinned))
+		b.mu.Lock()
+		b.fresh = pinned
+		b.mu.Unlock()
 	}
 	return nil
+}
+
+// fallBack is err, the end of a build of name: base's that didn't boot
+// (backend.ErrBoot) from what the backend pinned in this run says so, has
+// the backend pin the newest older one (PinOrigin's PinOlder) and builds
+// base on that, once a run. Anything else is err as it is: what was
+// pinned before this run booted then.
+func (b Builds) fallBack(ctx context.Context, name string, err error) error {
+	if !errors.Is(err, backend.ErrBoot) || name != image.Base || b.From != "" {
+		return err
+	}
+	b.mu.Lock()
+	failed := b.fresh
+	again := failed != "" && !b.fellBack
+	b.fellBack = true
+	b.mu.Unlock()
+	if !again {
+		return err
+	}
+	b.Warn(msg.OriginNoBoot(failed))
+	if perr := b.pin(ctx, backend.PinOlder); perr != nil {
+		return errors.Join(err, perr)
+	}
+	return b.buildOnce(ctx, name)
 }
 
 // Layers returns base, then the built-in layers and the user's, sorted:
@@ -262,7 +296,14 @@ func (b *Env) proxy() *settings.CompanyProxy {
 	return b.Tools.Proxy
 }
 
+// build builds name and what it's built on, unless they're built, base
+// falling back to an older origin when it doesn't boot (fallBack) once its
+// first build has let go of its lock.
 func (b Builds) build(ctx context.Context, name string) error {
+	return b.fallBack(ctx, name, b.buildOnce(ctx, name))
+}
+
+func (b Builds) buildOnce(ctx context.Context, name string) error {
 	if err := b.lookUp(ctx); err != nil {
 		return err
 	}
