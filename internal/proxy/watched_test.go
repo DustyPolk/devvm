@@ -110,6 +110,25 @@ func TestWatchedFailures(t *testing.T) {
 	}
 }
 
+// A change of mode alone leaves the stamp as it was, so a settled file made readable by others
+// after a good read keeps its contents until it's written again, which then refuses it.
+func TestWatchedChmodOnly(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "f")
+	w, fails, _ := watchedText(path, false)
+	old := time.Now().Add(-time.Hour)
+	writeAt(t, path, "good", old)
+	w.get()
+	must(t, os.Chmod(path, 0o644)) //nolint:gosec // G302: a file others may read is what's tested
+	if got := w.get(); got != "good" || *fails != 0 {
+		t.Errorf("after a chmod alone: get = %q, %d failures", got, *fails)
+	}
+	must(t, os.Chtimes(path, old.Add(time.Minute), old.Add(time.Minute)))
+	if got := w.get(); got != "" || *fails != 1 {
+		t.Errorf("after its next change: get = %q, %d failures", got, *fails)
+	}
+}
+
 // A parse that fails is a failure as a read's is, and a symbolic link is refused (readPrivate).
 func TestWatchedRefused(t *testing.T) {
 	t.Parallel()

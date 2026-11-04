@@ -81,6 +81,8 @@ type Lima struct {
 	OCINote time.Duration
 	// Getenv reads the environment (SSH_AUTH_SOCK).
 	Getenv func(string) string
+	// Company is the company proxy builds go through (buildUpstream).
+	Company *settings.CompanyProxy
 	// Ubuntu finds Ubuntu's cloud image for base, which PinOrigin pins,
 	// at UbuntuURL, where Ubuntu's dated releases are listed
 	// (ubuntu.DefaultURL, unless a test build moves it). UbuntuRelease is
@@ -147,8 +149,9 @@ func withRoles(l *Lima) *Lima {
 
 // New returns the Lima backend for devvm's folders and its own files
 // (assets), on u, sizing base to host, finding Ubuntu's cloud image at
-// ubuntuURL (ubuntu.DefaultURL when it's "") through the company proxy cp
-// (nil for the environment's).
+// ubuntuURL (ubuntu.DefaultURL when it's "") through the company proxy cp,
+// which builds go through too (nil for the one its Getenv and config.toml
+// name, without config.toml's password).
 func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string, cp *settings.CompanyProxy) *Lima {
 	ubuntuURL = strings.TrimRight(cmp.Or(ubuntuURL, ubuntu.DefaultURL), "/")
 	self, err := os.Executable()
@@ -161,8 +164,8 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string,
 	if t := finder.Client.Transport(); t != nil {
 		t.Proxy = cp.Route
 	}
-	return withRoles(&Lima{
-		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
+	l := withRoles(&Lima{
+		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Company: cp,
 		Self: self, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
 		Ubuntu: finder, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: "/dev/kvm",
@@ -171,6 +174,10 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
 	})
+	if l.Company == nil {
+		l.Company = settings.NewCompanyProxy(d, func(k string) string { return l.Getenv(k) }, nil)
+	}
+	return l
 }
 
 // Name returns lima.

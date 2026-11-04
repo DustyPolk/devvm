@@ -174,6 +174,8 @@ The data folder and the config folder each hold a `version` file with their layo
 
 A new file that an older devvm doesn't need to know about, or a field added to a JSON file, which an older devvm ignores, keeps the version and changes only the listings.
 
+A development machine that ran a build of devvm from before layout version 1 can have folders in the data folder that devvm doesn't read, and devvm leaves them as they are. One is `ca`, a CA with its private key that every VM's proxy shared in those builds. devvm keeps each VM's own CA in `vms/<hash>/run/ca/`. Delete such a folder yourself, with `rm -rf ~/.local/share/devvm/ca`.
+
 ## How a backend plugs in
 
 devvm runs every VM on Lima, but the rest of devvm reaches Lima only through the `backend.Backend` interface in `internal/backend`, so another backend is an addition rather than a change to the callers. A backend lives in a package of its own under `internal/backend`, and it does four things:

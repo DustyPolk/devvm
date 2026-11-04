@@ -454,9 +454,8 @@ func writeLogin(t *testing.T, s *Store, kind, data string) {
 	}
 }
 
-// The VM's copies: a login's with placeholders ending in its salt, the MCP
-// servers whose secrets a plain copy would carry, and settings files with
-// secret-looking values taken out.
+// The VM's copies: a login's with placeholders ending in its salt, and the
+// MCP servers whose secrets a plain copy would carry.
 func TestVMCopies(t *testing.T) {
 	s, _ := testStore(t, false, nil)
 	var warned []string
@@ -486,13 +485,6 @@ func TestVMCopies(t *testing.T) {
 		"codex_login_kept keys=b, extra", "opencode_login_kept providers=llama", "opencode_login_withheld providers=other",
 	}; !slices.Equal(warned, want) {
 		t.Errorf("warned %q, want %q", warned, want)
-	}
-	out, keys, err := Redact("json", []byte(`{"env":{"API_TOKEN":"tok-secret","NAME":"x"}}`))
-	if err != nil || strings.Contains(string(out), "tok-secret") || !slices.Equal(keys, []string{"env.API_TOKEN", "env.NAME"}) {
-		t.Errorf("Redact = %s, %q, %v", out, keys, err)
-	}
-	if _, _, err := Redact("toml", []byte("x = \"\"\"\nunclosed\n")); err == nil {
-		t.Error("Redact took a file that isn't TOML")
 	}
 }
 

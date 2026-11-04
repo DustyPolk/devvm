@@ -1,8 +1,10 @@
 package lima
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,6 +19,7 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/settings"
 )
 
 const (
@@ -335,20 +338,34 @@ func TestConfineProxyEnv(t *testing.T) {
 
 // Without the proxy settings in devvm's environment, a build goes through
 // config.toml's company proxy, its password the secret the build's proxy
-// looks up itself; a config.toml devvm can't read fails the build.
+// looks up itself, which must be saved (the backend's company proxy);
+// a config.toml devvm can't read fails the build.
 func TestBuildUpstreamConfig(t *testing.T) {
 	l, _, _ := testLima(t, "linux")
 	none := func(string) string { return "" }
-	writeTestFile(t, l.Dirs.ConfigFile(), "[proxy]\nhttps = \"http://alice@proxy.corp:3128\"\n")
-	host, up, err := buildUpstream(l.Dirs, none, backend.NetInternet)
-	if err != nil || host.HTTPS != "http://alice@proxy.corp:3128" || up == nil || up.Secret != proxy.UpstreamSecret {
-		t.Errorf("config.toml's: %+v, %+v, %v", host, up, err)
+	writeTestFile(t, l.Dirs.ConfigFile(), "[proxy]\nhttps = \"http://alice@proxy.corp:3128\"\nno-proxy = \"corp.internal\"\n")
+	if _, _, err := buildUpstream(t.Context(), l.Company, backend.NetInternet); msg.IDOf(err) != "proxy_password_missing" {
+		t.Errorf("no password saved: %v", err)
 	}
-	if _, up, err := buildUpstream(l.Dirs, none, backend.NetNone); up != nil || err != nil {
+	var asked []string
+	l.Company = settings.NewCompanyProxy(l.Dirs, none, func(_ context.Context, name string) (string, error) {
+		asked = append(asked, name)
+		return "fake-password", nil
+	})
+	host, up, err := buildUpstream(t.Context(), l.Company, backend.NetInternet)
+	if err != nil || host.HTTPS != "http://alice@proxy.corp:3128" || host.NoProxy != "corp.internal" || up == nil || up.Secret != proxy.UpstreamSecret ||
+		strings.Contains(fmt.Sprint(host, *up), "fake-password") || !slices.Equal(asked, []string{proxy.UpstreamSecret}) {
+		t.Errorf("config.toml's: %+v, %+v, %v, asked %v", host, up, err, asked)
+	}
+	if _, up, err := buildUpstream(t.Context(), l.Company, backend.NetNone); up != nil || err != nil {
 		t.Errorf("no internet: %+v, %v", up, err)
 	}
+	writeTestFile(t, l.Dirs.ConfigFile(), "")
+	if host, up, err := buildUpstream(t.Context(), l.Company, backend.NetInternet); up != nil || err != nil || !host.None() {
+		t.Errorf("no company proxy: %+v, %+v, %v", host, up, err)
+	}
 	writeTestFile(t, l.Dirs.ConfigFile(), "[proxy]\nhttps = 1\n")
-	if _, _, err := buildUpstream(l.Dirs, none, backend.NetInternet); err == nil {
+	if _, _, err := buildUpstream(t.Context(), l.Company, backend.NetInternet); err == nil {
 		t.Error("a broken config.toml was read")
 	}
 }

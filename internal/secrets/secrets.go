@@ -158,13 +158,6 @@ func (s *Store) MCPSecrets() []string {
 	return servers
 }
 
-// Redact returns an agent's settings file (format json, for JSONC too, or
-// toml) with the values under secret-looking keys replaced, and those
-// keys' paths. A file it can't read that way is an error.
-func Redact(format string, data []byte) ([]byte, []string, error) {
-	return agentlogin.Redact(format, data)
-}
-
 var serviceName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 // Service is the Keychain service secrets are saved under:

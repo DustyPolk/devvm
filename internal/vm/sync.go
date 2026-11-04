@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/w3cj/devvm/internal/agentlogin"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/image"
@@ -395,7 +396,7 @@ func (e syncer) stageNet(s *stage, store *secrets.Store, vm string, tools []stri
 			}
 			continue
 		}
-		out, keys, err := secrets.Redact(format, f.data)
+		out, keys, err := agentlogin.Redact(format, f.data)
 		if err != nil {
 			s.drop(f.name)
 			e.Warn(msg.ConfigNotCopied(shown, vm))

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/shell"
@@ -31,24 +30,20 @@ import (
 // for sudo, in the build VM while its scripts run.
 const sudoKeepProxy = `Defaults env_keep += "http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY"`
 
-// buildUpstream is the company proxy a build on n goes through: the
-// host's proxy settings, as getenv has them, else config.toml's in d
-// (settings.HostProxy), and what its proxy's config holds of them; none
-// (nil) without the internet or a proxy on the host. A setting the proxy
-// can't go through is its message.
-func buildUpstream(d paths.Dirs, getenv func(string) string, n backend.Net) (backend.HostProxy, *proxy.Upstream, error) {
+// buildUpstream is the company proxy a build on n goes through, as cp
+// checks it (settings.CompanyProxy.Upstream: the environment's, else
+// config.toml's, with its password saved), as the variables it sets and
+// as its proxy's config holds it; none (nil) without the internet or a
+// company proxy. A setting the proxy can't go through is its message.
+func buildUpstream(ctx context.Context, cp *settings.CompanyProxy, n backend.Net) (backend.HostProxy, *proxy.Upstream, error) {
 	if n != backend.NetInternet {
 		return backend.HostProxy{}, nil, nil
 	}
-	host, err := settings.HostProxy(d, getenv)
-	if err != nil {
+	up, err := cp.Upstream(ctx)
+	if err != nil || up == nil {
 		return backend.HostProxy{}, nil, err
 	}
-	up, err := host.Upstream()
-	if err != nil {
-		return backend.HostProxy{}, nil, err
-	}
-	return host, up, nil
+	return backend.HostProxy{HTTPS: up.HTTPS, HTTP: up.HTTP, NoProxy: up.NoProxy, Secret: up.Secret}, up, nil
 }
 
 // buildProxy starts the proxy of a build VM (vm) on n: with the company
@@ -63,7 +58,7 @@ func buildUpstream(d paths.Dirs, getenv func(string) string, n backend.Net) (bac
 func buildProxy(ctx context.Context, l *Lima, vm string, n backend.Net) (backend.Confinement, backend.HostProxy, func(ok bool), error) {
 	c := backend.Confinement{Net: n}
 	none := func(bool) {}
-	host, up, err := buildUpstream(l.Dirs, l.Getenv, n)
+	host, up, err := buildUpstream(ctx, l.Company, n)
 	if err != nil || up == nil {
 		return c, backend.HostProxy{}, none, err
 	}
