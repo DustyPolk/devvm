@@ -67,8 +67,9 @@ type Backend interface {
 	// Start starts a stopped VM as w wants it, confined as c says, and
 	// returns once it answers: it first changes what of w and c the VM's
 	// config doesn't have yet, and nothing else, after checking w with
-	// Validate. Its ports are forwarded as w says once it runs. A
-	// running VM is left as it is, w and c unapplied (callers say
+	// Validate. Its ports are devvm's forwarder's to forward once it
+	// runs (ForwardTarget). A running VM is left as it is, w and c
+	// unapplied (callers say
 	// what changes at its next start); its confinement is checked with
 	// Confined.
 	Start(ctx context.Context, vm string, w Want, c Confinement) error
@@ -104,12 +105,19 @@ type Backend interface {
 	// SSH says how ssh and editors reach a running VM.
 	SSH(ctx context.Context, vm string) (SSHTarget, error)
 
-	// SetPorts changes which of a running VM's ports are forwarded, at
-	// once: its forwarder started again with p as Start starts it with c
-	// (HostKey, ProxyPort, Free) while the VM runs on. Connections open
-	// through its old forwarder end. A stopped VM is left as it is: its
-	// next Start's Want has its ports.
-	SetPorts(ctx context.Context, vm string, p Ports, c Confinement) error
+	// ForwardTarget says how devvm's port forwarder, on the host, reaches
+	// a running VM's sshd to forward its ports (FeaturePorts,
+	// FeaturePortsAll): the backend forwards none of its own.
+	ForwardTarget(ctx context.Context, vm string) (ForwardTarget, error)
+}
+
+// ForwardTarget is how devvm's port forwarder reaches a running VM's
+// sshd: on Port of the host's loopback, as User with Key alone. The host
+// key it pins is the one devvm pins for the VM's ssh config, and its
+// lifeline is the backend's (Lifeline).
+type ForwardTarget struct {
+	User, Key string
+	Port      int
 }
 
 // KeyFiles is a backend that puts files of its own into base (scripts it
@@ -222,7 +230,6 @@ type Want struct {
 	// AgentForwarding is whether the VM forwards an ssh-agent; changing
 	// it once the VM is made needs FeatureAgentToggle.
 	AgentForwarding bool
-	Ports           Ports // which ports to forward to host loopback
 }
 
 // Validate returns the error a start of the VM in, stopped, would refuse
@@ -321,30 +328,6 @@ type Confinement struct {
 	// NoAgent is set when the VM's choice is no agent: a backend whose VM
 	// forwards one anyway (made so, for agent-toggle) gives it none.
 	NoAgent bool
-	// Free returns the listed ports of a VM that lists its ports less
-	// those a program on the host has, warning about those: what its
-	// forwarder forwards, asked once any forwarder it had has stopped (its
-	// own ports would read as taken). nil forwards every listed port.
-	Free func(ctx context.Context, listed []PortRange) []PortRange
-	// HostKey returns the VM's host key (TYPE BASE64) as devvm pins it
-	// for its ssh config, read once it runs: a backend whose own ssh
-	// devvm pins (Lima's) gives it to its port forwarder. nil for a
-	// build.
-	HostKey func(ctx context.Context) (string, error)
-}
-
-// Forwarded returns what the forwarder of a VM that forwards p forwards
-// with c: nil for every port, else p's listed ports less those Free leaves
-// out, empty for none.
-func (c Confinement) Forwarded(ctx context.Context, p Ports) []PortRange {
-	if p.All {
-		return nil
-	}
-	rs := append([]PortRange{}, p.Ranges...)
-	if c.Free != nil && len(rs) > 0 {
-		rs = append([]PortRange{}, c.Free(ctx, rs)...)
-	}
-	return rs
 }
 
 // Status is a VM's state as its backend reports it.

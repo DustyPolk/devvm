@@ -3,15 +3,39 @@ package ports
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
+
+func TestForwarding(t *testing.T) {
+	for in, want := range map[string]backend.Ports{
+		"":               {All: true},
+		"all":            {All: true},
+		"none":           {},
+		"5173,8000-8010": {Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8010}}},
+	} {
+		if got, err := Forwarding(in); err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("Forwarding(%q) = %+v, %v; want %+v", in, got, err, want)
+		}
+	}
+	// A bad entry, as a hand-edited state file has it, is refused, never
+	// port 0.
+	for _, bad := range []string{"80,x", "x", "80-y", "5173,,80"} {
+		got, err := Forwarding(bad)
+		if msg.NamesOf(err) != `port_invalid value="`+bad+`"` || len(got.Ranges) != 0 {
+			t.Errorf("Forwarding(%q) = %+v, %v", bad, got, msg.NamesOf(err))
+		}
+	}
+}
 
 // newVM writes the state of a VM named name, as up does.
 func newVM(t *testing.T, d paths.Dirs, name string) *state.VM {

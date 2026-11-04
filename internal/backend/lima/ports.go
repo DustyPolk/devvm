@@ -2,106 +2,32 @@ package lima
 
 import (
 	"context"
-	"io"
+	"fmt"
 	"path/filepath"
-	"strconv"
-	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/vmssh"
-	"github.com/w3cj/devvm/internal/daemon"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
 )
 
-// Forwarding ports (ports, ports-all) is emulated, and reviewed, so every
-// backend forwards by the same rules. Lima's own forwards are off: every
-// VM's portForwards ignore every guest port on every address
-// (noForwardsSet, set where they differ), so Lima forwards nothing (its
-// ssh is the VM driver's forward, not a rule). devvm's forwarder
-// (vmssh.Forwarder, devvm _lima-ports) forwards the VM's ports instead:
-// started by Start once a project VM runs, over Lima's ssh with Lima's key
-// and the host key devvm pins for the VM (Confinement.HostKey), and ending
-// once the VM's hostagent does (its lifeline, ha.pid); Stop and Delete
-// stop it. Which ports a VM forwards (every one, its listed ones, none) is
-// the caller's: Start's Want, and SetPorts's, which starts a running VM's
-// forwarder again. Neither is a lima.yaml edit, and Lima keeps no record
-// of them.
+// Forwarding ports (ports, ports-all) is emulated, and reviewed: Lima's
+// own forwards are off, as every VM's portForwards ignore every guest port
+// on every address (noForwardsSet, set where they differ), so Lima
+// forwards nothing (its ssh is the VM driver's forward, not a rule).
+// devvm's forwarder, which isn't the backend's (vmssh.Forwards), forwards
+// the VM's ports instead, over Lima's ssh (ForwardTarget), and ends once
+// the VM's hostagent does (its lifeline, ha.pid). Which ports a VM
+// forwards is never in lima.yaml.
 
-// forwarderCmd is the hidden command that runs a VM's forwarder.
-const forwarderCmd = "_lima-ports"
-
-// forwards is how Lima's VMs' ports are forwarded: each VM's forwarder,
-// its files in the VM's backend folder.
-type forwards struct {
-	vmssh.Forwards
-	// Key is Lima's own ssh key, which the forwarder logs in with.
-	Key string
-}
-
-// newForwards is how Lima's VMs' ports are forwarded: devvm _lima-ports,
-// self, their files in each VM's backend folder.
-func newForwards(d paths.Dirs, self string) forwards {
-	return forwards{
-		Forwards: vmssh.Forwards{
-			Dirs: d, Prefix: "lima", Cmd: forwarderCmd, Self: self,
-			Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond,
-		},
-		Key: filepath.Join(d.Lima, "_config", "user"),
-	}
-}
-
-// start starts the forwarder of a project VM that forwards ports, once it
-// runs, after stopping any it had, holding its lock throughout: p's ports
-// (c.Forwarded), over Lima's ssh (ssh), with the host key
-// devvm pins for it, never on its ssh's or proxy's port, following its
-// hostagent's pid file (lifeline). It reports whether it did: one that
-// can't start is warned about by the caller, and the VM runs on. A VM that
-// forwards none is left without one.
-func (f forwards) start(ctx context.Context, vm string, p backend.Ports, c backend.Confinement, ssh func(context.Context, string) (backend.SSHTarget, error), lifeline string) bool {
-	unlock, err := f.Lock(ctx, vm)
+// ForwardTarget is how devvm's port forwarder reaches a running VM's sshd:
+// Lima's ssh port on the host's loopback, as Lima's user, with Lima's own
+// key (_config/user in devvm's Lima home), which every VM there
+// authorizes.
+func (l *Lima) ForwardTarget(ctx context.Context, vm string) (backend.ForwardTarget, error) {
+	t, err := l.SSH(ctx, vm)
 	if err != nil {
-		return false
+		return backend.ForwardTarget{}, err
 	}
-	defer unlock()
-	f.Stop(vm)
-	only := c.Forwarded(ctx, p)
-	if only != nil && len(only) == 0 {
-		return true
+	if t.User == "" || t.Port <= 0 || t.Host != "127.0.0.1" {
+		return backend.ForwardTarget{}, fmt.Errorf("%s: its ssh isn't a user on a host loopback port", vm)
 	}
-	if c.HostKey == nil {
-		return false
-	}
-	key, err := c.HostKey(ctx)
-	t, terr := ssh(ctx, vm)
-	if err != nil || terr != nil || t.User == "" || t.Port <= 0 {
-		return false
-	}
-	spec := vmssh.Spec{
-		User: t.User, Key: f.Key, HostKey: key, Reserve: []int{t.Port, c.ProxyPort}, Only: only,
-		Args: []string{"-lifeline", lifeline, "-port", strconv.Itoa(t.Port)},
-	}
-	return f.Start(vm, spec) == nil
-}
-
-// ForwardMain runs a VM's forwarder (devvm _lima-ports) with its
-// arguments (vmssh.LifelineMain): its lifeline is the VM's hostagent's
-// pid file, its port Lima's ssh's.
-func ForwardMain(ctx context.Context, args []string, script []byte, reserved func(vm string) (map[int]bool, error), log io.Writer) error {
-	return vmssh.LifelineMain(ctx, forwarderCmd, args, script, reserved, log)
-}
-
-// SetPorts changes which of a running VM's ports are forwarded (every one,
-// its listed ones, or none): its forwarder, started again with them. A
-// stopped one is left as it is: its next start forwards its Want's.
-func (l *Lima) SetPorts(ctx context.Context, vm string, p backend.Ports, c backend.Confinement) error {
-	in, err := l.inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
-	if backend.Status(in.Status) == backend.StatusRunning && !l.Forwards.start(ctx, vm, p, c, l.SSH, l.haPIDFile(vm)) {
-		l.Warn(msg.PortsForwardFailed(l.Forwards.Log(vm), vm))
-	}
-	return nil
+	return backend.ForwardTarget{User: t.User, Key: filepath.Join(l.Dirs.Lima, "_config", "user"), Port: t.Port}, nil
 }

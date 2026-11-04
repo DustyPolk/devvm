@@ -199,8 +199,7 @@ func (s VMSpec) Features() []Feature {
 	if s.AgentForwarding {
 		fs = append(fs, FeatureAgentForwarding)
 	}
-	fs = append(fs, s.Size.Features()...)
-	return append(fs, s.Ports.Features()...)
+	return append(fs, s.Size.Features()...)
 }
 
 // Features returns what setting the size needs.
@@ -218,7 +217,8 @@ func (s Size) Features() []Feature {
 	return fs
 }
 
-// Features returns what forwarding the ports needs: nothing for none.
+// Features returns what forwarding the ports needs, with devvm's
+// forwarder (Backend.ForwardTarget): nothing for none.
 func (p Ports) Features() []Feature {
 	switch {
 	case p.All:

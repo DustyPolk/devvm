@@ -32,14 +32,15 @@ type Fake struct {
 	NameLimit    int                         // NameMax's answer
 	Instances    map[string]backend.Instance // by name
 	ImageKeys    []string
-	ImageSizes   map[string]int64  // ImageSize's answers, by key
-	Built        backend.Built     // BuildImage's answer
-	Target       backend.SSHTarget // SSH's answer
-	ShellCmd     backend.Command   // Shell's answer
-	Unconfined   bool              // Confined answers false (else: true, or for a VM Start started, whether with NetProxy)
-	LifelineFile string            // Lifeline's answer
-	Missing      []backend.Problem // Problems' answer
-	Format       string            // ToolFormat's answer
+	ImageSizes   map[string]int64      // ImageSize's answers, by key
+	Built        backend.Built         // BuildImage's answer
+	Target       backend.SSHTarget     // SSH's answer
+	Forward      backend.ForwardTarget // ForwardTarget's answer, for a running VM
+	ShellCmd     backend.Command       // Shell's answer
+	Unconfined   bool                  // Confined answers false (else: true, or for a VM Start started, whether with NetProxy)
+	LifelineFile string                // Lifeline's answer
+	Missing      []backend.Problem     // Problems' answer
+	Format       string                // ToolFormat's answer
 	// ExecFunc, when set, is what Exec returns after recording the call
 	// (Errs aside).
 	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
@@ -392,12 +393,16 @@ func apply(in *backend.Instance, w backend.Want) {
 	in.AgentForwarding = w.AgentForwarding
 }
 
-// SetPorts records the call.
-func (f *Fake) SetPorts(_ context.Context, vm string, p backend.Ports, c backend.Confinement) error {
+// ForwardTarget records the call and returns Forward for a running
+// instance.
+func (f *Fake) ForwardTarget(_ context.Context, vm string) (backend.ForwardTarget, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.record("SetPorts", vm, p, c); err != nil {
-		return err
+	if err := f.record("ForwardTarget", vm); err != nil {
+		return backend.ForwardTarget{}, err
 	}
-	return f.change(vm, func(*backend.Instance) {})
+	if in, ok := f.Instances[vm]; !ok || in.Status != backend.StatusRunning {
+		return backend.ForwardTarget{}, fmt.Errorf("%s: not running", vm)
+	}
+	return f.Forward, nil
 }

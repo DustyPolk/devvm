@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -52,6 +54,25 @@ func SetForward(st *state.VM, forward string) error {
 	}
 	p.Forward = forward
 	return Set(st, p)
+}
+
+// Forwarding returns which ports a VM forwards, as a ports value
+// (Ports.Forward, settings.ParsePorts) says: "" and all are every port,
+// none is none. A value that isn't one (a state file edited by hand) is
+// port_invalid, so a bad entry never becomes a port the VM didn't ask
+// for.
+func Forwarding(v string) (backend.Ports, error) {
+	switch v {
+	case "", settings.PortsAll:
+		return backend.Ports{All: true}, nil
+	case settings.PortsNone:
+		return backend.Ports{}, nil
+	}
+	rs, err := backend.ParsePortRanges(v)
+	if err != nil {
+		return backend.Ports{}, msg.PortInvalid(strconv.Quote(v)).Because(err)
+	}
+	return backend.Ports{Ranges: rs}, nil
 }
 
 // Forwarded returns the host ports a VM forwards, as p lists them

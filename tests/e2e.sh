@@ -176,7 +176,7 @@ cloud_sums="$(cloud_pin CloudSHA256Arm64)|$(cloud_pin CloudSHA256Amd64)"
 images=$XDG_DATA_HOME/devvm/images   # the image records, one per key
 layers=$XDG_CONFIG_HOME/devvm/layers
 vms=$XDG_DATA_HOME/devvm/vms         # the VMs' folders, one per VM, named by its name's hash
-# vmdir VM: the folder devvm keeps a VM's files in: its state, policy, backend/, run/ and logs/. A
+# vmdir VM: the folder devvm keeps a VM's files in: its state, policy, run/ and logs/. A
 # project VM's (devvm-FOLDER-HASH) is vms/HASH; a build VM's is run/builds/NAME.
 vmdir() { if [[ $1 =~ ^devvm-.+-[0-9a-f]{14}$ ]]; then echo "$XDG_DATA_HOME/devvm/vms/${1: -14}"
   else echo "$XDG_DATA_HOME/devvm/run/builds/$1"; fi; }
@@ -258,7 +258,7 @@ cleanup() {
   [[ -z ${agent_pid:-} ]] || kill "$agent_pid" 2>/dev/null
   [[ -z ${user_agent_pid:-} ]] || kill "$user_agent_pid" 2>/dev/null
   pkill -f "[s]sh-agent -a $XDG_DATA_HOME/devvm/agent.sock" 2>/dev/null   # devvm's own, in the sandbox
-  pkill -f "[_]lima-ports -vm .* -lifeline $DEVVM_LIMA_HOME/" 2>/dev/null  # Lima VMs' forwarders, the sandbox's
+  pkill -f "[_]ports -vm .* -lifeline $DEVVM_LIMA_HOME/" 2>/dev/null  # VMs' forwarders, the sandbox's
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_DATA_HOME/devvm/agent-keys.json" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
     "$work/listener.json" "$work/ps.log" "$work/lima-bypass" \
@@ -1468,8 +1468,8 @@ check "hostname is the folder" bash -c "[[ \$(limactl shell --workdir / $vm host
 # machine (the control).
 check "Lima forwards nothing itself; devvm's forwarder runs, with the host key devvm pinned" bash -c "
   [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $vm) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]] &&
-  pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
-  grep -qxF \"\$(cut -d' ' -f2- '$(vmdir "$vm")/backend/ports.known_hosts' | sed 's/^/$vm /')\" '$XDG_DATA_HOME/devvm/known_hosts'"
+  pgrep -f -- '[_]ports -vm $vm ' >/dev/null &&
+  grep -qxF \"\$(cut -d' ' -f2- '$(vmdir "$vm")/run/ports.known_hosts' | sed 's/^/$vm /')\" '$XDG_DATA_HOME/devvm/known_hosts'"
 # Without network policy too: so no other VM's forwarder takes it before Lima binds it.
 check "its ssh port is the one its state records, on this machine's loopback alone" bash -c "
   sp=\$(st_get '$(vmdir "$vm")' ports.host.ssh) && [[ -n \$sp ]] && ! vm_state '$(vmdir "$vm")' | grep -qx net.on=true &&
@@ -1481,11 +1481,11 @@ lima_serve "$vm" 47160 47161
 in_vm "$vm" "setsid -f python3 -c 'import socket,time; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.bind((\"0.0.0.0\",47162)); time.sleep(600)' devvm-e2e-udp </dev/null >/dev/null 2>&1" >/dev/null 2>&1
 check "a VM server on a port reaches this machine" bash -c 'for i in $(seq 20); do nc -z 127.0.0.1 47160 && exit 0; sleep 1; done; exit 1'
 check "through devvm's forwarder alone: Lima's hostagent has none of its ports, TCP or UDP" bash -c "sleep 3; nc -z 127.0.0.1 47160 &&
-  ! lima_listens tcp 47160 && ! lima_listens udp 47162 && pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null"
+  ! lima_listens tcp 47160 && ! lima_listens udp 47162 && pgrep -f -- '[_]ports -vm $vm ' >/dev/null"
 check "the forward listens on this machine's loopback alone" loopback_only 47160
 check "a port a program here has on every address keeps its localhost connections while the VM listens on it" bash -c "sleep 3
   out=\$(nc -w 2 127.0.0.1 47161 </dev/null); echo \"47161 answered by: \${out:-nothing}\"; [[ \$out == host-program ]] &&
-  grep -q 'port 47161: not forwarded' '$(vmdir "$vm")/backend/ports.log'"
+  grep -q 'port 47161: not forwarded' '$(vmdir "$vm")/logs/ports.log'"
 kill "$hostprog" 2>/dev/null; wait "$hostprog" 2>/dev/null; hostprog=""
 # A server on a link's address (127.77.0.0/16) is never forwarded, while the VM's own on 127.0.0.1
 # with the same port is (the control).
@@ -1496,7 +1496,7 @@ check "a server on a link's address isn't forwarded, the VM's own on 127.0.0.1 w
   limactl shell --workdir / $vm ss -Hltn 'sport = :47163' </dev/null | grep -q '127\.77\.0\.1:47163' &&
   for i in \$(seq 20); do [[ \$(nc -w 2 127.0.0.1 47164 </dev/null) == own ]] && break; sleep 1; done &&
   [[ \$(nc -w 2 127.0.0.1 47164 </dev/null) == own ]] && sleep 3 && ! nc -z 127.0.0.1 47163 && ! nc -z ::1 47163 &&
-  ! grep -q 'port 47163' '$(vmdir "$vm")/backend/ports.log'"
+  ! grep -q 'port 47163' '$(vmdir "$vm")/logs/ports.log'"
 in_vm "$vm" 'pkill -f "[h]ttp.server -b 0.0.0.0 4716"; pkill -f "[d]evvm-e2e-udp"; pkill -f "[d]evvm-e2e-say"' >/dev/null 2>&1
 check "Exec's arguments, folder and input reach the guest as given" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2EExecQuoting\$' ./internal/backend/lima |
@@ -1573,7 +1573,7 @@ fi
 
 section "an existing VM"
 check "devvm stop stops it and its port forwarder, and drops its ssh config entry" bash -c "cd '$p' && '$D' stop </dev/null >'$work/last.log' 2>&1 &&
-  [[ \$(status_of $vm) == Stopped ]] && grep -qF \"\$(m stopped vm=$vm)\" '$work/last.log' && ! pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
+  [[ \$(status_of $vm) == Stopped ]] && grep -qF \"\$(m stopped vm=$vm)\" '$work/last.log' && ! pgrep -f -- '[_]ports -vm $vm ' >/dev/null &&
   ! grep -q '^Host devvm-web ' '$XDG_DATA_HOME/devvm/ssh_config'"
 # A program here that took its ssh port while it was stopped, on 127.0.0.1 alone and accepting
 # nothing (SO_REUSEADDR, as the port's last connections may still be in TIME_WAIT): the VM gets a
@@ -1612,7 +1612,7 @@ check "restart, and its new host keys are pinned" bash -c "cd '$p' && printf 'ex
   [[ \$(env -u SSH_AUTH_SOCK ssh -F '$sc/config' devvm-web hostname </dev/null) == web ]]"
 check "a running VM's new ports apply at once" bash -c "cd '$p' &&
   '$D' ports 47170-47173 2>&1 | grep -qF \"\$(m ports_forwarding ports=47170-47173 vm=$vm)\" && [[ \$('$D' ports 2>/dev/null) == 47170-47173 ]] &&
-  ps -axww -o command= | grep -- '[_]lima-ports -vm $vm ' | grep -q -- ' -only 47170-47173\$'"
+  ps -axww -o command= | grep -- '[_]ports -vm $vm ' | grep -q -- ' -only 47170-47173\$'"
 check "a bad port list is a usage error, exit 2, naming devvm ports --help, and the VM's ports stay" bash -c "cd '$p' &&
   { '$D' ports 47170-x </dev/null >'$work/last.log' 2>&1; [[ \$? == 2 ]]; } &&
   grep -qxF \"\$(m usage_help 'command=devvm ports')\" '$work/last.log' && [[ \$('$D' ports 2>/dev/null) == 47170-47173 ]]"
@@ -1656,7 +1656,7 @@ if [[ "$(uname -s)" == Darwin ]]; then
     '$D' stop </dev/null >/dev/null 2>&1 && ! ls -lOd '$p/.git/config' | grep -q uchg &&
     [[ \$('$D' git-protect 2>/dev/null) == off ]] && printf 'exit\n' | '$D' >/dev/null 2>&1 && [[ \$(status_of $vm) == Running ]]"
   check "stopped outside devvm, its port forwarder ends with it (its lifeline)" bash -c "limactl stop $vm >/dev/null 2>&1 &&
-    for i in \$(seq 10); do pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null || exit 0; sleep 1; done; exit 1"
+    for i in \$(seq 10); do pgrep -f -- '[_]ports -vm $vm ' >/dev/null || exit 0; sleep 1; done; exit 1"
   check "git-protect strict keeps host git status out of submodules" bash -c "limactl stop $vm >/dev/null 2>&1; cd '$p' &&
     '$D' git-protect strict </dev/null >/dev/null 2>&1 && [[ \$(git config --file .git/config diff.ignoreSubmodules) == all &&
     \$('$D' git-protect 2>/dev/null) == strict ]] && ls -lOd '$p/.git/config' | grep -q uchg"
@@ -1670,7 +1670,7 @@ fi
 check "rm deletes only this VM, with its state and ssh config entry, and unlocks" bash -c "cd '$p' && '$D' rm --force </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! grep -q '^Host devvm-web ' '$XDG_DATA_HOME/devvm/ssh_config' &&
   ! grep -q '^$vm ' '$kh' && { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$p/.git/config' | grep -q uchg; } &&
-  ! pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null &&
+  ! pgrep -f -- '[_]ports -vm $vm ' >/dev/null &&
   [[ -z \$(ls '$XDG_DATA_HOME/devvm/exports' 2>/dev/null) ]]"
 
 section "a devcontainer.json"
@@ -2226,7 +2226,7 @@ EOF
   check "... and the VM works: ssh, devvm's forwarder (on loopback alone), the proxy, the self-check" bash -c "
     for i in \$(seq 20); do nc -z 127.0.0.1 47195 && break; sleep 1; done; nc -z 127.0.0.1 47195 &&
     { loopback_only 47195 || { echo 'not on loopback alone:'; lsof -nP -iTCP:47195 -sTCP:LISTEN; false; }; } &&
-    { pgrep -f -- '[_]lima-ports -vm $vm ' >/dev/null || { echo 'no forwarder'; false; }; } &&
+    { pgrep -f -- '[_]ports -vm $vm ' >/dev/null || { echo 'no forwarder'; false; }; } &&
     { ! lima_listens tcp 47195 || { echo 'limactl listens'; false; }; } &&
     { [[ \$(env -u SSH_AUTH_SOCK ssh -F '$XDG_DATA_HOME/devvm/ssh_config' devvm-net hostname </dev/null) == net ]] || { echo 'ssh failed'; false; }; } &&
     { in_vm '$vm' 'curl -fsS -m 20 -o /dev/null https://github.com' || { echo 'the proxy failed'; false; }; } &&

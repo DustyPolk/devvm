@@ -133,11 +133,12 @@ func TestUpDevcontainer(t *testing.T) {
 // opened all the same.
 func TestUpDevcontainerCommandFails(t *testing.T) {
 	e, f, warned := devcontainerTestEnv(t, `{"onCreateCommand": "false", "postCreateCommand": "true", "postStartCommand": "echo hi"}`)
-	f.ExecFunc = func(_ string, argv []string, _ backend.ExecOpts) error {
+	hostKeys := f.ExecFunc // the forwarder's
+	f.ExecFunc = func(vm string, argv []string, o backend.ExecOpts) error {
 		if slices.Contains(argv, "false") {
 			return errors.New("exit status 1")
 		}
-		return nil
+		return hostKeys(vm, argv, o)
 	}
 	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	if want := "devcontainer_command_failed command=onCreateCommand vm=" + st.Name(); !slices.Equal(warned.Names(), []string{want}) {

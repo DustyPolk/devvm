@@ -127,7 +127,6 @@ func scenario(fx fixture) []step {
 	}
 	made := backend.Want{
 		AgentDirs: fx.agents, AgentForwarding: true, Size: backend.Size{CPUs: 3, MemoryGiB: 5, DiskGiB: 120},
-		Ports: backend.Ports{Ranges: []backend.PortRange{{From: 3000, To: 3001}}},
 	}
 	changed := backend.Want{AgentDirs: fx.agents[:min(1, len(fx.agents))], Size: backend.Size{CPUs: 4, MemoryGiB: 6.5, DiskGiB: 130}}
 	proxy := backend.Confinement{

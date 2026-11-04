@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,7 +34,7 @@ func TestUp(t *testing.T) {
 	}
 	create, start := call(f, "CreateVM"), call(f, "Start")
 	spec, _ := create.Args[1].(backend.VMSpec)
-	if spec.Project != e.Dir || spec.Size.CPUs != 2 || !reflect.DeepEqual(spec.Ports, backend.Ports{}) || !strings.HasPrefix(spec.Name, "devvm-web-") {
+	if spec.Project != e.Dir || spec.Size.CPUs != 2 || !strings.HasPrefix(spec.Name, "devvm-web-") {
 		t.Errorf("CreateVM spec = %+v", spec)
 	}
 	// Every VM has the share, read-only, even with no tools of its own.
@@ -100,7 +99,8 @@ func TestUpNetworkPolicy(t *testing.T) {
 	if err := (Launch{e}).Up(t.Context(), Options{NetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Confined", "Exec", "Exec", "List", "SSH", "Shell"}
+	// Its forwarder, once it runs: how to reach it, its host keys.
+	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "ForwardTarget", "Exec", "Confined", "Exec", "Exec", "List", "SSH", "Shell"}
 	if ms := f.Methods(); !slices.Equal(ms, want) {
 		t.Errorf("calls = %q, want %q", ms, want)
 	}
@@ -134,7 +134,7 @@ func TestUpNetworkPolicyFailsClosed(t *testing.T) {
 	if msg.NamesOf(err) != "net_direct_route vm="+spec.Name {
 		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
-	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Confined", "Exec", "Confined", "Stop"}
+	want := []string{"Check", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "ForwardTarget", "Exec", "Confined", "Exec", "Confined", "Stop"}
 	if ms := f.Methods(); !slices.Equal(ms, want) || len(*execs) > 0 {
 		t.Errorf("calls = %q, want %q; execs %+v", ms, want, *execs)
 	}
@@ -220,7 +220,7 @@ func TestUpTools(t *testing.T) {
 	if !slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets layers=none tools=node claude vm=") }) {
 		t.Errorf("said %q", said.Names())
 	}
-	if ms := f.Methods(); !slices.Equal(ms, []string{"Check", "Inspect", "Images", "BuildImage", "Images", "BuildTools", "CreateVM", "Start", "Exec", "List", "SSH", "Shell"}) {
+	if ms := f.Methods(); !slices.Equal(ms, []string{"Check", "Inspect", "Images", "BuildImage", "Images", "BuildTools", "CreateVM", "Start", "ForwardTarget", "Exec", "Exec", "List", "SSH", "Shell"}) {
 		t.Errorf("calls = %q", ms)
 	}
 	lock, err := os.ReadFile(e.Dirs.ToolLock())

@@ -95,9 +95,6 @@ type Lima struct {
 	// whether the run was interrupted.
 	AddCleanup  func(f func(context.Context)) (remove func())
 	Interrupted func() bool
-	// Forwards is how VMs' ports are forwarded: their records and
-	// forwarders.
-	Forwards forwards
 }
 
 // UI is where the backend prints, the run log its commands run into, and
@@ -136,7 +133,6 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string)
 		DockerRunning: from.DockerRunning,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
-		Forwards: newForwards(d, self),
 	}
 }
 
@@ -333,15 +329,14 @@ func (l *Lima) Stop(ctx context.Context, vm string) error {
 		return err
 	}
 	status := backend.Status(in.Status)
-	if status != backend.StatusStopped {
-		var opts []string
-		if status == statusBroken {
-			opts = []string{"--force"}
-		}
-		err = l.stop(ctx, vm, opts...)
+	if status == backend.StatusStopped {
+		return nil
 	}
-	l.Forwards.Stop(vm)
-	return err
+	var opts []string
+	if status == statusBroken {
+		opts = []string{"--force"}
+	}
+	return l.stop(ctx, vm, opts...)
 }
 
 // statusBroken is how Lima reports a VM whose hostagent doesn't answer.
@@ -355,7 +350,7 @@ func (l *Lima) stop(ctx context.Context, vm string, opts ...string) error {
 	return nil
 }
 
-// Delete deletes a VM, stopping it first, and its backend folder.
+// Delete deletes a VM, stopping it first.
 func (l *Lima) Delete(ctx context.Context, vm string) error {
 	if _, err := l.inspect(ctx, vm); err != nil {
 		return err
@@ -363,13 +358,18 @@ func (l *Lima) Delete(ctx context.Context, vm string) error {
 	return l.delete(ctx, vm)
 }
 
-// delete deletes a VM or an image's instance, and its files
-// (vmssh.Forwards.Forget).
+// delete deletes a VM or an image's instance. A build VM (not a project
+// VM: an image's, the tools build's) loses its whole folder in devvm's
+// data folder too, its sandbox profile and records; a project VM's is its
+// teardown's.
 func (l *Lima) delete(ctx context.Context, vm string) error {
 	if err := l.Runner.Run(ctx, msg.Deleting(vm), l.limactl(ctx, "delete", "-f", vm)); err != nil {
 		return backend.Logged(msg.DeleteFailed(vm))
 	}
-	return l.Forwards.Forget(vm)
+	if vmname.IsVM(vm) {
+		return nil
+	}
+	return os.RemoveAll(l.Dirs.VM(vm).Dir)
 }
 
 // List lists the VMs in devvm's Lima home, without images.

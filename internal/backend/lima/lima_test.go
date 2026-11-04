@@ -444,7 +444,6 @@ func TestCreateVM(t *testing.T) {
 		Tools: "/d/tools", ToolsAt: "/mnt/devvm-tools", SSHPort: 23456,
 		Want: backend.Want{
 			AgentDirs: []string{"/h/.claude"}, AgentForwarding: true, Size: backend.Size{CPUs: 6, MemoryGiB: 8, DiskGiB: 150},
-			Ports: backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}}},
 		},
 	})
 	if err != nil {
@@ -460,10 +459,6 @@ func TestCreateVM(t *testing.T) {
 	}
 	if got := f.lines(); !slices.Equal(got, want) {
 		t.Errorf("ran\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-	// Its ports are its starts': nothing of them is kept.
-	if _, err := os.Stat(l.Dirs.VM("devvm-p-0123456789abcd").Backend()); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("its backend folder: %v", err)
 	}
 	// A disk smaller than its image's is refused.
 	err = l.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: "devvm-p-0123456789abcd", Want: backend.Want{Size: backend.Size{DiskGiB: 50}}})
@@ -582,23 +577,43 @@ func TestNoForwardsSet(t *testing.T) {
 	}
 }
 
-// SetPorts never edits a VM's config: a stopped VM's ports are its next
-// start's, a running one's its forwarder's (ports_test.go).
-func TestSetPortsNoEdit(t *testing.T) {
+// devvm's forwarder reaches a running VM over Lima's ssh, on its host
+// loopback port, as Lima's user with Lima's own key, whatever else Lima's
+// ssh config names; a stopped VM, or one whose ssh isn't a user on a
+// loopback port, has none. Nothing of the VM's config changes.
+func TestForwardTarget(t *testing.T) {
 	l, f, _ := testLima(t, "darwin")
-	f.out["limactl list --json"] = `{"name":"v","status":"Stopped"}
-{"name":"r","status":"Running"}`
-	for _, vm := range []string{"v", "r"} {
-		f.calls = nil
-		if err := l.SetPorts(t.Context(), vm, backend.Ports{All: true}, backend.Confinement{}); err != nil {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if got := f.lines(); len(got) > 0 {
-			t.Errorf("%s: ran %q", vm, got)
+		return p
+	}
+	cfg := write("ssh.config", "Host lima-v\n  IdentityFile \"/h/.ssh/id_ed25519\"\n  User cj\n  Hostname 127.0.0.1\n  Port 41083\n")
+	other := write("other.config", "Host lima-o\n  User cj\n  Hostname 10.0.0.2\n  Port 22\n")
+	f.out["limactl list --json"] = `{"name":"v","status":"Running","sshLocalPort":41083,"sshConfigFile":"` + cfg + `"}
+{"name":"o","status":"Running","sshLocalPort":22,"sshConfigFile":"` + other + `"}
+{"name":"n","status":"Running","sshLocalPort":41084}
+{"name":"s","status":"Stopped"}`
+	got, err := l.ForwardTarget(t.Context(), "v")
+	want := backend.ForwardTarget{User: "cj", Key: filepath.Join(l.Dirs.Lima, "_config", "user"), Port: 41083}
+	if err != nil || got != want {
+		t.Errorf("ForwardTarget: %+v, %v; want %+v", got, err, want)
+	}
+	for _, vm := range []string{"o", "n"} {
+		if got, err := l.ForwardTarget(t.Context(), vm); err == nil {
+			t.Errorf("%s: %+v", vm, got)
 		}
 	}
-	if _, err := os.Stat(l.Dirs.VM("v").Backend()); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("its backend folder: %v", err)
+	if _, err := l.ForwardTarget(t.Context(), "s"); msg.IDOf(err) != "vm_not_running" {
+		t.Errorf("a stopped VM: %v", err)
+	}
+	for _, c := range f.lines() {
+		if c != "limactl list --json" {
+			t.Errorf("ran %q", c)
+		}
 	}
 }
 
@@ -712,11 +727,7 @@ func TestStubLifecycle(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("calls %q, want %q", got, want)
 	}
-	// Its backend folder goes; the rest of its folder, its start record
-	// with it, is its teardown's.
-	if _, err := os.Stat(l.Dirs.VM(vm).Backend()); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("Delete left its backend folder: %v", err)
-	}
+	// A project VM's folder, its start record with it, is its teardown's.
 	if _, err := os.Stat(l.Dirs.VM(vm).Started()); err != nil {
 		t.Errorf("its start record: %v", err)
 	}

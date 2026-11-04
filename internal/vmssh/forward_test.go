@@ -465,12 +465,12 @@ func TestForwardsStopKills(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	f := Forwards{Dirs: paths.Dirs{Data: dir}, Cmd: "_x-ports", Args: func(int) ([]string, error) {
+	f := Forwards{Dirs: paths.Dirs{Data: dir}, Args: func(int) ([]string, error) {
 		select {
 		case <-ended:
 			return nil, errors.New("gone")
 		default:
-			return []string{"/devvm", "_x-ports", "-vm", "v"}, nil
+			return []string{"/devvm", Cmd, "-vm", "v"}, nil
 		}
 	}}
 	pidFile := f.Dirs.VM("v").Forwarder(".pid")
@@ -493,7 +493,7 @@ func TestForwardsStopKills(t *testing.T) {
 // that names no pid.
 func TestForwardsStopReusedPID(t *testing.T) {
 	dir := t.TempDir()
-	f := Forwards{Dirs: paths.Dirs{Data: dir}, Cmd: "_x-ports", Args: func(int) ([]string, error) { return []string{"/usr/bin/go", "test"}, nil }}
+	f := Forwards{Dirs: paths.Dirs{Data: dir}, Args: func(int) ([]string, error) { return []string{"/usr/bin/go", "test"}, nil }}
 	for _, pid := range []string{strconv.Itoa(os.Getpid()), "0", "-1", "x"} {
 		if err := state.WriteFile(f.Dirs.VM("v").Forwarder(".pid"), []byte(pid+"\n")); err != nil {
 			t.Fatal(err)
@@ -505,11 +505,11 @@ func TestForwardsStopReusedPID(t *testing.T) {
 	}
 }
 
-// Forwards: a VM's forwarder runs devvm's hidden command with the
-// backend's flags and the forwarder's own, its host key pinned in a file
-// of its own; it's found by its pid and arguments, stopped, and its files
-// deleted.
-func TestForwards(t *testing.T) {
+// Forwards: a VM's forwarder runs devvm _ports with how it reaches the
+// VM and what it forwards, its host key pinned in a file of its own; it's
+// found by its pid and arguments, and its files are in the VM's run and
+// logs folders.
+func TestForwardsRun(t *testing.T) {
 	short, err := os.MkdirTemp("/tmp", "dv")
 	if err != nil {
 		t.Fatal(err)
@@ -518,7 +518,7 @@ func TestForwards(t *testing.T) {
 	var args []string
 	running := false
 	f := Forwards{
-		Dirs: paths.Dirs{Data: short}, Prefix: "x", Cmd: "_x-ports", Self: "/devvm",
+		Dirs: paths.Dirs{Data: short}, Self: "/devvm",
 		Detach: func(c daemon.Cmd) (int, error) {
 			args = append([]string{c.Path}, c.Args...)
 			return os.Getpid(), daemon.WriteStatus(c.Status, os.Getpid(), "")
@@ -527,22 +527,25 @@ func TestForwards(t *testing.T) {
 			if !running {
 				return nil, errors.New("gone")
 			}
-			return []string{"/devvm", "_x-ports", "-vm", "v"}, nil
+			return []string{"/devvm", Cmd, "-vm", "v"}, nil
 		},
 		Tick: time.Millisecond,
 	}
-	spec := Spec{User: "u", Key: "/k", HostKey: "ssh-ed25519 AAAA", Reserve: []int{0, 22}, Only: []backend.PortRange{{From: 80, To: 81}}, Args: []string{"-a", "b"}}
+	s := spec{
+		ForwardTarget: backend.ForwardTarget{User: "u", Key: "/k", Port: 2222}, HostKey: "ssh-ed25519 AAAA", Lifeline: "/ha.pid",
+		Reserve: []int{0, 22}, Only: []backend.PortRange{{From: 80, To: 81}},
+	}
 	// It's started once it says so in its status file, and still runs.
 	running = true
-	if err := f.Start("v", spec); err != nil {
+	if err := f.run("v", s); err != nil {
 		t.Fatal(err)
 	}
 	running = false
 	want := []string{
-		"/devvm", "_x-ports", "-vm", "v", "-a", "b", "-user", "u", "-key", "/k", "-known-hosts", f.KnownHosts("v"),
+		"/devvm", "_ports", "-vm", "v", "-lifeline", "/ha.pid", "-port", "2222", "-user", "u", "-key", "/k", "-known-hosts", f.KnownHosts("v"),
 		"-control", f.Control("v"), "-reserve", "22", "-only", "80-81",
 	}
-	if !slices.Equal(args, want) || !strings.HasPrefix(f.Control("v"), filepath.Join(short, "run", "x-")) {
+	if !slices.Equal(args, want) || !strings.HasPrefix(f.Control("v"), filepath.Join(short, "run", "port-")) {
 		t.Errorf("forwarder:\n%q\nwant\n%q", args, want)
 	}
 	if b, err := os.ReadFile(f.KnownHosts("v")); err != nil || string(b) != "v ssh-ed25519 AAAA\n" {
@@ -578,34 +581,14 @@ func TestForwards(t *testing.T) {
 	} else {
 		unlock()
 	}
-	// Its files are in the VM's backend folder, which Forget deletes: a
-	// project VM's alone, the rest of its folder its teardown's; a build
-	// VM's whole folder.
-	for _, ext := range []string{".pid", ".status", ".known_hosts", ".log", ".lock"} {
-		if _, err := os.Stat(f.Dirs.VM("v").Forwarder(ext)); err != nil {
-			t.Errorf("%s: %v", ext, err)
+	// Its files are in the VM's run folder, its log in its logs folder.
+	for _, p := range []string{
+		f.Dirs.VM("v").Forwarder(".pid"), f.Dirs.VM("v").Forwarder(".status"), f.KnownHosts("v"), f.Dirs.VM("v").Forwarder(".lock"),
+		f.Log("v"),
+	} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s: %v", p, err)
 		}
-	}
-	if err := f.Forget("v"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(f.Dirs.VM("v").Dir); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("a build VM's folder left: %v", err)
-	}
-	const project = "devvm-v-0123456789abcd"
-	for _, p := range []string{f.Dirs.VM(project).Forwarder(".log"), f.Dirs.VM(project).State()} {
-		if err := state.WriteFile(p, nil); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := f.Forget(project); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(f.Dirs.VM(project).Backend()); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("a project VM's backend folder left: %v", err)
-	}
-	if _, err := os.Stat(f.Dirs.VM(project).State()); err != nil {
-		t.Errorf("a project VM's state: %v", err)
 	}
 	// One that says so and has ended: an error.
 	f.Detach = func(c daemon.Cmd) (int, error) {
@@ -616,14 +599,14 @@ func TestForwards(t *testing.T) {
 		<-h.Done()
 		return h.PID(), daemon.WriteStatus(c.Status, h.PID(), "")
 	}
-	if err := f.Start("v", spec); err == nil {
+	if err := f.run("v", s); err == nil {
 		t.Error("a forwarder that ended: no error")
 	}
 	// One that never says it forwards: an error, left running.
 	f.Detach = func(daemon.Cmd) (int, error) { return os.Getpid(), nil }
 	running = true
 	f.Tick = time.Microsecond
-	if err := f.Start("v", spec); err == nil {
+	if err := f.run("v", s); err == nil {
 		t.Error("a forwarder that doesn't forward: no error")
 	}
 }

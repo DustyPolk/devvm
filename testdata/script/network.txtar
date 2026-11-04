@@ -35,7 +35,7 @@ stub_calls
 [darwin] stdout '^tmutil addexclusion \S*/data/devvm/ca$'
 [darwin] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.env = \{"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192\.168\.5\.2:[0-9]+",.*"NODE_EXTRA_CA_CERTS":"/etc/ssl/devvm\.pem",.*"NO_PROXY":"localhost,127\.0\.0\.1,::1",.*\} --set \.propagateProxyEnv=false --set \.hostResolver\.enabled=false --set \.dns=\["127\.0\.0\.1"\]$'
 [linux] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.env = \{"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192\.168\.5\.4:3128",.*\} --set \.propagateProxyEnv=false --set \.hostResolver\.enabled=false --set \.dns=\["127\.0\.0\.1"\]$'
-stdout '^limactl start --tty=false devvm-net-[0-9a-f]{14}\nlimactl shell --workdir / devvm-net-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\n(limactl list --json\n)*ssh -F none -M .*\nlimactl shell --workdir / devvm-net-[0-9a-f]{14} sh -c cd ''/'' && exec ''curl'' ''--noproxy'' ''\*'' ''-sS'' ''-m'' ''3'' ''-o'' ''/dev/null'' ''https://1\.1\.1\.1''\n'
+stdout '^limactl start --tty=false devvm-net-[0-9a-f]{14}\n(limactl list --json\n)*limactl shell --workdir / devvm-net-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\n(limactl list --json\n)*ssh -F none -M .*\nlimactl shell --workdir / devvm-net-[0-9a-f]{14} sh -c cd ''/'' && exec ''curl'' ''--noproxy'' ''\*'' ''-sS'' ''-m'' ''3'' ''-o'' ''/dev/null'' ''https://1\.1\.1\.1''\n'
 stdout '^limactl shell --workdir /\S*/net devvm-net-[0-9a-f]{14}\n\z'
 # The password is in no command's arguments: devvm wrote it into lima.yaml,
 # the user's alone.

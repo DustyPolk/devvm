@@ -35,6 +35,7 @@ import (
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/w3cj/devvm/internal/vmssh"
 )
 
 // Env is what the commands on a folder's VM run with, shared by Launch,
@@ -76,6 +77,9 @@ type Env struct {
 	// PortInUse reports whether a program on the host has a port, on any
 	// address (platform.PortInUse): a listed port that isn't forwarded.
 	PortInUse func(ctx context.Context, port int) bool
+	// Forwarders are VMs' port forwarders, as processes (forwards adds
+	// the rest).
+	Forwarders vmssh.Forwards
 	// PublicImage pins an image a devcontainer.json names to the digest its
 	// registry gives anyone (from.Lookup.Public).
 	PublicImage func(ctx context.Context, ref string) (string, error)
@@ -156,7 +160,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 		Interactive: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() }, CanPick: u.CanPick,
 		Stdout: u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
 		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
-		PortInUse: platform.PortInUse, PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: reg.Host.FreeSpace,
+		PortInUse: platform.PortInUse, Forwarders: vmssh.NewForwards(d, self), PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: reg.Host.FreeSpace,
 	}
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, e.Warn) }
 	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }
@@ -491,14 +495,14 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	if !st.Finished() {
 		return conf, msg.VMUnfinished(vm)
 	}
-	// The ports its backend forwards at each start (every port: an
-	// emulation on some), which it got when they were set: refused now
-	// unless they may still be used.
+	// The ports devvm's forwarder forwards from its backend's ssh at each
+	// start (an emulation on some), which it got when they were set:
+	// refused now unless they may still be used.
 	p, err := ports.Of(st)
 	if err != nil {
 		return conf, err
 	}
-	forward, err := PortsBackend(p.Forward)
+	forward, err := ports.Forwarding(p.Forward)
 	if err != nil {
 		return conf, err
 	}
@@ -562,21 +566,16 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	// ssh for editors, where the backend has it (an emulation once it's
 	// reviewed): a VM without it starts all the same.
 	conf.SSH = e.Registry.Require(b, vm, backend.FeatureSSH) == nil
-	// Its listed ports less those taken, and its host key as its ssh
-	// config pins it, for a backend's forwarder that reaches the VM's own
-	// sshd.
-	f := e.forwarding(b, st)
-	conf.Free, conf.HostKey = f.Free, f.HostKey
 	if conf.Net == backend.NetProxy {
 		defer e.AddCleanup(undoStart(e, b, vm))()
 	}
 	// What its state asks of it, which the start makes it where it
 	// differs: its size, its agents' folders on the host now, its agent
-	// forwarding and its ports.
+	// forwarding.
 	agentDirs, _ := agentMounts(e.Dirs.Home, tools.Names(st))
 	want := backend.Want{
 		Size: sectionOf[Size](st, sizeSection).Backend(), AgentDirs: agentDirs,
-		AgentForwarding: sshagent.Forwards(mode), Ports: forward,
+		AgentForwarding: sshagent.Forwards(mode),
 	}
 	if err := b.Start(ctx, vm, want, conf); err != nil {
 		if conf.Net == backend.NetProxy {
@@ -584,6 +583,8 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 		}
 		return conf, err
 	}
+	// Its ports, once it runs: its state's, through devvm's forwarder.
+	e.forwards().Start(ctx, b, st)
 	// The agent it started with, until its next start: its ssh config
 	// entry's and devvm's shell's. One whose start can't be told apart
 	// gets none recorded, and follows its choice.
@@ -609,6 +610,7 @@ func undoStart(e *Env, b backend.Backend, vm string) func(context.Context) {
 			e.Warn(msg.StopFailed(vm))
 		}
 		e.Proxy.Stop(vm)
+		e.Forwarders.Stop(vm)
 	}
 }
 

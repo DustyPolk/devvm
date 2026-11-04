@@ -1,7 +1,8 @@
-// Package vmssh is what devvm runs over a VM's ssh on the host: the port
-// forwarder that reaches a Lima VM over Lima's ssh (Forwarder, run
-// detached by Forwards), and the sessions that carry links between VMs
-// (Links).
+// Package vmssh is what devvm runs over a VM's ssh on the host, on every
+// backend, none of it a backend's: the port forwarder (Forwarder, run as
+// devvm _ports by its one owner, Forwards, which reads the ports a VM
+// forwards from its state and how to reach it from its backend), and the
+// sessions that carry links between VMs (Links).
 package vmssh
 
 import (
@@ -35,11 +36,11 @@ import (
 // The forwarder forwards a VM's ports to the host's loopback, by the same
 // rules on every backend, where Lima's own forwards would share a port a
 // host program has (SO_REUSEADDR). It runs on the host, detached (devvm
-// _lima-ports; Forwards), one per VM:
+// _ports; Forwards), one per VM:
 //
-//   - it reaches the VM only through the VM's sshd, as the VM's user with
-//     its own key, the host key read through the backend at the start and
-//     pinned: one ssh connection (a master), whose session runs ports.sh,
+//   - it reaches the VM only through the VM's sshd, as its backend says
+//     (backend.ForwardTarget: a user, a key, a host loopback port), the
+//     host key devvm pins for the VM pinned too: one ssh connection (a master), whose session runs ports.sh,
 //     which reports what listens in the VM; each forwarded connection is a
 //     channel of it (ssh -W through the master), which the VM's sshd opens
 //     to the VM's own loopback;
@@ -543,17 +544,19 @@ func pipeSSH(ctx context.Context, conn net.Conn, args []string) {
 	_ = cmd.Wait()
 }
 
-// Flags are the forwarder's flags every backend's command has; each adds
-// its own, for how it reaches its VM (SSH's Port) and how it knows the VM
-// runs (Forwarder's Alive).
+// Flags are the forwarder's flags (devvm _ports): how it reaches the VM
+// (SSH), how it knows the VM runs (its lifeline, for Forwarder's Alive),
+// and what it forwards.
 type Flags struct {
 	SSH
-	reserve, only string
+	reserve, only, lifeline string
 }
 
 // Register adds the flags to fs.
 func (f *Flags) Register(fs *flag.FlagSet) {
 	fs.StringVar(&f.VM, "vm", "", "the VM")
+	fs.StringVar(&f.lifeline, "lifeline", "", "the VM's process's pid file: exit when it changes or its process is gone")
+	fs.IntVar(&f.Port, "port", 0, "the host loopback port the VM's sshd is forwarded from")
 	fs.StringVar(&f.User, "user", "", "the VM's user")
 	fs.StringVar(&f.Key, "key", "", "the VM's own key")
 	fs.StringVar(&f.KnownHosts, "known-hosts", "", "the VM's host key, as known_hosts has it, under the VM's name")
@@ -562,13 +565,13 @@ func (f *Flags) Register(fs *flag.FlagSet) {
 	fs.StringVar(&f.only, "only", "", "the ports forwarded, as devvm ports lists them (5173,8000-8010); every one from 1024 up without it")
 }
 
-// Forwarder returns the forwarder the parsed flags (with SSH's Port set)
-// make, ports.sh being script, reserved the ports devvm records
+// Forwarder returns the forwarder the parsed flags make, ports.sh being
+// script, reserved the ports devvm records
 // for VMs but vm's own listed ones, its lines going to log. Its caller
 // sets Alive and Every.
 func (f *Flags) Forwarder(script []byte, reserved func(vm string) (map[int]bool, error), log io.Writer) (*Forwarder, error) {
 	if f.VM == "" || f.User == "" || f.Key == "" || f.KnownHosts == "" || f.Control == "" || f.Port <= 0 {
-		return nil, errors.New("-vm, -user, -key, -known-hosts, -control and how to reach the VM are needed")
+		return nil, errors.New("-vm, -port, -user, -key, -known-hosts and -control are needed")
 	}
 	own := map[int]bool{}
 	for p := range strings.SplitSeq(f.reserve, ",") {

@@ -318,7 +318,7 @@ func (e creation) firstRun(o Options, size Size) (settings.Defaults, error) {
 // which can take minutes: its image, size, ports, network policy (asked
 // for), SSH agent and the backend features it needs, with what the
 // folder's devcontainer.json says (which changes o).
-func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b backend.Backend, size Size, ports string) (newVM, error) {
+func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b backend.Backend, size Size, list string) (newVM, error) {
 	vm := f.Name
 	if o.Clone {
 		if err := checkCloneRepo(ctx, f.Dir); err != nil {
@@ -334,7 +334,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err != nil {
 		return newVM{}, err
 	}
-	n := newVM{size: size.Or(defaultSize(def)), ports: ports, agent: sshagent.Off, conf: backend.Confinement{Net: backend.NetDirect}}
+	n := newVM{size: size.Or(defaultSize(def)), ports: list, agent: sshagent.Off, conf: backend.Confinement{Net: backend.NetDirect}}
 	host, err := e.Host()
 	if err != nil {
 		return newVM{}, err
@@ -356,7 +356,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 			e.Warn(msg.DevcontainerPortsNotForwarded(o.dc.File, o.dc.Ports))
 		}
 	}
-	forward, err := PortsBackend(n.ports)
+	forward, err := ports.Forwarding(n.ports)
 	if err != nil {
 		return newVM{}, err
 	}
@@ -370,7 +370,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	// from it. Its agents' folders on the host are mounted read-only.
 	n.spec = backend.VMSpec{
 		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(n.tools), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
-		AgentForwarding: o.SSHAgent, Size: n.size.Backend(), Ports: forward,
+		AgentForwarding: o.SSHAgent, Size: n.size.Backend(),
 		Env: trust.GuestEnv(nil),
 	}
 	n.net = e.chooseNet(o, b, vm, def.Network.Value)
@@ -386,7 +386,8 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if n.net {
 		n.conf.Net = backend.NetProxy
 	}
-	need := slices.Concat(n.spec.Features(), n.conf.Features(), backend.ImageFeatures(n.img))
+	// Its ports, which devvm's forwarder forwards from the backend's ssh.
+	need := slices.Concat(n.spec.Features(), forward.Features(), n.conf.Features(), backend.ImageFeatures(n.img))
 	if o.Clone {
 		// Its clone is copied in and fetched over ssh.
 		need = append(need, backend.FeatureSSH)

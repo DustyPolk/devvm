@@ -76,19 +76,19 @@ stdout '^==> ports_forwarding ports='$P' vm=devvm-web-[0-9a-f]{14}$'
 ! stderr .
 stub_calls
 ! stdout 'limactl (edit|stop|start)'
-exec sh -c 'ps -axww -o command= | grep -- "[_]lima-ports -vm $WEB "'
+exec sh -c 'ps -axww -o command= | grep -- "[_]ports -vm $WEB "'
 stdout ' -only '$P'$'
 exec devvm ports
 stdout '\A'$P'\n\z'
 ! stderr .
 exec devvm ports all
 stdout '^==> ports_forwarding ports=all vm=devvm-web-[0-9a-f]{14}$'
-exec sh -c 'ps -axww -o command= | grep -- "[_]lima-ports -vm $WEB "'
+exec sh -c 'ps -axww -o command= | grep -- "[_]ports -vm $WEB "'
 ! stdout ' -only '
 # None: its forwarder stops.
 exec devvm ports none
 stdout '^==> ports_forwarding ports=none vm=devvm-web-[0-9a-f]{14}$'
-exec sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do ps -axww -o command= | grep -q -- "[_]lima-ports -vm $WEB " || exit 0; sleep 0.5; done; exit 1'
+exec sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do ps -axww -o command= | grep -q -- "[_]ports -vm $WEB " || exit 0; sleep 0.5; done; exit 1'
 exec devvm ports $P
 
 # Stopped: changed at once, in the VM's state, which its next start
@@ -100,7 +100,7 @@ exec devvm ports add 8000-8010
 stdout '^==> ports_now ports='$P',8000-8010 vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl edit'
-! exists $WEB_dir/backend/ports
+! exists $WEB_dir/backend
 exec devvm ports
 stdout '\A'$P',8000-8010\n\z'
 ! stderr .
@@ -142,18 +142,18 @@ exec devvm
 stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout portForwards
-exec sh -c 'ps -axww -o command= | grep -- "[_]lima-ports -vm $WEB "'
+exec sh -c 'ps -axww -o command= | grep -- "[_]ports -vm $WEB "'
 stdout ' -only '$P'$'
 exec devvm ports
 stdout '\A'$P','$TAKEN'\n\z'
 exec devvm ports add $Q
 stdout '^==> ports_forwarding ports='$P','$TAKEN','$Q' vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: ports_taken count=1 ports='$TAKEN' vm=devvm-web-[0-9a-f]{14}$'
-exec sh -c 'ps -axww -o command= | grep -- "[_]lima-ports -vm $WEB "'
+exec sh -c 'ps -axww -o command= | grep -- "[_]ports -vm $WEB "'
 stdout ' -only '$P','$Q'$'
 # Stopped, its forwarder stops too.
 exec devvm stop
-exec sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do ps -axww -o command= | grep -q -- "[_]lima-ports -vm $WEB " || exit 0; sleep 0.5; done; exit 1'
+exec sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do ps -axww -o command= | grep -q -- "[_]ports -vm $WEB " || exit 0; sleep 0.5; done; exit 1'
 
 # Completion: the keywords and add and rm.
 exec devvm __complete ports ''

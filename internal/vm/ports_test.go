@@ -2,14 +2,12 @@ package vm
 
 import (
 	"context"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
 )
 
 func TestAddRemovePorts(t *testing.T) {
@@ -43,76 +41,70 @@ func TestAddRemovePorts(t *testing.T) {
 	}
 }
 
-// A listed range splits around the ports in use, never joining another;
-// one wholly free stays as listed.
-func TestSplitPorts(t *testing.T) {
-	r := func(from, to int) backend.PortRange { return backend.PortRange{From: from, To: to} }
-	inUse := func(p int) bool { return p == 5174 || p == 8080 || p == 8081 }
-	free, taken := splitPorts([]backend.PortRange{r(5173, 5173), r(5174, 5176), r(5177, 5177), r(8079, 8082)}, inUse)
-	if want := []backend.PortRange{r(5173, 5173), r(5175, 5176), r(5177, 5177), r(8079, 8079), r(8082, 8082)}; !reflect.DeepEqual(free, want) {
-		t.Errorf("free %v, want %v", free, want)
+// only is a forwarder start's -only, "" for every port.
+func only(args []string) string {
+	if i := slices.Index(args, "-only"); i >= 0 {
+		return args[i+1]
 	}
-	if want := []backend.PortRange{r(5174, 5174), r(8080, 8081)}; !reflect.DeepEqual(taken, want) {
-		t.Errorf("taken %v, want %v", taken, want)
-	}
+	return ""
 }
 
-// A start forwards the listed ports less those a host program has,
-// warned, as the backend asks once its old forwarder stopped (Free);
-// every port is left to the backend, and none forwards none.
+// A start forwards its state's ports once the VM runs, through devvm's
+// forwarder, after its backend's start: the listed ports less those a
+// host program has, warned; every port; none for none. Its backend's
+// start never has them.
 func TestStartPorts(t *testing.T) {
 	for _, tc := range []struct {
-		ports, warned string
-		want          []backend.PortRange
+		ports, warned, only string
+		starts              int
 	}{
-		{"5173-5175,8080", "ports_taken count=2 ports=5174,8080 vm=", []backend.PortRange{{From: 5173, To: 5173}, {From: 5175, To: 5175}}},
-		{"5173", "", []backend.PortRange{{From: 5173, To: 5173}}},
-		{"none", "", []backend.PortRange{}},
-		{"all", "", nil},
+		{"5173-5175,8080", "ports_taken count=2 ports=5174,8080 vm=", "5173,5175", 1},
+		{"5173", "", "5173", 1},
+		{"none", "", "", 0},
+		{"all", "", "", 1},
 	} {
 		t.Run(strings.ReplaceAll(tc.ports, ",", "+"), func(t *testing.T) { // a comma isn't a project path's
 			e, f, _ := upEnv(t, allNative())
+			starts := testForwarders(t, e, f)
 			e.PortInUse = func(_ context.Context, p int) bool { return p == 5174 || p == 8080 }
 			var warned msg.Recorder
 			e.Warn = warned.Add
 			st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: tc.ports})
-			var got []backend.PortRange
-			for _, c := range f.Calls() {
-				if c.Method == "Start" {
-					w, conf := c.Args[1].(backend.Want), c.Args[2].(backend.Confinement)
-					if conf.HostKey == nil {
-						t.Error("started without its host key")
-					}
-					p, err := PortsBackend(tc.ports)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !reflect.DeepEqual(w.Ports, p) {
-						t.Errorf("started wanting ports %+v, want %+v", w.Ports, p)
-					}
-					got = conf.Forwarded(t.Context(), w.Ports)
-				}
+			ms := f.Methods()
+			if i, j := slices.Index(ms, "Start"), slices.Index(ms, "ForwardTarget"); tc.starts > 0 && (i < 0 || j < i) {
+				t.Errorf("calls %q: no forwarder after its start", ms)
 			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("started with %+v, want %+v", got, tc.want)
+			if len(*starts) != tc.starts || tc.starts > 0 && only((*starts)[0]) != tc.only {
+				t.Errorf("forwarders %q, want %d with -only %q", *starts, tc.starts, tc.only)
+			}
+			if tc.starts > 0 && !e.Forwarders.Running(st.Name()) {
+				t.Error("its forwarder isn't running")
 			}
 			want := []string(nil)
 			if tc.warned != "" {
 				want = []string{tc.warned + st.Name()}
 			}
-			if taken := slices.DeleteFunc(warned.Names(), func(w string) bool { return !strings.HasPrefix(w, "ports_taken") }); !reflect.DeepEqual(taken, want) {
-				t.Errorf("warned %q, want %q", taken, want)
+			if w := warned.Names(); !slices.Equal(w, want) {
+				t.Errorf("warned %q, want %q", w, want)
+			}
+			// devvm stop stops it.
+			if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
+				t.Fatal(msg.NamesOf(err))
+			}
+			if e.Forwarders.Running(st.Name()) {
+				t.Error("its forwarder runs with the VM stopped")
 			}
 		})
 	}
 }
 
-// A running VM's ports change at once: its backend gets the new ports with
-// what its forwarder starts again with (its host key, its proxy's port,
-// Free warning about taken ports), and devvm ports shows them. A stopped
-// VM's backend gets them alone.
+// A running VM's ports change at once: its state first, then its
+// forwarder started again with them (its proxy's port reserved, taken
+// ports warned about), and devvm ports shows them. A stopped VM's state
+// changes alone, and its backend isn't asked to change.
 func TestSetPortsRunning(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
+	starts := testForwarders(t, e, f)
 	var infos, warned msg.Recorder
 	e.Info = infos.Add
 	e.Warn = warned.Add
@@ -122,37 +114,28 @@ func TestSetPortsRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.PortInUse = func(_ context.Context, p int) bool { return p == 8080 }
-	n := len(f.Calls())
+	n, before := len(f.Calls()), len(*starts)
 	infos.Reset()
 	warned.Reset()
 	s := Settings{e}
 	if err := s.SetPorts(t.Context(), PortsChange{Op: "add", List: "8080-8081"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	setPorts := func(n int) []any {
+	noRestart := func(n int) {
 		t.Helper()
-		var args []any
 		for _, c := range f.Calls()[n:] {
-			switch c.Method {
-			case "SetPorts":
-				args = c.Args
-			case "Start", "Stop":
+			if c.Method == "Start" || c.Method == "Stop" {
 				t.Errorf("%s called", c.Method)
 			}
 		}
-		if args == nil {
-			t.Fatal("no SetPorts")
-		}
-		return args
 	}
-	args := setPorts(n)
-	want := backend.Ports{Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8080, To: 8081}}}
-	conf := args[2].(backend.Confinement)
-	if !reflect.DeepEqual(args[1], want) || conf.HostKey == nil || conf.ProxyPort != 30001 {
-		t.Errorf("SetPorts(%v, %+v)", args[1], conf)
+	noRestart(n)
+	if len(*starts) != before+1 {
+		t.Fatalf("forwarders %q", *starts)
 	}
-	if got := conf.Forwarded(t.Context(), want); !reflect.DeepEqual(got, []backend.PortRange{{From: 5173, To: 5173}, {From: 8081, To: 8081}}) {
-		t.Errorf("forwarded %v", got)
+	got := (*starts)[len(*starts)-1]
+	if i := slices.Index(got, "-reserve"); i < 0 || got[i+1] != "60022,30001" || only(got) != "5173,8081" {
+		t.Errorf("forwarder %q", got)
 	}
 	if !slices.Equal(infos.Names(), []string{"ports_forwarding ports=5173,8080-8081 vm=" + vm}) || !slices.Equal(warned.Names(), []string{"ports_taken count=1 ports=8080 vm=" + vm}) {
 		t.Errorf("said %q, warned %q", infos.Names(), warned.Names())
@@ -160,46 +143,27 @@ func TestSetPortsRunning(t *testing.T) {
 	if ports, err := s.Ports(t.Context()); err != nil || ports != "5173,8080-8081" {
 		t.Errorf("ports: %q, %v", ports, err)
 	}
+	// None: its forwarder stops.
+	if err := s.SetPorts(t.Context(), PortsChange{List: "none"}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if e.Forwarders.Running(vm) || len(*starts) != before+1 {
+		t.Errorf("none: forwarder running %v, started %q", e.Forwarders.Running(vm), *starts)
+	}
 	if err := f.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
 	n = len(f.Calls())
 	infos.Reset()
-	if err := s.SetPorts(t.Context(), PortsChange{List: "none"}); err != nil {
+	if err := s.SetPorts(t.Context(), PortsChange{List: "5173"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if args := setPorts(n); !reflect.DeepEqual(args[2], backend.Confinement{}) || !slices.Equal(infos.Names(), []string{"ports_now ports=none vm=" + vm}) {
-		t.Errorf("stopped: SetPorts %v, said %q", args, infos.Names())
+	noRestart(n)
+	if len(*starts) != before+1 || !slices.Equal(infos.Names(), []string{"ports_now ports=5173 vm=" + vm}) {
+		t.Errorf("stopped: started %q, said %q", *starts, infos.Names())
 	}
-	// Its backend failing: its state as it was, nothing said.
-	f.Errs = map[string]error{"SetPorts": msg.VMNotRunning(vm)}
-	infos.Reset()
-	if err := s.SetPorts(t.Context(), PortsChange{List: "5173"}); msg.NamesOf(err) != "vm_not_running vm="+vm || len(infos.Names()) != 0 {
-		t.Errorf("backend failed: %v, said %q", err, infos.Names())
-	}
-	if now, err := state.ReadVM(e.Dirs, vm); err != nil || get(now, KeyPorts) != "none" {
-		t.Errorf("backend failed: state ports=%q, %v", get(now, KeyPorts), err)
-	}
-}
-
-func TestPortsBackend(t *testing.T) {
-	for in, want := range map[string]backend.Ports{
-		"":               {All: true},
-		"all":            {All: true},
-		"none":           {},
-		"5173,8000-8010": {Ranges: []backend.PortRange{{From: 5173, To: 5173}, {From: 8000, To: 8010}}},
-	} {
-		if got, err := PortsBackend(in); err != nil || !reflect.DeepEqual(got, want) {
-			t.Errorf("PortsBackend(%q) = %+v, %v; want %+v", in, got, err, want)
-		}
-	}
-	// A bad entry, as a hand-edited state file has it, is refused, never
-	// port 0.
-	for _, bad := range []string{"80,x", "x", "80-y", "5173,,80"} {
-		got, err := PortsBackend(bad)
-		if msg.NamesOf(err) != `port_invalid value="`+bad+`"` || len(got.Ranges) != 0 {
-			t.Errorf("PortsBackend(%q) = %+v, %v", bad, got, msg.NamesOf(err))
-		}
+	if ports, err := s.Ports(t.Context()); err != nil || ports != "5173" {
+		t.Errorf("stopped: ports %q, %v", ports, err)
 	}
 }
 

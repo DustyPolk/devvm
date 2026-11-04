@@ -31,8 +31,7 @@ const limaHost = "192.168.5.2"
 func (l *Lima) haPIDFile(vm string) string { return filepath.Join(l.Dirs.LimaVM(vm), "ha.pid") }
 
 // Start starts a stopped VM as w wants it, confined as c asks, and
-// returns once it answers over ssh; its forwarder then forwards w's
-// ports. A running VM is left as it is.
+// returns once it answers over ssh. A running VM is left as it is.
 //
 // What differs of w and c is changed in one limactl edit, none when
 // nothing does: any edit gives the VM new ssh host keys at its next boot.
@@ -45,7 +44,7 @@ func (l *Lima) Start(ctx context.Context, vm string, w backend.Want, c backend.C
 }
 
 // start is Start, for a project VM (w set) or a build's VM (w nil: its
-// config is left as it was made, but for c's, and it forwards no ports).
+// config is left as it was made, but for c's).
 func (l *Lima) start(ctx context.Context, vm string, w *backend.Want, c backend.Confinement) error {
 	if err := l.checkGlobalConfigs(); err != nil {
 		return err
@@ -103,14 +102,7 @@ func (l *Lima) start(ctx context.Context, vm string, w *backend.Want, c backend.
 			return err
 		}
 	}
-	if err := l.recordStart(vm, c.Net); err != nil {
-		return err
-	}
-	// A project VM's ports, through devvm's forwarder (ports.go).
-	if w != nil && c.HostKey != nil && !l.Forwards.start(ctx, vm, w.Ports, c, l.SSH, l.haPIDFile(vm)) {
-		l.Warn(msg.PortsForwardFailed(l.Forwards.Log(vm), vm))
-	}
-	return nil
+	return l.recordStart(vm, c.Net)
 }
 
 // degraded decides on a start Lima reported as failed. Lima reports that

@@ -8,11 +8,11 @@ import "path/filepath"
 //	          devvm made for it (state.VM)
 //	lock      held by each change to vm.json
 //	policy    its own network policy rules
-//	backend/  its backend's files: its port forwarder's pid, status,
-//	          log, lock and the host key it pins (ports.*)
-//	run/      what its runs leave: pids, its proxy's files, its sandbox
-//	          profile, its secrets' bindings, its links' list
-//	logs/     its proxy's decisions and output, its link session's
+//	run/      what its runs leave: pids, its proxy's files, its port
+//	          forwarder's, its sandbox profile, its secrets' bindings,
+//	          its links' list
+//	logs/     its proxy's decisions and output, its link session's and
+//	          its port forwarder's
 //
 // None of them is a socket, so none has the socket limit (SocketMax):
 // the sockets VMs need are in the run folder, by hash.
@@ -28,12 +28,9 @@ func (v VM) Lock() string { return filepath.Join(v.Dir, "lock") }
 // Policy holds the VM's own network policy rules.
 func (v VM) Policy() string { return filepath.Join(v.Dir, "policy") }
 
-// Backend is the folder of the VM's backend's files: its port record
-// (Ports) and its port forwarder's (Forwarder).
-func (v VM) Backend() string { return filepath.Join(v.Dir, "backend") }
-
 // Run is the folder of what the VM's runs leave: pids, its proxy's files,
-// its sandbox profile, its secrets' bindings and its links' list.
+// its port forwarder's, its sandbox profile, its secrets' bindings and its
+// links' list.
 func (v VM) Run() string { return filepath.Join(v.Dir, "run") }
 
 // Logs is the folder of the VM's logs.
@@ -82,6 +79,9 @@ func (v VM) ProxyLog() string { return filepath.Join(v.Logs(), "proxy.log") }
 // LinksLog is the VM's link session's own output.
 func (v VM) LinksLog() string { return filepath.Join(v.Logs(), "links.log") }
 
-// Forwarder is one of the files of the VM's port forwarder, named by ext:
-// .pid, .status, .log, .lock, and .known_hosts, the host key it pins.
-func (v VM) Forwarder(ext string) string { return filepath.Join(v.Backend(), "ports"+ext) }
+// Forwarder is one of the files of the VM's port forwarder in Run, named
+// by ext: .pid, .status, .lock, and .known_hosts, the host key it pins.
+func (v VM) Forwarder(ext string) string { return filepath.Join(v.Run(), "ports"+ext) }
+
+// ForwarderLog is the VM's port forwarder's own output.
+func (v VM) ForwarderLog() string { return filepath.Join(v.Logs(), "ports.log") }

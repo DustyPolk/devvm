@@ -12,12 +12,12 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/backend/lima"
-	"github.com/w3cj/devvm/internal/backend/vmssh"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ubuntu"
+	"github.com/w3cj/devvm/internal/vmssh"
 )
 
 // quietUI prints nothing, runs commands as they are, counts no steps and
@@ -140,17 +140,15 @@ func TestSocketsFit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := New(d, assets.FS, quietUI{}, Overrides{})
-	if err != nil {
+	if _, err := New(d, assets.FS, quietUI{}, Overrides{}); err != nil {
 		t.Fatal(err)
 	}
 	vm := "devvm-" + strings.Repeat("a", 20) + "-0123456789abcd" // the longest folder part
 	target := "devvm-" + strings.Repeat("b", 20) + "-0123456789abce"
-	lb, _ := r.Lookup("lima")
-	l := lb.(*lima.Lima)
+	fw := vmssh.NewForwards(d, "")
 	links := vmssh.Links{VM: vm, Dir: d.Run()}
 	ctls := []string{
-		l.Forwards.Control(vm),
+		fw.Control(vm),
 		links.Control("", ""), links.Control(target, "12345 2026-11-03T00:00:00.000000000Z"),
 	}
 	for _, p := range ctls {
@@ -172,11 +170,11 @@ func TestSocketsFit(t *testing.T) {
 		}
 	}
 	short := vmssh.Links{VM: "devvm-a-0123456789abcd", Dir: d.Run()}
-	if len(short.Control("", "")) != len(links.Control("", "")) || len(l.Forwards.Control("devvm-a-0123456789abcd")) != len(l.Forwards.Control(vm)) {
+	if len(short.Control("", "")) != len(links.Control("", "")) || len(fw.Control("devvm-a-0123456789abcd")) != len(fw.Control(vm)) {
 		t.Error("a control socket's length depends on the VM's name")
 	}
 	// One more character of home and a control socket is too long.
-	if over := len(l.Forwards.Control(vm)) + 1; over <= vmssh.ControlMax && len(links.Control(target, "x"))+1 <= vmssh.ControlMax {
+	if over := len(fw.Control(vm)) + 1; over <= vmssh.ControlMax && len(links.Control(target, "x"))+1 <= vmssh.ControlMax {
 		t.Errorf("homeMax %d isn't the longest: raise it", homeMax)
 	}
 }

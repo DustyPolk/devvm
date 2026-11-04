@@ -207,12 +207,13 @@ func TestCloneRmStartsAsLaunch(t *testing.T) {
 	if msg.NamesOf(errors.Unwrap(err)) != "net_direct_route vm="+vm {
 		t.Errorf("cause %v", errors.Unwrap(err))
 	}
-	// Nothing ran in it but the self-check.
+	// Nothing ran in it but the self-check, and the read of its host keys
+	// for its port forwarder.
 	for _, c := range f.Calls()[before:] {
 		if c.Method != "Exec" {
 			continue
 		}
-		if argv, _ := c.Args[1].([]string); len(argv) == 0 || argv[0] != "curl" {
+		if argv, _ := c.Args[1].([]string); len(argv) == 0 || argv[0] != "curl" && !slices.Equal(argv, []string{"sh", "-c", "cat /etc/ssh/ssh_host_*_key.pub"}) {
 			t.Errorf("ran %q", argv)
 		}
 	}

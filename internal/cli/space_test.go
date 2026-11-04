@@ -39,16 +39,16 @@ func TestEntriesIn(t *testing.T) {
 	}
 }
 
-// An orphan's leftover state is its whole folder: its state, logs, run
-// and backend files, the temporary files of its unfinished writes; a VM
-// its backend has is none, and its logs are network logs. A VM whose
+// An orphan's leftover state is its whole folder: its state, logs and
+// run files, the temporary files of its unfinished writes; a VM
+// its backend has is none, and its logs are logs. A VM whose
 // backend didn't answer is never an orphan.
 func TestLeftoverFolders(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
 	const orphan, live, unasked = "devvm-a-0123456789abc1", "devvm-b-0123456789abc2", "devvm-c-0123456789abc3"
 	for vm, be := range map[string]string{orphan: "fake", live: "fake", unasked: "other"} {
 		v := d.VM(vm)
-		for _, f := range []string{v.Logs() + "/network.jsonl", v.ProxyPID(), v.Forwarder(".log"), filepath.Join(v.Run(), ".proxy.json.tmp-1")} {
+		for _, f := range []string{v.Logs() + "/network.jsonl", v.ProxyPID(), v.ForwarderLog(), filepath.Join(v.Run(), ".proxy.json.tmp-1")} {
 			if err := state.WriteFile(f, []byte(strings.Repeat("x", 5000))); err != nil {
 				t.Fatal(err)
 			}
@@ -68,8 +68,10 @@ func TestLeftoverFolders(t *testing.T) {
 		t.Errorf("leftovers = %+v, %v; want %s's folder, %d", row, err, orphan, du(d.VM(orphan).Dir))
 	}
 	logs, err := e.vmLogs()
-	if want := du(d.VM(live).EventLog()) + du(d.VM(unasked).EventLog()); err != nil || logs.count != 2 || logs.size != want {
-		t.Errorf("vmLogs = %+v, %v; want 2, %d", logs, err, want)
+	// Every log of theirs: the network logs and the port forwarders'.
+	want := du(d.VM(live).EventLog()) + du(d.VM(unasked).EventLog()) + du(d.VM(live).ForwarderLog()) + du(d.VM(unasked).ForwarderLog())
+	if err != nil || logs.count != 4 || logs.size != want {
+		t.Errorf("vmLogs = %+v, %v; want 4, %d", logs, err, want)
 	}
 }
 

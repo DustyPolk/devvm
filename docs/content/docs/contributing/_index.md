@@ -94,7 +94,7 @@ A fresh context elsewhere, such as for a cleanup that outlives a canceled run, o
 The layers:
 
 - Only `cmd/devvm` and `internal/cli` import `internal/ui`; only `internal/cli` imports `internal/vm`; only `cmd/devvm` imports `internal/cli`.
-- `internal/backend/...` imports none of `internal/vm`, `build`, `tools`, `netpolicy`, `secrets`, `project`, `gitprotect`, `sshconfig` or `sshagent`.
+- `internal/backend/...` imports none of `internal/vm`, `build`, `tools`, `netpolicy`, `secrets`, `project`, `gitprotect`, `sshconfig`, `sshagent`, `trust` or `vmssh`, so the port forwarder and the link sessions stay devvm's on every backend.
 - Only `internal/backend/registry` and `internal/cli` import a backend (`lima`); only tests import `backendtest` and `internal/stubtest`, and `internal/stubtest` imports only `internal/msg`.
 - `internal/proxy` imports no other devvm package but `internal/daemon`.
 - `assets`, `locales`, `internal/platform`, `internal/msg/gen`, `internal/testbuild`, `internal/hostgit`, `internal/shell`, `internal/vmname`, `internal/daemon` and `internal/fetch` import no devvm package; `internal/msg` only `locales`; `internal/paths` only `internal/msg`; `internal/state` only `internal/msg`, `internal/paths`, `internal/platform` and `internal/vmname`; `internal/image` only `assets`, `internal/msg` and `internal/paths`; `internal/devcontainer` only `internal/image`, `internal/msg` and `internal/shell`.
@@ -174,7 +174,7 @@ A new file that an older devvm doesn't need to know about, or a field added to a
 
 devvm runs every VM on Lima, but the rest of devvm reaches Lima only through the `backend.Backend` interface in `internal/backend`, so another backend is an addition rather than a change to the callers. A backend lives in a package of its own under `internal/backend`, and it does four things:
 
-- **It implements `backend.Backend`** and returns errors as messages, as [AGENTS.md](https://github.com/w3cj/devvm/blob/main/AGENTS.md#backends) says, instead of ending the run.
+- **It implements `backend.Backend`** and returns errors as messages, as [AGENTS.md](https://github.com/w3cj/devvm/blob/main/AGENTS.md#backends) says, instead of ending the run. It runs no port forwarder of its own: `ForwardTarget` says how devvm's forwarder (`vmssh.Forwards`) reaches a running VM's sshd, and `Lifeline` which file the forwarder follows.
 - **It declares `Caps`**, saying for each of `backend.Features` whether it has the feature natively, emulates it, or lacks it ([features](../internals/backends.md#features)). Callers check what a VM needs with the registry's `Review.Require` before they act, and an emulation stays refused until its review passes.
 - **It's registered in `registry.New`** (`internal/backend/registry`), the only place besides `internal/cli` that imports a backend.
 - **It names its images by key**, and an image's key hashes the backend's name, so two backends never share an image.

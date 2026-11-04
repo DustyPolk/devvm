@@ -29,6 +29,7 @@ import (
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
+	"github.com/w3cj/devvm/internal/vmssh"
 )
 
 // testUI is devvm's UI for these tests: it prints nothing, fails the test
@@ -120,6 +121,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	e.Environ = []string{"SSH_AUTH_SOCK=/user/agent"}
 	e.Agent = sshagent.New(d, e.mounts, testUI{t})
 	e.Agent.Run = (&agentCalls{}).run
+	testForwarders(t, e, f)
 	return e, f, &execs
 }
 
@@ -184,6 +186,56 @@ func testProxy(t *testing.T, d paths.Dirs) *netpolicy.Proxy {
 	p.ExcludeFromBackup = func(context.Context, string) error { return nil }
 	p.Tick = time.Millisecond
 	return p
+}
+
+// testForwarders runs e's VMs' port forwarders as sleeps that say they
+// forward, their control sockets in a short folder, and returns each
+// start's arguments. Their host keys are the fake's: one each.
+func testForwarders(t *testing.T, e *Env, f *backendtest.Fake) *[][]string {
+	t.Helper()
+	short, err := os.MkdirTemp("/tmp", "dv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(short) })
+	var mu sync.Mutex
+	starts := &[][]string{}
+	args := map[int][]string{}
+	fw := vmssh.NewForwards(e.Dirs, "/devvm")
+	fw.Run, fw.Tick = short, time.Millisecond
+	fw.Detach = func(c daemon.Cmd) (int, error) {
+		cmd := exec.CommandContext(t.Context(), "sleep", "30")
+		if err := cmd.Start(); err != nil {
+			return 0, err
+		}
+		done := make(chan struct{})
+		go func() { _ = cmd.Wait(); close(done) }()
+		t.Cleanup(func() { _ = cmd.Process.Kill(); <-done })
+		mu.Lock()
+		defer mu.Unlock()
+		a := append([]string{c.Path}, c.Args...)
+		*starts = append(*starts, a)
+		args[cmd.Process.Pid] = a
+		return cmd.Process.Pid, daemon.WriteStatus(c.Status, cmd.Process.Pid, "")
+	}
+	fw.Args = func(pid int) ([]string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if a, ok := args[pid]; ok {
+			return a, nil
+		}
+		return nil, errors.New("not ours")
+	}
+	e.Forwarders = fw
+	f.Forward = backend.ForwardTarget{User: "u", Key: "/k", Port: 60022}
+	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
+		if len(argv) == 3 && strings.Contains(argv[2], "ssh_host_") && o.Stdout != nil {
+			_, err := io.WriteString(o.Stdout, "ssh-ed25519 AAAAkey root@vm\n")
+			return err
+		}
+		return nil
+	}
+	return starts
 }
 
 func allNative() backend.Caps {

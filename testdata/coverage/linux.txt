@@ -5,7 +5,6 @@ internal/backend 95.7
 internal/backend/backendtest 46.5
 internal/backend/lima 88.4
 internal/backend/registry 100.0
-internal/backend/vmssh 87.7
 internal/build 87.3
 internal/cli 88.5
 internal/cli/docgen 85.1
@@ -39,3 +38,4 @@ internal/ubuntu 92.5
 internal/ui 94.4
 internal/vm 85.6
 internal/vmname 100.0
+internal/vmssh 87.7

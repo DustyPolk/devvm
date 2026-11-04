@@ -31,7 +31,7 @@ func LocationOf(b Backend) (string, bool) {
 }
 
 // Forgetter is a backend that keeps files or resources of its own for a
-// VM besides the VM (its port records, its ssh key), which devvm gc
+// VM besides the VM (an ssh key, say: Lima keeps none), which devvm gc
 // --orphans deletes once the backend no longer
 // has the VM, as Delete does after deleting it.
 type Forgetter interface {

@@ -46,6 +46,7 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 		e.Info(msg.Stopped(vm))
 	}
 	e.Proxy.Stop(vm)
+	e.Forwarders.Stop(vm)
 	linkRuns(e).stop(ctx, vm)
 	if err := checkGit(ctx, e.Env, t, false); err != nil {
 		return err

@@ -25,7 +25,7 @@ func devvm() rules {
 		// its methods do, as vm's Launch, Lifecycle, Settings and Net.
 		maxMethods: 24,
 		largeTypes: map[string]large{
-			"internal/backend/lima.Lima":        {72, "a backend: backend.Backend's 25 methods, KeyFiles, DiskDirs, Floors, Usage, Location, Forget, Strays, DevvmCache, DeleteCache and Lima's own"},
+			"internal/backend/lima.Lima":        {71, "a backend: backend.Backend's 25 methods, KeyFiles, DiskDirs, Floors, Usage, Location, Strays, DevvmCache, DeleteCache and Lima's own"},
 			"internal/backend/backendtest.Fake": {31, "backend.Backend's 25 methods and what tests ask of it"},
 			"internal/paths.Dirs":               {49, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":                    {47, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
@@ -98,11 +98,14 @@ func devvm() rules {
 				to: []string{"internal/cli/..."},
 			},
 			{
+				// vmssh's port forwarder and link sessions are devvm's,
+				// on every backend: none runs its own.
 				name: "backends are below what uses them",
 				from: []string{"internal/backend/..."},
 				to: []string{
 					"internal/vm", "internal/build", "internal/tools", "internal/netpolicy", "internal/secrets",
 					"internal/project", "internal/gitprotect", "internal/sshconfig", "internal/sshagent", "internal/trust",
+					"internal/vmssh",
 				},
 			},
 			{
