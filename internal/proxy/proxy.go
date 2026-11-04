@@ -50,6 +50,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/w3cj/devvm/internal/daemon"
@@ -83,7 +84,17 @@ type server struct {
 	interceptPorts map[int]bool
 	links          links
 	nix            *nixCache
+	// connects holds a slot for each CONNECT open (maxConnects); connectsFull is whether the
+	// proxy's log has said the limit was reached since a tunnel last ended.
+	connects     chan struct{}
+	connectsFull atomic.Bool
 }
+
+// maxConnects is how many CONNECTs a VM's proxy carries at once, tunnels and interceptions alike:
+// four times what a browser keeps open at most (Chrome's 256), and many times a package manager's
+// (npm's 15 sockets, uv's 50 downloads), so several builds and installs at once fit, while a VM that opens tunnels without end can't take every descriptor
+// the proxy has (two each).
+const maxConnects = 1024
 
 // newServer makes the server c describes, logging to l and its events to out: it reads its CA,
 // the company proxy's settings, the built-in policies (from std.FS) and the user's policy files,
@@ -95,6 +106,7 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 		secrets:        newSecrets(c.Secrets, std.Secret, l),
 		interceptPorts: map[int]bool{443: true},
 		links:          newLinks(c.Links, c.LinkSockets, c.VM, l, ev),
+		connects:       make(chan struct{}, maxConnects),
 	}
 	var err error
 	if c.CA != "" {
@@ -526,6 +538,13 @@ func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "devvm proxy: not a host name", http.StatusBadRequest)
 		return
 	}
+	select {
+	case s.connects <- struct{}{}:
+		defer func() { <-s.connects; s.connectsFull.Store(false) }()
+	default:
+		s.refuseConnect(w, host, port)
+		return
+	}
 	// One of the VM's links: its socket, before any rule (links.go).
 	if l, ok := s.links.find(host, port); ok {
 		s.links.connect(w, r, host, port, l)
@@ -557,6 +576,21 @@ func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.tunnel(w, r, host, port, e)
+}
+
+// refuseConnect refuses a CONNECT past the VM's limit (connects): 503, which a client may try
+// again, with the reason, logged as a refused block, as no rule would help. The proxy's own log
+// says so the first time the limit is reached since a tunnel last ended, so a VM that keeps
+// trying doesn't fill it.
+func (s *server) refuseConnect(w http.ResponseWriter, host string, port int) {
+	why := strconv.Itoa(cap(s.connects)) + " tunnels open already"
+	e := Event{Event: "blocked", Host: host, Port: port, Method: "CONNECT", Refused: true, Reason: why}
+	if !s.connectsFull.Swap(true) {
+		s.log.Printf("%s:%d: %d tunnels open at once, the VM's limit: refusing more until one ends", host, port, cap(s.connects))
+	}
+	s.events.record(e)
+	w.Header().Set("X-Devvm-Blocked", host)
+	http.Error(w, "devvm proxy: "+net.JoinHostPort(host, strconv.Itoa(port))+" is refused: "+e.Reason, http.StatusServiceUnavailable)
 }
 
 // tunnel carries a CONNECT to host:port that the policy allows, e its event. The far end's bytes

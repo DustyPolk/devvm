@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -164,6 +165,69 @@ func TestTunnelServerSpeaksFirst(t *testing.T) {
 	if _, err := io.ReadFull(r, answer); err != nil || string(answer) != "got:hi" {
 		t.Errorf("two bytes that aren't TLS: %q, %v", answer, err)
 	}
+}
+
+// The VM's CONNECTs open at once are bounded (connects, maxConnects for a proxy Main starts): one
+// past the limit gets 503 and a refused block, the proxy's own log says so once, and a tunnel that
+// ends makes room again.
+func TestConnectLimit(t *testing.T) {
+	t.Parallel()
+	if s := testServer(t, Config{}, ""); cap(s.connects) != maxConnects {
+		t.Errorf("a proxy carries %d CONNECTs at once, want %d", cap(s.connects), maxConnects)
+	}
+	s, _, events, addr := linkProxy(t)
+	own := &syncBuffer{}
+	s.log.SetOutput(own)
+	s.connects = make(chan struct{}, 2)
+	ln, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	must(t, err)
+	serveFarEnd(t, ln)
+	target := "127.0.0.1:" + strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	s.egress.pol = writePolicy(t, target+"\n")
+	var open []net.Conn
+	for range 2 {
+		c, _ := connectTo(t, addr, target)
+		_, _ = c.Write([]byte("e")) // the far end holds it until the client's end
+		open = append(open, c)
+	}
+	for range 2 {
+		code, body := roundTrip(t, addr, "CONNECT "+target+" HTTP/1.1\r\nHost: "+target+"\r\n\r\n")
+		if code != http.StatusServiceUnavailable || !strings.Contains(body, "2 tunnels open already") {
+			t.Errorf("past the limit: %d %q", code, body)
+		}
+	}
+	if l := events.String(); strings.Count(l, `"event":"blocked"`) != 2 || !strings.Contains(l, `"reason":"2 tunnels open already","refused":true`) {
+		t.Errorf("the event log: %s", l)
+	}
+	if l := own.String(); strings.Count(l, "tunnels open at once") != 1 {
+		t.Errorf("the proxy's log: %q", l)
+	}
+	_ = open[0].Close()
+	status := func() int {
+		c, err := new(net.Dialer).DialContext(t.Context(), "tcp", addr)
+		must(t, err)
+		defer func() { _ = c.Close() }()
+		_ = c.SetDeadline(time.Now().Add(10 * time.Second))
+		fmt.Fprintf(c, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", target, target)
+		resp, err := http.ReadResponse(bufio.NewReader(c), &http.Request{Method: http.MethodConnect})
+		if err != nil {
+			return 0
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		code := status()
+		if code == http.StatusOK {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a tunnel ended, and a new one still gets %d", code)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	_ = open[1].Close()
 }
 
 // A tunnel to one of the VM's links.

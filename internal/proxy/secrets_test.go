@@ -397,6 +397,39 @@ func TestLeafWithinCA(t *testing.T) {
 	}
 }
 
+// The leaves a CA keeps are bounded (leafMax, leafCacheMax for a CA the proxy loads): past it, the
+// one used least recently goes, so a binding with a wildcard host can't grow the cache without end.
+func TestLeafCacheBounded(t *testing.T) {
+	t.Parallel()
+	if c := testCA(t, time.Now().Add(-time.Hour), time.Now().Add(48*time.Hour)); c.leafMax != leafCacheMax {
+		t.Errorf("a CA keeps %d leaves, want %d", c.leafMax, leafCacheMax)
+	}
+	authority := testCA(t, time.Now().Add(-time.Hour), time.Now().Add(48*time.Hour))
+	authority.leafMax = 3
+	leaf := func(host string) *tls.Certificate {
+		t.Helper()
+		l, err := authority.leafFor(host)
+		must(t, err)
+		return l
+	}
+	a := leaf("a.example.com")
+	b := leaf("b.example.com")
+	leaf("c.example.com")
+	if leaf("a.example.com") != a { // a is the most recently used now, b the least
+		t.Error("a cached leaf was minted again")
+	}
+	leaf("d.example.com")
+	if n := len(authority.leaves); n != 3 || authority.order.Len() != 3 {
+		t.Errorf("%d leaves kept (%d in order), want 3", n, authority.order.Len())
+	}
+	if leaf("a.example.com") != a {
+		t.Error("the most recently used leaf went")
+	}
+	if leaf("b.example.com") == b {
+		t.Error("the least recently used leaf stayed")
+	}
+}
+
 // A tunnel to a host with a bound secret, once the proxy's CA has ended, is refused before it
 // opens: 403 with the reason and no allow command, logged as a refused block.
 func TestInterceptCAEnded(t *testing.T) {

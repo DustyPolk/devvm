@@ -8,6 +8,7 @@ package proxy
 // anywhere.
 
 import (
+	"container/list"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -300,15 +301,30 @@ func basicHas(v, placeholder string) bool {
 
 // ca is the VM's CA as its proxy has it (Config.CA): the certificate and key it signs leaves with,
 // the one key every leaf has, the leaves it has minted, by host, under mu, and its next CA
-// (Config.CANext), nil for none.
+// (Config.CANext), nil for none. It keeps at most leafMax leaves, the most recently used at the
+// front of order, and the one used least recently goes when another would pass it.
 type ca struct {
 	cert    *x509.Certificate
 	key     *ecdsa.PrivateKey
 	leafKey *ecdsa.PrivateKey
 	mu      sync.Mutex
-	leaves  map[string]*tls.Certificate
+	leaves  map[string]*list.Element // each a *leaf in order
+	order   *list.List
+	leafMax int
 	next    *ca
 }
+
+// leaf is a certificate the CA minted, and its host.
+type leaf struct {
+	host string
+	cert *tls.Certificate
+}
+
+// leafCacheMax is how many leaves a CA keeps: a binding for one host needs one, and one with a
+// wildcard host (*.example.com) one for each name the VM asks for, which could grow without end.
+// Minting one again costs one signature, and each leaf kept takes a few KiB, so 1024 keep every
+// host an agent's session uses in a few MiB.
+const leafCacheMax = 1024
 
 // Each VM has CAs of its own (trust.InitCA), which no other VM trusts: the current one and the next
 // one, which every launch installs in the VM beside it. The next CA starts before the current one
@@ -392,7 +408,7 @@ func newCA(cert *x509.Certificate, key *ecdsa.PrivateKey) (*ca, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ca{cert: cert, key: key, leafKey: leafKey, leaves: map[string]*tls.Certificate{}}, nil
+	return &ca{cert: cert, key: key, leafKey: leafKey, leaves: map[string]*list.Element{}, order: list.New(), leafMax: leafCacheMax}, nil
 }
 
 // upstreamPool is what the proxy's own TLS connections trust: the CA certificates in pem
@@ -458,9 +474,12 @@ func (c *ca) mint(host string, now time.Time) (*tls.Certificate, error) {
 	if !now.Before(c.cert.NotAfter) {
 		return nil, errCAEnded
 	}
-	if l, ok := c.leaves[host]; ok && now.Before(l.Leaf.NotAfter) &&
-		(l.Leaf.NotAfter.Sub(now) > time.Hour || l.Leaf.NotAfter.Equal(c.cert.NotAfter)) {
-		return l, nil
+	if el, ok := c.leaves[host]; ok {
+		l := el.Value.(*leaf).cert
+		if now.Before(l.Leaf.NotAfter) && (l.Leaf.NotAfter.Sub(now) > time.Hour || l.Leaf.NotAfter.Equal(c.cert.NotAfter)) {
+			c.order.MoveToFront(el)
+			return l, nil
+		}
 	}
 	notBefore, notAfter := now.Add(-time.Hour), now.Add(24*time.Hour)
 	if notBefore.Before(c.cert.NotBefore) {
@@ -483,10 +502,26 @@ func (c *ca) mint(host string, now time.Time) (*tls.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
-	leaf, _ := x509.ParseCertificate(der)
-	l := &tls.Certificate{Certificate: [][]byte{der, c.cert.Raw}, PrivateKey: c.leafKey, Leaf: leaf}
-	c.leaves[host] = l
+	parsed, _ := x509.ParseCertificate(der)
+	l := &tls.Certificate{Certificate: [][]byte{der, c.cert.Raw}, PrivateKey: c.leafKey, Leaf: parsed}
+	c.keep(host, l)
 	return l, nil
+}
+
+// keep caches l as host's leaf, the most recently used, and lets the least recently used go past
+// leafMax; c.mu is held.
+func (c *ca) keep(host string, l *tls.Certificate) {
+	if el, ok := c.leaves[host]; ok {
+		el.Value.(*leaf).cert = l
+		c.order.MoveToFront(el)
+		return
+	}
+	c.leaves[host] = c.order.PushFront(&leaf{host: host, cert: l})
+	for c.order.Len() > c.leafMax {
+		old := c.order.Back()
+		delete(c.leaves, old.Value.(*leaf).host)
+		c.order.Remove(old)
+	}
 }
 
 // --- interception ---
