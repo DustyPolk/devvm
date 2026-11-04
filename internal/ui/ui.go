@@ -233,7 +233,7 @@ func (u *UI) Die(m msg.M) {
 // has one, without control characters, dim in a terminal. While verbose,
 // those lines are on stderr already, so only the log's path is.
 func (u *UI) DieLogged(m msg.M) {
-	flushLog(u)
+	flushLog(u, true)
 	path := u.logPath()
 	switch {
 	case path == "" || u.Interrupted():

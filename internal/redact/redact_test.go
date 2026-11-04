@@ -17,9 +17,43 @@ func TestString(t *testing.T) {
 		{"value `http://bob:pw@127.0.0.1:3128` and \"https://c:d@e\"", "value `http://bob:<password>@127.0.0.1:3128` and \"https://c:<password>@e\""},
 		{"no user https://host:443/a@b", "no user https://host:443/a@b"},
 		{"user only http://alice@proxy", "user only http://alice@proxy"},
+		// A proxy URL without a scheme, with its port.
+		{"HTTPS_PROXY=alice:s3cr%40t@proxy.corp:8080", "HTTPS_PROXY=alice:<password>@proxy.corp:8080"},
+		{"proxy alice:pw@10.0.0.1:3128/ and 'bob:p:w@[::1]:80'", "proxy alice:<password>@10.0.0.1:3128/ and 'bob:<password>@[::1]:80'"},
+		{"devvm:" + key + "@192.168.5.2:3129", "devvm:<key>@192.168.5.2:3129"},
+		// Ordinary text with an "@" is left alone: ssh targets, emails, a user without a password.
+		{"git@github.com:org/repo.git and ssh alice@host -p 22", "git@github.com:org/repo.git and ssh alice@host -p 22"},
+		{"mailto:bob@example.com, Contact: carol@example.com:25", "mailto:bob@example.com, Contact: carol@example.com:25"},
+		{"alice@proxy.corp:8080 at 10:30", "alice@proxy.corp:8080 at 10:30"},
 	} {
 		if got := String(tc.in); got != tc.want {
 			t.Errorf("String(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// Split ends what a writer writes of a line before its last word, at most tail bytes before its
+// end, and never inside a secret.
+func TestSplit(t *testing.T) {
+	t.Parallel()
+	long := "http://alice:e2e-not-a-secret@proxy:3128" //nolint:gosec // a fake password
+	for _, tc := range []struct {
+		in   string
+		tail int
+		want int
+	}{
+		{"", 8, 0},
+		{"no end http://bob:e2e-no", 64, len("no end ")},
+		{"tab\tend", 64, len("tab\t")},
+		{"noword", 64, 0},
+		{"noword", 2, 4},
+		// A secret the tail would cut is held whole.
+		{`"` + long + `"`, len(`secret@proxy:3128"`), 1},
+		{"x=alice:e2e-not-a-secret@proxy:3128", len("secret@proxy:3128"), 1},
+		{"x " + long, 64, 2},
+	} {
+		if got := Split([]byte(tc.in), tc.tail); got != tc.want {
+			t.Errorf("Split(%q, %d) = %d, want %d", tc.in, tc.tail, got, tc.want)
 		}
 	}
 }

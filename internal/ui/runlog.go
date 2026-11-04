@@ -168,8 +168,8 @@ func (u *UI) LogNote() {
 // than LoggedCmd (a backend's Exec, say): the run log, streamed to stderr
 // too while verbose, through the run's one redacting writer, so a password
 // split across writes is still found. The end of a line still to come is
-// written at the next flush point (flushLog): a logged command's start,
-// DieLogged and the run's end.
+// written at the next flush point (flushLog): a logged command's start, as
+// far as its last word, and DieLogged and the run's end, all of it.
 func (u *UI) LogWriter() io.Writer {
 	f := u.openLog()
 	u.log.Lock()
@@ -180,23 +180,34 @@ func (u *UI) LogWriter() io.Writer {
 	return u.log.w
 }
 
-// flushLog writes what u's LogWriter holds of a line, redacted.
-func flushLog(u *UI) {
+// flushLog writes what u's LogWriter holds of a line, redacted: all of it at the end (DieLogged,
+// the run's end), or as far as its last word while the run goes on (flushPart).
+func flushLog(u *UI, end bool) {
 	u.log.Lock()
 	w := u.log.w
 	u.log.Unlock()
-	if w != nil {
+	switch {
+	case w == nil:
+	case end:
 		w.flush()
+	default:
+		w.flushPart()
 	}
 }
 
 // redactLineMax is as much of a line without its end as redacting holds: past it, the line is
-// written as far as it goes.
+// written as far as redactPart lets it.
 const redactLineMax = 64 << 10
+
+// redactTailMax is as much of a line's last word as redacting holds back when it writes part of
+// a line (redact.Split), so a URL with its password of up to this length is found whole.
+const redactTailMax = 4 << 10
 
 // redacting is a command's output on its way to the run log: it writes whole lines, each
 // redacted (redact.String), so a password split across two writes is still found. A line ends at
-// "\n" or "\r" (a progress bar's). flush writes the rest, once the command has ended.
+// "\n" or "\r" (a progress bar's). A line longer than redactLineMax, or one at a flush point while
+// its command still runs (flushPart), is written as far as its last word, and the rest is held
+// for what comes next. flush writes it all, once the command has ended.
 type redacting struct {
 	w   io.Writer
 	mu  sync.Mutex
@@ -210,11 +221,27 @@ func (r *redacting) Write(p []byte) (int, error) {
 	if i := bytes.LastIndexAny(r.buf, "\n\r"); i >= 0 {
 		_, _ = io.WriteString(r.w, redact.String(string(r.buf[:i+1])))
 		r.buf = slices.Clone(r.buf[i+1:])
-	} else if len(r.buf) > redactLineMax {
-		_, _ = io.WriteString(r.w, redact.String(string(r.buf)))
-		r.buf = nil
+	}
+	if len(r.buf) > redactLineMax {
+		r.writePart()
 	}
 	return len(p), nil
+}
+
+// writePart writes the held line as far as redact.Split lets it, and holds the rest; r.mu is held.
+func (r *redacting) writePart() {
+	i := redact.Split(r.buf, redactTailMax)
+	if i > 0 {
+		_, _ = io.WriteString(r.w, redact.String(string(r.buf[:i])))
+		r.buf = slices.Clone(r.buf[i:])
+	}
+}
+
+// flushPart writes what it can of the held line while more may still come.
+func (r *redacting) flushPart() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.writePart()
 }
 
 func (r *redacting) flush() {
@@ -278,7 +305,7 @@ func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 		// The count before the step, then the step, its values bold.
 		label = append([]part{{text: strings.TrimSuffix(counted, shown)}}, u.errStyle.valueParts(step)...)
 	}
-	flushLog(u) // what LogWriter holds goes first
+	flushLog(u, false) // what LogWriter holds goes first, but for a last word still to be ended
 	_, _ = io.WriteString(w, logLine+redact.String("+ "+strings.Join(cmd.Args, " "))+"\n")
 	out := &redacting{w: w}
 	defer out.flush()

@@ -197,6 +197,32 @@ func TestRedactingWriter(t *testing.T) {
 	if got := b.String(); got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
+
+	// A line longer than redactLineMax is written as far as its last word, and the rest is held,
+	// so a password that the limit splits is still found, with or without a scheme.
+	for _, url := range []string{"http://alice:e2e-not-a-secret@proxy:3128", "alice:e2e-not-a-secret@proxy:3128"} {
+		b.Reset()
+		r = &redacting{w: &b}
+		long := strings.Repeat("ab ", redactLineMax/3)
+		i := strings.Index(url, "e2e-not") + len("e2e-not")
+		_, _ = r.Write([]byte(long + url[:i]))
+		if strings.Contains(b.String(), "e2e-not") {
+			t.Errorf("the limit wrote %q", b.String()[len(long)-8:])
+		}
+		_, _ = r.Write([]byte(url[i:] + " more"))
+		r.flush()
+		if got := b.String(); strings.Contains(got, "e2e-not") || !strings.HasSuffix(got, ":<password>@proxy:3128 more") || len(got) < len(long) {
+			t.Errorf("%s: got %q", url, got[max(0, len(got)-80):])
+		}
+	}
+
+	// A long line without a space keeps only its last redactTailMax bytes.
+	b.Reset()
+	r = &redacting{w: &b}
+	_, _ = r.Write([]byte(strings.Repeat("x", redactLineMax+1)))
+	if b.Len() != redactLineMax+1-redactTailMax || len(r.buf) != redactTailMax {
+		t.Errorf("wrote %d, held %d", b.Len(), len(r.buf))
+	}
 }
 
 // What a guest command writes through LogWriter is redacted too, a password split across writes
@@ -208,11 +234,13 @@ func TestLogWriterRedacts(t *testing.T) {
 	u, _, errOut := testUI(t, "")
 	u.SetFlags(Flags{Verbose: true})
 	_, _ = io.WriteString(u.LogWriter(), "HTTPS_PROXY=http://alice:e2e-not")
-	_, _ = io.WriteString(u.LogWriter(), "-a-secret@127.0.0.1:3128\nno end http://bob:"+pass+"@h")
+	_, _ = io.WriteString(u.LogWriter(), "-a-secret@127.0.0.1:3128\nno end http://bob:e2e-not")
+	// A logged command's start writes the line as far as its last word, and holds the rest.
 	if err := u.logged(t.Context(), msg.M{}, "true"); err != nil {
 		t.Fatal(err)
 	}
-	want := "HTTPS_PROXY=http://alice:<password>@127.0.0.1:3128\nno end http://bob:<password>@h+ true\n"
+	_, _ = io.WriteString(u.LogWriter(), "-a-secret@h\n")
+	want := "HTTPS_PROXY=http://alice:<password>@127.0.0.1:3128\nno end + true\nhttp://bob:<password>@h\n"
 	if got := readFile(t, u.logPath()); got != want || errOut.String() != want {
 		t.Errorf("log %q, stderr %q\nwant %q", got, errOut, want)
 	}

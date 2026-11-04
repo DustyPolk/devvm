@@ -129,7 +129,7 @@ func (u *UI) main(fn func(ctx context.Context) int) int {
 	}
 	u.stopStatus()
 	u.runCleanups()
-	flushLog(u)
+	flushLog(u, true)
 	if r.panic != nil {
 		panic(r.panic)
 	}
