@@ -39,7 +39,9 @@ import (
 // what it says it is: each InRelease signed by Ubuntu's archive key,
 // pinned in devvm's own files, each list one a signed InRelease gives the
 // SHA-256 of, and each package one a list gives the SHA-256 of, whose
-// entry there is the one kept. It keeps each file in its cache
+// entry there is the one kept, and the newest version that the release
+// pocket's, -updates' and -security's lists, all of which must come
+// back, have of it. It keeps each file in its cache
 // under its SHA-256 and the set under the key. Every later build of that
 // key replays the set: the build VM gets those files from the cache and
 // installs from them alone, so it needs no network for them, and the same
@@ -293,8 +295,10 @@ func (t *taken) take(r io.Reader) (err error) {
 	if err != nil {
 		return err
 	}
-	t.set, err = setOf(list, files, signed)
-	return err
+	if t.set, err = setOf(list, files, signed.entryMap()); err != nil {
+		return err
+	}
+	return signed.checkNewest(t.set)
 }
 
 // keepList keeps an InRelease (in memory) or a package list (in the
@@ -336,18 +340,64 @@ func (t *taken) keepList(r io.Reader, name string) error {
 	return nil
 }
 
-// signedEntries is the archive's own entry for each package of want (by
-// SHA-256: its size), from the package lists the build gave back: each
-// InRelease must check out with Ubuntu's archive key, and each list must
-// be one a verified InRelease gives the SHA-256 and size of. An InRelease
-// older than the pinned cloud image's release is refused too
-// (packages_stale_mirror, or packages_stale with no mirror set). A package
-// no list has is left out, and setOf refuses it. Nothing to check for
-// none.
-func (t *taken) signedEntries(want map[string]int64) (map[string]string, error) {
+// signedEntries is what the package lists the build gave back say of the
+// packages of want (by SHA-256: their sizes): each InRelease must check
+// out with Ubuntu's archive key, and each list must be one a verified
+// InRelease gives the SHA-256 and size of. An InRelease older than the
+// pinned cloud image's release is refused too (packages_stale_mirror, or
+// packages_stale with no mirror set). resolute-updates' and
+// resolute-security's InRelease files must be there, and each verified
+// InRelease's lists for the architectures that list the packages, but an
+// empty one, so that no newer version can be left out
+// (packages_lists_missing). A package no list has is left out, and setOf
+// refuses it. Nothing to check for none.
+func (t *taken) signedEntries(want map[string]int64) (*signed, error) {
 	if len(want) == 0 {
 		return nil, nil
 	}
+	releases, err := t.verified()
+	if err != nil {
+		return nil, err
+	}
+	for _, suite := range ubuntu.RequiredSuites() {
+		if !slices.ContainsFunc(releases, func(r ubuntu.Release) bool { return r.Suite == suite }) {
+			return nil, msg.PackagesListsMissing(suite)
+		}
+	}
+	s := &signed{entries: map[string]string{}, arches: map[string][]string{}, newest: map[string]map[string]newest{}}
+	given := make([]map[string]bool, len(releases)) // each release's lists that came back, by path
+	for i := range given {
+		given[i] = map[string]bool{}
+	}
+	for _, name := range t.lists {
+		// The list's SHA-256 first: only a signed list is read for its
+		// entries, so what it holds is the archive's, not the build VM's.
+		sum, size, err := hashFile(filepath.Join(t.dir, name))
+		if err != nil {
+			return nil, err
+		}
+		var l archiveList
+		for i, r := range releases {
+			for _, rl := range r.Lists(sum, size) {
+				if l.entries == nil {
+					if l, err = readArchiveList(filepath.Join(t.dir, name), want); err != nil {
+						return nil, err
+					}
+				}
+				given[i][rl.Path] = true
+				s.add(l, rl.Arch(), r)
+			}
+		}
+		if l.entries == nil {
+			return nil, refused(name + " isn't a package list a signed InRelease gives")
+		}
+	}
+	return s, s.complete(releases, given)
+}
+
+// verified is each InRelease the build gave back, its signature checked
+// and none older than the pinned cloud image's release.
+func (t *taken) verified() ([]ubuntu.Release, error) {
 	pin, err := state.ReadUbuntuPin(t.dirs.Dirs)
 	if err != nil {
 		return nil, err
@@ -363,22 +413,117 @@ func (t *taken) signedEntries(want map[string]int64) (map[string]string, error) 
 		}
 		releases = append(releases, r)
 	}
-	signed := map[string]string{}
-	for _, name := range t.lists {
-		sum, size, entries, err := readArchiveList(filepath.Join(t.dir, name), want)
-		if err != nil {
-			return nil, err
+	return releases, nil
+}
+
+// signed is what the archive's signed lists say of a recording's
+// packages: each one's entry, the architectures whose lists have it, and,
+// by architecture and package name, the newest version that a pocket apt
+// installs from by default lists (the release pocket, resolute-updates or
+// resolute-security, not resolute-backports).
+type signed struct {
+	entries map[string]string            // by SHA-256
+	arches  map[string][]string          // by SHA-256
+	newest  map[string]map[string]newest // by architecture, then name
+}
+
+// newest is a package's newest version in a pocket's list, and the pocket.
+type newest struct{ version, suite string }
+
+// add adds what l, one of r's lists for arch, says.
+func (s *signed) add(l archiveList, arch string, r ubuntu.Release) {
+	for sum, entry := range l.entries {
+		if _, ok := s.entries[sum]; !ok {
+			s.entries[sum] = entry
 		}
-		if !slices.ContainsFunc(releases, func(r ubuntu.Release) bool { return r.Lists(sum, size) }) {
-			return nil, refused(name + " isn't a package list a signed InRelease gives")
+		if !slices.Contains(s.arches[sum], arch) {
+			s.arches[sum] = append(s.arches[sum], arch)
 		}
-		for k, v := range entries {
-			if _, ok := signed[k]; !ok {
-				signed[k] = v
+	}
+	if r.Backports() {
+		return
+	}
+	if s.newest[arch] == nil {
+		s.newest[arch] = map[string]newest{}
+	}
+	for name, v := range l.newest {
+		if newer(v, s.newest[arch][name].version) {
+			s.newest[arch][name] = newest{v, r.Suite}
+		}
+	}
+}
+
+// complete checks, for each architecture that lists the packages, that
+// each of ubuntu.RequiredSuites has a verified InRelease that gives lists
+// for it, as an InRelease of another archive (archive.ubuntu.com's
+// against ports.ubuntu.com's) has none, and that every list each of
+// releases gives for it came back (given: by release, the paths that
+// did), but an empty one, which lists nothing.
+func (s *signed) complete(releases []ubuntu.Release, given []map[string]bool) error {
+	var arches []string
+	for _, a := range s.arches {
+		arches = append(arches, a...)
+	}
+	slices.Sort(arches)
+	for _, arch := range slices.Compact(arches) {
+		for _, suite := range ubuntu.RequiredSuites() {
+			if !slices.ContainsFunc(releases, func(r ubuntu.Release) bool { return r.Suite == suite && len(r.ListsFor(arch)) > 0 }) {
+				return msg.PackagesListsMissing(suite)
+			}
+		}
+		for i, r := range releases {
+			for _, l := range r.ListsFor(arch) {
+				if l.Size > 0 && !given[i][l.Path] {
+					return msg.PackagesListsMissing(r.Suite)
+				}
 			}
 		}
 	}
-	return signed, nil
+	return nil
+}
+
+// entryMap is each package's signed entry, by SHA-256; nil for none.
+func (s *signed) entryMap() map[string]string {
+	if s == nil {
+		return nil
+	}
+	return s.entries
+}
+
+// checkNewest refuses a package of set that a pocket apt installs from by
+// default lists a newer version of, for an architecture that lists it
+// (packages_not_newest): apt would have installed that one.
+func (s *signed) checkNewest(set state.PackageSet) error {
+	if s == nil {
+		return nil
+	}
+	for _, p := range set.Packages {
+		for _, arch := range s.arches[p.SHA256] {
+			n, ok := s.newest[arch][p.Name]
+			if !ok {
+				continue
+			}
+			c, err := ubuntu.CompareVersions(n.version, p.Version)
+			if err != nil {
+				return refused(p.Name + "'s version isn't one: " + strconv.Quote(p.Version))
+			}
+			if c > 0 {
+				return msg.PackagesNotNewest(p.Name, n.version, n.suite, p.Version)
+			}
+		}
+	}
+	return nil
+}
+
+// newer reports whether version a is newer than b, "" for none; never for
+// an a that isn't a version.
+func newer(a, b string) bool {
+	if b == "" {
+		_, err := ubuntu.CompareVersions(a, a)
+		return err == nil
+	}
+	c, err := ubuntu.CompareVersions(a, b)
+	return err == nil && c > 0
 }
 
 // stale is the refusal of r, an InRelease older than the cloud image
@@ -392,27 +537,36 @@ func (t *taken) stale(r ubuntu.Release, release string) error {
 	return msg.PackagesStale(date, release, r.Suite)
 }
 
-// readArchiveList reads one of the archive's package lists: its SHA-256
-// and size, and its entries for the packages of want, by SHA-256.
-func readArchiveList(name string, want map[string]int64) (sum string, size int64, entries map[string]string, err error) {
+// archiveList is what one of the archive's package lists says: its
+// entries for the packages a recording gave back (by SHA-256), and the
+// newest version it lists of each package (by name).
+type archiveList struct {
+	entries map[string]string
+	newest  map[string]string
+}
+
+// readArchiveList reads one of the archive's package lists, whose SHA-256
+// a verified InRelease gives, for the packages of want (by SHA-256).
+func readArchiveList(name string, want map[string]int64) (archiveList, error) {
 	f, err := os.Open(name) //nolint:gosec // in the build's own folder, a checked name
 	if err != nil {
-		return "", 0, nil, err
+		return archiveList{}, err
 	}
 	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	n := &counter{}
-	sc := bufio.NewScanner(io.TeeReader(f, io.MultiWriter(h, n)))
+	sc := bufio.NewScanner(f)
 	sc.Buffer(nil, maxArchiveLine)
-	entries = map[string]string{}
+	l := archiveList{entries: map[string]string{}, newest: map[string]string{}}
 	var entry strings.Builder
-	match := ""
+	var match, pkg, version string
 	end := func() {
-		if match != "" && entries[match] == "" {
-			entries[match] = entry.String()
+		if match != "" && l.entries[match] == "" {
+			l.entries[match] = entry.String()
+		}
+		if pkg != "" && newer(version, l.newest[pkg]) {
+			l.newest[pkg] = version
 		}
 		entry.Reset()
-		match = ""
+		match, pkg, version = "", "", ""
 	}
 	for sc.Scan() {
 		line := sc.Text()
@@ -420,28 +574,26 @@ func readArchiveList(name string, want map[string]int64) (sum string, size int64
 			end()
 			continue
 		}
-		if s, ok := strings.CutPrefix(line, "SHA256: "); ok {
-			if _, ok := want[strings.TrimSpace(s)]; ok {
-				match = strings.TrimSpace(s)
+		k, v, _ := strings.Cut(line, ": ")
+		switch v = strings.TrimSpace(v); k {
+		case "SHA256":
+			if _, ok := want[v]; ok {
+				match = v
 			}
+		case "Package":
+			pkg = v
+		case "Version":
+			version = v
 		}
 		if entry.WriteString(line + "\n"); entry.Len() > maxArchiveEntry {
-			return "", 0, nil, refused(filepath.Base(name) + " has an entry over " + strconv.Itoa(maxArchiveEntry>>20) + " MiB")
+			return archiveList{}, refused(filepath.Base(name) + " has an entry over " + strconv.Itoa(maxArchiveEntry>>20) + " MiB")
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return "", 0, nil, refused(filepath.Base(name) + ": " + err.Error())
+		return archiveList{}, refused(filepath.Base(name) + ": " + err.Error())
 	}
 	end()
-	return hex.EncodeToString(h.Sum(nil)), n.n, entries, nil
-}
-
-// counter counts the bytes written to it.
-type counter struct{ n int64 }
-
-func (c *counter) Write(b []byte) (int, error) {
-	c.n += int64(len(b))
-	return len(b), nil
+	return l, nil
 }
 
 // keep writes one package file from r into the folder, checking that its

@@ -1,0 +1,16 @@
+Package: openssl
+Architecture: arm64
+Version: 3.0-1ubuntu1
+Filename: pool/main/openssl.deb
+Size: 14
+SHA256: 810c115401fff894f76f00de7e82fd5cd075757d2730c149ed73961c1e8179de
+
+Package: git
+Architecture: arm64
+Version: 1.0-1ubuntu0.1
+Depends: libc6 (>= 2.34),
+ libfoo
+Filename: pool/main/git-security.deb
+Size: 16
+SHA256: 5a2a24d280e575e326e2345c2bc9cb711ec4011deee7c9c09c6a026b9fee9278
+

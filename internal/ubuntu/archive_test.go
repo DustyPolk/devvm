@@ -3,6 +3,7 @@ package ubuntu
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -47,11 +48,25 @@ func TestVerifyUbuntusRelease(t *testing.T) {
 		t.Errorf("read %s, %s", r.Suite, r.Date)
 	}
 	const mainArm64 = "32df8f754a7bf1f448c75dd951f3b553e36a615c726617c40a8199972785e41a"
-	if !r.Lists(mainArm64, 4539808) || r.Lists(mainArm64, 4539807) {
-		t.Error("main's arm64 Packages: not listed with its size")
+	if l := r.Lists(mainArm64, 4539808); len(l) != 1 || l[0].Path != "main/binary-arm64/Packages" || l[0].Arch() != "arm64" ||
+		len(r.Lists(mainArm64, 4539807)) != 0 {
+		t.Errorf("main's arm64 Packages: not listed with its size: %v", l)
 	}
-	if r.Lists("b2c5060084dc1345085fae9745b378ad97177006db8d40761d7d6dd73874fd82", 457597198) {
+	if len(r.Lists("b2c5060084dc1345085fae9745b378ad97177006db8d40761d7d6dd73874fd82", 457597198)) != 0 {
 		t.Error("Contents-amd64 is listed as a package list")
+	}
+	var arm64 []string
+	for _, l := range r.ListsFor("arm64") {
+		arm64 = append(arm64, l.Path)
+	}
+	if want := []string{
+		"main/binary-arm64/Packages", "multiverse/binary-arm64/Packages", "restricted/binary-arm64/Packages",
+		"universe/binary-arm64/Packages",
+	}; !slices.Equal(arm64, want) {
+		t.Errorf("arm64's lists: %q, want %q", arm64, want)
+	}
+	if r.Backports() || !(Release{Suite: "resolute-backports"}).Backports() {
+		t.Error("backports: not told apart")
 	}
 	other := newTestKey(t)
 	unsigned, _, _ := bytes.Cut(in, []byte(sigBegin))
@@ -169,9 +184,9 @@ func TestReadRelease(t *testing.T) {
 		switch {
 		case (err == nil) != c.ok:
 			t.Errorf("%s: %v, want ok %v", c.name, err, c.ok)
-		case c.ok && !r.Lists(sum, 12):
+		case c.ok && len(r.Lists(sum, 12)) != 1:
 			t.Errorf("%s: its list isn't listed", c.name)
-		case c.ok && r.Lists(strings.Repeat("cd", 32), 9):
+		case c.ok && len(r.Lists(strings.Repeat("cd", 32), 9)) != 0:
 			t.Errorf("%s: a compressed list is listed", c.name)
 		}
 	}

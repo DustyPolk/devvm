@@ -1,0 +1,28 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: Ubuntu
+Label: Ubuntu
+Suite: resolute-security
+Version: 26.04
+Codename: resolute
+Date: Wed, 04 Nov 2026 18:15:15 UTC
+Architectures: amd64 arm64
+Components: main universe
+Description: devvm test archive
+SHA256:
+ b93a97bc25c0fcf2a7c11fc411a80cc8e2591574d101ab5cb380a3b710feb1b8              385 main/binary-arm64/Packages
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 universe/binary-arm64/Packages
+ 1111111111111111111111111111111111111111111111111111111111111111             2048 main/binary-amd64/Packages
+-----BEGIN PGP SIGNATURE-----
+
+iQFPBAEBCgA5FiEEr9e0McdzGOzTKcuGsl/ncJAd00cFAmrrxHMbFIAAAAAABAAO
+bWFudTIsMi41KzEuMTIsMCwzAAoJELJf53CQHdNHvM4H/3G+uTZIZseK/s5J848F
+KiGCQiv/WotISNGZXbRhs6WUv/PNlNibhIv6AYfgpzV2pQTx3QY8D6EsBsqS1oqj
+C2XwvIvE5qP/9JV/pB8j8SdKZ+sCtkLIJSIkivH+z0ERH4vD/mh6hfVMZONx7ZCk
+anD48JrTmA7+UrsvxRMCBEZFApLNlvSejUzc0vjAQwK43BtGmIHbfm62IRR88wwy
+613Q62eSC3Sz5pPqGK4xS2JaRH4ygroN9MWOlYprnsfMApU1j/E+Fc6aD5R49TG/
+67wZ9RQSBu1YH9b0V2LNgccN8VmIwe3u8Kq/qWp1VSwvNrrgmB1cU8X9YerRqLt3
+7II=
+=ULlr
+-----END PGP SIGNATURE-----

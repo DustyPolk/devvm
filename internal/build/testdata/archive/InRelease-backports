@@ -1,0 +1,28 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: Ubuntu
+Label: Ubuntu
+Suite: resolute-backports
+Version: 26.04
+Codename: resolute
+Date: Wed, 04 Nov 2026 18:15:15 UTC
+NotAutomatic: yes
+ButAutomaticUpgrades: yes
+Architectures: arm64
+Components: main
+Description: devvm test archive
+SHA256:
+ 557ad231ecb2185f2e9fbf9a3a2be32a524b81c07a59c483e32ac827dc359946              208 main/binary-arm64/Packages
+-----BEGIN PGP SIGNATURE-----
+
+iQFPBAEBCgA5FiEEr9e0McdzGOzTKcuGsl/ncJAd00cFAmrrxHMbFIAAAAAABAAO
+bWFudTIsMi41KzEuMTIsMCwzAAoJELJf53CQHdNHIpMIAJkfnHBTQkd+w+lnrm7u
+z9jQz5kwCLSN9qhbyUUsXt08U/EIop1nScLz9dzOg5iTWPRzQeghvOW6jLELPrK7
+Ie7k7x+RAxxIezO4N1u7XXdnA2tHaBpMzzDCe8ND+pk86u3PYPkUXiOStW90kOGu
+T5j/7bZrvpvZT6+YHu7NZCXx5KgrbMhCMvIlrpuV8DnysNqexSXdbPnvGs+O+f61
+FVk71pSOZU1Vxa/6cxlJSK54OvCJfFdKfMJd/qkL5g8fPxVcvgoAwvwVvManN9ZH
+iElhffvhD4MnU4mprDwqDmvZBkSWShNnZKKBkyZckgkReW4tPx+9vVRgY6AhDwhn
+dRw=
+=UVYG
+-----END PGP SIGNATURE-----

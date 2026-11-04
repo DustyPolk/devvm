@@ -3,6 +3,7 @@ package ubuntu
 import (
 	"errors"
 	"io/fs"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -44,8 +45,35 @@ var ErrRelease = errors.New("not an InRelease of Ubuntu " + Version)
 type Release struct {
 	Suite string    // resolute, resolute-updates…
 	Date  time.Time // when Ubuntu signed it
-	lists map[string]int64
+	lists []List
 }
+
+// List is one of a suite's uncompressed package lists, as its InRelease
+// gives it.
+type List struct {
+	Path   string // main/binary-arm64/Packages
+	SHA256 string
+	Size   int64
+}
+
+// Arch is the architecture l lists the packages of, as its path names it
+// (main/binary-arm64/Packages: arm64).
+func (l List) Arch() string {
+	_, dir, _ := strings.Cut(path.Dir(l.Path), "/binary-")
+	return dir
+}
+
+// RequiredSuites are the pockets whose lists every recording of base's
+// packages must give back: the ones that hold newer versions than the
+// release pocket's, which apt installs instead.
+func RequiredSuites() []string {
+	return []string{Series + "-updates", Series + "-security"}
+}
+
+// Backports reports whether r is the backports pocket, whose packages apt
+// installs only when asked to (Ubuntu signs it NotAutomatic), so a newer
+// version there is no newer one apt would choose.
+func (r Release) Backports() bool { return r.Suite == Series+"-backports" }
 
 // VerifyRelease checks that inRelease is clearsigned by Ubuntu's archive
 // key (ArchiveKeyring, in assets, devvm's own files) at now and reads what
@@ -76,7 +104,7 @@ var listSum = regexp.MustCompile(`^ ([0-9a-f]{64}) +([0-9]+) +([a-z0-9-]+/binary
 // readRelease reads a verified InRelease's text: its Suite, its Date and,
 // of its SHA256 field, each component's uncompressed Packages list.
 func readRelease(text string) (Release, error) {
-	r := Release{lists: map[string]int64{}}
+	var r Release
 	field := ""
 	for line := range strings.Lines(text) {
 		line = strings.TrimSuffix(line, "\n")
@@ -86,7 +114,7 @@ func readRelease(text string) (Release, error) {
 				if err != nil {
 					return Release{}, ErrRelease
 				}
-				r.lists[m[1]] = n
+				r.lists = append(r.lists, List{Path: m[3], SHA256: m[1], Size: n})
 			}
 			continue
 		}
@@ -111,10 +139,28 @@ func readRelease(text string) (Release, error) {
 	return r, nil
 }
 
-// Lists reports whether r lists a package list with SHA-256 sum and size.
-func (r Release) Lists(sum string, size int64) bool {
-	n, ok := r.lists[sum]
-	return ok && n == size
+// Lists is each package list r gives with SHA-256 sum and size: none for
+// a list that isn't r's, and more than one when lists are the same, as
+// empty ones are.
+func (r Release) Lists(sum string, size int64) []List {
+	var out []List
+	for _, l := range r.lists {
+		if l.SHA256 == sum && l.Size == size {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// ListsFor is every package list r gives for arch's packages.
+func (r Release) ListsFor(arch string) []List {
+	var out []List
+	for _, l := range r.lists {
+		if l.Arch() == arch {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // Stale reports whether r is an older state of the archive than the

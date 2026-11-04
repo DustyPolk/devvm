@@ -615,6 +615,14 @@ other = "Ubuntu's archive gave base's build {{.suite}} as of {{.date}}, older th
 description = "mirror is config.toml's ubuntu-mirror; suite, date and release as in packages_stale"
 other = "The mirror {{.mirror}} gave base's build {{.suite}} as of {{.date}}, older than the cloud image {{.release}}, so devvm keeps none of its packages. Set ubuntu-mirror in config.toml to a mirror that's up to date, or remove it, then run the command again."
 
+[packages_lists_missing]
+description = "suite is the archive's suite (resolute-security) whose signed InRelease or one of whose package lists the build didn't give back"
+other = "Base's build didn't give back all of {{.suite}}'s signed package lists, so devvm can't check that it got the newest packages and keeps none of them. Run the command again."
+
+[packages_not_newest]
+description = "name and version are the recorded package's; newer is the version that suite (resolute-updates) lists"
+other = "Base's build got {{.name}} {{.version}}, but {{.suite}} has {{.newer}}, which apt installs instead, so devvm keeps none of its packages. Check that no feature asks apt for an older version, then run the command again."
+
 [packages_send_failed]
 other = "Sending base's recorded packages into {{.vm}} failed."
 

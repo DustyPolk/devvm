@@ -2209,9 +2209,19 @@ func OutputFailed(reason string) M {
 	return M{id: "output_failed", vals: []val{{"reason", reason}}}
 }
 
+// PackagesListsMissing is [packages_lists_missing]: "Base's build didn't give back all of {{.suite}}'s signed package lists, so devvm can't check that it got the newest packages and keeps none of them. Run the command again."
+func PackagesListsMissing(suite string) M {
+	return M{id: "packages_lists_missing", vals: []val{{"suite", suite}}}
+}
+
 // PackagesMissing is [packages_missing]: "devvm's package cache doesn't have {{.name}} {{.version}}, which this base recorded, so devvm can't build it again. Run devvm rebuild base to record base's packages again."
 func PackagesMissing(name string, version string) M {
 	return M{id: "packages_missing", vals: []val{{"name", name}, {"version", version}}}
+}
+
+// PackagesNotNewest is [packages_not_newest]: "Base's build got {{.name}} {{.version}}, but {{.suite}} has {{.newer}}, which apt installs instead, so devvm keeps none of its packages. Check that no feature asks apt for an older version, then run the command again."
+func PackagesNotNewest(name string, newer string, suite string, version string) M {
+	return M{id: "packages_not_newest", vals: []val{{"name", name}, {"newer", newer}, {"suite", suite}, {"version", version}}}
 }
 
 // PackagesRefused is [packages_refused]: "devvm refused the packages base's build gave back, so it keeps none of them: {{.why}}."
@@ -3807,7 +3817,9 @@ var specs = map[string]spec{
 	"origin_no_boot":                   {fields: []string{"origin"}},
 	"origin_pinned":                    {fields: []string{"origin"}},
 	"output_failed":                    {fields: []string{"reason"}},
+	"packages_lists_missing":           {fields: []string{"suite"}},
 	"packages_missing":                 {fields: []string{"name", "version"}},
+	"packages_not_newest":              {fields: []string{"name", "newer", "suite", "version"}},
 	"packages_refused":                 {fields: []string{"why"}},
 	"packages_send_failed":             {fields: []string{"vm"}},
 	"packages_stale":                   {fields: []string{"date", "release", "suite"}},

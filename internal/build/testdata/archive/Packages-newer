@@ -1,0 +1,9 @@
+Package: git
+Architecture: arm64
+Version: 1.0-1ubuntu1.1
+Depends: libc6 (>= 2.34),
+ libfoo
+Filename: pool/main/git-newer.deb
+Size: 13
+SHA256: 0173c23fa4f34f0653fbd4abd2c61d4014375d89d9467b7895734729a53abbef
+

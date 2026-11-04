@@ -28,7 +28,8 @@ begin() {
     apt-get update
     return
   elif [[ -f $dir/in/mirrors ]]; then
-    printf 'APT::Keep-Downloaded-Packages "true";\nBinary::apt::APT::Keep-Downloaded-Packages "true";\n' \
+    # Phased updates too: devvm refuses a package older than a list it gives back has.
+    printf 'APT::Keep-Downloaded-Packages "true";\nBinary::apt::APT::Keep-Downloaded-Packages "true";\nAPT::Get::Always-Include-Phased-Updates "true";\n' \
       > /etc/apt/apt.conf.d/50devvm-keep
     apt-get clean
     # Ubuntu's sources (deb822, as 26.04's are) with each archive's URI the mirrors listed, then
