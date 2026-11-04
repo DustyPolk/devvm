@@ -73,6 +73,25 @@ func TestCompanyProxy(t *testing.T) {
 	}
 }
 
+// A password with the characters a URL gives meaning to is percent-encoded
+// in Env's URLs, and parses back to itself. mise (reqwest) decodes it before
+// it sends Proxy-Authorization: checked against squid with basic auth.
+func TestCompanyProxyEnvEncodesPassword(t *testing.T) {
+	d := testDirs(t)
+	write(t, d.ConfigFile(), "[proxy]\nhttps = \"http://alice@proxy.corp:3128\"\n")
+	const password = "p@ss:w/rd #1%?" //nolint:gosec // G101: a test's fake password
+	c := NewCompanyProxy(d, func(string) string { return "" }, func(context.Context, string) (string, error) { return password, nil })
+	vars, err := c.Env(t.Context())
+	const want = "http://alice:p%40ss%3Aw%2Frd%20%231%25%3F@proxy.corp:3128" //nolint:gosec // G101: a fake company proxy's fake password
+	if err != nil || !slices.Equal(vars, []string{"HTTPS_PROXY=" + want, "https_proxy=" + want}) {
+		t.Fatalf("Env: %q, %v", vars, err)
+	}
+	u, err := url.Parse(want)
+	if p, _ := u.User.Password(); err != nil || u.User.Username() != "alice" || p != password {
+		t.Errorf("parsed back: %v, %q", err, p)
+	}
+}
+
 // Without the password saved, the check fails with its message, and so
 // do requests, which aren't tried again, and programs.
 func TestCompanyProxyPasswordMissing(t *testing.T) {
