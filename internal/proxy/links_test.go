@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -109,26 +108,23 @@ func linkEntry(dir, addr string, port int, hosts ...string) LinkEntry {
 	}
 }
 
-// linkProxy is the proxy for linkVM with the list in a short folder (sockets' paths are at most 104
-// characters), a policy that allows nothing, and its events in a buffer.
-func linkProxy(t *testing.T) (dir string, events *syncBuffer, addr string) {
+// linkProxy is a proxy for linkVM with the list in a short folder (sockets' paths are at most 104
+// characters), a policy that allows nothing, and its events in a buffer, and the address it
+// listens on.
+func linkProxy(t *testing.T) (s *server, dir string, events *syncBuffer, addr string) {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "pl")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	oldVM, oldOut, oldAuth := vmName, logOut, proxyAuth
-	events = &syncBuffer{}
 	// The list is in the VM's own run folder; the sockets are in devvm's.
 	list := filepath.Join(dir, "vm", "run", "links.json")
 	must(t, os.MkdirAll(filepath.Dir(list), 0o700))
-	vmName, linksFile, linkSockets, logOut, proxyAuth = linkVM, list, dir, events, ""
-	pol = writePolicy(t, "")
-	t.Cleanup(func() { vmName, linksFile, linkSockets, logOut, proxyAuth = oldVM, "", "", oldOut, oldAuth })
-	p := httptest.NewServer(http.HandlerFunc(handler))
-	t.Cleanup(p.Close)
-	return dir, events, p.Listener.Addr().String()
+	s = testServer(t, Config{VM: linkVM, Links: list, LinkSockets: dir}, "")
+	events = &syncBuffer{}
+	s.events.out = events
+	return s, dir, events, listen(t, s)
 }
 
 // tunnel sends a CONNECT for hostPort, then data, and returns the status and what came back.
@@ -164,9 +160,10 @@ func tunnel(t *testing.T, addr, hostPort string, data []byte) (int, string) {
 // anything else is the policy's, and blocked. The proxy logs nothing of a link it carried: its
 // socket's server, devvm _links, does.
 func TestLinkConnect(t *testing.T) {
-	dir, events, addr := linkProxy(t)
+	t.Parallel()
+	s, dir, events, addr := linkProxy(t)
 	db := serveLink(t, dir, "127.77.0.1", 5432)
-	writeLinkList(t, linksFile, linkEntry(dir, "127.77.0.1", 5432, "db", "db.devvm.internal"))
+	writeLinkList(t, s.links.file, linkEntry(dir, "127.77.0.1", 5432, "db", "db.devvm.internal"))
 	for _, hp := range []string{"db:5432", "DB:5432", "db.:5432", "db.devvm.internal:5432", "Db.Devvm.Internal.:5432"} {
 		if code, got := tunnel(t, addr, hp, []byte("ping "+hp)); code != http.StatusOK || got != "ping "+hp {
 			t.Errorf("%s: %d %q", hp, code, got)
@@ -195,18 +192,20 @@ func TestLinkConnect(t *testing.T) {
 // and a secret bound to the link's name (or to every host) isn't put in, its port intercepted or
 // not.
 func TestLinkConnectUntouched(t *testing.T) {
-	dir, _, addr := linkProxy(t)
+	t.Parallel()
+	s, dir, _, addr := linkProxy(t)
 	db := serveLink(t, dir, "127.77.0.1", 443)
-	writeLinkList(t, linksFile, linkEntry(dir, "127.77.0.1", 443, "db", "db.devvm.internal"))
+	writeLinkList(t, s.links.file, linkEntry(dir, "127.77.0.1", 443, "db", "db.devvm.internal"))
 	ca := t.TempDir()
 	writeCA(t, ca)
-	must(t, loadCA(filepath.Join(ca, "ca.pem"), filepath.Join(ca, "ca.key")))
-	secretsPath = filepath.Join(ca, "bindings.json")
-	writeBindings(t, secretsPath, bound("db", "**"))
-	t.Cleanup(func() { secretsPath = "" })
-	fakeSecret(t, "real-secret")
+	var err error
+	s.ca, err = loadCA(filepath.Join(ca, "ca.pem"), filepath.Join(ca, "ca.key"))
+	must(t, err)
+	s.secrets.path = filepath.Join(ca, "bindings.json")
+	writeBindings(t, s.secrets.path, bound("db", "**"))
+	fakeSecret(s.secrets, "real-secret")
 	// A rule that allows the name too: the link still comes first, never intercepted.
-	pol = writePolicy(t, "db\n")
+	s.egress.pol = writePolicy(t, "db\n")
 	hello := clientHello(t, "evil.example")
 	if code, got := tunnel(t, addr, "db:443", hello); code != http.StatusOK || got != string(hello) {
 		t.Errorf("a ClientHello for another host: %d, %d bytes back", code, len(got))
@@ -224,11 +223,11 @@ func TestLinkConnectUntouched(t *testing.T) {
 // and then one for another host are each handled as they are: the link's carried, the other host
 // blocked by the policy. HTTPS to a link is refused in absolute form: CONNECT carries it.
 func TestLinkForward(t *testing.T) {
-	dir, events, addr := linkProxy(t)
-	proxyAuth = "k3y"
-	t.Cleanup(func() { proxyAuth = "" })
+	t.Parallel()
+	s, dir, events, addr := linkProxy(t)
+	s.password = "k3y"
 	db := serveLink(t, dir, "127.77.0.1", 8080)
-	writeLinkList(t, linksFile, linkEntry(dir, "127.77.0.1", 8080, "db", "db.devvm.internal"))
+	writeLinkList(t, s.links.file, linkEntry(dir, "127.77.0.1", 8080, "db", "db.devvm.internal"))
 	c, err := new(net.Dialer).DialContext(t.Context(), "tcp", addr)
 	if err != nil {
 		t.Fatal(err)
@@ -260,11 +259,11 @@ func TestLinkForward(t *testing.T) {
 	if code, _ := get("https://db:8080/", "db:8080"); code != http.StatusBadRequest {
 		t.Errorf("https in absolute form: %d", code)
 	}
-	s := db.seen()
-	if len(s) != 2 {
-		t.Fatalf("the link's socket saw %d connections, want 2: %q", len(s), s)
+	seen := db.seen()
+	if len(seen) != 2 {
+		t.Fatalf("the link's socket saw %d connections, want 2: %q", len(seen), seen)
 	}
-	for _, req := range s {
+	for _, req := range seen {
 		if !strings.HasPrefix(req, "GET /") || strings.Contains(req, "Proxy-") || strings.Contains(req, "k3y") || strings.Contains(req, "ZGV2dm06azN5") {
 			t.Errorf("the link got %q", req)
 		}
@@ -277,8 +276,9 @@ func TestLinkForward(t *testing.T) {
 // A link on the list whose socket doesn't answer (removed since, or devvm _links gone) is refused
 // with 502 and logged once as a refused link.
 func TestLinkGone(t *testing.T) {
-	dir, events, addr := linkProxy(t)
-	writeLinkList(t, linksFile, linkEntry(dir, "127.77.0.1", 5432, "db", "db.devvm.internal"))
+	t.Parallel()
+	s, dir, events, addr := linkProxy(t)
+	writeLinkList(t, s.links.file, linkEntry(dir, "127.77.0.1", 5432, "db", "db.devvm.internal"))
 	if code, _ := tunnel(t, addr, "db:5432", nil); code != http.StatusBadGateway {
 		t.Errorf("CONNECT: %d", code)
 	}
@@ -297,7 +297,9 @@ func TestLinkGone(t *testing.T) {
 // ignored, as is a list that's a symbolic link, that others may write, of another version, or not
 // JSON. A request never names a socket: a host with a slash isn't one.
 func TestLinkListRefused(t *testing.T) {
-	dir, _, addr := linkProxy(t)
+	t.Parallel()
+	s, dir, _, addr := linkProxy(t)
+	linksFile := s.links.file
 	serveLink(t, dir, "127.77.0.1", 5432)
 	other := LinkSocket(dir, "devvm-other-0123456789abcd", netip.MustParseAddr("127.77.0.1"), 5432)
 	ln, err := new(net.ListenConfig).Listen(t.Context(), "unix", other)
@@ -364,12 +366,11 @@ func TestLinkListRefused(t *testing.T) {
 	}
 	// Without the sockets' folder, no link is reached.
 	must(t, os.Chmod(linksFile, 0o600))
-	old := linkSockets
-	linkSockets = ""
+	s.links.sockets = ""
 	if code, _ := tunnel(t, addr, "db:5432", nil); code != http.StatusForbidden {
-		t.Errorf("without -link-sockets: %d", code)
+		t.Errorf("without link_sockets: %d", code)
 	}
-	linkSockets = old
+	s.links.sockets = dir
 	for name, data := range map[string]string{
 		"another version": `{"version":2,"links":[{"hosts":["db"],"addr":"127.77.0.1","port":5432,"socket":"` + good.Socket + `"}]}`,
 		"not JSON":        "db 5432 " + good.Socket,
@@ -398,8 +399,9 @@ func TestLinkListRefused(t *testing.T) {
 // allow: it's never asked of the policy, a resolver or a company proxy. A short name that's no
 // link is the policy's.
 func TestLinkDomainRefused(t *testing.T) {
-	_, events, addr := linkProxy(t)
-	pol = writePolicy(t, "**\n**:5432\n")
+	t.Parallel()
+	s, _, events, addr := linkProxy(t)
+	s.egress.pol = writePolicy(t, "**\n**:5432\n")
 	for _, hp := range []string{"db.devvm.internal:5432", "devvm.internal:443", "x.y.devvm.internal.:5432"} {
 		if code, _ := tunnel(t, addr, hp, nil); code != http.StatusForbidden {
 			t.Errorf("CONNECT %s: %d", hp, code)
@@ -413,12 +415,13 @@ func TestLinkDomainRefused(t *testing.T) {
 	}
 }
 
-// Without -links, the proxy has no links: a name that would be one is the policy's.
+// Without links, the proxy has no links: a name that would be one is the policy's.
 func TestNoLinksFile(t *testing.T) {
-	dir, _, addr := linkProxy(t)
+	t.Parallel()
+	s, dir, _, addr := linkProxy(t)
 	serveLink(t, dir, "127.77.0.1", 5432)
-	writeLinkList(t, linksFile, linkEntry(dir, "127.77.0.1", 5432, "db"))
-	linksFile = ""
+	writeLinkList(t, s.links.file, linkEntry(dir, "127.77.0.1", 5432, "db"))
+	s.links.file = ""
 	if code, _ := tunnel(t, addr, "db:5432", nil); code != http.StatusForbidden {
 		t.Errorf("CONNECT: %d", code)
 	}
@@ -427,6 +430,7 @@ func TestNoLinksFile(t *testing.T) {
 // A link's socket is named by a hash of the VM, "socket", its address and its port, each after a
 // NUL: what devvm _links listens on and the e2e checks look for.
 func TestLinkSocket(t *testing.T) {
+	t.Parallel()
 	got := LinkSocket("/run", "vm", netip.MustParseAddr("127.77.0.1"), 5432)
 	if got != "/run/link-"+LinkHash("vm", "socket", "127.77.0.1", "5432")+".sock" || len(filepath.Base(got)) != len("link-0123456789abcdef.sock") {
 		t.Errorf("LinkSocket = %q", got)

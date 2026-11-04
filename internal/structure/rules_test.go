@@ -130,6 +130,7 @@ func varCases() []ruleCase {
 		{
 			name:  "internal/proxy's state",
 			files: map[string]string{"internal/proxy/a.go": "package proxy\nvar port int\n"},
+			want:  &want{ruleVars, "var port"},
 		},
 		{
 			name:  "an allowed var",

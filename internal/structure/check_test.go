@@ -318,15 +318,11 @@ func varAllowed(name string, value ast.Expr, embed bool) bool {
 }
 
 // checkVars: package-level vars, tests' too, are constants' kin: what
-// varAllowed allows, or what allowedVars lists. internal/proxy is left
-// out: its state is globals its Main sets.
+// varAllowed allows, or what allowedVars lists.
 func checkVars(m *module, r rules) []violation {
 	var vs []violation
 	seen := map[string]bool{}
 	for _, f := range m.files {
-		if matches(f.dir, []string{"internal/proxy/..."}) {
-			continue
-		}
 		for _, d := range f.ast.Decls {
 			gd, ok := d.(*ast.GenDecl)
 			if !ok || gd.Tok != token.VAR {

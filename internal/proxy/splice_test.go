@@ -87,8 +87,7 @@ func checkTunnel(t *testing.T, f *farEnd, open func() (net.Conn, io.Reader)) {
 
 	c, r = open()
 	_ = c.SetDeadline(time.Now().Add(20 * time.Second))
-	// Five bytes: a tunnel the policy allows reads that many, to see whether they start TLS.
-	_, _ = c.Write([]byte("s----"))
+	_, _ = c.Write([]byte("s"))
 	if _, err := io.ReadFull(r, make([]byte, 64<<10)); err != nil {
 		t.Fatalf("the far end's bytes: %v", err)
 	}
@@ -120,33 +119,73 @@ func connectTo(t *testing.T, addr, hostPort string) (net.Conn, io.Reader) {
 
 // A tunnel to a host the policy allows.
 func TestTunnelSplices(t *testing.T) {
-	_, _, addr := linkProxy(t)
+	t.Parallel()
+	s, _, _, addr := linkProxy(t)
 	ln, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	must(t, err)
 	f := serveFarEnd(t, ln)
 	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
-	pol = writePolicy(t, "127.0.0.1:"+port+"\n")
+	s.egress.pol = writePolicy(t, "127.0.0.1:"+port+"\n")
 	checkTunnel(t, f, func() (net.Conn, io.Reader) { return connectTo(t, addr, "127.0.0.1:"+port) })
+}
+
+// A tunnel to a host the policy allows passes the far end's bytes on at once: a protocol whose
+// server speaks first (SMTP) gets its greeting before the client sends anything, and a client that
+// sends fewer than five bytes that aren't TLS gets its answer.
+func TestTunnelServerSpeaksFirst(t *testing.T) {
+	t.Parallel()
+	s, _, _, addr := linkProxy(t)
+	ln, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	must(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = c.Close() }()
+		_, _ = io.WriteString(c, "220 hello\r\n")
+		b := make([]byte, 2)
+		if _, err := io.ReadFull(c, b); err == nil {
+			_, _ = c.Write(append([]byte("got:"), b...))
+		}
+	}()
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	s.egress.pol = writePolicy(t, "127.0.0.1:"+port+"\n")
+	c, r := connectTo(t, addr, "127.0.0.1:"+port)
+	defer func() { _ = c.Close() }()
+	_ = c.SetDeadline(time.Now().Add(5 * time.Second))
+	greeting := make([]byte, len("220 hello\r\n"))
+	if _, err := io.ReadFull(r, greeting); err != nil || string(greeting) != "220 hello\r\n" {
+		t.Fatalf("the greeting before the client spoke: %q, %v", greeting, err)
+	}
+	_, _ = c.Write([]byte("hi"))
+	answer := make([]byte, len("got:hi"))
+	if _, err := io.ReadFull(r, answer); err != nil || string(answer) != "got:hi" {
+		t.Errorf("two bytes that aren't TLS: %q, %v", answer, err)
+	}
 }
 
 // A tunnel to one of the VM's links.
 func TestLinkTunnelSplices(t *testing.T) {
-	dir, _, addr := linkProxy(t)
+	t.Parallel()
+	s, dir, _, addr := linkProxy(t)
 	sock := LinkSocket(dir, linkVM, netip.MustParseAddr("127.77.0.1"), 5432)
 	ln, err := new(net.ListenConfig).Listen(t.Context(), "unix", sock)
 	must(t, err)
 	f := serveFarEnd(t, ln)
-	writeLinkList(t, linksFile, linkEntry(dir, "127.77.0.1", 5432, "db"))
+	writeLinkList(t, s.links.file, linkEntry(dir, "127.77.0.1", 5432, "db"))
 	checkTunnel(t, f, func() (net.Conn, io.Reader) { return connectTo(t, addr, "db:5432") })
 }
 
 // splice closes a connection with no writing side of its own to close at the end of what the
 // client sent, and returns once the server's bytes end, both connections closed.
 func TestSpliceEnds(t *testing.T) {
+	t.Parallel()
 	client, vm := net.Pipe()
 	server, far := net.Pipe()
 	done := make(chan struct{})
-	go func() { splice(client, server); close(done) }()
+	go func() { splice(client, server, nil); close(done) }()
 	go func() { _, _ = vm.Write([]byte("hi")); _ = vm.Close() }()
 	_ = far.SetDeadline(time.Now().Add(10 * time.Second))
 	if b, err := io.ReadAll(far); string(b) != "hi" || err != nil {
@@ -166,6 +205,7 @@ func TestSpliceEnds(t *testing.T) {
 // hijack answers that the tunnel is open, and the bytes the client sent along with its request
 // are the connection's first.
 func TestHijack(t *testing.T) {
+	t.Parallel()
 	ln, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	must(t, err)
 	srv := &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -194,6 +234,7 @@ func TestHijack(t *testing.T) {
 // The links' addresses are 127.77.0.0/16, as themselves or mapped into IPv6, and LinkAddr gives
 // each of them.
 func TestIsLinkAddr(t *testing.T) {
+	t.Parallel()
 	for s, want := range map[string]bool{
 		"127.77.0.1": true, "127.77.255.254": true, "127.77.0.0": true, "127.77.255.255": true, "::ffff:127.77.0.1": true,
 		"127.0.0.1": false, "127.78.0.0": false, "127.76.255.255": false, "::1": false, "::ffff:127.0.0.1": false,

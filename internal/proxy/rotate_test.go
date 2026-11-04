@@ -31,6 +31,7 @@ func modeOf(t *testing.T, path string) os.FileMode {
 // one there, and a new one starts; no line spans two files, and every
 // file is the user's alone, whatever mode the log had.
 func TestRotateRenames(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "vm.jsonl")
 	if err := os.WriteFile(path, []byte("old 0123456789\n"), 0o644); err != nil { //nolint:gosec // a log left open to others
 		t.Fatal(err)
@@ -87,6 +88,7 @@ func TestRotateRenames(t *testing.T) {
 // new log, whose size counts from its own, and the next rotation keeps
 // the renamed one's lines.
 func TestRotateFollowsTheOtherWriter(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "vm.jsonl")
 	r, err := openRotating(path, 30)
 	if err != nil {
@@ -123,6 +125,7 @@ func TestRotateFollowsTheOtherWriter(t *testing.T) {
 // Writes from many connections at once during a rotation: each line
 // whole, once, in one of the two files.
 func TestRotateConcurrent(t *testing.T) {
+	t.Parallel()
 	const writers, each = 16, 50
 	line := func(w, i int) string { return fmt.Sprintf(`{"writer":%02d,"line":%03d,"pad":"0123456789"}`+"\n", w, i) }
 	total := int64(writers * each * len(line(0, 0)))
@@ -173,6 +176,7 @@ func TestRotateConcurrent(t *testing.T) {
 // its last error goes to: it's copied to <log>.1 and emptied, so writes
 // that bypass the rotation still reach the current log.
 func TestRotateCopies(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "vm.proxy.log")
 	if err := os.WriteFile(path, []byte("started 0123\n"), 0o644); err != nil { //nolint:gosec // a log left open to others
 		t.Fatal(err)

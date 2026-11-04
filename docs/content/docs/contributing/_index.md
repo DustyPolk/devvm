@@ -87,7 +87,7 @@ A fresh context elsewhere, such as for a cleanup that outlives a canceled run, o
 | --- | --- |
 | `max-methods` | no type has more than 24 methods, value and pointer receivers together; a larger one splits by what its methods do |
 | `no-init` | no `func init()` |
-| `package-vars` | outside `internal/proxy`, a package-level `var` is a blank interface check, an `Err*`/`err*` sentinel from `errors.New` or `fmt.Errorf`, a `regexp.MustCompile`, `template.Must` or `sync.Once*` result, a `//go:embed` file, or listed in `allowedVars`; anything else becomes a field, a const or a local |
+| `package-vars` | a package-level `var` is a blank interface check, an `Err*`/`err*` sentinel from `errors.New` or `fmt.Errorf`, a `regexp.MustCompile`, `template.Must` or `sync.Once*` result, a `//go:embed` file, or listed in `allowedVars`; anything else becomes a field, a const or a local |
 | `layers` | which packages import which, in non-test files (tests may wire packages together) |
 | `owners` | in non-test files, only its owner runs a host command that `commands` lists, only the files `execSites` lists make a host command, only `guardOwner` asserts a backend package's type, only `envOwner` reads a `DEVVM_` variable, but the settings `envSettings` lists, only its file in `envOwners` reads `HOME`, only its owner's string literals hold a text that `literals` lists, and only `pathsOwner` builds a path in devvm's data or config folder ([details](#the-checks-on-owners)) |
 

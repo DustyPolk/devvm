@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -25,16 +26,57 @@ import (
 	"time"
 )
 
-func writePolicy(t *testing.T, rules string) *policy {
+// quiet is a log that keeps nothing.
+func quiet() *log.Logger { return log.New(io.Discard, "devvm proxy: ", 0) }
+
+// policyFiles writes rules to a policy file of the test's own, and returns it and a file that's
+// missing, which has no rules.
+func policyFiles(t *testing.T, rules string) []string {
 	t.Helper()
 	f := filepath.Join(t.TempDir(), "policy")
-	if err := os.WriteFile(f, []byte(rules), 0o600); err != nil {
-		t.Fatal(err)
+	must(t, os.WriteFile(f, []byte(rules), 0o600))
+	return []string{f, filepath.Join(t.TempDir(), "missing")}
+}
+
+func writePolicy(t *testing.T, rules string) *policy {
+	t.Helper()
+	return newPolicy(nil, policyFiles(t, rules), quiet())
+}
+
+// testServer is a proxy of the test's own, made as Main makes one (newServer), from c with a
+// policy of rules (and the VM's name "vm" when c has none): it logs nothing, and nothing of it is
+// any other test's.
+func testServer(t *testing.T, c Config, rules string) *server {
+	t.Helper()
+	c.Policies = append(c.Policies, policyFiles(t, rules)...)
+	if c.VM == "" {
+		c.VM = "vm"
 	}
-	return newPolicy(nil, []string{f, filepath.Join(t.TempDir(), "missing")})
+	s, err := newServer(c, IO{}, quiet(), io.Discard)
+	must(t, err)
+	return s
+}
+
+// listen serves s for the test, on a port of its own, and returns its address.
+func listen(t *testing.T, s *server) string {
+	t.Helper()
+	p := httptest.NewServer(http.HandlerFunc(s.handler))
+	t.Cleanup(p.Close)
+	return p.Listener.Addr().String()
+}
+
+// logs captures s's event log and its own log lines.
+func logs(s *server) *syncBuffer {
+	b := &syncBuffer{}
+	s.events.mu.Lock()
+	s.events.out = b
+	s.events.mu.Unlock()
+	s.log.SetOutput(b)
+	return b
 }
 
 func TestNewBlocks(t *testing.T) {
+	t.Parallel()
 	rs := []numbered{
 		{1, Event{Host: "old.test", Port: 443, Reason: "not in the allowlist"}},
 		{2, Event{Host: "registry.example.com", Port: 443, Reason: "not in the allowlist"}},
@@ -72,6 +114,7 @@ func TestNewBlocks(t *testing.T) {
 }
 
 func TestDecide(t *testing.T) {
+	t.Parallel()
 	p := writePolicy(t, `
 # comment
 example.com
@@ -114,6 +157,7 @@ github.com:22
 // ParsePolicy is strict: a line holds one rule, as devvm network allow takes it, a comment, or
 // nothing. Every other line is returned as not a rule, with its number, and the proxy skips it.
 func TestParsePolicy(t *testing.T) {
+	t.Parallel()
 	text := "# a comment\n" +
 		"\n" +
 		"example.com\n" +
@@ -179,13 +223,11 @@ func TestParsePolicy(t *testing.T) {
 // logging the file, the line's number and its text, and keeps the file's rules. A trailing dot
 // in a rule names the same host.
 func TestPolicySkipsBadLines(t *testing.T) {
+	t.Parallel()
 	var logged strings.Builder
-	old := logger.Writer()
-	logger.SetOutput(&logged)
-	t.Cleanup(func() { logger.SetOutput(old) })
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("**\nexample.com:x\n!example.org.\n!::ffff:10.0.0.0/104\n"), 0o600))
-	p := newPolicy(nil, []string{f})
+	p := newPolicy(nil, []string{f}, log.New(&logged, "", 0))
 	if ok, why := p.decide("example.org", 443); ok {
 		t.Errorf("example.org allowed (%s): the deny with a trailing dot was skipped", why)
 	}
@@ -206,15 +248,13 @@ func TestPolicySkipsBadLines(t *testing.T) {
 // everything, by name and by address, as a refusal no allow rule would lift, naming the file and
 // line; fixing the line lifts it.
 func TestPolicyBrokenDeny(t *testing.T) {
+	t.Parallel()
 	var logged strings.Builder
-	old := logger.Writer()
-	logger.SetOutput(&logged)
-	t.Cleanup(func() { logger.SetOutput(old) })
 	dir := t.TempDir()
 	good, f := filepath.Join(dir, "good"), filepath.Join(dir, "policy")
 	must(t, os.WriteFile(good, []byte("**\n10.0.0.0/8\n"), 0o600))
 	must(t, os.WriteFile(f, []byte("ok.test\n! bad.example.com # a space after the !\n"), 0o600))
-	p := newPolicy(nil, []string{good, f})
+	p := newPolicy(nil, []string{good, f}, log.New(&logged, "", 0))
 	for _, h := range []string{"bad.example.com", "other.test", "10.0.0.1"} {
 		ok, why, refused := p.verdict(h, 443)
 		if ok || !refused || !strings.Contains(why, f+":2 isn't a rule but reads as a deny") {
@@ -228,14 +268,13 @@ func TestPolicyBrokenDeny(t *testing.T) {
 		t.Errorf("the log has no %q:\n%s", want, logged.String())
 	}
 	// Through the proxy: 403, refused, with no allow command.
-	oldPol, oldOut, oldAuth := pol, logOut, proxyAuth
-	var events strings.Builder
-	pol, logOut, proxyAuth = p, &events, ""
-	t.Cleanup(func() { pol, logOut, proxyAuth = oldPol, oldOut, oldAuth })
+	s := testServer(t, Config{}, "")
+	s.egress.pol = p
+	events := logs(s)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodConnect, "http://other.test:443", nil)
 	req.Host = "other.test:443"
 	w := httptest.NewRecorder()
-	handler(w, req)
+	s.handler(w, req)
 	if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), "network allow") || !strings.Contains(w.Body.String(), "refused") {
 		t.Errorf("answered %d %q", w.Code, w.Body.String())
 	}
@@ -245,7 +284,7 @@ func TestPolicyBrokenDeny(t *testing.T) {
 	// An absolute-form request too.
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://other.test/x", nil)
 	w = httptest.NewRecorder()
-	handler(w, req)
+	s.handler(w, req)
 	if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), "network allow") {
 		t.Errorf("absolute form: answered %d %q", w.Code, w.Body.String())
 	}
@@ -268,10 +307,11 @@ func TestPolicyBrokenDeny(t *testing.T) {
 // times) is read again: its denies, a broken one too, hold again. A leading byte-order mark is
 // no part of the first line.
 func TestPolicyFileBack(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f, away := filepath.Join(dir, "policy"), filepath.Join(dir, "away")
 	must(t, os.WriteFile(f, []byte("\xef\xbb\xbf!bad.test\n**\n"), 0o600))
-	p := newPolicy(nil, []string{f})
+	p := newPolicy(nil, []string{f}, quiet())
 	if ok, _ := p.decide("bad.test", 443); ok {
 		t.Fatal("bad.test allowed: the byte-order mark hid its deny")
 	}
@@ -299,9 +339,10 @@ func TestPolicyFileBack(t *testing.T) {
 }
 
 func TestPolicyReload(t *testing.T) {
+	t.Parallel()
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("a.test\n"), 0o600))
-	p := newPolicy(nil, []string{f})
+	p := newPolicy(nil, []string{f}, quiet())
 	if ok, _ := p.decide("b.test", 443); ok {
 		t.Fatal("b.test allowed before it was added")
 	}
@@ -327,18 +368,19 @@ func TestPolicyReload(t *testing.T) {
 // beats a built-in allow. One that's missing, or holds a line that isn't a rule, or with no files
 // to read it from, is an error.
 func TestBuiltinPolicies(t *testing.T) {
+	t.Parallel()
 	own := fstest.MapFS{
 		"layers/base.policy":       {Data: []byte("# devvm's\nbase.test\n")},
 		"shared-tools/node.policy": {Data: []byte("node.test\n*.node.test:8443\n")},
 		"layers/bad.policy":        {Data: []byte("ok.test\nnot a rule\n")},
 	}
-	rs, err := readBuiltins(own, []string{"layers/base.policy", "shared-tools/node.policy"})
+	rs, err := readBuiltins(own, []string{"layers/base.policy", "shared-tools/node.policy"}, quiet())
 	if err != nil || len(rs) != 3 {
 		t.Fatalf("readBuiltins = %v, %v", rs, err)
 	}
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("mine.test\n!node.test\n"), 0o600))
-	p := newPolicy(rs, []string{f})
+	p := newPolicy(rs, []string{f}, quiet())
 	all, _ := p.all()
 	var texts []string
 	for _, r := range all {
@@ -367,45 +409,48 @@ func TestBuiltinPolicies(t *testing.T) {
 		{own, []string{"../policy"}, "built-in policy ../policy: "},
 		{nil, []string{"layers/base.policy"}, "built-in policies need devvm's own files"},
 	} {
-		if _, err := readBuiltins(c.own, c.names); err == nil || !strings.HasPrefix(err.Error(), c.want) {
+		if _, err := readBuiltins(c.own, c.names, quiet()); err == nil || !strings.HasPrefix(err.Error(), c.want) {
 			t.Errorf("readBuiltins(%q) = %v, want %q", c.names, err, c.want)
 		}
 	}
-	if rs, err := readBuiltins(nil, nil); err != nil || rs != nil {
+	if rs, err := readBuiltins(nil, nil, quiet()); err != nil || rs != nil {
 		t.Errorf("no built-ins: %v, %v", rs, err)
 	}
 }
 
 func TestInternal(t *testing.T) {
+	t.Parallel()
+	own := &hostAddrs{}
 	for _, s := range []string{
 		"127.0.0.1", "::1", "10.0.0.1", "172.16.3.4", "192.168.1.1", "169.254.169.254",
 		"100.64.0.1", "fd00::1", "fe80::1", "0.0.0.0", "::ffff:127.0.0.1", "224.0.0.1",
 		"0.1.2.3", "192.0.0.8", "198.18.0.1", "240.0.0.1", "64:ff9b::10.0.0.1", "64:ff9b::127.0.0.1", "64:ff9b:1::1",
 		"::7f00:1", "::a00:1", "fec0::1",
 	} {
-		if !internal(netip.MustParseAddr(s)) {
+		if !own.internal(netip.MustParseAddr(s)) {
 			t.Errorf("%s should be internal", s)
 		}
 	}
 	for _, s := range []string{"1.1.1.1", "140.82.112.3", "2606:4700::1111", "64:ff9b::1.1.1.1"} {
-		if internal(netip.MustParseAddr(s)) {
+		if own.internal(netip.MustParseAddr(s)) {
 			t.Errorf("%s shouldn't be internal", s)
 		}
 	}
 }
 
 func TestFloor(t *testing.T) {
-	pol = writePolicy(t, "**\n10.9.8.7\n")
-	if _, err := resolve(t.Context(), "127.0.0.1", 443); !errors.Is(err, errFloor) {
+	t.Parallel()
+	e := testServer(t, Config{}, "**\n10.9.8.7\n").egress
+	if _, err := e.resolve(t.Context(), "127.0.0.1", 443); !errors.Is(err, errFloor) {
 		t.Errorf("loopback: got %v, want the floor", err)
 	}
-	if _, err := resolve(t.Context(), "10.9.8.6", 443); !errors.Is(err, errFloor) {
+	if _, err := e.resolve(t.Context(), "10.9.8.6", 443); !errors.Is(err, errFloor) {
 		t.Errorf("private: got %v, want the floor", err)
 	}
-	if a, err := resolve(t.Context(), "10.9.8.7", 443); err != nil || len(a) != 1 {
+	if a, err := e.resolve(t.Context(), "10.9.8.7", 443); err != nil || len(a) != 1 {
 		t.Errorf("an address rule should pass the floor: %v %v", a, err)
 	}
-	if _, why := check(t.Context(), "localhost", 443, false); why == "" {
+	if _, why := e.check(t.Context(), "localhost", 443, false); why == "" {
 		t.Error("localhost passed the floor through '**'")
 	}
 }
@@ -413,39 +458,37 @@ func TestFloor(t *testing.T) {
 // A deny beats any allow, for addresses too: a name that resolves to a denied address isn't dialed,
 // even when a host rule or a wider address rule allows it.
 func TestAddressDenyAppliesToNames(t *testing.T) {
-	pol = writePolicy(t, "localhost:8080\n127.0.0.0/8:8080\n::1:8080\n!127.0.0.1:8080\n!::1:8080\n")
-	if ok, _ := pol.decide("127.0.0.1", 8080); ok {
+	t.Parallel()
+	e := testServer(t, Config{}, "localhost:8080\n127.0.0.0/8:8080\n::1:8080\n!127.0.0.1:8080\n!::1:8080\n").egress
+	if ok, _ := e.pol.decide("127.0.0.1", 8080); ok {
 		t.Fatal("the denied address itself is allowed")
 	}
-	if pol.addrAllowed(netip.MustParseAddr("127.0.0.1"), 8080) {
+	if e.pol.addrAllowed(netip.MustParseAddr("127.0.0.1"), 8080) {
 		t.Error("addrAllowed ignores the deny")
 	}
-	if _, why := check(t.Context(), "localhost", 8080, false); why == "" {
+	if _, why := e.check(t.Context(), "localhost", 8080, false); why == "" {
 		t.Error("localhost, which resolves to denied addresses, passed")
 	}
-	pol = writePolicy(t, "**\n!1.1.1.1\n")
-	if a, err := resolve(t.Context(), "1.1.1.1", 443); err == nil {
+	e.pol = writePolicy(t, "**\n!1.1.1.1\n")
+	if a, err := e.resolve(t.Context(), "1.1.1.1", 443); err == nil {
 		t.Errorf("a denied public address resolved: %v", a)
 	}
 	// The NAT64 form of a denied IPv4 address (64:ff9b::a.b.c.d, which DNS64 hands out on IPv6-only
 	// networks) is denied too, as the floor judges it by the IPv4 address in it.
-	pol = writePolicy(t, "**\n!203.0.113.0/24\n")
+	e.pol = writePolicy(t, "**\n!203.0.113.0/24\n")
 	n := netip.MustParseAddr("64:ff9b::cb00:7105")
-	if !pol.addrDenied(n, 443) {
+	if !e.pol.addrDenied(n, 443) {
 		t.Error("the NAT64 form of a denied address isn't denied")
 	}
-	if a, err := resolve(t.Context(), n.String(), 443); err == nil {
+	if a, err := e.resolve(t.Context(), n.String(), 443); err == nil {
 		t.Errorf("the NAT64 form of a denied address resolved: %v", a)
 	}
 }
 
 // With a password, every request needs it (user devvm): CONNECT, absolute-form and devvm.proxy alike.
 func TestProxyAuth(t *testing.T) {
-	pol = writePolicy(t, "")
-	proxyAuth = "k3y"
-	t.Cleanup(func() { proxyAuth = "" })
-	proxy := httptest.NewServer(http.HandlerFunc(handler))
-	defer proxy.Close()
+	t.Parallel()
+	addr := listen(t, testServer(t, Config{Password: "k3y"}, ""))
 	basic := func(s string) string { return "Basic " + base64.StdEncoding.EncodeToString([]byte(s)) }
 	for _, c := range []struct {
 		auth string
@@ -461,7 +504,7 @@ func TestProxyAuth(t *testing.T) {
 			if c.auth != "" {
 				h += "Proxy-Authorization: " + c.auth + "\r\n"
 			}
-			got, _ := roundTrip(t, proxy.Listener.Addr().String(), h+"\r\n")
+			got, _ := roundTrip(t, addr, h+"\r\n")
 			if strings.HasPrefix(req, "CONNECT") && c.want == http.StatusOK {
 				// Past the password: refused by the (empty) policy instead.
 				if got == http.StatusProxyAuthRequired {
@@ -476,13 +519,60 @@ func TestProxyAuth(t *testing.T) {
 	}
 }
 
+// Two proxies in one process share nothing of a VM's: each takes only its own password, logs and
+// lists only its own blocks, as its own VM, and keeps its own values, looked up with its own
+// lookup, and its own CA's leaves.
+func TestServersApart(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeCA(t, dir)
+	other := filepath.Join(dir, "other")
+	must(t, os.Mkdir(other, 0o700))
+	writeCA(t, other)
+	a := testServer(t, Config{VM: "devvm-a", Password: "pa", CA: filepath.Join(dir, "ca.pem"), CAKey: filepath.Join(dir, "ca.key")}, "")
+	b := testServer(t, Config{VM: "devvm-b", Password: "pb", CA: filepath.Join(other, "ca.pem"), CAKey: filepath.Join(other, "ca.key")}, "")
+	aEvents, bEvents := logs(a), logs(b)
+	aAddr, bAddr := listen(t, a), listen(t, b)
+	auth := func(pw string) string { return "Proxy-Authorization: " + authOf(ProxyUser, pw) + "\r\n" }
+	if code, _ := roundTrip(t, bAddr, "GET http://devvm.proxy/blocked HTTP/1.1\r\nHost: devvm.proxy\r\n"+auth("pa")+"\r\n"); code != http.StatusProxyAuthRequired {
+		t.Errorf("b took a's password: %d", code)
+	}
+	if code, _ := roundTrip(t, bAddr, "CONNECT blocked.test:443 HTTP/1.1\r\nHost: blocked.test:443\r\n"+auth("pb")+"\r\n"); code != http.StatusForbidden {
+		t.Errorf("b's block: %d", code)
+	}
+	if _, body := roundTrip(t, aAddr, "GET http://devvm.proxy/blocked HTTP/1.1\r\nHost: devvm.proxy\r\n"+auth("pa")+"\r\n"); !strings.Contains(body, "nothing blocked") {
+		t.Errorf("a lists b's block: %q", body)
+	}
+	if _, body := roundTrip(t, bAddr, "GET http://devvm.proxy/blocked/new?after=0 HTTP/1.1\r\nHost: devvm.proxy\r\n"+auth("pb")+"\r\n"); !strings.Contains(body, "blocked.test") {
+		t.Errorf("b doesn't list its block: %q", body)
+	}
+	if aEvents.String() != "" || !strings.Contains(bEvents.String(), `"vm":"devvm-b","event":"blocked","host":"blocked.test"`) {
+		t.Errorf("events: a %q, b %q", aEvents.String(), bEvents.String())
+	}
+	fakeSecret(a.secrets, "a-value")
+	fakeSecret(b.secrets, "b-value")
+	bind := Binding{Name: "t", Kind: KindSecret}
+	if v, err := a.secrets.value(bind); v != "a-value" || err != nil {
+		t.Errorf("a's value: %q, %v", v, err)
+	}
+	if v, err := b.secrets.value(bind); v != "b-value" || err != nil {
+		t.Errorf("b's value: %q, %v", v, err)
+	}
+	la, err := a.ca.leafFor("api.example.com")
+	must(t, err)
+	lb, err := b.ca.leafFor("api.example.com")
+	must(t, err)
+	if la == lb || la.Leaf.CheckSignatureFrom(a.ca.cert) != nil || lb.Leaf.CheckSignatureFrom(a.ca.cert) == nil {
+		t.Error("a leaf of one proxy's CA is the other's")
+	}
+}
+
 // Hosts are names or addresses; anything else (shell characters, spaces) is refused before the
 // policy, the log or the suggested allow command see it.
 func TestOddHostsRefused(t *testing.T) {
-	pol = writePolicy(t, "")
-	logOut = io.Discard
-	proxy := httptest.NewServer(http.HandlerFunc(handler))
-	defer proxy.Close()
+	t.Parallel()
+	s := testServer(t, Config{}, "")
+	addr := listen(t, s)
 	for _, req := range []string{
 		"CONNECT x;sh*:443 HTTP/1.1\r\nHost: x\r\n\r\n",
 		"GET http://x;sh*/ HTTP/1.1\r\nHost: x;sh*\r\n\r\n",
@@ -495,7 +585,7 @@ func TestOddHostsRefused(t *testing.T) {
 		"CONNECT evil..test:443 HTTP/1.1\r\nHost: x\r\n\r\n",
 		"CONNECT .evil.test:443 HTTP/1.1\r\nHost: x\r\n\r\n",
 	} {
-		code, body := roundTrip(t, proxy.Listener.Addr().String(), req)
+		code, body := roundTrip(t, addr, req)
 		if code != http.StatusBadRequest || strings.Contains(body, "network allow") {
 			t.Errorf("%q: %d %q (want 400, no allow command)", strings.SplitN(req, "\r\n", 2)[0], code, body)
 		}
@@ -519,18 +609,19 @@ func TestOddHostsRefused(t *testing.T) {
 	}
 	// Under ** with a deny of evil.test, every form with more dots gets 400: the policy trims one
 	// dot of its own, so evil.test.. alone (evil.test. to it) would pass the deny.
-	pol = writePolicy(t, "**\n!evil.test\n")
-	if ok, _, _ := pol.verdict("evil.test..", 443); !ok {
+	s.egress.pol = writePolicy(t, "**\n!evil.test\n")
+	if ok, _, _ := s.egress.pol.verdict("evil.test..", 443); !ok {
 		t.Errorf("the policy denies evil.test..: then this test doesn't show HostOK refusing it")
 	}
 	for _, h := range []string{"evil.test..", "evil.test...", "evil.test...."} {
-		if code, body := roundTrip(t, proxy.Listener.Addr().String(), "CONNECT "+h+":443 HTTP/1.1\r\nHost: x\r\n\r\n"); code != http.StatusBadRequest {
+		if code, body := roundTrip(t, addr, "CONNECT "+h+":443 HTTP/1.1\r\nHost: x\r\n\r\n"); code != http.StatusBadRequest {
 			t.Errorf("%s under **: %d %q, want 400", h, code, body)
 		}
 	}
 }
 
 func TestAllowRule(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		host string
 		port int
@@ -553,6 +644,7 @@ func TestAllowRule(t *testing.T) {
 }
 
 func TestValidRule(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		rule string
 		ok   bool
@@ -657,6 +749,7 @@ func clientHello(t *testing.T, name string) []byte {
 }
 
 func TestClientHello(t *testing.T) {
+	t.Parallel()
 	if rec := clientHello(t, "api.example.com"); len(rec) < 50 || rec[0] != 0x16 {
 		t.Errorf("record not returned for replay: %d bytes", len(rec))
 	}
@@ -667,6 +760,7 @@ func TestClientHello(t *testing.T) {
 }
 
 func TestSNIMatches(t *testing.T) {
+	t.Parallel()
 	if !sniMatches("API.example.com", "api.example.com") || sniMatches("other.com", "api.example.com") {
 		t.Error("name check")
 	}
@@ -687,6 +781,7 @@ func writeConfig(t *testing.T, c Config) string {
 // are errors, and nothing is served then. The proxy has no other mode: what the host does alone
 // (the CA, agents' logins, redaction) isn't reachable from its arguments.
 func TestMainRefuses(t *testing.T) {
+	t.Parallel()
 	var out, errs bytes.Buffer
 	std := IO{Stdout: &out, Stderr: &errs}
 	if err := Main([]string{"--help"}, std); err != nil || strings.Count("\n"+out.String(), "\n  -") != 1 || !strings.Contains(out.String(), "-config") {
@@ -713,7 +808,6 @@ func TestMainRefuses(t *testing.T) {
 	// A built-in policy devvm's files lack: a devvm bug, so the proxy never listens.
 	std.FS = fstest.MapFS{"layers/base.policy": {Data: []byte("base.test\n")}}
 	c := Config{Listen: "127.0.0.1:0", Password: "k3y", BuiltinPolicies: []string{"layers/base.policy", "layers/gone.policy"}}
-	t.Cleanup(func() { proxyAuth = "" })
 	if err := Main([]string{"-config", writeConfig(t, c)}, std); err == nil || !strings.Contains(err.Error(), "built-in policy layers/gone.policy") {
 		t.Errorf("a missing built-in: %v", err)
 	}
@@ -725,8 +819,8 @@ func TestMainRefuses(t *testing.T) {
 // A short run: the proxy listens, logs that it does to stderr, answers with the VM's password, and
 // returns once the VM's hostagent (here a sleep) is gone.
 func TestMainRuns(t *testing.T) {
-	lifelineTick = 50 * time.Millisecond
-	t.Cleanup(func() { lifelineTick = 3 * time.Second; proxyAuth, linksFile = "", "" })
+	t.Parallel()
+	const tick = 50 * time.Millisecond
 	dir := t.TempDir()
 	pidFile, logFile := filepath.Join(dir, "ha.pid"), filepath.Join(dir, "log.jsonl")
 	sleep := exec.CommandContext(t.Context(), "sleep", "60")
@@ -749,11 +843,11 @@ func TestMainRuns(t *testing.T) {
 	errs := &syncBuffer{}
 	done := make(chan error)
 	go func() {
-		done <- Main([]string{"--config", writeConfig(t, Config{
+		done <- run([]string{"--config", writeConfig(t, Config{
 			Listen: addr, VM: "devvm-x", Password: "k3y", Lifeline: pidFile, Log: logFile,
 			Policies: []string{filepath.Join(dir, "missing")}, Links: filepath.Join(dir, "devvm-x.links.json"),
 			BuiltinPolicies: []string{"layers/base.policy"},
-		})}, IO{Stdout: io.Discard, Stderr: errs, FS: fstest.MapFS{"layers/base.policy": {Data: []byte("base.test:8443\n")}}})
+		})}, IO{Stdout: io.Discard, Stderr: errs, FS: fstest.MapFS{"layers/base.policy": {Data: []byte("base.test:8443\n")}}}, tick)
 	}()
 	pu, _ := url.Parse("http://devvm:k3y@" + addr)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}}
@@ -788,7 +882,7 @@ func TestMainRuns(t *testing.T) {
 	if !strings.Contains(string(b), `"vm":"devvm-x","event":"blocked","host":"blocked.test"`) {
 		t.Errorf("event log = %q", b)
 	}
-	time.Sleep(5 * lifelineTick) // the proxy has seen the hostagent
+	time.Sleep(5 * tick) // the proxy has seen the hostagent
 	_ = sleep.Process.Kill()
 	_ = sleep.Wait()
 	select {
@@ -912,7 +1006,7 @@ func FuzzRequest(f *testing.F) {
 		if err := os.WriteFile(file, []byte(ruleFor(host, port)+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if ok, why := newPolicy(nil, []string{file}).decide(host, port); !ok {
+		if ok, why := newPolicy(nil, []string{file}, quiet()).decide(host, port); !ok {
 			t.Fatalf("%q: the rule %q doesn't allow %s port %d: %s", raw, ruleFor(host, port), host, port, why)
 		}
 	})

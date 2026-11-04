@@ -3,7 +3,7 @@ package proxy
 import (
 	"bytes"
 	"errors"
-	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +15,7 @@ import (
 
 // A config devvm writes reads back as it was, and Sum tells any change apart.
 func TestConfigRoundTrip(t *testing.T) {
+	t.Parallel()
 	c := Config{ //nolint:gosec // G101: a test's fake password
 		Listen: "127.0.0.1:4000", VM: "devvm-x", Password: "k3y",
 		BuiltinPolicies: []string{"layers/base.policy"}, Policies: []string{"/p/policy"},
@@ -55,6 +56,7 @@ func TestConfigRoundTrip(t *testing.T) {
 // ReadConfig refuses a file that isn't devvm's for this proxy alone, of another version, holding a
 // field it doesn't know, or one the proxy can't run with: each with an error naming why.
 func TestReadConfigRefuses(t *testing.T) {
+	t.Parallel()
 	good := Config{Listen: "127.0.0.1:0", Password: "k3y"}
 	dir := t.TempDir()
 	write := func(name string, b []byte, mode os.FileMode) string {
@@ -120,6 +122,7 @@ func TestReadConfigRefuses(t *testing.T) {
 // ReadRegular, which policy files are read with, follows a link to a regular file, and refuses a
 // FIFO, a device and a file past its cap with a named error, without hanging.
 func TestReadRegular(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "policy")
 	must(t, os.WriteFile(f, []byte("a.test\n"), 0o644)) //nolint:gosec // a policy file others may read, as yours may be
@@ -153,12 +156,11 @@ func TestReadRegular(t *testing.T) {
 // A policy file that becomes a FIFO or a link to /dev/zero is refused, not read: the proxy keeps
 // its last rules, and logs why once.
 func TestPolicyFileNotRegular(t *testing.T) {
+	t.Parallel()
 	errs := &syncBuffer{}
-	logger.SetOutput(errs)
-	t.Cleanup(func() { logger.SetOutput(io.Discard) })
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("a.test\n!b.test\n"), 0o600))
-	p := newPolicy(nil, []string{f})
+	p := newPolicy(nil, []string{f}, log.New(errs, "", 0))
 	if ok, _ := p.decide("a.test", 443); !ok {
 		t.Fatal("a.test isn't allowed")
 	}

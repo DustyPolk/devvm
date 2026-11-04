@@ -17,11 +17,13 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -52,23 +54,13 @@ const (
 	nixTmpAge = time.Hour
 )
 
-var (
-	nixCacheDir       = ""              // Config.NixCache: the cache's folder; "": no cache
-	nixCacheMax       = NixCacheDefault // Config.NixCacheMax: its cap, in bytes
-	nixBase           = "https://" + nixHost
-	nixDial           = func(ctx context.Context) (net.Conn, error) { return dialOut(ctx, nixHost, 443) }
-	nixFloor          = upstreamAllowed // tests: no DNS
-	nixClient         = newNixClient()
-	nixMu             sync.Mutex
-	nixKnown          = map[string]narMeta{} // NAR path (nar/…) → what a checked narinfo says of it
-	nixKnownMax       = 1 << 16
-	nixFetching       = map[string]chan struct{}{} // NARs this proxy is fetching, by path
-	nixSlots          = make(chan struct{}, nixFetchMax)
-	errNixUnsupported = errors.New("not a narinfo devvm reads")
-)
+var errNixUnsupported = errors.New("not a narinfo devvm reads")
 
 // nixFetchMax is how many NARs one proxy fetches at once.
 const nixFetchMax = 4
+
+// nixKnownMax is how many checked narinfos' NARs a proxy remembers.
+const nixKnownMax = 1 << 16
 
 // narMeta is what a checked narinfo says of its NAR's file.
 type narMeta struct {
@@ -76,14 +68,47 @@ type narMeta struct {
 	fileSize int64
 }
 
-// newNixClient makes the client the cache fetches with: to cache.nixos.org only, through the floor
-// or the company proxy (dialOut), with the system's roots and the user's CAs, never following a
-// redirect.
-func newNixClient() *http.Client {
+// nixCache is a proxy's way to the shared Nix cache (Config.NixCache): the folder, which every
+// proxy shares under its lock (.lock), and what this proxy keeps of it, under mu.
+type nixCache struct {
+	dir string // Config.NixCache: the cache's folder; "": no cache
+	max int64  // Config.NixCacheMax: its cap, in bytes
+	// base, dial and floor are cache.nixos.org's URL, how it's reached (through the floor or the
+	// company proxy, dialOut) and the check that it may be (the floor's, as for any request).
+	base   string
+	dial   func(ctx context.Context) (net.Conn, error)
+	floor  func(ctx context.Context) error
+	client *http.Client
+	egress *egress // the VM's policy decides whether cache.nixos.org may be asked
+	events *events
+	log    *log.Logger
+
+	mu       sync.Mutex
+	known    map[string]narMeta       // NAR path (nar/…) → what a checked narinfo says of it
+	fetching map[string]chan struct{} // NARs this proxy is fetching, by path
+	slots    chan struct{}            // nixFetchMax
+}
+
+// newNixCache is the cache in dir, capped at maxSize, which fetches from cache.nixos.org through e,
+// trusting roots (nil: the system's) besides the system's.
+func newNixCache(dir string, maxSize int64, e *egress, ev *events, l *log.Logger, roots *x509.CertPool) *nixCache {
+	n := &nixCache{
+		dir: dir, max: maxSize, base: "https://" + nixHost, egress: e, events: ev, log: l,
+		known: map[string]narMeta{}, fetching: map[string]chan struct{}{}, slots: make(chan struct{}, nixFetchMax),
+	}
+	n.dial = func(ctx context.Context) (net.Conn, error) { return e.dialOut(ctx, nixHost, 443) }
+	n.floor = n.upstreamAllowed
+	n.client = n.newClient(roots)
+	return n
+}
+
+// newClient makes the client the cache fetches with: to cache.nixos.org only, through n.dial, with
+// the system's roots and the user's CAs (roots), never following a redirect.
+func (n *nixCache) newClient(roots *x509.CertPool) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			DialContext:     func(ctx context.Context, _, _ string) (net.Conn, error) { return nixDial(ctx) },
-			TLSClientConfig: &tls.Config{RootCAs: upstreamCAs, ServerName: nixHost}, ForceAttemptHTTP2: true,
+			DialContext:     func(ctx context.Context, _, _ string) (net.Conn, error) { return n.dial(ctx) },
+			TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: nixHost}, ForceAttemptHTTP2: true,
 			IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 30 * time.Second,
 		},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -267,44 +292,44 @@ func parseNarinfo(data []byte, hash string) (narinfo, error) {
 }
 
 // remember what a checked narinfo says of its NAR, for the VM's request for it next.
-func remember(ni narinfo) {
-	nixMu.Lock()
-	defer nixMu.Unlock()
-	if len(nixKnown) >= nixKnownMax {
-		clear(nixKnown)
+func (n *nixCache) remember(ni narinfo) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if len(n.known) >= nixKnownMax {
+		clear(n.known)
 	}
-	nixKnown[ni.url] = narMeta{ni.fileHash, ni.fileSize}
+	n.known[ni.url] = narMeta{ni.fileHash, ni.fileSize}
 }
 
-func known(p string) (narMeta, bool) {
-	nixMu.Lock()
-	defer nixMu.Unlock()
-	m, ok := nixKnown[p]
+func (n *nixCache) lookup(p string) (narMeta, bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	m, ok := n.known[p]
 	return m, ok
 }
 
 // --- serving ---
 
-// serveNix answers a request under http://devvm.proxy/nix/. Its event says what came of it: a hit,
+// serve answers a request under http://devvm.proxy/nix/. Its event says what came of it: a hit,
 // fetched, or not found and why (logged, never kept).
-func serveNix(w http.ResponseWriter, r *http.Request) {
+func (n *nixCache) serve(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimPrefix(r.URL.Path, "/nix/")
 	kind := nixPath(p)
 	e := Event{Event: "nix-cache", Host: nixHost, Port: 443, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent()}
 	if (r.Method != http.MethodGet && r.Method != http.MethodHead) || r.URL.RawQuery != "" || r.URL.ForceQuery ||
 		r.URL.EscapedPath() != r.URL.Path || kind == nixNone {
 		e.Reason = "refused: not a request the Nix cache takes"
-		record(e)
+		n.events.record(e)
 		http.Error(w, "devvm proxy: not a request the Nix cache takes", http.StatusBadRequest)
 		return
 	}
-	if nixCacheDir == "" {
+	if n.dir == "" {
 		http.Error(w, "devvm proxy: no Nix cache", http.StatusNotFound)
 		return
 	}
-	if ok, why := pol.decide(nixHost, 443); !ok {
+	if ok, why := n.egress.pol.decide(nixHost, 443); !ok {
 		e.Reason = "not found: " + nixHost + " isn't allowed (" + why + ")"
-		record(e)
+		n.events.record(e)
 		http.Error(w, "devvm proxy: "+nixHost+" isn't allowed", http.StatusNotFound)
 		return
 	}
@@ -314,16 +339,16 @@ func serveNix(w http.ResponseWriter, r *http.Request) {
 		e.Reason = "served"
 		serveBytes(w, r, []byte(nixCacheInfo), "text/x-nix-cache-info", time.Time{})
 	case nixNarinfo:
-		err = serveNarinfo(w, r, p, &e)
+		err = n.serveNarinfo(w, r, p, &e)
 	case nixNar:
-		err = serveNar(w, r, p, &e)
+		err = n.serveNar(w, r, p, &e)
 	case nixNone: // refused above
 	}
 	if err != nil {
 		e.Reason = "not found: " + err.Error()
 		http.Error(w, "devvm proxy: not in the Nix cache", http.StatusNotFound)
 	}
-	record(e)
+	n.events.record(e)
 }
 
 func serveBytes(w http.ResponseWriter, r *http.Request, data []byte, ctype string, mod time.Time) {
@@ -333,25 +358,25 @@ func serveBytes(w http.ResponseWriter, r *http.Request, data []byte, ctype strin
 
 // serveNarinfo answers a narinfo: the cache's copy when it still checks, else cache.nixos.org's,
 // checked, then kept.
-func serveNarinfo(w http.ResponseWriter, r *http.Request, p string, e *Event) error {
+func (n *nixCache) serveNarinfo(w http.ResponseWriter, r *http.Request, p string, e *Event) error {
 	hash := p[:32]
-	file := filepath.Join(nixCacheDir, p)
+	file := filepath.Join(n.dir, p)
 	if data, err := readUpTo(file, nixInfoMax); err == nil {
 		if ni, err := parseNarinfo(data, hash); err == nil {
 			touch(file)
-			remember(ni)
+			n.remember(ni)
 			e.Reason = "hit"
 			serveBytes(w, r, data, "text/x-nix-narinfo", time.Time{})
 			return nil
 		}
 		_ = os.Remove(file) //nolint:gosec // a name nixPath checked, in the cache's folder
 	}
-	if err := nixFloor(r.Context()); err != nil {
+	if err := n.floor(r.Context()); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
-	resp, err := nixGet(ctx, p)
+	resp, err := n.get(ctx, p)
 	if err != nil {
 		return err
 	}
@@ -367,10 +392,10 @@ func serveNarinfo(w http.ResponseWriter, r *http.Request, p string, e *Event) er
 	if err != nil {
 		return fmt.Errorf("its narinfo is refused: %w", err)
 	}
-	if err := keepBytes(file, data); err != nil {
-		logf("nix cache: %v", err)
+	if err := n.keepBytes(file, data); err != nil {
+		n.log.Printf("nix cache: %v", err)
 	}
-	remember(ni)
+	n.remember(ni)
 	e.Reason = "fetched"
 	serveBytes(w, r, data, "text/x-nix-narinfo", time.Time{})
 	return nil
@@ -378,9 +403,9 @@ func serveNarinfo(w http.ResponseWriter, r *http.Request, p string, e *Event) er
 
 // serveNar answers a NAR: the cache's copy, else cache.nixos.org's when a checked narinfo names it,
 // its SHA-256 and size checked against that narinfo's before it's kept and served.
-func serveNar(w http.ResponseWriter, r *http.Request, p string, e *Event) error {
-	file := filepath.Join(nixCacheDir, filepath.FromSlash(p))
-	m, ok := known(p)
+func (n *nixCache) serveNar(w http.ResponseWriter, r *http.Request, p string, e *Event) error {
+	file := filepath.Join(n.dir, filepath.FromSlash(p))
+	m, ok := n.lookup(p)
 	if serveCachedNar(w, r, file, m, ok) {
 		e.Reason = "hit"
 		return nil
@@ -388,15 +413,15 @@ func serveNar(w http.ResponseWriter, r *http.Request, p string, e *Event) error 
 	switch {
 	case !ok:
 		return errors.New("no checked narinfo names it")
-	case m.fileSize > nixCacheMax:
+	case m.fileSize > n.max:
 		return errors.New("it's larger than the cache's cap")
 	case r.Method == http.MethodHead:
 		return errors.New("a HEAD fetches nothing")
 	}
-	if err := nixFloor(r.Context()); err != nil {
+	if err := n.floor(r.Context()); err != nil {
 		return err
 	}
-	if err := fetchOnce(r.Context(), p, file, m); err != nil {
+	if err := n.fetchOnce(r.Context(), p, file, m); err != nil {
 		return err
 	}
 	if !serveCachedNar(w, r, file, m, ok) {
@@ -426,10 +451,10 @@ func serveCachedNar(w http.ResponseWriter, r *http.Request, file string, m narMe
 
 // fetchOnce fetches a NAR into the cache: one fetch of each at a time in this proxy, which other
 // requests for it wait for, and at most nixFetchMax at once.
-func fetchOnce(ctx context.Context, p, file string, m narMeta) error {
-	nixMu.Lock()
-	if ch, busy := nixFetching[p]; busy {
-		nixMu.Unlock()
+func (n *nixCache) fetchOnce(ctx context.Context, p, file string, m narMeta) error {
+	n.mu.Lock()
+	if ch, busy := n.fetching[p]; busy {
+		n.mu.Unlock()
 		select {
 		case <-ch:
 		case <-ctx.Done():
@@ -438,42 +463,42 @@ func fetchOnce(ctx context.Context, p, file string, m narMeta) error {
 		return nil // whether it's there, the caller sees
 	}
 	ch := make(chan struct{})
-	nixFetching[p] = ch
-	nixMu.Unlock()
+	n.fetching[p] = ch
+	n.mu.Unlock()
 	defer func() {
-		nixMu.Lock()
-		delete(nixFetching, p)
-		nixMu.Unlock()
+		n.mu.Lock()
+		delete(n.fetching, p)
+		n.mu.Unlock()
 		close(ch)
 	}()
 	select {
-	case nixSlots <- struct{}{}:
+	case n.slots <- struct{}{}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	defer func() { <-nixSlots }()
-	return fetchNar(ctx, p, file, m)
+	defer func() { <-n.slots }()
+	return n.fetchNar(ctx, p, file, m)
 }
 
 // upstreamAllowed: the floor (or the company proxy's) for cache.nixos.org, as for any request.
-func upstreamAllowed(ctx context.Context) error {
-	if _, why := check(ctx, nixHost, 443, false); why != "" {
+func (n *nixCache) upstreamAllowed(ctx context.Context) error {
+	if _, why := n.egress.check(ctx, nixHost, 443, false); why != "" {
 		return errors.New(nixHost + " is blocked: " + why)
 	}
 	return nil
 }
 
-// nixGet fetches p from cache.nixos.org: its answer when that's 200. Nothing of the VM's request
+// get fetches p from cache.nixos.org: its answer when that's 200. Nothing of the VM's request
 // goes with it.
-func nixGet(ctx context.Context, p string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, nixBase+"/"+p, nil) //nolint:gosec // cache.nixos.org alone, a path nixPath checked
+func (n *nixCache) get(ctx context.Context, p string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, n.base+"/"+p, nil) //nolint:gosec // cache.nixos.org alone, a path nixPath checked
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "devvm-nix-cache")
-	resp, err := nixClient.Do(req) //nolint:gosec // as above; its dialer reaches cache.nixos.org alone
+	resp, err := n.client.Do(req) //nolint:gosec // as above; its dialer reaches cache.nixos.org alone
 	if err != nil {
-		logf("nix cache: %s: %v", p, err) // can name addresses the VM shouldn't learn
+		n.log.Printf("nix cache: %s: %v", p, err) // can name addresses the VM shouldn't learn
 		return nil, errors.New(nixHost + " couldn't be reached")
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -486,12 +511,12 @@ func nixGet(ctx context.Context, p string) (*http.Response, error) {
 // fetchNar downloads p into a file of its own in the cache's folder, checks it against m, and
 // renames it to file. Its room under the cap is taken first, and the file is made its full size
 // at once, so what's being fetched counts against the cap as it's written.
-func fetchNar(ctx context.Context, p, file string, m narMeta) error {
+func (n *nixCache) fetchNar(ctx context.Context, p, file string, m narMeta) error {
 	var tmp *os.File
 	room := onDisk(m.fileSize)
-	err := reserve(room, func() error {
+	err := n.reserve(room, func() error {
 		var err error
-		if tmp, err = os.CreateTemp(nixCacheDir, ".tmp-*"); err == nil {
+		if tmp, err = os.CreateTemp(n.dir, ".tmp-*"); err == nil {
 			err = tmp.Truncate(m.fileSize)
 		}
 		return err
@@ -506,23 +531,23 @@ func fetchNar(ctx context.Context, p, file string, m narMeta) error {
 	kept := false
 	defer func() {
 		if !kept {
-			release(room)
+			n.release(room)
 		}
 	}()
-	resp, err := nixGet(ctx, p)
+	resp, err := n.get(ctx, p)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	h := sha256.New()
-	n, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(resp.Body, m.fileSize+1))
+	got, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(resp.Body, m.fileSize+1))
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
 		return err
 	}
-	if n != m.fileSize || "sha256:"+nix32(h.Sum(nil)) != m.fileHash {
+	if got != m.fileSize || "sha256:"+nix32(h.Sum(nil)) != m.fileHash {
 		return errors.New("its NAR doesn't match the narinfo's FileHash and FileSize")
 	}
 	if err := os.Rename(tmp.Name(), file); err != nil { //nolint:gosec // a name nixPath checked, in the cache's folder
@@ -534,12 +559,12 @@ func fetchNar(ctx context.Context, p, file string, m narMeta) error {
 
 // keepBytes writes data, a narinfo, whole into the cache as file, all under the cache's lock: it's
 // small, and no file of it is left for other proxies to count meanwhile.
-func keepBytes(file string, data []byte) error {
-	n := onDisk(int64(len(data)))
-	return reserve(n, func() error {
+func (n *nixCache) keepBytes(file string, data []byte) error {
+	room := onDisk(int64(len(data)))
+	return n.reserve(room, func() error {
 		err := writeAtomic(file, data, 0o600)
 		if err != nil {
-			addSize(nixCacheDir, -n)
+			addSize(n.dir, -room)
 		}
 		return err
 	})
@@ -562,15 +587,15 @@ func touch(file string) {
 
 // --- the folder, its size and its cap ---
 
-// openNixCache makes the cache's folders, the user's alone, and the client it fetches with.
-func openNixCache() error {
-	if nixCacheDir == "" {
+// open makes the cache's folders, the user's alone.
+func (n *nixCache) open() error {
+	if n.dir == "" {
 		return nil
 	}
-	if nixCacheMax < 0 {
+	if n.max < 0 {
 		return errors.New("nix_cache_max is below 0")
 	}
-	for _, d := range []string{nixCacheDir, filepath.Join(nixCacheDir, "nar")} {
+	for _, d := range []string{n.dir, filepath.Join(n.dir, "nar")} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err
 		}
@@ -578,7 +603,6 @@ func openNixCache() error {
 			return err
 		}
 	}
-	nixClient = newNixClient()
 	return nil
 }
 
@@ -618,34 +642,34 @@ var errNixFull = errors.New("the cache is full of files being fetched")
 // lock. When the cache would pass its cap, it first deletes the least recently used files, down
 // to nine tenths of it, so most writes count nothing. Files being fetched count but never go, so
 // a fetch that would pass the cap with them is refused.
-func reserve(n int64, then func() error) error {
-	unlock, err := lockNix(nixCacheDir)
+func (n *nixCache) reserve(room int64, then func() error) error {
+	unlock, err := lockNix(n.dir)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	total, ok := readSize(nixCacheDir)
-	if !ok || total+n > nixCacheMax {
-		if total, _, _, err = trim(nixCacheDir, nixCacheMax-n, max(nixCacheMax/10*9-n, 0)); err != nil {
+	total, ok := readSize(n.dir)
+	if !ok || total+room > n.max {
+		if total, _, _, err = trim(n.dir, n.max-room, max(n.max/10*9-room, 0)); err != nil {
 			return err
 		}
-		if total+n > nixCacheMax {
-			writeSize(nixCacheDir, total)
+		if total+room > n.max {
+			writeSize(n.dir, total)
 			return errNixFull
 		}
 	}
-	writeSize(nixCacheDir, total+n)
+	writeSize(n.dir, total+room)
 	return then()
 }
 
 // release gives back room reserve took for a file that wasn't kept.
-func release(n int64) {
-	unlock, err := lockNix(nixCacheDir)
+func (n *nixCache) release(room int64) {
+	unlock, err := lockNix(n.dir)
 	if err != nil {
 		return
 	}
 	defer unlock()
-	addSize(nixCacheDir, -n)
+	addSize(n.dir, -room)
 }
 
 // addSize changes the running total by n; the caller holds the lock.

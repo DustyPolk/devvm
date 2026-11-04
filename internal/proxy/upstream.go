@@ -33,12 +33,16 @@ type upstream struct {
 	auth string
 }
 
-var (
-	upUnresolved = false   // Config.UpstreamUnresolved: names the host can't resolve go upstream even when only ** allows them
-	upHTTPS      *upstream // tunnels and the connections that put secrets in; nil: direct
-	upHTTP       *upstream // plain HTTP requests; nil: direct
-	noProxy      []noProxyRule
-)
+// upstreams is a proxy's company proxies (Config.Upstream): set once, as it starts, and only read
+// after.
+type upstreams struct {
+	https   *upstream // tunnels and the connections that put secrets in; nil: direct
+	http    *upstream // plain HTTP requests; nil: direct
+	noProxy []noProxyRule
+	// unresolved is Config.UpstreamUnresolved: names the host can't resolve go upstream even when
+	// only ** allows them.
+	unresolved bool
+}
 
 // ErrUpstreamScheme is ParseUpstream's error for a proxy that isn't http://.
 var ErrUpstreamScheme = errors.New("only http:// proxies can be an upstream")
@@ -96,29 +100,30 @@ func newUpstream(raw string) (*upstream, error) {
 	return up, nil
 }
 
-// loadUpstream takes the config's company proxy (Config.Upstream): the host's HTTPS_PROXY,
+// newUpstreams takes the config's company proxy (Config.Upstream): the host's HTTPS_PROXY,
 // HTTP_PROXY and NO_PROXY.
-func loadUpstream(u Upstream) error {
+func newUpstreams(u Upstream) (upstreams, error) {
+	var ups upstreams
 	var err error
-	if upHTTPS, err = newUpstream(u.HTTPS); err != nil {
-		return fmt.Errorf("upstream: HTTPS_PROXY: %w", err)
+	if ups.https, err = newUpstream(u.HTTPS); err != nil {
+		return upstreams{}, fmt.Errorf("upstream: HTTPS_PROXY: %w", err)
 	}
-	if upHTTP, err = newUpstream(u.HTTP); err != nil {
-		return fmt.Errorf("upstream: HTTP_PROXY: %w", err)
+	if ups.http, err = newUpstream(u.HTTP); err != nil {
+		return upstreams{}, fmt.Errorf("upstream: HTTP_PROXY: %w", err)
 	}
-	noProxy = parseNoProxy(u.NoProxy)
-	return nil
+	ups.noProxy = parseNoProxy(u.NoProxy)
+	return ups, nil
 }
 
-// upstreamNames: the upstreams, by host:port only, for the proxy's log.
-func upstreamNames() string {
+// names: the upstreams, by host:port only, for the proxy's log.
+func (ups upstreams) names() string {
 	name := func(u *upstream) string {
 		if u == nil {
 			return "none"
 		}
 		return u.addr
 	}
-	return "https through " + name(upHTTPS) + ", http through " + name(upHTTP)
+	return "https through " + name(ups.https) + ", http through " + name(ups.http)
 }
 
 // --- NO_PROXY ---
@@ -198,17 +203,17 @@ func local(host string) bool {
 	return host == "localhost" || strings.HasSuffix(host, ".localhost")
 }
 
-// upstreamFor: the upstream host:port goes through, nil for direct. plain is a plain HTTP request
+// route: the upstream host:port goes through, nil for direct. plain is a plain HTTP request
 // (HTTP_PROXY's); anything else is a tunnel (HTTPS_PROXY's). host is canonical (splitHostPort).
-func upstreamFor(host string, port int, plain bool) *upstream {
-	up := upHTTPS
+func (ups upstreams) route(host string, port int, plain bool) *upstream {
+	up := ups.https
 	if plain {
-		up = upHTTP
+		up = ups.http
 	}
 	if up == nil || local(host) {
 		return nil
 	}
-	for _, r := range noProxy {
+	for _, r := range ups.noProxy {
 		if r.matches(host, port) {
 			return nil
 		}
@@ -228,9 +233,9 @@ var errUnresolved = errors.New("this machine can't resolve it, and only ** allow
 // or under *.domain: one that only ** allows is refused (errUnresolved), so ** alone never sends
 // the company proxy a name it may resolve to its own network's hosts. With Config.UpstreamUnresolved
 // (a build whose VM reaches internal addresses anyway), any such name goes upstream.
-func floorUpstream(ctx context.Context, host string, port int) error {
+func (e *egress) floorUpstream(ctx context.Context, host string, port int) error {
 	if _, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
-		_, err := resolve(ctx, host, port)
+		_, err := e.resolve(ctx, host, port)
 		return err
 	}
 	lctx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -240,14 +245,14 @@ func floorUpstream(ctx context.Context, host string, port int) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if !upUnresolved && !pol.byName(host, port) {
+		if !e.up.unresolved && !e.pol.byName(host, port) {
 			return errUnresolved
 		}
 		return nil
 	}
 	for _, a := range ips {
 		a = a.Unmap()
-		if pol.addrDenied(a, port) || internal(a) && !pol.addrAllowed(a, port) {
+		if e.pol.addrDenied(a, port) || e.own.internal(a) && !e.pol.addrAllowed(a, port) {
 			return errFloor
 		}
 	}
@@ -318,9 +323,9 @@ const maxConnectReply = 64 << 10
 
 // dialOut connects to host:port for a tunnel or a TLS connection: through the upstream when one
 // applies, else directly to an address the floor allows.
-func dialOut(ctx context.Context, host string, port int) (net.Conn, error) {
-	if up := upstreamFor(host, port, false); up != nil {
+func (e *egress) dialOut(ctx context.Context, host string, port int) (net.Conn, error) {
+	if up := e.up.route(host, port, false); up != nil {
 		return up.connect(ctx, host, port)
 	}
-	return dial(ctx, host, port)
+	return e.dial(ctx, host, port)
 }

@@ -54,7 +54,7 @@ flowchart TD
   named --> swap["the placeholder swapped<br>for the real value"]
 ```
 
-A tunnel that the proxy doesn't intercept carries the bytes both ways as they are. When the VM finishes sending, the proxy closes its side of the connection to the far end, so the far end sees the end of what the VM sent and can still answer. The tunnel ends when the far end's bytes end, or when the proxy can't pass them on because the VM's connection has gone, and then the proxy closes both connections. In a tunnel to a host the policy allows, the proxy reads the VM's first five bytes to see whether they start a TLS ClientHello before it passes anything on, so with a protocol whose server speaks first, such as SMTP, the VM gets no answer until it has sent five bytes.
+A tunnel that the proxy doesn't intercept carries the bytes both ways as they are. When the VM finishes sending, the proxy closes its side of the connection to the far end, so the far end sees the end of what the VM sent and can still answer. The tunnel ends when the far end's bytes end, or when the proxy can't pass them on because the VM's connection has gone, and then the proxy closes both connections. In a tunnel to a host the policy allows, the far end's bytes reach the VM at once, so a protocol whose server speaks first, such as SMTP, gets its greeting before the VM sends anything. The VM's bytes wait until the proxy has checked them: when the first one starts a TLS record, the proxy reads the whole ClientHello and checks its SNI before any of it reaches the far end, and any other first byte passes at once.
 
 ### Links through the proxy
 

@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -33,6 +34,7 @@ func fixture(t *testing.T, name string) []byte {
 }
 
 func TestNixPath(t *testing.T) {
+	t.Parallel()
 	h32, h52 := strings.Repeat("a", 32), strings.Repeat("0", 52)
 	for p, want := range map[string]nixKind{
 		"nix-cache-info":                     nixInfo,
@@ -63,6 +65,7 @@ func TestNixPath(t *testing.T) {
 }
 
 func TestNix32(t *testing.T) {
+	t.Parallel()
 	sum := sha256.Sum256(fixture(t, fixNar))
 	if got, want := nix32(sum[:]), "1jrm0rjd3i5vxv2sjm6zgqqi87ikb3fjqg3myg7wj0x4q5psb550"; got != want {
 		t.Errorf("nix32 = %s, want %s (the narinfo's FileHash)", got, want)
@@ -70,6 +73,7 @@ func TestNix32(t *testing.T) {
 }
 
 func TestParseNarinfo(t *testing.T) {
+	t.Parallel()
 	good := string(fixture(t, fixHash+".narinfo"))
 	ni, err := parseNarinfo([]byte(good), fixHash)
 	if err != nil {
@@ -132,9 +136,9 @@ func (f *fakeNixCache) requests() []string {
 	return append([]string(nil), f.got...)
 }
 
-// useNixCache points the proxy's cache at a temp folder and a fake cache.nixos.org, with policy
+// useNixCache is a proxy whose cache is a temp folder and a fake cache.nixos.org, with policy
 // rules.
-func useNixCache(t *testing.T, rules string) (*fakeNixCache, string) {
+func useNixCache(t *testing.T, rules string) (*server, *fakeNixCache, string) {
 	t.Helper()
 	f := &fakeNixCache{files: map[string][]byte{
 		"/" + fixHash + ".narinfo": fixture(t, fixHash+".narinfo"),
@@ -157,61 +161,54 @@ func useNixCache(t *testing.T, rules string) (*fakeNixCache, string) {
 	}))
 	t.Cleanup(f.srv.Close)
 	dir := filepath.Join(t.TempDir(), "nix-cache")
-	oldDir, oldMax, oldBase, oldDial, oldFloor, oldPol := nixCacheDir, nixCacheMax, nixBase, nixDial, nixFloor, pol
-	t.Cleanup(func() {
-		nixCacheDir, nixCacheMax, nixBase, nixDial, nixFloor, pol = oldDir, oldMax, oldBase, oldDial, oldFloor, oldPol
-		clear(nixKnown)
-	})
-	nixCacheDir, nixCacheMax, nixBase = dir, NixCacheDefault, "http://"+nixHost
+	s := testServer(t, Config{NixCache: dir}, rules)
+	s.nix.base = "http://" + nixHost
 	addr := f.srv.Listener.Addr().String()
-	nixDial = func(ctx context.Context) (net.Conn, error) {
+	s.nix.dial = func(ctx context.Context) (net.Conn, error) {
 		var d net.Dialer
 		return d.DialContext(ctx, "tcp", addr)
 	}
-	nixFloor = func(context.Context) error { return nil }
-	pol = writePolicy(t, rules)
-	clear(nixKnown)
-	if err := openNixCache(); err != nil {
-		t.Fatal(err)
-	}
-	return f, dir
+	s.nix.floor = func(context.Context) error { return nil }
+	return s, f, dir
 }
 
-func nixReq(t *testing.T, method, target string) (int, []byte) {
+func nixReq(t *testing.T, s *server, method, target string) (int, []byte) {
 	t.Helper()
 	r := httptest.NewRequestWithContext(t.Context(), method, target, nil)
 	r.Header.Set("Proxy-Authorization", "Basic secret")
 	r.Header.Set("Cookie", "vm=1")
 	w := httptest.NewRecorder()
-	serveReserved(w, r)
+	s.serveReserved(w, r)
 	return w.Code, w.Body.Bytes()
 }
 
 func TestNixCacheServes(t *testing.T) {
-	f, dir := useNixCache(t, nixHost)
-	log := logs(t)
-	if code, body := nixReq(t, "GET", "http://devvm.proxy/nix/nix-cache-info"); code != 200 || string(body) != nixCacheInfo {
+	t.Parallel()
+	s, f, dir := useNixCache(t, nixHost)
+	log := logs(s)
+	if code, body := nixReq(t, s, "GET", "http://devvm.proxy/nix/nix-cache-info"); code != 200 || string(body) != nixCacheInfo {
 		t.Fatalf("nix-cache-info: %d %q", code, body)
 	}
 	// A NAR no checked narinfo names isn't fetched.
-	if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+fixNar); code != 404 || len(f.requests()) != 0 {
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixNar); code != 404 || len(f.requests()) != 0 {
 		t.Fatalf("a NAR before its narinfo: %d, upstream got %q", code, f.requests())
 	}
 	narinfo := "http://devvm.proxy/nix/" + fixHash + ".narinfo"
-	if code, body := nixReq(t, "GET", narinfo); code != 200 || string(body) != string(fixture(t, fixHash+".narinfo")) {
+	if code, body := nixReq(t, s, "GET", narinfo); code != 200 || string(body) != string(fixture(t, fixHash+".narinfo")) {
 		t.Fatalf("narinfo: %d %q", code, body)
 	}
-	if code, body := nixReq(t, "GET", "http://devvm.proxy/nix/"+fixNar); code != 200 || string(body) != string(fixture(t, fixNar)) {
+	if code, body := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixNar); code != 200 || string(body) != string(fixture(t, fixNar)) {
 		t.Fatalf("NAR: %d, %d bytes", code, len(body))
 	}
 	// Again, from the cache alone, as another VM's proxy would serve them.
-	clear(nixKnown)
+	other := testServer(t, Config{NixCache: dir}, nixHost)
+	other.nix.floor = func(context.Context) error { return errors.New("asked cache.nixos.org") }
 	for _, p := range []string{fixHash + ".narinfo", fixNar} {
-		if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+p); code != 200 {
+		if code, _ := nixReq(t, other, "GET", "http://devvm.proxy/nix/"+p); code != 200 {
 			t.Errorf("%s again: %d", p, code)
 		}
 	}
-	if code, body := nixReq(t, "HEAD", narinfo); code != 200 || len(body) != 0 {
+	if code, body := nixReq(t, s, "HEAD", narinfo); code != 200 || len(body) != 0 {
 		t.Errorf("HEAD: %d %q", code, body)
 	}
 	got := f.requests()
@@ -236,7 +233,8 @@ func TestNixCacheServes(t *testing.T) {
 }
 
 func TestNixCacheRefuses(t *testing.T) {
-	f, dir := useNixCache(t, nixHost)
+	t.Parallel()
+	s, f, dir := useNixCache(t, nixHost)
 	h32 := strings.Repeat("a", 32)
 	for _, c := range []struct{ method, target string }{
 		{"POST", "http://devvm.proxy/nix/" + fixHash + ".narinfo"},
@@ -251,7 +249,7 @@ func TestNixCacheRefuses(t *testing.T) {
 		{"GET", "http://devvm.proxy/nix/"},
 		{"GET", "http://devvm.proxy/nix/nar/x"},
 	} {
-		if code, _ := nixReq(t, c.method, c.target); code != http.StatusBadRequest {
+		if code, _ := nixReq(t, s, c.method, c.target); code != http.StatusBadRequest {
 			t.Errorf("%s %s: %d, want 400", c.method, c.target, code)
 		}
 	}
@@ -260,7 +258,7 @@ func TestNixCacheRefuses(t *testing.T) {
 	}
 	// What upstream doesn't have, or answers otherwise, isn't kept: Nix goes direct.
 	for _, p := range []string{h32 + ".narinfo", "redirect.narinfo"} {
-		if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+p); code != 404 && code != 400 {
+		if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+p); code != 404 && code != 400 {
 			t.Errorf("%s: %d", p, code)
 		}
 	}
@@ -268,7 +266,7 @@ func TestNixCacheRefuses(t *testing.T) {
 	f.mu.Lock()
 	f.files["/"+fixHash+".narinfo"] = []byte(strings.Replace(string(fixture(t, fixHash+".narinfo")), "NarSize: 8848", "NarSize: 8849", 1))
 	f.mu.Unlock()
-	if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 404 {
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 404 {
 		t.Errorf("a forged narinfo: %d", code)
 	}
 	f.mu.Lock()
@@ -277,16 +275,16 @@ func TestNixCacheRefuses(t *testing.T) {
 	nar[100] ^= 1
 	f.files["/"+fixNar] = nar
 	f.mu.Unlock()
-	if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 200 {
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 200 {
 		t.Fatalf("narinfo: %d", code)
 	}
-	if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+fixNar); code != 404 {
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixNar); code != 404 {
 		t.Errorf("a corrupted NAR: %d", code)
 	}
 	f.mu.Lock()
 	f.files["/"+fixNar] = append(fixture(t, fixNar), 0)
 	f.mu.Unlock()
-	if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+fixNar); code != 404 {
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixNar); code != 404 {
 		t.Errorf("a NAR longer than its FileSize: %d", code)
 	}
 	if n, _, _ := NixCacheUsage(dir); n != 1 {
@@ -298,20 +296,21 @@ func TestNixCacheRefuses(t *testing.T) {
 }
 
 func TestNixCachePolicy(t *testing.T) {
-	f, _ := useNixCache(t, "github.com\n")
-	if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 404 {
+	t.Parallel()
+	s, f, _ := useNixCache(t, "github.com\n")
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 404 {
 		t.Errorf("without %s in the policy: %d", nixHost, code)
 	}
-	nixFloor = func(context.Context) error { return fmt.Errorf("%s is blocked", nixHost) }
-	pol = writePolicy(t, nixHost)
-	if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 404 {
+	s.nix.floor = func(context.Context) error { return fmt.Errorf("%s is blocked", nixHost) }
+	s.egress.pol = writePolicy(t, nixHost)
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 404 {
 		t.Errorf("below the floor: %d", code)
 	}
 	if got := f.requests(); len(got) != 0 {
 		t.Errorf("upstream got %q", got)
 	}
-	nixCacheDir = ""
-	if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/nix-cache-info"); code != 404 {
+	s.nix.dir = ""
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/nix-cache-info"); code != 404 {
 		t.Errorf("no -nix-cache: %d", code)
 	}
 }
@@ -319,18 +318,19 @@ func TestNixCachePolicy(t *testing.T) {
 // A NAR is fetched once however many ask for it at once, a HEAD fetches nothing, a copy that
 // isn't the size its narinfo says goes, and files being fetched never take the cache past its cap.
 func TestNixCacheFetches(t *testing.T) {
-	f, dir := useNixCache(t, nixHost)
+	t.Parallel()
+	s, f, dir := useNixCache(t, nixHost)
 	nar := "http://devvm.proxy/nix/" + fixNar
-	if code, _ := nixReq(t, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 200 {
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 200 {
 		t.Fatalf("narinfo: %d", code)
 	}
-	if code, _ := nixReq(t, "HEAD", nar); code != 404 || len(f.requests()) != 1 {
+	if code, _ := nixReq(t, s, "HEAD", nar); code != 404 || len(f.requests()) != 1 {
 		t.Errorf("HEAD of a NAR not in the cache: %d, upstream got %q", code, f.requests())
 	}
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() {
-			if code, body := nixReq(t, "GET", nar); code != 200 || len(body) != 958 {
+			if code, body := nixReq(t, s, "GET", nar); code != 200 || len(body) != 958 {
 				t.Errorf("GET: %d, %d bytes", code, len(body))
 			}
 		})
@@ -339,26 +339,26 @@ func TestNixCacheFetches(t *testing.T) {
 	if got := f.requests(); len(got) != 2 {
 		t.Errorf("upstream got %q, want the narinfo and the NAR once", got)
 	}
-	if code, _ := nixReq(t, "HEAD", nar); code != 200 {
+	if code, _ := nixReq(t, s, "HEAD", nar); code != 200 {
 		t.Errorf("HEAD of a NAR in the cache: %d", code)
 	}
 	// A copy of another size is dropped and fetched again.
 	must(t, os.WriteFile(filepath.Join(dir, fixNar), []byte("short"), 0o600))
-	if code, body := nixReq(t, "GET", nar); code != 200 || len(body) != 958 || len(f.requests()) != 3 {
+	if code, body := nixReq(t, s, "GET", nar); code != 200 || len(body) != 958 || len(f.requests()) != 3 {
 		t.Errorf("a short copy: %d, %d bytes, upstream got %q", code, len(body), f.requests())
 	}
 	// Files being fetched that fill the cap leave no room, and nothing is kept.
 	must(t, os.Remove(filepath.Join(dir, fixNar)))
-	nixCacheMax = 128 << 10
+	s.nix.max = 128 << 10
 	writeCached(t, dir, ".tmp-busy", 128<<10, time.Now())
 	must(t, os.Remove(sizeFile(dir)))
-	if code, _ := nixReq(t, "GET", nar); code != 404 {
+	if code, _ := nixReq(t, s, "GET", nar); code != 404 {
 		t.Errorf("a full cache: %d", code)
 	}
 	if _, err := os.Stat(filepath.Join(dir, fixNar)); err == nil {
 		t.Error("a NAR was kept in a full cache")
 	}
-	if n, _ := readSize(dir); n > nixCacheMax {
+	if n, _ := readSize(dir); n > s.nix.max {
 		t.Errorf("the running total is %d, over the cap", n)
 	}
 }
@@ -372,6 +372,7 @@ func writeCached(t *testing.T, dir, name string, size int, at time.Time) {
 }
 
 func TestTrimNixCache(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	must(t, os.Mkdir(filepath.Join(dir, "nar"), 0o700))
 	now := time.Now()
@@ -413,13 +414,14 @@ func TestTrimNixCache(t *testing.T) {
 
 // Many proxies keeping files at once never leave the cache over its cap.
 func TestNixCacheCap(t *testing.T) {
-	_, dir := useNixCache(t, nixHost)
-	nixCacheMax = 64 << 10
+	t.Parallel()
+	s, _, dir := useNixCache(t, nixHost)
+	s.nix.max = 64 << 10
 	var wg sync.WaitGroup
 	var failed atomic.Int32
 	for i := range 40 {
 		wg.Go(func() {
-			if keepBytes(filepath.Join(dir, fmt.Sprintf("%032d.narinfo", i)), make([]byte, 900)) != nil {
+			if s.nix.keepBytes(filepath.Join(dir, fmt.Sprintf("%032d.narinfo", i)), make([]byte, 900)) != nil {
 				failed.Add(1)
 			}
 		})
@@ -428,8 +430,8 @@ func TestNixCacheCap(t *testing.T) {
 	if failed.Load() > 0 {
 		t.Fatalf("%d writes failed", failed.Load())
 	}
-	if _, size, _ := NixCacheUsage(dir); size > nixCacheMax || size == 0 {
-		t.Errorf("the cache takes %d, its cap is %d", size, nixCacheMax)
+	if _, size, _ := NixCacheUsage(dir); size > s.nix.max || size == 0 {
+		t.Errorf("the cache takes %d, its cap is %d", size, s.nix.max)
 	}
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {

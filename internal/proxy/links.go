@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -36,10 +37,14 @@ import (
 // (LinkSocket), so a list holding anything else is ignored, and no request reaches another VM's
 // link or any other socket. Without that folder, no link is reached.
 
-var (
-	linksFile   = "" // Config.Links: the VM's links list, which devvm _links writes; empty: none
-	linkSockets = "" // Config.LinkSockets: the folder of the links' sockets; empty: none
-)
+// links is a proxy's way to the VM's links: set once, as it starts, and only read after.
+type links struct {
+	file    string // Config.Links: the VM's links list, which devvm _links writes; empty: none
+	sockets string // Config.LinkSockets: the folder of the links' sockets; empty: none
+	vm      string // Config.VM, whose links' sockets they are
+	log     *log.Logger
+	events  *events
+}
 
 // LinkList is the file devvm _links writes for the VM's proxy: the links it carries now.
 type LinkList struct {
@@ -93,17 +98,17 @@ func readLinkList(path string) (LinkList, error) {
 	return l, nil
 }
 
-// linkFor returns the VM's link that host and port name, from the list as it is now: its entry,
+// find returns the VM's link that host and port name, from the list as it is now: its entry,
 // with the socket it must have. A host and port on no entry, an entry whose socket isn't this VM's
 // link's, and a list that can't be read give none, so the request is the policy's.
-func linkFor(host string, port int) (LinkEntry, bool) {
-	if linksFile == "" || linkSockets == "" {
+func (k links) find(host string, port int) (LinkEntry, bool) {
+	if k.file == "" || k.sockets == "" {
 		return LinkEntry{}, false
 	}
-	l, err := readLinkList(linksFile)
+	l, err := readLinkList(k.file)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			logf("links: %v", err)
+			k.log.Printf("links: %v", err)
 		}
 		return LinkEntry{}, false
 	}
@@ -113,8 +118,8 @@ func linkFor(host string, port int) (LinkEntry, bool) {
 		}
 		a, err := netip.ParseAddr(e.Addr)
 		if err != nil || a.String() != e.Addr || !IsLinkAddr(a) || a != a.Unmap() || port < 1 || port > 65535 ||
-			e.Socket != LinkSocket(linkSockets, vmName, a, port) {
-			logf("links: %s:%d: not this VM's link's socket", host, port)
+			e.Socket != LinkSocket(k.sockets, k.vm, a, port) {
+			k.log.Printf("links: %s:%d: not this VM's link's socket", host, port)
 			continue
 		}
 		return e, true
@@ -146,13 +151,13 @@ func LinkAddr(i uint16) netip.Addr {
 // internet, and a host under LinkDomain is a link's or nothing.
 const LinkDomain = "devvm.internal"
 
-// notALink refuses a host under LinkDomain that's none of the VM's links: such a name is never
-// the policy's, so no rule or company proxy sends it anywhere.
-func notALink(w http.ResponseWriter, method, host string, port int) bool {
+// refuse refuses a host under LinkDomain that's none of the VM's links: such a name is never
+// the policy's, so no rule or company proxy sends it anywhere. It reports whether it refused.
+func (k links) refuse(w http.ResponseWriter, method, host string, port int) bool {
 	if !strings.HasSuffix(host, "."+LinkDomain) && host != LinkDomain {
 		return false
 	}
-	record(Event{Event: "blocked", Host: host, Port: port, Method: method, Reason: "not one of this VM's links", Refused: true})
+	k.events.record(Event{Event: "blocked", Host: host, Port: port, Method: method, Reason: "not one of this VM's links", Refused: true})
 	http.Error(w, "devvm proxy: "+net.JoinHostPort(host, strconv.Itoa(port))+" isn't one of this VM's links", http.StatusForbidden)
 	return true
 }
@@ -180,22 +185,22 @@ func dialLink(ctx context.Context, sock string) (net.Conn, error) {
 	}
 }
 
-// linkGone answers a request for a link whose socket doesn't answer (its link removed since the
+// gone answers a request for a link whose socket doesn't answer (its link removed since the
 // list was read, or devvm _links gone) and logs it as devvm _links logs a refusal.
-func linkGone(w http.ResponseWriter, host string, port int, e LinkEntry, err error) {
-	logf("links: %s:%d: %v", host, port, err)
-	record(Event{Event: "link_refused", Host: host, Port: port, Target: e.Target, Reason: linkNotCarried})
+func (k links) gone(w http.ResponseWriter, host string, port int, e LinkEntry, err error) {
+	k.log.Printf("links: %s:%d: %v", host, port, err)
+	k.events.record(Event{Event: "link_refused", Host: host, Port: port, Target: e.Target, Reason: linkNotCarried})
 	http.Error(w, "devvm proxy: the link "+net.JoinHostPort(host, strconv.Itoa(port))+" isn't carried now", http.StatusBadGateway)
 }
 
 // linkNotCarried is the reason of a refusal the proxy logs: the link's socket didn't answer.
 const linkNotCarried = "not carried"
 
-// connectLink tunnels a CONNECT for a link to its socket, the bytes as they are.
-func connectLink(w http.ResponseWriter, r *http.Request, host string, port int, e LinkEntry) {
+// connect tunnels a CONNECT for a link to its socket, the bytes as they are.
+func (k links) connect(w http.ResponseWriter, r *http.Request, host string, port int, e LinkEntry) {
 	up, err := dialLink(r.Context(), e.Socket)
 	if err != nil {
-		linkGone(w, host, port, e, err)
+		k.gone(w, host, port, e, err)
 		return
 	}
 	defer func() { _ = up.Close() }()
@@ -203,7 +208,7 @@ func connectLink(w http.ResponseWriter, r *http.Request, host string, port int, 
 	if err != nil {
 		return
 	}
-	splice(client, up)
+	splice(client, up, nil)
 }
 
 // linkDialError: a link's socket didn't answer.
@@ -211,9 +216,9 @@ type linkDialError struct{ err error }
 
 func (e linkDialError) Error() string { return e.err.Error() }
 
-// forwardLink forwards an absolute-form request for a link (plain HTTP) to its socket, a new
+// forward forwards an absolute-form request for a link (plain HTTP) to its socket, a new
 // connection for each request, so devvm _links checks each one, and none of the proxy's headers.
-func forwardLink(w http.ResponseWriter, r *http.Request, host string, port int, e LinkEntry) {
+func (k links) forward(w http.ResponseWriter, r *http.Request, host string, port int, e LinkEntry) {
 	tr := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			c, err := dialLink(ctx, e.Socket)
@@ -227,7 +232,7 @@ func forwardLink(w http.ResponseWriter, r *http.Request, host string, port int, 
 	defer tr.CloseIdleConnections()
 	rp := &httputil.ReverseProxy{
 		Transport:     tr,
-		ErrorLog:      logger,
+		ErrorLog:      k.log,
 		FlushInterval: -1,
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.Out.URL.Scheme, pr.Out.URL.Host = "http", r.URL.Host
@@ -236,10 +241,10 @@ func forwardLink(w http.ResponseWriter, r *http.Request, host string, port int, 
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
 			if de := (linkDialError{}); errors.As(err, &de) {
-				linkGone(w, host, port, e, de.err)
+				k.gone(w, host, port, e, de.err)
 				return
 			}
-			logf("links: %s:%d: %v", host, port, err)
+			k.log.Printf("links: %s:%d: %v", host, port, err)
 			http.Error(w, "devvm proxy: the link "+net.JoinHostPort(host, strconv.Itoa(port))+" didn't answer", http.StatusBadGateway)
 		},
 	}

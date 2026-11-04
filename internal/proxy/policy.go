@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net"
 	"net/netip"
 	"os"
@@ -199,22 +200,24 @@ type policy struct {
 	broken map[string]PolicyLine
 	// failed is, for each file whose last read failed, why: logged once, not at every request.
 	failed map[string]string
+	log    *log.Logger // the proxy's own log: what was read, what was skipped
 }
 
 // PolicyMax bounds a policy file that the proxy, devvm network and devvm doctor read.
 const PolicyMax = 1 << 20
 
-func newPolicy(builtin []rule, files []string) *policy {
+func newPolicy(builtin []rule, files []string, l *log.Logger) *policy {
 	return &policy{
 		builtin: builtin, files: files, mtime: map[string]time.Time{}, rules: map[string][]rule{}, broken: map[string]PolicyLine{},
-		failed: map[string]string{},
+		failed: map[string]string{}, log: l,
 	}
 }
 
-// readBuiltins reads the built-in policies names, paths in devvm's own files own, once, in order.
-// Each is devvm's own, so one that's missing or holds a line that isn't a rule is devvm's bug: an
-// error, and the proxy refuses to start, rather than run with fewer rules than devvm meant.
-func readBuiltins(own fs.FS, names []string) ([]rule, error) {
+// readBuiltins reads the built-in policies names, paths in devvm's own files own, once, in order,
+// logging each to l. Each is devvm's own, so one that's missing or holds a line that isn't a rule
+// is devvm's bug: an error, and the proxy refuses to start, rather than run with fewer rules than
+// devvm meant.
+func readBuiltins(own fs.FS, names []string, l *log.Logger) ([]rule, error) {
 	if len(names) > 0 && own == nil {
 		return nil, errors.New("built-in policies need devvm's own files")
 	}
@@ -230,7 +233,7 @@ func readBuiltins(own fs.FS, names []string) ([]rule, error) {
 				return nil, fmt.Errorf("built-in policy %s:%d isn't a rule: %q", n, l.N, l.Text)
 			}
 		}
-		logf("built-in policy %s: %d rules", n, len(rs))
+		l.Printf("built-in policy %s: %d rules", n, len(rs))
 		out = append(out, rs...)
 	}
 	return out, nil
@@ -266,7 +269,7 @@ func (p *policy) all() ([]rule, string) {
 			if err != nil { // keep its last rules (a deny dropped for a moment would let through)
 				if why := err.Error(); p.failed[f] != why {
 					p.failed[f] = why
-					logf("policy %v; its last rules kept", err)
+					p.log.Printf("policy %v; its last rules kept", err)
 				}
 				out = append(out, p.rules[f]...)
 				continue
@@ -293,16 +296,16 @@ func (p *policy) load(f, b string) {
 	for _, l := range lines {
 		switch {
 		case BrokenDeny(l):
-			logf("%s:%d: not a rule but reads as a deny, so everything is denied: %q", f, l.N, l.Text)
+			p.log.Printf("%s:%d: not a rule but reads as a deny, so everything is denied: %q", f, l.N, l.Text)
 			if _, ok := p.broken[f]; !ok {
 				p.broken[f] = l
 			}
 		case !l.OK:
-			logf("%s:%d: not a rule, skipped: %q", f, l.N, l.Text)
+			p.log.Printf("%s:%d: not a rule, skipped: %q", f, l.N, l.Text)
 		}
 	}
 	p.rules[f] = rs
-	logf("policy %s: %d rules", f, len(rs))
+	p.log.Printf("policy %s: %d rules", f, len(rs))
 }
 
 // decide whether host:port may be reached. host is a name or an address literal. It returns the

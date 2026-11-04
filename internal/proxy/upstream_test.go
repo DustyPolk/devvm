@@ -83,27 +83,14 @@ func (f *fakeUpstream) requests() []string {
 	return append([]string(nil), f.seen...)
 }
 
-// useUpstream points both upstreams at f, with the test's credentials, and NO_PROXY at noProxyList.
-func useUpstream(t *testing.T, f *fakeUpstream, noProxyList string) {
+// useUpstream points both of s's upstreams at f, with the test's credentials, and NO_PROXY at
+// noProxyList.
+func useUpstream(t *testing.T, s *server, f *fakeUpstream, noProxyList string) {
 	t.Helper()
 	u := "http://corp-user:" + upPassword + "@" + f.ln.Addr().String()
-	must(t, loadUpstream(Upstream{HTTPS: u, HTTP: u, NoProxy: noProxyList}))
-	t.Cleanup(func() { upHTTPS, upHTTP, noProxy = nil, nil, nil })
-}
-
-// logs captures the event log and the proxy's own log lines.
-func logs(t *testing.T) *syncBuffer {
-	t.Helper()
-	b := &syncBuffer{}
-	set := func(w io.Writer) { // a tunnel still open may log as the test ends
-		logMu.Lock()
-		logOut = w
-		logMu.Unlock()
-		logger.SetOutput(w)
-	}
-	set(b)
-	t.Cleanup(func() { set(io.Discard) })
-	return b
+	ups, err := newUpstreams(Upstream{HTTPS: u, HTTP: u, NoProxy: noProxyList})
+	must(t, err)
+	s.egress.up = ups
 }
 
 func authOf(user, pass string) string {
@@ -111,6 +98,7 @@ func authOf(user, pass string) string {
 }
 
 func TestParseUpstream(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		raw, host string
 		scheme    bool // ErrUpstreamScheme
@@ -154,9 +142,11 @@ func TestParseUpstream(t *testing.T) {
 }
 
 func TestNoProxy(t *testing.T) {
-	upHTTPS, upHTTP = &upstream{addr: "https.corp:8080"}, &upstream{addr: "http.corp:8080"}
-	noProxy = parseNoProxy(" Corp.Example , .internal.test,*.wild.test, 10.0.0.0/8, 192.0.2.7, git.test:22, [2001:db8::1]")
-	t.Cleanup(func() { upHTTPS, upHTTP, noProxy = nil, nil, nil })
+	t.Parallel()
+	ups := upstreams{
+		https: &upstream{addr: "https.corp:8080"}, http: &upstream{addr: "http.corp:8080"},
+		noProxy: parseNoProxy(" Corp.Example , .internal.test,*.wild.test, 10.0.0.0/8, 192.0.2.7, git.test:22, [2001:db8::1]"),
+	}
 	for _, c := range []struct {
 		host   string
 		port   int
@@ -183,21 +173,21 @@ func TestNoProxy(t *testing.T) {
 		{"127.0.0.1", 8080, true, true},
 		{"::1", 8080, false, true},
 	} {
-		up := upstreamFor(c.host, c.port, c.plain)
+		up := ups.route(c.host, c.port, c.plain)
 		if (up == nil) != c.direct {
 			t.Errorf("%s:%d (plain %v): upstream %v, want direct %v", c.host, c.port, c.plain, up, c.direct)
 		}
-		if up != nil && c.plain != (up == upHTTP) {
+		if up != nil && c.plain != (up == ups.http) {
 			t.Errorf("%s:%d (plain %v): the wrong upstream, %s", c.host, c.port, c.plain, up.addr)
 		}
 	}
-	noProxy = parseNoProxy("*")
-	if upstreamFor("github.com", 443, false) != nil {
+	ups.noProxy = parseNoProxy("*")
+	if ups.route("github.com", 443, false) != nil {
 		t.Error("NO_PROXY=* sent a host upstream")
 	}
 	// Without HTTP_PROXY, plain HTTP goes direct; tunnels still go upstream.
-	noProxy, upHTTP = nil, nil
-	if upstreamFor("github.com", 80, true) != nil || upstreamFor("github.com", 80, false) == nil {
+	ups.noProxy, ups.http = nil, nil
+	if ups.route("github.com", 80, true) != nil || ups.route("github.com", 80, false) == nil {
 		t.Error("HTTPS_PROXY alone: plain HTTP should go direct, tunnels upstream")
 	}
 }
@@ -205,6 +195,7 @@ func TestNoProxy(t *testing.T) {
 // A tunnel to an allowed host goes through the upstream: CONNECT by the name the VM asked for, with
 // the upstream's credentials, never the VM's; a denied host, or a private address, never reaches it.
 func TestUpstreamTunnel(t *testing.T) {
+	t.Parallel()
 	echo, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	must(t, err)
 	t.Cleanup(func() { _ = echo.Close() })
@@ -218,16 +209,13 @@ func TestUpstreamTunnel(t *testing.T) {
 		}
 	}()
 	f := newFakeUpstream(t, echo.Addr().String(), http.StatusOK)
-	useUpstream(t, f, "")
-	out := logs(t)
-	pol = writePolicy(t, "allowed.test\n**:5432\n!denied.test\n10.1.2.3\n")
-	proxyAuth = "k3y"
-	t.Cleanup(func() { proxyAuth = "" })
-	proxy := httptest.NewServer(http.HandlerFunc(handler))
-	t.Cleanup(proxy.Close)
+	s := testServer(t, Config{Password: "k3y"}, "allowed.test\n**:5432\n!denied.test\n10.1.2.3\n")
+	useUpstream(t, s, f, "")
+	out := logs(s)
+	addr := listen(t, s)
 	vmAuth := "Proxy-Authorization: " + authOf("devvm", "k3y") + "\r\n"
 
-	c, err := new(net.Dialer).DialContext(t.Context(), "tcp", proxy.Listener.Addr().String())
+	c, err := new(net.Dialer).DialContext(t.Context(), "tcp", addr)
 	must(t, err)
 	defer c.Close()
 	fmt.Fprintf(c, "CONNECT allowed.test:443 HTTP/1.1\r\nHost: allowed.test:443\r\n%s\r\n", vmAuth)
@@ -250,7 +238,7 @@ func TestUpstreamTunnel(t *testing.T) {
 	// Refused before the upstream: a denied host, a host the policy doesn't allow, and a private
 	// address the policy allows but the floor still judges.
 	for _, target := range []string{"denied.test:443", "other.test:443", "10.1.2.4:5432", "127.0.0.1:5432"} {
-		code, _ := roundTrip(t, proxy.Listener.Addr().String(), "CONNECT "+target+" HTTP/1.1\r\nHost: "+target+"\r\n"+vmAuth+"\r\n")
+		code, _ := roundTrip(t, addr, "CONNECT "+target+" HTTP/1.1\r\nHost: "+target+"\r\n"+vmAuth+"\r\n")
 		if code != http.StatusForbidden {
 			t.Errorf("%s: %d, want 403", target, code)
 		}
@@ -259,7 +247,7 @@ func TestUpstreamTunnel(t *testing.T) {
 		t.Errorf("refused hosts reached the upstream: %q", f.requests())
 	}
 	// An allowed address goes upstream too, by its address.
-	c2, err := new(net.Dialer).DialContext(t.Context(), "tcp", proxy.Listener.Addr().String())
+	c2, err := new(net.Dialer).DialContext(t.Context(), "tcp", addr)
 	must(t, err)
 	fmt.Fprintf(c2, "CONNECT 10.1.2.3:443 HTTP/1.1\r\nHost: 10.1.2.3:443\r\n%s\r\n", vmAuth)
 	resp, err = http.ReadResponse(bufio.NewReader(c2), &http.Request{Method: http.MethodConnect})
@@ -273,12 +261,12 @@ func TestUpstreamTunnel(t *testing.T) {
 	if reqs := f.requests(); len(reqs) != 2 || !strings.HasPrefix(reqs[1], "CONNECT 10.1.2.3:443 ") {
 		t.Errorf("the allowed address: %q", reqs)
 	}
-	s := out.String()
-	if strings.Contains(s, upPassword) || strings.Contains(s, authOf("corp-user", upPassword)) {
-		t.Errorf("the logs hold the upstream's credentials: %s", s)
+	l := out.String()
+	if strings.Contains(l, upPassword) || strings.Contains(l, authOf("corp-user", upPassword)) {
+		t.Errorf("the logs hold the upstream's credentials: %s", l)
 	}
-	if !strings.Contains(s, `"event":"tunnel","host":"allowed.test","port":443`) || !strings.Contains(s, `"upstream":"`+f.ln.Addr().String()+`"`) {
-		t.Errorf("the event log doesn't name the upstream: %s", s)
+	if !strings.Contains(l, `"event":"tunnel","host":"allowed.test","port":443`) || !strings.Contains(l, `"upstream":"`+f.ln.Addr().String()+`"`) {
+		t.Errorf("the event log doesn't name the upstream: %s", l)
 	}
 }
 
@@ -286,6 +274,7 @@ func TestUpstreamTunnel(t *testing.T) {
 // under *.domain; one that only ** allows is refused before the upstream sees it. (.test names
 // never resolve.)
 func TestUpstreamUnresolved(t *testing.T) {
+	t.Parallel()
 	echo, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	must(t, err)
 	t.Cleanup(func() { _ = echo.Close() })
@@ -299,11 +288,10 @@ func TestUpstreamUnresolved(t *testing.T) {
 		}
 	}()
 	f := newFakeUpstream(t, echo.Addr().String(), http.StatusOK)
-	useUpstream(t, f, "")
-	out := logs(t)
-	pol = writePolicy(t, "**\nnamed.test\n*.wild.test\n!denied.wild.test\n")
-	proxy := httptest.NewServer(http.HandlerFunc(handler))
-	t.Cleanup(proxy.Close)
+	s := testServer(t, Config{}, "**\nnamed.test\n*.wild.test\n!denied.wild.test\n")
+	useUpstream(t, s, f, "")
+	out := logs(s)
+	addr := listen(t, s)
 	for _, tc := range []struct {
 		target string
 		code   int
@@ -316,7 +304,7 @@ func TestUpstreamUnresolved(t *testing.T) {
 		{"named.test:8443", http.StatusForbidden}, // named for 443 and 80 only
 	} {
 		// Only the answer: an open tunnel waits for a ClientHello.
-		c, err := new(net.Dialer).DialContext(t.Context(), "tcp", proxy.Listener.Addr().String())
+		c, err := new(net.Dialer).DialContext(t.Context(), "tcp", addr)
 		must(t, err)
 		fmt.Fprintf(c, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", tc.target, tc.target)
 		resp, err := http.ReadResponse(bufio.NewReader(c), &http.Request{Method: http.MethodConnect})
@@ -337,13 +325,12 @@ func TestUpstreamUnresolved(t *testing.T) {
 		t.Errorf("the refusal isn't logged: %s", out.String())
 	}
 	// Plain HTTP the same.
-	code, _ := roundTrip(t, proxy.Listener.Addr().String(), "GET http://only-star.test/ HTTP/1.1\r\nHost: only-star.test\r\n\r\n")
+	code, _ := roundTrip(t, addr, "GET http://only-star.test/ HTTP/1.1\r\nHost: only-star.test\r\n\r\n")
 	if code != http.StatusForbidden || strings.Contains(strings.Join(f.requests(), "\n"), "only-star") {
 		t.Errorf("plain HTTP: %d, the upstream saw %q", code, f.requests())
 	}
-	// -upstream-unresolved (a build's proxy): ** sends it upstream; a denied name stays refused.
-	upUnresolved = true
-	t.Cleanup(func() { upUnresolved = false })
+	// upstream_unresolved (a build's proxy): ** sends it upstream; a denied name stays refused.
+	s.egress.up.unresolved = true
 	for _, tc := range []struct {
 		target string
 		code   int
@@ -351,12 +338,12 @@ func TestUpstreamUnresolved(t *testing.T) {
 		{"only-star.test:443", http.StatusOK},
 		{"denied.wild.test:443", http.StatusForbidden},
 	} {
-		c, err := new(net.Dialer).DialContext(t.Context(), "tcp", proxy.Listener.Addr().String())
+		c, err := new(net.Dialer).DialContext(t.Context(), "tcp", addr)
 		must(t, err)
 		fmt.Fprintf(c, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", tc.target, tc.target)
 		resp, err := http.ReadResponse(bufio.NewReader(c), &http.Request{Method: http.MethodConnect})
 		if err != nil || resp.StatusCode != tc.code {
-			t.Errorf("-upstream-unresolved %s: %v %v, want %d", tc.target, resp, err, tc.code)
+			t.Errorf("upstream_unresolved %s: %v %v, want %d", tc.target, resp, err, tc.code)
 		}
 		if resp != nil {
 			_ = resp.Body.Close()
@@ -368,6 +355,7 @@ func TestUpstreamUnresolved(t *testing.T) {
 // The upstream's answer to CONNECT is read only so far: headers that never end fail the tunnel.
 // What follows an answer that ends is the tunnel's, past the limit too.
 func TestUpstreamConnectReplyLimit(t *testing.T) {
+	t.Parallel()
 	serve := func(answer func(net.Conn)) *upstream {
 		ln, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
 		must(t, err)
@@ -413,14 +401,12 @@ func TestUpstreamConnectReplyLimit(t *testing.T) {
 
 // NO_PROXY's hosts are reached directly: the upstream never sees them.
 func TestUpstreamNoProxyDirect(t *testing.T) {
+	t.Parallel()
 	f := newFakeUpstream(t, "127.0.0.1:9", http.StatusOK)
-	useUpstream(t, f, "*")
-	logs(t)
-	pol = writePolicy(t, "allowed.test\n")
-	proxy := httptest.NewServer(http.HandlerFunc(handler))
-	t.Cleanup(proxy.Close)
+	s := testServer(t, Config{}, "allowed.test\n")
+	useUpstream(t, s, f, "*")
 	// Direct, it's resolved here: .test names don't resolve, so it's refused, unseen upstream.
-	code, body := roundTrip(t, proxy.Listener.Addr().String(), "CONNECT allowed.test:443 HTTP/1.1\r\nHost: allowed.test:443\r\n\r\n")
+	code, body := roundTrip(t, listen(t, s), "CONNECT allowed.test:443 HTTP/1.1\r\nHost: allowed.test:443\r\n\r\n")
 	if code != http.StatusForbidden || !strings.Contains(body, "can't resolve") || len(f.requests()) != 0 {
 		t.Errorf("NO_PROXY=*: %d %q, upstream saw %q", code, body, f.requests())
 	}
@@ -429,15 +415,13 @@ func TestUpstreamNoProxyDirect(t *testing.T) {
 // Plain HTTP goes to HTTP_PROXY's upstream in absolute form, with its credentials in place of the
 // VM's; an upstream that refuses is reported to the VM without them.
 func TestUpstreamPlainHTTP(t *testing.T) {
+	t.Parallel()
 	f := newFakeUpstream(t, "", http.StatusOK)
-	useUpstream(t, f, "")
-	out := logs(t)
-	pol = writePolicy(t, "allowed.test\n")
-	proxyAuth = "k3y"
-	t.Cleanup(func() { proxyAuth = "" })
-	proxy := httptest.NewServer(http.HandlerFunc(handler))
-	t.Cleanup(proxy.Close)
-	pu, _ := url.Parse("http://devvm:k3y@" + proxy.Listener.Addr().String())
+	s := testServer(t, Config{Password: "k3y"}, "allowed.test\n")
+	useUpstream(t, s, f, "")
+	out := logs(s)
+	addr := listen(t, s)
+	pu, _ := url.Parse("http://devvm:k3y@" + addr)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}}
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://allowed.test/x?y=1", nil)
 	resp, err := client.Do(req)
@@ -450,16 +434,16 @@ func TestUpstreamPlainHTTP(t *testing.T) {
 	if reqs := f.requests(); len(reqs) != 1 || reqs[0] != "GET http://allowed.test/x?y=1 "+authOf("corp-user", upPassword) {
 		t.Errorf("the upstream saw %q", reqs)
 	}
-	if s := out.String(); strings.Contains(s, upPassword) || !strings.Contains(s, `"upstream":"`+f.ln.Addr().String()+`"`) {
-		t.Errorf("the log: %s", s)
+	if l := out.String(); strings.Contains(l, upPassword) || !strings.Contains(l, `"upstream":"`+f.ln.Addr().String()+`"`) {
+		t.Errorf("the log: %s", l)
 	}
 	// The upstream gets the host that was checked, canonical, whatever the VM's spelling.
-	if c, _ := roundTrip(t, proxy.Listener.Addr().String(),
+	if c, _ := roundTrip(t, addr,
 		"GET http://ALLOWED.test.:8080/y HTTP/1.1\r\nHost: x\r\nProxy-Authorization: "+authOf("devvm", "k3y")+"\r\nConnection: close\r\n\r\n"); c != http.StatusForbidden {
 		t.Errorf("a port the policy doesn't allow: %d", c)
 	}
-	pol = writePolicy(t, "allowed.test\nallowed.test:8080\n")
-	code, _ := roundTrip(t, proxy.Listener.Addr().String(),
+	s.egress.pol = writePolicy(t, "allowed.test\nallowed.test:8080\n")
+	code, _ := roundTrip(t, addr,
 		"GET http://ALLOWED.test.:8080/y HTTP/1.1\r\nHost: x\r\nProxy-Authorization: "+authOf("devvm", "k3y")+"\r\nConnection: close\r\n\r\n")
 	if reqs := f.requests(); code != http.StatusOK || len(reqs) != 2 || !strings.HasPrefix(reqs[1], "GET http://allowed.test:8080/y ") {
 		t.Errorf("an odd spelling: %d, the upstream saw %q", code, reqs)
@@ -467,7 +451,7 @@ func TestUpstreamPlainHTTP(t *testing.T) {
 
 	// An upstream that refuses: the tunnel is refused, naming it by host:port alone.
 	f.status = http.StatusProxyAuthRequired
-	code, body := roundTrip(t, proxy.Listener.Addr().String(),
+	code, body := roundTrip(t, addr,
 		"CONNECT allowed.test:443 HTTP/1.1\r\nHost: allowed.test:443\r\nProxy-Authorization: "+authOf("devvm", "k3y")+"\r\n\r\n")
 	if code != http.StatusForbidden || !strings.Contains(body, "answered 407") || strings.Contains(body, upPassword) {
 		t.Errorf("refused upstream: %d %q", code, body)
@@ -477,10 +461,11 @@ func TestUpstreamPlainHTTP(t *testing.T) {
 // A host with a bound secret is intercepted, and its request goes on through the upstream's tunnel
 // over TLS checked against the user's CAs, with the secret put in.
 func TestUpstreamIntercept(t *testing.T) {
-	_, _, c := interceptSetup(t, func(http.ResponseWriter, *http.Request) {})
+	t.Parallel()
+	s, _, file, c := interceptSetup(t, func(http.ResponseWriter, *http.Request) {})
 	// The fake upstream sends every tunnel to a TLS server whose certificate, from the same CA as
 	// the user's, names "intercepted.test", which the VM asks for, bound and allowed.
-	srvCert, _ := leafFor("intercepted.test")
+	srvCert, _ := s.ca.leafFor("intercepted.test")
 	tlsSrv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%s|%s", r.Host, r.Header.Get("Authorization")) //nolint:gosec // a test echo server
 	}))
@@ -488,11 +473,11 @@ func TestUpstreamIntercept(t *testing.T) {
 	tlsSrv.StartTLS()
 	t.Cleanup(tlsSrv.Close)
 	f := newFakeUpstream(t, tlsSrv.Listener.Addr().String(), http.StatusOK)
-	useUpstream(t, f, "")
-	pol = writePolicy(t, "intercepted.test\n")
-	writeBindings(t, secretsPath, bound("intercepted.test"))
+	useUpstream(t, s, f, "")
+	s.egress.pol = writePolicy(t, "intercepted.test\n")
+	writeBindings(t, file, bound("intercepted.test"))
 	later := time.Now().Add(time.Second)
-	must(t, os.Chtimes(secretsPath, later, later))
+	must(t, os.Chtimes(file, later, later))
 	code, body := get(t, c, "https://intercepted.test/x", "")
 	if code != http.StatusOK || body != "intercepted.test|Bearer real" {
 		t.Errorf("through the upstream: %d %q", code, body)
@@ -501,7 +486,7 @@ func TestUpstreamIntercept(t *testing.T) {
 		t.Errorf("the upstream saw %q", reqs)
 	}
 	// Without the user's CA, the upstream's certificate isn't trusted: nothing is sent.
-	upstreamCAs = x509.NewCertPool()
+	s.upstreamCAs = x509.NewCertPool()
 	f.mu.Lock()
 	f.seen = nil
 	f.mu.Unlock()

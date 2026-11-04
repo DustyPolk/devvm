@@ -32,6 +32,7 @@ import (
 // with another mode included, and leaves nothing else; one it can't write
 // leaves nothing either.
 func TestWriteAtomic(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ca.crt")
 	for _, tc := range []struct {
@@ -72,25 +73,26 @@ func bound(hosts ...string) Binding {
 	return Binding{Name: "t", Kind: KindSecret, Hosts: hosts, Header: "Authorization", Placeholder: "PH"}
 }
 
-// fakeSecret makes every lookup give value, with nothing cached yet, and returns the bindings
+// fakeSecret makes every lookup of s give value, with nothing cached yet, and returns the bindings
 // looked up, in order.
-func fakeSecret(t *testing.T, value string) *[]Binding {
-	t.Helper()
+func fakeSecret(s *secrets, value string) *[]Binding {
 	var asked []Binding
-	old := secretLookup
-	secretLookup = func(_ context.Context, b Binding) (string, error) { asked = append(asked, b); return value, nil }
-	values = map[string]cached{}
-	t.Cleanup(func() { secretLookup, values = old, map[string]cached{} })
+	s.valueMu.Lock()
+	defer s.valueMu.Unlock()
+	s.lookup = func(_ context.Context, b Binding) (string, error) { asked = append(asked, b); return value, nil }
+	s.values = map[string]cached{}
 	return &asked
 }
 
 func TestInject(t *testing.T) {
-	fakeSecret(t, "real")
+	t.Parallel()
+	s := newSecrets("", nil, quiet())
+	fakeSecret(s, "real")
 	bs := []Binding{{Name: "github", Kind: KindSecret, Header: "Authorization", Placeholder: "PH"}}
 	h := http.Header{}
 	h.Set("Authorization", "token PH")
 	h.Set("X-Echo", "PH")
-	if used := inject(h, bs); len(used) != 1 || used[0] != "github" {
+	if used := s.inject(h, bs); len(used) != 1 || used[0] != "github" {
 		t.Errorf("used = %v", used)
 	}
 	if h.Get("Authorization") != "token real" || h.Get("X-Echo") != "PH" {
@@ -98,52 +100,44 @@ func TestInject(t *testing.T) {
 	}
 	h = http.Header{}
 	h.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("x-access-token:PH")))
-	inject(h, bs)
+	s.inject(h, bs)
 	if raw, _ := basic(h.Get("Authorization")); raw != "x-access-token:real" {
 		t.Errorf("basic = %q", raw)
 	}
 	h = http.Header{}
 	h.Set("Authorization", "Bearer something-else")
-	if used := inject(h, bs); len(used) != 0 || h.Get("Authorization") != "Bearer something-else" {
+	if used := s.inject(h, bs); len(used) != 0 || h.Get("Authorization") != "Bearer something-else" {
 		t.Error("a header without the placeholder changed")
 	}
 }
 
-// interceptSetup: devvm's CA in a temp dir, an upstream HTTPS server for "localhost" (handler h) with a
-// certificate from it, a policy allowing it, a secret bound to it (placeholder PH, value "real"), and
-// the proxy. It returns the upstream's port, the bindings file, and a client that goes through the
-// proxy and trusts the CA, keeping one connection open.
-func interceptSetup(t *testing.T, h http.HandlerFunc) (int, string, *http.Client) {
+// interceptSetup: a proxy with devvm's CA, which a temp dir holds, an upstream HTTPS server for
+// "localhost" (handler h) with a certificate from it, a policy allowing it, a secret bound to it
+// (placeholder PH, value "real"). It returns the proxy, the upstream's port, the bindings file, and
+// a client that goes through the proxy and trusts the CA, keeping one connection open.
+func interceptSetup(t *testing.T, h http.HandlerFunc) (*server, int, string, *http.Client) {
 	t.Helper()
 	dir := t.TempDir()
 	writeCA(t, dir)
-	if err := loadCA(filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key")); err != nil {
-		t.Fatal(err)
-	}
-	leaves = map[string]*tls.Certificate{} // minted by another test's CA
+	file := filepath.Join(dir, "bindings.json")
+	s := testServer(t, Config{CA: filepath.Join(dir, "ca.pem"), CAKey: filepath.Join(dir, "ca.key"), Secrets: file}, "")
 	pool := x509.NewCertPool()
-	pool.AddCert(caCert)
-	upstreamCAs = pool
-	t.Cleanup(func() { upstreamCAs = nil })
+	pool.AddCert(s.ca.cert)
+	s.upstreamCAs = pool
 	up := httptest.NewUnstartedServer(h)
-	cert, _ := leafFor("localhost")
+	cert, _ := s.ca.leafFor("localhost")
 	up.TLS = &tls.Config{Certificates: []tls.Certificate{*cert}}
 	up.StartTLS()
 	t.Cleanup(up.Close)
 	_, portStr, _ := net.SplitHostPort(up.Listener.Addr().String())
 	port, err := strconv.Atoi(portStr)
 	must(t, err)
-	interceptPorts[port] = true
-	t.Cleanup(func() { delete(interceptPorts, port) })
-	pol = writePolicy(t, fmt.Sprintf("localhost:%d\n127.0.0.1:%d\n", port, port))
-	secretsPath = filepath.Join(dir, "bindings.json")
-	writeBindings(t, secretsPath, bound("localhost"))
-	t.Cleanup(func() { secretsPath = "" })
-	fakeSecret(t, "real")
-	proxy := httptest.NewServer(http.HandlerFunc(handler))
-	t.Cleanup(proxy.Close)
-	pu, _ := url.Parse(proxy.URL)
-	return port, secretsPath, &http.Client{Transport: &http.Transport{
+	s.interceptPorts[port] = true
+	s.egress.pol = writePolicy(t, fmt.Sprintf("localhost:%d\n127.0.0.1:%d\n", port, port))
+	writeBindings(t, file, bound("localhost"))
+	fakeSecret(s.secrets, "real")
+	pu, _ := url.Parse("http://" + listen(t, s))
+	return s, port, file, &http.Client{Transport: &http.Transport{
 		Proxy: http.ProxyURL(pu), TLSClientConfig: &tls.Config{RootCAs: pool}, MaxConnsPerHost: 1,
 	}}
 }
@@ -167,7 +161,8 @@ func get(t *testing.T, c *http.Client, url, host string) (int, string) {
 // A secret goes only to the host it's bound to: inside an intercepted tunnel, a request whose Host
 // names another site (one sharing the bound host's CDN, say) is refused, not forwarded with the token.
 func TestInterceptRefusesAnotherHost(t *testing.T) {
-	port, _, c := interceptSetup(t, func(w http.ResponseWriter, r *http.Request) {
+	t.Parallel()
+	_, port, _, c := interceptSetup(t, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%s|%s", r.Host, r.Header.Get("Authorization")) //nolint:gosec // a test echo server
 	})
 	u := fmt.Sprintf("https://localhost:%d/x", port)
@@ -183,7 +178,8 @@ func TestInterceptRefusesAnotherHost(t *testing.T) {
 // Unbinding a secret applies to tunnels already open: the next request in a kept-alive tunnel gets
 // no secret.
 func TestUnbindAppliesToOpenTunnels(t *testing.T) {
-	port, file, c := interceptSetup(t, func(w http.ResponseWriter, r *http.Request) {
+	t.Parallel()
+	_, port, file, c := interceptSetup(t, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, r.Header.Get("Authorization")) //nolint:gosec // a test echo server
 	})
 	u := fmt.Sprintf("https://localhost:%d/x", port)
@@ -220,6 +216,7 @@ func writeCA(t *testing.T, dir string) {
 // Values from agents' login files are cached briefly: a logout on the host stops them soon. The
 // binding's kind decides, never its name.
 func TestLoginValuesCacheBriefly(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		b    Binding
 		want time.Duration
@@ -240,45 +237,48 @@ func TestLoginValuesCacheBriefly(t *testing.T) {
 // A value is looked up in this process, with the binding the file has, once, then cached until its
 // time is up; a lookup that fails, or gives nothing, isn't cached, and puts nothing in.
 func TestSecretValueLooksUpInProcess(t *testing.T) {
-	asked := fakeSecret(t, " real\n")
+	t.Parallel()
+	s := newSecrets("", nil, quiet())
+	asked := fakeSecret(s, " real\n")
 	b := Binding{Name: "codex", Kind: KindLogin, Agent: "codex"}
 	for range 2 {
-		if v, err := secretValue(b); v != "real" || err != nil {
-			t.Fatalf("secretValue = %q, %v", v, err)
+		if v, err := s.value(b); v != "real" || err != nil {
+			t.Fatalf("value = %q, %v", v, err)
 		}
 	}
 	if len(*asked) != 1 || !reflect.DeepEqual((*asked)[0], b) {
 		t.Errorf("looked up %+v, want %+v once", *asked, b)
 	}
-	values[b.Name] = cached{"real", time.Now().Add(-loginTTL)}
-	if _, err := secretValue(b); err != nil || len(*asked) != 2 {
+	s.values[b.Name] = cached{"real", time.Now().Add(-loginTTL)}
+	if _, err := s.value(b); err != nil || len(*asked) != 2 {
 		t.Errorf("an expired value: %v, %d lookups", err, len(*asked))
 	}
-	values = map[string]cached{}
-	secretLookup = func(context.Context, Binding) (string, error) { return "", errors.New("locked") }
-	if _, err := secretValue(b); err == nil || !strings.Contains(err.Error(), "codex: locked") {
+	s.values = map[string]cached{}
+	s.lookup = func(context.Context, Binding) (string, error) { return "", errors.New("locked") }
+	if _, err := s.value(b); err == nil || !strings.Contains(err.Error(), "codex: locked") {
 		t.Errorf("a failed lookup: %v", err)
 	}
-	secretLookup = func(context.Context, Binding) (string, error) { return " ", nil }
-	if _, err := secretValue(b); err == nil {
+	s.lookup = func(context.Context, Binding) (string, error) { return " ", nil }
+	if _, err := s.value(b); err == nil {
 		t.Error("an empty value was taken")
 	}
-	if _, ok := values[b.Name]; ok {
+	if _, ok := s.values[b.Name]; ok {
 		t.Error("a failed lookup was cached")
 	}
-	secretLookup = nil
-	if _, err := secretValue(b); err == nil {
+	s.lookup = nil
+	if _, err := s.value(b); err == nil {
 		t.Error("a value without a lookup")
 	}
 	h := http.Header{}
 	h.Set("Authorization", "Bearer PH")
-	if used := inject(h, []Binding{{Name: "codex", Kind: KindLogin, Header: "Authorization", Placeholder: "PH"}}); used != nil || h.Get("Authorization") != "Bearer PH" {
+	if used := s.inject(h, []Binding{{Name: "codex", Kind: KindLogin, Header: "Authorization", Placeholder: "PH"}}); used != nil || h.Get("Authorization") != "Bearer PH" {
 		t.Errorf("without a value: used %v, %q", used, h.Get("Authorization"))
 	}
 }
 
 // The bindings file: versioned, private, of known kinds; InterceptLines gives its hosts on 443.
 func TestReadBindings(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "secrets.json")
 	l := BindingList{Bindings: []Binding{
@@ -327,30 +327,28 @@ func TestReadBindings(t *testing.T) {
 
 // A bindings file the proxy can't read, or that's gone, has no bindings: nothing goes in.
 func TestBindingsUnreadableHaveNone(t *testing.T) {
-	secretsPath = filepath.Join(t.TempDir(), "bindings.json")
-	t.Cleanup(func() { secretsPath = "" })
-	must(t, os.WriteFile(secretsPath, BindingList{Bindings: []Binding{{Name: "t", Kind: KindSecret, Hosts: []string{"localhost"}}}}.Encode(), 0o600))
-	if bs := bindingsFor("localhost"); len(bs) != 1 {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "bindings.json")
+	s := newSecrets(path, nil, quiet())
+	must(t, os.WriteFile(path, BindingList{Bindings: []Binding{{Name: "t", Kind: KindSecret, Hosts: []string{"localhost"}}}}.Encode(), 0o600))
+	if bs := s.forHost("localhost"); len(bs) != 1 {
 		t.Fatalf("bindings = %+v", bs)
 	}
-	must(t, os.Chmod(secretsPath, 0o644)) //nolint:gosec // G302: the file others may read is what's tested
+	must(t, os.Chmod(path, 0o644)) //nolint:gosec // G302: the file others may read is what's tested
 	later := time.Now().Add(2 * time.Second)
-	must(t, os.Chtimes(secretsPath, later, later))
-	if bs := bindingsFor("localhost"); bs != nil {
+	must(t, os.Chtimes(path, later, later))
+	if bs := s.forHost("localhost"); bs != nil {
 		t.Errorf("a file others may read gave %+v", bs)
 	}
-	must(t, os.Remove(secretsPath))
-	if bs := bindingsFor("localhost"); bs != nil {
+	must(t, os.Remove(path))
+	if bs := s.forHost("localhost"); bs != nil {
 		t.Errorf("a file that's gone gave %+v", bs)
 	}
 }
 
-// useCA makes the proxy's CA one valid from notBefore to notAfter, for this test, with no leaves
-// minted yet.
-func useCA(t *testing.T, notBefore, notAfter time.Time) {
+// testCA is a CA valid from notBefore to notAfter, with no leaves minted yet.
+func testCA(t *testing.T, notBefore, notAfter time.Time) *ca {
 	t.Helper()
-	oldCert, oldKey, oldLeafKey, oldLeaves := caCert, caKey, leafKey, leaves
-	t.Cleanup(func() { caCert, caKey, leafKey, leaves = oldCert, oldKey, oldLeafKey, oldLeaves })
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	must(t, err)
 	tmpl := &x509.Certificate{
@@ -359,35 +357,35 @@ func useCA(t *testing.T, notBefore, notAfter time.Time) {
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	must(t, err)
-	caCert, err = x509.ParseCertificate(der)
+	cert, err := x509.ParseCertificate(der)
 	must(t, err)
-	caKey = key
-	leafKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	c, err := newCA(cert, key)
 	must(t, err)
-	leaves = map[string]*tls.Certificate{}
+	return c
 }
 
 // A leaf never outlives the CA that signed it, or starts before it: a VM left running near the CA's
 // end gets leaves that end with it, kept until then, and none once it has ended.
 func TestLeafWithinCA(t *testing.T) {
+	t.Parallel()
 	start, end := time.Now().Add(-time.Minute).Truncate(time.Second), time.Now().Add(30*time.Minute).Truncate(time.Second)
-	useCA(t, start, end)
-	c, err := leafFor("api.example.com")
+	authority := testCA(t, start, end)
+	c, err := authority.leafFor("api.example.com")
 	must(t, err)
 	if c.Leaf.NotAfter.After(end) || c.Leaf.NotBefore.Before(start) {
 		t.Errorf("a leaf valid %v to %v, from a CA valid %v to %v", c.Leaf.NotBefore, c.Leaf.NotAfter, start, end)
 	}
-	if again, err := leafFor("api.example.com"); err != nil || again != c {
+	if again, err := authority.leafFor("api.example.com"); err != nil || again != c {
 		t.Errorf("a leaf that ends with its CA was minted again (%v)", err)
 	}
 	pool := x509.NewCertPool()
-	pool.AddCert(caCert)
+	pool.AddCert(authority.cert)
 	if _, err := c.Leaf.Verify(x509.VerifyOptions{DNSName: "api.example.com", Roots: pool}); err != nil {
 		t.Errorf("the leaf doesn't verify: %v", err)
 	}
 
-	useCA(t, time.Now().Add(-30*24*time.Hour), time.Now().Add(-time.Minute))
-	if c, err := leafFor("api.example.com"); !errors.Is(err, errCAEnded) || c != nil {
+	authority = testCA(t, time.Now().Add(-30*24*time.Hour), time.Now().Add(-time.Minute))
+	if c, err := authority.leafFor("api.example.com"); !errors.Is(err, errCAEnded) || c != nil {
 		t.Errorf("a leaf from a CA that has ended: %v, %v", c != nil, err)
 	}
 }
@@ -395,17 +393,16 @@ func TestLeafWithinCA(t *testing.T) {
 // A tunnel to a host with a bound secret, once the proxy's CA has ended, is refused before it
 // opens: 403 with the reason and no allow command, logged as a refused block.
 func TestInterceptCAEnded(t *testing.T) {
-	port, _, _ := interceptSetup(t, func(http.ResponseWriter, *http.Request) {})
+	t.Parallel()
+	s, port, _, _ := interceptSetup(t, func(http.ResponseWriter, *http.Request) {})
 	var events strings.Builder
-	oldOut := logOut
-	logOut = &events
-	t.Cleanup(func() { logOut = oldOut })
-	useCA(t, time.Now().Add(-30*24*time.Hour), time.Now().Add(-time.Minute))
+	s.events.out = &events // the handler runs here, alone
+	s.ca = testCA(t, time.Now().Add(-30*24*time.Hour), time.Now().Add(-time.Minute))
 	target := net.JoinHostPort("localhost", strconv.Itoa(port))
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodConnect, "http://"+target, nil)
 	req.Host = target
 	w := httptest.NewRecorder()
-	handler(w, req)
+	s.handler(w, req)
 	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), caEndedReason) ||
 		strings.Contains(w.Body.String(), "network allow") || w.Header().Get("X-Devvm-Blocked") != "localhost" {
 		t.Errorf("answered %d %q", w.Code, w.Body.String())
@@ -419,19 +416,20 @@ func TestInterceptCAEnded(t *testing.T) {
 
 // devvm touches the bindings file when a value is set or removed: cached values are dropped.
 func TestBindingsChangeDropsCachedValues(t *testing.T) {
-	secretsPath = filepath.Join(t.TempDir(), "bindings.json")
-	t.Cleanup(func() { secretsPath = "" })
-	writeBindings(t, secretsPath)
-	bindings.all()
-	valueMu.Lock()
-	values["t"] = cached{"old", time.Now()}
-	valueMu.Unlock()
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "bindings.json")
+	s := newSecrets(path, nil, quiet())
+	writeBindings(t, path)
+	s.all()
+	s.valueMu.Lock()
+	s.values["t"] = cached{"old", time.Now()}
+	s.valueMu.Unlock()
 	later := time.Now().Add(2 * time.Second)
-	must(t, os.Chtimes(secretsPath, later, later))
-	bindings.all()
-	valueMu.Lock()
-	defer valueMu.Unlock()
-	if _, ok := values["t"]; ok {
+	must(t, os.Chtimes(path, later, later))
+	s.all()
+	s.valueMu.Lock()
+	defer s.valueMu.Unlock()
+	if _, ok := s.values["t"]; ok {
 		t.Error("a cached value survived the bindings file changing")
 	}
 }
@@ -439,44 +437,12 @@ func TestBindingsChangeDropsCachedValues(t *testing.T) {
 // An intercepted HTTPS request through the proxy: the client trusts only devvm's CA and sends the
 // placeholder; the upstream server sees the real secret.
 func TestIntercept(t *testing.T) {
-	dir := t.TempDir()
-	writeCA(t, dir)
-	if err := loadCA(filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key")); err != nil {
-		t.Fatal(err)
-	}
-	leaves = map[string]*tls.Certificate{} // minted by another test's CA
-	pool := x509.NewCertPool()
-	pool.AddCert(caCert)
-	upstreamCAs = pool
-	t.Cleanup(func() { upstreamCAs = nil })
-
+	t.Parallel()
 	// Upstream: echoes what it received, with a certificate for "localhost" from the same CA.
-	up := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	s, port, _, client := interceptSetup(t, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%s|%s|%s", r.Header.Get("Authorization"), r.Header.Get("X-Echo"), r.Host) //nolint:gosec // a test echo server
-	}))
-	cert, _ := leafFor("localhost")
-	up.TLS = &tls.Config{Certificates: []tls.Certificate{*cert}}
-	up.StartTLS()
-	defer up.Close()
-	_, portStr, _ := net.SplitHostPort(up.Listener.Addr().String())
-	port, err := strconv.Atoi(portStr)
-	must(t, err)
-	interceptPorts[port] = true
-	t.Cleanup(func() { delete(interceptPorts, port) })
-
-	pol = writePolicy(t, fmt.Sprintf("localhost:%d\n127.0.0.1:%d\n", port, port))
-	secretsPath = filepath.Join(dir, "bindings.json")
-	writeBindings(t, secretsPath, bound("localhost"))
-	t.Cleanup(func() { secretsPath = "" })
-	fakeSecret(t, "real-secret")
-
-	proxy := httptest.NewServer(http.HandlerFunc(handler))
-	defer proxy.Close()
-	pu, _ := url.Parse(proxy.URL)
-	client := &http.Client{Transport: &http.Transport{
-		Proxy:           http.ProxyURL(pu),
-		TLSClientConfig: &tls.Config{RootCAs: pool},
-	}}
+	})
+	fakeSecret(s.secrets, "real-secret")
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("https://localhost:%d/x", port), nil)
 	req.Header.Set("Authorization", "Bearer PH")
 	req.Header.Set("X-Echo", "PH")
@@ -517,6 +483,7 @@ func TestIntercept(t *testing.T) {
 
 // Calls that make lasting GitHub credentials with the VM's token are refused; ordinary ones aren't.
 func TestMintsCredential(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ host, method, path, want string }{
 		{"api.github.com", "POST", "/user/keys", "a key on your GitHub account"},
 		{"api.github.com", "post", "/User/SSH_Signing_Keys/", "a key on your GitHub account"},

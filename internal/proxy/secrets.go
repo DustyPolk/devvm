@@ -20,6 +20,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"net"
 	"net/http"
@@ -121,56 +122,59 @@ func InterceptLines(hosts []string) []string {
 // Lookup returns a binding's value: IO.Secret, which devvm sets to its secrets' store.
 type Lookup func(ctx context.Context, b Binding) (string, error)
 
-var (
-	secretsPath  = ""           // Config.Secrets: the bindings file (no values), re-read on change
-	secretLookup Lookup         // IO.Secret: each binding's value
-	upstreamCAs  *x509.CertPool // nil: the system roots; Config.UpstreamCAs: the user's CAs besides them
-	// Only HTTPS is intercepted; anything else to a bound host (SSH on :22, …) is tunneled.
-	interceptPorts = map[int]bool{443: true}
-)
-
-type bindingFile struct {
+// secrets is a proxy's bindings (Config.Secrets) and the values it has looked up for them.
+type secrets struct {
+	path   string // Config.Secrets: the bindings file (no values), re-read on change; "": none
+	lookup Lookup // IO.Secret: each binding's value
+	log    *log.Logger
+	// mu holds the bindings as the file had them at mtime. It's taken before valueMu, never after.
 	mu    sync.Mutex
 	mtime time.Time
 	list  []Binding
+	// valueMu holds the values, by binding name, and is held through a lookup, so lookups go one
+	// at a time.
+	valueMu sync.Mutex
+	values  map[string]cached
 }
 
-var bindings = &bindingFile{}
+func newSecrets(path string, lookup Lookup, l *log.Logger) *secrets {
+	return &secrets{path: path, lookup: lookup, log: l, values: map[string]cached{}}
+}
 
 // all returns the bindings as the file has them now. A file that's gone, or that can't be read as
 // ReadBindings reads it, has none: no value goes in until devvm writes it again.
-func (b *bindingFile) all() []Binding {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if secretsPath == "" {
+func (s *secrets) all() []Binding {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.path == "" {
 		return nil
 	}
-	st, err := os.Lstat(secretsPath)
+	st, err := os.Lstat(s.path)
 	if err != nil {
-		b.list, b.mtime = nil, time.Time{}
+		s.list, s.mtime = nil, time.Time{}
 		return nil
 	}
-	if !st.ModTime().Equal(b.mtime) {
-		b.mtime = st.ModTime()
-		l, err := ReadBindings(secretsPath)
+	if !st.ModTime().Equal(s.mtime) {
+		s.mtime = st.ModTime()
+		l, err := ReadBindings(s.path)
 		if err != nil {
-			logf("secrets: %v", err)
+			s.log.Printf("secrets: %v", err)
 		} else {
-			logf("secrets %s: %d bindings", secretsPath, len(l.Bindings))
+			s.log.Printf("secrets %s: %d bindings", s.path, len(l.Bindings))
 		}
-		b.list = l.Bindings
+		s.list = l.Bindings
 		// devvm touches the file when a value is set or removed: look values up afresh.
-		valueMu.Lock()
-		values = map[string]cached{}
-		valueMu.Unlock()
+		s.valueMu.Lock()
+		s.values = map[string]cached{}
+		s.valueMu.Unlock()
 	}
-	return b.list
+	return s.list
 }
 
-// bindingsFor: the bindings that apply to host.
-func bindingsFor(host string) []Binding {
+// forHost: the bindings that apply to host.
+func (s *secrets) forHost(host string) []Binding {
 	var out []Binding
-	for _, b := range bindings.all() {
+	for _, b := range s.all() {
 		for _, h := range b.Hosts {
 			if r, ok := parseRule(h); ok && !r.deny && r.matchHost(strings.ToLower(host)) {
 				out = append(out, b)
@@ -187,11 +191,6 @@ type cached struct {
 	value string
 	at    time.Time
 }
-
-var (
-	valueMu sync.Mutex
-	values  = map[string]cached{}
-)
 
 // A value is cached for valueTTL; a login's (KindLogin: Codex, opencode, Claude MCP) for loginTTL,
 // since logging out on the host changes nothing devvm sees.
@@ -210,35 +209,35 @@ func ttlOf(b Binding) time.Duration {
 	return valueTTL
 }
 
-// secretValue returns b's value from secretLookup, cached (see ttlOf). Lookups go one at a time,
-// so two requests never refresh a login at once.
-func secretValue(b Binding) (string, error) {
-	valueMu.Lock()
-	defer valueMu.Unlock()
-	if c, ok := values[b.Name]; ok && time.Since(c.at) < ttlOf(b) {
+// value returns b's value from the lookup, cached (see ttlOf). Lookups go one at a time, so two
+// requests never refresh a login at once.
+func (s *secrets) value(b Binding) (string, error) {
+	s.valueMu.Lock()
+	defer s.valueMu.Unlock()
+	if c, ok := s.values[b.Name]; ok && time.Since(c.at) < ttlOf(b) {
 		return c.value, nil
 	}
-	if secretLookup == nil {
+	if s.lookup == nil {
 		return "", errors.New("no secret lookup")
 	}
 	// The value is cached for every request: no one request's end cancels it.
 	ctx, cancel := context.WithTimeout(context.Background(), lookupTimeout) //nolint:forbidigo // shared by every request
 	defer cancel()
-	v, err := secretLookup(ctx, b)
+	v, err := s.lookup(ctx, b)
 	if err != nil {
 		return "", fmt.Errorf("secret %s: %w", b.Name, err)
 	}
 	if v = strings.TrimSpace(v); v == "" {
 		return "", fmt.Errorf("secret %s is empty", b.Name)
 	}
-	values[b.Name] = cached{v, time.Now()}
+	s.values[b.Name] = cached{v, time.Now()}
 	return v, nil
 }
 
 // inject replaces each binding's placeholder in its header, also inside "Basic" credentials (git
 // over HTTPS sends user:token that way). Only the binding's header is touched. It returns the names
 // of the secrets it put in.
-func inject(h http.Header, bs []Binding) (used []string) {
+func (s *secrets) inject(h http.Header, bs []Binding) (used []string) {
 	for _, b := range bs {
 		vs := h.Values(b.Header)
 		if len(vs) == 0 {
@@ -251,8 +250,8 @@ func inject(h http.Header, bs []Binding) (used []string) {
 			nv := v
 			if strings.Contains(nv, b.Placeholder) || basicHas(nv, b.Placeholder) {
 				if val == "" {
-					if val, err = secretValue(b); err != nil {
-						logf("%v", err)
+					if val, err = s.value(b); err != nil {
+						s.log.Printf("%v", err)
 						return used
 					}
 				}
@@ -289,13 +288,15 @@ func basicHas(v, placeholder string) bool {
 
 // --- the CA ---
 
-var (
-	caCert  *x509.Certificate
-	caKey   *ecdsa.PrivateKey
+// ca is devvm's CA as a proxy has it (Config.CA): the certificate and key it signs leaves with, the
+// one key every leaf has, and the leaves it has minted, by host, under mu.
+type ca struct {
+	cert    *x509.Certificate
+	key     *ecdsa.PrivateKey
 	leafKey *ecdsa.PrivateKey
-	leafMu  sync.Mutex
-	leaves  = map[string]*tls.Certificate{}
-)
+	mu      sync.Mutex
+	leaves  map[string]*tls.Certificate
+}
 
 // devvm makes its CA (trust.InitCA) and replaces it before it ends; VMs trust a new CA from their
 // next launch, which starts their proxy again with it. A proxy keeps the CA it started with, as its
@@ -328,42 +329,51 @@ func writeAtomic(path string, data []byte, mode os.FileMode) error {
 	return os.Rename(tmp.Name(), path) //nolint:gosec // devvm's own files, or a Nix cache file nixPath named
 }
 
-func loadCA(certPath, keyPath string) error {
+// loadCA reads the CA's certificate and key files (Config.CA, Config.CAKey).
+func loadCA(certPath, keyPath string) (*ca, error) {
 	pair, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	k, ok := pair.PrivateKey.(*ecdsa.PrivateKey)
 	if !ok {
-		return errors.New("the CA key isn't ECDSA")
+		return nil, errors.New("the CA key isn't ECDSA")
 	}
-	if caCert, err = x509.ParseCertificate(pair.Certificate[0]); err != nil {
-		return err
+	cert, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		return nil, err
 	}
-	caKey = k
-	leafKey, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	return err
+	return newCA(cert, k)
 }
 
-// loadUpstreamCAs makes the proxy's own TLS connections trust the CA certificates in pem
+// newCA is the CA cert, signing with key, with a leaf key of its own and no leaves yet.
+func newCA(cert *x509.Certificate, key *ecdsa.PrivateKey) (*ca, error) {
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return &ca{cert: cert, key: key, leafKey: leafKey, leaves: map[string]*tls.Certificate{}}, nil
+}
+
+// upstreamPool is what the proxy's own TLS connections trust: the CA certificates in pem
 // (Config.UpstreamCAs: the user's, checked by devvm) as well as the system roots.
-func loadUpstreamCAs(pem []byte) error {
+func upstreamPool(pem []byte) (*x509.CertPool, error) {
 	pool, err := x509.SystemCertPool()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !pool.AppendCertsFromPEM(pem) {
-		return errors.New("upstream_cas holds no certificates")
+		return nil, errors.New("upstream_cas holds no certificates")
 	}
-	upstreamCAs = pool
-	return nil
+	return pool, nil
 }
 
-func caPEM() []byte {
-	if caCert == nil {
+// pem is the CA's certificate, for /ca.pem; nil for no CA.
+func (c *ca) pem() []byte {
+	if c == nil {
 		return nil
 	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Raw})
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.cert.Raw})
 }
 
 // errCAEnded: the CA is past its NotAfter, so a leaf it signed would verify nowhere.
@@ -372,18 +382,18 @@ var errCAEnded = errors.New("devvm's CA has ended")
 // caEndedReason is the log's reason for a tunnel refused because the CA has ended.
 const caEndedReason = "devvm's CA has ended: open the VM again (devvm in its folder) for a new one"
 
-// caEnded reports whether the CA is past its NotAfter at now.
-func caEnded(now time.Time) bool { return !now.Before(caCert.NotAfter) }
+// ended reports whether the CA is past its NotAfter at now.
+func (c *ca) ended(now time.Time) bool { return !now.Before(c.cert.NotAfter) }
 
 // caEndedRefusal refuses a CONNECT to be intercepted (e) once the CA has ended, before the tunnel
 // opens: 403, with the reason and no allow command, since no rule would help, and logged as a
 // refused block. It reports whether it refused.
-func caEndedRefusal(w http.ResponseWriter, e Event) bool {
-	if !caEnded(time.Now()) {
+func (s *server) caEndedRefusal(w http.ResponseWriter, e Event) bool {
+	if !s.ca.ended(time.Now()) {
 		return false
 	}
 	e.Event, e.Reason, e.Refused = "blocked", caEndedReason, true
-	record(e)
+	s.events.record(e)
 	w.Header().Set("X-Devvm-Blocked", e.Host)
 	http.Error(w, "devvm proxy: "+net.JoinHostPort(e.Host, strconv.Itoa(e.Port))+" is refused: "+caEndedReason, http.StatusForbidden)
 	return true
@@ -392,23 +402,23 @@ func caEndedRefusal(w http.ResponseWriter, e Event) bool {
 // leafFor mints (and caches) a certificate for host, signed by the CA: for a day, and never past
 // the CA's own NotAfter or before its NotBefore, since a client checks the whole chain. One that
 // ends with the CA is kept until then. Once the CA has ended there's none (errCAEnded).
-func leafFor(host string) (*tls.Certificate, error) {
-	leafMu.Lock()
-	defer leafMu.Unlock()
+func (c *ca) leafFor(host string) (*tls.Certificate, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	now := time.Now()
-	if caEnded(now) {
+	if c.ended(now) {
 		return nil, errCAEnded
 	}
-	if c, ok := leaves[host]; ok && now.Before(c.Leaf.NotAfter) &&
-		(c.Leaf.NotAfter.Sub(now) > time.Hour || c.Leaf.NotAfter.Equal(caCert.NotAfter)) {
-		return c, nil
+	if l, ok := c.leaves[host]; ok && now.Before(l.Leaf.NotAfter) &&
+		(l.Leaf.NotAfter.Sub(now) > time.Hour || l.Leaf.NotAfter.Equal(c.cert.NotAfter)) {
+		return l, nil
 	}
 	notBefore, notAfter := now.Add(-time.Hour), now.Add(24*time.Hour)
-	if notBefore.Before(caCert.NotBefore) {
-		notBefore = caCert.NotBefore
+	if notBefore.Before(c.cert.NotBefore) {
+		notBefore = c.cert.NotBefore
 	}
-	if notAfter.After(caCert.NotAfter) {
-		notAfter = caCert.NotAfter
+	if notAfter.After(c.cert.NotAfter) {
+		notAfter = c.cert.NotAfter
 	}
 	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	tmpl := &x509.Certificate{
@@ -420,14 +430,14 @@ func leafFor(host string) (*tls.Certificate, error) {
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:     []string{host},
 	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &leafKey.PublicKey, caKey)
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, c.cert, &c.leafKey.PublicKey, c.key)
 	if err != nil {
 		return nil, err
 	}
 	leaf, _ := x509.ParseCertificate(der)
-	c := &tls.Certificate{Certificate: [][]byte{der, caCert.Raw}, PrivateKey: leafKey, Leaf: leaf}
-	leaves[host] = c
-	return c, nil
+	l := &tls.Certificate{Certificate: [][]byte{der, c.cert.Raw}, PrivateKey: c.leafKey, Leaf: leaf}
+	c.leaves[host] = l
+	return l, nil
 }
 
 // --- interception ---
@@ -437,11 +447,11 @@ func leafFor(host string) (*tls.Certificate, error) {
 // over a new TLS connection with the secrets put in. Each request must be for host itself: the
 // secrets are bound to it, so another Host (a site on the same CDN, say) gets 421. The handshake
 // with the VM gets 30 seconds.
-func intercept(ctx context.Context, client net.Conn, host string, port int, e Event) {
+func (s *server) intercept(ctx context.Context, client net.Conn, host string, port int, e Event) {
 	tconn := tls.Server(client, &tls.Config{
 		NextProtos: []string{"h2", "http/1.1"},
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-			return leafFor(host)
+			return s.ca.leafFor(host)
 		},
 	})
 	hctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -449,14 +459,14 @@ func intercept(ctx context.Context, client net.Conn, host string, port int, e Ev
 	cancel()
 	if err != nil {
 		e.Event, e.Reason = "blocked", "TLS with the VM failed (is the devvm CA installed?): "+err.Error()
-		record(e)
+		s.events.record(e)
 		_ = client.Close()
 		return
 	}
 	e.Event = "intercept"
-	record(e)
+	s.events.record(e)
 	cn := &closeNotifyConn{Conn: tconn, done: make(chan struct{})}
-	fwd := forwarder("https", net.JoinHostPort(host, fmt.Sprint(port)), host, port)
+	fwd := s.forwarder("https", net.JoinHostPort(host, fmt.Sprint(port)), host, port)
 	srv := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if h, _ := splitHostPort(r.Host, port); h != host {
@@ -464,7 +474,7 @@ func intercept(ctx context.Context, client net.Conn, host string, port int, e Ev
 				return
 			}
 			if what := mintsCredential(host, r.Method, r.URL.Path); what != "" {
-				record(Event{
+				s.events.record(Event{
 					Event: "blocked", Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Refused: true,
 					Reason: "makes " + what + " with your token, which would outlast the VM; do it on the host",
 				})
@@ -476,7 +486,7 @@ func intercept(ctx context.Context, client net.Conn, host string, port int, e Ev
 		Protocols:         new(http.Protocols),
 		IdleTimeout:       10 * time.Minute,
 		ReadHeaderTimeout: 30 * time.Second,
-		ErrorLog:          logger,
+		ErrorLog:          s.log,
 	}
 	// TLS is already done here, so the server sees plain HTTP/1.1, or HTTP/2 with prior knowledge.
 	srv.Protocols.SetHTTP1(true)
@@ -517,16 +527,16 @@ func mintsCredential(host, method, p string) string {
 // for every request, so `devvm secret unuse` applies to connections already open. HTTPS goes over
 // TLS with the system's roots and the user's CAs, through an upstream's CONNECT tunnel when one
 // applies; plain HTTP through an upstream is sent to it in absolute form, with its credentials.
-func forwarder(scheme, target, host string, port int) http.Handler {
-	tlsConf := &tls.Config{RootCAs: upstreamCAs, ServerName: host}
+func (s *server) forwarder(scheme, target, host string, port int) http.Handler {
+	tlsConf := &tls.Config{RootCAs: s.upstreamCAs, ServerName: host}
 	tr := &http.Transport{
-		DialContext:     func(ctx context.Context, _, _ string) (net.Conn, error) { return dialOut(ctx, host, port) },
+		DialContext:     func(ctx context.Context, _, _ string) (net.Conn, error) { return s.egress.dialOut(ctx, host, port) },
 		TLSClientConfig: tlsConf, ForceAttemptHTTP2: true,
 		IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: 10 * time.Second,
 	}
-	up := upstreamFor(host, port, scheme == "http")
+	up := s.egress.up.route(host, port, scheme == "http")
 	if scheme == "http" {
-		tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) { return dial(ctx, host, port) }
+		tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) { return s.egress.dial(ctx, host, port) }
 		if up != nil {
 			// The upstream connects to what the request line names: the host that was checked,
 			// in its canonical form, never the VM's spelling of it.
@@ -545,7 +555,7 @@ func forwarder(scheme, target, host string, port int) http.Handler {
 	}
 	return &httputil.ReverseProxy{
 		Transport:     tr,
-		ErrorLog:      logger,
+		ErrorLog:      s.log,
 		FlushInterval: -1, // stream (SSE) instead of buffering
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.Out.URL.Scheme, pr.Out.URL.Host = scheme, target
@@ -565,16 +575,16 @@ func forwarder(scheme, target, host string, port int) http.Handler {
 					pr.Out.Header.Set("Proxy-Authorization", up.auth)
 				}
 			}
-			if scheme == "https" && interceptPorts[port] { // secrets only ever go over TLS, to :443
-				if bs := bindingsFor(host); len(bs) > 0 {
-					e.Secrets = inject(pr.Out.Header, bs)
+			if scheme == "https" && s.interceptPorts[port] { // secrets only ever go over TLS, to :443
+				if bs := s.secrets.forHost(host); len(bs) > 0 {
+					e.Secrets = s.secrets.inject(pr.Out.Header, bs)
 				}
 			}
-			record(e)
+			s.events.record(e)
 		},
 		// The error stays in the proxy's own log: it can name addresses the VM shouldn't learn.
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
-			logf("%s:%d: %v", host, port, err)
+			s.log.Printf("%s:%d: %v", host, port, err)
 			http.Error(w, "devvm proxy: couldn't reach "+host, http.StatusBadGateway)
 		},
 	}

@@ -23,6 +23,10 @@
 //
 // It exits when the VM's hostagent does (Config.Lifeline). Standard library only, and internal/daemon,
 // which is too: it prints nothing itself, but writes to the streams devvm hands Main.
+//
+// Everything one proxy runs with and keeps between connections is in its server, which Main makes
+// from the config (newServer): the package keeps no state of its own, so each test makes a server
+// of its own, and none sees another's.
 package proxy
 
 import (
@@ -30,6 +34,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/subtle"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -50,8 +55,6 @@ import (
 	"github.com/w3cj/devvm/internal/daemon"
 )
 
-var vmName = "vm"
-
 // newFlags defines devvm _proxy's one flag, -config, on a flag set of its own, writing into path. It
 // takes one dash or two.
 func newFlags(path *string) *flag.FlagSet {
@@ -60,9 +63,78 @@ func newFlags(path *string) *flag.FlagSet {
 	return fs
 }
 
-// --- who may use the proxy ---
+// --- the server ---
 
-var proxyAuth = "" // the VM's password (Config.Password); empty: no check
+// server is one proxy: what its config gave it, and what it keeps between connections, each part
+// under a lock of its own. newServer makes it from a Config.
+type server struct {
+	vm       string      // Config.VM, for the log
+	password string      // the VM's password (Config.Password); empty: no check
+	log      *log.Logger // its own log lines (what it loaded, what failed), not events
+	events   *events
+	egress   *egress  // where a connection may go: the policy, the floor, the company proxy
+	secrets  *secrets // Config.Secrets: the bindings and their values
+	ca       *ca      // Config.CA, for interception; nil: none
+	// upstreamCAs is what the proxy's own TLS connections trust: nil, the system roots;
+	// Config.UpstreamCAs, the user's CAs besides them.
+	upstreamCAs *x509.CertPool
+	// interceptPorts are the ports a host with a bound secret is intercepted on: HTTPS's alone, so
+	// anything else to a bound host (SSH on :22, …) is tunneled.
+	interceptPorts map[int]bool
+	links          links
+	nix            *nixCache
+}
+
+// newServer makes the server c describes, logging to l and its events to out: it reads its CA,
+// the company proxy's settings, the built-in policies (from std.FS) and the user's policy files,
+// and opens the Nix cache. Values come from std.Secret.
+func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) {
+	ev := &events{vm: c.VM, out: out}
+	s := &server{
+		vm: c.VM, password: c.Password, log: l, events: ev,
+		secrets:        newSecrets(c.Secrets, std.Secret, l),
+		interceptPorts: map[int]bool{443: true},
+		links:          links{file: c.Links, sockets: c.LinkSockets, vm: c.VM, log: l, events: ev},
+	}
+	var err error
+	if c.CA != "" {
+		if s.ca, err = loadCA(c.CA, c.CAKey); err != nil {
+			return nil, err
+		}
+	}
+	if c.UpstreamCAs != "" {
+		if s.upstreamCAs, err = upstreamPool([]byte(c.UpstreamCAs)); err != nil {
+			return nil, err
+		}
+	}
+	var up upstreams
+	if c.Upstream != nil {
+		if up, err = newUpstreams(*c.Upstream); err != nil {
+			return nil, err
+		}
+		l.Printf("%s", up.names())
+	}
+	up.unresolved = c.UpstreamUnresolved
+	rs, err := readBuiltins(std.FS, c.BuiltinPolicies, l)
+	if err != nil {
+		return nil, err
+	}
+	own := &hostAddrs{}
+	own.load()
+	s.egress = &egress{pol: newPolicy(rs, c.Policies, l), own: own, up: up}
+	s.egress.pol.all()
+	maxSize := c.NixCacheMax
+	if maxSize == 0 {
+		maxSize = NixCacheDefault
+	}
+	s.nix = newNixCache(c.NixCache, maxSize, s.egress, ev, l, s.upstreamCAs)
+	if err := s.nix.open(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// --- who may use the proxy ---
 
 // ProxyUser is the user every request names with its password, a VM's or a build's own, as devvm's
 // backends put it in a guest's proxy settings.
@@ -72,8 +144,8 @@ const ProxyUser = "devvm"
 // VM's connections, so the port alone can't tell the VM apart from anything else on the host that
 // reaches it: other VMs, other users. Inside an intercepted tunnel there's no proxy header: the
 // CONNECT that opened it was checked.
-func authorized(r *http.Request) bool {
-	if proxyAuth == "" {
+func (s *server) authorized(r *http.Request) bool {
+	if s.password == "" {
 		return true
 	}
 	v := r.Header.Get("Proxy-Authorization")
@@ -81,10 +153,8 @@ func authorized(r *http.Request) bool {
 		return false
 	}
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v[6:]))
-	return err == nil && subtle.ConstantTimeCompare(raw, []byte(ProxyUser+":"+proxyAuth)) == 1
+	return err == nil && subtle.ConstantTimeCompare(raw, []byte(ProxyUser+":"+s.password)) == 1
 }
-
-var pol *policy
 
 // --- events ---
 
@@ -115,26 +185,38 @@ type numbered struct {
 	e Event
 }
 
-var (
-	logMu  sync.Mutex
-	logOut io.Writer  = io.Discard // Main sets it: Config.Log, else stdout
-	recent []numbered              // the last blocks, for /blocked
-	blocks int                     // blocks so far
-)
+// events is a proxy's event log (Config.Log, else IO.Stdout) and the blocks it keeps for
+// /blocked, all under its lock.
+type events struct {
+	vm     string // Config.VM: every event's
+	mu     sync.Mutex
+	out    io.Writer
+	recent []numbered // the last blocks, for /blocked
+	blocks int        // blocks so far
+}
 
-func record(e Event) {
-	e.Time, e.VM = time.Now().UTC().Format(time.RFC3339), vmName
+// record writes e to the log, as the VM's, now, and keeps it among the recent blocks when it's one.
+func (ev *events) record(e Event) {
+	e.Time, e.VM = time.Now().UTC().Format(time.RFC3339), ev.vm
 	b, _ := json.Marshal(e)
-	logMu.Lock()
-	defer logMu.Unlock()
-	fmt.Fprintln(logOut, string(b))
+	ev.mu.Lock()
+	defer ev.mu.Unlock()
+	fmt.Fprintln(ev.out, string(b))
 	if e.Event == "blocked" {
-		blocks++
-		recent = append(recent, numbered{blocks, e})
-		if len(recent) > 50 {
-			recent = recent[len(recent)-50:]
+		ev.blocks++
+		ev.recent = append(ev.recent, numbered{ev.blocks, e})
+		if len(ev.recent) > 50 {
+			ev.recent = ev.recent[len(ev.recent)-50:]
 		}
 	}
+}
+
+// blocked is a copy of the recent blocks, and how many blocks there have been, for /blocked and
+// /blocked/new.
+func (ev *events) blocked() ([]numbered, int) {
+	ev.mu.Lock()
+	defer ev.mu.Unlock()
+	return slices.Clone(ev.recent), ev.blocks
 }
 
 // newBlocks answers /blocked/new?after=N for the VM's prompt: the number of blocks so far on the first
@@ -174,23 +256,17 @@ func newBlocks(rs []numbered, count int, after string) string {
 	return b.String()
 }
 
-// logger: the proxy's own log lines (what it loaded, what failed), not events. Main points it at
-// the stderr devvm hands it.
-var logger = log.New(io.Discard, "devvm proxy: ", log.LstdFlags)
-
-func logf(format string, a ...any) { logger.Printf(format, a...) }
-
 // --- destinations ---
 
-// The host's own addresses, re-read every 30 seconds: they change (a new network, IPv6 temporary
-// addresses).
-var (
-	ownMu    sync.Mutex
-	ownAddrs = map[netip.Addr]bool{}
-	ownAt    time.Time
-)
+// hostAddrs is the host's own addresses, read again every 30 seconds: they change (a new network,
+// IPv6 temporary addresses).
+type hostAddrs struct {
+	mu    sync.Mutex
+	addrs map[netip.Addr]bool
+	at    time.Time
+}
 
-func loadOwnAddrs() {
+func (h *hostAddrs) load() {
 	addrs, _ := net.InterfaceAddrs()
 	own := map[netip.Addr]bool{}
 	for _, a := range addrs {
@@ -198,21 +274,21 @@ func loadOwnAddrs() {
 			own[p.Addr().Unmap()] = true
 		}
 	}
-	ownMu.Lock()
-	ownAddrs, ownAt = own, time.Now()
-	ownMu.Unlock()
+	h.mu.Lock()
+	h.addrs, h.at = own, time.Now()
+	h.mu.Unlock()
 }
 
-func isOwn(a netip.Addr) bool {
-	ownMu.Lock()
-	stale := time.Since(ownAt) > 30*time.Second
-	ownMu.Unlock()
+func (h *hostAddrs) has(a netip.Addr) bool {
+	h.mu.Lock()
+	stale := time.Since(h.at) > 30*time.Second
+	h.mu.Unlock()
 	if stale {
-		loadOwnAddrs()
+		h.load()
 	}
-	ownMu.Lock()
-	defer ownMu.Unlock()
-	return ownAddrs[a]
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.addrs[a]
 }
 
 // Ranges that aren't the public internet beyond what netip's predicates cover: CGNAT, "this network",
@@ -224,6 +300,7 @@ var notPublic = []netip.Prefix{
 	netip.MustParsePrefix("240.0.0.0/4"), netip.MustParsePrefix("64:ff9b:1::/48"),
 	netip.MustParsePrefix("::/96"), netip.MustParsePrefix("fec0::/10"),
 }
+
 var nat64 = netip.MustParsePrefix("64:ff9b::/96")
 
 // nat64IPv4: the IPv4 address in a NAT64 address (64:ff9b::a.b.c.d).
@@ -235,12 +312,13 @@ func nat64IPv4(a netip.Addr) (netip.Addr, bool) {
 	return netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}), true
 }
 
-// internal: addresses a VM must not reach without an explicit rule: the host itself and its networks.
-// A NAT64 address (64:ff9b::a.b.c.d, on IPv6-only networks) is judged by the IPv4 address in it.
-func internal(a netip.Addr) bool {
+// internal: addresses a VM must not reach without an explicit rule: the host itself (h) and its
+// networks. A NAT64 address (64:ff9b::a.b.c.d, on IPv6-only networks) is judged by the IPv4 address
+// in it.
+func (h *hostAddrs) internal(a netip.Addr) bool {
 	a = a.Unmap()
 	if v4, ok := nat64IPv4(a); ok {
-		return internal(v4)
+		return h.internal(v4)
 	}
 	for _, p := range notPublic {
 		if p.Contains(a) {
@@ -248,14 +326,22 @@ func internal(a netip.Addr) bool {
 		}
 	}
 	return a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() ||
-		a.IsMulticast() || a.IsUnspecified() || a.IsInterfaceLocalMulticast() || isOwn(a)
+		a.IsMulticast() || a.IsUnspecified() || a.IsInterfaceLocalMulticast() || h.has(a)
+}
+
+// egress decides where a connection may go, and makes it: the policy, the floor of internal
+// addresses (the host's own among them), and the company proxy.
+type egress struct {
+	pol *policy
+	own *hostAddrs
+	up  upstreams
 }
 
 var errFloor = errors.New("resolves to an internal address")
 
 // resolve host to the addresses that may be dialed for port. Callers dial these, not the name, so
 // a second DNS answer can't swap in an internal address.
-func resolve(ctx context.Context, host string, port int) ([]netip.Addr, error) {
+func (e *egress) resolve(ctx context.Context, host string, port int) ([]netip.Addr, error) {
 	var addrs []netip.Addr
 	if a, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
 		addrs = []netip.Addr{a.Unmap()}
@@ -270,7 +356,7 @@ func resolve(ctx context.Context, host string, port int) ([]netip.Addr, error) {
 	}
 	var ok []netip.Addr
 	for _, a := range addrs {
-		if !pol.addrDenied(a, port) && (!internal(a) || pol.addrAllowed(a, port)) {
+		if !e.pol.addrDenied(a, port) && (!e.own.internal(a) || e.pol.addrAllowed(a, port)) {
 			ok = append(ok, a)
 		}
 	}
@@ -280,8 +366,8 @@ func resolve(ctx context.Context, host string, port int) ([]netip.Addr, error) {
 	return ok, nil
 }
 
-func dial(ctx context.Context, host string, port int) (net.Conn, error) {
-	addrs, err := resolve(ctx, host, port)
+func (e *egress) dial(ctx context.Context, host string, port int) (net.Conn, error) {
+	addrs, err := e.resolve(ctx, host, port)
 	if err != nil {
 		return nil, err
 	}
@@ -290,11 +376,11 @@ func dial(ctx context.Context, host string, port int) (net.Conn, error) {
 	}
 	d := net.Dialer{Timeout: 15 * time.Second}
 	for _, a := range addrs {
-		c, e := d.DialContext(ctx, "tcp", netip.AddrPortFrom(a, uint16(port)).String())
-		if e == nil {
+		c, err2 := d.DialContext(ctx, "tcp", netip.AddrPortFrom(a, uint16(port)).String())
+		if err2 == nil {
 			return c, nil
 		}
-		err = e
+		err = err2
 	}
 	return nil, err
 }
@@ -344,9 +430,9 @@ func splitHostPort(hp string, def int) (string, int) {
 	return norm(h), n
 }
 
-func block(w http.ResponseWriter, e Event) {
+func (s *server) block(w http.ResponseWriter, e Event) {
 	e.Event = "blocked"
-	record(e)
+	s.events.record(e)
 	w.Header().Set("X-Devvm-Blocked", e.Host)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
@@ -377,19 +463,19 @@ func AllowRule(host string, port int) (string, bool) {
 
 // check runs the policy and the floor; on success it returns the rule that allowed host:port. plain
 // is a plain HTTP request, which goes through HTTP_PROXY's upstream rather than HTTPS_PROXY's.
-func check(ctx context.Context, host string, port int, plain bool) (string, string) {
-	rule, why, _ := checkRefused(ctx, host, port, plain)
+func (e *egress) check(ctx context.Context, host string, port int, plain bool) (string, string) {
+	rule, why, _ := e.checkRefused(ctx, host, port, plain)
 	return rule, why
 }
 
 // checkRefused is check, and whether a refusal is one no allow rule would lift (a broken deny's),
 // which its event marks Refused.
-func checkRefused(ctx context.Context, host string, port int, plain bool) (string, string, bool) {
-	ok, rule, refused := pol.verdict(host, port) // rule: the allowing rule, or why not
+func (e *egress) checkRefused(ctx context.Context, host string, port int, plain bool) (string, string, bool) {
+	ok, rule, refused := e.pol.verdict(host, port) // rule: the allowing rule, or why not
 	if !ok {
 		return "", rule, refused
 	}
-	if why := floorCheck(ctx, host, port, plain); why != "" {
+	if why := e.floorCheck(ctx, host, port, plain); why != "" {
 		return "", why, false
 	}
 	return rule, "", false
@@ -397,10 +483,10 @@ func checkRefused(ctx context.Context, host string, port int, plain bool) (strin
 
 // floorCheck is check past the rules for an allowed host: the address floor, or the company
 // proxy's. It returns why not, or "".
-func floorCheck(ctx context.Context, host string, port int, plain bool) string {
-	floor := func() error { _, err := resolve(ctx, host, port); return err }
-	if upstreamFor(host, port, plain) != nil {
-		floor = func() error { return floorUpstream(ctx, host, port) }
+func (e *egress) floorCheck(ctx context.Context, host string, port int, plain bool) string {
+	floor := func() error { _, err := e.resolve(ctx, host, port); return err }
+	if e.up.route(host, port, plain) != nil {
+		floor = func() error { return e.floorUpstream(ctx, host, port) }
 	}
 	err := floor()
 	switch {
@@ -415,46 +501,56 @@ func floorCheck(ctx context.Context, host string, port int, plain bool) string {
 	}
 }
 
-func handleConnect(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	host, port := splitHostPort(r.Host, 443)
 	if !HostOK(host) {
 		http.Error(w, "devvm proxy: not a host name", http.StatusBadRequest)
 		return
 	}
 	// One of the VM's links: its socket, before any rule (links.go).
-	if l, ok := linkFor(host, port); ok {
-		connectLink(w, r, host, port, l)
+	if l, ok := s.links.find(host, port); ok {
+		s.links.connect(w, r, host, port, l)
 		return
 	}
-	if notALink(w, "CONNECT", host, port) {
+	if s.links.refuse(w, "CONNECT", host, port) {
 		return
 	}
 	e := Event{Host: host, Port: port, Method: "CONNECT"}
-	rule, why, refused := checkRefused(r.Context(), host, port, false)
+	rule, why, refused := s.egress.checkRefused(r.Context(), host, port, false)
 	if why != "" {
 		e.Reason, e.Refused = why, refused
-		block(w, e)
+		s.block(w, e)
 		return
 	}
 	e.Rule = rule
-	if up := upstreamFor(host, port, false); up != nil {
+	if up := s.egress.up.route(host, port, false); up != nil {
 		e.Upstream = up.addr
 	}
-	if bs := bindingsFor(host); interceptPorts[port] && len(bs) > 0 && caCert != nil {
-		if caEndedRefusal(w, e) {
+	if bs := s.secrets.forHost(host); s.interceptPorts[port] && len(bs) > 0 && s.ca != nil {
+		if s.caEndedRefusal(w, e) {
 			return
 		}
 		client, err := hijack(w)
 		if err != nil {
 			return
 		}
-		intercept(r.Context(), client, host, port, e)
+		s.intercept(r.Context(), client, host, port, e)
 		return
 	}
-	up, err := dialOut(r.Context(), host, port)
+	s.tunnel(w, r, host, port, e)
+}
+
+// tunnel carries a CONNECT to host:port that the policy allows, e its event. The far end's bytes
+// go to the client at once, so a protocol whose server speaks first (SMTP) gets its greeting
+// before the client sends anything. The client's go on only once they're checked: when they start
+// a TLS ClientHello, its SNI must be the host that was checked (which blunts domain fronting), and
+// nothing of the client's reaches the far end before that. Other protocols (SSH on :22, …) pass as
+// they are.
+func (s *server) tunnel(w http.ResponseWriter, r *http.Request, host string, port int, e Event) {
+	up, err := s.egress.dialOut(r.Context(), host, port)
 	if err != nil {
 		e.Reason = "connect failed: " + err.Error()
-		block(w, e)
+		s.block(w, e)
 		return
 	}
 	defer func() { _ = up.Close() }()
@@ -463,19 +559,18 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = client.Close() }()
-
-	// TLS: the SNI must be the host that was checked (blunts domain fronting). Other protocols
-	// (SSH on :22, …) pass as they are.
-	first, sni, isTLS := peekClientHello(client.r)
-	if isTLS && !sniMatches(sni, host) {
-		e.Event, e.Reason = "blocked", fmt.Sprintf("TLS name %q doesn't match %s", sni, host)
-		record(e)
-		return
-	}
-	e.Event = "tunnel"
-	record(e)
-	_, _ = up.Write(first)
-	splice(client, up)
+	splice(client, up, func() bool {
+		first, sni, isTLS := peekClientHello(client.r)
+		if isTLS && !sniMatches(sni, host) {
+			e.Event, e.Reason = "blocked", fmt.Sprintf("TLS name %q doesn't match %s", sni, host)
+			s.events.record(e)
+			return false
+		}
+		e.Event = "tunnel"
+		s.events.record(e)
+		_, err := up.Write(first)
+		return err == nil
+	})
 }
 
 func sniMatches(sni, host string) bool {
@@ -486,10 +581,15 @@ func sniMatches(sni, host string) bool {
 }
 
 // peekClientHello reads the first TLS record if the stream starts with one, and returns the bytes
-// read (to replay upstream), the SNI, and whether it was TLS.
+// read (to replay upstream), the SNI, and whether it was TLS. It looks at one byte first: only a
+// TLS record starts with 0x16, so a client that sends fewer than a record header's five bytes of
+// anything else isn't held.
 func peekClientHello(r *bufio.Reader) ([]byte, string, bool) {
+	if b, err := r.Peek(1); err != nil || b[0] != 0x16 {
+		return nil, "", false
+	}
 	hdr, err := r.Peek(5)
-	if err != nil || hdr[0] != 0x16 || hdr[1] != 3 {
+	if err != nil || hdr[1] != 3 {
 		return nil, "", false
 	}
 	n := int(hdr[3])<<8 | int(hdr[4])
@@ -502,7 +602,7 @@ func peekClientHello(r *bufio.Reader) ([]byte, string, bool) {
 
 // handleHTTP serves absolute-form requests (plain HTTP, or "GET https://…" from clients like
 // busybox wget) and the reserved http://devvm.proxy/ endpoints.
-func handleHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Host == "" {
 		http.Error(w, "devvm proxy: not a proxy request", http.StatusBadRequest)
 		return
@@ -521,47 +621,45 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if host == "devvm.proxy" {
-		serveReserved(w, r)
+		s.serveReserved(w, r)
 		return
 	}
 	// One of the VM's links: its socket, before any rule (links.go). HTTPS to a link goes through
 	// CONNECT, so its TLS stays the client's: the proxy makes none of its own to a link.
-	if l, ok := linkFor(host, port); ok {
+	if l, ok := s.links.find(host, port); ok {
 		if scheme == "https" {
 			http.Error(w, "devvm proxy: reach a link over HTTPS through CONNECT", http.StatusBadRequest)
 			return
 		}
-		forwardLink(w, r, host, port, l)
+		s.links.forward(w, r, host, port, l)
 		return
 	}
-	if notALink(w, r.Method, host, port) {
+	if s.links.refuse(w, r.Method, host, port) {
 		return
 	}
 	e := Event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent()}
-	if _, why, refused := checkRefused(r.Context(), host, port, scheme == "http"); why != "" {
+	if _, why, refused := s.egress.checkRefused(r.Context(), host, port, scheme == "http"); why != "" {
 		e.Reason, e.Refused = why, refused
-		block(w, e)
+		s.block(w, e)
 		return
 	}
 	// Some clients half-close after sending; don't treat that as the client going away.
-	forwarder(scheme, r.URL.Host, host, port).ServeHTTP(noCloseNotify{w}, r.WithContext(context.WithoutCancel(r.Context())))
+	s.forwarder(scheme, r.URL.Host, host, port).ServeHTTP(noCloseNotify{w}, r.WithContext(context.WithoutCancel(r.Context())))
 }
 
 type noCloseNotify struct{ http.ResponseWriter }
 
 func (w noCloseNotify) Flush() { _ = http.NewResponseController(w.ResponseWriter).Flush() }
 
-func serveReserved(w http.ResponseWriter, r *http.Request) {
+func (s *server) serveReserved(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/nix/") {
-		serveNix(w, r)
+		s.nix.serve(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	switch r.URL.Path {
 	case "/blocked":
-		logMu.Lock()
-		rs := append([]numbered(nil), recent...)
-		logMu.Unlock()
+		rs, _ := s.events.blocked()
 		if len(rs) == 0 {
 			fmt.Fprintln(w, "devvm: nothing blocked recently")
 			return
@@ -577,12 +675,10 @@ func serveReserved(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = w.Write(b.Bytes())
 	case "/blocked/new":
-		logMu.Lock()
-		s := newBlocks(recent, blocks, r.URL.Query().Get("after"))
-		logMu.Unlock()
-		fmt.Fprint(w, s)
+		rs, count := s.events.blocked()
+		fmt.Fprint(w, newBlocks(rs, count, r.URL.Query().Get("after")))
 	case "/ca.pem":
-		if p := caPEM(); p != nil {
+		if p := s.ca.pem(); p != nil {
 			_, _ = w.Write(p)
 			return
 		}
@@ -592,48 +688,34 @@ func serveReserved(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	if !authorized(r) {
+func (s *server) handler(w http.ResponseWriter, r *http.Request) {
+	if !s.authorized(r) {
 		w.Header().Set("Proxy-Authenticate", `Basic realm="devvm"`)
 		http.Error(w, "devvm proxy: this proxy belongs to another VM", http.StatusProxyAuthRequired)
 		return
 	}
 	if r.Method == http.MethodConnect {
-		handleConnect(w, r)
+		s.handleConnect(w, r)
 		return
 	}
-	handleHTTP(w, r)
+	s.handleHTTP(w, r)
 }
 
-// lifelineTick: how often watchLifeline looks (tests shorten it).
-var lifelineTick = 3 * time.Second
+// lifelineTick: how often the proxy looks at its VM's lifeline.
+const lifelineTick = 3 * time.Second
 
 // lifelineWait bounds how long the proxy waits for its VM's lifeline: it starts before the VM does.
 const lifelineWait = 15 * time.Minute
 
 // watchLifeline returns once the VM's lifeline (daemon.Lifeline) no longer holds, or never names a
-// process that runs. It follows the start it first sees running, not later ones: a restarted VM
-// gets a new proxy. A lifeline a start writes whose process is already gone (the VM stopped
-// between two looks) ends it too; what the file held when the proxy started is an earlier
-// start's, and waited past.
-func watchLifeline(path string) {
-	if l, ok := daemon.FollowLifeline(path, lifelineWait, lifelineTick); ok {
-		l.Wait(lifelineTick)
+// process that runs, looking every tick. It follows the start it first sees running, not later
+// ones: a restarted VM gets a new proxy. A lifeline a start writes whose process is already gone
+// (the VM stopped between two looks) ends it too; what the file held when the proxy started is an
+// earlier start's, and waited past.
+func watchLifeline(path string, tick time.Duration) {
+	if l, ok := daemon.FollowLifeline(path, lifelineWait, tick); ok {
+		l.Wait(tick)
 	}
-}
-
-// loadPolicies reads the built-in policies (Config.BuiltinPolicies) from devvm's files, the user's
-// policy files (Config.Policies) and the host's own addresses, and opens the Nix cache
-// (Config.NixCache).
-func loadPolicies(c Config, own fs.FS) error {
-	rs, err := readBuiltins(own, c.BuiltinPolicies)
-	if err != nil {
-		return err
-	}
-	pol = newPolicy(rs, c.Policies)
-	pol.all()
-	loadOwnAddrs()
-	return openNixCache()
 }
 
 // IO is what devvm _proxy reads and writes: devvm's own streams.
@@ -651,7 +733,10 @@ type IO struct {
 
 // Main runs devvm _proxy with args (its flags): the proxy itself, with -config's file, until the
 // VM's hostagent is gone. -help prints the flags to std.Stdout. Errors are returned, not printed.
-func Main(args []string, std IO) error {
+func Main(args []string, std IO) error { return run(args, std, lifelineTick) }
+
+// run is Main, looking at the VM's lifeline every tick.
+func run(args []string, std IO, tick time.Duration) error {
 	var configPath string
 	fs := newFlags(&configPath)
 	fs.SetOutput(io.Discard)
@@ -666,7 +751,6 @@ func Main(args []string, std IO) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
 	}
-	logger.SetOutput(std.Stderr)
 	// Without a config, and the password in it, any program on the host could use the proxy, and
 	// the VM's tokens with it.
 	if configPath == "" {
@@ -679,75 +763,46 @@ func Main(args []string, std IO) error {
 	if c.Secrets != "" && std.Secret == nil {
 		return errors.New("secrets without a lookup")
 	}
-	return serve(c, std)
-}
-
-// apply sets what the proxy runs with from c, reading its CA and the company proxy's settings.
-func (c Config) apply() error {
-	vmName, proxyAuth, upUnresolved = c.VM, c.Password, c.UpstreamUnresolved
-	secretsPath = c.Secrets
-	linksFile, linkSockets = c.Links, c.LinkSockets
-	nixCacheDir, nixCacheMax = c.NixCache, c.NixCacheMax
-	if nixCacheMax == 0 {
-		nixCacheMax = NixCacheDefault
-	}
-	if c.CA != "" {
-		if err := loadCA(c.CA, c.CAKey); err != nil {
-			return err
-		}
-	}
-	if c.UpstreamCAs != "" {
-		if err := loadUpstreamCAs([]byte(c.UpstreamCAs)); err != nil {
-			return err
-		}
-	}
-	if c.Upstream != nil {
-		if err := loadUpstream(*c.Upstream); err != nil {
-			return err
-		}
-		logf("%s", upstreamNames())
-	}
-	return nil
+	return serve(c, std, tick)
 }
 
 // serve runs the proxy with c until the VM's hostagent is gone (c.Lifeline).
-func serve(c Config, std IO) error {
+func serve(c Config, std IO, tick time.Duration) error {
+	l := log.New(std.Stderr, "devvm proxy: ", log.LstdFlags)
 	if c.ProxyLog != "" {
 		f, err := copyRotating(c.ProxyLog, std.Stderr, LogLimit)
 		if err != nil {
 			return err
 		}
-		logger.SetOutput(f)
+		l.SetOutput(f)
 	}
-	if err := c.apply(); err != nil {
-		return err
-	}
-	secretLookup, logOut = std.Secret, std.Stdout
+	out := std.Stdout
 	if c.Log != "" {
 		f, err := OpenEventLog(c.Log)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = f.Close() }()
-		logOut = f
+		out = f
 	}
-	if err := loadPolicies(c, std.FS); err != nil {
+	s, err := newServer(c, std, l, out)
+	if err != nil {
 		return err
 	}
 	ln, err := net.Listen("tcp", c.Listen) //nolint:noctx // listens for the proxy's whole life
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{Handler: http.HandlerFunc(handler), ReadHeaderTimeout: 30 * time.Second}
-	logf("listening on %s for %s", ln.Addr(), vmName)
+	srv := &http.Server{Handler: http.HandlerFunc(s.handler), ReadHeaderTimeout: 30 * time.Second}
+	l.Printf("listening on %s for %s", ln.Addr(), s.vm)
 	// What devvm waits for as it starts the proxy: the address it listens on.
 	if err := daemon.Ready(ln.Addr().String()); err != nil {
-		logf("%v", err)
+		l.Printf("%v", err)
 	}
 	if c.Lifeline != "" {
 		go func() {
-			watchLifeline(c.Lifeline)
-			logf("the VM's hostagent is gone; exiting")
+			watchLifeline(c.Lifeline, tick)
+			l.Printf("the VM's hostagent is gone; exiting")
 			_ = srv.Close()
 		}()
 	}

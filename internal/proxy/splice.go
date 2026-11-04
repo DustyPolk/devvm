@@ -2,7 +2,8 @@ package proxy
 
 // Tunnels: a CONNECT the proxy carries itself (to a host the policy allows, or to one of the VM's
 // links) and each connection the relay passes on are spliced, their bytes passed as they are both
-// ways (splice); a CONNECT's connection is first taken from the HTTP server (hijack).
+// ways (splice), the far end's from the start; a CONNECT's connection is first taken from the HTTP
+// server (hijack).
 
 import (
 	"bufio"
@@ -29,11 +30,18 @@ func hijack(w http.ResponseWriter) (bufConn, error) {
 // splice passes client's bytes to server and server's to client, as they are. The end of what
 // client sends ends what server reads (closeWrite), and server can still answer. Once server's
 // bytes end, or client can't be written to (it went away), splice closes both connections and
-// returns.
-func splice(client, server net.Conn) {
+// returns. Server's bytes pass from the start; client's only once before, when there's one, has
+// returned true (it may read client's first bytes and pass them on itself), and when it returns
+// false, none do, and both connections close.
+func splice(client, server net.Conn, before func() bool) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		if before != nil && !before() {
+			_ = client.Close()
+			_ = server.Close()
+			return
+		}
 		_, _ = io.Copy(server, client)
 		closeWrite(server)
 	}()
