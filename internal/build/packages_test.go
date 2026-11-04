@@ -88,8 +88,39 @@ func (d deb) entry() string {
 		"Filename: pool/main/" + d.name + ".deb\nSize: " + strconv.Itoa(len(d.file)) + "\nSHA256: " + d.sum() + "\n"
 }
 
-// given is what a recording's build gives back for debs.
+// archiveFixture is one of testdata/archive's files: a test archive key
+// (archive.gpg, standing in for Ubuntu's), a package list of the debs
+// these tests use, git's, curl's, libc's, an old git's and a new git's
+// (Packages), and InRelease files that list it, clearsigned by that key
+// with gpg (gpg --quick-gen-key, then --export-options export-minimal
+// --export and --clearsign; the private key wasn't kept).
+func archiveFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", "archive", name)) //nolint:gosec // the test's own files
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// signedLists is the InRelease and the package list a recording's build
+// gives back with its debs.
+func signedLists(t *testing.T) []tarEntry {
+	t.Helper()
+	return []tarEntry{
+		{name: "./1.InRelease", data: string(archiveFixture(t, "InRelease"))},
+		{name: "./2.Packages", data: string(archiveFixture(t, "Packages"))},
+	}
+}
+
+// given is what a recording's build gives back for debs, with the
+// archive's signed lists.
 func given(t *testing.T, debs ...deb) []byte {
+	t.Helper()
+	return tarOf(t, givenEntries(t, debs...)...)
+}
+
+func givenEntries(t *testing.T, debs ...deb) []tarEntry {
 	t.Helper()
 	var list strings.Builder
 	entries := []tarEntry{{name: "./", data: ""}}
@@ -98,7 +129,7 @@ func given(t *testing.T, debs ...deb) []byte {
 		entries = append(entries, tarEntry{name: "./" + d.sum() + ".deb", data: d.file})
 	}
 	entries[0] = tarEntry{name: "./Packages", data: list.String()}
-	return tarOf(t, entries...)
+	return append(entries, signedLists(t)...)
 }
 
 // A first build of base records what it downloaded: each file in the
@@ -216,23 +247,78 @@ func TestBasePackagesRefused(t *testing.T) {
 		"an entry without one": {{name: "./Packages", data: strings.Replace(list, "Version: 1.0-1ubuntu1\n", "", 1)}, {name: sumName, data: git.file}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			b, f := testEnv(t)
-			f.PackagesOut = tarOf(t, out...)
-			err := (Builds{b}).Build(t.Context(), "base")
-			if msg.IDOf(err) != "packages_refused" {
-				t.Fatalf("got %v", err)
-			}
-			key, _ := b.Key(image.Base)
-			if _, err := state.ReadPackageSet(b.Dirs, key); err == nil {
-				t.Error("a set was recorded")
-			}
-			if _, err := state.ReadImage(b.Dirs, key); err == nil {
-				t.Error("the image was recorded")
-			}
-			if left, _ := os.ReadDir(b.Dirs.Packages()); len(left) != 0 {
-				t.Errorf("the cache holds %v", left)
-			}
+			checkRefused(t, append(out, signedLists(t)...))
 		})
+	}
+}
+
+// checkRefused checks that a recording whose build gives back out is
+// refused, and none of it is kept: no set, nothing in the cache, no image
+// record.
+func checkRefused(t *testing.T, out []tarEntry) {
+	t.Helper()
+	b, f := testEnv(t)
+	f.PackagesOut = tarOf(t, out...)
+	err := (Builds{b}).Build(t.Context(), "base")
+	if msg.IDOf(err) != "packages_refused" {
+		t.Fatalf("got %v", err)
+	}
+	t.Log(msg.NamesOf(err))
+	key, _ := b.Key(image.Base)
+	if _, err := state.ReadPackageSet(b.Dirs, key); err == nil {
+		t.Error("a set was recorded")
+	}
+	if _, err := state.ReadImage(b.Dirs, key); err == nil {
+		t.Error("the image was recorded")
+	}
+	if left, _ := os.ReadDir(b.Dirs.Packages()); len(left) != 0 {
+		t.Errorf("the cache holds %v", left)
+	}
+}
+
+// Each package a recording gives back must be one the archive's package
+// lists give the SHA-256 of, each list one an InRelease signed by Ubuntu's
+// archive key gives the SHA-256 of: a forged InRelease, a list it doesn't
+// give, a package no list has or apt's entry for another package is
+// refused, and nothing is kept.
+func TestBasePackagesSigned(t *testing.T) {
+	git := deb{"git", "git's file"}
+	inRelease := string(archiveFixture(t, "InRelease"))
+	packages := string(archiveFixture(t, "Packages"))
+	files := func(debs ...deb) []tarEntry { return givenEntries(t, debs...)[:1+len(debs)] }
+	withLists := func(in, list string, debs ...deb) []tarEntry {
+		return append(files(debs...), tarEntry{name: "./1.InRelease", data: in}, tarEntry{name: "./2.Packages", data: list})
+	}
+	for name, out := range map[string][]tarEntry{
+		"a forged InRelease":      withLists(strings.Replace(inRelease, "Suite: resolute-updates", "Suite: resolute-security", 1), packages, git),
+		"another signature":       withLists(strings.Replace(inRelease, "iQ", "iR", 1), packages, git),
+		"not clearsigned":         withLists(inRelease[strings.Index(inRelease, "Origin:"):strings.Index(inRelease, "-----BEGIN PGP SIGNATURE")], packages, git),
+		"a changed list":          withLists(inRelease, strings.Replace(packages, "libfoo", "libbar", 1), git),
+		"a package no list has":   withLists(inRelease, packages, deb{"git", "a made-up git's file"}),
+		"another package's entry": withLists(inRelease, packages, deb{"vim", "git's file"}),
+		"no lists":                files(git),
+		"no InRelease":            append(files(git), tarEntry{name: "./2.Packages", data: packages}),
+		"a list twice":            append(withLists(inRelease, packages, git), tarEntry{name: "./2.Packages", data: packages}),
+		"an InRelease twice":      append(withLists(inRelease, packages, git), tarEntry{name: "./1.InRelease", data: inRelease}),
+		"a line over 1 MiB":       withLists(inRelease, packages+"Description: "+strings.Repeat("x", 1<<20)+"\n", git),
+		"another list's name":     append(files(git), tarEntry{name: "./1.InRelease", data: inRelease}, tarEntry{name: "./lists/2.Packages", data: packages}),
+	} {
+		t.Run(name, func(t *testing.T) { checkRefused(t, out) })
+	}
+
+	// A good set is kept, each package with the archive's entry for it.
+	b, f := testEnv(t)
+	f.PackagesOut = tarOf(t, withLists(inRelease, packages, git)...)
+	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
+		t.Fatal(err)
+	}
+	key, _ := b.Key(image.Base)
+	set, err := state.ReadPackageSet(b.Dirs, key)
+	if err != nil || len(set.Packages) != 1 {
+		t.Fatalf("set %+v, %v", set, err)
+	}
+	if p := set.Packages[0]; p.Name != "git" || p.SHA256 != git.sum() || !strings.Contains(packages, p.Entry) {
+		t.Errorf("kept %+v, not the archive's entry", p)
 	}
 }
 

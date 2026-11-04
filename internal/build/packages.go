@@ -27,14 +27,19 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 // Base's packages, from the backend's own Ubuntu (assets/layers/apt.sh
 // runs in its build). A base key's first build records them: apt gets
 // them from Ubuntu's archive, the mirror config.toml sets tried first,
 // checking each against the archive's signature, and the build gives back
-// each package it downloaded with apt's entry for it. devvm checks that
-// what comes back is what it says it is, keeps each file in its cache
+// each package it downloaded with apt's entry for it, and the InRelease
+// files and package lists apt used. devvm checks that what comes back is
+// what it says it is: each InRelease signed by Ubuntu's archive key,
+// pinned in devvm's own files, each list one a signed InRelease gives the
+// SHA-256 of, and each package one a list gives the SHA-256 of, whose
+// entry there is the one kept. It keeps each file in its cache
 // under its SHA-256 and the set under the key. Every later build of that
 // key replays the set: the build VM gets those files from the cache and
 // installs from them alone, so it needs no network for them, and the same
@@ -42,15 +47,27 @@ import (
 // image's own sources, unpinned.
 
 // The most a build may give back: a set's list of entries, one package
-// file, all of them, and how many entries its tar stream holds.
+// file, all of them, and how many entries its tar stream holds; one
+// InRelease, one of the archive's package lists and all of those lists.
 const (
 	maxPackagesList    = 64 << 20
 	maxPackageFile     = 2 << 30
 	maxPackagesAll     = 16 << 30
 	maxPackagesEntries = 20000
+	maxInRelease       = 4 << 20
+	maxInReleases      = 32 << 20
+	maxArchiveList     = 512 << 20
+	maxArchiveLists    = 2 << 30
+	maxArchiveLine     = 1 << 20
+	maxArchiveEntry    = 4 << 20
 )
 
-var debName = regexp.MustCompile(`^[0-9a-f]{64}\.deb$`)
+var (
+	debName = regexp.MustCompile(`^[0-9a-f]{64}\.deb$`)
+	// listName is an InRelease or a package list apt.sh gave back, which
+	// it numbers.
+	listName = regexp.MustCompile(`^[0-9]{1,4}\.(InRelease|Packages)$`)
+)
 
 // packages is how a build of base with key gets its packages: replay, from
 // the set key recorded; else record, whose taken is filled once the build
@@ -61,8 +78,12 @@ type packages struct {
 	taken *taken // recording: what the build gave back; nil replaying
 }
 
-// cache is the package cache in devvm's folders.
-type cache struct{ paths.Dirs }
+// cache is the package cache in devvm's folders, and devvm's own files,
+// which hold Ubuntu's archive key (ubuntu.ArchiveKeyring).
+type cache struct {
+	paths.Dirs
+	Assets fs.FS
+}
 
 // basePackages returns base's packages for the build of key, from the
 // backend's own Ubuntu: the set key recorded, checked against the cache
@@ -186,20 +207,27 @@ func writeTarFile(tw *tar.Writer, name string, data []byte) error {
 	return err
 }
 
-// taken is what a recording's build gave back: its package files, kept in
-// a folder of its own in the cache (dir) until commit, and the set they
-// make.
+// taken is what a recording's build gave back: its package files and the
+// archive's package lists, kept in a folder of its own in the cache (dir)
+// until commit, the InRelease files, and the set they make.
 type taken struct {
-	dirs cache
-	dir  string
-	set  state.PackageSet
+	dirs        cache
+	dir         string
+	set         state.PackageSet
+	names       []string // every InRelease's and list's, as given back
+	releases    [][]byte // the InRelease files, as given back
+	releaseSize int64    // all of them
+	lists       []string // the package lists' names in dir
+	listSize    int64    // all of them
 }
 
 // take reads the build's tar stream of out/: Packages, apt's entries for
-// what it downloaded, and each package's file as <sha256>.deb. Anything
-// else, a file whose content isn't its name's SHA-256, an entry without
-// its file or a file without its entry is refused (packages_refused),
-// and nothing is kept: the build VM wrote all of it.
+// what it downloaded, each package's file as <sha256>.deb, and the
+// InRelease files and package lists apt used, as <n>.InRelease and
+// <n>.Packages. Anything else, a file whose content isn't its name's
+// SHA-256, an entry without its file, a file without its entry, or a
+// package the archive's signed lists don't give is refused
+// (packages_refused), and nothing is kept: the build VM wrote all of it.
 func (t *taken) take(r io.Reader) (err error) {
 	if err := state.PrivateDir(t.dirs.Packages()); err != nil {
 		return err
@@ -252,12 +280,146 @@ func (t *taken) take(r io.Reader) (err error) {
 			if files[sum], err = t.keep(tr, sum); err != nil {
 				return err
 			}
+		case listName.MatchString(name):
+			if err := t.keepList(tr, name); err != nil {
+				return err
+			}
 		default:
 			return refused("not a package: " + strconv.Quote(h.Name))
 		}
 	}
-	t.set, err = setOf(list, files)
+	signed, err := t.signedEntries(files)
+	if err != nil {
+		return err
+	}
+	t.set, err = setOf(list, files, signed)
 	return err
+}
+
+// keepList keeps an InRelease (in memory) or a package list (in the
+// folder) the build gave back, up to their caps.
+func (t *taken) keepList(r io.Reader, name string) error {
+	if slices.Contains(t.names, name) {
+		return refused("twice: " + name)
+	}
+	t.names = append(t.names, name)
+	if strings.HasSuffix(name, ".InRelease") {
+		b, err := fetch.ReadCapped(r, maxInRelease)
+		if err != nil {
+			return refused(name + ": " + err.Error())
+		}
+		if t.releaseSize += int64(len(b)); t.releaseSize > maxInReleases {
+			return refused("InRelease files over " + strconv.Itoa(maxInReleases>>20) + " MiB")
+		}
+		t.releases = append(t.releases, b)
+		return nil
+	}
+	f, err := os.OpenFile(filepath.Join(t.dir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // the folder's own, a checked name
+	if err != nil {
+		return err
+	}
+	n, err := io.Copy(f, io.LimitReader(r, maxArchiveList+1))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	switch {
+	case err != nil:
+		return err
+	case n > maxArchiveList:
+		return refused(name + " is over " + strconv.Itoa(maxArchiveList>>20) + " MiB")
+	}
+	if t.listSize += n; t.listSize > maxArchiveLists {
+		return refused("package lists over " + strconv.Itoa(maxArchiveLists>>30) + " GiB")
+	}
+	t.lists = append(t.lists, name)
+	return nil
+}
+
+// signedEntries is the archive's own entry for each package of want (by
+// SHA-256: its size), from the package lists the build gave back: each
+// InRelease must check out with Ubuntu's archive key, and each list must
+// be one a verified InRelease gives the SHA-256 and size of. A package no
+// list has is left out, and setOf refuses it. Nothing to check for none.
+func (t *taken) signedEntries(want map[string]int64) (map[string]string, error) {
+	if len(want) == 0 {
+		return nil, nil
+	}
+	var releases []ubuntu.Release
+	for _, in := range t.releases {
+		r, err := ubuntu.VerifyRelease(t.dirs.Assets, in, time.Now())
+		if err != nil {
+			return nil, msg.PackagesRefused("an InRelease that Ubuntu's archive key didn't sign").Because(err)
+		}
+		releases = append(releases, r)
+	}
+	signed := map[string]string{}
+	for _, name := range t.lists {
+		sum, size, entries, err := readArchiveList(filepath.Join(t.dir, name), want)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.ContainsFunc(releases, func(r ubuntu.Release) bool { return r.Lists(sum, size) }) {
+			return nil, refused(name + " isn't a package list a signed InRelease gives")
+		}
+		for k, v := range entries {
+			if _, ok := signed[k]; !ok {
+				signed[k] = v
+			}
+		}
+	}
+	return signed, nil
+}
+
+// readArchiveList reads one of the archive's package lists: its SHA-256
+// and size, and its entries for the packages of want, by SHA-256.
+func readArchiveList(name string, want map[string]int64) (sum string, size int64, entries map[string]string, err error) {
+	f, err := os.Open(name) //nolint:gosec // in the build's own folder, a checked name
+	if err != nil {
+		return "", 0, nil, err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	n := &counter{}
+	sc := bufio.NewScanner(io.TeeReader(f, io.MultiWriter(h, n)))
+	sc.Buffer(nil, maxArchiveLine)
+	entries = map[string]string{}
+	var entry strings.Builder
+	match := ""
+	end := func() {
+		if match != "" && entries[match] == "" {
+			entries[match] = entry.String()
+		}
+		entry.Reset()
+		match = ""
+	}
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.TrimSpace(line) == "" {
+			end()
+			continue
+		}
+		if s, ok := strings.CutPrefix(line, "SHA256: "); ok {
+			if _, ok := want[strings.TrimSpace(s)]; ok {
+				match = strings.TrimSpace(s)
+			}
+		}
+		if entry.WriteString(line + "\n"); entry.Len() > maxArchiveEntry {
+			return "", 0, nil, refused(filepath.Base(name) + " has an entry over " + strconv.Itoa(maxArchiveEntry>>20) + " MiB")
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return "", 0, nil, refused(filepath.Base(name) + ": " + err.Error())
+	}
+	end()
+	return hex.EncodeToString(h.Sum(nil)), n.n, entries, nil
+}
+
+// counter counts the bytes written to it.
+type counter struct{ n int64 }
+
+func (c *counter) Write(b []byte) (int, error) {
+	c.n += int64(len(b))
+	return len(b), nil
 }
 
 // keep writes one package file from r into the folder, checking that its
@@ -284,8 +446,9 @@ func (t *taken) keep(r io.Reader, sum string) (int64, error) {
 }
 
 // setOf is the set apt's entries (list) make, each matched with its file
-// (files: by SHA-256, its size).
-func setOf(list []byte, files map[string]int64) (state.PackageSet, error) {
+// (files: by SHA-256, its size) and with the archive's signed entry for it
+// (signed: by SHA-256), which the set keeps.
+func setOf(list []byte, files map[string]int64, signed map[string]string) (state.PackageSet, error) {
 	set := state.PackageSet{Recorded: time.Now().UTC().Truncate(time.Second)}
 	seen := map[string]bool{}
 	for entry := range strings.SplitSeq(strings.TrimSpace(string(list)), "\n\n") {
@@ -305,6 +468,9 @@ func setOf(list []byte, files map[string]int64) (state.PackageSet, error) {
 		case seen[p.SHA256]:
 			return state.PackageSet{}, refused("two entries for " + p.Name + " " + p.Version)
 		}
+		if p, err = archiveEntry(p, signed); err != nil {
+			return state.PackageSet{}, err
+		}
 		seen[p.SHA256] = true
 		set.Packages = append(set.Packages, p)
 	}
@@ -312,6 +478,21 @@ func setOf(list []byte, files map[string]int64) (state.PackageSet, error) {
 		return state.PackageSet{}, refused("a file without an entry")
 	}
 	return set, nil
+}
+
+// archiveEntry is p as the archive's signed lists have it (signed: by
+// SHA-256), which must be the same package, version, architecture and
+// size: packages_refused for one they don't have.
+func archiveEntry(p state.Package, signed map[string]string) (state.Package, error) {
+	entry, ok := signed[p.SHA256]
+	if !ok {
+		return state.Package{}, refused(p.Name + " " + p.Version + "'s SHA-256 isn't in the archive's signed package lists")
+	}
+	a, err := packageOf(entry)
+	if err != nil || a.Name != p.Name || a.Version != p.Version || a.Arch != p.Arch || a.SHA256 != p.SHA256 || a.Size != p.Size {
+		return state.Package{}, refused(p.Name + " " + p.Version + "'s entry isn't the archive's")
+	}
+	return a, nil
 }
 
 // packageOf reads one entry of apt's lists: its fields, each a line of

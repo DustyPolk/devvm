@@ -17,11 +17,13 @@ import (
 	"time"
 )
 
-// An OpenPGP detached signature's check (RFC 4880), as much of it as
-// Ubuntu's signed checksums need and no more: version 4 signatures over
-// binary data, by an RSA key of a pinned keyring, hashed with SHA-256 or
-// a stronger SHA-2. The cryptography is the standard library's; this
-// only reads the packets. Anything else is refused.
+// An OpenPGP signature's check (RFC 4880), as much of it as Ubuntu's
+// signed files need and no more: version 4 signatures by an RSA key of a
+// pinned keyring, hashed with SHA-256 or a stronger SHA-2, either detached
+// over binary data (the cloud images' SHA256SUMS) or over a clearsigned
+// message's text (the archive's InRelease). The cryptography is the
+// standard library's; this only reads the packets. Anything else is
+// refused.
 
 // errBadSignature is every refusal: the caller decides what to say.
 var errBadSignature = errors.New("bad OpenPGP signature")
@@ -36,6 +38,7 @@ const (
 	pubRSASignOnly = 3
 
 	sigBinary = 0x00
+	sigText   = 0x01
 
 	subCreated  = 2
 	subExpires  = 3
@@ -195,10 +198,11 @@ type signature struct {
 }
 
 // readSignature reads a signature packet's body, refusing any but a
-// version 4 RSA signature over binary data with a hash of hashes, and one
-// with a critical subpacket this doesn't know or that has expired at now.
-func readSignature(b []byte, now time.Time) (signature, error) {
-	if len(b) < 6 || b[0] != 4 || b[1] != sigBinary || (b[2] != pubRSA && b[2] != pubRSASignOnly) {
+// version 4 RSA signature of sigType (sigBinary or sigText) with a hash of
+// hashOf's, and one with a critical subpacket this doesn't know or that
+// has expired at now.
+func readSignature(b []byte, sigType byte, now time.Time) (signature, error) {
+	if len(b) < 6 || b[0] != 4 || b[1] != sigType || (b[2] != pubRSA && b[2] != pubRSASignOnly) {
 		return signature{}, errBadSignature
 	}
 	if _, ok := hashOf(b[3]); !ok {
@@ -272,6 +276,12 @@ func checkSubpackets(b []byte, now time.Time) error {
 // signature of data by a key of keyring that checks out, at now. It
 // returns errBadSignature when none does.
 func verifyDetached(keyring, sig, data []byte, now time.Time) error {
+	return verify(keyring, sig, data, sigBinary, now)
+}
+
+// verify checks that sig, binary or armored, holds at least one signature
+// of sigType over data by a key of keyring that checks out, at now.
+func verify(keyring, sig, data []byte, sigType byte, now time.Time) error {
 	keys, err := rsaKeys(keyring)
 	if err != nil {
 		return err
@@ -287,7 +297,7 @@ func verifyDetached(keyring, sig, data []byte, now time.Time) error {
 		if p.tag != tagSignature {
 			continue
 		}
-		s, err := readSignature(p.body, now)
+		s, err := readSignature(p.body, sigType, now)
 		if err != nil {
 			continue
 		}
@@ -317,13 +327,90 @@ func verifyDetached(keyring, sig, data []byte, now time.Time) error {
 	return errBadSignature
 }
 
+const (
+	clearBegin = "-----BEGIN PGP SIGNED MESSAGE-----"
+	sigBegin   = "-----BEGIN PGP SIGNATURE-----"
+	sigEnd     = "-----END PGP SIGNATURE-----"
+)
+
+// verifyClearsigned checks that msg, a clearsigned message (RFC 4880's
+// cleartext signature framework, as an InRelease is), holds a signature of
+// its text by a key of keyring that checks out at now, and returns that
+// text: its lines dash-unescaped and without trailing spaces or tabs, as
+// they were signed, each ending in "\n". Anything before the message's
+// first line or after its signature, a header other than Hash, or a line
+// starting with a dash that isn't escaped is refused.
+func verifyClearsigned(keyring, msg []byte, now time.Time) ([]byte, error) {
+	lines := strings.SplitAfter(string(msg), "\n")
+	if len(lines) == 0 || trimLine(lines[0]) != clearBegin {
+		return nil, errBadSignature
+	}
+	i := 1
+	for ; i < len(lines) && trimLine(lines[i]) != ""; i++ {
+		if !strings.HasPrefix(lines[i], "Hash: ") {
+			return nil, errBadSignature
+		}
+	}
+	var text []string
+	for i++; i < len(lines); i++ {
+		line := lines[i]
+		if trimLine(line) == sigBegin {
+			break
+		}
+		if strings.HasPrefix(line, "-") {
+			var ok bool
+			if line, ok = strings.CutPrefix(line, "- "); !ok {
+				return nil, errBadSignature
+			}
+		}
+		text = append(text, trimLine(line))
+	}
+	sig, err := signatureBlock(lines[min(i, len(lines)):])
+	if err != nil {
+		return nil, err
+	}
+	// What's signed: the lines joined by CR LF, without the last's.
+	if err := verify(keyring, sig, []byte(strings.Join(text, "\r\n")), sigText, now); err != nil {
+		return nil, err
+	}
+	if len(text) == 0 {
+		return nil, nil
+	}
+	return []byte(strings.Join(text, "\n") + "\n"), nil
+}
+
+// signatureBlock is lines, a clearsigned message's from its signature's
+// first line on, up to the signature's end; anything after it but blank
+// lines is refused.
+func signatureBlock(lines []string) ([]byte, error) {
+	if len(lines) == 0 {
+		return nil, errBadSignature
+	}
+	for j, line := range lines {
+		if trimLine(line) != sigEnd {
+			continue
+		}
+		for _, rest := range lines[j+1:] {
+			if trimLine(rest) != "" {
+				return nil, errBadSignature
+			}
+		}
+		return []byte(strings.Join(lines[:j+1], "")), nil
+	}
+	return nil, errBadSignature
+}
+
+// trimLine is a line without its line ending and trailing spaces or tabs,
+// which a cleartext signature doesn't cover.
+func trimLine(line string) string { return strings.TrimRight(line, " \t\r\n") }
+
 // dearmor returns an ASCII-armored signature's bytes (RFC 4880's radix-64,
 // its checksum checked), or sig itself when it's binary.
 func dearmor(sig []byte) ([]byte, error) {
 	if len(sig) > 0 && sig[0]&0x80 != 0 {
 		return sig, nil
 	}
-	const begin, end = "-----BEGIN PGP SIGNATURE-----", "-----END PGP SIGNATURE-----"
+	const begin, end = sigBegin, sigEnd
 	sc := bufio.NewScanner(bytes.NewReader(sig))
 	state := 0 // 0: before begin, 1: headers, 2: body
 	var body strings.Builder

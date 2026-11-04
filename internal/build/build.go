@@ -422,7 +422,7 @@ func (b Builds) buildWith(ctx context.Context, spec backend.ImageSpec, name stri
 	if name != image.Base || b.From != "" {
 		return b.Backend.BuildImage(ctx, spec)
 	}
-	pk, err := cache{b.Dirs}.basePackages(spec.Key)
+	pk, err := cache{b.Dirs, b.Assets}.basePackages(spec.Key)
 	if err != nil {
 		return backend.Built{}, err
 	}

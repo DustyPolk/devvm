@@ -24,6 +24,7 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
+	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
 func write(t *testing.T, path, data string) {
@@ -46,6 +47,7 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 	write(t, filepath.Join(root, "base.yaml"), "cpus: 4\n")
 	write(t, filepath.Join(root, "layers", "base.sh"), "#!/bin/bash\n")
 	write(t, filepath.Join(root, "layers", "apt.sh"), "#!/bin/bash\n# apt\n")
+	write(t, filepath.Join(root, ubuntu.ArchiveKeyring), string(archiveFixture(t, "archive.gpg")))
 	write(t, filepath.Join(d.Layers(), "foo.sh"), "#!/bin/bash\necho foo\n")
 	write(t, filepath.Join(d.Layers(), "bar.sh"), "#!/bin/bash\necho bar\n")
 	write(t, d.Settings(), `{"features": []}`) // chosen: none

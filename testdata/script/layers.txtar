@@ -13,18 +13,27 @@ cmp pk/mirrors-2 want-mirrors-2
 cmp ubuntu.sources ubuntu.sources.orig
 
 # record: each package downloaded goes to out/<sha256>.deb, with apt's entry
-# for that version with that SHA-256 (not another's) in out/Packages.
-mkdir archives
+# for that version with that SHA-256 (not another's) in out/Packages, and
+# each InRelease and package list apt has to out/<n>.InRelease or
+# out/<n>.Packages, its other lists left out.
+mkdir archives lists
 cp git.deb archives/git_1_arm64.deb
-exec bash -c 'set -euo pipefail; source fn.sh; layer_fn apt record; dpkg_deb_stub; dir=$PWD/pk archives=$PWD/archives; record'
+cp inrelease lists/mirror_dists_resolute_InRelease
+cp packages lists/mirror_dists_resolute_main_binary-arm64_Packages
+cp packages lists/mirror_dists_resolute_main_i18n_Translation-en
+exec bash -c 'set -euo pipefail; source fn.sh; layer_fn apt record; dpkg_deb_stub; dir=$PWD/pk archives=$PWD/archives lists=$PWD/lists; record'
 exists pk/out/aaaa.deb
 ! exists archives/git_1_arm64.deb
 cmp pk/out/Packages want-packages
+cmp pk/out/1.InRelease inrelease
+cmp pk/out/2.Packages packages
+exec sh -c 'LC_ALL=C ls pk/out'
+cmp stdout want-out
 
 # One apt's lists don't have with that SHA-256 fails it.
 cp git.deb archives/git_1_arm64.deb
 env WRONG=1
-! exec bash -c 'set -euo pipefail; source fn.sh; layer_fn apt record; dpkg_deb_stub; dir=$PWD/pk archives=$PWD/archives; record'
+! exec bash -c 'set -euo pipefail; source fn.sh; layer_fn apt record; dpkg_deb_stub; dir=$PWD/pk archives=$PWD/archives lists=$PWD/lists; record'
 stderr 'apt''s lists have no git 1 \(arm64\)'
 env WRONG=
 
@@ -107,5 +116,14 @@ SHA256: aaaa
 Description: git
  more
 
+-- inrelease --
+an InRelease
+-- packages --
+a package list
+-- want-out --
+1.InRelease
+2.Packages
+Packages
+aaaa.deb
 -- installed --
 snapd

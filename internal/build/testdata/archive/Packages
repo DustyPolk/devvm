@@ -1,0 +1,45 @@
+Package: git
+Architecture: arm64
+Version: 1.0-1ubuntu1
+Depends: libc6 (>= 2.34),
+ libfoo
+Filename: pool/main/git.deb
+Size: 10
+SHA256: af98e99d6af9f9c073e038ac3fd6d882e572c5f5246d94187e5101e8d82dfa87
+
+Package: curl
+Architecture: arm64
+Version: 1.0-1ubuntu1
+Depends: libc6 (>= 2.34),
+ libfoo
+Filename: pool/main/curl.deb
+Size: 11
+SHA256: 24e986e61639574e36d076b794de7e71f82124465a27fdb935c201c82cc77d88
+
+Package: libc6
+Architecture: arm64
+Version: 1.0-1ubuntu1
+Depends: libc6 (>= 2.34),
+ libfoo
+Filename: pool/main/libc6.deb
+Size: 11
+SHA256: 0c56b8e3ce003bc0f74cf47c62f572bd6fa6e7dc3802eabf4abf0445373c1435
+
+Package: git
+Architecture: arm64
+Version: 1.0-1ubuntu1
+Depends: libc6 (>= 2.34),
+ libfoo
+Filename: pool/main/git.deb
+Size: 17
+SHA256: bac1eda7a0781c7a88773b7d70c614743b86e5235c53103f56440b5156954d43
+
+Package: git
+Architecture: arm64
+Version: 1.0-1ubuntu1
+Depends: libc6 (>= 2.34),
+ libfoo
+Filename: pool/main/git.deb
+Size: 16
+SHA256: 25a32c2db802ca6abfddb3acd077cee7a602b09fd62621b78b46f5060c3b90f9
+

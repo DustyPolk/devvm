@@ -6,18 +6,20 @@
 #                       devvm's cache on the host, and nothing else (no network)
 #   mirrors             record: from Ubuntu's archive, the mirrors listed tried in order, apt
 #                       checking their signatures with Ubuntu's archive key; at the end, each
-#                       package downloaded goes to out/ with what apt's lists say of it
+#                       package downloaded goes to out/ with what apt's lists say of it, and so do
+#                       the InRelease files and package lists apt used, which devvm checks again
 #   neither             a --from image's own sources, as they are
 # Both end with the image's own sources, no package lists and an empty apt cache, so a first build
 # and a replay make the same image. A source that doesn't answer exits 75 at once: no retries.
 set -euo pipefail
-dir=/var/cache/devvm/packages archives=/var/cache/apt/archives
+dir=/var/cache/devvm/packages archives=/var/cache/apt/archives lists=/var/lib/apt/lists
 command -v apt-get >/dev/null || exit 0   # Alpine (--from alpine): apk, not pinned
 export DEBIAN_FRONTEND=noninteractive
 aside=/etc/apt/devvm-sources
 
 begin() {
-  printf 'Acquire::Retries "0";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+  # Package lists kept as they're signed, uncompressed, for record to give back.
+  printf 'Acquire::Retries "0";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::GzipIndexes "false";\n' \
     > /etc/apt/apt.conf.d/50devvm-build
   if [[ -f $dir/in/Packages ]]; then
     # The host checked each file against the SHA-256 recorded for it, and Packages lists those.
@@ -65,11 +67,17 @@ sources_aside() {
 
 # record moves each package the build downloaded to out/<sha256>.deb, and its entry in apt's lists,
 # which apt checked against the archive's signature, to out/Packages. A package apt's lists don't
-# have with that SHA-256 fails the build.
+# have with that SHA-256 fails the build. Each InRelease and package list apt used goes to
+# out/<n>.InRelease or out/<n>.Packages, so the host checks them with the archive's key itself.
 record() {
-  local deb pkg ver arch sum entry
+  local deb pkg ver arch sum entry n=0 f
   mkdir -p "$dir/out"
   : > "$dir/out/Packages"
+  for f in "$lists"/*_InRelease "$lists"/*_Packages; do
+    [[ -e $f ]] || continue
+    n=$((n + 1))
+    cp "$f" "$dir/out/$n.${f##*_}"
+  done
   for deb in "$archives"/*.deb; do
     [[ -e $deb ]] || continue
     pkg=$(dpkg-deb -f "$deb" Package) ver=$(dpkg-deb -f "$deb" Version) arch=$(dpkg-deb -f "$deb" Architecture)
@@ -98,13 +106,13 @@ end() {
   fi
   rm -f /etc/apt/apt.conf.d/50devvm-build /etc/apt/apt.conf.d/50devvm-keep
   apt-get clean
-  rm -rf /var/lib/apt/lists/*
+  rm -rf "${lists:?}"/*
 }
 
 # lists fetches the package lists from the image's own sources when it has none, as base's image
 # doesn't: a layer's script then installs as on any Ubuntu, from the archive as it is.
 lists() {
-  if ! compgen -G '/var/lib/apt/lists/*_Packages' >/dev/null && ! apt-get update --error-on=any; then
+  if ! compgen -G "$lists/*_Packages" >/dev/null &&! apt-get update --error-on=any; then
     echo "devvm: no package source answered (above)" >&2
     exit 75
   fi
