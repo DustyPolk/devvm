@@ -388,9 +388,6 @@ func TestAddLayersRefuses(t *testing.T) {
 	}
 }
 
-// A remake that fails once the old machine is set aside puts it back as
-// it was: the new one deleted, the old one renamed back,
-// its state as before, and nothing saved left.
 // What devvm layer rm makes: the VM's layers without those given, the
 // rest in their order, base when none is left; and those it lacks, once
 // each.
@@ -498,6 +495,9 @@ func TestRemoveLayers(t *testing.T) {
 	}
 }
 
+// A remake that fails once the old machine is set aside puts it back as
+// it was: the new one deleted, the old one renamed back,
+// its state as before, and nothing saved left.
 func TestRemakeUndo(t *testing.T) {
 	e, f, st, _ := remakeEnv(t)
 	vm := st.Name()
