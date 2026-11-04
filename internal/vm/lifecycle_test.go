@@ -346,3 +346,44 @@ func TestAdopt(t *testing.T) {
 		t.Errorf("Up adopted with --force = %v", msg.NamesOf(err))
 	}
 }
+
+// On Linux hosts, set-id files in the folder are named when a VM is made
+// and once it's stopped, but not at a launch into the running VM: the
+// walk is slow. Those in .git aren't.
+func TestSetIDOnStop(t *testing.T) {
+	e, _, _ := upEnv(t, allNative())
+	e.OS = "linux"
+	if err := os.MkdirAll(filepath.Join(e.Dir, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"tool", filepath.Join(".git", "hook")} {
+		p = filepath.Join(e.Dir, p)
+		if err := os.WriteFile(p, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, os.ModeSetuid|0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := "setid_files files=" + filepath.Join(e.Dir, "tool")
+	var warned msg.Recorder
+	e.Warn = warned.Add
+	existingVM(t, e, Options{NoNetworkPolicy: true})
+	if !slices.Equal(warned.Names(), []string{want}) {
+		t.Errorf("a new VM: warned %q, want %s", warned.Names(), want)
+	}
+	warned.Reset()
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if slices.Contains(warned.Names(), want) {
+		t.Errorf("a launch into the running VM named the set-id files")
+	}
+	warned.Reset()
+	if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Contains(warned.Names(), want) {
+		t.Errorf("stop: warned %q, want %s", warned.Names(), want)
+	}
+}

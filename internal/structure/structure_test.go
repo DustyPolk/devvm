@@ -73,7 +73,7 @@ func devvm() rules {
 				from: []string{"internal/backend/..."},
 				to: []string{
 					"internal/vm", "internal/build", "internal/tools", "internal/netpolicy", "internal/secrets",
-					"internal/project", "internal/gitprotect", "internal/sshconfig", "internal/sshagent", "internal/trust",
+					"internal/project", "internal/gitprotect", "internal/hostsafety", "internal/sshconfig", "internal/sshagent", "internal/trust",
 					"internal/vmssh",
 				},
 			},
@@ -178,7 +178,7 @@ func devvmVars() map[string]string {
 		"internal/msg/gen.initialisms":            table,
 		"internal/netpolicy.Env":                  table,
 		"internal/netpolicy.directArgv":           table,
-		"internal/project.nixMarkers":             table,
+		"internal/vm.nixMarkers":                  table,
 		"internal/proxy.notPublic":                table,
 		"internal/proxy.nat64":                    table,
 		"internal/proxy.githubMinting":            table,

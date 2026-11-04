@@ -87,7 +87,7 @@ devvm's data folder, `~/.local/share/devvm`, and its settings folder, `~/.config
 
 ## devvm names set-id files
 
-On a Linux host, root in a VM can set the set-user-id and set-group-id bits on files in the project folder, and those bits reach this machine, so such a file runs as its owner for anyone who runs it. devvm names these files at each launch and stop, and it names the ones that root owns apart from the rest, because those run as root.
+On a Linux host, root in a VM can set the set-user-id and set-group-id bits on files in the project folder, and those bits reach this machine, so such a file runs as its owner for anyone who runs it. devvm names these files when it makes a VM and once a VM is stopped, by devvm stop or found stopped at a launch, but not at a launch into a running VM, because looking through a big folder takes a while. It names the ones that root owns apart from the rest, because those run as root, and it doesn't look in `.git` folders.
 
 - For a file that root owns, don't run it, and delete it with `sudo rm FILE`.
 - For any other file, `chmod u-s,g-s FILE` clears its bits.

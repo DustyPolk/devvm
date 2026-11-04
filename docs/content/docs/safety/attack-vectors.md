@@ -99,7 +99,7 @@ The attacks in this section run the attacker's code, and devvm doesn't stop that
 
 ### This machine
 
-- **Set-id files on Linux hosts.** Root in a VM can set the set-user-id bit on a file in the project folder, and on Linux hosts that bit reaches the host, so the file runs as its owner for whoever runs it. devvm names such files at each launch and stop, and [Troubleshooting](../using/troubleshooting.md#devvm-names-set-id-files) says how to clear them.
+- **Set-id files on Linux hosts.** Root in a VM can set the set-user-id bit on a file in the project folder, and on Linux hosts that bit reaches the host, so the file runs as its owner for whoever runs it. devvm names such files when it makes a VM and once a VM is stopped, and [Troubleshooting](../using/troubleshooting.md#devvm-names-set-id-files) says how to clear them.
 - **The proxy's CA keys.** Inside a VM, its CA vouches for any site, so someone with a copy of its key and a place on your network could impersonate sites to that VM. Each VM has CAs of its own, so a copy reaches one VM and no other. Only you can read the keys, devvm keeps them out of Time Machine, and each CA lasts 30 days, so a copy goes stale. Keep `~/.local/share/devvm/vms` out of other backup and sync tools as well ([secrets stay on this machine](../internals/security.md#secrets-stay-on-the-host)).
 
 ## Left to you

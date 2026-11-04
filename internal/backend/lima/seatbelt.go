@@ -2,10 +2,10 @@ package lima
 
 import (
 	"bytes"
-	"path/filepath"
 	"strings"
 	"text/template"
 
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -71,13 +71,10 @@ func (p profile) render() string {
 }
 
 // sbPath is a path as Seatbelt matches it, with its folder's links
-// resolved (Seatbelt sees real paths), as a profile string.
+// resolved (Seatbelt sees real paths, paths.PhysicalParent), as a profile
+// string.
 func sbPath(p string) string {
-	dir := filepath.Dir(p)
-	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
-		dir = resolved
-	}
-	return sbString(filepath.Join(dir, filepath.Base(p)))
+	return sbString(paths.PhysicalParent(p))
 }
 
 // sbString quotes s as a Seatbelt string: backslashes and double quotes

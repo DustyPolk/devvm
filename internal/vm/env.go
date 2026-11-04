@@ -22,6 +22,7 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/gitprotect"
+	"github.com/w3cj/devvm/internal/hostsafety"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
@@ -759,7 +760,7 @@ func (e *Env) checkSetID(dir string) {
 		return
 	}
 	var root, other []string
-	for _, f := range project.SetIDFiles(dir) {
+	for _, f := range hostsafety.SetIDFiles(dir) {
 		if f.Root {
 			root = append(root, f.Path)
 		} else {

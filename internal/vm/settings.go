@@ -87,7 +87,7 @@ func setGitProtect(ctx context.Context, e *Env, p *gitprotect.Protector, t *foun
 // .git is checked (gitprotect's Check) under the protection the VM ran
 // with, so what it changed meanwhile is named; then, once the VM is
 // stopped, the protection chosen while it ran is set, and on Linux
-// set-id files are checked.
+// set-id files are checked (not while it runs: the walk is slow).
 func checkGit(ctx context.Context, e *Env, t *found, running bool) error {
 	if isClone(t.st) {
 		return nil
@@ -96,7 +96,10 @@ func checkGit(ctx context.Context, e *Env, t *found, running bool) error {
 	if err := p.Check(ctx, t.st, running); err != nil {
 		return err
 	}
-	if next := gitprotect.Next(t.st); next != "" && !running {
+	if running {
+		return nil
+	}
+	if next := gitprotect.Next(t.st); next != "" {
 		if err := setGitProtect(ctx, e, p, t, next); err != nil {
 			return err
 		}

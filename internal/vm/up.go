@@ -13,6 +13,7 @@ import (
 	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/gitprotect"
+	"github.com/w3cj/devvm/internal/hostsafety"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/platform"
@@ -275,7 +276,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 		if err := e.Protector(f.Dir).NewVM(ctx, st); err != nil {
 			return err
 		}
-		if !o.SSHAgent && project.SSHRemote(ctx, f.Dir) {
+		if !o.SSHAgent && hostsafety.SSHRemote(ctx, f.Dir) {
 			e.Warn(msg.SSHRemoteHint(vm))
 		}
 		// Files an earlier VM of this folder made are named too.

@@ -10,7 +10,6 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/settings"
 )
 
@@ -68,7 +67,7 @@ type partsDefault struct {
 // flake.nix, isn't one: only its reason is kept, for the picker.
 func (e creation) defaults(dir string, dc *devcontainer.Plan, def settings.Defaults) partsDefault {
 	d := partsDefault{why: map[string]string{}}
-	for _, f := range project.DetectFiles(dir) {
+	for _, f := range detectFiles(dir) {
 		d.why[f.Name] = f.File
 		if image.IsTool(f.Name) {
 			d.Toolchains = append(d.Toolchains, f.Name)

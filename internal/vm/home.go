@@ -16,6 +16,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/tools"
 )
 
@@ -121,7 +122,7 @@ func homePath(name string) (string, bool) {
 
 // skipped reports whether p is one of skips or inside one.
 func skipped(p string, skips []string) bool {
-	return slices.ContainsFunc(skips, func(s string) bool { return p == s || strings.HasPrefix(p, s+"/") })
+	return slices.ContainsFunc(skips, func(s string) bool { return paths.Within(p, s) })
 }
 
 // throughLink reports whether p is inside a symlink kept before it,

@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
@@ -172,14 +173,13 @@ func findQEMU(name, skip, path string) (string, error) {
 	return "", msg.QEMUMissing(name)
 }
 
+// realDir is a folder on PATH as an absolute physical path
+// (paths.Physical), so two names for one folder compare equal.
 func realDir(d string) string {
 	if a, err := filepath.Abs(d); err == nil {
 		d = a
 	}
-	if r, err := filepath.EvalSymlinks(d); err == nil {
-		return r
-	}
-	return d
+	return paths.Physical(d)
 }
 
 // Connect is devvm _qemu connect: it joins in and out to a TCP connection

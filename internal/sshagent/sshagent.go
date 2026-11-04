@@ -345,31 +345,19 @@ func (a *Agent) load(ctx context.Context, k AddedKey) (string, error) {
 
 // mountedBy returns a project VM that mounts a folder holding the file key
 // names in the end (a link to a key in a project folder is as readable
-// there), or "".
+// there), or "": both by their physical paths (paths.Physical).
 func (a *Agent) mountedBy(ctx context.Context, key string) (string, error) {
-	file := resolved(key)
+	file := paths.Physical(key)
 	ms, err := a.Mounts(ctx)
 	if err != nil {
 		return "", err
 	}
 	for _, m := range ms {
-		dir := resolved(m.Dir)
-		if file == dir || strings.HasPrefix(file, strings.TrimSuffix(dir, "/")+"/") {
+		if paths.Within(file, paths.Physical(m.Dir)) {
 			return m.VM, nil
 		}
 	}
 	return "", nil
-}
-
-// resolved is path with its links resolved, as far as they resolve.
-func resolved(path string) string {
-	if r, err := filepath.EvalSymlinks(path); err == nil {
-		return r
-	}
-	if r, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
-		return filepath.Join(r, filepath.Base(path))
-	}
-	return path
 }
 
 // AddOptions are how devvm ssh-agent add loads a key.
@@ -430,16 +418,13 @@ func (a *Agent) Add(ctx context.Context, file string, o AddOptions) error {
 }
 
 // recordedPath is the path the agent's keys file records for file: made
-// absolute, its folder's links resolved.
+// absolute, its folder's links resolved (paths.PhysicalParent).
 func recordedPath(file string) (string, error) {
 	key, err := filepath.Abs(file)
 	if err != nil {
 		return "", err
 	}
-	if dir, err := filepath.EvalSymlinks(filepath.Dir(key)); err == nil {
-		key = filepath.Join(dir, filepath.Base(key))
-	}
-	return key, nil
+	return paths.PhysicalParent(key), nil
 }
 
 // Remove takes a key added to the agent out of it, when the agent runs

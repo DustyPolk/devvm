@@ -1,24 +1,17 @@
 // Package project is a project folder as devvm sees it: its path and its
-// VM's name, the folders a VM must never get read-write, the toolchains its
-// files call for, and what in it a VM could turn against the host.
+// VM's name, the VMs a link's TARGET names, the folders a VM must never
+// get read-write, and the parent folders whose VM a command may use.
 package project
 
 import (
-	"bufio"
-	"context"
 	"crypto/sha1" //nolint:gosec // names, not security: 56 bits tell folders apart
 	"encoding/hex"
 	"errors"
-	"io"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 	"unicode"
 
-	"github.com/w3cj/devvm/internal/hostgit"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
@@ -165,24 +158,26 @@ type Unsafe struct {
 	Home, Config, Data, Lima string
 }
 
-// Holds returns the first of these folders that dir is or holds (any
-// folder holds /), or "". The VM would get them read-write: tokens, the
+// Holds returns the first of these folders that dir, a physical path, is
+// or holds (any folder holds /), each by its physical path
+// (paths.Physical), or "". The VM would get them read-write: tokens, the
 // proxy's CA key and binary, other VMs' disks.
 func (u Unsafe) Holds(dir string) string {
 	for _, p := range []string{u.Home, u.Config, u.Data, u.Lima} {
-		if r := physical(p); r == dir || strings.HasPrefix(r, dir+"/") || dir == "/" {
+		if paths.Within(paths.Physical(p), dir) {
 			return p
 		}
 	}
 	return ""
 }
 
-// Inside returns the first of devvm's own folders that dir is inside, or
-// "". A VM in the layers folder could rewrite the scripts every image build
-// runs; one in the data folder, the binaries that run on the host.
+// Inside returns the first of devvm's own folders that dir, a physical
+// path, is below (paths.Below), or "". A VM in the layers folder could
+// rewrite the scripts every image build runs; one in the data folder, the
+// binaries that run on the host.
 func (u Unsafe) Inside(dir string) string {
 	for _, p := range []string{u.Config, u.Data, u.Lima} {
-		if strings.HasPrefix(dir, physical(p)+"/") {
+		if paths.Below(dir, paths.Physical(p)) {
 			return p
 		}
 	}
@@ -194,7 +189,7 @@ func (u Unsafe) Inside(dir string) string {
 // resolved) and the root, both left out, as is everything above home
 // when dir is home or in it.
 func Parents(dir, home string) []string {
-	home = physical(home)
+	home = paths.Physical(home)
 	if dir == home {
 		return nil
 	}
@@ -203,154 +198,4 @@ func Parents(dir, home string) []string {
 		ps = append(ps, p)
 	}
 	return ps
-}
-
-// physical returns path with its symlinks resolved, as far as it exists:
-// a folder devvm hasn't made yet is where it will be.
-func physical(path string) string {
-	rest := ""
-	for p := filepath.Clean(path); ; p = filepath.Dir(p) {
-		if r, err := filepath.EvalSymlinks(p); err == nil {
-			return filepath.Join(r, rest)
-		}
-		if filepath.Dir(p) == p {
-			return path
-		}
-		rest = filepath.Join(filepath.Base(p), rest)
-	}
-}
-
-// nixMarkers are a Nix project's own files, which call for the nix layer.
-var nixMarkers = []string{"flake.nix", "shell.nix", "devenv.nix"}
-
-// marker is a part and the files in a folder's top level that call for it.
-type marker struct {
-	part  string
-	files []string
-}
-
-// markers are the files that call for each toolchain (image.SharedTools'
-// Detect), then for the nix layer, in the order DetectFiles lists them:
-// the same mix always gives the same image.
-func markers() []marker {
-	var ms []marker
-	for _, d := range image.SharedTools {
-		if len(d.Detect) > 0 {
-			ms = append(ms, marker{d.Name, d.Detect})
-		}
-	}
-	return append(ms, marker{image.NixLayer, nixMarkers})
-}
-
-// nixShellMax is how much of a default.nix nixShell reads.
-const nixShellMax = 64 << 10
-
-// nixShell reports whether dir's default.nix makes a shell (mkShell, or
-// mkShellNoCC), as one for nix-shell does; most build a package instead.
-func nixShell(dir string) bool {
-	p := filepath.Join(dir, "default.nix")
-	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
-		return false
-	}
-	f, err := os.Open(p) //nolint:gosec // a regular file in the project folder, read
-	if err != nil {
-		return false
-	}
-	defer func() { _ = f.Close() }()
-	data, _ := io.ReadAll(io.LimitReader(f, nixShellMax))
-	return strings.Contains(string(data), "mkShell")
-}
-
-// Found is a toolchain, or the nix layer, that a folder calls for, and the
-// first of its marker files that calls for it.
-type Found struct{ Name, File string }
-
-// DetectFiles returns the toolchains and the nix layer whose marker files
-// are in dir's top level, in a fixed order, each with the file that calls
-// for it: nix also for a default.nix that makes a shell.
-func DetectFiles(dir string) []Found {
-	var found []Found
-	for _, m := range markers() {
-		file := ""
-		for _, f := range m.files {
-			if _, err := os.Lstat(filepath.Join(dir, f)); err == nil {
-				file = f
-				break
-			}
-		}
-		if file == "" && m.part == image.NixLayer && nixShell(dir) {
-			file = "default.nix"
-		}
-		if file != "" {
-			found = append(found, Found{m.part, file})
-		}
-	}
-	return found
-}
-
-// setIDMax is how many set-id files SetIDFiles returns at most.
-const setIDMax = 5
-
-// SetIDFile is a file with the set-user-id or set-group-id bit; Root when
-// it runs as root or with root's group (rootSetID).
-type SetIDFile struct {
-	Path string
-	Root bool
-}
-
-// rootSetID reports whether a file with mode m, of uid and gid, runs as
-// root (set-user-id, root's) or with root's group (set-group-id, its).
-func rootSetID(m fs.FileMode, uid, gid uint32) bool {
-	return m&fs.ModeSetuid != 0 && uid == 0 || m&fs.ModeSetgid != 0 && gid == 0
-}
-
-// SetIDFiles returns up to five files in dir, on its file system, with the
-// set-user-id or set-group-id bit. On Linux hosts a VM's set-id bits reach
-// the host, and a set-user-id file runs as its owner for anyone who runs
-// it: the user, or root.
-func SetIDFiles(dir string) []SetIDFile {
-	var files []SetIDFile
-	root, err := os.Stat(dir)
-	if err != nil {
-		return nil
-	}
-	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // an unreadable folder: skip it, like find
-		}
-		if d.IsDir() {
-			if fi, err := d.Info(); err == nil && path != dir && !platform.SameDevice(root, fi) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !d.Type().IsRegular() {
-			return nil
-		}
-		fi, err := d.Info()
-		if err == nil && fi.Mode()&(fs.ModeSetuid|fs.ModeSetgid) != 0 {
-			uid, gid, ok := platform.Owner(fi)
-			files = append(files, SetIDFile{Path: path, Root: ok && rootSetID(fi.Mode(), uid, gid)})
-		}
-		if len(files) == setIDMax {
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	return files
-}
-
-// SSHRemote reports whether dir's repo fetches origin over SSH, which a VM
-// without an SSH agent can't.
-func SSHRemote(ctx context.Context, dir string) bool {
-	out, err := hostgit.Output(ctx, "config", "--file", filepath.Join(dir, ".git", "config"), "--get", "remote.origin.url")
-	if err != nil {
-		return false
-	}
-	s := bufio.NewScanner(strings.NewReader(string(out)))
-	if !s.Scan() {
-		return false
-	}
-	url := s.Text()
-	return strings.HasPrefix(url, "git@") || strings.HasPrefix(url, "ssh://")
 }
