@@ -18,10 +18,12 @@ stdout '^==> base_features features=cli-tools fzf omb mine$'
 grep '^  "features": \[\n    "cli-tools",\n    "fzf",\n    "omb",\n    "mine"\n  \]$' $CHOSEN
 cmp $STUB_DIR/scripts ran-all
 catg $DATA/logs/runs/*.log
-stdout '^# \[4/9\] running_script script=base\.sh vm=devvm-img-'
-stdout '^# \[5/9\] running_script script=cli-tools\.sh vm=devvm-img-'
-stdout '^# \[8/9\] running_script script=mine\.sh vm=devvm-img-'
-stdout '^# \[9/9\] stopping vm=devvm-img-'
+stdout '^# \[4/11\] running_script script=apt\.sh vm=devvm-img-'
+stdout '^# \[5/11\] running_script script=base\.sh vm=devvm-img-'
+stdout '^# \[6/11\] running_script script=cli-tools\.sh vm=devvm-img-'
+stdout '^# \[9/11\] running_script script=mine\.sh vm=devvm-img-'
+stdout '^# \[10/11\] running_script script=apt\.sh vm=devvm-img-'
+stdout '^# \[11/11\] stopping vm=devvm-img-'
 
 # Chosen once: the next build keeps the choice, and base.
 exec devvm build base
@@ -43,13 +45,13 @@ stderr '^devvm: unknown_feature feature=nope$'
 ! stdout base_features
 cmp $STUB_DIR/scripts ran-some
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/logs/runs/*.log'
-stdout '^# \[4/7\] running_script script=base\.sh vm=devvm-img-'
-stdout '^# \[5/7\] running_script script=fzf\.sh vm=devvm-img-'
-stdout '^# \[6/7\] running_script script=omb\.sh vm=devvm-img-'
-stdout '^# \[7/7\] stopping vm=devvm-img-'
-[darwin] stdout '^# \[4/5\] running_script script=foo\.sh vm=devvm-img-'
-[linux] stdout '^# \[3/4\] running_script script=foo\.sh vm=devvm-img-'
-! stdout '\[8/7\]|\[6/5\]|\[5/4\]'
+stdout '^# \[5/9\] running_script script=base\.sh vm=devvm-img-'
+stdout '^# \[6/9\] running_script script=fzf\.sh vm=devvm-img-'
+stdout '^# \[7/9\] running_script script=omb\.sh vm=devvm-img-'
+stdout '^# \[9/9\] stopping vm=devvm-img-'
+[darwin] stdout '^# \[5/6\] running_script script=foo\.sh vm=devvm-img-'
+[linux] stdout '^# \[4/5\] running_script script=foo\.sh vm=devvm-img-'
+! stdout '\[10/9\]|\[7/6\]|\[6/5\]'
 
 # None chosen: base runs only base.sh.
 cp none.toml $CFG/config.toml

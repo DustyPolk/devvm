@@ -45,6 +45,7 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 	root := filepath.Join(dir, "root")
 	write(t, filepath.Join(root, "base.yaml"), "cpus: 4\n")
 	write(t, filepath.Join(root, "layers", "base.sh"), "#!/bin/bash\n")
+	write(t, filepath.Join(root, "layers", "apt.sh"), "#!/bin/bash\n# apt\n")
 	write(t, filepath.Join(d.Layers(), "foo.sh"), "#!/bin/bash\necho foo\n")
 	write(t, filepath.Join(d.Layers(), "bar.sh"), "#!/bin/bash\necho bar\n")
 	write(t, d.Settings(), `{"features": []}`) // chosen: none
@@ -101,6 +102,20 @@ func record(t *testing.T, b *Env, key string) state.Image {
 func assetsDir(b *Env) string { return filepath.Join(filepath.Dir(b.Dirs.Data), "root") }
 
 func script(name, data string) image.Step { return image.Step{Name: name, Data: []byte(data)} }
+
+// layerSteps is a layer's steps: testEnv's apt.sh lists as root, then s.
+func layerSteps(s image.Step) []image.Step {
+	return []image.Step{{Name: "apt.sh", Data: []byte("#!/bin/bash\n# apt\n"), Args: []string{"lists"}, Root: true}, s}
+}
+
+// aptSteps is base's steps around steps: testEnv's apt.sh begin, then
+// steps, then apt.sh end, both as root.
+func aptSteps(steps ...image.Step) []image.Step {
+	apt := func(arg string) image.Step {
+		return image.Step{Name: "apt.sh", Data: []byte("#!/bin/bash\n# apt\n"), Args: []string{arg}, Root: true}
+	}
+	return slices.Concat([]image.Step{apt("begin")}, steps, []image.Step{apt("end")})
+}
 
 // sameScripts reports whether two lists of steps have the same names,
 // scripts, arguments and users, in order.
@@ -222,9 +237,9 @@ func TestBuild(t *testing.T) {
 		t.Fatalf("built %d images, want 3: %+v", len(specs), specs)
 	}
 	for i, want := range []backend.ImageSpec{
-		{Image: "base", Key: chain[0].Key, Recipe: image.Recipe{Steps: []image.Step{script("base.sh", "#!/bin/bash\n")}}},
-		{Image: "foo", Key: chain[1].Key, Parent: chain[0].Key, Recipe: image.Recipe{Steps: []image.Step{script("foo.sh", "#!/bin/bash\necho foo\n")}}},
-		{Image: "foo+bar", Key: chain[2].Key, Parent: chain[1].Key, Recipe: image.Recipe{Steps: []image.Step{script("bar.sh", "#!/bin/bash\necho bar\n")}}},
+		{Image: "base", Key: chain[0].Key, Recipe: image.Recipe{Steps: aptSteps(script("base.sh", "#!/bin/bash\n"))}},
+		{Image: "foo", Key: chain[1].Key, Parent: chain[0].Key, Recipe: image.Recipe{Steps: layerSteps(script("foo.sh", "#!/bin/bash\necho foo\n"))}},
+		{Image: "foo+bar", Key: chain[2].Key, Parent: chain[1].Key, Recipe: image.Recipe{Steps: layerSteps(script("bar.sh", "#!/bin/bash\necho bar\n"))}},
 	} {
 		want.Net = backend.NetInternet
 		got := specs[i]
@@ -266,7 +281,7 @@ func TestBuildBuiltinLayer(t *testing.T) {
 		t.Fatalf("last call %s", last.Method)
 	}
 	got := last.Args[0].(backend.ImageSpec)
-	if got.Image != "foo+docker" || !sameScripts(got.Recipe.Steps, []image.Step{script("docker.sh", "#!/bin/bash\necho devvm's\n")}) {
+	if got.Image != "foo+docker" || !sameScripts(got.Recipe.Steps, layerSteps(script("docker.sh", "#!/bin/bash\necho devvm's\n"))) {
 		t.Errorf("built %+v", got)
 	}
 	if data, err := b.LayerData("docker"); err != nil || string(data) != "#!/bin/bash\necho devvm's\n" {

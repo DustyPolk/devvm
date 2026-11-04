@@ -1772,7 +1772,7 @@ DEVVM_MESSAGES=names "$D" build e2eslow </dev/null >"$work/slow.log" 2>&1 &
 slow=$!
 for _ in $(seq 300); do
   runlog=$(sed -n 's/^ *log_details file=//p' "$work/slow.log")
-  [[ -n $runlog ]] && grep -q '^# \[4/5\] running_script script=e2eslow.sh ' "$runlog" 2>/dev/null && break
+  [[ -n $runlog ]] && grep -qE '^# \[[0-9]+/[0-9]+\] running_script script=e2eslow\.sh ' "$runlog" 2>/dev/null && break
   sleep 1
 done
 ks=$(sed -n 's/^==> building_image image=e2eslow key=\([0-9a-f]*\)$/\1/p' "$work/slow.log")
@@ -3047,7 +3047,7 @@ check "devvm network on: after devvm restart, its nix-daemon goes through the pr
     ! nix build --no-link --impure --expr '\''$nix_fetch'\'' 2>/tmp/fetch.err && grep -q \"response 403\" /tmp/fetch.err'"
 (cd "$al" && quiet "$D" rm --force --no-export)
 
-# Ubuntu's image has empty package lists, where apt 3.2 needs a second update to reach the snapshot.
+# Ubuntu's container image has empty package lists, which apt.sh fills from its own sources.
 check "base builds from ubuntu:26.04" nd quiet "$D" build --from "$from_ubuntu" base
 check "none of them needed Docker" bash -c "! grep -v '^docker image inspect ' '$work/docker-calls'"
 check "and the build VM and its temporary folders are gone" bash -c "

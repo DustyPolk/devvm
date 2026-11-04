@@ -3,6 +3,7 @@
 package backendtest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/fs"
@@ -54,6 +55,10 @@ type Fake struct {
 	Format       string            // ToolFormat's answer
 	OriginSteps  []image.Step      // Origin's answer, for any base
 	Pinned       string            // PinOrigin's answer
+	// PackagesOut is the tar stream a build's packages give back, read by
+	// its Take (none: empty); PackagesSent is what the last build's Send
+	// wrote.
+	PackagesOut, PackagesSent []byte
 	// ExecFunc, when set, is what Exec returns after recording the call
 	// (Errs aside).
 	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
@@ -197,6 +202,20 @@ func (f *images) BuildImage(_ context.Context, spec backend.ImageSpec) (backend.
 	defer f.mu.Unlock()
 	if err := f.record("BuildImage", spec); err != nil {
 		return backend.Built{}, err
+	}
+	if p := spec.Packages; p != nil {
+		var sent bytes.Buffer
+		if p.Send != nil {
+			if err := p.Send(&sent); err != nil {
+				return backend.Built{}, err
+			}
+		}
+		f.PackagesSent = sent.Bytes()
+		if p.Take != nil {
+			if err := p.Take(bytes.NewReader(f.PackagesOut)); err != nil {
+				return backend.Built{}, err
+			}
+		}
 	}
 	if !slices.Contains(f.ImageKeys, spec.Key) {
 		f.ImageKeys = append(f.ImageKeys, spec.Key)

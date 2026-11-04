@@ -1,51 +1,32 @@
-# Functions in base.sh, run on their own with stand-ins for what they call
-# in the VM (fn.sh, below).
+# Functions in base.sh and apt.sh, run on their own with stand-ins for what
+# they call in the VM (fn.sh, below).
 
-# apt_update: the snapshot on the first update is enough.
-cp get-snapshot $STUB_DIR/apt.1
-exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
-exec grep -c 'apt-get update' $STUB_LOG
-stdout '^1$'
-! stderr 'aren''t pinned'
+# mirrored: each archive of a sources file gets a mirror list of the mirror
+# set, then that archive, the rest of the file as it was.
+mkdir pk/in
+cp mirrors pk/in/mirrors
+exec bash -c 'source fn.sh; layer_fn apt mirrored; dir=$PWD/pk; mirrored ubuntu.sources out.sources'
+exec sh -c 'sed "s|$WORK|WORK|g" out.sources'
+cmp stdout mirrored.sources
+cmp pk/mirrors-1 want-mirrors-1
+cmp pk/mirrors-2 want-mirrors-2
+cmp ubuntu.sources ubuntu.sources.orig
 
-# Empty lists (--from) take a second update to reach the snapshot.
-stub_reset
-cp get-ports $STUB_DIR/apt.1
-cp get-snapshot $STUB_DIR/apt.2
-exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
-exec grep -c 'apt-get update' $STUB_LOG
-stdout '^2$'
-! stderr 'aren''t pinned'
+# record: each package downloaded goes to out/<sha256>.deb, with apt's entry
+# for that version with that SHA-256 (not another's) in out/Packages.
+mkdir archives
+cp git.deb archives/git_1_arm64.deb
+exec bash -c 'set -euo pipefail; source fn.sh; layer_fn apt record; dpkg_deb_stub; dir=$PWD/pk archives=$PWD/archives; record'
+exists pk/out/aaaa.deb
+! exists archives/git_1_arm64.deb
+cmp pk/out/Packages want-packages
 
-# No snapshot after two updates says so.
-stub_reset
-cp hit-debian $STUB_DIR/apt.1
-cp hit-debian $STUB_DIR/apt.2
-exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
-stderr 'aren''t pinned'
-exec grep -c 'apt-get update' $STUB_LOG
-stdout '^2$'
-
-# A failed snapshot is tried twice more, after 15 and 30 s, then stops the
-# build.
-stub_reset
-cp failed $STUB_DIR/apt.1
-cp failed $STUB_DIR/apt.2
-cp failed $STUB_DIR/apt.3
-! exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
-stderr 'couldn''t fetch the package snapshot 20260101T000000Z'
-exec grep -c 'apt-get update' $STUB_LOG
-stdout '^3$'
-exec cat $STUB_DIR/sleeps
-cmp stdout sleeps
-
-# A 503 that clears on the next try.
-stub_reset
-rm $STUB_DIR/sleeps
-cp get-snapshot $STUB_DIR/apt.2
-exec bash -c 'source fn.sh; layer_fn base apt_update; apt_stub; apt_update'
-exec grep -c 'apt-get update' $STUB_LOG
-stdout '^2$'
+# One apt's lists don't have with that SHA-256 fails it.
+cp git.deb archives/git_1_arm64.deb
+env WRONG=1
+! exec bash -c 'set -euo pipefail; source fn.sh; layer_fn apt record; dpkg_deb_stub; dir=$PWD/pk archives=$PWD/archives; record'
+stderr 'apt''s lists have no git 1 \(arm64\)'
+env WRONG=
 
 # installed: only the packages that are installed, and no failure for
 # unknown ones.
@@ -56,17 +37,15 @@ cmp stdout installed
 # layer_fn SCRIPT NAME: define NAME from assets/layers/SCRIPT.sh (the scripts run
 # top to bottom when sourced).
 layer_fn() { eval "$(awk -v f="$2() " 'index($0, f) == 1 { on = 1 } on { print } on && /^}/ { exit }' "$DEVVM_REPO/assets/layers/$1.sh")"; }
-# apt-get update prints the next of $STUB_DIR/apt.1, apt.2, ... and logs the
-# call; sleep only logs.
-apt_stub() {
-  apt_snapshot=20260101T000000Z
-  sudo() { "$@"; }
-  apt-get() {
-    local n; n=$(( $(grep -c . "$STUB_LOG") + 1 ))
-    echo "apt-get $*" >> "$STUB_LOG"
-    cat "$STUB_DIR/apt.$n"
+# dpkg-deb reads git.deb's fields; sha256sum gives aaaa; apt-cache has two
+# entries for the version, one with that SHA-256 (unless $WRONG).
+dpkg_deb_stub() {
+  dpkg-deb() { case $3 in Package) echo git ;; Version) echo 1 ;; Architecture) echo arm64 ;; esac; }
+  sha256sum() { echo "aaaa  $1"; }
+  apt-cache() {
+    printf 'Package: git\nVersion: 1\nSHA256: bbbb\n\n'
+    if [[ -z ${WRONG:-} ]]; then printf 'Package: git\nVersion: 1\nSHA256: aaaa\nDescription: git\n more\n\n'; fi
   }
-  sleep() { echo "sleep $*" >> "$STUB_DIR/sleeps"; }
 }
 # dpkg-query lists what it knows and fails for the rest, like the real one.
 dpkg_stub() {
@@ -75,16 +54,58 @@ dpkg_stub() {
     echo "dpkg-query: no packages found matching nope" >&2; return 1
   }
 }
--- get-snapshot --
-Get:1 https://snapshot.ubuntu.com/ubuntu/20260101T000000Z resolute InRelease
--- get-ports --
-Get:1 http://ports.ubuntu.com/ubuntu-ports resolute InRelease
--- hit-debian --
-Hit:1 http://deb.debian.org/debian bookworm InRelease
--- failed --
-W: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20260101T000000Z/dists/resolute/InRelease  503
--- sleeps --
-sleep 15
-sleep 30
+-- mirrors --
+https://mirror.example/ubuntu-ports
+-- ubuntu.sources --
+Types: deb
+URIs: http://ports.ubuntu.com/ubuntu-ports/
+Suites: resolute resolute-updates resolute-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: resolute-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+-- ubuntu.sources.orig --
+Types: deb
+URIs: http://ports.ubuntu.com/ubuntu-ports/
+Suites: resolute resolute-updates resolute-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: resolute-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+-- mirrored.sources --
+Types: deb
+URIs: mirror+file:WORK/pk/mirrors-1
+Suites: resolute resolute-updates resolute-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: mirror+file:WORK/pk/mirrors-2
+Suites: resolute-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+-- want-mirrors-1 --
+https://mirror.example/ubuntu-ports
+http://ports.ubuntu.com/ubuntu-ports/
+-- want-mirrors-2 --
+https://mirror.example/ubuntu-ports
+http://security.ubuntu.com/ubuntu/
+-- git.deb --
+not really a package
+-- want-packages --
+Package: git
+Version: 1
+SHA256: aaaa
+Description: git
+ more
+
 -- installed --
 snapd

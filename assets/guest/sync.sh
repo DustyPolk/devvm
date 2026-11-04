@@ -62,8 +62,6 @@ fi
 if [[ -n "$DEVVM_LANG" ]] && command -v locale-gen >/dev/null && ! locale -a | grep -qix "${DEVVM_LANG/UTF-8/utf8}"; then
   sudo locale-gen "$DEVVM_LANG" >/dev/null
 fi
-# Images build from a dated package snapshot (layers/base.sh); the VM's own apt uses the live archive.
-[[ ! -f /etc/apt/apt.conf.d/50devvm-snapshot ]] || sudo rm -f /etc/apt/apt.conf.d/50devvm-snapshot
 
 # Shared tools: mount this VM's images (at boot too, by devvm-tools.service), then tell mise which
 # versions to use. /etc/mise is mise's system config: the user's own (~/.config/mise) comes first.

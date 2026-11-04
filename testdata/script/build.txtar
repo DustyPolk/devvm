@@ -39,12 +39,22 @@ stdout '^  "made_by": "\S+"$'
 
 # Each step is numbered in the run log, and the count is what ran.
 catg $DATA/logs/runs/*.log
-stdout '^# \[1/5\] creating_from_ubuntu vm=devvm-img-'
-stdout '^# \[2/5\] configuring vm=devvm-img-'
-stdout '^# \[3/5\] starting vm=devvm-img-'
-stdout '^# \[4/5\] running_script script=base\.sh vm=devvm-img-'
-stdout '^# \[5/5\] stopping vm=devvm-img-'
-! stdout '\[6/5\]'
+stdout '^# \[1/7\] creating_from_ubuntu vm=devvm-img-'
+stdout '^# \[2/7\] configuring vm=devvm-img-'
+stdout '^# \[3/7\] starting vm=devvm-img-'
+stdout '^# \[4/7\] running_script script=apt\.sh vm=devvm-img-'
+stdout '^# \[5/7\] running_script script=base\.sh vm=devvm-img-'
+stdout '^# \[6/7\] running_script script=apt\.sh vm=devvm-img-'
+stdout '^# \[7/7\] stopping vm=devvm-img-'
+! stdout '\[8/7\]'
+
+# Its packages: a recording, sent no mirror (config.toml sets none), which
+# gave back none, recorded under base's key.
+exec tar -tf $STUB_DIR/packages-in.tar
+cmp stdout want-recording
+exists $DATA/packages/sets
+exec sh -c 'ls "$XDG_DATA_HOME"/devvm/packages/sets'
+stdout '^[0-9a-f]{12}\.json$'
 
 # Built and recorded: reused, from the image pinned.
 stub_reset
@@ -60,8 +70,11 @@ stub_calls
 exec sh -c 'rm "$IMAGES"/????????????/record.json'
 exec devvm -v build base
 stdout '^==> image_leftover image=base key=[0-9a-f]{12}$'
-stderr '^# \[1/5\] creating_from_ubuntu vm=devvm-img-'
+stderr '^# \[1/7\] creating_from_ubuntu vm=devvm-img-'
 stderr '^\+ limactl create '
+# Built again under the same key, it replays the set recorded.
+exec tar -tf $STUB_DIR/packages-in.tar
+cmp stdout want-replay
 ! stdout '^\+ limactl'
 exec sh -c 'ls -t "$XDG_DATA_HOME"/devvm/logs/runs/*.log | head -1 | xargs cat'
 stdout '^\+ limactl create '
@@ -107,8 +120,8 @@ stderr '^devvm: tool_not_layer tool=node$'
 exec sh -c ': > "$STUB_DIR/shell-fails"'
 ! exec devvm build foo+bar
 stderr '^--- log_end file=.*\.log$'
-stderr '^\+ limactl shell devvm-img-[0-9a-f]{12} bash -s$'
-stderr '^devvm: script_failed script=bar\.sh vm=devvm-img-[0-9a-f]{12}$'
+stderr '^\+ limactl shell --workdir / devvm-img-[0-9a-f]{12} sudo bash -s -- lists$'
+stderr '^devvm: script_failed script=apt\.sh vm=devvm-img-[0-9a-f]{12}$'
 ! stdout unfinished_image
 stub_calls
 stdout '^limactl stop devvm-img-[0-9a-f]{12}$'
@@ -154,6 +167,10 @@ exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES"/????????????/record.js
 stdout '^2\n2\n$'
 rm $STUB_DIR/clone-fails
 
+-- want-recording --
+in/mirrors
+-- want-replay --
+in/Packages
 -- foo.sh --
 #!/bin/bash
 echo foo

@@ -2,18 +2,13 @@
 # desktop: a built-in layer (devvm --layers desktop). An Xfce desktop with a VNC server, which devvm
 # desktop opens (about 400 MB).
 set -euxo pipefail
-# No downloads of its own: its packages come from the distribution's archive. A layer builds in a
-# copy of base's image, which still has base's apt snapshot (layers/base.sh's
-# /etc/apt/apt.conf.d/50devvm-snapshot) and the package lists base fetched through it: guest/sync.sh
-# removes the snapshot only in project VMs. So these packages come from the snapshot, as base's own
-# do, and the same image key means the same packages. Distributions whose apt has no snapshots
-# (Debian 12) aren't pinned, as base says when it builds.
-# Alpine (--from alpine): Alpine's own packages, from the release's repositories, which have no
-# snapshots: not pinned.
+# No downloads of its own: its packages come from the distribution's archive as it is when the layer
+# builds, which base's image has no package lists of (layers/apt.sh), so they aren't pinned. Alpine
+# (--from alpine): Alpine's own packages, from the release's repositories.
 if command -v apk >/dev/null; then
   sudo apk add --no-cache xfce4 xfce4-terminal tigervnc dbus-x11 xauth font-dejavu
-  echo "devvm: Alpine's packages aren't pinned" >&2
 else
+  sudo apt-get update --error-on=any
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-settings xfce4-terminal thunar \
     tigervnc-standalone-server tigervnc-tools dbus-x11 xauth fonts-dejavu-core

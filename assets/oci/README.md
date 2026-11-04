@@ -18,6 +18,6 @@ The container image's own code runs as root in the build VM, so devvm treats eve
 - Delete `/.dockerenv`, or cloud-init thinks it's in a container.
 - `hosts`, `hostname` and `resolv.conf` are only placeholders in Docker images.
 - Debian kernels need the virtio drivers listed for the initramfs.
-- Container images have empty apt lists, and apt 3.2's first update on them ignores the snapshot (`apt_update` runs a second).
+- Container images have empty apt lists: `layers/apt.sh begin` fetches them from the image's own sources before `base.sh` runs.
 - `bootify.sh` runs in a chroot inside a running VM: apt there would start services, so `build.sh` adds a `policy-rc.d` while it runs.
 - The build VM is a fresh cloud image: its first boot may run apt (unattended-upgrades), so `build.sh` uses no apt itself.

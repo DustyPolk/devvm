@@ -19,11 +19,6 @@ cmp stdout mise-base.want
 exec grep -E 'miseVersion =|"(macos|linux)-' repo/internal/tools/mise.go
 cmp stdout mise-go.want
 
-# apt moves base's snapshot to today.
-exec repo/scripts/bump.sh apt
-exec grep '^apt_snapshot=' repo/assets/layers/base.sh
-stdout '^apt_snapshot=[0-9]{8}T000000Z$'
-
 # e2e-ubuntu moves the cloud image release e2e pins to the newest Ubuntu
 # lists; with none listed, nothing is edited.
 exec repo/scripts/bump.sh e2e-ubuntu

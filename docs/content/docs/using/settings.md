@@ -11,7 +11,7 @@ devvm writes nothing into your project folders. It keeps the settings you edit i
 
 | File | What it holds | Written by |
 | --- | --- | --- |
-| `config.toml` | the defaults that new VMs get and the [retention settings](#retention), which win over what devvm's commands save, and the [company proxy](../safety/network.md#behind-a-company-proxy) ([config.toml](#configtoml)) | you |
+| `config.toml` | the defaults that new VMs get and the [retention settings](#retention), which win over what devvm's commands save, the [company proxy](../safety/network.md#behind-a-company-proxy) and an [Ubuntu mirror](#an-ubuntu-mirror) ([config.toml](#configtoml)) | you |
 | `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm network allow -g`, `deny -g`, `rm -g`, or you |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new`, then you |
 | `features/` | your own [features](customizing.md#your-own-features) | you |
@@ -24,7 +24,7 @@ Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles re
 
 ## config.toml
 
-`~/.config/devvm/config.toml` sets the defaults that new VMs get, the retention settings and the company proxy, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
+`~/.config/devvm/config.toml` sets the defaults that new VMs get, the retention settings, the company proxy and an Ubuntu mirror, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
 
 ```toml
 # Whether new VMs get network policy: ask, on or off.
@@ -41,6 +41,9 @@ agents = ["claude", "codex"]
 
 # The layers new VMs get, bottom first, or [] for none.
 layers = ["docker"]
+
+# A mirror of Ubuntu's archive that base's first build tries first.
+ubuntu-mirror = "http://mirror.example.com/ubuntu-ports"
 
 # New VMs' CPUs, and their memory and disk in GiB.
 [size]
@@ -67,6 +70,12 @@ no-proxy = "localhost,.example.com"
 Each key takes what its command takes. `network` is `ask`, `on` or `off`, as `devvm network -g` sets it ([turning it on or off](../safety/network.md#turning-it-on-or-off)). `ports` is `all`, `none` or a list, as `devvm ports -g` takes it ([size and ports](ports-size.md#size-and-ports)). `features` lists the [features](customizing.md#choosing-features) that base gets, `agents` the [coding agents](#coding-agents-for-new-vms) that new VMs get, and `layers` the [layers](#layers-for-new-vms) that new VMs get, bottom first. `cpus` is a whole number, and `memory` and `disk` are a number of GiB, such as `8`, `8.5` or `"8G"`, as `devvm size -g` takes them. The `[retention]` keys are the [retention settings](#retention), with a duration such as `"90d"` or a size such as `"20G"` in quotes, and a count as a number.
 
 The `[proxy]` table is the [company proxy](../safety/network.md#behind-a-company-proxy) that VMs with network policy, builds and devvm's own downloads go through when the shell you run devvm in sets neither `HTTPS_PROXY` nor `HTTP_PROXY`. VMs without network policy never get it, and devvm warns you when it starts one. That shell's settings win over the whole table. `https` and `http` take what `HTTPS_PROXY` and `HTTP_PROXY` take, an `http://` URL or `host:port`, and `no-proxy` takes what `NO_PROXY` takes. A URL never holds a password, and devvm refuses one that does, so put only the user in it and save the password with `devvm secret set proxy`. No command saves the proxy, so it's only ever in `config.toml`.
+
+### An Ubuntu mirror
+
+`ubuntu-mirror` is a mirror of Ubuntu's archive, such as one your company or university runs, which the first build of base gets its packages from before it tries Ubuntu's own. It must mirror the archive for this machine's architecture: `archive.ubuntu.com/ubuntu` on an Intel or AMD machine, or `ports.ubuntu.com/ubuntu-ports` on an Apple silicon Mac or another arm64 machine. Give it as an `http://` or `https://` address without a user, a query or spaces, and devvm refuses anything else (`config.toml` names the line). A package that the mirror doesn't have, or a mirror that doesn't answer, falls back to Ubuntu's archive for that file.
+
+A mirror can't give base a package that Ubuntu didn't publish. apt checks every list and package against Ubuntu's archive key whichever server sends it, and refuses one that doesn't match. A mirror that's behind, or one that's lying, can still serve lists older than Ubuntu's, so base gets older packages, which is why you should only set a mirror you trust to keep up. Only the first build of each base uses the mirror, because a later build of the same base installs the packages devvm kept from that first build ([base](images.md#base)). VMs don't use it, and neither do layers or a `--from` base. No command saves it, so it's only ever in `config.toml`.
 
 ### Where a default comes from
 

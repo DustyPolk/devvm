@@ -62,14 +62,17 @@ stdout '^  "libc": "musl",$'
 # Each step numbered: the conversion's five, then base's, with sudo told
 # to keep the build proxy's settings and told no more.
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/logs/runs/*.log'
-stdout '^# \[1/12\] creating_from_ubuntu vm=devvm-oci-build$'
-stdout '^# \[2/12\] configuring vm=devvm-oci-build$'
-stdout '^# \[3/12\] starting vm=devvm-oci-build$'
-stdout '^# \[4/12\] converting from=node:24@sha256:a{64}$'
-stdout '^# \[5/12\] deleting vm=devvm-oci-build$'
-stdout '^# \[6/12\] creating vm=devvm-img-'
-stdout '^# \[12/12\] stopping vm=devvm-img-'
-! stdout '\[13/12\]'
+stdout '^# \[1/14\] creating_from_ubuntu vm=devvm-oci-build$'
+stdout '^# \[2/14\] configuring vm=devvm-oci-build$'
+stdout '^# \[3/14\] starting vm=devvm-oci-build$'
+stdout '^# \[4/14\] converting from=node:24@sha256:a{64}$'
+stdout '^# \[5/14\] deleting vm=devvm-oci-build$'
+stdout '^# \[6/14\] creating vm=devvm-img-'
+stdout '^# \[14/14\] stopping vm=devvm-img-'
+! stdout '\[15/14\]'
+# A --from base's packages are its image's own: nothing sent or taken.
+! exists $STUB_DIR/packages-in.tar
+! exists $DATA/packages/sets
 
 # Built: reused, without a lookup; a layer on it records where its base
 # came from. Ubuntu's base is another image.
@@ -119,8 +122,8 @@ stdout '^docker info$'
 stdout '^docker save -o /\S*/tmp/devvm-oci\.[0-9]+/vm/image\.tar myapp:dev$'
 stdout '^limactl shell --workdir / devvm-oci-build sudo bash -s -- /\S*/tmp/devvm-oci\.[0-9]+/oci/build\.sh /\S*/tmp/devvm-oci\.[0-9]+/oci /\S*/tmp/devvm-oci\.[0-9]+/vm - myapp:dev '
 exec sh -c 'ls -t "$XDG_DATA_HOME"/devvm/logs/runs/*.log | head -1 | xargs cat'
-stdout '^# \[1/13\] exporting_docker from=myapp:dev$'
-stdout '^# \[13/13\] stopping vm=devvm-img-'
+stdout '^# \[1/15\] exporting_docker from=myapp:dev$'
+stdout '^# \[15/15\] stopping vm=devvm-img-'
 
 # The cache may go at any time: the base keeps its key, from the digest
 # its record names, so it stays current, and a build offline keeps it.

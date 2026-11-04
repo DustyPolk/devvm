@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -190,10 +191,16 @@ func buildScripts(ctx context.Context, l *Lima, inst string, spec backend.ImageS
 			return err
 		}
 	}
+	if err := sendPackages(ctx, l, inst, spec.Packages); err != nil {
+		return err
+	}
 	for _, s := range spec.Recipe.Steps {
 		if err := l.runStep(ctx, inst, s, slices.Concat(spec.Trust.Env, proxyExports(hp))); err != nil {
 			return err
 		}
+	}
+	if err := takePackages(ctx, l, inst, spec.Packages); err != nil {
+		return err
 	}
 	for _, s := range []backend.Script{sudoOff, spec.Trust.Remove} {
 		if err := l.runScript(ctx, inst, s, true); err != nil {
@@ -332,6 +339,9 @@ func (l *images) runStep(ctx context.Context, vm string, s image.Step, env []byt
 	cmd := l.limactl(ctx, argv...)
 	cmd.Stdin = bytes.NewReader(slices.Concat(env, s.Data))
 	if err := l.Runner.Run(ctx, msg.RunningScript(s.Name, vm), cmd); err != nil {
+		if e, ok := errors.AsType[*exec.ExitError](err); ok && e.ExitCode() == backend.ExitUnreachable {
+			return backend.Logged(msg.BuildSourcesUnreachable(s.Name, vm))
+		}
 		return backend.Logged(msg.ScriptFailed(s.Name, vm))
 	}
 	return nil

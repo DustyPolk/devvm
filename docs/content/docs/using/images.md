@@ -22,7 +22,7 @@ A VM made from base gets 4 CPUs, 8 GiB of memory and a 100 GiB disk unless you g
 
 base drops the server extras that Ubuntu's cloud image comes with, which are snapd, multipath, ModemManager, udisks, firmware updates, crash reporting, tracing tools, kernel headers, and apt's background updates and upgrades. That saves 0.9 GB of disk and 100 MB of memory per VM. The everyday tools stay, such as htop, tmux, lsof, strace, tcpdump, rsync and nano.
 
-devvm builds base from pinned packages, but your VMs use Ubuntu's live archive, so `apt upgrade` in a VM gets the current updates.
+The first time devvm builds base on this machine, it starts from the newest release of Ubuntu's cloud image and installs the newest packages from Ubuntu's archive, or first from a [mirror you set](settings.md#an-ubuntu-mirror). devvm keeps a copy of each package it installed, so building the same base again, such as after `devvm images rm base`, installs exactly those packages from the copies, with no network for them. `devvm rebuild base` starts again from the newest image and packages. Your VMs use Ubuntu's live archive, and base keeps no package lists, so run `sudo apt update` in a VM before you install a package, and `apt upgrade` then gets the current updates.
 
 ## Layers
 
@@ -41,7 +41,7 @@ devvm ships three layers, `desktop`, `docker` and `nix`. You choose them like an
 
 #### desktop
 
-The `desktop` layer installs an Xfce desktop with TigerVNC's server, which [`devvm desktop`](desktop.md) opens in Screen Sharing, and adds about 370 MB to the image. Its packages come from the same pinned package snapshot as base's, and on a base made `--from alpine`, it installs Alpine's own packages, which aren't pinned. It needs no hosts of its own with network policy, and a VM without the layer has no desktop.
+The `desktop` layer installs an Xfce desktop with TigerVNC's server, which [`devvm desktop`](desktop.md) opens in Screen Sharing, and adds about 370 MB to the image. Its packages come from the distribution's archive as it is when the layer builds, which on a base made `--from alpine` means Alpine's own packages, and they aren't pinned. It needs no hosts of its own with network policy, and a VM without the layer has no desktop.
 
 #### docker
 

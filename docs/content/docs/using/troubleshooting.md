@@ -55,6 +55,8 @@ devvm limactl shell --start devvm-img-<key>
 
 The next build of that image deletes the VM and starts over, and `devvm gc` also deletes it. A build whose create or clone fails deletes the image, once devvm has shown the end of the log, because there's nothing in the image to look at.
 
+A first build of base also fails when the packages its VM gives back aren't exactly the packages apt downloaded, each named by its own checksum with apt's entry for it. devvm then keeps none of them, so nothing it didn't check reaches its package cache ([base's packages](../internals/images.md#bases-packages)).
+
 Either way, the images under it, which are already built, stay. devvm deletes and builds again any image it finds without its record, such as a failed build's or one devvm couldn't clean up after a crash or a power cut.
 
 ## Not enough free space
@@ -76,6 +78,12 @@ devvm deletes an interrupted new VM, with its state, until its first shell opens
 ## base can't build on Lima
 
 On Lima, base starts from a dated release of Ubuntu's cloud image. The first time devvm builds base, it finds the newest release on cloud-images.ubuntu.com and pins it on this machine, so that build needs to reach Ubuntu's list of releases and the release's checksums. When it can't, devvm says so and pins nothing, so check that you're online and run the command again. Once an image is pinned, building base again needs Lima's cached copy of it or the release itself, which Ubuntu removes after a few months, and devvm rebuild base pins the newest again ([Ubuntu's cloud image](../internals/images.md#ubuntus-cloud-image)).
+
+Building the same base again also needs the copies of its packages that devvm kept from its first build. When one of them is gone or changed, devvm names it and builds nothing, and `devvm rebuild base` makes a new base with the newest packages ([base's packages](../internals/images.md#bases-packages)).
+
+## No package source answers
+
+The first build of base on this machine gets its packages from Ubuntu's archive, or first from the [mirror you set](settings.md#an-ubuntu-mirror). When neither answers, devvm stops at once and says so, without trying again, and it keeps the build VM stopped as for any [failed build](#a-build-fails). Check that you're online, and that the mirror's address is right, then run the command again. Building the same base again later needs neither, because devvm installs the packages it kept from the first build.
 
 ## A file devvm can't read
 

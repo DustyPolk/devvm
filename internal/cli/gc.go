@@ -134,7 +134,9 @@ type gcPlan struct {
 	// forgets them
 	orphans   vm.LeftoverReport
 	leftovers vm.Leftovers
-	mise      []string // older versions of devvm's own mise
+	mise      []string            // older versions of devvm's own mise
+	packages  build.StalePackages // the package cache's: sets and files nothing needs
+	cache     build.Images        // what deletes them
 	nix       nixCachePlan
 	share     tools.Share // where the tool images are
 	// skipped are the backends a VM uses that couldn't list their
@@ -285,6 +287,10 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 	if p.mise, err = (tools.Versions{Env: b.Tools}).StaleMise(); err != nil {
 		return p, err
 	}
+	p.cache = build.Images{Env: b}
+	if p.packages, err = p.cache.Stale(ctx); err != nil {
+		return p, err
+	}
 	p.nix, err = planNixCache(u, b.Dirs, o.nixCache)
 	return p, err
 }
@@ -348,7 +354,7 @@ func (p gcPlan) showRecent(u *ui.UI) bool {
 // keeps for being recent aren't any.
 func (p gcPlan) empty() bool {
 	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.orphans.Orphans)+len(p.mise) == 0 &&
-		len(p.orphans.Links)+len(p.orphans.Sockets) == 0 && !p.nix.any()
+		len(p.orphans.Links)+len(p.orphans.Sockets)+len(p.packages.Sets)+len(p.packages.Files) == 0 && !p.nix.any()
 }
 
 // showOrphans lists the VMs gc --orphans forgets, then says which it
@@ -402,6 +408,9 @@ func (p gcPlan) show(u *ui.UI) {
 	if len(p.mise) > 0 {
 		u.Say(msg.GCMise(len(p.mise), humanSize(dirsSize(p.mise))))
 	}
+	if n := len(p.packages.Files); n > 0 || len(p.packages.Sets) > 0 {
+		u.Say(msg.GCPackages(n, humanSize(p.packages.Size)))
+	}
 	p.nix.show(u)
 	if len(p.exports) > 0 {
 		u.Say(msg.GCHistory(len(p.exports), humanSize(exportsSize(p.exports))))
@@ -435,6 +444,12 @@ func (p gcPlan) run(ctx context.Context, u *ui.UI) error {
 	}
 	if len(p.mise) > 0 {
 		u.Info(msg.DeletedMise(len(p.mise)))
+	}
+	if len(p.packages.Sets)+len(p.packages.Files) > 0 {
+		if err := p.cache.DeletePackages(ctx, p.packages); err != nil {
+			return err
+		}
+		u.Info(msg.DeletedPackages(len(p.packages.Files)))
 	}
 	if err := removeAll(exportPaths(p.exports)); err != nil {
 		return err

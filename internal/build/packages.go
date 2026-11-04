@@ -1,0 +1,524 @@
+package build
+
+import (
+	"archive/tar"
+	"bufio"
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"io"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/fetch"
+	"github.com/w3cj/devvm/internal/image"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/settings"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// Base's packages, from the backend's own Ubuntu (assets/layers/apt.sh
+// runs in its build). A base key's first build records them: apt gets
+// them from Ubuntu's archive, the mirror config.toml sets tried first,
+// checking each against the archive's signature, and the build gives back
+// each package it downloaded with apt's entry for it. devvm checks that
+// what comes back is what it says it is, keeps each file in its cache
+// under its SHA-256 and the set under the key. Every later build of that
+// key replays the set: the build VM gets those files from the cache and
+// installs from them alone, so it needs no network for them, and the same
+// key always means the same packages. A --from base gets neither: its
+// image's own sources, unpinned.
+
+// The most a build may give back: a set's list of entries, one package
+// file, all of them, and how many entries its tar stream holds.
+const (
+	maxPackagesList    = 64 << 20
+	maxPackageFile     = 2 << 30
+	maxPackagesAll     = 16 << 30
+	maxPackagesEntries = 20000
+)
+
+var debName = regexp.MustCompile(`^[0-9a-f]{64}\.deb$`)
+
+// packages is how a build of base with key gets its packages: replay, from
+// the set key recorded; else record, whose taken is filled once the build
+// gives them back and stored by its commit. nil for an image that isn't a
+// base from the backend's own Ubuntu.
+type packages struct {
+	spec  *backend.Packages
+	taken *taken // recording: what the build gave back; nil replaying
+}
+
+// cache is the package cache in devvm's folders.
+type cache struct{ paths.Dirs }
+
+// basePackages returns base's packages for the build of key, from the
+// backend's own Ubuntu: the set key recorded, checked against the cache
+// (packages_missing for a file that's gone or changed), or a recording.
+func (b cache) basePackages(key string) (*packages, error) {
+	set, err := state.ReadPackageSet(b.Dirs, key)
+	switch {
+	case err == nil:
+		if err := b.checkCached(set); err != nil {
+			return nil, err
+		}
+		return &packages{spec: &backend.Packages{Send: func(w io.Writer) error { return b.sendSet(w, set) }}}, nil
+	case !errors.Is(err, fs.ErrNotExist):
+		return nil, err
+	}
+	mirror, err := settings.UbuntuMirror(b.Dirs)
+	if err != nil {
+		return nil, err
+	}
+	t := &taken{dirs: b}
+	return &packages{
+		spec: &backend.Packages{
+			Send: func(w io.Writer) error { return sendMirrors(w, mirror) },
+			Take: t.take,
+		},
+		taken: t,
+	}, nil
+}
+
+// checkCached checks that every package of set is in the cache with its
+// SHA-256, before anything is built.
+func (b cache) checkCached(set state.PackageSet) error {
+	for _, p := range set.Packages {
+		if sum, size, err := hashFile(b.PackageFile(p.SHA256)); err != nil || sum != p.SHA256 || size != p.Size {
+			return msg.PackagesMissing(p.Name, p.Version)
+		}
+	}
+	return nil
+}
+
+func hashFile(name string) (sum string, size int64, err error) {
+	f, err := os.Open(name) //nolint:gosec // a path from paths.Dirs
+	if err != nil {
+		return "", 0, err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	n, err := io.Copy(h, f)
+	return hex.EncodeToString(h.Sum(nil)), n, err
+}
+
+// sendMirrors is a recording's input: in/mirrors, the mirror to try first
+// ("" for none), which apt.sh puts before each of Ubuntu's archives.
+func sendMirrors(w io.Writer, mirror string) error {
+	tw := tar.NewWriter(w)
+	data := ""
+	if mirror != "" {
+		data = mirror + "\n"
+	}
+	if err := writeTarFile(tw, "in/mirrors", []byte(data)); err != nil {
+		return err
+	}
+	return tw.Close()
+}
+
+// sendSet is a replay's input: set's package files, from the cache, and
+// in/Packages, their entries, each naming its file.
+func (b cache) sendSet(w io.Writer, set state.PackageSet) error {
+	tw := tar.NewWriter(w)
+	if err := writeTarFile(tw, "in/Packages", replayList(set)); err != nil {
+		return err
+	}
+	for _, p := range set.Packages {
+		if err := b.sendCached(tw, p); err != nil {
+			return err
+		}
+	}
+	return tw.Close()
+}
+
+// sendCached sends p's file from the cache, checked again as it goes.
+func (b cache) sendCached(tw *tar.Writer, p state.Package) error {
+	f, err := os.Open(b.PackageFile(p.SHA256))
+	if err != nil {
+		return msg.PackagesMissing(p.Name, p.Version).Because(err)
+	}
+	defer func() { _ = f.Close() }()
+	if err := tw.WriteHeader(&tar.Header{Name: "in/" + p.SHA256 + ".deb", Mode: 0o644, Size: p.Size, Typeflag: tar.TypeReg}); err != nil {
+		return err
+	}
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(tw, h), io.LimitReader(f, p.Size)); err != nil {
+		return err
+	}
+	if hex.EncodeToString(h.Sum(nil)) != p.SHA256 {
+		return msg.PackagesMissing(p.Name, p.Version)
+	}
+	return nil
+}
+
+// replayList is apt's list for a replay: each package's entry as
+// recorded, with its file's name in the replay's folder.
+func replayList(set state.PackageSet) []byte {
+	var out bytes.Buffer
+	for _, p := range set.Packages {
+		for line := range strings.Lines(p.Entry) {
+			if !strings.HasPrefix(line, "Filename:") {
+				out.WriteString(strings.TrimSuffix(line, "\n") + "\n")
+			}
+		}
+		out.WriteString("Filename: ./" + p.SHA256 + ".deb\n\n")
+	}
+	return out.Bytes()
+}
+
+func writeTarFile(tw *tar.Writer, name string, data []byte) error {
+	if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg}); err != nil {
+		return err
+	}
+	_, err := tw.Write(data)
+	return err
+}
+
+// taken is what a recording's build gave back: its package files, kept in
+// a folder of its own in the cache (dir) until commit, and the set they
+// make.
+type taken struct {
+	dirs cache
+	dir  string
+	set  state.PackageSet
+}
+
+// take reads the build's tar stream of out/: Packages, apt's entries for
+// what it downloaded, and each package's file as <sha256>.deb. Anything
+// else, a file whose content isn't its name's SHA-256, an entry without
+// its file or a file without its entry is refused (packages_refused),
+// and nothing is kept: the build VM wrote all of it.
+func (t *taken) take(r io.Reader) (err error) {
+	if err := state.PrivateDir(t.dirs.Packages()); err != nil {
+		return err
+	}
+	if t.dir, err = os.MkdirTemp(t.dirs.Packages(), ".taken-"); err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			t.discard()
+		}
+	}()
+	var list []byte
+	files := map[string]int64{} // by SHA-256: its size
+	var total int64
+	tr := tar.NewReader(r)
+	for n := 0; ; n++ {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return refused(err.Error())
+		}
+		// Each entry's header counts too, and there are only so many.
+		if total += 512; n >= maxPackagesEntries {
+			return refused("more than " + strconv.Itoa(maxPackagesEntries) + " entries")
+		}
+		name := path.Clean(h.Name)
+		switch {
+		case name == "." && h.Typeflag == tar.TypeDir:
+			continue
+		case h.Typeflag != tar.TypeReg:
+			return refused("not a file: " + strconv.Quote(h.Name))
+		case name == "Packages":
+			if list != nil {
+				return refused("twice: Packages")
+			}
+			if list, err = fetch.ReadCapped(tr, maxPackagesList); err != nil {
+				return refused("Packages: " + err.Error())
+			}
+		case debName.MatchString(name):
+			sum := strings.TrimSuffix(name, ".deb")
+			if _, ok := files[sum]; ok {
+				return refused("twice: " + name)
+			}
+			if total += h.Size; total > maxPackagesAll {
+				return refused("more than " + strconv.Itoa(maxPackagesAll>>30) + " GiB")
+			}
+			if files[sum], err = t.keep(tr, sum); err != nil {
+				return err
+			}
+		default:
+			return refused("not a package: " + strconv.Quote(h.Name))
+		}
+	}
+	t.set, err = setOf(list, files)
+	return err
+}
+
+// keep writes one package file from r into the folder, checking that its
+// content's SHA-256 is sum, and returns its size.
+func (t *taken) keep(r io.Reader, sum string) (int64, error) {
+	f, err := os.OpenFile(t.dir+"/"+sum+".deb", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // the folder's own, a checked name
+	if err != nil {
+		return 0, err
+	}
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(r, maxPackageFile+1))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	switch {
+	case err != nil:
+		return 0, err
+	case n > maxPackageFile:
+		return 0, refused(sum + ".deb is over " + strconv.Itoa(maxPackageFile>>30) + " GiB")
+	case hex.EncodeToString(h.Sum(nil)) != sum:
+		return 0, refused(sum + ".deb has another SHA-256")
+	}
+	return n, nil
+}
+
+// setOf is the set apt's entries (list) make, each matched with its file
+// (files: by SHA-256, its size).
+func setOf(list []byte, files map[string]int64) (state.PackageSet, error) {
+	set := state.PackageSet{Recorded: time.Now().UTC().Truncate(time.Second)}
+	seen := map[string]bool{}
+	for entry := range strings.SplitSeq(strings.TrimSpace(string(list)), "\n\n") {
+		if strings.TrimSpace(entry) == "" {
+			continue
+		}
+		p, err := packageOf(entry)
+		if err != nil {
+			return state.PackageSet{}, err
+		}
+		size, ok := files[p.SHA256]
+		switch {
+		case !ok:
+			return state.PackageSet{}, refused("no file for " + p.Name + " " + p.Version)
+		case size != p.Size:
+			return state.PackageSet{}, refused(p.Name + " " + p.Version + "'s file isn't the size its entry says")
+		case seen[p.SHA256]:
+			return state.PackageSet{}, refused("two entries for " + p.Name + " " + p.Version)
+		}
+		seen[p.SHA256] = true
+		set.Packages = append(set.Packages, p)
+	}
+	if len(seen) != len(files) {
+		return state.PackageSet{}, refused("a file without an entry")
+	}
+	return set, nil
+}
+
+// packageOf reads one entry of apt's lists: its fields, each a line of
+// its own ("Field: value") or a continuation (" value").
+func packageOf(entry string) (state.Package, error) {
+	p := state.Package{Entry: entry}
+	sc := bufio.NewScanner(strings.NewReader(entry))
+	sc.Buffer(nil, maxPackagesList)
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, ": ")
+		if !ok {
+			k, ok = strings.CutSuffix(line, ":")
+		}
+		if !ok {
+			return state.Package{}, refused("not an entry's line: " + strconv.Quote(line))
+		}
+		switch k {
+		case "Package":
+			p.Name = v
+		case "Version":
+			p.Version = v
+		case "Architecture":
+			p.Arch = v
+		case "SHA256":
+			p.SHA256 = v
+		case "Size":
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return state.Package{}, refused("not a size: " + strconv.Quote(v))
+			}
+			p.Size = n
+		}
+	}
+	if !p.Valid() {
+		return state.Package{}, refused("an entry without a package's name, version, architecture, SHA-256 or size")
+	}
+	return p, nil
+}
+
+// commit stores what the build gave back, once the image is built: each
+// file in the cache under its SHA-256 (one there already is the same
+// file), then key's set, under the cache's lock.
+func (t *taken) commit(ctx context.Context, key string) error {
+	defer t.discard()
+	if err := os.MkdirAll(t.dirs.ImageLocks(), 0o700); err != nil {
+		return err
+	}
+	unlock, err := platform.LockFile(ctx, t.dirs.PackagesLock())
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	for _, p := range t.set.Packages {
+		dst := t.dirs.PackageFile(p.SHA256)
+		if _, err := os.Stat(dst); err == nil {
+			continue
+		}
+		if err := os.Rename(t.dir+"/"+p.SHA256+".deb", dst); err != nil {
+			return err
+		}
+	}
+	return state.WritePackageSet(t.dirs.Dirs, key, t.set)
+}
+
+// discard deletes what the build gave back that isn't in the cache.
+func (t *taken) discard() {
+	if t.dir != "" {
+		_ = os.RemoveAll(t.dir)
+		t.dir = ""
+	}
+}
+
+func refused(why string) error { return msg.PackagesRefused(why) }
+
+// StalePackages is what of the package cache nothing needs: the sets of
+// keys that are neither base's key as it is now nor an image the backend
+// has, and the package files that no other set names. Their size is the
+// files'. A build's folder of what it gave back (.taken-…) is left alone.
+type StalePackages struct {
+	Sets  []string // keys
+	Files []string // SHA-256s
+	Size  int64
+}
+
+// Stale returns what of the package cache nothing needs: nothing when the
+// backend can't say which images it has.
+func (b Images) Stale(ctx context.Context) (StalePackages, error) {
+	var s StalePackages
+	keys, err := state.PackageSetKeys(b.Dirs)
+	if err != nil || len(keys) == 0 {
+		return s, err
+	}
+	have, err := b.Backend.Images(ctx)
+	if err != nil {
+		return s, nil //nolint:nilerr // a backend that can't list keeps every set: gc says why elsewhere
+	}
+	current, err := b.Key(image.Base)
+	if err != nil {
+		return s, err
+	}
+	used := map[string]bool{}
+	for _, k := range keys {
+		if k == current || slices.Contains(have, k) {
+			set, err := state.ReadPackageSet(b.Dirs, k)
+			if err != nil {
+				return s, err
+			}
+			for _, p := range set.Packages {
+				used[p.SHA256] = true
+			}
+			continue
+		}
+		s.Sets = append(s.Sets, k)
+	}
+	entries, err := os.ReadDir(b.Dirs.Packages())
+	if err != nil {
+		return s, err
+	}
+	for _, e := range entries {
+		if sum, ok := strings.CutSuffix(e.Name(), ".deb"); ok && debName.MatchString(e.Name()) && !used[sum] {
+			s.Files = append(s.Files, sum)
+			if fi, err := e.Info(); err == nil {
+				s.Size += fi.Size()
+			}
+		}
+	}
+	return s, nil
+}
+
+// DeletePackages deletes s's sets, then its files, under the cache's lock:
+// no build stores a set meanwhile.
+func (b Images) DeletePackages(ctx context.Context, s StalePackages) error {
+	if err := os.MkdirAll(b.Dirs.ImageLocks(), 0o700); err != nil {
+		return err
+	}
+	unlock, err := platform.LockFile(ctx, b.Dirs.PackagesLock())
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	for _, k := range s.Sets {
+		if err := state.RemovePackageSet(b.Dirs, k); err != nil {
+			return err
+		}
+	}
+	// What the sets left name now, under the lock: a build may have
+	// recorded one naming a file since s was made.
+	used, err := usedFiles(b.Dirs)
+	if err != nil {
+		return err
+	}
+	for _, sum := range s.Files {
+		if used[sum] {
+			continue
+		}
+		if err := os.Remove(b.Dirs.PackageFile(sum)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return removeOldTaken(b.Dirs)
+}
+
+// usedFiles is the package files every set names.
+func usedFiles(d paths.Dirs) (map[string]bool, error) {
+	keys, err := state.PackageSetKeys(d)
+	if err != nil {
+		return nil, err
+	}
+	used := map[string]bool{}
+	for _, k := range keys {
+		set, err := state.ReadPackageSet(d, k)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range set.Packages {
+			used[p.SHA256] = true
+		}
+	}
+	return used, nil
+}
+
+// takenAge is how old a build's folder of what it gave back (.taken-…)
+// is when gc deletes it: a build that ended without deleting it, as a
+// killed devvm does.
+const takenAge = 24 * time.Hour
+
+// removeOldTaken deletes builds' folders older than takenAge.
+func removeOldTaken(d paths.Dirs) error {
+	entries, err := os.ReadDir(d.Packages())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		fi, err := e.Info()
+		if err != nil || !e.IsDir() || !strings.HasPrefix(e.Name(), ".taken-") || time.Since(fi.ModTime()) < takenAge {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(d.Packages(), e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}

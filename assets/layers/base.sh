@@ -8,10 +8,6 @@ mise_sha256_arm64=c7108d85a32ba17e4747d31d4a42f39f0c134f16211e204e8ef0a49d4f518f
 mise_sha256_amd64=6eb1b890e90818417ca34c90dbbd47881917d5cd199f31b63b062ea9c6b18d85
 mise_sha256_arm64_musl=e036eb7bd3ca63e8565497e597967484330a74ff24e9c4c9f2ac41824cbf4090
 mise_sha256_amd64_musl=fc5137a3147494e039c3d5fc3d84de354170d7d8dafdb0b5f0b6f3f19d1dd922
-# apt_snapshot: the distribution's packages come from its archive as it was then (snapshot.ubuntu.com,
-# snapshot.debian.org), so the same image key means the same packages. It moves with Ubuntu's container
-# image (internal/ubuntu), which mustn't be newer.
-apt_snapshot=20261026T000000Z
 
 export DEBIAN_FRONTEND=noninteractive
 # Alpine (--from alpine): apk, OpenRC and musl. Its packages come from the release's repositories,
@@ -24,38 +20,8 @@ if command -v apk >/dev/null; then
   musl=_musl
 else
 musl=""
-# The snapshot holds for the whole build (features install packages too), and for the layers built on
-# base, which start from a copy of its image; guest/sync.sh removes it in project VMs, so they get
-# current updates.
-echo "APT::Snapshot \"$apt_snapshot\";" | sudo tee /etc/apt/apt.conf.d/50devvm-snapshot >/dev/null
-# The snapshot servers answer 502 or 503 now and then, and a connection can stall without closing:
-# each download is tried again (with a growing delay), and one that sends nothing for 30 s fails.
-printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' |
-  sudo tee /etc/apt/apt.conf.d/50devvm-retries >/dev/null
-# apt carries on with the live archive when a snapshot can't be fetched: fail instead. Distributions
-# whose apt has no snapshots (Debian 12, Ubuntu's ports archive before 26.04) say so and stay unpinned.
-# On empty package lists (a Docker image's, with --from), apt 3.2's first update only learns that the
-# archive has snapshots and leaves lists nothing installs from; the second uses the snapshot.
-# The snapshot servers answer 503 now and then: try again twice, after 15 and 30 s.
-apt_update() {
-  local live=0 failed=0
-  while :; do
-    sudo apt-get update 2>&1 | tee /tmp/apt-update.log
-    if grep -E '^(Err:|W: Failed to fetch).*snapshot' /tmp/apt-update.log >&2; then
-      failed=$((failed + 1))
-      (( failed < 3 )) || { echo "devvm: couldn't fetch the package snapshot $apt_snapshot (above)" >&2; exit 1; }
-      echo "devvm: couldn't fetch the package snapshot; trying again in $((failed * 15)) s" >&2
-      sleep $((failed * 15)); continue
-    fi
-    grep -E '^(Get|Hit):[0-9]+ https://snapshot\.' /tmp/apt-update.log >/dev/null && break
-    live=$((live + 1))
-    if (( live == 2 )); then
-      echo "devvm: this distribution's apt doesn't use snapshots; its packages aren't pinned" >&2; break
-    fi
-  done
-  rm -f /tmp/apt-update.log
-}
-apt_update
+# The package lists are apt.sh begin's: base's packages are recorded at its first build and replayed
+# from devvm's cache after (layers/apt.sh), and a --from image's come from its own sources, unpinned.
 # erofs-utils: the shared tools' builds make their images with it, in a VM cloned from base.
 sudo apt-get install -y git curl wget ca-certificates build-essential unzip jq ripgrep erofs-utils
 fi

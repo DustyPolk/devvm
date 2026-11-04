@@ -5,8 +5,7 @@
 # and Ubuntu's cloud image release).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
-# Tools: apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu
-#   apt: base's package snapshot
+# Tools: docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu
 #   mise: base's, and the one devvm runs on the host to resolve the shared tools' versions
 #   e2e-tools: the shared tools' versions every e2e section but tools uses
 #   e2e-from: the container images e2e's --from checks start from, by digest
@@ -19,7 +18,7 @@
 # `devvm gc`.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all="apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu"
+all="docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu"
 
 check=false
 if [[ ${1:-} == --check ]]; then check=true; shift; fi
@@ -45,7 +44,7 @@ sha_of() { fetch -o "$tmp/dl" "$1"; sha256 "$tmp/dl"; rm -f "$tmp/dl"; }
 get() { sed -n "s/^$2=\([^ ]*\).*/\1/p" "$root/$1"; }
 get_const() { sed -n "s/^const $2 = \"\(.*\)\"$/\1/p" "$root/$1"; }
 # valid VAR VALUE: VALUE comes from upstream and lands in a script that runs (some on the host), so
-# only the shape a pin can have: a checksum, a commit, an image digest, a snapshot date or a version.
+# only the shape a pin can have: a checksum, a commit, an image digest, a date or a version.
 # Else exit.
 valid() {
   local re='^[0-9A-Za-z][0-9A-Za-z.+~_-]*$'
@@ -54,7 +53,7 @@ valid() {
     *_commit) re='^[0-9a-f]{40}$' ;;
     *_digest) re='^sha256:[0-9a-f]{64}$' ;;
     *_release) re='^release-[0-9]{8}$' ;;
-    apt_snapshot|*_built) re='^[0-9]{8}T[0-9]{6}Z$' ;;
+    *_built) re='^[0-9]{8}T[0-9]{6}Z$' ;;
   esac
   [[ $2 =~ $re ]] || { printf 'bump: upstream gave %s an unexpected value: %q\n' "$1" "$2" >&2; exit 1; }
 }
@@ -97,13 +96,6 @@ pin3() {   # pin3 FILE PREFIX VERSION SHA_ARM64 SHA_AMD64
   set_var "$1" "${2}_version" "$3"
   set_var "$1" "${2}_sha256_arm64" "$4"
   set_var "$1" "${2}_sha256_amd64" "$5"
-}
-
-# The package snapshot base builds from, today's (UTC).
-bump_apt() {
-  local f=assets/layers/base.sh cur new
-  cur=$(get $f apt_snapshot); new=$(date -u +%Y%m%dT000000Z)
-  if report apt "$cur" "$new"; then set_var $f apt_snapshot "$new"; fi
 }
 
 # The dated release of Ubuntu's cloud image that e2e pins base to (tests/e2e.sh's

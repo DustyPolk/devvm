@@ -251,6 +251,30 @@ type ImageSpec struct {
 	// it downloads, base's preparation included, and removed once its
 	// steps are done, before it stops.
 	Trust Trust
+	// Packages is what base's build is given for its packages, and what
+	// it gives back (internal/build's): nil for neither.
+	Packages *Packages
+}
+
+// ExitUnreachable is the exit code of a recipe's step that reached none of
+// what it downloads from (assets/layers/apt.sh: no package source
+// answered), which the backend reports as build_sources_unreachable, not
+// as the step failing.
+const ExitUnreachable = 75
+
+// PackagesDir is the folder in a build VM that Packages fills and empties:
+// assets/layers/apt.sh reads in/ and writes out/.
+const PackagesDir = "/var/cache/devvm/packages"
+
+// Packages is how a build's packages go in and out of its VM. Send writes
+// a tar stream, which the backend unpacks into PackagesDir as root before
+// the recipe's first step. Take reads a tar stream of PackagesDir/out,
+// which the backend makes as root after the recipe's last step, and the
+// backend then deletes PackagesDir. Each may be nil. What Take reads
+// comes from the build VM, so it checks every byte.
+type Packages struct {
+	Send func(w io.Writer) error
+	Take func(r io.Reader) error
 }
 
 // Trust is how a build VM trusts the user's own CAs while it builds: Add

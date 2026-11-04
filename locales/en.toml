@@ -588,6 +588,23 @@ other = "running {{.script}} in {{.vm}}"
 [script_failed]
 other = "{{.script}} failed in {{.vm}}, and devvm keeps it stopped until the next build or devvm gc deletes it. To look inside, run devvm limactl shell --start {{.vm}}."
 
+[build_sources_unreachable]
+other = "{{.script}} in {{.vm}} reached no package source, neither the mirror you set nor Ubuntu's archive. Check that you're online, then run the command again."
+
+[packages_missing]
+description = "name and version are a package base's key recorded, which devvm's package cache lacks or has changed"
+other = "devvm's package cache doesn't have {{.name}} {{.version}}, which this base recorded, so devvm can't build it again. Run devvm rebuild base to record base's packages again."
+
+[packages_refused]
+description = "why is what devvm found wrong with what the build gave back"
+other = "devvm refused the packages base's build gave back, so it keeps none of them: {{.why}}."
+
+[packages_send_failed]
+other = "Sending base's recorded packages into {{.vm}} failed."
+
+[packages_take_failed]
+other = "Taking the packages base downloaded out of {{.vm}} failed."
+
 [interrupted_image]
 other = "interrupted: deleting the unfinished image {{.vm}}"
 
@@ -856,6 +873,14 @@ other = "Reading or changing the retention settings failed: {{.reason}}."
 [gc_mise]
 one = "{{.count}} older version of the mise devvm runs on this machine is left ({{.size}})."
 other = "{{.count}} older versions of the mise devvm runs on this machine are left ({{.size}})."
+
+[gc_packages]
+one = "{{.count}} package file that no base needs is left in devvm's package cache ({{.size}})."
+other = "{{.count}} package files that no base needs are left in devvm's package cache ({{.size}})."
+
+[deleted_packages]
+one = "deleted {{.count}} package file from devvm's package cache"
+other = "deleted {{.count}} package files from devvm's package cache"
 
 [deleted_mise]
 one = "deleted {{.count}} older version of devvm's mise"
@@ -1567,6 +1592,10 @@ other = "{{.vm}}'s network policy proxy didn't stop, so devvm couldn't start it 
 [upstream_proxy_scheme]
 description = "setting is HTTPS_PROXY or HTTP_PROXY; scheme is the URL's, such as https:// or socks5://"
 other = "{{.setting}} names a {{.scheme}} proxy, and network policy and image builds go only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
+
+[ubuntu_mirror_invalid]
+description = "setting is config.toml's ubuntu-mirror"
+other = "{{.setting}} isn't a mirror's address devvm can use. Set it as http://host/path or https://host/path, without a user, a query or spaces."
 
 [upstream_proxy_invalid]
 description = "setting is HTTPS_PROXY, HTTP_PROXY or NO_PROXY, or config.toml's proxy.https, proxy.http or proxy.no-proxy"

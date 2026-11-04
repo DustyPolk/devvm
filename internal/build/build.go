@@ -350,7 +350,7 @@ func (b Builds) build(ctx context.Context, name string) error {
 		b.Info(msg.BuildingImage(name, key))
 	}
 	b.LogNote()
-	out, err := b.Backend.BuildImage(ctx, spec)
+	out, err := b.buildWith(ctx, spec, name)
 	if err != nil {
 		return err
 	}
@@ -372,6 +372,29 @@ func (b Builds) build(ctx context.Context, name string) error {
 	b.sayFitted(out.Fitted)
 	b.Info(msg.ImageReady(name))
 	return nil
+}
+
+// buildWith has the backend build spec, the image named name: base from
+// the backend's own Ubuntu with its packages (basePackages), which a
+// recording stores once the image is built, before its record.
+func (b Builds) buildWith(ctx context.Context, spec backend.ImageSpec, name string) (backend.Built, error) {
+	if name != image.Base || b.From != "" {
+		return b.Backend.BuildImage(ctx, spec)
+	}
+	pk, err := cache{b.Dirs}.basePackages(spec.Key)
+	if err != nil {
+		return backend.Built{}, err
+	}
+	spec.Packages = pk.spec
+	out, err := b.Backend.BuildImage(ctx, spec)
+	if pk.taken == nil {
+		return out, err
+	}
+	if err != nil {
+		pk.taken.discard()
+		return out, err
+	}
+	return out, pk.taken.commit(ctx, spec.Key)
 }
 
 // sayFitted says what base got when the backend fitted it to the host

@@ -97,6 +97,7 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		want   []string // the images whose keys change
 	}{
 		{"layers/base.sh", "", func(t *testing.T, b *Env) { edit(t, own(b, "layers/base.sh")) }, all},
+		{"layers/apt.sh", "", func(t *testing.T, b *Env) { edit(t, own(b, "layers/apt.sh")) }, all},
 		{"the backend", "", func(_ *testing.T, b *Env) { b.Backend = backendtest.New("other", b.Backend.Caps()) }, all},
 		{"a backend's origin step", "", func(_ *testing.T, b *Env) {
 			b.Backend.(*backendtest.Fake).OriginSteps = []image.Step{{Name: "ubuntu.img", Args: []string{"x"}}}
@@ -311,7 +312,10 @@ func sent(t *testing.T, b *Env, backendName string, names ...string) (sends, key
 		if spec.From != nil {
 			from = *spec.From
 		}
-		spec.Key, spec.Trust, spec.From = "", backend.Trust{}, nil
+		// A base's packages are its key's own: what its first build
+		// recorded, which every later build of the key is given
+		// (packages.go).
+		spec.Key, spec.Trust, spec.From, spec.Packages = "", backend.Trust{}, nil, nil
 		sends[spec.Image] = fmt.Sprintf("%#v %#v", spec, from)
 	}
 	return sends, keys

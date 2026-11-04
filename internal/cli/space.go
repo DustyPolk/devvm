@@ -395,6 +395,14 @@ func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	debs, err := filesIn(d.Packages(), func(n string) bool { return strings.HasSuffix(n, ".deb") })
+	if err != nil {
+		return nil, err
+	}
+	stalePackages, err := build.Images{Env: e.b}.Stale(ctx)
+	if err != nil {
+		return nil, err
+	}
 	left, err := e.leftovers(ctx)
 	if err != nil {
 		return nil, err
@@ -418,6 +426,7 @@ func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 		spaceRow{What: "network logs", Count: logs.count, Size: logs.size, Sized: true, Kept: keptLog, Rest: "devvm rm"},
 		runsRow,
 		spaceRow{What: "mise", Count: mise.count, Size: mise.size, Sized: true, Kept: keptRemade, GC: dirsSize(oldMise), Rest: "-"},
+		spaceRow{What: "packages", Count: debs.count, Size: debs.size, Sized: true, Kept: keptRemade, GC: stalePackages.Size, Rest: "rebuild base"},
 		nix,
 		left,
 		spaceRow{What: "state", Count: 1, Size: max(other, 0), Sized: true, Kept: keptState, Rest: "-"},
@@ -574,7 +583,7 @@ func (e spaceEnv) retainOf(keys ...string) string {
 func otherState(d paths.Dirs) int64 {
 	var n int64
 	for _, p := range []string{
-		d.VMs(), d.Images(), d.FromDigests(), d.Run(),
+		d.VMs(), d.Images(), d.FromDigests(), d.Run(), d.PackageSets(),
 		d.ToolLock(), d.ToolLockConfig(), d.ToolLockChecked(),
 	} {
 		n += du(p)

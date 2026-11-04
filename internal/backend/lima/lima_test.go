@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -65,6 +66,10 @@ type fakeRunner struct {
 	out   map[string]string
 	fail  []string
 	do    func(c call) // run for each command
+	// stdout is what a command that starts with a key writes to its
+	// output, and exit the code one that starts with a key exits with.
+	stdout map[string]string
+	exit   map[string]int
 }
 
 func (f *fakeRunner) record(cmd *exec.Cmd) error {
@@ -72,13 +77,23 @@ func (f *fakeRunner) record(cmd *exec.Cmd) error {
 	defer f.mu.Unlock()
 	argv := append([]string{filepath.Base(cmd.Path)}, cmd.Args[1:]...)
 	c := call{argv: argv, env: cmd.Env, dir: cmd.Dir}
-	if r, ok := cmd.Stdin.(*bytes.Reader); ok {
-		b, _ := io.ReadAll(r)
+	if cmd.Stdin != nil {
+		b, _ := io.ReadAll(cmd.Stdin)
 		c.stdin = string(b)
 	}
 	f.calls = append(f.calls, c)
 	if f.do != nil {
 		f.do(c)
+	}
+	for p, out := range f.stdout {
+		if strings.HasPrefix(c.line(), p) && cmd.Stdout != nil {
+			_, _ = io.WriteString(cmd.Stdout, out)
+		}
+	}
+	for p, code := range f.exit {
+		if strings.HasPrefix(c.line(), p) {
+			return exec.Command("sh", "-c", "exit "+strconv.Itoa(code)).Run() //nolint:gosec,noctx // an exit code the test sets, from a shell that ends at once
+		}
 	}
 	for _, p := range f.fail {
 		if strings.HasPrefix(c.line(), p) {

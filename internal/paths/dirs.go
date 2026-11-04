@@ -130,6 +130,25 @@ func (d Dirs) UbuntuPin() string { return filepath.Join(d.Images(), "ubuntu.json
 // UbuntuPinLock is held by the devvm pinning Ubuntu's cloud image.
 func (d Dirs) UbuntuPinLock() string { return filepath.Join(d.ImageLocks(), "ubuntu") }
 
+// Packages is the cache of base's packages: each package file under its
+// SHA-256 (PackageFile), and the packages each base key recorded at its
+// first build (PackageSet), which later builds of that key install from
+// here.
+func (d Dirs) Packages() string { return filepath.Join(d.Data, "packages") }
+
+// PackageFile is the package file with this SHA-256, in Packages.
+func (d Dirs) PackageFile(sha256 string) string { return filepath.Join(d.Packages(), sha256+".deb") }
+
+// PackageSets holds the package set each base key recorded.
+func (d Dirs) PackageSets() string { return filepath.Join(d.Packages(), "sets") }
+
+// PackageSet is the package set the base with this key recorded.
+func (d Dirs) PackageSet(key string) string { return filepath.Join(d.PackageSets(), key+".json") }
+
+// PackagesLock is held while the package cache changes: a build storing
+// what it recorded, or devvm gc deleting what no set names.
+func (d Dirs) PackagesLock() string { return filepath.Join(d.ImageLocks(), "packages") }
+
 // Cache holds what devvm makes again whenever it's needed, which may be
 // deleted at any time: devvm's own mise, the shared Nix cache and the
 // digests --from bases were last looked up at.

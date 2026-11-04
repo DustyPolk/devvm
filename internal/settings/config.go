@@ -47,6 +47,9 @@ type configFile struct {
 			Size opt[nixSizeKind] `toml:"size"`
 		} `toml:"nix-cache"`
 	} `toml:"retention"`
+	// UbuntuMirror is base's first mirror (UbuntuMirror), which no command
+	// saves.
+	UbuntuMirror opt[ubuntuMirrorKind] `toml:"ubuntu-mirror"`
 	// Proxy is the company proxy (HostProxy), which no command saves.
 	Proxy struct {
 		HTTPS   opt[proxyHTTPSKind] `toml:"https"`
@@ -126,7 +129,7 @@ func (c *configFile) refused() (msg.M, bool) {
 	for _, v := range []refuser{
 		&c.Network, &c.Ports, &c.Features, &c.Agents, &c.Layers, &c.Size.CPUs, &c.Size.Memory, &c.Size.Disk,
 		&r.Logs.Runs, &r.History.Age, &r.History.Count, &r.Tools.UnusedAge, &r.Orphans.Age, &r.NixCache.Size,
-		&c.Proxy.HTTPS, &c.Proxy.HTTP, &c.Proxy.NoProxy,
+		&c.Proxy.HTTPS, &c.Proxy.HTTP, &c.Proxy.NoProxy, &c.UbuntuMirror,
 	} {
 		if m, ok := v.refusal(); ok {
 			return m, true

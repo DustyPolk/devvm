@@ -76,6 +76,13 @@ func (b *Env) plan(in inputs, name string) ([]planned, error) {
 		return nil, err
 	}
 	plans := []planned{base}
+	apt, err := fs.ReadFile(b.Assets, "layers/apt.sh")
+	if err != nil && len(layers) > 0 {
+		return nil, fmt.Errorf("reading devvm's layers/apt.sh: %w", err)
+	}
+	// Each layer's script runs with package lists, which base keeps none
+	// of (packages.go).
+	lists := image.Step{Name: "apt.sh", Data: apt, Args: []string{"lists"}, Root: true}
 	for i, layer := range layers {
 		img := strings.Join(layers[:i+1], "+")
 		p := planned{Input: image.Input{Image: img, Parent: plans[i].Key()}}
@@ -86,15 +93,16 @@ func (b *Env) plan(in inputs, name string) ([]planned, error) {
 		case err != nil:
 			return nil, fmt.Errorf("reading the %s layer's script: %w", layer, err)
 		default:
-			p.Recipe.Steps = []image.Step{{Name: layer + ".sh", Data: data}}
+			p.Recipe.Steps = []image.Step{lists, {Name: layer + ".sh", Data: data}}
 		}
 		plans = append(plans, b.keyed(in, p))
 	}
 	return plans, nil
 }
 
-// basePlan is base's: the backend's own steps (Origin), then base.sh and
-// its chosen features' scripts, in order.
+// basePlan is base's: the backend's own steps (Origin), then apt.sh begin
+// as root, base.sh and its chosen features' scripts, in order, and apt.sh
+// end as root (base's packages, packages.go).
 func (b *Env) basePlan(in inputs) (planned, error) {
 	p := planned{Input: image.Input{Image: image.Base}, from: in.from}
 	if in.from != nil {
@@ -108,7 +116,11 @@ func (b *Env) basePlan(in inputs) (planned, error) {
 	if err != nil {
 		return planned{}, fmt.Errorf("reading devvm's layers/base.sh: %w", err)
 	}
-	p.Recipe.Steps = []image.Step{{Name: "base.sh", Data: data}}
+	apt, err := fs.ReadFile(b.Assets, "layers/apt.sh")
+	if err != nil {
+		return planned{}, fmt.Errorf("reading devvm's layers/apt.sh: %w", err)
+	}
+	p.Recipe.Steps = []image.Step{{Name: "apt.sh", Data: apt, Args: []string{"begin"}, Root: true}, {Name: "base.sh", Data: data}}
 	for _, f := range in.features {
 		if !image.FeatureName(f) {
 			return planned{}, fmt.Errorf("invalid feature name %q", f)
@@ -123,6 +135,7 @@ func (b *Env) basePlan(in inputs) (planned, error) {
 		}
 		p.Recipe.Steps = append(p.Recipe.Steps, image.Step{Name: s.Name, Data: s.Data})
 	}
+	p.Recipe.Steps = append(p.Recipe.Steps, image.Step{Name: "apt.sh", Data: apt, Args: []string{"end"}, Root: true})
 	return b.keyed(in, p), nil
 }
 

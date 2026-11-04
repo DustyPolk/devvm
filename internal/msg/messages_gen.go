@@ -249,6 +249,11 @@ func BuildFailed(image string, reason string) M {
 	return M{id: "build_failed", vals: []val{{"image", image}, {"reason", reason}}}
 }
 
+// BuildSourcesUnreachable is [build_sources_unreachable]: "{{.script}} in {{.vm}} reached no package source, neither the mirror you set nor Ubuntu's archive. Check that you're online, then run the command again."
+func BuildSourcesUnreachable(script string, vm string) M {
+	return M{id: "build_sources_unreachable", vals: []val{{"script", script}, {"vm", vm}}}
+}
+
 // BuildingImage is [building_image]: "building image {{.image}} ({{.key}})"
 func BuildingImage(image string, key string) M {
 	return M{id: "building_image", vals: []val{{"image", image}, {"key", key}}}
@@ -597,6 +602,11 @@ func DeletedNixCache(count int, size string) M {
 // DeletedOldImage is [deleted_old_image]: "deleted the old image {{.image}} ({{.key}})"
 func DeletedOldImage(image string, key string) M {
 	return M{id: "deleted_old_image", vals: []val{{"image", image}, {"key", key}}}
+}
+
+// DeletedPackages is [deleted_packages]: "deleted {{.count}} package files from devvm's package cache"
+func DeletedPackages(count int) M {
+	return M{id: "deleted_packages", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
 // DeletedTools is [deleted_tools]: "deleted {{.count}} unused tool images"
@@ -1062,6 +1072,11 @@ func GCOrphans(count int) M {
 // GCOrphansUnknown is [gc_orphans_unknown]: "The {{.backend}} backend didn't answer, so devvm gc --orphans leaves its VMs' state alone."
 func GCOrphansUnknown(backend string) M {
 	return M{id: "gc_orphans_unknown", vals: []val{{"backend", backend}}}
+}
+
+// GCPackages is [gc_packages]: "{{.count}} package files that no base needs are left in devvm's package cache ({{.size}})."
+func GCPackages(count int, size string) M {
+	return M{id: "gc_packages", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
 }
 
 // GCRecentMaking is [gc_recent_making]: "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tool-images --recent again once that's done."
@@ -2174,6 +2189,26 @@ func OutputFailed(reason string) M {
 	return M{id: "output_failed", vals: []val{{"reason", reason}}}
 }
 
+// PackagesMissing is [packages_missing]: "devvm's package cache doesn't have {{.name}} {{.version}}, which this base recorded, so devvm can't build it again. Run devvm rebuild base to record base's packages again."
+func PackagesMissing(name string, version string) M {
+	return M{id: "packages_missing", vals: []val{{"name", name}, {"version", version}}}
+}
+
+// PackagesRefused is [packages_refused]: "devvm refused the packages base's build gave back, so it keeps none of them: {{.why}}."
+func PackagesRefused(why string) M {
+	return M{id: "packages_refused", vals: []val{{"why", why}}}
+}
+
+// PackagesSendFailed is [packages_send_failed]: "Sending base's recorded packages into {{.vm}} failed."
+func PackagesSendFailed(vm string) M {
+	return M{id: "packages_send_failed", vals: []val{{"vm", vm}}}
+}
+
+// PackagesTakeFailed is [packages_take_failed]: "Taking the packages base downloaded out of {{.vm}} failed."
+func PackagesTakeFailed(vm string) M {
+	return M{id: "packages_take_failed", vals: []val{{"vm", vm}}}
+}
+
 // PartNoneAlone is [part_none_alone]: "{{.flag}} takes none alone, or a list of names without it."
 func PartNoneAlone(flag string) M {
 	return M{id: "part_none_alone", vals: []val{{"flag", flag}}}
@@ -3054,6 +3089,11 @@ func UbuntuBadSignature(release string, url string) M {
 	return M{id: "ubuntu_bad_signature", vals: []val{{"release", release}, {"url", url}}}
 }
 
+// UbuntuMirrorInvalid is [ubuntu_mirror_invalid]: "{{.setting}} isn't a mirror's address devvm can use. Set it as http://host/path or https://host/path, without a user, a query or spaces."
+func UbuntuMirrorInvalid(setting string) M {
+	return M{id: "ubuntu_mirror_invalid", vals: []val{{"setting", setting}}}
+}
+
 // UbuntuUnreachable is [ubuntu_unreachable]: "devvm couldn't read the list of Ubuntu {{.version}}'s cloud images at {{.url}}. Check that you're online, then try again."
 func UbuntuUnreachable(url string, version string) M {
 	return M{id: "ubuntu_unreachable", vals: []val{{"url", url}, {"version", version}}}
@@ -3330,6 +3370,7 @@ var specs = map[string]spec{
 	"base_will_rebuild":                {},
 	"branch_names_invalid":             {fields: []string{"refs"}},
 	"build_failed":                     {fields: []string{"image", "reason"}},
+	"build_sources_unreachable":        {fields: []string{"script", "vm"}},
 	"building_image":                   {fields: []string{"image", "key"}},
 	"building_image_from":              {fields: []string{"from", "image", "key"}},
 	"building_tools":                   {fields: []string{"tools"}},
@@ -3400,6 +3441,7 @@ var specs = map[string]spec{
 	"deleted_mise":                     {plural: true, fields: []string{"count"}},
 	"deleted_nix_cache":                {plural: true, fields: []string{"count", "size"}},
 	"deleted_old_image":                {fields: []string{"image", "key"}},
+	"deleted_packages":                 {plural: true, fields: []string{"count"}},
 	"deleted_tools":                    {plural: true, fields: []string{"count"}},
 	"deleted_tools_no_vm":              {plural: true, fields: []string{"count"}},
 	"deleted_unfinished_build":         {fields: []string{"key"}},
@@ -3493,6 +3535,7 @@ var specs = map[string]spec{
 	"gc_orphan_recent":                 {fields: []string{"vm"}},
 	"gc_orphans":                       {plural: true, fields: []string{"count"}},
 	"gc_orphans_unknown":               {fields: []string{"backend"}},
+	"gc_packages":                      {plural: true, fields: []string{"count", "size"}},
 	"gc_recent_making":                 {},
 	"gc_recent_needs_tools":            {},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},
@@ -3715,6 +3758,10 @@ var specs = map[string]spec{
 	"opencode_refresh_failed":          {fields: []string{"provider", "reason"}},
 	"origin_pinned":                    {fields: []string{"origin"}},
 	"output_failed":                    {fields: []string{"reason"}},
+	"packages_missing":                 {fields: []string{"name", "version"}},
+	"packages_refused":                 {fields: []string{"why"}},
+	"packages_send_failed":             {fields: []string{"vm"}},
+	"packages_take_failed":             {fields: []string{"vm"}},
 	"part_none_alone":                  {fields: []string{"flag"}},
 	"part_other_flag":                  {fields: []string{"flag", "given", "other"}},
 	"parts_flags_ignored":              {fields: []string{"vm"}},
@@ -3891,6 +3938,7 @@ var specs = map[string]spec{
 	"tools_switch":                     {fields: []string{"vm"}},
 	"tools_unmounted":                  {fields: []string{"tools", "vm"}},
 	"ubuntu_bad_signature":             {fields: []string{"release", "url"}},
+	"ubuntu_mirror_invalid":            {fields: []string{"setting"}},
 	"ubuntu_unreachable":               {fields: []string{"url", "version"}},
 	"uncommitted_not_copied":           {fields: []string{"branch", "dir", "remote"}},
 	"unfetched_commits":                {fields: []string{"refs"}},
