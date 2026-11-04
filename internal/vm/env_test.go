@@ -227,7 +227,7 @@ func testForwarders(t *testing.T, e *Env, f *backendtest.Fake) *[][]string {
 		return nil, errors.New("not ours")
 	}
 	e.Forwarders = fw
-	f.Forward = backend.ForwardTarget{User: "u", Key: "/k", Port: 60022}
+	f.Target = backend.SSHTarget{Host: "127.0.0.1", Port: 60022, User: "u", Key: "/k"}
 	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
 		if len(argv) == 3 && strings.Contains(argv[2], "ssh_host_") && o.Stdout != nil {
 			_, err := io.WriteString(o.Stdout, testHostKey+"\n")
@@ -324,12 +324,21 @@ func call(f *backendtest.Fake, method string) backendtest.Call {
 	return last
 }
 
-// staged returns the files the VM's setup was sent (Exec's input).
+// staged returns the files the VM's last setup was sent (its Exec's
+// input).
 func staged(t *testing.T, f *backendtest.Fake) map[string]string {
 	t.Helper()
-	c := call(f, "Exec")
-	if argv, _ := c.Args[1].([]string); !slices.Equal(argv, []string{"bash", "-c", syncCmd}) {
-		t.Fatalf("Exec argv = %q", argv)
+	var c backendtest.Call
+	for _, e := range f.Calls() {
+		if e.Method != "Exec" {
+			continue
+		}
+		if argv, _ := e.Args[1].([]string); slices.Equal(argv, []string{"bash", "-c", syncCmd}) {
+			c = e
+		}
+	}
+	if c.Method == "" {
+		t.Fatalf("no setup sent: %q", f.Methods())
 	}
 	o, _ := c.Args[2].(backend.ExecOpts)
 	files := map[string]string{}

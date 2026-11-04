@@ -399,9 +399,6 @@ func checkStopped(ctx context.Context, s Subject) error {
 	if _, err := s.Backend.SSH(ctx, conformVM); err == nil {
 		return errors.New("SSH reaches a stopped VM")
 	}
-	if _, err := s.Backend.ForwardTarget(ctx, conformVM); err == nil {
-		return errors.New("ForwardTarget reaches a stopped VM")
-	}
 	return nil
 }
 
@@ -631,8 +628,8 @@ func checkRestart(ctx context.Context, s Subject) error {
 	return nil
 }
 
-// A running VM is reached by ssh, by the port forwarder, by a shell and
-// by Exec.
+// A running VM is reached by ssh (which the port forwarder and links use
+// too), by a shell and by Exec.
 func checkReach(ctx context.Context, s Subject) error {
 	sp, err := create(ctx, s, conformVM)
 	if err != nil {
@@ -643,9 +640,6 @@ func checkReach(ctx context.Context, s Subject) error {
 	}
 	if t, err := s.Backend.SSH(ctx, conformVM); err != nil || t.Host == "" || t.Port <= 0 || t.User == "" || t.Key == "" {
 		return fmt.Errorf("SSH: %+v, %w", t, err)
-	}
-	if t, err := s.Backend.ForwardTarget(ctx, conformVM); err != nil || t.User == "" || t.Key == "" || t.Port <= 0 {
-		return fmt.Errorf("ForwardTarget: %+v, %w", t, err)
 	}
 	if c, err := s.Backend.Shell(ctx, conformVM, "/"); err != nil || c.Path == "" || len(c.Args) == 0 {
 		return fmt.Errorf("Shell: %+v, %w", c, err)

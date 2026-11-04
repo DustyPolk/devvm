@@ -19,7 +19,6 @@ func fakeSubject(t *testing.T) (Subject, *Fake) {
 	f.ImageKeys = []string{"0123456789ab"}
 	f.LifelineFile = filepath.Join(dir, "ha.pid")
 	f.Target = backend.SSHTarget{Host: "127.0.0.1", Port: 60022, User: "u", Key: filepath.Join(dir, "key")}
-	f.Forward = backend.ForwardTarget{User: "u", Key: filepath.Join(dir, "key"), Port: 60022}
 	f.ShellCmd = backend.Command{Path: "/usr/bin/ssh", Args: []string{"ssh", "vm"}}
 	return Subject{
 		Backend: f, Image: "0123456789ab", Dir: dir, Boots: true,

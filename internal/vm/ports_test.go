@@ -71,7 +71,7 @@ func TestStartPorts(t *testing.T) {
 			e.Warn = warned.Add
 			st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: tc.ports})
 			ms := f.Methods()
-			if i, j := slices.Index(ms, "Start"), slices.Index(ms, "ForwardTarget"); tc.starts > 0 && (i < 0 || j < i) {
+			if i, j := slices.Index(ms, "Start"), slices.Index(ms, "SSH"); tc.starts > 0 && (i < 0 || j < i) {
 				t.Errorf("calls %q: no forwarder after its start", ms)
 			}
 			if len(*starts) != tc.starts || tc.starts > 0 && only((*starts)[0]) != tc.only {

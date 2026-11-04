@@ -100,9 +100,10 @@ type Machines interface {
 	// returns once it answers: it first changes what of w and c the VM's
 	// config doesn't have yet, and nothing else, after checking w with
 	// Validate. Its ports are devvm's forwarder's to forward once it
-	// runs (ForwardTarget). A running VM is left as it is, w and c
-	// unapplied (callers say what changes at its next start); its
-	// confinement is checked with Running.
+	// runs, over its ssh (SSH): the backend forwards none of its own. A
+	// running VM is left as it is, w and c unapplied (callers say what
+	// changes at its next start); its confinement is checked with
+	// Running.
 	Start(ctx context.Context, vm string, w Want, c Confinement) error
 	// Running says how the VM runs now: its start, whether it's
 	// confined, and its lifeline, which a stopped VM has too.
@@ -130,13 +131,9 @@ type Machines interface {
 	// Shell returns the command that opens an interactive shell in a
 	// running VM, in dir. The caller runs it in place of devvm.
 	Shell(ctx context.Context, vm, dir string) (Command, error)
-	// SSH says how ssh and editors reach a running VM.
+	// SSH says how ssh, editors, links and devvm's port forwarder reach
+	// a running VM.
 	SSH(ctx context.Context, vm string) (SSHTarget, error)
-
-	// ForwardTarget says how devvm's port forwarder, on the host, reaches
-	// a running VM's sshd to forward its ports (FeaturePorts,
-	// FeaturePortsAll): the backend forwards none of its own.
-	ForwardTarget(ctx context.Context, vm string) (ForwardTarget, error)
 }
 
 // Housekeeping is what devvm space and devvm gc ask of a backend beyond
@@ -175,15 +172,6 @@ type Run struct {
 	// when that process does. A stopped VM has it too, as its proxy starts
 	// first. Not a VM's own file: the VM can't write it.
 	Lifeline string
-}
-
-// ForwardTarget is how devvm's port forwarder reaches a running VM's
-// sshd: on Port of the host's loopback, as User with Key alone. The host
-// key it pins is the one devvm pins for the VM's ssh config, and its
-// lifeline is the VM's (Run.Lifeline).
-type ForwardTarget struct {
-	User, Key string
-	Port      int
 }
 
 // Problem is something a backend needs that the host lacks, as devvm

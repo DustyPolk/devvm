@@ -58,7 +58,7 @@ devvm uses an emulation only once its review has passed, and until then it refus
 
 On Lima, devvm emulates forwarding ports, both the listed ones and every one, through its forwarder, and the emulation is reviewed ([port forwarding](ports.md)). Everything else on Lima is Lima's own.
 
-The forwarder is devvm's own on every backend, never a backend's. A backend that has `ports` turns its own forwards off and tells devvm's forwarder how to reach a running VM's sshd, which is a user, a key and a port on this machine's loopback (`ForwardTarget`). devvm reads which ports the VM forwards from its state, chooses which of them are free, pins the VM's host keys for its current start and starts the forwarder, which follows the backend's lifeline for the VM.
+The forwarder is devvm's own on every backend, never a backend's. A backend that has `ports` turns its own forwards off, and devvm's forwarder reaches a running VM's sshd the way the backend's `SSH` says, which is a user, a key and a port. devvm refuses that target unless it's on this machine's loopback, `127.0.0.1`, with the same check it uses for links and the ssh config (`vmssh.FromTarget`). devvm reads which ports the VM forwards from its state, chooses which of them are free, pins the VM's host keys for its current start and starts the forwarder, which follows the backend's lifeline for the VM.
 
 ## Missing and unreviewed features
 

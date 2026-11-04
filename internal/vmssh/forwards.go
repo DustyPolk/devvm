@@ -28,7 +28,7 @@ const Cmd = "_ports"
 // backend: devvm _ports, detached, one per running VM that forwards ports.
 // Which ports it forwards is the VM's state's (ports.Forward), read at
 // each start, never a copy of the backend's; how it reaches the VM is the
-// backend's (ForwardTarget, Lifeline). Its lock, its files and its
+// backend's (its ssh as FromTarget checks it, its Lifeline). Its lock, its files and its
 // process are its own: the pid, status and lock in the VM's run folder
 // (paths.VM.Forwarder), its log in its logs folder, and its master's
 // control socket in devvm's run folder, named by a hash. The host keys it
@@ -62,14 +62,14 @@ func NewForwards(d paths.Dirs, self string) Forwards {
 }
 
 // spec is what a VM's forwarder runs with: how it reaches the VM's sshd
-// (the backend's target, the record of the host keys devvm pins for its
-// start, its lifeline), the host ports it never forwards, and the ports it
-// forwards (nil for every one).
+// (the backend's target as FromTarget checks it, with the record of the
+// host keys devvm pins for its start), its lifeline, the host ports it
+// never forwards, and the ports it forwards (nil for every one).
 type spec struct {
-	backend.ForwardTarget
-	KnownHosts, Lifeline string
-	Reserve              []int
-	Only                 []backend.PortRange
+	SSH
+	Lifeline string
+	Reserve  []int
+	Only     []backend.PortRange
 }
 
 // Log is the VM's forwarder's log.
@@ -93,8 +93,9 @@ const ControlMax = paths.SocketMax - 1 - 17
 // Start starts the forwarder of st's VM, which b runs, after stopping any
 // it had, holding its lock throughout: the ports its state forwards, its
 // listed ones less those a program on the host has (warned, ports_taken),
-// over its sshd as b reaches it (ForwardTarget), with the host keys devvm
-// pins for its start (PinHostKeys), never on its ssh's or its proxy's port, following b's
+// over its sshd as b reaches it (its SSH, checked by FromTarget: a user
+// and a key on a host loopback port), with the host keys devvm pins for
+// its start (PinHostKeys), never on its ssh's or its proxy's port, following b's
 // lifeline for it. A VM that forwards none, or whose listed ports are all
 // taken, is left without one. One that can't start is warned about
 // (ports_forward_failed), naming its log, and the VM runs on. Connections
@@ -129,22 +130,22 @@ func (f Forwards) start(ctx context.Context, b backend.Backend, st *state.VM) er
 			return nil
 		}
 	}
-	t, err := b.ForwardTarget(ctx, vm)
+	t, err := b.SSH(ctx, vm)
 	if err != nil {
 		return err
 	}
-	kh, err := PinHostKeys(ctx, f.Dirs, b, vm)
+	s, err := FromTarget(vm, t)
 	if err != nil {
+		return err
+	}
+	if s.KnownHosts, err = PinHostKeys(ctx, f.Dirs, b, vm); err != nil {
 		return err
 	}
 	run, err := b.Running(ctx, vm)
 	if err != nil {
 		return err
 	}
-	return f.run(vm, spec{
-		ForwardTarget: t, KnownHosts: kh, Lifeline: run.Lifeline,
-		Reserve: []int{t.Port, p.Host.Proxy}, Only: only,
-	})
+	return f.run(vm, spec{SSH: s, Lifeline: run.Lifeline, Reserve: []int{s.Port, p.Host.Proxy}, Only: only})
 }
 
 // free returns the VM's listed ports less those a program on the host

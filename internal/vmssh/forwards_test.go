@@ -73,7 +73,12 @@ func TestForwardsStart(t *testing.T) {
 	const vm = "devvm-p-0123456789abcd"
 	key := "ssh-ed25519 " + keyED
 	b, _ := hostKeysFake(t, vm, &key)
-	b.Forward = backend.ForwardTarget{User: "u", Key: "/k", Port: 60022}
+	// The forwarder's target is the VM's ssh, Options and ConfigFile
+	// left out.
+	b.Target = backend.SSHTarget{
+		Host: Loopback, Port: 60022, User: "u", Key: "/k",
+		Options: []backend.SSHOption{{Key: "IdentitiesOnly", Value: "yes"}}, ConfigFile: "/lima/ssh.config",
+	}
 	b.LifelineFile = "/lima/ha.pid"
 	st, err := state.New(f.Dirs, vm)
 	if err != nil {
@@ -133,11 +138,35 @@ func TestForwardsStart(t *testing.T) {
 	warned.Reset()
 
 	// What it can't start with is warned about, naming its log: a state it
-	// can't read, a host key it can't, a VM its backend can't reach.
+	// can't read, an ssh target FromTarget refuses (another address, a
+	// name, no user, no key, a relative key), a host key it can't read, a
+	// VM its backend can't reach. None of them starts a forwarder.
 	failed := []string{"ports_forward_failed log=" + f.Log(vm) + " vm=" + vm}
 	forward("x")
 	f.Start(ctx, b, st)
+	if w := warned.Names(); !slices.Equal(w, failed) || len(*starts) != 2 {
+		t.Errorf("a state it can't read: started %q, warned %q", *starts, w)
+	}
+	warned.Reset()
 	forward("")
+	good := b.Target
+	for _, bad := range []backend.SSHTarget{
+		{Host: "10.0.0.2", Port: 22, User: "u", Key: "/k"},
+		{Host: "localhost", Port: 60022, User: "u", Key: "/k"},
+		{Host: "0.0.0.0", Port: 60022, User: "u", Key: "/k"},
+		{Host: Loopback, Port: 60022, Key: "/k"},
+		{Host: Loopback, Port: 60022, User: "u"},
+		{Host: Loopback, Port: 60022, User: "u", Key: "k"},
+		{Host: Loopback, User: "u", Key: "/k"},
+	} {
+		b.Target = bad
+		f.Start(ctx, b, st)
+		if w := warned.Names(); !slices.Equal(w, failed) || len(*starts) != 2 || f.Running(vm) {
+			t.Errorf("%+v: started %q, warned %q", bad, *starts, w)
+		}
+		warned.Reset()
+	}
+	b.Target = good
 	key = "no keys"
 	if err := ForgetHostKeys(f.Dirs, vm); err != nil {
 		t.Fatal(err)
@@ -146,7 +175,7 @@ func TestForwardsStart(t *testing.T) {
 	key = "ssh-ed25519 " + keyED
 	b.Instances[vm] = backend.Instance{Name: vm, Status: backend.StatusStopped}
 	f.Start(ctx, b, st)
-	if w := warned.Names(); len(*starts) != 2 || !slices.Equal(w, slices.Concat(failed, failed, failed)) {
+	if w := warned.Names(); len(*starts) != 2 || !slices.Equal(w, slices.Concat(failed, failed)) {
 		t.Errorf("started %q, warned %q", *starts, w)
 	}
 }

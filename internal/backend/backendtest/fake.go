@@ -43,15 +43,14 @@ type Fake struct {
 	// leaves it unset, its image's: New sets 4 CPUs, 8 GiB of memory and
 	// a 100 GiB disk.
 	ImageVMSize  backend.Size
-	ImageSizes   map[string]int64      // ImageSize's answers, by key
-	Built        backend.Built         // BuildImage's answer
-	Target       backend.SSHTarget     // SSH's answer
-	Forward      backend.ForwardTarget // ForwardTarget's answer, for a running VM
-	ShellCmd     backend.Command       // Shell's answer
-	Unconfined   bool                  // Running's Confined is false (else: true, or for a VM Start started, whether with NetProxy)
-	LifelineFile string                // Running's Lifeline
-	Missing      []backend.Problem     // Problems' answer
-	Format       string                // ToolFormat's answer
+	ImageSizes   map[string]int64  // ImageSize's answers, by key
+	Built        backend.Built     // BuildImage's answer
+	Target       backend.SSHTarget // SSH's answer, for a running VM
+	ShellCmd     backend.Command   // Shell's answer
+	Unconfined   bool              // Running's Confined is false (else: true, or for a VM Start started, whether with NetProxy)
+	LifelineFile string            // Running's Lifeline
+	Missing      []backend.Problem // Problems' answer
+	Format       string            // ToolFormat's answer
 	// ExecFunc, when set, is what Exec returns after recording the call
 	// (Errs aside).
 	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
@@ -482,18 +481,4 @@ func apply(in *backend.Instance, w backend.Want) {
 	}
 	in.AgentDirs = slices.Clone(w.AgentDirs)
 	in.AgentForwarding = w.AgentForwarding
-}
-
-// ForwardTarget records the call and returns Forward for a running
-// instance.
-func (f *machines) ForwardTarget(_ context.Context, vm string) (backend.ForwardTarget, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if err := f.record("ForwardTarget", vm); err != nil {
-		return backend.ForwardTarget{}, err
-	}
-	if in, ok := f.Instances[vm]; !ok || in.Status != backend.StatusRunning {
-		return backend.ForwardTarget{}, fmt.Errorf("%s: not running", vm)
-	}
-	return f.Forward, nil
 }

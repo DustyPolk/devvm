@@ -569,7 +569,7 @@ func TestForwardsRun(t *testing.T) {
 		Tick: time.Millisecond,
 	}
 	s := spec{
-		ForwardTarget: backend.ForwardTarget{User: "u", Key: "/k", Port: 2222}, KnownHosts: "/kh", Lifeline: "/ha.pid",
+		SSH: SSH{User: "u", Key: "/k", Port: 2222, KnownHosts: "/kh"}, Lifeline: "/ha.pid",
 		Reserve: []int{0, 22}, Only: []backend.PortRange{{From: 80, To: 81}},
 	}
 	// It's started once it says so in its status file, and still runs.

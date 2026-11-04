@@ -292,7 +292,7 @@ func (s Size) Features() []Feature {
 }
 
 // Features returns what forwarding the ports needs, with devvm's
-// forwarder (Backend.ForwardTarget): nothing for none.
+// forwarder (vmssh.Forwards, over the VM's ssh): nothing for none.
 func (p Ports) Features() []Feature {
 	switch {
 	case p.All:

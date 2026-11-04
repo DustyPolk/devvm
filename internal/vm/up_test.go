@@ -28,7 +28,9 @@ func TestUp(t *testing.T) {
 		t.Fatal(msg.NamesOf(err))
 	}
 	ms := f.Methods()
-	want := []string{"Problems", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Running", "Exec", "List", "SSH", "Shell"}
+	// The ssh config's entry, once it runs: how to reach it, its host keys
+	// for its start (asked which start, read, then asked again).
+	want := []string{"Problems", "Inspect", "Images", "BuildImage", "CreateVM", "Start", "Running", "Exec", "List", "SSH", "Running", "Running", "Exec", "Running", "Shell"}
 	if !slices.Equal(ms, want) {
 		t.Errorf("calls = %q, want %q", ms, want)
 	}
@@ -100,8 +102,9 @@ func TestUpNetworkPolicy(t *testing.T) {
 		t.Fatal(msg.NamesOf(err))
 	}
 	// Its forwarder, once it runs: how to reach it, its host keys for its
-	// start (asked which start, read, then asked again).
-	want := []string{"Problems", "Inspect", "Images", "BuildImage", "CreateVM", "Running", "Start", "ForwardTarget", "Running", "Exec", "Running", "Running", "Exec", "Exec", "List", "SSH", "Shell"}
+	// start (asked which start, read); then the ssh config's entry, which
+	// reads them again, as this VM shows none.
+	want := []string{"Problems", "Inspect", "Images", "BuildImage", "CreateVM", "Running", "Start", "SSH", "Running", "Exec", "Running", "Running", "Exec", "Exec", "List", "SSH", "Running", "Running", "Exec", "Shell"}
 	if ms := f.Methods(); !slices.Equal(ms, want) {
 		t.Errorf("calls = %q, want %q", ms, want)
 	}
@@ -135,7 +138,7 @@ func TestUpNetworkPolicyFailsClosed(t *testing.T) {
 	if msg.NamesOf(err) != "net_direct_route vm="+spec.Name {
 		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
-	want := []string{"Problems", "Inspect", "Images", "BuildImage", "CreateVM", "Running", "Start", "ForwardTarget", "Running", "Exec", "Running", "Running", "Running", "Running", "Exec", "Running", "Stop"}
+	want := []string{"Problems", "Inspect", "Images", "BuildImage", "CreateVM", "Running", "Start", "SSH", "Running", "Exec", "Running", "Running", "Running", "Running", "Exec", "Running", "Stop"}
 	if ms := f.Methods(); !slices.Equal(ms, want) || len(*execs) > 0 {
 		t.Errorf("calls = %q, want %q; execs %+v", ms, want, *execs)
 	}
@@ -221,7 +224,7 @@ func TestUpTools(t *testing.T) {
 	if !slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets layers=none tools=node claude vm=") }) {
 		t.Errorf("said %q", said.Names())
 	}
-	if ms := f.Methods(); !slices.Equal(ms, []string{"Problems", "Inspect", "Images", "BuildImage", "Images", "BuildTools", "CreateVM", "Start", "ForwardTarget", "Running", "Exec", "Running", "Running", "Running", "Exec", "List", "SSH", "Shell"}) {
+	if ms := f.Methods(); !slices.Equal(ms, []string{"Problems", "Inspect", "Images", "BuildImage", "Images", "BuildTools", "CreateVM", "Start", "SSH", "Running", "Exec", "Running", "Running", "Running", "Exec", "List", "SSH", "Running", "Running", "Shell"}) {
 		t.Errorf("calls = %q", ms)
 	}
 	lock, err := os.ReadFile(e.Dirs.ToolLock())

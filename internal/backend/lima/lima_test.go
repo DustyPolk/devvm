@@ -581,46 +581,10 @@ func TestNoForwardsSet(t *testing.T) {
 	}
 }
 
-// devvm's forwarder reaches a running VM over Lima's ssh, on its host
-// loopback port, as Lima's user with Lima's own key, whatever else Lima's
-// ssh config names; a stopped VM, or one whose ssh isn't a user on a
-// loopback port, has none. Nothing of the VM's config changes.
-func TestForwardTarget(t *testing.T) {
-	l, f, _ := testLima(t, "darwin")
-	dir := t.TempDir()
-	write := func(name, content string) string {
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return p
-	}
-	cfg := write("ssh.config", "Host lima-v\n  IdentityFile \"/h/.ssh/id_ed25519\"\n  User cj\n  Hostname 127.0.0.1\n  Port 41083\n")
-	other := write("other.config", "Host lima-o\n  User cj\n  Hostname 10.0.0.2\n  Port 22\n")
-	f.out["limactl list --json"] = `{"name":"v","status":"Running","sshLocalPort":41083,"sshConfigFile":"` + cfg + `"}
-{"name":"o","status":"Running","sshLocalPort":22,"sshConfigFile":"` + other + `"}
-{"name":"n","status":"Running","sshLocalPort":41084}
-{"name":"s","status":"Stopped"}`
-	got, err := l.ForwardTarget(t.Context(), "v")
-	want := backend.ForwardTarget{User: "cj", Key: filepath.Join(l.Dirs.Lima, "_config", "user"), Port: 41083}
-	if err != nil || got != want {
-		t.Errorf("ForwardTarget: %+v, %v; want %+v", got, err, want)
-	}
-	for _, vm := range []string{"o", "n"} {
-		if got, err := l.ForwardTarget(t.Context(), vm); err == nil {
-			t.Errorf("%s: %+v", vm, got)
-		}
-	}
-	if _, err := l.ForwardTarget(t.Context(), "s"); msg.IDOf(err) != "vm_not_running" {
-		t.Errorf("a stopped VM: %v", err)
-	}
-	for _, c := range f.lines() {
-		if c != "limactl list --json" {
-			t.Errorf("ran %q", c)
-		}
-	}
-}
-
+// SSH is what ssh, links and devvm's forwarder reach a running VM by: its
+// key is the first IdentityFile of Lima's ssh config, Lima's own
+// (_config/user), which every VM authorizes; a stopped VM has none. It
+// runs nothing but limactl list: nothing of the VM's config changes.
 func TestSSH(t *testing.T) {
 	l, f, _ := testLima(t, "darwin")
 	cfg := filepath.Join(t.TempDir(), "ssh.config")
@@ -648,6 +612,11 @@ func TestSSH(t *testing.T) {
 	}
 	if _, err := l.SSH(t.Context(), "s"); msg.IDOf(err) != "vm_not_running" {
 		t.Errorf("SSH to a stopped VM: %v", err)
+	}
+	for _, c := range f.lines() {
+		if c != "limactl list --json" {
+			t.Errorf("ran %q", c)
+		}
 	}
 }
 

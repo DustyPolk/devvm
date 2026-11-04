@@ -41,7 +41,7 @@ import (
 // _ports; Forwards), one per VM:
 //
 //   - it reaches the VM only through the VM's sshd, as its backend says
-//     (backend.ForwardTarget: a user, a key, a host loopback port), the
+//     (its SSH, as FromTarget checks it: a user, a key, a host loopback port), the
 //     host key devvm pins for the VM pinned too: one ssh connection (a master), whose session runs ports.sh,
 //     which reports what listens in the VM; each forwarded connection is a
 //     channel of it (ssh -W through the master), which the VM's sshd opens
