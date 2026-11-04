@@ -73,6 +73,18 @@ Gotchas of this setup:
 
 These need real x86_64 hardware. An emulated x86_64 VM on a Mac (`--arch=x86_64`, QEMU TCG; Lima needs its `lima-additional-guestagents`) runs the unit tests, but VMs nested in it crash in their firmware.
 
+## Slots for each host
+
+`tests/e2e.sh --slots N` runs the end-to-end sections in N sandboxes at once ([slots](_index.md#slots)), and each slot runs its own VMs, up to three at a time in the link section. How many slots a host can run depends on its cores and memory:
+
+| Host | Slots |
+| --- | --- |
+| A bare-metal Linux host with 32 cores and 124 GB of memory | 3 or 4 |
+| A Mac | 2 |
+| A Linux host nested in a VM, such as [the Linux host above](#linux-hosts) | 1, the default: a VM booting while another one works boots degraded there |
+
+A Mac clones the images it gives each slot, because `/tmp` and your home folder are on the same APFS volume. A Linux host reflinks the Lima instances in your home folder when its file system can, as XFS made with `reflink=1` and Btrfs can, but a `/tmp` on tmpfs can't reflink, so there each slot other than slot 0 builds its own tool images. Every slot keeps its images between runs, so only its first run builds them.
+
 ## Test builds
 
 The tests run a test build of devvm, which is one made with `-ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes"`, as `tests/e2e.sh` and the CLI tests make theirs. Only a test build reads the environment variables that stand in for what devvm would find on this machine. Releases (GoReleaser, the Homebrew formula) don't set the flag, so a release ignores every one of these variables, whatever its environment says. devvm reads them in one place, `readOverrides` in `internal/cli/overrides.go`, into an `Overrides` struct, and passes each one to the package that uses it:
