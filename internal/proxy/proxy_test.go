@@ -365,7 +365,7 @@ func TestBuiltinPolicies(t *testing.T) {
 		{own, []string{"layers/missing.policy"}, "built-in policy layers/missing.policy: "},
 		{own, []string{"layers/base.policy", "layers/bad.policy"}, `built-in policy layers/bad.policy:2 isn't a rule: "not a rule"`},
 		{own, []string{"../policy"}, "built-in policy ../policy: "},
-		{nil, []string{"layers/base.policy"}, "-builtin-policy needs devvm's own files"},
+		{nil, []string{"layers/base.policy"}, "built-in policies need devvm's own files"},
 	} {
 		if _, err := readBuiltins(c.own, c.names); err == nil || !strings.HasPrefix(err.Error(), c.want) {
 			t.Errorf("readBuiltins(%q) = %v, want %q", c.names, err, c.want)
@@ -373,9 +373,6 @@ func TestBuiltinPolicies(t *testing.T) {
 	}
 	if rs, err := readBuiltins(nil, nil); err != nil || rs != nil {
 		t.Errorf("no built-ins: %v, %v", rs, err)
-	}
-	if got := splitList(" a, ,b ,"); !slices.Equal(got, []string{"a", "b"}) {
-		t.Errorf("splitList = %q", got)
 	}
 }
 
@@ -491,6 +488,12 @@ func TestOddHostsRefused(t *testing.T) {
 		"GET http://x;sh*/ HTTP/1.1\r\nHost: x;sh*\r\n\r\n",
 		"CONNECT $(id):443 HTTP/1.1\r\nHost: x\r\n\r\n",
 		"CONNECT [fe80::1%25$(id)]:443 HTTP/1.1\r\nHost: x\r\n\r\n",
+		// Empty labels: a company proxy that drops trailing dots would reach evil.test, which a
+		// deny of evil.test never matched under an allow-all **.
+		"CONNECT evil.test..:443 HTTP/1.1\r\nHost: x\r\n\r\n",
+		"GET http://evil.test../ HTTP/1.1\r\nHost: evil.test..\r\n\r\n",
+		"CONNECT evil..test:443 HTTP/1.1\r\nHost: x\r\n\r\n",
+		"CONNECT .evil.test:443 HTTP/1.1\r\nHost: x\r\n\r\n",
 	} {
 		code, body := roundTrip(t, proxy.Listener.Addr().String(), req)
 		if code != http.StatusBadRequest || strings.Contains(body, "network allow") {
@@ -506,6 +509,23 @@ func TestOddHostsRefused(t *testing.T) {
 	for _, bad := range []string{"127.1", "2130706433", "0x7f000001", "10.1", "127.0.1.", "a.0x7f"} {
 		if hostOK(bad) {
 			t.Errorf("hostOK(%q) = true", bad)
+		}
+	}
+	// A name is splitHostPort's form: no trailing dot, and no other empty label.
+	for _, bad := range []string{"evil.test.", "evil.test..", "evil..test", ".evil.test", ".", ".."} {
+		if hostOK(bad) {
+			t.Errorf("hostOK(%q) = true", bad)
+		}
+	}
+	// Under ** with a deny of evil.test, every form with more dots gets 400: the policy trims one
+	// dot of its own, so evil.test.. alone (evil.test. to it) would pass the deny.
+	pol = writePolicy(t, "**\n!evil.test\n")
+	if ok, _, _ := pol.verdict("evil.test..", 443); !ok {
+		t.Errorf("the policy denies evil.test..: then this test doesn't show hostOK refusing it")
+	}
+	for _, h := range []string{"evil.test..", "evil.test...", "evil.test...."} {
+		if code, body := roundTrip(t, proxy.Listener.Addr().String(), "CONNECT "+h+":443 HTTP/1.1\r\nHost: x\r\n\r\n"); code != http.StatusBadRequest {
+			t.Errorf("%s under **: %d %q, want 400", h, code, body)
 		}
 	}
 }
@@ -655,37 +675,39 @@ func TestSNIMatches(t *testing.T) {
 	}
 }
 
-// Main: -help prints the flags, bad arguments and a missing or empty password are errors, and
-// nothing is served then.
+// writeConfig writes c to a file of its own, as devvm does (Encode, mode 600), and returns its path.
+func writeConfig(t *testing.T, c Config) string {
+	t.Helper()
+	f := filepath.Join(t.TempDir(), "proxy.json")
+	must(t, os.WriteFile(f, c.Encode(), 0o600))
+	return f
+}
+
+// Main: -help prints the flags, bad arguments, a missing config and one that can't run are errors,
+// and nothing is served then.
 func TestMainRefuses(t *testing.T) {
 	var out, errs bytes.Buffer
 	std := IO{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errs}
-	if err := Main([]string{"--help"}, std); err != nil || !strings.Contains(out.String(), "-auth-file") {
+	if err := Main([]string{"--help"}, std); err != nil || !strings.Contains(out.String(), "-config") {
 		t.Errorf("--help: %v, %q", err, out.String())
-	}
-	empty := filepath.Join(t.TempDir(), "key")
-	if err := os.WriteFile(empty, []byte("\n"), 0o600); err != nil {
-		t.Fatal(err)
 	}
 	for _, args := range [][]string{
 		{"-nope"},
 		{"extra"},
 		{},
-		{"-auth-file", filepath.Join(t.TempDir(), "missing")},
-		{"-auth-file", empty},
+		{"-listen", "127.0.0.1:0"},
+		{"-config", filepath.Join(t.TempDir(), "missing")},
+		{"-config", writeConfig(t, Config{Listen: "127.0.0.1:0"})},
 	} {
 		if err := Main(args, std); err == nil {
 			t.Errorf("%q: no error", args)
 		}
 	}
 	// A built-in policy devvm's files lack: a devvm bug, so the proxy never listens.
-	key := filepath.Join(t.TempDir(), "key")
-	if err := os.WriteFile(key, []byte("k3y\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	std.FS = fstest.MapFS{"layers/base.policy": {Data: []byte("base.test\n")}}
-	args := []string{"-auth-file", key, "-listen", "127.0.0.1:0", "-builtin-policy", "layers/base.policy,layers/gone.policy"}
-	if err := Main(args, std); err == nil || !strings.Contains(err.Error(), "built-in policy layers/gone.policy") {
+	c := Config{Listen: "127.0.0.1:0", Password: "k3y", BuiltinPolicies: []string{"layers/base.policy", "layers/gone.policy"}}
+	t.Cleanup(func() { proxyAuth = "" })
+	if err := Main([]string{"-config", writeConfig(t, c)}, std); err == nil || !strings.Contains(err.Error(), "built-in policy layers/gone.policy") {
 		t.Errorf("a missing built-in: %v", err)
 	}
 	if strings.Contains(errs.String(), "listening on") {
@@ -699,10 +721,7 @@ func TestMainRuns(t *testing.T) {
 	lifelineTick = 50 * time.Millisecond
 	t.Cleanup(func() { lifelineTick = 3 * time.Second; proxyAuth, linksFile = "", "" })
 	dir := t.TempDir()
-	key, pidFile, logFile := filepath.Join(dir, "key"), filepath.Join(dir, "ha.pid"), filepath.Join(dir, "log.jsonl")
-	if err := os.WriteFile(key, []byte("k3y\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	pidFile, logFile := filepath.Join(dir, "ha.pid"), filepath.Join(dir, "log.jsonl")
 	sleep := exec.CommandContext(t.Context(), "sleep", "60")
 	if err := sleep.Start(); err != nil {
 		t.Fatal(err)
@@ -723,11 +742,11 @@ func TestMainRuns(t *testing.T) {
 	errs := &syncBuffer{}
 	done := make(chan error)
 	go func() {
-		done <- Main([]string{
-			"--listen", addr, "-vm", "devvm-x", "-auth-file", key, "-lifeline", pidFile, "-log", logFile,
-			"-policy", filepath.Join(dir, "missing"), "-links", filepath.Join(dir, "devvm-x.links.json"),
-			"-builtin-policy", "layers/base.policy",
-		}, IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: errs, FS: fstest.MapFS{"layers/base.policy": {Data: []byte("base.test:8443\n")}}})
+		done <- Main([]string{"--config", writeConfig(t, Config{
+			Listen: addr, VM: "devvm-x", Password: "k3y", Lifeline: pidFile, Log: logFile,
+			Policies: []string{filepath.Join(dir, "missing")}, Links: filepath.Join(dir, "devvm-x.links.json"),
+			BuiltinPolicies: []string{"layers/base.policy"},
+		})}, IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: errs, FS: fstest.MapFS{"layers/base.policy": {Data: []byte("base.test:8443\n")}}})
 	}()
 	pu, _ := url.Parse("http://devvm:k3y@" + addr)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}}

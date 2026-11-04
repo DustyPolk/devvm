@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -32,6 +33,13 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
 
 // sandbox returns devvm's folders in a temporary folder, and a VM's state
 // there with that image.
@@ -275,15 +283,20 @@ func (f *proxies) start(t *testing.T) daemon.Starter {
 			return 0, err
 		}
 		pid := cmd.Process.Pid
+		// It reads its config as the proxy does: _proxy -config FILE.
+		cfg, err := proxy.ReadConfig(args[2])
+		if err != nil {
+			return 0, err
+		}
 		if f.quiet {
 			_ = cmd.Wait()
-			_, _ = fmt.Fprintf(c.Out, "devvm proxy: listen tcp %s: bind: address already in use\n", args[2])
+			_, _ = fmt.Fprintf(c.Out, "devvm proxy: listen tcp %s: bind: address already in use\n", cfg.Listen)
 		} else {
 			// Reaped once it ends, as a detached process is.
 			done := make(chan struct{})
 			go func() { _ = cmd.Wait(); close(done) }()
 			t.Cleanup(func() { _ = cmd.Process.Kill(); <-done })
-			if err := daemon.WriteStatus(c.Status, pid, args[2]); err != nil {
+			if err := daemon.WriteStatus(c.Status, pid, cfg.Listen); err != nil {
 				return 0, err
 			}
 		}
@@ -390,34 +403,37 @@ func TestPrepare(t *testing.T) {
 	if !ok {
 		t.Fatal("no proxy runs")
 	}
-	args := strings.Join(f.args[pid], " ")
 	// devvm's files stay in the binary: nothing is written out for the proxy.
 	if _, err := os.Stat(filepath.Join(d.Data, "assets")); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("devvm's files written out: %v", err)
 	}
-	for _, want := range []string{
-		"/bin/sh _proxy -listen 127.0.0.1:" + strconv.Itoa(pp) + " -vm " + st.Name() +
-			" -builtin-policy layers/base.policy,shared-tools/node.policy,shared-tools/claude.policy -policy " + d.Policy() + ",",
-		" -log " + files.Logs() + "/network.jsonl -proxy-log " + files.Logs() + "/proxy.log -lifeline /lima/vm/ha.pid -ca " + d.CA() + "/ca.pem -cakey " + d.CA() + "/ca.key",
-		" -secrets " + files.Run() + "/secrets.json -secret-cmd /bin/sh -auth-file " + files.Run() + "/proxy.auth",
+	// Its arguments name its config alone: the key and salt are in no
+	// process's arguments.
+	config := files.ProxyConfig()
+	if want := []string{"/bin/sh", "_proxy", "-config", config}; !slices.Equal(f.args[pid], want) {
+		t.Errorf("the proxy's arguments %q, want %q", f.args[pid], want)
+	}
+	cfg, err := proxy.ReadConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin, _ := image.SHA256File("/bin/sh")
+	caSum, _ := image.SHA256File(filepath.Join(d.CA(), "ca.pem"))
+	if want := (proxy.Config{
+		Version: proxy.ConfigVersion, Listen: "127.0.0.1:" + strconv.Itoa(pp), VM: st.Name(), Password: key,
+		BuiltinPolicies: []string{"layers/base.policy", "shared-tools/node.policy", "shared-tools/claude.policy"},
+		Policies:        []string{d.Policy(), files.Policy(), files.SecretsPolicy()},
+		Log:             files.EventLog(), ProxyLog: files.ProxyLog(), Lifeline: "/lima/vm/ha.pid",
+		CA: filepath.Join(d.CA(), "ca.pem"), CAKey: filepath.Join(d.CA(), "ca.key"),
+		Secrets: files.Secrets(), SecretCmd: "/bin/sh",
 		// Its links' list: in its run folder, devvm's alone.
-		" -links " + files.Run() + "/links.json -link-sockets " + d.Run(),
-	} {
-		if !strings.Contains(args, want) {
-			t.Errorf("the proxy's arguments %q lack %q", args, want)
-		}
-	}
-	// The key and salt are in no process's arguments.
-	if strings.Contains(args, key) || strings.Contains(args, netOf(t, st).Made.ProxySalt) {
-		t.Errorf("the proxy's arguments hold its key or salt: %q", args)
-	}
-	auth := files.Proxy(".auth")
-	b, err := os.ReadFile(auth) //nolint:gosec // the test's own folder
-	if err != nil || strings.TrimSpace(string(b)) != key {
-		t.Errorf("auth file = %q, %v", b, err)
+		Links: files.LinkList(), LinkSockets: d.Run(),
+		DevvmSHA256: bin, CASHA256: caSum,
+	}); !reflect.DeepEqual(cfg, want) || bin == "" || caSum == "" {
+		t.Errorf("config = %+v\nwant %+v", cfg, want)
 	}
 	for path, mode := range map[string]os.FileMode{
-		auth: 0o600, d.Run(): 0o700, files.Run(): 0o700, files.Logs(): 0o700, files.ProxyLog(): 0o600,
+		config: 0o600, d.Run(): 0o700, files.Run(): 0o700, files.Logs(): 0o700, files.ProxyLog(): 0o600,
 		files.Secrets(): 0o600, d.CA(): 0o700,
 	} {
 		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != mode {
@@ -470,8 +486,17 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	if f.count() != 1 {
 		t.Fatalf("a running VM's proxy started again: %d starts", f.count())
 	}
+	config := d.VM(st.Name()).ProxyConfig()
 	for i, change := range []func(){
-		func() { _ = os.WriteFile(d.VM(st.Name()).Proxy(".bin"), []byte("old\n"), 0o600) },
+		// It started from another devvm binary.
+		func() {
+			cfg, err := proxy.ReadConfig(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.DevvmSHA256 = "old"
+			must(t, os.WriteFile(config, cfg.Encode(), 0o600))
+		},
 		func() {
 			_ = os.WriteFile(filepath.Join(d.CA(), "ca.pem"), []byte("rotated\n"), 0o600)
 			p.InitCA = func(string) error { return nil }
@@ -492,14 +517,29 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	if got := strconv.Itoa(hostPorts(t, st).Proxy); got != pp {
 		t.Errorf("the port moved: %s, then %s", pp, got)
 	}
-	// What it started with: both lists, a line each.
-	want := "layers/base.policy,shared-tools/node.policy,shared-tools/claude.policy\n" +
-		filepath.Join(d.Layers(), "pg.policy") + "," + d.Policy() + "," + d.VM(st.Name()).Policy() + "," + d.VM(st.Name()).SecretsPolicy() + "\n"
-	if b, _ := os.ReadFile(d.VM(st.Name()).Proxy(".policy")); string(b) != want {
-		t.Errorf("proxy.policy = %q, want %q", b, want)
+	// What it started with: both lists.
+	cfg, err := proxy.ReadConfig(config)
+	if want := []string{"layers/base.policy", "shared-tools/node.policy", "shared-tools/claude.policy"}; err != nil || !slices.Equal(cfg.BuiltinPolicies, want) {
+		t.Errorf("built-in policies %q (%v), want %q", cfg.BuiltinPolicies, err, want)
+	}
+	if want := []string{filepath.Join(d.Layers(), "pg.policy"), d.Policy(), d.VM(st.Name()).Policy(), d.VM(st.Name()).SecretsPolicy()}; !slices.Equal(cfg.Policies, want) {
+		t.Errorf("policies %q, want %q", cfg.Policies, want)
+	}
+	// A config that's gone, or that the proxy wouldn't read, counts as
+	// another.
+	for i, change := range []func(){
+		func() { must(t, os.Remove(config)) },
+		func() { must(t, os.Chmod(config, 0o644)) }, //nolint:gosec // a config others may read, which the proxy refuses
+	} {
+		n := f.count()
+		change()
+		prepare(true)
+		if f.count() != n+1 {
+			t.Errorf("config change %d: %d starts, want %d", i, f.count(), n+1)
+		}
 	}
 	prepare(false)
-	if f.count() != 6 {
+	if f.count() != 8 {
 		t.Errorf("a stopped VM's proxy didn't start again: %d starts", f.count())
 	}
 	// A running VM whose proxy is gone, with its port taken by another
@@ -515,8 +555,8 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 	}
 }
 
-// The company proxy in devvm's environment goes to the VM's proxy in a
-// file, the user's alone, never in its arguments; a change starts it
+// The company proxy in devvm's environment goes to the VM's proxy in its
+// config, the user's alone, never in its arguments; a change starts it
 // again, and one it can't go through is refused.
 func TestPrepareUpstream(t *testing.T) {
 	d, st := sandbox(t, "base")
@@ -532,18 +572,24 @@ func TestPrepareUpstream(t *testing.T) {
 	if err := prepare(false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	file := d.VM(st.Name()).Proxy(".upstream")
+	config := d.VM(st.Name()).ProxyConfig()
 	pid, _ := p.PID(st.Name())
-	args := strings.Join(f.args[pid], " ")
-	if !strings.Contains(args, " -upstream "+file) || strings.Contains(args, "pa55") {
-		t.Errorf("the proxy's arguments %q: want -upstream %s, and no password", args, file)
+	if args := strings.Join(f.args[pid], " "); strings.Contains(args, "pa55") {
+		t.Errorf("the proxy's arguments hold the company proxy's password: %q", args)
 	}
-	b, err := os.ReadFile(file) //nolint:gosec // the test's own folder
-	if want := "HTTPS_PROXY=" + corp + "\nHTTP_PROXY=\nNO_PROXY=.corp.example\n"; err != nil || string(b) != want {
-		t.Errorf("upstream file = %q, %v; want %q", b, err, want)
+	upstream := func() *proxy.Upstream {
+		t.Helper()
+		cfg, err := proxy.ReadConfig(config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg.Upstream
 	}
-	if fi, err := os.Stat(file); err != nil || fi.Mode().Perm() != 0o600 {
-		t.Errorf("upstream file mode: %v %v", fi, err)
+	if up := upstream(); up == nil || *up != (proxy.Upstream{HTTPS: corp, NoProxy: ".corp.example"}) {
+		t.Errorf("upstream = %+v", up)
+	}
+	if fi, err := os.Stat(config); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("config mode: %v %v", fi, err)
 	}
 	// Running, the same settings keep it; others start it again.
 	if err := prepare(true); err != nil || f.count() != 1 {
@@ -553,14 +599,13 @@ func TestPrepareUpstream(t *testing.T) {
 	if err := prepare(true); err != nil || f.count() != 2 {
 		t.Errorf("changed: %v, %d starts", msg.NamesOf(err), f.count())
 	}
-	// None: no file, no flag.
+	// None: none in its config.
 	env = map[string]string{}
 	if err := prepare(true); err != nil || f.count() != 3 {
 		t.Fatalf("none: %v, %d starts", msg.NamesOf(err), f.count())
 	}
-	pid, _ = p.PID(st.Name())
-	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) || strings.Contains(strings.Join(f.args[pid], " "), "-upstream ") {
-		t.Errorf("without a company proxy: %v, %q", err, f.args[pid])
+	if up := upstream(); up != nil {
+		t.Errorf("without a company proxy: %+v", up)
 	}
 	for _, c := range []struct{ env, value, want string }{
 		{"HTTPS_PROXY", "https://corp:pa55@proxy.corp", "upstream_proxy_scheme scheme=https:// setting=HTTPS_PROXY"},
@@ -627,9 +672,10 @@ func TestPrepareWarnsPolicy(t *testing.T) {
 	}
 }
 
-// Two devvm runs writing a VM's proxy files at once each write them whole:
-// neither fails, and no temporary file is left.
-func TestWriteUpstreamAtOnce(t *testing.T) {
+// Two devvm runs writing a VM's proxy's config at once each write it
+// whole: neither fails, the config is one of theirs, and no temporary file
+// is left.
+func TestWriteConfigAtOnce(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
 	run := d.VM(st.Name()).Run()
@@ -641,7 +687,10 @@ func TestWriteUpstreamAtOnce(t *testing.T) {
 	for i := range 4 {
 		wg.Go(func() {
 			for range 50 {
-				errs <- p.writeUpstream(st.Name(), []byte("cas "+strconv.Itoa(i)), []byte("up "+strconv.Itoa(i)))
+				errs <- p.writeConfig(st.Name(), proxy.Config{
+					Listen: "127.0.0.1:0", Password: "k3y", UpstreamCAs: strings.Repeat("cas "+strconv.Itoa(i), 1000),
+					Upstream: &proxy.Upstream{HTTPS: "http://up-" + strconv.Itoa(i)},
+				})
 			}
 		})
 	}
@@ -649,7 +698,7 @@ func TestWriteUpstreamAtOnce(t *testing.T) {
 	close(errs)
 	for err := range errs {
 		if err != nil {
-			t.Fatalf("writeUpstream: %v", err)
+			t.Fatalf("writeConfig: %v", err)
 		}
 	}
 	es, _ := os.ReadDir(run)
@@ -657,13 +706,13 @@ func TestWriteUpstreamAtOnce(t *testing.T) {
 	for _, e := range es {
 		left = append(left, e.Name())
 	}
-	if want := []string{"proxy.cas", "proxy.upstream"}; !slices.Equal(left, want) {
+	if want := []string{"proxy.json"}; !slices.Equal(left, want) {
 		t.Errorf("the run folder holds %q; want %q", left, want)
 	}
-	up := p.run(st.Name(), ".upstream")
-	b, err := os.ReadFile(up) //nolint:gosec // the test's own folder
-	if fi, serr := os.Stat(up); err != nil || serr != nil || fi.Mode().Perm() != 0o600 || !regexp.MustCompile(`\Aup [0-3]\z`).Match(b) {
-		t.Errorf("upstream file %q (%v), mode %v (%v)", b, err, fi, serr)
+	cfg, err := proxy.ReadConfig(d.VM(st.Name()).ProxyConfig())
+	if err != nil || cfg.Upstream == nil || !regexp.MustCompile(`\Ahttp://up-[0-3]\z`).MatchString(cfg.Upstream.HTTPS) ||
+		cfg.UpstreamCAs != strings.Repeat("cas "+strings.TrimPrefix(cfg.Upstream.HTTPS, "http://up-"), 1000) {
+		t.Errorf("config: %v; one writer's whole: %v", err, cfg.Upstream)
 	}
 }
 
@@ -672,16 +721,16 @@ func TestWriteUpstreamAtOnce(t *testing.T) {
 func TestPrepareWriteFails(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
-	// A folder where the password goes: renaming over it fails.
-	auth := d.VM(st.Name()).Proxy(".auth")
-	if err := os.MkdirAll(filepath.Join(auth, "x"), 0o700); err != nil {
+	// A folder where the config goes: renaming over it fails.
+	config := d.VM(st.Name()).ProxyConfig()
+	if err := os.MkdirAll(filepath.Join(config, "x"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	var le *os.LinkError
-	if _, err := p.Prepare(t.Context(), lifelined(), st, false); !errors.As(err, &le) || le.New != auth {
-		t.Fatalf("Prepare: %v; want the password's rename failing", err)
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); !errors.As(err, &le) || le.New != config {
+		t.Fatalf("Prepare: %v; want the config's rename failing", err)
 	}
-	es, _ := os.ReadDir(filepath.Dir(auth))
+	es, _ := os.ReadDir(filepath.Dir(config))
 	for _, e := range es {
 		if strings.Contains(e.Name(), "tmp") {
 			t.Errorf("left in the run folder: %s", e.Name())
@@ -700,9 +749,13 @@ func TestPID(t *testing.T) {
 	if !ok {
 		t.Fatal("no proxy")
 	}
-	f.args[pid] = []string{"/bin/sh", "_proxy", "-vm", "devvm-other-0123456789abc9"}
+	f.args[pid] = []string{"/bin/sh", "_proxy", "-config", d.VM("devvm-other-0123456789abc9").ProxyConfig()}
 	if _, ok := p.PID(st.Name()); ok {
 		t.Error("another VM's proxy counts")
+	}
+	f.args[pid] = []string{"/bin/sh", "_proxy", "-vm", st.Name()}
+	if _, ok := p.PID(st.Name()); ok {
+		t.Error("a proxy without the VM's config counts")
 	}
 	f.args[pid] = []string{"/bin/sleep", "30"}
 	if _, ok := p.PID(st.Name()); ok {
@@ -716,7 +769,7 @@ func TestPID(t *testing.T) {
 	}
 	// Nor does a pid file that names no pid, or this test's own.
 	for _, pidFile := range []string{"x\n", "0\n", "-1\n", strconv.Itoa(os.Getpid()) + "\n"} {
-		if err := os.WriteFile(d.VM(st.Name()).Proxy(".pid"), []byte(pidFile), 0o600); err != nil {
+		if err := os.WriteFile(d.VM(st.Name()).ProxyPID(), []byte(pidFile), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if _, ok := p.PID(st.Name()); ok || !p.Stop(st.Name()) || len(signalled) != 0 {
@@ -737,7 +790,7 @@ func TestStopKeepsFiles(t *testing.T) {
 	if !p.Stop(st.Name()) || daemon.Alive(pid) {
 		t.Error("the proxy still runs")
 	}
-	if _, err := os.Stat(d.VM(st.Name()).Proxy(".auth")); err != nil {
+	if _, err := os.Stat(d.VM(st.Name()).ProxyConfig()); err != nil {
 		t.Errorf("its files: %v", err)
 	}
 }
@@ -924,26 +977,25 @@ func TestListed(t *testing.T) {
 
 // Only a VM with the nix layer gets the shared Nix cache, with the cap
 // nix-cache.size gives, or its default.
-func TestNixCacheArgs(t *testing.T) {
+func TestNixCache(t *testing.T) {
 	if settings.NixCacheDefault != proxy.NixCacheDefault {
 		t.Errorf("the cap's default: settings' %d, the proxy's %d", settings.NixCacheDefault, proxy.NixCacheDefault)
 	}
 	d, st := sandbox(t, "base")
 	var warned msg.Recorder
 	p := &Proxy{Dirs: d, Warn: warned.Add}
-	if got := p.nixCacheArgs(st); got != nil {
-		t.Errorf("base: %q", got)
+	if dir, capped := p.nixCache(st); dir != "" || capped != 0 {
+		t.Errorf("base: %q %d", dir, capped)
 	}
 	change(t, st, func(st *state.VM) error { st.Image = "pg+nix"; return nil })
-	want := []string{"-nix-cache", d.NixCache(), "-nix-cache-max", strconv.FormatInt(settings.NixCacheDefault, 10)}
-	if got := p.nixCacheArgs(st); !slices.Equal(got, want) {
-		t.Errorf("node+nix: %q, want %q", got, want)
+	if dir, capped := p.nixCache(st); dir != d.NixCache() || capped != settings.NixCacheDefault {
+		t.Errorf("pg+nix: %q %d", dir, capped)
 	}
 	if _, err := settings.Save(d, settings.Values{Retention: map[string]string{settings.RetainNixCacheSize: "2G"}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := p.nixCacheArgs(st); got[3] != strconv.FormatInt(2<<30, 10) {
-		t.Errorf("nix-cache.size=2G: %q", got)
+	if _, capped := p.nixCache(st); capped != 2<<30 {
+		t.Errorf("nix-cache.size=2G: %d", capped)
 	}
 	if err := os.MkdirAll(d.Config, 0o700); err != nil {
 		t.Fatal(err)
@@ -951,7 +1003,7 @@ func TestNixCacheArgs(t *testing.T) {
 	if err := os.WriteFile(d.ConfigFile(), []byte("[retention]\nnix-cache.size = \"lots\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := p.nixCacheArgs(st); got[3] != want[3] || len(warned.Names()) != 1 || !strings.HasPrefix(warned.Names()[0], "retention_unreadable") {
-		t.Errorf("unreadable: %q, warned %q", got, warned.Names())
+	if _, capped := p.nixCache(st); capped != settings.NixCacheDefault || len(warned.Names()) != 1 || !strings.HasPrefix(warned.Names()[0], "retention_unreadable") {
+		t.Errorf("unreadable: %d, warned %q", capped, warned.Names())
 	}
 }

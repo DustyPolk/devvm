@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -29,9 +28,11 @@ func Rule(rule string, deny bool) (string, error) {
 	return rule, nil
 }
 
-// readRules reads a policy file's lines; a missing file has none.
+// readRules reads a policy file's lines; a missing file has none. It reads
+// it as the proxy does (proxy.ReadRegular), so a FIFO or a device there
+// can't hang devvm network or doctor.
 func readRules(path string) ([]string, error) {
-	b, err := os.ReadFile(path) //nolint:gosec // a policy file in devvm's folders
+	b, err := proxy.ReadRegular(path, proxy.PolicyMax)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	} else if err != nil || len(b) == 0 {

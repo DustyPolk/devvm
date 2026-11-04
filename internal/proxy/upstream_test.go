@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -87,10 +86,8 @@ func (f *fakeUpstream) requests() []string {
 // useUpstream points both upstreams at f, with the test's credentials, and NO_PROXY at noProxyList.
 func useUpstream(t *testing.T, f *fakeUpstream, noProxyList string) {
 	t.Helper()
-	file := filepath.Join(t.TempDir(), "upstream")
 	u := "http://corp-user:" + upPassword + "@" + f.ln.Addr().String()
-	must(t, os.WriteFile(file, []byte("HTTPS_PROXY="+u+"\nHTTP_PROXY="+u+"\nNO_PROXY="+noProxyList+"\n"), 0o600))
-	must(t, loadUpstream(file))
+	must(t, loadUpstream(Upstream{HTTPS: u, HTTP: u, NoProxy: noProxyList}))
 	t.Cleanup(func() { upHTTPS, upHTTP, noProxy = nil, nil, nil })
 }
 

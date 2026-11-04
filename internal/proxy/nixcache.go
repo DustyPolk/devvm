@@ -1,6 +1,6 @@
 package proxy
 
-// The shared Nix cache (-nix-cache DIR): the proxy answers http://devvm.proxy/nix/ itself, as a
+// The shared Nix cache (Config.NixCache): the proxy answers http://devvm.proxy/nix/ itself, as a
 // binary cache that only the host fills, from cache.nixos.org alone. A VM can only make the host
 // fetch: it asks for nix-cache-info, a narinfo or a NAR, by an exact pattern of paths (nixPath), and
 // nothing it sends is stored or names a file beyond that pattern. Before keeping a file the host
@@ -8,7 +8,7 @@ package proxy
 // NAR's SHA-256 and size against the FileHash and FileSize of a checked narinfo that names it. Each
 // VM's own Nix checks the signature again, and the NarHash, which the host can't (xz and zstd aren't
 // in the standard library). Files are written whole and renamed in, the user's alone; the cache
-// stays under its cap (-nix-cache-max), the least recently used files deleted first, under a lock
+// stays under its cap (Config.NixCacheMax), the least recently used files deleted first, under a lock
 // every proxy and devvm gc share. Anything that fails answers 404, so the VM's Nix goes to
 // cache.nixos.org itself, through the proxy as any other request.
 
@@ -53,8 +53,8 @@ const (
 )
 
 var (
-	nixCacheDir       = ""              // -nix-cache: the cache's folder; "": no cache
-	nixCacheMax       = NixCacheDefault // -nix-cache-max: its cap, in bytes
+	nixCacheDir       = ""              // Config.NixCache: the cache's folder; "": no cache
+	nixCacheMax       = NixCacheDefault // Config.NixCacheMax: its cap, in bytes
 	nixBase           = "https://" + nixHost
 	nixDial           = func(ctx context.Context) (net.Conn, error) { return dialOut(ctx, nixHost, 443) }
 	nixFloor          = upstreamAllowed // tests: no DNS
@@ -568,7 +568,7 @@ func openNixCache() error {
 		return nil
 	}
 	if nixCacheMax < 0 {
-		return errors.New("-nix-cache-max is below 0")
+		return errors.New("nix_cache_max is below 0")
 	}
 	for _, d := range []string{nixCacheDir, filepath.Join(nixCacheDir, "nar")} {
 		if err := os.MkdirAll(d, 0o700); err != nil {

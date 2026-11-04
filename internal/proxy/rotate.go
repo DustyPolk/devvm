@@ -17,7 +17,7 @@ const LogLimit = 10 << 20
 // files: the log rotates before the Write that would take it past the
 // limit. Writes are serialized, so none is lost or split by a rotation.
 //
-// The event log (-log) has two writers, the proxy and devvm _links
+// The event log (Config.Log) has two writers, the proxy and devvm _links
 // (OpenEventLog), each in its own process: it's renamed to <log>.1 and a
 // new one is opened, which devvm network log --follow follows by name.
 // Before each line a writer checks that its open file is still the one
@@ -25,7 +25,7 @@ const LogLimit = 10 << 20
 // rotated it, or it was deleted), and it takes the log's size from the
 // file. A rotation holds the file's lock and checks again, so two
 // writers past the limit at once rename it only once. The proxy's own
-// log (-proxy-log) is also the proxy process's stdout and stderr, which
+// log (Config.ProxyLog) is also the proxy process's stdout and stderr, which
 // devvm opened, where its last error and any crash go: that file is
 // copied to <log>.1 and emptied instead, so those writes, appended to
 // the same file, reach the current log.

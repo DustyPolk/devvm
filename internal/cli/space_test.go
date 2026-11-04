@@ -48,7 +48,7 @@ func TestLeftoverFolders(t *testing.T) {
 	const orphan, live, unasked = "devvm-a-0123456789abc1", "devvm-b-0123456789abc2", "devvm-c-0123456789abc3"
 	for vm, be := range map[string]string{orphan: "fake", live: "fake", unasked: "other"} {
 		v := d.VM(vm)
-		for _, f := range []string{v.Logs() + "/network.jsonl", v.Proxy(".pid"), v.Forwarder(".log"), filepath.Join(v.Run(), ".proxy.auth.tmp-1")} {
+		for _, f := range []string{v.Logs() + "/network.jsonl", v.ProxyPID(), v.Forwarder(".log"), filepath.Join(v.Run(), ".proxy.json.tmp-1")} {
 			if err := state.WriteFile(f, []byte(strings.Repeat("x", 5000))); err != nil {
 				t.Fatal(err)
 			}

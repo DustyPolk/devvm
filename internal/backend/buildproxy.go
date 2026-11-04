@@ -8,13 +8,14 @@ import (
 
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 )
 
 // A build that reaches the internet through a company proxy goes through
 // a proxy of devvm's own on the host, one per build: devvm _proxy with any host on ports 80 and 443 but
 // the host's own and internal addresses, through the company proxy (its
-// -upstream file), and a password made for the build. The build gets only
+// config's Upstream), and a password made for the build. The build gets only
 // that proxy's address with that password, so the company proxy's
 // credentials stay on the host, out of reach of the code a build runs,
 // which is an image's own.
@@ -38,14 +39,15 @@ type BuildProxy struct {
 	dir      string
 }
 
-// Start starts the proxy of a build (name), its files in dir, made again
-// and the user's alone: its policy, its password, its log (proxy.log) and
-// its event log (events.jsonl). It listens on a loopback port of its own,
-// goes through the company proxy that upstream names (the -upstream file;
-// nil for none) and ends when the process lifeline's pid file names does,
-// or at Stop. extra are more of its arguments. It returns once the proxy
-// says it listens, in its status file (status), and still runs.
-func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra ...string) (*BuildProxy, error) {
+// Start starts the proxy of a build (c.VM), its files in dir, made again
+// and the user's alone: its config (proxy.json), its policy, its log
+// (proxy.log) and its event log (events.jsonl). c has what the build
+// chose: its lifeline, the company proxy it goes through and whether names
+// the host can't resolve go there; Start sets the rest. It listens on a
+// loopback port of its own and ends when the process its lifeline's pid
+// file names does, or at Stop. It returns once the proxy says it listens,
+// in its status file (status), and still runs.
+func (s ProxyStarter) Start(dir string, c proxy.Config) (*BuildProxy, error) {
 	if err := os.RemoveAll(dir); err != nil {
 		return nil, err
 	}
@@ -57,11 +59,15 @@ func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra .
 		return nil, err
 	}
 	p := &BuildProxy{Password: pw, dir: dir}
-	auth, policy, logPath := filepath.Join(dir, "auth"), filepath.Join(dir, "policy"), filepath.Join(dir, "proxy.log")
-	if err := state.WriteFile(auth, []byte(p.Password+"\n")); err != nil {
+	policy, logPath := filepath.Join(dir, "policy"), filepath.Join(dir, "proxy.log")
+	if err := state.WriteFile(policy, []byte("# a build: any host, not this machine's own or internal addresses\n**\n")); err != nil {
 		return nil, err
 	}
-	if err := state.WriteFile(policy, []byte("# a build: any host, not this machine's own or internal addresses\n**\n")); err != nil {
+	c.Listen, c.Password, c.Policies, c.Log = "127.0.0.1:0", pw, []string{policy}, filepath.Join(dir, "events.jsonl")
+	// The password and the company proxy's credentials go in the config,
+	// the user's alone: a process's arguments are visible to other users.
+	config := filepath.Join(dir, configFile)
+	if err := state.WriteFile(config, c.Encode()); err != nil {
 		return nil, err
 	}
 	out, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own log
@@ -69,20 +75,9 @@ func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra .
 		return nil, err
 	}
 	defer func() { _ = out.Close() }()
-	args := []string{
-		"_proxy", "-listen", "127.0.0.1:0", "-vm", name, "-policy", policy,
-		"-log", filepath.Join(dir, "events.jsonl"), "-auth-file", auth, "-lifeline", lifeline,
-	}
-	args = append(args, extra...)
-	if upstream != nil {
-		f := filepath.Join(dir, "upstream")
-		if err := state.WriteFile(f, upstream); err != nil {
-			return nil, err
-		}
-		args = append(args, "-upstream", f)
-	}
 	status := filepath.Join(dir, "status")
-	if p.proc, err = s.Spawn(daemon.Cmd{Path: s.Self, Args: args, Out: out, Status: status}); err != nil {
+	if p.proc, err = s.Spawn(daemon.Cmd{Path: s.Self, Args: []string{"_proxy", "-config", config}, Out: out, Status: status}); err != nil {
+		_ = os.Remove(config) // its passwords, for a proxy that never ran
 		return nil, err
 	}
 	said, ok := daemon.WaitReady(status, p.proc.PID(), p.proc.Running, s.Tick, 10)
@@ -91,19 +86,21 @@ func (s ProxyStarter) Start(name, dir, lifeline string, upstream []byte, extra .
 		return p, nil
 	}
 	p.Stop()
-	return nil, msg.ProxyStartFailed(logPath, name)
+	return nil, msg.ProxyStartFailed(logPath, c.VM)
 }
 
 // Stop stops the proxy, through the process Start started (daemon.Handle),
 // so the signal reaches it alone, never another process given its pid
-// since: SIGTERM, then after two seconds SIGKILL. It deletes its password
-// and the company proxy's file, leaving its logs. A nil one is none.
+// since: SIGTERM, then after two seconds SIGKILL. It deletes its config,
+// which holds its password and the company proxy's, leaving its logs. A
+// nil one is none.
 func (p *BuildProxy) Stop() {
 	if p == nil {
 		return
 	}
 	p.proc.Stop(2 * time.Second)
-	for _, f := range []string{"auth", "upstream"} {
-		_ = os.Remove(filepath.Join(p.dir, f))
-	}
+	_ = os.Remove(filepath.Join(p.dir, configFile))
 }
+
+// configFile is a build proxy's config in its folder.
+const configFile = "proxy.json"

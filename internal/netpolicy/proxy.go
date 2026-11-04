@@ -1,9 +1,7 @@
 package netpolicy
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -91,15 +89,14 @@ func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u U
 	}
 }
 
-// run is one of the VM's proxy's files in its run folder (paths.VM.Proxy).
-func (p *Proxy) run(vm, ext string) string { return p.Dirs.VM(vm).Proxy(ext) }
-
 // proc is the VM's proxy as a background process: its pid file in the
-// VM's run folder, and devvm _proxy -vm VM in its arguments.
+// VM's run folder, and devvm _proxy -config with the VM's config in its
+// arguments.
 func (p *Proxy) proc(vm string) daemon.Proc {
+	files := p.Dirs.VM(vm)
 	return daemon.Proc{
-		PIDFile: p.run(vm, ".pid"), Args: p.Args, Signal: p.Signal,
-		Is: func(args []string) bool { return daemon.HasFlag(args, "_proxy", "-vm", vm) },
+		PIDFile: files.ProxyPID(), Args: p.Args, Signal: p.Signal,
+		Is: func(args []string) bool { return daemon.HasFlag(args, "_proxy", "-config", files.ProxyConfig()) },
 	}
 }
 
@@ -146,31 +143,14 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		return none, err
 	}
 	// A stopped VM's proxy follows the hostagent it started with: a new
-	// start gets a new one. One whose policies changed (tools added or
-	// removed), from another devvm binary (an upgrade, which may change
-	// the built-in policies' rules), or holding a CA
-	// since replaced (which mints certificates the VM no longer trusts
-	// after its next setup) starts again too, on the same port.
-	builtin, files := Policies(p.Dirs, vm, st.Image, tools.Names(st))
-	for _, m := range PolicyWarnings(files) {
-		p.Warn(m)
-	}
-	policies := policyList{builtin: strings.Join(builtin, ","), files: strings.Join(files, ",")}
-	bin, _ := image.SHA256File(p.Self)
-	caSum, _ := image.SHA256File(filepath.Join(ca, "ca.pem"))
-	// The user's CAs, which it trusts for its own connections: one whose
-	// folder changed starts again too.
-	cas, err := trust.Read(p.Dirs.TrustedCAs())
+	// start gets a new one. A running VM's proxy starts again, on the same
+	// port, when its config would differ from the one it started with
+	// (stale).
+	cfg, err := p.config(st, key, lifeline)
 	if err != nil {
 		return none, err
 	}
-	// The company proxy it goes through, from devvm's environment: one
-	// whose settings changed starts again too.
-	upstream, err := backend.ReadHostProxy(p.Getenv).Upstream()
-	if err != nil {
-		return none, err
-	}
-	if !running || p.stale(vm, policies, bin, caSum, cas.Bundle(), upstream) {
+	if !running || p.stale(st, cfg) {
 		// Never the old one kept: it would go on with what it started with.
 		if !p.Stop(vm) {
 			return none, msg.ProxyStopFailed(vm)
@@ -197,31 +177,61 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if up {
 		return conf, nil
 	}
-	if err := p.writeUpstream(vm, cas.Bundle(), upstream); err != nil {
-		return none, err
-	}
-	return conf, p.start(st, conf, policies, bin, caSum, lifeline)
+	cfg.Listen = listenOn(pp)
+	return conf, p.start(vm, cfg)
 }
 
-// policyList is a VM's policies (Policies) as its proxy's flags list
-// them: the built-in ones (-builtin-policy) and the user's files
-// (-policy), each comma-separated.
-type policyList struct{ builtin, files string }
+// config is the config the VM's proxy would start with now, listening on
+// the proxy port the VM has (none: port 0), with its key (the password)
+// and following its lifeline. It holds everything that, changed, starts a
+// running VM's proxy again: its policies (tools added or removed, a layer
+// of the user's), devvm's binary (an upgrade, which may change the
+// built-in policies' rules), devvm's CA (replaced, so it mints
+// certificates the VM no longer trusts after its next setup), the user's
+// CAs, which it trusts for its own connections, the company proxy it goes
+// through, from devvm's environment, and the shared Nix cache's cap.
+func (p *Proxy) config(st *state.VM, key, lifeline string) (proxy.Config, error) {
+	vm, files, ca := st.Name(), p.Dirs.VM(st.Name()), p.Dirs.CA()
+	builtin, policies := Policies(p.Dirs, vm, st.Image, tools.Names(st))
+	for _, m := range PolicyWarnings(policies) {
+		p.Warn(m)
+	}
+	cas, err := trust.Read(p.Dirs.TrustedCAs())
+	if err != nil {
+		return proxy.Config{}, err
+	}
+	upstream, err := backend.ReadHostProxy(p.Getenv).Upstream()
+	if err != nil {
+		return proxy.Config{}, err
+	}
+	pp, err := ports.Of(st)
+	if err != nil {
+		return proxy.Config{}, err
+	}
+	bin, _ := image.SHA256File(p.Self)
+	caSum, _ := image.SHA256File(filepath.Join(ca, "ca.pem"))
+	c := proxy.Config{
+		Listen: listenOn(pp.Host.Proxy), VM: vm, Password: key,
+		BuiltinPolicies: builtin, Policies: policies,
+		Log: files.EventLog(), ProxyLog: files.ProxyLog(), Lifeline: lifeline,
+		CA: filepath.Join(ca, "ca.pem"), CAKey: filepath.Join(ca, "ca.key"),
+		Secrets: files.Secrets(), SecretCmd: p.Self,
+		UpstreamCAs: string(cas.Bundle()), Upstream: upstream,
+		Links: files.LinkList(), LinkSockets: p.Dirs.Run(),
+		DevvmSHA256: bin, CASHA256: caSum,
+	}
+	c.NixCache, c.NixCacheMax = p.nixCache(st)
+	return c, nil
+}
 
-// record is what the run folder keeps of the policies a proxy started
-// with: both lists, a line each, so a change to either starts it again.
-func (l policyList) record() string { return l.builtin + "\n" + l.files }
+// listenOn is the proxy's address for port, on the host's loopback.
+func listenOn(port int) string { return "127.0.0.1:" + strconv.Itoa(port) }
 
-// stale reports whether the VM's proxy started with other settings than
-// these: its policies (tools added or removed), devvm's binary (an
-// upgrade), devvm's CA (replaced, so it mints certificates the VM no
-// longer trusts after its next setup), the user's CAs, or the company
-// proxy it goes through.
-func (p *Proxy) stale(vm string, policies policyList, bin, caSum string, cas, upstream []byte) bool {
-	oldCAs, _ := os.ReadFile(p.run(vm, ".cas"))
-	oldUp, _ := os.ReadFile(p.run(vm, ".upstream"))
-	return read(p.run(vm, ".policy")) != policies.record() || read(p.run(vm, ".bin")) != bin || read(p.run(vm, ".ca")) != caSum ||
-		!bytes.Equal(oldCAs, cas) || !bytes.Equal(oldUp, upstream)
+// stale reports whether the VM's proxy started with another config than
+// cfg (its Sum): one that's gone or can't be read counts as another.
+func (p *Proxy) stale(st *state.VM, cfg proxy.Config) bool {
+	old, err := proxy.ReadConfig(p.Dirs.VM(st.Name()).ProxyConfig())
+	return err != nil || old.Sum() != cfg.Sum()
 }
 
 // Ports is the allocator of VMs' host ports, which asks Listening
@@ -282,94 +292,52 @@ func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
 	return nil
 }
 
-// writeUpstream writes the user's CAs (-upstream-cas) and the company
-// proxy (-upstream, its password with it, so owner-only) where the VM's
-// proxy reads them as it starts, or removes each file for none.
-func (p *Proxy) writeUpstream(vm string, cas, upstream []byte) error {
-	for _, f := range []struct {
-		ext  string
-		data []byte
-	}{{".cas", cas}, {".upstream", upstream}} {
-		path := p.run(vm, f.ext)
-		if len(f.data) == 0 {
-			if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return err
-			}
-			continue
-		}
-		if err := state.WriteFile(path, f.data); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// start starts the VM's proxy as conf has it, and waits for it to listen.
-func (p *Proxy) start(st *state.VM, conf backend.Confinement, policies policyList, bin, caSum, lifeline string) error {
-	vm := st.Name()
-	// The password goes in a file: a process's arguments are visible to
-	// other users.
-	auth := p.run(vm, ".auth")
-	if err := state.WriteFile(auth, []byte(conf.ProxyPassword+"\n")); err != nil {
+// start writes cfg, the VM's proxy's config, and starts the proxy with
+// it, devvm _proxy -config FILE, waiting for it to listen. The config holds
+// the password and the company proxy's, so it's the user's alone, and in
+// no process's arguments, which other users can see.
+func (p *Proxy) start(vm string, cfg proxy.Config) error {
+	files := p.Dirs.VM(vm)
+	if err := p.writeConfig(vm, cfg); err != nil {
 		return err
 	}
-	files := p.Dirs.VM(vm)
-	logPath := files.ProxyLog()
-	out, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // devvm's own log
+	out, err := os.OpenFile(cfg.ProxyLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = out.Close() }()
-	ca := p.Dirs.CA()
-	addr := "127.0.0.1:" + strconv.Itoa(conf.ProxyPort)
-	args := []string{
-		"_proxy", "-listen", addr, "-vm", vm, "-builtin-policy", policies.builtin, "-policy", policies.files, "-log", files.EventLog(), "-proxy-log", logPath, "-lifeline", lifeline,
-		"-ca", filepath.Join(ca, "ca.pem"), "-cakey", filepath.Join(ca, "ca.key"),
-		"-secrets", files.Secrets(), "-secret-cmd", p.Self, "-auth-file", auth, "-links", files.LinkList(), "-link-sockets", p.Dirs.Run(),
-	}
-	for _, f := range [][2]string{{".cas", "-upstream-cas"}, {".upstream", "-upstream"}} {
-		if _, err := os.Stat(p.run(vm, f[0])); err == nil {
-			args = append(args, f[1], p.run(vm, f[0]))
-		}
-	}
-	args = append(args, p.nixCacheArgs(st)...)
-	status := p.run(vm, ".status")
+	status := files.ProxyStatus()
+	args := []string{"_proxy", "-config", files.ProxyConfig()}
 	pid, err := p.proc(vm).Start(p.Start, daemon.Cmd{Path: p.Self, Args: args, Out: out, Status: status})
 	if err != nil {
 		return err
 	}
-	for _, f := range [][2]string{{".policy", policies.record()}, {".bin", bin}, {".ca", caSum}} {
-		if err := state.WriteFile(p.run(vm, f[0]), []byte(f[1]+"\n")); err != nil {
-			return err
-		}
-	}
 	// Started means this proxy says it listens on the port, and still runs:
 	// another program that took the port first would otherwise get the
 	// VM's traffic.
-	if said, ok := p.proc(vm).Ready(status, pid, p.Tick, 10); ok && said == addr {
+	if said, ok := p.proc(vm).Ready(status, pid, p.Tick, 10); ok && said == cfg.Listen {
 		return nil
 	}
-	return msg.ProxyStartFailed(logPath, vm)
+	return msg.ProxyStartFailed(cfg.ProxyLog, vm)
 }
 
-// nixCacheArgs are the proxy's flags for the shared Nix cache: only for a
-// VM whose image has the nix layer, with the cap nix-cache.size gives (its
+// writeConfig writes the VM's proxy's config whole, mode 600, so a proxy
+// never reads half of it, and two devvms writing it at once leave one of
+// theirs.
+func (p *Proxy) writeConfig(vm string, cfg proxy.Config) error {
+	return state.WriteFile(p.Dirs.VM(vm).ProxyConfig(), cfg.Encode())
+}
+
+// nixCache is the proxy's shared Nix cache and its cap: only for a VM
+// whose image has the nix layer, with the cap nix-cache.size gives (its
 // default when the retention settings can't be read, with a warning).
-func (p *Proxy) nixCacheArgs(st *state.VM) []string {
+func (p *Proxy) nixCache(st *state.VM) (string, int64) {
 	if !image.HasLayer(st.Image, image.NixLayer) {
-		return nil
+		return "", 0
 	}
 	def, err := settings.Read(p.Dirs)
 	if err != nil {
 		p.Warn(msg.RetentionUnreadable().Because(err))
 	}
-	return []string{"-nix-cache", p.Dirs.NixCache(), "-nix-cache-max", strconv.FormatInt(def.Retention.NixCacheCap(), 10)}
-}
-
-func read(path string) string {
-	b, err := os.ReadFile(path) //nolint:gosec // devvm's own run folder
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(b))
+	return p.Dirs.NixCache(), def.Retention.NixCacheCap()
 }

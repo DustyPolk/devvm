@@ -2,6 +2,7 @@ package lima
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
@@ -172,7 +174,14 @@ func fakeProxy(t *testing.T, l *Lima) (spawned *[][]string, stopped chan struct{
 	t.Helper()
 	spawned, stopped = &[][]string{}, make(chan struct{}, 4)
 	l.Spawn = func(c daemon.Cmd) (*daemon.Handle, error) {
-		*spawned = append(*spawned, append([]string{c.Path}, c.Args...))
+		// Its arguments, then its config as it starts: its folder goes with
+		// a build that succeeds.
+		args := append([]string{c.Path}, c.Args...)
+		if len(c.Args) == 3 && c.Args[1] == "-config" {
+			b, _ := os.ReadFile(c.Args[2])
+			args = append(args, string(b))
+		}
+		*spawned = append(*spawned, args)
 		h, err := daemon.Spawn(daemon.Cmd{Path: "sleep", Args: []string{"60"}, Out: c.Out})
 		if err != nil {
 			return nil, err
@@ -218,12 +227,13 @@ func TestBuildImageHostProxy(t *testing.T) {
 			if len(*spawned) != 1 {
 				t.Fatalf("proxies: %v", *spawned)
 			}
-			p := strings.Join((*spawned)[0], " ")
+			args := (*spawned)[0]
 			dir := l.Dirs.VM(inst).BuildProxy()
-			if !strings.Contains(p, " -lifeline "+l.haPIDFile(inst)+" ") || !strings.Contains(p, " -upstream-unresolved") ||
-				!strings.HasSuffix(p, " -upstream "+filepath.Join(dir, "upstream")) ||
-				strings.Contains(p, "pa55") {
-				t.Errorf("the build's proxy: %s", p)
+			var c proxy.Config
+			if len(args) != 5 || args[3] != filepath.Join(dir, "proxy.json") || json.Unmarshal([]byte(args[4]), &c) != nil ||
+				c.Lifeline != l.haPIDFile(inst) || !c.UpstreamUnresolved || c.Upstream == nil || c.Upstream.HTTPS != env["HTTPS_PROXY"] ||
+				c.Upstream.NoProxy != ".corp" || strings.Contains(strings.Join(args[:4], " "), "pa55") {
+				t.Errorf("the build's proxy: %q", args)
 			}
 			select {
 			case <-stopped:

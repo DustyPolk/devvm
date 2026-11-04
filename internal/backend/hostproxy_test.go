@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/proxy"
 )
 
 // corpProxy is a fake company proxy, with a fake password.
@@ -19,9 +20,9 @@ func TestHostProxy(t *testing.T) {
 	if h != (HostProxy{HTTPS: corpProxy, HTTP: "proxy.corp:3128", NoProxy: "localhost,.corp"}) {
 		t.Errorf("read %+v (capitals first, then lowercase)", h)
 	}
-	b, err := h.Upstream()
-	if want := "HTTPS_PROXY=" + corpProxy + "\nHTTP_PROXY=proxy.corp:3128\nNO_PROXY=localhost,.corp\n"; err != nil || string(b) != want {
-		t.Errorf("Upstream = %q, %v", b, err)
+	up, err := h.Upstream()
+	if want := (proxy.Upstream{HTTPS: corpProxy, HTTP: "proxy.corp:3128", NoProxy: "localhost,.corp"}); err != nil || up == nil || *up != want {
+		t.Errorf("Upstream = %+v, %v", up, err)
 	}
 	if got, want := h.Env(), []string{
 		"HTTP_PROXY=proxy.corp:3128", "http_proxy=proxy.corp:3128", "HTTPS_PROXY=" + corpProxy,
@@ -31,8 +32,8 @@ func TestHostProxy(t *testing.T) {
 	}
 	// NO_PROXY alone is no proxy.
 	none := HostProxy{NoProxy: "*"}
-	if b, err := none.Upstream(); !none.None() || b != nil || err != nil || none.Env() != nil {
-		t.Errorf("none: %q %v %q", b, err, none.Env())
+	if up, err := none.Upstream(); !none.None() || up != nil || err != nil || none.Env() != nil {
+		t.Errorf("none: %+v %v %q", up, err, none.Env())
 	}
 	for _, c := range []struct {
 		h    HostProxy

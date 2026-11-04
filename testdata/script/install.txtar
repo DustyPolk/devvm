@@ -357,7 +357,7 @@ again
 . "$WORK/lib.sh"
 release 0.1.0
 mkdir -p "$prefix/lib/devvm/0.0.9" "$prefix/lib/devvm/0.0.8"
-ps() { echo "$prefix/lib/devvm/0.0.9/devvm _proxy -listen 127.0.0.1:1"; }
+ps() { echo "$prefix/lib/devvm/0.0.9/devvm _proxy -config /x/run/proxy.json"; }
 install_devvm 0.1.0 2>/dev/null
 echo "left: $(cd "$prefix/lib/devvm" && echo *)"
 # The real ps sees a process naming a folder in its arguments.

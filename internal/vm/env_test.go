@@ -24,6 +24,7 @@ import (
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
@@ -167,7 +168,12 @@ func testProxy(t *testing.T, d paths.Dirs) *netpolicy.Proxy {
 		mu.Lock()
 		defer mu.Unlock()
 		args[cmd.Process.Pid] = append([]string{path}, a...)
-		return cmd.Process.Pid, daemon.WriteStatus(c.Status, cmd.Process.Pid, a[2])
+		// It listens where its config says: _proxy -config FILE.
+		cfg, err := proxy.ReadConfig(a[2])
+		if err != nil {
+			return 0, err
+		}
+		return cmd.Process.Pid, daemon.WriteStatus(c.Status, cmd.Process.Pid, cfg.Listen)
 	}
 	p.Args = func(pid int) ([]string, error) {
 		mu.Lock()

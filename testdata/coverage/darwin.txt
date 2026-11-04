@@ -1,7 +1,7 @@
 # Each package's test coverage, in percent: the unit tests and the CLI tests together.
 # mise run test fails when a package drops below its line; mise run coverage raises them.
 cmd/devvm 100.0
-internal/backend 95.9
+internal/backend 96.0
 internal/backend/backendtest 46.5
 internal/backend/lima 88.8
 internal/backend/registry 100.0
@@ -19,12 +19,12 @@ internal/hostgit 100.0
 internal/image 97.5
 internal/msg 69.5
 internal/msg/gen 93.3
-internal/netpolicy 87.4
+internal/netpolicy 88.1
 internal/paths 98.0
 internal/platform 86.1
 internal/ports 90.4
 internal/project 91.8
-internal/proxy 88.3
+internal/proxy 88.6
 internal/secrets 90.8
 internal/settings 95.7
 internal/shell 100.0

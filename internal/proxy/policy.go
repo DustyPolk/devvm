@@ -76,8 +76,7 @@ func parseRule(s string) (rule, bool) {
 	}
 	h := strings.TrimSuffix(line, ".")
 	name := strings.TrimPrefix(h, "*.")
-	if _, err := netip.ParseAddr(name); err == nil || strings.ContainsAny(name, "[]*") ||
-		slices.Contains(strings.Split(name, "."), "") || !hostOK(name) {
+	if _, err := netip.ParseAddr(name); err == nil || strings.ContainsAny(name, "[]*") || !hostOK(name) {
 		return rule{}, false
 	}
 	r.host = h
@@ -198,11 +197,17 @@ type policy struct {
 	// broken is, for each file with one, the first of its lines that starts with ! and isn't a
 	// rule (BrokenDeny): while any file has one, the policy denies everything.
 	broken map[string]PolicyLine
+	// failed is, for each file whose last read failed, why: logged once, not at every request.
+	failed map[string]string
 }
+
+// PolicyMax bounds a policy file that the proxy, devvm network and devvm doctor read.
+const PolicyMax = 1 << 20
 
 func newPolicy(builtin []rule, files []string) *policy {
 	return &policy{
 		builtin: builtin, files: files, mtime: map[string]time.Time{}, rules: map[string][]rule{}, broken: map[string]PolicyLine{},
+		failed: map[string]string{},
 	}
 }
 
@@ -211,7 +216,7 @@ func newPolicy(builtin []rule, files []string) *policy {
 // error, and the proxy refuses to start, rather than run with fewer rules than devvm meant.
 func readBuiltins(own fs.FS, names []string) ([]rule, error) {
 	if len(names) > 0 && own == nil {
-		return nil, errors.New("-builtin-policy needs devvm's own files")
+		return nil, errors.New("built-in policies need devvm's own files")
 	}
 	var out []rule
 	for _, n := range names {
@@ -229,17 +234,6 @@ func readBuiltins(own fs.FS, names []string) ([]rule, error) {
 		out = append(out, rs...)
 	}
 	return out, nil
-}
-
-// splitList is a comma-separated list's items, spaces around each and empty ones left out.
-func splitList(s string) []string {
-	var out []string
-	for f := range strings.SplitSeq(s, ",") {
-		if f = strings.TrimSpace(f); f != "" {
-			out = append(out, f)
-		}
-	}
-	return out
 }
 
 // BrokenDeny reports whether l is a line that reads as a deny, starting with !, but isn't a
@@ -267,11 +261,17 @@ func (p *policy) all() ([]rule, string) {
 			continue
 		}
 		if !st.ModTime().Equal(p.mtime[f]) {
-			b, err := os.ReadFile(f) //nolint:gosec // devvm names the policy files
-			if err != nil {          // keep its last rules (a deny dropped for a moment would let through)
+			// A FIFO or a device there (a link to /dev/zero) is refused, not read (ReadRegular).
+			b, err := ReadRegular(f, PolicyMax)
+			if err != nil { // keep its last rules (a deny dropped for a moment would let through)
+				if why := err.Error(); p.failed[f] != why {
+					p.failed[f] = why
+					logf("policy %v; its last rules kept", err)
+				}
 				out = append(out, p.rules[f]...)
 				continue
 			}
+			delete(p.failed, f)
 			p.load(f, string(b))
 			p.mtime[f] = st.ModTime()
 		}

@@ -39,10 +39,15 @@ func (v VM) Run() string { return filepath.Join(v.Dir, "run") }
 // Logs is the folder of the VM's logs.
 func (v VM) Logs() string { return filepath.Join(v.Dir, "logs") }
 
-// Proxy is one of the files of the VM's network policy proxy in Run,
-// named by ext: .pid, .status, .auth, .cas, .upstream, and
-// what it started with (.policy, .bin, .ca).
-func (v VM) Proxy(ext string) string { return filepath.Join(v.Run(), "proxy"+ext) }
+// ProxyConfig is the config the VM's network policy proxy runs with
+// (proxy.Config): everything it started with, its password among it.
+func (v VM) ProxyConfig() string { return filepath.Join(v.Run(), "proxy.json") }
+
+// ProxyPID is the VM's proxy's pid file.
+func (v VM) ProxyPID() string { return filepath.Join(v.Run(), "proxy.pid") }
+
+// ProxyStatus is the status file the VM's proxy writes once it listens.
+func (v VM) ProxyStatus() string { return filepath.Join(v.Run(), "proxy.status") }
 
 // BuildProxy is the folder of a build VM's proxy, behind a company proxy:
 // its files and logs, kept when the build fails.

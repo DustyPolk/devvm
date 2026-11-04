@@ -1,13 +1,16 @@
 package netpolicy
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/msg"
@@ -187,6 +190,43 @@ func TestBuiltinPolicies(t *testing.T) {
 	})
 	if err != nil || n == 0 {
 		t.Fatalf("%d policy files: %v", n, err)
+	}
+}
+
+// A policy file that's a FIFO, a link to /dev/zero or past the cap is
+// refused with a named error, never read: devvm network and doctor don't
+// hang on it.
+func TestPolicyNotRegular(t *testing.T) {
+	dir := t.TempDir()
+	fifo, zero, big := filepath.Join(dir, "fifo.policy"), filepath.Join(dir, "zero.policy"), filepath.Join(dir, "big.policy")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/dev/zero", zero); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(big, []byte(strings.Repeat("a.test\n", proxy.PolicyMax/7+1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for f, want := range map[string]error{fifo: proxy.ErrNotRegular, zero: proxy.ErrNotRegular, big: proxy.ErrTooLong} {
+			if _, err := ReadRules(nil, nil, []string{f}); !errors.Is(err, want) {
+				t.Errorf("ReadRules(%s) = %v, want %v", f, err, want)
+			}
+			if _, err := AddRule(f, "b.test"); !errors.Is(err, want) {
+				t.Errorf("AddRule(%s) = %v, want %v", f, err, want)
+			}
+			if ws := PolicyWarnings([]string{f}); ws != nil {
+				t.Errorf("PolicyWarnings(%s) = %v", f, ws)
+			}
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("reading a policy that isn't a regular file hangs")
 	}
 }
 

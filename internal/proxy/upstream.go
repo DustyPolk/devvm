@@ -1,6 +1,6 @@
 package proxy
 
-// The upstream: a company proxy the host has to go through (-upstream). The proxy still decides
+// The upstream: a company proxy the host has to go through (Config.Upstream). The proxy still decides
 // every request by the name the VM asked for, then reaches allowed hosts through the upstream: a
 // CONNECT tunnel through HTTPS_PROXY's for tunnels and the connections it makes to put secrets in,
 // an absolute-form request to HTTP_PROXY's for plain HTTP. The upstream gets the host's name, not an
@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -35,8 +34,7 @@ type upstream struct {
 }
 
 var (
-	upstreamFile = ""      // -upstream: HTTPS_PROXY=, HTTP_PROXY= and NO_PROXY= lines (devvm writes it, mode 600)
-	upUnresolved = false   // -upstream-unresolved: names the host can't resolve go upstream even when only ** allows them
+	upUnresolved = false   // Config.UpstreamUnresolved: names the host can't resolve go upstream even when only ** allows them
 	upHTTPS      *upstream // tunnels and the connections that put secrets in; nil: direct
 	upHTTP       *upstream // plain HTTP requests; nil: direct
 	noProxy      []noProxyRule
@@ -98,25 +96,17 @@ func newUpstream(raw string) (*upstream, error) {
 	return up, nil
 }
 
-// loadUpstream reads -upstream's file: the host's HTTPS_PROXY, HTTP_PROXY and NO_PROXY.
-func loadUpstream(file string) error {
-	data, err := os.ReadFile(file) //nolint:gosec // devvm's own run folder, given by devvm
-	if err != nil {
-		return err
+// loadUpstream takes the config's company proxy (Config.Upstream): the host's HTTPS_PROXY,
+// HTTP_PROXY and NO_PROXY.
+func loadUpstream(u Upstream) error {
+	var err error
+	if upHTTPS, err = newUpstream(u.HTTPS); err != nil {
+		return fmt.Errorf("upstream: HTTPS_PROXY: %w", err)
 	}
-	vals := map[string]string{}
-	for line := range strings.SplitSeq(string(data), "\n") {
-		if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok {
-			vals[k] = v
-		}
+	if upHTTP, err = newUpstream(u.HTTP); err != nil {
+		return fmt.Errorf("upstream: HTTP_PROXY: %w", err)
 	}
-	if upHTTPS, err = newUpstream(vals["HTTPS_PROXY"]); err != nil {
-		return fmt.Errorf("%s: HTTPS_PROXY: %w", file, err)
-	}
-	if upHTTP, err = newUpstream(vals["HTTP_PROXY"]); err != nil {
-		return fmt.Errorf("%s: HTTP_PROXY: %w", file, err)
-	}
-	noProxy = parseNoProxy(vals["NO_PROXY"])
+	noProxy = parseNoProxy(u.NoProxy)
 	return nil
 }
 
@@ -236,7 +226,7 @@ var errUnresolved = errors.New("this machine can't resolve it, and only ** allow
 // internal or denied (the upstream may connect to any of them). A name the host can't resolve
 // (common behind a company proxy) goes upstream unjudged only when the policy names it, as itself
 // or under *.domain: one that only ** allows is refused (errUnresolved), so ** alone never sends
-// the company proxy a name it may resolve to its own network's hosts. With -upstream-unresolved
+// the company proxy a name it may resolve to its own network's hosts. With Config.UpstreamUnresolved
 // (a build whose VM reaches internal addresses anyway), any such name goes upstream.
 func floorUpstream(ctx context.Context, host string, port int) error {
 	if _, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {

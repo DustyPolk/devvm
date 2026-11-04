@@ -3,7 +3,8 @@
 // devvm starts one per VM, listening on a loopback port. The VM's Lima hostagent runs under a
 // Seatbelt profile, or a restricted QEMU network, that lets the VM reach nothing else, so every
 // connection the VM makes goes through here. Other programs on the host can reach the port too, so
-// requests must carry the VM's password (-auth-file), and the VM's placeholders end in its own key:
+// requests must carry the VM's password (its config's, -config: see config.go), and the VM's
+// placeholders end in its own key:
 //
 //   - CONNECT host:port and absolute-form requests (GET http://host/…) are checked against the
 //     policy: devvm's built-in policies, read from its own files (IO.FS) once, and the user's
@@ -11,16 +12,16 @@
 //   - Names are resolved here, and connections to loopback, private, link-local and the host's own
 //     addresses are refused unless a rule names the address (the "floor").
 //   - A tunnel that starts with a TLS ClientHello must name the CONNECT host in its SNI.
-//   - Hosts with a bound secret (-secrets) are intercepted on :443 instead, to put the secret in
+//   - Hosts with a bound secret (Config.Secrets) are intercepted on :443 instead, to put the secret in
 //     (see secrets.go). Everything else passes unread.
 //   - Every decision goes to a JSON-lines log, and http://devvm.proxy/blocked lists recent blocks
 //     (/blocked/new: those since the VM's last prompt; /ca.pem serves the CA).
-//   - With -nix-cache, http://devvm.proxy/nix/ is a Nix binary cache shared by VMs, which only the
+//   - With Config.NixCache, http://devvm.proxy/nix/ is a Nix binary cache shared by VMs, which only the
 //     host fills, from cache.nixos.org, checking what it keeps (see nixcache.go).
-//   - With -links, the VM's links (NAME:PORT, from the list devvm _links writes) go to their
+//   - With Config.Links, the VM's links (NAME:PORT, from the list devvm _links writes) go to their
 //     sockets on the host before any rule, their bytes as they are (see links.go).
 //
-// It exits when the VM's hostagent does (-lifeline). Standard library only, and internal/daemon,
+// It exits when the VM's hostagent does (Config.Lifeline). Standard library only, and internal/daemon,
 // which is too: it prints nothing itself, but writes to the streams devvm hands Main.
 package proxy
 
@@ -41,6 +42,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,40 +52,22 @@ import (
 )
 
 var (
-	listen    = "127.0.0.1:0"
-	vmName    = "vm"
-	builtins  = ""
-	policies  = ""
-	logPath   = ""
-	proxyLog  = ""
-	lifeline  = ""
-	caFile    = ""
-	caKeyF    = ""
-	initCADir = ""
-	loginKind = ""
-	loginFile = ""
-	loginVM   = false
-	loginBnd  = false
-	loginGet  = ""
-	redactFmt = ""
+	configPath = ""
+	vmName     = "vm"
+	initCADir  = ""
+	loginKind  = ""
+	loginFile  = ""
+	loginVM    = false
+	loginBnd   = false
+	loginGet   = ""
+	redactFmt  = ""
 )
 
 // newFlags defines devvm _proxy's flags on a flag set of its own, writing into the variables above.
 // Each takes one dash or two.
 func newFlags() *flag.FlagSet {
 	fs := flag.NewFlagSet("devvm _proxy", flag.ContinueOnError)
-	fs.StringVar(&listen, "listen", "127.0.0.1:0", "address to listen on")
-	fs.StringVar(&vmName, "vm", "vm", "VM name, for logs")
-	fs.StringVar(&builtins, "builtin-policy", "", "built-in policies, comma-separated paths in devvm's own files (IO.FS): read once, ahead of -policy's; a missing one refuses to start")
-	fs.StringVar(&policies, "policy", "", "the user's policy files, comma-separated, re-read on change (missing files have no rules)")
-	fs.StringVar(&logPath, "log", "", "JSON-lines event log (default: stdout), rotated past 10 MiB (rotate.go)")
-	fs.StringVar(&proxyLog, "proxy-log", "", "the file stderr appends to: the proxy's own log, rotated past 10 MiB by copying (rotate.go)")
-	fs.StringVar(&lifeline, "lifeline", "", "pid file of the VM's hostagent: exit when that process is gone")
-	fs.StringVar(&caFile, "ca", "", "CA certificate for interception (PEM); with -cakey")
-	fs.StringVar(&caKeyF, "cakey", "", "CA private key (PEM)")
-	fs.StringVar(&upstreamCAFile, "upstream-cas", "", "CA certificates (PEM) trusted for the proxy's own TLS connections, besides the system's (secrets.go)")
-	fs.StringVar(&upstreamFile, "upstream", "", "file of the host's HTTPS_PROXY=, HTTP_PROXY= and NO_PROXY= lines: reach allowed hosts through that proxy (upstream.go)")
-	fs.BoolVar(&upUnresolved, "upstream-unresolved", false, "with -upstream: send names the host can't resolve there even when only ** allows them (a build that reaches internal addresses anyway)")
+	fs.StringVar(&configPath, "config", "", "the proxy's config (Config, JSON, mode 600): run the proxy with it (config.go)")
 	fs.StringVar(&initCADir, "init-ca", "", "write a new CA (ca.pem, ca.key) into this directory unless one is there, and exit")
 	fs.StringVar(&loginKind, "login", "", "codex, opencode or claude: work on that agent's login file (logins.go), with -login-file and one of the next three")
 	fs.StringVar(&loginFile, "login-file", "", "the agent's login file on the host")
@@ -91,25 +75,15 @@ func newFlags() *flag.FlagSet {
 	fs.BoolVar(&loginBnd, "login-bindings", false, "print the login's secret bindings (JSON, no values)")
 	fs.StringVar(&loginGet, "login-get", "", "print one value (refreshing an OAuth token when due)")
 	fs.StringVar(&redactFmt, "redact", "", "json or toml: copy stdin to stdout with secret-named values replaced, their paths on stderr (redact.go)")
-	fs.StringVar(&secretsPath, "secrets", "", "secret bindings (JSON, no values), re-read on change")
-	fs.StringVar(&secretCmd, "secret-cmd", "", "the devvm binary, run as `devvm secret get NAME`")
 	fs.StringVar(&loginSalt, "login-salt", "", "with -login-vm or -login-bindings: the VM's key, which ends its placeholders (default $DEVVM_LOGIN_SALT, which keeps it out of the process's arguments)")
 	fs.BoolVar(&loginSecrets, "login-secrets", false, "with -login claude: print the MCP servers whose settings hold secrets")
 	fs.BoolVar(&loginHosts, "login-hosts", false, "with -login-bindings: print the bindings' hosts as allowlist lines (host:443) instead")
-	fs.StringVar(&authFile, "auth-file", "", "file holding the VM's password: requests need Proxy-Authorization for user devvm with it")
-	fs.StringVar(&nixCacheDir, "nix-cache", "", "serve http://devvm.proxy/nix/, the Nix cache shared with other VMs, from this folder (nixcache.go)")
-	fs.Int64Var(&nixCacheMax, "nix-cache-max", NixCacheDefault, "with -nix-cache: the cache's cap, in bytes")
-	fs.StringVar(&linksFile, "links", "", "the VM's links list, which devvm _links writes: reach them through their sockets, before any rule (links.go)")
-	fs.StringVar(&linkSockets, "link-sockets", "", "with -links: the folder of the links' sockets, devvm's run folder")
 	return fs
 }
 
 // --- who may use the proxy ---
 
-var (
-	authFile  = ""
-	proxyAuth = "" // the VM's password; empty: no check
-)
+var proxyAuth = "" // the VM's password (Config.Password); empty: no check
 
 // ProxyUser is the user every request names with its password, a VM's or a build's own, as devvm's
 // backends put it in a guest's proxy settings.
@@ -150,7 +124,7 @@ type Event struct {
 	Agent   string   `json:"agent,omitempty"`
 	Secrets []string `json:"secrets,omitempty"` // names of secrets put in, never values
 	Refused bool     `json:"refused,omitempty"` // blocked whatever the allowlist says: no rule allows it
-	// The company proxy it went through (-upstream), as host:port: never its credentials.
+	// The company proxy it went through (Config.Upstream), as host:port: never its credentials.
 	Upstream string `json:"upstream,omitempty"`
 	// The VM a link's connection went to (devvm _links's events, Host the link's name): never the proxy's.
 	Target string `json:"target,omitempty"`
@@ -164,7 +138,7 @@ type numbered struct {
 
 var (
 	logMu  sync.Mutex
-	logOut io.Writer  = io.Discard // Main sets it: -log, else stdout
+	logOut io.Writer  = io.Discard // Main sets it: Config.Log, else stdout
 	recent []numbered              // the last blocks, for /blocked
 	blocks int                     // blocks so far
 )
@@ -350,18 +324,20 @@ func dial(ctx context.Context, host string, port int) (net.Conn, error) {
 
 // hostOK: a host name (letters, digits, '-', '_', '.') or an address. The VM chooses the host, and it
 // ends up in the log, in the policy and in the allow command devvm suggests for the host's shell.
+// A name is splitHostPort's form, with no trailing dot, and has no empty label: a company proxy
+// that drops trailing dots (evil.test.., which splitHostPort leaves as evil.test.) would reach a
+// host that a deny of evil.test never matched.
 func hostOK(h string) bool {
 	if a, err := netip.ParseAddr(strings.Trim(h, "[]")); err == nil {
 		return a.Zone() == "" // a zone (fe80::1%eth0) is any text
 	}
-	if h == "" || len(h) > 253 {
+	if h == "" || len(h) > 253 || slices.Contains(strings.Split(h, "."), "") {
 		return false
 	}
 	// An address in a shorthand netip doesn't read (127.1, 2130706433, 0x7f000001, 10.1): no name
 	// ends in such a label, and a company proxy or resolver that reads it as inet_aton does would
 	// reach an address the floor never judged.
-	last := h[strings.LastIndexByte(strings.TrimSuffix(h, "."), '.')+1:]
-	if last = strings.TrimSuffix(last, "."); strings.HasPrefix(last, "0x") || strings.Trim(last, "0123456789") == "" {
+	if last := h[strings.LastIndexByte(h, '.')+1:]; strings.HasPrefix(last, "0x") || strings.Trim(last, "0123456789") == "" {
 		return false
 	}
 	for _, c := range h {
@@ -665,14 +641,15 @@ func watchLifeline(path string) {
 	}
 }
 
-// loadPolicies reads the built-in policies (-builtin-policy) from devvm's files, the user's policy
-// files (-policy) and the host's own addresses, and opens the Nix cache (-nix-cache).
-func loadPolicies(own fs.FS) error {
-	rs, err := readBuiltins(own, splitList(builtins))
+// loadPolicies reads the built-in policies (Config.BuiltinPolicies) from devvm's files, the user's
+// policy files (Config.Policies) and the host's own addresses, and opens the Nix cache
+// (Config.NixCache).
+func loadPolicies(c Config, own fs.FS) error {
+	rs, err := readBuiltins(own, c.BuiltinPolicies)
 	if err != nil {
 		return err
 	}
-	pol = newPolicy(rs, splitList(policies))
+	pol = newPolicy(rs, c.Policies)
 	pol.all()
 	loadOwnAddrs()
 	return openNixCache()
@@ -681,20 +658,20 @@ func loadPolicies(own fs.FS) error {
 // IO is what devvm _proxy reads and writes: devvm's own streams.
 type IO struct {
 	Stdin io.Reader
-	// Stdout gets data: the event log without -log, and what -login, -redact and -help print.
+	// Stdout gets data: the event log without Config.Log, and what -login, -redact and -help print.
 	Stdout io.Writer
 	// Stderr gets the proxy's own log lines, and -redact's paths.
 	Stderr io.Writer
 	// Kept is told, with -login-vm, what of an agent's login file the VM's copy holds as it is:
 	// Codex's auth.json keys or opencode's providers devvm doesn't know. Nil: nothing is told.
 	Kept func(agent string, names []string)
-	// FS is devvm's own files (its assets), which -builtin-policy names paths in.
+	// FS is devvm's own files (its assets), which Config.BuiltinPolicies names paths in.
 	FS fs.FS
 }
 
-// Main runs devvm _proxy with args (its flags): the proxy itself, until the VM's hostagent is
-// gone, or one of the modes that do one thing and return (-init-ca, -login, -redact). -help prints
-// the flags to std.Stdout. Errors are returned, not printed.
+// Main runs devvm _proxy with args (its flags): the proxy itself, with -config's file, until the
+// VM's hostagent is gone, or one of the modes that do one thing and return (-init-ca, -login,
+// -redact). -help prints the flags to std.Stdout. Errors are returned, not printed.
 func Main(args []string, std IO) error {
 	fs := newFlags()
 	fs.SetOutput(io.Discard)
@@ -728,55 +705,71 @@ func Main(args []string, std IO) error {
 	if initCADir != "" {
 		return initCA(initCADir)
 	}
-	if caFile != "" {
-		if err := loadCA(caFile, caKeyF); err != nil {
+	// Without a config, and the password in it, any program on the host could use the proxy, and
+	// the VM's tokens with it.
+	if configPath == "" {
+		return errors.New("-config is required")
+	}
+	c, err := ReadConfig(configPath)
+	if err != nil {
+		return err
+	}
+	return serve(c, std)
+}
+
+// apply sets what the proxy runs with from c, reading its CA and the company proxy's settings.
+func (c Config) apply() error {
+	vmName, proxyAuth, upUnresolved = c.VM, c.Password, c.UpstreamUnresolved
+	secretsPath, secretCmd = c.Secrets, c.SecretCmd
+	linksFile, linkSockets = c.Links, c.LinkSockets
+	nixCacheDir, nixCacheMax = c.NixCache, c.NixCacheMax
+	if nixCacheMax == 0 {
+		nixCacheMax = NixCacheDefault
+	}
+	if c.CA != "" {
+		if err := loadCA(c.CA, c.CAKey); err != nil {
 			return err
 		}
 	}
-	if upstreamCAFile != "" {
-		if err := loadUpstreamCAs(upstreamCAFile); err != nil {
+	if c.UpstreamCAs != "" {
+		if err := loadUpstreamCAs([]byte(c.UpstreamCAs)); err != nil {
 			return err
 		}
 	}
-	if upstreamFile != "" {
-		if err := loadUpstream(upstreamFile); err != nil {
+	if c.Upstream != nil {
+		if err := loadUpstream(*c.Upstream); err != nil {
 			return err
 		}
 		logf("%s", upstreamNames())
 	}
-	// Without a password any program on the host could use the proxy, and the VM's tokens with it.
-	if authFile == "" {
-		return errors.New("-auth-file is required")
-	}
-	{
-		b, err := os.ReadFile(authFile)
+	return nil
+}
+
+// serve runs the proxy with c until the VM's hostagent is gone (c.Lifeline).
+func serve(c Config, std IO) error {
+	if c.ProxyLog != "" {
+		f, err := copyRotating(c.ProxyLog, std.Stderr, LogLimit)
 		if err != nil {
 			return err
 		}
-		if proxyAuth = strings.TrimSpace(string(b)); proxyAuth == "" {
-			return fmt.Errorf("%s is empty", authFile)
-		}
+		logger.SetOutput(f)
+	}
+	if err := c.apply(); err != nil {
+		return err
 	}
 	logOut = std.Stdout
-	if logPath != "" {
-		f, err := OpenEventLog(logPath)
+	if c.Log != "" {
+		f, err := OpenEventLog(c.Log)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = f.Close() }()
 		logOut = f
 	}
-	if proxyLog != "" {
-		f, err := copyRotating(proxyLog, std.Stderr, LogLimit)
-		if err != nil {
-			return err
-		}
-		logger.SetOutput(f)
-	}
-	if err := loadPolicies(std.FS); err != nil {
+	if err := loadPolicies(c, std.FS); err != nil {
 		return err
 	}
-	ln, err := net.Listen("tcp", listen) //nolint:noctx // listens for the proxy's whole life
+	ln, err := net.Listen("tcp", c.Listen) //nolint:noctx // listens for the proxy's whole life
 	if err != nil {
 		return err
 	}
@@ -786,9 +779,9 @@ func Main(args []string, std IO) error {
 	if err := daemon.Ready(ln.Addr().String()); err != nil {
 		logf("%v", err)
 	}
-	if lifeline != "" {
+	if c.Lifeline != "" {
 		go func() {
-			watchLifeline(lifeline)
+			watchLifeline(c.Lifeline)
 			logf("the VM's hostagent is gone; exiting")
 			_ = srv.Close()
 		}()

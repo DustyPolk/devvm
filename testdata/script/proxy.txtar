@@ -1,16 +1,27 @@
 # devvm _proxy: the network policy proxy, hidden. --help lists its flags.
 exec devvm _proxy --help
-stdout '-auth-file'
-stdout '-listen'
+stdout '-config'
+! stdout '-auth-file'
 ! stderr .
 exec devvm --help
 ! stdout _proxy
 
-# The proxy refuses to run without the VM's password, or with an empty one.
+# The proxy runs only with its config (proxy.Config), which holds the VM's
+# password: none, one others may read, one without a password, and one of
+# another version are refused.
+! exec devvm _proxy
+stderr '^devvm: proxy_failed reason=-config is required$'
 ! exec devvm _proxy -listen 127.0.0.1:0
-stderr '^devvm: proxy_failed reason=-auth-file is required$'
-! exec devvm _proxy --auth-file empty
-stderr '^devvm: proxy_failed reason=empty is empty$'
+stderr '^devvm: proxy_failed reason=flag provided but not defined: -listen$'
+chmod 0600 nopw.json
+chmod 0600 v2.json
+chmod 0644 open.json
+! exec devvm _proxy --config open.json
+stderr '^devvm: proxy_failed reason=open.json: another user may read or change it$'
+! exec devvm _proxy --config nopw.json
+stderr '^devvm: proxy_failed reason=nopw.json: no password$'
+! exec devvm _proxy -config v2.json
+stderr '^devvm: proxy_failed reason=v2.json: version 2, not 1$'
 ! exec devvm _proxy -nope
 stderr '^devvm: proxy_failed reason=flag provided but not defined: -nope$'
 
@@ -40,7 +51,12 @@ stderr '^devvm: codex_login_kept keys=extra$'
 exec devvm _proxy -login codex -login-file auth.json -login-bindings -login-hosts
 stdout '^api.openai.com:443$'
 
--- empty --
+-- open.json --
+{"version": 1, "listen": "127.0.0.1:0", "password": "k3y"}
+-- nopw.json --
+{"version": 1, "listen": "127.0.0.1:0"}
+-- v2.json --
+{"version": 2, "listen": "127.0.0.1:0", "password": "k3y"}
 
 -- settings.json --
 {"provider": {"options": {"apiKey": "dummy-key", "baseURL": "https://x"}}}

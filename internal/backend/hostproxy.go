@@ -37,11 +37,11 @@ func ReadHostProxy(getenv func(string) string) HostProxy {
 // None reports whether the host goes through no proxy.
 func (h HostProxy) None() bool { return h.HTTPS == "" && h.HTTP == "" }
 
-// Upstream is the file a VM's proxy reads its upstream from (devvm _proxy
-// -upstream): nil for none, or the message for a setting the proxy can't go
-// through. The file holds the proxy's password, if it has one, so it's
-// written as the VM's proxy password is: the user's alone.
-func (h HostProxy) Upstream() ([]byte, error) {
+// Upstream is the company proxy a VM's proxy or a build's goes through
+// (proxy.Config's Upstream): nil for none, or the message for a setting the
+// proxy can't go through. It holds the company proxy's password, if it has
+// one, so it goes only into the proxy's config, the user's alone.
+func (h HostProxy) Upstream() (*proxy.Upstream, error) {
 	if h.None() {
 		return nil, nil
 	}
@@ -65,7 +65,7 @@ func (h HostProxy) Upstream() ([]byte, error) {
 	if strings.ContainsAny(h.NoProxy, "\r\n") {
 		return nil, msg.UpstreamProxyInvalid("NO_PROXY")
 	}
-	return []byte("HTTPS_PROXY=" + h.HTTPS + "\nHTTP_PROXY=" + h.HTTP + "\nNO_PROXY=" + h.NoProxy + "\n"), nil
+	return &proxy.Upstream{HTTPS: h.HTTPS, HTTP: h.HTTP, NoProxy: h.NoProxy}, nil
 }
 
 // Env is the variables a build's commands get, KEY=value, in capitals and

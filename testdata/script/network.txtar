@@ -44,10 +44,16 @@ stdout '^-rw-------\S* '
 # macOS: the hostagent's profile lets it reach the proxy's port.
 [darwin] exec sh -c 'grep -F "localhost:$(sed -n "s/^ *\"proxy\": \([0-9]*\).*/\1/p" "$NET_dir/vm.json")" "$NET_dir/run/sandbox.sb"'
 # The proxy said it listens on that port, for that VM; its password is in
-# a file, never in its arguments.
+# its config, the user's alone, never in its arguments.
 exec sh -c 'grep -F "listening on 127.0.0.1:$(sed -n "s/^ *\"proxy\": \([0-9]*\).*/\1/p" "$NET_dir/vm.json") for devvm-net-" "$NET_dir/logs/proxy.log"'
-exec cat $NET_dir/run/proxy.auth
-stdout '^[0-9a-f]{64}$'
+exec cat $NET_dir/run/proxy.json
+stdout '^  "password": "[0-9a-f]{64}",$'
+stdout '^  "version": 1,$'
+exec ls -l $NET_dir/run/proxy.json
+stdout '^-rw-------\S* '
+exec sh -c 'ps -axww -o command= | grep "[_]proxy -config $NET_dir/run/proxy.json"'
+stdout '_proxy -config \S*/run/proxy\.json$'
+! stdout '[0-9a-f]{64}'
 exec cat $NET_dir/run/secrets.json
 stdout '^\[\]$'
 # The run log never holds the key.
@@ -74,7 +80,7 @@ rm $STUB_DIR/net-direct
 # A running VM whose proxy is gone and can't start again (another program
 # took its port) is stopped, never left running without it.
 cd $WORK/net
-exec sh -c 'pp=$(sed -n "s/^ *\"proxy\": \([0-9]*\).*/\1/p" "$NET_dir/vm.json"); pkill -f -- "_proxy -listen 127.0.0.1:$pp "; sleep 0.5; echo k > "$WORK/squat.key"; devvm _proxy -listen "127.0.0.1:$pp" -auth-file "$WORK/squat.key" -lifeline "$WORK/squat.none" >/dev/null 2>&1 & echo $! > "$WORK/squat.pid"; sleep 1'
+exec sh -c 'pp=$(sed -n "s/^ *\"proxy\": \([0-9]*\).*/\1/p" "$NET_dir/vm.json"); pkill -f -- "_proxy -config $NET_dir/run/proxy.json"; sleep 0.5; printf "{\"version\": 1, \"listen\": \"127.0.0.1:%s\", \"password\": \"k\", \"lifeline\": \"%s\"}\n" "$pp" "$WORK/squat.none" > "$WORK/squat.json"; chmod 600 "$WORK/squat.json"; devvm _proxy -config "$WORK/squat.json" >/dev/null 2>&1 & echo $! > "$WORK/squat.pid"; sleep 1'
 stub_reset
 ! exec devvm
 stderr '^devvm: net_proxy_down_stopped vm=devvm-net-[0-9a-f]{14}$'
@@ -98,8 +104,8 @@ exec cat $AGENT_dir/run/secrets.policy
 stdout '^api\.anthropic\.com:443$'
 # Its proxy's policies: base's and claude's built in, read from the
 # binary, then the files: the user's, the VM's own and its secrets' hosts.
-exec cat $AGENT_dir/run/proxy.policy
-stdout '\Alayers/base\.policy,shared-tools/claude\.policy\n\S*/config/devvm/policy,\S*/data/devvm/vms/[0-9a-f]{14}/policy,\S*/data/devvm/vms/[0-9a-f]{14}/run/secrets\.policy\n\z'
+exec cat $AGENT_dir/run/proxy.json
+stdout '"builtin_policies": \[\n    "layers/base\.policy",\n    "shared-tools/claude\.policy"\n  \],\n  "policies": \[\n    "\S*/config/devvm/policy",\n    "\S*/data/devvm/vms/[0-9a-f]{14}/policy",\n    "\S*/data/devvm/vms/[0-9a-f]{14}/run/secrets\.policy"\n  \],'
 ! exists $XDG_DATA_HOME/devvm/assets
 env CLAUDE_CODE_OAUTH_TOKEN=
 

@@ -44,10 +44,9 @@ type binding struct {
 }
 
 var (
-	secretsPath    = ""           // -secrets: JSON list of bindings (no values), re-read on change
-	secretCmd      = ""           // -secret-cmd: the devvm script, run as `devvm secret get NAME`
-	upstreamCAs    *x509.CertPool // nil: the system roots (tests set their own)
-	upstreamCAFile = ""           // -upstream-cas: the user's CAs, trusted besides the system roots
+	secretsPath = ""           // Config.Secrets: JSON list of bindings (no values), re-read on change
+	secretCmd   = ""           // Config.SecretCmd: the devvm binary, run as `devvm secret get NAME`
+	upstreamCAs *x509.CertPool // nil: the system roots; Config.UpstreamCAs: the user's CAs besides them
 	// Only HTTPS is intercepted; anything else to a bound host (SSH on :22, …) is tunneled.
 	interceptPorts = map[int]bool{443: true}
 )
@@ -133,7 +132,7 @@ var secretValue = func(name string) (string, error) {
 		return c.value, nil
 	}
 	if secretCmd == "" {
-		return "", errors.New("no -secret-cmd")
+		return "", errors.New("no secret_cmd")
 	}
 	// The value is cached for every request: no one request's end cancels it.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second) //nolint:forbidigo // shared by every request
@@ -313,19 +312,15 @@ func loadCA(certPath, keyPath string) error {
 	return err
 }
 
-// loadUpstreamCAs makes the proxy's own TLS connections trust the CA certificates in file (the
-// user's, checked by devvm) as well as the system roots.
-func loadUpstreamCAs(file string) error {
-	data, err := os.ReadFile(file) //nolint:gosec // devvm's own run folder, given by devvm
-	if err != nil {
-		return err
-	}
+// loadUpstreamCAs makes the proxy's own TLS connections trust the CA certificates in pem
+// (Config.UpstreamCAs: the user's, checked by devvm) as well as the system roots.
+func loadUpstreamCAs(pem []byte) error {
 	pool, err := x509.SystemCertPool()
 	if err != nil {
 		return err
 	}
-	if !pool.AppendCertsFromPEM(data) {
-		return fmt.Errorf("%s holds no certificates", file)
+	if !pool.AppendCertsFromPEM(pem) {
+		return errors.New("upstream_cas holds no certificates")
 	}
 	upstreamCAs = pool
 	return nil

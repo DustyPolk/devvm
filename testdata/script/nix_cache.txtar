@@ -1,18 +1,15 @@
-# The shared Nix cache: devvm _proxy -nix-cache answers http://devvm.proxy/nix/
+# The shared Nix cache: devvm _proxy with nix_cache in its config answers http://devvm.proxy/nix/
 # itself; devvm space, devvm images and devvm gc show what it takes, and devvm
 # gc deletes its least recently used files while it's over its cap
 # (nix-cache.size), or all of it with --nix-cache.
 env CACHE=$XDG_DATA_HOME/devvm/cache/nix-cache
 
-exec devvm _proxy --help
-stdout '-nix-cache '
-stdout '-nix-cache-max'
-
 # The proxy makes the folder, the user's alone, and answers nix-cache-info
 # itself. What the cache doesn't take is refused, a NAR no checked narinfo
 # names isn't fetched, and nothing is answered without the VM's password.
 free_port PORT
-! exec devvm _proxy -listen 127.0.0.1:$PORT -auth-file key -policy nix.policy -log events.jsonl -nix-cache cache -nix-cache-max 1000 &p&
+exec sh -c 'printf ''{"version": 1, "listen": "127.0.0.1:%s", "password": "k", "policies": ["nix.policy"], "log": "events.jsonl", "nix_cache": "cache", "nix_cache_max": 1000}\n'' "$PORT" > nix.json && chmod 600 nix.json'
+! exec devvm _proxy -config nix.json &p&
 exec sh $WORK/waitfor 'nc -z 127.0.0.1 $PORT'
 exec curl -sS -x http://devvm:k@127.0.0.1:$PORT http://devvm.proxy/nix/nix-cache-info
 stdout '^Priority: 30$'
@@ -80,8 +77,6 @@ exists $CACHE
 exec devvm images
 ! stderr images_nix_cache
 
--- key --
-k
 -- nix.policy --
 cache.nixos.org
 -- waitfor --

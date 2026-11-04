@@ -261,8 +261,8 @@ cleanup() {
   pkill -f "[_]lima-ports -vm .* -lifeline $DEVVM_LIMA_HOME/" 2>/dev/null  # Lima VMs' forwarders, the sandbox's
   rm -rf "$src" "$work/ssh" "$work/net-home" "$work/agent-home" "$work/agent-ssh" "$XDG_DATA_HOME/devvm/agent-keys.json" "$work/clone-home" "$work/claude-before.json" "$work/codex-before.json" \
     "$work/export.list" "$work/export" "$XDG_DATA_HOME/devvm/exports" "$work/nodocker" "$work/docker-calls" "$work/from-home" \
-    "$work/listener.auth" "$work/ps.log" "$work/lima-bypass" \
-    "$work/corp.auth" "$work/corp.policy" "$work/corp.jsonl" "$work/corp.log"
+    "$work/listener.json" "$work/ps.log" "$work/lima-bypass" \
+    "$work/corp.auth" "$work/corp.json" "$work/corp.policy" "$work/corp.jsonl" "$work/corp.log"
   # The project folders' .git is locked (macOS): unlocked to go.
   if [[ -d $projects ]]; then
     [[ "$(uname -s)" != Darwin ]] || chflags -R nouchg "$projects" 2>/dev/null
@@ -400,14 +400,22 @@ launch() {
   vm=$(vm_of "$d"); [[ -z $vm ]] || created+=("$vm")
 }
 in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
+# proxy_config FILE VM LISTEN PASSWORD [POLICY [LOG]]: a config of this run's own for devvm _proxy
+# -config, the run's alone (mode 600): VM's proxy on LISTEN with PASSWORD, POLICY's rules (none
+# without one) and its events in LOG (none: its standard output).
+proxy_config() { local pol=""
+  [[ -z ${5:-} ]] || pol="\"$5\""
+  (umask 077 && printf '{"version": 1, "vm": "%s", "listen": "%s", "password": "%s", "policies": [%s], "log": "%s"}\n' \
+    "$2" "$3" "$4" "$pol" "${6:-}" >"$1") && chmod 600 "$1"
+}
 # corp_start: a company proxy of this run's ($corp): a devvm _proxy on 127.0.0.1:18766 with a
-# password of its own ($work/corp.auth), allowing any host, its events in $work/corp.jsonl;
-# $corpurl is its address with the password. corp_stop ends it.
+# password of its own ($work/corp.auth, which the checks read it from), allowing any host, its
+# events in $work/corp.jsonl; $corpurl is its address with the password. corp_stop ends it.
 corp_start() {
   corppw=e2e-corp-pw-$$-$(date +%s)
   echo "$corppw" > "$work/corp.auth"; printf '**\n' > "$work/corp.policy"; : > "$work/corp.jsonl"
-  "$D" _proxy -listen 127.0.0.1:18766 -vm e2e-corp -auth-file "$work/corp.auth" -policy "$work/corp.policy" \
-    -log "$work/corp.jsonl" >"$work/corp.log" 2>&1 &
+  proxy_config "$work/corp.json" e2e-corp 127.0.0.1:18766 "$corppw" "$work/corp.policy" "$work/corp.jsonl"
+  "$D" _proxy -config "$work/corp.json" >"$work/corp.log" 2>&1 &
   corp=$!
   sleep 1
   corpurl="http://devvm:$corppw@127.0.0.1:18766"
@@ -1373,7 +1381,7 @@ check "a build's commands get a proxy of devvm's for the build, never the host's
   env HTTPS_PROXY='http://corp:$pxpass@127.0.0.1:9' HTTP_PROXY='http://corp:$pxpass@127.0.0.1:9' NO_PROXY='*' \
     '$D' build e2eproxy </dev/null >'$work/last.log' 2>&1 &&
   grep -qx '$pxtoken' '$XDG_DATA_HOME'/devvm/logs/runs/*.log &&
-  ! ps -axww -o command= | grep -q -- '[_]proxy -listen 127.0.0.1:0 -vm devvm-img-' &&
+  ! ps -axww -o command= | grep -q -- '[_]proxy -config .*/build-proxy/proxy.json' &&
   [[ -z \$(ls -d '$XDG_DATA_HOME'/devvm/run/builds/*/run/build-proxy 2>/dev/null) ]]"
 owned e2eproxy
 kp=$(keys_of e2eproxy | head -1)
@@ -1974,13 +1982,18 @@ ps_watch
 ps_unwatch
 vm=$(vm_of "$n"); [[ -z $vm ]] || created+=("$vm")
 pp=$(st_get "$(vmdir "$vm")" ports.host.proxy)
+pxc=$(vmdir "$vm")/run/proxy.json
 salt=$(st_get "$(vmdir "$vm")" net.made.proxy_salt)
 events=$(vmdir "$vm")/logs/network.jsonl
 # pgrep -f looks for [_]proxy: Linux's pgrep also matches the check's own shell, whose command line
 # holds the pattern.
 check "--network-policy: the VM runs behind its proxy, and the self-check passed" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && vm_state '$(vmdir "$vm")' | grep -qx net.on=true && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok &&
-  pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ' >/dev/null"
+  pgrep -f -- '[_]proxy -config $pxc' >/dev/null && grep -q '\"listen\": \"127.0.0.1:$pp\"' '$pxc'"
+check "the proxy's config is yours alone, holds its password, and is all its arguments name" bash -c "
+  [[ \$(stat -c %a '$pxc' 2>/dev/null || stat -f %Lp '$pxc') == 600 ]] && grep -q '^  \"version\": 1,\$' '$pxc' &&
+  key=\$(st_get '$(vmdir "$vm")' net.made.proxy_key) && grep -qF \"\\\"password\\\": \\\"\$key\\\"\" '$pxc' &&
+  [[ \$(ps -ww -o command= -p \"\$(pgrep -f -- '[_]proxy -config $pxc' | head -1)\" | awk '{ \$1 = \"\"; print }') == ' _proxy -config $pxc' ]]"
 # The control: the launch set the VM's environment (limactl edit, the password's stand-in in the
 # run log), and the guest has the password.
 check "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it" bash -c "
@@ -2011,14 +2024,14 @@ check "devvm network log --blocked groups it, with the command that allows it" b
 # The command devvm network log suggests, run as it is: the same proxy allows the host at once, and after
 # devvm network rm blocks it again.
 check "devvm network allow applies at once to the running VM's proxy, devvm network shows it after on, and rm takes it back" bash -c "cd '$n' &&
-  pid=\$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') && [[ -n \$pid ]] &&
+  pid=\$(pgrep -f -- '[_]proxy -config $pxc') && [[ -n \$pid ]] &&
   cmd=\$('$D' network log --blocked | awk '\$3 == \"example.com:443\" { sub(/^.* devvm /, \"\"); print }') &&
   [[ \$cmd == 'network allow example.com' ]] && '$D' \$cmd </dev/null >/dev/null &&
   '$D' network >'$work/e' && [[ \$(head -1 '$work/e') == on ]] && grep -qx '  example.com' '$work/e' &&
   limactl shell --workdir / $vm bash -lc 'curl -fsS -m 20 -o /dev/null https://example.com' </dev/null &&
   '$D' network rm example.com >/dev/null &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/' </dev/null) == 403 ]] &&
-  [[ \$(pgrep -f -- '[_]proxy -listen 127.0.0.1:$pp -vm $vm ') == \$pid ]]"
+  [[ \$(pgrep -f -- '[_]proxy -config $pxc') == \$pid ]]"
 # A line that reads as a deny but isn't a rule: the running proxy denies everything, refused with no
 # allow command, devvm network rm warns of it, and once it's gone the allowed host works again.
 # The VM's own file is put back whatever happens, so the checks after this one see its rules.
@@ -2055,8 +2068,8 @@ EOF
 check "... and Lima's network's DNS addresses, asked directly, answer nothing" in_vm "$vm" "$lima_dns_asked"
 # A service on the host's own loopback (a devvm _proxy, which answers anything with 407): unreachable
 # directly, and refused by the VM's proxy (internal addresses need a rule naming them).
-echo listener-key > "$work/listener.auth"
-"$D" _proxy -listen 127.0.0.1:18765 -auth-file "$work/listener.auth" >/dev/null 2>&1 &
+proxy_config "$work/listener.json" e2e-listener 127.0.0.1:18765 listener-key
+"$D" _proxy -config "$work/listener.json" >/dev/null 2>&1 &
 listener=$!
 sleep 1
 check "the host's loopback services are unreachable, directly or through the proxy" bash -c "
@@ -2082,9 +2095,10 @@ corp_why() {
   echo "its events:"; tail -n 5 "$work/corp.jsonl"; }
 # corp_proxy_args: the command line of each process of the VM's proxy.
 corp_proxy_args() { local p
-  p=$(pgrep -f -- "[_]proxy -listen 127.0.0.1:$pp -vm $vm " | paste -sd , -) && ps -ww -o command= -p "$p"; }
+  p=$(pgrep -f -- "[_]proxy -config $pxc" | paste -sd , -) && ps -ww -o command= -p "$p"; }
 corp_launch() { (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$@" "$D" >"$work/last.log" 2>&1); }
-corp_upstream() { grep -q -- ' -upstream ' <<<"$(corp_proxy_args)"; }
+# corp_upstream: the VM's proxy runs, its config naming a company proxy.
+corp_upstream() { [[ -n $(corp_proxy_args) ]] && grep -q '^  "upstream": {' "$pxc"; }
 corp_saw() { grep -q "$1" "$work/corp.jsonl"; }
 corp_through() {
   if ! { step "the launch" corp_launch env HTTPS_PROXY="$corpurl" HTTP_PROXY="$corpurl" &&
@@ -2169,10 +2183,10 @@ check "a VM started outside devvm is unenforced, and the self-check stops it" ba
 check "devvm starts it again confined, and the self-check passes" bash -c "cd '$n' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
   [[ \$(status_of '$vm') == Running ]] && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok"
 check "devvm stop stops it and its proxy at once, and devvm starts both again" bash -c "cd '$n' &&
-  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && HOME='$nh' '$D' stop </dev/null >/dev/null 2>&1 &&
-  [[ \$(status_of '$vm') == Stopped ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  pgrep -f -- '[_]proxy -config $pxc' >/dev/null && HOME='$nh' '$D' stop </dev/null >/dev/null 2>&1 &&
+  [[ \$(status_of '$vm') == Stopped ]] && ! pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
   printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$(status_of '$vm') == Running ]] &&
-  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok"
+  pgrep -f -- '[_]proxy -config $pxc' >/dev/null && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok"
 # macOS: the hostagent's Seatbelt profile denies it every bind but its ssh port's, so Lima forwards
 # nothing even without its ignore rules. A limactl first on PATH puts Lima's own rule (forward
 # everything) back for one start, inside the sandbox devvm starts limactl in: Lima tries the guest's
@@ -2238,7 +2252,7 @@ kill -INT "$ip" 2>/dev/null
 wait "$ip"; rc=$?
 check "Ctrl+C during its start stops it and its proxy, and ls shows its policy on" bash -c "
   [[ $rc -eq 130 ]] && grep -qx '==> interrupted_start vm=$vm' '$work/int.log' && [[ \$(status_of '$vm') == Stopped ]] &&
-  ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  ! pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
   '$D' ls | grep -Eq '^$vm +Stopped +base +[a-z,]*claude[a-z,]* +off +on +- +/'"
 (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" >"$work/last.log" 2>&1)
 check "ls shows its policy on, and unenforced once started outside devvm" bash -c "
@@ -2257,21 +2271,21 @@ check "so does devvm host, which names nothing" bash -c "
 check "devvm network off: its next start is direct, without a proxy" bash -c "cd '$n' &&
   [[ \$('$D' network | head -1) == unenforced ]] && '$D' network off </dev/null >/dev/null &&
   printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == off ]] &&
-  [[ \$(status_of '$vm') == Running ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  [[ \$(status_of '$vm') == Running ]] && ! pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
   limactl shell --workdir / $vm curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
 check "devvm network on while it runs, without a terminal: unenforced until devvm restart starts it confined" bash -c "cd '$n' &&
   '$D' network on </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_set_running state=on vm=$vm | head -1)\" '$work/last.log' &&
   [[ \$('$D' network | head -1) == unenforced ]] &&
   printf 'exit\n' | HOME='$nh' '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == on ]] &&
-  vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok && pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok && pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
 check "devvm network off while it runs confined, without a terminal: launched, it keeps its proxy until it next starts" bash -c "cd '$n' &&
   '$D' network off </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_set_running state=off vm=$vm | head -1)\" '$work/last.log' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m net_off_next_start vm=$vm | head -1)\" '$work/last.log' &&
-  pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null &&
+  pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
 check "rm --force deletes it, its proxy and its state" bash -c "cd '$n' && HOME='$nh' '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
-  ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! pgrep -f -- '[_]proxy -listen .* -vm $vm ' >/dev/null"
+  ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! pgrep -f -- '[_]proxy -config $pxc' >/dev/null"
 fi
 
 if want desktop; then

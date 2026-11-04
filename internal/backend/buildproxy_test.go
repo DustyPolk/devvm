@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -11,13 +12,13 @@ import (
 
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/proxy"
 )
 
 // A build's proxy starts with its own password, its policy and the
-// company proxy's file, all the user's alone, and none of them in its
+// company proxy in its config, the user's alone, and none of them in its
 // arguments; it's found by the port its status file names. Stop ends it
-// and deletes the password and the company proxy's file, leaving the
-// logs.
+// and deletes the config, leaving the logs.
 func TestProxyStarter(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "build")
 	var args []string
@@ -30,33 +31,34 @@ func TestProxyStarter(t *testing.T) {
 		}
 		return h, err
 	}}
-	up := []byte("HTTPS_PROXY=" + corpProxy + "\nHTTP_PROXY=\nNO_PROXY=\n")
-	p, err := s.Start("devvm-img-x", dir, "/run/ha.pid", up, "-upstream-unresolved")
+	up := &proxy.Upstream{HTTPS: corpProxy}
+	p, err := s.Start(dir, proxy.Config{VM: "devvm-img-x", Lifeline: "/run/ha.pid", Upstream: up, UpstreamUnresolved: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p.Port != 40123 || len(p.Password) != 64 {
 		t.Errorf("port %d, password %q", p.Port, p.Password)
 	}
-	line := strings.Join(args, " ")
-	for _, want := range []string{
-		"/devvm _proxy -listen 127.0.0.1:0 -vm devvm-img-x -policy " + filepath.Join(dir, "policy"),
-		"-auth-file " + filepath.Join(dir, "auth"), "-lifeline /run/ha.pid -upstream-unresolved",
-		"-upstream " + filepath.Join(dir, "upstream"),
-	} {
-		if !strings.Contains(line, want) {
-			t.Errorf("arguments %q lack %q", line, want)
+	config := filepath.Join(dir, "proxy.json")
+	if want := []string{"/devvm", "_proxy", "-config", config}; !slices.Equal(args, want) {
+		t.Errorf("arguments %q, want %q", args, want)
+	}
+	c, err := proxy.ReadConfig(config)
+	if want := (proxy.Config{
+		Version: proxy.ConfigVersion, Listen: "127.0.0.1:0", VM: "devvm-img-x", Password: p.Password,
+		Policies: []string{filepath.Join(dir, "policy")}, Log: filepath.Join(dir, "events.jsonl"), Lifeline: "/run/ha.pid",
+		Upstream: up, UpstreamUnresolved: true,
+	}); err != nil || !reflect.DeepEqual(c, want) {
+		t.Errorf("config = %+v, %v; want %+v", c, err, want)
+	}
+	for _, f := range []string{"proxy.json", "policy"} {
+		fi, err := os.Stat(filepath.Join(dir, f))
+		if err != nil || fi.Mode().Perm() != 0o600 {
+			t.Errorf("%s: %v %v", f, fi, err)
 		}
 	}
-	if strings.Contains(line, p.Password) || strings.Contains(line, "u:p@") {
-		t.Errorf("a password in the arguments: %s", line)
-	}
-	for f, want := range map[string]string{"auth": p.Password + "\n", "upstream": string(up), "policy": "**"} {
-		b, err := os.ReadFile(filepath.Join(dir, f)) //nolint:gosec // the test's own folder
-		fi, serr := os.Stat(filepath.Join(dir, f))
-		if err != nil || serr != nil || !strings.Contains(string(b), want) || fi.Mode().Perm() != 0o600 {
-			t.Errorf("%s: %q %v %v", f, b, err, serr)
-		}
+	if b, _ := os.ReadFile(filepath.Join(dir, "policy")); !strings.HasSuffix(string(b), "\n**\n") { //nolint:gosec // the test's own folder
+		t.Errorf("policy = %q", b)
 	}
 	p.Stop()
 	select {
@@ -64,18 +66,19 @@ func TestProxyStarter(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("not stopped")
 	}
-	for _, f := range []string{"auth", "upstream"} {
-		if _, err := os.Stat(filepath.Join(dir, f)); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("%s stayed: %v", f, err)
-		}
+	if _, err := os.Stat(config); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its config stayed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "proxy.log")); err != nil {
 		t.Errorf("the log went: %v", err)
 	}
 
-	// Without a company proxy, no file for one.
-	if p, err = s.Start("devvm-img-x", dir, "/run/ha.pid", nil); err != nil || slices.Contains(args, "-upstream") {
-		t.Errorf("no upstream: %v %v", err, args)
+	// Without a company proxy, none in its config.
+	if p, err = s.Start(dir, proxy.Config{VM: "devvm-img-x", Lifeline: "/run/ha.pid"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := proxy.ReadConfig(config); err != nil || c.Upstream != nil || c.UpstreamUnresolved {
+		t.Errorf("no upstream: %+v %v", c, err)
 	}
 	p.Stop()
 }
@@ -116,7 +119,7 @@ func TestProxyStarterFails(t *testing.T) {
 			<-h.Done()
 			return h, daemon.WriteStatus(c.Status, h.PID(), "127.0.0.1:40123")
 		}}
-		_, err := s.Start("b", dir, "/l", nil)
+		_, err := s.Start(dir, proxy.Config{VM: "b", Lifeline: "/l"})
 		if msg.NamesOf(err) != "proxy_start_failed log="+filepath.Join(dir, "proxy.log")+" vm=b" {
 			t.Errorf("%q: Start = %v", say, err)
 		}
@@ -125,6 +128,20 @@ func TestProxyStarterFails(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Errorf("%q: left running", say)
 		}
+		if _, err := os.Stat(filepath.Join(dir, "proxy.json")); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%q: its config, with its password, stayed: %v", say, err)
+		}
+	}
+	// One that can't be started at all leaves no config either.
+	dir := t.TempDir()
+	s := ProxyStarter{Self: "/devvm", Tick: time.Millisecond, Spawn: func(daemon.Cmd) (*daemon.Handle, error) {
+		return nil, errors.New("no such program")
+	}}
+	if _, err := s.Start(dir, proxy.Config{VM: "b", Password: "x"}); err == nil {
+		t.Error("Start: no error")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "proxy.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a proxy that never ran left its config: %v", err)
 	}
 }
 

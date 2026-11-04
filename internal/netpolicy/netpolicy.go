@@ -159,6 +159,6 @@ var Env = map[string]string{
 
 // NoProxy is what a VM with network policy reaches without its proxy: the
 // VM itself. Its links aren't in it: an HTTP client that sends one to the
-// proxy reaches it there (proxy's -links), so links change no VM's
+// proxy reaches it there (proxy.Config's Links), so links change no VM's
 // environment.
 const NoProxy = "localhost,127.0.0.1,::1"

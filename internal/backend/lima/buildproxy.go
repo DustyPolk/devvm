@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/shell"
 )
 
 // A build behind a company proxy (the host's HTTPS_PROXY or HTTP_PROXY)
 // reaches it through a proxy of devvm's on the host for that build alone
 // (backend.ProxyStarter), which has the company proxy's address and
-// password in its -upstream file. The build VM gets only its own proxy's
+// password in its config (proxy.Config's Upstream). The build VM gets only its own proxy's
 // address and a password made for the build, never the company proxy's,
 // so the code a build runs (an image's own, with --from) can't read the
 // company proxy's credentials or write them into an image. On macOS the
@@ -29,10 +30,10 @@ import (
 const sudoKeepProxy = `Defaults env_keep += "http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY"`
 
 // buildUpstream is the company proxy a build on n goes through: the
-// host's proxy settings, as getenv has them, and the -upstream file its
-// proxy reads; none (nil) without the internet or a proxy on the host. A
+// host's proxy settings, as getenv has them, and what its proxy's config
+// holds of them; none (nil) without the internet or a proxy on the host. A
 // setting the proxy can't go through is its message.
-func buildUpstream(getenv func(string) string, n backend.Net) (backend.HostProxy, []byte, error) {
+func buildUpstream(getenv func(string) string, n backend.Net) (backend.HostProxy, *proxy.Upstream, error) {
 	if n != backend.NetInternet {
 		return backend.HostProxy{}, nil, nil
 	}
@@ -67,7 +68,7 @@ func buildProxy(ctx context.Context, l *Lima, vm string, n backend.Net) (backend
 	starter := backend.ProxyStarter{Self: l.Self, Spawn: l.Spawn, Tick: l.Tick}
 	// The build VM reaches internal addresses directly anyway, so names this
 	// machine can't resolve go on to the company proxy.
-	p, err := starter.Start(vm, dir, l.haPIDFile(vm), up, "-upstream-unresolved")
+	p, err := starter.Start(dir, proxy.Config{VM: vm, Lifeline: l.haPIDFile(vm), Upstream: up, UpstreamUnresolved: true})
 	if err != nil {
 		return c, backend.HostProxy{}, none, err
 	}

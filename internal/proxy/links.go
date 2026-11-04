@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -24,7 +23,7 @@ import (
 
 // --- links between VMs ---
 //
-// The proxy is a second entrance to the VM's links (-links): a request for one of their names and
+// The proxy is a second entrance to the VM's links (Config.Links): a request for one of their names and
 // ports, CONNECT db:5432 or GET http://db:5432/, goes to that link's socket on the host, which
 // devvm _links serves as it serves the link's remote forward, checking each connection there. The
 // proxy reads the list devvm _links writes whenever the links it carries change, on every request,
@@ -33,13 +32,13 @@ import (
 // (NAME.devvm.internal). Its bytes pass as they are: no TLS check or interception, no secret put
 // in, no rule asked, and no event of the proxy's own, as devvm _links logs the connection. A
 // request names a host and a port, never a socket: the socket is the one the link sockets' folder
-// (-link-sockets, devvm's run folder) has for this VM's link at that address and port
+// (Config.LinkSockets, devvm's run folder) has for this VM's link at that address and port
 // (LinkSocket), so a list holding anything else is ignored, and no request reaches another VM's
 // link or any other socket. Without that folder, no link is reached.
 
 var (
-	linksFile   = "" // -links: the VM's links list, which devvm _links writes; empty: none
-	linkSockets = "" // -link-sockets: the folder of the links' sockets; empty: none
+	linksFile   = "" // Config.Links: the VM's links list, which devvm _links writes; empty: none
+	linkSockets = "" // Config.LinkSockets: the folder of the links' sockets; empty: none
 )
 
 // LinkList is the file devvm _links writes for the VM's proxy: the links it carries now.
@@ -77,25 +76,10 @@ func LinkHash(vm string, parts ...string) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
-// readLinkList reads the list at path: a regular file, not a link, that only its owner may
-// write, at most linkListMax long, of LinkListVersion.
+// readLinkList reads the list at path: a regular file, not a link, that only its owner, this
+// process's user, may write, at most linkListMax long (readPrivate), of LinkListVersion.
 func readLinkList(path string) (LinkList, error) {
-	// Not blocking: a FIFO there can't hold the request.
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0) //nolint:gosec // devvm names the list
-	if err != nil {
-		return LinkList{}, err
-	}
-	defer func() { _ = f.Close() }()
-	fi, err := f.Stat()
-	switch {
-	case err != nil:
-		return LinkList{}, err
-	case !fi.Mode().IsRegular() || fi.Mode().Perm()&0o022 != 0:
-		return LinkList{}, fmt.Errorf("%s: not a file only its owner writes", path)
-	case fi.Size() > linkListMax:
-		return LinkList{}, fmt.Errorf("%s: too long", path)
-	}
-	b, err := io.ReadAll(io.LimitReader(f, linkListMax+1))
+	b, err := readPrivate(path, linkListMax, 0o022)
 	if err != nil {
 		return LinkList{}, err
 	}
