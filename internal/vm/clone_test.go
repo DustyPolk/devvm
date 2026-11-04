@@ -113,6 +113,27 @@ func TestUpClone(t *testing.T) {
 	}
 }
 
+// A --clone VM of a linked worktree: its clone has only the worktree's
+// branch and that branch's upstream, not the repo's other branches.
+func TestUpCloneWorktree(t *testing.T) {
+	e, _, vmfs := cloneEnv(t)
+	repo := filepath.Join(filepath.Dir(e.Dir), "repo")
+	if err := os.Rename(e.Dir, repo); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "branch", "other")
+	gitIn(t, repo, "worktree", "add", "-q", "-b", "feature", e.Dir)
+	gitIn(t, e.Dir, "branch", "-q", "--set-upstream-to=main")
+	existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	clone := vmfs + e.Dir
+	if got := gitIn(t, clone, "branch", "--format=%(refname:short)"); got != "feature\nmain" {
+		t.Errorf("clone's branches %q", got)
+	}
+	if got := gitIn(t, clone, "symbolic-ref", "--short", "HEAD"); got != "feature" {
+		t.Errorf("clone's HEAD %q", got)
+	}
+}
+
 // rm on a --clone VM: branches with commits the repo lacks are offered
 // for fetching, uncommitted changes in the clone are asked about, and
 // the remote goes with the VM. A VM's answer that isn't an object name
@@ -436,6 +457,93 @@ func TestCheckCloneRepo(t *testing.T) {
 	gitIn(t, dir, "checkout", "-q", "main")
 	if got := check(dir); got != "" {
 		t.Errorf("a branch: %s", got)
+	}
+}
+
+// --clone takes a repo of the folder's own, or a git worktree of one
+// whose link git made both ways, and refuses a .git that points into
+// another repo: a gitdir file to it, a worktree's gitdir file whose
+// entry doesn't name this folder back, or alternates.
+func TestCheckCloneRepoPointers(t *testing.T) {
+	gitEnv(t)
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, wt := filepath.Join(root, "other"), filepath.Join(root, "wt")
+	gitIn(t, root, "init", "-q", "-b", "main", other)
+	gitIn(t, other, "commit", "-q", "--allow-empty", "-m", "one")
+	gitIn(t, other, "worktree", "add", "-q", "-b", "wt", wt)
+	repo := func(name string) string {
+		d := filepath.Join(root, name)
+		gitIn(t, root, "init", "-q", "-b", "main", d)
+		gitIn(t, d, "commit", "-q", "--allow-empty", "-m", "one")
+		return d
+	}
+	gitFile := func(name, gitdir string) string {
+		d := filepath.Join(root, name)
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, ".git"), []byte("gitdir: "+gitdir+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	alt := repo("alt")
+	if err := os.WriteFile(filepath.Join(alt, ".git", "objects", "info", "alternates"), []byte(other+"/.git/objects\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pointed := gitFile("pointed", filepath.Join(other, ".git"))
+	forged := gitFile("forged", filepath.Join(other, ".git", "worktrees", "wt"))
+	for _, c := range []struct{ dir, want string }{
+		{repo("plain"), ""},
+		{wt, ""},
+		{pointed, "clone_git_elsewhere path=" + pointed + "/.git"},
+		{forged, "clone_git_elsewhere path=" + forged + "/.git"},
+		{alt, "clone_alternates path=" + alt + "/.git/objects/info/alternates"},
+	} {
+		if got := msg.NamesOf(checkCloneRepo(t.Context(), c.dir)); got != c.want {
+			t.Errorf("%s: %q, want %q", filepath.Base(c.dir), got, c.want)
+		}
+	}
+}
+
+// A linked worktree's seed push sends only its branch and that branch's
+// upstream; a repo's, every branch.
+func TestSeedRefs(t *testing.T) {
+	gitEnv(t)
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	main, wt := filepath.Join(root, "main"), filepath.Join(root, "wt")
+	gitIn(t, root, "init", "-q", "-b", "main", main)
+	gitIn(t, main, "commit", "-q", "--allow-empty", "-m", "one")
+	gitIn(t, main, "worktree", "add", "-q", "-b", "wt", wt)
+	for _, c := range []struct {
+		dir      string
+		worktree bool
+		want     []string
+	}{
+		{main, false, []string{"--all"}},
+		{wt, true, []string{"refs/heads/wt:refs/heads/wt"}},
+	} {
+		got, err := cloneSource(t.Context(), c.dir)
+		if err != nil || got != c.worktree {
+			t.Errorf("%s: worktree %v, %v", c.dir, got, err)
+		}
+		if refs := seedRefs(t.Context(), c.dir, filepath.Base(c.dir), got); !slices.Equal(refs, c.want) {
+			t.Errorf("%s: %q", c.dir, refs)
+		}
+	}
+	gitIn(t, wt, "branch", "-q", "--set-upstream-to=main")
+	if refs := seedRefs(t.Context(), wt, "wt", true); !slices.Equal(refs, []string{"refs/heads/wt:refs/heads/wt", "refs/heads/main:refs/heads/main"}) {
+		t.Errorf("with its upstream: %q", refs)
+	}
+	gitIn(t, wt, "config", "branch.wt.merge", "refs/heads/wt")
+	if refs := seedRefs(t.Context(), wt, "wt", true); !slices.Equal(refs, []string{"refs/heads/wt:refs/heads/wt"}) {
+		t.Errorf("its own upstream: %q", refs)
 	}
 }
 

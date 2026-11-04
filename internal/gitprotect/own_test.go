@@ -1,0 +1,104 @@
+package gitprotect
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/w3cj/devvm/internal/msg"
+)
+
+// OwnRepo takes a .git folder, or a linked worktree whose link git made
+// both ways, and names whatever else points into another repo.
+func TestOwnRepo(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "repo")
+	root, repo := f.root, f.dir
+	f.git(repo, "init", "-q")
+	f.git(repo, "commit", "-q", "--allow-empty", "-m", "one")
+	wt := filepath.Join(root, "wt")
+	f.git(repo, "worktree", "add", "-q", "-b", "wt", wt)
+	g, entry := filepath.Join(repo, ".git"), filepath.Join(repo, ".git", "worktrees", "wt")
+
+	check := func(name, dir, want string) {
+		t.Helper()
+		gd, cd, err := OwnRepo(dir)
+		got := msg.NamesOf(err)
+		if err == nil {
+			got = gd + " " + cd
+		}
+		if got != want {
+			t.Errorf("%s: %q, want %q", name, got, want)
+		}
+	}
+	// set writes data to path for one check, then puts back what was there.
+	set := func(path, data string, fn func()) {
+		t.Helper()
+		had := os.Rename(path, path+".away") == nil
+		write(t, path, data)
+		fn()
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if had {
+			if err := os.Rename(path+".away", path); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// replaced swaps path for a symlink to target for one check.
+	replaced := func(path, target string, fn func()) {
+		t.Helper()
+		if err := os.Rename(path, path+".away"); err != nil {
+			t.Fatal(err)
+		}
+		symlink(t, target, path)
+		fn()
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(path+".away", path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := filepath.Join(root, "other")
+	f.git(root, "init", "-q", other)
+	f.git(other, "commit", "-q", "--allow-empty", "-m", "one")
+	og := filepath.Join(other, ".git")
+
+	check("a repo", repo, g+" "+g)
+	check("its worktree", wt, entry+" "+g)
+	check("no .git", root, "clone_not_top dir="+root)
+
+	set(filepath.Join(g, "commondir"), og+"\n", func() {
+		check("a commondir", repo, "clone_git_elsewhere path="+g+"/commondir")
+		check("its worktree, the repo's commondir elsewhere", wt, "clone_git_elsewhere path="+wt+"/.git")
+	})
+	set(filepath.Join(entry, "commondir"), og+"\n", func() {
+		check("a worktree's commondir elsewhere", wt, "clone_git_elsewhere path="+wt+"/.git")
+	})
+	set(filepath.Join(entry, "gitdir"), "../../../../wt/.git\n", func() {
+		check("a relative back-link", wt, entry+" "+g)
+	})
+	set(filepath.Join(wt, ".git"), "gitdir: "+filepath.Join(repo, ".git", "elsewhere", "wt")+"\n", func() {
+		check("not in worktrees", wt, "clone_git_elsewhere path="+wt+"/.git")
+	})
+	set(filepath.Join(wt, ".git"), "nothing\n", func() {
+		check("no gitdir line", wt, "clone_git_elsewhere path="+wt+"/.git")
+	})
+	set(filepath.Join(g, "objects", "info", "alternates"), og+"/objects\n", func() {
+		check("alternates", repo, "clone_alternates path="+g+"/objects/info/alternates")
+		check("alternates, from a worktree", wt, "clone_alternates path="+g+"/objects/info/alternates")
+	})
+	replaced(g, og, func() {
+		check("a symlinked .git", repo, "clone_git_elsewhere path="+g)
+	})
+	replaced(filepath.Join(g, "objects"), filepath.Join(og, "objects"), func() {
+		check("symlinked objects", repo, "clone_git_elsewhere path="+g+"/objects")
+	})
+	replaced(filepath.Join(g, "refs", "heads"), filepath.Join(og, "refs", "heads"), func() {
+		check("symlinked heads", repo, "clone_git_elsewhere path="+g+"/refs/heads")
+	})
+	symlink(t, filepath.Join(og, "packed-refs"), filepath.Join(g, "packed-refs"))
+	check("symlinked packed refs", repo, "clone_git_elsewhere path="+g+"/packed-refs")
+}

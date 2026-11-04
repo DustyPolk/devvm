@@ -27,14 +27,15 @@ sequenceDiagram
 ## Requirements
 
 - The folder is the top folder of a git repo that has at least one commit and a branch checked out, not a detached HEAD.
+- The repo is the folder's own, or the folder is a worktree that `git worktree add` made. devvm refuses a `.git` that points into another repo, because the push would copy that repo's branches into the VM. That includes a `.git` file that isn't a worktree's, a worktree whose link back to this folder doesn't match, a `commondir` that leads to another repo, and objects or refs that are symlinks. devvm also refuses a repo that borrows objects from another repo through `objects/info/alternates`. To use such a repo, run `git repack -a -d` in it, then delete that file.
 - git is installed on this machine. The VM's images already have it.
 - You choose `--clone` when the VM is created. devvm refuses `--clone` for an existing VM that mounts its folder, so to switch, save any work in that VM, then run `devvm rm` and `devvm --clone`. Once a VM is a `--clone` VM it stays one, and you don't need to pass `--clone` again.
 
 ## What's copied
 
-From this machine, the VM mounts only the shared tools and its [agents' config folders](coding-agents.md#mounts). Once the VM is running, devvm creates a repo in it at the same path as your folder and pushes every local branch into it. The push goes over [the VM's SSH entry](ssh.md#ssh-access-by-name), which checks the VM's pinned host keys. devvm checks out your current branch in the clone, and your shell opens there.
+From this machine, the VM mounts only the shared tools and its [agents' config folders](coding-agents.md#mounts). Once the VM is running, devvm creates a repo in it at the same path as your folder and pushes every local branch into it. When the folder is a git worktree, devvm pushes only the worktree's branch and that branch's upstream, if it has one, and leaves the repo's other branches on this machine. The push goes over [the VM's SSH entry](ssh.md#ssh-access-by-name), which checks the VM's pinned host keys. devvm checks out your current branch in the clone, and your shell opens there.
 
-devvm copies only your local branches. Tags, uncommitted changes, and untracked or ignored files such as `.env` and `node_modules` stay on this machine. devvm warns you about uncommitted changes, so you can commit them and send them later with `git push devvm BRANCH`.
+Apart from a worktree's upstream, which can be a remote-tracking branch such as `origin/main`, devvm copies only your local branches. Tags, uncommitted changes, and untracked or ignored files such as `.env` and `node_modules` stay on this machine. devvm warns you about uncommitted changes, so you can commit them and send them later with `git push devvm BRANCH`.
 
 If the copy fails, for example because the VM can't be reached, devvm tries again the next time you run it in the folder.
 

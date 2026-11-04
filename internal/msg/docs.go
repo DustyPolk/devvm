@@ -218,6 +218,8 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"clone_no_commits":                 "using/clone#requirements",
 	"clone_detached":                   "using/clone#requirements",
 	"clone_needs_new_vm":               "using/clone#requirements",
+	"clone_git_elsewhere":              "using/clone#requirements",
+	"clone_alternates":                 "using/clone#requirements",
 	"remotes_taken":                    "using/clone#the-remote",
 	"fetch_until":                      "using/clone#the-remote",
 	"no_terminal_fetch":                "using/clone#deleting-the-vm",

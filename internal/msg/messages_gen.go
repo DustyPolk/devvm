@@ -324,6 +324,11 @@ func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
 
+// CloneAlternates is [clone_alternates]: "--clone copies only a repo's own objects, and {{.path}} borrows objects from another repo. Run git repack -a -d, delete that file, then run devvm --clone again."
+func CloneAlternates(path string) M {
+	return M{id: "clone_alternates", vals: []val{{"path", path}}}
+}
+
 // CloneCheckFailed is [clone_check_failed]: "Reading the clone in {{.vm}} failed, so devvm kept the VM. To delete it without the check, losing the clone's unfetched commits and uncommitted changes, run devvm rm --no-clone-check."
 func CloneCheckFailed(vm string) M {
 	return M{id: "clone_check_failed", vals: []val{{"vm", vm}}}
@@ -347,6 +352,11 @@ func CloneDetached() M {
 // CloneDirty is [clone_dirty]: "The VM's clone has uncommitted changes, which will be lost:"
 func CloneDirty() M {
 	return M{id: "clone_dirty"}
+}
+
+// CloneGitElsewhere is [clone_git_elsewhere]: "--clone takes only a repo of the folder's own or a git worktree of one, and {{.path}} points into another repo. Run devvm --clone in that repo's own folder."
+func CloneGitElsewhere(path string) M {
+	return M{id: "clone_git_elsewhere", vals: []val{{"path", path}}}
 }
 
 // CloneNeedsGit is [clone_needs_git]: "--clone needs git, and git isn't installed on this machine."
@@ -3325,11 +3335,13 @@ var specs = map[string]spec{
 	"claude_mcp_secrets_copied":        {fields: []string{"servers", "vm"}},
 	"claude_token_howto":               {},
 	"claude_token_invalid":             {},
+	"clone_alternates":                 {fields: []string{"path"}},
 	"clone_check_failed":               {fields: []string{"vm"}},
 	"clone_check_not_started":          {fields: []string{"vm"}},
 	"clone_check_skipped":              {fields: []string{"vm"}},
 	"clone_detached":                   {},
 	"clone_dirty":                      {},
+	"clone_git_elsewhere":              {fields: []string{"path"}},
 	"clone_needs_git":                  {},
 	"clone_needs_new_vm":               {fields: []string{"vm"}},
 	"clone_no_commits":                 {},

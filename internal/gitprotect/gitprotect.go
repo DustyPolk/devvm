@@ -570,16 +570,22 @@ func gitdirOf(file, worktree string) string {
 		if !ok {
 			continue
 		}
-		if !filepath.IsAbs(t) {
-			t = filepath.Join(worktree, t)
-		}
-		r, err := filepath.EvalSymlinks(t)
-		if err != nil || !isDir(r) {
-			return ""
-		}
-		return r
+		return resolvedDir(worktree, t)
 	}
 	return ""
+}
+
+// resolvedDir returns p, relative to dir unless it's absolute, with its
+// symlinks resolved, when it's a folder, or "".
+func resolvedDir(dir, p string) string {
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(dir, p)
+	}
+	r, err := filepath.EvalSymlinks(p)
+	if err != nil || !isDir(r) {
+		return ""
+	}
+	return r
 }
 
 // paths returns what to lock: the hooks and config of the repo and of its
@@ -628,17 +634,27 @@ func (p *Protector) worktreeStrays() []string {
 	for _, d := range p.gitDirs() {
 		physical, _ := filepath.EvalSymlinks(d)
 		for _, w := range worktrees(d) {
-			c, _ := os.ReadFile(filepath.Join(w, "commondir")) //nolint:gosec // the project's own
-			target := strings.TrimRight(string(c), "\n")
-			if !filepath.IsAbs(target) {
-				target = filepath.Join(w, target)
-			}
-			if r, err := filepath.EvalSymlinks(target); err != nil || r != physical {
+			if r, ok := commonOf(w); !ok || r != physical {
 				out = append(out, w)
 			}
 		}
 	}
 	return out
+}
+
+// commonOf returns where git in the git dir g reads the repo's config,
+// objects and refs from: its commondir, resolved (relative to g, as git
+// reads it), else g itself, resolved. It's false when that isn't there.
+func commonOf(g string) (string, bool) {
+	target := g
+	if c, err := os.ReadFile(filepath.Join(g, "commondir")); err == nil { //nolint:gosec // the project's own
+		target = strings.TrimRight(string(c), "\n")
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(g, target)
+		}
+	}
+	r, err := filepath.EvalSymlinks(target)
+	return r, err == nil
 }
 
 // hooksPathInside reports whether core.hooksPath leads into the project

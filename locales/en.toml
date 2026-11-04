@@ -1754,6 +1754,14 @@ other = "--clone needs a commit, and this repo has none yet. Make a first commit
 [clone_detached]
 other = "--clone needs a branch checked out, and HEAD is detached. Check out a branch, then run devvm --clone again."
 
+[clone_git_elsewhere]
+description = "path is the .git file, commondir or gitdir file that points elsewhere"
+other = "--clone takes only a repo of the folder's own or a git worktree of one, and {{.path}} points into another repo. Run devvm --clone in that repo's own folder."
+
+[clone_alternates]
+description = "path is the repo's objects/info/alternates file"
+other = "--clone copies only a repo's own objects, and {{.path}} borrows objects from another repo. Run git repack -a -d, delete that file, then run devvm --clone again."
+
 [clone_needs_new_vm]
 other = "{{.vm}} mounts this folder, and --clone needs a new VM. Save any work in it, then run devvm rm and devvm --clone."
 

@@ -25,6 +25,19 @@ exec git checkout -q --detach
 ! exec devvm --clone --no-network-policy
 stderr '^devvm: clone_detached$'
 exec git checkout -q main
+
+# Objects borrowed from another repo (alternates), or a .git file that
+# points into one: refused.
+exec sh -c 'echo /elsewhere/objects > .git/objects/info/alternates'
+! exec devvm --clone --no-network-policy
+stderr '^devvm: clone_alternates path=/\S*/web/\.git/objects/info/alternates$'
+rm .git/objects/info/alternates
+mkdir $WORK/pointed
+exec sh -c 'echo "gitdir: $(pwd -P)/.git" > ../pointed/.git'
+cd $WORK/pointed
+! exec devvm --clone --no-network-policy
+stderr '^devvm: clone_git_elsewhere path=/\S*/pointed/\.git$'
+cd $WORK/web
 exec git branch other
 stub_calls
 ! stdout 'limactl (create|clone)'

@@ -7,11 +7,13 @@ import (
 	"errors"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/hostgit"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/project"
@@ -58,13 +60,16 @@ func hostGit(ctx context.Context, dir string, args ...string) (string, error) {
 }
 
 // checkCloneRepo refuses --clone for a folder that isn't the top of a git
-// repo with a commit and a branch checked out.
+// repo of its own (cloneSource) with a commit and a branch checked out.
 func checkCloneRepo(ctx context.Context, dir string) error {
 	if _, err := exec.LookPath("git"); err != nil {
 		return msg.CloneNeedsGit()
 	}
 	if top, err := hostGit(ctx, dir, "rev-parse", "--show-toplevel"); err != nil || top != dir {
 		return msg.CloneNotTop(dir)
+	}
+	if _, err := cloneSource(ctx, dir); err != nil {
+		return err
 	}
 	if _, err := hostGit(ctx, dir, "rev-parse", "-q", "--verify", "HEAD"); err != nil {
 		return msg.CloneNoCommits()
@@ -73,6 +78,46 @@ func checkCloneRepo(ctx context.Context, dir string) error {
 		return msg.CloneDetached()
 	}
 	return nil
+}
+
+// cloneSource checks that what git reads in dir, a repo's top folder, is
+// that repo's own (gitprotect.OwnRepo), and that git run there reads the
+// same git dir and common dir. It reports whether dir is a linked
+// worktree of a repo elsewhere.
+func cloneSource(ctx context.Context, dir string) (worktree bool, err error) {
+	gitDir, common, err := gitprotect.OwnRepo(dir)
+	if err != nil {
+		return false, err
+	}
+	out, err := hostGit(ctx, dir, "rev-parse", "--path-format=absolute", "--absolute-git-dir", "--git-common-dir")
+	got := strings.Split(out, "\n")
+	if err != nil || len(got) != 2 || resolved(got[0]) != gitDir || resolved(got[1]) != common {
+		return false, msg.CloneGitElsewhere(filepath.Join(dir, ".git"))
+	}
+	return gitDir != common, nil
+}
+
+// resolved is p with its symlinks resolved, or "" when it can't be.
+func resolved(p string) string {
+	r, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return ""
+	}
+	return r
+}
+
+// seedRefs are what the seed push sends: every branch of a repo; of a
+// linked worktree, whose repo is elsewhere, only its branch and that
+// branch's upstream, if it has one.
+func seedRefs(ctx context.Context, dir, branch string, worktree bool) []string {
+	if !worktree {
+		return []string{"--all"}
+	}
+	refs := []string{"refs/heads/" + branch + ":refs/heads/" + branch}
+	if up, err := hostGit(ctx, dir, "for-each-ref", "--format=%(upstream)", "refs/heads/"+branch); err == nil && strings.HasPrefix(up, "refs/") && up != "refs/heads/"+branch {
+		refs = append(refs, up+":"+up)
+	}
+	return refs
 }
 
 // gitSSH is host git (hostgit) run in dir with ssh reading devvm's ssh
@@ -101,6 +146,11 @@ func (e clones) seedClone(ctx context.Context, b backend.Backend, st *state.VM, 
 	if err != nil {
 		return msg.CloneDetached()
 	}
+	// Checked again, as the folder may have changed since the VM was made.
+	worktree, err := cloneSource(ctx, dir)
+	if err != nil {
+		return err
+	}
 	remote, err := freeRemote(ctx, f)
 	if err != nil {
 		return err
@@ -115,7 +165,8 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 		return backend.Logged(msg.CloneSeedFailed(vm))
 	}
 	e.Info(msg.CopyingBranches())
-	if err := e.LoggedCmd(ctx, msg.CopyingBranches(), e.gitSSH(ctx, vm, dir, "push", "-q", "--no-verify", "--no-recurse-submodules", "--no-signed", cloneURL(vm, dir), "--all")); err != nil {
+	push := append([]string{"push", "-q", "--no-verify", "--no-recurse-submodules", "--no-signed", cloneURL(vm, dir)}, seedRefs(ctx, dir, branch, worktree)...)
+	if err := e.LoggedCmd(ctx, msg.CopyingBranches(), e.gitSSH(ctx, vm, dir, push...)); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
