@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/redact"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -166,29 +166,28 @@ func (u *UI) LogNote() {
 
 // LogWriter is where to send the output of a command run some other way
 // than LoggedCmd (a backend's Exec, say): the run log, streamed to stderr
-// too while verbose.
-func (u *UI) LogWriter() io.Writer { return logTo(u, u.openLog()) }
+// too while verbose, through the run's one redacting writer, so a password
+// split across writes is still found. The end of a line still to come is
+// written at the next flush point (flushLog): a logged command's start,
+// DieLogged and the run's end.
+func (u *UI) LogWriter() io.Writer {
+	f := u.openLog()
+	u.log.Lock()
+	defer u.log.Unlock()
+	if u.log.w == nil {
+		u.log.w = &redacting{w: logTo(u, f)}
+	}
+	return u.log.w
+}
 
-// proxyKey is a VM's proxy key (32 hex digits) or the build proxy's
-// password (64) in a proxy URL, which lets a process act as that VM or
-// build. It's kept out of the run log.
-var proxyKey = regexp.MustCompile(`devvm:[0-9a-f]{32,64}@`)
-
-// urlPassword is the password in a URL's user info (scheme://user:password@), such as a company
-// proxy's in the shell's HTTPS_PROXY, which Lima logs as it reads it for a VM without network
-// policy. It's kept out of the run log too.
-var urlPassword = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://[^\s/:@"'` + "`" + `]*):([^\s@/?#]+)@`)
-
-// redact is s without the proxy keys and URL passwords it holds.
-func redact(s string) string {
-	s = proxyKey.ReplaceAllString(s, "devvm:<key>@")
-	return urlPassword.ReplaceAllStringFunc(s, func(m string) string {
-		sub := urlPassword.FindStringSubmatch(m)
-		if sub[2] == "<key>" {
-			return m
-		}
-		return sub[1] + ":<password>@"
-	})
+// flushLog writes what u's LogWriter holds of a line, redacted.
+func flushLog(u *UI) {
+	u.log.Lock()
+	w := u.log.w
+	u.log.Unlock()
+	if w != nil {
+		w.flush()
+	}
 }
 
 // redactLineMax is as much of a line without its end as redacting holds: past it, the line is
@@ -196,8 +195,8 @@ func redact(s string) string {
 const redactLineMax = 64 << 10
 
 // redacting is a command's output on its way to the run log: it writes whole lines, each
-// redacted, so a password split across two writes is still found. A line ends at "\n" or "\r"
-// (a progress bar's). flush writes the rest, once the command has ended.
+// redacted (redact.String), so a password split across two writes is still found. A line ends at
+// "\n" or "\r" (a progress bar's). flush writes the rest, once the command has ended.
 type redacting struct {
 	w   io.Writer
 	mu  sync.Mutex
@@ -209,10 +208,10 @@ func (r *redacting) Write(p []byte) (int, error) {
 	defer r.mu.Unlock()
 	r.buf = append(r.buf, p...)
 	if i := bytes.LastIndexAny(r.buf, "\n\r"); i >= 0 {
-		_, _ = io.WriteString(r.w, redact(string(r.buf[:i+1])))
+		_, _ = io.WriteString(r.w, redact.String(string(r.buf[:i+1])))
 		r.buf = slices.Clone(r.buf[i+1:])
 	} else if len(r.buf) > redactLineMax {
-		_, _ = io.WriteString(r.w, redact(string(r.buf)))
+		_, _ = io.WriteString(r.w, redact.String(string(r.buf)))
 		r.buf = nil
 	}
 	return len(p), nil
@@ -222,7 +221,7 @@ func (r *redacting) flush() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.buf) > 0 {
-		_, _ = io.WriteString(r.w, redact(string(r.buf)))
+		_, _ = io.WriteString(r.w, redact.String(string(r.buf)))
 		r.buf = nil
 	}
 }
@@ -279,7 +278,8 @@ func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 		// The count before the step, then the step, its values bold.
 		label = append([]part{{text: strings.TrimSuffix(counted, shown)}}, u.errStyle.valueParts(step)...)
 	}
-	_, _ = io.WriteString(w, logLine+redact("+ "+strings.Join(cmd.Args, " "))+"\n")
+	flushLog(u) // what LogWriter holds goes first
+	_, _ = io.WriteString(w, logLine+redact.String("+ "+strings.Join(cmd.Args, " "))+"\n")
 	out := &redacting{w: w}
 	defer out.flush()
 	cmd.Stdout, cmd.Stderr = out, out

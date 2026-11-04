@@ -17,6 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/redact"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -97,12 +98,26 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 		cmd.Path = wrap[0]
 	}
 	cmd.Env = setEnv(cmd.Env, env...)
+	defer l.redactLog(vm)
 	if err := l.Runner.Run(ctx, msg.Starting(vm), cmd); err != nil {
 		if err := l.degraded(ctx, vm); err != nil {
 			return err
 		}
 	}
 	return l.recordStart(vm, c.Net)
+}
+
+// redactLog takes proxy passwords out of the VM's hostagent log, once
+// limactl start has ended, started or not. The hostagent logs a proxy
+// variable's value, password and all, as it reads it at its start (the
+// limactl comment says when), and that log is Lima's, outside devvm's run
+// log. Each password becomes as many "*" in place, so the hostagent, which
+// keeps writing to the file at its own offset, goes on where it was.
+func (l *machines) redactLog(vm string) {
+	path := filepath.Join(l.Dirs.LimaVM(vm), "ha.stderr.log")
+	if err := redact.File(path); err != nil {
+		l.Warn(msg.LimaLogUnredacted(path, err.Error()).Because(err))
+	}
 }
 
 // degraded decides on a start Lima reported as failed. Lima reports that

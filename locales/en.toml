@@ -279,6 +279,10 @@ other = "configuring {{.vm}}"
 [start_failed]
 other = "{{.vm}} didn't start."
 
+[lima_log_unredacted]
+description = "file is Lima's hostagent log; reason is why it couldn't be changed"
+other = "Taking proxy passwords out of Lima's log {{.file}} failed: {{.reason}}. Delete the file if it holds a password."
+
 [start_no_ssh]
 description = "console is a glob of the VM's console logs"
 other = "{{.vm}} didn't start because it doesn't answer over ssh. Check its console logs, {{.console}}."

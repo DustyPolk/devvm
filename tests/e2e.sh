@@ -2750,6 +2750,23 @@ check "devvm network off: its next start is direct, without a proxy" bash -c "cd
   printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == off ]] &&
   [[ \$(status_of '$vm') == Running ]] && ! pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
   limactl shell --workdir / $vm curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
+# Without network policy, behind the run's company proxy on this machine's loopback, its password
+# fake: the shell's HTTPS_PROXY reaches the guest, which uses it, and Lima, which points it at the
+# VM's gateway, logs it as it starts the VM. Neither devvm's run logs nor Lima's hostagent log keep
+# the password: the run log has the line with <password>, the hostagent log with as many stars. The
+# check reads the password from its file, so it's in no command's arguments.
+corp_start
+check_lines=60 check "without network policy, the shell's proxy password reaches the guest, and no run log or Lima log keeps it" bash -c "cd '$n' &&
+  pw=\$(cat '$work/corp.auth') && url=\"http://devvm:\$pw@127.0.0.1:$P18766\" && stars=\$(printf '%*s' \${#pw} '' | tr ' ' '*') &&
+  printf 'exit\n' | HOME='$nh' HTTPS_PROXY=\"\$url\" HTTP_PROXY=\"\$url\" '$D' restart >'$work/last.log' 2>&1 &&
+  grep -qF 'devvm:<password>@127.0.0.1:$P18766' \"\$(ls -t '$XDG_DATA_HOME'/devvm/logs/runs/*.log | head -1)\" &&
+  [[ \$('$D' network | head -1) == off ]] &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null) == \"http://devvm:\$pw@192.168.5.2:$P18766\" ]] &&
+  limactl shell --workdir / $vm bash -lc 'curl -fsS -m 30 -o /dev/null https://github.com' </dev/null &&
+  grep -q '\"event\":\"tunnel\",\"host\":\"github.com\",\"port\":443' '$work/corp.jsonl' &&
+  ! grep -rqsFf '$work/corp.auth' '$XDG_DATA_HOME/devvm/logs' '$(vmdir "$vm")/logs' '$DEVVM_LIMA_HOME/$vm/ha.stderr.log' '$work/last.log' &&
+  grep -qF \"devvm:\$stars@127.0.0.1:$P18766\" '$DEVVM_LIMA_HOME/$vm/ha.stderr.log'"
+corp_stop
 check "devvm network on while it runs, without a terminal: unenforced until devvm restart starts it confined" bash -c "cd '$n' &&
   '$D' network on </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_set_running state=on vm=$vm | head -1)\" '$work/last.log' &&
   [[ \$('$D' network | head -1) == unenforced ]] &&

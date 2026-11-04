@@ -69,6 +69,7 @@ type UI struct {
 		sync.Mutex
 		path  string
 		f     *os.File
+		w     *redacting // LogWriter's, made at its first call
 		noted bool
 		keep  int // run logs kept, the newest; keepLogs when 0
 	}
@@ -232,6 +233,7 @@ func (u *UI) Die(m msg.M) {
 // has one, without control characters, dim in a terminal. While verbose,
 // those lines are on stderr already, so only the log's path is.
 func (u *UI) DieLogged(m msg.M) {
+	flushLog(u)
 	path := u.logPath()
 	switch {
 	case path == "" || u.Interrupted():

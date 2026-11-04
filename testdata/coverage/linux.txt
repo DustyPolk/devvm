@@ -26,6 +26,7 @@ internal/platform 81.4
 internal/ports 90.0
 internal/project 91.5
 internal/proxy 88.9
+internal/redact 96.0
 internal/secrets 91.3
 internal/settings 95.3
 internal/shell 100.0

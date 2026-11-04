@@ -563,6 +563,58 @@ func TestDegradedStart(t *testing.T) {
 	}
 }
 
+// The hostagent logs the shell's proxy password as it starts a VM without
+// network policy: once limactl start ends, started or failed, the password
+// in its log is stars, the file's length kept. A log devvm can't change
+// warns.
+func TestStartRedactsTheHostagentLog(t *testing.T) {
+	l, f, warned := testLima(t, "darwin")
+	pass := "e2e-not-a-secret" //nolint:gosec // a fake password
+	log := filepath.Join(l.Dirs.LimaVM("v"), "ha.stderr.log")
+	line := "level=info msg=\"Replacing \\\"HTTPS_PROXY\\\" value `http://alice:" + pass + "@127.0.0.1:3128`\"\n"
+	f.do = func(c call) {
+		if slices.Contains(c.argv, "start") {
+			if err := os.MkdirAll(filepath.Dir(log), 0o700); err != nil {
+				t.Error(err)
+			}
+			if err := os.WriteFile(log, []byte(line), 0o600); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+	f.out["limactl list --json"] = `{"name":"v","status":"Stopped"}`
+	want := strings.ReplaceAll(line, pass, strings.Repeat("*", len(pass)))
+	for _, fail := range []bool{false, true} {
+		f.fail = nil
+		if fail {
+			f.fail = []string{"limactl start"}
+		}
+		err := l.start(t.Context(), "v", nil, backend.Confinement{Net: backend.NetDirect})
+		if (err != nil) != fail {
+			t.Errorf("failed %v: %v", fail, err)
+		}
+		if b, _ := os.ReadFile(log); string(b) != want { //nolint:gosec // the test's own file
+			t.Errorf("failed %v: log %q, want %q", fail, b, want)
+		}
+	}
+	if len(warned.Names()) != 0 {
+		t.Errorf("warned %q", warned.Names())
+	}
+	f.fail, f.do = nil, nil
+	if err := os.Remove(log); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(log, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.start(t.Context(), "v", nil, backend.Confinement{Net: backend.NetDirect}); err != nil {
+		t.Fatal(err)
+	}
+	if ids := warned.IDs(); !slices.Equal(ids, []string{"lima_log_unredacted"}) {
+		t.Errorf("an unreadable log: warned %q", warned.Names())
+	}
+}
+
 // Running: the hostagent's pid file is the lifeline, stopped or not; its
 // pid and when it was written are the start's ID; and the VM is confined
 // while it runs on the hostagent Start started with NetProxy, which runs.

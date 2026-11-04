@@ -1554,6 +1554,11 @@ func LimaHostUnsupported(os string) M {
 	return M{id: "lima_host_unsupported", vals: []val{{"os", os}}}
 }
 
+// LimaLogUnredacted is [lima_log_unredacted]: "Taking proxy passwords out of Lima's log {{.file}} failed: {{.reason}}. Delete the file if it holds a password."
+func LimaLogUnredacted(file string, reason string) M {
+	return M{id: "lima_log_unredacted", vals: []val{{"file", file}, {"reason", reason}}}
+}
+
 // LimaMissing is [lima_missing]: "Lima isn't installed. Install Lima 2.0 or newer."
 func LimaMissing() M {
 	return M{id: "lima_missing"}
@@ -3581,6 +3586,7 @@ var specs = map[string]spec{
 	"lima_global_config":               {fields: []string{"files"}},
 	"lima_home_too_long":               {fields: []string{"home", "vm"}},
 	"lima_host_unsupported":            {fields: []string{"os"}},
+	"lima_log_unredacted":              {fields: []string{"file", "reason"}},
 	"lima_missing":                     {},
 	"lima_missing_fix":                 {fields: []string{"fix"}},
 	"lima_old":                         {fields: []string{"version"}},

@@ -108,6 +108,7 @@ func devvm() rules {
 				from: []string{
 					"assets", "locales", "internal/platform", "internal/msg/gen", "internal/testbuild", "internal/hostgit",
 					"internal/shell", "internal/vmname", "internal/daemon", "internal/fetch", "internal/jsonc",
+					"internal/redact",
 				},
 				to: []string{"..."},
 			},

@@ -15,6 +15,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/build/`, `internal/image/` | building and rebuilding images, their records; image keys and names (pure) |
 | `internal/fetch/` | every HTTP client (stdlib): `NewClient` (timeout, `HTTPSOnly`/`SameScheme`), `Retry`/`Transient`, `ReadCapped`, `Get`, `Download` (checks the SHA-256) |
 | `internal/from/` | `--from`: references, registry digests (anonymous token), Docker's IDs, the recorded digests |
+| `internal/redact/` | passwords out of logs (stdlib): `String` (the run log's lines: proxy keys, URL passwords), `File` (another program's log, in place, its length kept) |
 | `internal/devcontainer/`, `internal/jsonc/` | a project's devcontainer.json (pure): finding it, mapping it to a new VM's plan, refusals; JSON with comments (`jsonc.Strip`, stdlib) |
 | `internal/tools/` | the shared tools: the lock, host mise, the daily check, tool image builds, the share |
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |

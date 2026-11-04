@@ -53,7 +53,8 @@ func (logRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
 // Lima's hostagent logs a value as it reads it, password and all, when it
 // replaces a loopback proxy's address with the guest's gateway, overrides
 // the system's or lima.yaml's, or can't parse it; limactl start passes
-// those lines on to devvm's run log, which keeps URL passwords out.
+// those lines on to devvm's run log, which keeps URL passwords out, and
+// Start takes them out of the hostagent's own log (redactLog).
 func (l *Lima) limactl(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "limactl", args...) //nolint:gosec // devvm's own arguments
 	cmd.Env = setEnv(os.Environ(), append(backend.ClientProxyVars(), "LIMA_HOME="+l.Dirs.Lima)...)

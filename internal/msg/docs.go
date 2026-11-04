@@ -38,6 +38,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"image_building":                   "using/images#deleting-images",
 	"qemu_refused":                     "internals/lima#confinement",
 	"start_no_ssh":                     "using/troubleshooting#a-vm-wont-boot",
+	"lima_log_unredacted":              "using/troubleshooting#a-command-fails",
 	"no_ubuntu_image":                  "using/troubleshooting#base-cant-build-on-lima",
 	"ubuntu_bad_signature":             "using/troubleshooting#a-download-doesnt-check-out",
 	"ubuntu_checksum_unpinned":         "using/troubleshooting#a-download-doesnt-check-out",

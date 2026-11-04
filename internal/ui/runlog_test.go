@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -195,6 +196,44 @@ func TestRedactingWriter(t *testing.T) {
 	want := "plain line\nhttps://u:<password>@host/x and http://devvm:<key>@h\rno user https://host:443/a@b\ntail http://v:<password>@w"
 	if got := b.String(); got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+// What a guest command writes through LogWriter is redacted too, a password split across writes
+// and calls included: a line's end still to come is written, redacted, at a logged command's
+// start, at DieLogged and at the run's end, and verbose streams it the same.
+func TestLogWriterRedacts(t *testing.T) {
+	t.Parallel()
+	pass := "e2e-not-a-secret" //nolint:gosec // a fake password
+	u, _, errOut := testUI(t, "")
+	u.SetFlags(Flags{Verbose: true})
+	_, _ = io.WriteString(u.LogWriter(), "HTTPS_PROXY=http://alice:e2e-not")
+	_, _ = io.WriteString(u.LogWriter(), "-a-secret@127.0.0.1:3128\nno end http://bob:"+pass+"@h")
+	if err := u.logged(t.Context(), msg.M{}, "true"); err != nil {
+		t.Fatal(err)
+	}
+	want := "HTTPS_PROXY=http://alice:<password>@127.0.0.1:3128\nno end http://bob:<password>@h+ true\n"
+	if got := readFile(t, u.logPath()); got != want || errOut.String() != want {
+		t.Errorf("log %q, stderr %q\nwant %q", got, errOut, want)
+	}
+
+	// DieLogged shows the line LogWriter holds, redacted.
+	u, _, errOut = testUI(t, "")
+	_, _ = io.WriteString(u.LogWriter(), "failed: https://carol:"+pass+"@proxy")
+	exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) })
+	if log := readFile(t, u.logPath()); log != "failed: https://carol:<password>@proxy" || strings.Contains(errOut.String(), pass) ||
+		!strings.Contains(errOut.String(), "carol:<password>@proxy") {
+		t.Errorf("DieLogged: log %q, stderr %q", log, errOut)
+	}
+
+	// The run's end writes it too.
+	u, _, _ = testUI(t, "")
+	u.main(func(context.Context) int {
+		_, _ = io.WriteString(u.LogWriter(), "last http://dave:"+pass+"@p")
+		return 0
+	})
+	if log := readFile(t, u.logPath()); log != "last http://dave:<password>@p" {
+		t.Errorf("the run's end: log %q", log)
 	}
 }
 
