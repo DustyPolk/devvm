@@ -103,7 +103,7 @@ func (b cache) basePackages(key string) (*packages, error) {
 	if err != nil {
 		return nil, err
 	}
-	t := &taken{dirs: b}
+	t := &taken{dirs: b, mirror: mirror}
 	return &packages{
 		spec: &backend.Packages{
 			Send: func(w io.Writer) error { return sendMirrors(w, mirror) },
@@ -212,6 +212,7 @@ func writeTarFile(tw *tar.Writer, name string, data []byte) error {
 // until commit, the InRelease files, and the set they make.
 type taken struct {
 	dirs        cache
+	mirror      string // config.toml's ubuntu-mirror, "" for none
 	dir         string
 	set         state.PackageSet
 	names       []string // every InRelease's and list's, as given back
@@ -338,17 +339,27 @@ func (t *taken) keepList(r io.Reader, name string) error {
 // signedEntries is the archive's own entry for each package of want (by
 // SHA-256: its size), from the package lists the build gave back: each
 // InRelease must check out with Ubuntu's archive key, and each list must
-// be one a verified InRelease gives the SHA-256 and size of. A package no
-// list has is left out, and setOf refuses it. Nothing to check for none.
+// be one a verified InRelease gives the SHA-256 and size of. An InRelease
+// older than the pinned cloud image's release is refused too
+// (packages_stale_mirror, or packages_stale with no mirror set). A package
+// no list has is left out, and setOf refuses it. Nothing to check for
+// none.
 func (t *taken) signedEntries(want map[string]int64) (map[string]string, error) {
 	if len(want) == 0 {
 		return nil, nil
+	}
+	pin, err := state.ReadUbuntuPin(t.dirs.Dirs)
+	if err != nil {
+		return nil, err
 	}
 	var releases []ubuntu.Release
 	for _, in := range t.releases {
 		r, err := ubuntu.VerifyRelease(t.dirs.Assets, in, time.Now())
 		if err != nil {
 			return nil, msg.PackagesRefused("an InRelease that Ubuntu's archive key didn't sign").Because(err)
+		}
+		if r.Stale(pin.Release) {
+			return nil, t.stale(r, pin.Release)
 		}
 		releases = append(releases, r)
 	}
@@ -368,6 +379,17 @@ func (t *taken) signedEntries(want map[string]int64) (map[string]string, error) 
 		}
 	}
 	return signed, nil
+}
+
+// stale is the refusal of r, an InRelease older than the cloud image
+// release: naming the mirror that served it, or Ubuntu's archive when
+// none is set.
+func (t *taken) stale(r ubuntu.Release, release string) error {
+	date := r.Date.Format(time.DateOnly)
+	if t.mirror != "" {
+		return msg.PackagesStaleMirror(date, t.mirror, release, r.Suite)
+	}
+	return msg.PackagesStale(date, release, r.Suite)
 }
 
 // readArchiveList reads one of the archive's package lists: its SHA-256

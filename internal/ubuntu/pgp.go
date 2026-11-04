@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"hash"
 	"math/big"
+	"slices"
 	"strings"
 	"time"
 )
@@ -39,6 +40,8 @@ const (
 
 	sigBinary = 0x00
 	sigText   = 0x01
+
+	maxSignatures = 4 // a signature's most packets that verify tries
 
 	subCreated  = 2
 	subExpires  = 3
@@ -293,10 +296,13 @@ func verify(keyring, sig, data []byte, sigType byte, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	// Each signature hashes all of data, so only so many are tried: Ubuntu
+	// signs with one or two keys.
+	ps = slices.DeleteFunc(ps, func(p packet) bool { return p.tag != tagSignature })
+	if len(ps) > maxSignatures {
+		return errBadSignature
+	}
 	for _, p := range ps {
-		if p.tag != tagSignature {
-			continue
-		}
 		s, err := readSignature(p.body, sigType, now)
 		if err != nil {
 			continue

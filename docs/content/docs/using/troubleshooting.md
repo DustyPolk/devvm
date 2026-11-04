@@ -85,6 +85,10 @@ Building the same base again also needs the copies of its packages that devvm ke
 
 The first build of base on this machine gets its packages from Ubuntu's archive, or first from the [mirror you set](settings.md#an-ubuntu-mirror). When neither answers, devvm stops at once and says so, without trying again, and it keeps the build VM stopped as for any [failed build](#a-build-fails). Check that you're online, and that the mirror's address is right, then run the command again. Building the same base again later needs neither, because devvm installs the packages it kept from the first build.
 
+## Base gets old package lists
+
+The first build of base checks that the package lists it got are as new as the Ubuntu cloud image it starts from, because Ubuntu's signed lists don't expire, and a server that stopped updating still serves them. When the lists for one part of the archive, such as `resolute-updates`, are more than a day older than the cloud image, devvm refuses them, keeps none of the build's packages and names that part, its date and the image. When you set a [mirror](settings.md#an-ubuntu-mirror), devvm names it, so set `ubuntu-mirror` to one that's up to date, or remove it to use Ubuntu's archive. Without a mirror, the old lists came from Ubuntu's archive itself, so check that no proxy or cache between you and the archive serves an old copy, then run the command again.
+
 ## A file devvm can't read
 
 When devvm can't read one of its settings or state files, it names the file, and the line when the problem is on one. Fix the line or delete the file. [Your settings](settings.md#your-settings) lists what each file you edit holds, and [devvm's data folder](space.md#devvms-data-folder) what each file devvm writes holds.

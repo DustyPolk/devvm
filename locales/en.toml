@@ -607,6 +607,14 @@ other = "devvm's package cache doesn't have {{.name}} {{.version}}, which this b
 description = "why is what devvm found wrong with what the build gave back"
 other = "devvm refused the packages base's build gave back, so it keeps none of them: {{.why}}."
 
+[packages_stale]
+description = "suite is the archive's suite (resolute-updates), date its InRelease's date, release the pinned cloud image's (release-YYYYMMDD)"
+other = "Ubuntu's archive gave base's build {{.suite}} as of {{.date}}, older than the cloud image {{.release}}, so devvm keeps none of its packages. Check that nothing between you and Ubuntu's archive serves an old copy, then run the command again."
+
+[packages_stale_mirror]
+description = "mirror is config.toml's ubuntu-mirror; suite, date and release as in packages_stale"
+other = "The mirror {{.mirror}} gave base's build {{.suite}} as of {{.date}}, older than the cloud image {{.release}}, so devvm keeps none of its packages. Set ubuntu-mirror in config.toml to a mirror that's up to date, or remove it, then run the command again."
+
 [packages_send_failed]
 other = "Sending base's recorded packages into {{.vm}} failed."
 

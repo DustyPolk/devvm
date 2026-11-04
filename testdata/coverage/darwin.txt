@@ -6,7 +6,7 @@ internal/backend 97.1
 internal/backend/backendtest 74.4
 internal/backend/lima 89.8
 internal/backend/registry 100.0
-internal/build 87.5
+internal/build 87.9
 internal/cli 88.8
 internal/cli/docgen 85.3
 internal/daemon 97.9
@@ -38,7 +38,7 @@ internal/stubtest 81.0
 internal/testbuild 100.0
 internal/tools 89.4
 internal/trust 94.1
-internal/ubuntu 92.5
+internal/ubuntu 96.8
 internal/ui 94.4
 internal/vm 86.0
 internal/vmname 100.0

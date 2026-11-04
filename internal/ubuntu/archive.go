@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,17 @@ import (
 // Ubuntu's security team lists (wiki.ubuntu.com/SecurityTeam/FAQ, GPG keys
 // used by Ubuntu), exported with gpg --export-options export-minimal.
 const ArchiveKeyring = "layers/ubuntu-archive.gpg"
+
+// Released is the day Series was released, when Ubuntu stopped changing
+// its release pocket: that suite's InRelease is dated then, and one dated
+// before it is a development state of the archive.
+const Released = "20260423"
+
+// pocketLag is how much older than the pinned cloud image's release a
+// pocket that keeps changing (-updates, -security, -backports) may be:
+// the image was built from the archive as it was that day, and a pocket
+// last published the day before is as new.
+const pocketLag = 24 * time.Hour
 
 // ErrRelease is an InRelease that isn't one of Series' suites, or whose
 // fields can't be read.
@@ -50,6 +62,13 @@ func VerifyRelease(assets fs.FS, inRelease []byte, now time.Time) (Release, erro
 		return Release{}, err
 	}
 	return readRelease(string(text))
+}
+
+// knownSuite reports whether s is a suite an Ubuntu image's sources name:
+// the release pocket and the pockets Ubuntu publishes to it, not
+// -proposed's untested packages.
+func knownSuite(s string) bool {
+	return slices.Contains([]string{Series, Series + "-updates", Series + "-security", Series + "-backports"}, s)
 }
 
 var listSum = regexp.MustCompile(`^ ([0-9a-f]{64}) +([0-9]+) +([a-z0-9-]+/binary-[a-z0-9]+/Packages)$`)
@@ -86,7 +105,7 @@ func readRelease(text string) (Release, error) {
 			r.Date = t.UTC()
 		}
 	}
-	if (r.Suite != Series && !strings.HasPrefix(r.Suite, Series+"-")) || r.Date.IsZero() {
+	if !knownSuite(r.Suite) || r.Date.IsZero() {
 		return Release{}, ErrRelease
 	}
 	return r, nil
@@ -96,4 +115,28 @@ func readRelease(text string) (Release, error) {
 func (r Release) Lists(sum string, size int64) bool {
 	n, ok := r.lists[sum]
 	return ok && n == size
+}
+
+// Stale reports whether r is an older state of the archive than the
+// pinned cloud image's release (release-YYYYMMDD) was built from: the
+// release pocket dated before Released, or any other pocket dated more
+// than a day before release. Ubuntu's InRelease files carry no
+// Valid-Until, so a mirror that stopped updating still serves validly
+// signed ones. A release that isn't a date makes every other pocket
+// stale.
+func (r Release) Stale(release string) bool {
+	if r.Suite == Series {
+		return r.Date.Before(day(Released))
+	}
+	d := day(strings.TrimPrefix(release, "release-"))
+	return d.IsZero() || r.Date.Before(d.Add(-pocketLag))
+}
+
+// day is YYYYMMDD's start, in UTC; zero when it isn't a date.
+func day(s string) time.Time {
+	t, err := time.Parse("20060102", s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }

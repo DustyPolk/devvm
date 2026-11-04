@@ -59,6 +59,8 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"build_sources_unreachable":        "using/troubleshooting#no-package-source-answers",
 	"packages_missing":                 "using/troubleshooting#base-cant-build-on-lima",
 	"packages_refused":                 "using/troubleshooting#a-build-fails",
+	"packages_stale":                   "using/troubleshooting#base-gets-old-package-lists",
+	"packages_stale_mirror":            "using/settings#an-ubuntu-mirror",
 	"rebuild_replaces":                 "using/images#rebuilding",
 	"layer_exists":                     "using/customizing#your-own-layers",
 	"images_stale_note":                "using/images#cleaning-up",

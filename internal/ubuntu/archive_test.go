@@ -87,6 +87,19 @@ func TestVerifyClearsigned(t *testing.T) {
 		t.Errorf("CR LF: %q, %v", got, err)
 	}
 	unsigned, _, _ := bytes.Cut(signed, []byte(sigBegin))
+	// More signature packets than verify tries, the good one last.
+	canonical := []byte(strings.Join(strings.Split(strings.TrimSuffix(want, "\n"), "\n"), "\r\n"))
+	var many []byte
+	for range maxSignatures {
+		many = append(many, unarmored(t, newTestKey(t).sign(t, canonical, 10, sigText, nil))...)
+	}
+	many = append(many, unarmored(t, k.sign(t, canonical, 10, sigText, nil))...)
+	if err := verify(k.keyring, many, canonical, sigText, time.Now()); !errors.Is(err, errBadSignature) {
+		t.Errorf("%d signatures: %v, want a bad signature", maxSignatures+1, err)
+	}
+	if err := verify(k.keyring, unarmored(t, k.sign(t, canonical, 10, sigText, nil)), canonical, sigText, time.Now()); err != nil {
+		t.Errorf("one signature: %v", err)
+	}
 	for name, data := range map[string][]byte{
 		"an unescaped dash": bytes.Replace(signed, []byte("- --- another"), []byte("--- another"), 1),
 		"a changed line":    bytes.Replace(signed, []byte("last"), []byte("lost"), 1),
@@ -97,6 +110,36 @@ func TestVerifyClearsigned(t *testing.T) {
 	} {
 		if _, err := verifyClearsigned(k.keyring, data, time.Now()); !errors.Is(err, errBadSignature) {
 			t.Errorf("%s: %v, want a bad signature", name, err)
+		}
+	}
+}
+
+// A pocket that keeps changing is stale when it's more than a day older
+// than the pinned image's release; the release pocket, frozen at
+// Released, when it's older than that.
+func TestReleaseStale(t *testing.T) {
+	at := func(s string) time.Time {
+		d, err := time.Parse(time.DateTime, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	for _, c := range []struct {
+		suite, date, release string
+		stale                bool
+	}{
+		{"resolute-updates", "2026-11-04 18:15:15", "release-20261016", false},
+		{"resolute-updates", "2026-10-15 00:00:00", "release-20261016", false},
+		{"resolute-security", "2026-10-14 23:59:59", "release-20261016", true},
+		{"resolute-backports", "2026-01-01 00:00:00", "release-20261016", true},
+		{"resolute-updates", "2026-11-04 18:15:15", "not a release", true},
+		{"resolute", "2026-04-23 17:07:15", "release-20261016", false},
+		{"resolute", "2026-04-22 23:59:59", "release-20261016", true},
+	} {
+		r := Release{Suite: c.suite, Date: at(c.date)}
+		if got := r.Stale(c.release); got != c.stale {
+			t.Errorf("%s of %s, %s: stale %v, want %v", c.suite, c.date, c.release, got, c.stale)
 		}
 	}
 }
@@ -114,6 +157,8 @@ func TestReadRelease(t *testing.T) {
 		{"good", good, true},
 		{"a numeric zone", strings.Replace(good, "UTC", "+0000", 1), true},
 		{"the release pocket", strings.Replace(good, "resolute-security", "resolute", 1), true},
+		{"backports", strings.Replace(good, "resolute-security", "resolute-backports", 1), true},
+		{"proposed", strings.Replace(good, "resolute-security", "resolute-proposed", 1), false},
 		{"another series", strings.Replace(good, "resolute-security", "noble-security", 1), false},
 		{"a series that starts the same", strings.Replace(good, "resolute-security", "resolutex", 1), false},
 		{"no date", strings.Replace(good, "Date: Wed, 04 Nov 2026 19:59:16 UTC\n", "", 1), false},

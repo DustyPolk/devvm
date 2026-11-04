@@ -75,8 +75,17 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Getenv = func(string) string { return "" }
 	tl.Mise = filepath.Join(repo, "testdata", "stubs", "mise")
+	// The cloud image the backend pinned, which base's recorded package
+	// lists must be as new as.
+	pin := state.UbuntuPin{Release: testRelease, File: "ubuntu-26.04-server-cloudimg-arm64.img", Digest: "sha256:" + strings.Repeat("1", 64)}
+	if err := state.WriteUbuntuPin(d, pin); err != nil {
+		t.Fatal(err)
+	}
 	return quiet(&Env{Dirs: d, Assets: os.DirFS(root), Backend: f, Tools: tl, Version: testVersion}), f
 }
+
+// testRelease is the cloud image release testEnv's backend pinned.
+const testRelease = "release-20261016"
 
 // testVersion is testEnv's devvm's version.
 const testVersion = "0.1.0-test"

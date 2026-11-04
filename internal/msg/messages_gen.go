@@ -2239,6 +2239,16 @@ func PackagesSendFailed(vm string) M {
 	return M{id: "packages_send_failed", vals: []val{{"vm", vm}}}
 }
 
+// PackagesStale is [packages_stale]: "Ubuntu's archive gave base's build {{.suite}} as of {{.date}}, older than the cloud image {{.release}}, so devvm keeps none of its packages. Check that nothing between you and Ubuntu's archive serves an old copy, then run the command again."
+func PackagesStale(date string, release string, suite string) M {
+	return M{id: "packages_stale", vals: []val{{"date", date}, {"release", release}, {"suite", suite}}}
+}
+
+// PackagesStaleMirror is [packages_stale_mirror]: "The mirror {{.mirror}} gave base's build {{.suite}} as of {{.date}}, older than the cloud image {{.release}}, so devvm keeps none of its packages. Set ubuntu-mirror in config.toml to a mirror that's up to date, or remove it, then run the command again."
+func PackagesStaleMirror(date string, mirror string, release string, suite string) M {
+	return M{id: "packages_stale_mirror", vals: []val{{"date", date}, {"mirror", mirror}, {"release", release}, {"suite", suite}}}
+}
+
 // PackagesTakeFailed is [packages_take_failed]: "Taking the packages base downloaded out of {{.vm}} failed."
 func PackagesTakeFailed(vm string) M {
 	return M{id: "packages_take_failed", vals: []val{{"vm", vm}}}
@@ -3813,6 +3823,8 @@ var specs = map[string]spec{
 	"packages_missing":                 {fields: []string{"name", "version"}},
 	"packages_refused":                 {fields: []string{"why"}},
 	"packages_send_failed":             {fields: []string{"vm"}},
+	"packages_stale":                   {fields: []string{"date", "release", "suite"}},
+	"packages_stale_mirror":            {fields: []string{"date", "mirror", "release", "suite"}},
 	"packages_take_failed":             {fields: []string{"vm"}},
 	"part_none_alone":                  {fields: []string{"flag"}},
 	"part_other_flag":                  {fields: []string{"flag", "given", "other"}},

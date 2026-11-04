@@ -257,11 +257,24 @@ func TestBasePackagesRefused(t *testing.T) {
 // record.
 func checkRefused(t *testing.T, out []tarEntry) {
 	t.Helper()
+	if err := keptNone(t, "", out); msg.IDOf(err) != "packages_refused" {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// keptNone returns the error a recording whose build gives back out
+// fails with, config.toml holding config, and checks that none of it is
+// kept.
+func keptNone(t *testing.T, config string, out []tarEntry) error {
+	t.Helper()
 	b, f := testEnv(t)
+	if config != "" {
+		write(t, b.Dirs.ConfigFile(), config)
+	}
 	f.PackagesOut = tarOf(t, out...)
 	err := (Builds{b}).Build(t.Context(), "base")
-	if msg.IDOf(err) != "packages_refused" {
-		t.Fatalf("got %v", err)
+	if err == nil {
+		t.Fatal("kept")
 	}
 	t.Log(msg.NamesOf(err))
 	key, _ := b.Key(image.Base)
@@ -274,6 +287,7 @@ func checkRefused(t *testing.T, out []tarEntry) {
 	if left, _ := os.ReadDir(b.Dirs.Packages()); len(left) != 0 {
 		t.Errorf("the cache holds %v", left)
 	}
+	return err
 }
 
 // Each package a recording gives back must be one the archive's package
@@ -306,9 +320,11 @@ func TestBasePackagesSigned(t *testing.T) {
 		t.Run(name, func(t *testing.T) { checkRefused(t, out) })
 	}
 
-	// A good set is kept, each package with the archive's entry for it.
+	// A good set is kept, each package with the archive's entry for it,
+	// the release pocket's InRelease as old as the release.
 	b, f := testEnv(t)
-	f.PackagesOut = tarOf(t, withLists(inRelease, packages, git)...)
+	f.PackagesOut = tarOf(t, append(withLists(inRelease, packages, git),
+		tarEntry{name: "./3.InRelease", data: string(archiveFixture(t, "InRelease-release"))})...)
 	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
 		t.Fatal(err)
 	}
@@ -319,6 +335,26 @@ func TestBasePackagesSigned(t *testing.T) {
 	}
 	if p := set.Packages[0]; p.Name != "git" || p.SHA256 != git.sum() || !strings.Contains(packages, p.Entry) {
 		t.Errorf("kept %+v, not the archive's entry", p)
+	}
+}
+
+// An InRelease signed by Ubuntu's archive key but older than the pinned
+// cloud image's release, which a stale mirror serves, is refused, naming
+// the mirror set, or Ubuntu's archive with none, and nothing is kept.
+func TestBasePackagesStale(t *testing.T) {
+	git := deb{"git", "git's file"}
+	out := givenEntries(t, git)[:2]
+	out = append(out,
+		tarEntry{name: "./1.InRelease", data: string(archiveFixture(t, "InRelease-old"))},
+		tarEntry{name: "./2.Packages", data: string(archiveFixture(t, "Packages"))})
+	for config, want := range map[string]string{
+		"": "packages_stale date=2026-01-01 release=" + testRelease + " suite=resolute-updates",
+		"ubuntu-mirror = \"https://mirror.example/ubuntu-ports\"\n": "packages_stale_mirror date=2026-01-01 mirror=https://mirror.example/ubuntu-ports release=" +
+			testRelease + " suite=resolute-updates",
+	} {
+		if got := msg.NamesOf(keptNone(t, config, out)); got != want {
+			t.Errorf("%q: got %s, want %s", config, got, want)
+		}
 	}
 }
 

@@ -1,0 +1,27 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: Ubuntu
+Label: Ubuntu
+Suite: resolute-updates
+Version: 26.04
+Codename: resolute
+Date: Thu, 01 Jan 2026 00:00:00 UTC
+Architectures: arm64
+Components: main
+Description: devvm test archive
+SHA256:
+ fca72a5dec4ab83b0a72cfd063bfda1285c9e9627506b1b23f8524251e9eaf40             1006 main/binary-arm64/Packages
+ 2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881                1 main/binary-arm64/Packages.xz
+-----BEGIN PGP SIGNATURE-----
+
+iQFPBAEBCgA5FiEEz9rwcLg4s8RyGSi2BBswl4ManTIFAmrrqFsbFIAAAAAABAAO
+bWFudTIsMi41KzEuMTIsMCwzAAoJEAQbMJeDGp0ybisH/iTmALM8WIBP6E9JIIez
+GLww8YzwV8AnTqVxIOChfW87/5HUBtQzjK1QoHKiDzEETFjTpc341Jes13RmWvzN
+JJJLe9sADgzM6bGoDUwnjH5TMxqz4TUXW7skcKXl9a6AB4Mo3NCQTJ7h59Ekw73T
+TotUmNbToUP1Npgchu1e+s8U/H7mIryX3Al2ZSnQTSZyJd+qGisMbtnk8o8Rx0D2
+RX0U/sYF2uJ4aa75uGShuf3r8BWixAlyU5jcBkhw0moUN2old1TZsvqDLihuUpUm
+bAQlHccuyGjXiJzuFhYLkrY4uZTMyzQQPCdb2OLgdoVTkl22Uiu00VJ/H6syGktc
+SZ0=
+=pobh
+-----END PGP SIGNATURE-----
