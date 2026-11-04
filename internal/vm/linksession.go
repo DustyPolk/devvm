@@ -280,12 +280,25 @@ func (e Links) linkConn(ctx context.Context, client string, l vmssh.Link, runs *
 		return vmssh.LinkTarget{}, vmssh.EventLinkStopped, ""
 	}
 	if why, err := policyEnforced(ctx, c.Backend, cst, tst); err != nil || why != "" {
+		// A target that stopped since runs looked it up runs unconfined
+		// as its backend says, which is because it stopped.
+		if why == LinkUnenforced && endedSince(ctx, c.Backend, target, run.start) {
+			return vmssh.LinkTarget{}, vmssh.EventLinkStopped, ""
+		}
 		return refused(cmp.Or(why, linkUnread), err)
 	}
 	if run.sshErr != nil {
 		return refused(LinkNoSSH, run.sshErr)
 	}
 	return vmssh.LinkTarget{SSH: run.ssh, Start: run.start}, "", ""
+}
+
+// endedSince reports whether target's backend says it no longer runs on
+// start, the start its run was looked up on: it stopped, or started again.
+// A backend that can't say isn't taken as an end.
+func endedSince(ctx context.Context, b backend.Backend, target, start string) bool {
+	run, err := b.Running(ctx, target)
+	return err == nil && run.ID != start
 }
 
 // policyEnforced checks the policy rule against a running target as it

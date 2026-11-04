@@ -2,6 +2,7 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -207,6 +208,8 @@ func TestLinkCheckBurst(t *testing.T) {
 // What a target's backend said of its run is reused for linkRunFor: a
 // target that stops is noticed once that passes, while each connection's
 // other checks, its policy's as the target runs included, are made again.
+// With network policy, that check notices a target that stopped at once,
+// as a stopped VM runs unconfined, and says it stopped.
 func TestLinkRunReused(t *testing.T) {
 	e, f, client, target, l := linkSessionEnv(t)
 	now := time.Unix(1e9, 0)
@@ -218,11 +221,16 @@ func TestLinkRunReused(t *testing.T) {
 			t.Errorf("linkConn = %q, %q; want %q, %q", ev, w, want, why)
 		}
 	}
+	running := backend.Instance{Name: target.Name(), Status: backend.StatusRunning}
+	stopped := backend.Instance{Name: target.Name(), Status: backend.StatusStopped}
 	check("", "")
-	f.Instances[target.Name()] = backend.Instance{Name: target.Name(), Status: backend.StatusStopped}
+	f.Instances[target.Name()] = stopped
 	check("", "")
 	setNet(t, client, "on")
 	setNet(t, target, "on")
+	check(vmssh.EventLinkStopped, "")
+	f.Instances[target.Name()] = running
+	check("", "")
 	f.Unconfined = true
 	check(vmssh.EventLinkRefused, LinkUnenforced)
 	f.Unconfined = false
@@ -233,6 +241,23 @@ func TestLinkRunReused(t *testing.T) {
 	if err := set(t, target, KeyPublish, "5432"); err != nil {
 		t.Fatal(err)
 	}
+	// A failed self-check is refused as it is, on the run looked up, or
+	// when the backend can't say which run it's on.
+	if err := set(t, target, keyCheck, netpolicy.CheckUnenforced); err != nil {
+		t.Fatal(err)
+	}
+	check(vmssh.EventLinkRefused, LinkUnenforced)
+	f.Errs = map[string]error{"Running": errors.New("no backend")}
+	check(vmssh.EventLinkRefused, LinkUnenforced)
+	f.Errs = nil
+	if err := set(t, target, keyCheck, ""); err != nil {
+		t.Fatal(err)
+	}
+	// Running on another start since: the run looked up has ended.
+	f.Restart(target.Name())
+	check(vmssh.EventLinkStopped, "")
+	setNet(t, client, "off")
+	f.Instances[target.Name()] = stopped
 	now = now.Add(linkRunFor - time.Millisecond)
 	check("", "")
 	now = now.Add(time.Millisecond)

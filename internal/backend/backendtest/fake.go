@@ -310,8 +310,8 @@ func (f *machines) Start(_ context.Context, vm string, w backend.Want, c backend
 // it another) and Confined: false with Unconfined; else, for a VM the
 // fake made or started (CreateVM, Start, Restart), whether it runs on a
 // start Start made with NetProxy, as a backend says. A VM a test preset
-// in Instances, or one the fake doesn't hold, is confined whatever its
-// status, unless Unconfined.
+// running in Instances is confined unless Unconfined; a stopped one, or
+// one the fake doesn't hold, never is, as for every backend.
 func (f *machines) Running(_ context.Context, vm string) (backend.Run, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -320,9 +320,9 @@ func (f *machines) Running(_ context.Context, vm string) (backend.Run, error) {
 	}
 	in, ok := f.Instances[vm]
 	running := ok && in.Status == backend.StatusRunning
-	r := backend.Run{Lifeline: f.LifelineFile, Confined: !f.Unconfined}
-	if n, ok := f.nets[vm]; ok && !f.Unconfined {
-		r.Confined = running && n == backend.NetProxy
+	r := backend.Run{Lifeline: f.LifelineFile, Confined: running && !f.Unconfined}
+	if n, ok := f.nets[vm]; ok && r.Confined {
+		r.Confined = n == backend.NetProxy
 	}
 	if running {
 		r.ID = "start-" + strconv.Itoa(f.starts[vm])

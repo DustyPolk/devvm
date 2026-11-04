@@ -57,8 +57,9 @@ func TestFakeRecordsAndAnswers(t *testing.T) {
 }
 
 // Running gives the lifeline, the start's ID and its confinement: a VM
-// preset is confined, one the fake made only once Start started it with
-// NetProxy; the roles Lima has and the fake doesn't answer none.
+// preset running is confined, a stopped one isn't, and one the fake made
+// is only once Start started it with NetProxy; the roles Lima has and the
+// fake doesn't answer none.
 func TestFakeRunningAndNone(t *testing.T) {
 	ctx := t.Context()
 	f := New("fake", nil)
@@ -68,8 +69,11 @@ func TestFakeRunningAndNone(t *testing.T) {
 		t.Errorf("preset running: %+v, %v", r, err)
 	}
 	f.Instances["v"] = backend.Instance{Name: "v", Status: backend.StatusStopped}
-	if r, err := f.Running(ctx, "v"); r != (backend.Run{Lifeline: "/ha.pid", Confined: true}) || err != nil {
+	if r, err := f.Running(ctx, "v"); r != (backend.Run{Lifeline: "/ha.pid"}) || err != nil {
 		t.Errorf("preset stopped: %+v, %v", r, err)
+	}
+	if r, err := f.Running(ctx, "none"); r != (backend.Run{Lifeline: "/ha.pid"}) || err != nil {
+		t.Errorf("not held: %+v, %v", r, err)
 	}
 	if err := f.Start(ctx, "v", backend.Want{}, backend.Confinement{Net: backend.NetDirect}); err != nil {
 		t.Fatal(err)

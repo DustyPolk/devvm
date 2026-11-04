@@ -1029,6 +1029,9 @@ func TestListed(t *testing.T) {
 			setNet(t, st, func(n *Net) { n.On, n.Made.Check = tc.net == "on", tc.check })
 			f := backendtest.New("fake", nil)
 			f.Unconfined = tc.unconfined
+			if tc.running {
+				f.Instances[st.Name()] = backend.Instance{Name: st.Name(), Status: backend.StatusRunning}
+			}
 			got, err := Listed(t.Context(), f, st, tc.running)
 			if err != nil || got != tc.want {
 				t.Errorf("Listed = %q, %v; want %q", got, err, tc.want)
