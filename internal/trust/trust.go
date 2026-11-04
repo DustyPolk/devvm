@@ -2,8 +2,8 @@
 // inspects TLS: read from devvm's CA folder (paths.Dirs.TrustedCAs) and
 // checked, then trusted in project VMs (sent at each launch, installed by
 // guest/ca.sh), in build VMs while they build (never in the images), and
-// by devvm's proxy for its own connections. It also makes devvm's own CA
-// (InitCA), which the proxy intercepts with.
+// by devvm's proxy for its own connections. It also makes each VM's own
+// CA (InitCA), which the VM's proxy intercepts with.
 package trust
 
 import (

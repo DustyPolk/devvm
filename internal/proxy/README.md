@@ -58,7 +58,8 @@ Flags take one dash or two. The proxy has one, `-config`, and everything it runs
 | `log` | the JSON-lines event log, mode 600, rotated past 10 MiB; none: stdout |
 | `proxy_log` | the file the proxy's stderr appends to (devvm opens it for the process): the proxy's own log lines, and its HTTP servers' errors, go through it and rotate past 10 MiB by copying, so the last error, written to stderr after `Main` returns, reaches the current file |
 | `lifeline` | the hostagent's pid file (`daemon.Lifeline`): wait up to 15 minutes for it to name a process that runs, past what it held when the proxy started, and return once it no longer holds what it held then or that process is gone |
-| `ca`, `ca_key` | devvm's CA, for interception |
+| `ca`, `ca_key` | the VM's own CA, for interception |
+| `ca_next`, `ca_next_key` | with `ca`: the VM's next CA, which signs from an hour after its start; the VM trusts it too |
 | `secrets` | the VM's bindings file, `BindingList` (no values), re-read when it changes ([secrets](#secrets)); `Main` refuses it without `IO.Secret` |
 | `upstream_cas` | CA certificates (PEM) the proxy's own TLS connections trust besides the system's: the user's |
 | `upstream` | the host's `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` (`https`, `http`, `no_proxy`): allowed requests go through that company proxy, which gets host names, and its credentials only in its own `Proxy-Authorization`; logs name it by `host:port` |
@@ -67,9 +68,9 @@ Flags take one dash or two. The proxy has one, `-config`, and everything it runs
 | `nix_cache_max` | with `nix_cache`: the cache's cap, in bytes (devvm sets `nix-cache.size`, 10 GiB when it's off; none: `NixCacheDefault`) |
 | `links` | the VM's links' list, which `devvm _links` writes (`~/.local/share/devvm/vms/<hash>/run/links.json`): reach each link through its socket, before any rule; a missing list has no links |
 | `link_sockets` | with `links`: the folder of the links' sockets, devvm's run folder (`~/.local/share/devvm/run`); without it, no link is reached |
-| `devvm_sha256`, `ca_sha256` | the SHA-256 of the devvm binary and of devvm's CA certificate: not read by the proxy, there so a new binary or CA changes the config's `Sum` and devvm starts the proxy again |
+| `devvm_sha256`, `ca_sha256`, `ca_next_sha256` | the SHA-256 of the devvm binary, of the VM's CA certificate and of its next one's: not read by the proxy, there so a new binary or CA changes the config's `Sum` and devvm starts the proxy again |
 
-Running the proxy is `Main`'s only mode. What only the host does for network policy runs in devvm itself, never through the proxy's arguments: `trust.InitCA` makes devvm's CA (`ca.pem`, `ca.key`, each written whole; valid 30 days; no host name in it) unless one with over a week left is there, and `internal/agentlogin` makes the VM's copies of agents' login and settings files, their bindings and their values.
+Running the proxy is `Main`'s only mode. What only the host does for network policy runs in devvm itself, never through the proxy's arguments: `trust.InitCA` readies the VM's own CA and its next one in the VM's `run/ca/` (`ca.pem` and `ca.key`, `next.pem` and `next.key`, each written whole; each valid 30 days; no host name in them), and the proxy signs with the next one from an hour after its start, and `internal/agentlogin` makes the VM's copies of agents' login and settings files, their bindings and their values.
 
 ## The server
 
@@ -78,7 +79,7 @@ Everything a proxy runs with, and everything it keeps between connections, is in
 - `events`: the event log and the last 50 blocks, for `/blocked` and `/blocked/new`;
 - `egress`: the policy (`policy`, which reads the user's files again when they change), the host's own addresses (`hostAddrs`, read again every 30 seconds) and the company proxy (`upstreams`, set as the proxy starts and only read after);
 - `secrets`: the bindings file, read again when it changes, and the values looked up for it, held through each lookup so lookups go one at a time;
-- `ca`: devvm's CA and the certificates the proxy has made with it;
+- `ca`: the VM's CA, its next one, and the certificates the proxy has made with each;
 - `links`: the links' list and their sockets' folder, which are only read;
 - `nixCache`: the Nix cache's folder, which every proxy shares under its `.lock`, and the narinfos this proxy has checked and the NARs it's fetching.
 
@@ -90,7 +91,7 @@ The bindings file, `secrets.json` in the VM's run folder, is a `BindingList`: `{
 
 The proxy looks a value up in its own process, through `IO.Secret`, which `devvm _proxy` sets to `secrets.Store.Get`, so no other devvm runs for it, and no value is in any process's arguments. On macOS the Keychain is still asked through `security find-generic-password`, whose output is the value, as when you save one. `Main` refuses a config with `secrets` and no `IO.Secret`. The lookup gets the binding itself, so the kind decides whether it's the Keychain, devvm's secrets folder or the agent's file (`agentlogin.File.Get`, which refreshes an OAuth login on the host when it's due, under the file's lock). It runs for at most 20 seconds and one at a time, so two requests never refresh a login at once. The proxy keeps a value for 5 minutes, or for 30 seconds when its kind is `login`, and never logs it, and a lookup that fails or gives nothing puts nothing in and is logged, without a value, to the proxy's own log.
 
-Inside the VM, `http://devvm.proxy/blocked` lists recent blocks, `/blocked/new` those since the last prompt, `/ca.pem` serves the CA certificate, and with `nix_cache`, `/nix/` is the shared Nix cache.
+Inside the VM, `http://devvm.proxy/blocked` lists recent blocks, `/blocked/new` those since the last prompt, `/ca.pem` serves the VM's CA certificate and the next one's, and with `nix_cache`, `/nix/` is the shared Nix cache.
 
 ## Testing
 

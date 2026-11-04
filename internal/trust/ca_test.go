@@ -1,7 +1,9 @@
 package trust
 
 import (
+	"bytes"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
@@ -12,83 +14,213 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/w3cj/devvm/internal/paths"
 )
 
-// devvm's CA lasts 30 days, stays while it has over a week left, and is replaced after that; the
-// key is the user's alone, and the pair is what the proxy loads (an ECDSA key, tls's pair).
-func TestInitCA(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "ca")
-	if err := InitCA(dir); err != nil {
+const day = 24 * time.Hour
+
+// readCA reads the CA in certPath and keyPath as the proxy loads it: an ECDSA key, tls's pair.
+func readCA(t *testing.T, certPath, keyPath string) *x509.Certificate {
+	t.Helper()
+	pair, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
 		t.Fatal(err)
 	}
-	read := func() (*x509.Certificate, *ecdsa.PrivateKey) {
-		t.Helper()
-		pair, err := tls.LoadX509KeyPair(filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		key, ok := pair.PrivateKey.(*ecdsa.PrivateKey)
-		if !ok {
-			t.Fatalf("the key is a %T", pair.PrivateKey)
-		}
-		c, err := x509.ParseCertificate(pair.Certificate[0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		return c, key
+	if _, ok := pair.PrivateKey.(*ecdsa.PrivateKey); !ok {
+		t.Fatalf("the key is a %T", pair.PrivateKey)
 	}
-	first, key := read()
-	if life := first.NotAfter.Sub(first.NotBefore); life > 31*24*time.Hour || life < 29*24*time.Hour {
-		t.Errorf("CA valid for %v, want about 30 days", life)
+	c, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !first.IsCA || !first.MaxPathLenZero || len(first.DNSNames) != 0 || first.KeyUsage&x509.KeyUsageCertSign == 0 {
-		t.Errorf("CA = %+v", first)
+	return c
+}
+
+// both reads the VM's current CA and its next one.
+func both(t *testing.T, ca paths.CA) (cur, next *x509.Certificate) {
+	t.Helper()
+	return readCA(t, ca.Cert(), ca.Key()), readCA(t, ca.NextCert(), ca.NextKey())
+}
+
+// writeTestCA writes a CA valid from notBefore to notAfter, with a key of its own, to certPath and
+// keyPath, and returns its serial.
+func writeTestCA(t *testing.T, certPath, keyPath string, notBefore, notAfter time.Time) *big.Int {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for name, want := range map[string]os.FileMode{"ca.key": 0o600, "ca.pem": 0o644, ".": 0o700} {
-		if st, err := os.Stat(filepath.Join(dir, name)); err != nil || st.Mode().Perm() != want {
+	serial, _ := rand.Int(rand.Reader, big.NewInt(1<<62))
+	tmpl := &x509.Certificate{
+		SerialNumber: serial, Subject: pkix.Name{CommonName: "test"}, NotBefore: notBefore, NotAfter: notAfter,
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kder, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kder}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return serial
+}
+
+// A VM's first CA lasts 30 days, from an hour ago, and its next one starts a week and an hour
+// before it ends and lasts as long; both stay while the current one has over a week left. The keys
+// are the user's alone, and no CA names a host.
+func TestInitCA(t *testing.T) {
+	ca := paths.CA{Dir: filepath.Join(t.TempDir(), "ca")}
+	if err := InitCA(ca); err != nil {
+		t.Fatal(err)
+	}
+	cur, next := both(t, ca)
+	if life := cur.NotAfter.Sub(cur.NotBefore); life != caLife+caSkew {
+		t.Errorf("CA valid for %v, want %v", life, caLife+caSkew)
+	}
+	if time.Since(cur.NotBefore) < 59*time.Minute || time.Until(cur.NotAfter) < caLife-time.Minute {
+		t.Errorf("CA from %v to %v, want from an hour ago for 30 days", cur.NotBefore, cur.NotAfter)
+	}
+	if !next.NotBefore.Equal(cur.NotAfter.Add(-caRenew-caSkew)) || next.NotAfter.Sub(next.NotBefore) != caLife+caSkew {
+		t.Errorf("next CA from %v to %v; the current one ends %v", next.NotBefore, next.NotAfter, cur.NotAfter)
+	}
+	for _, c := range []*x509.Certificate{cur, next} {
+		if !c.IsCA || !c.MaxPathLenZero || len(c.DNSNames) != 0 || c.KeyUsage&x509.KeyUsageCertSign == 0 {
+			t.Errorf("CA = %+v", c)
+		}
+	}
+	if cur.SerialNumber.Cmp(next.SerialNumber) == 0 || bytes.Equal(cur.RawSubjectPublicKeyInfo, next.RawSubjectPublicKeyInfo) ||
+		cur.Subject.String() == next.Subject.String() {
+		t.Error("the next CA is the current one, or has its name")
+	}
+	for name, want := range map[string]os.FileMode{"ca.key": 0o600, "next.key": 0o600, "ca.pem": 0o644, "next.pem": 0o644, ".": 0o700} {
+		if st, err := os.Stat(filepath.Join(ca.Dir, name)); err != nil || st.Mode().Perm() != want {
 			t.Errorf("%s: %v, %v; want %v", name, st.Mode().Perm(), err, want)
 		}
 	}
-	if err := InitCA(dir); err != nil {
+	if err := InitCA(ca); err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := read(); c.SerialNumber.Cmp(first.SerialNumber) != 0 {
-		t.Error("a fresh CA was replaced")
+	if c, n := both(t, ca); c.SerialNumber.Cmp(cur.SerialNumber) != 0 || n.SerialNumber.Cmp(next.SerialNumber) != 0 {
+		t.Error("a current CA, or its next one, was replaced")
 	}
-	// One with 3 days left, and one valid for 10 years (longer than a CA lasts), are replaced.
-	for i, life := range [][2]time.Time{
-		{time.Now().Add(-27 * 24 * time.Hour), time.Now().Add(3 * 24 * time.Hour)},
-		{time.Now().Add(-time.Hour), time.Now().AddDate(10, 0, 0)},
+}
+
+// Once the current CA has under a week left, the next one, started an hour before, takes its
+// place, and a new next one follows it.
+func TestInitCASwitch(t *testing.T) {
+	ca := paths.CA{Dir: t.TempDir()}
+	now := time.Now()
+	end := now.Add(caRenew - time.Minute)
+	writeTestCA(t, ca.Cert(), ca.Key(), end.Add(-caLife), end)
+	serial := writeTestCA(t, ca.NextCert(), ca.NextKey(), end.Add(-caRenew-caSkew), end.Add(-caRenew+caLife))
+	if err := InitCA(ca); err != nil {
+		t.Fatal(err)
+	}
+	cur, next := both(t, ca)
+	if cur.SerialNumber.Cmp(serial) != 0 {
+		t.Errorf("current CA %v, want the next one, %v", cur.SerialNumber, serial)
+	}
+	if next.SerialNumber.Cmp(serial) == 0 || !next.NotBefore.Equal(cur.NotAfter.Add(-caRenew-caSkew)) {
+		t.Errorf("next CA %v from %v, want a new one from a week and an hour before %v", next.SerialNumber, next.NotBefore, cur.NotAfter)
+	}
+}
+
+// What can't serve as the current CA, or its next, is made again: one with under a week left and
+// no next one ready, one that lasts too long, a next one that ends first or hasn't started yet
+// when it's needed, one that is the current one (a switch that stopped halfway), and a key
+// without its certificate.
+func TestInitCAReplaced(t *testing.T) {
+	now := time.Now()
+	type ca struct{ from, to time.Time }
+	fresh := ca{now.Add(-time.Hour), now.Add(caLife - time.Hour)}
+	follows := ca{fresh.to.Add(-caRenew - caSkew), fresh.to.Add(-caRenew - caSkew + caLife)}
+	for _, tc := range []struct {
+		name          string
+		cur, next     *ca // nil: none
+		keepCur, keep bool
+	}{
+		{name: "none"},
+		{name: "three days left, no next", cur: &ca{now.Add(-27 * day), now.Add(3 * day)}},
+		{name: "three days left, the next not started", cur: &ca{now.Add(-27 * day), now.Add(3 * day)}, next: &ca{now.Add(time.Hour), now.Add(30 * day)}},
+		{name: "three days left, the next with as little", cur: &ca{now.Add(-27 * day), now.Add(3 * day)}, next: &ca{now.Add(-27 * day), now.Add(3 * day)}},
+		{name: "ten years", cur: &ca{now.Add(-time.Hour), now.AddDate(10, 0, 0)}},
+		{name: "a next that ends first", cur: &fresh, next: &ca{now.Add(-time.Hour), fresh.to.Add(-time.Hour)}, keepCur: true},
+		{name: "a next that starts too late", cur: &fresh, next: &ca{fresh.to.Add(-time.Hour), fresh.to.Add(caLife)}, keepCur: true},
+		{name: "a next that lasts too long", cur: &fresh, next: &ca{follows.from, follows.from.AddDate(1, 0, 0)}, keepCur: true},
+		{name: "a next that follows", cur: &fresh, next: &follows, keepCur: true, keep: true},
 	} {
-		serial := big.NewInt(int64(7 + i))
-		tmpl := &x509.Certificate{
-			SerialNumber: serial, Subject: pkix.Name{CommonName: "old"}, NotBefore: life[0], NotAfter: life[1],
-			IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
-		}
-		der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+		t.Run(tc.name, func(t *testing.T) {
+			dir := paths.CA{Dir: t.TempDir()}
+			var cs, ns *big.Int
+			if tc.cur != nil {
+				cs = writeTestCA(t, dir.Cert(), dir.Key(), tc.cur.from, tc.cur.to)
+			}
+			if tc.next != nil {
+				ns = writeTestCA(t, dir.NextCert(), dir.NextKey(), tc.next.from, tc.next.to)
+			}
+			if err := InitCA(dir); err != nil {
+				t.Fatal(err)
+			}
+			cur, next := both(t, dir)
+			if kept := cs != nil && cur.SerialNumber.Cmp(cs) == 0; kept != tc.keepCur {
+				t.Errorf("current CA kept: %v, want %v", kept, tc.keepCur)
+			}
+			if kept := ns != nil && next.SerialNumber.Cmp(ns) == 0; kept != tc.keep {
+				t.Errorf("next CA kept: %v, want %v", kept, tc.keep)
+			}
+			if !tc.keepCur && (time.Until(cur.NotAfter) < caLife-2*time.Hour || cur.NotAfter.Sub(cur.NotBefore) != caLife+caSkew) {
+				t.Errorf("current CA from %v to %v, want a new one", cur.NotBefore, cur.NotAfter)
+			}
+			if !tc.keep && !next.NotBefore.Equal(cur.NotAfter.Add(-caRenew-caSkew)) {
+				t.Errorf("next CA from %v; the current one ends %v", next.NotBefore, cur.NotAfter)
+			}
+		})
+	}
+
+	// A switch that stopped halfway, the next CA's files copied to the current one's: a new next.
+	dir := paths.CA{Dir: t.TempDir()}
+	writeTestCA(t, dir.Cert(), dir.Key(), fresh.from, fresh.to)
+	for _, f := range [][2]string{{dir.Cert(), dir.NextCert()}, {dir.Key(), dir.NextKey()}} {
+		b, err := os.ReadFile(f[0])
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "ca.pem"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		if err := os.WriteFile(f[1], b, 0o600); err != nil { //nolint:gosec // G703: the test's own folder
+
 			t.Fatal(err)
-		}
-		if err := InitCA(dir); err != nil {
-			t.Fatal(err)
-		}
-		var c *x509.Certificate
-		c, key = read()
-		if c.SerialNumber.Cmp(serial) == 0 || time.Until(c.NotAfter) < 29*24*time.Hour || c.NotAfter.Sub(c.NotBefore) > 31*24*time.Hour {
-			t.Errorf("%d: an old CA was kept: %v until %v", i, c.SerialNumber, c.NotAfter)
 		}
 	}
+	if err := InitCA(dir); err != nil {
+		t.Fatal(err)
+	}
+	if cur, next := both(t, dir); cur.SerialNumber.Cmp(next.SerialNumber) == 0 {
+		t.Error("the next CA is still the current one")
+	}
+
 	// A key without its certificate is replaced, with a certificate of its own.
-	if err := os.Remove(filepath.Join(dir, "ca.pem")); err != nil {
+	if err := os.Remove(dir.Cert()); err != nil {
 		t.Fatal(err)
 	}
 	if err := InitCA(dir); err != nil {
 		t.Fatal(err)
 	}
-	read()
+	both(t, dir)
+	// So is a certificate without its key.
+	if err := os.Remove(dir.Key()); err != nil {
+		t.Fatal(err)
+	}
+	if err := InitCA(dir); err != nil {
+		t.Fatal(err)
+	}
+	both(t, dir)
 }
 
 // A CA folder InitCA can't write fails it.
@@ -97,16 +229,19 @@ func TestInitCAFails(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := InitCA(filepath.Join(file, "ca")); err == nil {
+	if err := InitCA(paths.CA{Dir: filepath.Join(file, "ca")}); err == nil {
 		t.Error("InitCA wrote under a file")
 	}
-	// A certificate it can't write (a folder in its place) fails it too.
-	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "ca.pem"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := InitCA(dir); err == nil {
-		t.Error("InitCA wrote over a folder")
+	// A certificate it can't write (a folder in its place) fails it too, the current one's or the
+	// next one's.
+	for _, name := range []string{"ca.pem", "next.pem"} {
+		ca := paths.CA{Dir: t.TempDir()}
+		if err := os.Mkdir(filepath.Join(ca.Dir, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := InitCA(ca); err == nil {
+			t.Errorf("InitCA wrote over a folder, %s", name)
+		}
 	}
 }
 

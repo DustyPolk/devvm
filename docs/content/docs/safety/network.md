@@ -156,13 +156,13 @@ If a VM was deleted outside devvm, devvm deletes what it kept for that VM when i
 
 ## Inside the VM
 
-Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at devvm's CA. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
+Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at the VM's own CAs. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
 
 A blocked request gets `403`, and the response names the host, the reason and the rule that would allow it. The proxy also answers at `http://devvm.proxy/`:
 
 - `/blocked` lists the last 50 blocks.
 - `/blocked/new?after=N` gives the number of blocks so far, then those after the Nth, with each rule once, so a shell prompt can show what a command hit.
-- `/ca.pem` is devvm's CA certificate, never its key.
+- `/ca.pem` is the VM's own CA certificate and the next one's, never their keys.
 - `/nix/` is the shared Nix cache, in a VM with the `nix` layer ([below](#nix)).
 
 In the VM, `devvm-why` prints what the proxy blocked lately, and a note before each prompt tells you when something new was blocked. devvm also tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`.
@@ -218,7 +218,7 @@ devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devv
 
 Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`. A VM without network policy gets the real value instead.
 
-To put a secret in, the proxy shows the VM a certificate from devvm's own CA, which each launch installs in the VM and which lasts 30 days. devvm makes a new CA when a launch finds that the current one has under a week left, so a VM that you open with `devvm` in its folder at least once a week always trusts the current one. Connecting with `ssh` alone isn't a launch. When a VM runs past its CA's end without a launch, its proxy refuses its HTTPS connections to secrets' hosts, and `devvm network log --blocked` gives the reason `devvm's CA has ended`. The VM's other requests keep working. Run `devvm` in the VM's folder to install a new CA, which also starts the VM's proxy again and ends the connections open through it ([how](../internals/network.md#how-the-proxy-puts-them-in)).
+To put a secret in, the proxy shows the VM a certificate from the VM's own CA, which no other VM trusts, so one VM's proxy can't make certificates that another VM accepts. Each CA lasts 30 days, and its key stays on this machine. Each launch installs the VM's current CA and the next one, which starts a week before the current one ends, and the proxy switches to the next CA then on its own, without a launch. So a VM that you don't open again keeps working for at least 30 days after its last launch with `devvm` in its folder. Connecting with `ssh` alone isn't a launch. When a VM runs past its next CA's end without a launch, its proxy refuses its HTTPS connections to secrets' hosts, and `devvm network log --blocked` gives the reason `devvm's CA has ended`. The VM's other requests keep working. Run `devvm` in the VM's folder to install new CAs, which also starts the VM's proxy again and ends the connections open through it ([how](../internals/network.md#the-vms-ca)). `devvm rm` deletes a VM's CAs with the VM.
 
 `devvm secret unuse` and `devvm secret rm` take nothing back from a VM without network policy, because the value it got still works wherever it kept it, and devvm says so on `unuse`. Neither command revokes what a VM made with the secret ([what devvm doesn't protect](../internals/security.md#what-it-doesnt-protect)), so rotate it if that matters. Use a fine-grained GitHub token, scoped to the repos your VMs need.
 

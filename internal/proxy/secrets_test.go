@@ -198,19 +198,26 @@ func TestUnbindAppliesToOpenTunnels(t *testing.T) {
 // "EC PRIVATE KEY", mode 600. The proxy's tests can't import trust, which isn't the standard library.
 func writeCA(t *testing.T, dir string) {
 	t.Helper()
+	writeCAFiles(t, filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key"), time.Now().Add(-time.Hour), time.Now().Add(30*24*time.Hour))
+}
+
+// writeCAFiles writes a CA valid from notBefore to notAfter to certPath, mode 644, and its key to
+// keyPath, mode 600.
+func writeCAFiles(t *testing.T, certPath, keyPath string, notBefore, notAfter time.Time) {
+	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	must(t, err)
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "devvm proxy CA"},
-		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(30 * 24 * time.Hour),
+		NotBefore: notBefore, NotAfter: notAfter,
 		KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign, BasicConstraintsValid: true, IsCA: true, MaxPathLenZero: true,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	must(t, err)
 	kder, err := x509.MarshalECPrivateKey(key)
 	must(t, err)
-	must(t, os.WriteFile(filepath.Join(dir, "ca.key"), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kder}), 0o600))
-	must(t, os.WriteFile(filepath.Join(dir, "ca.pem"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)) //nolint:gosec // a certificate
+	must(t, os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kder}), 0o600))
+	must(t, os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)) //nolint:gosec // a certificate
 }
 
 // Values from agents' login files are cached briefly: a logout on the host stops them soon. The
@@ -411,6 +418,79 @@ func TestInterceptCAEnded(t *testing.T) {
 	must(t, json.Unmarshal([]byte(events.String()), &e))
 	if e.Event != "blocked" || e.Reason != caEndedReason || !e.Refused || e.Host != "localhost" || e.Port != port {
 		t.Errorf("logged %+v", e)
+	}
+}
+
+// The next CA signs from an hour after its start, a week before the current one ends: a VM that
+// trusts both, as each launch installs them, verifies the proxy's certificates before the switch
+// and after it, with the same proxy, until the next CA ends.
+func TestNextCASigns(t *testing.T) {
+	t.Parallel()
+	now := time.Now().Truncate(time.Second)
+	cur := testCA(t, now.Add(-23*24*time.Hour), now.Add(7*24*time.Hour+30*time.Minute))
+	next := testCA(t, now.Add(-30*time.Minute), now.Add(30*24*time.Hour))
+	cur.next = next
+	pool := x509.NewCertPool()
+	pool.AddCert(cur.cert)
+	pool.AddCert(next.cert)
+	for _, tc := range []struct {
+		name  string
+		at    time.Time
+		want  *ca
+		ended bool
+	}{
+		{"before the switch", now, cur, false},
+		{"the switch", now.Add(30 * time.Minute), next, false},
+		{"after the current one ends", now.Add(8 * 24 * time.Hour), next, false},
+		{"after the next one ends", now.Add(31 * 24 * time.Hour), next, true},
+	} {
+		if got := cur.signer(tc.at); got != tc.want {
+			t.Errorf("%s: signed by the %s CA", tc.name, map[bool]string{true: "current", false: "next"}[got == cur])
+		}
+		if got := cur.ended(tc.at); got != tc.ended {
+			t.Errorf("%s: ended = %v", tc.name, got)
+		}
+		if tc.ended {
+			continue
+		}
+		leaf, err := cur.signer(tc.at).mint("api.example.com", tc.at)
+		must(t, err)
+		if _, err := leaf.Leaf.Verify(x509.VerifyOptions{DNSName: "api.example.com", Roots: pool, CurrentTime: tc.at}); err != nil {
+			t.Errorf("%s: the leaf doesn't verify: %v", tc.name, err)
+		}
+	}
+	if got := cur.pem(); strings.Count(string(got), "BEGIN CERTIFICATE") != 2 || strings.Contains(string(got), "PRIVATE") {
+		t.Errorf("/ca.pem = %q", got)
+	}
+}
+
+// A proxy loads the next CA its config names beside the current one, and refuses a key another user
+// may read, or a symbolic link where a CA file should be.
+func TestLoadCA(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cert, key, ncert, nkey := filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key"), filepath.Join(dir, "next.pem"), filepath.Join(dir, "next.key")
+	writeCAFiles(t, cert, key, time.Now().Add(-time.Hour), time.Now().Add(30*24*time.Hour))
+	writeCAFiles(t, ncert, nkey, time.Now().Add(22*24*time.Hour), time.Now().Add(52*24*time.Hour))
+	s := testServer(t, Config{CA: cert, CAKey: key, CANext: ncert, CANextKey: nkey}, "")
+	if s.ca == nil || s.ca.next == nil || s.ca.signer(time.Now()) != s.ca {
+		t.Fatal("the proxy didn't load its next CA, or signs with it before it starts")
+	}
+	if l, err := s.ca.leafFor("api.example.com"); err != nil || l.Leaf.CheckSignatureFrom(s.ca.cert) != nil {
+		t.Errorf("a leaf before the switch: %v", err)
+	}
+	must(t, os.Chmod(nkey, 0o640)) //nolint:gosec // G302: a key others may read, which the proxy refuses
+	if _, err := loadCA(ncert, nkey); !errors.Is(err, ErrNotPrivate) {
+		t.Errorf("a key another user may read: %v", err)
+	}
+	must(t, os.Chmod(nkey, 0o600))
+	link := filepath.Join(dir, "link.key")
+	must(t, os.Symlink(nkey, link))
+	if _, err := loadCA(ncert, link); !errors.Is(err, ErrNotRegular) {
+		t.Errorf("a key that's a link: %v", err)
+	}
+	if _, err := loadCA(ncert, key); err == nil {
+		t.Error("a certificate with another CA's key")
 	}
 }
 

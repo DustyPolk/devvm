@@ -50,9 +50,14 @@ type Config struct {
 	// Lifeline is the pid file of the VM's hostagent (daemon.Lifeline): the proxy returns once it
 	// no longer holds the process it followed. "": it runs until it's stopped.
 	Lifeline string `json:"lifeline,omitempty"`
-	// CA and CAKey are devvm's CA, for interception: its certificate and key files (PEM).
-	CA    string `json:"ca,omitempty"`
-	CAKey string `json:"ca_key,omitempty"`
+	// CA and CAKey are the VM's own CA, for interception: its certificate and key files (PEM).
+	// CANext and CANextKey are its next CA's, which the VM trusts too: the proxy signs with it
+	// from successorSkew after its start, so the switch needs no new proxy. Each key file must be
+	// a regular file, not a symbolic link, that only its owner may read or write.
+	CA        string `json:"ca,omitempty"`
+	CAKey     string `json:"ca_key,omitempty"`
+	CANext    string `json:"ca_next,omitempty"`
+	CANextKey string `json:"ca_next_key,omitempty"`
 	// Secrets is the VM's bindings file (BindingList, no values), read again when it changes; each
 	// binding's value comes from IO.Secret.
 	Secrets string `json:"secrets,omitempty"`
@@ -72,11 +77,13 @@ type Config struct {
 	// their sockets, devvm's run folder: without both, no link is reached.
 	Links       string `json:"links,omitempty"`
 	LinkSockets string `json:"link_sockets,omitempty"`
-	// DevvmSHA256 and CASHA256 are the SHA-256 of the devvm binary and of devvm's CA certificate
-	// it was started with. The proxy doesn't read them: they're in the file so a new binary or a
-	// new CA makes another config, and devvm starts the proxy again (Sum).
-	DevvmSHA256 string `json:"devvm_sha256,omitempty"`
-	CASHA256    string `json:"ca_sha256,omitempty"`
+	// DevvmSHA256, CASHA256 and CANextSHA256 are the SHA-256 of the devvm binary, of the VM's CA
+	// certificate and of its next CA's it was started with. The proxy doesn't read them: they're
+	// in the file so a new binary or a new CA makes another config, and devvm starts the proxy
+	// again (Sum).
+	DevvmSHA256  string `json:"devvm_sha256,omitempty"`
+	CASHA256     string `json:"ca_sha256,omitempty"`
+	CANextSHA256 string `json:"ca_next_sha256,omitempty"`
 }
 
 // Upstream is the host's proxy settings, as devvm's environment has them (HTTPS_PROXY, HTTP_PROXY,
@@ -154,6 +161,12 @@ func (c Config) check() error {
 	}
 	if (c.CA == "") != (c.CAKey == "") {
 		return errors.New("ca and ca_key go together")
+	}
+	if (c.CANext == "") != (c.CANextKey == "") {
+		return errors.New("ca_next and ca_next_key go together")
+	}
+	if c.CANext != "" && c.CA == "" {
+		return errors.New("ca_next needs ca")
 	}
 	return nil
 }

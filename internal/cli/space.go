@@ -569,12 +569,12 @@ func (e spaceEnv) retainOf(keys ...string) string {
 
 // otherState is the disk devvm's other state takes: the VMs' folders (their
 // logs and the orphans' are counted apart, by the caller), images'
-// records, run files, CA, the tools lock and the --from digests in the
+// records, run files, the tools lock and the --from digests in the
 // cache.
 func otherState(d paths.Dirs) int64 {
 	var n int64
 	for _, p := range []string{
-		d.VMs(), d.Images(), d.FromDigests(), d.Run(), d.CA(),
+		d.VMs(), d.Images(), d.FromDigests(), d.Run(),
 		d.ToolLock(), d.ToolLockConfig(), d.ToolLockChecked(),
 	} {
 		n += du(p)

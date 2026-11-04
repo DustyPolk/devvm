@@ -74,7 +74,7 @@ type server struct {
 	events   *events
 	egress   *egress  // where a connection may go: the policy, the floor, the company proxy
 	secrets  *secrets // Config.Secrets: the bindings and their values
-	ca       *ca      // Config.CA, for interception; nil: none
+	ca       *ca      // Config.CA, and its next (Config.CANext), for interception; nil: none
 	// upstreamCAs is what the proxy's own TLS connections trust: nil, the system roots;
 	// Config.UpstreamCAs, the user's CAs besides them.
 	upstreamCAs *x509.CertPool
@@ -99,6 +99,11 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 	var err error
 	if c.CA != "" {
 		if s.ca, err = loadCA(c.CA, c.CAKey); err != nil {
+			return nil, err
+		}
+	}
+	if c.CANext != "" {
+		if s.ca.next, err = loadCA(c.CANext, c.CANextKey); err != nil {
 			return nil, err
 		}
 	}

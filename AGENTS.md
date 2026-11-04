@@ -18,7 +18,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/devcontainer/`, `internal/jsonc/` | a project's devcontainer.json (pure): finding it, mapping it to a new VM's plan, refusals; JSON with comments (`jsonc.Strip`, stdlib) |
 | `internal/tools/` | the shared tools: the lock, host mise, the daily check, tool image builds, the share |
 | `internal/netpolicy/`, `internal/secrets/` | network policy (the choice, the VM's proxy, the self-check); tokens on the host and the VM's bindings |
-| `internal/trust/` | the user's CAs (`~/.config/devvm/ca`): read and checked, sent to VMs, build VMs' `Trust` scripts, the guest environment; devvm's own CA (`InitCA`) |
+| `internal/trust/` | the user's CAs (`~/.config/devvm/ca`): read and checked, sent to VMs, build VMs' `Trust` scripts, the guest environment; each VM's own CA and its next (`InitCA`, in `vms/<hash>/run/ca/`) |
 | `internal/agentlogin/` | agents' login and settings files on the host: the VM's copies with placeholders, bindings, values and OAuth refresh (`File`), `Redact` |
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |
 | `internal/daemon/` | devvm's background processes (stdlib only): detached starts, pid files checked against the process's arguments, stopping (TERM, then KILL), readiness by status file, the lifeline; the only place a process is signalled by pid (forbidigo) |

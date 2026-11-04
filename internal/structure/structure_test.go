@@ -27,7 +27,7 @@ func devvm() rules {
 		// fake's own types each implement.
 		maxMethods: 24,
 		largeTypes: map[string]large{
-			"internal/paths.Dirs": {50, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
+			"internal/paths.Dirs": {49, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":      {47, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: devvmVars(),

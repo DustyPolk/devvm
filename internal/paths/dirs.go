@@ -157,9 +157,6 @@ func (d Dirs) Logs() string { return filepath.Join(d.Data, "logs") }
 // RunLogs holds the logs of devvm's runs: builds and the commands they ran.
 func (d Dirs) RunLogs() string { return filepath.Join(d.Logs(), "runs") }
 
-// CA holds the certificate authority VMs trust for the proxy.
-func (d Dirs) CA() string { return filepath.Join(d.Data, "ca") }
-
 // Tools is the shared tools folder, mounted read-only into VMs.
 func (d Dirs) Tools() string { return filepath.Join(d.Data, "tools") }
 

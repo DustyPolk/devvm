@@ -8,9 +8,9 @@ import "path/filepath"
 //	          devvm made for it (state.VM)
 //	lock      held by each change to vm.json
 //	policy    its own network policy rules
-//	run/      what its runs leave: pids, its proxy's files, its port
-//	          forwarder's, its sandbox profile, its secrets' bindings,
-//	          its links' list
+//	run/      what its runs leave: pids, its proxy's files and CA, its
+//	          port forwarder's, its sandbox profile, its secrets'
+//	          bindings, its links' list
 //	logs/     its proxy's decisions and output, its link session's and
 //	          its port forwarder's
 //	home.tar.gz  its home folder, while a remake makes it again
@@ -29,9 +29,9 @@ func (v VM) Lock() string { return filepath.Join(v.Dir, "lock") }
 // Policy holds the VM's own network policy rules.
 func (v VM) Policy() string { return filepath.Join(v.Dir, "policy") }
 
-// Run is the folder of what the VM's runs leave: pids, its proxy's files,
-// its port forwarder's, its sandbox profile, its secrets' bindings and its
-// links' list.
+// Run is the folder of what the VM's runs leave: pids, its proxy's files
+// and CA, its port forwarder's, its sandbox profile, its secrets' bindings
+// and its links' list.
 func (v VM) Run() string { return filepath.Join(v.Dir, "run") }
 
 // Logs is the folder of the VM's logs.
@@ -55,6 +55,28 @@ func (v VM) ProxyPID() string { return filepath.Join(v.Run(), "proxy.pid") }
 
 // ProxyStatus is the status file the VM's proxy writes once it listens.
 func (v VM) ProxyStatus() string { return filepath.Join(v.Run(), "proxy.status") }
+
+// CA is the folder of the VM's own CA, which its proxy intercepts with
+// and which only it trusts, with network policy.
+func (v VM) CA() CA { return CA{Dir: filepath.Join(v.Run(), "ca")} }
+
+// CA is a VM's CA folder (VM.CA) and its files: the CA its proxy signs
+// with now and the one after it, which starts before the first ends and
+// which the VM trusts too, each a certificate (PEM) and its key. The keys
+// never leave the host.
+type CA struct{ Dir string }
+
+// Cert is the current CA's certificate, ca.pem.
+func (c CA) Cert() string { return filepath.Join(c.Dir, "ca.pem") }
+
+// Key is the current CA's key, ca.key.
+func (c CA) Key() string { return filepath.Join(c.Dir, "ca.key") }
+
+// NextCert is the next CA's certificate, next.pem.
+func (c CA) NextCert() string { return filepath.Join(c.Dir, "next.pem") }
+
+// NextKey is the next CA's key, next.key.
+func (c CA) NextKey() string { return filepath.Join(c.Dir, "next.key") }
 
 // BuildProxy is the folder of a build VM's proxy, behind a company proxy:
 // its files and logs, kept when the build fails.

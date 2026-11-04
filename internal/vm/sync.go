@@ -356,11 +356,14 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 // settings files with the values under secret-looking keys taken out (one
 // that can't be read that way isn't sent).
 func (e syncer) stageNet(s *stage, store *secrets.Store, vm string, tools []string, salt string) error {
-	ca, err := os.ReadFile(filepath.Join(e.Dirs.CA(), "ca.pem"))
-	if err != nil {
-		return err
+	ca := e.Dirs.VM(vm).CA()
+	for _, f := range [][2]string{{"ca/devvm-proxy.crt", ca.Cert()}, {"ca/devvm-proxy-next.crt", ca.NextCert()}} {
+		cert, err := os.ReadFile(f[1])
+		if err != nil {
+			return err
+		}
+		s.put(f[0], 0o644, cert)
 	}
-	s.put("ca/devvm-proxy.crt", 0o644, ca)
 	for _, kind := range store.Logins(tools) {
 		data, err := store.VMLogin(kind, salt)
 		if err != nil {

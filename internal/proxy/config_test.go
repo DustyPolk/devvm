@@ -20,10 +20,10 @@ func TestConfigRoundTrip(t *testing.T) {
 		Listen: "127.0.0.1:4000", VM: "devvm-x", Password: "k3y",
 		BuiltinPolicies: []string{"layers/base.policy"}, Policies: []string{"/p/policy"},
 		Log: "/l/network.jsonl", ProxyLog: "/l/proxy.log", Lifeline: "/h/ha.pid",
-		CA: "/ca/ca.pem", CAKey: "/ca/ca.key", Secrets: "/r/secrets.json",
+		CA: "/ca/ca.pem", CAKey: "/ca/ca.key", CANext: "/ca/next.pem", CANextKey: "/ca/next.key", Secrets: "/r/secrets.json",
 		UpstreamCAs: "PEM", Upstream: &Upstream{HTTPS: "http://u:p@corp:3128", NoProxy: ".corp"}, //nolint:gosec // G101: a fake company proxy's fake password
 		NixCache: "/n", NixCacheMax: 5, Links: "/r/links.json", LinkSockets: "/run",
-		DevvmSHA256: "aa", CASHA256: "bb",
+		DevvmSHA256: "aa", CASHA256: "bb", CANextSHA256: "dd",
 	}
 	got, err := ReadConfig(writeConfig(t, c))
 	c.Version = ConfigVersion
@@ -38,6 +38,7 @@ func TestConfigRoundTrip(t *testing.T) {
 		"policies": func(c *Config) { c.BuiltinPolicies = append(c.BuiltinPolicies, "shared-tools/node.policy") },
 		"binary":   func(c *Config) { c.DevvmSHA256 = "cc" },
 		"ca":       func(c *Config) { c.CASHA256 = "cc" },
+		"next ca":  func(c *Config) { c.CANextSHA256 = "cc" },
 		"cas":      func(c *Config) { c.UpstreamCAs = "PEM2" },
 		"upstream": func(c *Config) { c.Upstream = nil },
 		"listen":   func(c *Config) { c.Listen = "127.0.0.1:4001" },
@@ -95,7 +96,9 @@ func TestReadConfigRefuses(t *testing.T) {
 		{"every address", write("all", enc(Config{Listen: "0.0.0.0:3128", Password: "k3y"}), 0o600), nil, "isn't a loopback address"},
 		{"a name", write("name", enc(Config{Listen: "localhost:3128", Password: "k3y"}), 0o600), nil, "isn't a loopback address"},
 		{"a cap below 0", write("cap", enc(Config{Listen: "[::1]:0", Password: "k3y", NixCacheMax: -1}), 0o600), nil, "below 0"},
-		{"a CA without its key", write("ca", enc(Config{Listen: "127.0.0.1:0", Password: "k3y", CA: "/ca.pem"}), 0o600), nil, "go together"},
+		{"a CA without its key", write("ca", enc(Config{Listen: "127.0.0.1:0", Password: "k3y", CA: "/ca.pem"}), 0o600), nil, "ca and ca_key go together"},
+		{"a next CA without its key", write("next", enc(Config{Listen: "127.0.0.1:0", Password: "k3y", CA: "/ca.pem", CAKey: "/ca.key", CANext: "/next.pem"}), 0o600), nil, "ca_next and ca_next_key go together"},
+		{"a next CA alone", write("nextonly", enc(Config{Listen: "127.0.0.1:0", Password: "k3y", CANext: "/next.pem", CANextKey: "/next.key"}), 0o600), nil, "ca_next needs ca"},
 		{"missing", filepath.Join(dir, "missing"), os.ErrNotExist, ""},
 	} {
 		done := make(chan error, 1)

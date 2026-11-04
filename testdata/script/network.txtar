@@ -12,9 +12,10 @@ stdout '^net\.on=false$'
 ! stdout 'proxy_|net_check'
 stub_calls
 ! stdout curl
-! exists $DATA/ca
+! exists $OFF_dir/run/ca
 
-# --network-policy: devvm's CA (kept out of Time Machine on macOS), the
+# --network-policy: the VM's own CA and its next one, the keys the user's
+# alone (kept out of Time Machine on macOS), the
 # VM's proxy, then the VM started confined, its environment pointing at
 # the proxy with the VM's key, then the self-check, the setup and the
 # shell.
@@ -22,8 +23,13 @@ project net
 stub_reset
 exec devvm --network-policy --no-git-protect
 stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
-exists $DATA/ca/ca.pem $DATA/ca/ca.key
 vm_name NET net
+exists $NET_dir/run/ca/ca.pem $NET_dir/run/ca/next.pem
+exec ls -l $NET_dir/run/ca/ca.key $NET_dir/run/ca/next.key
+stdout -count=2 '^-rw-------\S* '
+exec ls -ld $NET_dir/run/ca
+stdout '^drwx------\S* '
+! exists $DATA/ca
 vm_state $NET_dir/vm.json
 stdout '^net\.on=true$'
 stdout '^net\.made\.check=ok$'
@@ -32,7 +38,7 @@ stdout '^net\.made\.proxy_salt=[0-9a-f]{32}$'
 stdout '^ports\.host\.ssh=[0-9]+$'
 stdout '^ports\.host\.proxy=[0-9]+$'
 stub_calls
-[darwin] stdout '^tmutil addexclusion \S*/data/devvm/ca$'
+[darwin] stdout '^tmutil addexclusion \S*/data/devvm/vms/[0-9a-f]{14}/run/ca$'
 [darwin] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.env = \{"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192\.168\.5\.2:[0-9]+",.*"NODE_EXTRA_CA_CERTS":"/etc/ssl/devvm\.pem",.*"NO_PROXY":"localhost,127\.0\.0\.1,::1",.*\} --set \.propagateProxyEnv=false --set \.hostResolver\.enabled=false --set \.dns=\["127\.0\.0\.1"\]$'
 [linux] stdout '^limactl edit --tty=false devvm-net-[0-9a-f]{14} --set \.env = \{"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192\.168\.5\.4:3128",.*\} --set \.propagateProxyEnv=false --set \.hostResolver\.enabled=false --set \.dns=\["127\.0\.0\.1"\]$'
 stdout '^limactl start --tty=false devvm-net-[0-9a-f]{14}\n(limactl list --json\n)*limactl shell --workdir / devvm-net-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\n(limactl list --json\n)*ssh -F none -M .*\nlimactl shell --workdir / devvm-net-[0-9a-f]{14} sh -c cd ''/'' && exec ''curl'' ''--noproxy'' ''\*'' ''-sS'' ''-m'' ''3'' ''-o'' ''/dev/null'' ''https://1\.1\.1\.1''\n'
@@ -107,6 +113,11 @@ stdout '^api\.anthropic\.com:443$'
 exec cat $AGENT_dir/run/proxy.json
 stdout '"builtin_policies": \[\n    "layers/base\.policy",\n    "shared-tools/claude\.policy"\n  \],\n  "policies": \[\n    "\S*/config/devvm/policy",\n    "\S*/data/devvm/vms/[0-9a-f]{14}/policy",\n    "\S*/data/devvm/vms/[0-9a-f]{14}/run/secrets\.policy"\n  \],'
 ! exists $XDG_DATA_HOME/devvm/assets
+# Each VM has CAs of its own: its proxy signs with its own, and no other
+# VM has them.
+exec sh -c 'grep -Fx "  \"ca\": \"$AGENT_dir/run/ca/ca.pem\"," "$AGENT_dir/run/proxy.json" && grep -Fx "  \"ca_next_key\": \"$AGENT_dir/run/ca/next.key\"," "$AGENT_dir/run/proxy.json"'
+! cmp $AGENT_dir/run/ca/ca.pem $NET_dir/run/ca/ca.pem
+! cmp $AGENT_dir/run/ca/next.pem $NET_dir/run/ca/next.pem
 env CLAUDE_CODE_OAUTH_TOKEN=
 
 # A Codex login on the host: its bindings and hosts, with the VM's

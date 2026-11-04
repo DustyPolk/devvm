@@ -4,7 +4,6 @@ import (
 	"context"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"syscall"
@@ -42,8 +41,8 @@ type Proxy struct {
 	Args func(pid int) ([]string, error)
 	// ExcludeFromBackup keeps a folder out of backups (macOS).
 	ExcludeFromBackup func(ctx context.Context, dir string) error
-	// InitCA makes devvm's CA in dir unless a current one is there.
-	InitCA func(dir string) error
+	// InitCA readies a VM's CA and its next one (trust.InitCA).
+	InitCA func(paths.CA) error
 	// Listening reports whether a program has a host loopback port.
 	Listening func(ctx context.Context, port int) bool
 	// PortRange is the range new ports come from (platform.ChoosablePorts,
@@ -106,7 +105,7 @@ func (p *Proxy) PID(vm string) (int, bool) { return p.proc(vm).PID() }
 func (p *Proxy) Stop(vm string) bool { return p.proc(vm).Stop(4 * p.Tick) }
 
 // Prepare readies a VM with network policy to start on b, or a running one
-// to go on: devvm's CA, the VM's secret files, its ports, and its proxy
+// to go on: the VM's own CA, its secret files, its ports, and its proxy
 // running. It returns the confinement its backend starts it with. The proxy
 // follows the host process that runs the VM (its Run.Lifeline): a VM
 // started again gets a new proxy.
@@ -118,18 +117,18 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		return none, err
 	}
 	lifeline := run.Lifeline
-	// The CA lasts 30 days: a new one is made when it has under a week left
-	// (VMs trust it from their next start). Kept out of backups: a copy of
-	// its key elsewhere could impersonate any site to VMs.
-	ca := p.Dirs.CA()
-	if err := state.PrivateDir(ca); err != nil {
+	// The VM's own CA, and the next one, which it trusts too (trust.InitCA).
+	// Kept out of backups: a copy of a key elsewhere could impersonate any
+	// site to the VM.
+	ca := p.Dirs.VM(vm).CA()
+	if err := state.PrivateDir(ca.Dir); err != nil {
 		return none, err
 	}
 	if err := p.InitCA(ca); err != nil {
-		return none, msg.ProxyCAFailed(ca).Because(err)
+		return none, msg.ProxyCAFailed(ca.Dir).Because(err)
 	}
 	if p.OS == "darwin" {
-		_ = p.ExcludeFromBackup(ctx, ca)
+		_ = p.ExcludeFromBackup(ctx, ca.Dir)
 	}
 	key, err := Key(ctx, st)
 	if err != nil {
@@ -186,12 +185,13 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 // and following its lifeline. It holds everything that, changed, starts a
 // running VM's proxy again: its policies (tools added or removed, a layer
 // of the user's), devvm's binary (an upgrade, which may change the
-// built-in policies' rules), devvm's CA (replaced, so it mints
+// built-in policies' rules), the VM's CAs (replaced, so it would mint
 // certificates the VM no longer trusts after its next setup), the user's
 // CAs, which it trusts for its own connections, the company proxy it goes
 // through, from devvm's environment, and the shared Nix cache's cap.
 func (p *Proxy) config(st *state.VM, key, lifeline string) (proxy.Config, error) {
-	vm, files, ca := st.Name(), p.Dirs.VM(st.Name()), p.Dirs.CA()
+	vm, files := st.Name(), p.Dirs.VM(st.Name())
+	ca := files.CA()
 	builtin, policies := Policies(p.Dirs, vm, st.Image, tools.Names(st))
 	for _, m := range PolicyWarnings(policies) {
 		p.Warn(m)
@@ -209,16 +209,17 @@ func (p *Proxy) config(st *state.VM, key, lifeline string) (proxy.Config, error)
 		return proxy.Config{}, err
 	}
 	bin, _ := image.SHA256File(p.Self)
-	caSum, _ := image.SHA256File(filepath.Join(ca, "ca.pem"))
+	caSum, _ := image.SHA256File(ca.Cert())
+	nextSum, _ := image.SHA256File(ca.NextCert())
 	c := proxy.Config{
 		Listen: listenOn(pp.Host.Proxy), VM: vm, Password: key,
 		BuiltinPolicies: builtin, Policies: policies,
 		Log: files.EventLog(), ProxyLog: files.ProxyLog(), Lifeline: lifeline,
-		CA: filepath.Join(ca, "ca.pem"), CAKey: filepath.Join(ca, "ca.key"),
+		CA: ca.Cert(), CAKey: ca.Key(), CANext: ca.NextCert(), CANextKey: ca.NextKey(),
 		Secrets:     files.Secrets(),
 		UpstreamCAs: string(cas.Bundle()), Upstream: upstream,
 		Links: files.LinkList(), LinkSockets: p.Dirs.Run(),
-		DevvmSHA256: bin, CASHA256: caSum,
+		DevvmSHA256: bin, CASHA256: caSum, CANextSHA256: nextSum,
 	}
 	c.NixCache, c.NixCacheMax = p.nixCache(st)
 	return c, nil

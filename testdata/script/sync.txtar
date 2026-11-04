@@ -59,7 +59,7 @@ env CLAUDE_CODE_OAUTH_TOKEN=
 exec devvm --no-network-policy --no-git-protect --agents claude
 stderr '^devvm: no_claude_token vm=devvm-notoken-[0-9a-f]{14}$'
 
-# With network policy: devvm's CA, the VM's own placeholders, the logins'
+# With network policy: the VM's own CA and its next, the VM's own placeholders, the logins'
 # copies with placeholders (the host's files unchanged), and the
 # settings files with their keys taken out; one devvm can't read that way
 # isn't sent.
@@ -71,14 +71,18 @@ stderr '^devvm: config_not_copied file=\S*/home/\.codex/config\.toml vm=devvm-ne
 ! stderr claude_mcp_secrets_copied
 exec tar -tf $STUB_DIR/sync.tar
 ! stdout '^home/\.codex/config\.toml$'
+vm_name NET net
 exec tar -xOf $STUB_DIR/sync.tar ca/devvm-proxy.crt
-cmp stdout $DATA/ca/ca.pem
+cmp stdout $NET_dir/run/ca/ca.pem
+exec tar -xOf $STUB_DIR/sync.tar ca/devvm-proxy-next.crt
+cmp stdout $NET_dir/run/ca/next.pem
+exec tar -xOf $STUB_DIR/sync.tar
+! stdout 'PRIVATE KEY'
 exec sh -c 'tar -xOf "$STUB_DIR/sync.tar" home/.claude/settings.json home/.codex/auth.json claude.json env'
 ! stdout testfake
 stdout devvm-redacted
 stdout '"OPENAI_API_KEY": *"sk-devvm-proxy-managed'
 ! stdout projects
-vm_name NET net
 exec sh -c 'salt=$(sed -n "s/.*\"proxy_salt\": \"\([^\"]*\)\".*/\1/p" "$NET_dir/vm.json"); tar -xOf "$STUB_DIR/sync.tar" env | grep -Fx "export CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-devvm-proxy-managed-$salt''"'
 exec sh -c 'key=$(sed -n "s/.*\"proxy_key\": \"\([^\"]*\)\".*/\1/p" "$NET_dir/vm.json"); tar -xOf "$STUB_DIR/sync.tar" vm | grep -E "^DEVVM_PROXY=''http://devvm:$key@[0-9.]+:[0-9]+''$"'
 cmp $HOME/.codex/auth.json $WORK/codex.json

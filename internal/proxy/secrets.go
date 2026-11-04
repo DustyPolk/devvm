@@ -1,7 +1,7 @@
 package proxy
 
 // Secrets: the VM only ever holds placeholders. For hosts with a bound secret, the proxy terminates
-// TLS with a certificate from devvm's own CA (trusted only inside VMs), replaces the placeholder in
+// TLS with a certificate from the VM's own CA (trusted only inside that VM), replaces the placeholder in
 // the binding's header with the real value, and forwards over a fresh TLS connection. Values come
 // from devvm's own lookup (IO.Secret: the Keychain, devvm's secrets folder or an agent's login
 // file), in this process, on demand, and are cached briefly; they're never logged or written
@@ -292,21 +292,38 @@ func basicHas(v, placeholder string) bool {
 
 // --- the CA ---
 
-// ca is devvm's CA as a proxy has it (Config.CA): the certificate and key it signs leaves with, the
-// one key every leaf has, and the leaves it has minted, by host, under mu.
+// ca is the VM's CA as its proxy has it (Config.CA): the certificate and key it signs leaves with,
+// the one key every leaf has, the leaves it has minted, by host, under mu, and its next CA
+// (Config.CANext), nil for none.
 type ca struct {
 	cert    *x509.Certificate
 	key     *ecdsa.PrivateKey
 	leafKey *ecdsa.PrivateKey
 	mu      sync.Mutex
 	leaves  map[string]*tls.Certificate
+	next    *ca
 }
 
-// devvm makes its CA (trust.InitCA) and replaces it before it ends; VMs trust a new CA from their
-// next launch, which starts their proxy again with it. A proxy keeps the CA it started with, as its
-// VM trusts no other, so one whose VM runs past that CA's end can intercept nothing: leafFor mints
-// no leaf past the CA's end, and caEndedRefusal refuses the CONNECT before its tunnel opens, with
-// caEndedReason, which says to open the VM again.
+// Each VM has CAs of its own (trust.InitCA), which no other VM trusts: the current one and the next
+// one, which every launch installs in the VM beside it. The next CA starts before the current one
+// ends, and the proxy signs with it from successorSkew after its start (signer), the moment from
+// which the VM's next launch makes it the current one, so a VM that runs on without a launch goes
+// on verifying the proxy's certificates, and the proxy needs no restart. A proxy keeps the CAs it
+// started with, as its VM trusts no other, so one whose VM runs past the next CA's end can
+// intercept nothing: leafFor mints no leaf past the end, and caEndedRefusal refuses the CONNECT
+// before its tunnel opens, with caEndedReason, which says to open the VM again.
+
+// successorSkew is how long after its start the next CA signs: trust.InitCA dates it that early, so
+// a VM whose clock is behind by up to that still sees it started.
+const successorSkew = time.Hour
+
+// signer is the CA that signs at now: the next one from successorSkew after its start, else c.
+func (c *ca) signer(now time.Time) *ca {
+	if n := c.next; n != nil && !now.Before(n.cert.NotBefore.Add(successorSkew)) {
+		return n
+	}
+	return c
+}
 
 // writeAtomic replaces path with data, mode mode, whole or not at all: a
 // temporary file in its folder (.<name>.tmp-*), renamed over it. It's the
@@ -333,9 +350,22 @@ func writeAtomic(path string, data []byte, mode os.FileMode) error {
 	return os.Rename(tmp.Name(), path) //nolint:gosec // devvm's own files, or a Nix cache file nixPath named
 }
 
-// loadCA reads the CA's certificate and key files (Config.CA, Config.CAKey).
+// caFileMax bounds a CA's certificate and key files.
+const caFileMax = 64 << 10
+
+// loadCA reads a CA's certificate and key files (Config.CA and Config.CAKey, or Config.CANext and
+// Config.CANextKey), neither a symbolic link: the certificate only its owner may write, the key
+// only its owner may read or write (readPrivate).
 func loadCA(certPath, keyPath string) (*ca, error) {
-	pair, err := tls.LoadX509KeyPair(certPath, keyPath)
+	certPEM, err := readPrivate(certPath, caFileMax, 0o022)
+	if err != nil {
+		return nil, err
+	}
+	keyPEM, err := readPrivate(keyPath, caFileMax, 0o077)
+	if err != nil {
+		return nil, err
+	}
+	pair, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
 	}
@@ -372,12 +402,16 @@ func upstreamPool(pem []byte) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// pem is the CA's certificate, for /ca.pem; nil for no CA.
+// pem is the CA's certificate and its next one's, for /ca.pem; nil for no CA.
 func (c *ca) pem() []byte {
 	if c == nil {
 		return nil
 	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.cert.Raw})
+	b := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.cert.Raw})
+	if c.next != nil {
+		b = append(b, c.next.pem()...)
+	}
+	return b
 }
 
 // errCAEnded: the CA is past its NotAfter, so a leaf it signed would verify nowhere.
@@ -386,8 +420,8 @@ var errCAEnded = errors.New("devvm's CA has ended")
 // caEndedReason is the log's reason for a tunnel refused because the CA has ended.
 const caEndedReason = "devvm's CA has ended: open the VM again (devvm in its folder) for a new one"
 
-// ended reports whether the CA is past its NotAfter at now.
-func (c *ca) ended(now time.Time) bool { return !now.Before(c.cert.NotAfter) }
+// ended reports whether the CA that signs at now (signer) is past its NotAfter.
+func (c *ca) ended(now time.Time) bool { return !now.Before(c.signer(now).cert.NotAfter) }
 
 // caEndedRefusal refuses a CONNECT to be intercepted (e) once the CA has ended, before the tunnel
 // opens: 403, with the reason and no allow command, since no rule would help, and logged as a
@@ -403,14 +437,19 @@ func (s *server) caEndedRefusal(w http.ResponseWriter, e Event) bool {
 	return true
 }
 
-// leafFor mints (and caches) a certificate for host, signed by the CA: for a day, and never past
+// leafFor mints (and caches) a certificate for host, signed by the CA that signs now (signer).
+func (c *ca) leafFor(host string) (*tls.Certificate, error) {
+	now := time.Now()
+	return c.signer(now).mint(host, now)
+}
+
+// mint mints (and caches) a certificate for host, signed by c itself: for a day, and never past
 // the CA's own NotAfter or before its NotBefore, since a client checks the whole chain. One that
 // ends with the CA is kept until then. Once the CA has ended there's none (errCAEnded).
-func (c *ca) leafFor(host string) (*tls.Certificate, error) {
+func (c *ca) mint(host string, now time.Time) (*tls.Certificate, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	now := time.Now()
-	if c.ended(now) {
+	if !now.Before(c.cert.NotAfter) {
 		return nil, errCAEnded
 	}
 	if l, ok := c.leaves[host]; ok && now.Before(l.Leaf.NotAfter) &&

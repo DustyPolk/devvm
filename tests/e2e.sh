@@ -2201,8 +2201,45 @@ check "the proxy refuses anything on the host without the VM's password" bash -c
 check "the token never reaches the VM" bash -c "
   ! limactl shell --workdir / $vm sudo grep -rqs -e e2efake /etc /home /root </dev/null &&
   ! limactl shell --workdir / $vm bash -lc 'env' </dev/null | grep -q e2efake"
-check "devvm's CA is installed in the VM" bash -c "
-  limactl shell --workdir / $vm cat /usr/local/share/ca-certificates/devvm-proxy.crt </dev/null | cmp -s - '$XDG_DATA_HOME/devvm/ca/ca.pem'"
+# A second VM with network policy, small and with no agents, in the same home: each VM has CAs of
+# its own, the current one and the next, which its launch installs; its proxy presents only its
+# own, and it trusts no other VM's. The proxies' passwords go into curl's config files, the run's
+# alone, written by the shell's own printf: in no process's arguments.
+n2=$(newproj net2)
+vm1=$vm
+(cd "$n2" && printf 'exit\n' | HOME=$nh "$D" --network-policy --no-git-protect --agents none --cpus 2 --memory 2 --ports none >"$work/last.log" 2>&1)
+vm2=$(vm_of "$n2"); [[ -z $vm2 ]] || created+=("$vm2")
+vm=$vm1
+ca1=$(vmdir "$vm")/run/ca ca2=$(vmdir "$vm2")/run/ca
+pp2=$(st_get "$(vmdir "$vm2")" ports.host.proxy)
+i=0
+for d in "$(vmdir "$vm")" "$(vmdir "$vm2")"; do
+  i=$((i + 1))
+  (umask 077 && key=$(st_get "$d" net.made.proxy_key) && printf 'proxy-user = "devvm:%s"\n' "$key" >"$work/px$i.cfg")
+done
+# A certificate's second PEM line holds its serial, and a key's its secret, so grep finds that
+# certificate or key in any file that holds it.
+check "each VM's launch installs its own CA and the next one, which only the host keeps the keys of" bash -c "
+  [[ -n '$vm2' ]] && ! cmp -s '$ca1/ca.pem' '$ca2/ca.pem' && ! cmp -s '$ca1/next.pem' '$ca2/next.pem' &&
+  limactl shell --workdir / $vm cat /usr/local/share/ca-certificates/devvm-proxy.crt </dev/null | cmp -s - '$ca1/ca.pem' &&
+  limactl shell --workdir / $vm cat /usr/local/share/ca-certificates/devvm-proxy-next.crt </dev/null | cmp -s - '$ca1/next.pem' &&
+  limactl shell --workdir / $vm2 cat /usr/local/share/ca-certificates/devvm-proxy.crt </dev/null | cmp -s - '$ca2/ca.pem' &&
+  limactl shell --workdir / $vm2 cat /usr/local/share/ca-certificates/devvm-proxy-next.crt </dev/null | cmp -s - '$ca2/next.pem' &&
+  ! limactl shell --workdir / $vm sudo grep -rqsF -f /dev/stdin /etc /home /root /usr/local < <(sed -n 2p '$ca1/ca.key' '$ca1/next.key') &&
+  [[ \$(stat -c %a '$ca1/ca.key' 2>/dev/null || stat -f %Lp '$ca1/ca.key') == 600 ]] &&
+  [[ \$(stat -c %a '$ca1/next.key' 2>/dev/null || stat -f %Lp '$ca1/next.key') == 600 ]]"
+check "a VM trusts no other VM's CA" bash -c "
+  ! limactl shell --workdir / $vm2 sudo grep -rqsF -f /dev/stdin /etc/ssl /usr/local/share/ca-certificates < <(sed -n 2p '$ca1/ca.pem' '$ca1/next.pem') &&
+  ! limactl shell --workdir / $vm sudo grep -rqsF -f /dev/stdin /etc/ssl /usr/local/share/ca-certificates < <(sed -n 2p '$ca2/ca.pem' '$ca2/next.pem') &&
+  limactl shell --workdir / $vm sudo grep -qsF -f /dev/stdin /etc/ssl/devvm.pem < <(sed -n 2p '$ca1/next.pem')"
+check "each VM's proxy serves its own CAs, and presents its own CA's certificates, which the other VM's CAs don't verify" bash -c "
+  curl -fsS -m 20 -K '$work/px1.cfg' -x http://127.0.0.1:$pp http://devvm.proxy/ca.pem | cmp -s - <(cat '$ca1/ca.pem' '$ca1/next.pem') &&
+  curl -fsS -m 20 -K '$work/px2.cfg' -x http://127.0.0.1:$pp2 http://devvm.proxy/ca.pem | cmp -s - <(cat '$ca2/ca.pem' '$ca2/next.pem') &&
+  curl -sS -m 30 -o /dev/null -K '$work/px1.cfg' -x http://127.0.0.1:$pp --cacert <(cat '$ca1/ca.pem' '$ca1/next.pem') https://api.anthropic.com/devvm-e2e-ca &&
+  { curl -sS -m 30 -o /dev/null -K '$work/px1.cfg' -x http://127.0.0.1:$pp --cacert <(cat '$ca2/ca.pem' '$ca2/next.pem') https://api.anthropic.com/devvm-e2e-ca; [[ \$? == 60 ]]; }"
+check "devvm rm deletes a VM's CA with its folder, and leaves the other VM's" bash -c "cd '$n2' &&
+  HOME='$nh' '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 && [[ ! -e '$ca2' ]] && [[ -s '$ca1/ca.key' ]]"
+rm -f "$work/px1.cfg" "$work/px2.cfg"
 check "the VM gets its own placeholder, not the token" in_vm "$vm" "[[ \$CLAUDE_CODE_OAUTH_TOKEN == sk-ant-oat01-devvm-proxy-managed-$salt ]]"
 check "the VM's Codex and Claude Code (MCP) logins hold only placeholders" bash -c "
   ! limactl shell --workdir / $vm bash -c 'cat ~/.codex/auth.json ~/.claude.json' </dev/null | grep -e e2efake &&

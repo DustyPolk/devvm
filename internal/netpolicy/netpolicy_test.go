@@ -373,7 +373,8 @@ func TestPrepare(t *testing.T) {
 	// The run, the VM's run and logs, and CA folders are the user's alone
 	// after, whatever mode they had.
 	files := d.VM(st.Name())
-	for _, dir := range []string{d.Run(), files.Run(), files.Logs(), d.CA()} {
+	ca := files.CA()
+	for _, dir := range []string{d.Run(), files.Run(), files.Logs(), ca.Dir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // the test's own folder
 			t.Fatal(err)
 		}
@@ -391,12 +392,13 @@ func TestPrepare(t *testing.T) {
 		conf.ProxyPort != pp || pp == 0 || conf.SSHPort != sp || sp == 0 || sp == pp || conf.Env["NO_PROXY"] != "localhost,127.0.0.1,::1" {
 		t.Errorf("confinement = %+v", conf)
 	}
-	for _, f := range []string{"ca.pem", "ca.key"} {
-		if _, err := os.Stat(filepath.Join(d.CA(), f)); err != nil {
+	// The VM's own CA and its next one, in its run folder.
+	for _, f := range []string{ca.Cert(), ca.Key(), ca.NextCert(), ca.NextKey()} {
+		if _, err := os.Stat(f); err != nil {
 			t.Errorf("the CA: %v", err)
 		}
 	}
-	if !slices.Equal(excluded, []string{d.CA()}) {
+	if !slices.Equal(excluded, []string{ca.Dir}) {
 		t.Errorf("kept out of backups: %q", excluded)
 	}
 	pid, ok := p.PID(st.Name())
@@ -418,23 +420,24 @@ func TestPrepare(t *testing.T) {
 		t.Fatal(err)
 	}
 	bin, _ := image.SHA256File("/bin/sh")
-	caSum, _ := image.SHA256File(filepath.Join(d.CA(), "ca.pem"))
+	caSum, _ := image.SHA256File(ca.Cert())
+	nextSum, _ := image.SHA256File(ca.NextCert())
 	if want := (proxy.Config{
 		Version: proxy.ConfigVersion, Listen: "127.0.0.1:" + strconv.Itoa(pp), VM: st.Name(), Password: key,
 		BuiltinPolicies: []string{"layers/base.policy", "shared-tools/node.policy", "shared-tools/claude.policy"},
 		Policies:        []string{d.Policy(), files.Policy(), files.SecretsPolicy()},
 		Log:             files.EventLog(), ProxyLog: files.ProxyLog(), Lifeline: "/lima/vm/ha.pid",
-		CA: filepath.Join(d.CA(), "ca.pem"), CAKey: filepath.Join(d.CA(), "ca.key"),
+		CA: ca.Cert(), CAKey: ca.Key(), CANext: ca.NextCert(), CANextKey: ca.NextKey(),
 		Secrets: files.Secrets(),
 		// Its links' list: in its run folder, devvm's alone.
 		Links: files.LinkList(), LinkSockets: d.Run(),
-		DevvmSHA256: bin, CASHA256: caSum,
-	}); !reflect.DeepEqual(cfg, want) || bin == "" || caSum == "" {
+		DevvmSHA256: bin, CASHA256: caSum, CANextSHA256: nextSum,
+	}); !reflect.DeepEqual(cfg, want) || bin == "" || caSum == "" || nextSum == "" || caSum == nextSum {
 		t.Errorf("config = %+v\nwant %+v", cfg, want)
 	}
 	for path, mode := range map[string]os.FileMode{
 		config: 0o600, d.Run(): 0o700, files.Run(): 0o700, files.Logs(): 0o700, files.ProxyLog(): 0o600,
-		files.Secrets(): 0o600, d.CA(): 0o700,
+		files.Secrets(): 0o600, ca.Dir: 0o700, ca.Key(): 0o600, ca.NextKey(): 0o600,
 	} {
 		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != mode {
 			t.Errorf("%s: %v, want %v (%v)", path, fi.Mode().Perm(), mode, err)
@@ -497,10 +500,12 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 			cfg.DevvmSHA256 = "old"
 			must(t, os.WriteFile(config, cfg.Encode(), 0o600))
 		},
+		// Its CA, or its next one, was replaced.
 		func() {
-			_ = os.WriteFile(filepath.Join(d.CA(), "ca.pem"), []byte("rotated\n"), 0o600)
-			p.InitCA = func(string) error { return nil }
+			_ = os.WriteFile(d.VM(st.Name()).CA().Cert(), []byte("rotated\n"), 0o600)
+			p.InitCA = func(paths.CA) error { return nil }
 		},
+		func() { _ = os.WriteFile(d.VM(st.Name()).CA().NextCert(), []byte("rotated\n"), 0o600) },
 		// Its built-in policies change, then its files alone (a layer of
 		// the user's).
 		func() {
@@ -539,7 +544,7 @@ func TestPrepareRestartsTheProxy(t *testing.T) {
 		}
 	}
 	prepare(false)
-	if f.count() != 8 {
+	if f.count() != 9 {
 		t.Errorf("a stopped VM's proxy didn't start again: %d starts", f.count())
 	}
 	// A running VM whose proxy is gone, with its port taken by another
@@ -646,8 +651,8 @@ func TestPrepareStopsTheOldProxy(t *testing.T) {
 func TestPrepareCAFails(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
-	p.InitCA = func(string) error { return errors.New("disk full") }
-	if _, err := p.Prepare(t.Context(), lifelined(), st, false); msg.NamesOf(err) != "proxy_ca_failed dir="+d.CA() {
+	p.InitCA = func(paths.CA) error { return errors.New("disk full") }
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); msg.NamesOf(err) != "proxy_ca_failed dir="+d.VM(st.Name()).CA().Dir {
 		t.Errorf("Prepare = %v", msg.NamesOf(err))
 	}
 }

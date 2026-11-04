@@ -107,7 +107,6 @@ func TestFiles(t *testing.T) {
 		{d.ClaimsLock(), "/d/run/claims.lock"},
 		{d.Logs(), "/d/logs"},
 		{d.RunLogs(), "/d/logs/runs"},
-		{d.CA(), "/d/ca"},
 		{d.Tools(), "/d/tools"},
 		{d.ToolLock(), "/d/mise.lock"},
 		{d.Mise(), "/d/cache/mise"},
