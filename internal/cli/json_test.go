@@ -72,7 +72,7 @@ func TestJSONShapes(t *testing.T) {
 		{
 			"ls", lsJSON([]vm.Listed{{Name: "devvm-a", Status: "Running", Image: "base", Tools: []string{"node"}, From: "node:24", Git: "on", Net: "on", Backend: "lima", Folder: "/a"}}),
 			[]string{
-				"vms[].backend: string", "vms[].folder: string", "vms[].folder_gone: bool", "vms[].from: string", "vms[].git: string", "vms[].image: string", "vms[].links: number",
+				"vms[].backend: string", "vms[].folder: string", "vms[].folder_state: string", "vms[].from: string", "vms[].git: string", "vms[].image: string", "vms[].links: number",
 				"vms[].name: string", "vms[].net: string", "vms[].status: string", "vms[].tools[]: string",
 			},
 		},
@@ -175,9 +175,11 @@ func TestJSONShapes(t *testing.T) {
 			Total: 1, GC: 1,
 			Caches:  []cacheRow{{Backend: "lima", Name: "images", Path: "/c", Count: 1, Size: 1, Sized: true}},
 			Unknown: []string{"qemu"}, Strays: []strayVM{{Backend: "lima", Name: "devvm-b", Data: "/d"}},
-			FolderGone: []goneVM{{Backend: "lima", Name: "devvm-c", Folder: "/c"}},
+			FolderGone:   []goneVM{{Backend: "lima", Name: "devvm-c", Folder: "/c"}},
+			NotConnected: []goneVM{{Backend: "lima", Name: "devvm-d", Folder: "/d"}},
 		}, []string{
 			"folder_gone[].backend: string", "folder_gone[].folder: string", "folder_gone[].name: string",
+			"folder_not_connected[].backend: string", "folder_not_connected[].folder: string", "folder_not_connected[].name: string",
 			"backends[].backend: string", "backends[].count: number", "backends[].name: string", "backends[].path: string",
 			"backends[].size: number", "backends[].sized: bool",
 			"devvm[].backend: string", "devvm[].count: number", "devvm[].gc: number", "devvm[].kept: string", "devvm[].rest: string",

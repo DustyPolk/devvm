@@ -68,6 +68,9 @@ func newSpaceCmd(u *ui.UI) *cobra.Command {
 			for _, g := range r.FolderGone {
 				u.Note(msg.SpaceFolderGone(g.Folder, g.Name))
 			}
+			for _, g := range r.NotConnected {
+				u.Note(msg.SpaceFolderNotConnected(g.Folder, g.Name))
+			}
 			if asJSON {
 				// Lists are [] when empty, never null.
 				if r.Rows == nil {
@@ -142,9 +145,12 @@ type spaceReport struct {
 	// folder is gone (vm.FolderGone), by name: devvm rm VM deletes one,
 	// and devvm gc never does.
 	FolderGone []goneVM `json:"folder_gone,omitempty"`
+	// NotConnected are those whose folder is on a disk that isn't
+	// connected (vm.FolderNotConnected).
+	NotConnected []goneVM `json:"folder_not_connected,omitempty"`
 }
 
-// goneVM is a VM whose project folder is gone.
+// goneVM is a VM whose project folder is gone or not connected.
 type goneVM struct {
 	Backend string `json:"backend"`
 	Name    string `json:"name"`
@@ -219,7 +225,7 @@ func space(ctx context.Context, u *ui.UI) (spaceReport, error) {
 		return r, err
 	}
 	r.Rows = append(r.Rows, dataRows...)
-	if r.FolderGone, err = e.folderGone(); err != nil {
+	if r.FolderGone, r.NotConnected, err = e.folderGone(); err != nil {
 		return r, err
 	}
 	for _, row := range r.Rows {
@@ -480,23 +486,31 @@ func (e spaceEnv) vmFolders() (orphans, rest []string, err error) {
 }
 
 // folderGone are the VMs whose backend answered with them and whose
-// project folder is gone, by name.
-func (e spaceEnv) folderGone() ([]goneVM, error) {
+// project folder is gone, then those whose folder is on a disk that isn't
+// connected, by name.
+func (e spaceEnv) folderGone() (gone, unconnected []goneVM, err error) {
 	_, rest, err := e.vmFolders()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var out []goneVM
 	for _, n := range rest {
 		st, err := state.ReadVM(e.b.Dirs, n)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if e.vms[st.Backend][n] && vm.FolderGone(st) {
-			out = append(out, goneVM{Backend: st.Backend, Name: n, Folder: st.Dir})
+		if !e.vms[st.Backend][n] {
+			continue
+		}
+		g := goneVM{Backend: st.Backend, Name: n, Folder: st.Dir}
+		switch vm.FolderOf(st) {
+		case vm.FolderGone:
+			gone = append(gone, g)
+		case vm.FolderNotConnected:
+			unconnected = append(unconnected, g)
+		case vm.FolderThere:
 		}
 	}
-	return out, nil
+	return gone, unconnected, nil
 }
 
 // vmLogs are the logs of the VMs that aren't orphans: their network logs,

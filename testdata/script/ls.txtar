@@ -42,7 +42,7 @@ stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +unenforced +- +/'
 
 # A --clone VM shows clone in GIT, a base from a container image its
 # label, and a VM whose creation didn't finish - for what it lacks. Their
-# folders, /p/..., are gone: (gone) after them, and folder_gone in --json.
+# folders, /p/..., are gone: (gone) after them, and folder_state gone in --json.
 mkdir $VMS/0123456789ab01 $VMS/0123456789ab02
 cp $WORK/clone.json $VMS/0123456789ab01/vm.json
 cp $WORK/from.json $VMS/0123456789ab02/vm.json
@@ -59,7 +59,7 @@ stdout '\ndevvm-cl-.*\ndevvm-from-.*\ndevvm-half-.*\ndevvm-img-foo-.*\ndevvm-net
 exec devvm ls --json
 stdout '^{\n  "version": 1,\n  "vms": \[\n'
 stdout '^      "name": "devvm-cl-0123456789ab01",\n      "status": "Stopped",\n      "image": "base",\n      "tools": \[\n        "node",\n        "claude"\n      \],\n'
-stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "off",\n      "backend": "lima",\n      "folder": "/p/from",\n      "folder_gone": true,\n      "links": 0\n'
+stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "off",\n      "backend": "lima",\n      "folder": "/p/from",\n      "folder_state": "gone",\n      "links": 0\n'
 stdout '^      "name": "devvm-half-0123456789ab03",\n      "status": "Stopped",\n      "image": "",\n      "tools": \[\],\n      "git": "",\n'
 ! stdout '^NAME'
 

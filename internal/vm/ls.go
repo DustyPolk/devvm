@@ -26,9 +26,10 @@ type Listed struct {
 	Net     string   // its network policy: on, off or unenforced (netpolicy.Listed)
 	Backend string
 	Folder  string
-	// FolderGone is whether nothing is at Folder's path (FolderGone): the
-	// VM is deleted only by name, with devvm rm VM.
-	FolderGone bool
+	// FolderState is what's at Folder's path (FolderOf): a VM whose
+	// folder is gone or not connected is deleted only by name, with
+	// devvm rm VM.
+	FolderState FolderState
 	// Links is how many links it has to other VMs' ports, as a client.
 	Links int
 }
@@ -77,7 +78,7 @@ func listed(ctx context.Context, d paths.Dirs, b backend.Backend, in backend.Ins
 	l := Listed{
 		Name: in.Name, Status: string(in.Status), Image: st.Image, Tools: tools.Names(st),
 		Git: gitprotect.Mode(st), Backend: b.Name(),
-		Folder: st.Dir, FolderGone: FolderGone(st), Links: len(linksOf(st).Links),
+		Folder: st.Dir, FolderState: FolderOf(st), Links: len(linksOf(st).Links),
 	}
 	if l.Image != "" {
 		l.From = st.From

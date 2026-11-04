@@ -463,19 +463,51 @@ func (e *Env) sameFolder(f project.Folder, st *state.VM) bool {
 	return err == nil && st.Dir == f.Dir && st.Folder == id
 }
 
-// FolderGone reports whether the project folder a VM's state records is
-// gone: nothing is at its path, as when the folder was deleted or moved,
-// or is on a disk that isn't connected. A folder made again at that path
-// isn't gone, as sameFolder tells it apart, and neither is one whose path
-// can't be read, or a VM whose state records none. A VM whose folder is
-// gone is deleted only when asked for by name (Lifecycle.RmVM), never on
-// its own.
-func FolderGone(st *state.VM) bool {
+// FolderState is what's at the path of the project folder a VM's state
+// records.
+type FolderState string
+
+// The folder states. A VM whose folder is gone or not connected is
+// deleted only when asked for by name (Lifecycle.RmVM), never on its own.
+const (
+	// FolderThere: something is at the path, or it can't be read, or the
+	// state records no folder. A folder made again there is there too:
+	// sameFolder tells it apart.
+	FolderThere FolderState = "there"
+	// FolderGone: nothing is at the path, and the nearest folder above it
+	// that exists is on the device the folder was on (deleted or moved),
+	// or the state records no device to compare.
+	FolderGone FolderState = "gone"
+	// FolderNotConnected: nothing is at the path, and the nearest folder
+	// above it is on another device: the folder was on a disk or share
+	// that isn't connected, or moved to another disk, then deleted.
+	FolderNotConnected FolderState = "not_connected"
+)
+
+// FolderOf is the state of the project folder st records.
+func FolderOf(st *state.VM) FolderState { return folderOf(st, platform.DeviceOf) }
+
+// folderOf is FolderOf with device, which returns the device of what's at
+// a path (platform.DeviceOf), a test seam.
+func folderOf(st *state.VM, device func(string) (string, error)) FolderState {
 	if st.Dir == "" {
-		return false
+		return FolderThere
 	}
-	_, err := os.Lstat(st.Dir)
-	return errors.Is(err, fs.ErrNotExist)
+	if _, err := os.Lstat(st.Dir); !errors.Is(err, fs.ErrNotExist) {
+		return FolderThere
+	}
+	was := platform.FolderDevice(st.Folder)
+	for dir := filepath.Dir(st.Dir); was != ""; dir = filepath.Dir(dir) {
+		if dev, err := device(dir); err == nil {
+			if dev != was {
+				return FolderNotConnected
+			}
+			break
+		} else if !errors.Is(err, fs.ErrNotExist) || dir == filepath.Dir(dir) {
+			break
+		}
+	}
+	return FolderGone
 }
 
 // recordedVMs returns the project VMs that have state, as their states

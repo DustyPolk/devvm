@@ -35,3 +35,24 @@ func TestFolderID(t *testing.T) {
 		t.Error("FolderID of a missing folder: no error")
 	}
 }
+
+// DeviceOf gives the device FolderID records, which FolderDevice reads.
+func TestDeviceOf(t *testing.T) {
+	dir := t.TempDir()
+	id, err := FolderID(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev, err := DeviceOf(dir)
+	if err != nil || dev == "" || dev != FolderDevice(id) {
+		t.Errorf("DeviceOf = %q, %v; FolderID = %q", dev, err, id)
+	}
+	if _, err := DeviceOf(filepath.Join(dir, "missing")); err == nil {
+		t.Error("DeviceOf of a missing path: no error")
+	}
+	for id, want := range map[string]string{"": "", "12": "", "12:34": "12", "12:34:5.6": "12"} {
+		if got := FolderDevice(id); got != want {
+			t.Errorf("FolderDevice(%q) = %q, want %q", id, got, want)
+		}
+	}
+}

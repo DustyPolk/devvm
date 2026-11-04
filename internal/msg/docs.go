@@ -99,6 +99,8 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"rm_gone_clone":                    "getting-started/commands#a-vm-whose-folder-is-gone",
 	"rm_vm_export_failed":              "using/coding-agents#history",
 	"space_folder_gone":                "getting-started/commands#a-vm-whose-folder-is-gone",
+	"space_folder_not_connected":       "getting-started/commands#a-folder-on-a-disk-that-isnt-connected",
+	"rm_vm_not_connected":              "getting-started/commands#a-folder-on-a-disk-that-isnt-connected",
 	"vm_unfinished":                    "using/troubleshooting#a-vm-whose-creation-didnt-finish",
 	"use_parent_vm":                    "getting-started/commands#a-subfolder",
 	"using_parent_vm":                  "getting-started/commands#a-subfolder",

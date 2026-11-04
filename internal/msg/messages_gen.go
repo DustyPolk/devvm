@@ -539,6 +539,11 @@ func DeleteGoneFolderVM(dir string, vm string) M {
 	return M{id: "delete_gone_folder_vm", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
+// DeleteNotConnectedFolderVM is [delete_not_connected_folder_vm]: "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. It may hold that project's work. Delete it anyway?"
+func DeleteNotConnectedFolderVM(dir string, vm string) M {
+	return M{id: "delete_not_connected_folder_vm", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // DeleteOtherFolderVM is [delete_other_folder_vm]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. It may hold that project's work. Delete it?"
 func DeleteOtherFolderVM(vm string, was string) M {
 	return M{id: "delete_other_folder_vm", vals: []val{{"vm", vm}, {"was", was}}}
@@ -2584,6 +2589,11 @@ func RmVMLost(vm string) M {
 	return M{id: "rm_vm_lost", vals: []val{{"vm", vm}}}
 }
 
+// RmVMNotConnected is [rm_vm_not_connected]: "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. Connect the disk, or to delete the VM anyway, run devvm rm {{.vm}} in a terminal."
+func RmVMNotConnected(dir string, vm string) M {
+	return M{id: "rm_vm_not_connected", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // RuleAdded is [rule_added]: "devvm added {{.rule}} to {{.vm}}'s rules."
 func RuleAdded(rule string, vm string) M {
 	return M{id: "rule_added", vals: []val{{"rule", rule}, {"vm", vm}}}
@@ -2782,6 +2792,11 @@ func SpaceFailed(reason string) M {
 // SpaceFolderGone is [space_folder_gone]: "{{.vm}} was made for {{.dir}}, which is gone. Run devvm rm {{.vm}} to delete the VM."
 func SpaceFolderGone(dir string, vm string) M {
 	return M{id: "space_folder_gone", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// SpaceFolderNotConnected is [space_folder_not_connected]: "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. Connect the disk to use the VM."
+func SpaceFolderNotConnected(dir string, vm string) M {
+	return M{id: "space_folder_not_connected", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
 // SpaceStray is [space_stray]: "The {{.backend}} backend has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
@@ -3323,6 +3338,7 @@ var specs = map[string]spec{
 	"delete_anyway":                    {},
 	"delete_failed":                    {fields: []string{"vm"}},
 	"delete_gone_folder_vm":            {fields: []string{"dir", "vm"}},
+	"delete_not_connected_folder_vm":   {fields: []string{"dir", "vm"}},
 	"delete_other_folder_vm":           {fields: []string{"vm", "was"}},
 	"delete_parent_vm":                 {fields: []string{"dir", "vm"}},
 	"deleted":                          {fields: []string{"vm"}},
@@ -3732,6 +3748,7 @@ var specs = map[string]spec{
 	"rm_vm_failed":                     {fields: []string{"reason", "vm"}},
 	"rm_vm_folder_there":               {fields: []string{"dir", "vm"}},
 	"rm_vm_lost":                       {fields: []string{"vm"}},
+	"rm_vm_not_connected":              {fields: []string{"dir", "vm"}},
 	"rule_added":                       {fields: []string{"rule", "vm"}},
 	"rule_added_global":                {fields: []string{"rule"}},
 	"rule_missing":                     {fields: []string{"file", "rule"}},
@@ -3772,6 +3789,7 @@ var specs = map[string]spec{
 	"space_caches_note":                {},
 	"space_failed":                     {fields: []string{"reason"}},
 	"space_folder_gone":                {fields: []string{"dir", "vm"}},
+	"space_folder_not_connected":       {fields: []string{"dir", "vm"}},
 	"space_stray":                      {fields: []string{"backend", "data", "vm"}},
 	"ssh_agent_empty":                  {},
 	"ssh_agent_failed":                 {fields: []string{"reason"}},

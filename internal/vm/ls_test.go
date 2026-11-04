@@ -2,9 +2,11 @@ package vm
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -12,23 +14,67 @@ import (
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// A folder is gone when nothing is at its path: a file there, or a VM
-// that records no folder, isn't.
-func TestFolderGone(t *testing.T) {
+// A folder is there when anything is at its path, or the state records
+// none. With nothing there, it's gone when the nearest folder above that
+// exists is on the device the folder was on, or no device is recorded,
+// and not connected when it's on another.
+func TestFolderOf(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for path, want := range map[string]bool{
-		dir: false, file: false, "": false, filepath.Join(dir, "gone"): true, filepath.Join(dir, "gone", "deeper"): true,
-	} {
-		if got := FolderGone(&state.VM{Dir: path}); got != want {
-			t.Errorf("FolderGone(%q) = %v, want %v", path, got, want)
+	gone, deeper := filepath.Join(dir, "gone"), filepath.Join(dir, "gone", "deeper")
+	// dir is on device 7, everything above it on 1.
+	device := func(path string) (string, error) {
+		switch {
+		case path == dir:
+			return "7", nil
+		case strings.HasPrefix(dir, path):
+			return "1", nil
 		}
+		return "", fs.ErrNotExist
+	}
+	for _, c := range []struct {
+		dir, id string
+		want    FolderState
+	}{
+		{dir, "9:1", FolderThere},
+		{file, "9:1", FolderThere},
+		{"", "", FolderThere},
+		{gone, "7:5", FolderGone},
+		{deeper, "7:5:1.2", FolderGone},
+		{gone, "", FolderGone},
+		{gone, "9:5", FolderNotConnected},
+		{deeper, "9:5", FolderNotConnected},
+	} {
+		if got := folderOf(&state.VM{Dir: c.dir, Folder: c.id}, device); got != c.want {
+			t.Errorf("folderOf(%q, %q) = %v, want %v", c.dir, c.id, got, c.want)
+		}
+	}
+	// A device that can't be read: gone, as nothing tells it apart.
+	broken := func(string) (string, error) { return "", errors.ErrUnsupported }
+	if got := folderOf(&state.VM{Dir: gone, Folder: "9:5"}, broken); got != FolderGone {
+		t.Errorf("folderOf with no device = %v", got)
+	}
+	// The real device: a folder deleted from this disk is gone.
+	id := filepath.Join(dir, "real")
+	if err := os.Mkdir(id, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := platform.FolderID(id)
+	if err != nil {
+		t.Skip(err)
+	}
+	if err := os.Remove(id); err != nil {
+		t.Fatal(err)
+	}
+	if got := FolderOf(&state.VM{Dir: id, Folder: rec}); got != FolderGone {
+		t.Errorf("FolderOf a deleted folder = %v", got)
 	}
 }
 
@@ -90,11 +136,11 @@ func TestList(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Listed{
-		{Name: other, Status: "Running", Image: "base", Tools: []string{"go"}, Git: "on", Net: "off", Backend: "other", Folder: "/p/api", FolderGone: true},
-		{Name: clone, Status: "Stopped", Image: "base", Git: "clone", Net: "unenforced", Backend: "lima", Folder: "/p/cl", FolderGone: true},
-		{Name: half, Status: "Stopped", Backend: "lima"},
-		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "off", Backend: "lima", Folder: "/p/img-foo", FolderGone: true},
-		{Name: web, Status: "Running", Image: "docker", Tools: []string{"node", "claude"}, Git: "on", Net: "unenforced", Backend: "lima", Folder: webDir},
+		{Name: other, Status: "Running", Image: "base", Tools: []string{"go"}, Git: "on", Net: "off", Backend: "other", Folder: "/p/api", FolderState: FolderGone},
+		{Name: clone, Status: "Stopped", Image: "base", Git: "clone", Net: "unenforced", Backend: "lima", Folder: "/p/cl", FolderState: FolderGone},
+		{Name: half, Status: "Stopped", Backend: "lima", FolderState: FolderThere},
+		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "off", Backend: "lima", Folder: "/p/img-foo", FolderState: FolderGone},
+		{Name: web, Status: "Running", Image: "docker", Tools: []string{"node", "claude"}, Git: "on", Net: "unenforced", Backend: "lima", Folder: webDir, FolderState: FolderThere},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("List =\n%+v\nwant\n%+v", got, want)

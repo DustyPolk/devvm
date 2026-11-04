@@ -178,7 +178,8 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 }
 
 // RmVM deletes the VM that name names, by its name or its ssh alias, when
-// it's this folder's (Rm) or its project folder is gone (FolderGone); a
+// it's this folder's (Rm) or its project folder is gone or not connected
+// (FolderOf); a
 // VM whose folder is still there is deleted from that folder. It asks
 // first in a terminal, or deletes with --force, and refuses without
 // either (force_needed), as Rm does. Its agents' history is exported
@@ -203,7 +204,8 @@ func (e Lifecycle) RmVM(ctx context.Context, name string, o RmOptions) error {
 	if st.Dir == e.Dir {
 		return e.Rm(ctx, o)
 	}
-	if !FolderGone(st) {
+	folder := FolderOf(st)
+	if folder == FolderThere {
 		return msg.RmVMFolderThere(st.Dir, vm)
 	}
 	t, err := e.inspect(ctx, project.Folder{Dir: st.Dir, Name: vm}, st)
@@ -213,19 +215,25 @@ func (e Lifecycle) RmVM(ctx context.Context, name string, o RmOptions) error {
 	if !t.exists {
 		return msg.RmVMLost(vm)
 	}
-	return e.rmGone(ctx, t, o)
+	return e.rmGone(ctx, t, folder, o)
 }
 
-// rmGone deletes t, a VM whose folder is gone, for RmVM.
-func (e Lifecycle) rmGone(ctx context.Context, t *found, o RmOptions) error {
+// rmGone deletes t, a VM whose folder is gone or not connected, for RmVM.
+// One whose folder is on a disk that isn't connected is deleted only
+// after asking in a terminal, which --force never answers.
+func (e Lifecycle) rmGone(ctx context.Context, t *found, folder FolderState, o RmOptions) error {
 	vm, st := t.f.Name, t.st
 	clone := st.Finished() && isClone(st)
 	if clone && !o.NoCloneCheck {
 		return msg.RmGoneClone(st.Dir, vm)
 	}
 	export := !o.NoExport && st.Finished() && len(image.AgentsOf(tools.Names(st))) > 0
-	if err := e.stillGone(ctx, t, export && !clone); err != nil {
+	if err := e.stillGone(ctx, t, folder, export && !clone); err != nil {
 		return err
+	}
+	unconnected := folder == FolderNotConnected
+	if unconnected && !e.Terminal() {
+		return msg.RmVMNotConnected(st.Dir, vm)
 	}
 	if !o.Force && !e.Terminal() {
 		return msg.ForceNeeded("devvm rm")
@@ -233,14 +241,14 @@ func (e Lifecycle) rmGone(ctx context.Context, t *found, o RmOptions) error {
 	if clone {
 		e.Warn(msg.CloneCheckSkipped(vm))
 	}
-	if !o.Force && !e.Ask(msg.DeleteGoneFolderVM(st.Dir, vm)) {
+	if !e.askRmGone(t, unconnected, o.Force) {
 		e.Info(msg.Kept(vm))
 		return nil
 	}
 	// While it asked, the folder may have come back (a disk plugged in
 	// again), another devvm may have made the VM again there, or stopped
 	// it, which an export would start, making its folder again.
-	if err := e.stillGone(ctx, t, export && !clone); err != nil {
+	if err := e.stillGone(ctx, t, folder, export && !clone); err != nil {
 		return err
 	}
 	if export {
@@ -251,16 +259,26 @@ func (e Lifecycle) rmGone(ctx context.Context, t *found, o RmOptions) error {
 	return e.delete(ctx, t)
 }
 
+// askRmGone asks, for rmGone, whether to delete t: with force, only when
+// its folder is on a disk that isn't connected (unconnected), which
+// --force never answers.
+func (e Lifecycle) askRmGone(t *found, unconnected, force bool) bool {
+	if unconnected {
+		return e.Ask(msg.DeleteNotConnectedFolderVM(t.st.Dir, t.f.Name))
+	}
+	return force || e.Ask(msg.DeleteGoneFolderVM(t.st.Dir, t.f.Name))
+}
+
 // stillGone checks, for rmGone, that t's state is still the one it read
-// (its ID) and its folder still gone, and with running that the VM still
-// runs, so its export doesn't start it.
-func (e Lifecycle) stillGone(ctx context.Context, t *found, running bool) error {
+// (its ID) and its folder still in the state it found (folder), and with
+// running that the VM still runs, so its export doesn't start it.
+func (e Lifecycle) stillGone(ctx context.Context, t *found, folder FolderState, running bool) error {
 	vm := t.f.Name
 	st, err := state.ReadVM(e.Dirs, vm)
 	if err != nil {
 		return err
 	}
-	if st.ID != t.st.ID || !FolderGone(st) {
+	if st.ID != t.st.ID || FolderOf(st) != folder {
 		return msg.RmVMFolderThere(t.st.Dir, vm)
 	}
 	if !running {

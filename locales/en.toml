@@ -646,6 +646,10 @@ other = "The {{.backend}} backend didn't answer, so its VMs and images aren't co
 description = "dir is the folder vm was made for, which is gone"
 other = "{{.vm}} was made for {{.dir}}, which is gone. Run devvm rm {{.vm}} to delete the VM."
 
+[space_folder_not_connected]
+description = "dir is the folder vm was made for, on a disk that isn't connected"
+other = "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. Connect the disk to use the VM."
+
 [space_stray]
 description = "data is the data folder in the VM's label: another devvm's, or this one's"
 other = "The {{.backend}} backend has {{.vm}}, a VM of the devvm with data folder {{.data}}, which this devvm has no state for. devvm never deletes it."
@@ -955,6 +959,14 @@ other = "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run dev
 [delete_gone_folder_vm]
 description = "dir is the folder vm was made for, which is gone"
 other = "{{.vm}} was made for {{.dir}}, which is gone. It may hold that project's work. Delete it?"
+
+[rm_vm_not_connected]
+description = "dir is the folder vm was made for, on a disk that isn't connected"
+other = "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. Connect the disk, or to delete the VM anyway, run devvm rm {{.vm}} in a terminal."
+
+[delete_not_connected_folder_vm]
+description = "dir is the folder vm was made for, on a disk that isn't connected"
+other = "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. It may hold that project's work. Delete it anyway?"
 
 [adopt_vm]
 other = "This folder's VM, {{.vm}}, was made for an earlier folder at {{.was}}, which was deleted or replaced.\nUse that VM here, with its files, secrets and allowlist?"

@@ -24,8 +24,8 @@ exec devvm ls
 stdout '^devvm-api-[0-9a-f]{14} +Running +base +- +off +off +- +/\S*/api\n'
 ! stdout gone
 exec devvm ls --json
-stdout '"folder_gone": false'
-! stdout '"folder_gone": true'
+stdout '"folder_state": "there"'
+! stdout '"folder_state": "(gone|not_connected)"'
 exec devvm space --json
 ! stdout folder_gone
 cd $WORK/web
@@ -48,8 +48,8 @@ exec devvm ls
 stdout '^devvm-api-[0-9a-f]{14} +Running +base +- +off +off +- +/\S*/api \(gone\)\n'
 stdout '^devvm-web-[0-9a-f]{14} +Running +.* +/\S*/web\n'
 exec devvm ls --json
-stdout '"folder": "/\S*/api",\n      "folder_gone": true,\n'
-stdout '"folder": "/\S*/web",\n      "folder_gone": false,\n'
+stdout '"folder": "/\S*/api",\n      "folder_state": "gone",\n'
+stdout '"folder": "/\S*/web",\n      "folder_state": "there",\n'
 exec devvm space
 stderr '^space_folder_gone dir=/\S*/api vm=devvm-api-[0-9a-f]{14}$'
 ! stderr 'space_folder_gone .*web'
@@ -134,6 +134,39 @@ exec devvm rm devvm-cl-0123456789ab01 --force --no-clone-check --no-export
 stderr '^devvm: clone_check_skipped vm=devvm-cl-0123456789ab01$'
 stdout '^==> deleted vm=devvm-cl-0123456789ab01$'
 ! exists $VMS/0123456789ab01
+
+# A folder that was on another device, as on a disk that isn't connected:
+# ls and space mark it not connected, and rm VM refuses it, --force too,
+# without a terminal; in one it asks, which --force doesn't answer.
+project usb
+exec devvm --no-network-policy --no-git-protect
+vm_name USB usb
+cd $WORK
+rm $WORK/usb
+json_set $USB_dir/vm.json folder=999999999:1
+exec devvm ls
+stdout '^devvm-usb-[0-9a-f]{14} +Running +.* +/\S*/usb \(not connected\)\n'
+exec devvm ls --json
+stdout '"folder": "/\S*/usb",\n      "folder_state": "not_connected",\n'
+exec devvm space
+stderr '^space_folder_not_connected dir=/\S*/usb vm=devvm-usb-[0-9a-f]{14}$'
+! stderr 'space_folder_gone .*usb'
+exec devvm space --json
+stdout '"folder_not_connected": \[\n    {\n      "backend": "lima",\n      "name": "devvm-usb-[0-9a-f]{14}",\n      "folder": "/\S*/usb"\n    }\n  \]'
+stub_reset
+! exec devvm rm $USB --force
+stderr '^devvm: rm_vm_not_connected dir=/\S*/usb vm=devvm-usb-[0-9a-f]{14}$'
+ttyin -stdin $WORK/no.txt
+exec devvm rm $USB --force
+stderr '^delete_not_connected_folder_vm dir=/\S*/usb vm=devvm-usb-[0-9a-f]{14} \[y/N\] '
+stdout '==> kept vm=devvm-usb-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl delete'
+exists $USB_dir/vm.json
+ttyin -stdin $WORK/yes.txt
+exec devvm rm $USB --force
+stdout '^==> deleted vm=devvm-usb-[0-9a-f]{14}$'
+! exists $USB_dir
 
 # A VM its backend lost: gc --orphans' to forget.
 mkdir $VMS/0123456789ab02
