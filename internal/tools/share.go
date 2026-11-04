@@ -153,7 +153,7 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 	if err != nil {
 		return err
 	}
-	for name, data := range map[string][]byte{"mise.toml": config, "mise.lock": lock} {
+	for name, data := range map[string][]byte{"mise.toml": config, "mise.lock": lock.Bytes()} {
 		if err := state.WriteFile(filepath.Join(build, name), data); err != nil {
 			return err
 		}

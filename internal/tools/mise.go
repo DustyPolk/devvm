@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,47 +134,48 @@ func (t Versions) miseCmd(ctx context.Context, mise, dir string, args ...string)
 // from). Every tool, or nothing: offline, or with a tool mise can't
 // resolve, it writes nothing and returns tools_resolve_failed, with the
 // details in the run log. mise's version lists come from its versions
-// host (no GitHub rate limit).
-func (t Versions) Resolve(ctx context.Context, out string) error {
+// host (no GitHub rate limit). It returns the lock it wrote.
+func (t Versions) Resolve(ctx context.Context, out string) (Lock, error) {
 	mise, err := t.HostMise(ctx)
 	if err != nil {
-		return err
+		return Lock{}, err
 	}
 	tmp, err := os.MkdirTemp("", "devvm-tools.")
 	if err != nil {
-		return err
+		return Lock{}, err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 	config, err := t.config()
 	if err != nil {
-		return err
+		return Lock{}, err
 	}
 	if err := state.WriteFile(filepath.Join(tmp, "mise.toml"), config); err != nil {
-		return err
+		return Lock{}, err
 	}
 	cmd, err := t.miseCmd(ctx, mise, tmp, "lock", "--platform", strings.Join(t.platforms(), ","))
 	if err != nil {
-		return err
+		return Lock{}, err
 	}
 	if err := t.LoggedCmd(ctx, msg.ResolvingTools(), cmd); err != nil {
-		return t.resolveFailed(ctx)
+		return Lock{}, t.resolveFailed(ctx)
 	}
-	data, err := os.ReadFile(filepath.Join(tmp, "mise.lock")) //nolint:gosec // devvm's own temporary folder
+	lock, err := parseLockFile(filepath.Join(tmp, "mise.lock"))
 	if err != nil {
-		return t.resolveFailed(ctx)
+		return Lock{}, t.resolveFailed(ctx)
 	}
-	lock := Lock(data)
 	names, specs := configTools(config)
 	for _, n := range names {
-		if len(lock.Entry(n)) == 0 {
-			return t.resolveFailed(ctx)
+		if !lock.Has(n) {
+			return Lock{}, t.resolveFailed(ctx)
 		}
 	}
-	lock = t.stepBack(ctx, mise, lock, names, specs)
-	if err := state.WriteFile(out+".toml", config); err != nil {
-		return err
+	if lock, err = t.stepBack(ctx, mise, lock, names, specs); err != nil {
+		return Lock{}, err
 	}
-	return state.WriteFile(out, lock)
+	if err := state.WriteFile(out+".toml", config); err != nil {
+		return Lock{}, err
+	}
+	return lock, state.WriteFile(out, lock.Bytes())
 }
 
 func (t Versions) resolveFailed(ctx context.Context) error {
@@ -193,39 +195,46 @@ const candidates = 5
 // Older versions come from the tool's backend (GitHub releases for aqua
 // tools), not mise's versions host, which can list tags with no release.
 // The next daily check tries the newest again.
-func (t Versions) stepBack(ctx context.Context, mise string, lock Lock, names []string, specs map[string]string) Lock {
+func (t Versions) stepBack(ctx context.Context, mise string, lock Lock, names []string, specs map[string]string) (Lock, error) {
 	for _, tool := range names {
 		if lock.HasDownload(tool, t.platforms()) {
 			continue
 		}
-		entry := lock.Entry(tool)
-		v := field(entry, "version")
-		older := t.olderVersions(ctx, mise, field(entry, "backend"), specs[tool], v)
-		found := false
-		if entries := t.lockVersions(ctx, mise, tool, older); entries != nil {
-			for _, c := range older {
-				one := entries.VersionEntry(tool, c)
-				if one == nil || !Lock(one).HasDownload(tool, t.platforms()) {
-					continue
-				}
-				specifiers := ""
-				for _, line := range lines(entry) {
-					if strings.HasPrefix(line, "specifiers = ") {
-						specifiers = line
-						break
-					}
-				}
-				lock = lock.replace(tool, withSpecifiers(one, specifiers))
-				t.Warn(msg.ToolSteppedBack(c, tool, v))
-				found = true
-				break
-			}
-		}
-		if !found {
+		v := lock.Version(tool)
+		older := t.olderVersions(ctx, mise, lock.Backend(tool), specs[tool], v)
+		one, c := t.olderWithDownload(ctx, mise, tool, older)
+		if one == nil {
 			t.Warn(msg.ToolNoDownload(tool, v))
+			continue
+		}
+		one = maps.Clone(one)
+		delete(one, "specifiers")
+		if s, ok := lock.first(tool)["specifiers"]; ok {
+			one["specifiers"] = s
+		}
+		var err error
+		if lock, err = lock.withEntry(tool, one); err != nil {
+			return Lock{}, err
+		}
+		t.Warn(msg.ToolSteppedBack(c, tool, v))
+	}
+	return lock, nil
+}
+
+// olderWithDownload returns the entry of the newest of these older
+// versions of a tool (newest first) that has a download for every
+// platform, and its version: nil when none has.
+func (t Versions) olderWithDownload(ctx context.Context, mise, tool string, older []string) (lockEntry, string) {
+	entries, ok := t.lockVersions(ctx, mise, tool, older)
+	if !ok {
+		return nil, ""
+	}
+	for _, c := range older {
+		if one := entries.versionEntry(tool, c); hasDownload(one, t.platforms()) {
+			return one, c
 		}
 	}
-	return lock
+	return nil, ""
 }
 
 // olderVersions lists up to five versions of a tool older than v, newest
@@ -265,28 +274,26 @@ func (t Versions) olderVersions(ctx context.Context, mise, backendName, spec, v 
 
 // lockVersions locks these versions of a tool, all in one lock (mise
 // takes a list of versions), in a folder of its own: mise also reads the
-// mise.toml of the folders above. Nil when there are none, or mise fails.
-func (t Versions) lockVersions(ctx context.Context, mise, tool string, versions []string) Lock {
+// mise.toml of the folders above. False when there are none, or mise
+// fails.
+func (t Versions) lockVersions(ctx context.Context, mise, tool string, versions []string) (Lock, bool) {
 	if len(versions) == 0 {
-		return nil
+		return Lock{}, false
 	}
 	dir, err := os.MkdirTemp("", "devvm-tools.")
 	if err != nil {
-		return nil
+		return Lock{}, false
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	list := `"` + strings.Join(versions, `","`) + `"`
 	if err := state.WriteFile(filepath.Join(dir, "mise.toml"), []byte("[tools]\n"+tool+" = ["+list+"]\n")); err != nil {
-		return nil
+		return Lock{}, false
 	}
 	cmd, err := t.miseCmd(ctx, mise, dir, "lock", "--platform", strings.Join(t.platforms(), ","))
 	if err != nil {
-		return nil
+		return Lock{}, false
 	}
-	_ = t.LoggedCmd(ctx, msg.ResolvingTools(), cmd)           // what it locked is checked below
-	data, err := os.ReadFile(filepath.Join(dir, "mise.lock")) //nolint:gosec // devvm's own temporary folder
-	if err != nil {
-		return nil
-	}
-	return Lock(data)
+	_ = t.LoggedCmd(ctx, msg.ResolvingTools(), cmd) // what it locked is checked below
+	l, err := parseLockFile(filepath.Join(dir, "mise.lock"))
+	return l, err == nil
 }

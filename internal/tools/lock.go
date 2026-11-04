@@ -3,88 +3,110 @@ package tools
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
+	"errors"
+	"maps"
+	"os"
 	"strings"
 
+	"github.com/BurntSushi/toml"
+
 	"github.com/w3cj/devvm/internal/image"
+	"github.com/w3cj/devvm/internal/state"
 )
 
-// Lock is a mise lock file as mise writes it: an entry per tool version,
-// [[tools.TOOL]], followed by a [tools.TOOL."platforms.PLATFORM"] table per
-// platform with its download's URL and checksum. It's read line by line,
-// as mise writes it, so a tool's entry is hashed exactly as written.
-type Lock []byte
-
-func lines(data []byte) []string {
-	var out []string
-	s := bufio.NewScanner(bytes.NewReader(data))
-	s.Buffer(nil, 1<<20)
-	for s.Scan() {
-		out = append(out, s.Text())
-	}
-	return out
+// Lock is a mise lock file, read as TOML: an entry per tool version,
+// [[tools.TOOL]], each with a table per platform, "platforms.PLATFORM",
+// holding its download's URL and checksum, or install = "source" for a
+// build from source. Only what it says counts, not how mise writes it: its
+// order, spacing, quoting and comments. The zero Lock has no tools.
+type Lock struct {
+	raw []byte
+	doc map[string]any
 }
 
-func header(tool string) string { return "[[tools." + tool + "]]" }
-
-// Entry returns a tool's entries: from its [[tools.TOOL]] line to the next
-// entry of another tool, each line ending in a newline. Empty when the lock
-// has none.
-func (l Lock) Entry(tool string) []byte {
-	var b bytes.Buffer
-	in := false
-	for _, line := range lines(l) {
-		switch {
-		case line == header(tool):
-			in = true
-		case strings.HasPrefix(line, "[["):
-			in = false
-		}
-		if in {
-			b.WriteString(line + "\n")
-		}
+// ParseLock reads a mise lock file.
+func ParseLock(data []byte) (Lock, error) {
+	var doc map[string]any
+	if err := toml.Unmarshal(data, &doc); err != nil {
+		return Lock{}, err
 	}
-	return b.Bytes()
+	return Lock{raw: data, doc: doc}, nil
 }
 
-// field returns the first value of a key = "value" line in an entry,
-// without its quotes.
-func field(entry []byte, key string) string {
-	for _, line := range lines(entry) {
-		if v, ok := strings.CutPrefix(line, key+" = "); ok {
-			return strings.ReplaceAll(v, `"`, "")
-		}
+// parseLockFile reads and parses the lock file mise wrote at path, in a
+// temporary folder of devvm's.
+func parseLockFile(path string) (Lock, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // devvm's own temporary folder
+	if err != nil {
+		return Lock{}, err
 	}
-	return ""
+	return ParseLock(data)
 }
+
+// readLock reads the lock file at path: a CorruptError when it isn't TOML.
+func readLock(path string, data []byte) (Lock, error) {
+	l, err := ParseLock(data)
+	if err != nil {
+		c := &state.CorruptError{Path: path, Reason: err.Error()}
+		if pe, ok := errors.AsType[toml.ParseError](err); ok {
+			c.Line, c.Reason = pe.Position.Line, pe.Message
+		}
+		return Lock{}, c
+	}
+	return l, nil
+}
+
+// Bytes is the lock file as written: mise's own, or devvm's after a step
+// back.
+func (l Lock) Bytes() []byte { return l.raw }
+
+// None reports whether it's the zero Lock: there's no lock file yet.
+func (l Lock) None() bool { return l.raw == nil && l.doc == nil }
+
+// lockEntry is one of a tool's entries, its fields as TOML gives them.
+type lockEntry = map[string]any
+
+// entries returns a tool's entries, in the lock's order.
+func (l Lock) entries(tool string) []lockEntry {
+	ts, _ := l.doc["tools"].(map[string]any)
+	es, _ := ts[tool].([]map[string]any)
+	return es
+}
+
+// first returns a tool's first entry, the one its version installs: nil
+// when the lock has none.
+func (l Lock) first(tool string) lockEntry {
+	if es := l.entries(tool); len(es) > 0 {
+		return es[0]
+	}
+	return nil
+}
+
+func str(e lockEntry, key string) string {
+	s, _ := e[key].(string)
+	return s
+}
+
+// Has reports whether the lock has an entry for a tool.
+func (l Lock) Has(tool string) bool { return l.first(tool) != nil }
 
 // Version returns a tool's locked version: its first entry's.
-func (l Lock) Version(tool string) string { return field(l.Entry(tool), "version") }
+func (l Lock) Version(tool string) string { return str(l.first(tool), "version") }
 
-// VersionEntry returns the entry for one of a tool's versions, empty when
-// the lock has none (a lock can hold several).
-func (l Lock) VersionEntry(tool, version string) []byte {
-	var b bytes.Buffer
-	in, keep := false, false
-	want := `version = "` + version + `"`
-	for _, line := range lines(l) {
-		if strings.HasPrefix(line, "[[") {
-			if keep {
-				break
-			}
-			in = line == header(tool)
-			b.Reset()
-		}
-		if in {
-			b.WriteString(line + "\n")
-			if line == want {
-				keep = true
-			}
-		}
+// Backend returns the mise backend of a tool's first entry: core:node,
+// aqua:anthropics/claude-code.
+func (l Lock) Backend(tool string) string { return str(l.first(tool), "backend") }
+
+// Entry returns a tool's first entry, the one its version installs, in a
+// canonical form for its image's key: its fields as JSON, keys sorted. Nil
+// when the lock has none.
+func (l Lock) Entry(tool string) ([]byte, error) {
+	e := l.first(tool)
+	if e == nil {
+		return nil, nil
 	}
-	if !keep {
-		return nil
-	}
-	return b.Bytes()
+	return json.Marshal(e)
 }
 
 // HasDownload reports whether a tool's first entry has a download (a URL,
@@ -94,67 +116,58 @@ func (l Lock) HasDownload(tool string, platforms []string) bool {
 	if image.NoDownload(tool) {
 		return true
 	}
-	ls := lines(l.Entry(tool))
+	return hasDownload(l.first(tool), platforms)
+}
+
+func hasDownload(e lockEntry, platforms []string) bool {
+	if e == nil {
+		return false
+	}
 	for _, p := range platforms {
-		table := `[tools.` + tool + `."platforms.` + p + `"]`
-		in, url, source, entries := false, false, false, 0
-		for _, line := range ls {
-			if strings.HasPrefix(line, "[[") {
-				if entries++; entries > 1 {
-					break
-				}
-			}
-			switch {
-			case line == table:
-				in = true
-				continue
-			case strings.HasPrefix(line, "["):
-				in = false
-			}
-			if in && strings.HasPrefix(line, "url = ") {
-				url = true
-			}
-			if in && line == `install = "source"` {
-				source = true
-			}
-		}
-		if !url || source {
+		table, _ := e["platforms."+p].(map[string]any)
+		if str(table, "url") == "" || str(table, "install") == "source" {
 			return false
 		}
 	}
 	return true
 }
 
-// replace returns the lock with a tool's entries replaced by entry, where
-// the first of them was.
-func (l Lock) replace(tool string, entry []byte) Lock {
-	var b bytes.Buffer
-	skip, done := false, false
-	for _, line := range lines(l) {
-		if strings.HasPrefix(line, "[[") {
-			skip = line == header(tool)
-			if skip && !done {
-				b.Write(entry)
-				done = true
-			}
-		}
-		if !skip {
-			b.WriteString(line + "\n")
+// versionEntry returns the entry for one of a tool's versions, nil when
+// the lock has none (a lock can hold several).
+func (l Lock) versionEntry(tool, version string) lockEntry {
+	for _, e := range l.entries(tool) {
+		if str(e, "version") == version {
+			return e
 		}
 	}
-	return Lock(b.Bytes())
+	return nil
 }
 
-// withSpecifiers returns an entry with its specifiers line set to line.
-func withSpecifiers(entry []byte, line string) []byte {
-	var b bytes.Buffer
-	for _, l := range lines(entry) {
-		if strings.HasPrefix(l, "specifiers = ") {
-			l = line
-		}
-		b.WriteString(l + "\n")
+// withEntry returns the lock with a tool's entries replaced by e alone,
+// written again as TOML.
+func (l Lock) withEntry(tool string, e lockEntry) (Lock, error) {
+	doc, ts := map[string]any{}, map[string]any{}
+	maps.Copy(doc, l.doc)
+	if old, ok := l.doc["tools"].(map[string]any); ok {
+		maps.Copy(ts, old)
 	}
-	return b.Bytes()
+	ts[tool] = []map[string]any{e}
+	doc["tools"] = ts
+	var b bytes.Buffer
+	if err := toml.NewEncoder(&b).Encode(doc); err != nil {
+		return Lock{}, err
+	}
+	return Lock{raw: b.Bytes(), doc: doc}, nil
+}
+
+func lines(data []byte) []string {
+	var out []string
+	s := bufio.NewScanner(bytes.NewReader(data))
+	s.Buffer(nil, 1<<20)
+	for s.Scan() {
+		out = append(out, s.Text())
+	}
+	return out
 }
 
 // configTools reads the [tools] table of a mise.toml: each tool and its

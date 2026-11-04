@@ -237,13 +237,17 @@ func TestUpTools(t *testing.T) {
 	if ms := f.Methods(); !slices.Equal(ms, []string{"Problems", "Inspect", "PinOrigin", "Images", "BuildImage", "Images", "BuildTools", "CreateVM", "Start", "SSH", "Running", "Exec", "Running", "Running", "Running", "Exec", "List", "SSH", "Running", "Running", "Shell"}) {
 		t.Errorf("calls = %q", ms)
 	}
-	lock, err := os.ReadFile(e.Dirs.ToolLock())
+	data, err := os.ReadFile(e.Dirs.ToolLock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, err := tools.ParseLock(data)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var files []string
 	for _, tool := range []string{"node", "pnpm", "bun", "claude"} {
-		file, err := e.Tools.File(tools.Lock(lock), tool, tools.Target{Libc: "gnu"})
+		file, err := e.Tools.File(lock, tool, tools.Target{Libc: "gnu"})
 		if err != nil {
 			t.Fatal(err)
 		}

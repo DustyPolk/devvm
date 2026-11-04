@@ -200,8 +200,9 @@ type Tool struct {
 	Name string
 	// Version is the lock's version of it.
 	Version string
-	// LockEntry is the tool's entry in the lock, with its downloads and
-	// their checksums, as written there.
+	// LockEntry is the tool's entry in the lock, the one its version
+	// installs, with its downloads and their checksums: in a canonical
+	// form (tools.Lock's Entry), so how mise wrote it doesn't count.
 	LockEntry []byte
 	// Libc is the C library it's built for: gnu, or musl.
 	Libc string

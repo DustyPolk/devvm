@@ -43,13 +43,15 @@ type Listed struct {
 }
 
 // ReadLock reads the tools lock as it is, never resolving it: nil when
-// there's none yet.
+// there's none yet (the zero Lock), a CorruptError when it isn't TOML.
 func (t Versions) ReadLock() (Lock, error) {
 	data, err := os.ReadFile(t.Dirs.ToolLock())
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
+		return Lock{}, nil
+	} else if err != nil {
+		return Lock{}, err
 	}
-	return Lock(data), err
+	return readLock(t.Dirs.ToolLock(), data)
 }
 
 // List lists the share's tool images by the names images have them by,
@@ -91,7 +93,7 @@ func (t Share) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
 			currents := map[string]bool{}
 			current := ""
 			for i, tg := range tgs {
-				if lock == nil {
+				if lock.None() {
 					break
 				}
 				if f, _ := t.File(lock, tool, tg); f != "" {
@@ -126,7 +128,7 @@ func (t Share) List(tgs []Target, inUse map[string]int) ([]Listed, error) {
 					l.State = StateCurrent
 				case l.VMs > 0:
 					l.State = StateInUse
-				case lock != nil:
+				case !lock.None():
 					l.State = StateUnused
 				}
 				rows = append(rows, l)

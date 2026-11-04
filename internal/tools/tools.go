@@ -181,30 +181,30 @@ func (t *Env) platform(libc string) string {
 // config is devvm's shared-tools/mise.toml.
 func (t *Env) config() ([]byte, error) { return fs.ReadFile(t.Assets, "shared-tools/mise.toml") }
 
-// Lock returns the tools lock, resolving it first when there's none yet or
-// shared-tools/mise.toml changed since (a devvm upgrade).
+// Lock returns the tools lock, resolving it first when there's none yet,
+// it isn't TOML, or shared-tools/mise.toml changed since (a devvm
+// upgrade).
 func (t Versions) Lock(ctx context.Context) (Lock, error) {
 	want, err := t.config()
 	if err != nil {
-		return nil, err
+		return Lock{}, err
 	}
-	lock, lerr := os.ReadFile(t.Dirs.ToolLock())
+	data, lerr := os.ReadFile(t.Dirs.ToolLock())
 	from, ferr := os.ReadFile(t.Dirs.ToolLockConfig())
 	if lerr == nil && ferr == nil && bytes.Equal(from, want) {
-		return Lock(lock), nil
+		if lock, err := ParseLock(data); err == nil {
+			return lock, nil
+		}
 	}
 	t.Info(msg.ResolvingTools())
-	if err := t.Resolve(ctx, t.Dirs.ToolLock()); err != nil {
+	lock, err := t.Resolve(ctx, t.Dirs.ToolLock())
+	if err != nil {
 		if _, ok := errors.AsType[*backend.LoggedError](err); ok {
-			return nil, backend.Logged(msg.ToolsNeedResolve())
+			return Lock{}, backend.Logged(msg.ToolsNeedResolve())
 		}
-		return nil, err
+		return Lock{}, err
 	}
-	if err := t.touchChecked(); err != nil {
-		return nil, err
-	}
-	lock, err = os.ReadFile(t.Dirs.ToolLock())
-	return Lock(lock), err
+	return lock, t.touchChecked()
 }
 
 func (t Versions) touchChecked() error {
@@ -258,7 +258,7 @@ func (t Versions) RefreshDaily() error {
 // build is reading it. A failure leaves the lock as it was.
 func (t Versions) Refresh(ctx context.Context) error {
 	next := t.Dirs.ToolLock() + ".next"
-	if err := t.Resolve(ctx, next); err != nil {
+	if _, err := t.Resolve(ctx, next); err != nil {
 		return err
 	}
 	unlock, err := t.LockShare(ctx)
@@ -296,10 +296,13 @@ type Target struct {
 // File returns a tool's image file at the lock's version, for a VM of
 // that target.
 func (t *Env) File(lock Lock, tool string, tg Target) (string, error) {
-	entry := lock.Entry(tool)
-	v := field(entry, "version")
+	v := lock.Version(tool)
 	if v == "" {
 		return "", msg.ToolNotLocked(t.Dirs.ToolLock(), tool)
+	}
+	entry, err := lock.Entry(tool)
+	if err != nil {
+		return "", err
 	}
 	return image.ToolFile(t.Assets, image.Tool{Name: tool, Version: v, LockEntry: entry, Libc: tg.Libc, Format: tg.Format})
 }

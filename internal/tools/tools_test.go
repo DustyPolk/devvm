@@ -76,17 +76,47 @@ func write(t *testing.T, path string, data []byte) {
 
 func fixture(t *testing.T) []byte { return read(t, repo(t, "testdata", "mise.lock")) }
 
-// lockTools returns the tools a lock has entries for, in its order.
-func lockTools(l Lock) []string {
-	var out []string
-	for _, line := range lines(l) {
-		if t, ok := strings.CutPrefix(line, "[[tools."); ok {
-			if t, ok = strings.CutSuffix(t, "]]"); ok {
-				out = append(out, t)
-			}
+// parsed is a lock file's Lock.
+func parsed(t *testing.T, data []byte) Lock {
+	t.Helper()
+	l, err := ParseLock(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return l
+}
+
+// lockTools returns the tools a lock file has entries for, sorted.
+func lockTools(t *testing.T, data []byte) []string {
+	t.Helper()
+	ts, _ := parsed(t, data).doc["tools"].(map[string]any)
+	return slices.Sorted(maps.Keys(ts))
+}
+
+// textEntry returns a tool's entries in a lock file as written: from its
+// [[tools.TOOL]] line to the next entry of another tool.
+func textEntry(data []byte, tool string) []byte {
+	var b bytes.Buffer
+	in := false
+	for _, line := range lines(data) {
+		if strings.HasPrefix(line, "[[") {
+			in = line == "[[tools."+tool+"]]"
+		}
+		if in {
+			b.WriteString(line + "\n")
 		}
 	}
-	return out
+	return b.Bytes()
+}
+
+// entryOf is a tool's canonical entry in a lock file.
+func entryOf(t *testing.T, data []byte, tool string) []byte {
+	t.Helper()
+	e, err := parsed(t, data).Entry(tool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
 }
 
 // env is a sandbox: devvm's folders, devvm's files with a copy of
@@ -171,7 +201,7 @@ func TestLockResolvesOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if !bytes.Equal(lock, fixture(t)) || !bytes.Equal(read(t, e.Dirs.ToolLock()), fixture(t)) {
+	if !bytes.Equal(lock.Bytes(), fixture(t)) || !bytes.Equal(read(t, e.Dirs.ToolLock()), fixture(t)) {
 		t.Error("the lock isn't what mise wrote")
 	}
 	if !bytes.Equal(read(t, e.Dirs.ToolLockConfig()), read(t, e.configFile())) {
@@ -229,6 +259,105 @@ func TestLockOffline(t *testing.T) {
 	}
 	if _, err := os.Stat(e.Dirs.ToolLock()); !errors.Is(err, os.ErrNotExist) {
 		t.Error("a lock was written")
+	}
+}
+
+// A lock that isn't TOML is resolved again by Lock, and named as corrupt
+// by ReadLock, which never resolves.
+func TestLockNotTOML(t *testing.T) {
+	e := newEnv(t)
+	e.locked(t, []byte("[[tools.node]\n"))
+	_, err := e.ReadLock()
+	if c, ok := errors.AsType[*state.CorruptError](err); !ok || c.Path != e.Dirs.ToolLock() || c.Line == 0 {
+		t.Errorf("ReadLock = %v", err)
+	}
+	lock, err := e.Lock(t.Context())
+	if err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !bytes.Equal(lock.Bytes(), fixture(t)) || !strings.Contains(e.calls(t), "mise lock") {
+		t.Error("not resolved again")
+	}
+	if l, err := e.ReadLock(); err != nil || l.None() || l.Version("node") == "" {
+		t.Errorf("ReadLock = %v", err)
+	}
+	write(t, e.Dirs.ToolLock(), nil)
+	if l, err := e.ReadLock(); err != nil || l.None() || l.Has("node") {
+		t.Errorf("an empty lock: %v", err)
+	}
+	if err := os.Remove(e.Dirs.ToolLock()); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := e.ReadLock(); err != nil || !l.None() {
+		t.Errorf("no lock: %v", err)
+	}
+	if err := os.Mkdir(e.Dirs.ToolLock(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.ReadLock(); err == nil {
+		t.Error("a folder for a lock read")
+	}
+}
+
+// A lock mise wrote that isn't TOML fails the refresh and leaves the lock
+// as it was; an older versions' lock that isn't TOML is no step back.
+func TestResolveNotTOML(t *testing.T) {
+	e := newEnv(t)
+	e.locked(t, fixture(t))
+	e.stubLocks(t, []byte("[[tools.node]\n"), nil, "")
+	if err := e.Refresh(t.Context()); msg.NamesOf(err) != "tools_resolve_failed" {
+		t.Errorf("Refresh = %v", msg.NamesOf(err))
+	}
+	if !bytes.Equal(read(t, e.Dirs.ToolLock()), fixture(t)) {
+		t.Error("the lock changed")
+	}
+	newer := newerLock(t)
+	e.stubLocks(t, newer, []byte("not = [toml\n"), "24.20.0")
+	if err := e.Refresh(t.Context()); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Contains(*e.said, "devvm: tool_no_download tool=node version=24.21.0.1") {
+		t.Errorf("said %q", *e.said)
+	}
+}
+
+// An entry JSON can't hold (a NaN) has no key.
+func TestEntryNotJSON(t *testing.T) {
+	e := newEnv(t)
+	lock := parsed(t, []byte("[[tools.node]]\nversion = \"1.0.0\"\nx = nan\n"))
+	if _, err := e.File(lock, "node", gnuT); err == nil {
+		t.Error("a NaN made a key")
+	}
+	if b, err := (Lock{}).Entry("node"); b != nil || err != nil {
+		t.Errorf("no lock's entry = %s, %v", b, err)
+	}
+}
+
+// Only what the lock says counts for a tool's key, not how mise wrote it:
+// its order, spacing, quoting and comments; a changed checksum does.
+func TestEntryCanonical(t *testing.T) {
+	e := newEnv(t)
+	f := fixture(t)
+	node := textEntry(f, "node")
+	reformatted := regexp.MustCompile(`(?m)^(\w+) = "(.*)"$`).ReplaceAll(node, []byte("$1   =   '$2' # a comment"))
+	lines := strings.Split(strings.TrimSuffix(string(reformatted), "\n"), "\n")
+	// The entry's own fields after its header, in another order.
+	lines[1], lines[2] = lines[2], lines[1]
+	moved := bytes.Replace(f, node, []byte(strings.Join(lines, "\n")+"\n"), 1)
+	if bytes.Equal(moved, f) {
+		t.Fatal("the fixture didn't change")
+	}
+	want, err := e.File(parsed(t, f), "node", gnuT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := e.File(parsed(t, moved), "node", gnuT); err != nil || got != want {
+		t.Errorf("reformatted: %s, %v; want %s", got, err, want)
+	}
+	sum := regexp.MustCompile(`checksum = "sha256:[0-9a-f]`).Find(node)
+	changed := bytes.Replace(f, node, bytes.Replace(node, sum, append(sum[:len(sum)-1:len(sum)-1], 'x'), 1), 1)
+	if got, err := e.File(parsed(t, changed), "node", gnuT); err != nil || got == want {
+		t.Errorf("a changed checksum: %s, %v", got, err)
 	}
 }
 
@@ -339,8 +468,8 @@ func olderLock(t *testing.T) []byte {
 	t.Helper()
 	ver := regexp.MustCompile(`(?m)^version = .*$`)
 	spec := regexp.MustCompile(`(?m)^specifiers = .*$`)
-	a := ver.ReplaceAll(Lock(newerLock(t)).Entry("node"), []byte(`version = "24.20.1"`))
-	b := ver.ReplaceAll(Lock(fixture(t)).Entry("node"), []byte(`version = "24.20.0"`))
+	a := ver.ReplaceAll(textEntry(newerLock(t), "node"), []byte(`version = "24.20.1"`))
+	b := ver.ReplaceAll(textEntry(fixture(t), "node"), []byte(`version = "24.20.0"`))
 	return spec.ReplaceAll(append(a, b...), []byte(`specifiers = ["pinned"]`))
 }
 
@@ -367,21 +496,25 @@ func TestRefreshStepsBack(t *testing.T) {
 	if !slices.Contains(*e.said, "devvm: tool_stepped_back older=24.20.0 tool=node version=24.21.0.1") {
 		t.Errorf("said %q", *e.said)
 	}
-	lock := Lock(read(t, e.Dirs.ToolLock()))
+	written := read(t, e.Dirs.ToolLock())
+	lock := parsed(t, written)
 	if v := lock.Version("node"); v != "24.20.0" {
 		t.Errorf("node = %s", v)
 	}
-	if !bytes.Contains(lock.Entry("node"), []byte("specifiers = [\"24\"]\n")) {
-		t.Errorf("node's specifiers aren't mise.toml's anymore:\n%s", lock.Entry("node"))
+	if s, _ := lock.first("node")["specifiers"].([]any); !slices.Equal(s, []any{"24"}) {
+		t.Errorf("node's specifiers aren't mise.toml's anymore: %q", s)
 	}
 	if !lock.HasDownload("node", e.platforms()) {
 		t.Error("node has no download for every platform")
 	}
-	if !bytes.Equal(lock.Entry("bun"), Lock(newer).Entry("bun")) {
+	if !bytes.Equal(entryOf(t, written, "bun"), entryOf(t, newer, "bun")) {
 		t.Error("bun didn't move on")
 	}
-	if !slices.Equal(lockTools(lock), lockTools(newer)) {
-		t.Errorf("tools = %q", lockTools(lock))
+	if !slices.Equal(lockTools(t, written), lockTools(t, newer)) {
+		t.Errorf("tools = %q", lockTools(t, written))
+	}
+	if v := lock.doc["lockfile_version"]; v != parsed(t, newer).doc["lockfile_version"] {
+		t.Errorf("lockfile_version = %v", v)
 	}
 	if c := e.calls(t); !strings.Contains(c, "mise ls-remote core:node 24\n") {
 		t.Errorf("not from the backend: %q", c)
@@ -403,6 +536,15 @@ func TestRefreshStepsBackToNothing(t *testing.T) {
 	}
 	if !bytes.Equal(read(t, e.Dirs.ToolLock()), newer) {
 		t.Error("the lock isn't the newest")
+	}
+	// Older versions mise locked none of.
+	e.stubLocks(t, newer, newer, "24.20.0")
+	*e.said = nil
+	if err := e.Refresh(t.Context()); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Contains(*e.said, "devvm: tool_no_download tool=node version=24.21.0.1") || !bytes.Equal(read(t, e.Dirs.ToolLock()), newer) {
+		t.Errorf("said %q", *e.said)
 	}
 }
 
@@ -444,11 +586,14 @@ func TestRefresh(t *testing.T) {
 // A download for every platform, not a build from source; rust needs none.
 func TestHasDownload(t *testing.T) {
 	e := newEnv(t)
-	lock := Lock(fixture(t))
+	lock := parsed(t, fixture(t))
 	if !lock.HasDownload("node", e.platforms()) || !lock.HasDownload("rust", e.platforms()) {
 		t.Error("the fixture's node or rust has no download")
 	}
-	newer := Lock(newerLock(t))
+	if lock.HasDownload("zig", e.platforms()) {
+		t.Error("a tool the lock hasn't has a download")
+	}
+	newer := parsed(t, newerLock(t))
 	if newer.HasDownload("node", e.platforms()) {
 		t.Error("a source build on musl counts")
 	}
@@ -466,7 +611,7 @@ func TestHasDownload(t *testing.T) {
 			bare.WriteString(line + "\n")
 		}
 	}
-	if Lock(bare.Bytes()).HasDownload("opencode", e.platforms()) {
+	if parsed(t, bare.Bytes()).HasDownload("opencode", e.platforms()) {
 		t.Error("a tag with no release (no platforms) counts")
 	}
 	// Only the VM's own platform counts.
@@ -476,12 +621,45 @@ func TestHasDownload(t *testing.T) {
 }
 
 func TestVersionEntry(t *testing.T) {
-	lock := Lock(olderLock(t))
-	if e := lock.VersionEntry("node", "24.20.0"); !bytes.HasPrefix(e, []byte("[[tools.node]]\nversion = \"24.20.0\"\n")) || bytes.Count(e, []byte("[[")) != 1 {
-		t.Errorf("entry = %s", e)
+	lock := parsed(t, olderLock(t))
+	if e := lock.versionEntry("node", "24.20.0"); str(e, "version") != "24.20.0" || !hasDownload(e, []string{"linux-arm64", "linux-arm64-musl"}) {
+		t.Errorf("entry = %v", e)
 	}
-	if e := lock.VersionEntry("node", "1.0.0"); e != nil {
-		t.Errorf("entry for a version it hasn't = %s", e)
+	if e := lock.versionEntry("node", "24.20.1"); str(e, "version") != "24.20.1" || hasDownload(e, []string{"linux-arm64-musl"}) {
+		t.Errorf("entry = %v", e)
+	}
+	if e := lock.versionEntry("node", "1.0.0"); e != nil {
+		t.Errorf("entry for a version it hasn't = %v", e)
+	}
+}
+
+// A step back's lock is written again as TOML: what it says is kept, the
+// tool's entry replaced, and mise reads it as the same lock.
+func TestWithEntry(t *testing.T) {
+	f := fixture(t)
+	lock := parsed(t, f)
+	one := maps.Clone(parsed(t, olderLock(t)).versionEntry("node", "24.20.0"))
+	got, err := lock.withEntry("node", one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again := parsed(t, got.Bytes())
+	if again.Version("node") != "24.20.0" || len(again.entries("node")) != 1 {
+		t.Errorf("node = %s, %d entries", again.Version("node"), len(again.entries("node")))
+	}
+	for _, tool := range lockTools(t, f) {
+		if tool != "node" && !bytes.Equal(entryOf(t, got.Bytes(), tool), entryOf(t, f, tool)) {
+			t.Errorf("%s changed:\n%s", tool, got.Bytes())
+		}
+	}
+	if lock.Version("node") == "24.20.0" {
+		t.Error("the lock it came from changed")
+	}
+	if _, err := (Lock{}).withEntry("node", one); err != nil {
+		t.Errorf("onto no lock: %v", err)
+	}
+	if _, err := lock.withEntry("node", lockEntry{"version": make(chan int)}); err == nil {
+		t.Error("a value TOML can't hold was written")
 	}
 }
 
@@ -497,7 +675,7 @@ func TestFiles(t *testing.T) {
 	var tools []string
 	for _, f := range files {
 		tool, v, ok := image.ParseToolFile(f)
-		if !ok || v != Lock(fixture(t)).Version(tool) {
+		if !ok || v != parsed(t, fixture(t)).Version(tool) {
 			t.Errorf("%s isn't at the lock's version", f)
 		}
 		tools = append(tools, tool)
@@ -514,7 +692,7 @@ func TestFiles(t *testing.T) {
 	if _, err := e.Files(t.Context(), []string{"go"}, gnuT); msg.NamesOf(err) != `tool_bad_version tool=go version="1$(id)"` {
 		t.Errorf("a bad version: %v", msg.NamesOf(err))
 	}
-	if _, err := e.File(Lock(fixture(t)), "zig", gnuT); msg.NamesOf(err) != "tool_not_locked lock="+e.Dirs.ToolLock()+" tool=zig" {
+	if _, err := e.File(parsed(t, fixture(t)), "zig", gnuT); msg.NamesOf(err) != "tool_not_locked lock="+e.Dirs.ToolLock()+" tool=zig" {
 		t.Errorf("a tool the lock hasn't: %v", msg.NamesOf(err))
 	}
 }
@@ -533,7 +711,7 @@ func (e env) files(t *testing.T, tools ...string) []string {
 	t.Helper()
 	var out []string
 	for _, tool := range tools {
-		f, err := e.File(Lock(read(t, e.Dirs.ToolLock())), tool, gnuT)
+		f, err := e.File(parsed(t, read(t, e.Dirs.ToolLock())), tool, gnuT)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -598,7 +776,7 @@ func TestBuild(t *testing.T) {
 		t.Fatalf("calls = %q", ms)
 	}
 	spec, _ := f.Calls()[0].Args[0].(backend.ToolsSpec)
-	lock := Lock(fixture(t))
+	lock := parsed(t, fixture(t))
 	wantArgs := []string{
 		"node", lock.Version("node"), all[0], "bun", lock.Version("bun"), all[2], "claude", lock.Version("claude"), all[3],
 	}
@@ -658,7 +836,7 @@ func TestBuildOneBatch(t *testing.T) {
 		batches = append(batches, spec.Args)
 		outs[spec.Out] = true
 	}
-	lock := Lock(fixture(t))
+	lock := parsed(t, fixture(t))
 	want := [][]string{
 		{"node", lock.Version("node"), files[0], "go", lock.Version("go"), files[1], "bun", lock.Version("bun"), files[2]},
 	}
@@ -710,11 +888,11 @@ func TestBuildRefuses(t *testing.T) {
 	lock := regexp.MustCompile(`(?m)^(\[tools\.node\."platforms\.linux-.*-musl"\])$`).ReplaceAll(fixture(t), []byte("$1\ninstall = \"source\""))
 	e.locked(t, lock)
 	f := fake()
-	musl, err := e.File(Lock(lock), "node", muslT)
+	musl, err := e.File(parsed(t, lock), "node", muslT)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, muslT, []string{musl}); msg.NamesOf(err) != "tool_unbuilt tool=node version="+Lock(lock).Version("node") {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, muslT, []string{musl}); msg.NamesOf(err) != "tool_unbuilt tool=node version="+parsed(t, lock).Version("node") {
 		t.Errorf("Build = %v", msg.NamesOf(err))
 	}
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, []string{"node-1.0.0-0123456789ab.erofs"}); msg.NamesOf(err) != "tools_changed" {
@@ -1267,8 +1445,8 @@ func TestShow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gov := Lock(fixture(t)).Version("go")
-	cv := Lock(fixture(t)).Version("claude")
+	gov := parsed(t, fixture(t)).Version("go")
+	cv := parsed(t, fixture(t)).Version("claude")
 	want := []VMTool{{Tool: "go", Version: gov}, {Tool: "claude", Version: "2.0.0", Newer: cv}}
 	if !slices.Equal(ts, want) {
 		t.Errorf("Show = %+v, want %+v", ts, want)
@@ -1294,7 +1472,7 @@ func TestWarnNewer(t *testing.T) {
 	if err := e.WarnNewer(t.Context(), []string{"node", "claude"}, have, gnuT); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"devvm: newer_tools tools=claude " + Lock(fixture(t)).Version("claude")}
+	want := []string{"devvm: newer_tools tools=claude " + parsed(t, fixture(t)).Version("claude")}
 	if !slices.Equal(*e.said, want) {
 		t.Errorf("said %q, want %q", *e.said, want)
 	}
@@ -1321,7 +1499,7 @@ func TestUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if Lock(read(t, e.Dirs.ToolLock())).Version("go") != "9.9.9" || !changed || slices.Equal(files, before) {
+	if parsed(t, read(t, e.Dirs.ToolLock())).Version("go") != "9.9.9" || !changed || slices.Equal(files, before) {
 		t.Errorf("Update = %q, %v", files, changed)
 	}
 	if !slices.Equal(*e.said, []string{"==> checking_tools", "==> building_tools tools=go 9.9.9", "==> tools_switch vm=" + vm}) {
@@ -1505,7 +1683,7 @@ func TestConfigTools(t *testing.T) {
 	if slices.Sort(want); !slices.Equal(slices.Sorted(slices.Values(got)), want) {
 		t.Errorf("configTools = %q, want the shared tools' members %q", got, want)
 	}
-	if locked := lockTools(fixture(t)); !slices.Equal(slices.Sorted(slices.Values(got)), locked) {
+	if locked := lockTools(t, fixture(t)); !slices.Equal(slices.Sorted(slices.Values(got)), locked) {
 		t.Errorf("the fixture lock has %q", locked)
 	}
 }
