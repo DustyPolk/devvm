@@ -59,7 +59,7 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 - **Credentials never go into images.** Host agent history never goes into VMs.
 - **Never auto-delete project VMs:** they may hold unsaved work. Warn instead.
 - **The startup check only reports.** Never install host software without asking.
-- **Image keys hash everything that goes into an image**, the backend included. A tool image's key is its lock entry, `assets/shared-tools/build.sh`, `shared-tools/mise.toml`'s `[settings]` and the libc.
+- **Image keys hash everything that goes into an image**, the backend included. A tool image's key is its lock entry, `assets/shared-tools/build.sh`, `shared-tools/mise.toml`'s `[settings]`, the mise `layers/base.sh` pins (not rust's) and the libc.
 - **Pin every download** in `assets/`'s `layers/`, `features/`, `shared-tools/build.sh`, `oci/build.sh`: `<tool>_version` and `<tool>_sha256_arm64`/`_amd64` at the top, fetched with `devvm-fetch` (`oci/build.sh`: `sha256sum`). No `curl | sh`, no "latest". Upstream-checked exceptions: shared tools (`MISE_LOCKED=1`), Ubuntu's signed `SHA256SUMS`, Lima in `install.sh`. Go checks a download's SHA-256 before use.
 - **Shared tools are read-only in VMs:** whatever writes into a tool's folder (global installs, self-updates, `corepack enable`, `rustup component add`) is redirected (`~/.npm-global`, `go_set_gobin = false`), done in `assets/shared-tools/build.sh`, or off.
 - **In-VM scripts are bash 3.2-safe and shellcheck-clean** (`assets/`, `install.sh`, `tests/e2e.sh`): guard empty arrays (`${a[@]+"${a[@]}"}`), no associative arrays. Everything else is Go.

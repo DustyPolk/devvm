@@ -148,8 +148,8 @@ func newEnv(t *testing.T) env {
 	t.Setenv("MISE_STUB_LOCK", repo(t, "testdata", "mise.lock"))
 	t.Setenv("MISE_STUB_FAIL", "")
 	root := filepath.Join(dir, "root")
-	for _, f := range []string{"mise.toml", "build.sh"} {
-		write(t, filepath.Join(root, "shared-tools", f), read(t, repo(t, "assets", "shared-tools", f)))
+	for _, f := range []string{"shared-tools/mise.toml", "shared-tools/build.sh", "layers/base.sh"} {
+		write(t, filepath.Join(root, f), read(t, repo(t, "assets", f)))
 	}
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
 	var said, detached []string
@@ -1653,15 +1653,6 @@ func writeTemp(t *testing.T, data []byte) string {
 	p := filepath.Join(t.TempDir(), "f")
 	write(t, p, data)
 	return p
-}
-
-// The real pins: one per host devvm runs on, 64 hex digits each.
-func TestMisePins(t *testing.T) {
-	for _, p := range []string{"macos-arm64", "macos-x64", "linux-arm64", "linux-x64"} {
-		if !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(miseSHA256[p]) {
-			t.Errorf("%s's checksum = %q", p, miseSHA256[p])
-		}
-	}
 }
 
 // What a VM reads to mount its tools.

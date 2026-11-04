@@ -3,6 +3,7 @@ package image
 import (
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -43,8 +44,20 @@ func toolRoot(script string) fstest.MapFS {
 	return withConfig(script, miseConfig)
 }
 
+const baseScript = "#!/bin/bash\nmise_version=2026.1.0\n"
+
 func withConfig(script, config string) fstest.MapFS {
-	return fstest.MapFS{"shared-tools/build.sh": {Data: []byte(script)}, "shared-tools/mise.toml": {Data: []byte(config)}}
+	return fstest.MapFS{
+		"shared-tools/build.sh": {Data: []byte(script)}, "shared-tools/mise.toml": {Data: []byte(config)},
+		"layers/base.sh": {Data: []byte(baseScript)},
+	}
+}
+
+// withBase is root with this layers/base.sh.
+func withBase(root fstest.MapFS, base string) fstest.MapFS {
+	out := maps.Clone(root)
+	out["layers/base.sh"] = &fstest.MapFile{Data: []byte(base)}
+	return out
 }
 
 func toolFile(t *testing.T, root fstest.MapFS, tool Tool) string {
@@ -77,6 +90,7 @@ func TestToolFile(t *testing.T) {
 		{"the format (plain)", root, func(t *Tool) { t.Format = "plain-0123456789ab" }},
 		{"a setting in mise.toml", withConfig("#!/bin/bash\n", strings.Replace(miseConfig, "compile = false", "compile = true", 1)), func(*Tool) {}},
 		{"a setting added to mise.toml", withConfig("#!/bin/bash\n", miseConfig+"node.gpg_verify = false\n"), func(*Tool) {}},
+		{"the mise base.sh pins", withBase(root, "mise_version=2026.2.0\n"), func(*Tool) {}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -99,6 +113,48 @@ func TestToolFile(t *testing.T) {
 		if got := toolFile(t, withConfig("#!/bin/bash\n", config), node()); got != f {
 			t.Errorf("%s: %q, want %q", name, got, f)
 		}
+	}
+	if got := toolFile(t, withBase(root, baseScript+"# edit\nnode_version=1\n"), node()); got != f {
+		t.Errorf("the rest of base.sh: %q, want %q", got, f)
+	}
+	// rustup installs rust: mise's version doesn't count, and base.sh's
+	// pin isn't read.
+	rust := Tool{Name: "rust", Version: "1.99.1", LockEntry: []byte("[[tools.rust]]\n"), Libc: "gnu"}
+	r := toolFile(t, root, rust)
+	if got := toolFile(t, withBase(root, "mise_version=2026.2.0\n"), rust); got != r {
+		t.Errorf("rust with another mise: %q, want %q", got, r)
+	}
+	noBase := maps.Clone(root)
+	delete(noBase, "layers/base.sh")
+	if got := toolFile(t, noBase, rust); got != r {
+		t.Errorf("rust without base.sh: %q, want %q", got, r)
+	}
+}
+
+func TestMiseVersion(t *testing.T) {
+	if v, err := MiseVersion(assets.FS); err != nil || !ToolVersion(v) {
+		t.Errorf("devvm's base.sh: %q, %v", v, err)
+	}
+	if v, err := MiseVersion(toolRoot("")); err != nil || v != "2026.1.0" {
+		t.Errorf("MiseVersion = %q, %v", v, err)
+	}
+	for name, base := range map[string]string{
+		"none":         "#!/bin/bash\n",
+		"twice":        "mise_version=1\nmise_version=2\n",
+		"not a value":  "mise_version=$(id)\n",
+		"not the line": "  mise_version=1\n",
+	} {
+		if v, err := MiseVersion(withBase(toolRoot(""), base)); err == nil {
+			t.Errorf("%s: %q, no error", name, v)
+		}
+	}
+	noBase := toolRoot("")
+	delete(noBase, "layers/base.sh")
+	if _, err := MiseVersion(noBase); err == nil {
+		t.Error("no layers/base.sh: no error")
+	}
+	if _, err := ToolFile(noBase, node()); err == nil {
+		t.Error("node without layers/base.sh: no error")
 	}
 }
 

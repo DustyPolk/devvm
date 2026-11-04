@@ -151,13 +151,36 @@ func GroupTools(name string) []string {
 
 // NoDownload reports whether a tool in the lock needs no download there,
 // as its shared tool's installer fetches it: rust, which rustup installs.
-func NoDownload(tool string) bool {
+func NoDownload(tool string) bool { return installerOf(tool) != Mise }
+
+// installerOf is what installs a tool in the lock: its shared tool's
+// Installer, mise for a tool no shared tool has.
+func installerOf(tool string) Installer {
 	for _, d := range SharedTools {
 		if slices.Contains(d.Members, tool) {
-			return d.Installer != Mise
+			return d.Installer
 		}
 	}
-	return false
+	return Mise
+}
+
+// misePin is the line of layers/base.sh that pins the mise it installs.
+var misePin = regexp.MustCompile(`(?m)^mise_version=([0-9A-Za-z._-]+)$`)
+
+// MiseVersion is the version of mise that devvm's layers/base.sh pins
+// and installs in base: the mise that installs the shared tools in their
+// images, as their build VMs are made from base.
+func MiseVersion(assets fs.FS) (string, error) {
+	const name = "layers/base.sh"
+	data, err := fs.ReadFile(assets, name)
+	if err != nil {
+		return "", fmt.Errorf("reading devvm's %s: %w", name, err)
+	}
+	m := misePin.FindAllSubmatch(data, -1)
+	if len(m) != 1 {
+		return "", fmt.Errorf("devvm's %s pins mise_version %d times, not once", name, len(m))
+	}
+	return string(m[0][1]), nil
 }
 
 // Normalize returns an image name's canonical form, so the same layers
@@ -230,7 +253,8 @@ func ToolVersion(s string) bool { return toolVersion.MatchString(s) }
 // 12 hex digits of a SHA-256 over the tool's lock entry, devvm's
 // shared-tools/build.sh (in assets, devvm's own files), the [settings] of
 // devvm's shared-tools/mise.toml, which change what mise installs, the
-// libc and, unless it's build.sh's own, the format.
+// version of mise that installs it (MiseVersion; not for a tool rustup
+// installs), the libc and, unless it's build.sh's own, the format.
 func ToolFile(assets fs.FS, t Tool) (string, error) {
 	if !ToolName(t.Name) {
 		return "", fmt.Errorf("invalid tool name %q", t.Name)
@@ -253,6 +277,13 @@ func ToolFile(assets fs.FS, t Tool) (string, error) {
 		return "", err
 	}
 	k.bytes("mise-settings", settings)
+	if installerOf(t.Name) == Mise {
+		v, err := MiseVersion(assets)
+		if err != nil {
+			return "", err
+		}
+		k.field("mise", v)
+	}
 	k.field("libc", t.Libc)
 	if t.Format != "" {
 		k.field("format", t.Format)
