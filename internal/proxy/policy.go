@@ -34,7 +34,7 @@ type rule struct {
 
 // parseRule reads one rule, strictly: s is the whole rule, without a comment or spaces. It
 // refuses anything that wouldn't match as written: a port that isn't 1 to 65535 in digits, a host
-// that isn't a plain name (hostOK, with no empty label), a zone, a wildcard other than a leading
+// that isn't a plain name (HostOK, with no empty label), a zone, a wildcard other than a leading
 // "*." or "**", an address under "*.", an IPv4-mapped prefix shorter than the mapping, anything
 // but printable ASCII. A host's one trailing dot is dropped, as requests' are, and a mapped
 // prefix is its IPv4 one.
@@ -76,7 +76,7 @@ func parseRule(s string) (rule, bool) {
 	}
 	h := strings.TrimSuffix(line, ".")
 	name := strings.TrimPrefix(h, "*.")
-	if _, err := netip.ParseAddr(name); err == nil || strings.ContainsAny(name, "[]*") || !hostOK(name) {
+	if _, err := netip.ParseAddr(name); err == nil || strings.ContainsAny(name, "[]*") || !HostOK(name) {
 		return rule{}, false
 	}
 	r.host = h

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/w3cj/devvm/internal/agentlogin"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -222,32 +222,35 @@ func TestValue(t *testing.T) {
 	}
 }
 
-// Get: a known secret's value, a login's through the login helper, and
-// nothing else (a name is never a path).
+// Get: a known secret's value, a login's from its agent's file in the
+// user's home, and nothing else (a name is never a path).
 func TestGet(t *testing.T) {
 	s, kc := testStore(t, true, nil)
 	kc["devvm/github"] = "ghp_x"
-	var calls []string
-	s.Login = func(args []string, out io.Writer) error {
-		calls = append(calls, strings.Join(args, " "))
-		_, err := io.WriteString(out, "value\n")
-		return err
-	}
 	ctx := t.Context()
 	if v, err := s.Get(ctx, "github"); v != "ghp_x" || err != nil {
 		t.Errorf("github = %q, %v", v, err)
 	}
-	for _, tc := range [][2]string{
-		{"codex-key", "codex " + s.Dirs.Home + "/.codex/auth.json"},
-		{"codex", "codex " + s.Dirs.Home + "/.codex/auth.json"},
-		{"opencode-anthropic", "opencode " + s.Dirs.Home + "/.local/share/opencode/auth.json"},
-		{"claude-mcp-0123456789ab", "claude " + s.Dirs.Home + "/.claude.json"},
+	// A login whose file isn't there fails, as the proxy's error.
+	if _, err := s.Get(ctx, "codex-key"); msg.IDOf(err) != "proxy_failed" {
+		t.Errorf("Get(codex-key) without a login = %v", msg.NamesOf(err))
+	}
+	for kind, data := range map[string]string{
+		"codex":    `{"OPENAI_API_KEY": "sk-codex-value"}`,
+		"opencode": `{"anthropic": {"type": "api", "key": "sk-ant-value"}}`,
+		"claude":   `{"mcpServers": {"s": {"type": "http", "url": "https://mcp.example.com/", "headers": {"X-Key": "mcp-value"}}}}`,
 	} {
-		calls = nil
-		v, err := s.Get(ctx, tc[0])
-		want := "-login " + strings.Replace(tc[1], " ", " -login-file ", 1) + " -login-get " + tc[0]
-		if v != "value" || err != nil || !slices.Equal(calls, []string{want}) {
-			t.Errorf("Get(%s) = %q, %v; calls %q", tc[0], v, err, calls)
+		writeLogin(t, s, kind, data)
+	}
+	mcp, err := agentlogin.File{Kind: agentlogin.Claude, Path: LoginFile(s.Dirs.Home, "claude")}.Bindings()
+	if err != nil || len(mcp) != 1 {
+		t.Fatalf("MCP bindings = %+v, %v", mcp, err)
+	}
+	for name, want := range map[string]string{
+		"codex-key": "sk-codex-value", "opencode-anthropic": "sk-ant-value", mcp[0].Name: "mcp-value",
+	} {
+		if v, err := s.Get(ctx, name); v != want || err != nil {
+			t.Errorf("Get(%s) = %q, %v", name, v, err)
 		}
 	}
 	for _, name := range []string{"claude", "../../etc/passwd", "nope"} {
@@ -346,8 +349,11 @@ func TestWriteFiles(t *testing.T) {
 	}
 	// A refresh keeps the logins' bindings and hosts as written, without
 	// reading any login file, and follows the secrets: unbound, github's
-	// binding and hosts go.
-	s.Login = func([]string, io.Writer) error { t.Error("a refresh read a login"); return errors.New("no") }
+	// binding and hosts go. The login file is gone: had the refresh read
+	// it, codex-key would have gone too.
+	if err := os.Remove(auth); err != nil {
+		t.Fatal(err)
+	}
 	bind(t, st)
 	if err := s.RefreshFiles(t.Context(), st, salt); err != nil {
 		t.Fatal(err)
@@ -369,33 +375,48 @@ func TestWriteFiles(t *testing.T) {
 	}
 }
 
+// writeLogin writes an agent's login file, data, in the store's home.
+func writeLogin(t *testing.T, s *Store, kind, data string) {
+	t.Helper()
+	f := LoginFile(s.Dirs.Home, kind)
+	if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // The VM's copies: a login's with placeholders ending in its salt, the MCP
 // servers whose secrets a plain copy would carry, and settings files with
 // secret-looking values taken out.
 func TestVMCopies(t *testing.T) {
 	s, _ := testStore(t, false, nil)
-	write := func(kind, data string) {
-		t.Helper()
-		f := LoginFile(s.Dirs.Home, kind)
-		if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(f, []byte(data), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	var warned []string
+	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
 	if got := s.MCPSecrets(); got != nil {
 		t.Errorf("MCPSecrets without ~/.claude.json = %q", got)
 	}
-	write("claude", `{"mcpServers":{"plain":{"command":"x"},"a b":{"command":"y","env":{"K":"v"}}}}`)
+	writeLogin(t, s, "claude", `{"mcpServers":{"plain":{"command":"x"},"a b":{"command":"y","env":{"K":"v"}}}}`)
 	if got := s.MCPSecrets(); !slices.Equal(got, []string{"a b"}) {
 		t.Errorf("MCPSecrets = %q", got)
 	}
-	write("codex", `{"OPENAI_API_KEY":"sk-codex-secret"}`)
+	writeLogin(t, s, "codex", `{"OPENAI_API_KEY":"sk-codex-secret"}`)
 	salt := strings.Repeat("cd", 16)
 	data, err := s.VMLogin("codex", salt)
-	if err != nil || strings.Contains(string(data), "sk-codex-secret") || !strings.Contains(string(data), salt) {
-		t.Errorf("VMLogin = %s, %v", data, err)
+	if err != nil || strings.Contains(string(data), "sk-codex-secret") || !strings.Contains(string(data), salt) || warned != nil {
+		t.Errorf("VMLogin = %s, %v; warned %q", data, err, warned)
+	}
+	// What a copy holds as it is is warned about.
+	writeLogin(t, s, "codex", `{"OPENAI_API_KEY":"sk-codex-secret","extra":"x","b":1}`)
+	writeLogin(t, s, "opencode", `{"llama":{"type":"api","key":"local"}}`)
+	for _, kind := range []string{"codex", "opencode"} {
+		if _, err := s.VMLogin(kind, salt); err != nil {
+			t.Errorf("VMLogin(%s): %v", kind, err)
+		}
+	}
+	if want := []string{"codex_login_kept keys=b, extra", "opencode_login_kept providers=llama"}; !slices.Equal(warned, want) {
+		t.Errorf("warned %q, want %q", warned, want)
 	}
 	out, keys, err := Redact("json", []byte(`{"env":{"API_TOKEN":"tok-secret","NAME":"x"}}`))
 	if err != nil || strings.Contains(string(out), "tok-secret") || !slices.Equal(keys, []string{"env.API_TOKEN"}) {

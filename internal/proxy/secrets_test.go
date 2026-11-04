@@ -98,9 +98,7 @@ func TestInject(t *testing.T) {
 func interceptSetup(t *testing.T, h http.HandlerFunc) (int, string, *http.Client) {
 	t.Helper()
 	dir := t.TempDir()
-	if err := initCA(dir); err != nil {
-		t.Fatal(err)
-	}
+	writeCA(t, dir)
 	if err := loadCA(filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key")); err != nil {
 		t.Fatal(err)
 	}
@@ -182,60 +180,34 @@ func TestUnbindAppliesToOpenTunnels(t *testing.T) {
 	}
 }
 
-// The CA lasts 30 days, stays while it has over a week left, and is replaced after that.
-func TestCARotation(t *testing.T) {
-	dir := t.TempDir()
-	if err := initCA(dir); err != nil {
-		t.Fatal(err)
-	}
-	read := func() *x509.Certificate {
-		pair, err := tls.LoadX509KeyPair(filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		c, _ := x509.ParseCertificate(pair.Certificate[0])
-		return c
-	}
-	first := read()
-	if life := first.NotAfter.Sub(first.NotBefore); life > 31*24*time.Hour || life < 29*24*time.Hour {
-		t.Errorf("CA valid for %v, want about 30 days", life)
-	}
-	must(t, initCA(dir))
-	if read().SerialNumber.Cmp(first.SerialNumber) != 0 {
-		t.Error("a fresh CA was replaced")
-	}
-	// One that has 3 days left (made here with the same key) is replaced.
-	pair, _ := tls.LoadX509KeyPair(filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key"))
-	key := pair.PrivateKey.(*ecdsa.PrivateKey)
+// writeCA writes a CA into dir as devvm's (trust.InitCA) is: ca.pem, and its ECDSA key, ca.key,
+// "EC PRIVATE KEY", mode 600. The proxy's tests can't import trust, which isn't the standard library.
+func writeCA(t *testing.T, dir string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	must(t, err)
 	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(7), Subject: pkix.Name{CommonName: "old"}, NotBefore: time.Now().Add(-27 * 24 * time.Hour),
-		NotAfter: time.Now().Add(3 * 24 * time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "devvm proxy CA"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(30 * 24 * time.Hour),
+		KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign, BasicConstraintsValid: true, IsCA: true, MaxPathLenZero: true,
 	}
-	der, _ := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	must(t, os.WriteFile(filepath.Join(dir, "ca.pem"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
-	if err := initCA(dir); err != nil {
-		t.Fatal(err)
-	}
-	if c := read(); c.SerialNumber.Cmp(big.NewInt(7)) == 0 || time.Until(c.NotAfter) < 29*24*time.Hour {
-		t.Errorf("an expiring CA wasn't replaced: %v until %v", c.SerialNumber, c.NotAfter)
-	}
-	if st, _ := os.Stat(filepath.Join(dir, "ca.key")); st.Mode().Perm() != 0o600 {
-		t.Errorf("ca.key mode %v", st.Mode().Perm())
-	}
-	// One valid for longer than caLife (from before the CA was rotated: 10 years) is replaced too.
-	pair, _ = tls.LoadX509KeyPair(filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key"))
-	key = pair.PrivateKey.(*ecdsa.PrivateKey)
-	tmpl = &x509.Certificate{
-		SerialNumber: big.NewInt(8), Subject: pkix.Name{CommonName: "old"}, NotBefore: time.Now().Add(-time.Hour),
-		NotAfter: time.Now().AddDate(10, 0, 0), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
-	}
-	der, _ = x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	must(t, os.WriteFile(filepath.Join(dir, "ca.pem"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
-	if err := initCA(dir); err != nil {
-		t.Fatal(err)
-	}
-	if c := read(); c.SerialNumber.Cmp(big.NewInt(8)) == 0 || c.NotAfter.Sub(c.NotBefore) > 31*24*time.Hour {
-		t.Errorf("a CA valid for 10 years was kept: %v until %v", c.SerialNumber, c.NotAfter)
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	must(t, err)
+	kder, err := x509.MarshalECPrivateKey(key)
+	must(t, err)
+	must(t, os.WriteFile(filepath.Join(dir, "ca.key"), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kder}), 0o600))
+	must(t, os.WriteFile(filepath.Join(dir, "ca.pem"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)) //nolint:gosec // a certificate
+}
+
+// Values from agents' login files are cached briefly: a logout on the host stops them soon.
+func TestLoginValuesCacheBriefly(t *testing.T) {
+	for name, want := range map[string]time.Duration{
+		"claude": valueTTL, "github": valueTTL, "codex": loginTTL,
+		"codex-key": loginTTL, "opencode-anthropic": loginTTL, "claude-mcp-abc": loginTTL,
+	} {
+		if got := ttlOf(name); got != want {
+			t.Errorf("ttlOf(%q) = %v, want %v", name, got, want)
+		}
 	}
 }
 
@@ -334,12 +306,7 @@ func TestBindingsChangeDropsCachedValues(t *testing.T) {
 // placeholder; the upstream server sees the real secret.
 func TestIntercept(t *testing.T) {
 	dir := t.TempDir()
-	if err := initCA(dir); err != nil {
-		t.Fatal(err)
-	}
-	if st, _ := os.Stat(filepath.Join(dir, "ca.key")); st.Mode().Perm() != 0o600 {
-		t.Errorf("ca.key mode %v", st.Mode().Perm())
-	}
+	writeCA(t, dir)
 	if err := loadCA(filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key")); err != nil {
 		t.Fatal(err)
 	}

@@ -199,7 +199,7 @@ func TestLinkConnectUntouched(t *testing.T) {
 	db := serveLink(t, dir, "127.77.0.1", 443)
 	writeLinkList(t, linksFile, linkEntry(dir, "127.77.0.1", 443, "db", "db.devvm.internal"))
 	ca := t.TempDir()
-	must(t, initCA(ca))
+	writeCA(t, ca)
 	must(t, loadCA(filepath.Join(ca, "ca.pem"), filepath.Join(ca, "ca.key")))
 	secretsPath = filepath.Join(ca, "bindings.json")
 	must(t, os.WriteFile(secretsPath, []byte(`[{"name":"t","hosts":["db","**"],"header":"Authorization","placeholder":"PH"}]`), 0o600))

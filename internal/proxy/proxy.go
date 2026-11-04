@@ -41,7 +41,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,33 +50,13 @@ import (
 	"github.com/w3cj/devvm/internal/daemon"
 )
 
-var (
-	configPath = ""
-	vmName     = "vm"
-	initCADir  = ""
-	loginKind  = ""
-	loginFile  = ""
-	loginVM    = false
-	loginBnd   = false
-	loginGet   = ""
-	redactFmt  = ""
-)
+var vmName = "vm"
 
-// newFlags defines devvm _proxy's flags on a flag set of its own, writing into the variables above.
-// Each takes one dash or two.
-func newFlags() *flag.FlagSet {
+// newFlags defines devvm _proxy's one flag, -config, on a flag set of its own, writing into path. It
+// takes one dash or two.
+func newFlags(path *string) *flag.FlagSet {
 	fs := flag.NewFlagSet("devvm _proxy", flag.ContinueOnError)
-	fs.StringVar(&configPath, "config", "", "the proxy's config (Config, JSON, mode 600): run the proxy with it (config.go)")
-	fs.StringVar(&initCADir, "init-ca", "", "write a new CA (ca.pem, ca.key) into this directory unless one is there, and exit")
-	fs.StringVar(&loginKind, "login", "", "codex, opencode or claude: work on that agent's login file (logins.go), with -login-file and one of the next three")
-	fs.StringVar(&loginFile, "login-file", "", "the agent's login file on the host")
-	fs.BoolVar(&loginVM, "login-vm", false, "print the VM's copy of the login file, with placeholders")
-	fs.BoolVar(&loginBnd, "login-bindings", false, "print the login's secret bindings (JSON, no values)")
-	fs.StringVar(&loginGet, "login-get", "", "print one value (refreshing an OAuth token when due)")
-	fs.StringVar(&redactFmt, "redact", "", "json or toml: copy stdin to stdout with secret-named values replaced, their paths on stderr (redact.go)")
-	fs.StringVar(&loginSalt, "login-salt", "", "with -login-vm or -login-bindings: the VM's key, which ends its placeholders (default $DEVVM_LOGIN_SALT, which keeps it out of the process's arguments)")
-	fs.BoolVar(&loginSecrets, "login-secrets", false, "with -login claude: print the MCP servers whose settings hold secrets")
-	fs.BoolVar(&loginHosts, "login-hosts", false, "with -login-bindings: print the bindings' hosts as allowlist lines (host:443) instead")
+	fs.StringVar(path, "config", "", "the proxy's config (Config, JSON, mode 600): run the proxy with it (config.go)")
 	return fs
 }
 
@@ -322,12 +301,14 @@ func dial(ctx context.Context, host string, port int) (net.Conn, error) {
 
 // --- the proxy ---
 
-// hostOK: a host name (letters, digits, '-', '_', '.') or an address. The VM chooses the host, and it
-// ends up in the log, in the policy and in the allow command devvm suggests for the host's shell.
+// HostOK reports whether h is a host name (letters, digits, '-', '_', '.') or an address. The VM
+// chooses the host, and it ends up in the log, in the policy and in the allow command devvm
+// suggests for the host's shell; agentlogin checks an MCP server's host with it before it goes into
+// a VM's allowlist.
 // A name is splitHostPort's form, with no trailing dot, and has no empty label: a company proxy
 // that drops trailing dots (evil.test.., which splitHostPort leaves as evil.test.) would reach a
 // host that a deny of evil.test never matched.
-func hostOK(h string) bool {
+func HostOK(h string) bool {
 	if a, err := netip.ParseAddr(strings.Trim(h, "[]")); err == nil {
 		return a.Zone() == "" // a zone (fe80::1%eth0) is any text
 	}
@@ -388,7 +369,7 @@ func ruleFor(host string, port int) string {
 // command; false for a host the policy doesn't take, which a logged event
 // can't have, or a log that was edited.
 func AllowRule(host string, port int) (string, bool) {
-	if !hostOK(host) || port < 1 || port > 65535 {
+	if !HostOK(host) || port < 1 || port > 65535 {
 		return "", false
 	}
 	return ruleFor(host, port), true
@@ -436,7 +417,7 @@ func floorCheck(ctx context.Context, host string, port int, plain bool) string {
 
 func handleConnect(w http.ResponseWriter, r *http.Request) {
 	host, port := splitHostPort(r.Host, 443)
-	if !hostOK(host) {
+	if !HostOK(host) {
 		http.Error(w, "devvm proxy: not a host name", http.StatusBadRequest)
 		return
 	}
@@ -535,7 +516,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 		def = 443
 	}
 	host, port := splitHostPort(r.URL.Host, def)
-	if !hostOK(host) {
+	if !HostOK(host) {
 		http.Error(w, "devvm proxy: not a host name", http.StatusBadRequest)
 		return
 	}
@@ -657,23 +638,19 @@ func loadPolicies(c Config, own fs.FS) error {
 
 // IO is what devvm _proxy reads and writes: devvm's own streams.
 type IO struct {
-	Stdin io.Reader
-	// Stdout gets data: the event log without Config.Log, and what -login, -redact and -help print.
+	// Stdout gets data: the event log without Config.Log, and what -help prints.
 	Stdout io.Writer
-	// Stderr gets the proxy's own log lines, and -redact's paths.
+	// Stderr gets the proxy's own log lines.
 	Stderr io.Writer
-	// Kept is told, with -login-vm, what of an agent's login file the VM's copy holds as it is:
-	// Codex's auth.json keys or opencode's providers devvm doesn't know. Nil: nothing is told.
-	Kept func(agent string, names []string)
 	// FS is devvm's own files (its assets), which Config.BuiltinPolicies names paths in.
 	FS fs.FS
 }
 
 // Main runs devvm _proxy with args (its flags): the proxy itself, with -config's file, until the
-// VM's hostagent is gone, or one of the modes that do one thing and return (-init-ca, -login,
-// -redact). -help prints the flags to std.Stdout. Errors are returned, not printed.
+// VM's hostagent is gone. -help prints the flags to std.Stdout. Errors are returned, not printed.
 func Main(args []string, std IO) error {
-	fs := newFlags()
+	var configPath string
+	fs := newFlags(&configPath)
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -686,25 +663,7 @@ func Main(args []string, std IO) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
 	}
-	if loginSalt == "" {
-		loginSalt = os.Getenv("DEVVM_LOGIN_SALT")
-	}
 	logger.SetOutput(std.Stderr)
-	warnKept = std.Kept
-	if loginKind != "" {
-		out, err := loginCmd(loginKind, loginFile, loginVM, loginBnd, loginGet)
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(std.Stdout, out)
-		return err
-	}
-	if redactFmt != "" {
-		return redactCmd(redactFmt, std.Stdin, std.Stdout, std.Stderr)
-	}
-	if initCADir != "" {
-		return initCA(initCADir)
-	}
 	// Without a config, and the password in it, any program on the host could use the proxy, and
 	// the VM's tokens with it.
 	if configPath == "" {

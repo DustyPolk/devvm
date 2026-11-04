@@ -1922,7 +1922,7 @@ other = "The Claude Code token isn't one from claude setup-token, which starts w
 other = "{{.vm}} uses github, but no GitHub token is saved. Run devvm secret set github."
 
 [login_copy_failed]
-description = "reason is an error from the login helper, in English"
+description = "reason is an error from reading the agent's login file, in English"
 other = "Making {{.vm}}'s copy of {{.agent}}'s login failed: {{.reason}}."
 
 [config_redacted]

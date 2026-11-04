@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/image"
+	"github.com/w3cj/devvm/internal/jsonc"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/shell"
 )
@@ -232,7 +233,7 @@ func (p *parser) note(m msg.M) { p.plan.Notes = append(p.plan.Notes, m) }
 // decode reads the file's top-level object, comments and trailing commas
 // left out.
 func (p *parser) decode(data []byte) (map[string]json.RawMessage, error) {
-	clean := strip(data)
+	clean := jsonc.Strip(data)
 	var top map[string]json.RawMessage
 	err := json.Unmarshal(clean, &top)
 	if syn, ok := errors.AsType[*json.SyntaxError](err); ok {

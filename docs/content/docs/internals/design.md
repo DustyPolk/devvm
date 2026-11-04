@@ -430,7 +430,7 @@ devvm keeps its state in plain files in two folders, which [State files](overvie
 - **APFS clones** cost nothing until written, and `du` overcounts them: real use was 5.5 GB where `du` said 12.7 GB.
 - **Lima locks each additional disk to one running VM,** so images shared across VMs go through a shared folder (virtiofs on macOS, 9p on Linux) and are loop-mounted from it.
 - **Read-only mounts are enforced by the host:** even root in the VM can't write to them, but root can unmount a nested one and reach what's underneath.
-- **Codex and opencode refreshing their OAuth logins in a VM can rotate the token and sign the host out.** With network policy the VM holds only placeholders and the proxy refreshes on the host (`internal/proxy/logins.go`). Codex decodes `id_token`'s claims and the access token's `exp` without checking signatures, so placeholders are unsigned JWTs with the real account claims and a far-off `exp`.
+- **Codex and opencode refreshing their OAuth logins in a VM can rotate the token and sign the host out.** With network policy the VM holds only placeholders, and devvm refreshes the logins on the host when the proxy asks it for their values (`internal/agentlogin`). Codex decodes `id_token`'s claims and the access token's `exp` without checking signatures, so placeholders are unsigned JWTs with the real account claims and a far-off `exp`.
 - **No existing tool** gives Lima Dockerfile-style layers with sharing at run time; nerdbox and Kata do it on VM runtimes of their own.
 - **Where devvm fits,** next to sbx and Colima: sbx puts agents first; devvm gives a full Linux VM per project, with agents optional.
 

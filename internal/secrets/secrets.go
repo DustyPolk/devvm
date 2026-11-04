@@ -3,26 +3,24 @@
 // requests for the token's hosts. Values live in the macOS Keychain, or in
 // files only the user can read elsewhere. Agents' logins (Codex, opencode,
 // Claude Code's MCP servers) stay in their own files on the host, read
-// through the proxy's login helper.
+// with agentlogin.
 package secrets
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/w3cj/devvm/internal/agentlogin"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -75,15 +73,15 @@ func (s Secret) Placeholder(salt string) string { return s.prefix + "-" + salt }
 var ErrNone = errors.New("no value saved")
 
 // loginKinds are the agents whose login files stay on the host, in order.
-var loginKinds = []string{"codex", "opencode", "claude"}
+var loginKinds = []string{agentlogin.Codex, agentlogin.Opencode, agentlogin.Claude}
 
 // LoginFile is an agent's login file under home: Codex's and opencode's
 // auth.json, and for claude ~/.claude.json (its MCP servers' secrets).
 func LoginFile(home, kind string) string {
 	switch kind {
-	case "codex":
+	case agentlogin.Codex:
 		return filepath.Join(home, ".codex", "auth.json")
-	case "opencode":
+	case agentlogin.Opencode:
 		return filepath.Join(home, ".local", "share", "opencode", "auth.json")
 	}
 	return filepath.Join(home, ".claude.json")
@@ -99,9 +97,6 @@ type Store struct {
 	KeychainSet    func(ctx context.Context, service, account, label, value string) error
 	KeychainDelete func(ctx context.Context, service, account string) error
 	Getenv         func(string) string
-	// Login runs the proxy's login helper (devvm _proxy -login …) with
-	// args, its output to out.
-	Login func(args []string, out io.Writer) error
 	// Warn prints a warning.
 	Warn func(msg.M)
 }
@@ -109,67 +104,50 @@ type Store struct {
 // NewStore returns the store for devvm's folders and the user's home,
 // warning through warn.
 func NewStore(d paths.Dirs, warn func(msg.M)) *Store {
-	s := &Store{
+	return &Store{
 		Dirs: d, Keychain: platform.HasKeychain, Getenv: os.Getenv,
 		KeychainGet: platform.KeychainGet, KeychainSet: platform.KeychainSet, KeychainDelete: platform.KeychainDelete,
 		Warn: warn,
 	}
-	s.Login = func(args []string, out io.Writer) error {
-		kept := func(agent string, names []string) { LoginKept(s.Warn, agent, names) }
-		return proxy.Main(args, proxy.IO{Stdin: strings.NewReader(""), Stdout: out, Stderr: io.Discard, Kept: kept})
-	}
-	return s
 }
 
-// LoginKept warns, through warn, about what of an agent's login file goes
-// into the VM's copy as it is.
-func LoginKept(warn func(msg.M), agent string, names []string) {
-	list := strings.Join(names, ", ")
-	if agent == "codex" {
-		warn(msg.CodexLoginKept(list))
-		return
-	}
-	warn(msg.OpencodeLoginKept(list))
+// login is an agent's login file in the user's home, its placeholders
+// ending in salt.
+func (s *Store) login(kind, salt string) agentlogin.File {
+	return agentlogin.File{Kind: kind, Path: LoginFile(s.Dirs.Home, kind), Salt: salt}
 }
 
 // VMLogin returns the VM's copy of an agent's login file: placeholders
-// ending in salt in place of its keys and tokens.
+// ending in salt in place of its keys and tokens. It warns about what of
+// the file the copy holds as it is.
 func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
-	var out bytes.Buffer
-	err := s.Login([]string{"-login", kind, "-login-file", LoginFile(s.Dirs.Home, kind), "-login-vm", "-login-salt", salt}, &out)
-	return out.Bytes(), err
+	data, kept, err := s.login(kind, salt).VMCopy()
+	if len(kept) > 0 {
+		list := strings.Join(kept, ", ")
+		if kind == agentlogin.Codex {
+			s.Warn(msg.CodexLoginKept(list))
+		} else {
+			s.Warn(msg.OpencodeLoginKept(list))
+		}
+	}
+	return data, err
 }
 
 // MCPSecrets returns the MCP servers in ~/.claude.json whose settings hold
 // secrets; none when it can't be read.
 func (s *Store) MCPSecrets() []string {
-	var out bytes.Buffer
-	if s.Login([]string{"-login", "claude", "-login-file", LoginFile(s.Dirs.Home, "claude"), "-login-secrets"}, &out) != nil {
+	servers, err := agentlogin.MCPSecrets(LoginFile(s.Dirs.Home, agentlogin.Claude))
+	if err != nil {
 		return nil
 	}
-	return lines(out.String())
+	return servers
 }
 
 // Redact returns an agent's settings file (format json, for JSONC too, or
 // toml) with the values under secret-looking keys replaced, and those
 // keys' paths. A file it can't read that way is an error.
 func Redact(format string, data []byte) ([]byte, []string, error) {
-	var out, paths bytes.Buffer
-	if err := proxy.Main([]string{"-redact", format}, proxy.IO{Stdin: bytes.NewReader(data), Stdout: &out, Stderr: &paths}); err != nil {
-		return nil, nil, err
-	}
-	return out.Bytes(), lines(paths.String()), nil
-}
-
-// lines returns s's lines that aren't blank, trimmed.
-func lines(s string) []string {
-	var ls []string
-	for l := range strings.Lines(s) {
-		if l = strings.TrimSpace(l); l != "" {
-			ls = append(ls, l)
-		}
-	}
-	return ls
+	return agentlogin.Redact(format, data)
 }
 
 var serviceName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
@@ -316,16 +294,16 @@ func loginOf(name string) (string, bool) {
 	return "", false
 }
 
-// Get returns the value the proxy asks for by name: a login's, through the
-// login helper (which refreshes an OAuth token when it's due), or a known
-// secret's. Anything else is no_secret.
+// Get returns the value the proxy asks for by name: a login's, from its
+// agent's file (agentlogin.File.Get, which refreshes an OAuth token when
+// it's due), or a known secret's. Anything else is no_secret.
 func (s *Store) Get(ctx context.Context, name string) (string, error) {
 	if kind, ok := loginOf(name); ok {
-		var out bytes.Buffer
-		if err := s.Login([]string{"-login", kind, "-login-file", LoginFile(s.Dirs.Home, kind), "-login-get", name}, &out); err != nil {
+		v, err := s.login(kind, "").Get(ctx, name)
+		if err != nil {
 			return "", msg.ProxyFailed(err.Error()).Because(err)
 		}
-		return strings.TrimSpace(out.String()), nil
+		return strings.TrimSpace(v), nil
 	}
 	v, err := s.Value(ctx, name)
 	if errors.Is(err, ErrNone) {
@@ -398,18 +376,20 @@ type binding struct {
 func (s *Store) WriteFiles(ctx context.Context, st *state.VM, salt string) error {
 	var logins []json.RawMessage
 	var hosts []string
-	// A login the helper can't read has no bindings.
+	// A login that can't be read has no bindings.
 	for _, kind := range s.Logins(tools.Names(st)) {
-		args := []string{"-login", kind, "-login-file", LoginFile(s.Dirs.Home, kind), "-login-bindings", "-login-salt", salt}
-		var out bytes.Buffer
-		var bs []json.RawMessage
-		if s.Login(args, &out) == nil && json.Unmarshal(out.Bytes(), &bs) == nil {
-			logins = append(logins, bs...)
+		bs, err := s.login(kind, salt).Bindings()
+		if err != nil {
+			continue
 		}
-		out.Reset()
-		if s.Login(append(args, "-login-hosts"), &out) == nil {
-			hosts = append(hosts, strings.Fields(out.String())...)
+		for _, b := range bs {
+			raw, err := json.Marshal(b)
+			if err != nil {
+				return err
+			}
+			logins = append(logins, raw)
 		}
+		hosts = append(hosts, agentlogin.Hosts(bs)...)
 	}
 	return s.writeFiles(ctx, st, salt, logins, hosts)
 }

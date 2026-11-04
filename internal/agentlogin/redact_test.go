@@ -1,18 +1,49 @@
-package proxy
+package agentlogin
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 )
 
+// redacted returns Redact's copy of in, and the redacted keys' paths, a line each.
 func redacted(t *testing.T, format, in string) (string, string) {
 	t.Helper()
-	var out, names bytes.Buffer
-	if err := redactCmd(format, strings.NewReader(in), &out, &names); err != nil {
+	out, paths, err := Redact(format, []byte(in))
+	if err != nil {
 		t.Fatal(err)
 	}
-	return out.String(), names.String()
+	names := ""
+	for _, p := range paths {
+		names += p + "\n"
+	}
+	return string(out), names
+}
+
+// What Redact refuses: a format it doesn't know, and a file that isn't one.
+func TestRedactRefuses(t *testing.T) {
+	for _, tc := range []struct{ format, in string }{
+		{"yaml", "a: b"},
+		{"json", "{"},
+		{"toml", "x = \"\"\"\nmulti\n\"\"\"\n"},
+	} {
+		if out, paths, err := Redact(tc.format, []byte(tc.in)); err == nil || out != nil || paths != nil {
+			t.Errorf("Redact(%s, %q) = %q, %q, %v", tc.format, tc.in, out, paths, err)
+		}
+	}
+}
+
+// A JSONC file's strings stay as they are, commas and comment markers in them included; and a file
+// with nothing to redact has no paths.
+func TestRedactJSONKeepsStrings(t *testing.T) {
+	out, names := redacted(t, "json", `{"a": ",}", "b": "x // y", "c": [1,], /* z */ "d": ", ]"}`)
+	for _, s := range []string{`"a": ",}"`, `"b": "x // y"`, `"d": ", ]"`} {
+		if !strings.Contains(out, s) {
+			t.Errorf("copy changed %s:\n%s", s, out)
+		}
+	}
+	if names != "" {
+		t.Errorf("names = %q", names)
+	}
 }
 
 // Codex's config.toml with secrets in headers and env, and settings that only name them.

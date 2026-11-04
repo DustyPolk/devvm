@@ -1,11 +1,9 @@
-package proxy
+package agentlogin
 
 // Agents' settings files copied into VMs with network policy (Codex's config.toml, opencode's
 // opencode.json, Claude Code's settings.json) can hold keys: an MCP server's headers or env, a
 // provider's apiKey. The proxy can't put those in (it only knows the logins), so the VM's copy gets
 // "devvm-redacted" for every value whose key looks like a secret's.
-//
-//   devvm _proxy -redact json|toml < FILE > COPY   (the redacted keys' paths on stderr, one per line)
 //
 // What's kept although its key matches: values that point elsewhere rather than hold a secret (an
 // env var's name, {env:X} or ${X}, a path), and non-strings.
@@ -14,10 +12,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/w3cj/devvm/internal/jsonc"
 )
 
 var (
@@ -42,42 +41,36 @@ func redactKeep(v string) bool {
 	return false
 }
 
-func redactCmd(format string, in io.Reader, out, names io.Writer) error {
-	data, err := io.ReadAll(in)
-	if err != nil {
-		return err
-	}
+// Redact returns an agent's settings file, format "json" (JSONC too, written back as JSON) or
+// "toml", with every value under a secret-looking key replaced by "devvm-redacted", and those keys'
+// paths, sorted. A file it can't read that way is an error: a multi-line TOML string, say, is
+// refused rather than copied unread.
+func Redact(format string, data []byte) ([]byte, []string, error) {
 	var paths []string
+	var out []byte
 	switch format {
 	case "json":
 		var v any
-		if err := json.Unmarshal(stripJSONC(data), &v); err != nil {
-			return fmt.Errorf("not JSON: %w", err)
+		if err := json.Unmarshal(jsonc.Strip(data), &v); err != nil {
+			return nil, nil, fmt.Errorf("not JSON: %w", err)
 		}
-		v = redactJSON(v, "", &paths)
-		b, err := json.MarshalIndent(v, "", "  ")
+		b, err := json.MarshalIndent(redactJSON(v, "", &paths), "", "  ")
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
-		if _, err := out.Write(append(b, '\n')); err != nil {
-			return err
-		}
+		b = append(b, '\n')
+		out = b
 	case "toml":
 		s, err := redactTOML(string(data), &paths)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
-		if _, err := io.WriteString(out, s); err != nil {
-			return err
-		}
+		out = []byte(s)
 	default:
-		return fmt.Errorf("unknown format %q", format)
+		return nil, nil, fmt.Errorf("unknown format %q", format)
 	}
 	sort.Strings(paths)
-	for _, p := range paths {
-		fmt.Fprintln(names, p)
-	}
-	return nil
+	return out, paths, nil
 }
 
 func redactJSON(v any, path string, paths *[]string) any {
@@ -101,47 +94,6 @@ func redactJSON(v any, path string, paths *[]string) any {
 		}
 	}
 	return v
-}
-
-// stripJSONC: opencode's files may be JSONC: // and /* */ comments, and trailing commas.
-func stripJSONC(b []byte) []byte {
-	var out []byte
-	inStr, esc := false, false
-	for i := 0; i < len(b); i++ {
-		c := b[i]
-		if inStr {
-			out = append(out, c)
-			switch {
-			case esc:
-				esc = false
-			case c == '\\':
-				esc = true
-			case c == '"':
-				inStr = false
-			}
-			continue
-		}
-		switch {
-		case c == '"':
-			inStr = true
-			out = append(out, c)
-		case c == '/' && i+1 < len(b) && b[i+1] == '/':
-			for i < len(b) && b[i] != '\n' {
-				i++
-			}
-			out = append(out, '\n')
-		case c == '/' && i+1 < len(b) && b[i+1] == '*':
-			i += 2
-			for i+1 < len(b) && (b[i] != '*' || b[i+1] != '/') {
-				i++
-			}
-			i++
-		default:
-			out = append(out, c)
-		}
-	}
-	// Trailing commas: a comma followed (after whitespace) by } or ].
-	return regexp.MustCompile(`,(\s*[}\]])`).ReplaceAll(out, []byte("$1"))
 }
 
 // TOML, line by line (Codex's config.toml): `key = "value"` lines, and `{ key = "value", ... }` inline

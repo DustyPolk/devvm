@@ -2,13 +2,11 @@ package netpolicy
 
 import (
 	"context"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -80,9 +78,7 @@ func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u U
 	return &Proxy{
 		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Secrets: store,
 		Start: daemon.Detach, Args: platform.ProcessArgs, ExcludeFromBackup: platform.ExcludeFromBackup,
-		InitCA: func(dir string) error {
-			return proxy.Main([]string{"-init-ca", dir}, proxy.IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
-		},
+		InitCA:    trust.InitCA,
 		Listening: ports.Listening, PortRange: platform.ChoosablePorts(), Tick: 500 * time.Millisecond, Signal: daemon.Signal, Getenv: os.Getenv,
 		Note: u.Note, Warn: u.Warn, Confirm: func(m msg.M) bool { return u.Confirm(m) },
 		Terminal: u.StdinIsTerminal,
@@ -126,7 +122,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		return none, err
 	}
 	if err := p.InitCA(ca); err != nil {
-		return none, msg.ProxyCAFailed(ca)
+		return none, msg.ProxyCAFailed(ca).Because(err)
 	}
 	if p.OS == "darwin" {
 		_ = p.ExcludeFromBackup(ctx, ca)

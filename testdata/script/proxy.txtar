@@ -1,7 +1,9 @@
-# devvm _proxy: the network policy proxy, hidden. --help lists its flags.
+# devvm _proxy: the network policy proxy, hidden. --help lists its one
+# flag, -config.
 exec devvm _proxy --help
 stdout '-config'
 ! stdout '-auth-file'
+! stdout '-init-ca|-login|-redact'
 ! stderr .
 exec devvm --help
 ! stdout _proxy
@@ -25,31 +27,16 @@ stderr '^devvm: proxy_failed reason=v2.json: version 2, not 1$'
 ! exec devvm _proxy -nope
 stderr '^devvm: proxy_failed reason=flag provided but not defined: -nope$'
 
-# -init-ca writes the CA and keeps it on the next run.
-exec devvm _proxy -init-ca ca
-exists ca/ca.pem ca/ca.key
-grep 'BEGIN CERTIFICATE' ca/ca.pem
-cp ca/ca.pem first.pem
-exec devvm _proxy -init-ca ca
-cmp ca/ca.pem first.pem
-
-# -redact: secret-named values replaced, their paths on stderr.
-stdin settings.json
-exec devvm _proxy -redact json
-stdout '"apiKey": "devvm-redacted"'
-stdout '"baseURL": "https://x"'
-! stdout dummy-key
-stderr '^provider.options.apiKey$'
-
-# -login -login-vm: the VM's copy holds placeholders, and what it copies as
-# it is is warned about.
-exec devvm _proxy -login codex -login-file auth.json -login-vm
-stdout '"OPENAI_API_KEY": "sk-devvm-proxy-managed-codex"'
-stdout '"extra": "x"'
-! stdout sk-real
-stderr '^devvm: codex_login_kept keys=extra$'
-exec devvm _proxy -login codex -login-file auth.json -login-bindings -login-hosts
-stdout '^api.openai.com:443$'
+# What only the host does (devvm's CA, agents' logins, redaction) runs in
+# devvm itself: none of it is reachable from the proxy's arguments.
+! exec devvm _proxy -init-ca ca
+stderr '^devvm: proxy_failed reason=flag provided but not defined: -init-ca$'
+! exists ca
+! exec devvm _proxy -login codex -login-file auth.json -login-vm
+stderr '^devvm: proxy_failed reason=flag provided but not defined: -login$'
+! stdout .
+! exec devvm _proxy -redact json
+stderr '^devvm: proxy_failed reason=flag provided but not defined: -redact$'
 
 -- open.json --
 {"version": 1, "listen": "127.0.0.1:0", "password": "k3y"}
@@ -57,8 +44,5 @@ stdout '^api.openai.com:443$'
 {"version": 1, "listen": "127.0.0.1:0"}
 -- v2.json --
 {"version": 2, "listen": "127.0.0.1:0", "password": "k3y"}
-
--- settings.json --
-{"provider": {"options": {"apiKey": "dummy-key", "baseURL": "https://x"}}}
 -- auth.json --
-{"OPENAI_API_KEY": "sk-real", "extra": "x"}
+{"OPENAI_API_KEY": "sk-real"}

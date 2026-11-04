@@ -25,28 +25,26 @@ Once it listens, it says so with the address it listens on (`daemon.Ready`) in t
 | File | What |
 | --- | --- |
 | `config.go` | `Config`, the one config a VM's proxy and a build's run with (`Encode`, `Sum`, `ReadConfig`, `ConfigVersion`), and the checked reads of the files devvm names to the proxy: `ReadRegular`, which policy files are read with here, in `devvm network` and in doctor, and `readPrivate`, for the config and the links' list (`ErrNotRegular`, `ErrNotPrivate`, `ErrTooLong`) |
-| `proxy.go` | `Main` and the flags, the config applied (`apply`, `serve`), the listener, CONNECT and absolute-form handling, the address floor, the log (`Event`, `AllowRule`: `devvm network log` reads it), the `devvm.proxy` endpoints, `-init-ca` |
+| `proxy.go` | `Main` and its one flag, `-config`, the config applied (`apply`, `serve`), the listener, CONNECT and absolute-form handling, the host names it takes (`HostOK`, which `agentlogin` checks MCP servers' hosts with too), the address floor, the log (`Event`, `AllowRule`: `devvm network log` reads it), the `devvm.proxy` endpoints |
 | `policy.go` | the rule syntax and matching (`ValidRule`: `devvm network allow`, `deny` and `rm` take only these); `ParsePolicy`, the one strict parser of policy files, which `devvm network` and doctor use too: each line that holds more than a comment, with its number and whether it's a rule; the built-in policies are read once (`readBuiltins`), every line a rule, and come first in the union; the user's policy files are re-read when they change, each only as a regular file of at most 1 MiB (`ReadRegular`, `PolicyMax`; one that isn't keeps its last rules, logged once), and each line that isn't a rule is logged and skipped, except one that starts with `!` (`BrokenDeny`), which makes the policy deny everything, as refused blocks naming the file and line, until it's fixed |
 | `sni.go` | reads a tunnel's ClientHello to check its server name |
 | `splice.go` | every tunnel the proxy carries itself: `hijack` takes a `CONNECT`'s connection from the HTTP server and answers `200`, and `splice` passes the bytes both ways as they are, passes on the end of what the client sent, and ends once the server's bytes end or the client has gone |
-| `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA (a day each, never past the CA's end; once the CA has ended, `CONNECT`s to be intercepted answered `403` and logged as refused with `caEndedReason`), header substitution, values from `-secret-cmd` (cached briefly, never logged) |
+| `secrets.go` | interception for hosts with a bound secret: certificates from devvm's CA, which devvm makes (`trust.InitCA`) and the proxy only loads (a day each, never past the CA's end; once the CA has ended, `CONNECT`s to be intercepted answered `403` and logged as refused with `caEndedReason`), header substitution, values from `secret_cmd` (cached briefly, never logged); `writeAtomic`, the proxy's one writer of whole files |
 | `upstream.go` | `upstream`: a company proxy that allowed requests go through (`CONNECT` by name for tunnels and interception, absolute form for plain HTTP), `NO_PROXY`, and the floor for names it resolves (`floorUpstream`) |
 | `rotate.go` | the logs' rotation past `LogLimit` (10 MiB): the event log renamed to `<log>.1` under the file's lock, the proxy's own log, which is also its stderr, copied there and emptied; `OpenEventLog`, the event log's writer, which netpolicy's `AppendEvent` uses too, and which opens the log again before a line once the other writer has rotated it |
-| `logins.go` | Codex and opencode logins, and Claude Code's MCP secrets (`~/.claude.json`): the VM's copy with placeholders, bindings, and OAuth refresh on the host |
 | `nixcache.go` | `nix_cache`: the shared Nix cache at `http://devvm.proxy/nix/`, its path pattern (`nixPath`), narinfo checks (`parseNarinfo`), NAR checks, the cap and its trim (`NixCacheUsage`, `TrimNixCache`) |
 | `links.go` | `links`: the VM's links' list (`LinkList`, `LinkEntry`), their sockets' names (`LinkSocket`, `LinkHash`), their addresses and domain, which devvm's other packages use too (`IsLinkAddr`, `LinkAddr`, `LinkDomain`), matching (`linkFor`), `CONNECT` and absolute-form requests to a link |
-| `redact.go` | agents' settings files (`settings.json`, `config.toml`, opencode's config) for VMs with network policy: values under secret-looking keys replaced |
 | `*_test.go` | unit tests, and fuzz targets for policy rules (`FuzzParseRule`), request targets (`FuzzRequest`), ClientHellos (`FuzzClientHello`) and the Nix cache's paths (`FuzzNixPath`); `testdata/nix/` holds a narinfo and its NAR from cache.nixos.org |
 
 ## How devvm runs it
 
-`internal/cli/proxy.go` is the hidden `devvm _proxy` command: it hands its arguments to `Main` with the run UI's streams (`IO`: the event log and data on its `Stdout`, the proxy's own log lines on its `Stderr`) and devvm's own files (`IO.FS`, which is `assets.FS`, so the package never imports `assets`), warns through it about logins copied as they are (`IO.Kept`, `secrets.LoginKept`), and ends an error with its `Die`. The package itself prints nothing.
+`internal/cli/proxy.go` is the hidden `devvm _proxy` command: it hands its arguments to `Main` with the run UI's streams (`IO`: the event log and `-help` on its `Stdout`, the proxy's own log lines on its `Stderr`) and devvm's own files (`IO.FS`, which is `assets.FS`, so the package never imports `assets`), and ends an error with its `Die`. The package itself prints nothing.
 
 ```text
 devvm _proxy -config ~/.local/share/devvm/vms/<hash>/run/proxy.json
 ```
 
-Flags take one dash or two. The proxy itself has one, `-config`, and everything it runs with is in that file, `Config` as JSON, which `netpolicy.Proxy` writes for a VM's proxy and `backend.ProxyStarter` for a build's, each whole (`Encode`), mode 600, before it starts the proxy. The file holds the VM's password and the company proxy's credentials, which is why none of it is in the arguments: a process's arguments are visible to other users. `ReadConfig` reads it once, as the proxy starts: a regular file, not a symbolic link, owned by the proxy's user and readable and writable by nobody else, at most 1 MiB, of `ConfigVersion` (`"version": 1`), with no field `Config` lacks (`DisallowUnknownFields`), with a password, a loopback `listen` address, `ca` and `ca_key` together and a `nix_cache_max` of at least 0. Anything else is an error, and the proxy never listens. A running VM's proxy starts again when the config devvm would start it with has another `Sum`, the SHA-256 of its encoding.
+Flags take one dash or two. The proxy has one, `-config`, and everything it runs with is in that file, `Config` as JSON, which `netpolicy.Proxy` writes for a VM's proxy and `backend.ProxyStarter` for a build's, each whole (`Encode`), mode 600, before it starts the proxy. The file holds the VM's password and the company proxy's credentials, which is why none of it is in the arguments: a process's arguments are visible to other users. `ReadConfig` reads it once, as the proxy starts: a regular file, not a symbolic link, owned by the proxy's user and readable and writable by nobody else, at most 1 MiB, of `ConfigVersion` (`"version": 1`), with no field `Config` lacks (`DisallowUnknownFields`), with a password, a loopback `listen` address, `ca` and `ca_key` together and a `nix_cache_max` of at least 0. Anything else is an error, and the proxy never listens. A running VM's proxy starts again when the config devvm would start it with has another `Sum`, the SHA-256 of its encoding.
 
 | Field | What |
 | --- | --- |
@@ -71,19 +69,10 @@ Flags take one dash or two. The proxy itself has one, `-config`, and everything 
 | `link_sockets` | with `links`: the folder of the links' sockets, devvm's run folder (`~/.local/share/devvm/run`); without it, no link is reached |
 | `devvm_sha256`, `ca_sha256` | the SHA-256 of the devvm binary and of devvm's CA certificate: not read by the proxy, there so a new binary or CA changes the config's `Sum` and devvm starts the proxy again |
 
-Other modes, each doing one thing and returning:
-
-| | |
-| --- | --- |
-| `-init-ca DIR` | write a new CA (`ca.pem`, `ca.key`, each written whole; valid 30 days; no host name in it) into DIR unless one with over a week left is there |
-| `-login claude -login-file F -login-secrets` | print the MCP servers in `~/.claude.json` whose settings hold env values or headers |
-| `-login codex\|opencode\|claude -login-file F -login-vm` | print the VM's copy of the login file, with placeholders (`-login-salt KEY`, or `$DEVVM_LOGIN_SALT`, which keeps it out of the arguments: the VM's random salt, which ends them) |
-| `-login … -login-bindings` | print the login's secret bindings (JSON, no values; `-login-salt` as above); with `-login-hosts`, their hosts as allowlist lines (`host:443`) |
-| `-login … -login-get NAME` | print one value, refreshing an OAuth token when it's due |
-| `-redact json\|toml` | copy stdin to stdout with values under secret-looking keys replaced by `devvm-redacted`, their paths on stderr |
+Running the proxy is `Main`'s only mode. What only the host does for network policy runs in devvm itself, never through the proxy's arguments: `trust.InitCA` makes devvm's CA (`ca.pem`, `ca.key`, each written whole; valid 30 days; no host name in it) unless one with over a week left is there, and `internal/agentlogin` makes the VM's copies of agents' login and settings files, their bindings and their values, which `devvm secret get NAME`, the proxy's `secret_cmd`, prints.
 
 Inside the VM, `http://devvm.proxy/blocked` lists recent blocks, `/blocked/new` those since the last prompt, `/ca.pem` serves the CA certificate, and with `nix_cache`, `/nix/` is the shared Nix cache.
 
 ## Testing
 
-`go test ./internal/proxy` runs the unit tests and the fuzz targets' seeds; `go test -fuzz FuzzRequest ./internal/proxy` fuzzes one. `testdata/script/proxy.txtar` runs `devvm _proxy` itself, and `nix_cache.txtar` runs it with a config of its own.
+`go test ./internal/proxy` runs the unit tests and the fuzz targets' seeds; `go test -fuzz FuzzRequest ./internal/proxy` fuzzes one. `testdata/script/proxy.txtar` runs `devvm _proxy` itself and checks that it refuses any flag but `-config`. `nix_cache.txtar` runs it with a config of its own. `internal/agentlogin` and `internal/trust` have the tests of the logins, the redaction and the CA.

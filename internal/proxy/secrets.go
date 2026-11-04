@@ -212,69 +212,17 @@ var (
 	leaves  = map[string]*tls.Certificate{}
 )
 
-// The CA lasts caLife and is replaced when it has less than caRenew left: a key that leaks (in a
-// backup, say) stops working within weeks. VMs trust a new CA from their next launch, which starts
-// their proxy again with it. A proxy keeps the CA it started with, as its VM trusts no other, so one
-// whose VM runs past that CA's end can intercept nothing: leafFor mints no leaf past the CA's end,
-// and caEndedRefusal refuses the CONNECT before its tunnel opens, with caEndedReason, which says
-// to open the VM again.
-const (
-	caLife  = 30 * 24 * time.Hour
-	caRenew = 7 * 24 * time.Hour
-)
-
-// initCA writes a new CA into dir (ca.pem, ca.key mode 600) unless a valid one with over caRenew
-// left is there. One valid for longer than caLife (made before CAs were rotated) is replaced too.
-func initCA(dir string) error {
-	certPath, keyPath := filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key")
-	if _, err := os.Stat(keyPath); err == nil {
-		if pair, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
-			if c, err := x509.ParseCertificate(pair.Certificate[0]); err == nil && time.Until(c.NotAfter) > caRenew &&
-				c.NotAfter.Sub(c.NotBefore) <= caLife+time.Hour {
-				return nil
-			}
-		}
-	}
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return err
-	}
-	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	tmpl := &x509.Certificate{
-		SerialNumber: serial,
-		// No host name: every VM sees this certificate.
-		Subject:               pkix.Name{CommonName: "devvm proxy CA", Organization: []string{"devvm"}},
-		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(caLife),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-		MaxPathLenZero:        true,
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	if err != nil {
-		return err
-	}
-	kder, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	// Each file whole or not at all (temp file, then rename), so a crash halfway leaves no pair that
-	// doesn't match.
-	if err := writeAtomic(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kder}), 0o600); err != nil {
-		return err
-	}
-	return writeAtomic(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)
-}
+// devvm makes its CA (trust.InitCA) and replaces it before it ends; VMs trust a new CA from their
+// next launch, which starts their proxy again with it. A proxy keeps the CA it started with, as its
+// VM trusts no other, so one whose VM runs past that CA's end can intercept nothing: leafFor mints
+// no leaf past the CA's end, and caEndedRefusal refuses the CONNECT before its tunnel opens, with
+// caEndedReason, which says to open the VM again.
 
 // writeAtomic replaces path with data, mode mode, whole or not at all: a
 // temporary file in its folder (.<name>.tmp-*), renamed over it. It's the
 // proxy's one writer of whole files (the proxy imports only the standard
-// library, so not devvm's state.WriteFile): the CA, login files, the Nix
-// cache's files and the rotated log.
+// library, so not devvm's state.WriteFile): the Nix cache's files and the
+// rotated log.
 func writeAtomic(path string, data []byte, mode os.FileMode) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
 	if err != nil {

@@ -501,27 +501,27 @@ func TestOddHostsRefused(t *testing.T) {
 		}
 	}
 	for _, ok := range []string{"example.com", "a-b.c_d.test", "10.0.0.1", "[fd00::1]", "localhost", "1password.com", "x.0xyz.dev"} {
-		if !hostOK(ok) {
-			t.Errorf("hostOK(%q) = false", ok)
+		if !HostOK(ok) {
+			t.Errorf("HostOK(%q) = false", ok)
 		}
 	}
 	// Addresses in shorthand, which a company proxy may read as inet_aton does: never names.
 	for _, bad := range []string{"127.1", "2130706433", "0x7f000001", "10.1", "127.0.1.", "a.0x7f"} {
-		if hostOK(bad) {
-			t.Errorf("hostOK(%q) = true", bad)
+		if HostOK(bad) {
+			t.Errorf("HostOK(%q) = true", bad)
 		}
 	}
 	// A name is splitHostPort's form: no trailing dot, and no other empty label.
 	for _, bad := range []string{"evil.test.", "evil.test..", "evil..test", ".evil.test", ".", ".."} {
-		if hostOK(bad) {
-			t.Errorf("hostOK(%q) = true", bad)
+		if HostOK(bad) {
+			t.Errorf("HostOK(%q) = true", bad)
 		}
 	}
 	// Under ** with a deny of evil.test, every form with more dots gets 400: the policy trims one
 	// dot of its own, so evil.test.. alone (evil.test. to it) would pass the deny.
 	pol = writePolicy(t, "**\n!evil.test\n")
 	if ok, _, _ := pol.verdict("evil.test..", 443); !ok {
-		t.Errorf("the policy denies evil.test..: then this test doesn't show hostOK refusing it")
+		t.Errorf("the policy denies evil.test..: then this test doesn't show HostOK refusing it")
 	}
 	for _, h := range []string{"evil.test..", "evil.test...", "evil.test...."} {
 		if code, body := roundTrip(t, proxy.Listener.Addr().String(), "CONNECT "+h+":443 HTTP/1.1\r\nHost: x\r\n\r\n"); code != http.StatusBadRequest {
@@ -683,12 +683,13 @@ func writeConfig(t *testing.T, c Config) string {
 	return f
 }
 
-// Main: -help prints the flags, bad arguments, a missing config and one that can't run are errors,
-// and nothing is served then.
+// Main: -help prints the one flag, -config; bad arguments, a missing config and one that can't run
+// are errors, and nothing is served then. The proxy has no other mode: what the host does alone
+// (the CA, agents' logins, redaction) isn't reachable from its arguments.
 func TestMainRefuses(t *testing.T) {
 	var out, errs bytes.Buffer
-	std := IO{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errs}
-	if err := Main([]string{"--help"}, std); err != nil || !strings.Contains(out.String(), "-config") {
+	std := IO{Stdout: &out, Stderr: &errs}
+	if err := Main([]string{"--help"}, std); err != nil || strings.Count("\n"+out.String(), "\n  -") != 1 || !strings.Contains(out.String(), "-config") {
 		t.Errorf("--help: %v, %q", err, out.String())
 	}
 	for _, args := range [][]string{
@@ -696,6 +697,9 @@ func TestMainRefuses(t *testing.T) {
 		{"extra"},
 		{},
 		{"-listen", "127.0.0.1:0"},
+		{"-init-ca", t.TempDir()},
+		{"-login", "codex", "-login-file", filepath.Join(t.TempDir(), "auth.json"), "-login-vm"},
+		{"-redact", "json"},
 		{"-config", filepath.Join(t.TempDir(), "missing")},
 		{"-config", writeConfig(t, Config{Listen: "127.0.0.1:0"})},
 	} {
@@ -746,7 +750,7 @@ func TestMainRuns(t *testing.T) {
 			Listen: addr, VM: "devvm-x", Password: "k3y", Lifeline: pidFile, Log: logFile,
 			Policies: []string{filepath.Join(dir, "missing")}, Links: filepath.Join(dir, "devvm-x.links.json"),
 			BuiltinPolicies: []string{"layers/base.policy"},
-		})}, IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: errs, FS: fstest.MapFS{"layers/base.policy": {Data: []byte("base.test:8443\n")}}})
+		})}, IO{Stdout: io.Discard, Stderr: errs, FS: fstest.MapFS{"layers/base.policy": {Data: []byte("base.test:8443\n")}}})
 	}()
 	pu, _ := url.Parse("http://devvm:k3y@" + addr)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}}
@@ -845,7 +849,7 @@ func FuzzParseRule(f *testing.F) {
 		if strings.ContainsAny(r.host, " /\\#") {
 			t.Fatalf("%q: host %q", line, r.host)
 		}
-		if h := r.host; h != "" && h != "**" && !strings.HasPrefix(h, "*.") && (!hostOK(h) || !r.matchHost(h)) {
+		if h := r.host; h != "" && h != "**" && !strings.HasPrefix(h, "*.") && (!HostOK(h) || !r.matchHost(h)) {
 			t.Fatalf("%q: host %q isn't a host it matches", line, h)
 		}
 		_ = r.matchHost("example.com")
@@ -886,7 +890,7 @@ func FuzzRequest(f *testing.F) {
 			}
 			host, port = splitHostPort(r.URL.Host, def)
 		}
-		if !hostOK(host) {
+		if !HostOK(host) {
 			return
 		}
 		for _, c := range host {
