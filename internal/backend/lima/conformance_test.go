@@ -1,0 +1,61 @@
+package lima
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/stubtest"
+)
+
+// conformanceSubject is l, holding base's dummy image, as the
+// conformance suite checks it.
+func conformanceSubject(t *testing.T, l *Lima) backendtest.Subject {
+	t.Helper()
+	if _, err := l.createFromUbuntu(t.Context(), dummyBase, backend.Size{CPUs: 2, MemoryGiB: 3}); err != nil {
+		t.Fatal(err)
+	}
+	return backendtest.Subject{Backend: l, Image: strings.TrimPrefix(dummyBase, ImagePrefix), Dir: filepath.Join(l.Dirs.Home, "conformance")}
+}
+
+// Lima keeps backend.Backend's contract, on the limactl stub, whose VMs
+// start, and on real Lima's dummy instances, which can't: there the
+// checks that need a running VM are skipped, and tests/e2e.sh's run
+// them on real VMs, through devvm.
+func TestConformance(t *testing.T) {
+	t.Run("stub", func(t *testing.T) {
+		backendtest.Conformance(t, func(t *testing.T) backendtest.Subject {
+			stubs := stubtest.New(t)
+			l, _ := dummyLima(t, sandboxDirs(t), stubtest.ExecRunner{})
+			// Linux's confinement, as macOS's runs limactl inside
+			// sandbox-exec.
+			l.OS = "linux"
+			s := conformanceSubject(t, l)
+			s.Boots = true
+			// A start outside Start: limactl's own, on a hostagent of
+			// its own, which lasts.
+			s.Restart = func(ctx context.Context, vm string) error {
+				stubs.Write(t, "hostagent", strconv.Itoa(os.Getppid()))
+				for _, args := range [][]string{{"stop", vm}, {"start", "--tty=false", vm}} {
+					if err := l.Runner.Run(ctx, msg.M{}, l.limactl(ctx, args...)); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			return s
+		})
+	})
+	t.Run("lima", func(t *testing.T) {
+		backendtest.Conformance(t, func(t *testing.T) backendtest.Subject {
+			l, _ := realLima(t)
+			return conformanceSubject(t, l)
+		})
+	})
+}

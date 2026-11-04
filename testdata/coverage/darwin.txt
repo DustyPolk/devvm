@@ -2,9 +2,9 @@
 # mise run test fails when a package drops below its line; mise run coverage raises them.
 cmd/devvm 100.0
 internal/agentlogin 94.2
-internal/backend 96.0
-internal/backend/backendtest 46.5
-internal/backend/lima 88.8
+internal/backend 97.0
+internal/backend/backendtest 74.4
+internal/backend/lima 89.5
 internal/backend/registry 100.0
 internal/build 87.5
 internal/cli 88.6

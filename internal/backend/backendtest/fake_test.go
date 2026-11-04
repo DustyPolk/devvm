@@ -32,7 +32,7 @@ func TestFakeRecordsAndAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if in.Status != backend.StatusRunning || in.Size != (backend.Size{CPUs: 2, MemoryGiB: 4}) || !slices.Equal(in.AgentDirs, []string{"/h/.claude"}) {
+	if in.Status != backend.StatusRunning || in.Size != (backend.Size{CPUs: 2, MemoryGiB: 4, DiskGiB: 100}) || !slices.Equal(in.AgentDirs, []string{"/h/.claude"}) {
 		t.Errorf("instance: %+v", in)
 	}
 	if c, err := f.Shell(ctx, "v", "/p"); err != nil || c.Path != "/bin/true" {
@@ -56,17 +56,20 @@ func TestFakeRecordsAndAnswers(t *testing.T) {
 	}
 }
 
-// A stopped VM's start refuses a disk smaller than its own, changing
-// nothing.
-// Running gives the lifeline, the start's ID and its confinement; the
-// roles Lima has and the fake doesn't answer none.
+// Running gives the lifeline, the start's ID and its confinement: a VM
+// preset is confined, one the fake made only once Start started it with
+// NetProxy; the roles Lima has and the fake doesn't answer none.
 func TestFakeRunningAndNone(t *testing.T) {
 	ctx := t.Context()
 	f := New("fake", nil)
 	f.LifelineFile = "/ha.pid"
+	f.Instances["v"] = backend.Instance{Name: "v", Status: backend.StatusRunning}
+	if r, err := f.Running(ctx, "v"); r != (backend.Run{ID: "start-0", Lifeline: "/ha.pid", Confined: true}) || err != nil {
+		t.Errorf("preset running: %+v, %v", r, err)
+	}
 	f.Instances["v"] = backend.Instance{Name: "v", Status: backend.StatusStopped}
 	if r, err := f.Running(ctx, "v"); r != (backend.Run{Lifeline: "/ha.pid", Confined: true}) || err != nil {
-		t.Errorf("stopped: %+v, %v", r, err)
+		t.Errorf("preset stopped: %+v, %v", r, err)
 	}
 	if err := f.Start(ctx, "v", backend.Want{}, backend.Confinement{Net: backend.NetDirect}); err != nil {
 		t.Fatal(err)
@@ -91,6 +94,8 @@ func TestFakeRunningAndNone(t *testing.T) {
 	}
 }
 
+// A stopped VM's start refuses a disk smaller than its own, changing
+// nothing.
 func TestFakeStartValidates(t *testing.T) {
 	ctx := t.Context()
 	f := New("fake", nil)

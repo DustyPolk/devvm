@@ -162,6 +162,7 @@ func TestGuardLetsThrough(t *testing.T) {
 		backend.FeatureEgressProxy: backend.Emulated(false), backend.FeatureBuildImage: backend.Native,
 		backend.FeatureBuildConfinement: backend.Native,
 	})
+	f.ImageKeys = []string{baseKey}
 	var warned msg.Recorder
 	r.Unreviewed, r.Warn = backend.ParseUnreviewed("fake:egress-proxy"), warned.Add
 	if err := b.CreateVM(ctx, baseKey, backend.VMSpec{Name: "devvm-x", Project: "/p"}); err != nil {
