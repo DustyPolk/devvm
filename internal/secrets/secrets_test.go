@@ -486,11 +486,11 @@ func TestVMCopies(t *testing.T) {
 		t.Errorf("warned %q, want %q", warned, want)
 	}
 	out, keys, err := Redact("json", []byte(`{"env":{"API_TOKEN":"tok-secret","NAME":"x"}}`))
-	if err != nil || strings.Contains(string(out), "tok-secret") || !slices.Equal(keys, []string{"env.API_TOKEN"}) {
+	if err != nil || strings.Contains(string(out), "tok-secret") || !slices.Equal(keys, []string{"env.API_TOKEN", "env.NAME"}) {
 		t.Errorf("Redact = %s, %q, %v", out, keys, err)
 	}
-	if _, _, err := Redact("toml", []byte("x = \"\"\"\nmulti\n\"\"\"\n")); err == nil {
-		t.Error("Redact took a multi-line TOML string")
+	if _, _, err := Redact("toml", []byte("x = \"\"\"\nunclosed\n")); err == nil {
+		t.Error("Redact took a file that isn't TOML")
 	}
 }
 

@@ -133,8 +133,7 @@ first=$(sed -n '/"files": \[/{n;s/.*"\([^"]*\)".*/\1/p;}' "$FAILS_dir/vm.json")
 {"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}
 -- config.toml --
 note = """
-testfake-multiline
-"""
+testfake-unclosed
 -- history.jsonl --
 {"prompt":"testfake-history"}
 -- vm-plain --

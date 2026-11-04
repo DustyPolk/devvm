@@ -637,7 +637,7 @@ func scrubURL(raw string) string {
 }
 
 // scrubArgs: a server's arguments with secret values replaced: after a secret-named flag
-// (--api-key X), in --flag=X with one, and any that look like a key.
+// (--api-key X), in --flag=X with one, any that look like a key, and URLs' (scrubURL).
 func scrubArgs(v any) (any, bool) {
 	as, ok := v.([]any)
 	if !ok {
@@ -658,11 +658,16 @@ func scrubArgs(v any) (any, bool) {
 		case strings.HasPrefix(prev, "-") && !strings.Contains(prev, "=") && secretName.MatchString(prev) && !strings.HasPrefix(s, "-"):
 			out[i], changed = "devvm-redacted", true
 		case strings.HasPrefix(s, "-") && strings.Contains(s, "="):
-			if k, val, _ := strings.Cut(s, "="); val != "" && (secretName.MatchString(k) || secretLike(val)) {
+			k, val, _ := strings.Cut(s, "=")
+			if val != "" && (secretName.MatchString(k) || secretLike(val)) {
 				out[i], changed = k+"=devvm-redacted", true
+			} else if u := scrubURL(val); strings.Contains(val, "://") && u != val {
+				out[i], changed = k+"="+u, true
 			}
 		case secretLike(s):
 			out[i], changed = "devvm-redacted", true
+		case strings.Contains(s, "://") && scrubURL(s) != s:
+			out[i], changed = scrubURL(s), true
 		}
 	}
 	return out, changed

@@ -3,18 +3,25 @@ package agentlogin
 // Agents' settings files copied into VMs with network policy (Codex's config.toml, opencode's
 // opencode.json, Claude Code's settings.json) can hold keys: an MCP server's headers or env, a
 // provider's apiKey. The proxy can't put those in (it only knows the logins), so the VM's copy gets
-// "devvm-redacted" for every value whose key looks like a secret's.
+// "devvm-redacted" for every value whose key looks like a secret's, every value of an env or headers
+// table, and the secrets in arguments and URLs (scrubArgs, scrubURL), as ~/.claude.json's MCP servers
+// get. Each file is parsed whole, and one that doesn't parse is refused: no line reaches the VM
+// unread.
 //
 // What's kept although its key matches: values that point elsewhere rather than hold a secret (an
 // env var's name, {env:X} or ${X}, a path), and non-strings.
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/BurntSushi/toml"
 
 	"github.com/w3cj/devvm/internal/jsonc"
 )
@@ -24,12 +31,31 @@ var (
 	redactName = regexp.MustCompile(`(?i)(key|token|secret|passw|^authorization$|^proxy-authorization$|^cookie$)`)
 	envName    = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 	envRef     = regexp.MustCompile(`^(\{(env|file):[^}]*\}|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)$`)
+	// A switch or a port, kept in env tables: true, false or a number of at most five digits.
+	plainValue = regexp.MustCompile(`^(?i:true|false|[0-9]{1,5})$`)
+	// An env variable whose name says it holds a credential, or headers, wherever it is: its
+	// value goes whole, a URL too. TOKEN only as a word, as MAX_OUTPUT_TOKENS counts model tokens.
+	credName = regexp.MustCompile(`(?i)(key|token($|_)|secret|pass|auth|credential|cookie|header)`)
+	// Claude Code's own configuration variables (code.claude.com/docs/en/env-vars), which its
+	// settings.json's env keeps unless credName matches: the model's, CLAUDE_CODE_*, DISABLE_*,
+	// MAX_* and *_TIMEOUT_MS.
+	claudeEnv = regexp.MustCompile(`^(ANTHROPIC_(MODEL|SMALL_FAST_MODEL|DEFAULT_[A-Z0-9]+_MODEL|CUSTOM_MODEL_OPTION)(_[A-Z0-9_]+)?|` +
+		`CLAUDE_CODE_[A-Z0-9_]+|DISABLE_[A-Z0-9_]+|MAX_[A-Z0-9_]+|[A-Z0-9_]+_TIMEOUT_MS)$`)
 )
+
+// agentSetting: the value at path, under key k, is one of Claude Code's configuration variables in
+// its settings' top-level env (claudeEnv), and its name doesn't say it's a credential (credName).
+func agentSetting(path, k string) bool {
+	return path == "env."+k && claudeEnv.MatchString(k) && !credName.MatchString(k)
+}
+
+// redactMark is what the VM's copy holds in place of a secret.
+const redactMark = "devvm-redacted"
 
 // redactKeep: a value that names where a secret is rather than holding it.
 func redactKeep(v string) bool {
 	switch {
-	case v == "" || v == "devvm-redacted":
+	case v == "" || v == redactMark:
 		return true
 	case envName.MatchString(v): // an env var's name (Codex's env_key)
 		return true
@@ -41,130 +67,147 @@ func redactKeep(v string) bool {
 	return false
 }
 
+// wholeTable: a table, at path under key k, every string value of which is a secret's, such as an
+// MCP server's env or headers.
+func wholeTable(path, k string) bool {
+	switch strings.ToLower(k) {
+	case "env", "environment", "headers", "http_headers":
+		return true
+	case "set": // Codex's [shell_environment_policy] set = { VAR = "value" }
+		return path == "shell_environment_policy.set" || strings.HasSuffix(path, ".shell_environment_policy.set")
+	}
+	return false
+}
+
 // Redact returns an agent's settings file, format "json" (JSONC too, written back as JSON) or
-// "toml", with every value under a secret-looking key replaced by "devvm-redacted", and those keys'
-// paths, sorted. A file it can't read that way is an error: a multi-line TOML string, say, is
-// refused rather than copied unread.
+// "toml" (written back without its comments), with its secrets replaced by "devvm-redacted", and
+// the replaced values' paths, sorted. A file that doesn't parse is an error: it's refused rather
+// than copied unread.
 func Redact(format string, data []byte) ([]byte, []string, error) {
-	var paths []string
+	var r redaction
 	var out []byte
 	switch format {
 	case "json":
+		d := json.NewDecoder(bytes.NewReader(jsonc.Strip(data)))
+		d.UseNumber()
 		var v any
-		if err := json.Unmarshal(jsonc.Strip(data), &v); err != nil {
+		if err := d.Decode(&v); err != nil {
 			return nil, nil, fmt.Errorf("not JSON: %w", err)
 		}
-		b, err := json.MarshalIndent(redactJSON(v, "", &paths), "", "  ")
-		if err != nil {
+		if _, err := d.Token(); !errors.Is(err, io.EOF) {
+			return nil, nil, errors.New("not JSON: more after its value")
+		}
+		var b bytes.Buffer
+		e := json.NewEncoder(&b)
+		e.SetEscapeHTML(false)
+		e.SetIndent("", "  ")
+		if err := e.Encode(r.value(v, "", "", false)); err != nil {
 			return nil, nil, err
 		}
-		b = append(b, '\n')
-		out = b
+		out = b.Bytes()
 	case "toml":
-		s, err := redactTOML(string(data), &paths)
-		if err != nil {
+		var m map[string]any
+		if _, err := toml.Decode(string(data), &m); err != nil {
+			return nil, nil, fmt.Errorf("not TOML: %w", err)
+		}
+		var b bytes.Buffer
+		if err := toml.NewEncoder(&b).Encode(r.value(m, "", "", false)); err != nil {
 			return nil, nil, err
 		}
-		out = []byte(s)
+		out = b.Bytes()
 	default:
 		return nil, nil, fmt.Errorf("unknown format %q", format)
 	}
-	sort.Strings(paths)
-	return out, paths, nil
+	sort.Strings(r.paths)
+	return out, r.paths, nil
 }
 
-func redactJSON(v any, path string, paths *[]string) any {
+// redaction is one file's: the paths of the values it replaced.
+type redaction struct{ paths []string }
+
+func joinPath(path, k string) string {
+	if path == "" {
+		return k
+	}
+	return path + "." + k
+}
+
+// value returns v, at path (key k of its parent), with its secrets taken out. secret: every
+// string in v is one, as v is under a secret-looking key or in a table of secrets (secretIn).
+func (r *redaction) value(v any, path, k string, secret bool) any {
 	switch t := v.(type) {
+	case string:
+		return r.str(t, path, k, secret)
 	case map[string]any:
-		for k, x := range t {
-			p := k
-			if path != "" {
-				p = path + "." + k
-			}
-			if s, ok := x.(string); ok && redactName.MatchString(k) && !redactKeep(s) {
-				t[k] = "devvm-redacted"
-				*paths = append(*paths, p)
-				continue
-			}
-			t[k] = redactJSON(x, p, paths)
+		for ck, x := range t {
+			t[ck] = r.value(x, joinPath(path, ck), ck, secret || secretIn(path, k, ck, x))
+		}
+	case []map[string]any: // TOML's [[tables]]
+		for i, x := range t {
+			r.value(x, fmt.Sprintf("%s[%d]", path, i), k, secret)
 		}
 	case []any:
-		for i, x := range t {
-			t[i] = redactJSON(x, fmt.Sprintf("%s[%d]", path, i), paths)
-		}
+		return r.list(t, path, k, secret)
 	}
 	return v
 }
 
-// TOML, line by line (Codex's config.toml): `key = "value"` lines, and `{ key = "value", ... }` inline
-// tables, under [table] headers. Multi-line strings are refused rather than copied unread.
-var (
-	tomlTable   = regexp.MustCompile(`^\s*\[\[?\s*([^\]]+?)\s*\]\]?\s*(#.*)?$`)
-	tomlKV      = regexp.MustCompile(`^(\s*)((?:"[^"]*"|'[^']*'|[A-Za-z0-9_.\-]+))(\s*=\s*)(.*)$`)
-	tomlString  = regexp.MustCompile(`^("(?:[^"\\]|\\.)*"|'[^']*')(.*)$`)
-	tomlStrings = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'[^']*'`)
-	tomlInline  = regexp.MustCompile(`((?:"[^"]*"|'[^']*'|[A-Za-z0-9_\-]+))(\s*=\s*)("(?:[^"\\]|\\.)*"|'[^']*')`)
-)
+// secretIn: x, under key ck of the table at path (its parent's key k), is a secret, or a table or a
+// list of them. A table is when it's under a secret-looking key, but key bindings (opencode's
+// keybinds), and every value of a table of secrets (wholeTable) is one.
+func secretIn(path, k, ck string, x any) bool {
+	if _, ok := x.(map[string]any); ok {
+		name := strings.ToLower(ck)
+		return redactName.MatchString(ck) && !strings.Contains(name, "keybind") && !strings.Contains(name, "keymap")
+	}
+	return redactName.MatchString(ck) || wholeTable(path, k)
+}
 
-func tomlUnquote(s string) string {
-	if len(s) >= 2 && (s[0] == '"' || s[0] == '\'') {
-		return s[1 : len(s)-1]
+// str returns s, at path under key k, as the VM's copy holds it. A URL in a table of secrets, such
+// as an env's base URL, is only scrubbed; under a secret-looking key it goes whole. Claude Code's
+// configuration variables stay (agentSetting).
+func (r *redaction) str(s, path, k string, secret bool) string {
+	url := strings.Contains(s, "://")
+	named := redactName.MatchString(k) || credName.MatchString(k)
+	keep := redactKeep(s) || plainValue.MatchString(s) || (url && !named) || agentSetting(path, k)
+	switch {
+	case secret && !keep, secretShape.MatchString(s): // a known key's shape, wherever it is
+		r.paths = append(r.paths, path)
+		return redactMark
+	case url:
+		if u := scrubURL(s); u != s {
+			r.paths = append(r.paths, path)
+			return u
+		}
 	}
 	return s
 }
 
-func redactTOML(s string, paths *[]string) (string, error) {
-	var b strings.Builder
-	table := ""
-	sc := bufio.NewScanner(strings.NewReader(s))
-	sc.Buffer(make([]byte, 1<<20), 1<<20)
-	for sc.Scan() {
-		line := sc.Text()
-		if strings.Contains(line, `"""`) || strings.Contains(line, `'''`) {
-			return "", fmt.Errorf("multi-line strings aren't supported (line %q)", line)
-		}
-		if m := tomlTable.FindStringSubmatch(line); m != nil && !strings.Contains(line, "=") {
-			table = m[1]
-			b.WriteString(line + "\n")
+// list returns l, at path: every string in it replaced when they're secrets, else as arguments
+// are (scrubArgs); the tables and lists in it each checked.
+func (r *redaction) list(l []any, path, k string, secret bool) []any {
+	changed := false
+	for i, x := range l {
+		s, ok := x.(string)
+		if !ok || !secret {
 			continue
 		}
-		m := tomlKV.FindStringSubmatch(line)
-		if m == nil {
-			b.WriteString(line + "\n")
-			continue
+		if !redactKeep(s) {
+			l[i], changed = redactMark, true
 		}
-		key, path := tomlUnquote(m[2]), tomlUnquote(m[2])
-		if table != "" {
-			path = table + "." + key
-		}
-		val := m[4]
-		if sm := tomlString.FindStringSubmatch(val); sm != nil {
-			if last := key[strings.LastIndex(key, ".")+1:]; redactName.MatchString(last) && !redactKeep(tomlUnquote(sm[1])) {
-				val = `"devvm-redacted"` + sm[2]
-				*paths = append(*paths, path)
-			}
-		} else if last := key[strings.LastIndex(key, ".")+1:]; last == "args" && strings.HasPrefix(strings.TrimSpace(val), "[") {
-			// An MCP server's arguments: as in ~/.claude.json (scrubArgs).
-			var as []any
-			for _, q := range tomlStrings.FindAllString(val, -1) {
-				as = append(as, tomlUnquote(q))
-			}
-			if s, changed := scrubArgs(as); changed {
-				b, _ := json.Marshal(s)
-				val = string(b)
-				*paths = append(*paths, path)
-			}
-		} else if strings.HasPrefix(strings.TrimSpace(val), "{") {
-			val = tomlInline.ReplaceAllStringFunc(val, func(kv string) string {
-				p := tomlInline.FindStringSubmatch(kv)
-				if k := tomlUnquote(p[1]); redactName.MatchString(k) && !redactKeep(tomlUnquote(p[3])) {
-					*paths = append(*paths, path+"."+k)
-					return p[1] + p[2] + `"devvm-redacted"`
-				}
-				return kv
-			})
-		}
-		b.WriteString(m[1] + m[2] + m[3] + val + "\n")
 	}
-	return b.String(), sc.Err()
+	if !secret {
+		if out, ok := scrubArgs(l); ok {
+			l, changed = out.([]any), true
+		}
+	}
+	if changed {
+		r.paths = append(r.paths, path)
+	}
+	for i, x := range l {
+		if _, ok := x.(string); !ok {
+			l[i] = r.value(x, fmt.Sprintf("%s[%d]", path, i), k, secret)
+		}
+	}
+	return l
 }

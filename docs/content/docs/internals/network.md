@@ -225,9 +225,15 @@ With network policy, an HTTPS server's headers become bindings for its host, whi
 
 ### Keys in settings files
 
-With network policy, devvm also takes the keys out of the VM's copies of the agents' settings files, which are `~/.claude/settings.json`, `~/.codex/config.toml` and opencode's `.json`, `.jsonc` and `.toml` files. Those are JSON, JSONC or Codex's TOML. Every value under a key that looks like a secret's (`*key*`, `*token*`, `*secret*`, `*password*`, `Authorization`) becomes `devvm-redacted`, and devvm names what it replaced (`config_redacted`).
+With network policy, devvm also takes the keys out of the VM's copies of the agents' settings files, which are `~/.claude/settings.json`, `~/.codex/config.toml` and opencode's `.json`, `.jsonc` and `.toml` files. Those are JSON, JSONC or TOML, and devvm parses each file whole and writes the VM's copy from what it parsed, so a JSONC file's copy is JSON and a TOML file's copy has no comments. devvm replaces these with `devvm-redacted`, and names what it replaced (`config_redacted`):
 
-Values that only name where a secret is stay as they are. Those are an environment variable's name (`env_key = "OPENAI_API_KEY"`), `{env:X}`, `${X}` and a path. devvm refuses a file it can't read that way, such as one with a TOML multi-line string, instead of copying it unread, so the VM doesn't get that file (`config_not_copied`). An MCP server or a provider that needs one of those keys in the VM has to get it another way.
+- Every value under a key that looks like a secret's (`*key*`, `*token*`, `*secret*`, `*password*`, `Authorization`), and every string in a list or a table under such a key, but key bindings, such as opencode's `keybinds`.
+- Any string that starts like a known key or token, such as `sk-`, `ghp_` or `eyJ`, wherever it is.
+- Every value in an env or headers table, whatever its name: `env`, `environment`, `headers`, `http_headers`, and Codex's `shell_environment_policy.set`. A number of up to five digits, `true` and `false` stay, because they're switches and ports. In Claude Code's own `env`, the top-level one of `settings.json`, its [configuration variables](https://code.claude.com/docs/en/env-vars) stay too: `ANTHROPIC_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`, the `ANTHROPIC_DEFAULT_*_MODEL` and `ANTHROPIC_CUSTOM_MODEL_OPTION` families, `CLAUDE_CODE_*`, `DISABLE_*`, `MAX_*` and `*_TIMEOUT_MS`. A variable whose name has `KEY`, `TOKEN` as a word, `SECRET`, `PASS`, `AUTH`, `CREDENTIAL`, `COOKIE` or `HEADER` in it is redacted all the same, such as `CLAUDE_CODE_OAUTH_TOKEN`, and so is its value when it's a URL.
+- In a URL anywhere in the file, its user info and its secret-looking query values and path segments.
+- In every list, the arguments that MCP servers' arguments in `~/.claude.json` lose: the value after a secret-named flag, such as `--api-key X`, the value of `--token=X`, and any that looks like a key.
+
+Values that only name where a secret is stay as they are. Those are an environment variable's name (`env_key = "OPENAI_API_KEY"`), `{env:X}`, `${X}` and a path. devvm refuses a file that doesn't parse as its format, instead of copying any of it unread, so the VM doesn't get that file (`config_not_copied`). An MCP server or a provider that needs one of those keys in the VM has to get it another way.
 
 ## The self-check
 
