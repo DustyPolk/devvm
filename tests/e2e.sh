@@ -1,6 +1,6 @@
 #!/bin/bash
 # End-to-end tests with real VMs, in a sandbox. Hosted CI can't run nested VMs on macOS.
-#   tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N]
+#   tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N | --newest-base]
 #     (default)  every section but from: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images, and
 #                builds base again from its recorded packages with the mirror unreachable;
@@ -61,6 +61,12 @@
 #     --slots N  the chosen sections spread over N slots (1-9; default 1), which run at once, each a
 #                tests/e2e.sh --slot run of its own; their results and times are added up at the end
 #     --slot N   run in slot N's sandbox (0-9; default 0, the sandbox below), its images as it has them
+#     --newest-base
+#                base as a user's first build makes it: from Ubuntu's newest cloud image (no
+#                e2e_ubuntu_release) and the mirrors' newest packages, built from nothing in a sandbox
+#                of its own (slot 0's paths with -newest, its ports +1000), whose images and package
+#                cache it deletes first; images, project and tools unless --only says. A failure is
+#                upstream drift, which its summary names with the release
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e, Keychain
 # service devvm-go-e2e and the lock /tmp/devvm-go-e2e.lock: slot 0's. Slot N's add -N to each, and
 # 100 × N to each fixed port. It refuses to run against ~/.lima or devvm's own Lima home, deletes only
@@ -69,27 +75,36 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sections_all="images project clone gc tools network desktop nix from link"
-usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel="images project clone gc tools network nix link" every=false slot=0 slots=1
+usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N | --newest-base]  (sections: $sections_all)" >&2; exit 2; }
+clean=false sel="images project clone gc tools network nix link" every=false slot=0 slots=1 newest=false chosen=false
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
-    --from)  sel=$sections_all ;;
-    --only)  [[ -n "${2:-}" ]] || usage; sel=$(tr ',' ' ' <<<"$2"); shift
+    --from)  sel=$sections_all chosen=true ;;
+    --only)  [[ -n "${2:-}" ]] || usage; sel=$(tr ',' ' ' <<<"$2") chosen=true; shift
              for s in $sel; do [[ " $sections_all " == *" $s "* ]] || usage; done ;;
     --every-feature) every=true ;;
     --slots) [[ ${2:-} =~ ^[1-9]$ ]] || usage; slots=$2; shift ;;
     --slot)  [[ ${2:-} =~ ^[0-9]$ ]] || usage; slot=$2; shift ;;
+    --newest-base) newest=true ;;
     *) usage ;;
   esac
   shift
 done
 (( slots == 1 || slot == 0 )) || usage
+# --newest-base: its own sandbox, never a slot's, and base built from nothing.
+if $newest; then
+  (( slots == 1 && slot == 0 )) || usage
+  clean=true
+  $chosen || sel="images project tools"
+fi
 want() { [[ " $sel " == *" $1 "* ]]; }
 # A run with from builds base with every feature, which from checks, so its other sections run on that
 # base too: their checks of base differ, and so do their timings ($tier).
 features_on=false tier=plain
 if want from || $every; then features_on=true tier=features; fi
+# A newest base's run builds everything, so its times are kept apart from the cached runs'.
+! $newest || tier=$tier-newest
 mins() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
 # A slot's sandbox: slot_work N, slot_lima N and slot_service N are its state folder, Lima home and
 # Keychain service; slot 0's are the sandbox above, and slot N's add -N. Its lock is slot_work's
@@ -327,11 +342,13 @@ if (( slots > 1 )); then run_slots; exit; fi
 # Its own Lima home (other sandboxes' images aren't its own), for devvm and for its own limactl calls.
 export DEVVM_LIMA_HOME
 DEVVM_LIMA_HOME=$(slot_lima "$slot")
-export LIMA_HOME=$DEVVM_LIMA_HOME
 work=$(slot_work "$slot")
-export XDG_DATA_HOME=$work/data XDG_CONFIG_HOME=$work/config
 export DEVVM_SECRET_SERVICE
 DEVVM_SECRET_SERVICE=$(slot_service "$slot")   # its Keychain items: fake tokens only, deleted at the end
+# --newest-base's sandbox: slot 0's paths with -newest, so the cached pinned images stay as they are.
+if $newest; then DEVVM_LIMA_HOME=$DEVVM_LIMA_HOME-newest work=$work-newest DEVVM_SECRET_SERVICE=$DEVVM_SECRET_SERVICE-newest; fi
+export LIMA_HOME=$DEVVM_LIMA_HOME
+export XDG_DATA_HOME=$work/data XDG_CONFIG_HOME=$work/config
 # Its lock, held until it ends: one run at a time in a slot.
 mkdir -p "$work"
 lock_take "$work.lock" || exit 1
@@ -339,8 +356,10 @@ trap 'lock_drop "$work.lock"' EXIT
 rm -f "$work/summary"   # its results, for a --slots run, written at its end
 # Its fixed ports: P<port> is slot 0's port plus 100 × the slot, so slots running at once never
 # share one: slot 0's ranges (47160 to 47199, 47240 to 47249, 47613, 18765 and 18766) never meet
-# another slot's. Exported for the checks' own shells.
+# another slot's. --newest-base's are slot 0's plus 1000, past slot 9's. Exported for the checks'
+# own shells.
 po=$((slot * 100))
+! $newest || po=1000
 P47160=$((47160 + po)) P47161=$((47161 + po)) P47162=$((47162 + po)) P47163=$((47163 + po)) P47164=$((47164 + po))
 P47170=$((47170 + po)) P47171=$((47171 + po)) P47172=$((47172 + po)) P47173=$((47173 + po)) P47174=$((47174 + po))
 P47175=$((47175 + po)) P47176=$((47176 + po)) P47177=$((47177 + po)) P47178=$((47178 + po))
@@ -392,6 +411,16 @@ D=$src/devvm
 # its signed checksums.
 e2e_ubuntu_release=release-20261016
 export DEVVM_UBUNTU_RELEASE=$e2e_ubuntu_release
+# base_release: the release base is to pin. --newest-base gives devvm no release, so it pins the
+# newest, as a user's first build does: the newest Ubuntu lists now, read here as
+# scripts/bump.sh e2e-ubuntu reads it, which the images section checks devvm pinned and booted.
+base_release=$e2e_ubuntu_release
+if $newest; then
+  unset DEVVM_UBUNTU_RELEASE
+  base_release=$(curl -fsSL --retry 3 https://cloud-images.ubuntu.com/releases/resolute/ | grep -o 'release-[0-9]\{8\}' | sort -ru | head -1)
+  [[ -n $base_release ]] || { echo "e2e: couldn't read the newest release from Ubuntu's listing of its cloud images" >&2; exit 1; }
+  echo "e2e: newest base: Ubuntu's cloud image $base_release (e2e pins $e2e_ubuntu_release) and the mirrors' newest packages, in $work"
+fi
 # The container images the --from checks start from, by digest, so the bases made from them stay
 # cached until these pins move (scripts/bump.sh e2e-from). One check keeps a tag, so devvm's registry
 # lookup is checked too: the company proxy's alpine:3.21, converted each run anyway.
@@ -1600,6 +1629,8 @@ if $clean; then
   section "cleaning cached images"
   for n in $(limactl list -q 2>/dev/null | grep '^devvm-img-'); do limactl delete -f "$n" >/dev/null 2>&1; done
   rm -rf "$images" "$share"
+  # A newest base's packages come from the mirrors, not from an earlier run's cache.
+  ! $newest || rm -rf "$XDG_DATA_HOME/devvm/packages"
 fi
 
 if begin images; then
@@ -1610,6 +1641,12 @@ check "devvm doctor finds everything it needs on this host" bash -c "'$D' doctor
 check "build base" quiet env DEVVM_MESSAGES=names "$D" build base
 # Its key: the build's, else the newest base from Ubuntu's image (from's bases are cached too).
 kb=$(sed -n 's/^==> building_image image=base key=\([0-9a-f]*\)$/\1/p' "$work/last.log")
+# A newest base pins the newest release and boots from it: a fallback to the release before
+# (origin_no_boot) passes for a user, but is the drift this run looks for.
+if $newest; then
+  check "base pinned Ubuntu's newest cloud image and booted from it, with no fallback to the release before" bash -c "
+    grep -qx '==> origin_pinned origin=$base_release' '$work/last.log' && ! grep -q origin_no_boot '$work/last.log'"
+fi
 if [[ -n $kb ]] && $features_on; then
   runlog=$(sed -n 's/^ *log_details file=//p' "$work/last.log")
   check "base ran base.sh, then every feature" bash -c "
@@ -1634,8 +1671,8 @@ export -f pinned
 check "base is a stopped image, recorded with Ubuntu's pinned cloud image and its C library" bash -c "
   [[ -n '$kb' && \$(status_of devvm-img-$kb) == Stopped ]] &&
   [[ \$(rec $kb chain) == 'base=$kb' && \$(rec $kb libc) == gnu && -z \$(rec $kb from) ]] &&
-  rec $kb built | grep -qE '^[0-9-]+T[0-9:]+Z$' && [[ \$(pinned release) == $e2e_ubuntu_release ]] &&
-  [[ \$(rec $kb digest) == \"https://cloud-images.ubuntu.com/releases/resolute/$e2e_ubuntu_release/\$(pinned file) \$(pinned digest)\" ]] &&
+  rec $kb built | grep -qE '^[0-9-]+T[0-9:]+Z$' && [[ \$(pinned release) == $base_release ]] &&
+  [[ \$(rec $kb digest) == \"https://cloud-images.ubuntu.com/releases/resolute/$base_release/\$(pinned file) \$(pinned digest)\" ]] &&
   pinned digest | grep -qE '^sha256:[0-9a-f]{64}$'"
 check "base mounts nothing from the host" bash -c "[[ -z \$(limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' devvm-img-$kb) ]]"
 check "devvm limactl runs Lima on devvm's Lima home, whatever LIMA_HOME says, with its exit code" bash -c "
@@ -3193,4 +3230,12 @@ echo
 echo "e2e: $pass passed, $fail failed$( (( skipped == 0 )) || echo ", $skipped skipped")$( (( ${#retried[@]} == 0 )) || echo ", ${#retried[@]} retried") in $(mins $((SECONDS - started)))${failed[*]+: ${failed[*]}}"
 for l in ${retried[@]+"${retried[@]}"}; do echo "e2e: retried once: $l"; done
 for l in ${short[@]+"${short[@]}"}; do echo "e2e: FAILED: $l"; done
+# --newest-base: what devvm pinned, and a failure named as upstream drift with its release.
+if $newest; then
+  got=$(sed -n 's/^  "release": "\(.*\)",\{0,1\}$/\1/p' "$images/ubuntu.json" 2>/dev/null)
+  echo "e2e: newest base: Ubuntu listed $base_release as its newest; devvm pinned ${got:-nothing}"
+  if (( fail > 0 || ${#short[@]} > 0 )); then
+    echo "e2e: UPSTREAM DRIFT: base from Ubuntu's newest cloud image, ${got:-$base_release}, and the mirrors' newest packages, failed the checks above, which e2e's other runs miss as they pin $e2e_ubuntu_release; a user's first build of base gets this now (contributing/maintaining.md says what to do)"
+  fi
+fi
 (( fail == 0 && ${#short[@]} == 0 ))

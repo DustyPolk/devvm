@@ -332,7 +332,10 @@ tests/e2e.sh --from         # every section, from too: the longest
 tests/e2e.sh --only images  # just these sections
 tests/e2e.sh --clean        # delete the sandbox's cached images and tool images first
 tests/e2e.sh --slots 3      # the sections spread over 3 sandboxes that run at once
+tests/e2e.sh --newest-base  # base from Ubuntu's newest image and packages, in a sandbox of its own
 ```
+
+`--newest-base` builds base as a user's first build does, in place of the pinned release that the other runs use, and [Maintaining](maintaining.md#checking-base-against-ubuntus-newest) says when to run it and what to do when it fails.
 
 The sections so far:
 
