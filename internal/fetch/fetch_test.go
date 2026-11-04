@@ -137,6 +137,7 @@ func TestTransient(t *testing.T) {
 		fmt.Errorf("x: %w", ErrTooLarge):             false,
 		fmt.Errorf("x: %w", ErrChecksum):             false,
 		fmt.Errorf("x: %w", errRequest):              false,
+		fmt.Errorf("x: %w", ErrProxy):                false,
 	} {
 		if got := Transient(err); got != want {
 			t.Errorf("Transient(%v) = %v, want %v", err, got, want)

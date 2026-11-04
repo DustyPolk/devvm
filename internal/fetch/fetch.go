@@ -50,6 +50,10 @@ var (
 	ErrChecksum = errors.New("the SHA-256 doesn't match")
 	// ErrNoClient is a request on a Client that NewClient didn't make.
 	ErrNoClient = errors.New("not a client NewClient made")
+	// ErrProxy is a proxy its caller set (Transport's Proxy) that can't
+	// be gone through, such as a company proxy whose password isn't
+	// saved: trying again won't help.
+	ErrProxy = errors.New("no proxy to go through")
 	// errRequest is a request that can't be made, such as one for an
 	// address that isn't one.
 	errRequest = errors.New("no request")
@@ -58,7 +62,8 @@ var (
 // NewClient returns a client whose every request, its body included, takes
 // at most timeout, following redirects as r says, on its own copy of
 // net/http's default transport (environment proxies included), which a
-// caller can change.
+// caller can change: config.toml's company proxy is its caller's to set
+// (settings.CompanyProxy.Route), as fetch reads no settings.
 func NewClient(timeout time.Duration, r Redirects) *Client {
 	t := &http.Transport{}
 	if d, ok := http.DefaultTransport.(*http.Transport); ok {
@@ -128,8 +133,8 @@ func TransientStatus(code int) bool {
 // Transient reports whether a request that failed with err may succeed
 // when tried again: one that got no answer or lost it partway, or got a
 // status TransientStatus names. A refused redirect, a request that can't
-// be made, a client NewClient didn't make, a body over its cap and a
-// SHA-256 that doesn't match are not.
+// be made, a client NewClient didn't make, a proxy that can't be gone
+// through, a body over its cap and a SHA-256 that doesn't match are not.
 func Transient(err error) bool {
 	var se *StatusError
 	switch {
@@ -138,7 +143,7 @@ func Transient(err error) bool {
 	case errors.As(err, &se):
 		return TransientStatus(se.Code)
 	case errors.Is(err, ErrRedirect), errors.Is(err, errRequest), errors.Is(err, ErrNoClient),
-		errors.Is(err, ErrTooLarge), errors.Is(err, ErrChecksum):
+		errors.Is(err, ErrProxy), errors.Is(err, ErrTooLarge), errors.Is(err, ErrChecksum):
 		return false
 	}
 	return true

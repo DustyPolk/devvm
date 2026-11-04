@@ -2,8 +2,10 @@
 # it when devvm's environment sets none. Its URL names the user alone, and
 # the password is the proxy secret, which the VM's proxy looks up itself,
 # so neither its config nor its arguments hold it. A shell without the
-# settings starts the VM's proxy without them, with a warning. Every
-# value here is fake, and no password is ever in an argument.
+# settings starts the VM's proxy without them, with a warning. Builds
+# check the password before anything is built, and a VM without network
+# policy, which never gets config.toml's proxy, warns. Every value here is
+# fake, and no password is ever in an argument.
 
 # A password in config.toml is refused, never shown.
 project corp
@@ -12,10 +14,18 @@ cp $WORK/password.toml $CFG/config.toml
 stderr 'proxy_password_in_config key=proxy\.https'
 ! stderr pa55
 
-# The user alone, and no password saved: the VM doesn't start.
+# The user alone, and no password saved: the VM doesn't start, and
+# builds stop before anything is built.
 cp $WORK/user.toml $CFG/config.toml
 ! exec devvm --network-policy --no-git-protect
 stderr '^devvm: proxy_password_missing$'
+stub_reset
+! exec devvm build base
+stderr '^devvm: proxy_password_missing$'
+! exec devvm rebuild base --force
+stderr '^devvm: proxy_password_missing$'
+stub_calls
+! stdout 'limactl (create|start|clone)'
 
 # Saved, the VM's proxy goes through it, the password the secret's.
 stdin $WORK/proxy.password
@@ -41,6 +51,19 @@ exec devvm
 ! stderr upstream_proxy_gone
 exec devvm secret rm --force proxy
 
+# A VM without network policy gets the shell's proxy settings alone, never
+# config.toml's, so each start with config.toml's alone warns; one from a
+# shell with the settings doesn't.
+project plain
+cp $WORK/nouser.toml $CFG/config.toml
+exec devvm --no-network-policy --no-git-protect
+stderr '^devvm: proxy_needs_policy file=\S*/config/devvm/config\.toml vm_name=devvm-plain-[0-9a-f]{14}$'
+exec devvm stop
+env HTTPS_PROXY=http://proxy.corp.example:3128
+exec devvm
+! stderr proxy_needs_policy
+env HTTPS_PROXY=
+
 -- password.toml --
 features = []
 [proxy]
@@ -50,6 +73,10 @@ features = []
 [proxy]
 https = "http://alice@proxy.corp.example:3128"
 no-proxy = ".corp.example"
+-- nouser.toml --
+features = []
+[proxy]
+https = "http://proxy.corp.example:3128"
 -- none.toml --
 features = []
 -- proxy.password --

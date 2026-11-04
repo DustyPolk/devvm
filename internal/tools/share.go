@@ -68,6 +68,13 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 	if len(todo) == 0 {
 		return nil
 	}
+	// The company proxy the build goes through, with config.toml's
+	// password saved, before anything starts.
+	if t.Proxy != nil {
+		if _, err := t.Proxy.Upstream(ctx); err != nil {
+			return err
+		}
+	}
 	spec := backend.ToolsSpec{Net: backend.NetInternet}
 	if err := rv.Require(b, Label(todo), spec.Features()...); err != nil {
 		return err

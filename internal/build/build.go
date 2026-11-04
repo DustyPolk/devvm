@@ -27,6 +27,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/trust"
@@ -136,7 +137,7 @@ func (b Builds) lookUp(ctx context.Context) error {
 	}
 	l := b.Lookup
 	if l == nil {
-		l = from.NewLookup(b.Dirs, b.Warn)
+		l = from.NewLookup(b.Dirs, b.Warn, b.proxy())
 	}
 	if err := l.Refresh(ctx, b.From); err != nil {
 		return err
@@ -234,11 +235,34 @@ func (b Builds) Build(ctx context.Context, name string) error {
 	if err := b.CheckLayers(name); err != nil {
 		return err
 	}
+	if err := b.checkProxy(ctx); err != nil {
+		return err
+	}
 	// Every key holds base's, so its features are chosen first.
 	if err := Choice(b).chooseFeatures(); err != nil {
 		return err
 	}
 	return b.build(ctx, name)
+}
+
+// checkProxy checks the company proxy builds go through, with
+// config.toml's password saved (the shared tools' Proxy), before anything
+// is asked or built, as a new VM's start does.
+func (b Builds) checkProxy(ctx context.Context) error {
+	if b.proxy() == nil {
+		return nil
+	}
+	_, err := b.proxy().Upstream(ctx)
+	return err
+}
+
+// proxy is the company proxy From's registry is asked through (the shared
+// tools' Proxy); nil for the environment's.
+func (b *Env) proxy() *settings.CompanyProxy {
+	if b.Tools == nil {
+		return nil
+	}
+	return b.Tools.Proxy
 }
 
 func (b Builds) build(ctx context.Context, name string) error {
@@ -548,6 +572,9 @@ func (b Images) List(ctx context.Context) ([]Image, error) {
 func (b Builds) Rebuild(ctx context.Context, name string) error {
 	name = image.Normalize(name)
 	if err := b.CheckLayers(name); err != nil {
+		return err
+	}
+	if err := b.checkProxy(ctx); err != nil {
 		return err
 	}
 	if err := Choice(b).chooseFeatures(); err != nil {

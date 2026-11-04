@@ -53,7 +53,7 @@ func TestOverrides(t *testing.T) {
 		o    Overrides
 		want bool
 	}{{Overrides{}, false}, {o, true}} {
-		r, err := New(d, assets.FS, quietUI{}, c.o)
+		r, err := New(d, assets.FS, quietUI{}, c.o, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +103,7 @@ func TestBuild(t *testing.T) {
 func TestLimaIsTheDefault(t *testing.T) {
 	t.Parallel()
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
-	r, err := New(d, assets.FS, quietUI{}, Overrides{})
+	r, err := New(d, assets.FS, quietUI{}, Overrides{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestSocketsFit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(d, assets.FS, quietUI{}, Overrides{}); err != nil {
+	if _, err := New(d, assets.FS, quietUI{}, Overrides{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	vm := "devvm-" + strings.Repeat("a", 20) + "-0123456789abcd" // the longest folder part

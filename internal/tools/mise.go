@@ -79,9 +79,13 @@ func (t Versions) HostMise(ctx context.Context) (string, error) {
 		err := fetch.Download(ctx, t.Client, url, tmp, t.miseSums[platform])
 		return fetch.Transient(err), err
 	})
+	m, isMsg := errors.AsType[msg.M](err)
 	switch {
 	case errors.Is(err, fetch.ErrChecksum):
 		return "", msg.MiseChecksum(miseVersion)
+	case errors.Is(err, fetch.ErrProxy) && isMsg:
+		// The company proxy's own refusal, such as its password unsaved.
+		return "", m
 	case err != nil && ctx.Err() != nil:
 		return "", ctx.Err()
 	case err != nil:
@@ -96,9 +100,16 @@ func (t Versions) HostMise(ctx context.Context) (string, error) {
 // miseCmd returns mise running in dir, a folder of devvm's own, with its
 // state there too. mise also reads config files in the folders above (a
 // shared temporary folder: anyone's): MISE_CEILING_PATHS, which needs the
-// physical path, stops it at dir.
-func miseCmd(ctx context.Context, mise, dir string, args ...string) (*exec.Cmd, error) {
+// physical path, stops it at dir. It goes through config.toml's company
+// proxy when devvm's environment sets none (Proxy's Env): its
+// environment, never its arguments, holds the proxy's password, as mise
+// takes it only in the proxy's URL.
+func (t Versions) miseCmd(ctx context.Context, mise, dir string, args ...string) (*exec.Cmd, error) {
 	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil, err
+	}
+	proxyEnv, err := t.Proxy.Env(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +124,7 @@ func miseCmd(ctx context.Context, mise, dir string, args ...string) (*exec.Cmd, 
 		"MISE_TRUSTED_CONFIG_PATHS="+dir,
 		"MISE_CEILING_PATHS="+filepath.Dir(dir),
 	)
+	cmd.Env = append(cmd.Env, proxyEnv...)
 	return cmd, nil
 }
 
@@ -139,7 +151,7 @@ func (t Versions) Resolve(ctx context.Context, out string) error {
 	if err := state.WriteFile(filepath.Join(tmp, "mise.toml"), config); err != nil {
 		return err
 	}
-	cmd, err := miseCmd(ctx, mise, tmp, "lock", "--platform", strings.Join(t.platforms(), ","))
+	cmd, err := t.miseCmd(ctx, mise, tmp, "lock", "--platform", strings.Join(t.platforms(), ","))
 	if err != nil {
 		return err
 	}
@@ -229,7 +241,7 @@ func (t Versions) olderVersions(ctx context.Context, mise, backendName, spec, v 
 	if spec != "" && spec != "latest" {
 		args = append(args, spec)
 	}
-	cmd, err := miseCmd(ctx, mise, dir, args...)
+	cmd, err := t.miseCmd(ctx, mise, dir, args...)
 	if err != nil {
 		return nil
 	}
@@ -267,7 +279,7 @@ func (t Versions) lockVersions(ctx context.Context, mise, tool string, versions 
 	if err := state.WriteFile(filepath.Join(dir, "mise.toml"), []byte("[tools]\n"+tool+" = ["+list+"]\n")); err != nil {
 		return nil
 	}
-	cmd, err := miseCmd(ctx, mise, dir, "lock", "--platform", strings.Join(t.platforms(), ","))
+	cmd, err := t.miseCmd(ctx, mise, dir, "lock", "--platform", strings.Join(t.platforms(), ","))
 	if err != nil {
 		return nil
 	}

@@ -328,6 +328,27 @@ func TestBuildRequires(t *testing.T) {
 	}
 }
 
+// A build and a rebuild check the company proxy before anything: one in
+// config.toml that names a user needs its password saved, as a new VM
+// does.
+func TestBuildChecksCompanyProxy(t *testing.T) {
+	b, f := testEnv(t)
+	write(t, b.Dirs.ConfigFile(), "[proxy]\nhttps = \"http://alice@proxy.corp:3128\"\n")
+	if err := (Builds{b}).Build(t.Context(), "foo"); msg.NamesOf(err) != "proxy_password_missing" {
+		t.Errorf("Build = %v", msg.NamesOf(err))
+	}
+	if err := (Builds{b}).Rebuild(t.Context(), "foo"); msg.NamesOf(err) != "proxy_password_missing" {
+		t.Errorf("Rebuild = %v", msg.NamesOf(err))
+	}
+	if len(f.Calls()) > 0 {
+		t.Errorf("calls = %q", f.Methods())
+	}
+	b.Tools.Proxy.Password = func(context.Context, string) (string, error) { return "pa55", nil }
+	if err := (Builds{b}).Build(t.Context(), "foo"); err != nil {
+		t.Errorf("saved: %v", msg.NamesOf(err))
+	}
+}
+
 // Below the free space building base wants, or another image, nothing of
 // it is made: the backend is only asked which images it has.
 func TestBuildRefusesLowSpace(t *testing.T) {
@@ -636,7 +657,7 @@ func fromEnv(t *testing.T, digest *string, lookups *int) (*Env, *backendtest.Fak
 		w.Header().Set("Docker-Content-Digest", *digest)
 	}))
 	t.Cleanup(srv.Close)
-	reg := from.NewRegistry()
+	reg := from.NewRegistry(nil)
 	if tr, ok := srv.Client().Transport.(*http.Transport); ok {
 		reg.Client.Transport().TLSClientConfig = tr.TLSClientConfig // trusts the test server's certificate
 	}

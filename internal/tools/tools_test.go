@@ -242,7 +242,7 @@ func TestMiseCmdCeiling(t *testing.T) {
 	if err := os.Symlink(filepath.Join(dir, "shared"), filepath.Join(dir, "link")); err != nil {
 		t.Fatal(err)
 	}
-	cmd, err := miseCmd(t.Context(), "/bin/sh", filepath.Join(dir, "link", "t"), "-c",
+	cmd, err := (Versions{&Env{}}).miseCmd(t.Context(), "/bin/sh", filepath.Join(dir, "link", "t"), "-c",
 		`echo "ceiling=$MISE_CEILING_PATHS trusted=$MISE_TRUSTED_CONFIG_PATHS data=$MISE_DATA_DIR pwd=$(pwd -P)"`)
 	if err != nil {
 		t.Fatal(err)

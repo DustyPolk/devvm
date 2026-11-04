@@ -210,6 +210,18 @@ func (s *Store) Value(ctx context.Context, name string) (string, error) {
 	return v, nil
 }
 
+// ProxyPassword returns the value of name, the secret config.toml's
+// company proxy takes its password from (proxy.UpstreamSecret): its
+// Value, or proxy_password_missing while it isn't saved. It is
+// settings.CompanyProxy's Password.
+func (s *Store) ProxyPassword(ctx context.Context, name string) (string, error) {
+	v, err := s.Value(ctx, name)
+	if errors.Is(err, ErrNone) {
+		return "", msg.ProxyPasswordMissing()
+	}
+	return v, err
+}
+
 // Token returns a token as given for the secret (pasted, or a line on
 // stdin) without its whitespace. It refuses an empty one, one with a quote,
 // a backslash or a control character (they'd end the Keychain's command

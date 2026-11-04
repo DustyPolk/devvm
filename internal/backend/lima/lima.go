@@ -27,6 +27,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/ubuntu"
 	"github.com/w3cj/devvm/internal/vmname"
@@ -137,8 +138,9 @@ func withRoles(l *Lima) *Lima {
 
 // New returns the Lima backend for devvm's folders and its own files
 // (assets), on u, sizing base to host, finding Ubuntu's cloud image at
-// ubuntuURL (ubuntu.DefaultURL when it's "").
-func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string) *Lima {
+// ubuntuURL (ubuntu.DefaultURL when it's "") through the company proxy cp
+// (nil for the environment's).
+func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string, cp *settings.CompanyProxy) *Lima {
 	ubuntuURL = strings.TrimRight(cmp.Or(ubuntuURL, ubuntu.DefaultURL), "/")
 	self, err := os.Executable()
 	if err == nil {
@@ -146,10 +148,14 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string)
 			self = r
 		}
 	}
+	finder := ubuntu.New(assets, ubuntuURL, u)
+	if t := finder.Client.Transport(); t != nil {
+		t.Proxy = cp.Route
+	}
 	return withRoles(&Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
-		Ubuntu: ubuntu.New(assets, ubuntuURL, u).Image, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
+		Ubuntu: finder.Image, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: "/dev/kvm",
 		DockerRunning: from.DockerRunning,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },

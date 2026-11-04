@@ -28,7 +28,7 @@ func TestE2EExecQuoting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := New(d, assets.FS, quietUI{}, Overrides{})
+	r, err := New(d, assets.FS, quietUI{}, Overrides{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

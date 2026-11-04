@@ -86,29 +86,39 @@ type Registry struct {
 	RetryDelay time.Duration
 }
 
-// NewRegistry returns a Registry on the internet: a timeout per request,
-// and redirects to https only.
-func NewRegistry() *Registry {
-	return &Registry{
-		Client: fetch.NewClient(timeout, fetch.HTTPSOnly), Base: func(host string) string { return "https://" + host },
-		RetryDelay: time.Second,
+// A Proxy picks the proxy a request goes through, as net/http's
+// Transport.Proxy: the company proxy (settings.CompanyProxy.Route), or
+// nil for the environment's.
+type Proxy func(*http.Request) (*url.URL, error)
+
+// NewRegistry returns a Registry on the internet, through proxy: a
+// timeout per request, and redirects to https only.
+func NewRegistry(proxy Proxy) *Registry {
+	c := fetch.NewClient(timeout, fetch.HTTPSOnly)
+	if t := c.Transport(); t != nil && proxy != nil {
+		t.Proxy = proxy
 	}
+	return &Registry{Client: c, Base: func(host string) string { return "https://" + host }, RetryDelay: time.Second}
 }
 
 // NewPublicRegistry returns a Registry that reaches only the internet's
 // addresses, for an image a project's file names: never this machine's
 // (loopback), its network's (private, link-local, shared) or another
-// non-public one, whatever a name resolves to. A proxy the environment
-// names is reached as it is.
-func NewPublicRegistry() *Registry {
-	r := NewRegistry()
+// non-public one, whatever a name resolves to. The proxy that proxy
+// picks (NewRegistry's) is reached as it is.
+func NewPublicRegistry(proxy Proxy) *Registry {
+	r := NewRegistry(proxy)
 	t := r.Client.Transport()
 	if t == nil {
 		return r
 	}
+	pick := t.Proxy
+	if pick == nil {
+		pick = http.ProxyFromEnvironment
+	}
 	var proxies sync.Map
 	t.Proxy = func(req *http.Request) (*url.URL, error) {
-		u, err := http.ProxyFromEnvironment(req)
+		u, err := pick(req)
 		if u != nil {
 			proxies.Store(proxyAddr(u), true)
 		}

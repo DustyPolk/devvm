@@ -146,6 +146,81 @@ func upstreamPassword(name string, lookup Lookup) (string, error) {
 	return v, nil
 }
 
+// --- on the host ---
+
+// WithPassword is u with password, Secret's value, as the password of each URL that names a user
+// and none of its own, and no Secret: the company proxy as devvm's own clients and programs on
+// the host take it (Route, and the variables of a program devvm runs), never a VM. Its URLs then
+// hold the password, so they go into no file, log or process's arguments. Errors never hold a URL.
+func (u Upstream) WithPassword(password string) (Upstream, error) {
+	out := Upstream{NoProxy: u.NoProxy}
+	for _, s := range []struct {
+		name, raw string
+		into      *string
+	}{{"HTTPS_PROXY", u.HTTPS, &out.HTTPS}, {"HTTP_PROXY", u.HTTP, &out.HTTP}} {
+		if strings.TrimSpace(s.raw) == "" {
+			continue
+		}
+		pu, err := ParseUpstream(s.raw)
+		if err != nil {
+			return Upstream{}, fmt.Errorf("upstream: %s: %w", s.name, err)
+		}
+		if pu.User != nil && password != "" {
+			if _, ok := pu.User.Password(); !ok {
+				pu.User = url.UserPassword(pu.User.Username(), password)
+			}
+		}
+		*s.into = pu.String()
+	}
+	return out, nil
+}
+
+// Route is u as devvm's own HTTP clients on the host take it (net/http's Transport.Proxy), each
+// request sent where a VM's proxy would send it (route): through HTTPS_PROXY's proxy for https,
+// HTTP_PROXY's for plain http, and directly to localhost, loopback addresses and the hosts NO_PROXY
+// names. Its URLs carry their user and password (WithPassword), which net/http sends only to the
+// company proxy, in Proxy-Authorization.
+func (u Upstream) Route() (func(*http.Request) (*url.URL, error), error) {
+	var https, plain *url.URL
+	for _, s := range []struct {
+		name, raw string
+		into      **url.URL
+	}{{"HTTPS_PROXY", u.HTTPS, &https}, {"HTTP_PROXY", u.HTTP, &plain}} {
+		if strings.TrimSpace(s.raw) == "" {
+			continue
+		}
+		pu, err := ParseUpstream(s.raw)
+		if err != nil {
+			return nil, fmt.Errorf("upstream: %s: %w", s.name, err)
+		}
+		*s.into = pu
+	}
+	// route picks one of ups' two upstreams, which stand for the URLs.
+	ups := upstreams{noProxy: parseNoProxy(u.NoProxy)}
+	if https != nil {
+		ups.https = &upstream{addr: "https"}
+	}
+	if plain != nil {
+		ups.http = &upstream{addr: "http"}
+	}
+	return func(req *http.Request) (*url.URL, error) {
+		isPlain := req.URL.Scheme == "http"
+		def := 443
+		if isPlain {
+			def = 80
+		}
+		host, port := splitHostPort(req.URL.Host, def)
+		switch ups.route(host, port, isPlain) {
+		case nil:
+			return nil, nil
+		case ups.https:
+			return https, nil
+		default:
+			return plain, nil
+		}
+	}, nil
+}
+
 // names: the upstreams, by host:port only, for the proxy's log.
 func (ups upstreams) names() string {
 	name := func(u *upstream) string {

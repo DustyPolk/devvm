@@ -161,7 +161,7 @@ func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *msg.Recorder) {
 func limaOn(t *testing.T, goos string) (*Lima, *fakeRunner, *msg.Recorder, *stubtest.Stubs) {
 	t.Helper()
 	d, stubs := sandbox(t)
-	l := New(d, assets.FS, testUI{}, platform.Host{}, "")
+	l := New(d, assets.FS, testUI{}, platform.Host{}, "", nil)
 	f := &fakeRunner{out: map[string]string{}}
 	warned := &msg.Recorder{}
 	l.Runner, l.OS, l.Arch, l.Self = f, goos, "arm64", "/opt/my devvm/devvm"

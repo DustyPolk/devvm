@@ -148,9 +148,15 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 	if wd, err = filepath.EvalSymlinks(wd); err != nil {
 		return nil, err
 	}
+	// The shared tools' downloads and builds, and --from's lookups, go
+	// through the company proxy, with config.toml's password from the
+	// same secrets as the VMs' proxies.
+	store := secrets.NewStore(d, u.Warn)
+	tl := tools.New(d, assets, version, u, reg.Host)
+	tl.Proxy.Password = store.ProxyPassword
 	e := &Env{
-		Dirs: d, Assets: assets, Registry: reg, Tools: tools.New(d, assets, version, u, reg.Host),
-		Proxy: netpolicy.NewProxy(d, assets, self, secrets.NewStore(d, u.Warn), u),
+		Dirs: d, Assets: assets, Registry: reg, Tools: tl,
+		Proxy: netpolicy.NewProxy(d, assets, self, store, u),
 		Dir:   wd, OS: runtime.GOOS, Version: version,
 		Host: func() (Host, error) { return ThisHost(reg.Host) }, Exec: execShell, OpenURL: openURL, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
@@ -160,7 +166,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 		Interactive: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() }, CanPick: u.CanPick,
 		Stdout: u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
 		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
-		PortInUse: platform.PortInUse, Forwarders: vmssh.NewForwards(d, self), PublicImage: from.NewLookup(d, u.Warn).Public, FreeSpace: reg.Host.FreeSpace,
+		PortInUse: platform.PortInUse, Forwarders: vmssh.NewForwards(d, self), PublicImage: from.NewLookup(d, u.Warn, tl.Proxy).Public, FreeSpace: reg.Host.FreeSpace,
 	}
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, e.Warn) }
 	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }
@@ -582,6 +588,11 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	// devvm's own connections carry the agent of the start they're on.
 	e.useAgent(mode)
 	if conf.Net != backend.NetProxy {
+		// It gets the shell's proxy settings alone: config.toml's
+		// password never goes into a VM.
+		if conf.Net == backend.NetDirect && e.Proxy.Company().ConfigOnly() {
+			e.Warn(msg.ProxyNeedsPolicy(e.Dirs.ConfigFile(), vm))
+		}
 		e.Proxy.Stop(vm)
 		// Its ssh port, as the proxy's confinement has it: recorded, so
 		// other VMs' forwarders never take it before its backend binds it.

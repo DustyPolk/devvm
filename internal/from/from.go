@@ -24,6 +24,7 @@ import (
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -100,10 +101,11 @@ type Lookup struct {
 	Warn     func(msg.M)
 }
 
-// NewLookup returns a Lookup on the internet and this machine's Docker,
-// warning through warn.
-func NewLookup(d paths.Dirs, warn func(msg.M)) *Lookup {
-	return &Lookup{Dirs: d, Registry: NewRegistry(), PublicRegistry: NewPublicRegistry(), DockerID: DockerID, Warn: warn}
+// NewLookup returns a Lookup on the internet, through the company proxy
+// cp (nil for the environment's), and this machine's Docker, warning
+// through warn.
+func NewLookup(d paths.Dirs, warn func(msg.M), cp *settings.CompanyProxy) *Lookup {
+	return &Lookup{Dirs: d, Registry: NewRegistry(cp.Route), PublicRegistry: NewPublicRegistry(cp.Route), DockerID: DockerID, Warn: warn}
 }
 
 // Refresh looks up ref's digest and records it: its registry's, else

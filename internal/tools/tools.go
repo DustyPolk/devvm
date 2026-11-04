@@ -24,6 +24,8 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,6 +40,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -63,7 +66,12 @@ type Env struct {
 	// OS and Arch are the host's, as Go names them.
 	OS, Arch string
 	Getenv   func(string) string
-	Client   *fetch.Client
+	// Client downloads the host's mise, through Proxy (its Route).
+	Client *fetch.Client
+	// Proxy is the company proxy the host's mise is downloaded through
+	// and runs with, and that a tool build checks before it starts; its
+	// caller sets its Password (secrets.Store.ProxyPassword).
+	Proxy *settings.CompanyProxy
 	// RetryDelay is the wait before a download's first retry; it doubles
 	// after each.
 	RetryDelay time.Duration
@@ -129,7 +137,7 @@ func New(d paths.Dirs, assets fs.FS, version string, u UI, host platform.Host) *
 			self = r
 		}
 	}
-	return &Env{
+	t := &Env{
 		Dirs: d, Assets: assets, Self: self, Version: version, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Getenv: os.Getenv, Client: newClient(), RetryDelay: time.Second, Now: time.Now, Detach: daemon.Detach,
 		ShareNote: 3 * time.Second, miseURL: miseURL, miseSums: miseSHA256,
@@ -137,6 +145,13 @@ func New(d paths.Dirs, assets fs.FS, version string, u UI, host platform.Host) *
 		LogNote: u.LogNote, Status: u.Status, LoggedCmd: u.LoggedCmd, AddCleanup: u.AddCleanup,
 		FreeSpace: host.FreeSpace,
 	}
+	// The environment it reads is Getenv's, and the Proxy the one at each
+	// request: tests and callers change them.
+	t.Proxy = settings.NewCompanyProxy(d, func(k string) string { return t.Getenv(k) }, nil)
+	if tr := t.Client.Transport(); tr != nil {
+		tr.Proxy = func(req *http.Request) (*url.URL, error) { return t.Proxy.Route(req) }
+	}
+	return t
 }
 
 // MiseArch is mise's name for a Go architecture: the host's, and so its

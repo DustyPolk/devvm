@@ -1572,6 +1572,10 @@ other = "{{.key}} holds a password, and config.toml never keeps one. Leave only 
 [proxy_password_missing]
 other = "config.toml's proxy names a user, and no password for it is saved. Save it with devvm secret set proxy."
 
+[proxy_needs_policy]
+description = "file is config.toml's path"
+other = "{{.vm_name}} has no network policy, so it doesn't go through the company proxy in {{.file}}. Turn network policy on with devvm network on, or set HTTPS_PROXY in the shell that starts it."
+
 [upstream_proxy_gone]
 description = "file is config.toml's path"
 other = "{{.vm_name}}'s proxy went through a company proxy before, and this shell sets none, so it goes directly now. Set HTTPS_PROXY in this shell, or the [proxy] table in {{.file}}."

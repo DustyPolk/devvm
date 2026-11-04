@@ -9,6 +9,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/settings"
 )
 
 // Overrides are a test build's stand-ins for the backends, each the value
@@ -34,11 +35,12 @@ type UI interface {
 
 // New returns the registry of devvm's backends, on devvm's folders, its
 // own files (assets) and u: lima, the default (backend.Default), with a
-// test build's overrides o in place of its own. The registry's Host is
-// o's (platform.NewHost).
-func New(d paths.Dirs, assets fs.FS, u UI, o Overrides) (*backend.Registry, error) {
+// test build's overrides o in place of its own, their own requests on
+// this machine through the company proxy cp. The registry's Host is o's
+// (platform.NewHost).
+func New(d paths.Dirs, assets fs.FS, u UI, o Overrides, cp *settings.CompanyProxy) (*backend.Registry, error) {
 	host := platform.NewHost(o.Host)
-	l := lima.New(d, assets, u, host, o.UbuntuURL)
+	l := lima.New(d, assets, u, host, o.UbuntuURL, cp)
 	if o.KVM != "" {
 		l.KVM = o.KVM
 	}

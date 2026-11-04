@@ -2319,6 +2319,11 @@ func ProxyFailed(reason string) M {
 	return M{id: "proxy_failed", vals: []val{{"reason", reason}}}
 }
 
+// ProxyNeedsPolicy is [proxy_needs_policy]: "{{.vm_name}} has no network policy, so it doesn't go through the company proxy in {{.file}}. Turn network policy on with devvm network on, or set HTTPS_PROXY in the shell that starts it."
+func ProxyNeedsPolicy(file string, vmName string) M {
+	return M{id: "proxy_needs_policy", vals: []val{{"file", file}, {"vm_name", vmName}}}
+}
+
 // ProxyPasswordHowto is [proxy_password_howto]: "Type the company proxy's password for the user that config.toml's proxy names. Only devvm's proxies on this machine send it, and only to the company proxy."
 func ProxyPasswordHowto() M {
 	return M{id: "proxy_password_howto"}
@@ -3724,6 +3729,7 @@ var specs = map[string]spec{
 	"ports_taken":                      {plural: true, fields: []string{"count", "ports", "vm"}},
 	"proxy_ca_failed":                  {fields: []string{"dir"}},
 	"proxy_failed":                     {fields: []string{"reason"}},
+	"proxy_needs_policy":               {fields: []string{"file", "vm_name"}},
 	"proxy_password_howto":             {},
 	"proxy_password_in_config":         {fields: []string{"key"}},
 	"proxy_password_missing":           {},

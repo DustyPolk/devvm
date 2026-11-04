@@ -227,6 +227,20 @@ func TestValue(t *testing.T) {
 	}
 }
 
+// The company proxy's password: its value, or the message saying to save
+// it.
+func TestProxyPassword(t *testing.T) {
+	ctx := t.Context()
+	s, kc := testStore(t, true, map[string]string{})
+	if _, err := s.ProxyPassword(ctx, proxy.UpstreamSecret); msg.NamesOf(err) != "proxy_password_missing" {
+		t.Errorf("none saved: %v", msg.NamesOf(err))
+	}
+	kc["devvm/proxy"] = " pa55 word\n"
+	if v, err := s.ProxyPassword(ctx, proxy.UpstreamSecret); v != "pa55 word" || err != nil {
+		t.Errorf("saved: %q, %v", v, err)
+	}
+}
+
 // secretOf is the binding of a secret devvm keeps, as the proxy has it.
 func secretOf(name string) proxy.Binding { return proxy.Binding{Name: name, Kind: proxy.KindSecret} }
 

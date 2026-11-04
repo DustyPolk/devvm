@@ -2,7 +2,6 @@ package netpolicy
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"os"
 	"runtime"
@@ -227,22 +226,16 @@ func (p *Proxy) config(ctx context.Context, st *state.VM, key, lifeline string) 
 }
 
 // Upstream is the company proxy a VM's proxy, or a build's, goes through:
-// the environment's, else config.toml's (settings.HostProxy), checked
-// (backend.HostProxy.Upstream). One whose password is a secret
-// (config.toml's) needs it saved: a proxy started without it would fail.
+// the environment's, else config.toml's, checked, with config.toml's
+// password saved (settings.CompanyProxy.Upstream).
 func (p *Proxy) Upstream(ctx context.Context) (*proxy.Upstream, error) {
-	host, err := settings.HostProxy(p.Dirs, p.Getenv)
-	if err != nil {
-		return nil, err
-	}
-	if host.Secret != "" {
-		if _, err := p.Secrets.Value(ctx, host.Secret); errors.Is(err, secrets.ErrNone) {
-			return nil, msg.ProxyPasswordMissing()
-		} else if err != nil {
-			return nil, err
-		}
-	}
-	return host.Upstream()
+	return p.Company().Upstream(ctx)
+}
+
+// Company is the company proxy as devvm's environment and config.toml
+// have it now, with config.toml's password from p's secrets.
+func (p *Proxy) Company() *settings.CompanyProxy {
+	return settings.NewCompanyProxy(p.Dirs, p.Getenv, p.Secrets.ProxyPassword)
 }
 
 // stale reports whether the VM's proxy last started with another config

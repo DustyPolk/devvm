@@ -9,9 +9,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/internal/fetch"
 )
@@ -164,7 +166,7 @@ func TestPublicRegistryReachesOnlyTheInternet(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, base := range []string{f.srv.URL, "https://localhost:" + u.Port()} {
-		r := NewPublicRegistry()
+		r := NewPublicRegistry(nil)
 		r.Base = func(string) string { return base }
 		if _, err := r.Digest(t.Context(), "node:24"); !errors.Is(err, ErrNotFound) {
 			t.Errorf("%s: %v", base, err)
@@ -174,6 +176,38 @@ func TestPublicRegistryReachesOnlyTheInternet(t *testing.T) {
 	defer f.mu.Unlock()
 	if len(f.calls) != 0 {
 		t.Errorf("reached: %q", f.calls)
+	}
+}
+
+// A registry goes through the proxy its caller picks (the company
+// proxy), which NewPublicRegistry's reaches even on this machine.
+func TestRegistryThroughProxy(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	var tunnels []string
+	proxySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		tunnels = append(tunnels, r.Method+" "+r.Host)
+		mu.Unlock()
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(proxySrv.Close)
+	at, err := url.Parse(proxySrv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pick := func(*http.Request) (*url.URL, error) { return at, nil }
+	for _, r := range []*Registry{NewRegistry(pick), NewPublicRegistry(pick)} {
+		r.Base = func(string) string { return "https://registry.example" }
+		r.RetryDelay = time.Millisecond
+		if _, err := r.Digest(t.Context(), "node:24"); err == nil {
+			t.Error("a proxy that refuses gave a digest")
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(tunnels) < 2 || slices.ContainsFunc(tunnels, func(s string) bool { return s != "CONNECT registry.example:443" }) {
+		t.Errorf("the proxy got %q", tunnels)
 	}
 }
 
@@ -218,7 +252,7 @@ func registryAt(srv *httptest.Server) *Registry {
 
 // trusting is NewRegistry's client, trusting srv's certificate.
 func trusting(srv *httptest.Server) *fetch.Client {
-	c := NewRegistry().Client
+	c := NewRegistry(nil).Client
 	if t, ok := srv.Client().Transport.(*http.Transport); ok {
 		c.Transport().TLSClientConfig = t.TLSClientConfig
 	}
@@ -307,7 +341,7 @@ func TestDigestRetries(t *testing.T) {
 		w.Header().Set("Docker-Content-Digest", digestOf("b"))
 	}))
 	t.Cleanup(srv.Close)
-	r := &Registry{Client: NewRegistry().Client, Base: func(string) string { return srv.URL }}
+	r := &Registry{Client: NewRegistry(nil).Client, Base: func(string) string { return srv.URL }}
 	if d, err := r.Digest(t.Context(), "node:24"); err != nil || d != digestOf("b") || heads != 3 {
 		t.Errorf("after two 503s: %q, %v, %d requests", d, err, heads)
 	}

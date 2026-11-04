@@ -101,7 +101,7 @@ func newEnv(u *ui.UI) (*vm.Env, error) {
 		return nil, err
 	}
 	o := readOverrides(os.Getenv)
-	reg, err := registry.New(dirs, assets.FS, u, o.Overrides)
+	reg, err := registry.New(dirs, assets.FS, u, o.Overrides, companyProxy(dirs, u.Warn))
 	if err != nil {
 		return nil, err
 	}

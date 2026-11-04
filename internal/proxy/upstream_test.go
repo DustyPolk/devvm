@@ -546,3 +546,106 @@ func TestUpstreamIntercept(t *testing.T) {
 		t.Errorf("an untrusted certificate: %d, want 502", code)
 	}
 }
+
+// On the host: the password goes into each URL that names a user and none
+// of its own, and nowhere else; errors never hold a URL.
+func TestUpstreamWithPassword(t *testing.T) {
+	t.Parallel()
+	up := Upstream{HTTPS: "http://alice@proxy.corp:3128", HTTP: "proxy.corp:8080", NoProxy: ".corp", Secret: UpstreamSecret}
+	got, err := up.WithPassword("pa55 word")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Upstream{HTTPS: "http://" + url.UserPassword("alice", "pa55 word").String() + "@proxy.corp:3128", HTTP: "http://proxy.corp:8080", NoProxy: ".corp"}
+	if got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	// A URL's own password stays; no password leaves the user alone.
+	own := Upstream{HTTPS: "http://" + url.UserPassword("bob", "own").String() + "@proxy.corp:3128"}
+	if got, _ := own.WithPassword("other"); got.HTTPS != own.HTTPS {
+		t.Errorf("its own password: %s", got.HTTPS)
+	}
+	if got, _ := up.WithPassword(""); got.HTTPS != "http://alice@proxy.corp:3128" {
+		t.Errorf("no password: %s", got.HTTPS)
+	}
+	if _, err := (Upstream{HTTPS: "socks5://alice:pa55@proxy.corp:1080"}).WithPassword("x"); err == nil || strings.Contains(err.Error(), "pa55") {
+		t.Errorf("a socks proxy: %v", err)
+	}
+}
+
+// Route sends each request where a VM's proxy would: https through
+// HTTPS_PROXY's, http through HTTP_PROXY's, and NO_PROXY's hosts, localhost
+// and loopback directly.
+func TestUpstreamRoute(t *testing.T) {
+	t.Parallel()
+	with, err := (Upstream{HTTPS: "http://alice@tunnel.corp:3128", HTTP: "plain.corp:8080", NoProxy: ".corp,10.0.0.0/8"}).WithPassword("pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	route, err := with.Route()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tunnel := "http://" + url.UserPassword("alice", "pw").String() + "@tunnel.corp:3128"
+	for _, c := range []struct{ url, want string }{
+		{"https://github.com/jdx/mise", tunnel},
+		{"https://GitHub.com.:443/x", tunnel},
+		{"http://cloud-images.ubuntu.com/x", "http://plain.corp:8080"},
+		{"https://git.corp/x", ""},
+		{"https://10.1.2.3/x", ""},
+		{"https://localhost:8443/x", ""},
+		{"http://127.0.0.1/x", ""},
+	} {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, c.url, http.NoBody)
+		u, err := route(req)
+		got := ""
+		if u != nil {
+			got = u.String()
+		}
+		if err != nil || got != c.want {
+			t.Errorf("%s: %q, %v, want %q", c.url, got, err, c.want)
+		}
+	}
+	// Only HTTPS_PROXY: plain http goes directly.
+	route, _ = (Upstream{HTTPS: "tunnel.corp:3128"}).Route()
+	if u, _ := route(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com/", http.NoBody)); u != nil {
+		t.Errorf("http without HTTP_PROXY: %s", u)
+	}
+	if _, err := (Upstream{HTTP: "socks5://proxy.corp:1080"}).Route(); err == nil {
+		t.Error("a socks proxy routes")
+	}
+}
+
+// net/http goes through Route's proxy with its user and password, in
+// Proxy-Authorization only.
+func TestUpstreamRouteAuthorizes(t *testing.T) {
+	t.Parallel()
+	var auth, line string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth, line = r.Header.Get("Proxy-Authorization"), r.Method+" "+r.RequestURI
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(srv.Close)
+	u, _ := url.Parse(srv.URL)
+	route, err := (Upstream{HTTP: "http://alice@" + u.Host}).WithPassword(upPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pick, err := route.Route()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &http.Client{Transport: &http.Transport{Proxy: pick}}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.test/x", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if want := "Basic " + base64.StdEncoding.EncodeToString([]byte("alice:"+upPassword)); auth != want || line != "GET http://example.test/x" {
+		t.Errorf("the company proxy got %q, %q", line, auth)
+	}
+}
