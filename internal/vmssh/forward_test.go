@@ -372,6 +372,43 @@ func TestForwarderReservedUnknown(t *testing.T) {
 	}
 }
 
+// A forward whose port devvm has since reserved goes at the next report,
+// though the VM still listens there; while devvm's ports can't be read,
+// the forwards it has stay.
+func TestForwarderReservedLater(t *testing.T) {
+	p := freePorts(t, 1)[0]
+	var log bytes.Buffer
+	reserved := map[int]bool{}
+	var rerr error
+	f := &Forwarder{
+		VM: "devvm-f", Log: &log, ports: map[int]*forward{}, skipped: map[int]bool{},
+		Reserved: func() (map[int]bool, error) { return reserved, rerr },
+		Listen:   platform.ListenLoopback,
+	}
+	defer f.closeAll()
+	want := map[int]string{p: "127.0.0.1"}
+	f.apply(t.Context(), want)
+	if f.ports[p] == nil {
+		t.Fatalf("not forwarded: %s", log.String())
+	}
+	rerr = errors.New("unreadable")
+	f.apply(t.Context(), want)
+	if f.ports[p] == nil {
+		t.Fatal("a forward dropped while devvm's ports are unknown")
+	}
+	reserved, rerr = map[int]bool{p: true}, nil
+	f.apply(t.Context(), want)
+	if f.ports[p] != nil {
+		t.Errorf("a reserved port still forwarded")
+	}
+	if got := reach(t, net.JoinHostPort("127.0.0.1", strconv.Itoa(p))); got != "refused" {
+		t.Errorf("a reserved port: %q", got)
+	}
+	if !strings.Contains(log.String(), fmt.Sprintf("port %d: no longer forwarded", p)) {
+		t.Errorf("log: %q", log.String())
+	}
+}
+
 // The master asks for nothing to be forwarded, reads no configuration of
 // the user's and offers the VM's key alone; a relay is a channel of it,
 // and without it connects to the VM the same way, never elsewhere: on a

@@ -79,8 +79,9 @@ type Forwarder struct {
 	// Only is the ports it forwards: nil for every one from 1024 up, else
 	// these alone (the VM's listed ports), whatever their number.
 	Only []backend.PortRange
-	// Reserved returns the host ports never forwarded, asked each time a
-	// port would be; while it fails, none is.
+	// Reserved returns the host ports never forwarded, asked with each
+	// report: a forward on one goes; while it fails, no new port is
+	// forwarded.
 	Reserved func() (map[int]bool, error)
 	// Watch connects to the VM and runs ports.sh there, returning its
 	// output and how to wait for it; it ends with ctx or the connection.
@@ -278,7 +279,9 @@ func (f *Forwarder) wanted(port int) bool {
 }
 
 // apply makes the forwards what the VM reports: port to address in the
-// VM.
+// VM. A forward goes once the VM no longer listens there, or once devvm
+// reserves its port; while the reserved ports can't be read, those it has
+// stay.
 func (f *Forwarder) apply(ctx context.Context, want map[int]string) {
 	reserved, rerr := f.Reserved()
 	if rerr != nil {
@@ -287,7 +290,7 @@ func (f *Forwarder) apply(ctx context.Context, want map[int]string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for port, fw := range f.ports {
-		if _, ok := want[port]; !ok {
+		if _, ok := want[port]; !ok || reserved[port] {
 			fw.close()
 			delete(f.ports, port)
 			f.logf("port %d: no longer forwarded", port)
