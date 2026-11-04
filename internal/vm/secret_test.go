@@ -33,8 +33,24 @@ func TestSecrets(t *testing.T) {
 		}
 		return b.String()
 	}
-	if got, want := list(), "claude no \ngithub no \n"; got != want {
+	if got, want := list(), "claude no \ngithub no \nproxy no \n"; got != want {
 		t.Errorf("Secrets = %q, want %q", got, want)
+	}
+	// The company proxy's password: saved as given, spaces inside kept, and
+	// never a VM's.
+	if err := n.SecretSave(ctx, "proxy", " pa55 word\n"); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if v, err := e.Proxy.Secrets.Value(ctx, "proxy"); err != nil || v != "pa55 word" {
+		t.Errorf("proxy = %q, %v", v, err)
+	}
+	for _, use := range []bool{true, false} {
+		if err := n.SecretUse(ctx, "proxy", use); msg.NamesOf(err) != "secret_host_only secret=proxy" {
+			t.Errorf("SecretUse(proxy, %v) = %v", use, msg.NamesOf(err))
+		}
+	}
+	if err := n.SecretRm(ctx, "proxy"); err != nil {
+		t.Fatal(msg.NamesOf(err))
 	}
 	if err := n.SecretSave(ctx, "github", " ghp_testfake\n"); err != nil {
 		t.Fatal(msg.NamesOf(err))

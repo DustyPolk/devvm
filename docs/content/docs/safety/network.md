@@ -177,19 +177,30 @@ When a package isn't in the binary cache, Nix builds it from source, and the bui
 
 ## Behind a company proxy
 
-When this machine reaches the internet only through a company proxy, the VM's proxy sends the requests it allows through that proxy. devvm reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, or their lowercase forms, from the shell you run it in. It passes them to the VM's proxy when the proxy starts, and when you run devvm again with different settings, devvm starts the VM's proxy again with the new ones. So run devvm from a shell that has your company's proxy settings, and after you change them, run devvm again in the folder or `devvm restart`.
+When this machine reaches the internet only through a company proxy, the VM's proxy sends the requests it allows through that proxy. devvm reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, or their lowercase forms, from the shell you run it in. When that shell sets neither `HTTPS_PROXY` nor `HTTP_PROXY`, devvm reads the `[proxy]` table of [`config.toml`](../using/settings.md#configtoml) instead, so the proxy works from every shell, including an editor's terminal that didn't load your profile. The shell's settings win whole: devvm never mixes them with `config.toml`'s, so a `NO_PROXY` alone in the shell still leaves `config.toml`'s proxy in effect, with its own `no-proxy`.
+
+```toml
+[proxy]
+https = "http://alice@proxy.example.com:8080"
+http = "http://alice@proxy.example.com:8080"
+no-proxy = "localhost,.example.com"
+```
+
+devvm passes the settings to the VM's proxy when the proxy starts, and when you run devvm again with different settings, devvm starts the VM's proxy again with the new ones. So after you change them, run devvm again in the folder or `devvm restart`. When a VM's proxy went through a company proxy the last time it started and devvm finds none this time, devvm warns you and names `config.toml`, because a VM's proxy that a shell without the settings starts sends the VM's requests directly.
 
 The VM's proxy still decides each request by the host name the VM asked for, against the same allowlists, and only then passes it on. It sends tunnels, which carry HTTPS and the requests it puts your secrets into, through `HTTPS_PROXY`'s proxy, and plain HTTP requests through `HTTP_PROXY`'s. It reaches the hosts that `NO_PROXY` names directly, and also `localhost` and loopback addresses. In `NO_PROXY`, `example.com` matches that host and its subdomains, `.example.com` matches only its subdomains, an address or a CIDR matches addresses, any entry can end in a port, and `*` matches every host. `devvm network log` adds `through host:port` to each request that went through the company proxy.
 
-The company proxy needs an `http://` address, such as `http://user:password@proxy.example.com:8080`, and a proxy without a port is on port 80. devvm doesn't start a VM with network policy while `HTTPS_PROXY` or `HTTP_PROXY` names an `https://` or `socks5://` proxy, and it tells you which setting to change. The company proxy's password stays on this machine. The VM never gets it, and devvm writes it into no log, no image and no process's arguments.
+The company proxy needs an `http://` address, such as `http://user:password@proxy.example.com:8080` in `HTTPS_PROXY`, and a proxy without a port is on port 80. devvm doesn't start a VM with network policy while `HTTPS_PROXY`, `HTTP_PROXY` or a `[proxy]` key names an `https://` or `socks5://` proxy, and it tells you which setting to change. The company proxy's password stays on this machine. The VM never gets it, and devvm writes it into no log, no image and no process's arguments.
+
+`config.toml` never holds the password, because it's a file you might copy to other machines or keep with your dotfiles, and devvm refuses a `[proxy]` URL that has one. Put only the user in the URL, as `http://alice@proxy.example.com:8080`, and save the password with `devvm secret set proxy`, which keeps it as it keeps the other [secrets](#saving-and-binding-secrets). devvm's proxies look it up themselves when they start, so no file of devvm's holds it in the clear. devvm doesn't make a new VM, or start one with network policy, while `config.toml`'s proxy names a user and no password is saved. A VM's proxy reads the password only when it starts, so after you change it, run `devvm restart` in each VM's folder. No VM ever gets the `proxy` secret, and `devvm secret use proxy` refuses.
 
 The company proxy sees the name and port of every host the VM reaches, and if it inspects TLS, the [CA you add for it](../using/settings.md#a-companys-ca) also lets it read the traffic. The company proxy also looks up each name itself, so the VM's proxy can't check every address a name leads to. It still refuses an address that's this machine's own or internal, unless a rule names it, and it refuses a name when this machine's lookup gives an internal or denied address for it. A name that this machine can't look up goes to the company proxy unchecked only when an allowlist names it, as `example.com` or `*.example.com`. When only `**` allows a name that this machine can't look up, the VM's proxy refuses it, so `**` never lets a VM send the company proxy a name of its own making. Under a name you allow by name, a VM can still reach whatever the company proxy reaches, such as hosts on your company's network.
 
 ### Without network policy
 
-A VM without network policy gets your proxy settings in its environment when it starts and uses the company proxy directly.
+A VM without network policy gets the proxy settings of the shell that starts it in its environment, and uses the company proxy directly. It doesn't get `config.toml`'s `[proxy]`, so start it from a shell that has the settings.
 
-Builds never get your company proxy's settings, and images never keep them. When devvm builds an image, builds the shared tools or converts a `--from` container image on Lima behind a company proxy, the build goes through a proxy of devvm's on this machine, made for that build alone, which goes through your company proxy. The build's commands get only that proxy's address, with a password devvm makes for the build, while they run, and devvm stops the proxy when the build ends. So the code a build runs, which includes a container image's own, never sees your company proxy's address or password. That proxy also runs on this machine, so a company proxy on `localhost`, such as one a VPN client runs, works for builds too.
+Builds never get your company proxy's settings, and images never keep them. A build goes through the shell's company proxy, or else `config.toml`'s, as a VM's proxy does. When devvm builds an image, builds the shared tools or converts a `--from` container image on Lima behind a company proxy, the build goes through a proxy of devvm's on this machine, made for that build alone, which goes through your company proxy. The build's commands get only that proxy's address, with a password devvm makes for the build, while they run, and devvm stops the proxy when the build ends. So the code a build runs, which includes a container image's own, never sees your company proxy's address or password. That proxy also runs on this machine, so a company proxy on `localhost`, such as one a VPN client runs, works for builds too.
 
 A build's proxy allows any host, as `**` does. It sends a name that this machine can't look up on to the company proxy, so builds work where only the company proxy looks up outside names.
 
@@ -209,12 +220,13 @@ Agents' logins work the same way. When a VM's image has Codex or opencode and yo
 | Command | What it does |
 | --- | --- |
 | `devvm secret set claude` or `github` | asks for the Claude Code token or the GitHub token without showing it, and saves it (`--stdin` reads a line instead) |
+| `devvm secret set proxy` | asks for the [company proxy](#behind-a-company-proxy)'s password, for the user that `config.toml`'s `[proxy]` names, and saves it (`--stdin` reads a line instead) |
 | `devvm secret rm NAME` | deletes a saved secret |
 | `devvm secret` | lists the secrets, whether each is saved, and the VMs using each |
 | `devvm secret use NAME` | lets this folder's VM use the secret |
 | `devvm secret unuse NAME` | stops this folder's VM using it, though a VM whose image has `claude` always uses `claude` |
 
-devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devvm/secrets/<name>`, a file only you can read ([details](../internals/network.md#where-secrets-are-saved)). No devvm command prints a saved secret, because each VM's proxy reads the values it needs itself. devvm drops whitespace in a secret's value. It refuses a value with a quote, a backslash or a control character, and a `claude` value that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
+devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devvm/secrets/<name>`, a file only you can read ([details](../internals/network.md#where-secrets-are-saved)). No devvm command prints a saved secret, because each VM's proxy reads the values it needs itself. devvm drops whitespace in a secret's value, except inside the `proxy` password, which loses only the whitespace around it. It refuses a value with a quote, a backslash or a control character, and a `claude` value that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
 
 Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`. A VM without network policy gets the real value instead.
 
@@ -239,6 +251,11 @@ To put a secret in, the proxy shows the VM a certificate from the VM's own CA, w
     },
     {
       "name": "github",
+      "saved": false,
+      "used_by": []
+    },
+    {
+      "name": "proxy",
       "saved": false,
       "used_by": []
     }

@@ -114,7 +114,7 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 	}
 	var up upstreams
 	if c.Upstream != nil {
-		if up, err = newUpstreams(*c.Upstream); err != nil {
+		if up, err = newUpstreams(*c.Upstream, std.Secret); err != nil {
 			return nil, err
 		}
 		l.Printf("%s", up.names())
@@ -765,7 +765,7 @@ func run(args []string, std IO, tick time.Duration) error {
 	if err != nil {
 		return err
 	}
-	if c.Secrets != "" && std.Secret == nil {
+	if (c.Secrets != "" || c.Upstream != nil && c.Upstream.Secret != "") && std.Secret == nil {
 		return errors.New("secrets without a lookup")
 	}
 	return serve(c, std, tick)

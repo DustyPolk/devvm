@@ -1562,8 +1562,19 @@ description = "setting is HTTPS_PROXY or HTTP_PROXY; scheme is the URL's, such a
 other = "{{.setting}} names a {{.scheme}} proxy, and network policy and image builds go only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
 
 [upstream_proxy_invalid]
-description = "setting is HTTPS_PROXY, HTTP_PROXY or NO_PROXY"
+description = "setting is HTTPS_PROXY, HTTP_PROXY or NO_PROXY, or config.toml's proxy.https, proxy.http or proxy.no-proxy"
 other = "{{.setting}} isn't a proxy setting devvm can read. Set it as http://host:port, or unset it."
+
+[proxy_password_in_config]
+description = "key is config.toml's proxy.https or proxy.http"
+other = "{{.key}} holds a password, and config.toml never keeps one. Leave only the user in the URL, as http://user@host:port, and save the password with devvm secret set proxy."
+
+[proxy_password_missing]
+other = "config.toml's proxy names a user, and no password for it is saved. Save it with devvm secret set proxy."
+
+[upstream_proxy_gone]
+description = "file is config.toml's path"
+other = "{{.vm_name}}'s proxy went through a company proxy before, and this shell sets none, so it goes directly now. Set HTTPS_PROXY in this shell, or the [proxy] table in {{.file}}."
 
 [creating_from]
 other = "creating {{.vm}} from {{.image}}"
@@ -2086,6 +2097,15 @@ other = "Paste a fine-grained GitHub token that can reach only the repos your VM
 
 [token_prompt]
 other = "Token:"
+
+[proxy_password_howto]
+other = "Type the company proxy's password for the user that config.toml's proxy names. Only devvm's proxies on this machine send it, and only to the company proxy."
+
+[password_prompt]
+other = "Password:"
+
+[secret_host_only]
+other = "VMs never get the {{.secret}} secret, because only devvm's proxies on this machine send it to the company proxy."
 
 [no_token]
 other = "You didn't give a secret, so devvm saved nothing."

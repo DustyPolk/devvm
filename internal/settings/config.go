@@ -47,6 +47,12 @@ type configFile struct {
 			Size opt[nixSizeKind] `toml:"size"`
 		} `toml:"nix-cache"`
 	} `toml:"retention"`
+	// Proxy is the company proxy (HostProxy), which no command saves.
+	Proxy struct {
+		HTTPS   opt[proxyHTTPSKind] `toml:"https"`
+		HTTP    opt[proxyHTTPKind]  `toml:"http"`
+		NoProxy opt[noProxyKind]    `toml:"no-proxy"`
+	} `toml:"proxy"`
 }
 
 // values is what c sets.
@@ -73,14 +79,23 @@ func (c *configFile) values() Values {
 // devvm can't read, an unknown key or a value devvm can't use is a
 // state.CorruptError naming the file, and the line where TOML has one.
 func readConfig(path string) (Values, error) {
+	cf, err := decodeConfig(path)
+	if err != nil {
+		return Values{}, err
+	}
+	return cf.values(), nil
+}
+
+// decodeConfig reads config.toml at path whole, as readConfig does.
+func decodeConfig(path string) (*configFile, error) {
+	var cf configFile
 	data, err := os.ReadFile(path) //nolint:gosec // paths come from paths.Dirs
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return Values{}, nil
+		return &cf, nil
 	case err != nil:
-		return Values{}, err
+		return nil, err
 	}
-	var cf configFile
 	md, err := toml.Decode(string(data), &cf)
 	if err != nil {
 		c := &state.CorruptError{Path: path, Reason: err.Error()}
@@ -92,13 +107,13 @@ func readConfig(path string) (Values, error) {
 		if m, ok := cf.refused(); ok {
 			c.Reason, c.Msg = "", m
 		}
-		return Values{}, c
+		return nil, c
 	}
 	if keys := md.Undecoded(); len(keys) > 0 {
 		k := keys[0].String()
-		return Values{}, &state.CorruptError{Path: path, Line: keyLine(string(data), k), Reason: fmt.Sprintf("unknown key %q", k)}
+		return nil, &state.CorruptError{Path: path, Line: keyLine(string(data), k), Reason: fmt.Sprintf("unknown key %q", k)}
 	}
-	return cf.values(), nil
+	return &cf, nil
 }
 
 // A refuser is one of config.toml's values, which keeps the message its
@@ -111,6 +126,7 @@ func (c *configFile) refused() (msg.M, bool) {
 	for _, v := range []refuser{
 		&c.Network, &c.Ports, &c.Features, &c.Agents, &c.Layers, &c.Size.CPUs, &c.Size.Memory, &c.Size.Disk,
 		&r.Logs.Runs, &r.History.Age, &r.History.Count, &r.Tools.UnusedAge, &r.Orphans.Age, &r.NixCache.Size,
+		&c.Proxy.HTTPS, &c.Proxy.HTTP, &c.Proxy.NoProxy,
 	} {
 		if m, ok := v.refusal(); ok {
 			return m, true

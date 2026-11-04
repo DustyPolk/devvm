@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -88,7 +89,7 @@ func (f *fakeUpstream) requests() []string {
 func useUpstream(t *testing.T, s *server, f *fakeUpstream, noProxyList string) {
 	t.Helper()
 	u := "http://corp-user:" + upPassword + "@" + f.ln.Addr().String()
-	ups, err := newUpstreams(Upstream{HTTPS: u, HTTP: u, NoProxy: noProxyList})
+	ups, err := newUpstreams(Upstream{HTTPS: u, HTTP: u, NoProxy: noProxyList}, nil)
 	must(t, err)
 	s.egress.up = ups
 }
@@ -131,13 +132,63 @@ func TestParseUpstream(t *testing.T) {
 			t.Errorf("%q: the error holds the password: %v", c.raw, err)
 		}
 	}
-	up, err := newUpstream("proxy.corp")
+	up, err := newUpstream("proxy.corp", "")
 	if err != nil || up.addr != "proxy.corp:80" || up.auth != "" {
 		t.Errorf("no port: %+v %v", up, err)
 	}
-	up, err = newUpstream("http://u%40corp:p%3Aw@proxy.corp:8080")
+	up, err = newUpstream("http://u%40corp:p%3Aw@proxy.corp:8080", "")
 	if err != nil || up.auth != authOf("u@corp", "p:w") {
 		t.Errorf("escaped credentials: %+v %v", up, err)
+	}
+	// A URL's own password wins over the secret's; one without a user gets none.
+	up, err = newUpstream("http://u:own@proxy.corp:8080", "kept")
+	if err != nil || up.auth != authOf("u", "own") {
+		t.Errorf("own password: %+v %v", up, err)
+	}
+	up, err = newUpstream("http://proxy.corp:8080", "kept")
+	if err != nil || up.auth != "" {
+		t.Errorf("no user: %+v %v", up, err)
+	}
+}
+
+// TestUpstreamSecret: config.toml's proxy names a user and no password, and the proxy looks the
+// password up as it starts, through IO.Secret, as a secret devvm keeps. A lookup that fails, or
+// none, fails the start.
+func TestUpstreamSecret(t *testing.T) {
+	t.Parallel()
+	var asked []Binding
+	lookup := func(_ context.Context, b Binding) (string, error) {
+		asked = append(asked, b)
+		if b.Name != UpstreamSecret {
+			return "", errors.New("no such secret")
+		}
+		return " s3cret\n", nil
+	}
+	ups, err := newUpstreams(Upstream{HTTPS: "http://alice@proxy.corp:3128", HTTP: "proxy.corp:3128", Secret: UpstreamSecret}, lookup)
+	must(t, err)
+	if ups.https.auth != authOf("alice", "s3cret") || ups.http.auth != "" {
+		t.Errorf("auth: %q, %q", ups.https.auth, ups.http.auth)
+	}
+	if len(asked) != 1 || asked[0].Name != UpstreamSecret || asked[0].Kind != KindSecret {
+		t.Errorf("asked %+v", asked)
+	}
+	for _, c := range []struct {
+		name   string
+		secret string
+		lookup Lookup
+	}{
+		{"no value", "other", lookup},
+		{"no lookup", UpstreamSecret, nil},
+		{"empty", UpstreamSecret, func(context.Context, Binding) (string, error) { return " ", nil }},
+	} {
+		if _, err := newUpstreams(Upstream{HTTPS: "http://alice@proxy.corp:3128", Secret: c.secret}, c.lookup); err == nil {
+			t.Errorf("%s: started", c.name)
+		}
+	}
+	// Without a Secret, nothing is looked up.
+	asked = nil
+	if _, err := newUpstreams(Upstream{HTTPS: "http://alice@proxy.corp:3128"}, lookup); err != nil || asked != nil {
+		t.Errorf("no secret: %v, asked %+v", err, asked)
 	}
 }
 

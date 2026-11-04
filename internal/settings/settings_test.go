@@ -52,6 +52,11 @@ history.count = 5
 tools.unused-age = "30d"
 orphans.age = "2w"
 nix-cache.size = "20G"
+
+[proxy]
+https = "http://alice@proxy.corp.example:3128"
+http = "proxy.corp.example:3128"
+no-proxy = "localhost,.corp.example"
 `
 
 // Every key of config.toml is read, checked and in effect, from
@@ -151,6 +156,13 @@ func TestConfigRefused(t *testing.T) {
 		{"bad count", "[retention]\nhistory.count = 0\n", 2, "a count is a whole number"},
 		{"bad age", "[retention]\nhistory.age = \"30\"\n", 2, "bad_duration"},
 		{"bad size", "[retention]\nnix-cache.size = \"20g\"\n", 2, "a size is a whole number"},
+		{"a proxy's password", "[proxy]\nhttps = \"http://alice:pa55@proxy.corp:3128\"\n", 2, "proxy_password_in_config key=proxy.https"},
+		{"an empty proxy password", "[proxy]\nhttp = \"http://alice:@proxy.corp:3128\"\n", 2, "proxy_password_in_config key=proxy.http"},
+		{"a socks proxy", "[proxy]\nhttp = \"socks5://proxy.corp:1080\"\n", 2, "upstream_proxy_scheme scheme=socks5:// setting=proxy.http"},
+		{"a bad proxy", "[proxy]\nhttps = \"http://proxy.corp:x\"\n", 2, "upstream_proxy_invalid setting=proxy.https"},
+		{"a proxy not a string", "[proxy]\nhttps = 3128\n", 2, "not a string"},
+		{"a bad no-proxy", "[proxy]\nno-proxy = \"a\\nb\"\n", 2, "upstream_proxy_invalid setting=proxy.no-proxy"},
+		{"an unknown proxy key", "[proxy]\nall = \"proxy.corp:1080\"\n", 2, `unknown key "proxy.all"`},
 		{"bad TOML", "network = on\n", 1, ""},
 		{"a key twice", "network = \"on\"\nnetwork = \"off\"\n", 2, ""},
 	} {
@@ -160,6 +172,10 @@ func TestConfigRefused(t *testing.T) {
 			c, ok := errors.AsType[*state.CorruptError](err)
 			if !ok || c.Path != d.ConfigFile() || c.Line != tc.line || !strings.Contains(c.Shown(msg.M.Names), tc.reason) {
 				t.Errorf("got %v, want %s:%d: %s", err, d.ConfigFile(), tc.line, tc.reason)
+			}
+			// A proxy's password is never shown.
+			if ok && (strings.Contains(c.Shown(msg.M.Names), "pa55") || strings.Contains(err.Error(), "pa55")) {
+				t.Errorf("the error shows the password: %v", err)
 			}
 		})
 	}

@@ -30,6 +30,14 @@ func TestHostProxy(t *testing.T) {
 	}; !slices.Equal(got, want) {
 		t.Errorf("Env = %q", got)
 	}
+	// config.toml's password is a secret's, which the proxy looks up.
+	withSecret := HostProxy{HTTPS: "http://u@proxy.corp:8080", Secret: proxy.UpstreamSecret}
+	if up, err := withSecret.Upstream(); err != nil || up == nil || up.Secret != proxy.UpstreamSecret || up.HTTPS != withSecret.HTTPS {
+		t.Errorf("with a secret: %+v, %v", up, err)
+	}
+	if err := CheckProxyURL("proxy.https", ""); err != nil {
+		t.Errorf("none: %v", err)
+	}
 	// NO_PROXY alone is no proxy.
 	none := HostProxy{NoProxy: "*"}
 	if up, err := none.Upstream(); !none.None() || up != nil || err != nil || none.Env() != nil {

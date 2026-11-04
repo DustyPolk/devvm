@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/shell"
 )
 
@@ -30,14 +32,18 @@ import (
 const sudoKeepProxy = `Defaults env_keep += "http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY"`
 
 // buildUpstream is the company proxy a build on n goes through: the
-// host's proxy settings, as getenv has them, and what its proxy's config
-// holds of them; none (nil) without the internet or a proxy on the host. A
-// setting the proxy can't go through is its message.
-func buildUpstream(getenv func(string) string, n backend.Net) (backend.HostProxy, *proxy.Upstream, error) {
+// host's proxy settings, as getenv has them, else config.toml's in d
+// (settings.HostProxy), and what its proxy's config holds of them; none
+// (nil) without the internet or a proxy on the host. A setting the proxy
+// can't go through is its message.
+func buildUpstream(d paths.Dirs, getenv func(string) string, n backend.Net) (backend.HostProxy, *proxy.Upstream, error) {
 	if n != backend.NetInternet {
 		return backend.HostProxy{}, nil, nil
 	}
-	host := backend.ReadHostProxy(getenv)
+	host, err := settings.HostProxy(d, getenv)
+	if err != nil {
+		return backend.HostProxy{}, nil, err
+	}
 	up, err := host.Upstream()
 	if err != nil {
 		return backend.HostProxy{}, nil, err
@@ -57,7 +63,7 @@ func buildUpstream(getenv func(string) string, n backend.Net) (backend.HostProxy
 func buildProxy(ctx context.Context, l *Lima, vm string, n backend.Net) (backend.Confinement, backend.HostProxy, func(ok bool), error) {
 	c := backend.Confinement{Net: n}
 	none := func(bool) {}
-	host, up, err := buildUpstream(l.Getenv, n)
+	host, up, err := buildUpstream(l.Dirs, l.Getenv, n)
 	if err != nil || up == nil {
 		return c, backend.HostProxy{}, none, err
 	}

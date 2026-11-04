@@ -299,6 +299,26 @@ func TestConfineProxyEnv(t *testing.T) {
 	}
 }
 
+// Without the proxy settings in devvm's environment, a build goes through
+// config.toml's company proxy, its password the secret the build's proxy
+// looks up itself; a config.toml devvm can't read fails the build.
+func TestBuildUpstreamConfig(t *testing.T) {
+	l, _, _ := testLima(t, "linux")
+	none := func(string) string { return "" }
+	writeTestFile(t, l.Dirs.ConfigFile(), "[proxy]\nhttps = \"http://alice@proxy.corp:3128\"\n")
+	host, up, err := buildUpstream(l.Dirs, none, backend.NetInternet)
+	if err != nil || host.HTTPS != "http://alice@proxy.corp:3128" || up == nil || up.Secret != proxy.UpstreamSecret {
+		t.Errorf("config.toml's: %+v, %+v, %v", host, up, err)
+	}
+	if _, up, err := buildUpstream(l.Dirs, none, backend.NetNone); up != nil || err != nil {
+		t.Errorf("no internet: %+v, %v", up, err)
+	}
+	writeTestFile(t, l.Dirs.ConfigFile(), "[proxy]\nhttps = 1\n")
+	if _, _, err := buildUpstream(l.Dirs, none, backend.NetInternet); err == nil {
+		t.Error("a broken config.toml was read")
+	}
+}
+
 // A company proxy the build's proxy can't go through is refused before
 // anything is made; without one, a build starts no proxy.
 func TestBuildImageHostProxyRefused(t *testing.T) {

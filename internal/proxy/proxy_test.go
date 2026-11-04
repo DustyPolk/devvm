@@ -800,6 +800,8 @@ func TestMainRefuses(t *testing.T) {
 		{"-config", writeConfig(t, Config{Listen: "127.0.0.1:0"})},
 		// Bindings without IO.Secret: no value could go in.
 		{"-config", writeConfig(t, Config{Listen: "127.0.0.1:0", Password: "k3y", Secrets: filepath.Join(t.TempDir(), "secrets.json")})},
+		// The company proxy's password in a secret, without IO.Secret.
+		{"-config", writeConfig(t, Config{Listen: "127.0.0.1:0", Password: "k3y", Upstream: &Upstream{HTTPS: "http://u@corp:3128", Secret: UpstreamSecret}})},
 	} {
 		if err := Main(args, std); err == nil {
 			t.Errorf("%q: no error", args)

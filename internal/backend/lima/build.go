@@ -74,7 +74,7 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 	}
 	// The company proxy, which the build reaches through a proxy of
 	// devvm's (buildproxy.go): checked before anything is made.
-	host, _, err := buildUpstream(l.Getenv, spec.Net)
+	host, _, err := buildUpstream(l.Dirs, l.Getenv, spec.Net)
 	if err != nil {
 		return backend.Built{}, err
 	}

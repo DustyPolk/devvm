@@ -39,13 +39,16 @@ func Of(st *state.VM) (Bound, error) { return state.Section[Bound](st, Section) 
 
 // Secret is a token devvm keeps on the host: the hosts it's for, the header
 // the proxy puts it in, and the environment variable a VM finds its
-// placeholder in.
+// placeholder in. A HostOnly one is devvm's own, which no VM is bound to:
+// the company proxy's password (proxy.UpstreamSecret), which devvm's
+// proxies send only to the company proxy.
 type Secret struct {
-	Name   string
-	Hosts  []string
-	Header string
-	Env    string
-	prefix string // the placeholder's start; a VM's salt ends it
+	Name     string
+	Hosts    []string
+	Header   string
+	Env      string
+	HostOnly bool
+	prefix   string // the placeholder's start; a VM's salt ends it
 }
 
 // Known are the secrets devvm keeps, by name.
@@ -55,6 +58,7 @@ var Known = []Secret{
 		Name: "github", Hosts: []string{"api.github.com", "github.com", "codeload.github.com", "raw.githubusercontent.com"},
 		Header: "Authorization", Env: "GH_TOKEN", prefix: "devvm-proxy-managed-github",
 	},
+	{Name: proxy.UpstreamSecret, HostOnly: true},
 }
 
 // Lookup returns the known secret by that name.
@@ -210,9 +214,13 @@ func (s *Store) Value(ctx context.Context, name string) (string, error) {
 // stdin) without its whitespace. It refuses an empty one, one with a quote,
 // a backslash or a control character (they'd end the Keychain's command
 // line, or a request's header), and for claude anything but a setup-token
-// token.
+// token. The company proxy's password (proxy.UpstreamSecret) loses only
+// the whitespace around it: a password may hold spaces.
 func Token(name, given string) (string, error) {
 	v := strings.Join(strings.Fields(given), "")
+	if name == proxy.UpstreamSecret {
+		v = strings.TrimSpace(given)
+	}
 	switch {
 	case v == "":
 		return "", msg.NoToken()
@@ -327,10 +335,14 @@ func loginFailed(path string, err error) msg.M {
 // Names returns the secrets a VM uses: those bound to it, then claude when
 // it has Claude Code.
 // A section that can't be read (the folder's VM's is checked as it's
-// found) binds none.
+// found) binds none, and a HostOnly secret is never a VM's, whatever its
+// section says: its value would reach the VM, or its proxy's bindings.
 func Names(st *state.VM) []string {
 	b, _ := Of(st)
-	names := slices.Clone(b.Names)
+	names := slices.DeleteFunc(slices.Clone(b.Names), func(n string) bool {
+		s, ok := Lookup(n)
+		return ok && s.HostOnly
+	})
 	if FromTools(st, "claude") && !slices.Contains(names, "claude") {
 		names = append(names, "claude")
 	}

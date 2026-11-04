@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
@@ -32,9 +33,11 @@ func newSecretCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secret",
 		Short: "List the secrets kept on this machine, for VMs to use",
-		Long: "List the secrets devvm keeps on this machine, claude for the Claude Code token and github for a GitHub token, " +
+		Long: "List the secrets devvm keeps on this machine, claude for the Claude Code token, github for a GitHub token " +
+			"and proxy for the password of the company proxy that config.toml names, " +
 			"with whether each is saved and the VMs using it. " +
-			"A VM with network policy gets a placeholder, and its proxy puts the secret into requests for the secret's hosts.",
+			"A VM with network policy gets a placeholder, and its proxy puts the secret into requests for the secret's hosts. " +
+			"No VM gets proxy, which devvm's proxies send only to the company proxy.",
 		Example: examples(
 			"devvm secret", "list the secrets and the VMs using each",
 			"devvm secret set github", "save a GitHub token, asking for it",
@@ -53,13 +56,15 @@ func newSecretSetCmd(u *ui.UI) *cobra.Command {
 	var stdin bool
 	cmd := &cobra.Command{
 		Use:   "set NAME",
-		Short: "Save the Claude Code token or GitHub token on this machine",
-		Long: "Save a secret on this machine, claude for the Claude Code token that claude setup-token prints " +
-			"or github for a GitHub token. devvm asks for it without showing it, and --stdin reads a line instead. " +
-			"Proxies that are running put the new value in at once.",
+		Short: "Save a secret on this machine",
+		Long: "Save a secret on this machine, claude for the Claude Code token that claude setup-token prints, " +
+			"github for a GitHub token, or proxy for the password of the company proxy that config.toml names. " +
+			"devvm asks for it without showing it, and --stdin reads a line instead. " +
+			"Proxies that are running put a new token in at once, and a VM's proxy reads proxy as it starts.",
 		Example: examples(
 			"devvm secret set claude", "save the Claude Code token, asking for it",
 			"gh auth token | devvm secret set github --stdin", "save GitHub CLI's token without asking",
+			"devvm secret set proxy", "save the company proxy's password, asking for it",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			saveSecret(cmd, u, args[0], stdin)
@@ -78,14 +83,17 @@ func saveSecret(cmd *cobra.Command, u *ui.UI, name string, stdin bool) {
 	if stdin {
 		given = u.Line()
 	} else {
-		if u.StdinIsTerminal() {
-			if name == "claude" {
-				u.Note(msg.ClaudeTokenHowto())
-			} else {
-				u.Note(msg.GithubTokenHowto())
-			}
+		howto, prompt := msg.GithubTokenHowto(), msg.TokenPrompt()
+		switch name {
+		case "claude":
+			howto = msg.ClaudeTokenHowto()
+		case proxy.UpstreamSecret:
+			howto, prompt = msg.ProxyPasswordHowto(), msg.PasswordPrompt()
 		}
-		given = u.Secret(msg.TokenPrompt())
+		if u.StdinIsTerminal() {
+			u.Note(howto)
+		}
+		given = u.Secret(prompt)
 	}
 	withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
 }

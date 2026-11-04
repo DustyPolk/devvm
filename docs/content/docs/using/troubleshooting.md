@@ -114,9 +114,20 @@ With network policy, a VM reaches only the hosts on its allowlist. To see what t
 
 ## Behind a company proxy
 
-When this machine reaches the internet only through a company proxy and nothing in a VM or a build gets through, check that the shell you run devvm in has the proxy settings, as `env | grep -i _proxy` shows. devvm reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from that shell, so set them there, then run devvm again in the folder, which starts the VM's proxy again with them ([network policy behind a company proxy](../safety/network.md#behind-a-company-proxy)). A shell without the settings, such as an editor's terminal that didn't load your profile, starts the VM's proxy without them.
+When this machine reaches the internet only through a company proxy and nothing in a VM or a build gets through, check where devvm finds the proxy. devvm reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from the shell you run it in, as `env | grep -i _proxy` shows, and when that shell sets neither `HTTPS_PROXY` nor `HTTP_PROXY`, it reads the `[proxy]` table of `~/.config/devvm/config.toml` instead ([network policy behind a company proxy](../safety/network.md#behind-a-company-proxy)). A shell without the settings, such as an editor's terminal that didn't load your profile, starts the VM's proxy without a company proxy, unless `config.toml` names one. So set the proxy in `config.toml`, and it works from every shell:
 
-When devvm says that `HTTPS_PROXY` or `HTTP_PROXY` names an `https://` or `socks5://` proxy, ask your IT team for the proxy's `http://` address, and set that. A company proxy that inspects TLS also needs its CA, as the next section describes.
+```toml
+[proxy]
+https = "http://alice@proxy.example.com:8080"
+http = "http://alice@proxy.example.com:8080"
+no-proxy = "localhost,.example.com"
+```
+
+`config.toml` never holds the company proxy's password. Put only the user in the URL, as above, and save the password with `devvm secret set proxy`, which asks for it. Then run devvm again in the folder, which starts the VM's proxy again with the new settings.
+
+When a VM's proxy went through a company proxy the last time it started and devvm finds none this time, devvm warns you, names `config.toml` and starts the proxy without one, so the VM's requests go directly. Set the proxy in that shell or in `config.toml`, then run `devvm restart` in the folder.
+
+When devvm says that `HTTPS_PROXY`, `HTTP_PROXY` or one of `config.toml`'s `[proxy]` keys names an `https://` or `socks5://` proxy, ask your IT team for the proxy's `http://` address, and set that. A company proxy that inspects TLS also needs its CA, as the next section describes.
 
 Builds behind a company proxy go through a proxy of devvm's, which allows any host. It sends a name that this machine can't look up on to the company proxy, which resolves it.
 
@@ -124,7 +135,7 @@ Builds behind a company proxy go through a proxy of devvm's, which allows any ho
 
 When apt, `npm install`, `pip install`, `git clone` over HTTPS or an image's build fails with an error such as `certificate verify failed`, `self-signed certificate in certificate chain` or `unable to get local issuer certificate`, the network you're on may inspect TLS. Ask your IT team for the CA's certificate, or export it from this machine's store, such as Keychain Access on macOS. Put it in `~/.config/devvm/ca` and open the VM again ([a company's CA](settings.md#a-companys-ca)).
 
-`devvm doctor` says so when `HTTPS_PROXY` is set and the folder has no CA certificates. Many proxies don't inspect TLS, so that line isn't a problem in itself. When devvm refuses a file in the folder, it names the file, and you take out anything that isn't a CA certificate, such as a private key or a server's certificate.
+`devvm doctor` says so when `HTTPS_PROXY` or `config.toml`'s `proxy.https` is set and the folder has no CA certificates. Many proxies don't inspect TLS, so that line isn't a problem in itself. When devvm refuses a file in the folder, it names the file, and you take out anything that isn't a CA certificate, such as a private key or a server's certificate.
 
 ## A listed port isn't forwarded
 

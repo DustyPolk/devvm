@@ -79,8 +79,9 @@ func ParseUpstream(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// newUpstream makes an upstream of a proxy URL ("": none).
-func newUpstream(raw string) (*upstream, error) {
+// newUpstream makes an upstream of a proxy URL ("": none). password is the password of a URL that
+// names a user and none of its own (Upstream.Secret's value), "" for none.
+func newUpstream(raw, password string) (*upstream, error) {
 	if strings.TrimSpace(raw) == "" {
 		return nil, nil
 	}
@@ -94,25 +95,55 @@ func newUpstream(raw string) (*upstream, error) {
 	}
 	up := &upstream{addr: net.JoinHostPort(u.Hostname(), port)}
 	if u.User != nil {
-		pass, _ := u.User.Password()
+		pass, ok := u.User.Password()
+		if !ok {
+			pass = password
+		}
 		up.auth = "Basic " + base64.StdEncoding.EncodeToString([]byte(u.User.Username()+":"+pass))
 	}
 	return up, nil
 }
 
 // newUpstreams takes the config's company proxy (Config.Upstream): the host's HTTPS_PROXY,
-// HTTP_PROXY and NO_PROXY.
-func newUpstreams(u Upstream) (upstreams, error) {
+// HTTP_PROXY and NO_PROXY, or config.toml's, with Secret's value, from lookup, as the password of
+// a URL that names a user and none of its own.
+func newUpstreams(u Upstream, lookup Lookup) (upstreams, error) {
 	var ups upstreams
-	var err error
-	if ups.https, err = newUpstream(u.HTTPS); err != nil {
+	password, err := upstreamPassword(u.Secret, lookup)
+	if err != nil {
+		return upstreams{}, err
+	}
+	if ups.https, err = newUpstream(u.HTTPS, password); err != nil {
 		return upstreams{}, fmt.Errorf("upstream: HTTPS_PROXY: %w", err)
 	}
-	if ups.http, err = newUpstream(u.HTTP); err != nil {
+	if ups.http, err = newUpstream(u.HTTP, password); err != nil {
 		return upstreams{}, fmt.Errorf("upstream: HTTP_PROXY: %w", err)
 	}
 	ups.noProxy = parseNoProxy(u.NoProxy)
 	return ups, nil
+}
+
+// upstreamPassword is the value of the secret named name ("": none), from lookup: the company
+// proxy's password, which only Proxy-Authorization ever holds. A secret with no value fails the
+// proxy's start, which would otherwise go through the company proxy without it.
+func upstreamPassword(name string, lookup Lookup) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	if lookup == nil {
+		return "", errors.New("upstream: no secret lookup")
+	}
+	// The proxy's start, which no caller's context bounds.
+	ctx, cancel := context.WithTimeout(context.Background(), lookupTimeout) //nolint:forbidigo // the proxy's own start
+	defer cancel()
+	v, err := lookup(ctx, Binding{Name: name, Kind: KindSecret})
+	if err != nil {
+		return "", fmt.Errorf("upstream: the company proxy's password, secret %s: %w", name, err)
+	}
+	if v = strings.TrimSpace(v); v == "" {
+		return "", fmt.Errorf("upstream: secret %s is empty", name)
+	}
+	return v, nil
 }
 
 // names: the upstreams, by host:port only, for the proxy's log.

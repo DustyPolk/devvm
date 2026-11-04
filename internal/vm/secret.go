@@ -92,8 +92,12 @@ func (e Net) Secrets(ctx context.Context) ([]SecretListed, error) {
 // gets its placeholder, or the token without network policy, from its next
 // launch. Without network policy, the token it got before still works.
 func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
-	if _, ok := secrets.Lookup(name); !ok {
+	sec, ok := secrets.Lookup(name)
+	if !ok {
 		return msg.NoSecret(name)
+	}
+	if sec.HostOnly {
+		return msg.SecretHostOnly(name)
 	}
 	t, err := e.existing(ctx)
 	if err != nil {

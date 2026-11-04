@@ -604,13 +604,24 @@ func TestPrepareUpstream(t *testing.T) {
 	if err := prepare(true); err != nil || f.count() != 2 {
 		t.Errorf("changed: %v, %d starts", msg.NamesOf(err), f.count())
 	}
-	// None: none in its config.
+	// None: none in its config, with a warning, as a shell without the
+	// settings would start it; the next start without one warns no more.
+	var warned []string
+	p.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
 	env = map[string]string{}
 	if err := prepare(true); err != nil || f.count() != 3 {
 		t.Fatalf("none: %v, %d starts", msg.NamesOf(err), f.count())
 	}
 	if up := upstream(); up != nil {
 		t.Errorf("without a company proxy: %+v", up)
+	}
+	gone := "upstream_proxy_gone file=" + d.ConfigFile() + " vm_name=" + st.Name()
+	if !slices.Equal(warned, []string{gone}) {
+		t.Errorf("warned %q, want %s", warned, gone)
+	}
+	warned = nil
+	if err := prepare(false); err != nil || warned != nil {
+		t.Errorf("none again: %v, warned %q", msg.NamesOf(err), warned)
 	}
 	for _, c := range []struct{ env, value, want string }{
 		{"HTTPS_PROXY", "https://corp:pa55@proxy.corp", "upstream_proxy_scheme scheme=https:// setting=HTTPS_PROXY"},
@@ -621,6 +632,55 @@ func TestPrepareUpstream(t *testing.T) {
 		if err := prepare(false); msg.NamesOf(err) != c.want {
 			t.Errorf("%s=%s: %v, want %s", c.env, c.value, msg.NamesOf(err), c.want)
 		}
+	}
+}
+
+// config.toml's company proxy, when devvm's environment sets none: its URL
+// names the user, and the password stays in devvm's secrets, which the
+// proxy looks up itself, so its config never holds it. Without the password
+// saved, the VM doesn't start.
+func TestPrepareUpstreamConfig(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, _ := testProxy(t, d)
+	if err := os.MkdirAll(d.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const url = "http://alice@proxy.corp:3128"
+	if err := os.WriteFile(d.ConfigFile(), []byte("[proxy]\nhttps = \""+url+"\"\nno-proxy = \".corp\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prepare := func() error {
+		t.Helper()
+		_, err := p.Prepare(t.Context(), lifelined(), st, false)
+		return err
+	}
+	if err := prepare(); msg.NamesOf(err) != "proxy_password_missing" {
+		t.Errorf("no password saved: %v", msg.NamesOf(err))
+	}
+	if err := p.Secrets.Save(t.Context(), proxy.UpstreamSecret, "s3cret pa55"); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepare(); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	config := d.VM(st.Name()).ProxyConfig()
+	cfg, err := proxy.ReadConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (proxy.Upstream{HTTPS: url, NoProxy: ".corp", Secret: proxy.UpstreamSecret}); cfg.Upstream == nil || *cfg.Upstream != want {
+		t.Errorf("upstream = %+v", cfg.Upstream)
+	}
+	if b, _ := os.ReadFile(config); strings.Contains(string(b), "pa55") { //nolint:gosec // G304: the test's own sandbox
+		t.Error("the proxy's config holds the company proxy's password")
+	}
+	// The environment's wins.
+	p.Getenv = func(k string) string { return map[string]string{"HTTPS_PROXY": "http://env.corp:8080"}[k] }
+	if err := prepare(); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if cfg, _ := proxy.ReadConfig(config); cfg.Upstream == nil || *cfg.Upstream != (proxy.Upstream{HTTPS: "http://env.corp:8080"}) {
+		t.Errorf("the environment's: %+v", cfg.Upstream)
 	}
 }
 

@@ -2,6 +2,7 @@ package netpolicy
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"runtime"
@@ -54,7 +55,7 @@ type Proxy struct {
 	// Signal sends a process a signal (Stop's: daemon.Signal).
 	Signal func(pid int, sig syscall.Signal) error
 	// Getenv reads devvm's environment: the host's proxy settings, which a
-	// VM's proxy goes through (backend.ReadHostProxy).
+	// VM's proxy goes through over config.toml's (settings.HostProxy).
 	Getenv func(string) string
 	// What it prints, and asks ([Y/n]); Terminal reports whether it can
 	// ask.
@@ -145,11 +146,11 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	// start gets a new one. A running VM's proxy starts again, on the same
 	// port, when its config would differ from the one it started with
 	// (stale).
-	cfg, err := p.config(st, key, lifeline)
+	cfg, err := p.config(ctx, st, key, lifeline)
 	if err != nil {
 		return none, err
 	}
-	if !running || p.stale(st, cfg) {
+	if stale := p.stale(vm, cfg); !running || stale {
 		// Never the old one kept: it would go on with what it started with.
 		if !p.Stop(vm) {
 			return none, msg.ProxyStopFailed(vm)
@@ -188,8 +189,8 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 // built-in policies' rules), the VM's CAs (replaced, so it would mint
 // certificates the VM no longer trusts after its next setup), the user's
 // CAs, which it trusts for its own connections, the company proxy it goes
-// through, from devvm's environment, and the shared Nix cache's cap.
-func (p *Proxy) config(st *state.VM, key, lifeline string) (proxy.Config, error) {
+// through (upstream), and the shared Nix cache's cap.
+func (p *Proxy) config(ctx context.Context, st *state.VM, key, lifeline string) (proxy.Config, error) {
 	vm, files := st.Name(), p.Dirs.VM(st.Name())
 	ca := files.CA()
 	builtin, policies := Policies(p.Dirs, vm, st.Image, tools.Names(st))
@@ -200,7 +201,7 @@ func (p *Proxy) config(st *state.VM, key, lifeline string) (proxy.Config, error)
 	if err != nil {
 		return proxy.Config{}, err
 	}
-	upstream, err := backend.ReadHostProxy(p.Getenv).Upstream()
+	upstream, err := p.Upstream(ctx)
 	if err != nil {
 		return proxy.Config{}, err
 	}
@@ -225,15 +226,42 @@ func (p *Proxy) config(st *state.VM, key, lifeline string) (proxy.Config, error)
 	return c, nil
 }
 
+// Upstream is the company proxy a VM's proxy, or a build's, goes through:
+// the environment's, else config.toml's (settings.HostProxy), checked
+// (backend.HostProxy.Upstream). One whose password is a secret
+// (config.toml's) needs it saved: a proxy started without it would fail.
+func (p *Proxy) Upstream(ctx context.Context) (*proxy.Upstream, error) {
+	host, err := settings.HostProxy(p.Dirs, p.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	if host.Secret != "" {
+		if _, err := p.Secrets.Value(ctx, host.Secret); errors.Is(err, secrets.ErrNone) {
+			return nil, msg.ProxyPasswordMissing()
+		} else if err != nil {
+			return nil, err
+		}
+	}
+	return host.Upstream()
+}
+
+// stale reports whether the VM's proxy last started with another config
+// than cfg (its Sum): one that's gone or can't be read counts as another.
+// It warns when that proxy went through a company proxy and cfg goes
+// through none, as a shell without the proxy settings would start it.
+func (p *Proxy) stale(vm string, cfg proxy.Config) bool {
+	old, err := proxy.ReadConfig(p.Dirs.VM(vm).ProxyConfig())
+	if err != nil {
+		return true
+	}
+	if old.Upstream != nil && cfg.Upstream == nil {
+		p.Warn(msg.UpstreamProxyGone(p.Dirs.ConfigFile(), vm))
+	}
+	return old.Sum() != cfg.Sum()
+}
+
 // listenOn is the proxy's address for port, on the host's loopback.
 func listenOn(port int) string { return "127.0.0.1:" + strconv.Itoa(port) }
-
-// stale reports whether the VM's proxy started with another config than
-// cfg (its Sum): one that's gone or can't be read counts as another.
-func (p *Proxy) stale(st *state.VM, cfg proxy.Config) bool {
-	old, err := proxy.ReadConfig(p.Dirs.VM(st.Name()).ProxyConfig())
-	return err != nil || old.Sum() != cfg.Sum()
-}
 
 // Ports is the allocator of VMs' host ports, which asks Listening
 // whether a program has one.

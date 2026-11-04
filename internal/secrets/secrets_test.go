@@ -68,6 +68,11 @@ func TestToken(t *testing.T) {
 		{"github", "ghp_\x00x", "", "token_quotes"},
 		{"github", "ghp_\x7fx", "", "token_quotes"},
 		{"claude", "some-browser-code", "", "not_setup_token"},
+		// The company proxy's password keeps its spaces inside.
+		{"proxy", " pa55 word \n", "pa55 word", ""},
+		{"proxy", "pa55\tword", "", "token_quotes"},
+		{"proxy", `pa55"`, "", "token_quotes"},
+		{"proxy", " \n", "", "no_token"},
 	} {
 		v, err := Token(tc.name, tc.given)
 		if v != tc.want || msg.NamesOf(err) != tc.err {
@@ -315,6 +320,11 @@ func TestNamesAndLogins(t *testing.T) {
 	bind(t, st, "github")
 	if got := Names(st); !slices.Equal(got, []string{"github", "claude"}) {
 		t.Errorf("Names = %q", got)
+	}
+	// The company proxy's password is never a VM's, even bound.
+	bind(t, st, "github", "proxy")
+	if got := Names(st); !slices.Equal(got, []string{"github", "claude"}) {
+		t.Errorf("Names with proxy bound = %q", got)
 	}
 	if got := s.Logins([]string{"node", "codex", "claude"}); got != nil {
 		t.Errorf("Logins without files = %q", got)

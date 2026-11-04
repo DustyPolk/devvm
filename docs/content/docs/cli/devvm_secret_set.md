@@ -3,11 +3,11 @@ title: devvm secret set
 weight: 43
 ---
 
-Save the Claude Code token or GitHub token on this machine
+Save a secret on this machine
 
 ## Synopsis
 
-Save a secret on this machine, claude for the Claude Code token that claude setup-token prints or github for a GitHub token. devvm asks for it without showing it, and --stdin reads a line instead. Proxies that are running put the new value in at once.
+Save a secret on this machine, claude for the Claude Code token that claude setup-token prints, github for a GitHub token, or proxy for the password of the company proxy that config.toml names. devvm asks for it without showing it, and --stdin reads a line instead. Proxies that are running put a new token in at once, and a VM's proxy reads proxy as it starts.
 
 ```text
 devvm secret set NAME [flags]
@@ -18,6 +18,7 @@ devvm secret set NAME [flags]
 ```text
   devvm secret set claude                          # save the Claude Code token, asking for it
   gh auth token | devvm secret set github --stdin  # save GitHub CLI's token without asking
+  devvm secret set proxy                           # save the company proxy's password, asking for it
 ```
 
 ## Options

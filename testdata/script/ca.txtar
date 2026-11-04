@@ -51,6 +51,17 @@ rm $CAS/company.pem
 exec devvm doctor
 stdout '^doctor_proxy_ca dir=\S*/config/devvm/ca$'
 env HTTPS_PROXY=
+exec devvm doctor
+! stdout doctor_proxy_ca
+# config.toml's company proxy counts as HTTPS_PROXY does.
+cp $WORK/proxy.toml $CFG/config.toml
+exec devvm doctor
+stdout '^doctor_proxy_ca dir=\S*/config/devvm/ca$'
+rm $CFG/config.toml
+
+-- proxy.toml --
+[proxy]
+https = "http://proxy.example:3128"
 
 -- company.pem --
 # Company root, exported from the host's store

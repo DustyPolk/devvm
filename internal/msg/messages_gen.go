@@ -2169,6 +2169,11 @@ func PartsFlagsIgnored(vm string) M {
 	return M{id: "parts_flags_ignored", vals: []val{{"vm", vm}}}
 }
 
+// PasswordPrompt is [password_prompt]: "Password:"
+func PasswordPrompt() M {
+	return M{id: "password_prompt"}
+}
+
 // PickAgents is [pick_agents]: "Coding agents, which you start in the VM's shell"
 func PickAgents() M {
 	return M{id: "pick_agents"}
@@ -2312,6 +2317,21 @@ func ProxyCAFailed(dir string) M {
 // ProxyFailed is [proxy_failed]: "The network policy proxy failed: {{.reason}}."
 func ProxyFailed(reason string) M {
 	return M{id: "proxy_failed", vals: []val{{"reason", reason}}}
+}
+
+// ProxyPasswordHowto is [proxy_password_howto]: "Type the company proxy's password for the user that config.toml's proxy names. Only devvm's proxies on this machine send it, and only to the company proxy."
+func ProxyPasswordHowto() M {
+	return M{id: "proxy_password_howto"}
+}
+
+// ProxyPasswordInConfig is [proxy_password_in_config]: "{{.key}} holds a password, and config.toml never keeps one. Leave only the user in the URL, as http://user@host:port, and save the password with devvm secret set proxy."
+func ProxyPasswordInConfig(key string) M {
+	return M{id: "proxy_password_in_config", vals: []val{{"key", key}}}
+}
+
+// ProxyPasswordMissing is [proxy_password_missing]: "config.toml's proxy names a user, and no password for it is saved. Save it with devvm secret set proxy."
+func ProxyPasswordMissing() M {
+	return M{id: "proxy_password_missing"}
 }
 
 // ProxyPortTaken is [proxy_port_taken]: "Another program took port {{.port}}, which {{.vm}}'s network goes through. devvm picks another port when it next starts {{.vm}}."
@@ -2657,6 +2677,11 @@ func ScriptFailed(script string, vm string) M {
 // SecretFailed is [secret_failed]: "Reading or changing the saved secrets failed: {{.reason}}."
 func SecretFailed(reason string) M {
 	return M{id: "secret_failed", vals: []val{{"reason", reason}}}
+}
+
+// SecretHostOnly is [secret_host_only]: "VMs never get the {{.secret}} secret, because only devvm's proxies on this machine send it to the company proxy."
+func SecretHostOnly(secret string) M {
+	return M{id: "secret_host_only", vals: []val{{"secret", secret}}}
 }
 
 // SecretRemoved is [secret_removed]: "devvm deleted the {{.secret}} secret."
@@ -3087,6 +3112,11 @@ func UnsafeFolderUsed(dir string, holds string) M {
 // UpFailed is [up_failed]: "Opening this folder's VM failed: {{.reason}}."
 func UpFailed(reason string) M {
 	return M{id: "up_failed", vals: []val{{"reason", reason}}}
+}
+
+// UpstreamProxyGone is [upstream_proxy_gone]: "{{.vm_name}}'s proxy went through a company proxy before, and this shell sets none, so it goes directly now. Set HTTPS_PROXY in this shell, or the [proxy] table in {{.file}}."
+func UpstreamProxyGone(file string, vmName string) M {
+	return M{id: "upstream_proxy_gone", vals: []val{{"file", file}, {"vm_name", vmName}}}
 }
 
 // UpstreamProxyInvalid is [upstream_proxy_invalid]: "{{.setting}} isn't a proxy setting devvm can read. Set it as http://host:port, or unset it."
@@ -3664,6 +3694,7 @@ var specs = map[string]spec{
 	"part_none_alone":                  {fields: []string{"flag"}},
 	"part_other_flag":                  {fields: []string{"flag", "given", "other"}},
 	"parts_flags_ignored":              {fields: []string{"vm"}},
+	"password_prompt":                  {},
 	"pick_agents":                      {},
 	"pick_called_for":                  {fields: []string{"file"}},
 	"pick_from_setup":                  {},
@@ -3693,6 +3724,9 @@ var specs = map[string]spec{
 	"ports_taken":                      {plural: true, fields: []string{"count", "ports", "vm"}},
 	"proxy_ca_failed":                  {fields: []string{"dir"}},
 	"proxy_failed":                     {fields: []string{"reason"}},
+	"proxy_password_howto":             {},
+	"proxy_password_in_config":         {fields: []string{"key"}},
+	"proxy_password_missing":           {},
 	"proxy_port_taken":                 {fields: []string{"port", "vm"}},
 	"proxy_start_failed":               {fields: []string{"log", "vm"}},
 	"proxy_stop_failed":                {fields: []string{"vm"}},
@@ -3762,6 +3796,7 @@ var specs = map[string]spec{
 	"saving_home":                      {fields: []string{"vm"}},
 	"script_failed":                    {fields: []string{"script", "vm"}},
 	"secret_failed":                    {fields: []string{"reason"}},
+	"secret_host_only":                 {fields: []string{"secret"}},
 	"secret_removed":                   {fields: []string{"secret"}},
 	"secret_rm_confirm":                {fields: []string{"name"}},
 	"secret_saved":                     {fields: []string{"file", "secret"}},
@@ -3848,6 +3883,7 @@ var specs = map[string]spec{
 	"unsafe_folder_inside":             {fields: []string{"dir", "inside"}},
 	"unsafe_folder_used":               {fields: []string{"dir", "holds"}},
 	"up_failed":                        {fields: []string{"reason"}},
+	"upstream_proxy_gone":              {fields: []string{"file", "vm_name"}},
 	"upstream_proxy_invalid":           {fields: []string{"setting"}},
 	"upstream_proxy_scheme":            {fields: []string{"scheme", "setting"}},
 	"usage_error":                      {fields: []string{"reason"}},

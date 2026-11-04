@@ -1,0 +1,56 @@
+# The company proxy in config.toml: a VM with network policy goes through
+# it when devvm's environment sets none. Its URL names the user alone, and
+# the password is the proxy secret, which the VM's proxy looks up itself,
+# so neither its config nor its arguments hold it. A shell without the
+# settings starts the VM's proxy without them, with a warning. Every
+# value here is fake, and no password is ever in an argument.
+
+# A password in config.toml is refused, never shown.
+project corp
+cp $WORK/password.toml $CFG/config.toml
+! exec devvm --network-policy --no-git-protect
+stderr 'proxy_password_in_config key=proxy\.https'
+! stderr pa55
+
+# The user alone, and no password saved: the VM doesn't start.
+cp $WORK/user.toml $CFG/config.toml
+! exec devvm --network-policy --no-git-protect
+stderr '^devvm: proxy_password_missing$'
+
+# Saved, the VM's proxy goes through it, the password the secret's.
+stdin $WORK/proxy.password
+exec devvm secret set proxy --stdin
+exec devvm --network-policy --no-git-protect
+vm_name CORP corp
+exec cat $CORP_dir/run/proxy.json
+stdout '"https": "http://alice@proxy\.corp\.example:3128"'
+stdout '"secret": "proxy"'
+! stdout pa55
+! stderr upstream_proxy_gone
+
+# Without config.toml's proxy, and none in the environment, the next start
+# warns, naming config.toml, and the one after doesn't.
+exec devvm stop
+cp $WORK/none.toml $CFG/config.toml
+exec devvm
+stderr '^devvm: upstream_proxy_gone file=\S*/config/devvm/config\.toml vm_name=devvm-corp-[0-9a-f]{14}$'
+exec cat $CORP_dir/run/proxy.json
+! stdout '"upstream"'
+exec devvm stop
+exec devvm
+! stderr upstream_proxy_gone
+exec devvm secret rm --force proxy
+
+-- password.toml --
+features = []
+[proxy]
+https = "http://alice:pa55@proxy.corp.example:3128"
+-- user.toml --
+features = []
+[proxy]
+https = "http://alice@proxy.corp.example:3128"
+no-proxy = ".corp.example"
+-- none.toml --
+features = []
+-- proxy.password --
+pa55 word

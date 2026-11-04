@@ -47,7 +47,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm rm](devvm_rm.md): Delete this folder's VM, or a VM whose folder is gone
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
 - [devvm secret rm](devvm_secret_rm.md): Delete a saved secret
-- [devvm secret set](devvm_secret_set.md): Save the Claude Code token or GitHub token on this machine
+- [devvm secret set](devvm_secret_set.md): Save a secret on this machine
 - [devvm secret unuse](devvm_secret_unuse.md): Stop this folder's VM using a secret
 - [devvm secret use](devvm_secret_use.md): Let this folder's VM use a secret
 - [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network policy, coding agents and layers

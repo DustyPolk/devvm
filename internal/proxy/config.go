@@ -87,13 +87,20 @@ type Config struct {
 }
 
 // Upstream is the host's proxy settings, as devvm's environment has them (HTTPS_PROXY, HTTP_PROXY,
-// NO_PROXY): a company proxy URL (ParseUpstream) for tunnels and one for plain HTTP, either ""
-// for none, and the hosts that go directly.
+// NO_PROXY) or config.toml's [proxy]: a company proxy URL (ParseUpstream) for tunnels and one for
+// plain HTTP, either "" for none, and the hosts that go directly. Secret names the secret
+// (UpstreamSecret) whose value, looked up through IO.Secret as the proxy starts, is the password
+// of each URL that names a user and no password: config.toml's, which never holds one.
 type Upstream struct {
 	HTTPS   string `json:"https,omitempty"`
 	HTTP    string `json:"http,omitempty"`
 	NoProxy string `json:"no_proxy,omitempty"`
+	Secret  string `json:"secret,omitempty"`
 }
+
+// UpstreamSecret is the name of the secret devvm keeps the company proxy's password in, for
+// config.toml's proxy URLs (devvm secret set proxy).
+const UpstreamSecret = "proxy"
 
 // ConfigVersion is the config's version: a file of another isn't read.
 const ConfigVersion = 1

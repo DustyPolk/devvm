@@ -91,6 +91,11 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 		return e.finishRemake(ctx, o, t)
 	}
 	if !t.exists {
+		// The company proxy its builds and its proxy go through, checked
+		// before anything is built.
+		if _, err := e.Proxy.Upstream(ctx); err != nil {
+			return err
+		}
 		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
 	}
 	if err := e.checkFolder(t.f, t.st); err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/ui"
@@ -206,15 +207,16 @@ func smallHost(host func() (vm.Host, error)) []msg.M {
 	return ms
 }
 
-// sayProxyCA says, when HTTPS_PROXY is set and devvm's CA folder has no
-// CAs, that a proxy that inspects TLS needs its CA there: not a problem,
-// as most proxies don't. A folder devvm would refuse is warned about.
+// sayProxyCA says, when HTTPS_PROXY or config.toml's proxy.https is set
+// (settings.HostProxy) and devvm's CA folder has no CAs, that a proxy that
+// inspects TLS needs its CA there: not a problem, as most proxies don't. A
+// folder devvm would refuse is warned about.
 func sayProxyCA(u *ui.UI) {
-	if backend.ReadHostProxy(os.Getenv).HTTPS == "" {
-		return
-	}
 	dirs, err := paths.FromEnv()
 	if err != nil {
+		return
+	}
+	if host, err := settings.HostProxy(dirs, os.Getenv); err != nil || host.HTTPS == "" {
 		return
 	}
 	cas, err := trust.Read(dirs.TrustedCAs())

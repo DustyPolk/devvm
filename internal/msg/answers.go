@@ -33,7 +33,7 @@ func AnswerFor(id string) string {
 		return "--ssh-config"
 	case "remake_unfinished":
 		return "devvm rm, then devvm"
-	case "token_prompt":
+	case "token_prompt", "password_prompt":
 		return "--stdin"
 	case "continue", "gc_confirm", "gc_cache_confirm", "adopt_vm", "rm_confirm", "delete_gone_folder_vm", "images_rm_confirm", "secret_rm_confirm",
 		"remake_confirm", "remake_confirm_clean_home":

@@ -11,7 +11,7 @@ devvm writes nothing into your project folders. It keeps the settings you edit i
 
 | File | What it holds | Written by |
 | --- | --- | --- |
-| `config.toml` | the defaults that new VMs get and the [retention settings](#retention), which win over what devvm's commands save ([config.toml](#configtoml)) | you |
+| `config.toml` | the defaults that new VMs get and the [retention settings](#retention), which win over what devvm's commands save, and the [company proxy](../safety/network.md#behind-a-company-proxy) ([config.toml](#configtoml)) | you |
 | `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm network allow -g`, `deny -g`, `rm -g`, or you |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new`, then you |
 | `features/` | your own [features](customizing.md#your-own-features) | you |
@@ -24,7 +24,7 @@ Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles re
 
 ## config.toml
 
-`~/.config/devvm/config.toml` sets the defaults that new VMs get, and the retention settings, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
+`~/.config/devvm/config.toml` sets the defaults that new VMs get, the retention settings and the company proxy, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
 
 ```toml
 # Whether new VMs get network policy: ask, on or off.
@@ -56,9 +56,17 @@ history.count = 10
 tools.unused-age = "30d"
 orphans.age = "30d"
 nix-cache.size = "20G"
+
+# The company proxy, when the shell you run devvm in sets none.
+[proxy]
+https = "http://alice@proxy.example.com:8080"
+http = "http://alice@proxy.example.com:8080"
+no-proxy = "localhost,.example.com"
 ```
 
 Each key takes what its command takes. `network` is `ask`, `on` or `off`, as `devvm network -g` sets it ([turning it on or off](../safety/network.md#turning-it-on-or-off)). `ports` is `all`, `none` or a list, as `devvm ports -g` takes it ([size and ports](ports-size.md#size-and-ports)). `features` lists the [features](customizing.md#choosing-features) that base gets, `agents` the [coding agents](#coding-agents-for-new-vms) that new VMs get, and `layers` the [layers](#layers-for-new-vms) that new VMs get, bottom first. `cpus` is a whole number, and `memory` and `disk` are a number of GiB, such as `8`, `8.5` or `"8G"`, as `devvm size -g` takes them. The `[retention]` keys are the [retention settings](#retention), with a duration such as `"90d"` or a size such as `"20G"` in quotes, and a count as a number.
+
+The `[proxy]` table is the [company proxy](../safety/network.md#behind-a-company-proxy) that VMs with network policy and builds go through when the shell you run devvm in sets neither `HTTPS_PROXY` nor `HTTP_PROXY`. That shell's settings win over the whole table. `https` and `http` take what `HTTPS_PROXY` and `HTTP_PROXY` take, an `http://` URL or `host:port`, and `no-proxy` takes what `NO_PROXY` takes. A URL never holds a password, and devvm refuses one that does, so put only the user in it and save the password with `devvm secret set proxy`. No command saves the proxy, so it's only ever in `config.toml`.
 
 ### Where a default comes from
 
