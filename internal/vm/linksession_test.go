@@ -30,8 +30,8 @@ func linkSessionEnv(t *testing.T) (Links, *backendtest.Fake, *state.VM, *state.V
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
 	f := backendtest.New("fake", backend.Caps{backend.FeatureSSH: backend.Native, backend.FeatureLink: backend.Native})
 	f.Target = backend.SSHTarget{
-		Host: "127.0.0.1", Port: 62022, User: "u",
-		Options: []backend.SSHOption{{Key: "IdentityFile", Value: `"/k"`}, {Key: "IdentityFile", Value: `"/other"`}},
+		Host: "127.0.0.1", Port: 62022, User: "u", Key: "/k",
+		Options: []backend.SSHOption{{Key: "IdentitiesOnly", Value: "yes"}},
 	}
 	reg, err := backend.NewRegistry(f)
 	if err != nil {

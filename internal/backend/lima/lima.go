@@ -493,14 +493,16 @@ func (l *machines) Shell(ctx context.Context, vm, dir string) (backend.Command, 
 
 // sshLogin is the options of Lima's ssh config, lowercase, that say how
 // to log in. Anything else Lima (or a later version) writes there stays
-// out: it turns host key checks off and shares one connection.
+// out: it turns host key checks off and shares one connection. Its first
+// IdentityFile is the target's Key, apart.
 var sshLogin = []string{
-	"identityfile", "identitiesonly", "preferredauthentications", "batchmode",
+	"identitiesonly", "preferredauthentications", "batchmode",
 	"compression", "gssapiauthentication", "ciphers",
 }
 
-// SSH returns how ssh reaches a running VM: the address, port, user and
-// login options in the ssh config Lima keeps for it, which has its key.
+// SSH returns how ssh reaches a running VM: the address, port, user, key
+// (its first IdentityFile, Lima's _config/user) and login options in the
+// ssh config Lima keeps for it.
 func (l *machines) SSH(ctx context.Context, vm string) (backend.SSHTarget, error) {
 	in, err := l.inspect(ctx, vm)
 	if err != nil {
@@ -532,6 +534,10 @@ func (l *machines) SSH(ctx context.Context, vm string) (backend.SSHTarget, error
 			}
 		case lk == "user":
 			t.User = v
+		case lk == "identityfile":
+			if t.Key == "" {
+				t.Key = v
+			}
 		case slices.Contains(sshLogin, lk) && raw != "":
 			t.Options = append(t.Options, backend.SSHOption{Key: k, Value: raw})
 		}

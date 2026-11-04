@@ -19,6 +19,7 @@ You can also point ssh at the file, as in `ssh -F ~/.local/share/devvm/ssh_confi
 
 - **Only running VMs are listed.** A stopped VM's port is free for any program on this machine to take, so an entry for it could hand your connection, and your agent, to that program. Start the VM with `devvm host` or `devvm` before you connect from an editor.
 - **Each entry checks the VM's own host keys,** which devvm keeps in `~/.local/share/devvm/known_hosts`. ssh refuses a host key that doesn't match, and a VM whose keys devvm can't read gets no entry.
+- **Each entry reaches the VM on this machine's loopback, `127.0.0.1`,** as the VM's user with the VM's own key. A VM whose backend names any other address, or no user or key, gets no entry, so ssh never takes your connection somewhere else.
 - **The entries need OpenSSH 8.7 or newer** (`ssh -V`), and an older ssh refuses them.
 - **Keep remote forwards out of `Host *`.** The entries turn off what else your ssh config could share with a VM, but they can't turn off a `RemoteForward` of yours.
 

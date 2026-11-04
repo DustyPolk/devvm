@@ -626,7 +626,7 @@ func TestSSH(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "ssh.config")
 	// Lima's own: host keys unchecked, a shared connection, and (here) a
 	// command to run. Only the login options are kept.
-	content := "Host lima-v\n  IdentityFile \"/h/.lima/_config/user\"\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n" +
+	content := "Host lima-v\n  IdentityFile \"/h/.lima/_config/user\"\n  IdentityFile \"/h/.ssh/id_ed25519\"\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n" +
 		"  NoHostAuthenticationForLocalhost yes\n  PreferredAuthentications publickey\n  Compression no\n  BatchMode yes\n  IdentitiesOnly yes\n" +
 		"  ControlMaster auto\n  ControlPath \"/h/.lima/v/ssh.sock\"\n  ControlPersist yes\n  PermitLocalCommand yes\n  LocalCommand touch /x/ran\n" +
 		"  User cj\n  Hostname 127.0.0.1\n  Port 41083\n"
@@ -636,8 +636,8 @@ func TestSSH(t *testing.T) {
 	f.out["limactl list --json"] = `{"name":"v","status":"Running","sshLocalPort":41083,"sshConfigFile":"` + cfg + `"}
 {"name":"s","status":"Stopped"}`
 	got, err := l.SSH(t.Context(), "v")
-	want := backend.SSHTarget{Host: "127.0.0.1", Port: 41083, User: "cj", ConfigFile: cfg, Options: []backend.SSHOption{
-		{Key: "IdentityFile", Value: `"/h/.lima/_config/user"`},
+	// The first IdentityFile is its key, alone.
+	want := backend.SSHTarget{Host: "127.0.0.1", Port: 41083, User: "cj", Key: "/h/.lima/_config/user", ConfigFile: cfg, Options: []backend.SSHOption{
 		{Key: "PreferredAuthentications", Value: "publickey"},
 		{Key: "Compression", Value: "no"},
 		{Key: "BatchMode", Value: "yes"},

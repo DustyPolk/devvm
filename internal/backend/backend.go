@@ -437,14 +437,19 @@ type Command struct {
 	Dir  string
 }
 
-// SSHTarget is how ssh reaches a VM.
+// SSHTarget is how ssh reaches a VM: devvm takes it only on the host's
+// loopback, as a user with a key (vmssh.FromTarget).
 type SSHTarget struct {
 	Host string
 	Port int
 	User string
-	// Options are the other ssh options that log in (IdentityFile,
-	// IdentitiesOnly…), in order, values as an ssh config has them.
-	// Nothing that turns off host key checks or changes what ssh runs.
+	// Key is the private key file that logs in as User, which the VM
+	// authorizes.
+	Key string
+	// Options are the other ssh options that log in (IdentitiesOnly…),
+	// in order, values as an ssh config has them. Nothing that turns off
+	// host key checks or changes what ssh runs, and no IdentityFile:
+	// Key is the one.
 	Options []SSHOption
 	// ConfigFile is an ssh config the backend keeps for the VM, with its
 	// identity; "" when it has none.

@@ -641,7 +641,7 @@ func checkReach(ctx context.Context, s Subject) error {
 	if _, err := started(ctx, s.Backend, sp.Want, backend.Confinement{}); err != nil {
 		return err
 	}
-	if t, err := s.Backend.SSH(ctx, conformVM); err != nil || t.Host == "" || t.Port <= 0 {
+	if t, err := s.Backend.SSH(ctx, conformVM); err != nil || t.Host == "" || t.Port <= 0 || t.User == "" || t.Key == "" {
 		return fmt.Errorf("SSH: %+v, %w", t, err)
 	}
 	if t, err := s.Backend.ForwardTarget(ctx, conformVM); err != nil || t.User == "" || t.Key == "" || t.Port <= 0 {

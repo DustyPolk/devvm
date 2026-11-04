@@ -141,8 +141,8 @@ func testConfig(t *testing.T) (*Config, *backendtest.Fake) {
 	t.Helper()
 	root := t.TempDir()
 	f := backendtest.New("fake", backend.Caps{backend.FeatureSSH: backend.Native})
-	f.Target = backend.SSHTarget{Host: "127.0.0.1", Port: 60022, User: "u", Options: []backend.SSHOption{
-		{Key: "IdentityFile", Value: `"/x/key"`}, {Key: "IdentitiesOnly", Value: "yes"},
+	f.Target = backend.SSHTarget{Host: "127.0.0.1", Port: 60022, User: "u", Key: "/x/key", Options: []backend.SSHOption{
+		{Key: "IdentitiesOnly", Value: "yes"},
 	}}
 	f.ExecFunc = func(vm string, argv []string, o backend.ExecOpts) error {
 		if len(argv) != 3 || !strings.Contains(argv[2], "/etc/ssh/ssh_host_") {
@@ -467,13 +467,24 @@ func TestEntriesWithRealSSH(t *testing.T) {
 	}
 }
 
-// A running VM whose backend gives no host or no port gets no entry.
+// A running VM whose backend gives no host or no port, or a host other
+// than this machine's loopback, gets no entry: ssh would connect
+// somewhere else.
 func TestWriteNoAddress(t *testing.T) {
 	t.Parallel()
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
 	made(t, c.Dirs, web)
-	for _, target := range []backend.SSHTarget{{Host: "127.0.0.1", User: "u"}, {Port: 60022, User: "u"}} {
+	for _, target := range []backend.SSHTarget{
+		{Host: "127.0.0.1", User: "u", Key: "/x/key"},
+		{Port: 60022, User: "u", Key: "/x/key"},
+		{Host: "10.0.0.2", Port: 22, User: "u", Key: "/x/key"},
+		{Host: "localhost", Port: 60022, User: "u", Key: "/x/key"},
+		{Host: "evil.example", Port: 60022, User: "u", Key: "/x/key"},
+		{Host: "0.0.0.0", Port: 60022, User: "u", Key: "/x/key"},
+		{Host: "127.0.0.1", Port: 60022, Key: "/x/key"},
+		{Host: "127.0.0.1", Port: 60022, User: "u"},
+	} {
 		f.Target = target
 		if err := c.Write(t.Context()); err != nil {
 			t.Fatal(err)

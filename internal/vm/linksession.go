@@ -343,7 +343,7 @@ func (e Links) warnUnenforced(ctx context.Context, client, target *state.VM) {
 
 // linkSSH is how devvm's own ssh reaches a running VM for links: its
 // backend's ssh (reviewed), with the VM's own key and the host key devvm
-// pins for it, on a host loopback port.
+// pins for it, on a host loopback port (vmssh.FromTarget).
 func (e Links) linkSSH(ctx context.Context, b backend.Backend, vm string) (vmssh.SSH, error) {
 	if !e.Registry.Allowed(b, backend.FeatureSSH) {
 		return vmssh.SSH{}, fmt.Errorf("%s: the %s backend's ssh isn't usable", vm, b.Name())
@@ -352,18 +352,9 @@ func (e Links) linkSSH(ctx context.Context, b backend.Backend, vm string) (vmssh
 	if err != nil {
 		return vmssh.SSH{}, err
 	}
-	key := ""
-	for _, o := range t.Options {
-		if strings.EqualFold(o.Key, "IdentityFile") {
-			key = strings.Trim(o.Value, `"`)
-			break
-		}
-	}
-	switch {
-	case t.User == "" || key == "":
-		return vmssh.SSH{}, fmt.Errorf("%s: no user or key for its ssh", vm)
-	case t.Host != "127.0.0.1" || t.Port <= 0:
-		return vmssh.SSH{}, fmt.Errorf("%s: its ssh isn't on a host loopback port", vm)
+	s, err := vmssh.FromTarget(vm, t)
+	if err != nil {
+		return vmssh.SSH{}, err
 	}
 	pinned, err := hostKeyPinned(e.Dirs.KnownHosts(), vm)
 	if err != nil {
@@ -372,7 +363,8 @@ func (e Links) linkSSH(ctx context.Context, b backend.Backend, vm string) (vmssh
 	if !pinned {
 		return vmssh.SSH{}, fmt.Errorf("%s: no host key pinned", vm)
 	}
-	return vmssh.SSH{VM: vm, User: t.User, Key: key, KnownHosts: e.Dirs.KnownHosts(), Port: t.Port}, nil
+	s.KnownHosts = e.Dirs.KnownHosts()
+	return s, nil
 }
 
 // hostKeyPinned reports whether devvm's known hosts file has a host key

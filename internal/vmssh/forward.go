@@ -459,6 +459,30 @@ type SSH struct {
 	Port                               int
 }
 
+// Loopback is the one address devvm's own ssh, and the ssh config's
+// entries, reach a VM's sshd at: the host's loopback.
+const Loopback = "127.0.0.1"
+
+// FromTarget is how devvm's own ssh reaches vm as its backend says (t),
+// once t is checked: a user, an absolute key file, and a port on the
+// host's loopback (Loopback), never another address, so ssh connects
+// to that VM's forward alone. The user and key go into ssh config lines
+// too (sshconfig), so neither may break one. KnownHosts and Control are
+// the caller's.
+func FromTarget(vm string, t backend.SSHTarget) (SSH, error) {
+	switch {
+	case t.User == "" || t.Key == "":
+		return SSH{}, fmt.Errorf("%s: no user or key for its ssh", vm)
+	case strings.ContainsAny(t.User, " \t\"#\r\n"):
+		return SSH{}, fmt.Errorf("%s: its ssh user %q isn't one word", vm, t.User)
+	case !strings.HasPrefix(t.Key, "/") || strings.ContainsAny(t.Key, "\"\r\n"):
+		return SSH{}, fmt.Errorf("%s: its ssh key %q isn't a file's absolute path", vm, t.Key)
+	case t.Host != Loopback || t.Port <= 0 || t.Port > 65535:
+		return SSH{}, fmt.Errorf("%s: its ssh isn't on a host loopback port", vm)
+	}
+	return SSH{VM: vm, User: t.User, Key: t.Key, Port: t.Port}, nil
+}
+
 // connArgs are ssh's options for reaching the VM: no configuration of the
 // user's, the VM's key alone and no agent, its host key pinned, and
 // nothing forwarded either way.
@@ -472,7 +496,7 @@ func (o SSH) connArgs() []string {
 		"-o", "ForwardAgent=no", "-o", "ForwardX11=no", "-o", "Tunnel=no", "-o", "PermitRemoteOpen=none",
 		"-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no", "-o", "ProxyJump=none",
 		"-o", "ConnectTimeout=10", "-o", "LogLevel=ERROR",
-		"-o", "ProxyCommand=none", "-p", strconv.Itoa(o.Port), "-l", o.User, "127.0.0.1",
+		"-o", "ProxyCommand=none", "-p", strconv.Itoa(o.Port), "-l", o.User, Loopback,
 	}
 }
 

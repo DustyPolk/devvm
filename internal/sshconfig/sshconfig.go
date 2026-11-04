@@ -24,6 +24,7 @@ import (
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/w3cj/devvm/internal/vmssh"
 )
 
 // header starts the ssh config devvm writes.
@@ -127,7 +128,8 @@ func (c *Config) running(ctx context.Context) ([]running, error) {
 // checked against its own host keys. A VM whose host keys can't be read
 // gets no entry: a stopped VM's port is free for anything on the host to
 // take, so ssh must check it reaches the VM. Nor does one whose backend's
-// ssh isn't usable (an emulation not yet reviewed). An alias an earlier
+// ssh isn't usable (an emulation not yet reviewed), or isn't a user and a
+// key on a host loopback port (vmssh.FromTarget). An alias an earlier
 // entry has (two VMs made at once) is left out: ssh would take the first.
 func (c *Config) Write(ctx context.Context) error {
 	up, err := c.running(ctx)
@@ -143,7 +145,11 @@ func (c *Config) Write(ctx context.Context) error {
 			continue
 		}
 		t, err := r.b.SSH(ctx, r.in.Name)
-		if err != nil || t.Host == "" || t.Port == 0 {
+		if err != nil {
+			continue
+		}
+		login, err := vmssh.FromTarget(r.in.Name, t)
+		if err != nil {
 			continue
 		}
 		run, err := r.b.Running(ctx, r.in.Name)
@@ -161,7 +167,7 @@ func (c *Config) Write(ctx context.Context) error {
 				alias = r.in.Name
 			}
 			taken[alias] = true
-			if err := c.entry(&buf, alias, r.in, t, start); err != nil {
+			if err := c.entry(&buf, alias, r.in, login, t.Options, start); err != nil {
 				return err
 			}
 		}
@@ -176,7 +182,9 @@ func (c *Config) Write(ctx context.Context) error {
 // forwarding is the choice its current start (start) was made with, as
 // devvm's own shell has it (sshagent.Running), an explicit no included, so
 // a Host * of the user's doesn't apply: ssh takes an option's first value.
-func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, t backend.SSHTarget, start string) error {
+// It logs in as login says, its backend's checked target (vmssh.FromTarget),
+// with the target's other login options (opts).
+func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, login vmssh.SSH, opts []backend.SSHOption, start string) error {
 	hosts := alias
 	if alias != in.Name {
 		hosts += " " + in.Name
@@ -231,11 +239,11 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 		"  UpdateHostKeys no",
 		"  HashKnownHosts no",
 	)
-	lines = append(lines, "  Hostname "+t.Host, "  Port "+strconv.Itoa(t.Port))
-	if t.User != "" {
-		lines = append(lines, "  User "+t.User)
-	}
-	for _, o := range t.Options {
+	lines = append(lines,
+		"  Hostname "+vmssh.Loopback, "  Port "+strconv.Itoa(login.Port),
+		"  User "+login.User, `  IdentityFile "`+login.Key+`"`,
+	)
+	for _, o := range opts {
 		lines = append(lines, "  "+o.Key+" "+o.Value)
 	}
 	buf.WriteString(strings.Join(lines, "\n") + "\n")

@@ -407,6 +407,43 @@ func TestForwarderSSH(t *testing.T) {
 	}
 }
 
+// A backend's ssh target is taken only as a user with an absolute key
+// file on a port of the host's loopback: any other address, a name, no
+// user, key or port, or a key no ssh config line can quote, is refused.
+func TestFromTarget(t *testing.T) {
+	good := backend.SSHTarget{
+		Host: "127.0.0.1", Port: 60022, User: "u", Key: "/k/user", ConfigFile: "/c",
+		Options: []backend.SSHOption{{Key: "IdentitiesOnly", Value: "yes"}},
+	}
+	got, err := FromTarget("devvm-web-0123456789abcd", good)
+	if want := (SSH{VM: "devvm-web-0123456789abcd", User: "u", Key: "/k/user", Port: 60022}); err != nil || got != want {
+		t.Errorf("FromTarget = %+v, %v; want %+v", got, err, want)
+	}
+	for name, change := range map[string]func(*backend.SSHTarget){
+		"another address": func(t *backend.SSHTarget) { t.Host = "10.0.0.2" },
+		"all addresses":   func(t *backend.SSHTarget) { t.Host = "0.0.0.0" },
+		"a name":          func(t *backend.SSHTarget) { t.Host = "localhost" },
+		"IPv6 loopback":   func(t *backend.SSHTarget) { t.Host = "::1" },
+		"another 127":     func(t *backend.SSHTarget) { t.Host = "127.0.0.2" },
+		"no host":         func(t *backend.SSHTarget) { t.Host = "" },
+		"no port":         func(t *backend.SSHTarget) { t.Port = 0 },
+		"a port too high": func(t *backend.SSHTarget) { t.Port = 65536 },
+		"no user":         func(t *backend.SSHTarget) { t.User = "" },
+		"a user's space":  func(t *backend.SSHTarget) { t.User = "u ProxyCommand" },
+		"a user's line":   func(t *backend.SSHTarget) { t.User = "u\nProxyCommand x" },
+		"no key":          func(t *backend.SSHTarget) { t.Key = "" },
+		"a relative key":  func(t *backend.SSHTarget) { t.Key = "key" },
+		"a quoted key":    func(t *backend.SSHTarget) { t.Key = `/k"x` },
+		"a key's newline": func(t *backend.SSHTarget) { t.Key = "/k\nProxyCommand x" },
+	} {
+		tt := good
+		change(&tt)
+		if got, err := FromTarget("v", tt); err == nil {
+			t.Errorf("%s: %+v", name, got)
+		}
+	}
+}
+
 func newFlagSet(fl *Flags) *flag.FlagSet {
 	fs := flag.NewFlagSet("x", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
