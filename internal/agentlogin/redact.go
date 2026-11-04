@@ -4,8 +4,8 @@ package agentlogin
 // opencode.json, Claude Code's settings.json) can hold keys: an MCP server's headers or env, a
 // provider's apiKey. The proxy can't put those in (it only knows the logins), so the VM's copy gets
 // "devvm-redacted" for every value whose key looks like a secret's, every value of an env or headers
-// table, and the secrets in arguments and URLs (scrubArgs, scrubURL), as ~/.claude.json's MCP servers
-// get. Each file is parsed whole, and one that doesn't parse is refused: no line reaches the VM
+// table, and the secrets in arguments, URLs and free text (scrubArgs, scrubURL, scrubText), as
+// ~/.claude.json's MCP servers get. Each file is parsed whole, and one that doesn't parse is refused: no line reaches the VM
 // unread.
 //
 // What's kept although its key matches: values that point elsewhere rather than hold a secret (an
@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/BurntSushi/toml"
 
@@ -165,22 +166,24 @@ func secretIn(path, k, ck string, x any) bool {
 
 // str returns s, at path under key k, as the VM's copy holds it. A URL in a table of secrets, such
 // as an env's base URL, is only scrubbed; under a secret-looking key it goes whole. Claude Code's
-// configuration variables stay (agentSetting).
+// configuration variables stay (agentSetting). In free text, such as a hook's command, only the
+// keys and credentials go (scrubText).
 func (r *redaction) str(s, path, k string, secret bool) string {
 	url := strings.Contains(s, "://")
 	named := redactName.MatchString(k) || credName.MatchString(k)
 	keep := redactKeep(s) || plainValue.MatchString(s) || (url && !named) || agentSetting(path, k)
-	switch {
-	case secret && !keep, secretShape.MatchString(s): // a known key's shape, wherever it is
+	if (secret && !keep) || secretShape.MatchString(s) { // a known key's shape, wherever it is
 		r.paths = append(r.paths, path)
 		return redactMark
-	case url:
-		if u := scrubURL(s); u != s {
-			r.paths = append(r.paths, path)
-			return u
-		}
 	}
-	return s
+	out := s
+	if url && !strings.ContainsFunc(s, unicode.IsSpace) { // else text holding URLs (scrubText)
+		out = scrubURL(out)
+	}
+	if out = scrubText(out); out != s {
+		r.paths = append(r.paths, path)
+	}
+	return out
 }
 
 // list returns l, at path: every string in it replaced when they're secrets, else as arguments
@@ -194,6 +197,8 @@ func (r *redaction) list(l []any, path, k string, secret bool) []any {
 		}
 		if !redactKeep(s) {
 			l[i], changed = redactMark, true
+		} else if t := scrubText(s); t != s {
+			l[i], changed = t, true
 		}
 	}
 	if !secret {

@@ -208,6 +208,47 @@ func TestRedactClaudeEnv(t *testing.T) {
 	}
 }
 
+// Free text, such as a hook's command or an argument holding a header, loses the keys of a known
+// shape and the Bearer and Basic credentials in it, and keeps its other words; prose and references
+// stay.
+func TestRedactFreeText(t *testing.T) {
+	in := `{
+  "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "/usr/bin/curl -H 'x-api-key: sk-fake-in-hook' https://hooks.example.com"}]}]},
+  "statusLine": {"command": "notify --auth \"Bearer fakefakefakefake0001\" done"},
+  "mcp": {"m": {"command": ["curl", "-H", "Authorization: Basic ZmFrZTpmYWtlZmFrZWZha2U=", "-H", "X-Key: AKIAFAKEFAKEFAKE"]}},
+  "note": "a bearer token goes in the basic setup, as risk-assessment says",
+  "theme": "basic monokai-darker-extended",
+  "notify": {"command": "/usr/bin/curl -s https://hooks.example.com/services/T0/B0/fakefakefakefakefake0001 ; notify https://x.example.com/?token=fake-hook-query"},
+  "quoted": "send --auth Bearer 'fakefakefakefake0002'",
+  "paths": "/opt/sk-tools/bin/run --style basic /Users/me/notes/x1",
+  "tokenList": ["/bin/helper ghp_fakefakefake0003"],
+  "ref": "curl -H \"Authorization: Bearer ${GITHUB_TOKEN}\""
+}`
+	out, names := redacted(t, "json", in)
+	for _, s := range []string{
+		"sk-fake-in-hook", "fakefakefakefake0001", "ZmFrZTpmYWtlZmFrZWZha2U=", "AKIAFAKEFAKEFAKE",
+		"fakefakefakefakefake0001", "fake-hook-query", "fakefakefakefake0002", "fakefakefake0003",
+	} {
+		if strings.Contains(out, s) {
+			t.Errorf("copy holds %q:\n%s", s, out)
+		}
+	}
+	for _, s := range []string{
+		"/usr/bin/curl -H 'x-api-key: devvm-redacted' https://hooks.example.com",
+		`notify --auth \"Bearer devvm-redacted\" done`, `"Authorization: Basic devvm-redacted"`, `"X-Key: devvm-redacted"`,
+		"a bearer token goes in the basic setup, as risk-assessment says", `Bearer ${GITHUB_TOKEN}`, "basic monokai-darker-extended",
+		"/usr/bin/curl -s https://hooks.example.com/services/T0/B0/devvm-redacted ; notify https://x.example.com/?token=devvm-redacted",
+		"send --auth Bearer 'devvm-redacted'", "/opt/sk-tools/bin/run --style basic /Users/me/notes/x1", `"/bin/helper devvm-redacted"`,
+	} {
+		if !strings.Contains(out, s) {
+			t.Errorf("copy lost %s:\n%s", s, out)
+		}
+	}
+	if want := "hooks.Stop[0].hooks[0].command\nmcp.m.command\nnotify.command\nquoted\nstatusLine.command\ntokenList\n"; names != want {
+		t.Errorf("names = %q, want %q", names, want)
+	}
+}
+
 // opencode.json (JSONC) and Claude Code's settings.json.
 func TestRedactJSON(t *testing.T) {
 	in := `{

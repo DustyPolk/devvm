@@ -114,7 +114,7 @@ The VM can write anything in the project folder, and devvm locks only `.git`. An
 - **Project code and binaries.** `npm install`, `make`, a test run or `./bin/tool` on this machine runs whatever the VM wrote. Run them in the VM instead.
 - **Symlinks out of the folder.** The VM can create a link in the project folder that points at a file of yours, such as `~/.ssh/id_ed25519`. A program on this machine that follows it, such as an upload, an archive or an agent reading files, reads your file instead. devvm itself never follows a link out of the folder.
 - **Backdoors in code you merge.** Treat the VM's commits as an untrusted contributor's, and review them before you merge, deploy or publish them.
-- **Secrets in the project folder.** A `.env` file, a project `.npmrc` or a cloud key in the folder is in the VM. With network policy it can reach only the hosts on the allowlist, and without network policy it can reach anywhere. Keep secrets out of the project folder, or use `--clone`, which copies no untracked files into the VM.
+- **Secrets in the project folder.** A `.env` file, a project `.npmrc` or a cloud key in the folder is in the VM. With network policy it can reach only the hosts on the allowlist, and without network policy it can reach anywhere. Keep secrets out of the project folder, or use `--clone`, which copies no untracked files into the VM. The same goes for your agents' config folders, such as `~/.claude/skills` or `~/.config/opencode/plugin`, which the VM mounts whole, so a `.env` in one is in the VM too ([mounts](../using/coding-agents.md#mounts)).
 
 ### The network
 

@@ -561,7 +561,8 @@ func claudeSecrets(m map[string]any) []string {
 	for _, n := range names {
 		s := obj(servers, n)
 		if len(obj(s, "env")) > 0 || len(obj(s, "headers")) > 0 || scrubURL(str(s, "url")) != str(s, "url") ||
-			argsHoldSecrets(s["args"]) {
+			argsHoldSecrets(s["args"]) || scrubCommand(str(s, "command")) != str(s, "command") ||
+			scrubCommand(str(s, "headersHelper")) != str(s, "headersHelper") {
 			out = append(out, n)
 		}
 	}
@@ -595,7 +596,37 @@ var (
 	secretShape = regexp.MustCompile(`^(sk-|sk_|pk_|rk_|ghp_|gho_|ghs_|ghu_|github_pat_|glpat-|xox[abpr]-|AKIA|ASIA|AIza|ya29\.|eyJ)`)
 	uuidShape   = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	tokenShape  = regexp.MustCompile(`^[A-Za-z0-9_\-+=~]{24,}$`)
+	// In free text, such as a hook's command: a URL; a known key's shape after a word's start (not
+	// across a /, which no key has, so a path keeps its other folders); and a Bearer or Basic
+	// credential, quoted or not, of 16 or more token characters with a digit or one of +/= in it,
+	// which words don't have, and not a path.
+	urlInText    = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s'"<>]+`)
+	shapeInText  = regexp.MustCompile(`(^|[^A-Za-z0-9_])(?:sk-|sk_|pk_|rk_|ghp_|gho_|ghs_|ghu_|github_pat_|glpat-|xox[abpr]-|AKIA|ASIA|AIza|ya29\.|eyJ)[A-Za-z0-9_\-.+=~]{8,}`)
+	schemeInText = regexp.MustCompile(`(?i)\b(?:bearer|basic)\s+['"]?([A-Za-z0-9_\-.+/=~]{16,})`)
 )
+
+// scrubText: s with the URLs in it scrubbed (scrubURL) and the keys and credentials it holds
+// among other words replaced (shapeInText, schemeInText), the words around them kept.
+func scrubText(s string) string {
+	s = urlInText.ReplaceAllStringFunc(s, scrubURL)
+	s = shapeInText.ReplaceAllString(s, "${1}devvm-redacted")
+	return schemeInText.ReplaceAllStringFunc(s, func(m string) string {
+		cred := schemeInText.FindStringSubmatch(m)[1]
+		if !strings.ContainsAny(cred, "0123456789+/=") || strings.HasPrefix(cred, "/") || strings.HasPrefix(cred, "~/") {
+			return m
+		}
+		return strings.TrimSuffix(m, cred) + "devvm-redacted"
+	})
+}
+
+// scrubCommand: a shell command (an MCP server's command or headersHelper) as the VM's copy
+// holds it: a known key's shape whole, else scrubText's.
+func scrubCommand(s string) string {
+	if secretShape.MatchString(s) {
+		return "devvm-redacted"
+	}
+	return scrubText(s)
+}
 
 // secretLike: v looks like a key or token: a known prefix, a UUID, or 24+ token characters mixing
 // letters and digits.
@@ -679,6 +710,9 @@ func scrubArgs(v any) (any, bool) {
 		case strings.Contains(s, "://") && scrubURL(s) != s:
 			out[i], changed = scrubURL(s), true
 		}
+		if t, ok := out[i].(string); ok && scrubText(t) != t {
+			out[i], changed = scrubText(t), true
+		}
 	}
 	return out, changed
 }
@@ -734,6 +768,11 @@ func claudeVM(m map[string]any, salt string) map[string]any {
 		}
 		if u, ok := s["url"].(string); ok {
 			s["url"] = scrubURL(u)
+		}
+		for _, k := range []string{"command", "headersHelper"} {
+			if c, ok := s[k].(string); ok {
+				s[k] = scrubCommand(c)
+			}
 		}
 		if a, ok := s["args"]; ok {
 			s["args"], _ = scrubArgs(a)

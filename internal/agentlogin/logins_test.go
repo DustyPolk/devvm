@@ -537,23 +537,31 @@ func TestClaudeVMScrubsURLsArgsAndUnknownKeys(t *testing.T) {
 				}, "extra": "DUMMYEXTRA",
 				"oauth": map[string]any{"clientId": "cid", "clientSecret": "DUMMYCS"},
 			},
+			"h": map[string]any{
+				"type": "http", "url": "https://h.example.com/mcp",
+				"headersHelper": `echo '{"Authorization": "Bearer DUMMYHELPER0123456789"}'`,
+			},
+			"c": map[string]any{"command": "env KEY=sk-DUMMYCOMMAND run-server"},
 		},
 	})}
 	out, _ := vmCopy(t, f)
 	for _, s := range []string{
 		"TOPSECRET", "someFutureKey", "DUMMYPASS", "Ab3dEf6hIj9kLm2nOp5qRs8tUv", "Q1", "zz9Yy8Xx7Ww6",
-		"3f2c1b4a-9e8d", "DUMMYARG", "DUMMYEQ", "ghp_DUMMY", "DUMMYEXTRA", "DUMMYCS",
+		"3f2c1b4a-9e8d", "DUMMYARG", "DUMMYEQ", "ghp_DUMMY", "DUMMYEXTRA", "DUMMYCS", "DUMMYHELPER", "DUMMYCOMMAND",
 	} {
 		if strings.Contains(out, s) {
 			t.Errorf("the VM's copy holds %q:\n%s", s, out)
 		}
 	}
-	for _, s := range []string{`"theme": "dark"`, "region=eu", "mcp.example.com", "@scope/server-x", `"8080"`, "/home/me/data", `"cid"`, "--token=devvm-redacted"} {
+	for _, s := range []string{
+		`"theme": "dark"`, "region=eu", "mcp.example.com", "@scope/server-x", `"8080"`, "/home/me/data", `"cid"`, "--token=devvm-redacted",
+		`"command": "npx"`, "env KEY=devvm-redacted run-server", `Bearer devvm-redacted`,
+	} {
 		if !strings.Contains(out, s) {
 			t.Errorf("the VM's copy lost %q:\n%s", s, out)
 		}
 	}
-	if s, _ := MCPSecrets(f.Path); !slices.Equal(s, []string{"a", "u", "z"}) {
+	if s, _ := MCPSecrets(f.Path); !slices.Equal(s, []string{"a", "c", "h", "u", "z"}) {
 		t.Errorf("servers with secrets: %q", s)
 	}
 }

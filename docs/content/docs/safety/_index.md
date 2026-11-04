@@ -14,7 +14,7 @@ Some of what devvm protects are your secrets. A secret is a credential devvm kee
 - **Keep [network policy](network.md) on, and keep allowlists short.** New VMs get it by default. Without it, code in the VM reaches everything this machine can, and with it, stolen data can go only to the hosts you allowed.
 - **Review the VM's changes before you run them on this machine or merge them.** Treat its commits as an untrusted contributor's.
 - **Use a fine-grained GitHub token, and bind only the secrets a VM needs.** A VM can do whatever its secrets allow, even when it never sees them ([secrets and keys the VM may use](attack-vectors.md#secrets-and-keys-the-vm-may-use)).
-- **Keep credentials out of the project folder.** The VM sees every file in it, including a `.env` file.
+- **Keep credentials out of the project folder and your agents' config folders.** The VM sees every file in them, including a `.env` file, with network policy or without ([mounts](../using/coding-agents.md#mounts)).
 - **Leave SSH agent forwarding off,** or use [devvm's own agent](../using/ssh.md#devvms-own-agent) with only the keys the VM needs.
 
 ## What a VM can reach
