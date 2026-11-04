@@ -123,18 +123,22 @@ func (s *Store) login(kind, salt string) agentlogin.File {
 
 // VMLogin returns the VM's copy of an agent's login file: placeholders
 // ending in salt in place of its keys and tokens. It warns about what of
-// the file the copy holds as it is.
+// the file the copy holds as it is, and about the logins it holds without
+// their tokens.
 func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
-	data, kept, err := s.login(kind, salt).VMCopy()
-	if len(kept) > 0 {
-		list := strings.Join(kept, ", ")
+	c, err := s.login(kind, salt).VMCopy()
+	if len(c.Kept) > 0 {
+		list := strings.Join(c.Kept, ", ")
 		if kind == agentlogin.Codex {
 			s.Warn(msg.CodexLoginKept(list))
 		} else {
 			s.Warn(msg.OpencodeLoginKept(list))
 		}
 	}
-	return data, err
+	if len(c.Withheld) > 0 {
+		s.Warn(msg.OpencodeLoginWithheld(strings.Join(c.Withheld, ", ")))
+	}
+	return c.Data, err
 }
 
 // MCPSecrets returns the MCP servers in ~/.claude.json whose settings hold

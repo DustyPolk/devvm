@@ -62,15 +62,22 @@ stderr '^devvm: no_claude_token vm=devvm-notoken-[0-9a-f]{14}$'
 # With network policy: the VM's own CA and its next, the VM's own placeholders, the logins'
 # copies with placeholders (the host's files unchanged), and the
 # settings files with their keys taken out; one devvm can't read that way
-# isn't sent.
+# isn't sent, and neither is an opencode file that isn't settings or
+# Markdown, such as a .env.
+mkdir $HOME/.config/opencode
+cp $WORK/opencode-env $HOME/.config/opencode/.env
+cp $WORK/opencode-agents $HOME/.config/opencode/AGENTS.md
 project net
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
-exec devvm --network-policy --no-git-protect --agents claude,codex
+exec devvm --network-policy --no-git-protect --agents claude,codex,opencode
 stderr '^config_redacted file=\S*/home/\.claude/settings\.json keys=env\.ANTHROPIC_API_KEY vm=devvm-net-[0-9a-f]{14}$'
 stderr '^devvm: config_not_copied file=\S*/home/\.codex/config\.toml vm=devvm-net-[0-9a-f]{14}$'
+stderr '^devvm: config_not_copied file=\S*/home/\.config/opencode/\.env vm=devvm-net-[0-9a-f]{14}$'
 ! stderr claude_mcp_secrets_copied
 exec tar -tf $STUB_DIR/sync.tar
 ! stdout '^home/\.codex/config\.toml$'
+! stdout '^home/\.config/opencode/\.env$'
+stdout '^home/\.config/opencode/AGENTS\.md$'
 vm_name NET net
 exec tar -xOf $STUB_DIR/sync.tar ca/devvm-proxy.crt
 cmp stdout $NET_dir/run/ca/ca.pem
@@ -134,6 +141,10 @@ first=$(sed -n '/"files": \[/{n;s/.*"\([^"]*\)".*/\1/p;}' "$FAILS_dir/vm.json")
 -- config.toml --
 note = """
 testfake-unclosed
+-- opencode-env --
+MY_SERVICE=testfake-dotenv
+-- opencode-agents --
+Be brief.
 -- history.jsonl --
 {"prompt":"testfake-history"}
 -- vm-plain --

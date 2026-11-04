@@ -476,13 +476,15 @@ func TestVMCopies(t *testing.T) {
 	}
 	// What a copy holds as it is is warned about.
 	writeLogin(t, s, "codex", `{"OPENAI_API_KEY":"sk-codex-secret","extra":"x","b":1}`)
-	writeLogin(t, s, "opencode", `{"llama":{"type":"api","key":"local"}}`)
+	writeLogin(t, s, "opencode", `{"llama":{"type":"api","key":"local"},"other":{"type":"oauth","access":"a","refresh":"r"}}`)
 	for _, kind := range []string{"codex", "opencode"} {
 		if _, err := s.VMLogin(kind, salt); err != nil {
 			t.Errorf("VMLogin(%s): %v", kind, err)
 		}
 	}
-	if want := []string{"codex_login_kept keys=b, extra", "opencode_login_kept providers=llama"}; !slices.Equal(warned, want) {
+	if want := []string{
+		"codex_login_kept keys=b, extra", "opencode_login_kept providers=llama", "opencode_login_withheld providers=other",
+	}; !slices.Equal(warned, want) {
 		t.Errorf("warned %q, want %q", warned, want)
 	}
 	out, keys, err := Redact("json", []byte(`{"env":{"API_TOKEN":"tok-secret","NAME":"x"}}`))

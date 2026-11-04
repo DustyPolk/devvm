@@ -354,7 +354,8 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 // stageNet adds what a VM with network policy gets: devvm's CA, its
 // logins' copies with placeholders ending in its salt, and its agents'
 // settings files with the values under secret-looking keys taken out (one
-// that can't be read that way isn't sent).
+// that can't be read that way isn't sent, nor are opencode's files that
+// aren't settings or Markdown: withheld).
 func (e syncer) stageNet(s *stage, store *secrets.Store, vm string, tools []string, salt string) error {
 	ca := e.Dirs.VM(vm).CA()
 	for _, f := range [][2]string{{"ca/devvm-proxy.crt", ca.Cert()}, {"ca/devvm-proxy-next.crt", ca.NextCert()}} {
@@ -384,11 +385,15 @@ func (e syncer) stageNet(s *stage, store *secrets.Store, vm string, tools []stri
 		if !ok {
 			continue
 		}
+		shown := filepath.Join(e.Dirs.Home, rel)
 		format, ok := settingsFormat(rel)
 		if !ok {
+			if withheld(rel) {
+				s.drop(f.name)
+				e.Warn(msg.ConfigNotCopied(shown, vm))
+			}
 			continue
 		}
-		shown := filepath.Join(e.Dirs.Home, rel)
 		out, keys, err := secrets.Redact(format, f.data)
 		if err != nil {
 			s.drop(f.name)
@@ -420,6 +425,15 @@ func settingsFormat(rel string) (string, bool) {
 		return "toml", true
 	}
 	return "json", true
+}
+
+// withheld reports whether a VM with network policy doesn't get an agent's
+// file, by its path relative to the home folder, because devvm can't take
+// secrets out of it: opencode's config folder's files but its settings
+// (settingsFormat) and its Markdown, such as AGENTS.md. A .env is one.
+func withheld(rel string) bool {
+	_, settings := settingsFormat(rel)
+	return !settings && filepath.Dir(rel) == opencodeDir && filepath.Ext(rel) != ".md"
 }
 
 // hostTZ is the host's timezone: what /etc/localtime links to, else

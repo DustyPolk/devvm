@@ -136,6 +136,23 @@ func TestUpLinksNoPolicy(t *testing.T) {
 	}
 }
 
+// With network policy, opencode's config folder's files that are neither
+// settings nor Markdown stay on the host; every other agent's file goes.
+func TestWithheld(t *testing.T) {
+	for rel, want := range map[string]bool{
+		".config/opencode/.env":          true,
+		".config/opencode/secrets.txt":   true,
+		".config/opencode/AGENTS.md":     false,
+		".config/opencode/opencode.json": false,
+		".codex/AGENTS.md":               false,
+		".claude/CLAUDE.md":              false,
+	} {
+		if got := withheld(rel); got != want {
+			t.Errorf("withheld(%s) = %v, want %v", rel, got, want)
+		}
+	}
+}
+
 // The tool images a VM's report lists: only the VM's own, each once, in
 // the report's order; a line that's anything else, or cut short, doesn't
 // count. capped keeps the read to its limit.

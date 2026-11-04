@@ -58,9 +58,9 @@ func jwtWith(exp time.Time, extra map[string]any) string {
 // vmCopy is f's VMCopy, as text.
 func vmCopy(t *testing.T, f File) (string, []string) {
 	t.Helper()
-	b, kept, err := f.VMCopy()
+	c, err := f.VMCopy()
 	must(t, err)
-	return string(b), kept
+	return string(c.Data), c.Kept
 }
 
 // bindings is f's Bindings, each checked to be one of f's logins.
@@ -259,7 +259,7 @@ func TestGetRefuses(t *testing.T) {
 		if _, err := f.Bindings(); err == nil {
 			t.Errorf("Bindings of %+v", f)
 		}
-		if _, _, err := f.VMCopy(); err == nil {
+		if _, err := f.VMCopy(); err == nil {
 			t.Errorf("VMCopy of %+v", f)
 		}
 	}
@@ -316,6 +316,31 @@ func TestOpencodeLogins(t *testing.T) {
 	m, _ := readJSON(f.Path)
 	if e := obj(m, "openai"); str(e, "refresh") != "rt-new" || str(e, "access") != "at-new" {
 		t.Errorf("host file = %v", e)
+	}
+}
+
+// An OAuth login devvm doesn't bind (a provider it doesn't know, Copilot Enterprise) loses its
+// tokens in the VM's copy: the VM never holds a refresh token.
+func TestOpencodeUnboundOAuthWithheld(t *testing.T) {
+	f := File{Kind: Opencode, Path: writeFile(t, map[string]any{
+		"anthropic":      map[string]any{"type": "oauth", "access": "fake-access-a", "refresh": "fake-refresh-a", "expires": 1},
+		"github-copilot": map[string]any{"type": "oauth", "access": "fake-access-e", "refresh": "fake-refresh-e", "expires": 0, "enterpriseUrl": "ghe.example.com"},
+		"llama-cpp":      map[string]any{"type": "api", "key": "local"},
+	})}
+	out, kept := vmCopy(t, f)
+	for _, s := range []string{"fake-access-a", "fake-refresh-a", "fake-access-e", "fake-refresh-e"} {
+		if strings.Contains(out, s) {
+			t.Errorf("the VM's copy holds %q:\n%s", s, out)
+		}
+	}
+	if !strings.Contains(out, `"local"`) || !strings.Contains(out, `"ghe.example.com"`) {
+		t.Errorf("the VM's copy lost what isn't a token:\n%s", out)
+	}
+	if !slices.Equal(kept, []string{"llama-cpp"}) {
+		t.Errorf("kept = %v", kept)
+	}
+	if c, err := f.VMCopy(); err != nil || !slices.Equal(c.Withheld, []string{"anthropic", "github-copilot"}) {
+		t.Errorf("withheld = %v, %v", c.Withheld, err)
 	}
 }
 

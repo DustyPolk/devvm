@@ -2201,6 +2201,10 @@ other = "The VM gets {{.keys}} from Codex's auth.json unchanged."
 description = "providers lists opencode's login providers, comma-separated"
 other = "The VM gets opencode's {{.providers}} login unchanged."
 
+[opencode_login_withheld]
+description = "providers lists opencode's OAuth login providers, comma-separated"
+other = "The VM gets opencode's {{.providers}} login without its OAuth tokens, because network policy keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine."
+
 [devcontainer_using]
 description = "file is the devcontainer.json's path in the project folder"
 other = "devvm makes {{.vm}} as {{.file}} says. To skip the file, run devvm --no-devcontainer."

@@ -169,6 +169,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"no_secret":                        "safety/network#saving-and-binding-secrets",
 	"codex_login_kept":                 "using/coding-agents#codex-and-opencode-logins",
 	"opencode_login_kept":              "using/coding-agents#codex-and-opencode-logins",
+	"opencode_login_withheld":          "using/coding-agents#codex-and-opencode-logins",
 	"codex_no_key":                     "using/coding-agents#codex-and-opencode-logins",
 	"codex_no_chatgpt":                 "using/coding-agents#codex-and-opencode-logins",
 	"codex_refresh_failed":             "using/coding-agents#codex-and-opencode-logins",

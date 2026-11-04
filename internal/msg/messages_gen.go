@@ -2174,6 +2174,11 @@ func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
 }
 
+// OpencodeLoginWithheld is [opencode_login_withheld]: "The VM gets opencode's {{.providers}} login without its OAuth tokens, because network policy keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine."
+func OpencodeLoginWithheld(providers string) M {
+	return M{id: "opencode_login_withheld", vals: []val{{"providers", providers}}}
+}
+
 // OpencodeRefreshFailed is [opencode_refresh_failed]: "Refreshing opencode's {{.provider}} login on this machine failed: {{.reason}}. Log in again with opencode on this machine."
 func OpencodeRefreshFailed(provider string, reason string) M {
 	return M{id: "opencode_refresh_failed", vals: []val{{"provider", provider}, {"reason", reason}}}
@@ -3765,6 +3770,7 @@ var specs = map[string]spec{
 	"nothing_to_clean":                 {},
 	"oci_waiting":                      {},
 	"opencode_login_kept":              {fields: []string{"providers"}},
+	"opencode_login_withheld":          {fields: []string{"providers"}},
 	"opencode_refresh_failed":          {fields: []string{"provider", "reason"}},
 	"origin_no_boot":                   {fields: []string{"origin"}},
 	"origin_pinned":                    {fields: []string{"origin"}},

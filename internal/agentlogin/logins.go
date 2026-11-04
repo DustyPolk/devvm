@@ -351,6 +351,15 @@ func opencodeBindings(m map[string]any, salt string) []proxy.Binding {
 }
 
 func opencodeVM(m map[string]any, salt string) map[string]any {
+	// An OAuth login devvm doesn't bind loses its tokens: the VM never holds a refresh token.
+	for _, id := range opencodeUnbound(m, true) {
+		e := obj(m, id)
+		for _, k := range []string{"access", "refresh"} {
+			if str(e, k) != "" {
+				e[k] = redactMark
+			}
+		}
+	}
 	for _, b := range opencodeBindings(m, salt) {
 		e := obj(m, strings.TrimPrefix(b.Name, "opencode-"))
 		if str(e, "type") == "api" {
@@ -366,15 +375,16 @@ func opencodeVM(m map[string]any, salt string) map[string]any {
 	return m
 }
 
-// Providers whose logins the VM's copy still holds as they are, sorted.
-func opencodeOthers(m map[string]any) []string {
+// opencodeUnbound returns the providers whose logins devvm doesn't bind, sorted: the OAuth ones
+// (which the VM's copy holds without their tokens), or the others (which it holds as they are).
+func opencodeUnbound(m map[string]any, oauth bool) []string {
 	known := map[string]bool{}
 	for _, b := range opencodeBindings(m, "") {
 		known[strings.TrimPrefix(b.Name, "opencode-")] = true
 	}
 	var out []string
 	for id := range m {
-		if !known[id] {
+		if !known[id] && (str(obj(m, id), "type") == "oauth") == oauth {
 			out = append(out, id)
 		}
 	}
@@ -769,31 +779,44 @@ func (f File) Bindings() ([]proxy.Binding, error) {
 	return nil, f.errKind()
 }
 
+// VMFile is the VM's copy of an agent's file (File.VMCopy).
+type VMFile struct {
+	Data []byte
+	// Kept: what of the file the copy holds as it is, sorted: Codex's auth.json keys or opencode's
+	// providers devvm doesn't know.
+	Kept []string
+	// Withheld: opencode's OAuth logins devvm doesn't bind, sorted, which the copy holds without
+	// their tokens.
+	Withheld []string
+}
+
 // VMCopy returns the VM's copy of the file, with placeholders ending in f.Salt in place of its keys
-// and tokens, and what of it the copy holds as it is: Codex's auth.json keys or opencode's
-// providers devvm doesn't know, sorted.
-func (f File) VMCopy() (copied []byte, kept []string, err error) {
+// and tokens.
+func (f File) VMCopy() (VMFile, error) {
 	m, err := readJSON(f.Path)
 	if err != nil {
-		return nil, nil, err
+		return VMFile{}, err
 	}
+	var c VMFile
 	switch f.Kind {
 	case Codex:
-		kept = codexOthers(m)
+		c.Kept = codexOthers(m)
 		m = codexVM(m, f.Salt)
 	case Opencode:
-		kept = opencodeOthers(m)
+		c.Kept, c.Withheld = opencodeUnbound(m, false), opencodeUnbound(m, true)
 		m = opencodeVM(m, f.Salt)
 	case Claude:
 		m = claudeVM(m, f.Salt)
 	default:
-		return nil, nil, f.errKind()
+		return VMFile{}, f.errKind()
 	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		return nil, nil, err
+		return VMFile{}, err
 	}
-	return append(b, '\n'), kept, nil
+	c.Data = b
+	c.Data = append(c.Data, '\n')
+	return c, nil
 }
 
 // Get returns the value of the binding named name: from the host's file, read each time, refreshing
