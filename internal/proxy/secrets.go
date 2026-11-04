@@ -3,8 +3,9 @@ package proxy
 // Secrets: the VM only ever holds placeholders. For hosts with a bound secret, the proxy terminates
 // TLS with a certificate from devvm's own CA (trusted only inside VMs), replaces the placeholder in
 // the binding's header with the real value, and forwards over a fresh TLS connection. Values come
-// from `devvm secret get NAME` (the macOS Keychain) on demand and are cached briefly; they're never
-// logged or written anywhere.
+// from devvm's own lookup (IO.Secret: the Keychain, devvm's secrets folder or an agent's login
+// file), in this process, on demand, and are cached briefly; they're never logged or written
+// anywhere.
 
 import (
 	"context"
@@ -25,7 +26,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -35,18 +35,96 @@ import (
 	"time"
 )
 
-// binding: which hosts get a secret, in which header, and the placeholder the VM sends instead.
-type binding struct {
-	Name        string   `json:"name"`
+// The kinds of Binding: where its value comes from.
+const (
+	// KindSecret is a secret devvm keeps (devvm secret set): in the Keychain, or in devvm's
+	// secrets folder.
+	KindSecret = "secret"
+	// KindLogin is one of an agent's logins on the host: read from Agent's login file each time.
+	KindLogin = "login"
+)
+
+// Binding is one of the VM's secret bindings: the hosts whose :443 requests get a value, the header
+// it goes in, the placeholder it replaces there, and where the value comes from (Kind, with a
+// login's Agent). It holds no value. internal/secrets and internal/agentlogin make them, and devvm
+// writes a VM's in a BindingList (Config.Secrets).
+type Binding struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"` // KindSecret or KindLogin
+	// Agent is a login's agent, whose login file holds its value (codex, opencode, claude).
+	Agent       string   `json:"agent,omitempty"`
 	Hosts       []string `json:"hosts"`  // host patterns, as in policy files
 	Header      string   `json:"header"` // e.g. Authorization; the placeholder is replaced inside its value
 	Placeholder string   `json:"placeholder"`
 }
 
+// BindingList is the VM's bindings file (Config.Secrets), which devvm writes and the proxy reads
+// again when it changes: names, kinds, hosts, headers and placeholders, never values.
+type BindingList struct {
+	Version  int       `json:"version"` // BindingListVersion
+	Bindings []Binding `json:"bindings"`
+}
+
+// BindingListVersion is the bindings file's version: a file of another isn't read.
+const BindingListVersion = 1
+
+// bindingListMax bounds the bindings file the proxy reads.
+const bindingListMax = 1 << 20
+
+// Encode is the list as devvm writes it, of BindingListVersion, a line at its end.
+func (l BindingList) Encode() []byte {
+	l.Version = BindingListVersion
+	if l.Bindings == nil {
+		l.Bindings = []Binding{}
+	}
+	b, _ := json.Marshal(l) // only strings: it never fails
+	return append(b, '\n')
+}
+
+// ReadBindings reads the bindings file at path: a regular file, not a link, that only its owner,
+// this process's user, may read or write, at most bindingListMax long (readPrivate), of
+// BindingListVersion, each binding of a kind the proxy knows.
+func ReadBindings(path string) (BindingList, error) {
+	b, err := readPrivate(path, bindingListMax, 0o077)
+	if err != nil {
+		return BindingList{}, err
+	}
+	var l BindingList
+	if err := json.Unmarshal(b, &l); err != nil {
+		return BindingList{}, fmt.Errorf("%s: %w", path, err)
+	}
+	if l.Version != BindingListVersion {
+		return BindingList{}, fmt.Errorf("%s: version %d", path, l.Version)
+	}
+	for _, x := range l.Bindings {
+		if x.Kind != KindSecret && x.Kind != KindLogin {
+			return BindingList{}, fmt.Errorf("%s: binding %q of kind %q", path, x.Name, x.Kind)
+		}
+	}
+	return l, nil
+}
+
+// InterceptLines returns what a VM's allowlist gets for its bindings' hosts, as policy lines: each
+// on 443 alone, since a binding is only intercepted there, each once, in order.
+func InterceptLines(hosts []string) []string {
+	var lines []string
+	seen := map[string]bool{}
+	for _, h := range hosts {
+		if l := h + ":443"; !seen[l] {
+			seen[l] = true
+			lines = append(lines, l)
+		}
+	}
+	return lines
+}
+
+// Lookup returns a binding's value: IO.Secret, which devvm sets to its secrets' store.
+type Lookup func(ctx context.Context, b Binding) (string, error)
+
 var (
-	secretsPath = ""           // Config.Secrets: JSON list of bindings (no values), re-read on change
-	secretCmd   = ""           // Config.SecretCmd: the devvm binary, run as `devvm secret get NAME`
-	upstreamCAs *x509.CertPool // nil: the system roots; Config.UpstreamCAs: the user's CAs besides them
+	secretsPath  = ""           // Config.Secrets: the bindings file (no values), re-read on change
+	secretLookup Lookup         // IO.Secret: each binding's value
+	upstreamCAs  *x509.CertPool // nil: the system roots; Config.UpstreamCAs: the user's CAs besides them
 	// Only HTTPS is intercepted; anything else to a bound host (SSH on :22, …) is tunneled.
 	interceptPorts = map[int]bool{443: true}
 )
@@ -54,28 +132,33 @@ var (
 type bindingFile struct {
 	mu    sync.Mutex
 	mtime time.Time
-	list  []binding
+	list  []Binding
 }
 
 var bindings = &bindingFile{}
 
-func (b *bindingFile) all() []binding {
+// all returns the bindings as the file has them now. A file that's gone, or that can't be read as
+// ReadBindings reads it, has none: no value goes in until devvm writes it again.
+func (b *bindingFile) all() []Binding {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if secretsPath == "" {
 		return nil
 	}
-	st, err := os.Stat(secretsPath)
+	st, err := os.Lstat(secretsPath)
 	if err != nil {
-		b.list = nil
+		b.list, b.mtime = nil, time.Time{}
 		return nil
 	}
 	if !st.ModTime().Equal(b.mtime) {
-		var list []binding
-		if data, err := os.ReadFile(secretsPath); err == nil && json.Unmarshal(data, &list) == nil {
-			b.list, b.mtime = list, st.ModTime()
-			logf("secrets %s: %d bindings", secretsPath, len(list))
+		b.mtime = st.ModTime()
+		l, err := ReadBindings(secretsPath)
+		if err != nil {
+			logf("secrets: %v", err)
+		} else {
+			logf("secrets %s: %d bindings", secretsPath, len(l.Bindings))
 		}
+		b.list = l.Bindings
 		// devvm touches the file when a value is set or removed: look values up afresh.
 		valueMu.Lock()
 		values = map[string]cached{}
@@ -85,8 +168,8 @@ func (b *bindingFile) all() []binding {
 }
 
 // bindingsFor: the bindings that apply to host.
-func bindingsFor(host string) []binding {
-	var out []binding
+func bindingsFor(host string) []Binding {
+	var out []Binding
 	for _, b := range bindings.all() {
 		for _, h := range b.Hosts {
 			if r, ok := parseRule(h); ok && !r.deny && r.matchHost(strings.ToLower(host)) {
@@ -110,50 +193,52 @@ var (
 	values  = map[string]cached{}
 )
 
-// A value is cached for valueTTL; one from an agent's login file (Codex, opencode, Claude MCP) for
-// loginTTL, since logging out on the host changes nothing devvm sees.
+// A value is cached for valueTTL; a login's (KindLogin: Codex, opencode, Claude MCP) for loginTTL,
+// since logging out on the host changes nothing devvm sees.
 const (
 	valueTTL = 5 * time.Minute
 	loginTTL = 30 * time.Second
 )
 
-func ttlOf(name string) time.Duration {
-	if name == "codex" || name == "codex-key" || strings.HasPrefix(name, "opencode-") || strings.HasPrefix(name, "claude-mcp-") {
+// lookupTimeout bounds one lookup: the Keychain, or a login's file and its refresh.
+const lookupTimeout = 20 * time.Second
+
+func ttlOf(b Binding) time.Duration {
+	if b.Kind == KindLogin {
 		return loginTTL
 	}
 	return valueTTL
 }
 
-// secretValue runs `devvm secret get NAME` (cached, see ttlOf).
-var secretValue = func(name string) (string, error) {
+// secretValue returns b's value from secretLookup, cached (see ttlOf). Lookups go one at a time,
+// so two requests never refresh a login at once.
+func secretValue(b Binding) (string, error) {
 	valueMu.Lock()
 	defer valueMu.Unlock()
-	if c, ok := values[name]; ok && time.Since(c.at) < ttlOf(name) {
+	if c, ok := values[b.Name]; ok && time.Since(c.at) < ttlOf(b) {
 		return c.value, nil
 	}
-	if secretCmd == "" {
-		return "", errors.New("no secret_cmd")
+	if secretLookup == nil {
+		return "", errors.New("no secret lookup")
 	}
 	// The value is cached for every request: no one request's end cancels it.
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second) //nolint:forbidigo // shared by every request
-
+	ctx, cancel := context.WithTimeout(context.Background(), lookupTimeout) //nolint:forbidigo // shared by every request
 	defer cancel()
-	out, err := exec.CommandContext(ctx, secretCmd, "secret", "get", name).Output() //nolint:gosec // devvm names itself
+	v, err := secretLookup(ctx, b)
 	if err != nil {
-		return "", fmt.Errorf("devvm secret get %s: %w", name, err)
+		return "", fmt.Errorf("secret %s: %w", b.Name, err)
 	}
-	v := strings.TrimSpace(string(out))
-	if v == "" {
-		return "", fmt.Errorf("secret %s is empty", name)
+	if v = strings.TrimSpace(v); v == "" {
+		return "", fmt.Errorf("secret %s is empty", b.Name)
 	}
-	values[name] = cached{v, time.Now()}
+	values[b.Name] = cached{v, time.Now()}
 	return v, nil
 }
 
 // inject replaces each binding's placeholder in its header, also inside "Basic" credentials (git
 // over HTTPS sends user:token that way). Only the binding's header is touched. It returns the names
 // of the secrets it put in.
-func inject(h http.Header, bs []binding) (used []string) {
+func inject(h http.Header, bs []Binding) (used []string) {
 	for _, b := range bs {
 		vs := h.Values(b.Header)
 		if len(vs) == 0 {
@@ -166,7 +251,7 @@ func inject(h http.Header, bs []binding) (used []string) {
 			nv := v
 			if strings.Contains(nv, b.Placeholder) || basicHas(nv, b.Placeholder) {
 				if val == "" {
-					if val, err = secretValue(b.Name); err != nil {
+					if val, err = secretValue(b); err != nil {
 						logf("%v", err)
 						return used
 					}

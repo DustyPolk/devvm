@@ -53,10 +53,9 @@ type Config struct {
 	// CA and CAKey are devvm's CA, for interception: its certificate and key files (PEM).
 	CA    string `json:"ca,omitempty"`
 	CAKey string `json:"ca_key,omitempty"`
-	// Secrets is the VM's secret bindings (JSON, no values), read again when they change.
+	// Secrets is the VM's bindings file (BindingList, no values), read again when it changes; each
+	// binding's value comes from IO.Secret.
 	Secrets string `json:"secrets,omitempty"`
-	// SecretCmd is the devvm binary, run as devvm secret get NAME for a value.
-	SecretCmd string `json:"secret_cmd,omitempty"`
 	// UpstreamCAs are CA certificates (PEM) that the proxy's own TLS connections trust besides the
 	// system's: the user's.
 	UpstreamCAs string `json:"upstream_cas,omitempty"`

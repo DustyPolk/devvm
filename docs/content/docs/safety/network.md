@@ -210,12 +210,11 @@ Agents' logins work the same way. When a VM's image has Codex or opencode and yo
 | --- | --- |
 | `devvm secret set claude` or `github` | asks for the Claude Code token or the GitHub token without showing it, and saves it (`--stdin` reads a line instead) |
 | `devvm secret rm NAME` | deletes a saved secret |
-| `devvm secret get NAME` | prints a saved secret for a script or a pipe, and refuses when the output is a terminal unless you add `--to-terminal` |
 | `devvm secret` | lists the secrets, whether each is saved, and the VMs using each |
 | `devvm secret use NAME` | lets this folder's VM use the secret |
 | `devvm secret unuse NAME` | stops this folder's VM using it, though a VM whose image has `claude` always uses `claude` |
 
-devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devvm/secrets/<name>`, a file only you can read ([details](../internals/network.md#where-secrets-are-saved)). It drops whitespace in a secret's value. It refuses a value with a quote, a backslash or a control character, and a `claude` value that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
+devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devvm/secrets/<name>`, a file only you can read ([details](../internals/network.md#where-secrets-are-saved)). No devvm command prints a saved secret, because each VM's proxy reads the values it needs itself. devvm drops whitespace in a secret's value. It refuses a value with a quote, a backslash or a control character, and a `claude` value that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
 
 Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`. A VM without network policy gets the real value instead.
 

@@ -55,7 +55,7 @@ exec sh -c 'ps -axww -o command= | grep "[_]proxy -config $NET_dir/run/proxy.jso
 stdout '_proxy -config \S*/run/proxy\.json$'
 ! stdout '[0-9a-f]{64}'
 exec cat $NET_dir/run/secrets.json
-stdout '^\[\]$'
+stdout '^\{"version":1,"bindings":\[\]\}$'
 # The run log never holds the key.
 exec sh -c 'cat "$DATA"/logs/runs/*.log'
 stdout 'devvm:devvm-proxy-password@'
@@ -97,7 +97,7 @@ env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
 exec devvm --network-policy --no-git-protect --agents claude
 vm_name AGENT agent
 exec cat $AGENT_dir/run/secrets.json
-stdout '^\[\{"name":"claude","hosts":\["api\.anthropic\.com"\],"header":"Authorization","placeholder":"sk-ant-oat01-devvm-proxy-managed-[0-9a-f]{32}"\}\]$'
+stdout '^\{"version":1,"bindings":\[\{"name":"claude","kind":"secret","hosts":\["api\.anthropic\.com"\],"header":"Authorization","placeholder":"sk-ant-oat01-devvm-proxy-managed-[0-9a-f]{32}"\}\]\}$'
 ! stdout testfake
 exec sh -c 'salt=$(sed -n "s/^ *\"proxy_salt\": \"\(.*\)\".*/\1/p" "$AGENT_dir/vm.json"); test -n "$salt" && grep -F "$salt" "$AGENT_dir/run/secrets.json"'
 exec cat $AGENT_dir/run/secrets.policy
@@ -117,7 +117,7 @@ project codex
 exec devvm --network-policy --no-git-protect --agents codex
 vm_name CODEX codex
 exec cat $CODEX_dir/run/secrets.json
-stdout '"name":"codex-key","hosts":\["api\.openai\.com"\]'
+stdout '"name":"codex-key","kind":"login","agent":"codex","hosts":\["api\.openai\.com"\]'
 ! stdout sk-testfake
 exec cat $CODEX_dir/run/secrets.policy
 stdout '^api\.openai\.com:443$'

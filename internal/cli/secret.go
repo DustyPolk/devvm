@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
@@ -46,7 +45,7 @@ func newSecretCmd(u *ui.UI) *cobra.Command {
 	}
 	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newSecretSetCmd(u), newSecretRmCmd(u),
-		newSecretUseCmd(u, "use", true), newSecretUseCmd(u, "unuse", false), newSecretGetCmd(u))
+		newSecretUseCmd(u, "use", true), newSecretUseCmd(u, "unuse", false))
 	return cmd
 }
 
@@ -183,31 +182,4 @@ func newSecretUseCmd(u *ui.UI, name string, use bool) *cobra.Command {
 	}
 	oneSecret(cmd)
 	return cmd
-}
-
-// newSecretGetCmd is devvm secret get, which VMs' proxies run for a value.
-func newSecretGetCmd(u *ui.UI) *cobra.Command {
-	var toTerminal bool
-	get := &cobra.Command{
-		Use:    "get NAME",
-		Short:  "Print a secret's value, for a VM's network policy proxy",
-		Args:   exactArgs(1),
-		Hidden: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Not to a terminal, so a value isn't shown by accident.
-			if u.StdoutIsTerminal() && !toTerminal {
-				u.Die(msg.SecretToTerminal())
-			}
-			dirs, err := paths.FromEnv()
-			var v string
-			if err == nil {
-				v, err = secrets.NewStore(dirs, u.Warn).Get(cmd.Context(), args[0])
-			}
-			fail(u, err, func(reason string) msg.M { return msg.SecretReadFailed(reason, args[0]) })
-			_, err = u.Stdout().Write([]byte(v + "\n"))
-			return err
-		},
-	}
-	get.Flags().BoolVar(&toTerminal, "to-terminal", false, "print it even when the output is a terminal")
-	return get
 }

@@ -8,7 +8,6 @@ package secrets
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -279,37 +279,49 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-// loginOf returns the login kind a value's name belongs to: codex and
-// codex-key are Codex's, opencode-* opencode's, claude-mcp-* Claude Code's
-// MCP servers'.
-func loginOf(name string) (string, bool) {
-	switch {
-	case name == "codex" || name == "codex-key":
-		return "codex", true
-	case strings.HasPrefix(name, "opencode-"):
-		return "opencode", true
-	case strings.HasPrefix(name, "claude-mcp-"):
-		return "claude", true
-	}
-	return "", false
-}
-
-// Get returns the value the proxy asks for by name: a login's, from its
+// Get returns a binding's value for the VM's proxy, which runs it in its
+// own process (proxy.IO.Secret): a login's (proxy.KindLogin), from its
 // agent's file (agentlogin.File.Get, which refreshes an OAuth token when
-// it's due), or a known secret's. Anything else is no_secret.
-func (s *Store) Get(ctx context.Context, name string) (string, error) {
-	if kind, ok := loginOf(name); ok {
-		v, err := s.login(kind, "").Get(ctx, name)
+// it's due), or a known secret's (proxy.KindSecret). Anything else is
+// no_secret.
+func (s *Store) Get(ctx context.Context, b proxy.Binding) (string, error) {
+	switch b.Kind {
+	case proxy.KindLogin:
+		if !slices.Contains(loginKinds, b.Agent) {
+			return "", msg.NoSecret(b.Name)
+		}
+		f := s.login(b.Agent, "")
+		v, err := f.Get(ctx, b.Name)
 		if err != nil {
-			return "", msg.ProxyFailed(err.Error()).Because(err)
+			return "", loginFailed(f.Path, err)
 		}
 		return strings.TrimSpace(v), nil
+	case proxy.KindSecret:
+		v, err := s.Value(ctx, b.Name)
+		if errors.Is(err, ErrNone) {
+			return "", msg.NoSecret(b.Name)
+		}
+		return v, err
 	}
-	v, err := s.Value(ctx, name)
-	if errors.Is(err, ErrNone) {
-		return "", msg.NoSecret(name)
+	return "", msg.NoSecret(b.Name)
+}
+
+// loginFailed is the message for a login's lookup that failed: what
+// logging in again with its agent on this machine fixes, or the login file
+// at path that can't be read.
+func loginFailed(path string, err error) msg.M {
+	var re *agentlogin.RefreshError
+	switch {
+	case errors.Is(err, agentlogin.ErrCodexNoKey):
+		return msg.CodexNoKey().Because(err)
+	case errors.Is(err, agentlogin.ErrCodexNoChatGPT):
+		return msg.CodexNoChatgpt().Because(err)
+	case errors.As(err, &re) && re.Agent == agentlogin.Codex:
+		return msg.CodexRefreshFailed(re.Err.Error()).Because(err)
+	case errors.As(err, &re):
+		return msg.OpencodeRefreshFailed(re.Provider, re.Err.Error()).Because(err)
 	}
-	return v, err
+	return msg.LoginReadFailed(path, err.Error()).Because(err)
 }
 
 // Names returns the secrets a VM uses: those bound to it, then claude when
@@ -361,37 +373,21 @@ func (s *Store) Logins(tools []string) []string {
 	return kinds
 }
 
-// binding is one entry of the bindings file, as the proxy reads it.
-type binding struct {
-	Name        string   `json:"name"`
-	Hosts       []string `json:"hosts"`
-	Header      string   `json:"header"`
-	Placeholder string   `json:"placeholder"`
-}
-
 // WriteFiles writes the proxy's view of a VM's secrets: the bindings of
 // those with a value saved and of its agents' logins, and the hosts they
 // all imply, on 443 only (where the proxy puts values in). The proxy reads
 // both again when they change.
 func (s *Store) WriteFiles(ctx context.Context, st *state.VM, salt string) error {
-	var logins []json.RawMessage
-	var hosts []string
+	var logins []proxy.Binding
 	// A login that can't be read has no bindings.
 	for _, kind := range s.Logins(tools.Names(st)) {
 		bs, err := s.login(kind, salt).Bindings()
 		if err != nil {
 			continue
 		}
-		for _, b := range bs {
-			raw, err := json.Marshal(b)
-			if err != nil {
-				return err
-			}
-			logins = append(logins, raw)
-		}
-		hosts = append(hosts, agentlogin.Hosts(bs)...)
+		logins = append(logins, bs...)
 	}
-	return s.writeFiles(ctx, st, salt, logins, hosts)
+	return s.writeFiles(ctx, st, salt, logins)
 }
 
 // RefreshFiles writes a VM's secret files again for its secrets as they
@@ -399,79 +395,52 @@ func (s *Store) WriteFiles(ctx context.Context, st *state.VM, salt string) error
 // they come from the login files in the home of the devvm that started
 // its proxy.
 func (s *Store) RefreshFiles(ctx context.Context, st *state.VM, salt string) error {
-	data, err := os.ReadFile(s.Dirs.VM(st.Name()).Secrets())
+	l, err := proxy.ReadBindings(s.Dirs.VM(st.Name()).Secrets())
 	if err != nil {
 		return err
 	}
-	var all []json.RawMessage
-	if err := json.Unmarshal(data, &all); err != nil {
-		return err
-	}
-	var logins []json.RawMessage
-	var hosts []string
-	for _, raw := range all {
-		var b binding
-		if json.Unmarshal(raw, &b) != nil {
-			continue
-		}
-		if _, known := Lookup(b.Name); known {
-			continue
-		}
-		logins = append(logins, raw)
-		for _, h := range b.Hosts {
-			if l := h + ":443"; !slices.Contains(hosts, l) {
-				hosts = append(hosts, l)
-			}
-		}
-	}
-	return s.writeFiles(ctx, st, salt, logins, hosts)
+	logins := slices.DeleteFunc(l.Bindings, func(b proxy.Binding) bool { return b.Kind != proxy.KindLogin })
+	return s.writeFiles(ctx, st, salt, logins)
 }
 
 // writeFiles writes the VM's secret files: the bindings of its secrets
-// with a value saved, then its logins', and their hosts.
-func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, logins []json.RawMessage, loginHosts []string) error {
-	var list []json.RawMessage
+// with a value saved, then its logins', and the allowlist they imply,
+// every bound secret's hosts (saved or not) and its logins', on 443.
+func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, logins []proxy.Binding) error {
+	var list []proxy.Binding
 	var hosts []string
 	for _, name := range Names(st) {
 		sec, ok := Lookup(name)
 		if !ok {
 			continue
 		}
-		for _, h := range sec.Hosts {
-			hosts = append(hosts, h+":443")
-		}
+		hosts = append(hosts, sec.Hosts...)
 		if _, err := s.Value(ctx, name); errors.Is(err, ErrNone) {
 			continue
 		} else if err != nil {
 			return err
 		}
-		b, err := json.Marshal(binding{Name: name, Hosts: sec.Hosts, Header: sec.Header, Placeholder: sec.Placeholder(salt)})
-		if err != nil {
-			return err
-		}
-		list = append(list, b)
+		list = append(list, proxy.Binding{
+			Name: name, Kind: proxy.KindSecret, Hosts: sec.Hosts, Header: sec.Header, Placeholder: sec.Placeholder(salt),
+		})
 	}
-	list, hosts = append(list, logins...), append(hosts, loginHosts...)
-	if list == nil {
-		list = []json.RawMessage{}
+	for _, b := range logins {
+		hosts = append(hosts, b.Hosts...)
 	}
-	data, err := json.Marshal(list)
-	if err != nil {
-		return err
-	}
-	// The VM's secret bindings, for its proxy (-secrets): names, hosts,
-	// headers and placeholders, never values; and the allowlist they
-	// imply: their hosts, on 443.
+	list = append(list, logins...)
+	// The VM's secret bindings, for its proxy (Config.Secrets): names,
+	// kinds, hosts, headers and placeholders, never values; and the
+	// allowlist they imply.
 	files := s.Dirs.VM(st.Name())
 	if err := state.PrivateDir(files.Run()); err != nil {
 		return err
 	}
-	if err := state.WriteFile(files.Secrets(), append(data, '\n')); err != nil {
+	if err := state.WriteFile(files.Secrets(), proxy.BindingList{Bindings: list}.Encode()); err != nil {
 		return err
 	}
 	var pol []byte
-	for _, h := range hosts {
-		pol = append(pol, h+"\n"...)
+	for _, l := range proxy.InterceptLines(hosts) {
+		pol = append(pol, l+"\n"...)
 	}
 	return state.WriteFile(files.SecretsPolicy(), pol)
 }

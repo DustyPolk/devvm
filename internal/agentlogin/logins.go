@@ -2,7 +2,8 @@
 // (~/.codex/auth.json) and opencode (~/.local/share/opencode/auth.json) keep their logins there, and
 // Claude Code its MCP servers' secrets (~/.claude.json). Such a VM gets its own copy of each file
 // with placeholders instead of keys and tokens (File.VMCopy), and the proxy puts the real ones
-// into requests for each provider's hosts (File.Bindings), asking devvm for each value (File.Get).
+// into requests for each provider's hosts (File.Bindings), looking each value up in its own process
+// (File.Get).
 // OAuth access tokens are refreshed here, on the host, and written back to the host's file, so the
 // host's login keeps working: a VM never holds a refresh token, so it can't rotate one away.
 // Agents' settings files get their secret-looking values taken out (Redact).
@@ -60,15 +61,23 @@ const (
 	Claude   = "claude"
 )
 
-// A Binding is one of a login's secrets as the proxy puts it in: its name (the value File.Get
-// returns), the hosts whose :443 requests get it, the header it goes in, and the placeholder it
-// replaces there. It holds no value.
-type Binding struct {
-	Name        string   `json:"name"`
-	Hosts       []string `json:"hosts"`
-	Header      string   `json:"header"`
-	Placeholder string   `json:"placeholder"`
+// The errors of Get that logging in again with the agent on the host fixes.
+var (
+	// ErrCodexNoKey: Codex's login on the host has no API key.
+	ErrCodexNoKey = errors.New("codex isn't logged in with an API key")
+	// ErrCodexNoChatGPT: Codex's login on the host has no ChatGPT login.
+	ErrCodexNoChatGPT = errors.New("codex isn't logged in with ChatGPT")
+)
+
+// RefreshError is Get's error for an OAuth login whose refresh on the host failed: Agent's (Codex
+// or Opencode), and for opencode its Provider's. Logging in again with the agent fixes it.
+type RefreshError struct {
+	Agent, Provider string
+	Err             error
 }
+
+func (e *RefreshError) Error() string { return "refreshing the login: " + e.Err.Error() }
+func (e *RefreshError) Unwrap() error { return e.Err }
 
 // File is one agent's file on the host.
 type File struct {
@@ -217,16 +226,19 @@ func accountClaims(tok, salt string) map[string]any {
 
 // --- Codex ---
 
-func codexBindings(m map[string]any, salt string) []Binding {
-	var bs []Binding
+// login is one of agent's logins as a binding, of proxy.KindLogin: its value is File.Get's for name.
+func login(agent, name string, hosts []string, header, placeholder string) proxy.Binding {
+	return proxy.Binding{Name: name, Kind: proxy.KindLogin, Agent: agent, Hosts: hosts, Header: header, Placeholder: placeholder}
+}
+
+func codexBindings(m map[string]any, salt string) []proxy.Binding {
+	var bs []proxy.Binding
 	if str(m, "OPENAI_API_KEY") != "" {
-		bs = append(bs, Binding{Name: "codex-key", Hosts: []string{"api.openai.com"}, Header: "Authorization", Placeholder: salted("sk-devvm-proxy-managed-codex", salt)})
+		bs = append(bs, login(Codex, "codex-key", []string{"api.openai.com"}, "Authorization", salted("sk-devvm-proxy-managed-codex", salt)))
 	}
 	if t := obj(m, "tokens"); str(t, "access_token") != "" {
-		bs = append(bs, Binding{
-			Name: "codex", Hosts: []string{"chatgpt.com", "api.openai.com"}, Header: "Authorization",
-			Placeholder: fakeJWT(accountClaims(str(t, "access_token"), salt)),
-		})
+		bs = append(bs, login(Codex, "codex", []string{"chatgpt.com", "api.openai.com"}, "Authorization",
+			fakeJWT(accountClaims(str(t, "access_token"), salt))))
 	}
 	return bs
 }
@@ -284,11 +296,11 @@ func (f File) codexGet(ctx context.Context, name string) (string, error) {
 		if k := str(m, "OPENAI_API_KEY"); k != "" {
 			return k, nil
 		}
-		return "", errors.New("Codex isn't logged in with an API key on this machine") //nolint:staticcheck // Codex is a name
+		return "", ErrCodexNoKey
 	case "codex":
 		t := obj(m, "tokens")
 		if str(t, "access_token") == "" {
-			return "", errors.New("Codex isn't logged in with ChatGPT on this machine") //nolint:staticcheck // Codex is a name
+			return "", ErrCodexNoChatGPT
 		}
 		if exp, ok := jwtExp(str(t, "access_token")); ok && time.Until(exp) > refreshMargin {
 			return str(t, "access_token"), nil
@@ -297,7 +309,7 @@ func (f File) codexGet(ctx context.Context, name string) (string, error) {
 			"grant_type": "refresh_token", "client_id": openaiClientID, "refresh_token": str(t, "refresh_token"),
 		})
 		if err != nil {
-			return "", fmt.Errorf("refreshing Codex's login: %w (run codex on this machine to log in again)", err)
+			return "", &RefreshError{Agent: Codex, Err: err}
 		}
 		for _, k := range []string{"id_token", "access_token", "refresh_token"} {
 			if v := str(nt, k); v != "" {
@@ -312,8 +324,8 @@ func (f File) codexGet(ctx context.Context, name string) (string, error) {
 
 // --- opencode ---
 
-func opencodeBindings(m map[string]any, salt string) []Binding {
-	var bs []Binding
+func opencodeBindings(m map[string]any, salt string) []proxy.Binding {
+	var bs []proxy.Binding
 	for id := range m {
 		e := obj(m, id)
 		var p provider
@@ -332,7 +344,7 @@ func opencodeBindings(m map[string]any, salt string) []Binding {
 		if id == "openai" && str(e, "type") == "oauth" {
 			ph = fakeJWT(accountClaims(str(e, "access"), salt)) // opencode reads the account from it
 		}
-		bs = append(bs, Binding{Name: "opencode-" + id, Hosts: p.hosts, Header: p.header, Placeholder: ph})
+		bs = append(bs, login(Opencode, "opencode-"+id, p.hosts, p.header, ph))
 	}
 	return bs
 }
@@ -397,7 +409,7 @@ func (f File) opencodeGet(ctx context.Context, name string) (string, error) {
 			"grant_type": "refresh_token", "client_id": openaiClientID, "refresh_token": str(e, "refresh"),
 		})
 		if err != nil {
-			return "", fmt.Errorf("refreshing opencode's %s login: %w (log in again with opencode on this machine)", id, err)
+			return "", &RefreshError{Agent: Opencode, Provider: id, Err: err}
 		}
 		e["access"] = str(nt, "access_token")
 		if v := str(nt, "refresh_token"); v != "" {
@@ -488,7 +500,7 @@ func sortedKeys(m map[string]any) []string {
 }
 
 // claudeBindingName: a binding's name from its server and header (names are free text; this is
-// safe to pass to `devvm secret get`).
+// safe in the proxy's log and as its cache's key).
 func claudeBindingName(server, header string) string {
 	h := sha256.Sum256([]byte(server + "\x00" + strings.ToLower(header)))
 	return "claude-mcp-" + hex.EncodeToString(h[:6])
@@ -509,8 +521,8 @@ func claudeHost(s map[string]any) string {
 	return ""
 }
 
-func claudeBindings(m map[string]any, salt string) []Binding {
-	var bs []Binding
+func claudeBindings(m map[string]any, salt string) []proxy.Binding {
+	var bs []proxy.Binding
 	names, servers := claudeServers(m)
 	for _, n := range names {
 		s := obj(servers, n)
@@ -520,7 +532,7 @@ func claudeBindings(m map[string]any, salt string) []Binding {
 		}
 		for _, h := range sortedKeys(obj(s, "headers")) {
 			name := claudeBindingName(n, h)
-			bs = append(bs, Binding{Name: name, Hosts: []string{host}, Header: h, Placeholder: salted("devvm-proxy-managed-"+name, salt)})
+			bs = append(bs, login(Claude, name, []string{host}, h, salted("devvm-proxy-managed-"+name, salt)))
 		}
 	}
 	return bs
@@ -728,9 +740,9 @@ func MCPSecrets(path string) ([]string, error) {
 // errKind is a File of no agent devvm knows.
 func (f File) errKind() error { return fmt.Errorf("unknown login kind %q", f.Kind) }
 
-// Bindings returns the login's secret bindings, each placeholder ending in f.Salt; none for a file
-// that holds no login devvm knows.
-func (f File) Bindings() ([]Binding, error) {
+// Bindings returns the login's secret bindings, of proxy.KindLogin with f.Kind their Agent, each
+// placeholder ending in f.Salt; none for a file that holds no login devvm knows.
+func (f File) Bindings() ([]proxy.Binding, error) {
 	m, err := readJSON(f.Path)
 	if err != nil {
 		return nil, err
@@ -744,22 +756,6 @@ func (f File) Bindings() ([]Binding, error) {
 		return claudeBindings(m, f.Salt), nil
 	}
 	return nil, f.errKind()
-}
-
-// Hosts returns what a VM's allowlist gets for bindings, as policy lines: each binding's hosts on
-// 443 alone, since a binding is only intercepted there, each once, in order.
-func Hosts(bs []Binding) []string {
-	var lines []string
-	seen := map[string]bool{}
-	for _, b := range bs {
-		for _, h := range b.Hosts {
-			if l := h + ":443"; !seen[l] {
-				seen[l] = true
-				lines = append(lines, l)
-			}
-		}
-	}
-	return lines
 }
 
 // VMCopy returns the VM's copy of the file, with placeholders ending in f.Salt in place of its keys

@@ -425,7 +425,7 @@ func TestPrepare(t *testing.T) {
 		Policies:        []string{d.Policy(), files.Policy(), files.SecretsPolicy()},
 		Log:             files.EventLog(), ProxyLog: files.ProxyLog(), Lifeline: "/lima/vm/ha.pid",
 		CA: filepath.Join(d.CA(), "ca.pem"), CAKey: filepath.Join(d.CA(), "ca.key"),
-		Secrets: files.Secrets(), SecretCmd: "/bin/sh",
+		Secrets: files.Secrets(),
 		// Its links' list: in its run folder, devvm's alone.
 		Links: files.LinkList(), LinkSockets: d.Run(),
 		DevvmSHA256: bin, CASHA256: caSum,

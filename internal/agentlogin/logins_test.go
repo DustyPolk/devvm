@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/w3cj/devvm/internal/fetch"
 	"github.com/w3cj/devvm/internal/proxy"
 )
 
@@ -62,11 +63,16 @@ func vmCopy(t *testing.T, f File) (string, []string) {
 	return string(b), kept
 }
 
-// bindings is f's Bindings.
-func bindings(t *testing.T, f File) []Binding {
+// bindings is f's Bindings, each checked to be one of f's logins.
+func bindings(t *testing.T, f File) []proxy.Binding {
 	t.Helper()
 	bs, err := f.Bindings()
 	must(t, err)
+	for _, b := range bs {
+		if b.Kind != proxy.KindLogin || b.Agent != f.Kind {
+			t.Errorf("binding %s: kind %q, agent %q; want %q, %q", b.Name, b.Kind, b.Agent, proxy.KindLogin, f.Kind)
+		}
+	}
 	return bs
 }
 
@@ -395,17 +401,51 @@ func TestClaudeHostIsANameOnly(t *testing.T) {
 	}
 }
 
-// Hosts: each binding's hosts on 443, once each, in order; none without bindings.
-func TestHosts(t *testing.T) {
+// A Codex login's bindings: its key's for api.openai.com, its ChatGPT login's for both hosts.
+func TestCodexBindings(t *testing.T) {
 	f := File{Kind: Codex, Path: writeFile(t, map[string]any{
 		"OPENAI_API_KEY": "sk-real",
 		"tokens":         map[string]any{"access_token": jwtWith(time.Now().Add(time.Hour), nil)},
 	})}
-	if got := Hosts(bindings(t, f)); !slices.Equal(got, []string{"api.openai.com:443", "chatgpt.com:443"}) {
-		t.Errorf("Hosts = %q", got)
+	var got []string
+	for _, b := range bindings(t, f) {
+		got = append(got, b.Name+" "+strings.Join(b.Hosts, ","))
 	}
-	if got := Hosts(nil); got != nil {
-		t.Errorf("Hosts(nil) = %q", got)
+	if want := []string{"codex-key api.openai.com", "codex chatgpt.com,api.openai.com"}; !slices.Equal(got, want) {
+		t.Errorf("bindings = %q, want %q", got, want)
+	}
+}
+
+// Get's errors that logging in again fixes are typed, so devvm names what to do: Codex without the
+// login a binding names, and a refresh the token endpoint refuses.
+func TestGetErrorsSayWhatToDo(t *testing.T) {
+	none := File{Kind: Codex, Path: writeFile(t, map[string]any{"tokens": map[string]any{}})}
+	if _, err := none.Get(t.Context(), "codex-key"); !errors.Is(err, ErrCodexNoKey) {
+		t.Errorf("codex-key: %v", err)
+	}
+	if _, err := none.Get(t.Context(), "codex"); !errors.Is(err, ErrCodexNoChatGPT) {
+		t.Errorf("codex: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "no", http.StatusBadRequest) }))
+	t.Cleanup(srv.Close)
+	for _, tc := range []struct {
+		f        File
+		name     string
+		provider string
+	}{
+		{File{Kind: Codex, TokenURL: srv.URL, Path: writeFile(t, map[string]any{"tokens": map[string]any{
+			"access_token": jwtWith(time.Now(), nil), "refresh_token": "rt",
+		}})}, "codex", ""},
+		{File{Kind: Opencode, TokenURL: srv.URL, Path: writeFile(t, map[string]any{
+			"openai": map[string]any{"type": "oauth", "access": "at", "refresh": "rt", "expires": 1},
+		})}, "opencode-openai", "openai"},
+	} {
+		_, err := tc.f.Get(t.Context(), tc.name)
+		var re *RefreshError
+		var se *fetch.StatusError
+		if !errors.As(err, &re) || re.Agent != tc.f.Kind || re.Provider != tc.provider || !errors.As(err, &se) || err.Error() == "" {
+			t.Errorf("%s: %v", tc.name, err)
+		}
 	}
 }
 

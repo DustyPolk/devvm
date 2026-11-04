@@ -2029,12 +2029,23 @@ other = "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'."
 description = "secret is the name asked for, quoted when it holds a control character"
 other = "There's no secret {{.secret}}."
 
-[secret_read_failed]
-description = "reason is an error from the system, in English"
-other = "Reading the {{.secret}} secret failed: {{.reason}}."
+[codex_no_key]
+other = "Codex on this machine isn't logged in with an API key any more, so the VM's proxy has none to put in. Log in with codex on this machine, then run devvm in the VM's folder."
 
-[secret_to_terminal]
-other = "The secret wasn't printed, because the output is a terminal. To print it anyway, add --to-terminal."
+[codex_no_chatgpt]
+other = "Codex on this machine isn't logged in with ChatGPT any more, so the VM's proxy has no Codex login to put in. Log in with codex on this machine, then run devvm in the VM's folder."
+
+[codex_refresh_failed]
+description = "reason is an error from the system or OpenAI's token endpoint, in English"
+other = "Refreshing the Codex login on this machine failed: {{.reason}}. Log in again with codex on this machine."
+
+[opencode_refresh_failed]
+description = "provider is opencode's provider ID, such as openai; reason is an error from the system or the token endpoint, in English"
+other = "Refreshing opencode's {{.provider}} login on this machine failed: {{.reason}}. Log in again with opencode on this machine."
+
+[login_read_failed]
+description = "file is an agent's login file on this machine; reason is an error from the system, in English"
+other = "Reading the login in {{.file}} for the VM's proxy failed: {{.reason}}."
 
 [secret_failed]
 description = "reason is an error from the system, in English"

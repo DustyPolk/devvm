@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -20,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -59,16 +61,32 @@ func TestWriteAtomic(t *testing.T) {
 	}
 }
 
-func fakeSecret(t *testing.T, value string) {
+// writeBindings writes the bindings file at path as devvm does.
+func writeBindings(t *testing.T, path string, bs ...Binding) {
 	t.Helper()
-	old := secretValue
-	secretValue = func(string) (string, error) { return value, nil }
-	t.Cleanup(func() { secretValue = old })
+	must(t, os.WriteFile(path, BindingList{Bindings: bs}.Encode(), 0o600))
+}
+
+// bound is the secret t bound to hosts, in Authorization, for the placeholder PH.
+func bound(hosts ...string) Binding {
+	return Binding{Name: "t", Kind: KindSecret, Hosts: hosts, Header: "Authorization", Placeholder: "PH"}
+}
+
+// fakeSecret makes every lookup give value, with nothing cached yet, and returns the bindings
+// looked up, in order.
+func fakeSecret(t *testing.T, value string) *[]Binding {
+	t.Helper()
+	var asked []Binding
+	old := secretLookup
+	secretLookup = func(_ context.Context, b Binding) (string, error) { asked = append(asked, b); return value, nil }
+	values = map[string]cached{}
+	t.Cleanup(func() { secretLookup, values = old, map[string]cached{} })
+	return &asked
 }
 
 func TestInject(t *testing.T) {
 	fakeSecret(t, "real")
-	bs := []binding{{Name: "github", Header: "Authorization", Placeholder: "PH"}}
+	bs := []Binding{{Name: "github", Kind: KindSecret, Header: "Authorization", Placeholder: "PH"}}
 	h := http.Header{}
 	h.Set("Authorization", "token PH")
 	h.Set("X-Echo", "PH")
@@ -119,7 +137,7 @@ func interceptSetup(t *testing.T, h http.HandlerFunc) (int, string, *http.Client
 	t.Cleanup(func() { delete(interceptPorts, port) })
 	pol = writePolicy(t, fmt.Sprintf("localhost:%d\n127.0.0.1:%d\n", port, port))
 	secretsPath = filepath.Join(dir, "bindings.json")
-	must(t, os.WriteFile(secretsPath, []byte(`[{"name":"t","hosts":["localhost"],"header":"Authorization","placeholder":"PH"}]`), 0o600))
+	writeBindings(t, secretsPath, bound("localhost"))
 	t.Cleanup(func() { secretsPath = "" })
 	fakeSecret(t, "real")
 	proxy := httptest.NewServer(http.HandlerFunc(handler))
@@ -172,7 +190,7 @@ func TestUnbindAppliesToOpenTunnels(t *testing.T) {
 	if _, body := get(t, c, u, ""); body != "Bearer real" {
 		t.Fatalf("bound: %q", body)
 	}
-	must(t, os.WriteFile(file, []byte(`[]`), 0o600))
+	writeBindings(t, file)
 	later := time.Now().Add(2 * time.Second)
 	must(t, os.Chtimes(file, later, later))
 	if _, body := get(t, c, u, ""); body != "Bearer PH" {
@@ -199,15 +217,131 @@ func writeCA(t *testing.T, dir string) {
 	must(t, os.WriteFile(filepath.Join(dir, "ca.pem"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)) //nolint:gosec // a certificate
 }
 
-// Values from agents' login files are cached briefly: a logout on the host stops them soon.
+// Values from agents' login files are cached briefly: a logout on the host stops them soon. The
+// binding's kind decides, never its name.
 func TestLoginValuesCacheBriefly(t *testing.T) {
-	for name, want := range map[string]time.Duration{
-		"claude": valueTTL, "github": valueTTL, "codex": loginTTL,
-		"codex-key": loginTTL, "opencode-anthropic": loginTTL, "claude-mcp-abc": loginTTL,
+	for _, tc := range []struct {
+		b    Binding
+		want time.Duration
+	}{
+		{Binding{Name: "claude", Kind: KindSecret}, valueTTL},
+		{Binding{Name: "github", Kind: KindSecret}, valueTTL},
+		{Binding{Name: "codex", Kind: KindLogin, Agent: "codex"}, loginTTL},
+		{Binding{Name: "opencode-anthropic", Kind: KindLogin, Agent: "opencode"}, loginTTL},
+		{Binding{Name: "claude-mcp-abc", Kind: KindLogin, Agent: "claude"}, loginTTL},
+		{Binding{Name: "codex-key", Kind: KindSecret}, valueTTL},
 	} {
-		if got := ttlOf(name); got != want {
-			t.Errorf("ttlOf(%q) = %v, want %v", name, got, want)
+		if got := ttlOf(tc.b); got != tc.want {
+			t.Errorf("ttlOf(%+v) = %v, want %v", tc.b, got, tc.want)
 		}
+	}
+}
+
+// A value is looked up in this process, with the binding the file has, once, then cached until its
+// time is up; a lookup that fails, or gives nothing, isn't cached, and puts nothing in.
+func TestSecretValueLooksUpInProcess(t *testing.T) {
+	asked := fakeSecret(t, " real\n")
+	b := Binding{Name: "codex", Kind: KindLogin, Agent: "codex"}
+	for range 2 {
+		if v, err := secretValue(b); v != "real" || err != nil {
+			t.Fatalf("secretValue = %q, %v", v, err)
+		}
+	}
+	if len(*asked) != 1 || !reflect.DeepEqual((*asked)[0], b) {
+		t.Errorf("looked up %+v, want %+v once", *asked, b)
+	}
+	values[b.Name] = cached{"real", time.Now().Add(-loginTTL)}
+	if _, err := secretValue(b); err != nil || len(*asked) != 2 {
+		t.Errorf("an expired value: %v, %d lookups", err, len(*asked))
+	}
+	values = map[string]cached{}
+	secretLookup = func(context.Context, Binding) (string, error) { return "", errors.New("locked") }
+	if _, err := secretValue(b); err == nil || !strings.Contains(err.Error(), "codex: locked") {
+		t.Errorf("a failed lookup: %v", err)
+	}
+	secretLookup = func(context.Context, Binding) (string, error) { return " ", nil }
+	if _, err := secretValue(b); err == nil {
+		t.Error("an empty value was taken")
+	}
+	if _, ok := values[b.Name]; ok {
+		t.Error("a failed lookup was cached")
+	}
+	secretLookup = nil
+	if _, err := secretValue(b); err == nil {
+		t.Error("a value without a lookup")
+	}
+	h := http.Header{}
+	h.Set("Authorization", "Bearer PH")
+	if used := inject(h, []Binding{{Name: "codex", Kind: KindLogin, Header: "Authorization", Placeholder: "PH"}}); used != nil || h.Get("Authorization") != "Bearer PH" {
+		t.Errorf("without a value: used %v, %q", used, h.Get("Authorization"))
+	}
+}
+
+// The bindings file: versioned, private, of known kinds; InterceptLines gives its hosts on 443.
+func TestReadBindings(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "secrets.json")
+	l := BindingList{Bindings: []Binding{
+		{Name: "github", Kind: KindSecret, Hosts: []string{"api.github.com"}, Header: "Authorization", Placeholder: "PH"},
+		{Name: "codex", Kind: KindLogin, Agent: "codex", Hosts: []string{"chatgpt.com"}, Header: "Authorization", Placeholder: "PH2"},
+	}}
+	must(t, os.WriteFile(path, l.Encode(), 0o600))
+	got, err := ReadBindings(path)
+	l.Version = BindingListVersion
+	if err != nil || !reflect.DeepEqual(got, l) {
+		t.Errorf("ReadBindings = %+v, %v; want %+v", got, err, l)
+	}
+	if s := string(BindingList{}.Encode()); s != `{"version":1,"bindings":[]}`+"\n" {
+		t.Errorf("no bindings = %q", s)
+	}
+	for name, tc := range map[string]struct {
+		data string
+		mode os.FileMode
+	}{
+		"another version": {`{"version":2,"bindings":[]}`, 0o600},
+		"a bare list":     {`[]`, 0o600},
+		"an unknown kind": {`{"version":1,"bindings":[{"name":"x","kind":"env"}]}`, 0o600},
+		"no kind":         {`{"version":1,"bindings":[{"name":"x"}]}`, 0o600},
+		"others may read": {`{"version":1,"bindings":[]}`, 0o644},
+	} {
+		p := filepath.Join(dir, strings.ReplaceAll(name, " ", "-"))
+		must(t, os.WriteFile(p, []byte(tc.data), 0o600))
+		must(t, os.Chmod(p, tc.mode))
+		if _, err := ReadBindings(p); err == nil {
+			t.Errorf("%s: read", name)
+		}
+	}
+	link := filepath.Join(dir, "link")
+	must(t, os.Symlink(path, link))
+	if _, err := ReadBindings(link); !errors.Is(err, ErrNotRegular) {
+		t.Errorf("a link: %v", err)
+	}
+	hosts := InterceptLines([]string{"api.github.com", "github.com", "api.github.com"})
+	if want := []string{"api.github.com:443", "github.com:443"}; !reflect.DeepEqual(hosts, want) {
+		t.Errorf("InterceptLines = %q, want %q", hosts, want)
+	}
+	if InterceptLines(nil) != nil {
+		t.Error("InterceptLines(nil) isn't empty")
+	}
+}
+
+// A bindings file the proxy can't read, or that's gone, has no bindings: nothing goes in.
+func TestBindingsUnreadableHaveNone(t *testing.T) {
+	secretsPath = filepath.Join(t.TempDir(), "bindings.json")
+	t.Cleanup(func() { secretsPath = "" })
+	must(t, os.WriteFile(secretsPath, BindingList{Bindings: []Binding{{Name: "t", Kind: KindSecret, Hosts: []string{"localhost"}}}}.Encode(), 0o600))
+	if bs := bindingsFor("localhost"); len(bs) != 1 {
+		t.Fatalf("bindings = %+v", bs)
+	}
+	must(t, os.Chmod(secretsPath, 0o644)) //nolint:gosec // G302: the file others may read is what's tested
+	later := time.Now().Add(2 * time.Second)
+	must(t, os.Chtimes(secretsPath, later, later))
+	if bs := bindingsFor("localhost"); bs != nil {
+		t.Errorf("a file others may read gave %+v", bs)
+	}
+	must(t, os.Remove(secretsPath))
+	if bs := bindingsFor("localhost"); bs != nil {
+		t.Errorf("a file that's gone gave %+v", bs)
 	}
 }
 
@@ -287,7 +421,7 @@ func TestInterceptCAEnded(t *testing.T) {
 func TestBindingsChangeDropsCachedValues(t *testing.T) {
 	secretsPath = filepath.Join(t.TempDir(), "bindings.json")
 	t.Cleanup(func() { secretsPath = "" })
-	must(t, os.WriteFile(secretsPath, []byte(`[]`), 0o600))
+	writeBindings(t, secretsPath)
 	bindings.all()
 	valueMu.Lock()
 	values["t"] = cached{"old", time.Now()}
@@ -332,7 +466,7 @@ func TestIntercept(t *testing.T) {
 
 	pol = writePolicy(t, fmt.Sprintf("localhost:%d\n127.0.0.1:%d\n", port, port))
 	secretsPath = filepath.Join(dir, "bindings.json")
-	must(t, os.WriteFile(secretsPath, []byte(`[{"name":"t","hosts":["localhost"],"header":"Authorization","placeholder":"PH"}]`), 0o600))
+	writeBindings(t, secretsPath, bound("localhost"))
 	t.Cleanup(func() { secretsPath = "" })
 	fakeSecret(t, "real-secret")
 

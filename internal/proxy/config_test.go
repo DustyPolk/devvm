@@ -19,7 +19,7 @@ func TestConfigRoundTrip(t *testing.T) {
 		Listen: "127.0.0.1:4000", VM: "devvm-x", Password: "k3y",
 		BuiltinPolicies: []string{"layers/base.policy"}, Policies: []string{"/p/policy"},
 		Log: "/l/network.jsonl", ProxyLog: "/l/proxy.log", Lifeline: "/h/ha.pid",
-		CA: "/ca/ca.pem", CAKey: "/ca/ca.key", Secrets: "/r/secrets.json", SecretCmd: "/bin/devvm",
+		CA: "/ca/ca.pem", CAKey: "/ca/ca.key", Secrets: "/r/secrets.json",
 		UpstreamCAs: "PEM", Upstream: &Upstream{HTTPS: "http://u:p@corp:3128", NoProxy: ".corp"}, //nolint:gosec // G101: a fake company proxy's fake password
 		NixCache: "/n", NixCacheMax: 5, Links: "/r/links.json", LinkSockets: "/run",
 		DevvmSHA256: "aa", CASHA256: "bb",
@@ -83,6 +83,8 @@ func TestReadConfigRefuses(t *testing.T) {
 		{"another version", write("v2", bytes.Replace(good.Encode(), []byte(`"version": 1`), []byte(`"version": 2`), 1), 0o600), nil, "version 2, not 1"},
 		{"no version", write("v0", []byte(`{"listen":"127.0.0.1:0","password":"k3y"}`), 0o600), nil, "version 0, not 1"},
 		{"an unknown field", write("field", []byte(`{"version":1,"listen":"127.0.0.1:0","password":"k3y","auth_file":"/x"}`), 0o600), nil, `unknown field "auth_file"`},
+		// Values are looked up in the proxy's own process: no program is named to run for them.
+		{"a secret command", write("cmd", []byte(`{"version":1,"listen":"127.0.0.1:0","password":"k3y","secret_cmd":"/bin/devvm"}`), 0o600), nil, `unknown field "secret_cmd"`},
 		{"two configs", write("two", append(good.Encode(), good.Encode()...), 0o600), nil, "more than one config"},
 		{"not JSON", write("text", []byte("listen=127.0.0.1:0\n"), 0o600), nil, "invalid character"},
 		{"no password", write("nopw", enc(Config{Listen: "127.0.0.1:0", Password: " "}), 0o600), nil, "no password"},

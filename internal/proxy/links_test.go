@@ -202,7 +202,7 @@ func TestLinkConnectUntouched(t *testing.T) {
 	writeCA(t, ca)
 	must(t, loadCA(filepath.Join(ca, "ca.pem"), filepath.Join(ca, "ca.key")))
 	secretsPath = filepath.Join(ca, "bindings.json")
-	must(t, os.WriteFile(secretsPath, []byte(`[{"name":"t","hosts":["db","**"],"header":"Authorization","placeholder":"PH"}]`), 0o600))
+	writeBindings(t, secretsPath, bound("db", "**"))
 	t.Cleanup(func() { secretsPath = "" })
 	fakeSecret(t, "real-secret")
 	// A rule that allows the name too: the link still comes first, never intercepted.

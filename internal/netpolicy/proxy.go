@@ -211,7 +211,7 @@ func (p *Proxy) config(st *state.VM, key, lifeline string) (proxy.Config, error)
 		BuiltinPolicies: builtin, Policies: policies,
 		Log: files.EventLog(), ProxyLog: files.ProxyLog(), Lifeline: lifeline,
 		CA: filepath.Join(ca, "ca.pem"), CAKey: filepath.Join(ca, "ca.key"),
-		Secrets: files.Secrets(), SecretCmd: p.Self,
+		Secrets:     files.Secrets(),
 		UpstreamCAs: string(cas.Bundle()), Upstream: upstream,
 		Links: files.LinkList(), LinkSockets: p.Dirs.Run(),
 		DevvmSHA256: bin, CASHA256: caSum,

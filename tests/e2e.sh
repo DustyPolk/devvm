@@ -2200,21 +2200,24 @@ check "the host's login files are unchanged" bash -c "cmp -s '$nh/.codex/auth.js
 # the sandbox's config folder; deleted at the end. macOS finds the Keychain through HOME, so the
 # VM's home links the Keychains folder (the link alone goes at the end).
 if [[ "$(uname -s)" == Darwin ]]; then mkdir -p "$nh/Library" && ln -s "$HOME/Library/Keychains" "$nh/Library/Keychains"; fi
-check "devvm secret set saves a token, and devvm reads it back, never to a terminal" bash -c "
-  echo ghp_E2EFAKE | HOME='$nh' '$D' secret set github --stdin >/dev/null && [[ \$(HOME='$nh' '$D' secret get github | cat) == ghp_E2EFAKE ]] &&
-  { [[ \$(uname -s) != Darwin ]] || [[ \$(security find-generic-password -s '$DEVVM_SECRET_SERVICE' -a github -w) == ghp_E2EFAKE ]]; }"
+# The fake token goes in a file, written by the shell's own printf, so it's in no process's arguments.
+printf 'ghp_E2EFAKE\n' >"$work/github.token"
+check "devvm secret set saves a token, and devvm secret lists it saved" bash -c "
+  HOME='$nh' '$D' secret set github --stdin <'$work/github.token' >/dev/null && HOME='$nh' '$D' secret | grep -Eq '^github +yes ' &&
+  { [[ \$(uname -s) != Darwin ]] || security find-generic-password -s '$DEVVM_SECRET_SERVICE' -a github -w | cmp -s - '$work/github.token'; }"
+check "no devvm command prints a secret" bash -c "! HOME='$nh' '$D' secret get github >'$work/get.out' 2>&1 && ! grep -qF -f '$work/github.token' '$work/get.out'"
 check "secret use github: its proxy gets the binding at once, the VM its own placeholder on its next launch" bash -c "cd '$n' &&
   HOME='$nh' '$D' secret use github >/dev/null && grep -q '\"name\":\"github\"' '$(vmdir "$vm")/run/secrets.json' &&
   printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'echo \$GH_TOKEN' </dev/null) == devvm-proxy-managed-github-$salt ]] &&
-  ! limactl shell --workdir / $vm bash -lc 'env; cat ~/.config/devvm/env' </dev/null | grep -q ghp_E2EFAKE &&
+  ! limactl shell --workdir / $vm bash -lc 'env; cat ~/.config/devvm/env' </dev/null | grep -qF -f '$work/github.token' &&
   HOME='$nh' '$D' secret | grep -Eq '^github +yes +$vm\$'"
 check "the proxy puts the GitHub token in for its host" bash -c "
   limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.github.com/user -H \"Authorization: token \$GH_TOKEN\"' </dev/null &&
   grep '\"path\":\"/user\"' '$events' | grep -q '\"secrets\":\[\"github\"\]'"
 check "secret unuse and rm take the binding and the token away at once" bash -c "cd '$n' &&
   HOME='$nh' '$D' secret unuse github >/dev/null && ! grep -q '\"name\":\"github\"' '$(vmdir "$vm")/run/secrets.json' &&
-  HOME='$nh' '$D' secret rm --force github >/dev/null && ! HOME='$nh' '$D' secret get github >/dev/null 2>&1 &&
+  HOME='$nh' '$D' secret rm --force github >/dev/null && HOME='$nh' '$D' secret | grep -Eq '^github +no ' &&
   { [[ \$(uname -s) != Darwin ]] || ! security find-generic-password -s '$DEVVM_SECRET_SERVICE' -a github >/dev/null 2>&1; }"
 check "the self-check passes on the VM devvm started confined" bash -c "cd '$root' &&
   DEVVM_E2E_VM=$vm DEVVM_E2E_WANT= CGO_ENABLED=0 ${gocmd[*]} test -count=1 -v -run '^TestE2ESelfCheck\$' ./internal/netpolicy |

@@ -93,7 +93,7 @@ devvm saves the Claude Code token with the other [secrets](../safety/network.md#
 
 ### Codex and opencode logins
 
-With network policy, the VM's `auth.json` holds placeholders, and its proxy holds the real API keys and logins. Without network policy, the VM gets the file as it is, and a VM that refreshes an OAuth login can replace its refresh token and sign this machine out. An API key avoids this.
+With network policy, the VM's `auth.json` holds placeholders, and its proxy holds the real API keys and logins. The proxy reads them from this machine's login files as it needs them and refreshes ChatGPT logins there, so when the agent in the VM stops getting answers, the proxy's own log, `proxy.log` in `~/.local/share/devvm/vms/<hash>/logs/`, may say that refreshing a login failed or that you're no longer logged in that way. Log in again with `codex` or `opencode` on this machine, and if you changed how you log in, run `devvm` in the VM's folder so the VM gets the new login's placeholders. Without network policy, the VM gets the file as it is, and a VM that refreshes an OAuth login can replace its refresh token and sign this machine out. An API key avoids this.
 
 ## History
 

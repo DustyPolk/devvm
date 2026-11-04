@@ -214,7 +214,7 @@ func devvmEnvSettings() map[string]envSetting {
 // one of their runners: the UI's LoggedCmd, which a package takes as a
 // field, a backend's Runner, or hostgit.
 func devvmExecSites() map[string]string {
-	return map[string]string{ //nolint:gosec // file paths and why, not credentials (secrets.go)
+	return map[string]string{
 		"internal/hostgit/hostgit.go":          "the host git runner: git without the repo's fsmonitor, hooks or filters",
 		"internal/backend/lima/limactl.go":     "limactl's command, which Lima's Runner runs into the run log",
 		"internal/backend/lima/lima.go":        "qemu-img's command, which Lima's Runner runs",
@@ -230,7 +230,6 @@ func devvmExecSites() map[string]string {
 		"internal/vmssh/links.go":              "links' ssh sessions, which last as long as the link, their output to its log",
 		"internal/platform/keychain_darwin.go": "security and tmutil: secrets on stdin and stdout, never in a log",
 		"internal/platform/folder_darwin.go":   "chflags, for .git protection",
-		"internal/proxy/secrets.go":            "devvm secret get, in the proxy (standard library only), its value never logged",
 		"internal/daemon/daemon.go":            "devvm's background processes, which outlive the run and its context",
 	}
 }

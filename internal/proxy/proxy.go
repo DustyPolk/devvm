@@ -644,6 +644,9 @@ type IO struct {
 	Stderr io.Writer
 	// FS is devvm's own files (its assets), which Config.BuiltinPolicies names paths in.
 	FS fs.FS
+	// Secret looks a binding's value up, in this process (devvm's secrets' store), for
+	// Config.Secrets' bindings: required with them.
+	Secret Lookup
 }
 
 // Main runs devvm _proxy with args (its flags): the proxy itself, with -config's file, until the
@@ -673,13 +676,16 @@ func Main(args []string, std IO) error {
 	if err != nil {
 		return err
 	}
+	if c.Secrets != "" && std.Secret == nil {
+		return errors.New("secrets without a lookup")
+	}
 	return serve(c, std)
 }
 
 // apply sets what the proxy runs with from c, reading its CA and the company proxy's settings.
 func (c Config) apply() error {
 	vmName, proxyAuth, upUnresolved = c.VM, c.Password, c.UpstreamUnresolved
-	secretsPath, secretCmd = c.Secrets, c.SecretCmd
+	secretsPath = c.Secrets
 	linksFile, linkSockets = c.Links, c.LinkSockets
 	nixCacheDir, nixCacheMax = c.NixCache, c.NixCacheMax
 	if nixCacheMax == 0 {
@@ -716,7 +722,7 @@ func serve(c Config, std IO) error {
 	if err := c.apply(); err != nil {
 		return err
 	}
-	logOut = std.Stdout
+	secretLookup, logOut = std.Secret, std.Stdout
 	if c.Log != "" {
 		f, err := OpenEventLog(c.Log)
 		if err != nil {

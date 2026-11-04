@@ -2,7 +2,6 @@ package secrets
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -222,17 +222,26 @@ func TestValue(t *testing.T) {
 	}
 }
 
+// secretOf is the binding of a secret devvm keeps, as the proxy has it.
+func secretOf(name string) proxy.Binding { return proxy.Binding{Name: name, Kind: proxy.KindSecret} }
+
+// loginOf is agent's login binding name, as the proxy has it.
+func loginOf(agent, name string) proxy.Binding {
+	return proxy.Binding{Name: name, Kind: proxy.KindLogin, Agent: agent}
+}
+
 // Get: a known secret's value, a login's from its agent's file in the
-// user's home, and nothing else (a name is never a path).
+// user's home, by the binding's kind, and nothing else (a name is never a
+// path, and never decides the kind).
 func TestGet(t *testing.T) {
 	s, kc := testStore(t, true, nil)
 	kc["devvm/github"] = "ghp_x"
 	ctx := t.Context()
-	if v, err := s.Get(ctx, "github"); v != "ghp_x" || err != nil {
+	if v, err := s.Get(ctx, secretOf("github")); v != "ghp_x" || err != nil {
 		t.Errorf("github = %q, %v", v, err)
 	}
-	// A login whose file isn't there fails, as the proxy's error.
-	if _, err := s.Get(ctx, "codex-key"); msg.IDOf(err) != "proxy_failed" {
+	// A login whose file isn't there fails, naming the file.
+	if _, err := s.Get(ctx, loginOf("codex", "codex-key")); msg.IDOf(err) != "login_read_failed" {
 		t.Errorf("Get(codex-key) without a login = %v", msg.NamesOf(err))
 	}
 	for kind, data := range map[string]string{
@@ -246,16 +255,50 @@ func TestGet(t *testing.T) {
 	if err != nil || len(mcp) != 1 {
 		t.Fatalf("MCP bindings = %+v, %v", mcp, err)
 	}
-	for name, want := range map[string]string{
-		"codex-key": "sk-codex-value", "opencode-anthropic": "sk-ant-value", mcp[0].Name: "mcp-value",
+	for _, tc := range []struct {
+		b    proxy.Binding
+		want string
+	}{
+		{loginOf("codex", "codex-key"), "sk-codex-value"},
+		{loginOf("opencode", "opencode-anthropic"), "sk-ant-value"},
+		{mcp[0], "mcp-value"},
 	} {
-		if v, err := s.Get(ctx, name); v != want || err != nil {
-			t.Errorf("Get(%s) = %q, %v", name, v, err)
+		if v, err := s.Get(ctx, tc.b); v != tc.want || err != nil {
+			t.Errorf("Get(%+v) = %q, %v", tc.b, v, err)
 		}
 	}
-	for _, name := range []string{"claude", "../../etc/passwd", "nope"} {
-		if _, err := s.Get(ctx, name); msg.NamesOf(err) != `no_secret secret=`+msg.OneLine(name) {
-			t.Errorf("Get(%s) = %v", name, msg.NamesOf(err))
+	// Codex's file has no ChatGPT login: the message says to log in again.
+	if _, err := s.Get(ctx, loginOf("codex", "codex")); msg.NamesOf(err) != "codex_no_chatgpt" {
+		t.Errorf("Get(codex) = %v", msg.NamesOf(err))
+	}
+	for _, b := range []proxy.Binding{
+		secretOf("claude"), secretOf("../../etc/passwd"), secretOf("nope"),
+		// A secret's name as a login, or a login's as a secret: neither is looked up.
+		loginOf("github", "github"), loginOf("../../etc", "codex-key"), secretOf("codex-key"),
+		{Name: "github", Kind: "env"},
+	} {
+		if _, err := s.Get(ctx, b); msg.NamesOf(err) != `no_secret secret=`+msg.OneLine(b.Name) {
+			t.Errorf("Get(%+v) = %v", b, msg.NamesOf(err))
+		}
+	}
+}
+
+// A login's failure that logging in again fixes gets its own message.
+func TestLoginFailed(t *testing.T) {
+	cause := errors.New("401 Unauthorized")
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{agentlogin.ErrCodexNoKey, "codex_no_key"},
+		{agentlogin.ErrCodexNoChatGPT, "codex_no_chatgpt"},
+		{&agentlogin.RefreshError{Agent: agentlogin.Codex, Err: cause}, "codex_refresh_failed reason=401 Unauthorized"},
+		{&agentlogin.RefreshError{Agent: agentlogin.Opencode, Provider: "openai", Err: cause}, "opencode_refresh_failed provider=openai reason=401 Unauthorized"},
+		{cause, "login_read_failed file=/h/auth.json reason=401 Unauthorized"},
+	} {
+		m := loginFailed("/h/auth.json", tc.err)
+		if m.Names() != tc.want || !errors.Is(m, tc.err) {
+			t.Errorf("loginFailed(%v) = %s, want %s", tc.err, m.Names(), tc.want)
 		}
 	}
 }
@@ -316,22 +359,22 @@ func TestWriteFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "secret") {
+	if strings.Contains(string(data), "ghp_secret") || strings.Contains(string(data), "sk-codex-secret") {
 		t.Errorf("a value in the bindings: %s", data)
 	}
-	var bs []binding
-	if err := json.Unmarshal(data, &bs); err != nil {
+	l, err := proxy.ReadBindings(d.VM(vm1).Secrets())
+	if err != nil {
 		t.Fatal(err)
 	}
 	var got []string
-	for _, b := range bs {
-		got = append(got, b.Name+" "+strings.Join(b.Hosts, ",")+" "+b.Header+" "+b.Placeholder)
+	for _, b := range l.Bindings {
+		got = append(got, b.Name+" "+b.Kind+b.Agent+" "+strings.Join(b.Hosts, ",")+" "+b.Header+" "+b.Placeholder)
 	}
 	// claude has no value: no binding, but its host still comes with it.
 	want := []string{
-		"github api.github.com,github.com,codeload.github.com,raw.githubusercontent.com Authorization devvm-proxy-managed-github-" + salt,
+		"github secret api.github.com,github.com,codeload.github.com,raw.githubusercontent.com Authorization devvm-proxy-managed-github-" + salt,
 	}
-	if len(got) != 2 || got[0] != want[0] || !strings.HasPrefix(got[1], "codex-key api.openai.com Authorization ") || !strings.Contains(got[1], salt) {
+	if len(got) != 2 || got[0] != want[0] || !strings.HasPrefix(got[1], "codex-key logincodex api.openai.com Authorization ") || !strings.Contains(got[1], salt) {
 		t.Errorf("bindings = %q", got)
 	}
 	pol, err := os.ReadFile(d.VM(vm1).SecretsPolicy())
@@ -370,7 +413,7 @@ func TestWriteFiles(t *testing.T) {
 	if err := s.WriteFiles(t.Context(), none, salt); err != nil {
 		t.Fatal(err)
 	}
-	if data, _ := os.ReadFile(d.VM(vm2).Secrets()); string(data) != "[]\n" {
+	if data, _ := os.ReadFile(d.VM(vm2).Secrets()); string(data) != `{"version":1,"bindings":[]}`+"\n" {
 		t.Errorf("no bindings = %q", data)
 	}
 }

@@ -700,8 +700,11 @@ func TestMainRefuses(t *testing.T) {
 		{"-init-ca", t.TempDir()},
 		{"-login", "codex", "-login-file", filepath.Join(t.TempDir(), "auth.json"), "-login-vm"},
 		{"-redact", "json"},
+		{"-secret-cmd", "/bin/devvm"},
 		{"-config", filepath.Join(t.TempDir(), "missing")},
 		{"-config", writeConfig(t, Config{Listen: "127.0.0.1:0"})},
+		// Bindings without IO.Secret: no value could go in.
+		{"-config", writeConfig(t, Config{Listen: "127.0.0.1:0", Password: "k3y", Secrets: filepath.Join(t.TempDir(), "secrets.json")})},
 	} {
 		if err := Main(args, std); err == nil {
 			t.Errorf("%q: no error", args)

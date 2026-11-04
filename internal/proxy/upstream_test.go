@@ -490,7 +490,7 @@ func TestUpstreamIntercept(t *testing.T) {
 	f := newFakeUpstream(t, tlsSrv.Listener.Addr().String(), http.StatusOK)
 	useUpstream(t, f, "")
 	pol = writePolicy(t, "intercepted.test\n")
-	must(t, os.WriteFile(secretsPath, []byte(`[{"name":"t","hosts":["intercepted.test"],"header":"Authorization","placeholder":"PH"}]`), 0o600))
+	writeBindings(t, secretsPath, bound("intercepted.test"))
 	later := time.Now().Add(time.Second)
 	must(t, os.Chtimes(secretsPath, later, later))
 	code, body := get(t, c, "https://intercepted.test/x", "")

@@ -409,6 +409,21 @@ func CodexLoginKept(keys string) M {
 	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
 }
 
+// CodexNoChatgpt is [codex_no_chatgpt]: "Codex on this machine isn't logged in with ChatGPT any more, so the VM's proxy has no Codex login to put in. Log in with codex on this machine, then run devvm in the VM's folder."
+func CodexNoChatgpt() M {
+	return M{id: "codex_no_chatgpt"}
+}
+
+// CodexNoKey is [codex_no_key]: "Codex on this machine isn't logged in with an API key any more, so the VM's proxy has none to put in. Log in with codex on this machine, then run devvm in the VM's folder."
+func CodexNoKey() M {
+	return M{id: "codex_no_key"}
+}
+
+// CodexRefreshFailed is [codex_refresh_failed]: "Refreshing the Codex login on this machine failed: {{.reason}}. Log in again with codex on this machine."
+func CodexRefreshFailed(reason string) M {
+	return M{id: "codex_refresh_failed", vals: []val{{"reason", reason}}}
+}
+
 // ConfigNotCopied is [config_not_copied]: "{{.vm}} doesn't get a copy of {{.file}}, because devvm couldn't read it to take its secrets out."
 func ConfigNotCopied(file string, vm string) M {
 	return M{id: "config_not_copied", vals: []val{{"file", file}, {"vm", vm}}}
@@ -1719,6 +1734,11 @@ func LoginCopyFailed(agent string, reason string, vm string) M {
 	return M{id: "login_copy_failed", vals: []val{{"agent", agent}, {"reason", reason}, {"vm", vm}}}
 }
 
+// LoginReadFailed is [login_read_failed]: "Reading the login in {{.file}} for the VM's proxy failed: {{.reason}}."
+func LoginReadFailed(file string, reason string) M {
+	return M{id: "login_read_failed", vals: []val{{"file", file}, {"reason", reason}}}
+}
+
 // LsFailed is [ls_failed]: "Listing the VMs failed: {{.reason}}."
 func LsFailed(reason string) M {
 	return M{id: "ls_failed", vals: []val{{"reason", reason}}}
@@ -2112,6 +2132,11 @@ func OCIWaiting() M {
 // OpencodeLoginKept is [opencode_login_kept]: "The VM gets opencode's {{.providers}} login unchanged."
 func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
+}
+
+// OpencodeRefreshFailed is [opencode_refresh_failed]: "Refreshing opencode's {{.provider}} login on this machine failed: {{.reason}}. Log in again with opencode on this machine."
+func OpencodeRefreshFailed(provider string, reason string) M {
+	return M{id: "opencode_refresh_failed", vals: []val{{"provider", provider}, {"reason", reason}}}
 }
 
 // OutputFailed is [output_failed]: "Writing the command's output failed: {{.reason}}."
@@ -2614,11 +2639,6 @@ func SecretFailed(reason string) M {
 	return M{id: "secret_failed", vals: []val{{"reason", reason}}}
 }
 
-// SecretReadFailed is [secret_read_failed]: "Reading the {{.secret}} secret failed: {{.reason}}."
-func SecretReadFailed(reason string, secret string) M {
-	return M{id: "secret_read_failed", vals: []val{{"reason", reason}, {"secret", secret}}}
-}
-
 // SecretRemoved is [secret_removed]: "devvm deleted the {{.secret}} secret."
 func SecretRemoved(secret string) M {
 	return M{id: "secret_removed", vals: []val{{"secret", secret}}}
@@ -2637,11 +2657,6 @@ func SecretSaved(file string, secret string) M {
 // SecretSavedKeychain is [secret_saved_keychain]: "devvm saved the {{.secret}} secret in the Keychain."
 func SecretSavedKeychain(secret string) M {
 	return M{id: "secret_saved_keychain", vals: []val{{"secret", secret}}}
-}
-
-// SecretToTerminal is [secret_to_terminal]: "The secret wasn't printed, because the output is a terminal. To print it anyway, add --to-terminal."
-func SecretToTerminal() M {
-	return M{id: "secret_to_terminal"}
 }
 
 // SecretUnuseCopied is [secret_unuse_copied]: "Network policy is off for {{.vm}}, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."
@@ -3262,6 +3277,9 @@ var specs = map[string]spec{
 	"cloning_image":                    {fields: []string{"parent"}},
 	"code_failed":                      {fields: []string{"reason"}},
 	"codex_login_kept":                 {fields: []string{"keys"}},
+	"codex_no_chatgpt":                 {},
+	"codex_no_key":                     {},
+	"codex_refresh_failed":             {fields: []string{"reason"}},
 	"config_not_copied":                {fields: []string{"file", "vm"}},
 	"config_redacted":                  {fields: []string{"file", "keys", "vm"}},
 	"configuring":                      {fields: []string{"vm"}},
@@ -3524,6 +3542,7 @@ var specs = map[string]spec{
 	"log_end":                          {fields: []string{"file"}},
 	"log_failed":                       {fields: []string{"reason"}},
 	"login_copy_failed":                {fields: []string{"agent", "reason", "vm"}},
+	"login_read_failed":                {fields: []string{"file", "reason"}},
 	"ls_failed":                        {fields: []string{"reason"}},
 	"macos_old":                        {fields: []string{"version"}},
 	"making_waiting":                   {},
@@ -3603,6 +3622,7 @@ var specs = map[string]spec{
 	"nothing_to_clean":                 {},
 	"oci_waiting":                      {},
 	"opencode_login_kept":              {fields: []string{"providers"}},
+	"opencode_refresh_failed":          {fields: []string{"provider", "reason"}},
 	"output_failed":                    {fields: []string{"reason"}},
 	"part_none_alone":                  {fields: []string{"flag"}},
 	"part_other_flag":                  {fields: []string{"flag", "given", "other"}},
@@ -3703,12 +3723,10 @@ var specs = map[string]spec{
 	"saving_home":                      {fields: []string{"vm"}},
 	"script_failed":                    {fields: []string{"script", "vm"}},
 	"secret_failed":                    {fields: []string{"reason"}},
-	"secret_read_failed":               {fields: []string{"reason", "secret"}},
 	"secret_removed":                   {fields: []string{"secret"}},
 	"secret_rm_confirm":                {fields: []string{"name"}},
 	"secret_saved":                     {fields: []string{"file", "secret"}},
 	"secret_saved_keychain":            {fields: []string{"secret"}},
-	"secret_to_terminal":               {},
 	"secret_unuse_copied":              {fields: []string{"secret", "vm"}},
 	"secret_unused":                    {fields: []string{"secret", "vm"}},
 	"secret_used":                      {fields: []string{"secret", "vm"}},
