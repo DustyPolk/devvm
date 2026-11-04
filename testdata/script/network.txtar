@@ -64,7 +64,8 @@ exec cat $NET_dir/run/secrets.json
 stdout '^\{"version":1,"bindings":\[\]\}$'
 # The run log never holds the key.
 exec sh -c 'cat "$DATA"/logs/runs/*.log'
-stdout 'devvm:devvm-proxy-password@'
+stdout 'devvm:<password>@'
+! stdout 'devvm-proxy-password'
 ! stdout 'devvm:[0-9a-f]{64}@'
 
 # A VM devvm started confined that still reaches the internet directly:

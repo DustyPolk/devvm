@@ -160,6 +160,44 @@ func TestProxyKeysStayOutOfTheLog(t *testing.T) {
 	}
 }
 
+// A password in a URL that a command prints, such as the shell's proxy settings that Lima logs
+// as it reads them, stays out of the log and its stream. The URL reaches the command through its
+// environment, never its arguments.
+func TestURLPasswordsStayOutOfTheLog(t *testing.T) {
+	t.Parallel()
+	u, _, errOut := testUI(t, "")
+	u.SetFlags(Flags{Verbose: true})
+	pass := "e2e-not-a-secret" //nolint:gosec // a fake password
+	cmd := exec.CommandContext(t.Context(), "sh", "-c", `printf '%s\n' "level=info msg=\"Replacing \\\"HTTPS_PROXY\\\" value $V\""; printf '%s' "$W"`)
+	cmd.Env = append(os.Environ(), "V=`http://alice:"+pass+"@127.0.0.1:3128`", "W=HTTP_PROXY=http://bob:"+pass+"@proxy.corp")
+	if err := u.LoggedCmd(t.Context(), msg.M{}, cmd); err != nil {
+		t.Fatal(err)
+	}
+	log := readFile(t, u.logPath())
+	if strings.Contains(log, pass) || strings.Contains(errOut.String(), pass) ||
+		!strings.Contains(log, "value `http://alice:<password>@127.0.0.1:3128`") || !strings.Contains(log, "HTTP_PROXY=http://bob:<password>@proxy.corp") {
+		t.Errorf("log %q, stderr %q", log, errOut)
+	}
+}
+
+// The redacting writer finds a password split across writes, and lines that it leaves alone come
+// through whole.
+func TestRedactingWriter(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	r := &redacting{w: &b}
+	for _, p := range []string{"plain line\nhttps://u:sec", "ret@host/x and http://devvm:", strings.Repeat("ab", 16), "@h\rno user https://host:443/a@b\n", "tail http://v:p@w"} {
+		if n, err := r.Write([]byte(p)); n != len(p) || err != nil {
+			t.Fatalf("Write: %d, %v", n, err)
+		}
+	}
+	r.flush()
+	want := "plain line\nhttps://u:<password>@host/x and http://devvm:<key>@h\rno user https://host:443/a@b\ntail http://v:<password>@w"
+	if got := b.String(); got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
 func TestStepCounts(t *testing.T) {
 	t.Parallel()
 	u, _, _ := testUI(t, "")

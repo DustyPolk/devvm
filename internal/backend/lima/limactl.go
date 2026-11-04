@@ -48,9 +48,12 @@ func (logRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
 // runs in when a config is invalid, and a project folder is the VM's to
 // write, so the VM could have made that name a link to anything. It runs
 // without the host's proxy settings (backend.ClientProxyVars, which Lima
-// reads for propagateProxyEnv, each bare, which setEnv removes): Lima logs them as it
-// reads them, password and all, into devvm's run log, and only a VM on
-// Lima's own network gets them (Start puts them back for it).
+// reads for propagateProxyEnv, each bare, which setEnv removes), and only
+// a VM on Lima's own network gets them (Start puts them back for it).
+// Lima's hostagent logs a value as it reads it, password and all, when it
+// replaces a loopback proxy's address with the guest's gateway, overrides
+// the system's or lima.yaml's, or can't parse it; limactl start passes
+// those lines on to devvm's run log, which keeps URL passwords out.
 func (l *Lima) limactl(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "limactl", args...) //nolint:gosec // devvm's own arguments
 	cmd.Env = setEnv(os.Environ(), append(backend.ClientProxyVars(), "LIMA_HOME="+l.Dirs.Lima)...)

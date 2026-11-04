@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -173,7 +174,58 @@ func (u *UI) LogWriter() io.Writer { return logTo(u, u.openLog()) }
 // build. It's kept out of the run log.
 var proxyKey = regexp.MustCompile(`devvm:[0-9a-f]{32,64}@`)
 
-func redact(s string) string { return proxyKey.ReplaceAllString(s, "devvm:<key>@") }
+// urlPassword is the password in a URL's user info (scheme://user:password@), such as a company
+// proxy's in the shell's HTTPS_PROXY, which Lima logs as it reads it for a VM without network
+// policy. It's kept out of the run log too.
+var urlPassword = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://[^\s/:@"'` + "`" + `]*):([^\s@/?#]+)@`)
+
+// redact is s without the proxy keys and URL passwords it holds.
+func redact(s string) string {
+	s = proxyKey.ReplaceAllString(s, "devvm:<key>@")
+	return urlPassword.ReplaceAllStringFunc(s, func(m string) string {
+		sub := urlPassword.FindStringSubmatch(m)
+		if sub[2] == "<key>" {
+			return m
+		}
+		return sub[1] + ":<password>@"
+	})
+}
+
+// redactLineMax is as much of a line without its end as redacting holds: past it, the line is
+// written as far as it goes.
+const redactLineMax = 64 << 10
+
+// redacting is a command's output on its way to the run log: it writes whole lines, each
+// redacted, so a password split across two writes is still found. A line ends at "\n" or "\r"
+// (a progress bar's). flush writes the rest, once the command has ended.
+type redacting struct {
+	w   io.Writer
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (r *redacting) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.buf = append(r.buf, p...)
+	if i := bytes.LastIndexAny(r.buf, "\n\r"); i >= 0 {
+		_, _ = io.WriteString(r.w, redact(string(r.buf[:i+1])))
+		r.buf = slices.Clone(r.buf[i+1:])
+	} else if len(r.buf) > redactLineMax {
+		_, _ = io.WriteString(r.w, redact(string(r.buf)))
+		r.buf = nil
+	}
+	return len(p), nil
+}
+
+func (r *redacting) flush() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.buf) > 0 {
+		_, _ = io.WriteString(r.w, redact(string(r.buf)))
+		r.buf = nil
+	}
+}
 
 // steps counts the labelled steps in a phase (an image's build, say).
 type steps struct {
@@ -228,7 +280,9 @@ func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 		label = append([]part{{text: strings.TrimSuffix(counted, shown)}}, u.errStyle.valueParts(step)...)
 	}
 	_, _ = io.WriteString(w, logLine+redact("+ "+strings.Join(cmd.Args, " "))+"\n")
-	cmd.Stdout, cmd.Stderr = w, w
+	out := &redacting{w: w}
+	defer out.flush()
+	cmd.Stdout, cmd.Stderr = out, out
 
 	var s *statusLine
 	if u.stderrTTY && !verbose(u) {

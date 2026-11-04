@@ -2059,12 +2059,12 @@ check "the proxy's config is yours alone, holds its password, and is all its arg
   [[ \$(stat -c %a '$pxc' 2>/dev/null || stat -f %Lp '$pxc') == 600 ]] && grep -q '^  \"version\": 1,\$' '$pxc' &&
   key=\$(st_get '$(vmdir "$vm")' net.made.proxy_key) && grep -qF \"\\\"password\\\": \\\"\$key\\\"\" '$pxc' &&
   [[ \$(ps -ww -o command= -p \"\$(pgrep -f -- '[_]proxy -config $pxc' | head -1)\" | awk '{ \$1 = \"\"; print }') == ' _proxy -config $pxc' ]]"
-# The control: the launch set the VM's environment (limactl edit, the password's stand-in in the
-# run log), and the guest has the password.
+# The control: the launch set the VM's environment (limactl edit, its password's stand-in written
+# as <password> in the run log), and the guest has the password.
 check "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it" bash -c "
   key=\$(st_get '$(vmdir "$vm")' net.made.proxy_key) && [[ \${#key} -eq 64 ]] && [[ -s '$work/ps.log' ]] &&
   ! grep -qFf <(echo \"\$key\") '$work/ps.log' && ! ps -axww -o command= | grep -qFf <(echo \"\$key\") &&
-  grep -l 'limactl edit .*devvm:devvm-proxy-password@' '$XDG_DATA_HOME'/devvm/logs/runs/*.log >/dev/null &&
+  grep -l 'limactl edit .*devvm:<password>@' '$XDG_DATA_HOME'/devvm/logs/runs/*.log >/dev/null &&
   limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -qF \":\$key@\""
 check "ssh devvm-net reaches it, confined, its host key checked" bash -c "
   grep -q '^Host devvm-net $vm\$' '$XDG_DATA_HOME/devvm/ssh_config' &&
