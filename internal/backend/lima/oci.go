@@ -55,7 +55,7 @@ type converted struct {
 // build's Trust.Add), the build VM trusts them, and build.sh has the
 // image's chroot trust them while bootify.sh runs, with guest/ca.sh
 // written and mounted read-only too.
-func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, trust backend.Script) (*converted, error) {
+func (l *images) convert(ctx context.Context, f *backend.From, size backend.Size, trust backend.Script) (*converted, error) {
 	if f.Digest == "" {
 		return nil, msg.NoDigest(f.Ref)
 	}
@@ -118,7 +118,7 @@ func (l *Lima) convert(ctx context.Context, f *backend.From, size backend.Size, 
 	}
 	// crane pulls from the registry, behind a company proxy through a
 	// proxy of devvm's (buildproxy.go).
-	conf, hp, proxyDone, err := buildProxy(ctx, l, OCIVM, backend.NetInternet)
+	conf, hp, proxyDone, err := buildProxy(ctx, l.Lima, OCIVM, backend.NetInternet)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func writeScripts(own fs.FS, out string, cas bool) (oci, guest string, err error
 // exportDocker saves an image only Docker has into dir, as image.tar,
 // which build.sh reads for "-". The export must be the image looked up:
 // it's saved by name, so the tag may have moved since.
-func (l *Lima) exportDocker(ctx context.Context, f *backend.From, dir string) (string, error) {
+func (l *images) exportDocker(ctx context.Context, f *backend.From, dir string) (string, error) {
 	if !l.DockerRunning(ctx) {
 		return "", msg.DockerOnly(f.Ref)
 	}
@@ -328,7 +328,7 @@ func ext4(path string) bool {
 // lockOCI takes the conversion lock, an OS lock on a file in devvm's data
 // folder, until unlock is called or devvm ends, however it ends. It waits
 // for another devvm that holds it, saying so after OCINote.
-func (l *Lima) lockOCI(ctx context.Context) (unlock func(), err error) {
+func (l *images) lockOCI(ctx context.Context) (unlock func(), err error) {
 	path := l.Dirs.OCIBuildLock()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err

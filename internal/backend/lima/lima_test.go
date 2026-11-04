@@ -705,8 +705,8 @@ func TestStubLifecycle(t *testing.T) {
 		t.Errorf("after Start: %+v, %v", in, err)
 	}
 	// Started without its proxy: running, not confined.
-	if ok, err := l.Confined(ctx, vm); err != nil || ok {
-		t.Errorf("Confined after a direct Start: %v, %v", ok, err)
+	if r, err := l.Running(ctx, vm); err != nil || r.Confined || r.ID == "" {
+		t.Errorf("Running after a direct Start: %+v, %v", r, err)
 	}
 	if err := l.Start(ctx, vm, backend.Want{}, backend.Confinement{}); err != nil {
 		t.Fatal(err)

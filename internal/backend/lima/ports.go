@@ -21,7 +21,7 @@ import (
 // Lima's ssh port on the host's loopback, as Lima's user, with Lima's own
 // key (_config/user in devvm's Lima home), which every VM there
 // authorizes.
-func (l *Lima) ForwardTarget(ctx context.Context, vm string) (backend.ForwardTarget, error) {
+func (l *machines) ForwardTarget(ctx context.Context, vm string) (backend.ForwardTarget, error) {
 	t, err := l.SSH(ctx, vm)
 	if err != nil {
 		return backend.ForwardTarget{}, err

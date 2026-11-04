@@ -39,13 +39,13 @@ func (l *Lima) haPIDFile(vm string) string { return filepath.Join(l.Dirs.LimaVM(
 // every boot) is c.Env, plus, for NetProxy, the proxy's address in
 // HTTP_PROXY and HTTPS_PROXY (and lowercase), its password written into
 // lima.yaml by devvm, never in limactl's arguments.
-func (l *Lima) Start(ctx context.Context, vm string, w backend.Want, c backend.Confinement) error {
+func (l *machines) Start(ctx context.Context, vm string, w backend.Want, c backend.Confinement) error {
 	return l.start(ctx, vm, &w, c)
 }
 
 // start is Start, for a project VM (w set) or a build's VM (w nil: its
 // config is left as it was made, but for c's).
-func (l *Lima) start(ctx context.Context, vm string, w *backend.Want, c backend.Confinement) error {
+func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c backend.Confinement) error {
 	if err := l.checkGlobalConfigs(); err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func (l *Lima) start(ctx context.Context, vm string, w *backend.Want, c backend.
 			return err
 		}
 	}
-	if err := configure(ctx, l, in, w, c, sshPort); err != nil {
+	if err := configure(ctx, l.Lima, in, w, c, sshPort); err != nil {
 		return err
 	}
 	// Its profile, wrapper and records: the user's alone.
@@ -110,7 +110,7 @@ func (l *Lima) start(ctx context.Context, vm string, w *backend.Want, c backend.
 // failed), which is usable: carry on with a warning. Unless it doesn't
 // answer over ssh: then it never booted (QEMU can keep running a guest
 // stuck in its firmware), and it's stopped.
-func (l *Lima) degraded(ctx context.Context, vm string) error {
+func (l *machines) degraded(ctx context.Context, vm string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -134,7 +134,7 @@ func (l *Lima) degraded(ctx context.Context, vm string) error {
 // confine returns how limactl start runs confined: the command it runs
 // under (sandbox-exec and its profile; none), and the environment it adds
 // (KEY=value, or a bare KEY to remove).
-func (l *Lima) confine(vm string, c backend.Confinement, sshPort int, forwarding bool) (wrap, env []string, err error) {
+func (l *machines) confine(vm string, c backend.Confinement, sshPort int, forwarding bool) (wrap, env []string, err error) {
 	// Lima's processes forward the agent they find at start.
 	if c.AgentSocket != "" {
 		env = append(env, "SSH_AUTH_SOCK="+c.AgentSocket)
@@ -232,7 +232,7 @@ const passwordStandIn = "devvm-proxy-password" //nolint:gosec // a stand-in, no 
 // starts, none when it already does: an edit gives the VM new ssh host keys
 // at its next boot (cloud-init sees a new instance). fill reports that the
 // edits hold passwordStandIn for fillPassword to replace.
-func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) (opts []string, fill bool) {
+func (l *machines) startSets(cfg *config, c backend.Confinement, sshPort int) (opts []string, fill bool) {
 	var sets []string
 	if sshPort != 0 && cfg.SSH.LocalPort != sshPort {
 		sets = append(sets, ".ssh.localPort="+strconv.Itoa(sshPort))
@@ -290,7 +290,7 @@ func (l *Lima) startSets(cfg *config, c backend.Confinement, sshPort int) (opts 
 
 // guestEnv is the VM's guest environment as c has it: c.Env, and for
 // NetProxy the proxy's address.
-func (l *Lima) guestEnv(c backend.Confinement) map[string]string {
+func (l *machines) guestEnv(c backend.Confinement) map[string]string {
 	env := maps.Clone(c.Env)
 	if env == nil {
 		env = map[string]string{}
@@ -307,7 +307,7 @@ func (l *Lima) guestEnv(c backend.Confinement) map[string]string {
 // fillPassword replaces the proxy URL with passwordStandIn in the VM's
 // lima.yaml, as limactl edit wrote it, with the real one: the file, unlike
 // a process's arguments, is the user's alone (devvm writes it 0600).
-func (l *Lima) fillPassword(vm string, c backend.Confinement) error {
+func (l *machines) fillPassword(vm string, c backend.Confinement) error {
 	path := filepath.Join(l.Dirs.LimaVM(vm), "lima.yaml")
 	data, err := os.ReadFile(path) //nolint:gosec // the VM's own config, in devvm's Lima home
 	if err != nil {
@@ -330,7 +330,7 @@ func (l *Lima) fillPassword(vm string, c backend.Confinement) error {
 // proxyURL is devvm's proxy as the guest reaches it, with the VM's
 // password: on macOS the host's address on Lima's network and the proxy's
 // own port, on Linux QEMU's guestfwd address.
-func (l *Lima) proxyURL(c backend.Confinement) string {
+func (l *machines) proxyURL(c backend.Confinement) string {
 	if l.OS == "darwin" {
 		return backend.ProxyURL(limaHost, c.ProxyPort, c.ProxyPassword)
 	}
@@ -346,64 +346,55 @@ func freePort(ctx context.Context) (int, error) {
 
 // recordStart notes the hostagent Lima started for the VM, which a
 // confined start started confined (a process can't leave its sandbox).
-func (l *Lima) recordStart(vm string, n backend.Net) error {
+func (l *machines) recordStart(vm string, n backend.Net) error {
 	pid, err := os.ReadFile(l.haPIDFile(vm))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil // no hostagent to record: Confined says no
+		return nil // no hostagent to record: Running says it's not confined
 	} else if err != nil {
 		return err
 	}
 	return state.WriteFile(l.Dirs.VM(vm).Started(), fmt.Appendf(nil, "%s %d\n", strings.TrimSpace(string(pid)), n))
 }
 
-// Confined reports whether the VM runs on the hostagent Start started
-// with NetProxy: anything else (limactl start) is a new hostagent,
-// unconfined.
-func (l *Lima) Confined(_ context.Context, vm string) (bool, error) {
+// Running reads the VM's hostagent's pid file, its lifeline: the process
+// that runs the VM and its network, which Lima removes when the VM stops.
+// Each start writes it anew, so the pid it holds and when it was written
+// are the start's ID. The VM is confined when it runs on the hostagent
+// Start started with NetProxy (recordStart): anything else (limactl
+// start) is a new hostagent, unconfined.
+func (l *machines) Running(_ context.Context, vm string) (backend.Run, error) {
+	r := backend.Run{Lifeline: l.haPIDFile(vm)}
+	fi, err := os.Stat(r.Lifeline)
+	if errors.Is(err, os.ErrNotExist) {
+		return r, nil
+	} else if err != nil {
+		return r, err
+	}
+	ha, err := os.ReadFile(r.Lifeline)
+	if errors.Is(err, os.ErrNotExist) {
+		return r, nil // stopped since
+	} else if err != nil {
+		return r, err
+	}
+	pid := strings.TrimSpace(string(ha))
+	r.ID = pid + " " + fi.ModTime().UTC().Format(time.RFC3339Nano)
 	rec, err := os.ReadFile(l.Dirs.VM(vm).Started())
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return r, nil
 	} else if err != nil {
-		return false, err
-	}
-	ha, err := os.ReadFile(l.haPIDFile(vm))
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	} else if err != nil {
-		return false, err
+		return r, err
 	}
 	want, n, _ := strings.Cut(strings.TrimSpace(string(rec)), " ")
-	pid, err := strconv.Atoi(strings.TrimSpace(string(ha)))
-	if err != nil || strconv.Itoa(pid) != want || n != strconv.Itoa(int(backend.NetProxy)) {
-		return false, nil //nolint:nilerr // an unreadable pid is no hostagent of devvm's
+	p, err := strconv.Atoi(pid)
+	if err != nil || strconv.Itoa(p) != want || n != strconv.Itoa(int(backend.NetProxy)) {
+		return r, nil //nolint:nilerr // an unreadable pid is no hostagent of devvm's
 	}
-	return daemon.Alive(pid), nil
+	r.Confined = daemon.Alive(p)
+	return r, nil
 }
-
-// StartID is a running VM's hostagent: its pid file, which each start
-// writes anew, by the pid it holds and when it was written; "" without
-// one (Lima removes it when the VM stops).
-func (l *Lima) StartID(_ context.Context, vm string) (string, error) {
-	path := l.haPIDFile(vm)
-	fi, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
-	} else if err != nil {
-		return "", err
-	}
-	pid, err := os.ReadFile(path) //nolint:gosec // Lima's own pid file for the VM
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(pid)) + " " + fi.ModTime().UTC().Format(time.RFC3339Nano), nil
-}
-
-// Lifeline is the VM's hostagent's pid file: the process that runs the VM
-// and its network.
-func (l *Lima) Lifeline(_ context.Context, vm string) string { return l.haPIDFile(vm) }
 
 // ProxyURL is devvm's proxy as a VM started with c reaches it.
-func (l *Lima) ProxyURL(c backend.Confinement) string {
+func (l *machines) ProxyURL(c backend.Confinement) string {
 	if c.Net != backend.NetProxy {
 		return ""
 	}

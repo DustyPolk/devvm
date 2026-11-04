@@ -40,16 +40,6 @@ func count(n int) uint64 {
 // to 0.6 GiB.
 func ToolImages(n int) uint64 { return 512<<20 + count(n)*(256<<20) }
 
-// Storage is a backend whose images and VMs are files on the host's own
-// disks. DiskDirs returns a folder on each volume it writes them to,
-// made or not, and Floors the free space it wants on them. A backend
-// whose disks are elsewhere doesn't implement it, and its free space isn't
-// checked.
-type Storage interface {
-	DiskDirs() []string
-	Floors() Floors
-}
-
 // Space checks the host's free space before a step that writes disks.
 // Free returns the free space on the volume holding a path
 // (platform.Host's); with Free nil nothing is checked.
@@ -57,16 +47,12 @@ type Space struct {
 	Free func(path string) (uint64, error)
 }
 
-// Check refuses when a volume b writes to has less free than need
-// returns from b's floors (disk_low, for what: the image, tools or VM the
-// step makes). A backend that isn't Storage, or a system devvm can't
-// read free space on, isn't checked.
-func (s Space) Check(b Backend, what string, need func(Floors) uint64) error {
-	st, ok := As[Storage](b)
-	if !ok {
-		return nil
-	}
-	return s.check(st.DiskDirs(), what, need(st.Floors()))
+// Check refuses when a volume h writes to has less free than need
+// returns from h's floors (disk_low, for what: the image, tools or VM the
+// step makes). A backend without DiskDirs, or a system devvm can't read
+// free space on, isn't checked.
+func (s Space) Check(h Host, what string, need func(Floors) uint64) error {
+	return s.check(h.DiskDirs(), what, need(h.Floors()))
 }
 
 // CheckDir refuses when the volume holding dir, a folder the step writes
@@ -84,16 +70,12 @@ func (s Space) check(dirs []string, what string, need uint64) error {
 	return msg.DiskLow(dir, GiB(free), what, strconv.FormatUint(need>>30, 10))
 }
 
-// Warning is doctor's warning when a volume b writes to has less free
+// Warning is doctor's warning when a volume h writes to has less free
 // than building base wants there; false when it has enough, or can't be
 // read.
-func (s Space) Warning(b Backend) (msg.M, bool) {
-	st, ok := As[Storage](b)
-	if !ok {
-		return msg.M{}, false
-	}
-	need := wholeGiB(st.Floors().Base)
-	dir, free, err := s.lowest(st.DiskDirs())
+func (s Space) Warning(h Host) (msg.M, bool) {
+	need := wholeGiB(h.Floors().Base)
+	dir, free, err := s.lowest(h.DiskDirs())
 	if err != nil || dir == "" || free >= need {
 		return msg.M{}, false
 	}

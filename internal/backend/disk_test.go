@@ -66,7 +66,7 @@ func TestSpaceCheck(t *testing.T) {
 		{"statfs fails", b, imageOf, freeOf(nil, statErr), "disk_free_unknown dir=/lima"},
 		{"a system without it", b, imageOf, freeOf(nil, errors.ErrUnsupported), ""},
 		{"no free space func", b, imageOf, nil, ""},
-		{"a backend whose disks aren't the host's", nil, imageOf, freeOf(nil, statErr), ""},
+		{"a backend whose disks aren't the host's", stored(), imageOf, freeOf(nil, statErr), ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := backend.Space{Free: tc.free}.Check(tc.b, "node", tc.need)
@@ -112,7 +112,7 @@ func TestSpaceWarning(t *testing.T) {
 		{"below base's", b, freeOf(map[string]uint64{"/lima": 11 << 30}, nil), "disk_low_warning dir=/lima free=11.0 need=12"},
 		{"at base's", b, freeOf(map[string]uint64{"/lima": 12 << 30}, nil), ""},
 		{"unreadable", b, freeOf(nil, fs.ErrPermission), ""},
-		{"a backend whose disks aren't the host's", nil, freeOf(nil, nil), ""},
+		{"a backend whose disks aren't the host's", stored(), freeOf(nil, nil), ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, low := backend.Space{Free: tc.free}.Warning(tc.b)

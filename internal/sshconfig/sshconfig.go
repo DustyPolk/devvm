@@ -146,10 +146,11 @@ func (c *Config) Write(ctx context.Context) error {
 		if err != nil || t.Host == "" || t.Port == 0 {
 			continue
 		}
-		start, err := r.b.StartID(ctx, r.in.Name)
+		run, err := r.b.Running(ctx, r.in.Name)
 		if err != nil {
 			continue
 		}
+		start := run.ID
 		ok, err := c.recordHostKeys(ctx, r.b, r.in.Name)
 		if err != nil {
 			return err

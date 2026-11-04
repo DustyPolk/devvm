@@ -31,7 +31,7 @@ import (
 // caller has shown the run log's end. Once it exists, a failure keeps it,
 // stopped, for inspection; the next build deletes it (it has no record).
 // The registry's guard has checked spec (ImageSpec.Validate).
-func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.Built, error) {
+func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.Built, error) {
 	inst := ImagePrefix + spec.Key
 	if _, err := l.inspect(ctx, inst); err == nil {
 		return backend.Built{}, fmt.Errorf("lima: %s exists already", inst)
@@ -48,7 +48,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		} else if err != nil {
 			return backend.Built{}, err
 		}
-		edits = cloneEdits(l, in.Config, spec.Net)
+		edits = cloneEdits(l.Lima, in.Config, spec.Net)
 		if backend.Status(in.Status) != backend.StatusStopped {
 			if err := l.stop(ctx, parent); err != nil {
 				return backend.Built{}, err
@@ -123,7 +123,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 	}
 	created.Store(true)
 	// Its proxy ends with it, or with the run.
-	conf, hp, proxyDone, err := buildProxy(ctx, l, inst, spec.Net)
+	conf, hp, proxyDone, err := buildProxy(ctx, l.Lima, inst, spec.Net)
 	if err != nil {
 		return backend.Built{}, err
 	}
@@ -143,7 +143,7 @@ func (l *Lima) BuildImage(ctx context.Context, spec backend.ImageSpec) (backend.
 		}
 		return backend.Built{}, err
 	}
-	if err := buildScripts(ctx, l, inst, spec, hp); err != nil {
+	if err := buildScripts(ctx, l.Lima, inst, spec, hp); err != nil {
 		return failed(err)
 	}
 	// Flushed first: a guest that ignores Lima's stop request is stopped
@@ -248,7 +248,7 @@ func layerArgs(parent, inst string) []string {
 // base.yaml's settings and nothing from the host mounted, or the mounts a
 // --set in opts gives it (--set applies after --mount-none). It returns
 // the image it used. It gets size's CPUs and memory (buildSize's).
-func (l *Lima) createFromUbuntu(ctx context.Context, vm string, size backend.Size, opts ...string) (ubuntu.Image, error) {
+func (l *images) createFromUbuntu(ctx context.Context, vm string, size backend.Size, opts ...string) (ubuntu.Image, error) {
 	img, err := l.Ubuntu(ctx)
 	if err != nil {
 		return ubuntu.Image{}, err
@@ -271,7 +271,7 @@ func createArgs(vm string, images []limaImage, size backend.Size, opts ...string
 
 // create runs limactl create with args (createArgs) as step, base.yaml
 // from devvm's own files on its standard input: no copy of it on disk.
-func (l *Lima) create(ctx context.Context, step msg.M, vm string, args []string) error {
+func (l *images) create(ctx context.Context, step msg.M, vm string, args []string) error {
 	yaml, err := fs.ReadFile(l.Assets, "base.yaml")
 	if err != nil {
 		return err
@@ -298,7 +298,7 @@ func limaArch(goarch string) string {
 // runScript runs a script in the VM, fed on its standard input to bash as
 // the VM's user, or with root to sh as root: a build's Trust scripts, of
 // which an empty one isn't run.
-func (l *Lima) runScript(ctx context.Context, vm string, s backend.Script, root bool) error {
+func (l *images) runScript(ctx context.Context, vm string, s backend.Script, root bool) error {
 	cmd := l.limactl(ctx, "shell", vm, "bash", "-s")
 	if root {
 		if len(s.Data) == 0 {
@@ -315,7 +315,7 @@ func (l *Lima) runScript(ctx context.Context, vm string, s backend.Script, root 
 
 // unfinished deletes an image's instance whose build didn't finish: on an
 // interrupt, or when its create or clone failed.
-func (l *Lima) unfinished(ctx context.Context, inst string) {
+func (l *images) unfinished(ctx context.Context, inst string) {
 	if _, err := l.inspect(ctx, inst); err != nil {
 		return // never created, or Lima can't say: nothing devvm can delete
 	}
@@ -337,7 +337,7 @@ var (
 // fewer CPUs gets its own count and one that base.yaml's memory would
 // leave less than 2 GiB gets half its memory. Images built from base, and
 // their VMs, keep got.
-func (l *Lima) buildSize() (want, got backend.Size, err error) {
+func (l *images) buildSize() (want, got backend.Size, err error) {
 	data, err := fs.ReadFile(l.Assets, "base.yaml")
 	if err != nil {
 		return want, got, err

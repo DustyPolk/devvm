@@ -48,11 +48,11 @@ func (p *Proxy) SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, 
 	if err := setCheck(ctx, st, CheckUnenforced); err != nil {
 		return err
 	}
-	confined, err := b.Confined(ctx, vm)
+	run, err := b.Running(ctx, vm)
 	if err != nil {
 		return err
 	}
-	if confined {
+	if run.Confined {
 		return p.stop(ctx, b, vm, msg.NetDirectRoute(vm))
 	}
 	if !p.Terminal() {
@@ -107,11 +107,11 @@ func Listed(ctx context.Context, b backend.Backend, st *state.VM, running bool) 
 	case !running:
 		return "on", nil
 	}
-	confined, err := b.Confined(ctx, st.Name())
+	run, err := b.Running(ctx, st.Name())
 	if err != nil {
 		return "", err
 	}
-	if !confined {
+	if !run.Confined {
 		return CheckUnenforced, nil
 	}
 	return "on", nil
@@ -120,8 +120,8 @@ func Listed(ctx context.Context, b backend.Backend, st *state.VM, running bool) 
 // enforced reports whether the VM runs confined and can't connect out
 // directly.
 func enforced(ctx context.Context, b backend.Backend, vm string) (bool, error) {
-	confined, err := b.Confined(ctx, vm)
-	if err != nil || !confined {
+	run, err := b.Running(ctx, vm)
+	if err != nil || !run.Confined {
 		return false, err
 	}
 	return !Direct(ctx, b, vm), nil

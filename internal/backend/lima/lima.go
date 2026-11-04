@@ -42,8 +42,17 @@ const ImagePrefix = "devvm-img-"
 // Lima reports as failed, gets to answer over ssh.
 const sshTimeout = 60 * time.Second
 
-// Lima is the backend. New sets every field; tests change them.
+// Lima is the backend. New sets every field; tests change them. Its own
+// methods are Name, Caps and what its roles share (limactl, inspect…);
+// the rest are its roles', host, images, machines and housekeeping, each
+// a type of its own over this Lima (withRoles), as backend.Backend's
+// roles are.
 type Lima struct {
+	host
+	images
+	machines
+	housekeeping
+
 	Dirs   paths.Dirs
 	Runner Runner
 	// OS and Arch are the host's, as Go names them: how VMs are confined
@@ -109,10 +118,22 @@ type UI interface {
 	Interrupted() bool
 }
 
-var (
-	_ backend.Backend = (*Lima)(nil)
-	_ backend.Storage = (*Lima)(nil)
+// Lima's roles, each with the Lima it's part of: its fields, and the
+// other roles' methods.
+type (
+	host         struct{ *Lima } // backend.Host
+	images       struct{ *Lima } // backend.Images
+	machines     struct{ *Lima } // backend.Machines
+	housekeeping struct{ *Lima } // backend.Housekeeping
 )
+
+var _ backend.Backend = (*Lima)(nil)
+
+// withRoles returns l with its roles, each on l.
+func withRoles(l *Lima) *Lima {
+	l.host, l.images, l.machines, l.housekeeping = host{l}, images{l}, machines{l}, housekeeping{l}
+	return l
+}
 
 // New returns the Lima backend for devvm's folders and its own files
 // (assets), on u, sizing base to host, finding Ubuntu's cloud image at
@@ -125,7 +146,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string)
 			self = r
 		}
 	}
-	return &Lima{
+	return withRoles(&Lima{
 		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Self: self, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
 		Ubuntu: ubuntu.New(assets, ubuntuURL, u).Image, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
@@ -133,7 +154,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string)
 		DockerRunning: from.DockerRunning,
 		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
 		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
-	}
+	})
 }
 
 // Name returns lima.
@@ -141,15 +162,14 @@ func (l *Lima) Name() string { return Name }
 
 // KeyFiles is the pinned Ubuntu cloud image base starts from, for the
 // host's architecture.
-func (l *Lima) KeyFiles() map[string][]byte {
+func (l *images) KeyFiles() map[string][]byte {
 	return map[string][]byte{"ubuntu-image": []byte(ubuntu.CloudPin(l.Arch))}
 }
 
-// DiskDirs is devvm's Lima home, which holds every image's and VM's disk
-// (backend.Storage).
-func (l *Lima) DiskDirs() []string { return []string{l.Dirs.Lima} }
+// DiskDirs is devvm's Lima home, which holds every image's and VM's disk.
+func (l *host) DiskDirs() []string { return []string{l.Dirs.Lima} }
 
-// Floors is the free space Lima's steps want (backend.Storage), measured
+// Floors is the free space Lima's steps want (backend.Space), measured
 // with statfs on macOS (vz, APFS) in the e2e sandbox. Base took 1.1 GiB
 // at its peak with Ubuntu's cloud image already in Lima's cache; the
 // download adds up to 0.9 GiB, and every feature took base's disk from
@@ -159,7 +179,7 @@ func (l *Lima) DiskDirs() []string { return []string{l.Dirs.Lima} }
 // measured here) an image's and a tools build VM's disks start as full
 // copies of their parent's (2.0 GB as qcow2 without features), while a
 // VM's is an overlay of its image's.
-func (l *Lima) Floors() backend.Floors {
+func (l *host) Floors() backend.Floors {
 	f := backend.Floors{Base: 8 << 30, Image: 2 << 30, VM: 2 << 30, Tools: 3 << 30, PerTool: 512 << 20}
 	if l.overlays() {
 		f.Image += 6 << 30
@@ -204,7 +224,7 @@ const (
 
 // NameMax is the longest VM name whose ssh socket fits: Lima keeps it in
 // the VM's folder (<Lima home>/<vm>/ssh.sock).
-func (l *Lima) NameMax() int {
+func (l *host) NameMax() int {
 	return max(0, socketMax-sshSocketExtra-len(l.Dirs.Lima)-len("/")-len("/ssh.sock"))
 }
 
@@ -217,7 +237,7 @@ func imageKey(name string) (string, bool) {
 }
 
 // Images lists the keys of the images in devvm's Lima home.
-func (l *Lima) Images(ctx context.Context) ([]string, error) {
+func (l *images) Images(ctx context.Context) ([]string, error) {
 	ins, err := l.list(ctx)
 	if err != nil {
 		return nil, err
@@ -234,7 +254,7 @@ func (l *Lima) Images(ctx context.Context) ([]string, error) {
 // ImageSize is the disk space of the image's instance folder: its disk
 // and Lima's files. On macOS an image's disk is an APFS clone of its
 // parent's, so the blocks they share count for both.
-func (l *Lima) ImageSize(_ context.Context, key string) (int64, error) {
+func (l *images) ImageSize(_ context.Context, key string) (int64, error) {
 	name := ImagePrefix + key
 	if _, ok := imageKey(name); !ok || strings.ContainsAny(key, "/\x00") {
 		return 0, msg.NotAnImage(name)
@@ -244,7 +264,7 @@ func (l *Lima) ImageSize(_ context.Context, key string) (int64, error) {
 
 // DeleteImage deletes an image. On Linux hosts, an image whose disk
 // project VMs are overlays of is refused.
-func (l *Lima) DeleteImage(ctx context.Context, key string) error {
+func (l *images) DeleteImage(ctx context.Context, key string) error {
 	name := ImagePrefix + key
 	if _, ok := imageKey(name); !ok || strings.ContainsAny(key, "/\x00") {
 		return msg.NotAnImage(name)
@@ -268,7 +288,7 @@ func (l *Lima) DeleteImage(ctx context.Context, key string) error {
 
 // CreateVM clones the image's instance into a new, stopped VM. On Linux
 // hosts the VM's disk is then an overlay of the image's.
-func (l *Lima) CreateVM(ctx context.Context, image string, spec backend.VMSpec) error {
+func (l *machines) CreateVM(ctx context.Context, image string, spec backend.VMSpec) error {
 	vm := spec.Name
 	if len(vm) > l.NameMax() {
 		return msg.LimaHomeTooLong(l.Dirs.Lima, vm)
@@ -338,7 +358,7 @@ func (l *Lima) CreateVM(ctx context.Context, image string, spec backend.VMSpec) 
 // Stop stops a VM; a stopped one is left as it is. One Lima reports as
 // broken, such as a VM whose start was cut short before its hostagent
 // answers, is stopped with --force, as limactl stop refuses it.
-func (l *Lima) Stop(ctx context.Context, vm string) error {
+func (l *machines) Stop(ctx context.Context, vm string) error {
 	in, err := l.inspect(ctx, vm)
 	if err != nil {
 		return err
@@ -366,7 +386,7 @@ func (l *Lima) stop(ctx context.Context, vm string, opts ...string) error {
 }
 
 // Delete deletes a VM, stopping it first.
-func (l *Lima) Delete(ctx context.Context, vm string) error {
+func (l *machines) Delete(ctx context.Context, vm string) error {
 	if _, err := l.inspect(ctx, vm); err != nil {
 		return err
 	}
@@ -390,7 +410,7 @@ func (l *Lima) delete(ctx context.Context, vm string) error {
 // Rename renames a stopped VM's instance (limactl rename), its disk and
 // Lima's files with it; devvm's files for it keep the old name. A name too
 // long for the VM's ssh socket is refused first.
-func (l *Lima) Rename(ctx context.Context, vm, to string) error {
+func (l *machines) Rename(ctx context.Context, vm, to string) error {
 	if len(to) > l.NameMax() {
 		return msg.LimaHomeTooLong(l.Dirs.Lima, to)
 	}
@@ -409,7 +429,7 @@ func (l *Lima) Rename(ctx context.Context, vm, to string) error {
 }
 
 // List lists the VMs in devvm's Lima home, without images.
-func (l *Lima) List(ctx context.Context) ([]backend.Instance, error) {
+func (l *machines) List(ctx context.Context) ([]backend.Instance, error) {
 	ins, err := l.list(ctx)
 	if err != nil {
 		return nil, err
@@ -424,7 +444,7 @@ func (l *Lima) List(ctx context.Context) ([]backend.Instance, error) {
 }
 
 // Inspect returns one VM.
-func (l *Lima) Inspect(ctx context.Context, vm string) (backend.Instance, error) {
+func (l *machines) Inspect(ctx context.Context, vm string) (backend.Instance, error) {
 	in, err := l.inspect(ctx, vm)
 	if err != nil {
 		return backend.Instance{}, err
@@ -452,7 +472,7 @@ func (in instance) backend() backend.Instance {
 // Exec runs argv in the VM, in o.Dir. limactl shell passes each of its
 // arguments to the guest's shell quoted; the command devvm builds for it
 // (the folder, then argv) is quoted word by word too.
-func (l *Lima) Exec(ctx context.Context, vm string, argv []string, o backend.ExecOpts) error {
+func (l *machines) Exec(ctx context.Context, vm string, argv []string, o backend.ExecOpts) error {
 	dir := o.Dir
 	if dir == "" {
 		dir = "/"
@@ -463,7 +483,7 @@ func (l *Lima) Exec(ctx context.Context, vm string, argv []string, o backend.Exe
 }
 
 // Shell returns limactl shell in dir, for the caller to run in its place.
-func (l *Lima) Shell(ctx context.Context, vm, dir string) (backend.Command, error) {
+func (l *machines) Shell(ctx context.Context, vm, dir string) (backend.Command, error) {
 	cmd := l.limactl(ctx, "shell", "--workdir", dir, vm)
 	if cmd.Err != nil {
 		return backend.Command{}, cmd.Err
@@ -481,7 +501,7 @@ var sshLogin = []string{
 
 // SSH returns how ssh reaches a running VM: the address, port, user and
 // login options in the ssh config Lima keeps for it, which has its key.
-func (l *Lima) SSH(ctx context.Context, vm string) (backend.SSHTarget, error) {
+func (l *machines) SSH(ctx context.Context, vm string) (backend.SSHTarget, error) {
 	in, err := l.inspect(ctx, vm)
 	if err != nil {
 		return backend.SSHTarget{}, err
@@ -597,7 +617,7 @@ func (l *Lima) diskInfo(ctx context.Context, path string) (qemuImgInfo, error) {
 // overlay replaces vm's copy of src's disk with a qcow2 overlay of it: the
 // image's blocks are shared and the VM's disk holds only its changes. A
 // disk that isn't qcow2 (Lima's layout changed) is kept as it is.
-func (l *Lima) overlay(ctx context.Context, src, vm string) error {
+func (l *machines) overlay(ctx context.Context, src, vm string) error {
 	img, disk := l.disk(src), l.disk(vm)
 	if fi, err := os.Stat(img); err != nil || !fi.Mode().IsRegular() {
 		return nil //nolint:nilerr // no qcow2 disk to share: keep the copy
@@ -619,7 +639,7 @@ func (l *Lima) overlay(ctx context.Context, src, vm string) error {
 }
 
 // overlayUsers returns the VMs whose disks are overlays of image's.
-func (l *Lima) overlayUsers(ctx context.Context, image string) ([]string, error) {
+func (l *images) overlayUsers(ctx context.Context, image string) ([]string, error) {
 	ins, err := l.list(ctx)
 	if err != nil {
 		return nil, err

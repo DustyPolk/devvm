@@ -225,9 +225,9 @@ func TestWriteAgentStarted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	start, err := f.StartID(t.Context(), web)
+	run, err := f.Running(t.Context(), web)
 	if err == nil {
-		err = sshagent.RecordStart(t.Context(), st, sshagent.Off, start)
+		err = sshagent.RecordStart(t.Context(), st, sshagent.Off, run.ID)
 	}
 	if err != nil {
 		t.Fatal(err)

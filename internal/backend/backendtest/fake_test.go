@@ -58,6 +58,39 @@ func TestFakeRecordsAndAnswers(t *testing.T) {
 
 // A stopped VM's start refuses a disk smaller than its own, changing
 // nothing.
+// Running gives the lifeline, the start's ID and its confinement; the
+// roles Lima has and the fake doesn't answer none.
+func TestFakeRunningAndNone(t *testing.T) {
+	ctx := t.Context()
+	f := New("fake", nil)
+	f.LifelineFile = "/ha.pid"
+	f.Instances["v"] = backend.Instance{Name: "v", Status: backend.StatusStopped}
+	if r, err := f.Running(ctx, "v"); r != (backend.Run{Lifeline: "/ha.pid", Confined: true}) || err != nil {
+		t.Errorf("stopped: %+v, %v", r, err)
+	}
+	if err := f.Start(ctx, "v", backend.Want{}, backend.Confinement{Net: backend.NetDirect}); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := f.Running(ctx, "v"); r != (backend.Run{ID: "start-1", Lifeline: "/ha.pid"}) || err != nil {
+		t.Errorf("started direct: %+v, %v", r, err)
+	}
+	f.Restart("v")
+	if r, _ := f.Running(ctx, "v"); r.ID != "start-2" {
+		t.Errorf("restarted: %+v", r)
+	}
+	where, isDefault := f.Location()
+	u, uerr := f.Usage(ctx)
+	ss, serr := f.Strays(ctx)
+	cs, cerr := f.DevvmCache(ctx)
+	if where != "" || !isDefault || f.DiskDirs() != nil || f.Floors() != (backend.Floors{}) || f.KeyFiles() != nil ||
+		u.VMs != nil || uerr != nil || ss != nil || serr != nil || cs != nil || cerr != nil {
+		t.Error("the fake has something of a role it has none of")
+	}
+	if err := f.DeleteCache(ctx, nil); err != nil || !slices.Contains(f.Methods(), "DeleteCache") {
+		t.Errorf("DeleteCache: %v, %q", err, f.Methods())
+	}
+}
+
 func TestFakeStartValidates(t *testing.T) {
 	ctx := t.Context()
 	f := New("fake", nil)

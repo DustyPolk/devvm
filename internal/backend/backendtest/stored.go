@@ -3,15 +3,15 @@ package backendtest
 import "github.com/w3cj/devvm/internal/backend"
 
 // Stored is a fake whose disks are on the host, in Dirs
-// (backend.Storage), with Floor its floors: DefaultFloors when it's
-// zero. Its Fake may be nil when nothing else of it is called.
+// (backend.Host's DiskDirs), with Floor its floors: DefaultFloors when
+// it's zero. Its Fake may be nil when nothing else of it is called.
 type Stored struct {
 	*Fake
 	Dirs  []string
 	Floor backend.Floors
 }
 
-var _ backend.Storage = Stored{}
+var _ backend.Backend = Stored{}
 
 // DefaultFloors returns a Stored's floors unless it sets its own: 12 GiB
 // to build base, 8 for another image, 4 for a VM, 3 for shared tools and

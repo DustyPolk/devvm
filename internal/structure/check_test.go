@@ -189,7 +189,8 @@ func typeName(e ast.Expr) string {
 }
 
 // checkMethods: no type has more than maxMethods methods, but a large
-// type, which has no more than its max and is still large.
+// type, which has no more than its max and is still large. An
+// interface's are the methods it declares; one it embeds has its own.
 func checkMethods(m *module, r rules) []violation {
 	type key struct{ dir, pkg, typ string }
 	counts := map[key]int{}
@@ -199,8 +200,16 @@ func checkMethods(m *module, r rules) []violation {
 			switch d := d.(type) {
 			case *ast.GenDecl:
 				for _, s := range d.Specs {
-					if ts, ok := s.(*ast.TypeSpec); ok {
-						where[key{f.dir, f.ast.Name.Name, ts.Name.Name}] = m.pos(ts)
+					ts, ok := s.(*ast.TypeSpec)
+					if !ok {
+						continue
+					}
+					k := key{f.dir, f.ast.Name.Name, ts.Name.Name}
+					where[k] = m.pos(ts)
+					if it, ok := ts.Type.(*ast.InterfaceType); ok {
+						for _, fl := range it.Methods.List {
+							counts[k] += len(fl.Names)
+						}
 					}
 				}
 			case *ast.FuncDecl:

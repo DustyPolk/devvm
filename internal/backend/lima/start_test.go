@@ -124,9 +124,9 @@ func TestStartConfined(t *testing.T) {
 			if fwd, _ := envOf(s, GuestFwdEnv); tc.qemu && fwd != tc.guestfwd {
 				t.Errorf("%s=%q, want %q", GuestFwdEnv, fwd, tc.guestfwd)
 			}
-			if ok, err := l.Confined(t.Context(), "v"); err != nil {
+			if r, err := l.Running(t.Context(), "v"); err != nil {
 				t.Fatal(err)
-			} else if ok {
+			} else if r.Confined {
 				t.Error("Confined with a hostagent that doesn't run")
 			}
 		})
@@ -563,41 +563,46 @@ func TestDegradedStart(t *testing.T) {
 	}
 }
 
-// Confined: the VM still runs on the hostagent Start started, which runs.
-func TestConfined(t *testing.T) {
+// Running: the hostagent's pid file is the lifeline, stopped or not; its
+// pid and when it was written are the start's ID; and the VM is confined
+// while it runs on the hostagent Start started with NetProxy, which runs.
+func TestRunning(t *testing.T) {
 	l, f, _ := testLima(t, "darwin")
 	f.out["limactl list --json"] = `{"name":"v","status":"Stopped"}`
-	if ok, err := l.Confined(t.Context(), "v"); ok || err != nil {
-		t.Errorf("never started: %v, %v", ok, err)
+	ha := l.haPIDFile("v")
+	if r, err := l.Running(t.Context(), "v"); r != (backend.Run{Lifeline: ha}) || err != nil {
+		t.Errorf("never started: %+v, %v", r, err)
 	}
 	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(l.haPIDFile("v"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+	pid := strconv.Itoa(os.Getpid())
+	if err := os.WriteFile(ha, []byte(pid+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	editWritesYAML(t, l, f)
 	if err := l.start(t.Context(), "v", nil, backend.Confinement{Net: backend.NetProxy, ProxyPort: 1, ProxyPassword: "pw", SSHPort: 2}); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := l.Confined(t.Context(), "v"); !ok || err != nil {
-		t.Errorf("after Start: %v, %v", ok, err)
+	r, err := l.Running(t.Context(), "v")
+	if !r.Confined || r.Lifeline != ha || !strings.HasPrefix(r.ID, pid+" ") || err != nil {
+		t.Errorf("after Start: %+v, %v", r, err)
 	}
-	// Started again some other way: a new hostagent.
-	if err := os.WriteFile(l.haPIDFile("v"), []byte("1\n"), 0o600); err != nil {
+	// Started again some other way: a new hostagent, a new start.
+	if err := os.WriteFile(ha, []byte("1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := l.Confined(t.Context(), "v"); ok || err != nil {
-		t.Errorf("another hostagent: %v, %v", ok, err)
+	if again, err := l.Running(t.Context(), "v"); again.Confined || again.ID == r.ID || err != nil {
+		t.Errorf("another hostagent: %+v, %v", again, err)
 	}
 	// Started by Start, but without its proxy (network policy off then).
-	if err := os.WriteFile(l.haPIDFile("v"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(ha, []byte(pid+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.start(t.Context(), "v", nil, backend.Confinement{Net: backend.NetDirect}); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := l.Confined(t.Context(), "v"); ok || err != nil {
-		t.Errorf("started direct: %v, %v", ok, err)
+	if r, err := l.Running(t.Context(), "v"); r.Confined || r.ID == "" || err != nil {
+		t.Errorf("started direct: %+v, %v", r, err)
 	}
 }

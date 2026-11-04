@@ -141,8 +141,12 @@ func (f Forwards) start(ctx context.Context, b backend.Backend, st *state.VM) er
 	if err != nil {
 		return err
 	}
+	run, err := b.Running(ctx, vm)
+	if err != nil {
+		return err
+	}
 	return f.run(vm, spec{
-		ForwardTarget: t, HostKey: key, Lifeline: b.Lifeline(ctx, vm),
+		ForwardTarget: t, HostKey: key, Lifeline: run.Lifeline,
 		Reserve: []int{t.Port, p.Host.Proxy}, Only: only,
 	})
 }

@@ -21,7 +21,7 @@ import (
 func TestDevvmCache(t *testing.T) {
 	home := t.TempDir()
 	d := paths.Dirs{Data: filepath.Join(home, "data"), Lima: filepath.Join(home, "lima"), UserCache: filepath.Join(home, ".cache")}
-	l := &Lima{Dirs: d, Getenv: func(string) string { return "" }}
+	l := withRoles(&Lima{Dirs: d, Getenv: func(string) string { return "" }})
 	dir, err := l.downloadCache()
 	if err != nil || dir != filepath.Join(home, ".cache", "lima", "download", "by-url-sha256") {
 		t.Fatal(dir, err)

@@ -43,7 +43,7 @@ func NewRegistry(bs ...Backend) (*Registry, error) {
 // that list every feature (Caps.Check). The registry hands it out behind
 // its guard: CreateVM, Start, BuildImage and BuildTools refuse a spec that
 // needs a feature Require would refuse, or that isn't valid. Find its
-// other interfaces with As.
+// optional roles (Forgetter) with As.
 func (r *Registry) Register(b Backend) error {
 	name := b.Name()
 	if name == "" || strings.ToLower(name) != name || strings.ContainsAny(name, " \t\n=/") {

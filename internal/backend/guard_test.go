@@ -1,6 +1,7 @@
 package backend_test
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -183,32 +184,39 @@ func TestGuardLetsThrough(t *testing.T) {
 	}
 }
 
-// keyed is a backend with KeyFiles.
-type keyed struct{ *backendtest.Fake }
+// forgetful is a backend with the optional Forgetter role.
+type forgetful struct {
+	*backendtest.Fake
+	forgot *[]string
+}
 
-func (keyed) KeyFiles() map[string][]byte { return map[string][]byte{"a": []byte("b")} }
+func (f forgetful) Forget(_ context.Context, vm string) error {
+	*f.forgot = append(*f.forgot, vm)
+	return nil
+}
 
-// As finds a registry's backend's other interfaces behind its guard,
-// which a type assertion doesn't.
+// As finds a registry's backend's optional role behind its guard, which
+// a type assertion doesn't.
 func TestAs(t *testing.T) {
-	k := keyed{backendtest.New("keyed", nil)}
+	var forgot []string
+	k := forgetful{backendtest.New("forgetful", nil), &forgot}
 	r, err := backend.NewRegistry(k, backendtest.New("plain", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := r.Lookup("keyed")
-	if _, ok := b.(backend.KeyFiles); ok {
-		t.Error("the guard has KeyFiles: As isn't needed")
+	b, _ := r.Lookup("forgetful")
+	if _, ok := b.(backend.Forgetter); ok {
+		t.Error("the guard is a Forgetter: As isn't needed")
 	}
-	if kf, ok := backend.As[backend.KeyFiles](b); !ok || string(kf.KeyFiles()["a"]) != "b" {
-		t.Error("As: no KeyFiles behind the guard")
+	if f, ok := backend.As[backend.Forgetter](b); !ok || f.Forget(t.Context(), "devvm-x") != nil || !slices.Equal(forgot, []string{"devvm-x"}) {
+		t.Errorf("As: no Forgetter behind the guard (forgot %q)", forgot)
 	}
-	if _, ok := backend.As[backend.KeyFiles](k); !ok {
-		t.Error("As: no KeyFiles on the backend itself")
+	if _, ok := backend.As[backend.Forgetter](k); !ok {
+		t.Error("As: no Forgetter on the backend itself")
 	}
 	plain, _ := r.Lookup("plain")
-	if _, ok := backend.As[backend.KeyFiles](plain); ok {
-		t.Error("As: KeyFiles on a backend without")
+	if _, ok := backend.As[backend.Forgetter](plain); ok {
+		t.Error("As: a Forgetter of a backend without")
 	}
 	// A guarded backend registered again is guarded once, by its new
 	// registry.
@@ -216,8 +224,30 @@ func TestAs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b2, _ := again.Lookup("keyed")
-	if _, ok := backend.As[backend.KeyFiles](b2); !ok {
-		t.Error("As: no KeyFiles behind a registry's guard of a guarded backend")
+	b2, _ := again.Lookup("forgetful")
+	if _, ok := backend.As[backend.Forgetter](b2); !ok {
+		t.Error("As: no Forgetter behind a registry's guard of a guarded backend")
+	}
+}
+
+// The guard has every role, guarded: a guarded backend handed on as
+// Images or Machines alone still refuses what its backend lacks.
+func TestGuardRoles(t *testing.T) {
+	_, f, b := guardedFake(t, nil)
+	var (
+		_ backend.Host         = b
+		_ backend.Housekeeping = b
+	)
+	var im backend.Images = b
+	var ms backend.Machines = b
+	ctx := t.Context()
+	if _, err := im.BuildImage(ctx, backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetNone}); msg.IDOf(err) != "backend_lacks" {
+		t.Errorf("Images.BuildImage: %v", err)
+	}
+	if err := ms.CreateVM(ctx, baseKey, backend.VMSpec{Name: "devvm-x", Project: "/p"}); msg.IDOf(err) != "backend_lacks" {
+		t.Errorf("Machines.CreateVM: %v", err)
+	}
+	if got := f.Methods(); len(got) != 0 {
+		t.Errorf("the backend was asked %q", got)
 	}
 }

@@ -247,11 +247,11 @@ func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backe
 	default:
 		// Network policy turned off while it ran confined: it stays
 		// on its proxy, tokens out of it, until it starts again.
-		confined, err := b.Confined(ctx, vm)
+		run, err := b.Running(ctx, vm)
 		if err != nil {
 			return conf, err
 		}
-		if confined {
+		if run.Confined {
 			e.Warn(msg.NetOffNextStart(vm))
 			if started, err = e.Proxy.Prepare(ctx, b, st, true); err != nil {
 				return conf, e.Proxy.Unproxied(ctx, b, vm, err)

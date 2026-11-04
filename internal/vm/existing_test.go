@@ -35,7 +35,7 @@ func TestOpenNetworkPolicy(t *testing.T) {
 		t.Fatal(msg.NamesOf(err))
 	}
 	ms := f.Methods()[before:]
-	if slices.Contains(ms, "Start") || !slices.Contains(ms, "Confined") {
+	if slices.Contains(ms, "Start") || !slices.Contains(ms, "Running") {
 		t.Errorf("calls = %q", ms)
 	}
 	if again, _ := e.Proxy.PID(vm); again != pid {

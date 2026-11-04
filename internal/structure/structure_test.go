@@ -21,14 +21,14 @@ const (
 // devvm is what the repo is held to.
 func devvm() rules {
 	return rules{
-		// It keeps a type to one job: one that grows past it splits by what
-		// its methods do, as vm's Launch, Lifecycle, Settings and Net.
+		// It keeps a type to one job, an interface too: one that grows past
+		// it splits by what its methods do, as vm's Launch, Lifecycle,
+		// Settings and Net, and backend.Backend's roles, which Lima's and the
+		// fake's own types each implement.
 		maxMethods: 24,
 		largeTypes: map[string]large{
-			"internal/backend/lima.Lima":        {71, "a backend: backend.Backend's 25 methods, KeyFiles, DiskDirs, Floors, Usage, Location, Strays, DevvmCache, DeleteCache and Lima's own"},
-			"internal/backend/backendtest.Fake": {31, "backend.Backend's 25 methods and what tests ask of it"},
-			"internal/paths.Dirs":               {50, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
-			"internal/ui.UI":                    {47, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
+			"internal/paths.Dirs": {50, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
+			"internal/ui.UI":      {47, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: devvmVars(),
 		// hostgit runs git without the repo's fsmonitor, hooks or filters,

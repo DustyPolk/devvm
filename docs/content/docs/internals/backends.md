@@ -5,6 +5,17 @@ weight: 8
 
 This page explains how a backend gives devvm what it needs to run a VM, what devvm does when a backend lacks something, and how devvm names VMs. devvm runs its VMs on [Lima](../backends/lima.md), and another backend would plug in the same way, through the features below ([how a backend plugs in](../contributing/_index.md#how-a-backend-plugs-in)).
 
+## What a backend does
+
+A backend has four roles, and every backend has all of them:
+
+- **The host:** it says what it needs that this machine lacks, which `devvm doctor` reports, how long a VM's name can be, where its VMs live, and which folders hold their disks, so devvm can check the free space before a step that writes them.
+- **Images:** it builds images and the shared tools' images, keeps the images, and names the files of its own that it puts into base, which base's key hashes.
+- **Machines:** it makes, starts, stops, renames and deletes VMs, runs commands and shells in them, and says how ssh and devvm's port forwarder reach them. It also says how a VM runs now: which start it's on, whether that start is confined to the VM's proxy, and the file the VM's proxy and forwarder follow, which ends them when the process that runs the VM ends.
+- **Housekeeping:** it says how much disk its VMs and caches take for `devvm space`, lists the VMs with devvm's label that this devvm has no state for, and lists and deletes devvm's share of its own caches for `devvm gc --caches`. A backend that can't tell one of these returns nothing, so devvm shows no size or deletes nothing.
+
+A backend may also keep files of its own for a VM besides the VM, which `devvm gc --orphans` deletes once the VM is gone. Lima keeps none.
+
 ## Features
 
 Each thing devvm needs from a backend is a feature, such as building images, mounting the project folder or confining a VM to its proxy. `devvm doctor` lists them as "features" too, but they aren't the base image features you choose with `devvm setup`. Each backend declares how it has each feature:

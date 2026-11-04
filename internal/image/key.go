@@ -30,7 +30,7 @@ type Inputs struct {
 	// Backend is the backend that builds the image: lima.
 	Backend string
 	// BackendFiles are the backend's own files that go into base
-	// (backend.KeyFiles), by name. Nil for none.
+	// (backend.Images's KeyFiles), by name. Nil for none.
 	BackendFiles map[string][]byte
 	// Assets holds devvm's own files (assets.FS): base.yaml,
 	// layers/base.sh, the built-in layers, features/ and oci/. Files are

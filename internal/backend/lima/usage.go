@@ -10,12 +10,10 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 )
 
-var _ backend.UsageReporter = (*Lima)(nil)
-
 // downloadCache is Lima's own download cache, in the user's cache folder,
 // outside its homes: every Lima home of the user's shares it, devvm's and
 // their own. An error when there's no cache folder to look in.
-func (l *Lima) downloadCache() (string, error) {
+func (l *housekeeping) downloadCache() (string, error) {
 	if l.Dirs.UserCache == "" {
 		return "", errors.New("lima: no cache folder")
 	}
@@ -25,7 +23,7 @@ func (l *Lima) downloadCache() (string, error) {
 // Usage is the disk each VM's folder in devvm's Lima home takes (a clone
 // shares its image's blocks on macOS, which du counts for both), and
 // Lima's download cache, by entry.
-func (l *Lima) Usage(ctx context.Context) (backend.Usage, error) {
+func (l *housekeeping) Usage(ctx context.Context) (backend.Usage, error) {
 	u := backend.Usage{VMs: map[string]int64{}}
 	vms, err := l.List(ctx)
 	if err != nil {
@@ -44,7 +42,7 @@ func (l *Lima) Usage(ctx context.Context) (backend.Usage, error) {
 
 // cacheUsage is Lima's download cache, by entry; ok is false when there's
 // none to read.
-func (l *Lima) cacheUsage() (backend.Cache, bool) {
+func (l *housekeeping) cacheUsage() (backend.Cache, bool) {
 	dir, err := l.downloadCache()
 	if err != nil {
 		return backend.Cache{}, false

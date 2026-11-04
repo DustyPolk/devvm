@@ -26,7 +26,13 @@ type Call struct {
 // Fake is a backend that runs nothing. Set its fields before use: they're
 // what it answers, and it keeps Instances and ImageKeys current as VMs and
 // images are made, changed and deleted. Calls returns every call, in order.
+// Its roles' methods are on types of their own over it, as Lima's are.
 type Fake struct {
+	host
+	images
+	machines
+	housekeeping
+
 	BackendName  string
 	Capabilities backend.Caps
 	NameLimit    int                         // NameMax's answer
@@ -37,8 +43,8 @@ type Fake struct {
 	Target       backend.SSHTarget     // SSH's answer
 	Forward      backend.ForwardTarget // ForwardTarget's answer, for a running VM
 	ShellCmd     backend.Command       // Shell's answer
-	Unconfined   bool                  // Confined answers false (else: true, or for a VM Start started, whether with NetProxy)
-	LifelineFile string                // Lifeline's answer
+	Unconfined   bool                  // Running's Confined is false (else: true, or for a VM Start started, whether with NetProxy)
+	LifelineFile string                // Running's Lifeline
 	Missing      []backend.Problem     // Problems' answer
 	Format       string                // ToolFormat's answer
 	// ExecFunc, when set, is what Exec returns after recording the call
@@ -55,6 +61,14 @@ type Fake struct {
 	starts map[string]int         // by name: how many starts it had
 }
 
+// The fake's roles, each with the Fake it's part of.
+type (
+	host         struct{ *Fake } // backend.Host
+	images       struct{ *Fake } // backend.Images
+	machines     struct{ *Fake } // backend.Machines
+	housekeeping struct{ *Fake } // backend.Housekeeping
+)
+
 var _ backend.Backend = (*Fake)(nil)
 
 // New returns a fake named name with these capabilities, listing every
@@ -65,7 +79,9 @@ func New(name string, caps backend.Caps) *Fake {
 		all[f] = caps[f]
 	}
 	maps.Copy(all, caps)
-	return &Fake{BackendName: name, Capabilities: all, Instances: map[string]backend.Instance{}}
+	f := &Fake{BackendName: name, Capabilities: all, Instances: map[string]backend.Instance{}}
+	f.host, f.images, f.machines, f.housekeeping = host{f}, images{f}, machines{f}, housekeeping{f}
+	return f
 }
 
 // Calls returns the calls so far.
@@ -109,18 +125,46 @@ func (f *Fake) Name() string { return f.BackendName }
 func (f *Fake) Caps() backend.Caps { return f.Capabilities }
 
 // NameMax returns NameLimit.
-func (f *Fake) NameMax() int { return f.NameLimit }
+func (f *host) NameMax() int { return f.NameLimit }
 
 // Problems records the call and returns Missing.
-func (f *Fake) Problems(context.Context) []backend.Problem {
+func (f *host) Problems(context.Context) []backend.Problem {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	_ = f.record("Problems")
 	return slices.Clone(f.Missing)
 }
 
+// Location is "" and true: the fake's VMs can't move.
+func (f *host) Location() (string, bool) { return "", true }
+
+// DiskDirs is none: the fake writes no disks (Stored's do).
+func (f *host) DiskDirs() []string { return nil }
+
+// Floors is none.
+func (f *host) Floors() backend.Floors { return backend.Floors{} }
+
+// KeyFiles is none: the fake puts nothing into base.
+func (f *images) KeyFiles() map[string][]byte { return nil }
+
+// Usage is none: the fake can't tell what its VMs take.
+func (f *housekeeping) Usage(context.Context) (backend.Usage, error) { return backend.Usage{}, nil }
+
+// Strays is none.
+func (f *housekeeping) Strays(context.Context) ([]backend.Stray, error) { return nil, nil }
+
+// DevvmCache is none: the fake has no caches.
+func (f *housekeeping) DevvmCache(context.Context) ([]backend.CacheEntry, error) { return nil, nil }
+
+// DeleteCache records the call.
+func (f *housekeeping) DeleteCache(_ context.Context, entries []backend.CacheEntry) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.record("DeleteCache", entries)
+}
+
 // BuildImage records the call, adds the key to ImageKeys and returns Built.
-func (f *Fake) BuildImage(_ context.Context, spec backend.ImageSpec) (backend.Built, error) {
+func (f *images) BuildImage(_ context.Context, spec backend.ImageSpec) (backend.Built, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("BuildImage", spec); err != nil {
@@ -133,7 +177,7 @@ func (f *Fake) BuildImage(_ context.Context, spec backend.ImageSpec) (backend.Bu
 }
 
 // Images records the call and returns ImageKeys.
-func (f *Fake) Images(context.Context) ([]string, error) {
+func (f *images) Images(context.Context) ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("Images"); err != nil {
@@ -144,7 +188,7 @@ func (f *Fake) Images(context.Context) ([]string, error) {
 
 // ImageSize records the call and returns ImageSizes' size for the key, an
 // error matching fs.ErrNotExist for a key ImageKeys lacks.
-func (f *Fake) ImageSize(_ context.Context, key string) (int64, error) {
+func (f *images) ImageSize(_ context.Context, key string) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("ImageSize", key); err != nil {
@@ -157,7 +201,7 @@ func (f *Fake) ImageSize(_ context.Context, key string) (int64, error) {
 }
 
 // DeleteImage records the call and drops the key from ImageKeys.
-func (f *Fake) DeleteImage(_ context.Context, key string) error {
+func (f *images) DeleteImage(_ context.Context, key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("DeleteImage", key); err != nil {
@@ -170,7 +214,7 @@ func (f *Fake) DeleteImage(_ context.Context, key string) error {
 // BuildTools records the call, then runs ToolsBuild on the spec, or
 // writes each image its script would (every third argument, from the
 // third) into spec.Out as "image FILE".
-func (f *Fake) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
+func (f *images) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("BuildTools", spec); err != nil {
@@ -189,10 +233,10 @@ func (f *Fake) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
 }
 
 // ToolFormat returns Format.
-func (f *Fake) ToolFormat() string { return f.Format }
+func (f *images) ToolFormat() string { return f.Format }
 
 // CreateVM records the call and adds a stopped instance.
-func (f *Fake) CreateVM(_ context.Context, image string, spec backend.VMSpec) error {
+func (f *machines) CreateVM(_ context.Context, image string, spec backend.VMSpec) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("CreateVM", image, spec); err != nil {
@@ -209,7 +253,7 @@ func (f *Fake) CreateVM(_ context.Context, image string, spec backend.VMSpec) er
 
 // Start records the call and marks the instance running, made what w
 // wants first when it was stopped (backend.Validate's refusal returned).
-func (f *Fake) Start(_ context.Context, vm string, w backend.Want, c backend.Confinement) error {
+func (f *machines) Start(_ context.Context, vm string, w backend.Want, c backend.Confinement) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("Start", vm, w, c); err != nil {
@@ -237,23 +281,30 @@ func (f *Fake) Start(_ context.Context, vm string, w backend.Want, c backend.Con
 	return nil
 }
 
-// Confined records the call and answers false with Unconfined; else, for
-// a VM Start started, whether it started it with NetProxy, and true for
-// one preset running.
-func (f *Fake) Confined(_ context.Context, vm string) (bool, error) {
+// Running records the call and returns LifelineFile as its Lifeline, a
+// running instance's start as its ID ("start-N" for its Nth by Start,
+// "start-0" for one preset running; Restart, a start outside Start, gives
+// it another) and Confined: false with Unconfined; else, for a VM Start
+// started, whether it started it with NetProxy, and true for one preset
+// running.
+func (f *machines) Running(_ context.Context, vm string) (backend.Run, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.record("Confined", vm); err != nil {
-		return false, err
+	if err := f.record("Running", vm); err != nil {
+		return backend.Run{}, err
 	}
+	r := backend.Run{Lifeline: f.LifelineFile, Confined: !f.Unconfined}
 	if n, ok := f.nets[vm]; ok && !f.Unconfined {
-		return n == backend.NetProxy, nil
+		r.Confined = n == backend.NetProxy
 	}
-	return !f.Unconfined, nil
+	if in, ok := f.Instances[vm]; ok && in.Status == backend.StatusRunning {
+		r.ID = "start-" + strconv.Itoa(f.starts[vm])
+	}
+	return r, nil
 }
 
 // Stop records the call and marks the instance stopped.
-func (f *Fake) Stop(_ context.Context, vm string) error {
+func (f *machines) Stop(_ context.Context, vm string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("Stop", vm); err != nil {
@@ -263,7 +314,7 @@ func (f *Fake) Stop(_ context.Context, vm string) error {
 }
 
 // Delete records the call and removes the instance.
-func (f *Fake) Delete(_ context.Context, vm string) error {
+func (f *machines) Delete(_ context.Context, vm string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("Delete", vm); err != nil {
@@ -275,7 +326,7 @@ func (f *Fake) Delete(_ context.Context, vm string) error {
 
 // Rename records the call and gives the instance its new name; one that
 // runs, or a name an instance has, is refused.
-func (f *Fake) Rename(_ context.Context, vm, to string) error {
+func (f *machines) Rename(_ context.Context, vm, to string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("Rename", vm, to); err != nil {
@@ -297,7 +348,7 @@ func (f *Fake) Rename(_ context.Context, vm, to string) error {
 }
 
 // List records the call and returns Instances, sorted by name.
-func (f *Fake) List(context.Context) ([]backend.Instance, error) {
+func (f *machines) List(context.Context) ([]backend.Instance, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("List"); err != nil {
@@ -311,7 +362,7 @@ func (f *Fake) List(context.Context) ([]backend.Instance, error) {
 }
 
 // Inspect records the call and returns the instance.
-func (f *Fake) Inspect(_ context.Context, vm string) (backend.Instance, error) {
+func (f *machines) Inspect(_ context.Context, vm string) (backend.Instance, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("Inspect", vm); err != nil {
@@ -325,32 +376,13 @@ func (f *Fake) Inspect(_ context.Context, vm string) (backend.Instance, error) {
 }
 
 // Exec records the call.
-func (f *Fake) Exec(_ context.Context, vm string, argv []string, o backend.ExecOpts) error {
+func (f *machines) Exec(_ context.Context, vm string, argv []string, o backend.ExecOpts) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("Exec", vm, slices.Clone(argv), o); err != nil || f.ExecFunc == nil {
 		return err
 	}
 	return f.ExecFunc(vm, argv, o)
-}
-
-// Lifeline returns LifelineFile.
-func (f *Fake) Lifeline(context.Context, string) string { return f.LifelineFile }
-
-// StartID returns a running instance's start: "start-N" for its Nth by
-// Start, "start-0" for one preset running. Restart (a start outside
-// Start) gives it another.
-func (f *Fake) StartID(_ context.Context, vm string) (string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	in, ok := f.Instances[vm]
-	if !ok {
-		return "", fmt.Errorf("%s: %w", vm, backend.ErrNotFound)
-	}
-	if in.Status != backend.StatusRunning {
-		return "", nil
-	}
-	return "start-" + strconv.Itoa(f.starts[vm]), nil
 }
 
 // Restart stands for a start of vm outside devvm: it runs, on a start of
@@ -372,7 +404,7 @@ func (f *Fake) bump(vm string) {
 
 // ProxyURL returns the proxy at proxy.test on c's port, with its user and
 // password.
-func (f *Fake) ProxyURL(c backend.Confinement) string {
+func (f *machines) ProxyURL(c backend.Confinement) string {
 	if c.Net != backend.NetProxy {
 		return ""
 	}
@@ -380,7 +412,7 @@ func (f *Fake) ProxyURL(c backend.Confinement) string {
 }
 
 // Shell records the call and returns ShellCmd.
-func (f *Fake) Shell(_ context.Context, vm, dir string) (backend.Command, error) {
+func (f *machines) Shell(_ context.Context, vm, dir string) (backend.Command, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("Shell", vm, dir); err != nil {
@@ -390,7 +422,7 @@ func (f *Fake) Shell(_ context.Context, vm, dir string) (backend.Command, error)
 }
 
 // SSH records the call and returns Target.
-func (f *Fake) SSH(_ context.Context, vm string) (backend.SSHTarget, error) {
+func (f *machines) SSH(_ context.Context, vm string) (backend.SSHTarget, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("SSH", vm); err != nil {
@@ -417,7 +449,7 @@ func apply(in *backend.Instance, w backend.Want) {
 
 // ForwardTarget records the call and returns Forward for a running
 // instance.
-func (f *Fake) ForwardTarget(_ context.Context, vm string) (backend.ForwardTarget, error) {
+func (f *machines) ForwardTarget(_ context.Context, vm string) (backend.ForwardTarget, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.record("ForwardTarget", vm); err != nil {

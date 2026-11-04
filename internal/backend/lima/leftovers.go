@@ -10,18 +10,13 @@ import (
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
-var (
-	_ backend.Locator     = (*Lima)(nil)
-	_ backend.StrayFinder = (*Lima)(nil)
-)
-
 // Location is devvm's Lima home, which DEVVM_LIMA_HOME moves.
-func (l *Lima) Location() (string, bool) {
+func (l *host) Location() (string, bool) {
 	return l.Dirs.Lima, l.Dirs.Lima == l.Dirs.DefaultLima()
 }
 
 // Strays are the VMs in devvm's Lima home it has no state for.
-func (l *Lima) Strays(ctx context.Context) ([]backend.Stray, error) {
+func (l *housekeeping) Strays(ctx context.Context) ([]backend.Stray, error) {
 	vms, err := l.List(ctx)
 	if err != nil {
 		return nil, err

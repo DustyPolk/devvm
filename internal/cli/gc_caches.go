@@ -20,11 +20,10 @@ func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map
 		return err
 	}
 	for _, be := range reg.All() {
-		c, ok := backend.As[backend.CacheCleaner](be)
-		if !ok || skipped[be.Name()] {
+		if skipped[be.Name()] {
 			continue
 		}
-		entries, ok := cacheEntries(ctx, be, c)
+		entries, ok := cacheEntries(ctx, be)
 		if !ok || len(entries) == 0 {
 			continue
 		}
@@ -42,7 +41,7 @@ func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map
 			u.Info(msg.NothingDeleted())
 			continue
 		}
-		if err := c.DeleteCache(ctx, entries); err != nil {
+		if err := be.DeleteCache(ctx, entries); err != nil {
 			return err
 		}
 		u.Info(msg.DeletedCache(be.Name(), len(entries)))
@@ -52,12 +51,12 @@ func gcCaches(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts, skipped map
 
 // cacheEntries is devvm's share of a backend's caches; ok is false when
 // the backend can't be asked.
-func cacheEntries(ctx context.Context, be backend.Backend, c backend.CacheCleaner) ([]backend.CacheEntry, bool) {
+func cacheEntries(ctx context.Context, be backend.Backend) ([]backend.CacheEntry, bool) {
 	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(be.Name()))
 	defer cancel()
 	if backend.Check(ctx, be) != nil {
 		return nil, false
 	}
-	entries, err := c.DevvmCache(ctx)
+	entries, err := be.DevvmCache(ctx)
 	return entries, err == nil
 }

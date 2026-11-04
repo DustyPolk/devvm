@@ -37,7 +37,7 @@ type InVM struct {
 type Made struct {
 	// Started is the choice devvm last started it with, and that start:
 	// "<mode>_<start>", the start a hash of what its backend identifies
-	// it by (backend.Backend's StartID).
+	// it by (backend.Run's ID).
 	Started string `json:"started,omitempty"`
 	// Toggle is set when its backend emulates turning its forwarding on
 	// or off, and it was made ready for that, which its starts rely on.

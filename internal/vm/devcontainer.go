@@ -153,10 +153,11 @@ func (e devcontainers) run(ctx context.Context, b backend.Backend, st *state.VM,
 	if len(d.Start) == 0 {
 		return nil
 	}
-	id, err := b.StartID(ctx, st.Name())
-	if err != nil || id == "" {
+	run, err := b.Running(ctx, st.Name())
+	if err != nil || run.ID == "" {
 		return err
 	}
+	id := run.ID
 	sum := sha256.Sum256([]byte(id))
 	started := hex.EncodeToString(sum[:16])
 	if d.Made.Started == started {

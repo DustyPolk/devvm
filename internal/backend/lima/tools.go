@@ -17,7 +17,7 @@ const ToolsVM = "devvm-tools-build"
 // arguments, and deletes it. A ToolsVM left by an earlier run is deleted
 // first, and the VM goes however the run ends (a cleanup on the ui stack).
 // The registry's guard has checked spec (ToolsSpec.Validate).
-func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
+func (l *images) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	base := ImagePrefix + spec.Base
 	in, err := l.inspect(ctx, base)
 	if errors.Is(err, backend.ErrNotFound) {
@@ -43,7 +43,7 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	// Its steps: clone, configure (when Start edits it) and start, the
 	// script (the user's CAs before it), delete.
 	steps := 4
-	if cloneEdits(l, in.Config, spec.Net) {
+	if cloneEdits(l.Lima, in.Config, spec.Net) {
 		steps++
 	}
 	if !spec.Trust.None() {
@@ -54,7 +54,7 @@ func (l *Lima) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 		return backend.Logged(msg.VMCreateFailed(ToolsVM))
 	}
 	// Behind a company proxy, through a proxy of devvm's (buildproxy.go).
-	conf, hp, proxyDone, err := buildProxy(ctx, l, ToolsVM, spec.Net)
+	conf, hp, proxyDone, err := buildProxy(ctx, l.Lima, ToolsVM, spec.Net)
 	if err != nil {
 		return err
 	}
@@ -85,10 +85,10 @@ func toolsArgs(base, mounts string) []string {
 }
 
 // ToolFormat is build.sh's own: Lima's guests mount compressed EROFS.
-func (l *Lima) ToolFormat() string { return "" }
+func (l *images) ToolFormat() string { return "" }
 
 // deleteIfThere deletes a VM if devvm's Lima home has it.
-func (l *Lima) deleteIfThere(ctx context.Context, vm string) error {
+func (l *images) deleteIfThere(ctx context.Context, vm string) error {
 	if _, err := l.inspect(ctx, vm); errors.Is(err, backend.ErrNotFound) {
 		return nil
 	} else if err != nil {

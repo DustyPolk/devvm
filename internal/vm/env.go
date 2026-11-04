@@ -600,16 +600,16 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	// The agent it started with, until its next start: its ssh config
 	// entry's and devvm's shell's. One whose start can't be told apart
 	// gets none recorded, and follows its choice.
-	start, err := b.StartID(ctx, vm)
+	run, err := b.Running(ctx, vm)
 	if err != nil {
-		start = ""
+		run.ID = ""
 	}
-	return conf, sshagent.RecordStart(ctx, st, mode, start)
+	return conf, sshagent.RecordStart(ctx, st, mode, run.ID)
 }
 
 // undoStart is a start's cleanup for a VM with network policy: an
 // interrupt can leave it running with its backend's start still waiting
-// for it, so without the record of its confined start (Confined), and
+// for it, so without the record of its confined start (Run.Confined), and
 // it stops the VM and its proxy. The next launch starts both again,
 // confined.
 func undoStart(e *Env, b backend.Backend, vm string) func(context.Context) {
@@ -629,11 +629,11 @@ func undoStart(e *Env, b backend.Backend, vm string) func(context.Context) {
 // runningAgent is the SSH agent choice a running VM runs with: its
 // current start's (sshagent.Running).
 func runningAgent(ctx context.Context, b backend.Backend, st *state.VM) (string, error) {
-	start, err := b.StartID(ctx, st.Name())
+	run, err := b.Running(ctx, st.Name())
 	if err != nil {
 		return "", err
 	}
-	return sshagent.Running(st, start), nil
+	return sshagent.Running(st, run.ID), nil
 }
 
 // ensureRunning makes sure the VM runs, for a command that runs in it

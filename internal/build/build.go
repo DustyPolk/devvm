@@ -92,10 +92,7 @@ func (b *Env) Inputs() (image.Inputs, error) {
 	if err != nil {
 		return image.Inputs{}, err
 	}
-	var own map[string][]byte
-	if kf, ok := backend.As[backend.KeyFiles](b.Backend); ok {
-		own = kf.KeyFiles()
-	}
+	own := b.Backend.KeyFiles()
 	rebuilds, err := state.ReadRebuilds(b.Dirs)
 	if err != nil {
 		return image.Inputs{}, err

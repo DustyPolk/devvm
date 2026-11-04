@@ -20,8 +20,6 @@ import (
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
 
-var _ backend.CacheCleaner = (*Lima)(nil)
-
 // cacheRecent is how long an entry of Lima's cache is left alone after it
 // changed: a build may be downloading into it.
 const cacheRecent = time.Hour
@@ -34,7 +32,7 @@ const cacheRecent = time.Hour
 // an entry whose url doesn't hash to its name is never one, and nor is
 // anything else in the cache (your own downloads). Lima copies a VM's
 // disk out of the cache when it makes the VM, so no VM needs an entry.
-func (l *Lima) DevvmCache(context.Context) ([]backend.CacheEntry, error) {
+func (l *housekeeping) DevvmCache(context.Context) ([]backend.CacheEntry, error) {
 	dir, err := l.downloadCache()
 	if err != nil {
 		return nil, err
@@ -62,7 +60,7 @@ func (l *Lima) DevvmCache(context.Context) ([]backend.CacheEntry, error) {
 }
 
 // DeleteCache deletes entries DevvmCache listed, each one checked again.
-func (l *Lima) DeleteCache(_ context.Context, entries []backend.CacheEntry) error {
+func (l *housekeeping) DeleteCache(_ context.Context, entries []backend.CacheEntry) error {
 	dir, err := l.downloadCache()
 	if err != nil {
 		return err
@@ -91,7 +89,7 @@ type limaCache struct {
 	ubuntuURL string
 }
 
-func (l *Lima) cache() limaCache { return limaCache{dirs: l.Dirs, ubuntuURL: l.UbuntuURL} }
+func (l *housekeeping) cache() limaCache { return limaCache{dirs: l.Dirs, ubuntuURL: l.UbuntuURL} }
 
 // cloudURL is the address devvm downloads Ubuntu's cloud image from, for
 // any dated release.

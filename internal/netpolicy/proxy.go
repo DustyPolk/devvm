@@ -108,12 +108,16 @@ func (p *Proxy) Stop(vm string) bool { return p.proc(vm).Stop(4 * p.Tick) }
 // Prepare readies a VM with network policy to start on b, or a running one
 // to go on: devvm's CA, the VM's secret files, its ports, and its proxy
 // running. It returns the confinement its backend starts it with. The proxy
-// follows the host process that runs the VM (b's Lifeline): a VM started
-// again gets a new proxy.
+// follows the host process that runs the VM (its Run.Lifeline): a VM
+// started again gets a new proxy.
 func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, running bool) (backend.Confinement, error) {
 	vm := st.Name()
-	lifeline := b.Lifeline(ctx, vm)
 	none := backend.Confinement{}
+	run, err := b.Running(ctx, vm)
+	if err != nil {
+		return none, err
+	}
+	lifeline := run.Lifeline
 	// The CA lasts 30 days: a new one is made when it has under a week left
 	// (VMs trust it from their next start). Kept out of backups: a copy of
 	// its key elsewhere could impersonate any site to VMs.

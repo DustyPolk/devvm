@@ -968,7 +968,7 @@ func TestListed(t *testing.T) {
 			if err != nil || got != tc.want {
 				t.Errorf("Listed = %q, %v; want %q", got, err, tc.want)
 			}
-			if asked := slices.Contains(f.Methods(), "Confined"); asked != tc.asks {
+			if asked := slices.Contains(f.Methods(), "Running"); asked != tc.asks {
 				t.Errorf("asked the backend: %v", asked)
 			}
 		})

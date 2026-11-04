@@ -18,16 +18,24 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// Backend runs VMs and builds their images. A VM is made as its spec
-// wants (CreateVM), and each start of a stopped VM makes it what the
-// caller wants then (Start's Want), changing only what differs: nothing
-// changes a stopped VM's config in between. Errors are messages (msg.M)
-// where the user can act on them.
+// Backend runs VMs and builds their images: its name and Caps, then its
+// four roles, each an interface of its own that every backend implements.
+// Errors are messages (msg.M) where the user can act on them. A backend
+// may implement Forgetter too, which callers find with As.
 type Backend interface {
 	// Name is the backend's name, as --backend and VM state have it: lima.
 	Name() string
 	// Caps says which features the backend has, and how.
 	Caps() Caps
+	Host
+	Images
+	Machines
+	Housekeeping
+}
+
+// Host is what a backend needs of this host, and where on it the backend
+// keeps its VMs and their disks.
+type Host interface {
 	// Problems lists everything the backend needs that this host lacks
 	// (installed, a version devvm supports, a host it supports); none
 	// when it can run here. Check returns the first.
@@ -35,7 +43,23 @@ type Backend interface {
 	// NameMax is the longest VM name the backend takes; 0 for no limit.
 	// Callers shorten the names they make to fit.
 	NameMax() int
+	// Location says where this run's VMs live, when that can change
+	// between runs of devvm (Lima's home, DEVVM_LIMA_HOME), and whether
+	// it's the backend's default. A VM records where it was made
+	// (LocationOf), so a run that looks elsewhere never takes it for one
+	// its backend lost. A backend whose VMs can't move returns "" and
+	// true.
+	Location() (where string, isDefault bool)
+	// DiskDirs returns a folder on each volume of the host's own the
+	// backend writes images' and VMs' disks to, made or not, and Floors
+	// the free space it wants on them (Space). A backend whose disks are
+	// elsewhere returns none, and its free space isn't checked.
+	DiskDirs() []string
+	Floors() Floors
+}
 
+// Images builds images and shared tools' images, and keeps the images.
+type Images interface {
 	// BuildImage builds an image from its parent (or, for base, from the
 	// backend's own Ubuntu or spec.From) by running its scripts in order.
 	BuildImage(ctx context.Context, spec ImageSpec) (Built, error)
@@ -58,7 +82,18 @@ type Backend interface {
 	// (compressed EROFS), else a name of the backend's that changes
 	// whenever what it makes of them does.
 	ToolFormat() string
+	// KeyFiles is the files of the backend's own that it puts into base
+	// (scripts it runs before devvm's, the image it starts from), which
+	// base's key hashes too: by name, their contents. None for a backend
+	// that puts nothing in.
+	KeyFiles() map[string][]byte
+}
 
+// Machines makes, starts and reaches VMs. A VM is made as its spec wants
+// (CreateVM), and each start of a stopped VM makes it what the caller
+// wants then (Start's Want), changing only what differs: nothing changes a
+// stopped VM's config in between.
+type Machines interface {
 	// CreateVM makes a VM from an image, stopped, as spec wants it.
 	CreateVM(ctx context.Context, image string, spec VMSpec) error
 	// Start starts a stopped VM as w wants it, confined as c says, and
@@ -66,22 +101,12 @@ type Backend interface {
 	// config doesn't have yet, and nothing else, after checking w with
 	// Validate. Its ports are devvm's forwarder's to forward once it
 	// runs (ForwardTarget). A running VM is left as it is, w and c
-	// unapplied (callers say
-	// what changes at its next start); its confinement is checked with
-	// Confined.
+	// unapplied (callers say what changes at its next start); its
+	// confinement is checked with Running.
 	Start(ctx context.Context, vm string, w Want, c Confinement) error
-	// Confined reports whether a running VM still runs confined to
-	// devvm's proxy: started by Start with NetProxy, not some other way
-	// since.
-	Confined(ctx context.Context, vm string) (bool, error)
-	// Lifeline is the pid file of the host process that runs the VM once
-	// it starts, which the VM's proxy follows: it exits when that process
-	// does. Not a VM's own file: the VM can't write it.
-	Lifeline(ctx context.Context, vm string) string
-	// StartID identifies a running VM's current start: every start gets
-	// another, whether devvm or something else made it. Asked only of a
-	// running VM; "" when the backend can't tell.
-	StartID(ctx context.Context, vm string) (string, error)
+	// Running says how the VM runs now: its start, whether it's
+	// confined, and its lifeline, which a stopped VM has too.
+	Running(ctx context.Context, vm string) (Run, error)
 	// ProxyURL is devvm's proxy as a VM started with c reaches it, its
 	// user and password included; "" unless c.Net is NetProxy.
 	ProxyURL(c Confinement) string
@@ -114,20 +139,51 @@ type Backend interface {
 	ForwardTarget(ctx context.Context, vm string) (ForwardTarget, error)
 }
 
+// Housekeeping is what devvm space and devvm gc ask of a backend beyond
+// its images and VMs: the disk they take, its strays and its own caches.
+type Housekeeping interface {
+	// Usage says what the backend's VMs and caches take (devvm space).
+	// It changes nothing and runs only commands that end with ctx; a
+	// backend that can't tell returns none, and shows no sizes.
+	Usage(ctx context.Context) (Usage, error)
+	// Strays lists the backend's VMs with devvm's label that this devvm
+	// has no state for (devvm space), which devvm never deletes: they may
+	// be another devvm's.
+	Strays(ctx context.Context) ([]Stray, error)
+	// DevvmCache lists devvm's share of the backend's own caches, which
+	// devvm's builds fill (devvm gc --caches): entries only devvm's
+	// builds make, that no image or VM of devvm's needs, never the
+	// user's own. It changes nothing; none for a backend whose caches it
+	// can't tell apart.
+	DevvmCache(ctx context.Context) ([]CacheEntry, error)
+	// DeleteCache deletes entries DevvmCache listed, each checked again
+	// first: one that isn't devvm's any more stays.
+	DeleteCache(ctx context.Context, entries []CacheEntry) error
+}
+
+// Run is how a VM runs now, as its backend says (Machines.Running).
+type Run struct {
+	// ID identifies the running VM's current start: every start gets
+	// another, whether devvm or something else made it. "" when it isn't
+	// running, or the backend can't tell.
+	ID string
+	// Confined is whether it runs confined to devvm's proxy: started by
+	// Start with NetProxy, not some other way since.
+	Confined bool
+	// Lifeline is the pid file of the host process that runs the VM once
+	// it starts, which the VM's proxy and port forwarder follow: they exit
+	// when that process does. A stopped VM has it too, as its proxy starts
+	// first. Not a VM's own file: the VM can't write it.
+	Lifeline string
+}
+
 // ForwardTarget is how devvm's port forwarder reaches a running VM's
 // sshd: on Port of the host's loopback, as User with Key alone. The host
 // key it pins is the one devvm pins for the VM's ssh config, and its
-// lifeline is the backend's (Lifeline).
+// lifeline is the VM's (Run.Lifeline).
 type ForwardTarget struct {
 	User, Key string
 	Port      int
-}
-
-// KeyFiles is a backend that puts files of its own into base (scripts it
-// runs before devvm's, the image it starts from), which base's key hashes
-// too: by name, their contents. A backend that puts nothing in doesn't implement it.
-type KeyFiles interface {
-	KeyFiles() map[string][]byte
 }
 
 // Problem is something a backend needs that the host lacks, as devvm

@@ -16,11 +16,20 @@ import (
 // own Require gave that) and that the spec is well formed (its Validate),
 // so a caller that forgot Require never reaches a backend with a feature
 // it lacks. Callers still call Require first, for the refusal at the
-// right moment, before anything is built or made.
+// right moment, before anything is built or made. It has every role's
+// methods, its own in place of the backend's for the ones it guards, so a
+// guarded backend handed on as Images or Machines is still guarded.
 type guarded struct {
 	Backend
 	r *Registry
 }
+
+var (
+	_ Host         = (*guarded)(nil)
+	_ Images       = (*guarded)(nil)
+	_ Machines     = (*guarded)(nil)
+	_ Housekeeping = (*guarded)(nil)
+)
 
 // guard returns b behind the registry's checks, and only the registry's:
 // one another registry guards is guarded again by this one alone.
@@ -31,10 +40,10 @@ func (r *Registry) guard(b Backend) Backend {
 	return &guarded{Backend: b, r: r}
 }
 
-// As returns b as T, another interface some backends implement besides
-// Backend (KeyFiles, UsageReporter…): the registry's backends are behind
-// its guard, whose type has only Backend's methods, so a type assertion
-// on one finds none of the others.
+// As returns b as T, a role some backends implement besides Backend's own
+// (Forgetter), or the backend's own type in tests: the registry's
+// backends are behind its guard, whose type has only Backend's methods,
+// so a type assertion on one finds none of the others.
 func As[T any](b Backend) (T, bool) {
 	if g, ok := b.(*guarded); ok {
 		b = g.Backend

@@ -17,7 +17,7 @@ import (
 // on arm64 or x86_64, Lima 2 or newer, on Linux QEMU and /dev/kvm, and
 // none of Lima's global configs in devvm's home. A fix is Homebrew's for
 // Lima, when it's installed, and the package manager's for QEMU.
-func (l *Lima) Problems(ctx context.Context) []backend.Problem {
+func (l *host) Problems(ctx context.Context) []backend.Problem {
 	if l.OS != "darwin" && l.OS != "linux" {
 		return []backend.Problem{{Key: "os", Msg: msg.LimaHostUnsupported(l.OS)}}
 	}
@@ -49,7 +49,7 @@ func (l *Lima) Problems(ctx context.Context) []backend.Problem {
 
 // limaProblem is a missing Lima, one that doesn't run (built for another
 // processor, say) or one older than 2.0.
-func (l *Lima) limaProblem(ctx context.Context) (backend.Problem, bool) {
+func (l *host) limaProblem(ctx context.Context) (backend.Problem, bool) {
 	brew := has("brew")
 	problem := func(fix string, plain msg.M, fixed func(fix string) msg.M) (backend.Problem, bool) {
 		if !brew {
@@ -72,7 +72,7 @@ func (l *Lima) limaProblem(ctx context.Context) (backend.Problem, bool) {
 
 // limaVersion is the version limactl --version prints last, or "" when
 // it fails.
-func (l *Lima) limaVersion(ctx context.Context) string {
+func (l *host) limaVersion(ctx context.Context) string {
 	out, err := l.Runner.Output(l.limactl(ctx, "--version"))
 	if fields := strings.Fields(string(out)); err == nil && len(fields) > 0 {
 		return fields[len(fields)-1]
@@ -82,7 +82,7 @@ func (l *Lima) limaVersion(ctx context.Context) string {
 
 // qemuProblem is QEMU's emulator for the host's processor, or qemu-img,
 // missing; the fix is the first package manager's found.
-func (l *Lima) qemuProblem() (backend.Problem, bool) {
+func (l *host) qemuProblem() (backend.Problem, bool) {
 	for _, prog := range []string{qemuProgram(l.Arch), "qemu-img"} {
 		if has(prog) {
 			continue
@@ -119,7 +119,7 @@ func qemuInstall(arch string) string {
 
 // kvmProblem is a missing /dev/kvm (virtualization is off), or one the
 // user can't open: the fix joins the kvm group.
-func (l *Lima) kvmProblem() (backend.Problem, bool) {
+func (l *host) kvmProblem() (backend.Problem, bool) {
 	if _, err := os.Stat(l.KVM); err != nil {
 		return backend.Problem{Key: "kvm", Msg: msg.NoKVM()}, true
 	}

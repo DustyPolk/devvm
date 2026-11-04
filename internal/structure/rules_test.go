@@ -39,6 +39,16 @@ func methodCases() []ruleCase {
 			want: &want{ruleMethods, "type T has 3 methods"},
 		},
 		{
+			name:  "an interface over the limit",
+			files: map[string]string{"a/a.go": "package a\ntype I interface {\n\tA()\n\tB()\n\tC()\n}\n"},
+			want:  &want{ruleMethods, "type I has 3 methods"},
+		},
+		{
+			name: "an interface of interfaces",
+			files: map[string]string{"a/a.go": "package a\ntype I interface {\n\tJ\n\tK\n\tA()\n}\n" +
+				"type J interface {\n\tB()\n\tC()\n}\ntype K interface {\n\tD()\n\tE()\n}\n"},
+		},
+		{
 			name:  "methods at the limit",
 			files: map[string]string{"a/a.go": "package a\ntype T int\nfunc (T) A() {}\nfunc (*T) B() {}\n"},
 		},

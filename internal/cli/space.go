@@ -250,10 +250,7 @@ func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []s
 		names[in.Name] = true
 	}
 	e.vms[be.Name()] = names
-	var usage backend.Usage
-	if r, isReporter := backend.As[backend.UsageReporter](be); isReporter {
-		usage, _ = r.Usage(ctx)
-	}
+	usage, _ := be.Usage(ctx)
 	vmRow := spaceRow{What: "VMs", Backend: be.Name(), Count: len(vms), Sized: true, Kept: keptOnlyCopy, Rest: "devvm rm"}
 	for _, in := range vms {
 		n, sized := usage.VMs[in.Name]
@@ -280,13 +277,9 @@ func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []s
 // strays are a backend's VMs with devvm's label that this devvm has no
 // state for; none when it can't say.
 func strays(ctx context.Context, be backend.Backend) []strayVM {
-	f, ok := backend.As[backend.StrayFinder](be)
-	if !ok {
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(be.Name()))
 	defer cancel()
-	ss, err := f.Strays(ctx)
+	ss, err := be.Strays(ctx)
 	if err != nil {
 		return nil
 	}

@@ -63,10 +63,11 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 	if in, err := b.Inspect(ctx, vm); err != nil || in.Status != backend.StatusRunning {
 		return msg.VMNotRunning(vm)
 	}
-	start, err := b.StartID(ctx, vm)
+	run, err := b.Running(ctx, vm)
 	if err != nil {
 		return err
 	}
+	start := run.ID
 	if start == "" {
 		return msg.VMNotRunning(vm)
 	}
@@ -79,8 +80,8 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 		VM: vm, SSH: ssh, Dir: e.Dirs.Run(), Log: log, List: e.Dirs.VM(vm).LinkList(),
 		Every: linkAliveEvery, Sync: linkSyncEvery, Tick: 2 * time.Second,
 		Alive: func(ctx context.Context) bool {
-			id, err := b.StartID(ctx, vm)
-			return err == nil && id == start
+			now, err := b.Running(ctx, vm)
+			return err == nil && now.ID == start
 		},
 		Want:  func() ([]vmssh.Link, error) { return e.sessionLinks(vm) },
 		Check: e.linkCheck(vm),
@@ -225,12 +226,12 @@ func (e Links) targetRun(ctx context.Context, b backend.Backend, target string) 
 	if in, err := b.Inspect(ctx, target); err != nil || in.Status != backend.StatusRunning {
 		return targetRun{}
 	}
-	start, err := b.StartID(ctx, target)
-	if err != nil || start == "" {
+	run, err := b.Running(ctx, target)
+	if err != nil || run.ID == "" {
 		return targetRun{}
 	}
 	ssh, err := e.linkSSH(ctx, b, target)
-	return targetRun{start: start, ssh: ssh, sshErr: err}
+	return targetRun{start: run.ID, ssh: ssh, sshErr: err}
 }
 
 // linkConn checks a connection to one of client's links, from the states

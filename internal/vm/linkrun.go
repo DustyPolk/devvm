@@ -268,8 +268,8 @@ func policyBroken(client, target *state.VM) bool {
 func (e linkRuns) runningConf(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
 	vm := st.Name()
 	if !netpolicy.On(st) {
-		confined, err := b.Confined(ctx, vm)
-		if err != nil || !confined {
+		run, err := b.Running(ctx, vm)
+		if err != nil || !run.Confined {
 			return backend.Confinement{Net: backend.NetDirect}, err
 		}
 	}

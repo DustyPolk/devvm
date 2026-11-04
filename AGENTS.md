@@ -23,7 +23,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `internal/proxy/` | the proxy, run as `devvm _proxy`; see its `README.md` |
 | `internal/daemon/` | devvm's background processes (stdlib only): detached starts, pid files checked against the process's arguments, stopping (TERM, then KILL), readiness by status file, the lifeline; the only place a process is signalled by pid (forbidigo) |
 | `internal/desktop/` | devvm desktop's relay on the host: VNC's password checked here, then an ssh channel to the VM's socket, the viewer's clipboard dropped; passwords |
-| `internal/backend/` | `Backend`, `Caps`, `Require`, `Check`, the registry and its guard (`As`); `backendtest/` (fake), `registry/` (every backend's), `lima/` |
+| `internal/backend/` | `Backend` and its roles, `Caps`, `Require`, `Check`, the registry and its guard (`As`); `backendtest/` (fake), `registry/` (every backend's), `lima/` |
 | `internal/vmssh/` | devvm's own over a VM's ssh, on every backend: the port forwarder and its one owner (`Forwards`: lock, stop, start, its ports from vm.json, the backend's `ForwardTarget`), links' sessions |
 | `internal/ui/` | the only package that prints: `ui.UI` (messages, prompts, status line, run log, cleanups), `ui.Main` (signals); no package state |
 | `internal/msg/`, `locales/` | messages: `en.toml`, the generated functions, doc links (`docs.go`), the generator (`gen/`) |
@@ -92,7 +92,8 @@ Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-si
 ## Backends
 
 - Every backend implements `backend.Backend` and declares `Caps` per feature: native, emulated (reviewed) or none. A new `Feature` goes in `backend.Features` and the table in `docs/content/docs/internals/backends.md`.
-- **A missing feature fails** in one line naming the VM and what to do; never fall back silently. Callers check the registry's `Review.Require(b, vm, spec.Features()...)` first, and its guard refuses the rest; backends don't decide what a VM needs, and their other interfaces are found with `backend.As`.
+- **`backend.Backend` is `Name`, `Caps` and four roles**, `Host`, `Images`, `Machines`, `Housekeeping`, all required; a backend's type splits the same way (Lima's `host`, `images`, `machines`, `housekeeping`). The one optional role, `Forgetter`, is found with `backend.As`.
+- **A missing feature fails** in one line naming the VM and what to do; never fall back silently. Callers check the registry's `Review.Require(b, vm, spec.Features()...)` first, and its guard refuses the rest (it has every role's methods); backends don't decide what a VM needs.
 - **Every emulation is refused until reviewed:** a design note in `docs/content/docs/internals/design.md`, a threat check with the security-audit skill, and e2e checks proving the guarantee; then it's marked reviewed in `Caps`.
 - Backend-specific code stays in its package; what isn't (`.git` protection, the proxy) stays out.
 - **Backends return errors, they don't die:** a `msg.M`, or `backend.Logged(m)` after a logged command failed. A stopped VM changes only at `Start`, which applies what its `Want` asks where it differs (`backend.Validate` first); a running one is left as it is; restart warnings are the callers'. Ports are never the backend's: it gives `ForwardTarget`, and `vmssh.Forwards` forwards.
