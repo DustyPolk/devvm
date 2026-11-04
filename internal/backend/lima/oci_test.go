@@ -128,7 +128,6 @@ func writeConverted(t *testing.T, dir string) {
 }
 
 func TestCheckConverted(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	dir := t.TempDir()
 	writeConverted(t, dir)
 	if libc, cmdline, err := checkConverted(dir, "node:24"); err != nil || libc != "musl" || cmdline != "root=/dev/vda rw console=hvc0" {
@@ -160,7 +159,7 @@ func TestCheckConverted(t *testing.T) {
 		writeConverted(t, d)
 		c.bad(d)
 		_, _, err := checkConverted(d, "node:24")
-		if want := "convert_bad_output file=" + c.file + " from=node:24"; err == nil || err.Error() != want {
+		if want := "convert_bad_output file=" + c.file + " from=node:24"; err == nil || msg.NamesOf(err) != want {
 			t.Errorf("%s: %v, want %s", c.name, err, want)
 		}
 	}

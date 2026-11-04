@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 )
 
@@ -52,9 +53,15 @@ func TestMakePrivate(t *testing.T) {
 // the user's alone, and removing an image refuses a bad key.
 func TestFiles(t *testing.T) {
 	d := testDirs(t)
-	for e, want := range map[*CorruptError]string{{"/f", 3, "bad"}: "/f:3: bad", {"/f", 0, "bad"}: "/f: bad"} {
+	for e, want := range map[*CorruptError]string{
+		{Path: "/f", Line: 3, Reason: "bad"}: "/f:3: bad", {Path: "/f", Reason: "bad"}: "/f: bad",
+		{Path: "/f", Line: 2, Reason: "k: ", Msg: msg.MsgUnknown("x")}: "/f:2: k: " + msg.MsgUnknown("x").Text(),
+	} {
 		if e.Error() != want {
 			t.Errorf("%q, want %q", e.Error(), want)
+		}
+		if e.Msg.ID() != "" && e.Shown(msg.M.Names) != "/f:2: k: msg_unknown name=x" {
+			t.Errorf("Shown with names: %q", e.Shown(msg.M.Names))
 		}
 	}
 	path := filepath.Join(d.Data, "sub", "f")

@@ -18,7 +18,6 @@ import (
 
 func testDirs(t *testing.T) paths.Dirs {
 	t.Helper()
-	t.Setenv("DEVVM_MESSAGES", "names")
 	dir := t.TempDir()
 	return paths.Dirs{Config: filepath.Join(dir, "config"), Data: filepath.Join(dir, "data")}
 }
@@ -159,7 +158,7 @@ func TestConfigRefused(t *testing.T) {
 			write(t, d.ConfigFile(), tc.file)
 			_, err := Read(d)
 			c, ok := errors.AsType[*state.CorruptError](err)
-			if !ok || c.Path != d.ConfigFile() || c.Line != tc.line || !strings.Contains(c.Reason, tc.reason) {
+			if !ok || c.Path != d.ConfigFile() || c.Line != tc.line || !strings.Contains(c.Shown(msg.M.Names), tc.reason) {
 				t.Errorf("got %v, want %s:%d: %s", err, d.ConfigFile(), tc.line, tc.reason)
 			}
 		})

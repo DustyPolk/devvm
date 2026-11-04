@@ -124,15 +124,15 @@ func pickParts(u *ui.UI) func(msg.M, []vm.PickPart) []vm.PickPart {
 		for i, p := range parts {
 			sections[i].Heading = p.Heading
 			for _, r := range p.Rows {
-				sections[i].Choices = append(sections[i].Choices, ui.Choice{Name: r.Name, Desc: r.Desc, On: r.On, Fixed: r.Fixed})
+				sections[i].Choices = append(sections[i].Choices, ui.Choice{Name: r.Name, Desc: u.Text(r.Desc), On: r.On, Fixed: r.Fixed})
 			}
 		}
 		picked := u.Pick(help, sections)
-		out := make([]vm.PickPart, len(picked))
-		for i, s := range picked {
-			out[i].Heading = s.Heading
-			for _, c := range s.Choices {
-				out[i].Rows = append(out[i].Rows, vm.PickRow{Name: c.Name, Desc: c.Desc, On: c.On, Fixed: c.Fixed})
+		out := make([]vm.PickPart, len(parts))
+		for i, p := range parts {
+			out[i] = vm.PickPart{Heading: p.Heading, Rows: slices.Clone(p.Rows)}
+			for j := range out[i].Rows {
+				out[i].Rows[j].On = picked[i].Choices[j].On
 			}
 		}
 		return out

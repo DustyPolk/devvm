@@ -39,7 +39,7 @@ func (u *UI) Status(label msg.M) (stop func()) {
 	if verbose(u) || !u.stderrTTY {
 		return func() {}
 	}
-	s := u.startStatus(valueParts(label))
+	s := u.startStatus(u.errStyle.valueParts(label))
 	return s.stop
 }
 

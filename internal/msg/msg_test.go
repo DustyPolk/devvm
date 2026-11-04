@@ -92,22 +92,21 @@ func TestNames(t *testing.T) {
 	if got, want := HomeNotAbsolute().Names(), "home_not_absolute"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
+	// Whatever DEVVM_MESSAGES says, a message's String and Error are its
+	// text: names mode is the UI's.
 	t.Setenv("DEVVM_MESSAGES", "names")
-	if got, want := m.String(), m.Names(); got != want {
-		t.Errorf("String in names mode: got %q, want %q", got, want)
+	if got, want := m.String(), m.Text(); got != want {
+		t.Errorf("String: got %q, want %q", got, want)
 	}
-	if got, want := m.Line(), m.Names(); got != want {
-		t.Errorf("Line in names mode: got %q, want %q", got, want)
-	}
-	if got, want := m.Error(), m.Names(); got != want {
-		t.Errorf("Error in names mode: got %q, want %q", got, want)
+	if got, want := m.Error(), m.Text(); got != want {
+		t.Errorf("Error: got %q, want %q", got, want)
 	}
 }
 
 // errors.Is and errors.As see through a message to its cause, which
 // changes nothing it shows.
 func TestBecause(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
+	t.Parallel()
 	notExist := &fs.PathError{Op: "open", Path: "/x", Err: fs.ErrNotExist}
 	plain := ProxyFailed("why")
 	for _, tt := range []struct {
@@ -138,14 +137,13 @@ func TestBecause(t *testing.T) {
 			}
 		})
 	}
-	t.Setenv("DEVVM_MESSAGES", "")
-	if m := plain.Because(notExist); m.Error() != plain.Error() || m.Line() != plain.Line() {
+	if m := plain.Because(notExist); m.Error() != plain.Error() || m.Names() != plain.Names() {
 		t.Errorf("with a cause: %q, want %q", m.Error(), plain.Error())
 	}
 }
 
 func TestStringAddsDocLink(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "")
+	t.Parallel()
 	m := MsgUnknown("x")
 	if got := m.String(); got != m.Text() {
 		t.Errorf("no doc: got %q, want the text", got)
@@ -158,15 +156,8 @@ func TestStringAddsDocLink(t *testing.T) {
 	if got := m.String(); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
-	if got := m.Line(); got != m.Text() {
-		t.Errorf("Line: got %q, want the text without the link", got)
-	}
 	if text, link := m.Parts(); text != m.Text() || link != m.DocURL() {
 		t.Errorf("Parts: got %q, %q, want the text and the link apart", text, link)
-	}
-	t.Setenv("DEVVM_MESSAGES", "names")
-	if text, link := m.Parts(); text != m.Names() || link != "" {
-		t.Errorf("Parts in names mode: got %q, %q, want the names and no link", text, link)
 	}
 }
 

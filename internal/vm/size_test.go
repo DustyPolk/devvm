@@ -14,7 +14,6 @@ import (
 
 // Parse checks each size as its flag gives it, naming the flag.
 func TestParseSizes(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	if _, err := (Size{CPUs: "1.5"}).Parse(); msg.NamesOf(err) != `cpus_not_number flag=--cpus value="1.5"` {
 		t.Errorf("Parse with bad CPUs: %v", msg.NamesOf(err))
 	}
@@ -36,7 +35,6 @@ func TestSizeOr(t *testing.T) {
 }
 
 func TestSizeCheck(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	h := Host{CPUs: 8, MemoryGiB: 32}
 	for _, tc := range []struct {
 		s   Size

@@ -102,7 +102,6 @@ func tries(path []string, c *cobra.Command) [][]string {
 // message, exit 2, then the line naming the command's own --help; it
 // never runs, and the parser's own English never shows.
 func TestUsageErrorsEveryCommand(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	paths := commandPaths(stubbed(nil).root)
 	if len(paths) < 40 {
 		t.Fatalf("only %d commands found", len(paths))
@@ -167,7 +166,6 @@ func sampleArgs(t *testing.T, use string) [][]string {
 // Every command takes the arguments its Use shows: each, a repeated one
 // twice, and none when they're optional.
 func TestUseMatchesArgs(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	for _, path := range commandPaths(stubbed(nil).root) {
@@ -189,7 +187,6 @@ func TestUseMatchesArgs(t *testing.T) {
 // without the help line: a message as it is, anything else in
 // output_failed.
 func TestRanErrorIsAFailure(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, tc := range []struct {
 		err  error
 		want string
@@ -224,7 +221,6 @@ func TestArgsOf(t *testing.T) {
 // Every flag error the parser can give becomes a devvm message, by the
 // flag as given.
 func TestFlagErrors(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, tc := range []struct {
 		args []string
 		want string

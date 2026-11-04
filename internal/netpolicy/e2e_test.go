@@ -24,7 +24,6 @@ func TestE2ESelfCheck(t *testing.T) {
 	if vm == "" {
 		t.Skip("tests/e2e.sh runs it, on a VM of its own")
 	}
-	t.Setenv("DEVVM_MESSAGES", "names")
 	d, err := paths.FromEnv()
 	if err != nil {
 		t.Fatal(err)

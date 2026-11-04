@@ -28,7 +28,7 @@ func TestTableLikeTabwriter(t *testing.T) {
 	}
 	for _, on := range []bool{false, true} {
 		var out strings.Builder
-		tab := &Table{w: &out, st: style{on}}
+		tab := &Table{w: &out, st: style{on: on}}
 		tab.Header(rows[0]...)
 		tab.Row(Cell{"base", Plain}, Cell{"current", Good}, Cell{"1.0G", Plain}, Cell{"/a", Secondary})
 		tab.Row(Cell{"docker+foo", Plain}, Cell{"stale", Attention}, Cell{"-", Plain}, Cell{"/über/long path", Plain})
@@ -74,7 +74,7 @@ func TestTableBreak(t *testing.T) {
 func TestUITable(t *testing.T) {
 	t.Parallel()
 	u, out, _ := testUI(t, "")
-	u.outStyle = style{true}
+	u.outStyle = style{on: true}
 	tab := u.Table()
 	tab.Header("A")
 	if err := tab.Flush(); err != nil {

@@ -31,7 +31,6 @@ type fixture struct {
 
 func newFixture(t *testing.T, name string) *fixture {
 	t.Helper()
-	t.Setenv("DEVVM_MESSAGES", "names")
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

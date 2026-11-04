@@ -7,7 +7,6 @@ import (
 )
 
 func TestParseSizes(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, tc := range []struct{ in, want, err string }{
 		{"6", "6", ""},
 		{"1.5", "", `cpus_not_number flag=--cpus value="1.5"`},
@@ -39,7 +38,6 @@ func TestParseSizes(t *testing.T) {
 }
 
 func TestParsePorts(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for in, want := range map[string]string{
 		"all": "all", "none": "none", "5173, 8000-8010,5173": "5173,8000-8010", "0080,3000-3000": "80,3000",
 		" all ": "all",
@@ -58,7 +56,6 @@ func TestParsePorts(t *testing.T) {
 // devvm retention's KEY=VALUE words: a known key with a value it takes,
 // or off; anything else is refused.
 func TestParseRetention(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	got, err := ParseRetention([]string{"history.age=30d", "logs.runs=50", "tools.unused-age=off"})
 	if err != nil || len(got) != 3 || got[RetainHistoryAge] != "30d" || got[RetainRunLogs] != "50" || got[RetainToolsAge] != "" {
 		t.Errorf("got %q, %v", got, err)

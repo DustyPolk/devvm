@@ -21,7 +21,6 @@ import (
 // shown.
 func setupSandbox(t *testing.T, terminal bool) (setup, paths.Dirs, *[]string) {
 	t.Helper()
-	t.Setenv("DEVVM_MESSAGES", "names")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))

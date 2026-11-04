@@ -67,7 +67,6 @@ func testDirs(t *testing.T) paths.Dirs {
 // typed is saved, with the saved disk kept. What config.toml sets isn't
 // asked for.
 func TestSizeChoiceAsk(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	big, small := Host{CPUs: 8, MemoryGiB: 32}, Host{CPUs: 2, MemoryGiB: 6}
 	for _, tc := range []struct {
 		name    string
@@ -164,7 +163,6 @@ func TestSizeChoiceAsk(t *testing.T) {
 // Set saves what the flags give, checked, keeping the rest as saved; a
 // size config.toml sets is refused.
 func TestSizeChoiceSet(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	d := testDirs(t)
 	saveSize(t, d, Size{Disk: "60"})
 	a := &sizeAsker{t: t}

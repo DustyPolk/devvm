@@ -21,15 +21,47 @@ const (
 )
 
 // A style colors what devvm prints on one stream: labels, doc links and
-// log text, never a message's own text. The zero style is plain.
-type style struct{ on bool }
+// log text, never a message's own text. With names, it shows messages as
+// their names (no_vm dir=/x) in place of their text, without doc links. The
+// zero style is plain text.
+type style struct{ on, names bool }
+
+// newStyle is the style of a stream read with getenv: colored as colorOn
+// says, in names mode with DEVVM_MESSAGES=names. It's the only place devvm
+// reads names mode.
+func newStyle(getenv func(string) string, terminal bool) style {
+	return style{on: colorOn(getenv, terminal), names: namesMode(getenv)}
+}
+
+func namesMode(getenv func(string) string) bool { return getenv("DEVVM_MESSAGES") == "names" }
+
+// segments is m's text in segments and its doc link, as Segments has them,
+// or its names as one segment and no link in names mode.
+func (s style) segments(m msg.M) ([]msg.Segment, string) {
+	if s.names {
+		return []msg.Segment{{Text: m.Names()}}, ""
+	}
+	return m.Segments()
+}
+
+// line is m on one line without its doc link: its text, or its names in
+// names mode. The zero message is "".
+func (s style) line(m msg.M) string {
+	switch {
+	case m.ID() == "":
+		return ""
+	case s.names:
+		return m.Names()
+	}
+	return m.Text()
+}
 
 // colorOn reports whether a stream gets color: never with NO_COLOR or
 // DEVVM_MESSAGES=names, always with FORCE_COLOR or CLICOLOR_FORCE (but 0),
 // never with TERM=dumb, else only when the stream is a terminal.
 func colorOn(getenv func(string) string, terminal bool) bool {
 	switch {
-	case getenv("NO_COLOR") != "", getenv("DEVVM_MESSAGES") == "names":
+	case getenv("NO_COLOR") != "", namesMode(getenv):
 		return false
 	case forced(getenv("FORCE_COLOR")), forced(getenv("CLICOLOR_FORCE")):
 		return true
@@ -66,7 +98,7 @@ func (s style) paintLines(code, text string) string {
 // message renders m as devvm prints it: its text, its values bold, then
 // its doc link, colored, on a line of its own.
 func (s style) message(m msg.M) string {
-	segs, link := m.Segments()
+	segs, link := s.segments(m)
 	var b strings.Builder
 	for _, seg := range segs {
 		if seg.Value {
@@ -81,9 +113,9 @@ func (s style) message(m msg.M) string {
 	return b.String()
 }
 
-// valueParts is m on one line, as Line has it, in parts: its values bold.
-func valueParts(m msg.M) []part {
-	segs, _ := m.Segments()
+// valueParts is m on one line, as line has it, in parts: its values bold.
+func (s style) valueParts(m msg.M) []part {
+	segs, _ := s.segments(m)
 	parts := make([]part, 0, len(segs))
 	for _, seg := range segs {
 		p := part{text: seg.Text}

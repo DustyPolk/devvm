@@ -222,9 +222,10 @@ func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 	logLine := ""
 	if step.ID() != "" {
 		var counted string
-		counted, logLine = count(ctx, step.Line())
+		shown := u.errStyle.line(step)
+		counted, logLine = count(ctx, shown)
 		// The count before the step, then the step, its values bold.
-		label = append([]part{{text: strings.TrimSuffix(counted, step.Line())}}, valueParts(step)...)
+		label = append([]part{{text: strings.TrimSuffix(counted, shown)}}, u.errStyle.valueParts(step)...)
 	}
 	_, _ = io.WriteString(w, logLine+redact("+ "+strings.Join(cmd.Args, " "))+"\n")
 	cmd.Stdout, cmd.Stderr = w, w

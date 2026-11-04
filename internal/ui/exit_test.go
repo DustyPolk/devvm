@@ -16,14 +16,10 @@ import (
 )
 
 // TestMain makes the test binary a stand-in for devvm when UI_TEST_HELPER is
-// set, for the tests that send it signals. Otherwise messages print as
-// their names.
+// set, for the tests that send it signals.
 func TestMain(m *testing.M) {
 	if h := os.Getenv("UI_TEST_HELPER"); h != "" {
 		os.Exit(helper(h)) //nolint:forbidigo // the test binary as a helper process
-	}
-	if err := os.Setenv("DEVVM_MESSAGES", "names"); err != nil {
-		panic(err)
 	}
 	os.Exit(m.Run()) //nolint:forbidigo // the test binary
 }

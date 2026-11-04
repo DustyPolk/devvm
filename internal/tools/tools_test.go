@@ -108,7 +108,6 @@ func (e env) configFile() string { return filepath.Join(e.root, "shared-tools", 
 
 func newEnv(t *testing.T) env {
 	t.Helper()
-	t.Setenv("DEVVM_MESSAGES", "names")
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -1221,7 +1220,6 @@ func TestCompareVersions(t *testing.T) {
 func TestRemove(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
-	t.Setenv("DEVVM_MESSAGES", "names")
 	vm := "devvm-p-abc123abc123ab"
 	all := e.files(t, "node", "pnpm", "bun", "python", "uv", "claude")
 	names, files, err := Remove(vm, "base", []string{"node", "python", "claude"}, all, []string{"python", "claude"})

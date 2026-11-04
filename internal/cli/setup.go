@@ -175,7 +175,7 @@ func (s setup) saveNetwork(dirs paths.Dirs) error {
 	}
 	choices := make([]ui.Choice, len(modes))
 	for i, m := range modes {
-		choices[i] = ui.Choice{Name: m, Desc: descs[m].String(), On: m == def.Network.Value}
+		choices[i] = ui.Choice{Name: m, Desc: s.ui.Text(descs[m]), On: m == def.Network.Value}
 	}
 	mode := modes[s.pickOne(msg.NetworkDefaultHelp(), choices)]
 	return vm.NetworkChoice{Dirs: dirs, Info: s.ui.Info}.Set(mode)

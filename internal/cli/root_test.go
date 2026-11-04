@@ -9,9 +9,18 @@ import (
 )
 
 // testUI returns a UI with no input, printing into out and errOut.
+// testUI is a UI on buffers, plain, its messages shown as their names
+// (DEVVM_MESSAGES=names), whatever the test's environment says.
 func testUI() (u *ui.UI, out, errOut *bytes.Buffer) {
 	out, errOut = &bytes.Buffer{}, &bytes.Buffer{}
-	return ui.New(strings.NewReader(""), out, errOut), out, errOut
+	return ui.New(strings.NewReader(""), out, errOut, namesEnv), out, errOut
+}
+
+func namesEnv(k string) string {
+	if k == "DEVVM_MESSAGES" {
+		return "names"
+	}
+	return ""
 }
 
 // Only arguments that never reach up (a shell in this folder's VM): the

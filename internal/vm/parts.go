@@ -18,8 +18,9 @@ import (
 // layer, what it is or why it's checked, whether it's checked, and
 // whether it's shown as it is (a VM's layers, which only a new VM gets).
 type PickRow struct {
-	Name, Desc string
-	On, Fixed  bool
+	Name      string
+	Desc      msg.M // the zero message for none
+	On, Fixed bool
 }
 
 // PickPart is a heading of the tools picker and its rows.
@@ -162,11 +163,11 @@ func (e creation) chooseParts(o Options, vm, dir string, dc *devcontainer.Plan, 
 // pickNew shows the picker for a new VM, its defaults checked, and
 // returns the parts chosen.
 func (e creation) pickNew(vm string, d partsDefault, b *build.Env) Parts {
-	why := func(name string) string {
+	why := func(name string) msg.M {
 		if f, ok := d.why[name]; ok {
-			return msg.PickCalledFor(f).Line()
+			return msg.PickCalledFor(f)
 		}
-		return ""
+		return msg.M{}
 	}
 	var toolchains, agents, layers []PickRow
 	for _, t := range image.Toolchains {
@@ -175,16 +176,16 @@ func (e creation) pickNew(vm string, d partsDefault, b *build.Env) Parts {
 	for _, a := range image.Agents {
 		r := PickRow{Name: a, On: slices.Contains(d.Agents, a)}
 		if slices.Contains(d.setup, a) {
-			r.Desc = msg.PickFromSetup().Line()
+			r.Desc = msg.PickFromSetup()
 		}
 		agents = append(agents, r)
 	}
 	for _, l := range b.Layers()[1:] {
 		desc := why(l)
 		switch {
-		case desc != "":
+		case desc.ID() != "":
 		case slices.Contains(d.setupLayers, l):
-			desc = msg.PickFromSetup().Line()
+			desc = msg.PickFromSetup()
 		default:
 			desc = layerDesc(l)
 		}
@@ -215,16 +216,16 @@ func inOrder(was, chosen []string) []string {
 }
 
 // layerDesc is what a layer is, as the picker says it.
-func layerDesc(layer string) string {
+func layerDesc(layer string) msg.M {
 	switch layer {
 	case image.DesktopLayer:
-		return msg.PickLayerDesktop().Line()
+		return msg.PickLayerDesktop()
 	case image.DockerLayer:
-		return msg.PickLayerDocker().Line()
+		return msg.PickLayerDocker()
 	case image.NixLayer:
-		return msg.PickLayerNix().Line()
+		return msg.PickLayerNix()
 	}
-	return msg.PickLayerYours().Line()
+	return msg.PickLayerYours()
 }
 
 // checked is the names of a part's checked rows, in order.

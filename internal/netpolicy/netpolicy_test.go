@@ -40,7 +40,6 @@ const vmV = "devvm-v-0123456789abc6"
 
 func sandbox(t *testing.T, img string, tools ...string) (paths.Dirs, *state.VM) {
 	t.Helper()
-	t.Setenv("DEVVM_MESSAGES", "names")
 	root := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", root) // the run log
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
@@ -223,7 +222,6 @@ func TestKeyAndSalt(t *testing.T) {
 // The flag wins; without one and without a terminal, on; in a terminal,
 // the answer, asked yes by default ([Y/n]) after the tradeoff.
 func TestChoose(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	tty, answer, asked := false, false, 0
 	var said []string
 	p := &Proxy{
@@ -785,7 +783,6 @@ func TestRefreshSecrets(t *testing.T) {
 // A running VM whose proxy couldn't start is stopped, and the reason
 // returned; a stop that fails is returned instead.
 func TestUnproxied(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	why := msg.ProxyStartFailed("/log", vmV)
 	f := backendtest.New("fake", nil)
 	f.Instances[vmV] = backend.Instance{Name: vmV, Status: backend.StatusRunning}
@@ -830,7 +827,6 @@ func (c *ctxStopper) Stop(ctx context.Context, vm string) error {
 // After a start: enforced is ok; a direct route, or a VM started outside
 // devvm without a terminal (or still after a restart), stops the VM.
 func TestSelfCheck(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, tc := range []struct {
 		name                         string
 		unconfined, direct, tty, yes bool

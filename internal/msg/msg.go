@@ -2,9 +2,9 @@
 // from locales/en.toml (NoVM(dir) for [no_vm]). It renders them in the
 // user's language, but never prints: internal/ui does.
 //
-// With DEVVM_MESSAGES=names, a message renders as its ID and values in
-// sorted key order (no_vm dir=/x), so tests never depend on wording or
-// language.
+// A message's names are its ID and values in sorted key order (no_vm
+// dir=/x): internal/ui shows them in place of its text with
+// DEVVM_MESSAGES=names, so tests never depend on wording or language.
 package msg
 
 //go:generate go run ./gen
@@ -51,7 +51,7 @@ type spec struct {
 func (m M) ID() string { return m.id }
 
 // String returns the message as devvm prints it: its text, then its doc
-// link on a line of its own. With DEVVM_MESSAGES=names, its names instead.
+// link on a line of its own.
 func (m M) String() string {
 	text, link := m.Parts()
 	if link != "" {
@@ -61,22 +61,9 @@ func (m M) String() string {
 }
 
 // Parts returns what String joins, apart, so a terminal can color the
-// link: the message's text and its doc link ("" when it has none). With
-// DEVVM_MESSAGES=names, its names and no link.
+// link: the message's text and its doc link ("" when it has none).
 func (m M) Parts() (text, link string) {
-	if namesMode() {
-		return m.Names(), ""
-	}
 	return m.Text(), m.DocURL()
-}
-
-// Line returns the message on one line, without its doc link: its text, or
-// its names with DEVVM_MESSAGES=names. For status lines and run logs.
-func (m M) Line() string {
-	if namesMode() {
-		return m.Names()
-	}
-	return m.Text()
 }
 
 // Error makes a message usable as an error. It's the same as String.
@@ -144,8 +131,6 @@ func docURL(doc string) string {
 	}
 	return u
 }
-
-func namesMode() bool { return os.Getenv("DEVVM_MESSAGES") == "names" }
 
 // userLanguage returns the language messages are shown in, from the first
 // of LC_ALL, LC_MESSAGES and LANG that is set, as a BCP 47 tag ("de-DE"

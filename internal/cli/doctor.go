@@ -59,7 +59,7 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 				},
 			}
 			if asJSON {
-				return printJSON(u, d.report(cmd.Context(), reg.All(), b))
+				return printJSON(u, d.report(cmd.Context(), u.Text, reg.All(), b))
 			}
 			err = d.run(cmd.Context(), u, b)
 			if m, ok := errors.AsType[msg.M](err); ok {
@@ -93,22 +93,22 @@ type problemJSON struct {
 	Message string  `json:"message"`
 }
 
-// report is what doctor finds, as doctor --json shows it. It prints
-// nothing.
-func (d doctor) report(ctx context.Context, all []backend.Backend, b backend.Backend) doctorOutput {
+// report is what doctor finds, as doctor --json shows it, each message
+// as text shows it (the UI's Text). It prints nothing.
+func (d doctor) report(ctx context.Context, text func(msg.M) string, all []backend.Backend, b backend.Backend) doctorOutput {
 	out := doctorOutput{
 		Backend:  b.Name(),
 		Problems: []problemJSON{}, Warnings: []string{}, Features: map[string]map[string]string{},
 	}
 	for _, p := range b.Problems(ctx) {
-		j := problemJSON{Key: p.Key, Message: p.Msg.Line()}
+		j := problemJSON{Key: p.Key, Message: text(p.Msg)}
 		if p.Fix != "" {
 			j.Fix = &p.Fix
 		}
 		out.Problems = append(out.Problems, j)
 	}
 	for _, m := range d.warnings(b) {
-		out.Warnings = append(out.Warnings, m.Line())
+		out.Warnings = append(out.Warnings, text(m))
 	}
 	_, err := exec.LookPath("docker")
 	out.Docker = err == nil

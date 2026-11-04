@@ -34,7 +34,6 @@ func TestFolderGone(t *testing.T) {
 // ls lists project VMs on every backend, from their state; images, build
 // VMs and a VM without state aside.
 func TestList(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	d := paths.Dirs{Data: t.TempDir()}
 	const (
 		web   = "devvm-web-0123456789abc4"

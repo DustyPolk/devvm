@@ -153,5 +153,11 @@ func fail(u *ui.UI, err error, what func(reason string) msg.M) {
 	if m, ok := errors.AsType[msg.M](err); ok {
 		u.Die(m)
 	}
-	u.Die(what(err.Error()).Because(err))
+	reason := err.Error()
+	if c, ok := errors.AsType[*state.CorruptError](err); ok && c.Error() == reason {
+		// A file devvm can't read, unwrapped: its message as the UI
+		// shows messages, names in names mode.
+		reason = c.Shown(u.Text)
+	}
+	u.Die(what(reason).Because(err))
 }

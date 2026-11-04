@@ -18,7 +18,6 @@ import (
 // questions' answer yes (no terminal when tty is false).
 func printed(t *testing.T, e *Env, tty bool) *[]string {
 	t.Helper()
-	t.Setenv("DEVVM_MESSAGES", "names")
 	var got []string
 	e.Terminal = func() bool { return tty }
 	e.CanAsk = e.Terminal

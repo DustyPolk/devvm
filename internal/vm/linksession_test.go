@@ -338,7 +338,6 @@ func TestWarnUnenforced(t *testing.T) {
 // and none once the client is gone; it refuses a client that isn't
 // running, or whose ssh isn't devvm's.
 func TestSessionLinks(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	e, _, client, _, l := linkSessionEnv(t)
 	got, err := e.sessionLinks(client.Name())
 	want := vmssh.Link{Name: "db", Target: l.Target, Addr: l.Addr, Port: 5432, Hosts: []string{"db", "db.devvm.internal"}}

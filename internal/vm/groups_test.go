@@ -18,7 +18,6 @@ import (
 )
 
 func TestCheckGroupName(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, ok := range []string{"web", "team-2", "a"} {
 		if err := CheckGroupName(ok); err != nil {
 			t.Errorf("CheckGroupName(%q) = %v", ok, msg.NamesOf(err))
@@ -136,7 +135,6 @@ func TestGroupLinks(t *testing.T) {
 // joiner's own hostname, whatever it joins as, and never a name a member
 // has, as its name or its hostname.
 func TestCheckJoinName(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	d := paths.Dirs{Data: t.TempDir()}
 	db := member(t, d, "devvm-db-0123456789abc2", "", "")
 	api := member(t, d, "devvm-api-0123456789abc3", "", "web2")

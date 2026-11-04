@@ -171,7 +171,6 @@ func TestFlagNamesHaveOneMeaning(t *testing.T) {
 // refused, with a did-you-mean when a name is close. As flags, each
 // replaces its part, none with nothing, and left out it's nil.
 func TestPartFlags(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	cfg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", cfg)
 	t.Setenv("XDG_DATA_HOME", t.TempDir())

@@ -96,7 +96,7 @@ func TestOnPathOther(t *testing.T) {
 // --json has each problem's key, fix (null without one) and message, the
 // warnings, and every backend's features; it prints nothing else.
 func TestDoctorReport(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
+	t.Parallel()
 	b := backendtest.New("lima", backend.Caps{backend.FeatureSSH: backend.Native})
 	b.Missing = []backend.Problem{
 		{Key: "lima", Fix: "brew install lima", Msg: msg.LimaMissingFix("brew install lima")},
@@ -109,7 +109,7 @@ func TestDoctorReport(t *testing.T) {
 		Policies: func() []msg.M { return []msg.M{msg.PolicyNotRule("/p", "2", "a b")} },
 		Folders:  func() []msg.M { return []msg.M{msg.VMFolderStateless("/vms/0123456789abcd")} },
 	}
-	r := d.report(t.Context(), []backend.Backend{b}, b)
+	r := d.report(t.Context(), msg.M.Names, []backend.Backend{b}, b)
 	fix := "brew install lima"
 	want := []problemJSON{{Key: "lima", Fix: &fix, Message: "lima_missing_fix fix=brew install lima"}, {Key: "kvm", Message: "no_kvm"}}
 	if len(r.Problems) != 2 || r.Problems[0].Fix == nil || *r.Problems[0].Fix != fix || r.Problems[1].Fix != nil ||
@@ -138,7 +138,6 @@ func TestDoctorReport(t *testing.T) {
 // A machine below the recommended host gets a warning for each way it
 // is: less memory, fewer CPUs. None when it isn't, or can't say.
 func TestSmallHost(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, c := range []struct {
 		host vm.Host
 		err  error
@@ -164,7 +163,6 @@ func TestSmallHost(t *testing.T) {
 // doctor's warnings about a small host go to stderr and never change
 // what it returns.
 func TestDoctorSmallHostWarnsOnly(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	t.Setenv("HTTPS_PROXY", "")
 	t.Setenv("https_proxy", "")
 	notFound := func(string) (string, error) { return "", exec.ErrNotFound }

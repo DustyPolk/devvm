@@ -24,12 +24,8 @@ type Segment struct {
 
 // Segments returns the message's text in segments, so a terminal can show
 // its values apart, and its doc link ("" when it has none). Joined, the
-// segments are its Text, but for any marker rune a value held. With
-// DEVVM_MESSAGES=names, its names as one segment and no link.
+// segments are its Text, but for any marker rune a value held.
 func (m M) Segments() (segs []Segment, link string) {
-	if namesMode() {
-		return []Segment{{Text: m.Names()}}, ""
-	}
 	return m.segmentsIn(loadBundle(), userLanguage(os.Getenv)), m.DocURL()
 }
 

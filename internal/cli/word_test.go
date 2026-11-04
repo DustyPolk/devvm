@@ -62,7 +62,6 @@ func TestCommandNames(t *testing.T) {
 // that choose them; any other word gets the closest command, when one is
 // close. devvm takes no word, and a layer may have a command's name.
 func TestUnknownWord(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	cfg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", cfg)
 	t.Setenv("XDG_DATA_HOME", t.TempDir())

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // onlyOnPath puts a new folder alone on PATH, with programs that only
@@ -169,7 +171,7 @@ func TestProblems(t *testing.T) {
 			switch {
 			case len(want) == 0 && err != nil:
 				t.Errorf("Check: %v", err)
-			case len(want) > 0 && (err == nil || err.Error() != l.Problems(t.Context())[0].Msg.Names()):
+			case len(want) > 0 && (err == nil || msg.NamesOf(err) != l.Problems(t.Context())[0].Msg.Names()):
 				t.Errorf("Check: %v, want the first problem", err)
 			}
 		})

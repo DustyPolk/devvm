@@ -325,7 +325,6 @@ func TestAgentToggleRefused(t *testing.T) {
 // checkAgent offers to load a default key only into an agent that runs
 // with none; without a terminal it says how.
 func TestCheckAgent(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, tc := range []struct {
 		name  string
 		rc    int    // ssh-add -l's
@@ -355,7 +354,7 @@ func TestCheckAgent(t *testing.T) {
 				return tc.rc
 			}}
 			var said strings.Builder
-			e.Warn = func(m msg.M) { said.WriteString("devvm: " + m.String() + "\n") }
+			e.Warn = func(m msg.M) { said.WriteString("devvm: " + m.Names() + "\n") }
 			e.Confirm = func(msg.M) bool { return false }
 			e.Terminal = func() bool { return true }
 			Launch{e}.checkAgent(t.Context())

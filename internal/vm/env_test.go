@@ -60,7 +60,6 @@ const testVersion = "0.1.0-test"
 // folder named web.
 func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend.Command) {
 	t.Helper()
-	t.Setenv("DEVVM_MESSAGES", "names")
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

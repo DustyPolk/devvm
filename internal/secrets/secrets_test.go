@@ -24,7 +24,6 @@ import (
 // environment env.
 func testStore(t *testing.T, keychain bool, env map[string]string) (*Store, map[string]string) {
 	t.Helper()
-	t.Setenv("DEVVM_MESSAGES", "names")
 	root := t.TempDir()
 	d := paths.Dirs{Home: filepath.Join(root, "home"), Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
 	s := NewStore(d, func(m msg.M) { t.Log(m.Names()) })
@@ -59,7 +58,6 @@ func testStore(t *testing.T, keychain bool, env map[string]string) (*Store, map[
 // Keychain's command line or a header, or for claude isn't a setup-token
 // token, is refused.
 func TestToken(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, tc := range []struct{ name, given, want, err string }{
 		{"github", " ghp_x \n", "ghp_x", ""},
 		{"github", "ghp_ x\t", "ghp_x", ""},

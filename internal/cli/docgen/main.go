@@ -27,5 +27,5 @@ func main() {
 // newRoot is devvm's command, for its pages only: none of it runs, so its
 // UI has no input and prints nowhere.
 func newRoot() *cobra.Command {
-	return cli.NewRoot(ui.New(strings.NewReader(""), io.Discard, io.Discard))
+	return cli.NewRoot(ui.New(strings.NewReader(""), io.Discard, io.Discard, func(string) string { return "" }))
 }

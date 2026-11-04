@@ -4,6 +4,8 @@ import (
 	"io"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // A Role is what a table cell says, which colors it in a terminal.
@@ -72,6 +74,9 @@ func (u *UI) Table() *Table { return &Table{w: u.Stdout(), st: u.outStyle} }
 func (t *Table) Header(names ...string) {
 	t.rows = append(t.rows, tableRow{plainCells(names...), true})
 }
+
+// Text is m as a cell's text, as the UI's Text has it.
+func (t *Table) Text(m msg.M) string { return t.st.line(m) }
 
 // Row adds a row.
 func (t *Table) Row(cells ...Cell) { t.rows = append(t.rows, tableRow{cells, false}) }

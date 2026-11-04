@@ -140,7 +140,6 @@ func sandboxDirs(t *testing.T) paths.Dirs {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("DEVVM_LIMA_HOME", filepath.Join(root, "lima"))
 	t.Setenv("LIMA_HOME", "/elsewhere") // never devvm's
-	t.Setenv("DEVVM_MESSAGES", "names")
 	d, err := paths.FromEnv()
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +250,7 @@ func TestStartRefusesGlobalConfigsAndNetworks(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := l.Start(t.Context(), "devvm-img-x", backend.Confinement{Net: backend.NetInternet})
-	if msg.IDOf(err) != "lima_global_config" || !strings.Contains(err.Error(), "files="+filepath.Join(cfg, "default.yaml")) {
+	if msg.IDOf(err) != "lima_global_config" || !strings.Contains(msg.NamesOf(err), "files="+filepath.Join(cfg, "default.yaml")) {
 		t.Errorf("with default.yaml: %v", err)
 	}
 	f.out["limactl --version"] = "limactl version 2.2.1\n"
@@ -262,7 +261,7 @@ func TestStartRefusesGlobalConfigsAndNetworks(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = l.Start(t.Context(), "devvm-img-x", backend.Confinement{Net: backend.NetInternet})
-	if want := "vm_has_networks file=" + filepath.Join(l.Dirs.Lima, "devvm-img-x", "lima.yaml") + " vm=devvm-img-x"; err == nil || err.Error() != want {
+	if want := "vm_has_networks file=" + filepath.Join(l.Dirs.Lima, "devvm-img-x", "lima.yaml") + " vm=devvm-img-x"; err == nil || msg.NamesOf(err) != want {
 		t.Errorf("with a network: %v, want %s", err, want)
 	}
 	if got := f.lines(); len(got) > 0 {
@@ -425,7 +424,7 @@ func TestDeleteImageInUse(t *testing.T) {
 	}
 	f.out["qemu-img info -U --output=json "+l.disk(vm)] = `{"format":"qcow2","backing-filename":"` + l.disk("devvm-img-0123456789ab") + `"}`
 	err := l.DeleteImage(t.Context(), "0123456789ab")
-	if err == nil || err.Error() != "image_in_use key=0123456789ab vms="+vm {
+	if err == nil || msg.NamesOf(err) != "image_in_use key=0123456789ab vms="+vm {
 		t.Errorf("DeleteImage: %v", err)
 	}
 	if got := f.lines(); len(got) > 0 {
@@ -461,7 +460,7 @@ func TestCreateVM(t *testing.T) {
 		t.Errorf("ports: %+v, %v", p, err)
 	}
 	err = l.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{Name: "devvm-q-0123456789abcd", Project: "/a,b"})
-	if err == nil || err.Error() != "mount_comma path=/a,b" {
+	if err == nil || msg.NamesOf(err) != "mount_comma path=/a,b" {
 		t.Errorf("a comma: %v", err)
 	}
 	if err := l.CreateVM(t.Context(), "fedcba987654", backend.VMSpec{Name: "devvm-q-0123456789abcd"}); msg.IDOf(err) != "image_missing" {
@@ -540,7 +539,7 @@ func TestSetSize(t *testing.T) {
 		err := l.SetSize(t.Context(), tc.vm, tc.size)
 		got := strings.Join(f.lines(), "\n")
 		if err != nil {
-			got = err.Error()
+			got = msg.NamesOf(err)
 		}
 		if got != tc.want {
 			t.Errorf("SetSize(%s, %+v): %q, want %q", tc.vm, tc.size, got, tc.want)
@@ -613,7 +612,7 @@ func TestSetPortsAgentDirsAndForwarding(t *testing.T) {
 		err := s.do()
 		got := strings.Join(f.lines(), "\n")
 		if err != nil {
-			got = err.Error()
+			got = msg.NamesOf(err)
 		}
 		if got != s.want {
 			t.Errorf("step %d: %q, want %q", i, got, s.want)

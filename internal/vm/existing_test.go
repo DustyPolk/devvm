@@ -288,7 +288,7 @@ func TestLayersChoice(t *testing.T) {
 	c.Pick = func(help msg.M, parts []PickPart) []PickPart {
 		var on, descs []string
 		for _, r := range parts[0].Rows {
-			descs = append(descs, r.Desc)
+			descs = append(descs, r.Desc.Names())
 			if r.On {
 				on = append(on, r.Name)
 			}

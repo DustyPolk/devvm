@@ -14,7 +14,6 @@ import (
 )
 
 func TestLinkArgs(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, ok := range []string{"db", "pg-1", "a", "0db", strings.Repeat("a", 63)} {
 		if err := CheckLinkName(ok); err != nil {
 			t.Errorf("CheckLinkName(%q) = %v", ok, msg.NamesOf(err))
@@ -169,7 +168,6 @@ func TestCheckLink(t *testing.T) {
 // part; one name per target, one target per name, never localhost or
 // the client's hostname.
 func TestLinkNameFor(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	client := &found{f: project.Folder{Name: "devvm-app-0123456789abc1"}}
 	db, api := "devvm-db-0123456789abc2", "devvm-api-0123456789abc3"
 	links := []Link{{Name: "pg", Port: 5432, Target: db, TargetID: "i1"}}

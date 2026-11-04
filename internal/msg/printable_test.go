@@ -47,15 +47,14 @@ func TestPrintableBidi(t *testing.T) {
 // characters, whoever made it: in its text, its segments and its names.
 func TestValuesArePrintable(t *testing.T) {
 	hostile := "vm\033[2J\033]0;title\007\ndevvm: \302\233x"
+	t.Parallel()
 	m := StopFailed(hostile)
-	t.Setenv("DEVVM_MESSAGES", "")
 	text := m.Text()
 	segs, _ := m.Segments()
 	var joined strings.Builder
 	for _, s := range segs {
 		joined.WriteString(s.Text)
 	}
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for what, s := range map[string]string{"text": text, "segments": joined.String(), "names": m.Names()} {
 		if s != Printable(s) || strings.Contains(s, "\n") || !strings.Contains(s, "vm[2J]0;titledevvm: x") {
 			t.Errorf("%s: %q", what, s)

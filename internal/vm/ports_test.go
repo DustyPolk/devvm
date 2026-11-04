@@ -13,7 +13,6 @@ import (
 )
 
 func TestAddRemovePorts(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, c := range []struct {
 		rm             bool
 		old, list, out string
@@ -193,7 +192,6 @@ func TestPortsBackend(t *testing.T) {
 	}
 	// A bad entry, as a hand-edited state file has it, is refused, never
 	// port 0.
-	t.Setenv("DEVVM_MESSAGES", "names")
 	for _, bad := range []string{"80,x", "x", "80-y", "5173,,80"} {
 		got, err := PortsBackend(bad)
 		if msg.NamesOf(err) != `port_invalid value="`+bad+`"` || len(got.Ranges) != 0 {
@@ -204,7 +202,6 @@ func TestPortsBackend(t *testing.T) {
 
 // A VM whose state lists a port that isn't one doesn't start.
 func TestStartBadPorts(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	e, f, _ := upEnv(t, allNative())
 	st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: "5173"})
 	if err := set(t, st, KeyPorts, "5173,x"); err != nil {

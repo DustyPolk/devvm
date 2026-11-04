@@ -21,15 +21,18 @@ var sgrCodes = regexp.MustCompile("\033\\[[0-9;]*m")
 // its columns line up the same.
 func tables(t *testing.T, write func(*ui.Table) error) (plain, colored string) {
 	t.Helper()
-	t.Setenv("NO_COLOR", "")
-	t.Setenv("DEVVM_MESSAGES", "")
 	var p, c strings.Builder
 	for _, tc := range []struct {
 		force string
 		out   *strings.Builder
 	}{{"", &p}, {"1", &c}} {
-		t.Setenv("FORCE_COLOR", tc.force)
-		if err := write(ui.New(strings.NewReader(""), tc.out, io.Discard).Table()); err != nil {
+		getenv := func(k string) string {
+			if k == "FORCE_COLOR" {
+				return tc.force
+			}
+			return ""
+		}
+		if err := write(ui.New(strings.NewReader(""), tc.out, io.Discard, getenv).Table()); err != nil {
 			t.Fatal(err)
 		}
 	}

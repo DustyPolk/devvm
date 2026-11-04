@@ -43,7 +43,7 @@ func TestColorOn(t *testing.T) {
 }
 
 func TestMessagesColored(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "")
+	t.Parallel()
 	linked := msg.StopFailed("v")
 	plainText, link := linked.Parts()
 	if link == "" || strings.Contains(plainText, link) {
@@ -74,13 +74,14 @@ func TestMessagesColored(t *testing.T) {
 		{"die", func(u *UI, m msg.M) { exitCode(func() { u.Die(m) }) }, "", "\033[1;31mdevvm:\033[0m " + text + "\n\033[1;31mdevvm:\033[0m \033[4;34m" + link + "\033[0m\n"},
 	} {
 		u, out, errOut := testUI(t, "")
-		u.outStyle, u.errStyle = style{true}, style{true}
+		u.outStyle, u.errStyle = style{on: true}, style{on: true}
 		tc.print(u, linked)
 		if out.String() != tc.stdout || errOut.String() != tc.stder {
 			t.Errorf("%s colored: stdout %q, stderr %q; want %q, %q", tc.name, out, errOut, tc.stdout, tc.stder)
 		}
 		// Plain, it's the same text without the codes.
 		u, out, errOut = testUI(t, "")
+		u.outStyle, u.errStyle = style{}, style{}
 		tc.print(u, linked)
 		if got := out.String() + errOut.String(); got != plain(tc.stdout+tc.stder) {
 			t.Errorf("%s plain: %q", tc.name, got)
@@ -91,22 +92,42 @@ func TestMessagesColored(t *testing.T) {
 	}
 }
 
-func TestNamesModeStaysPlain(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
-	m := msg.StopFailed("v")
-	if text, link := m.Parts(); text != m.Names() || link != "" || m.String() != m.Names() {
-		t.Errorf("names mode: Parts %q, %q, String %q", text, link, m.String())
+// DEVVM_MESSAGES=names gives a stream's style names mode, without color: a
+// message shows as its names, one segment, no link, wherever the UI shows
+// it, and a terminal gets no codes, so e2e's checks of one read the names
+// as they are.
+func TestNamesMode(t *testing.T) {
+	t.Parallel()
+	names := env{"DEVVM_MESSAGES": "names", "FORCE_COLOR": "1"}.get
+	st := newStyle(names, true)
+	if st != (style{names: true}) || newStyle(env{}.get, false) != (style{}) {
+		t.Fatalf("newStyle: %+v", st)
 	}
-	// A terminal in names mode gets no color, so e2e's checks of a terminal
-	// read the names as they are.
-	if colorOn(env{"DEVVM_MESSAGES": "names"}.get, true) {
-		t.Error("names mode in a terminal: want no color")
+	m := msg.StopFailed("v")
+	if segs, link := st.segments(m); len(segs) != 1 || segs[0] != (msg.Segment{Text: m.Names()}) || link != "" {
+		t.Errorf("segments: %+v, %q", segs, link)
+	}
+	if st.message(m) != m.Names() || st.line(m) != m.Names() || st.line(msg.M{}) != "" {
+		t.Errorf("message %q, line %q", st.message(m), st.line(m))
+	}
+	if text := (style{}).line(m); text != m.Text() {
+		t.Errorf("line, not names mode: %q", text)
+	}
+	u, out, errOut := testUI(t, "")
+	u.Say(m)
+	u.Warn(m)
+	if out.String() != m.Names()+"\n" || errOut.String() != "devvm: "+m.Names()+"\n" || u.Text(m) != m.Names() || u.Table().Text(m) != m.Names() {
+		t.Errorf("stdout %q, stderr %q, Text %q", out, errOut, u.Text(m))
+	}
+	// The messages themselves don't change: String is still the text.
+	if m.String() == m.Names() {
+		t.Errorf("String in names mode: %q", m.String())
 	}
 }
 
 func TestDieLoggedColored(t *testing.T) {
 	u, _, errOut := testUI(t, "")
-	u.errStyle = style{true}
+	u.errStyle = style{on: true, names: true}
 	if err := u.logged(t.Context(), msg.M{}, "sh", "-c", "printf 'one\\n\\033[31mtwo\\n'"); err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +135,7 @@ func TestDieLoggedColored(t *testing.T) {
 	got := errOut.String()
 	// Each line of the log's end dim, the log's own codes dropped; then the
 	// message, its label red.
-	head := "\033[2m--- " + msg.LogEnd(u.logPath()).Line() + "\033[0m\n"
+	head := "\033[2m--- " + msg.LogEnd(u.logPath()).Names() + "\033[0m\n"
 	want := "\033[2mone\033[0m\n\033[2m[31mtwo\033[0m\n\033[2m---\033[0m\n" +
 		"\033[1;31mdevvm:\033[0m msg_unknown name=x\n"
 	if !strings.HasPrefix(got, head) || !strings.HasSuffix(got, want) {
@@ -125,7 +146,7 @@ func TestDieLoggedColored(t *testing.T) {
 func TestColoredStatusLineFits(t *testing.T) {
 	t.Parallel()
 	u, _, errOut := testUI(t, "")
-	u.stderrTTY, u.errStyle = true, style{true}
+	u.stderrTTY, u.errStyle = true, style{on: true, names: true}
 	u.termWidth = func() int { return 40 }
 	u.getenv = env{"LC_ALL": "C"}.get
 	if err := u.logged(t.Context(), msg.MsgUnknown("x"), "sh", "-c", "echo "+strings.Repeat("progress", 10)+"; sleep 0.5"); err != nil {
@@ -152,9 +173,9 @@ func TestColoredStatusLineFits(t *testing.T) {
 // A status line's values are bold, and it's cut on its plain text, a
 // value included, with the value's code closed.
 func TestStatusLineValuesBold(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "")
+	t.Parallel()
 	u, _, errOut := testUI(t, "")
-	u.stderrTTY, u.errStyle = true, style{true}
+	u.stderrTTY, u.errStyle = true, style{on: true}
 	u.getenv = env{"LC_ALL": "C"}.get
 	m := msg.StopFailed("a-long-vm-name")
 	for _, cols := range []int{80, 12} {
@@ -179,7 +200,7 @@ func TestStatusLineValuesBold(t *testing.T) {
 	u.termWidth = func() int { return 80 }
 	errOut.Reset()
 	u.Status(m)()
-	if !strings.Contains(errOut.String(), "    | "+m.Line()+" 0s") {
+	if !strings.Contains(errOut.String(), "    | "+m.Text()+" 0s") {
 		t.Errorf("plain: %q", errOut.String())
 	}
 }
@@ -188,7 +209,7 @@ func TestDoneMarkGreen(t *testing.T) {
 	t.Parallel()
 	u, _, _ := testUI(t, "")
 	u.getenv = env{"LC_ALL": "C"}.get
-	u.errStyle = style{true}
+	u.errStyle = style{on: true}
 	if got, want := u.doneLine([]part{{"starting ", ""}, {"x", sgrBold}}, 5), "    \033[32mok\033[0m starting \033[1mx\033[0m (5s)\n"; got != want {
 		t.Errorf("doneLine: got %q, want %q", got, want)
 	}

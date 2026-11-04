@@ -99,7 +99,7 @@ func writeList(tab *ui.Table, ls []vm.Listed) error {
 	for _, l := range ls {
 		image := l.Image
 		if l.From != "" {
-			image = msg.ImageFrom(l.From, l.Image).Line()
+			image = tab.Text(msg.ImageFrom(l.From, l.Image))
 		}
 		links := ""
 		if l.Links > 0 {

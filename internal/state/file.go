@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 )
 
@@ -29,13 +30,25 @@ type CorruptError struct {
 	Path   string
 	Line   int // 1-based; 0 when the problem isn't on one line
 	Reason string
+	// Msg is the reason's message, after Reason, when a check gave one
+	// (a value's: size_not_gib); the zero message when none did. It isn't
+	// unwrapped, so a failure shows the file and line around it.
+	Msg msg.M
 }
 
-func (e *CorruptError) Error() string {
-	if e.Line == 0 {
-		return fmt.Sprintf("%s: %s", e.Path, e.Reason)
+func (e *CorruptError) Error() string { return e.Shown(msg.M.Text) }
+
+// Shown is the error with its message as text shows it: the UI's Text,
+// so names mode shows the message's names.
+func (e *CorruptError) Shown(text func(msg.M) string) string {
+	reason := e.Reason
+	if e.Msg.ID() != "" {
+		reason += text(e.Msg)
 	}
-	return fmt.Sprintf("%s:%d: %s", e.Path, e.Line, e.Reason)
+	if e.Line == 0 {
+		return fmt.Sprintf("%s: %s", e.Path, reason)
+	}
+	return fmt.Sprintf("%s:%d: %s", e.Path, e.Line, reason)
 }
 
 // MakePrivate makes devvm's data and config folders, and makes both the

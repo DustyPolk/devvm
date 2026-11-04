@@ -54,7 +54,6 @@ var (
 // one that command takes, a flag's value and a placeholder are those its
 // help shows, and a line written to be typed is no usage error.
 func TestCommandLines(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	config := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", config)
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
@@ -112,7 +111,6 @@ func TestCommandLines(t *testing.T) {
 // The check finds each kind of stale command line, and passes the
 // current ones, in prose and in code.
 func TestCheckCommandLine(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	for _, tc := range []struct {

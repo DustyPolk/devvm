@@ -20,9 +20,9 @@ func (e env) get(k string) string { return e[k] }
 func testUI(t *testing.T, in string) (u *UI, out, errOut *bytes.Buffer) {
 	t.Helper()
 	out, errOut = &bytes.Buffer{}, &bytes.Buffer{}
-	u = New(strings.NewReader(in), out, errOut)
-	u.getenv = env{}.get
-	u.outStyle, u.errStyle = style{}, style{} // whatever FORCE_COLOR says
+	u = New(strings.NewReader(in), out, errOut, env{}.get)
+	// Plain, whatever FORCE_COLOR says, and messages as their names.
+	u.outStyle, u.errStyle = style{names: true}, style{names: true}
 	logs := filepath.Join(t.TempDir(), "logs", "runs")
 	u.runLogs = func() (string, error) { return logs, nil }
 	u.readPassword = func() (string, error) { return "", errors.New("no terminal") }
@@ -86,7 +86,7 @@ func TestWarnAndDiePrefixEveryLine(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 	u, _, errOut := testUI(t, "")
-	t.Setenv("DEVVM_MESSAGES", "")
+	u.errStyle = style{}
 	m := msg.MsgUnknown("a")
 	u.Warn(m)
 	if got, want := errOut.String(), "devvm: "+m.Text()+"\n"; got != want {

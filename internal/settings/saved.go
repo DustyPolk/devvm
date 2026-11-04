@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -31,7 +32,11 @@ func readSaved(path string) (Values, error) {
 		}
 	}
 	if key, err := v.check(false); err != nil {
-		return Values{}, &state.CorruptError{Path: path, Reason: key + ": " + err.Error()}
+		c := &state.CorruptError{Path: path, Reason: key + ": " + err.Error()}
+		if m, ok := errors.AsType[msg.M](err); ok {
+			c.Reason, c.Msg = key+": ", m
+		}
+		return Values{}, c
 	}
 	return v, nil
 }

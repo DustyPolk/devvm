@@ -412,12 +412,17 @@ func TestUpPicker(t *testing.T) {
 	if def, _ := settings.Read(e.Dirs); !def.Agents.Chosen || !slices.Equal(def.Agents.Names, []string{"codex"}) {
 		t.Errorf("setup's agents = %+v", def.Agents)
 	}
-	rows := map[string]PickRow{}
+	// Each row as its name, its description's names and whether it's on.
+	type row struct {
+		Name, Desc string
+		On         bool
+	}
+	rows := map[string]row{}
 	var headings []string
 	for _, p := range shown {
 		headings = append(headings, p.Heading.ID())
 		for _, r := range p.Rows {
-			rows[r.Name] = r
+			rows[r.Name] = row{r.Name, r.Desc.Names(), r.On}
 		}
 	}
 	if !slices.Equal(headings, []string{"pick_toolchains", "pick_agents", "pick_layers"}) {
@@ -430,7 +435,7 @@ func TestUpPicker(t *testing.T) {
 	if !slices.Equal(layers, []string{"desktop", "docker", "nix"}) {
 		t.Errorf("layers %q", layers)
 	}
-	for name, want := range map[string]PickRow{
+	for name, want := range map[string]row{
 		"desktop": {Name: "desktop", Desc: "pick_from_setup", On: true},
 		"node":    {Name: "node", Desc: "pick_called_for file=package.json", On: true},
 		"python":  {Name: "python"},

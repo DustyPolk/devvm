@@ -28,7 +28,7 @@ func devvm() rules {
 			"internal/backend/lima.Lima":        {75, "a backend: backend.Backend's 28 methods, KeyFiles, DiskDirs, Floors, Usage, Location, Forget, Strays, DevvmCache, DeleteCache and Lima's own"},
 			"internal/backend/backendtest.Fake": {34, "backend.Backend's 28 methods and what tests ask of it"},
 			"internal/paths.Dirs":               {43, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
-			"internal/ui.UI":                    {46, "the one terminal: messages and where they go, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
+			"internal/ui.UI":                    {47, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and whether one can show, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: map[string]string{
 			"internal/cli.version":           ldflags,
@@ -174,7 +174,7 @@ func devvmEnvSettings() map[string]envSetting {
 		"DEVVM_LIMA_HOME":      {[]string{"internal/paths/dirs.go"}, "a user setting: devvm's Lima home"},
 		"DEVVM_SECRET_SERVICE": {[]string{"internal/secrets/secrets.go"}, "a user setting: the Keychain service secrets are saved under"},
 		"DEVVM_FROM":           {[]string{"internal/cli/flags.go"}, "a user setting: --from's default"},
-		"DEVVM_MESSAGES":       {[]string{"internal/msg/msg.go", "internal/ui/style.go"}, "names mode, which tests and e2e read messages in: any build has it"},
+		"DEVVM_MESSAGES":       {[]string{"internal/ui/style.go"}, "names mode, which tests and e2e read messages in: any build has it"},
 		"DEVVM_LOGIN_SALT":     {[]string{"internal/proxy/proxy.go"}, "what devvm gives its own proxy, devvm _proxy"},
 		"DEVVM_GUESTFWD":       {[]string{"internal/backend/lima/qemu.go"}, "what devvm gives its own QEMU wrapper, devvm _qemu"},
 		"DEVVM_DAEMON_STATUS":  {[]string{"internal/daemon/status.go"}, "what devvm gives its own background processes: where each says it's ready"},

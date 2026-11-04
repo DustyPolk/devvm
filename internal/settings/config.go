@@ -12,6 +12,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/w3cj/devvm/internal/image"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -79,18 +80,43 @@ func readConfig(path string) (Values, error) {
 	case err != nil:
 		return Values{}, err
 	}
-	var c configFile
-	md, err := toml.Decode(string(data), &c)
-	if pe, ok := errors.AsType[toml.ParseError](err); ok {
-		return Values{}, &state.CorruptError{Path: path, Line: pe.Position.Line, Reason: pe.Message}
-	} else if err != nil {
-		return Values{}, &state.CorruptError{Path: path, Reason: err.Error()}
+	var cf configFile
+	md, err := toml.Decode(string(data), &cf)
+	if err != nil {
+		c := &state.CorruptError{Path: path, Reason: err.Error()}
+		if pe, ok := errors.AsType[toml.ParseError](err); ok {
+			c.Line, c.Reason = pe.Position.Line, pe.Message
+		}
+		// TOML keeps only a check's text: the value that failed keeps its
+		// message, so names mode can show it.
+		if m, ok := cf.refused(); ok {
+			c.Reason, c.Msg = "", m
+		}
+		return Values{}, c
 	}
 	if keys := md.Undecoded(); len(keys) > 0 {
 		k := keys[0].String()
 		return Values{}, &state.CorruptError{Path: path, Line: keyLine(string(data), k), Reason: fmt.Sprintf("unknown key %q", k)}
 	}
-	return c.values(), nil
+	return cf.values(), nil
+}
+
+// A refuser is one of config.toml's values, which keeps the message its
+// check refused it with.
+type refuser interface{ refusal() (msg.M, bool) }
+
+// refused is the message a value of c's was refused with, if one was.
+func (c *configFile) refused() (msg.M, bool) {
+	r := c.Retention
+	for _, v := range []refuser{
+		&c.Network, &c.Ports, &c.Features, &c.Agents, &c.Layers, &c.Size.CPUs, &c.Size.Memory, &c.Size.Disk,
+		&r.Logs.Runs, &r.History.Age, &r.History.Count, &r.Tools.UnusedAge, &r.Orphans.Age, &r.NixCache.Size,
+	} {
+		if m, ok := v.refusal(); ok {
+			return m, true
+		}
+	}
+	return msg.M{}, false
 }
 
 // keyLine returns the line of data, a TOML file, that sets key or opens
@@ -139,6 +165,7 @@ type kind interface{ parse(v any) (string, error) }
 type opt[K kind] struct {
 	v   string
 	set bool
+	bad error // what the check refused it with
 }
 
 // UnmarshalTOML checks the value as K's; TOML names the line of an error.
@@ -146,11 +173,14 @@ func (o *opt[K]) UnmarshalTOML(v any) error {
 	var k K
 	s, err := k.parse(v)
 	if err != nil {
+		o.bad = err
 		return err
 	}
 	o.v, o.set = s, true
 	return nil
 }
+
+func (o *opt[K]) refusal() (msg.M, bool) { return errors.AsType[msg.M](o.bad) }
 
 func (o *opt[K]) ptr() *string {
 	if !o.set {
@@ -164,7 +194,10 @@ func (o *opt[K]) ptr() *string {
 type list[K kind] struct {
 	v   []string
 	set bool
+	bad error // what the check refused a name with
 }
+
+func (l *list[K]) refusal() (msg.M, bool) { return errors.AsType[msg.M](l.bad) }
 
 // UnmarshalTOML checks each name as K's.
 func (l *list[K]) UnmarshalTOML(v any) error {
@@ -177,6 +210,7 @@ func (l *list[K]) UnmarshalTOML(v any) error {
 	for _, it := range items {
 		s, err := k.parse(it)
 		if err != nil {
+			l.bad = err
 			return err
 		}
 		if slices.Contains(names, s) {

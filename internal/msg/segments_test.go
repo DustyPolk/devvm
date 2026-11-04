@@ -22,7 +22,7 @@ func values(segs []Segment) (vals []string, text string) {
 // given, wherever the template puts them: a VM's name, a path, one in a
 // command, a count in either plural form.
 func TestSegments(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "")
+	t.Parallel()
 	for _, tc := range []struct {
 		m    M
 		want []string
@@ -54,7 +54,7 @@ func TestSegments(t *testing.T) {
 // dropped, and a VM's control characters are dropped (OneLine) as in its
 // text.
 func TestSegmentsOfHostileValues(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "")
+	t.Parallel()
 	m := StopFailed("a not a value b")
 	segs, _ := m.Segments()
 	vals, text := values(segs)
@@ -65,15 +65,5 @@ func TestSegmentsOfHostileValues(t *testing.T) {
 	segs, _ = StopFailed(hostile).Segments()
 	if vals, text := values(segs); !slices.Equal(vals, []string{"vm[2J]0;title"}) || strings.ContainsRune(text, '\033') || text != StopFailed(hostile).Text() {
 		t.Errorf("escape codes in a value: %+v", segs)
-	}
-}
-
-// Names mode: the names as one segment, no link, as String has them.
-func TestSegmentsInNamesMode(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
-	m := StopFailed("v")
-	segs, link := m.Segments()
-	if len(segs) != 1 || segs[0] != (Segment{Text: m.Names()}) || link != "" || m.String() != m.Names() {
-		t.Errorf("names mode: %+v, %q", segs, link)
 	}
 }

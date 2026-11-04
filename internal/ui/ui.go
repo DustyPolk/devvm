@@ -79,24 +79,26 @@ type UI struct {
 }
 
 // New returns a UI on these streams, none of them a terminal, with its run
-// log in devvm's data folder. They're colored only when FORCE_COLOR or
-// CLICOLOR_FORCE says so.
-func New(stdin io.Reader, stdout, stderr io.Writer) *UI {
+// log in devvm's data folder, reading its environment with getenv
+// (os.Getenv for devvm's own): they're colored only when FORCE_COLOR or
+// CLICOLOR_FORCE says so, and messages show as their names with
+// DEVVM_MESSAGES=names.
+func New(stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string) *UI {
 	u := &UI{
 		stdout: stdout, stderr: stderr, stdin: bufio.NewReader(stdin),
 		termWidth: func() int { return 0 }, rawInput: rawTerminal,
-		getenv: os.Getenv, runLogs: runLogs, interruptGrace: time.Second,
+		getenv: getenv, runLogs: runLogs, interruptGrace: time.Second,
 	}
-	u.outStyle, u.errStyle = style{colorOn(u.getenv, false)}, style{colorOn(u.getenv, false)}
+	u.outStyle, u.errStyle = newStyle(u.getenv, false), newStyle(u.getenv, false)
 	u.readPassword = u.readTerminal
 	return u
 }
 
 // onTerminal returns the UI on devvm's own standard streams.
 func onTerminal() *UI {
-	u := New(os.Stdin, os.Stdout, os.Stderr)
+	u := New(os.Stdin, os.Stdout, os.Stderr, os.Getenv)
 	u.stdinTTY, u.stdoutTTY, u.stderrTTY = isTerminal(os.Stdin), isTerminal(os.Stdout), isTerminal(os.Stderr)
-	u.outStyle, u.errStyle = style{colorOn(u.getenv, u.stdoutTTY)}, style{colorOn(u.getenv, u.stderrTTY)}
+	u.outStyle, u.errStyle = newStyle(u.getenv, u.stdoutTTY), newStyle(u.getenv, u.stderrTTY)
 	u.termWidth = func() int {
 		w, _, err := term.GetSize(fd(os.Stderr))
 		if err != nil {
@@ -190,6 +192,12 @@ func (u *UI) Info(m msg.M) {
 	u.write(w, st.paint(sgrBold, "==>")+" "+st.message(m)+"\n")
 }
 
+// Text returns the message on one line, without its doc link, as the UI
+// shows messages: its text, or its names with DEVVM_MESSAGES=names. For
+// messages shown as data (a table's cell, a --json field). The zero message
+// is "".
+func (u *UI) Text(m msg.M) string { return u.outStyle.line(m) }
+
 // Note prints the message to stderr.
 func (u *UI) Note(m msg.M) { u.write(u.stderr, u.errStyle.message(m)+"\n") }
 
@@ -228,9 +236,9 @@ func (u *UI) DieLogged(m msg.M) {
 	switch {
 	case path == "" || u.Interrupted():
 	case verbose(u):
-		u.write(u.stderr, u.errStyle.paintLines(sgrDim, msg.LogDetails(path).Line()+"\n"))
+		u.write(u.stderr, u.errStyle.paintLines(sgrDim, u.errStyle.line(msg.LogDetails(path))+"\n"))
 	default:
-		tail := "--- " + msg.LogEnd(path).Line() + "\n" + msg.Printable(tailLines(path, 25)) + "---\n"
+		tail := "--- " + u.errStyle.line(msg.LogEnd(path)) + "\n" + msg.Printable(tailLines(path, 25)) + "---\n"
 		u.write(u.stderr, u.errStyle.paintLines(sgrDim, tail))
 	}
 	u.Die(m)

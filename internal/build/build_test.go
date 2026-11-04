@@ -165,12 +165,11 @@ func TestLayersAndCheckLayers(t *testing.T) {
 // An image is base and layers alone: build and rebuild refuse a shared
 // tool's name, naming it, before anything runs.
 func TestBuildRefusesTools(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	b, f := testEnv(t)
 	for _, name := range []string{"node", "foo+claude", "go+foo"} {
 		tool := map[string]string{"node": "node", "foo+claude": "claude", "go+foo": "go"}[name]
 		for verb, do := range map[string]func(context.Context, string) error{"Build": Builds{b}.Build, "Rebuild": Builds{b}.Rebuild} {
-			if err := do(t.Context(), name); err == nil || err.Error() != "tool_not_layer tool="+tool {
+			if err := do(t.Context(), name); err == nil || msg.NamesOf(err) != "tool_not_layer tool="+tool {
 				t.Errorf("%s(%q) = %v", verb, name, err)
 			}
 		}
@@ -332,7 +331,6 @@ func TestBuildRequires(t *testing.T) {
 // Below the free space building base wants, or another image, nothing of
 // it is made: the backend is only asked which images it has.
 func TestBuildRefusesLowSpace(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	b, f := testEnv(t)
 	b.Backend = backendtest.Stored{Fake: f, Dirs: []string{"/lima"}}
 	free := uint64(12<<30 - 1)
@@ -342,7 +340,7 @@ func TestBuildRefusesLowSpace(t *testing.T) {
 		}
 		return free, nil
 	}
-	if err := (Builds{b}).Build(t.Context(), "foo"); err == nil || err.Error() != "disk_low dir=/lima free=11.9 name=base need=12" {
+	if err := (Builds{b}).Build(t.Context(), "foo"); err == nil || msg.NamesOf(err) != "disk_low dir=/lima free=11.9 name=base need=12" {
 		t.Errorf("Build with %d free = %v", free, err)
 	}
 	if ms := f.Methods(); !slices.Equal(ms, []string{"Images", "Images"}) {
@@ -354,7 +352,7 @@ func TestBuildRefusesLowSpace(t *testing.T) {
 	}
 	free = 8<<30 - 1
 	n := len(f.Calls())
-	if err := (Builds{b}).Build(t.Context(), "foo"); err == nil || err.Error() != "disk_low dir=/lima free=7.9 name=foo need=8" {
+	if err := (Builds{b}).Build(t.Context(), "foo"); err == nil || msg.NamesOf(err) != "disk_low dir=/lima free=7.9 name=foo need=8" {
 		t.Errorf("Build of foo with %d free = %v", free, err)
 	}
 	if slices.Contains(f.Methods()[n:], "BuildImage") {

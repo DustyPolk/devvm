@@ -194,7 +194,6 @@ func TestBuiltinPolicies(t *testing.T) {
 // edit: every VM's, each VM's own and your layers'; one that reads as a
 // deny warns that its VMs' proxies deny everything.
 func TestNotRules(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	root := t.TempDir()
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
 	files := map[string]string{

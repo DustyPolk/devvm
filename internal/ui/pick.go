@@ -128,7 +128,7 @@ func (p *picking) draw(s style, cur int) (string, int) {
 	lines, row := 0, 0
 	for _, sec := range p.sections {
 		if sec.Heading.ID() != "" {
-			fmt.Fprintf(&b, "\033[2K%s\r\n", s.paint(sgrBold, msg.OneLine(sec.Heading.Line())))
+			fmt.Fprintf(&b, "\033[2K%s\r\n", s.paint(sgrBold, msg.OneLine(s.line(sec.Heading))))
 			lines++
 		}
 		for _, c := range sec.Choices {

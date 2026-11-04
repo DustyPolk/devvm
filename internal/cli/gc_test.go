@@ -20,7 +20,6 @@ import (
 // one whose disk VMs use) stays, with its record, and gc goes on; any
 // other failure ends it.
 func TestDeleteStaleKeepsImagesInUse(t *testing.T) {
-	t.Setenv("DEVVM_MESSAGES", "names")
 	dir := t.TempDir()
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
 	f := backendtest.New("fake", backend.Caps{})

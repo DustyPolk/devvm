@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"io"
-	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/assets"
@@ -10,7 +8,6 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/testbuild"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // A release, as this test binary is (built without the test build's
@@ -32,7 +29,7 @@ func TestReleaseReadsNoOverrides(t *testing.T) {
 		t.Setenv(k, "1")
 	}
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
-	u := ui.New(strings.NewReader(""), io.Discard, io.Discard)
+	u, _, _ := testUI()
 	if tl := newTools(d, assets.FS, u, thisHost()); tl.Mise != "" {
 		t.Errorf("mise = %q", tl.Mise)
 	}
