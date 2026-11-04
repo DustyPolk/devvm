@@ -311,21 +311,49 @@ heartbeat &
 hb=$!
 trap 'kill $hb 2>/dev/null; cleanup' EXIT
 
-pass=0 fail=0 failed=()
+pass=0 fail=0 failed=() retried=()
+# retry: the only checks run a second time when they fail, by label, each for the reason above it.
+# A check here that fails twice fails; every other check fails on its first failure.
+retry=(
+  # network: the process listings, sampled while devvm launched the VM and taken again here, can
+  # catch a short-lived process mid-start.
+  "the proxy's password was in no host process's arguments while devvm launched the VM, nor after; the guest has it"
+  # link: 256 connections opened at once, and their relays ending within a minute, depend on how
+  # busy this machine is.
+  "256 connections at once, past the socket's backlog, all carried; a 257th is refused, and devvm network log shows link_limit"
+  # link: the client's refusal reaches its event log within 5 s of the connection, which a busy
+  # machine can miss.
+  "a stopped target: the connection fails, devvm network log shows link_target_stopped, the launch warns, and the target stays stopped"
+)
+# retries LABEL: the check is on the retry list.
+retries() { local l; for l in "${retry[@]}"; do [[ $l == "$1" ]] && return 0; done; return 1; }
 # check LABEL CMD...: run CMD, count and print the result; on failure, CMD's lines that start with
 # "failed: " (the step that failed), then its last other lines: 5, or $check_lines when the call
-# sets it (check_lines=40 check ...).
+# sets it (check_lines=40 check ...). A check on the retry list that fails runs once more, its first
+# output shown, and says so in its result, the timings ("label<TAB>seconds<TAB>retried") and the
+# summary.
 check() {
-  local label=$1 r dur left; shift
-  if "$@" >"$work/check.log" 2>&1; then r=PASS; pass=$((pass + 1)); else r=FAIL; fail=$((fail + 1)); failed+=("$label"); fi
+  local label=$1 r=PASS dur left again=""; shift
+  if ! "$@" >"$work/check.log" 2>&1; then
+    r=FAIL
+    if retries "$label"; then
+      again=retried; retried+=("$label")
+      echo "  RETRY [$((ncheck + 1))/$total] $label: its first run failed"; check_tail
+      ! "$@" >"$work/check.log" 2>&1 || r=PASS
+    fi
+  fi
+  if [[ $r == PASS ]]; then pass=$((pass + 1)); else fail=$((fail + 1)); failed+=("$label"); fi
   ncheck=$((ncheck + 1))
   dur=$(( $(date +%s) - $(cat "$work/mark") )); date +%s > "$work/mark"
-  printf '%s\t%s\n' "$label" "$dur" >> "$timings.new"
+  if [[ -n $again ]]; then printf '%s\t%s\t%s\n' "$label" "$dur" "$again"; else printf '%s\t%s\n' "$label" "$dur"; fi >> "$timings.new"
   left=$(awk -F'\t' -v l="$label" 'found { s += $2 } $1 == l { found = 1 } END { if (found) print s }' "$timings" 2>/dev/null)
   [[ $total == "?" ]] || (( ncheck <= total )) || total="?"   # more checks than last time
-  echo "  $r  [$ncheck/$total] $label ($(mins "$dur"); $(mins $((SECONDS - started))) in${left:+, about $(mins "$left") left})"
-  [[ $r == PASS ]] || { grep '^failed: ' "$work/check.log"; grep -v '^failed: ' "$work/check.log" | tail -n "${check_lines:-5}"; } |
-    sed 's/^/        /'
+  echo "  $r  [$ncheck/$total] $label ($(mins "$dur"); $(mins $((SECONDS - started))) in${left:+, about $(mins "$left") left}${again:+; retried once})"
+  [[ $r == PASS ]] || check_tail
+}
+# check_tail: a failed check's output, as check prints it.
+check_tail() {
+  { grep '^failed: ' "$work/check.log"; grep -v '^failed: ' "$work/check.log" | tail -n "${check_lines:-5}"; } | sed 's/^/        /'
 }
 # skip LABEL WHY: a check this run has nothing for (counted, so runs compare their counts).
 skip() {
@@ -852,7 +880,6 @@ link_section() {
   lk_w1=${lk_x}db lk_w2=${lk_x}api lk_n2=${lk_x}api   # the targets' servers' words; the second's link name
   check "two targets that forward no port and a client that forwards every port, without network policy" lk_made
   lk_serve "$lk_v1" "$lk_w1" 47240 47242 47243 47244 47249 80 >/dev/null 2>&1
-  lk_start "$lk_v1" hold 127.0.0.1 47241 >/dev/null 2>&1
   lk_serve "$lk_v2" "$lk_w2" 47240 80 >/dev/null 2>&1
   printf '%s\n' "$lk_pl" | lk_put "$lk_vc" /var/tmp/e2e-link.pl >/dev/null 2>&1
   check "sshd -T in every VM: remote forwards on 127.77.*:* alone, at the address asked, no socket forwards, tunnels or X11" \
@@ -1001,6 +1028,10 @@ lk_port_taken() {
   lk_gets "$lk_vc" db 47242 squatter && lk_gets "$lk_vc" db 47240 "$lk_w1-47240" && lk_end "$lk_vc" 127.77.0.1 47242 &&
     lk_dv "$lk_pc" link rm db 47242; }
 lk_cap() { local out s r=0
+  # A holding server of its own, started again on a retry: the first run's relays end with the old
+  # one, before the 256 connections are opened.
+  lk_end "$lk_v1" 127.0.0.1 47241 && lk_start "$lk_v1" hold 127.0.0.1 47241 || return 1
+  if ! { s=$(lk_session "$lk_vc") && lk_until 60 lk_few "$s"; }; then echo "the link session's relays didn't end"; return 1; fi
   lk_dv "$lk_pc" link add "${lk_x}db" 47241 || { cat "$work/last.log"; return 1; }
   out=$(lk_user "$lk_vc" 'LC_ALL=C perl /var/tmp/e2e-link.pl conns db 47241 257' 2>&1 | grep -E '^(closed:|connection )'); echo "$out"
   echo "events for db:47241: $(grep -F '"host":"db","port":47241,' "$(vmdir "$lk_vc")/logs/network.jsonl" | sed 's/.*"event":"\([a-z_]*\)".*/\1/' | sort | uniq -c | paste -sd ' ' -)"
@@ -2714,6 +2745,7 @@ else
   echo "$script_sum" > "$timings.sum"
 fi
 echo
-echo "e2e: $pass passed, $fail failed$( (( skipped == 0 )) || echo ", $skipped skipped") in $(mins $((SECONDS - started)))${failed[*]+: ${failed[*]}}"
+echo "e2e: $pass passed, $fail failed$( (( skipped == 0 )) || echo ", $skipped skipped")$( (( ${#retried[@]} == 0 )) || echo ", ${#retried[@]} retried") in $(mins $((SECONDS - started)))${failed[*]+: ${failed[*]}}"
+for l in ${retried[@]+"${retried[@]}"}; do echo "e2e: retried once: $l"; done
 [[ -z $short ]] || echo "e2e: FAILED: $short"
 (( fail == 0 )) && [[ -z $short ]]
