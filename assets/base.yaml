@@ -7,9 +7,7 @@
 # don't make systemd-networkd-wait-online wait for it.
 param:
   internal_netplanOptional: "true"
-cpus: 4
-memory: 8GiB
-disk: 100GiB
+# No cpus, memory or disk here: devvm gives base its size on limactl create's command line.
 containerd:
   system: false
   user: false

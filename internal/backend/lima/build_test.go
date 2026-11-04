@@ -11,6 +11,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/image"
@@ -30,7 +31,7 @@ const (
 func buildLima(t *testing.T, os string, parentStatus string) (*Lima, *fakeRunner) {
 	t.Helper()
 	l, f, _ := testLima(t, os)
-	l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("cpus: 4\nmemory: 8GiB\n")}}
+	l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("containerd:\n  user: false\n")}}
 	l.Memory = func() (uint64, error) { return 16 * gib, nil }
 	l.CPUs = func() int { return 8 }
 	l.Info = func(msg.M) {}
@@ -117,7 +118,7 @@ func TestBuildImageBase(t *testing.T) {
 	checkLines(t, f.lines(), []string{
 		"limactl create --tty=false --mount-none --name=" + inst +
 			` --set .images = [{"location":"` + img + `","arch":"aarch64","digest":"sha256:` + testUbuntuSum + `"}]` +
-			" --cpus=4 --memory=8 -",
+			" --cpus=4 --memory=8 --disk=100 -",
 		"limactl edit --tty=false " + inst + " --set .ssh.localPort=",
 		"sandbox-exec -f " + l.Dirs.VM(inst).Profile() + " ",
 		"limactl shell " + inst + " bash -s",
@@ -125,7 +126,7 @@ func TestBuildImageBase(t *testing.T) {
 		"limactl stop " + inst,
 	})
 	for _, c := range f.calls {
-		if strings.HasPrefix(c.line(), "limactl create") && c.stdin != "cpus: 4\nmemory: 8GiB\n" {
+		if strings.HasPrefix(c.line(), "limactl create") && c.stdin != "containerd:\n  user: false\n" {
 			t.Errorf("limactl create's input: %q, want base.yaml", c.stdin)
 		}
 	}
@@ -407,8 +408,6 @@ func TestBuildImageRefuses(t *testing.T) {
 		"an existing image":  func(s *backend.ImageSpec) { s.Key = baseKey; s.Parent = "" },
 		"no Ubuntu pinned":   func(*backend.ImageSpec) {},
 		"another Ubuntu":     func(*backend.ImageSpec) {},
-		"no memory in GiB":   func(*backend.ImageSpec) {},
-		"no CPUs":            func(*backend.ImageSpec) {},
 		"no host memory":     func(*backend.ImageSpec) {},
 		"a missing base.yml": func(*backend.ImageSpec) {},
 	} {
@@ -423,10 +422,6 @@ func TestBuildImageRefuses(t *testing.T) {
 				if err := os.Remove(l.Dirs.UbuntuPin()); err != nil {
 					t.Fatal(err)
 				}
-			case "no memory in GiB":
-				l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("cpus: 4\nmemory: 8G\n")}}
-			case "no CPUs":
-				l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("memory: 8GiB\n")}}
 			case "no host memory":
 				l.Memory = func() (uint64, error) { return 0, errors.ErrUnsupported }
 			case "a missing base.yml":
@@ -472,6 +467,41 @@ func TestBuildImageSmallHost(t *testing.T) {
 	lines := f.lines()
 	if len(lines) == 0 || !strings.HasPrefix(lines[0], "limactl create ") || !strings.Contains(lines[0], " --cpus=2 --memory=4 ") {
 		t.Errorf("calls:\n%s\nwant base created with --cpus=2 --memory=4", strings.Join(lines, "\n"))
+	}
+}
+
+// devvm's own base, on a host with room for it, is created with 4 CPUs,
+// 8 GiB of memory and a 100 GiB disk, all limactl create's flags: the
+// base.yaml on its input sets none of them.
+func TestBuildImageBaseSize(t *testing.T) {
+	l, f := buildLima(t, "darwin", "")
+	l.Assets = assets.FS
+	if _, err := l.BuildImage(t.Context(), baseSpec(t, l)); err != nil {
+		t.Fatal(err)
+	}
+	var create call
+	for _, c := range f.calls {
+		if strings.HasPrefix(c.line(), "limactl create") {
+			create = c
+		}
+	}
+	flag := func(name string) string {
+		for _, a := range create.argv {
+			if v, ok := strings.CutPrefix(a, "--"+name+"="); ok {
+				return v
+			}
+		}
+		return ""
+	}
+	for name, want := range map[string]string{"cpus": "4", "memory": "8", "disk": "100"} {
+		if got := flag(name); got != want {
+			t.Errorf("base's %s: %q, want %q (%s)", name, got, want, create.line())
+		}
+		for line := range strings.Lines(create.stdin) {
+			if strings.HasPrefix(line, name+":") {
+				t.Errorf("base.yaml sets %s: %q", name, line)
+			}
+		}
 	}
 }
 

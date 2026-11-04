@@ -25,7 +25,8 @@ import (
 // OCIVM is the throwaway VM a container image is converted in (--from).
 const OCIVM = "devvm-oci-build"
 
-// convertedSize is the converted disk's size; Lima grows it to base.yaml's.
+// convertedSize is the converted disk's size; Lima grows it to base's
+// (backend.BaseDiskGiB, base's origin's disk).
 const convertedSize = "20G"
 
 // ociSteps is the conversion's steps: the build VM's create, configure

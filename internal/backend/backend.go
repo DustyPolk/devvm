@@ -340,7 +340,7 @@ type Built struct {
 	// "" for musl, for base from the backend's own Ubuntu, and above base.
 	Glibc string
 	// Fitted is base's CPUs and memory when fitting them to the host made
-	// either less than base.yaml's (Fitted); zero when it didn't, and
+	// either less than BaseCPUs or BaseMemoryGiB (Fitted); zero when it didn't, and
 	// above base.
 	Fitted Size
 }

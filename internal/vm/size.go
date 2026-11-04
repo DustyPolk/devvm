@@ -1,9 +1,7 @@
 package vm
 
 import (
-	"bufio"
 	"context"
-	"io/fs"
 	"strconv"
 	"strings"
 
@@ -23,7 +21,7 @@ type Size struct {
 	Disk   string `json:"disk,omitempty"`
 }
 
-// The parts of a size, as devvm size shows them and base.yaml names them.
+// The parts of a size, as devvm size shows them.
 const (
 	KeyCPUs   = "cpus"
 	KeyMemory = "memory" // GiB
@@ -251,7 +249,7 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 		return err
 	}
 	if global {
-		return SizeChoice{Dirs: e.Dirs, Assets: e.Assets, Host: host, Info: e.Info}.Set(s)
+		return SizeChoice{Dirs: e.Dirs, Host: host, Info: e.Info}.Set(s)
 	}
 	t, err := e.folderVM(ctx, msg.NoVMSize)
 	if err != nil {
@@ -286,27 +284,4 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 		e.Info(msg.SizePending(SizeText(pending), vm))
 	}
 	return nil
-}
-
-// BaseDisk returns the disk size in GiB that base.yaml in assets, devvm's
-// own files, gives base, and so every image and new VM (disks can't
-// shrink); 0 when it sets none.
-func BaseDisk(assets fs.FS) float64 { return baseSetting(assets, "disk") }
-
-// baseSetting returns the number base.yaml in assets sets for key (cpus,
-// memory or disk, the last two in GiB); 0 when it sets none.
-func baseSetting(assets fs.FS, key string) float64 {
-	f, err := assets.Open("base.yaml")
-	if err != nil {
-		return 0
-	}
-	defer func() { _ = f.Close() }()
-	s := bufio.NewScanner(f)
-	for s.Scan() {
-		if v, ok := strings.CutPrefix(s.Text(), key+":"); ok {
-			g, _ := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(v), "GiB"), 64)
-			return g
-		}
-	}
-	return 0
 }

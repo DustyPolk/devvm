@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,7 +21,7 @@ import (
 
 // BuildImage builds the image's instance, devvm-img-<key>, which is then
 // the image: base is a VM made from Ubuntu's cloud image with base.yaml's
-// settings (with spec.From, from that image converted into a disk:
+// settings and base's size (buildSize) (with spec.From, from that image converted into a disk:
 // convert), all from its recipe's origin (Origin, checked by originOf), a
 // layer a clone of its parent's instance. Neither mounts anything from the
 // host. It starts confined as spec.Net asks (no port forwards, and on
@@ -101,7 +100,7 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		if err != nil {
 			return backend.Built{}, err
 		}
-		want, size, err := l.buildSize(o.yaml)
+		want, size, err := l.buildSize(o)
 		if err != nil {
 			return backend.Built{}, err
 		}
@@ -267,7 +266,7 @@ func layerArgs(parent, inst string) []string {
 // on this machine, which base's origin holds, with yaml's settings
 // (base.yaml) and nothing from the host mounted, or the mounts a --set in
 // opts gives it (--set applies after --mount-none). It returns the image
-// it used. It gets size's CPUs and memory (buildSize's).
+// it used. It gets size's CPUs, memory and disk (buildSize's).
 func (l *images) createFromUbuntu(ctx context.Context, vm string, yaml []byte, size backend.Size, opts ...string) (ubuntu.Image, error) {
 	img, err := l.pinnedImage()
 	if err != nil {
@@ -282,11 +281,16 @@ func (l *images) createFromUbuntu(ctx context.Context, vm string, yaml []byte, s
 
 // createArgs are limactl create's arguments for a VM booting images, with
 // nothing from the host mounted but what opts' --set gives it, size's CPUs
-// and memory, and the rest of base.yaml's settings, which create gives it
-// on its standard input (-).
+// and memory, its disk unless that's zero (Lima's own then), and the rest
+// of base.yaml's settings, which create gives it on its standard input
+// (-).
 func createArgs(vm string, images []limaImage, size backend.Size, opts ...string) []string {
 	args := append([]string{"create", "--tty=false", "--mount-none", "--name=" + vm, "--set", ".images = " + yqJSON(images)}, opts...)
-	return append(args, "--cpus="+strconv.Itoa(size.CPUs), "--memory="+gibString(size.MemoryGiB), "-")
+	args = append(args, "--cpus="+strconv.Itoa(size.CPUs), "--memory="+gibString(size.MemoryGiB))
+	if size.DiskGiB > 0 {
+		args = append(args, "--disk="+gibString(size.DiskGiB))
+	}
+	return append(args, "-")
 }
 
 // create runs limactl create with args (createArgs) as step, yaml
@@ -366,35 +370,21 @@ func (l *images) unfinished(ctx context.Context, inst string) {
 	_ = l.delete(ctx, inst)
 }
 
-var (
-	cpusLine   = regexp.MustCompile(`(?m)^cpus:\s*([0-9]+)\s*$`)
-	memoryLine = regexp.MustCompile(`(?m)^memory:\s*([0-9.]+)GiB\s*$`)
-)
-
-// buildSize is base's CPUs and memory: data's, base.yaml's (want), and
-// got, them fitted to the host (backend.FitCPUs, backend.FitMemory), so a
-// host with fewer CPUs gets its own count and one that base.yaml's memory
-// would leave less than 2 GiB gets half its memory. Images built from
-// base, and their VMs, keep got.
-func (l *images) buildSize(data []byte) (want, got backend.Size, err error) {
-	c := cpusLine.FindSubmatch(data)
-	if c == nil {
-		return want, got, errors.New("lima: base.yaml sets no CPUs")
-	}
-	if want.CPUs, err = strconv.Atoi(string(c[1])); err != nil {
-		return want, got, err
-	}
-	m := memoryLine.FindSubmatch(data)
-	if m == nil {
-		return want, got, errors.New("lima: base.yaml sets no memory in GiB")
-	}
-	if want.MemoryGiB, err = strconv.ParseFloat(string(m[1]), 64); err != nil {
-		return want, got, err
-	}
+// buildSize is base's size: its own CPUs and memory (backend.BaseCPUs,
+// backend.BaseMemoryGiB) as want, and got, them fitted to the host
+// (backend.FitCPUs, backend.FitMemory), so a host with fewer CPUs gets
+// its own count and one that base's memory would leave less than 2 GiB
+// gets half its memory, with o's disk. Images built from base, and their
+// VMs, keep got.
+func (l *images) buildSize(o origin) (want, got backend.Size, err error) {
+	want = backend.Size{CPUs: backend.BaseCPUs, MemoryGiB: backend.BaseMemoryGiB}
 	host, err := l.Memory()
 	if err != nil {
 		return want, got, err
 	}
-	got = backend.Size{CPUs: backend.FitCPUs(want.CPUs, l.CPUs()), MemoryGiB: backend.FitMemory(want.MemoryGiB, host)}
+	got = backend.Size{
+		CPUs: backend.FitCPUs(want.CPUs, l.CPUs()), MemoryGiB: backend.FitMemory(want.MemoryGiB, host),
+		DiskGiB: o.diskGiB,
+	}
 	return want, got, nil
 }

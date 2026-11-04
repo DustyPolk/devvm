@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/settings"
@@ -34,7 +33,7 @@ func (a *sizeAsker) answer(m msg.M) string {
 }
 
 func (a *sizeAsker) choice(d paths.Dirs, h Host) SizeChoice {
-	return SizeChoice{Dirs: d, Assets: assets.FS, Host: h, Answer: a.answer, Say: a.record, Warn: a.record, Info: a.record}
+	return SizeChoice{Dirs: d, Host: h, Answer: a.answer, Say: a.record, Warn: a.record, Info: a.record}
 }
 
 // saveSize saves s as new VMs' size in d's settings.json.

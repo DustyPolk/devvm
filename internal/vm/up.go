@@ -371,7 +371,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err != nil {
 		return newVM{}, err
 	}
-	if err := n.size.Check(host, BaseDisk(e.Assets), vm); err != nil {
+	if err := n.size.Check(host, backend.BaseDiskGiB, vm); err != nil {
 		return newVM{}, err
 	}
 	if n.ports == "" {

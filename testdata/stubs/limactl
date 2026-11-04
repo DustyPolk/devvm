@@ -6,7 +6,7 @@
 # failing with $STUB_DIR/list-fails and hanging with $STUB_DIR/list-hangs;
 # create's template on its input (-) goes to $STUB_DIR/create-template. A
 # VM's size ("CPUS MEMORY DISK", in bytes) is $STUB_DIR/size-<name>, else 4
-# CPUs, 8 GiB and 100 GiB, which create's --cpus= and --memory= set and
+# CPUs, 8 GiB and 100 GiB, which create's --cpus=, --memory= and --disk= set and
 # edit's --cpus, --memory and --disk change. create's, clone's and edit's --set
 # go into its config (set_config, below: list shows it, with lima.yaml's env),
 # which a clone copies from its source, --mount-none takes the mounts out of,
@@ -160,7 +160,7 @@ config_json() {
 }
 # create, clone and edit: a clone starts with its source's config, size and lima.yaml;
 # --mount-none drops the mounts, then each --set applies, as Lima's do; create's
-# --cpus=N and --memory=GiB set its size.
+# --cpus=N, --memory=GiB and --disk=GiB set its size.
 case ${1:-} in
   create | clone | edit)
     target=${names[0]:-}
@@ -176,15 +176,16 @@ case ${1:-} in
     fi
     [[ " $* " != *" --mount-none "* ]] || rm -f "$STUB_DIR/config-$target/mounts"
     args=("$@")
-    cpus=4 mem=8589934592
+    cpus=4 mem=8589934592 disk=107374182400
     for ((i = 0; i < ${#args[@]}; i++)); do
       case ${args[i]} in
         --set) set_config "$target" "${args[i + 1]}" ;;
         --cpus=*) cpus=${args[i]#--cpus=} ;;
         --memory=*) mem=$(awk -v g="${args[i]#--memory=}" 'BEGIN { printf "%.0f", g * 1073741824 }') ;;
+        --disk=*) disk=$(awk -v g="${args[i]#--disk=}" 'BEGIN { printf "%.0f", g * 1073741824 }') ;;
       esac
     done
-    [[ $1 != create ]] || echo "$cpus $mem 107374182400" > "$STUB_DIR/size-$target" ;;
+    [[ $1 != create ]] || echo "$cpus $mem $disk" > "$STUB_DIR/size-$target" ;;
 esac
 case ${1:-} in
   create)

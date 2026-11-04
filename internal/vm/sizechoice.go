@@ -2,7 +2,6 @@ package vm
 
 import (
 	"errors"
-	"io/fs"
 	"strconv"
 	"strings"
 
@@ -16,9 +15,8 @@ import (
 // settings.json: from flags (Set), or asked for (Ask). Nothing rebuilds,
 // and existing VMs keep their size.
 type SizeChoice struct {
-	Dirs   paths.Dirs
-	Assets fs.FS // devvm's own files, whose base.yaml sets base's size
-	Host   Host
+	Dirs paths.Dirs
+	Host Host
 	// Answer asks for a value and returns the line typed, "" for Enter;
 	// Say prints the question's context, Warn a refused answer, Info
 	// what's saved.
@@ -124,12 +122,12 @@ func (c SizeChoice) ask(prompt msg.M, parse func(string) (Size, error)) string {
 	}
 }
 
-// Fitted is the CPUs and memory base.yaml gives base, fitted to the host
-// (backend.FitCPUs, backend.FitMemory): base.yaml's own when the host
-// has room for them.
+// Fitted is base's CPUs and memory (backend.BaseCPUs,
+// backend.BaseMemoryGiB), fitted to the host (backend.FitCPUs,
+// backend.FitMemory): base's own when the host has room for them.
 func (c SizeChoice) Fitted() Size {
-	cpus := backend.FitCPUs(int(baseSetting(c.Assets, KeyCPUs)), c.Host.CPUs)
-	mem := backend.FitMemory(baseSetting(c.Assets, KeyMemory), c.Host.memoryBytes())
+	cpus := backend.FitCPUs(backend.BaseCPUs, c.Host.CPUs)
+	mem := backend.FitMemory(backend.BaseMemoryGiB, c.Host.memoryBytes())
 	return Size{CPUs: strconv.Itoa(cpus), Memory: strconv.FormatFloat(mem, 'g', -1, 64)}
 }
 
@@ -151,7 +149,7 @@ func (e creation) firstRunSize(given Size, def settings.Defaults) error {
 		return err
 	}
 	return SizeChoice{
-		Dirs: e.Dirs, Assets: e.Assets, Host: host,
+		Dirs: e.Dirs, Host: host,
 		Answer: e.Answer, Say: e.Say, Warn: e.Warn, Info: e.Info,
 	}.Ask()
 }

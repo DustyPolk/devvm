@@ -179,8 +179,11 @@ func (l *Lima) Name() string { return Name }
 // Origin is what Lima makes base from, which BuildImage is given back:
 // the Ubuntu cloud image pinned on this machine (PinOrigin; "" before
 // one is), which a --from conversion's VM boots too, with f, the
-// conversion's scripts (convertSteps), and then base.yaml, the settings
-// limactl create reads.
+// conversion's scripts (convertSteps), then base's disk in GiB
+// (backend.BaseDiskGiB), which limactl create gets as its --disk, and
+// then base.yaml, the other settings limactl create reads. Base's CPUs
+// and memory aren't in it: they're fitted to the host, and don't change
+// what the image holds.
 func (l *images) Origin(f *backend.From) ([]image.Step, error) {
 	pin, _, err := l.pinned()
 	if err != nil {
@@ -198,19 +201,23 @@ func (l *images) Origin(f *backend.From) ([]image.Step, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(steps, image.Step{Name: originConfig, Data: yaml}), nil
+	return append(steps,
+		image.Step{Name: originDisk, Args: []string{gibString(backend.BaseDiskGiB)}},
+		image.Step{Name: originConfig, Data: yaml}), nil
 }
 
-// The names of Lima's origin steps: the Ubuntu image's pin, and
-// base.yaml.
+// The names of Lima's origin steps: the Ubuntu image's pin, base's disk,
+// and base.yaml.
 const (
 	originUbuntu = "ubuntu-image"
+	originDisk   = "disk"
 	originConfig = "base.yaml"
 )
 
 // origin is base's origin steps as BuildImage runs them.
 type origin struct {
 	yaml       []byte       // base.yaml, for limactl create
+	diskGiB    float64      // base's disk, limactl create's --disk
 	conversion []image.Step // with --from, the conversion's (convertSteps); nil without
 }
 
@@ -231,6 +238,8 @@ func (l *images) originOf(steps []image.Step, f *backend.From) (origin, error) {
 		switch {
 		case s.Name == originUbuntu && len(s.Args) == 1:
 			pin = s.Args[0]
+		case s.Name == originDisk && len(s.Args) == 1:
+			o.diskGiB, _ = strconv.ParseFloat(s.Args[0], 64)
 		case s.Name == originConfig:
 			o.yaml = s.Data
 		case strings.HasPrefix(s.Name, "oci/"):
@@ -242,6 +251,8 @@ func (l *images) originOf(steps []image.Step, f *backend.From) (origin, error) {
 		return origin{}, fmt.Errorf("lima: base's recipe pins Ubuntu %q, not %q", pin, want)
 	case o.yaml == nil:
 		return origin{}, errors.New("lima: base's recipe has no base.yaml")
+	case o.diskGiB <= 0:
+		return origin{}, errors.New("lima: base's recipe has no disk size")
 	case (f != nil) != (o.conversion != nil):
 		return origin{}, errors.New("lima: base's recipe has another conversion than its --from asks for")
 	case f == nil:

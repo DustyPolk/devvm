@@ -17,7 +17,14 @@ func TestFitCPUs(t *testing.T) {
 	}
 }
 
-// base's memory: base.yaml's, or half the host's whole GiB when that
+// Base's own size is 4 CPUs, 8 GiB of memory and a 100 GiB disk.
+func TestBaseSize(t *testing.T) {
+	if got := (Size{CPUs: BaseCPUs, MemoryGiB: BaseMemoryGiB, DiskGiB: BaseDiskGiB}); got != (Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}) {
+		t.Errorf("base's size: %+v", got)
+	}
+}
+
+// base's memory: its own, or half the host's whole GiB when that
 // leaves it less than 2 GiB.
 func TestFitMemory(t *testing.T) {
 	for _, c := range []struct {
@@ -68,7 +75,7 @@ func TestMaxMemory(t *testing.T) {
 }
 
 // What a build reports as fitted: the CPUs and memory base got when
-// either is less than base.yaml's, never its disk; nothing otherwise.
+// either is less than base's own, never its disk; nothing otherwise.
 func TestFitted(t *testing.T) {
 	want := Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}
 	for _, c := range []struct {

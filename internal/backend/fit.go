@@ -3,6 +3,16 @@ package backend
 // gib is a GiB in bytes.
 const gib = 1 << 30
 
+// Base's size, which every backend gives base: its CPUs and memory, which
+// FitCPUs and FitMemory fit to the host, and its disk, which every image
+// and new VM gets at least, as disks can't shrink. Base's disk goes into
+// its image, so each backend's Origin carries it into base's key.
+const (
+	BaseCPUs      = 4
+	BaseMemoryGiB = 8   // GiB
+	BaseDiskGiB   = 100 // GiB
+)
+
 // FitCPUs is the CPUs a VM asking for want gets on a host with hostCPUs:
 // want, or the host's count when it has fewer. A hostCPUs of 0 or less
 // is unknown, and gives want.
@@ -26,7 +36,7 @@ func FitMemory(wantGiB float64, hostBytes uint64) float64 {
 }
 
 // Fitted is got's CPUs and memory, base's as fitted to the host, when
-// either is less than want's, base.yaml's; zero when the host gave base
+// either is less than want's, base's own; zero when the host gave base
 // all it asks for.
 func Fitted(want, got Size) Size {
 	if got.CPUs < want.CPUs || got.MemoryGiB < want.MemoryGiB {

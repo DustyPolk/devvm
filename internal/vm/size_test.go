@@ -4,9 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"testing/fstest"
 
-	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
@@ -73,15 +71,6 @@ func TestSizeCheck(t *testing.T) {
 	}
 	if b := (Size{CPUs: "2", Memory: "1.5", Disk: "120"}).Backend(); b != (backend.Size{CPUs: 2, MemoryGiB: 1.5, DiskGiB: 120}) {
 		t.Errorf("Backend = %+v", b)
-	}
-}
-
-func TestBaseDisk(t *testing.T) {
-	if got := BaseDisk(assets.FS); got != 100 {
-		t.Errorf("BaseDisk(devvm's files) = %v, want base.yaml's 100", got)
-	}
-	if got := BaseDisk(fstest.MapFS{}); got != 0 {
-		t.Errorf("BaseDisk(no base.yaml) = %v", got)
 	}
 }
 

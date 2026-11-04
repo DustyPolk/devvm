@@ -401,7 +401,7 @@ func stepNames(steps []image.Step) []string {
 
 // Base's origin is the Ubuntu cloud image pinned on this machine, for the
 // host ("" before one is, or when the one pinned is another
-// architecture's), and base.yaml; with --from, the conversion's scripts in
+// architecture's), base's disk and base.yaml; with --from, the conversion's scripts in
 // between, build.sh as root with the user it makes the image's, and none
 // of oci/'s other files. Without the user, or devvm's files, there's
 // none.
@@ -413,11 +413,11 @@ func TestOrigin(t *testing.T) {
 	for arch, pin := range map[string]string{"arm64": want, "amd64": ""} {
 		l.Arch = arch
 		steps, err := l.Origin(nil)
-		if err != nil || !slices.Equal(stepNames(steps), []string{originUbuntu, originConfig}) ||
-			!slices.Equal(steps[0].Args, []string{pin}) {
-			t.Fatalf("%s: Origin = %+v, %v", arch, steps, err)
+		if err != nil || !slices.Equal(stepNames(steps), []string{originUbuntu, originDisk, originConfig}) ||
+			!slices.Equal(steps[0].Args, []string{pin}) || !slices.Equal(steps[1].Args, []string{"100"}) {
+			t.Fatalf("%s: Origin = %q, %v", arch, stepNames(steps), err)
 		}
-		if yaml, _ := fs.ReadFile(assets.FS, "base.yaml"); !bytes.Equal(steps[1].Data, yaml) {
+		if yaml, _ := fs.ReadFile(assets.FS, "base.yaml"); !bytes.Equal(steps[2].Data, yaml) {
 			t.Errorf("%s: base.yaml isn't devvm's", arch)
 		}
 	}
@@ -436,7 +436,7 @@ func TestOrigin(t *testing.T) {
 	}
 	pinUbuntu(t, l, testUbuntuURL, testUbuntuSum)
 	steps, err := l.Origin(f)
-	if want := slices.Concat([]string{originUbuntu}, conversionScripts, []string{originConfig}); err != nil || !slices.Equal(stepNames(steps), want) {
+	if want := slices.Concat([]string{originUbuntu}, conversionScripts, []string{originDisk, originConfig}); err != nil || !slices.Equal(stepNames(steps), want) {
 		t.Fatalf("Origin(--from) = %q, %v; want %q", stepNames(steps), err, want)
 	}
 	build := steps[1]
@@ -485,8 +485,15 @@ func TestOriginOfRefuses(t *testing.T) {
 		steps []image.Step
 		from  *backend.From
 	}{
-		"another Ubuntu":            {change(func(s []image.Step) []image.Step { s[0].Args = []string{"x"}; return s }), f},
-		"no base.yaml":              {change(func(s []image.Step) []image.Step { return s[:len(s)-1] }), f},
+		"another Ubuntu": {change(func(s []image.Step) []image.Step { s[0].Args = []string{"x"}; return s }), f},
+		"no base.yaml":   {change(func(s []image.Step) []image.Step { return s[:len(s)-1] }), f},
+		"no disk": {change(func(s []image.Step) []image.Step {
+			return slices.DeleteFunc(s, func(st image.Step) bool { return st.Name == originDisk })
+		}), f},
+		"a disk that isn't a size": {change(func(s []image.Step) []image.Step {
+			s[len(s)-2] = image.Step{Name: originDisk, Args: []string{"big"}}
+			return s
+		}), f},
 		"a conversion without one":  {good, nil},
 		"no conversion with --from": {ubuntuOnly, f},
 		"another digest":            {change(func(s []image.Step) []image.Step { s[1].Args[0] = "debian@sha256:bbbb"; return s }), f},

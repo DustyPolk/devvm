@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
@@ -136,7 +135,7 @@ func (s setup) run(c setupChoice) error {
 	if err != nil {
 		return err
 	}
-	sc := vm.SizeChoice{Dirs: dirs, Assets: assets.FS, Host: host, Answer: s.answer, Say: s.ui.Say, Warn: s.ui.Warn, Info: s.ui.Info}
+	sc := vm.SizeChoice{Dirs: dirs, Host: host, Answer: s.answer, Say: s.ui.Say, Warn: s.ui.Warn, Info: s.ui.Info}
 	if err := sc.Ask(); err != nil {
 		return err
 	}

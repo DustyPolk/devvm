@@ -20,7 +20,7 @@ catg $IMAGES/ubuntu.json
 stdout '^  "release": "release-20261016",$'
 stdout '^  "digest": "sha256:[0-9a-f]{64}",$'
 stub_calls
-stdout '^limactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} --set \.images = \[\{"location":"file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:[0-9a-f]{64}"\}\] --cpus=4 --memory=8 -$'
+stdout '^limactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} --set \.images = \[\{"location":"file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:[0-9a-f]{64}"\}\] --cpus=4 --memory=8 --disk=100 -$'
 cmp $STUB_DIR/create-template $DEVVM_REPO/assets/base.yaml
 ! exists $XDG_DATA_HOME/devvm/assets
 stdout '^limactl edit --tty=false devvm-img-[0-9a-f]{12} .*--set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'

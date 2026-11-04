@@ -27,7 +27,7 @@ env DEVVM_TEST_FREE_GIB=500
 exec devvm build base
 stdout '^==> base_fitted cpus=2 memory=3\.5$'
 stub_calls
-stdout '^limactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} .* --cpus=2 --memory=3\.5 -$'
+stdout '^limactl create --tty=false --mount-none --name=devvm-img-[0-9a-f]{12} .* --cpus=2 --memory=3\.5 --disk=100 -$'
 
 # Sizes past the host: more CPUs than it has, or more memory than leaves
 # it 2 GiB.
