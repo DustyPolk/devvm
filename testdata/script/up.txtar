@@ -30,7 +30,7 @@ stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14}
 ! stdout 'limactl edit --tty=false devvm-web'
 ! stdout 'devvm-tools-build'
 stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}\n(limactl list --json\n)*limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*/etc/ssh/ssh_host_.*\n'
-stdout '^ssh -F none -M -S \S+/data/devvm/run/port-[0-9a-f]{16}\.ctl -T .* -o IdentityFile=\S+/lima/_config/user .* -o UserKnownHostsFile=\S+/data/devvm/vms/[0-9a-f]{14}/run/ports\.known_hosts .* -o HostKeyAlias=devvm-web-[0-9a-f]{14} .* -p 60022 -l stub 127\.0\.0\.1 sh -s$'
+stdout '^ssh -F none -M -S \S+/data/devvm/run/port-[0-9a-f]{16}\.ctl -T .* -o IdentityFile=\S+/lima/_config/user .* -o UserKnownHostsFile=\S+/data/devvm/vms/[0-9a-f]{14}/run/known_hosts .* -o HostKeyAlias=devvm-web-[0-9a-f]{14} .* -p 60022 -l stub 127\.0\.0\.1 sh -s$'
 ! stdout '^docker '
 stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c cd ''/'' && exec ''bash'' ''-c'' ''d=\$\(mktemp -d\); tar -xf - .*''\n(limactl list --json\n)+limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 exists $XDG_DATA_HOME/devvm/tools
@@ -39,11 +39,17 @@ exists $XDG_DATA_HOME/devvm/tools
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/hooks$'
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/config$'
 [linux] ! stdout chflags
-# The forwarder pins the host key devvm pinned; the backend keeps no
-# files of the VM's.
+# The forwarder checks the VM's one record of its host keys, for its
+# start, which the ssh config checks too; the backend keeps no files of
+# the VM's.
 vm_name WEB web
-exec sh -c 'cat "$WEB_dir/run/ports.known_hosts"; grep -c "^$WEB $(cut -d" " -f2- "$WEB_dir/run/ports.known_hosts")$" "$XDG_DATA_HOME"/devvm/known_hosts'
-stdout '\Adevvm-web-[0-9a-f]{14} ssh-ed25519 \S+\n1\n\z'
+exec cat $WEB_dir/run/known_hosts
+stdout '\A# devvm: host keys of start [0-9]+ \S+\ndevvm-web-[0-9a-f]{14} ssh-ed25519 \S+\n\z'
+stub_calls
+stdout '^ssh -F none -M .* -o UserKnownHostsFile='$WEB_dir'/run/known_hosts '
+exec cat $DATA/ssh_config
+stdout '^  UserKnownHostsFile "'$WEB_dir'/run/known_hosts"$'
+! exists $DATA/known_hosts
 ! exists $WEB_dir/backend
 vm_state $WEB_dir/vm.json
 stdout '^version=1$'

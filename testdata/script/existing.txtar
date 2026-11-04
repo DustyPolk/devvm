@@ -2,7 +2,6 @@
 # and sets it up again; flags for new VMs are ignored with a warning, and
 # what its state asks of a stopped VM's size and ports is applied.
 # restart stops it first.
-env KNOWN=$DATA/known_hosts
 project web git
 exec devvm --no-network-policy
 vm_name WEB web
@@ -16,7 +15,7 @@ stub_calls
 ! stdout 'limactl (start|stop|clone|create|edit|delete)'
 stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c .*tar -xf - '
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
-exec grep -c '^devvm-web-' $KNOWN
+exec grep -c '^devvm-web-' $WEB_dir/run/known_hosts
 stdout '^1$'
 
 # Flags for new VMs: ignored, with a warning each.
@@ -131,8 +130,7 @@ stdout '^limactl delete -f devvm-web-[0-9a-f]{14}$'
 [darwin] stdout '^chflags -R -P nouchg /\S*/web/\.git/config$'
 ! exists $WEB_dir
 exists $API_dir/vm.json
-exec cat $KNOWN
-! stdout devvm-web
+exec cat $API_dir/run/known_hosts
 stdout devvm-api
 exec cat $DATA/ssh_config
 ! stdout devvm-web

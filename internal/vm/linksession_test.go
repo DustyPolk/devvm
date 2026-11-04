@@ -49,10 +49,7 @@ func linkSessionEnv(t *testing.T) (Links, *backendtest.Fake, *state.VM, *state.V
 	if err := os.MkdirAll(d.Config, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	pins := client.Name() + " ssh-ed25519 AAAA\n" + target.Name() + " ssh-ed25519 BBBB\n"
-	if err := os.WriteFile(d.KnownHosts(), []byte(pins), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	pinHostKeys(t, d, f, client.Name(), target.Name())
 	return Links{Env: &Env{Dirs: d, Registry: reg}}, f, client, target, l
 }
 
@@ -75,25 +72,28 @@ func TestLinkConn(t *testing.T) {
 		return got
 	}
 	got := check("", "")
-	want := vmssh.SSH{VM: target.Name(), User: "u", Key: "/k", KnownHosts: e.Dirs.KnownHosts(), Port: 62022}
+	want := vmssh.SSH{VM: target.Name(), User: "u", Key: "/k", KnownHosts: e.Dirs.VM(target.Name()).KnownHosts(), Port: 62022}
 	if got.SSH != want || got.Start != "start-0" {
 		t.Errorf("the target: %+v, want %+v", got, want)
 	}
 
 	// The target's ssh: on the host's loopback alone, on a port, and with
-	// its host key pinned.
+	// its host keys pinned for its current start, which a connection
+	// never reads itself.
 	f.Target.Host, f.Target.Port = "10.0.0.2", 22
 	check(vmssh.EventLinkRefused, LinkNoSSH)
 	f.Target.Host, f.Target.Port = "127.0.0.1", 0
 	check(vmssh.EventLinkRefused, LinkNoSSH)
 	f.Target.Port = 62022
-	if err := os.WriteFile(e.Dirs.KnownHosts(), []byte(client.Name()+" ssh-ed25519 AAAA\n"), 0o600); err != nil {
+	if err := vmssh.ForgetHostKeys(e.Dirs, target.Name()); err != nil {
 		t.Fatal(err)
 	}
+	n := countExecs(f)
 	check(vmssh.EventLinkRefused, LinkNoSSH)
-	if err := os.WriteFile(e.Dirs.KnownHosts(), []byte(target.Name()+" ssh-ed25519 BBBB\n"), 0o600); err != nil {
-		t.Fatal(err)
+	if countExecs(f) != n {
+		t.Error("a connection read the target's host keys")
 	}
+	pinHostKeys(t, e.Dirs, f, target.Name())
 	check("", "")
 
 	// A target that doesn't run: refused, never started.

@@ -184,13 +184,9 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 }
 
 // forwards is VMs' port forwarders as devvm runs them (Forwarders): what
-// a host program has, the host keys devvm pins, and warnings, as the Env
-// has them.
+// a host program has, and warnings, as the Env has them.
 func (e *Env) forwards() vmssh.Forwards {
 	f := e.Forwarders
 	f.InUse, f.Warn = e.PortInUse, e.Warn
-	f.HostKey = func(ctx context.Context, b backend.Backend, vm string) (string, error) {
-		return e.sshConfig().HostKey(ctx, b, vm)
-	}
 	return f
 }

@@ -569,7 +569,7 @@ func TestForwardsRun(t *testing.T) {
 		Tick: time.Millisecond,
 	}
 	s := spec{
-		ForwardTarget: backend.ForwardTarget{User: "u", Key: "/k", Port: 2222}, HostKey: "ssh-ed25519 AAAA", Lifeline: "/ha.pid",
+		ForwardTarget: backend.ForwardTarget{User: "u", Key: "/k", Port: 2222}, KnownHosts: "/kh", Lifeline: "/ha.pid",
 		Reserve: []int{0, 22}, Only: []backend.PortRange{{From: 80, To: 81}},
 	}
 	// It's started once it says so in its status file, and still runs.
@@ -579,14 +579,11 @@ func TestForwardsRun(t *testing.T) {
 	}
 	running = false
 	want := []string{
-		"/devvm", "_ports", "-vm", "v", "-lifeline", "/ha.pid", "-port", "2222", "-user", "u", "-key", "/k", "-known-hosts", f.KnownHosts("v"),
+		"/devvm", "_ports", "-vm", "v", "-lifeline", "/ha.pid", "-port", "2222", "-user", "u", "-key", "/k", "-known-hosts", "/kh",
 		"-control", f.Control("v"), "-reserve", "22", "-only", "80-81",
 	}
 	if !slices.Equal(args, want) || !strings.HasPrefix(f.Control("v"), filepath.Join(short, "run", "port-")) {
 		t.Errorf("forwarder:\n%q\nwant\n%q", args, want)
-	}
-	if b, err := os.ReadFile(f.KnownHosts("v")); err != nil || string(b) != "v ssh-ed25519 AAAA\n" {
-		t.Errorf("known_hosts: %q, %v", b, err)
 	}
 	if f.Running("v") {
 		t.Error("found with other arguments")
@@ -620,7 +617,7 @@ func TestForwardsRun(t *testing.T) {
 	}
 	// Its files are in the VM's run folder, its log in its logs folder.
 	for _, p := range []string{
-		f.Dirs.VM("v").Forwarder(".pid"), f.Dirs.VM("v").Forwarder(".status"), f.KnownHosts("v"), f.Dirs.VM("v").Forwarder(".lock"),
+		f.Dirs.VM("v").Forwarder(".pid"), f.Dirs.VM("v").Forwarder(".status"), f.Dirs.VM("v").Forwarder(".lock"),
 		f.Log("v"),
 	} {
 		if _, err := os.Stat(p); err != nil {

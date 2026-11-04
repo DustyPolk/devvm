@@ -77,14 +77,14 @@ func checkCloneRepo(ctx context.Context, dir string) error {
 
 // gitSSH is host git (hostgit) run in dir with ssh reading devvm's ssh
 // config only, for vm. Whatever host the repo's config rewrites vm's URL
-// to (url.*.insteadOf, remote.URL.url), ssh trusts only the host key
-// devvm pinned for vm itself (HostKeyAlias), forwards nothing (no agent,
+// to (url.*.insteadOf, remote.URL.url), ssh trusts only the host keys
+// devvm pinned for vm's start (its record, HostKeyAlias), forwards nothing (no agent,
 // no ports), and never asks on the terminal (BatchMode), so a VM's sshd
 // can't prompt for a password.
 func (e clones) gitSSH(ctx context.Context, vm, dir string, args ...string) *exec.Cmd {
 	cmd := hostgit.Command(ctx, append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -F "+shell.Quote(e.Dirs.SSHConfig())+" -o BatchMode=yes"+
-		" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="+shell.Quote(e.Dirs.KnownHosts())+" -o GlobalKnownHostsFile=/dev/null"+
+		" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="+shell.Quote(e.Dirs.VM(vm).KnownHosts())+" -o GlobalKnownHostsFile=/dev/null"+
 		" -o HostKeyAlias="+shell.Quote(vm)+" -o ForwardAgent=no -o ClearAllForwardings=yes")
 	return cmd
 }

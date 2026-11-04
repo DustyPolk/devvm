@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -58,10 +57,7 @@ func testForwards(t *testing.T) (*Forwards, *[][]string, *msg.Recorder) {
 			return nil, errors.New("not ours")
 		},
 		InUse: func(context.Context, int) bool { return false },
-		HostKey: func(context.Context, backend.Backend, string) (string, error) {
-			return "ssh-ed25519 AAAAkey", nil
-		},
-		Warn: warned.Add,
+		Warn:  warned.Add,
 	}
 	return f, &starts, warned
 }
@@ -70,12 +66,13 @@ func testForwards(t *testing.T) (*Forwards, *[][]string, *msg.Recorder) {
 // and how to reach it from its backend: every port, or its listed ones
 // less those a host program has (warned), asked once its old forwarder
 // has stopped; none, or all its listed ones taken, runs none. It never
-// takes the VM's ssh or proxy port, and pins the host key devvm pins.
+// takes the VM's ssh or proxy port, and checks the host keys devvm pins
+// for the VM's start.
 func TestForwardsStart(t *testing.T) {
 	f, starts, warned := testForwards(t)
 	const vm = "devvm-p-0123456789abcd"
-	b := backendtest.New("fake", nil)
-	b.Instances[vm] = backend.Instance{Name: vm, Status: backend.StatusRunning}
+	key := "ssh-ed25519 " + keyED
+	b, _ := hostKeysFake(t, vm, &key)
 	b.Forward = backend.ForwardTarget{User: "u", Key: "/k", Port: 60022}
 	b.LifelineFile = "/lima/ha.pid"
 	st, err := state.New(f.Dirs, vm)
@@ -93,13 +90,13 @@ func TestForwardsStart(t *testing.T) {
 	f.Start(ctx, b, st)
 	want := []string{
 		"/devvm", "_ports", "-vm", vm, "-lifeline", "/lima/ha.pid", "-port", "60022", "-user", "u", "-key", "/k",
-		"-known-hosts", f.KnownHosts(vm), "-control", f.Control(vm), "-reserve", "60022,30001",
+		"-known-hosts", f.Dirs.VM(vm).KnownHosts(), "-control", f.Control(vm), "-reserve", "60022,30001",
 	}
 	if len(*starts) != 1 || !slices.Equal((*starts)[0], want) || len(warned.Names()) != 0 {
 		t.Fatalf("every port:\n%q\nwant\n%q\nwarned %q", *starts, want, warned.Names())
 	}
-	if b, err := os.ReadFile(f.KnownHosts(vm)); err != nil || string(b) != vm+" ssh-ed25519 AAAAkey\n" {
-		t.Errorf("known_hosts: %q, %v", b, err)
+	if got := readFile(t, f.Dirs.VM(vm).KnownHosts()); got != startLine+"start-0\n"+vm+" ssh-ed25519 "+keyED+"\n" {
+		t.Errorf("known_hosts: %q", got)
 	}
 	if !f.Running(vm) {
 		t.Error("not running")
@@ -141,9 +138,12 @@ func TestForwardsStart(t *testing.T) {
 	forward("x")
 	f.Start(ctx, b, st)
 	forward("")
-	f.HostKey = func(context.Context, backend.Backend, string) (string, error) { return "", errors.New("no keys") }
+	key = "no keys"
+	if err := ForgetHostKeys(f.Dirs, vm); err != nil {
+		t.Fatal(err)
+	}
 	f.Start(ctx, b, st)
-	f.HostKey = func(context.Context, backend.Backend, string) (string, error) { return "ssh-ed25519 AAAAkey", nil }
+	key = "ssh-ed25519 " + keyED
 	b.Instances[vm] = backend.Instance{Name: vm, Status: backend.StatusStopped}
 	f.Start(ctx, b, st)
 	if w := warned.Names(); len(*starts) != 2 || !slices.Equal(w, slices.Concat(failed, failed, failed)) {

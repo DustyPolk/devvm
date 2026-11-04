@@ -1,8 +1,10 @@
 // Package vmssh is what devvm runs over a VM's ssh on the host, on every
 // backend, none of it a backend's: the port forwarder (Forwarder, run as
 // devvm _ports by its one owner, Forwards, which reads the ports a VM
-// forwards from its state and how to reach it from its backend), and the
-// sessions that carry links between VMs (Links).
+// forwards from its state and how to reach it from its backend), the
+// sessions that carry links between VMs (Links), and the one record of
+// each VM's host keys for its start that every ssh of devvm's to the VM
+// checks (PinHostKeys).
 package vmssh
 
 import (
@@ -583,7 +585,7 @@ func (f *Flags) Register(fs *flag.FlagSet) {
 	fs.IntVar(&f.Port, "port", 0, "the host loopback port the VM's sshd is forwarded from")
 	fs.StringVar(&f.User, "user", "", "the VM's user")
 	fs.StringVar(&f.Key, "key", "", "the VM's own key")
-	fs.StringVar(&f.KnownHosts, "known-hosts", "", "the VM's host key, as known_hosts has it, under the VM's name")
+	fs.StringVar(&f.KnownHosts, "known-hosts", "", "the VM's host keys for its start, a known hosts file, under the VM's name")
 	fs.StringVar(&f.Control, "control", "", "the master's control socket")
 	fs.StringVar(&f.reserve, "reserve", "", "host ports never forwarded, comma-separated")
 	fs.StringVar(&f.only, "only", "", "the ports forwarded, as devvm ports lists them (5173,8000-8010); every one from 1024 up without it")

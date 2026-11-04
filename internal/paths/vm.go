@@ -9,8 +9,8 @@ import "path/filepath"
 //	lock      held by each change to vm.json
 //	policy    its own network policy rules
 //	run/      what its runs leave: pids, its proxy's files and CA, its
-//	          port forwarder's, its sandbox profile, its secrets'
-//	          bindings, its links' list
+//	          port forwarder's, its pinned host keys, its sandbox
+//	          profile, its secrets' bindings, its links' list
 //	logs/     its proxy's decisions and output, its link session's and
 //	          its port forwarder's
 //	home.tar.gz  its home folder, while a remake makes it again
@@ -30,8 +30,8 @@ func (v VM) Lock() string { return filepath.Join(v.Dir, "lock") }
 func (v VM) Policy() string { return filepath.Join(v.Dir, "policy") }
 
 // Run is the folder of what the VM's runs leave: pids, its proxy's files
-// and CA, its port forwarder's, its sandbox profile, its secrets' bindings
-// and its links' list.
+// and CA, its port forwarder's, its pinned host keys, its sandbox profile,
+// its secrets' bindings and its links' list.
 func (v VM) Run() string { return filepath.Join(v.Dir, "run") }
 
 // Logs is the folder of the VM's logs.
@@ -112,8 +112,12 @@ func (v VM) ProxyLog() string { return filepath.Join(v.Logs(), "proxy.log") }
 func (v VM) LinksLog() string { return filepath.Join(v.Logs(), "links.log") }
 
 // Forwarder is one of the files of the VM's port forwarder in Run, named
-// by ext: .pid, .status, .lock, and .known_hosts, the host key it pins.
+// by ext: .pid, .status and .lock.
 func (v VM) Forwarder(ext string) string { return filepath.Join(v.Run(), "ports"+ext) }
+
+// KnownHosts is the VM's host keys as devvm pins them for its current
+// start (vmssh.PinHostKeys), which every ssh of devvm's to the VM checks.
+func (v VM) KnownHosts() string { return filepath.Join(v.Run(), "known_hosts") }
 
 // ForwarderLog is the VM's port forwarder's own output.
 func (v VM) ForwarderLog() string { return filepath.Join(v.Logs(), "ports.log") }

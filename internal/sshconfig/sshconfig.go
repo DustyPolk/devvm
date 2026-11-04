@@ -1,26 +1,22 @@
 // Package sshconfig is how ssh and editors reach project VMs by name: the
-// ssh config devvm writes for its running VMs (devvm-<folder>), the VMs'
-// host keys it checks them with, and the line in ~/.ssh/config that
-// includes it.
+// ssh config devvm writes for its running VMs (devvm-<folder>), each
+// checked against the host keys devvm pins for its start
+// (vmssh.PinHostKeys), and the line in ~/.ssh/config that includes it.
 package sshconfig
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vmname"
@@ -30,13 +26,7 @@ import (
 // header starts the ssh config devvm writes.
 const header = "# Written by devvm on every launch; edits are overwritten.\n"
 
-// hostKeyTimeout is how long a VM gets to show its host keys.
-const hostKeyTimeout = 30 * time.Second
-
-// hostKeysMax is the most of a VM's answer read for its host keys.
-const hostKeysMax = 64 << 10
-
-// Config is devvm's ssh config and its VMs' host keys. New sets its
+// Config is devvm's ssh config. New sets its
 // backends; its caller sets what it prints and asks.
 type Config struct {
 	Dirs paths.Dirs
@@ -125,8 +115,9 @@ func (c *Config) running(ctx context.Context) ([]running, error) {
 
 // Write rewrites the ssh config with every running project VM, each by
 // its alias (Host) and its full name, neither of which ever changes,
-// checked against its own host keys. A VM whose host keys can't be read
-// gets no entry: a stopped VM's port is free for anything on the host to
+// checked against the host keys devvm pins for its current start
+// (vmssh.PinHostKeys), read from it once. A VM whose host keys can't be
+// pinned gets no entry: a stopped VM's port is free for anything on the host to
 // take, so ssh must check it reaches the VM. Nor does one whose backend's
 // ssh isn't usable (an emulation not yet reviewed), or isn't a user and a
 // key on a host loopback port (vmssh.FromTarget). An alias an earlier
@@ -156,20 +147,20 @@ func (c *Config) Write(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		start := run.ID
-		ok, err := c.recordHostKeys(ctx, r.b, r.in.Name)
-		if err != nil {
+		kh, err := vmssh.PinHostKeys(ctx, c.Dirs, r.b, r.in.Name)
+		if errors.Is(err, vmssh.ErrNoHostKeys) {
+			continue
+		} else if err != nil {
 			return err
 		}
-		if ok {
-			alias := c.Host(r.in.Name)
-			if taken[alias] {
-				alias = r.in.Name
-			}
-			taken[alias] = true
-			if err := c.entry(&buf, alias, r.in, login, t.Options, start); err != nil {
-				return err
-			}
+		login.KnownHosts = kh
+		alias := c.Host(r.in.Name)
+		if taken[alias] {
+			alias = r.in.Name
+		}
+		taken[alias] = true
+		if err := c.entry(&buf, alias, r.in, login, t.Options, run.ID); err != nil {
+			return err
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -208,7 +199,7 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 	lines := []string{
 		"", "Host " + hosts,
 		"  HostKeyAlias " + in.Name,
-		`  UserKnownHostsFile "` + c.Dirs.KnownHosts() + `"`,
+		`  UserKnownHostsFile "` + login.KnownHosts + `"`,
 		"  StrictHostKeyChecking yes",
 		"  NoHostAuthenticationForLocalhost no",
 		"  ForwardAgent " + forward,
@@ -248,150 +239,6 @@ func (c *Config) entry(buf *strings.Builder, alias string, in backend.Instance, 
 	}
 	buf.WriteString(strings.Join(lines, "\n") + "\n")
 	return nil
-}
-
-// A host key as a VM shows it: its type and its key.
-var (
-	keyType = regexp.MustCompile(`^(ssh|ecdsa)-[A-Za-z0-9@.-]+$`)
-	keyData = regexp.MustCompile(`^[A-Za-z0-9+/]+=*$`)
-)
-
-// recordHostKeys makes sure the known hosts file has vm's host keys,
-// reading them from the running VM through its backend (which reaches
-// the VM itself) when it has none. It reports whether it has them.
-func (c *Config) recordHostKeys(ctx context.Context, b backend.Backend, vm string) (bool, error) {
-	path := c.Dirs.KnownHosts()
-	data, err := os.ReadFile(path) //nolint:gosec // devvm's own file
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, err
-	}
-	if hasHost(data, vm) {
-		return true, nil
-	}
-	kctx, cancel := context.WithTimeout(ctx, hostKeyTimeout)
-	defer cancel()
-	out := &capped{max: hostKeysMax}
-	err = b.Exec(kctx, vm, []string{"sh", "-c", "cat /etc/ssh/ssh_host_*_key.pub"}, backend.ExecOpts{Stdout: out})
-	if ctx.Err() != nil {
-		return false, ctx.Err()
-	}
-	if err != nil {
-		return false, nil
-	}
-	keys := parseHostKeys(vm, out.Bytes())
-	if keys == "" {
-		return false, nil
-	}
-	return true, c.changeKnownHosts(ctx, func(data []byte) []byte {
-		if hasHost(data, vm) {
-			return data
-		}
-		return append(data, keys...)
-	})
-}
-
-// changeKnownHosts changes the known hosts file under its lock, reading
-// it again inside, so that two devvms changing it at once lose neither's
-// change; change gets the file as it is and returns it as it's to be.
-func (c *Config) changeKnownHosts(ctx context.Context, change func([]byte) []byte) error {
-	if err := state.PrivateDir(c.Dirs.Data); err != nil {
-		return err
-	}
-	unlock, err := platform.LockFile(ctx, c.Dirs.KnownHostsLock())
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	path := c.Dirs.KnownHosts()
-	data, err := os.ReadFile(path) //nolint:gosec // devvm's own file
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	out := change(data)
-	if bytes.Equal(out, data) {
-		return nil
-	}
-	return state.WriteFile(path, out)
-}
-
-// HostKey returns vm's host key as the known hosts file pins it (TYPE
-// BASE64), its ed25519 one where it has one, reading them from the
-// running VM first when it has none.
-func (c *Config) HostKey(ctx context.Context, b backend.Backend, vm string) (string, error) {
-	ok, err := c.recordHostKeys(ctx, b, vm)
-	if err != nil {
-		return "", err
-	}
-	if !ok {
-		return "", errors.New(vm + ": its host keys can't be read")
-	}
-	data, err := os.ReadFile(c.Dirs.KnownHosts())
-	if err != nil {
-		return "", err
-	}
-	key := ""
-	for l := range strings.SplitSeq(string(data), "\n") {
-		k, ok := strings.CutPrefix(l, vm+" ")
-		if !ok {
-			continue
-		}
-		if key == "" || strings.HasPrefix(k, "ssh-ed25519 ") {
-			key = k
-		}
-	}
-	if key == "" {
-		return "", errors.New(vm + ": no host key pinned")
-	}
-	return key, nil
-}
-
-// parseHostKeys returns the known hosts lines for the host keys in out,
-// under vm's name; lines that aren't a host key are dropped.
-func parseHostKeys(vm string, out []byte) string {
-	var b strings.Builder
-	s := bufio.NewScanner(bytes.NewReader(out))
-	for s.Scan() {
-		f := strings.Fields(s.Text())
-		if len(f) >= 2 && keyType.MatchString(f[0]) && keyData.MatchString(f[1]) {
-			b.WriteString(vm + " " + f[0] + " " + f[1] + "\n")
-		}
-	}
-	return b.String()
-}
-
-// hasHost reports whether known hosts data has a line for vm.
-func hasHost(data []byte, vm string) bool {
-	for l := range strings.SplitSeq(string(data), "\n") {
-		if strings.HasPrefix(l, vm+" ") {
-			return true
-		}
-	}
-	return false
-}
-
-// ForgetHostKeys drops vm's host keys, to be read again once it runs: a
-// VM whose backend config changed can get new ones when it boots.
-func (c *Config) ForgetHostKeys(ctx context.Context, vm string) error {
-	data, err := os.ReadFile(c.Dirs.KnownHosts())
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil || !hasHost(data, vm) {
-		return err
-	}
-	return c.changeKnownHosts(ctx, func(data []byte) []byte {
-		var keep []string
-		for l := range strings.SplitSeq(strings.TrimSuffix(string(data), "\n"), "\n") {
-			if !strings.HasPrefix(l, vm+" ") {
-				keep = append(keep, l)
-			}
-		}
-		out := ""
-		if len(keep) > 0 {
-			out = strings.Join(keep, "\n") + "\n"
-		}
-		return []byte(out)
-	})
 }
 
 // IncludeLine is the line ~/.ssh/config needs to read devvm's ssh config.
@@ -438,18 +285,4 @@ func (c *Config) EnsureInclude(home string) (bool, error) {
 	}
 	c.Info(msg.SSHIncludeAdded())
 	return true, nil
-}
-
-// capped keeps the first max bytes written to it, and takes the rest
-// without keeping it.
-type capped struct {
-	bytes.Buffer
-	max int
-}
-
-func (w *capped) Write(p []byte) (int, error) {
-	if room := w.max - w.Len(); room > 0 {
-		w.Buffer.Write(p[:min(len(p), room)])
-	}
-	return len(p), nil
 }

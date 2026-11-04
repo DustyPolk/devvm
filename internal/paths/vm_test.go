@@ -30,7 +30,7 @@ func TestVMFiles(t *testing.T) {
 		v.ProxyLog():                  "logs/proxy.log",
 		v.LinksLog():                  "logs/links.log",
 		v.ForwarderLog():              "logs/ports.log",
-		v.Forwarder(".known_hosts"):   "run/ports.known_hosts",
+		v.KnownHosts():                "run/known_hosts",
 		v.Forwarder(".lock"):          "run/ports.lock",
 		v.CA().Dir:                    "run/ca",
 		v.CA().Cert():                 "run/ca/ca.pem",

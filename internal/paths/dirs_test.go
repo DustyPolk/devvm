@@ -121,8 +121,6 @@ func TestFiles(t *testing.T) {
 		{d.Features(), "/c/features"},
 		{d.Secrets(), "/d/secrets"},
 		{d.SSHConfig(), "/d/ssh_config"},
-		{d.KnownHosts(), "/d/known_hosts"},
-		{d.KnownHostsLock(), "/d/known_hosts.lock"},
 		{d.QEMUWrapper(), "/d/run/qemu"},
 		{d.ToolImage("go-1.2.0-0123456789ab.erofs"), "/d/tools/go-1.2.0-0123456789ab.erofs"},
 		{d.ShareLock(), "/d/tools.lock"},

@@ -86,8 +86,6 @@ images/X
 images/X/record.json
 images/locks
 images/locks/X
-known_hosts
-known_hosts.lock
 logs
 logs/runs
 logs/runs/X.log
@@ -116,9 +114,9 @@ vms/APP/run/ca/ca.key
 vms/APP/run/ca/ca.pem
 vms/APP/run/ca/next.key
 vms/APP/run/ca/next.pem
+vms/APP/run/known_hosts
 vms/APP/run/links.json
 vms/APP/run/links.pid
-vms/APP/run/ports.known_hosts
 vms/APP/run/ports.lock
 vms/APP/run/ports.pid
 vms/APP/run/ports.status
@@ -142,7 +140,7 @@ vms/DB/run/ca/ca.key
 vms/DB/run/ca/ca.pem
 vms/DB/run/ca/next.key
 vms/DB/run/ca/next.pem
-vms/DB/run/ports.known_hosts
+vms/DB/run/known_hosts
 vms/DB/run/ports.lock
 vms/DB/run/ports.pid
 vms/DB/run/ports.status
@@ -161,8 +159,6 @@ images/X
 images/X/record.json
 images/locks
 images/locks/X
-known_hosts
-known_hosts.lock
 logs
 logs/runs
 logs/runs/X.log
@@ -195,9 +191,9 @@ vms/APP/run/ca/ca.key
 vms/APP/run/ca/ca.pem
 vms/APP/run/ca/next.key
 vms/APP/run/ca/next.pem
+vms/APP/run/known_hosts
 vms/APP/run/links.json
 vms/APP/run/links.pid
-vms/APP/run/ports.known_hosts
 vms/APP/run/ports.lock
 vms/APP/run/ports.pid
 vms/APP/run/ports.status
@@ -220,7 +216,7 @@ vms/DB/run/ca/ca.key
 vms/DB/run/ca/ca.pem
 vms/DB/run/ca/next.key
 vms/DB/run/ca/next.pem
-vms/DB/run/ports.known_hosts
+vms/DB/run/known_hosts
 vms/DB/run/ports.lock
 vms/DB/run/ports.pid
 vms/DB/run/ports.status

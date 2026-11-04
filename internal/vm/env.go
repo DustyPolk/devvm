@@ -562,7 +562,7 @@ func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf b
 	} else if a.Made.Toggle && !e.Registry.Allowed(b, backend.FeatureAgentToggle) {
 		return conf, e.Registry.Require(b, vm, backend.FeatureAgentToggle)
 	}
-	if err := e.sshConfig().ForgetHostKeys(ctx, vm); err != nil {
+	if err := vmssh.ForgetHostKeys(e.Dirs, vm); err != nil {
 		return conf, err
 	}
 	// A link session of its last start's, which would end on its own: the

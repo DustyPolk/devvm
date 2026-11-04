@@ -19,10 +19,10 @@ type vmFolders struct{ *Env }
 // the one place a VM's files go, in order: what runs for it (its proxy,
 // its port forwarder, its link session), then what's
 // outside its folder (its clone's remote or .git's locks, other VMs'
-// links to it and its group, its host keys, with leaves its backend's own
-// leftovers, backend.Forgetter, and the old machine a remake that didn't
-// finish set aside), then its folder, every file of its in
-// it, and last its ssh config entry. leaves is false after the backend
+// links to it and its group, with leaves its backend's own leftovers,
+// backend.Forgetter, and the old machine a remake that didn't finish set
+// aside), then its folder, every file of its in it (its pinned host keys
+// among them), and last its ssh config entry. leaves is false after the backend
 // deleted the VM itself, which took its leftovers with it.
 func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 	vm := t.f.Name
@@ -35,9 +35,6 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 		e.Protector(t.f.Dir).Unlock(ctx, t.st)
 	}
 	if err := Groups(e).forget(ctx, vm); err != nil {
-		return err
-	}
-	if err := e.sshConfig().ForgetHostKeys(ctx, vm); err != nil {
 		return err
 	}
 	if f, ok := backend.As[backend.Forgetter](t.b); ok && leaves {

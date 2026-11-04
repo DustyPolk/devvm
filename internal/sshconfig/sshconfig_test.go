@@ -2,6 +2,7 @@ package sshconfig
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"os"
@@ -135,8 +136,14 @@ const pinned = `  ForwardX11 no
   HashKnownHosts no
 `
 
+// keyOf is a made-up ed25519 host key of vm's, in ssh's wire format.
+func keyOf(vm string) string {
+	b := []byte("\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20")
+	return base64.StdEncoding.EncodeToString(append(b, (vm + strings.Repeat(".", 32))[:32]...))
+}
+
 // testConfig is a config on a fake backend whose VMs answer with a
-// made-up host key each, and an "other" key line.
+// made-up host key each (keyOf), and lines that aren't keys.
 func testConfig(t *testing.T) (*Config, *backendtest.Fake) {
 	t.Helper()
 	root := t.TempDir()
@@ -148,7 +155,7 @@ func testConfig(t *testing.T) (*Config, *backendtest.Fake) {
 		if len(argv) != 3 || !strings.Contains(argv[2], "/etc/ssh/ssh_host_") {
 			return errors.New("unexpected command")
 		}
-		_, err := io.WriteString(o.Stdout, "ssh-ed25519 AAAAkey"+strings.ReplaceAll(vm, "-", "")+" root@x\n"+
+		_, err := io.WriteString(o.Stdout, "ssh-ed25519 "+keyOf(vm)+" root@x\n"+
 			"garbage\nssh-rsa not;base64\n*-evil AAAA\n")
 		return err
 	}
@@ -264,11 +271,11 @@ func TestWrite(t *testing.T) {
 	if err := c.Write(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	kh := c.Dirs.KnownHosts()
+	khImg, khWeb := c.Dirs.VM(imgish).KnownHosts(), c.Dirs.VM(web).KnownHosts()
 	want := header + `
 Host devvm-img-foo ` + imgish + `
   HostKeyAlias ` + imgish + `
-  UserKnownHostsFile "` + kh + `"
+  UserKnownHostsFile "` + khImg + `"
   StrictHostKeyChecking yes
   NoHostAuthenticationForLocalhost no
   ForwardAgent yes
@@ -282,7 +289,7 @@ Host devvm-img-foo ` + imgish + `
 
 Host devvm-web ` + web + `
   HostKeyAlias ` + web + `
-  UserKnownHostsFile "` + kh + `"
+  UserKnownHostsFile "` + khWeb + `"
   StrictHostKeyChecking yes
   NoHostAuthenticationForLocalhost no
   ForwardAgent no
@@ -297,17 +304,24 @@ Host devvm-web ` + web + `
 	if got := read(t, c.Dirs.SSHConfig()); got != want {
 		t.Errorf("ssh config:\n%s\nwant:\n%s", got, want)
 	}
-	// Only the running project VMs' keys, under their names, nothing but
-	// host keys.
-	wantKH := imgish + " ssh-ed25519 AAAAkeydevvmimgfooabc123abc123ab\n" + web + " ssh-ed25519 AAAAkeydevvmwebaaaaaaaaaaaaaa\n"
-	if got := read(t, kh); got != wantKH {
-		t.Errorf("known hosts = %q, want %q", got, wantKH)
+	// Only the running project VMs' keys, each in its own record for its
+	// start, under its name, nothing but host keys.
+	record := func(vm string) string {
+		return "# devvm: host keys of start start-0\n" + vm + " ssh-ed25519 " + keyOf(vm) + "\n"
+	}
+	for vm, kh := range map[string]string{imgish: khImg, web: khWeb} {
+		if got := read(t, kh); got != record(vm) {
+			t.Errorf("%s's known hosts = %q, want %q", vm, got, record(vm))
+		}
+	}
+	if got := read(t, c.Dirs.VM(api).KnownHosts()); got != "" {
+		t.Errorf("a stopped VM's keys: %q", got)
 	}
 	if fi, err := os.Stat(c.Dirs.SSHConfig()); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("ssh config's mode: %v, %v", fi, err)
 	}
 
-	// Keys are read once; a stopped VM drops out, its keys kept.
+	// Keys are read once for each start; a stopped VM drops out, its keys kept.
 	f.Instances[imgish] = backend.Instance{Name: imgish, Status: backend.StatusStopped}
 	execs := 0
 	for _, m := range f.Methods() {
@@ -330,8 +344,17 @@ Host devvm-web ` + web + `
 	if strings.Contains(got, imgish) || !strings.Contains(got, "Host devvm-web "+web+"\n") {
 		t.Errorf("ssh config with %s stopped:\n%s", imgish, got)
 	}
-	if read(t, kh) != wantKH {
-		t.Errorf("known hosts changed: %q", read(t, kh))
+	if read(t, khImg) != record(imgish) {
+		t.Errorf("known hosts changed: %q", read(t, khImg))
+	}
+
+	// Started again: its keys are read again, for the new start.
+	f.Restart(web)
+	if err := c.Write(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, khWeb); !strings.HasPrefix(got, "# devvm: host keys of start start-1\n") {
+		t.Errorf("after a start: %q", got)
 	}
 
 	// Two web folders: the first keeps its alias, the second has its full
@@ -354,26 +377,61 @@ Host devvm-web ` + web + `
 	if got := read(t, c.Dirs.SSHConfig()); strings.Count(got, "Host devvm-web ") != 1 || !strings.Contains(got, "\nHost "+web2+"\n") {
 		t.Errorf("ssh config with one alias twice:\n%s", got)
 	}
-	delete(f.Instances, web2)
-	if err := c.ForgetHostKeys(t.Context(), web2); err != nil {
-		t.Fatal(err)
-	}
+}
 
-	// Forgotten keys are read again; forgetting keeps the others.
-	if err := c.ForgetHostKeys(t.Context(), web); err != nil {
+// New's config asks the registry for the backends VMs' states name. A
+// backend that can't list, or can't say how a VM runs, gives no entries;
+// backends it can't name, or a run cancelled, write nothing.
+func TestWriteFailures(t *testing.T) {
+	t.Parallel()
+	c, f := testConfig(t)
+	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	made(t, c.Dirs, web)
+	if st, err := state.ReadVM(c.Dirs, web); err != nil || st.Update(t.Context(), func(st *state.VM) error { st.Backend = "fake"; return nil }) != nil {
 		t.Fatal(err)
 	}
-	if got := read(t, kh); got != imgish+" ssh-ed25519 AAAAkeydevvmimgfooabc123abc123ab\n" {
-		t.Errorf("known hosts after forgetting %s = %q", web, got)
-	}
-	if err := c.ForgetHostKeys(t.Context(), imgish); err != nil {
+	reg, err := backend.NewRegistry(f)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := read(t, kh); got != "" {
-		t.Errorf("known hosts after forgetting both = %q", got)
+	if err := New(c.Dirs, reg).Write(t.Context()); err != nil {
+		t.Fatal(err)
 	}
-	if err := c.ForgetHostKeys(t.Context(), api); err != nil {
-		t.Errorf("forgetting a VM with no keys: %v", err)
+	if got := read(t, c.Dirs.SSHConfig()); !strings.Contains(got, "\nHost devvm-web "+web+"\n") {
+		t.Errorf("New's config:\n%s", got)
+	}
+	for _, method := range []string{"List", "Running"} {
+		f.Errs = map[string]error{method: errors.New("no")}
+		if err := c.Write(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if got := read(t, c.Dirs.SSHConfig()); got != header {
+			t.Errorf("%s fails: %q", method, got)
+		}
+	}
+	f.Errs = nil
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := c.Write(cancelled); err == nil {
+		t.Error("written once cancelled")
+	}
+	c.Backends = func() ([]backend.Backend, error) { return nil, errors.New("no states") }
+	if err := c.Write(t.Context()); err == nil {
+		t.Error("written without its backends")
+	}
+}
+
+// A record devvm can't read fails the ssh config: it's devvm's own file.
+func TestWriteUnreadableRecord(t *testing.T) {
+	t.Parallel()
+	c, f := testConfig(t)
+	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	made(t, c.Dirs, web)
+	if err := os.MkdirAll(c.Dirs.VM(web).KnownHosts(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Write(t.Context()); err == nil {
+		t.Error("written past an unreadable record")
 	}
 }
 
@@ -389,7 +447,7 @@ func TestWriteUnchecked(t *testing.T) {
 	if got := read(t, c.Dirs.SSHConfig()); got != header {
 		t.Errorf("ssh config = %q", got)
 	}
-	if got := read(t, c.Dirs.KnownHosts()); got != "" {
+	if got := read(t, c.Dirs.VM(web).KnownHosts()); got != "" {
 		t.Errorf("known hosts = %q", got)
 	}
 	f.ExecFunc = func(_ string, _ []string, o backend.ExecOpts) error {
@@ -492,133 +550,6 @@ func TestWriteNoAddress(t *testing.T) {
 		if got := read(t, c.Dirs.SSHConfig()); got != header {
 			t.Errorf("%+v: %q", target, got)
 		}
-	}
-}
-
-func TestParseHostKeys(t *testing.T) {
-	out := "ssh-ed25519 AAAAC3Nza root@vm\necdsa-sha2-nistp256 AAAAE2Vj= c\n\nssh-rsa\nrsa AAAA\nssh-x AA AA\nssh-y A\"A\n"
-	want := "v ssh-ed25519 AAAAC3Nza\nv ecdsa-sha2-nistp256 AAAAE2Vj=\nv ssh-x AA\n"
-	if got := parseHostKeys("v", []byte(out)); got != want {
-		t.Errorf("parseHostKeys = %q, want %q", got, want)
-	}
-	w := &capped{max: 4}
-	if n, err := w.Write([]byte("abcdef")); n != 6 || err != nil || w.String() != "abcd" {
-		t.Errorf("capped: %d, %v, %q", n, err, w.String())
-	}
-}
-
-// A VM's host key, for its port forwarder: read from it and pinned when
-// none is, else the pinned one, ed25519 first; none when it can't show
-// one.
-func TestHostKey(t *testing.T) {
-	c, f := testConfig(t)
-	if got, err := c.HostKey(t.Context(), f, web); err != nil || got != "ssh-ed25519 AAAAkey"+strings.ReplaceAll(web, "-", "") {
-		t.Errorf("read: %q, %v", got, err)
-	}
-	if !strings.Contains(read(t, c.Dirs.KnownHosts()), web+" ssh-ed25519 ") {
-		t.Error("not pinned")
-	}
-	if err := os.WriteFile(c.Dirs.KnownHosts(), []byte(api+" ecdsa-sha2-nistp256 AAAAe\n"+api+" ssh-ed25519 AAAAp\n"+api+" ssh-rsa AAAAr\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	f.ExecFunc = func(string, []string, backend.ExecOpts) error { return errors.New("not asked") }
-	if got, err := c.HostKey(t.Context(), f, api); err != nil || got != "ssh-ed25519 AAAAp" {
-		t.Errorf("pinned: %q, %v", got, err)
-	}
-	if got, err := c.HostKey(t.Context(), f, web); err == nil {
-		t.Errorf("unreadable: %q", got)
-	}
-}
-
-// bothRead holds each Exec until two have started, so both callers have
-// read the known hosts file before either writes it.
-type bothRead struct {
-	*backendtest.Fake
-	both sync.WaitGroup
-}
-
-func (b *bothRead) Exec(ctx context.Context, vm string, argv []string, o backend.ExecOpts) error {
-	b.both.Done()
-	b.both.Wait()
-	return b.Fake.Exec(ctx, vm, argv, o)
-}
-
-// Two devvms pinning different VMs' keys at once keep both: each has read
-// the file before either writes, and the write reads it again under the
-// lock.
-func TestHostKeyConcurrent(t *testing.T) {
-	c, f := testConfig(t)
-	b := &bothRead{Fake: f}
-	b.both.Add(2)
-	var wg sync.WaitGroup
-	for _, vm := range []string{web, api} {
-		wg.Go(func() {
-			if _, err := c.HostKey(t.Context(), b, vm); err != nil {
-				t.Errorf("%s: %v", vm, err)
-			}
-		})
-	}
-	wg.Wait()
-	data, err := os.ReadFile(c.Dirs.KnownHosts())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !hasHost(data, web) || !hasHost(data, api) {
-		t.Errorf("known hosts lost a pin:\n%s", data)
-	}
-
-	// Two pinning one VM at once pin it once.
-	b = &bothRead{Fake: f}
-	b.both.Add(2)
-	for range 2 {
-		wg.Go(func() {
-			if _, err := c.HostKey(t.Context(), b, imgish); err != nil {
-				t.Errorf("%s: %v", imgish, err)
-			}
-		})
-	}
-	wg.Wait()
-	if got := strings.Count(read(t, c.Dirs.KnownHosts()), imgish+" "); got != 1 {
-		t.Errorf("%s pinned %d times", imgish, got)
-	}
-}
-
-// A change to known hosts that changes nothing writes nothing, and one
-// whose folder or file can't be read fails.
-func TestChangeKnownHosts(t *testing.T) {
-	t.Parallel()
-	c, _ := testConfig(t)
-	same := func(data []byte) []byte { return data }
-	if err := c.changeKnownHosts(t.Context(), same); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(c.Dirs.KnownHosts()); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("no change wrote the file: %v", err)
-	}
-	if err := os.Mkdir(c.Dirs.KnownHosts(), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.changeKnownHosts(t.Context(), same); err == nil {
-		t.Error("a folder at known_hosts was read")
-	}
-	if err := os.Remove(c.Dirs.KnownHosts()); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(c.Dirs.KnownHostsLock()); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(c.Dirs.KnownHostsLock(), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.changeKnownHosts(t.Context(), same); err == nil {
-		t.Error("a folder at the lock was locked")
-	}
-	c.Dirs.Data = filepath.Join(c.Dirs.KnownHostsLock(), "x")
-	if err := os.WriteFile(c.Dirs.Data, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.changeKnownHosts(t.Context(), same); err == nil {
-		t.Error("a file at the data folder was used")
 	}
 }
 

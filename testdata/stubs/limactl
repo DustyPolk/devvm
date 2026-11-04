@@ -13,7 +13,8 @@
 # and delete forgets with $LIMA_HOME/<name>. The TestLimactlStubContract test
 # in internal/backend/lima checks all this against real Lima. A VM's ssh config is $LIMA_HOME/<name>/ssh.config, as start
 # writes it (Lima's own options, host keys unchecked) unless it exists; its
-# host keys, read with a shell, are one made-up key per VM, unless
+# host keys, read with a shell, are one made-up key per VM (its name in
+# an ed25519 key), unless
 # $STUB_DIR/hostkeys-fail exists.
 # create and clone make the instance's folder, $LIMA_HOME/<name>.
 # start writes the VM's ha.pid (devvm's pid, which runs and is soon gone,
@@ -282,7 +283,10 @@ case ${1:-} in
     # The VM's ssh host keys.
     if [[ "$*" == *"/etc/ssh/ssh_host_"* ]]; then
       [[ ! -e $STUB_DIR/hostkeys-fail ]] || exit 1
-      echo "ssh-ed25519 AAAAstubkey${names[0]//-/} root@${names[0]}"
+      # An ed25519 key in ssh's wire format: its type, then the VM's name
+      # cut or padded to 32 bytes.
+      k="${names[0]}................................"
+      echo "ssh-ed25519 $(printf '\0\0\0\013ssh-ed25519\0\0\0\040%s' "${k:0:32}" | base64 | tr -d '\n') root@${names[0]}"
       echo "not a key"
       exit 0
     fi

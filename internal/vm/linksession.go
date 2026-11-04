@@ -3,12 +3,9 @@ package vm
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"os"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -342,8 +339,9 @@ func (e Links) warnUnenforced(ctx context.Context, client, target *state.VM) {
 }
 
 // linkSSH is how devvm's own ssh reaches a running VM for links: its
-// backend's ssh (reviewed), with the VM's own key and the host key devvm
-// pins for it, on a host loopback port (vmssh.FromTarget).
+// backend's ssh (reviewed), with the VM's own key and the host keys devvm
+// pinned for its current start (vmssh.KnownHostsFor), on a host loopback
+// port (vmssh.FromTarget).
 func (e Links) linkSSH(ctx context.Context, b backend.Backend, vm string) (vmssh.SSH, error) {
 	if !e.Registry.Allowed(b, backend.FeatureSSH) {
 		return vmssh.SSH{}, fmt.Errorf("%s: the %s backend's ssh isn't usable", vm, b.Name())
@@ -356,33 +354,10 @@ func (e Links) linkSSH(ctx context.Context, b backend.Backend, vm string) (vmssh
 	if err != nil {
 		return vmssh.SSH{}, err
 	}
-	pinned, err := hostKeyPinned(e.Dirs.KnownHosts(), vm)
-	if err != nil {
+	if s.KnownHosts, err = vmssh.KnownHostsFor(ctx, e.Dirs, b, vm); err != nil {
 		return vmssh.SSH{}, err
 	}
-	if !pinned {
-		return vmssh.SSH{}, fmt.Errorf("%s: no host key pinned", vm)
-	}
-	s.KnownHosts = e.Dirs.KnownHosts()
 	return s, nil
-}
-
-// hostKeyPinned reports whether devvm's known hosts file has a host key
-// for vm, which devvm's ssh then checks the VM's against (HostKeyAlias).
-func hostKeyPinned(path, vm string) (bool, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // devvm's own file
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	for l := range strings.SplitSeq(string(data), "\n") {
-		if strings.HasPrefix(l, vm+" ") {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // linkEvents writes a link session's events to its client's event log,

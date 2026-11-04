@@ -230,12 +230,43 @@ func testForwarders(t *testing.T, e *Env, f *backendtest.Fake) *[][]string {
 	f.Forward = backend.ForwardTarget{User: "u", Key: "/k", Port: 60022}
 	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
 		if len(argv) == 3 && strings.Contains(argv[2], "ssh_host_") && o.Stdout != nil {
-			_, err := io.WriteString(o.Stdout, "ssh-ed25519 AAAAkey root@vm\n")
+			_, err := io.WriteString(o.Stdout, testHostKey+"\n")
 			return err
 		}
 		return nil
 	}
 	return starts
+}
+
+// testHostKey is a made-up host key line, in ssh's wire format.
+const testHostKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGRldnZtLXRlc3QtaG9zdC1rZXktYWFhYWFhYWFhYWFh root@vm"
+
+// pinHostKeys pins each VM's host keys for its current start, as a launch
+// does, from f's VMs showing testHostKey.
+func pinHostKeys(t *testing.T, d paths.Dirs, f *backendtest.Fake, vms ...string) {
+	t.Helper()
+	was := f.ExecFunc
+	defer func() { f.ExecFunc = was }()
+	f.ExecFunc = func(_ string, _ []string, o backend.ExecOpts) error {
+		_, err := io.WriteString(o.Stdout, testHostKey+"\n")
+		return err
+	}
+	for _, vm := range vms {
+		if _, err := vmssh.PinHostKeys(t.Context(), d, f, vm); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// countExecs is how many commands f has run in its VMs.
+func countExecs(f *backendtest.Fake) int {
+	n := 0
+	for _, m := range f.Methods() {
+		if m == "Exec" {
+			n++
+		}
+	}
+	return n
 }
 
 func allNative() backend.Caps {

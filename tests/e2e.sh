@@ -1050,9 +1050,9 @@ lk_stopped() {
     lk_shows "$lk_pc" "  REFUSED  $lk_n2:47240  to $lk_v2: it isn't running\$" network log -n 100000 &&
     ! lk_running "$lk_v2"; }
 lk_restarted() { local k0 k1
-  k0=$(grep "^$lk_v2 " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
+  k0=$(grep "^$lk_v2 " "$(vmdir "$lk_v2")/run/known_hosts" | sort)
   if ! { lk_up "$lk_p2" && lk_running "$lk_v2" && lk_serve "$lk_v2" "$lk_w2" 47240 80; }; then tail -5 "$work/last.log"; return 1; fi
-  k1=$(grep "^$lk_v2 " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
+  k1=$(grep "^$lk_v2 " "$(vmdir "$lk_v2")/run/known_hosts" | sort)
   lk_until 20 lk_gets "$lk_vc" "$lk_n2" 47240 "$lk_w2-47240" || return 1
   # Lima keeps a VM's host keys.
   echo "host key kept: $([[ $k0 == "$k1" ]] && echo yes || echo no)"; }
@@ -1103,7 +1103,7 @@ lk_boot() { lk_root "$1" 'cat /proc/sys/kernel/random/boot_id; cut -d" " -f22 /p
 lk_via_gets() { local a; a=$(lk_via "$1" "$2" "${4:-}"); echo "$2${4:+ ($4)}: $(paste -sd ' ' - <<<"$a")"
   [[ $(head -1 <<<"$a") == 200 && $(sed -n 2p <<<"$a") == "$3" ]]; }
 lk_proxy_added() { local b0 b1 k0 k1 n
-  b0=$(lk_boot "$lk_vc") k0=$(grep "^$lk_vc " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
+  b0=$(lk_boot "$lk_vc") k0=$(grep "^$lk_vc " "$(vmdir "$lk_vc")/run/known_hosts" | sort)
   n=$(lk_user "$lk_vc" 'printf "%s|%s" "$NO_PROXY" "$no_proxy"'); echo "NO_PROXY|no_proxy: $n"
   [[ $n == "localhost,127.0.0.1,::1|localhost,127.0.0.1,::1" ]] || return 1
   lk_start "$lk_v1" serve 127.0.0.1 47242 "$lk_w1-47242" &&
@@ -1111,7 +1111,7 @@ lk_proxy_added() { local b0 b1 k0 k1 n
   lk_until 15 lk_via_gets "$lk_vc" http://db:47242/ "$lk_w1-47242" &&
     lk_via_gets "$lk_vc" http://db.devvm.internal:47242/ "$lk_w1-47242" && lk_via_gets "$lk_vc" http://db:47242/ "$lk_w1-47242" -p &&
     lk_curls "$lk_vc" http://db:47242/ "$lk_w1-47242" && lk_gets "$lk_vc" db 47242 "$lk_w1-47242" || return 1
-  b1=$(lk_boot "$lk_vc") k1=$(grep "^$lk_vc " "$XDG_DATA_HOME/devvm/known_hosts" | sort)
+  b1=$(lk_boot "$lk_vc") k1=$(grep "^$lk_vc " "$(vmdir "$lk_vc")/run/known_hosts" | sort)
   echo "boot and init before: $(paste -sd ' ' - <<<"$b0"), after: $(paste -sd ' ' - <<<"$b1")"
   [[ -n $b0 && $b0 == "$b1" && $k0 == "$k1" ]] && [[ $(lk_user "$lk_vc" 'printf "%s" "$NO_PROXY"') == localhost,127.0.0.1,::1 ]] &&
     lk_event "$lk_vc" link db 47242 "\"target\":\"$lk_v1\""; }
@@ -1474,10 +1474,10 @@ check "hostname is the folder" bash -c "[[ \$(limactl shell --workdir / $vm host
 # program on this machine on every address of a port (with SO_REUSEADDR, as most servers do) keeps
 # its localhost connections while the VM listens on it too; a VM server on another port reaches this
 # machine (the control).
-check "Lima forwards nothing itself; devvm's forwarder runs, with the host key devvm pinned" bash -c "
+check "Lima forwards nothing itself; devvm's forwarder runs, with the host keys devvm pinned for this start" bash -c "
   [[ \$(limactl list --format '{{range .Config.PortForwards}}{{.GuestIP}}={{.Ignore}} {{end}}' $vm) == '127.0.0.1=true 0.0.0.0=true ::=true ' ]] &&
-  pgrep -f -- '[_]ports -vm $vm ' >/dev/null &&
-  grep -qxF \"\$(cut -d' ' -f2- '$(vmdir "$vm")/run/ports.known_hosts' | sed 's/^/$vm /')\" '$XDG_DATA_HOME/devvm/known_hosts'"
+  ps -axww -o command= | grep -- '[_]ports -vm $vm ' | grep -qF -- ' -known-hosts $(vmdir "$vm")/run/known_hosts ' &&
+  grep -q '^$vm ssh-ed25519 ' '$(vmdir "$vm")/run/known_hosts'"
 # Without network policy too: so no other VM's forwarder takes it before Lima binds it.
 check "its ssh port is the one its state records, on this machine's loopback alone" bash -c "
   sp=\$(st_get '$(vmdir "$vm")' ports.host.ssh) && [[ -n \$sp ]] && ! vm_state '$(vmdir "$vm")' | grep -qx net.on=true &&
@@ -1529,7 +1529,7 @@ section "ssh by name"
 # is never read or changed. ssh gets no agent but a throwaway one.
 sc=$work/ssh; rm -rf "$sc"; mkdir -p "$sc"
 printf 'Include %s\nHost *\n  ForwardAgent yes\n' "$XDG_DATA_HOME/devvm/ssh_config" > "$sc/config"
-kh=$XDG_DATA_HOME/devvm/known_hosts
+kh=$(vmdir "$vm")/run/known_hosts
 agent_pid=$(ssh-agent -a "$sc/agent.sock" | sed -n 's/^SSH_AGENT_PID=\([0-9]*\);.*/\1/p')
 check "the ssh config lists it by the folder's name" grep -q "^Host devvm-web $vm\$" "$XDG_DATA_HOME/devvm/ssh_config"
 check "its host keys are pinned, as the VM has them" bash -c "

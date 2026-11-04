@@ -37,7 +37,7 @@ exec sh -c 'mkdir -p "$HOME/.ssh" && echo "Include $DATA/ssh_config" > "$HOME/.s
 # through that line: the real ssh resolves the name, connecting to nothing.
 [exec:/usr/bin/ssh] exec /usr/bin/ssh -F $HOME/.ssh/config -G devvm-web
 [exec:/usr/bin/ssh] stdout '^hostname 127\.0\.0\.1$'
-[exec:/usr/bin/ssh] stdout '^userknownhostsfile \S*/data/devvm/known_hosts$'
+[exec:/usr/bin/ssh] stdout '^userknownhostsfile \S*/data/devvm/vms/[0-9a-f]{14}/run/known_hosts$'
 [exec:/usr/bin/ssh] stdout '^hostkeyalias devvm-web-[0-9a-f]{14}$'
 json_set $WEB_dir/vm.json size.cpus=6
 stub_reset

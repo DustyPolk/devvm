@@ -262,11 +262,3 @@ func (d Dirs) Secrets() string { return filepath.Join(d.Data, "secrets") }
 
 // SSHConfig is the SSH config devvm writes for its VMs.
 func (d Dirs) SSHConfig() string { return filepath.Join(d.Data, "ssh_config") }
-
-// KnownHosts holds the VMs' SSH host keys.
-func (d Dirs) KnownHosts() string { return filepath.Join(d.Data, "known_hosts") }
-
-// KnownHostsLock is the lock file each devvm changing the known hosts
-// file holds, so that two pinning or forgetting keys at once lose neither
-// change.
-func (d Dirs) KnownHostsLock() string { return filepath.Join(d.Data, "known_hosts.lock") }

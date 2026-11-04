@@ -29,9 +29,10 @@ const Cmd = "_ports"
 // Which ports it forwards is the VM's state's (ports.Forward), read at
 // each start, never a copy of the backend's; how it reaches the VM is the
 // backend's (ForwardTarget, Lifeline). Its lock, its files and its
-// process are its own: the pid, status, lock and pinned host key in the
-// VM's run folder (paths.VM.Forwarder), its log in its logs folder, and
-// its master's control socket in devvm's run folder, named by a hash.
+// process are its own: the pid, status and lock in the VM's run folder
+// (paths.VM.Forwarder), its log in its logs folder, and its master's
+// control socket in devvm's run folder, named by a hash. The host keys it
+// checks are the VM's one record for its start (PinHostKeys).
 type Forwards struct {
 	Dirs paths.Dirs
 	// Run is where the control sockets go instead, when set: tests' run
@@ -49,35 +50,30 @@ type Forwards struct {
 	// InUse reports whether a program on the host has a port, on any
 	// address (platform.PortInUse): a listed port it has isn't forwarded.
 	InUse func(ctx context.Context, port int) bool
-	// HostKey returns the VM's host key (TYPE BASE64) as devvm pins it
-	// for its ssh config (sshconfig.Config.HostKey), read once it runs.
-	HostKey func(ctx context.Context, b backend.Backend, vm string) (string, error)
 	// Warn prints a warning: ports_taken, ports_forward_failed.
 	Warn func(msg.M)
 }
 
 // NewForwards returns the forwarders of devvm's folders, run by self
-// (devvm's binary), as processes of their own. Its caller sets InUse,
-// HostKey and Warn.
+// (devvm's binary), as processes of their own. Its caller sets InUse and
+// Warn.
 func NewForwards(d paths.Dirs, self string) Forwards {
 	return Forwards{Dirs: d, Self: self, Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond}
 }
 
 // spec is what a VM's forwarder runs with: how it reaches the VM's sshd
-// (the backend's target, the host key devvm pins, its lifeline), the host
-// ports it never forwards, and the ports it forwards (nil for every one).
+// (the backend's target, the record of the host keys devvm pins for its
+// start, its lifeline), the host ports it never forwards, and the ports it
+// forwards (nil for every one).
 type spec struct {
 	backend.ForwardTarget
-	HostKey, Lifeline string
-	Reserve           []int
-	Only              []backend.PortRange
+	KnownHosts, Lifeline string
+	Reserve              []int
+	Only                 []backend.PortRange
 }
 
 // Log is the VM's forwarder's log.
 func (f Forwards) Log(vm string) string { return f.Dirs.VM(vm).ForwarderLog() }
-
-// KnownHosts is the host key the VM's forwarder pins.
-func (f Forwards) KnownHosts(vm string) string { return f.Dirs.VM(vm).Forwarder(".known_hosts") }
 
 // Control is the master's control socket: in the run folder, named by a
 // hash, as a socket's path is at most paths.SocketMax characters and ssh
@@ -97,8 +93,8 @@ const ControlMax = paths.SocketMax - 1 - 17
 // Start starts the forwarder of st's VM, which b runs, after stopping any
 // it had, holding its lock throughout: the ports its state forwards, its
 // listed ones less those a program on the host has (warned, ports_taken),
-// over its sshd as b reaches it (ForwardTarget), with the host key devvm
-// pins for it, never on its ssh's or its proxy's port, following b's
+// over its sshd as b reaches it (ForwardTarget), with the host keys devvm
+// pins for its start (PinHostKeys), never on its ssh's or its proxy's port, following b's
 // lifeline for it. A VM that forwards none, or whose listed ports are all
 // taken, is left without one. One that can't start is warned about
 // (ports_forward_failed), naming its log, and the VM runs on. Connections
@@ -137,7 +133,7 @@ func (f Forwards) start(ctx context.Context, b backend.Backend, st *state.VM) er
 	if err != nil {
 		return err
 	}
-	key, err := f.HostKey(ctx, b, vm)
+	kh, err := PinHostKeys(ctx, f.Dirs, b, vm)
 	if err != nil {
 		return err
 	}
@@ -146,7 +142,7 @@ func (f Forwards) start(ctx context.Context, b backend.Backend, st *state.VM) er
 		return err
 	}
 	return f.run(vm, spec{
-		ForwardTarget: t, HostKey: key, Lifeline: run.Lifeline,
+		ForwardTarget: t, KnownHosts: kh, Lifeline: run.Lifeline,
 		Reserve: []int{t.Port, p.Host.Proxy}, Only: only,
 	})
 }
@@ -200,12 +196,10 @@ func (f Forwards) run(vm string, s spec) error {
 	if err := os.MkdirAll(filepath.Dir(ctl), 0o700); err != nil {
 		return err
 	}
-	if err := state.PrivateDir(f.Dirs.VM(vm).Logs()); err != nil {
-		return err
-	}
-	kh := f.KnownHosts(vm)
-	if err := state.WriteFile(kh, []byte(vm+" "+s.HostKey+"\n")); err != nil {
-		return err
+	for _, dir := range []string{f.Dirs.VM(vm).Run(), f.Dirs.VM(vm).Logs()} {
+		if err := state.PrivateDir(dir); err != nil {
+			return err
+		}
 	}
 	out, err := os.OpenFile(f.Log(vm), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -229,7 +223,7 @@ func (f Forwards) run(vm string, s spec) error {
 	}
 	args := []string{
 		Cmd, "-vm", vm, "-lifeline", s.Lifeline, "-port", strconv.Itoa(s.Port),
-		"-user", s.User, "-key", s.Key, "-known-hosts", kh, "-control", ctl, "-reserve", strings.Join(reserve, ","),
+		"-user", s.User, "-key", s.Key, "-known-hosts", s.KnownHosts, "-control", ctl, "-reserve", strings.Join(reserve, ","),
 	}
 	if s.Only != nil {
 		args = append(args, "-only", backend.FormatPortRanges(s.Only))
