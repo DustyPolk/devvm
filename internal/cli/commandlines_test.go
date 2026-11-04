@@ -122,7 +122,7 @@ func TestCheckCommandLine(t *testing.T) {
 		{"a.md", "Run `devvm ports 5173,8000-8010` to forward them.", false},
 		{"a.md", "`devvm ssh-agent add KEY_FILE [--lifetime DURATION]` loads a key.", false},
 		{"a.md", "```sh\ndevvm tools add python claude  # add them\n```", false},
-		{"a.go", "// devvm update moves the VM to the newest tools", true},
+		{"a.go", "// devvm join puts the VM in a group", true},
 		{"a.go", `"run devvm export to save it"`, true},
 		{"a.md", "devvm network policy shows it.", true},
 		{"a.md", "devvm gc --all deletes more.", true},

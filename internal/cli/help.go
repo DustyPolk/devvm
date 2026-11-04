@@ -20,7 +20,7 @@ type commandGroup struct {
 // exist is left out.
 func commandGroups() []commandGroup {
 	return []commandGroup{
-		{"vm", "Your VM:", []string{"restart", "stop", "rm", "adopt", "ls", "code", "desktop", "host", "history"}},
+		{"vm", "Your VM:", []string{"restart", "stop", "update", "rm", "adopt", "ls", "code", "desktop", "host", "history"}},
 		{"change", "Change your VM:", []string{"tools", "size", "ports", "network", "ssh-agent", "git-protect", "secret"}},
 		{"links", "Links between VMs:", []string{"link", "group"}},
 		{"images", "Images:", []string{"images", "build", "rebuild", "layer"}},

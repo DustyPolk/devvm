@@ -250,6 +250,7 @@ func TestShowCommandsTakeJSON(t *testing.T) {
 		"devvm ssh-agent add":  "it changes a setting",
 		"devvm tools add":      "it changes a setting",
 		"devvm layer add":      "it makes a VM again, then opens a shell",
+		"devvm update":         "it makes a VM again, then opens a shell",
 		"devvm tools update":   "it changes a setting",
 		"devvm secret use":     "it changes a setting",
 		"devvm secret unuse":   "it changes a setting",

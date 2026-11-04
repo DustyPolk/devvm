@@ -10,6 +10,7 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/ui"
+	"github.com/w3cj/devvm/internal/vm"
 )
 
 // addFromFlag adds --from, the container image a base starts from.
@@ -35,9 +36,19 @@ func addForceFlag(f *pflag.FlagSet, p *bool) {
 }
 
 // addNoExportFlag adds --no-export, which skips exporting the agents'
-// history before a VM's disk goes (devvm rm, devvm layer add).
+// history before a VM's disk goes (devvm rm, devvm layer add, devvm
+// update).
 func addNoExportFlag(f *pflag.FlagSet, p *bool) {
 	f.BoolVar(p, "no-export", false, "don't export the agents' history first")
+}
+
+// addRemakeFlags adds the flags of a command that makes the folder's VM
+// again (devvm layer add, devvm update): --force, --no-export and
+// --clean-home.
+func addRemakeFlags(f *pflag.FlagSet, o *vm.RemakeOptions) {
+	addForceFlag(f, &o.Force)
+	addNoExportFlag(f, &o.NoExport)
+	f.BoolVar(&o.CleanHome, "clean-home", false, "give the VM the image's home folder instead of keeping its own")
 }
 
 // addSSHConfigFlag adds --ssh-config, which answers the question whether

@@ -87,8 +87,6 @@ func newLayerAddCmd(u *ui.UI) *cobra.Command {
 		},
 		ValidArgsFunction: completeLayerNames,
 	}
-	addForceFlag(cmd.Flags(), &o.Force)
-	addNoExportFlag(cmd.Flags(), &o.NoExport)
-	cmd.Flags().BoolVar(&o.CleanHome, "clean-home", false, "give the VM the image's home folder instead of keeping its own")
+	addRemakeFlags(cmd.Flags(), &o)
 	return cmd
 }

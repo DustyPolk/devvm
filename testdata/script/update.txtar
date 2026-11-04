@@ -1,0 +1,96 @@
+# devvm update: the folder's VM made again from its own image's new
+# build, after asking, when that image changed since the VM was made,
+# keeping its settings and its home folder; a current VM is said to be
+# so, and nothing runs. Each launch's outdated warning names devvm update.
+env LAYERS=$XDG_CONFIG_HOME/devvm/layers
+
+# Usage errors, before anything runs.
+! exec devvm update docker
+stderr '^devvm: args_none command=devvm update given=docker$'
+
+# No VM.
+project web
+! exec devvm update --force
+stderr '^devvm: no_vm dir=/\S*/web$'
+
+# A VM of a layer of the user's, with ports, a rule and files in its
+# project folder and its home.
+exec devvm layer new foo
+exec devvm --no-network-policy --no-git-protect --agents claude --layers foo --ports 3000
+vm_name WEB web
+exec devvm network allow example.com
+exec sh -c 'echo kept > notes && mkdir -p "$STUB_DIR/vmhome-$WEB" && echo ls > "$STUB_DIR/vmhome-$WEB/.bash_history"'
+vm_state $WEB_dir/vm.json
+stdout '^image=foo$'
+
+# Current: said, and nothing runs.
+stub_reset
+exec devvm update
+stdout '^==> vm_current image=foo vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+
+# Its layer's script edited: each launch warns, naming devvm update.
+exec sh -c 'echo "echo again" >> "$LAYERS/foo.sh"'
+exec devvm
+stderr 'vm_outdated changed=foo$'
+
+# Without a terminal it refuses unless --force; in one it asks, and no
+# keeps the VM.
+stub_reset
+! exec devvm update
+stdout '^==> vm_changed changed=foo vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: force_needed command=devvm update$'
+ttyin -stdin $WORK/no.txt
+exec devvm update
+stderr '^remake_confirm image=foo vm=devvm-web-[0-9a-f]{14} \[y/N\] '
+stdout '==> kept vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+
+# --force: in order, the new build, the history exported, home saved, the
+# VM stopped and set aside, made again from the same image name and
+# started, home put back, the old machine deleted, then a shell.
+stub_reset
+exec devvm update --force
+stdout '^==> building_image image=foo '
+stdout '==> exported '
+stdout '==> saving_home vm=devvm-web-[0-9a-f]{14}$'
+stdout '==> creating_from image=foo vm=devvm-web-[0-9a-f]{14}$'
+stdout '==> remade image=foo vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout 'tar -czf - --one-file-system.*\n(.*\n)*limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl rename --tty=false devvm-web-[0-9a-f]{14} devvm-[0-9a-f]{14}-old\n(.*\n)*limactl clone --tty=false devvm-img-[0-9a-f]+ devvm-web-[0-9a-f]{14} .*\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n(.*\n)*.*tar -xzf - --skip-old-files.*\n(.*\n)*limactl delete -f devvm-[0-9a-f]{14}-old\n(.*\n)*limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n'
+vm_state $WEB_dir/vm.json
+stdout '^image=foo$'
+stdout '^ports.forward=3000$'
+stdout '^net.on=false$'
+stdout '^tools.names=claude$'
+! stdout '^remake'
+grep '^example\.com$' $WEB_dir/policy
+grep '^kept$' notes
+exec tar -tzf $STUB_DIR/home-in.tgz
+stdout '^\.bash_history$'
+
+# Current again: no warning, and devvm update does nothing.
+exec devvm
+! stderr vm_outdated
+stub_reset
+exec devvm update --force
+stdout '^==> vm_current image=foo vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+
+# Refused like devvm layer add: a --clone VM, and a parent folder's VM
+# without a terminal.
+exec sh -c 'echo "echo once more" >> "$LAYERS/foo.sh"'
+json_set $WEB_dir/vm.json 'clone:={"on":true}'
+! exec devvm update --force
+stderr '^devvm: remake_clone vm=devvm-web-[0-9a-f]{14}$'
+json_set $WEB_dir/vm.json 'clone:={}'
+mkdir sub
+cd sub
+! exec devvm update --force
+stderr '^devvm: remake_parent_vm command=devvm update dir=/\S*/web vm=devvm-web-[0-9a-f]{14}$'
+
+-- no.txt --
+n

@@ -514,3 +514,106 @@ func TestRemakePending(t *testing.T) {
 		t.Errorf("its folder: %v", err)
 	}
 }
+
+// devvm update on a current VM says so and changes nothing. On an
+// outdated one it names what changed, refuses without a terminal unless
+// --force, asks in one, and with --force makes the VM again from the same
+// image name, its new build: built, home saved and put back, its settings
+// kept, then a shell.
+func TestUpdate(t *testing.T) {
+	e, f, st, restored := remakeEnv(t)
+	vm := st.Name()
+	lc := Lifecycle{e}
+	var said []string
+	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	n := len(f.Calls())
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Equal(said, []string{"vm_current image=base vm=" + vm}) ||
+		slices.ContainsFunc(f.Methods()[n:], func(m string) bool { return m == "BuildImage" || m == "Stop" }) {
+		t.Errorf("current: said %q, then %q", said, f.Methods()[n:])
+	}
+
+	// Outdated: base is rebuilt, as devvm rebuild base does.
+	if err := state.BumpRebuild(e.Dirs, f.Name(), "", "base"); err != nil {
+		t.Fatal(err)
+	}
+	before := readState(t, e.Dirs, vm)
+	said = nil
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); msg.NamesOf(err) != "force_needed command=devvm update" {
+		t.Errorf("no terminal: %v", msg.NamesOf(err))
+	}
+	if !slices.Equal(said, []string{"vm_changed changed=base vm=" + vm}) {
+		t.Errorf("said %q", said)
+	}
+	asked := answers(t, e, false)
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Equal(*asked, []string{"remake_confirm image=base vm=" + vm}) || slices.Contains(f.Methods()[n:], "Stop") {
+		t.Errorf("declined: asked %q, then %q", *asked, f.Methods()[n:])
+	}
+
+	n = len(f.Calls())
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{Force: true}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	after := readState(t, e.Dirs, vm)
+	if after.Image != "base" || after.Chain == before.Chain || remakePending(after) {
+		t.Errorf("image %s, chain %s (was %s), pending %v", after.Image, after.Chain, before.Chain, remakePending(after))
+	}
+	for _, k := range []string{keyID, keyPorts, keyNet, keyCPUs, keyMemory, keyAgent, keyToolNames} {
+		if get(after, k) != get(before, k) {
+			t.Errorf("%s: %q, was %q", k, get(after, k), get(before, k))
+		}
+	}
+	if got := entries(t, *restored); !slices.Equal(got, []string{"0 644 .bash_history ls\n"}) {
+		t.Errorf("restored %q", got)
+	}
+	var steps []string
+	for _, m := range f.Methods()[n:] {
+		if slices.Contains([]string{"BuildImage", "Stop", "Rename", "CreateVM", "Start", "Delete", "Shell"}, m) {
+			steps = append(steps, m)
+		}
+	}
+	if want := []string{"BuildImage", "Stop", "Rename", "CreateVM", "Start", "Delete", "Shell"}; !slices.Equal(steps, want) {
+		t.Errorf("steps %q, want %q", steps, want)
+	}
+
+	// Current again.
+	said = nil
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{Force: true}); err != nil || !slices.Equal(said, []string{"vm_current image=base vm=" + vm}) {
+		t.Errorf("after: said %q, %v", said, msg.NamesOf(err))
+	}
+}
+
+// devvm update refuses what devvm layer add does, before anything runs: no
+// VM, a --clone VM and one whose creation didn't finish.
+func TestUpdateRefuses(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	lc := Lifecycle{e}
+	up := func() string { return msg.NamesOf(lc.Update(t.Context(), "devvm update", RemakeOptions{Force: true})) }
+	if got := up(); got != "no_vm dir="+e.Dir {
+		t.Errorf("no VM: %s", got)
+	}
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	vm := st.Name()
+	change(t, st, func(st *state.VM) error { st.Chain = "base=000000000000"; return nil })
+	if err := set(t, st, keyClone, "clone"); err != nil {
+		t.Fatal(err)
+	}
+	if got := up(); got != "remake_clone vm="+vm {
+		t.Errorf("a clone: %s", got)
+	}
+	if err := set(t, st, keyClone, ""); err != nil {
+		t.Fatal(err)
+	}
+	change(t, st, func(st *state.VM) error { st.Created = time.Time{}; return nil })
+	if got := up(); got != "vm_unfinished vm="+vm {
+		t.Errorf("unfinished: %s", got)
+	}
+	if slices.Contains(f.Methods(), "Rename") {
+		t.Errorf("ran %q", f.Methods())
+	}
+}

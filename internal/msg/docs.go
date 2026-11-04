@@ -398,6 +398,7 @@ var commandDocs = map[string]string{
 	"devvm":                "getting-started/commands",
 	"devvm restart":        "getting-started/commands#restarting-and-stopping",
 	"devvm stop":           "getting-started/commands#restarting-and-stopping",
+	"devvm update":         "using/images#outdated-vms",
 	"devvm rm":             "getting-started/commands#deleting-a-vm",
 	"devvm adopt":          "getting-started/commands#a-folder-made-again",
 	"devvm ls":             "getting-started/commands#listing-vms",

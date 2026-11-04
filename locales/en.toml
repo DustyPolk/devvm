@@ -365,6 +365,14 @@ other = "There's no layer {{.layer}}. Did you mean {{.like}}?"
 description = "layers is a space-separated list of layers: docker nix"
 other = "{{.vm}} has {{.layers}} already"
 
+[vm_current]
+description = "image is the VM's image: docker+desktop"
+other = "{{.vm}} is current, because nothing in {{.image}} changed since devvm made it"
+
+[vm_changed]
+description = "changed is a comma-separated list of image names"
+other = "{{.changed}} changed since {{.vm}} was made"
+
 [remake_confirm]
 description = "image is the image the VM is made again from: docker+desktop"
 other = "devvm makes {{.vm}} again from {{.image}}, keeping its home folder, the project folder and its settings. Everything else on its disk is lost, such as packages you installed, Docker's images and the Nix store. Make it again?"
@@ -853,7 +861,7 @@ other = "The shared Nix cache takes {{.size}} of its {{.cap}} cap. Run devvm gc 
 
 [vm_outdated]
 description = "changed is a comma-separated list of image names"
-other = "{{.changed}} changed since this VM was made. The VM keeps the image it has."
+other = "{{.changed}} changed since this VM was made, and the VM keeps the image it has. Run devvm update to make it again from the new image, keeping its home folder and settings."
 
 [up_failed]
 description = "reason is an error from the system, in English"

@@ -29,6 +29,7 @@ You start the agent in the VM's shell, whose prompt starts with `(devvm)`, so th
 | `devvm` | open a shell in this folder's VM, at the same path, making the VM first with the toolchains, agents and layers you check in a list, or that `--tools`, `--agents` and `--layers` name ([details](../using/images.md#what-a-new-vm-gets)) |
 | `devvm restart` | stop this folder's VM, start it again and open a shell in it, for changes that apply only when it starts ([details](#restarting-and-stopping)) |
 | `devvm stop` | stop this folder's VM ([details](#restarting-and-stopping)) |
+| `devvm update [--force] [--no-export] [--clean-home]` | make this folder's VM again from its image's new build when the image has changed, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/images.md#outdated-vms)) |
 | `devvm rm [--force] [--no-export] [--no-clone-check]` | delete this folder's VM after asking, exporting its agents' history first unless `--no-export` ([details](#deleting-a-vm)) |
 | `devvm rm VM [--force] [--no-export] [--no-clone-check]` | delete a VM whose folder is gone, by its name or ssh alias, after asking ([details](#a-vm-whose-folder-is-gone)) |
 | `devvm adopt` | use the VM made for an earlier folder at this path here ([details](#a-folder-made-again)) |
@@ -48,12 +49,12 @@ A VM is running or stopped from the time devvm makes it until you delete it.
 ```mermaid
 flowchart TD
   none(["no VM"]) -- "devvm" --> running(["running"])
-  running -- "devvm restart" --> running
+  running -- "devvm restart,<br>devvm update" --> running
   running -- "devvm stop" --> stopped(["stopped"])
-  stopped -- "devvm,<br>devvm restart" --> running
+  stopped -- "devvm,<br>devvm restart,<br>devvm update" --> running
   running -- "devvm rm" --> deleted(["deleted"])
   stopped -- "devvm rm" --> deleted
-  outdated@{ shape: braces, label: "When its image changes, a VM<br>is outdated, and it keeps<br>its image until devvm rm." }
+  outdated@{ shape: braces, label: "When its image changes, a VM<br>is outdated, and it keeps<br>its image until devvm update." }
   running ~~~ outdated
 ```
 

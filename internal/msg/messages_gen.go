@@ -3109,9 +3109,19 @@ func VMAlreadyHere(vm string) M {
 	return M{id: "vm_already_here", vals: []val{{"vm", vm}}}
 }
 
+// VMChanged is [vm_changed]: "{{.changed}} changed since {{.vm}} was made"
+func VMChanged(changed string, vm string) M {
+	return M{id: "vm_changed", vals: []val{{"changed", changed}, {"vm", vm}}}
+}
+
 // VMCreateFailed is [vm_create_failed]: "Creating {{.vm}} failed."
 func VMCreateFailed(vm string) M {
 	return M{id: "vm_create_failed", vals: []val{{"vm", vm}}}
+}
+
+// VMCurrent is [vm_current]: "{{.vm}} is current, because nothing in {{.image}} changed since devvm made it"
+func VMCurrent(image string, vm string) M {
+	return M{id: "vm_current", vals: []val{{"image", image}, {"vm", vm}}}
 }
 
 // VMFolderStateless is [vm_folder_stateless]: "A devvm that stopped while making or deleting a VM left {{.path}}, which has no vm.json, so no VM uses it. Delete the folder."
@@ -3154,7 +3164,7 @@ func VMOtherFolderRm(vm string, was string) M {
 	return M{id: "vm_other_folder_rm", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
-// VMOutdated is [vm_outdated]: "{{.changed}} changed since this VM was made. The VM keeps the image it has."
+// VMOutdated is [vm_outdated]: "{{.changed}} changed since this VM was made, and the VM keeps the image it has. Run devvm update to make it again from the new image, keeping its home folder and settings."
 func VMOutdated(changed string) M {
 	return M{id: "vm_outdated", vals: []val{{"changed", changed}}}
 }
@@ -3817,7 +3827,9 @@ var specs = map[string]spec{
 	"using_parent_vm":                  {fields: []string{"dir", "vm"}},
 	"vm_adopted":                       {fields: []string{"dir", "vm"}},
 	"vm_already_here":                  {fields: []string{"vm"}},
+	"vm_changed":                       {fields: []string{"changed", "vm"}},
 	"vm_create_failed":                 {fields: []string{"vm"}},
+	"vm_current":                       {fields: []string{"image", "vm"}},
 	"vm_folder_stateless":              {fields: []string{"path"}},
 	"vm_has_networks":                  {fields: []string{"file", "vm"}},
 	"vm_lacks":                         {fields: []string{"has", "tool", "vm"}},

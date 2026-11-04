@@ -148,7 +148,7 @@ When you delete a project folder and make a new one at the same path, such as by
 
 ## An outdated VM, or newer shared tools
 
-devvm warns on each launch when an image the VM was made from has changed, and it leaves the VM as it is ([outdated VMs](images.md#outdated-vms)). It also warns when there are newer shared tools than the VM's, and `devvm tools update` moves the VM to them ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
+devvm warns on each launch when an image the VM was made from has changed, and it leaves the VM as it is. `devvm update` makes the VM again from the new image, keeping its home folder, the project folder and its settings, after asking ([outdated VMs](images.md#outdated-vms)). It also warns when there are newer shared tools than the VM's, and `devvm tools update` moves the VM to them ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
 
 ## A download doesn't check out
 

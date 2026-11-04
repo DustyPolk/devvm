@@ -87,7 +87,7 @@ Everything else on the VM's disk is lost: the packages you installed with apt, p
 
 ### A remake that stops halfway
 
-If devvm itself is killed while it makes a VM again, such as when this machine loses power, the VM's state records the remake. The next `devvm` or `devvm layer add` in the folder finishes it without asking. When the old disk is still set aside, devvm puts it back and makes the VM again from the start, and when it's gone, devvm makes the new VM with the home folder it saved. Until then, other commands on the VM refuse and name `devvm`, and `devvm rm` deletes the VM together with its old disk.
+If devvm itself is killed while it makes a VM again, such as when this machine loses power, the VM's state records the remake. The next `devvm`, `devvm layer add` or `devvm update` in the folder finishes it without asking. When the old disk is still set aside, devvm puts it back and makes the VM again from the start, and when it's gone, devvm makes the new VM with the home folder it saved. Until then, other commands on the VM refuse and name `devvm`, and `devvm rm` deletes the VM together with its old disk.
 
 ## Shared tools
 
@@ -156,7 +156,21 @@ Shared tools aren't images, so `devvm rebuild` refuses a shared tool's name, and
 
 ## Outdated VMs
 
-A VM keeps the image it was made from. When that image, or one it's built on, changes after an edited script or a rebuild, devvm warns on each launch that the VM is outdated, and it leaves the VM as it is. To get the new image, save any work the VM holds outside the project folder, then run `devvm rm` and `devvm` to make a new VM.
+A VM keeps the image it was made from. When that image, or one it's built on, changes after an edited script, another choice of base's features or a rebuild, the VM is outdated. devvm then warns on each launch, names the images that changed and `devvm update`, and leaves the VM as it is.
+
+`devvm update` makes this folder's VM again from its own image as it builds now, with the same layers, in the same way that `devvm layer add` makes a VM again with more layers. devvm builds the image first, then gives the VM a new disk copied from it, and keeps its home folder, the project folder and its settings ([what a VM made again keeps](#what-a-vm-made-again-keeps)). Everything else on its disk is lost, such as the packages you installed with apt and Docker's images, so in a terminal devvm names the images that changed and asks first, with no as the default. Without a terminal, it refuses unless you give `--force`.
+
+```sh
+devvm update               # make this folder's VM again from its image's new build, after asking
+devvm update --force       # the same without asking, as a script must
+devvm update --clean-home  # the same, with the new image's home folder
+```
+
+When nothing the VM was made from has changed, devvm says that the VM is current and changes nothing. `devvm update` takes the same flags as `devvm layer add`, and it refuses the same VMs, before it changes anything: a `--clone` VM, one whose creation didn't finish, and one whose backend can't run its layers. It exports the agents' history first unless you give `--no-export`, and `--clean-home` gives the VM the new image's home folder instead of its own. In a subfolder of a folder with a VM, devvm asks in a terminal whether to make that folder's VM again, and refuses without one. The steps, and what happens when one fails, are those of [adding layers to a VM](#adding-layers-to-a-vm).
+
+For a VM made with `--from`, devvm tells whether the VM is outdated from the container image's digest that it last recorded, without looking anything up. When devvm makes the VM again, the build looks up the digest as every build does, so a tag that has moved since gives the VM the container image's newer version too, and a pinned digest stays as it is ([`--from`](from.md)).
+
+`devvm update` changes only the VM's image. Its shared tools aren't part of the image, and `devvm tools update` moves the VM to newer ones without making it again ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
 
 ## Listing images
 

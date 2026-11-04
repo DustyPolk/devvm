@@ -21,7 +21,7 @@ Everything above `base` builds and runs as usual, including base's own setup, th
 
 devvm builds `base` from the exact image that a tag names when it builds, which is the image's digest, and it records that digest:
 
-- When the tag moves to a new image, such as a new `node:24`, the next build makes a new `base`. That build happens for a new VM with `--from`, `devvm build` or `devvm rebuild`, and the old `base` is then stale.
+- When the tag moves to a new image, such as a new `node:24`, the next build makes a new `base`. That build happens for a new VM with `--from`, `devvm build`, `devvm rebuild`, `devvm layer add` or `devvm update`. The old `base` is then stale, and the VMs made from it are outdated, which `devvm update` changes ([outdated VMs](images.md#outdated-vms)).
 - Offline, or when the registry doesn't have the image any more, devvm uses the digest it recorded last, with a warning. With none recorded, it fails.
 - Opening an existing VM never looks anything up, because only builds do.
 - `--from node:24@sha256:<digest>` pins an exact image, and devvm never looks it up.

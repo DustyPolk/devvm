@@ -84,3 +84,4 @@ devvm [flags]
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM
 - [devvm stop](devvm_stop.md): Stop this folder's VM
 - [devvm tools](devvm_tools.md): Show or choose this folder's VM's shared tools
+- [devvm update](devvm_update.md): Make this folder's VM again from its image's new build, then open a shell in it

@@ -1836,6 +1836,24 @@ owned e2eadd+e2eadd2
 check "layer add of a layer it has changes nothing" bash -c "cd '$r' &&
   '$D' layer add e2eadd --force </dev/null >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m has_layers layers=e2eadd vm='$remade')\" '$work/last.log' && [[ \$(st_get '$rd' image) == e2eadd+e2eadd2 ]]"
+check "update on a current VM says so and changes nothing" bash -c "cd '$r' &&
+  '$D' update --force </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m vm_current image=e2eadd+e2eadd2 vm='$remade')\" '$work/last.log' && ! limactl list -q | grep -qx '$aside'"
+printf 'echo e2eupd | sudo tee /etc/devvm-e2eupd >/dev/null\n' >> "$layers/e2eadd2.sh"
+chain=$(st_get "$rd" chain)
+check "an edited layer's script makes it outdated, and the warning names devvm update" bash -c "cd '$r' &&
+  in_vm '$remade' 'echo in-home > ~/e2e-home.txt' &&
+  printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m vm_outdated changed=e2eadd+e2eadd2)\" '$work/last.log'"
+check "update --force makes it again from the image's new build, keeping home and settings" bash -c "cd '$r' &&
+  printf 'exit\n' | '$D' update --force >'$work/last.log' 2>&1 &&
+  [[ \$(st_get '$rd' image) == e2eadd+e2eadd2 && \$(st_get '$rd' chain) != '$chain' ]] &&
+  in_vm '$remade' 'grep -qx e2eupd /etc/devvm-e2eupd && grep -qx in-home ~/e2e-home.txt' &&
+  [[ \$(st_get '$rd' id) == '$id' && \$(st_get '$rd' ports.forward) == 3000,5173 && \$(st_get '$rd' secrets.names) == github ]] &&
+  grep -qx example.com '$rd/policy' && grep -qx in-project '$r/e2e-project.txt' && ! limactl list -q | grep -qx '$aside'"
+owned e2eadd+e2eadd2
+check "once updated, a launch doesn't warn" bash -c "cd '$r' &&
+  printf 'exit\n' | '$D' >'$work/last.log' 2>&1 && ! grep -qF \"\$(m vm_outdated changed=e2eadd+e2eadd2)\" '$work/last.log'"
 check "rm deletes the VM made again" bash -c "cd '$r' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qxE '$remade|$aside'"
 "$D" secret rm github --force </dev/null >/dev/null 2>&1

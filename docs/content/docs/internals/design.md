@@ -385,11 +385,11 @@ A group is a named set of VMs that reach each other's published ports by name: y
 | A member's name taking over a name the user chose | The user's links take precedence, a name is unique in the group, `localhost` is refused, and so is a VM whose own hostname is a member's name | The CLI tests refuse a taken name, another member's folder part, `localhost`, and a VM whose folder part is a member's folder part or the name it joined with, and drop a member's group links whose name one of the user's links has |
 | Leaving or removing a member leaving links behind | `devvm group leave` and `devvm rm` remove the group's links in every member, and the user's stay | After `devvm group leave`, the leaver's and the others' group links are gone and their names don't resolve, while a link made with `devvm link add` still answers |
 | A group's link outliving its group, from a leave cut short or a race | Each connection checks that the client and the target are in the same group (`ungrouped`), and a leave removes the leaver's group links first | Unit tests (`TestCheckGroupLink`) refuse a group's link once either VM is in another group or none, and keep the user's own |
-| A VM made again inheriting membership | Membership is in the VM's own state, which `devvm rm` deletes, so a VM made after it starts in no group. `devvm layer add` keeps the state, because it makes the same VM again ([below](#a-vm-made-again)) | The CLI tests: devvm rm of a member takes it out, and the last one's leaving removes the group |
+| A VM made again inheriting membership | Membership is in the VM's own state, which `devvm rm` deletes, so a VM made after it starts in no group. `devvm layer add` and `devvm update` keep the state, because they make the same VM again ([below](#a-vm-made-again)) | The CLI tests: devvm rm of a member takes it out, and the last one's leaving removes the group |
 
 ## A VM made again
 
-`devvm layer add` makes a VM again from a new image while keeping devvm's state for it and its home folder ([making a VM again](overview.md#making-a-vm-again)). Three choices shape it.
+`devvm layer add` makes a VM again from a new image, and `devvm update` from its own image's new build, while keeping devvm's state for it and its home folder ([making a VM again](overview.md#making-a-vm-again)). Both use the one remake, and three choices shape it.
 
 **Option B, a new disk.** The layer's script never runs in the existing VM. Running it there would run a third-party installer next to the project's files, as root, on a disk the VM's own code has changed, and the image's key would then describe a disk that no longer matches it. A new disk from the image keeps every VM a copy of an image whose key hashes everything in it.
 

@@ -22,7 +22,7 @@ import (
 )
 
 // RemakeOptions are the flags of a command that makes the folder's VM
-// again (devvm layer add).
+// again (devvm layer add, devvm update).
 type RemakeOptions struct {
 	Force    bool // --force: no "make it again?" asked, which needs a terminal otherwise
 	NoExport bool // --no-export: the agents' history isn't exported first
@@ -74,6 +74,34 @@ func (e Lifecycle) AddLayers(ctx context.Context, command string, layers []strin
 		return nil
 	}
 	return e.remakeTo(ctx, t, img, command, o)
+}
+
+// Update makes the folder's VM again from its own image as it builds now,
+// after the user agrees (remakeTo), when that image or one it's built on
+// changed since the VM was made (outdated: Builds.Outdated, the warning a
+// launch gives), then opens a shell in it. It says which images changed
+// first. A VM that isn't outdated is said to be current, and nothing
+// changes. command is the command as typed. A remake of it that didn't
+// finish is finished first.
+func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) error {
+	t, resumed, err := e.toRemake(ctx, command)
+	if err != nil || t == nil {
+		return err
+	}
+	vm, st := t.f.Name, t.st
+	changed, err := (build.Builds{Env: e.builder(t.b, st.From)}).Outdated(st.Chain)
+	if err != nil {
+		return err
+	}
+	if len(changed) == 0 {
+		if resumed {
+			return Launch(e).open(ctx, Options{}, t)
+		}
+		e.Info(msg.VMCurrent(st.Image, vm))
+		return nil
+	}
+	e.Info(msg.VMChanged(strings.Join(changed, ", "), vm))
+	return e.remakeTo(ctx, t, st.Image, command, o)
 }
 
 // addedImage is the image img makes with layers added on top, in the
@@ -158,7 +186,8 @@ func (e Lifecycle) remakeTo(ctx context.Context, t *found, img, command string, 
 }
 
 // remaking makes a VM again from an image, keeping devvm's settings for
-// it and its home folder: the one remake devvm layer add uses.
+// it and its home folder: the one remake devvm layer add and devvm update
+// use.
 type remaking struct{ *Env }
 
 // check refuses, before anything runs, to make t's VM again from img

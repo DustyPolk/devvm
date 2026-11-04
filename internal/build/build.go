@@ -613,14 +613,21 @@ func (b Builds) Rebuild(ctx context.Context, name string) error {
 	return nil
 }
 
-// WarnIfOutdated warns when an image a VM was made from has changed since:
-// chain is the VM's, as its state records it. It never changes the VM.
-func (b Builds) WarnIfOutdated(chain string) error {
+// Outdated returns the images a VM was made from that have changed since,
+// base first: chain is the VM's, as its state records it. A --from base's
+// digest is the one last recorded, so it looks nothing up.
+func (b Builds) Outdated(chain string) ([]string, error) {
 	in, err := b.Inputs()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	changed, err := in.Outdated(image.ParseChain(chain))
+	return in.Outdated(image.ParseChain(chain))
+}
+
+// WarnIfOutdated warns when an image a VM was made from has changed since
+// (Outdated), naming devvm update. It never changes the VM.
+func (b Builds) WarnIfOutdated(chain string) error {
+	changed, err := b.Outdated(chain)
 	if err != nil {
 		return err
 	}
