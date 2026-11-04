@@ -61,7 +61,7 @@ Test in a Lima VM with nested virtualization, which needs an M3 or newer and mac
    tests/e2e.sh --from
    ```
 
-The first `--from` run builds every image and takes about half an hour on an M3 Max; later ones reuse them. Stop the VM when done (`limactl stop linuxhost`); it keeps its images for the next run.
+The first `--from` run builds every image and takes about half an hour on an M3 Max. Later ones reuse them, because every section but `tools` uses the pinned shared tools' versions and `--from` images, and those images stay valid until `scripts/bump.sh e2e-tools` or `scripts/bump.sh e2e-from` moves a pin ([end-to-end tests](_index.md#end-to-end-tests)). Stop the VM when done (`limactl stop linuxhost`); it keeps its images for the next run.
 
 Gotchas of this setup:
 

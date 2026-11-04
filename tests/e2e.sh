@@ -16,7 +16,8 @@
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone, the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps; gc deletes a stale
-#                image and an unused tool image, keeping base and a VM named like an image; tools makes a node
+#                image and an unused tool image, keeping base and a VM named like an image; tools resolves
+#                the shared tools' newest versions (every other section has tests/e2e-mise.lock's), makes a node
 #                VM and checks its shared tools, devvm tools, tools update, rm and add, devvm node an
 #                unknown command and --tools ignored on it; network makes a VM with Claude Code and Codex, with
 #                network policy and checks it reaches only its allowlist, devvm network, its log and rules, its tokens
@@ -49,7 +50,7 @@
 #                alpine:3 (musl tools, the docker layer on OpenRC, the nix layer's daemon an OpenRC service,
 #                through the proxy once network policy is on, the desktop layer's programs), each with every
 #                feature, and builds base from ubuntu:26.04, with a
-#                docker that isn't running
+#                docker that isn't running; each image by its pinned digest
 #     --only     just these sections; SECTIONS below
 #     --clean    delete the sandbox's cached images and tool images first (default: reuse them
 #                between runs)
@@ -182,6 +183,14 @@ D=$src/devvm
 cloud_pin() { sed -n "s/^const $1 = \"\([0-9a-z-]*\)\"$/\1/p" "$root/internal/ubuntu/ubuntu.go"; }
 cloud_release=$(cloud_pin CloudRelease)
 cloud_sums="$(cloud_pin CloudSHA256Arm64)|$(cloud_pin CloudSHA256Amd64)"
+# The container images the --from checks start from, by digest, so the bases made from them stay
+# cached until these pins move (scripts/bump.sh e2e-from). One check keeps a tag, so devvm's registry
+# lookup is checked too: the company proxy's alpine:3.21, converted each run anyway.
+from_node_digest=sha256:e7add2a490bb17d97b485b8641bd88455fff7839ade0f5eba493c3508124d413
+from_alpine_digest=sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+from_ubuntu_digest=sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+from_node=node:24@$from_node_digest from_alpine=alpine:3@$from_alpine_digest
+from_ubuntu=ubuntu:26.04@$from_ubuntu_digest
 images=$XDG_DATA_HOME/devvm/images   # the image records, one per key
 layers=$XDG_CONFIG_HOME/devvm/layers
 vms=$XDG_DATA_HOME/devvm/vms         # the VMs' folders, one per VM, named by its name's hash
@@ -226,10 +235,22 @@ vm_set() {
 }
 projects=$work/p                     # the project folders, this run's
 share=$XDG_DATA_HOME/devvm/tools     # the shared tool images
-lock=$XDG_DATA_HOME/devvm/mise.lock  # the shared tools' versions, resolved at the start of each run
-export DEVVM_NO_TOOL_CHECK=1         # and not again mid-run
+lock=$XDG_DATA_HOME/devvm/mise.lock  # the shared tools' versions
+export DEVVM_NO_TOOL_CHECK=1         # never checked for newer ones but by the tools section
 # lockv TOOL: its version in the lock.
 lockv() { awk -v t="[[tools.$1]]" '$0 == t { f = 1; next } f && /^version = / { gsub(/"/, "", $3); print $3; exit }' "$lock"; }
+# The shared tools' versions are pinned (tests/e2e-mise.lock; scripts/bump.sh e2e-tools), so the tool
+# images built for them stay cached between runs. Only the tools section resolves upstream's newest,
+# and pin_lock puts the pins back after it. The pinned lock's first line is the SHA-256 of the
+# shared-tools/mise.toml it was resolved from: for another, the run stops here.
+e2e_lock=$root/tests/e2e-mise.lock
+pin_lock() { cp "$e2e_lock" "$lock" && cp "$root/assets/shared-tools/mise.toml" "$lock.toml"; }
+lock_for=$(sed -n '1s/^# devvm e2e: shared-tools\/mise\.toml sha256:\([0-9a-f]*\)$/\1/p' "$e2e_lock" 2>/dev/null)
+if [[ -z $lock_for || $lock_for != "$({ sha256sum 2>/dev/null || shasum -a 256; } < "$root/assets/shared-tools/mise.toml" | cut -c1-64)" ]]; then
+  echo "e2e: tests/e2e-mise.lock isn't resolved from this assets/shared-tools/mise.toml: run scripts/bump.sh e2e-tools" >&2; exit 1
+fi
+[[ -d $XDG_DATA_HOME/devvm ]] || mkdir -m 700 "$XDG_DATA_HOME/devvm"
+pin_lock || { echo "e2e: couldn't put the pinned tool lock in place" >&2; exit 1; }
 # m NAME [name=value...]: a message's text, from devvm, so checks never repeat its wording. Exported
 # for the checks' own shells.
 m() { "$D" _msg "$@"; }
@@ -1253,7 +1274,7 @@ lk_policy_back() {
     lk_until 10 lk_resolves "$lk_vc" db && lk_until 20 lk_curls "$lk_vc" http://db:47240/ "$lk_w1-47240"; }
 lk_alpine() { local pa va r=0
   pa=$(newproj "${lk_x}alp")
-  nd launch "$pa" exit --from alpine:3 --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none; va=$vm
+  nd launch "$pa" exit --from "$from_alpine" --no-network-policy --no-git-protect --cpus 2 --memory 2 --ports none; va=$vm
   if ! { [[ -n $va ]] && vm_state "$(vmdir "$va")" | grep -qx tools.made.libc=musl; }; then echo "no Alpine VM"; tail -5 "$work/last.log"; return 1; fi
   lk_dv "$pa" link add "${lk_x}db" 80 && lk_said "==> link_added name=${lk_x}db port=80 target=$lk_v1 vm=$va" || r=1
   (( r == 0 )) && echo "its ip_unprivileged_port_start: $(lk_root "$va" 'cat /proc/sys/net/ipv4/ip_unprivileged_port_start')" &&
@@ -1343,17 +1364,6 @@ if $clean; then
   section "cleaning cached images"
   for n in $(limactl list -q 2>/dev/null | grep '^devvm-img-'); do limactl delete -f "$n" >/dev/null 2>&1; done
   rm -rf "$images" "$share"
-fi
-
-if want tools; then
-# What a user gets: upstream's newest versions, each download with its checksum (rust: rustup checks),
-# resolved by devvm's pinned mise, downloaded and checked on the first run.
-section "shared tool versions"
-march=arm64; [[ "$(uname -m)" != x86_64 ]] || march=x64   # the lock's platform: mise's name for the arch
-ntools=$(awk -F' *= *' '/^\[tools\]/ { s = 1; next } /^\[/ { s = 0 } s && NF == 2' "$root/assets/shared-tools/mise.toml" | wc -l)
-check "the shared tools resolve to upstream's newest, with checksums" bash -c "'$D' _refresh-tools </dev/null >'$work/last.log' 2>&1 &&
-  (( \$(grep -c '^\[\[tools\.' '$lock') == $ntools )) &&
-  (( \$(grep -A1 '\"platforms.linux-$march\"\]' '$lock' | grep -c '^checksum = \"sha256:') == $ntools - 1 ))"
 fi
 
 if want images; then
@@ -2045,10 +2055,19 @@ rm -f "$gfix" "$share/$old" "$share/$old.json"
 fi
 
 if want tools; then
+# What a user gets: upstream's newest versions, each download with its checksum (rust: rustup checks),
+# resolved by devvm's pinned mise, downloaded and checked on the first run. This section alone uses
+# them: pin_lock puts the pins back at its end.
+section "shared tool versions"
+march=arm64; [[ "$(uname -m)" != x86_64 ]] || march=x64   # the lock's platform: mise's name for the arch
+ntools=$(awk -F' *= *' '/^\[tools\]/ { s = 1; next } /^\[/ { s = 0 } s && NF == 2' "$root/assets/shared-tools/mise.toml" | wc -l)
+check "the shared tools resolve to upstream's newest, with checksums" bash -c "'$D' _refresh-tools </dev/null >'$work/last.log' 2>&1 &&
+  (( \$(grep -c '^\[\[tools\.' '$lock') == $ntools )) &&
+  (( \$(grep -A1 '\"platforms.linux-$march\"\]' '$lock' | grep -c '^checksum = \"sha256:') == $ntools - 1 ))"
 section "shared tools"
 t=$(newproj tools); echo '{}' > "$t/package.json"
-# A package.json: node, detected. Its tool images stay cached in the share between runs (--clean
-# deletes them), as base does.
+# A package.json: node, detected. Its tool images, of the newest versions, stay cached in the share
+# until upstream moves or a later run's gc finds them unused.
 launch "$t" exit --no-network-policy --no-git-protect
 check "a node VM, with node's shared tools in its state and the share" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && vm_state '$(vmdir "$vm")' | grep -qx image=base &&
@@ -2134,6 +2153,7 @@ check "--tools on it adds nothing: warned, naming devvm tools, and opened as it 
 check "devvm tools add node mounts it again, nothing built" bash -c "cd '$t2' && n=\$(find '$share' -name '*.erofs' | wc -l) &&
   printf 'node -v\nexit\n' | '$D' tools add node >'$work/last.log' 2>&1 && grep -qx v$(lockv node) '$work/last.log' &&
   vm_state '$(vmdir "$vm")' | grep -qx image=base && vm_state '$(vmdir "$vm")' | grep -qx tools.names=node && (( \$(find '$share' -name '*.erofs' | wc -l) == n ))"
+pin_lock || echo "  e2e: couldn't put the pinned tool lock back"
 fi
 
 if want network; then
@@ -2708,17 +2728,17 @@ printf '#!/bin/sh\necho "docker $*" >> "%s"\necho "Cannot connect to the Docker 
 chmod 755 "$work/nodocker/docker"
 nd() { PATH="$work/nodocker:$PATH" "$@"; }
 export -f nd in_vm; export work
-[[ -f $lock ]] || quiet "$D" _refresh-tools   # the tools' versions, for lockv
-
+# Each image by its pinned digest (from_node and the others, at the top), which devvm looks up
+# nowhere: the bases stay cached until the pins move. The company proxy's check below keeps a tag.
 f=$(newproj fromdocker); echo '{}' > "$f/package.json"
 fh=$work/from-home; mkdir -p "$fh"   # the Claude Code VM's: no agent config of yours
-HOME=$fh nd launch "$f" exit --from node:24 --no-network-policy --tools node,python --agents claude --layers docker,nix   # node:24 is Debian 12
+HOME=$fh nd launch "$f" exit --from "$from_node" --no-network-policy --tools node,python --agents claude --layers docker,nix   # node:24 is Debian 12
 # A build in Nix's sandbox, which fails without it (the nix layer's sandbox-fallback = false).
 nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo ok > $out" ]; }'
-check "a VM with node, python, Claude Code and the docker and nix layers from node:24 (Debian 12) boots, its base keyed by the registry's digest" bash -c "
+check "a VM with node, python, Claude Code and the docker and nix layers from node:24 (Debian 12) boots, its base keyed by its pinned digest" bash -c "
   [[ -n '$vm' ]] && limactl shell --workdir / '$vm' cat /etc/os-release </dev/null | grep -qx VERSION_CODENAME=bookworm &&
-  vm_state '$(vmdir "$vm")' | grep -qx from=node:24 && vm_state '$(vmdir "$vm")' | grep -qx tools.made.libc=gnu &&
-  rec \"\$(from_record node:24)\" digest | grep -qE '^node@sha256:[0-9a-f]{64}$'"
+  vm_state '$(vmdir "$vm")' | grep -qx 'from=$from_node' && vm_state '$(vmdir "$vm")' | grep -qx tools.made.libc=gnu &&
+  [[ \$(rec \"\$(from_record '$from_node')\" digest) == '$from_node' ]]"
 check "its node, claude and every feature work" in_vm "$vm" \
   'node --version && claude --version && eza --version && bat --version && fd --version && fzf --version && tldr --version && [[ -d ~/.oh-my-bash ]]'
 check "python, python3 and claude are the locked versions" in_vm "$vm" \
@@ -2734,8 +2754,8 @@ check "the nix layer's Nix runs in it (systemd): nix run nixpkgs#hello, and a bu
 # Alpine: apk, OpenRC and musl, so its own (musl) tool images; the docker layer from Alpine's packages;
 # the nix layer's daemon as an OpenRC service of devvm's; the desktop layer from Alpine's packages.
 al=$(newproj fromalpine); echo '{}' > "$al/package.json"
-nd launch "$al" exit --from alpine:3 --no-network-policy --layers docker,nix,desktop
-check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && vm_state '$(vmdir "$vm")' | grep -qx tools.made.libc=musl && [[ \$(rec \"\$(from_record alpine:3)\" libc) == musl ]]"
+nd launch "$al" exit --from "$from_alpine" --no-network-policy --layers docker,nix,desktop
+check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && vm_state '$(vmdir "$vm")' | grep -qx tools.made.libc=musl && [[ \$(rec \"\$(from_record '$from_alpine')\" libc) == musl ]]"
 check "and node, pnpm work there" in_vm "$vm" \
   "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
 check "the docker layer's Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'
@@ -2759,7 +2779,7 @@ check "devvm network on: after devvm restart, its nix-daemon goes through the pr
 (cd "$al" && quiet "$D" rm --force --no-export)
 
 # Ubuntu's image has empty package lists, where apt 3.2 needs a second update to reach the snapshot.
-check "base builds from ubuntu:26.04" nd quiet "$D" build --from ubuntu:26.04 base
+check "base builds from ubuntu:26.04" nd quiet "$D" build --from "$from_ubuntu" base
 check "none of them needed Docker" bash -c "! grep -v '^docker image inspect ' '$work/docker-calls'"
 check "and the build VM and its temporary folders are gone" bash -c "
   ! limactl list -q 2>/dev/null | grep -qx devvm-oci-build && ! ls -d \"\${TMPDIR:-/tmp}\"/devvm-oci.* 2>/dev/null"

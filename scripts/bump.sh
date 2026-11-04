@@ -1,20 +1,24 @@
 #!/bin/bash
 # Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, layers/nix.sh, features/*.sh,
 # shared-tools/build.sh, oci/build.sh), internal/tools/mise.go (devvm's host mise) and
-# internal/ubuntu/ubuntu.go (Ubuntu's cloud image).
+# internal/ubuntu/ubuntu.go (Ubuntu's cloud image), and the end-to-end tests' own pins
+# (tests/e2e-mise.lock, and the --from images' digests in tests/e2e.sh).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
-# Tools: apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer
+# Tools: apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from
 #   apt: base's package snapshot, and Ubuntu's cloud image base starts from
 #   mise: base's, and the one devvm runs on the host to resolve the shared tools' versions
-# The shared tools themselves (node, claude, ...) aren't pinned: devvm resolves them per user.
+#   e2e-tools: the shared tools' versions every e2e section but tools uses
+#   e2e-from: the container images e2e's --from checks start from, by digest
+# The shared tools themselves (node, claude, ...) aren't pinned for users: devvm resolves them per
+# user. Only e2e pins them, so its cached tool images stay valid between runs.
 # Needs curl and jq, and gpgv for apt. Checksums come from upstream's published sums where there are
 # any; otherwise they're computed from the download (said so in the output). Edited scripts change
 # image keys, so the affected images rebuild on next use: test with `devvm build <image>`, then
 # `devvm gc`.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all="apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer"
+all="apt docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from"
 
 check=false
 if [[ ${1:-} == --check ]]; then check=true; shift; fi
@@ -263,8 +267,90 @@ bump_omb() {
   set_var $f omb_commit "$new"
 }
 
+# lock_version LOCK TOOL: a tool's version in a mise lock, "" for none.
+lock_version() {
+  awk -v t="[[tools.$2]]" '$0 == t { f = 1; next } f && /^version = / { gsub(/"/, "", $3); print $3; exit }' "$1" 2>/dev/null || true
+}
+# lock_checksum LOCK TOOL PLATFORM: the tool's download for PLATFORM has a SHA-256 in the lock.
+lock_checksum() {
+  awk -v h="[tools.$2.\"platforms.$3\"]" '
+    $0 == h { f = 1; next }
+    f { ok = $0 ~ /^checksum = "sha256:[0-9a-f]+"$/ && length($0) == 84; exit }
+    END { exit !ok }' "$1"
+}
+
+# The shared tools' versions every e2e section but tools uses (tests/e2e-mise.lock): upstream's newest,
+# resolved as devvm resolves them (its pinned host mise, mise lock on assets/shared-tools/mise.toml), for
+# both architectures' glibc and musl VMs. Every tool must be in it, and each one's downloads but rust's
+# (rustup checks its own) need a SHA-256 on every platform, or this exits: a release without its files
+# yet, to try again later. Its first line is the SHA-256 of the mise.toml it was resolved from, which
+# e2e checks before it runs.
+e2e_lock=""
+bump_e2e-tools() {
+  local g=internal/tools/mise.go f=tests/e2e-mise.lock d os a v sum p tool cur new want=false
+  local platforms="linux-arm64 linux-arm64-musl linux-x64 linux-x64-musl"
+  v=$(get_const $g miseVersion)
+  case $(uname -s) in Darwin) os=macos ;; Linux) os=linux ;; *) echo "bump: devvm has no host mise for $(uname -s)" >&2; exit 1 ;; esac
+  case $(uname -m) in arm64|aarch64) a=arm64 ;; *) a=x64 ;; esac
+  sum=$(sed -n "s/^[[:space:]]*\"$os-$a\": *\"\([0-9a-f]\{64\}\)\",\$/\1/p" "$root/$g")
+  valid mise_sha256 "$sum"
+  fetch -o "$tmp/mise" "https://github.com/jdx/mise/releases/download/v$v/mise-v$v-$os-$a"
+  [[ $(shasum -a 256 "$tmp/mise" | cut -c1-64) == "$sum" ]] ||
+    { echo "bump: devvm's host mise $v doesn't match its pinned SHA-256" >&2; exit 1; }
+  chmod 700 "$tmp/mise"
+  mkdir -p "$tmp/e2e-tools/config"; d=$(cd "$tmp/e2e-tools" && pwd -P)
+  cp "$root/assets/shared-tools/mise.toml" "$d/mise.toml"
+  if ! (cd "$d" && MISE_DATA_DIR=$d/data MISE_CACHE_DIR=$d/cache MISE_STATE_DIR=$d/state MISE_CONFIG_DIR=$d/config \
+      MISE_GLOBAL_CONFIG_FILE=$d/config/none.toml MISE_TRUSTED_CONFIG_PATHS=$d MISE_CEILING_PATHS=$(dirname "$d") \
+      "$tmp/mise" lock --platform "$(tr ' ' ',' <<<"$platforms")") >"$tmp/mise-lock.log" 2>&1; then
+    cat "$tmp/mise-lock.log" >&2; echo "bump: mise lock failed" >&2; exit 1
+  fi
+  while read -r tool; do
+    new=$(lock_version "$d/mise.lock" "$tool")
+    valid "${tool}_version" "$new"
+    if [[ $tool != rust ]]; then
+      for p in $platforms; do
+        lock_checksum "$d/mise.lock" "$tool" "$p" || { echo "bump: $tool $new has no checksummed download for $p yet: try again later" >&2; exit 1; }
+      done
+    fi
+    cur=$(lock_version "$root/$f" "$tool")
+    if report "e2e $tool" "${cur:-none}" "$new"; then want=true; fi
+  done < <(awk -F' *= *' '/^\[tools\]/ { s = 1; next } /^\[/ { s = 0 } s && NF == 2 { print $1 }' "$d/mise.toml")
+  sum=$(shasum -a 256 "$d/mise.toml" | cut -c1-64)
+  if report "e2e lock" "$(sed -n '1s/^# devvm e2e: shared-tools\/mise.toml sha256:\(.\{12\}\).*/\1/p' "$root/$f" 2>/dev/null)" "${sum:0:12}"; then
+    want=true
+  fi
+  $want || return 0
+  { echo "# devvm e2e: shared-tools/mise.toml sha256:$sum"; cat "$d/mise.lock"; } > "$tmp/e2e-mise.lock"
+  e2e_lock=$tmp/e2e-mise.lock
+}
+
+# hub_index REPO TAG FILE: Docker Hub's index (manifest list) of library/REPO:TAG into FILE, as the
+# registry sent it, so its SHA-256 is its digest. The anonymous pull token goes to curl as a header
+# it reads from a file, never in a process's arguments.
+hub_index() {
+  printf 'Authorization: Bearer %s\n' \
+    "$(fetch "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/$1:pull" | jq -r .token)" > "$tmp/hub-auth"
+  fetch -H @"$tmp/hub-auth" -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+    "https://registry-1.docker.io/v2/library/$1/manifests/$2" > "$3"
+  jq -e '.manifests | length > 0' "$3" >/dev/null || { echo "bump: Docker Hub sent no index for $1:$2" >&2; exit 1; }
+}
+
+# The container images e2e's --from checks start from (tests/e2e.sh's from_*_digest), by the digest
+# of their index on Docker Hub, so the bases made from them stay cached until these pins move.
+bump_e2e-from() {
+  local f=tests/e2e.sh p ref var new
+  for p in node:24=from_node_digest alpine:3=from_alpine_digest ubuntu:26.04=from_ubuntu_digest; do
+    ref=${p%%=*} var=${p#*=}
+    hub_index "${ref%%:*}" "${ref#*:}" "$tmp/e2e-from-index"
+    new=sha256:$(shasum -a 256 "$tmp/e2e-from-index" | cut -c1-64)
+    if report "$ref" "$(get $f "$var" | cut -c8-19)" "${new:7:12}"; then set_var $f "$var" "$new"; fi
+  done
+}
+
 for t in $tools; do "bump_$t"; done
 write_staged
+[[ -z $e2e_lock ]] || cat "$e2e_lock" > "$root/tests/e2e-mise.lock"
 
 $check && exit 0
 if (( ${#summary[@]} == 0 )); then echo "==> everything is up to date"; exit 0; fi
