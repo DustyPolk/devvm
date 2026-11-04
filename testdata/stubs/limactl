@@ -31,7 +31,9 @@
 # (status, config, size and folder) to its new name, and fails with
 # $STUB_DIR/rename-fails, changing nothing. shell fails with $STUB_DIR/shell-fails (or when its
 # arguments contain $STUB_DIR/shell-fails-on's text) and hangs with
-# $STUB_DIR/shell-hangs (touching $STUB_DIR/hanging first), and a direct
+# $STUB_DIR/shell-hangs (touching $STUB_DIR/hanging first); one whose
+# arguments contain $STUB_DIR/shell-waits-on's text touches $STUB_DIR/waiting,
+# then waits until that file is gone and carries on; and a direct
 # connection (curl --noproxy) fails unless $STUB_DIR/net-direct exists; a script fed
 # to shell's bash -s has its second line appended to $STUB_DIR/scripts, and
 # the tar stream a VM's setup is sent is kept as $STUB_DIR/sync.tar (with
@@ -243,6 +245,10 @@ case ${1:-} in
     done
     [[ ! -d $LIMA_HOME/$old ]] || mv "$LIMA_HOME/$old" "$LIMA_HOME/$new" ;;
   shell)
+    if [[ -f $STUB_DIR/shell-waits-on && "$*" == *"$(cat "$STUB_DIR/shell-waits-on")"* ]]; then
+      : > "$STUB_DIR/waiting"
+      while [[ -e $STUB_DIR/shell-waits-on ]]; do sleep 0.1; done
+    fi
     echo "${SSH_AUTH_SOCK-unset}" > "$STUB_DIR/shell-agent"
     # A clone's git: Exec's command line is "cd '/' && exec WORDS".
     line=${*: -1}

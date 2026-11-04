@@ -1104,16 +1104,6 @@ func GCPackages(count int, size string) M {
 	return M{id: "gc_packages", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
 }
 
-// GCRecentMaking is [gc_recent_making]: "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tool-images --recent again once that's done."
-func GCRecentMaking() M {
-	return M{id: "gc_recent_making"}
-}
-
-// GCRecentNeedsTools is [gc_recent_needs_tools]: "--recent goes with --tool-images. Run devvm gc --tool-images --recent."
-func GCRecentNeedsTools() M {
-	return M{id: "gc_recent_needs_tools"}
-}
-
 // GCTools is [gc_tools]: "{{.count}} shared tool images are unused ({{.size}})."
 func GCTools(count int, size string) M {
 	return M{id: "gc_tools", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}}}
@@ -1127,11 +1117,6 @@ func GCToolsMaking(count int, tools string) M {
 // GCToolsNoVM is [gc_tools_no_vm]: "{{.count}} current shared tool images no VM has ({{.size}}): {{.tools}}."
 func GCToolsNoVM(count int, size string, tools string) M {
 	return M{id: "gc_tools_no_vm", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"size", size}, {"tools", tools}}}
-}
-
-// GCToolsRecent is [gc_tools_recent]: "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc --tool-images --recent to delete them now."
-func GCToolsRecent(count int, tools string) M {
-	return M{id: "gc_tools_recent", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"tools", tools}}}
 }
 
 // GCUnfinished is [gc_unfinished]: "  {{.key}}, left over from a failed build"
@@ -3601,12 +3586,9 @@ var specs = map[string]spec{
 	"gc_orphans":                       {plural: true, fields: []string{"count"}},
 	"gc_orphans_unknown":               {fields: []string{"backend"}},
 	"gc_packages":                      {plural: true, fields: []string{"count", "size"}},
-	"gc_recent_making":                 {},
-	"gc_recent_needs_tools":            {},
 	"gc_tools":                         {plural: true, fields: []string{"count", "size"}},
 	"gc_tools_making":                  {plural: true, fields: []string{"count", "tools"}},
 	"gc_tools_no_vm":                   {plural: true, fields: []string{"count", "size", "tools"}},
-	"gc_tools_recent":                  {plural: true, fields: []string{"count", "tools"}},
 	"gc_unfinished":                    {fields: []string{"key"}},
 	"git_appeared":                     {},
 	"git_commondir":                    {fields: []string{"git", "target"}},

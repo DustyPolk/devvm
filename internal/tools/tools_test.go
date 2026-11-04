@@ -1203,9 +1203,9 @@ func TestListTargets(t *testing.T) {
 	}
 }
 
-// NoVM: current tool images no VM lists, of the names asked for, built
-// over an hour ago; never one a VM lists, one that isn't current, or one
-// whose hash is missing.
+// NoVM: current tool images no VM lists, of the names asked for, however
+// new; never one a VM lists, one that isn't current, or one whose record
+// is missing.
 func TestNoVM(t *testing.T) {
 	e := newEnv(t)
 	old := time.Now().Add(-2 * time.Hour)
@@ -1233,23 +1233,11 @@ func TestNoVM(t *testing.T) {
 		}
 		return out
 	}
-	if got := files(e.NoVM(ls, nil)); !slices.Equal(got, []string{"node-1-0123456789ab.erofs", "go-1-0123456789ab.erofs"}) {
+	if got := files(e.NoVM(ls, nil)); !slices.Equal(got, []string{"node-1-0123456789ab.erofs", "go-1-0123456789ab.erofs", "claude-1-0123456789ab.erofs"}) {
 		t.Errorf("NoVM = %v", got)
 	}
 	if got := files(e.NoVM(ls, []string{"go"})); !slices.Equal(got, []string{"go-1-0123456789ab.erofs"}) {
 		t.Errorf("NoVM(go) = %v", got)
-	}
-	// The ones kept for being built in the last hour: claude, not codex
-	// (no hash).
-	old2, recent := e.NoVMRecent(ls, nil)
-	if got := files(old2); !slices.Equal(got, []string{"node-1-0123456789ab.erofs", "go-1-0123456789ab.erofs"}) {
-		t.Errorf("NoVMRecent's old = %v", got)
-	}
-	if got := files(recent); !slices.Equal(got, []string{"claude-1-0123456789ab.erofs"}) {
-		t.Errorf("NoVMRecent's recent = %v", got)
-	}
-	if _, recent := e.NoVMRecent(ls, []string{"go"}); len(recent) != 0 {
-		t.Errorf("NoVMRecent(go)'s recent = %v", files(recent))
 	}
 }
 

@@ -736,11 +736,6 @@ other = "{{.count}} current shared tool images no VM has ({{.size}}): {{.tools}}
 one = "deleted {{.count}} tool image no VM had"
 other = "deleted {{.count}} tool images no VM had"
 
-[gc_tools_recent]
-description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
-one = "{{.count}} current shared tool image no VM has stays because it was built in the last hour: {{.tools}}. Run devvm gc --tool-images --recent to delete it now."
-other = "{{.count}} current shared tool images no VM has stay because they were built in the last hour: {{.tools}}. Run devvm gc --tool-images --recent to delete them now."
-
 [gc_tools_making]
 description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
 one = "{{.count}} current shared tool image no VM has stays because a VM is being made or is getting new shared tools: {{.tools}}. Run devvm gc --tool-images again once that's done."
@@ -748,12 +743,6 @@ other = "{{.count}} current shared tool images no VM has stay because a VM is be
 
 [gc_names_need_tools]
 other = "Tool names such as {{.tool}} go with --tool-images. Run devvm gc --tool-images {{.tool}}."
-
-[gc_recent_needs_tools]
-other = "--recent goes with --tool-images. Run devvm gc --tool-images --recent."
-
-[gc_recent_making]
-other = "A VM is being made or is getting new shared tools, so nothing was deleted. Run devvm gc --tool-images --recent again once that's done."
 
 [unknown_tool]
 other = "There's no shared tool named {{.tool}}. The names are {{.tools}}."

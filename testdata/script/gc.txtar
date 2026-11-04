@@ -1,5 +1,6 @@
 # gc: deletes what devvm images lists as stale or unfinished, the tool
-# images it lists as unused, and older versions of devvm's mise, after
+# images it lists as unused, older versions of devvm's mise and what of the
+# package cache no base needs, after
 # listing them; not a terminal, so it doesn't ask. Never a project VM (one named like an image included),
 # a current image, or a tool image a VM's state lists.
 env IMAGES=$XDG_DATA_HOME/devvm/images
@@ -93,6 +94,26 @@ stdout '^==> nothing_to_clean$'
 exec devvm images
 stderr '^images_total size=\S+$'
 ! stderr 'images_stale_note|images_unused'
+
+# The package cache: the set of a base the backend no longer has goes, and
+# with it the file only it names, as does a file no set names; so does a
+# build's folder of what it gave back once it's a day old, but not a new one.
+env PKGS=$XDG_DATA_HOME/devvm/packages
+env A=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+env B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+mkdir $PKGS/sets $PKGS/.taken-old $PKGS/.taken-new
+exec sh -c 'echo x > "$PKGS/$A.deb" && echo y > "$PKGS/$B.deb" && touch -t 202001010000 "$PKGS/.taken-old"'
+exec sh -c 'printf "{\"recorded\": \"2020-01-01T00:00:00Z\", \"packages\": [{\"name\": \"a\", \"version\": \"1\", \"arch\": \"arm64\", \"sha256\": \"%s\", \"size\": 2, \"entry\": \"Package: a\"}]}\n" "$A" > "$PKGS/sets/222222222222.json"'
+exec devvm gc --force
+stdout '^gc_packages count=2 size=\S+$'
+stdout '^==> deleted_packages count=2$'
+! exists $PKGS/sets/222222222222.json
+! exists $PKGS/$A.deb
+! exists $PKGS/$B.deb
+! exists $PKGS/.taken-old
+exists $PKGS/.taken-new
+exec devvm gc --force
+stdout '^==> nothing_to_clean$'
 
 -- foo.sh --
 #!/bin/bash

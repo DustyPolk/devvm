@@ -1,7 +1,7 @@
 # gc --tool-images: also the current tool images no VM's state lists, on every
-# backend and C library, or only the named tools'; never one a VM's state
-# lists (a stopped VM's, or one deleted outside devvm), nor one built in
-# the last hour. Never a VM.
+# backend and C library, or only the named tools', however new; never one a
+# VM's state lists (a stopped VM's, or one deleted outside devvm), nor any
+# while a VM is being made. Never a VM.
 env SHARE=$XDG_DATA_HOME/devvm/tools
 
 # Names go only with --tool-images, and only shared tools' names.
@@ -12,7 +12,7 @@ stderr '^devvm: unknown_tool tool=nope '
 
 # node (node, pnpm, bun), claude and codex, all current, built for a VM
 # that's gone since. A VM deleted outside devvm still lists claude in its
-# state; codex was built just now.
+# state; node's three are old, and codex was built just now.
 project tl
 exec devvm --tools node --agents claude,codex --no-network-policy --no-git-protect
 exec devvm rm --force --no-export
@@ -31,85 +31,85 @@ stdout '^==> nothing_to_clean$'
 exec devvm gc --force --tool-images claude
 stdout '^==> nothing_to_clean$'
 
-# --tool-images: node's three, not claude's (a VM's) nor codex's (just built),
-# which it names with the list.
+# --tool-images codex: only codex, built just now.
+exec devvm gc --force --tool-images codex
+stdout '^gc_tools_no_vm count=1 size=\S+ tools=codex \S+$'
+stdout '^==> deleted_tools_no_vm count=1$'
+exec sh -c 'cd "$SHARE" && ls *.erofs'
+! stdout '^codex-'
+stdout '^node-'
+
+# --tool-images: node's three, not claude's (a VM's).
 exec devvm gc --force --tool-images
 stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
-stdout '^==> gc_tools_recent count=1 tools=codex \S+$'
 stdout '^==> deleted_tools_no_vm count=3$'
 exec sh -c 'cd "$SHARE" && ls *.erofs'
 ! stdout '^(node|pnpm|bun)-'
 stdout '^claude-'
-stdout '^codex-'
 ! exists $SHARE/.lock
 
-# Only codex is left of them: gc names it in place of nothing_to_clean.
+# Nothing is left of them.
 exec devvm gc --force --tool-images
-stdout '^==> gc_tools_recent count=1 tools=codex \S+$'
-! stdout 'nothing_to_clean|deleted_'
-
-# Plain gc never names it, and --recent goes only with --tool-images.
-exec devvm gc --force
 stdout '^==> nothing_to_clean$'
-! stdout gc_tools_recent
-! exec devvm gc --recent
-stderr '^devvm: gc_recent_needs_tools$'
+! stdout 'deleted_'
 
-# A VM that gets node later builds it again.
+# A VM that gets node later builds it again. Without a terminal, gc deletes
+# nothing unless --force.
 exec devvm --tools node --agents none --no-network-policy --no-git-protect
 exec devvm rm --force --no-export
-exec sh -c 'cd "$SHARE" && ls node-*.erofs'
-
-# --tool-images --recent with a name: only that tool's, built just now.
-exec devvm gc --force --tool-images --recent node
-stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
-stdout '^==> deleted_tools_no_vm count=3$'
-! stdout gc_tools_recent
+! exec devvm gc --tool-images node
+stderr '^devvm: force_needed command=devvm gc$'
 exec sh -c 'cd "$SHARE" && ls *.erofs'
-! stdout '^(node|pnpm|bun)-'
-stdout '^codex-'
+stdout '^node-'
 
-# codex is old now, and node's three are built again just now.
-json_set $SHARE/codex-*.erofs.json built=2020-01-01T00:00:00Z
-exec devvm --tools node --agents none --no-network-policy --no-git-protect
-exec devvm rm --force --no-export
-
-# While a VM is being made (its start hangs), --tool-images --recent deletes
-# nothing, and plain --tool-images keeps every current one, old codex too,
-# saying so; once its devvm is killed, nothing holds the lock.
+# While a VM is being made (its start hangs), --tool-images keeps every
+# current one no VM has, saying so; once its devvm is killed, nothing holds
+# the lock.
 project making git
 exec sh -c ': > "$STUB_DIR/start-hangs"'
 ! exec devvm --no-network-policy &u&
 wait_file $STUB_DIR/hanging
-! exec devvm gc --force --tool-images --recent
-stderr '^devvm: gc_recent_making$'
-! stdout 'deleted_'
 exec devvm gc --force --tool-images
-stdout '^==> gc_tools_making count=4 tools=codex \S+, node \S+, pnpm \S+, bun \S+$'
-! stdout 'gc_tools_no_vm|gc_tools_recent|deleted_|nothing_to_clean'
+stdout '^==> gc_tools_making count=3 tools=node \S+, pnpm \S+, bun \S+$'
+! stdout 'gc_tools_no_vm|deleted_|nothing_to_clean'
 exec sh -c 'cd "$SHARE" && ls *.erofs'
-stdout '^codex-'
 stdout '^node-'
 kill -KILL u
 wait u
 rm $STUB_DIR/start-hangs
+rm $STUB_DIR/hanging
 
-# Plain --tool-images again: old codex goes, node's three stay (just built).
+# Then --tool-images deletes node's three, but never claude (a VM's).
 exec devvm gc --force --tool-images
-stdout '^gc_tools_no_vm count=1 size=\S+ tools=codex \S+$'
-stdout '^==> gc_tools_recent count=3 tools=node \S+, pnpm \S+, bun \S+$'
-stdout '^==> deleted_tools_no_vm count=1$'
-
-# --tool-images --recent: node's three too, but never claude (a VM's). Without
-# a terminal, gc deletes nothing unless --force.
-! exec devvm gc --tool-images --recent
-stderr '^devvm: force_needed command=devvm gc$'
-exec sh -c 'cd "$SHARE" && ls *.erofs'
-stdout '^node-'
-exec devvm gc --force --tool-images --recent
 stdout '^gc_tools_no_vm count=3 size=\S+ tools=node \S+, pnpm \S+, bun \S+$'
 stdout '^==> deleted_tools_no_vm count=3$'
+! stdout gc_tools_making
 exec sh -c 'cd "$SHARE" && ls *.erofs'
-! stdout '^(codex|node|pnpm|bun)-'
+! stdout '^(node|pnpm|bun)-'
 stdout '^claude-'
 ! exists $SHARE/.lock
+
+# codex, no VM's, then a VM whose go is being built: gc --tool-images waits
+# for the build, then finds the VM still being made (its start hangs once it
+# runs) and keeps every current one no VM lists, go too while its VM's state
+# doesn't list it yet.
+project cx git
+exec devvm --tools none --agents codex --no-network-policy --no-git-protect
+exec devvm rm --force --no-export
+project waits git
+exec sh -c 'printf devvm-tools-build > "$STUB_DIR/shell-waits-on" && printf waits > "$STUB_DIR/start-hangs-running"'
+! exec devvm --tools go --agents none --no-network-policy --no-git-protect &w&
+wait_file $STUB_DIR/waiting
+exec devvm gc --force --tool-images &g&
+exec sleep 0.5
+rm $STUB_DIR/shell-waits-on
+wait_file $STUB_DIR/hanging
+wait g
+stdout '^==> gc_tools_making count=[12] tools=.*codex '
+! stdout 'gc_tools_no_vm|deleted_|nothing_to_clean'
+exec sh -c 'cd "$SHARE" && ls *.erofs'
+stdout '^codex-'
+stdout '^go-'
+kill -KILL w
+wait w
+rm $STUB_DIR/start-hangs-running

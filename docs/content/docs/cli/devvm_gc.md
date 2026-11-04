@@ -10,7 +10,7 @@ Delete stale images and unused tool images
 Delete the stale and unfinished images, the shared tools devvm images lists as unused, the files devvm itself no longer needs, and the shared Nix cache's least recently used files while it's over its cap, after listing them and asking in a terminal. Its flags delete more, such as --tool-images for the current shared tool images no VM has. gc never deletes a VM.
 
 ```text
-devvm gc [--tool-images [--recent] [TOOL...]] [flags]
+devvm gc [--tool-images [TOOL...]] [flags]
 ```
 
 ## Examples
@@ -32,7 +32,6 @@ devvm gc [--tool-images [--recent] [TOOL...]] [flags]
       --nix-cache             also delete the whole shared Nix cache
       --older-than DURATION   with --history, only those older than DURATION, such as 30d
       --orphans               also delete what devvm keeps for VMs their backend no longer has
-      --recent                with --tool-images, also delete those built in the last hour
       --retention             then apply the retention settings
       --tool-images           also delete the current shared tool images no VM has, or only those of the TOOLs named
 ```
