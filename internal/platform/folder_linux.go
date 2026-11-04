@@ -24,6 +24,10 @@ func FolderID(path string) (string, error) {
 	return id, nil
 }
 
+// HasImmutableFlag reports whether this system has a user-immutable flag:
+// Linux's immutable attribute needs root.
+const HasImmutableFlag = false
+
 // Chflags sets file flags: Linux has no unprivileged immutable flag.
 func Chflags(context.Context, string, string) error { return errors.ErrUnsupported }
 

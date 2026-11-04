@@ -19,6 +19,10 @@ func FolderID(path string) (string, error) {
 	return fmt.Sprintf("%d:%d", st.Dev, st.Ino), nil
 }
 
+// HasImmutableFlag reports whether this system has a user-immutable flag
+// (Chflags, Immutable): macOS's uchg, which the user sets without root.
+const HasImmutableFlag = true
+
 // Chflags sets file flags (uchg, nouchg) on path and everything under it,
 // following no symlink, path itself included: chflags -R -P.
 func Chflags(ctx context.Context, flags, path string) error {

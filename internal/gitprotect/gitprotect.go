@@ -20,7 +20,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -93,8 +92,9 @@ const maxDepth = 8
 type Protector struct {
 	Dir  string // the project folder, a physical path
 	Home string // for ~ in git's paths
-	// OS is the host's, as Go names it: locks need darwin.
-	OS string
+	// CanLock reports whether the host has a user-immutable flag to lock
+	// with (platform.HasImmutableFlag): on and strict need it.
+	CanLock bool
 	// Chflags sets file flags on a path and everything under it, following
 	// no symlink (platform.Chflags).
 	Chflags func(ctx context.Context, flags, path string) error
@@ -109,7 +109,7 @@ type Protector struct {
 // being home (paths.Dirs.Home), warning through warn.
 func New(dir, home string, warn func(msg.M)) *Protector {
 	return &Protector{
-		Dir: dir, Home: home, OS: runtime.GOOS,
+		Dir: dir, Home: home, CanLock: platform.HasImmutableFlag,
 		Chflags: platform.Chflags, Locked: platform.Immutable, Warn: warn,
 	}
 }
@@ -121,7 +121,7 @@ func (p *Protector) NewMode(off bool) string {
 	switch {
 	case off:
 		return Off
-	case p.OS != "darwin":
+	case !p.CanLock:
 		if exists(p.git()) {
 			p.Warn(msg.GitProtectNeedsMacosNew())
 		}
@@ -135,7 +135,7 @@ func (p *Protector) NewMode(off bool) string {
 // lock can't cover.
 func (p *Protector) NewVM(ctx context.Context, vm *state.VM) error {
 	g, err := Of(vm)
-	if err != nil || g.Mode != On && g.Mode != Strict || p.OS != "darwin" {
+	if err != nil || g.Mode != On && g.Mode != Strict || !p.CanLock {
 		return err
 	}
 	made, err := p.protect(ctx, g, whyNew, false)
@@ -193,7 +193,7 @@ func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
 		}
 		return record(ctx, vm, func(g *InVM) { g.Mode, g.Next = Off, "" })
 	}
-	if p.OS != "darwin" {
+	if !p.CanLock {
 		return msg.GitProtectOnNeedsMacos()
 	}
 	if mode == Strict || was == Strict {
@@ -267,7 +267,7 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 	switch {
 	case err != nil:
 		return err
-	case g.Mode != On && g.Mode != Strict, p.OS != "darwin":
+	case g.Mode != On && g.Mode != Strict, !p.CanLock:
 		return nil
 	case !g.Made.Protected:
 		if running {
@@ -405,7 +405,7 @@ func hasHooks(dir string) bool {
 // state records locking (vm; nil for none), which the VM may since have
 // dropped from its index. Like locking, it never acts through a symlink.
 func (p *Protector) Unlock(ctx context.Context, vm *state.VM) {
-	if p.OS != "darwin" {
+	if !p.CanLock {
 		return
 	}
 	todo := p.paths(ctx, p.embedded(ctx))

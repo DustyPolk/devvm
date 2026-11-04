@@ -47,7 +47,7 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 		}
 	}
 	// Elsewhere there are no locks to race.
-	if p.OS == "darwin" {
+	if p.CanLock {
 		in, err := t.b.Inspect(ctx, vm)
 		if err != nil {
 			return err

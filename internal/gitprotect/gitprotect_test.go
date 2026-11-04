@@ -5,13 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -38,7 +38,7 @@ func newFixture(t *testing.T, name string) *fixture {
 	f := &fixture{t: t, root: root, dir: filepath.Join(root, name), immutable: map[string]bool{}}
 	mkdirs(t, f.dir)
 	f.p = &Protector{
-		Dir: f.dir, Home: filepath.Join(root, "home"), OS: "darwin",
+		Dir: f.dir, Home: filepath.Join(root, "home"), CanLock: true,
 		Chflags: func(_ context.Context, flags, path string) error {
 			f.flags = append(f.flags, flags+" "+path)
 			f.immutable[path] = flags == "uchg"
@@ -476,7 +476,7 @@ func TestUnlock(t *testing.T) {
 		t.Errorf("flags %q", f.flags)
 	}
 	f.flags = nil
-	f.p.OS = "linux"
+	f.p.CanLock = false
 	f.p.Unlock(t.Context(), f.vm)
 	if len(f.flags) > 0 {
 		t.Errorf("linux: flags %q", f.flags)
@@ -550,7 +550,7 @@ func TestNewVMOffAndLinux(t *testing.T) {
 	if Mode(f.vm) != "off" || len(f.flags) > 0 || len(f.warns.Names()) > 0 {
 		t.Errorf("off: %s, locks %q, warnings %q", Mode(f.vm), f.flags, f.warns.Names())
 	}
-	f.p.OS = "linux"
+	f.p.CanLock = false
 	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
@@ -564,16 +564,23 @@ func TestNewVMOffAndLinux(t *testing.T) {
 	if err := f.newVM(false); err != nil || len(f.warns.Names()) > 0 {
 		t.Errorf("linux without .git: %v, warnings %q", err, f.warns.Names())
 	}
-	f.p.OS = "darwin"
+	f.p.CanLock = true
 	if err := f.newVM(false); err != nil || Mode(f.vm) != "on" || len(f.flags) > 0 {
 		t.Errorf("no .git: %v, %s, locks %q", err, Mode(f.vm), f.flags)
+	}
+}
+
+// A protector locks where the host has a user-immutable flag, macOS alone.
+func TestNewCanLock(t *testing.T) {
+	if p := New(t.TempDir(), t.TempDir(), nil); p.CanLock != platform.HasImmutableFlag {
+		t.Errorf("CanLock %t on a host whose immutable flag is %t", p.CanLock, platform.HasImmutableFlag)
 	}
 }
 
 // The real flag, on macOS: the VM's user can't add a hook or change the
 // config, nor make a hooks folder the repo didn't have.
 func TestRealLocks(t *testing.T) {
-	if runtime.GOOS != "darwin" {
+	if !platform.HasImmutableFlag {
 		t.Skip("chflags is macOS's")
 	}
 	needGit(t)
@@ -869,7 +876,7 @@ func TestSetStrictFails(t *testing.T) {
 // Without a .git, on is recorded for when one appears.
 func TestSetLinuxAndNoGit(t *testing.T) {
 	f := newFixture(t, "p")
-	f.p.OS = "linux"
+	f.p.CanLock = false
 	if err := f.newVM(false); err != nil || Mode(f.vm) != Off {
 		t.Errorf("new on linux: %s, %v", Mode(f.vm), err)
 	}
@@ -882,7 +889,7 @@ func TestSetLinuxAndNoGit(t *testing.T) {
 	if Mode(f.vm) != Off || len(f.flags) > 0 {
 		t.Errorf("off on linux: %s, locks %q", Mode(f.vm), f.flags)
 	}
-	f.p.OS = "darwin"
+	f.p.CanLock = true
 	f.set(Strict)
 	if Mode(f.vm) != Strict || len(f.flags)+len(f.warns.Names()) > 0 {
 		t.Errorf("no .git: %s, locks %q, warnings %q", Mode(f.vm), f.flags, f.warns.Names())
