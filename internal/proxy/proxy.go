@@ -94,7 +94,7 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 		vm: c.VM, password: c.Password, log: l, events: ev,
 		secrets:        newSecrets(c.Secrets, std.Secret, l),
 		interceptPorts: map[int]bool{443: true},
-		links:          links{file: c.Links, sockets: c.LinkSockets, vm: c.VM, log: l, events: ev},
+		links:          newLinks(c.Links, c.LinkSockets, c.VM, l, ev),
 	}
 	var err error
 	if c.CA != "" {

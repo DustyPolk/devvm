@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -27,8 +26,8 @@ import (
 // The proxy is a second entrance to the VM's links (Config.Links): a request for one of their names and
 // ports, CONNECT db:5432 or GET http://db:5432/, goes to that link's socket on the host, which
 // devvm _links serves as it serves the link's remote forward, checking each connection there. The
-// proxy reads the list devvm _links writes whenever the links it carries change, on every request,
-// before any rule: a host and port on it match exactly, after splitHostPort's one normalization
+// proxy checks the list devvm _links writes whenever the links it carries change on every request,
+// before any rule, and reads it again when it has changed (watched): a host and port on it match exactly, after splitHostPort's one normalization
 // (lower case, one trailing dot), and the list names each link's short name and its long one
 // (NAME.devvm.internal). Its bytes pass as they are: no TLS check or interception, no secret put
 // in, no rule asked, and no event of the proxy's own, as devvm _links logs the connection. A
@@ -39,11 +38,23 @@ import (
 
 // links is a proxy's way to the VM's links: set once, as it starts, and only read after.
 type links struct {
-	file    string // Config.Links: the VM's links list, which devvm _links writes; empty: none
-	sockets string // Config.LinkSockets: the folder of the links' sockets; empty: none
-	vm      string // Config.VM, whose links' sockets they are
+	file    string             // Config.Links: the VM's links list, which devvm _links writes; empty: none
+	list    *watched[LinkList] // file's list; a list that can't be read has none, logged once
+	sockets string             // Config.LinkSockets: the folder of the links' sockets; empty: none
+	vm      string             // Config.VM, whose links' sockets they are
 	log     *log.Logger
 	events  *events
+}
+
+func newLinks(file, sockets, vm string, l *log.Logger, ev *events) links {
+	return links{
+		file: file, sockets: sockets, vm: vm, log: l, events: ev,
+		list: &watched[LinkList]{
+			path: file, read: readLinkListFile,
+			parse:  func(b []byte) (LinkList, error) { return parseLinkList(file, b) },
+			onFail: func(err error) { l.Printf("links: %v", err) },
+		},
+	}
 }
 
 // LinkList is the file devvm _links writes for the VM's proxy: the links it carries now.
@@ -81,13 +92,12 @@ func LinkHash(vm string, parts ...string) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
-// readLinkList reads the list at path: a regular file, not a link, that only its owner, this
-// process's user, may write, at most linkListMax long (readPrivate), of LinkListVersion.
-func readLinkList(path string) (LinkList, error) {
-	b, err := readPrivate(path, linkListMax, 0o022)
-	if err != nil {
-		return LinkList{}, err
-	}
+// readLinkListFile reads the list at path: a regular file, not a link, that only its owner, this
+// process's user, may write, at most linkListMax long (readPrivate).
+func readLinkListFile(path string) ([]byte, error) { return readPrivate(path, linkListMax, 0o022) }
+
+// parseLinkList is the list b, read from path, of LinkListVersion.
+func parseLinkList(path string, b []byte) (LinkList, error) {
 	var l LinkList
 	if err := json.Unmarshal(b, &l); err != nil {
 		return LinkList{}, fmt.Errorf("%s: %w", path, err)
@@ -105,13 +115,7 @@ func (k links) find(host string, port int) (LinkEntry, bool) {
 	if k.file == "" || k.sockets == "" {
 		return LinkEntry{}, false
 	}
-	l, err := readLinkList(k.file)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			k.log.Printf("links: %v", err)
-		}
-		return LinkEntry{}, false
-	}
+	l := k.list.get()
 	for _, e := range l.Links {
 		if e.Port != port || !slices.Contains(e.Hosts, host) {
 			continue

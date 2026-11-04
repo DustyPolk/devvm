@@ -86,10 +86,17 @@ func (l BindingList) Encode() []byte {
 // this process's user, may read or write, at most bindingListMax long (readPrivate), of
 // BindingListVersion, each binding of a kind the proxy knows.
 func ReadBindings(path string) (BindingList, error) {
-	b, err := readPrivate(path, bindingListMax, 0o077)
+	b, err := readBindingsFile(path)
 	if err != nil {
 		return BindingList{}, err
 	}
+	return parseBindings(path, b)
+}
+
+func readBindingsFile(path string) ([]byte, error) { return readPrivate(path, bindingListMax, 0o077) }
+
+// parseBindings is ReadBindings for the bytes b, read from path.
+func parseBindings(path string, b []byte) (BindingList, error) {
 	var l BindingList
 	if err := json.Unmarshal(b, &l); err != nil {
 		return BindingList{}, fmt.Errorf("%s: %w", path, err)
@@ -124,13 +131,11 @@ type Lookup func(ctx context.Context, b Binding) (string, error)
 
 // secrets is a proxy's bindings (Config.Secrets) and the values it has looked up for them.
 type secrets struct {
-	path   string // Config.Secrets: the bindings file (no values), re-read on change; "": none
+	// file is Config.Secrets, the bindings file (no values), re-read on change; nil: none. Its
+	// lock is taken before valueMu, never after.
+	file   *watched[[]Binding]
 	lookup Lookup // IO.Secret: each binding's value
 	log    *log.Logger
-	// mu holds the bindings as the file had them at mtime. It's taken before valueMu, never after.
-	mu    sync.Mutex
-	mtime time.Time
-	list  []Binding
 	// valueMu holds the values, by binding name, and is held through a lookup, so lookups go one
 	// at a time.
 	valueMu sync.Mutex
@@ -138,37 +143,36 @@ type secrets struct {
 }
 
 func newSecrets(path string, lookup Lookup, l *log.Logger) *secrets {
-	return &secrets{path: path, lookup: lookup, log: l, values: map[string]cached{}}
+	s := &secrets{lookup: lookup, log: l, values: map[string]cached{}}
+	if path != "" {
+		s.file = &watched[[]Binding]{
+			path: path, read: readBindingsFile,
+			parse: func(b []byte) ([]Binding, error) {
+				bl, err := parseBindings(path, b)
+				if err == nil {
+					l.Printf("secrets %s: %d bindings", path, len(bl.Bindings))
+				}
+				return bl.Bindings, err
+			},
+			onFail: func(err error) { l.Printf("secrets: %v", err) },
+			// devvm rewrites the file when a value is set or removed: look values up afresh.
+			changed: func() {
+				s.valueMu.Lock()
+				s.values = map[string]cached{}
+				s.valueMu.Unlock()
+			},
+		}
+	}
+	return s
 }
 
 // all returns the bindings as the file has them now. A file that's gone, or that can't be read as
 // ReadBindings reads it, has none: no value goes in until devvm writes it again.
 func (s *secrets) all() []Binding {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.path == "" {
+	if s.file == nil {
 		return nil
 	}
-	st, err := os.Lstat(s.path)
-	if err != nil {
-		s.list, s.mtime = nil, time.Time{}
-		return nil
-	}
-	if !st.ModTime().Equal(s.mtime) {
-		s.mtime = st.ModTime()
-		l, err := ReadBindings(s.path)
-		if err != nil {
-			s.log.Printf("secrets: %v", err)
-		} else {
-			s.log.Printf("secrets %s: %d bindings", s.path, len(l.Bindings))
-		}
-		s.list = l.Bindings
-		// devvm touches the file when a value is set or removed: look values up afresh.
-		s.valueMu.Lock()
-		s.values = map[string]cached{}
-		s.valueMu.Unlock()
-	}
-	return s.list
+	return s.file.get()
 }
 
 // forHost: the bindings that apply to host.

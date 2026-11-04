@@ -7,12 +7,9 @@ import (
 	"log"
 	"net"
 	"net/netip"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
 
 // A rule from a policy file. One per line, '#' starts a comment:
@@ -187,30 +184,39 @@ func (r rule) matchAddr(a netip.Addr) bool {
 }
 
 // policy is the union of devvm's built-in policies, read once, and several files, each re-read when
-// its mtime changes.
+// it changes (watched). A file that's gone has no rules; one that can't be read keeps its last
+// rules and broken deny, logged once (a deny dropped for a moment would let through).
 type policy struct {
-	mu sync.Mutex
 	// builtin is the built-in policies' rules (readBuiltins), ahead of the files'.
 	builtin []rule
-	files   []string
-	mtime   map[string]time.Time
-	rules   map[string][]rule
-	// broken is, for each file with one, the first of its lines that starts with ! and isn't a
-	// rule (BrokenDeny): while any file has one, the policy denies everything.
-	broken map[string]PolicyLine
-	// failed is, for each file whose last read failed, why: logged once, not at every request.
-	failed map[string]string
-	log    *log.Logger // the proxy's own log: what was read, what was skipped
+	files   []*watched[policyFile]
+}
+
+// policyFile is what one policy file holds.
+type policyFile struct {
+	rules []rule
+	// broken is the first of its lines that starts with ! and isn't a rule (BrokenDeny): while any
+	// file has one, the policy denies everything.
+	broken *PolicyLine
 }
 
 // PolicyMax bounds a policy file that the proxy, devvm network and devvm doctor read.
 const PolicyMax = 1 << 20
 
+// newPolicy is the policy of builtin and files, logging to l, the proxy's own log, what was
+// read and what was skipped.
 func newPolicy(builtin []rule, files []string, l *log.Logger) *policy {
-	return &policy{
-		builtin: builtin, files: files, mtime: map[string]time.Time{}, rules: map[string][]rule{}, broken: map[string]PolicyLine{},
-		failed: map[string]string{}, log: l,
+	p := &policy{builtin: builtin}
+	for _, f := range files {
+		p.files = append(p.files, &watched[policyFile]{
+			// A FIFO or a device there (a link to /dev/zero) is refused, not read (ReadRegular).
+			path: f, follow: true, keep: true,
+			read:   func(path string) ([]byte, error) { return ReadRegular(path, PolicyMax) },
+			parse:  func(b []byte) (policyFile, error) { return loadPolicy(f, string(b), l), nil },
+			onFail: func(err error) { l.Printf("policy %v; its last rules kept", err) },
+		})
 	}
+	return p
 }
 
 // readBuiltins reads the built-in policies names, paths in devvm's own files own, once, in order,
@@ -246,66 +252,36 @@ func BrokenDeny(l PolicyLine) bool { return !l.OK && strings.HasPrefix(l.Text, "
 // all returns the policy's rules, the built-in policies' first, and while a file has a broken deny
 // (BrokenDeny), why the policy denies everything.
 func (p *policy) all() ([]rule, string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	out := slices.Clone(p.builtin)
-	for _, f := range p.files {
-		st, err := os.Stat(f)
-		if errors.Is(err, fs.ErrNotExist) {
-			// A missing file has no rules, and one that comes back is read again, whatever its
-			// mtime (a rename back, a restore that keeps it).
-			delete(p.rules, f)
-			delete(p.broken, f)
-			delete(p.mtime, f)
-			continue
-		}
-		if err != nil { // keep its last rules and broken deny, as for a read that fails
-			out = append(out, p.rules[f]...)
-			continue
-		}
-		if !st.ModTime().Equal(p.mtime[f]) {
-			// A FIFO or a device there (a link to /dev/zero) is refused, not read (ReadRegular).
-			b, err := ReadRegular(f, PolicyMax)
-			if err != nil { // keep its last rules (a deny dropped for a moment would let through)
-				if why := err.Error(); p.failed[f] != why {
-					p.failed[f] = why
-					p.log.Printf("policy %v; its last rules kept", err)
-				}
-				out = append(out, p.rules[f]...)
-				continue
-			}
-			delete(p.failed, f)
-			p.load(f, string(b))
-			p.mtime[f] = st.ModTime()
-		}
-		out = append(out, p.rules[f]...)
-	}
-	for _, f := range p.files {
-		if l, ok := p.broken[f]; ok {
-			return out, fmt.Sprintf("%s:%d isn't a rule but reads as a deny (%q), so this VM's proxy denies everything until it's fixed", f, l.N, l.Text)
+	why := ""
+	for _, w := range p.files {
+		pf := w.get()
+		out = append(out, pf.rules...)
+		if l := pf.broken; l != nil && why == "" {
+			why = fmt.Sprintf("%s:%d isn't a rule but reads as a deny (%q), so this VM's proxy denies everything until it's fixed", w.path, l.N, l.Text)
 		}
 	}
-	return out, ""
+	return out, why
 }
 
-// load takes file f's rules from its text b, logging each line that isn't a rule and noting the
-// first broken deny. With p.mu held.
-func (p *policy) load(f, b string) {
+// loadPolicy is file f's rules from its text b, logging to l each line that isn't a rule and
+// noting the first broken deny.
+func loadPolicy(f, b string, l *log.Logger) policyFile {
 	lines, rs := parsePolicy(b)
-	delete(p.broken, f)
-	for _, l := range lines {
+	pf := policyFile{rules: rs}
+	for _, line := range lines {
 		switch {
-		case BrokenDeny(l):
-			p.log.Printf("%s:%d: not a rule but reads as a deny, so everything is denied: %q", f, l.N, l.Text)
-			if _, ok := p.broken[f]; !ok {
-				p.broken[f] = l
+		case BrokenDeny(line):
+			l.Printf("%s:%d: not a rule but reads as a deny, so everything is denied: %q", f, line.N, line.Text)
+			if pf.broken == nil {
+				pf.broken = &line
 			}
-		case !l.OK:
-			p.log.Printf("%s:%d: not a rule, skipped: %q", f, l.N, l.Text)
+		case !line.OK:
+			l.Printf("%s:%d: not a rule, skipped: %q", f, line.N, line.Text)
 		}
 	}
-	p.rules[f] = rs
-	p.log.Printf("policy %s: %d rules", f, len(rs))
+	l.Printf("policy %s: %d rules", f, len(rs))
+	return pf
 }
 
 // decide whether host:port may be reached. host is a name or an address literal. It returns the

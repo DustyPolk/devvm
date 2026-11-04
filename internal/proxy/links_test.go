@@ -201,8 +201,8 @@ func TestLinkConnectUntouched(t *testing.T) {
 	var err error
 	s.ca, err = loadCA(filepath.Join(ca, "ca.pem"), filepath.Join(ca, "ca.key"))
 	must(t, err)
-	s.secrets.path = filepath.Join(ca, "bindings.json")
-	writeBindings(t, s.secrets.path, bound("db", "**"))
+	s.secrets = newSecrets(filepath.Join(ca, "bindings.json"), nil, quiet())
+	writeBindings(t, s.secrets.file.path, bound("db", "**"))
 	fakeSecret(s.secrets, "real-secret")
 	// A rule that allows the name too: the link still comes first, never intercepted.
 	s.egress.pol = writePolicy(t, "db\n")
