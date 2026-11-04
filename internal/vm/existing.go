@@ -192,9 +192,6 @@ func (e Launch) checkAgentForwarding(b backend.Backend, st *state.VM, in backend
 	if err := e.Registry.Require(b, st.Name(), backend.FeatureAgentToggle); err != nil {
 		return err
 	}
-	if want && in.AgentFixed {
-		return msg.AgentFixed(b.Name(), st.Name())
-	}
 	if in.Status == backend.StatusRunning {
 		e.Warn(msg.AgentNextStart(st.Name()))
 	}

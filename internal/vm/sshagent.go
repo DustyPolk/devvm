@@ -68,9 +68,6 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 		if err := e.Registry.Require(b, vm, backend.FeatureAgentToggle); err != nil {
 			return err
 		}
-		if in.AgentFixed {
-			return msg.AgentFixed(b.Name(), vm)
-		}
 	}
 	if err := st.Update(ctx, func(st *state.VM) error { return sshagent.SetMode(st, mode) }); err != nil {
 		return err

@@ -1699,9 +1699,6 @@ other = "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}, and it applies
 [agent_next_start]
 other = "{{.vm}}'s SSH agent forwarding changes when it next starts. Run devvm restart to apply it now."
 
-[agent_fixed]
-other = "{{.vm}} was made without SSH agent forwarding, and the {{.backend}} backend can't add it later. To add it, run devvm rm, then devvm --ssh-agent."
-
 [agent_start_failed]
 other = "The SSH agent devvm runs didn't start at {{.sock}}."
 

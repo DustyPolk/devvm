@@ -49,11 +49,6 @@ func AgentDirsRemoved(dirs string, vm string) M {
 	return M{id: "agent_dirs_removed", vals: []val{{"dirs", dirs}, {"vm", vm}}}
 }
 
-// AgentFixed is [agent_fixed]: "{{.vm}} was made without SSH agent forwarding, and the {{.backend}} backend can't add it later. To add it, run devvm rm, then devvm --ssh-agent."
-func AgentFixed(backend string, vm string) M {
-	return M{id: "agent_fixed", vals: []val{{"backend", backend}, {"vm", vm}}}
-}
-
 // AgentHolds is [agent_holds]: "devvm's SSH agent holds: {{.keys}}"
 func AgentHolds(keys string) M {
 	return M{id: "agent_holds", vals: []val{{"keys", keys}}}
@@ -3275,7 +3270,6 @@ var specs = map[string]spec{
 	"agent_dir_comma":                  {fields: []string{"path"}},
 	"agent_dirs_added":                 {fields: []string{"dirs", "vm"}},
 	"agent_dirs_removed":               {fields: []string{"dirs", "vm"}},
-	"agent_fixed":                      {fields: []string{"backend", "vm"}},
 	"agent_holds":                      {fields: []string{"keys"}},
 	"agent_holds_note":                 {},
 	"agent_key_changed":                {fields: []string{"key"}},

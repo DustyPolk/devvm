@@ -254,8 +254,7 @@ func TestSetSSHAgentRisk(t *testing.T) {
 // A backend that emulates turning forwarding on or off (agent-toggle):
 // a new VM is made ready for it only while it's let through (warned when
 // unreviewed), and its state says so; each start says whether the VM gets
-// no agent; once it isn't let through, that VM no longer starts. A VM made
-// without forwarding where it's fixed can't have it turned on.
+// no agent; once it isn't let through, that VM no longer starts.
 func TestAgentToggleEmulated(t *testing.T) {
 	caps := allNative()
 	caps[backend.FeatureAgentToggle] = backend.Emulated(false)
@@ -291,23 +290,6 @@ func TestAgentToggleEmulated(t *testing.T) {
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{}); msg.NamesOf(err) != "backend_unreviewed backend=fake feature=agent-toggle vm="+vm {
 		t.Errorf("refused: %s", msg.NamesOf(err))
-	}
-	// Made without forwarding, where that's fixed: on is refused.
-	e.Registry.Unreviewed = map[string]bool{"fake:agent-toggle": true}
-	in := f.Instances[vm]
-	in.AgentForwarding, in.AgentFixed = false, true
-	f.Instances[vm] = in
-	if err := set(t, st, keyAgent, sshagent.Off); err != nil {
-		t.Fatal(err)
-	}
-	if err := (Settings{e}).SetSSHAgent(t.Context(), sshagent.On); msg.NamesOf(err) != "agent_fixed backend=fake vm="+vm {
-		t.Errorf("fixed, devvm ssh-agent on: %s", msg.NamesOf(err))
-	}
-	if err := set(t, st, keyAgent, sshagent.On); err != nil {
-		t.Fatal(err)
-	}
-	if err := (Launch{e}).Up(t.Context(), Options{}); msg.NamesOf(err) != "agent_fixed backend=fake vm="+vm {
-		t.Errorf("fixed, launched on: %s", msg.NamesOf(err))
 	}
 }
 

@@ -10,7 +10,6 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"backend_unreviewed":               "backends#when-a-backend-lacks-something",
 	"backend_unreviewed_used":          "contributing/testing#unreviewed-emulations",
 	"backend_unknown_vm":               "backends#a-vms-backend",
-	"agent_fixed":                      "backends#when-a-backend-lacks-something",
 	"ports_forward_failed":             "using/ports-size#ports",
 	"net_off_backend":                  "backends#when-a-backend-lacks-something",
 	"net_about":                        "safety/network#turning-it-on-or-off",

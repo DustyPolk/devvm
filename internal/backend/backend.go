@@ -413,9 +413,6 @@ type Instance struct {
 	Size            Size     // what it has, all set
 	AgentDirs       []string // its agent folder mounts
 	AgentForwarding bool
-	// AgentFixed is set when its forwarding can't be turned on: it was
-	// made without, on a backend that sets forwarding only then.
-	AgentFixed bool
 }
 
 // ExecOpts is where a command run in a VM runs and what it's connected to.
