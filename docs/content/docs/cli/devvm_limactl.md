@@ -1,6 +1,6 @@
 ---
 title: devvm limactl
-weight: 21
+weight: 22
 ---
 
 Run Lima's limactl for debugging, which starts VMs without network policy

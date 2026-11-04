@@ -1854,6 +1854,13 @@ check "update --force makes it again from the image's new build, keeping home an
 owned e2eadd+e2eadd2
 check "once updated, a launch doesn't warn" bash -c "cd '$r' &&
   printf 'exit\n' | '$D' >'$work/last.log' 2>&1 && ! grep -qF \"\$(m vm_outdated changed=e2eadd+e2eadd2)\" '$work/last.log'"
+check "layer rm --force makes it again without the layer, keeping home and settings" bash -c "cd '$r' &&
+  printf 'exit\n' | '$D' layer rm e2eadd --force >'$work/last.log' 2>&1 &&
+  [[ \$(st_get '$rd' image) == e2eadd2 ]] &&
+  in_vm '$remade' '[[ ! -e /etc/devvm-e2eadd ]] && grep -qx e2eadd2 /etc/devvm-e2eadd2 && grep -qx in-home ~/e2e-home.txt' &&
+  [[ \$(st_get '$rd' id) == '$id' && \$(st_get '$rd' ports.forward) == 3000,5173 && \$(st_get '$rd' secrets.names) == github ]] &&
+  grep -qx example.com '$rd/policy' && grep -qx in-project '$r/e2e-project.txt' && ! limactl list -q | grep -qx '$aside'"
+owned e2eadd2
 check "rm deletes the VM made again" bash -c "cd '$r' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qxE '$remade|$aside'"
 "$D" secret rm github --force </dev/null >/dev/null 2>&1

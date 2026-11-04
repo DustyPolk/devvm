@@ -69,7 +69,7 @@ Links carry TCP over IPv4 alone. Each name resolves to an IPv4 address, so a pro
 
 ### Which VM a link reaches
 
-A link stays with the VM it was made for, because devvm records the target VM's identity with the link. A VM made again in the target's folder after `devvm rm`, or another VM with the same folder name that appears later, isn't the linked target. `devvm layer add` keeps the target's identity as it makes the VM again, so its links still reach it ([adding layers to a VM](images.md#adding-layers-to-a-vm)).
+A link stays with the VM it was made for, because devvm records the target VM's identity with the link. A VM made again in the target's folder after `devvm rm`, or another VM with the same folder name that appears later, isn't the linked target. `devvm layer add`, `devvm layer rm` and `devvm update` keep the target's identity as they make the VM again, so its links still reach it ([adding layers to a VM](images.md#adding-layers-to-a-vm)).
 
 ### A link joins the two VMs' trust
 

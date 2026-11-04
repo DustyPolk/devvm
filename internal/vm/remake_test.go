@@ -389,6 +389,113 @@ func TestAddLayersRefuses(t *testing.T) {
 // A remake that fails once the old machine is set aside puts it back as
 // it was: the new one deleted, the old one renamed back,
 // its state as before, and nothing saved left.
+// What devvm layer rm makes: the VM's layers without those given, the
+// rest in their order, base when none is left; and those it lacks, once
+// each.
+func TestRemovedImage(t *testing.T) {
+	for _, c := range []struct {
+		img    string
+		layers []string
+		want   string
+		lacks  []string
+	}{
+		{"docker+nix+desktop", []string{"nix"}, "docker+desktop", nil},
+		{"docker+nix+desktop", []string{"desktop", "docker"}, "nix", nil},
+		{"docker", []string{"docker"}, "base", nil},
+		{"docker", []string{"nix", "docker", "nix"}, "base", []string{"nix"}},
+		{"base", []string{"desktop"}, "base", []string{"desktop"}},
+	} {
+		got, lacks := removedImage(c.img, c.layers)
+		if got != c.want || !slices.Equal(lacks, c.lacks) {
+			t.Errorf("%s without %q = %s, lacks %q; want %s, %q", c.img, c.layers, got, lacks, c.want, c.lacks)
+		}
+	}
+}
+
+// devvm layer rm's arguments: base, a shared tool's name and one that
+// can't be a layer's are refused as devvm layer add refuses them; any
+// other name may be one of the VM's layers, even one whose script is
+// gone.
+func TestCheckLayerNames(t *testing.T) {
+	layers := []string{"desktop", "docker", "nix"}
+	for _, c := range []struct {
+		given []string
+		want  string
+	}{
+		{[]string{"docker", "gone-layer"}, ""},
+		{[]string{"docker", "node"}, "tool_not_layer tool=node"},
+		{[]string{"base"}, "unknown_layer layer=base layers=desktop docker nix"},
+		{[]string{"Dockr!"}, "unknown_layer_like layer=Dockr! like=docker"},
+		{[]string{"x_y_z_w"}, "unknown_layer layer=x_y_z_w layers=desktop docker nix"},
+	} {
+		if got := msg.NamesOf(CheckLayerNames(c.given, layers)); got != c.want {
+			t.Errorf("%q: %q, want %q", c.given, got, c.want)
+		}
+	}
+}
+
+// devvm layer rm --force makes the VM again from its image without the
+// layers given, the remake devvm layer add makes: its settings kept. One
+// of the user's layers whose script is gone can be taken out. Layers it
+// lacks are said, and with none of them nothing runs; a name that isn't
+// a layer is refused before anything runs.
+func TestRemoveLayers(t *testing.T) {
+	e, f, st, _ := remakeEnv(t)
+	vm := st.Name()
+	lc := Lifecycle{e}
+	var said []string
+	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	change(t, st, func(st *state.VM) error { st.Image = "docker+gone+nix"; return nil })
+	before := readState(t, e.Dirs, vm)
+	rm := func(layers ...string) error {
+		said = nil
+		return lc.RemoveLayers(t.Context(), "devvm layer rm "+strings.Join(layers, " "), layers, RemakeOptions{Force: true})
+	}
+
+	n := len(f.Calls())
+	if err := rm("dokcer"); msg.NamesOf(err) != "unknown_layer_like layer=dokcer like=docker" {
+		t.Errorf("a typo: %s", msg.NamesOf(err))
+	}
+	if err := rm("desktop"); err != nil || !slices.Equal(said, []string{"lacks_layers layers=desktop vm=" + vm}) {
+		t.Errorf("one it lacks: said %q, %v", said, msg.NamesOf(err))
+	}
+	if slices.ContainsFunc(f.Methods()[n:], func(m string) bool { return m == "BuildImage" || m == "Stop" }) {
+		t.Errorf("ran %q", f.Methods()[n:])
+	}
+
+	n = len(f.Calls())
+	if err := rm("gone", "desktop"); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	after := readState(t, e.Dirs, vm)
+	if after.Image != "docker+nix" || remakePending(after) || !slices.Equal(said[:1], []string{"lacks_layers layers=desktop vm=" + vm}) {
+		t.Errorf("image %s, pending %v, said %q", after.Image, remakePending(after), said)
+	}
+	for _, k := range []string{keyID, keyPorts, keyNet, keyCPUs, keyMemory, keyAgent, keyToolNames} {
+		if get(after, k) != get(before, k) {
+			t.Errorf("%s: %q, was %q", k, get(after, k), get(before, k))
+		}
+	}
+	var steps []string
+	for _, m := range f.Methods()[n:] {
+		if slices.Contains([]string{"BuildImage", "Stop", "Rename", "CreateVM", "Start", "Delete", "Shell"}, m) {
+			steps = append(steps, m)
+		}
+	}
+	// docker, then docker+nix built.
+	if want := []string{"BuildImage", "Stop", "Rename", "CreateVM", "Start", "Delete", "Shell"}; !slices.Equal(slices.Compact(steps), want) {
+		t.Errorf("steps %q, want %q", steps, want)
+	}
+
+	// Every layer out: base.
+	if err := rm("nix", "docker"); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if got := readState(t, e.Dirs, vm).Image; got != "base" {
+		t.Errorf("image %s, want base", got)
+	}
+}
+
 func TestRemakeUndo(t *testing.T) {
 	e, f, st, _ := remakeEnv(t)
 	vm := st.Name()

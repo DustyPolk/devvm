@@ -385,6 +385,15 @@ func CheckLayers(given, layers []string) error {
 	return nil
 }
 
+// CheckLayerNames refuses a name given as a layer to take out (devvm
+// layer rm's) that no image can have, as CheckLayers does: base, a
+// shared tool's, or one that isn't a layer's name. Any other name may be
+// one of the VM's layers, even one of the user's whose script is gone,
+// which RemoveLayers tells once it has the VM.
+func CheckLayerNames(given, layers []string) error {
+	return CheckLayers(slices.DeleteFunc(slices.Clone(given), image.LayerName), layers)
+}
+
 // firstRunAgents asks which agents new VMs get on devvm's first run in a
 // terminal, until they're chosen (def), unless --agents chose this VM's.
 func (e creation) firstRunAgents(o Options, def settings.Defaults) error {

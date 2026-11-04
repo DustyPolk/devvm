@@ -1,6 +1,6 @@
 ---
 title: devvm update
-weight: 56
+weight: 57
 ---
 
 Make this folder's VM again from its image's new build, then open a shell in it

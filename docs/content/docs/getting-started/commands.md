@@ -209,7 +209,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 ### Adding to a VM
 
-`devvm tools` in a terminal shows the same list as a new VM, with the VM's toolchains and agents checked. Its layers are in the list too, greyed out, and the cursor skips them, because a VM keeps the layers it was made with until `devvm layer add` makes it again. Check what you want to add, uncheck what you want to take out, and press enter. devvm then makes those changes as `devvm tools add` and `devvm tools rm` would, and opens a shell in the VM. When you change nothing, devvm says so and opens nothing. Without a terminal, or with `--json`, `devvm tools` shows the VM's shared tools instead.
+`devvm tools` in a terminal shows the same list as a new VM, with the VM's toolchains and agents checked. Its layers are in the list too, greyed out, and the cursor skips them, because a VM keeps the layers it was made with until `devvm layer add` or `devvm layer rm` makes it again. Check what you want to add, uncheck what you want to take out, and press enter. devvm then makes those changes as `devvm tools add` and `devvm tools rm` would, and opens a shell in the VM. When you change nothing, devvm says so and opens nothing. Without a terminal, or with `--json`, `devvm tools` shows the VM's shared tools instead.
 
 `devvm tools add TOOL...` adds shared tools to the folder's VM without the list, each one a separate word, as in `devvm tools add python claude`, and then opens a shell in it. The tools are mounted rather than installed, so nothing in the VM's disk changes.
 
@@ -219,7 +219,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 
 `devvm tools rm TOOL...` takes shared tools out again.
 
-A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the VM more layers by making it again from an image with them on top, as in `devvm layer add desktop`. The VM keeps its home folder, the project folder and its settings, and everything else on its disk is lost, such as the packages you installed and Docker's images. So in a terminal devvm asks first, with no as the default, and without one it refuses unless you give `--force`. It exports the agents' history first unless you give `--no-export`, and `--clean-home` gives the VM the new image's home folder instead of its own ([adding layers to a VM](../using/images.md#adding-layers-to-a-vm)). A layer can't be taken out of a VM. To drop one, save your work outside the project folder, run `devvm rm`, and make the VM again with the layers you want.
+A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the VM more layers by making it again from an image with them on top, as in `devvm layer add desktop`. The VM keeps its home folder, the project folder and its settings, and everything else on its disk is lost, such as the packages you installed and Docker's images. So in a terminal devvm asks first, with no as the default, and without one it refuses unless you give `--force`. It exports the agents' history first unless you give `--no-export`, and `--clean-home` gives the VM the new image's home folder instead of its own ([adding layers to a VM](../using/images.md#adding-layers-to-a-vm)). `devvm layer rm LAYER...` takes layers out in the same way, making the VM again from an image of its other layers, as in `devvm layer rm desktop`, with the same question and flags ([taking layers out of a VM](../using/images.md#taking-layers-out-of-a-vm)).
 
 ## Links between VMs
 
@@ -246,6 +246,7 @@ A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the 
 | `devvm rebuild IMAGE` | build an image of base or layers again from its parent as it is, and delete the stale images no VM uses, while shared tools follow the tools lock instead ([details](../using/images.md#rebuilding)) |
 | `devvm layer new NAME` | start a layer of your own, `~/.config/devvm/layers/NAME.sh`, with its allowlist, `NAME.policy` ([details](../using/customizing.md#your-own-layers)) |
 | `devvm layer add LAYER... [--force] [--no-export] [--clean-home]` | make this folder's VM again with more layers on top, keeping its home folder and settings, after asking, then open a shell in it ([details](#adding-to-a-vm)) |
+| `devvm layer rm LAYER... [--force] [--no-export] [--clean-home]` | make this folder's VM again without some of its layers, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/images.md#taking-layers-out-of-a-vm)) |
 
 `devvm build`, `devvm rebuild` and `devvm images rm` take `--from IMAGE` to work on a base made from that container image ([details](../using/from.md)).
 

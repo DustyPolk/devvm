@@ -1,6 +1,6 @@
 ---
 title: devvm ports add
-weight: 34
+weight: 35
 ---
 
 Forward more ports from this folder's VM

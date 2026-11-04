@@ -118,7 +118,7 @@ func completeToolNames(_ *cobra.Command, args []string, toComplete string) ([]co
 	return out, cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeLayerNames completes devvm layer add's LAYER...: the layers
+// completeLayerNames completes devvm layer add's and rm's LAYER...: the layers
 // there are, but those given.
 func completeLayerNames(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 	var out []cobra.Completion

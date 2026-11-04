@@ -23,7 +23,7 @@ A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, tha
 - Download files with `devvm-fetch URL SHA256 OUT`, which `base` installs. It fails when the file's checksum doesn't match.
 - `NAME.policy` lists the hosts that VMs with the layer can reach with [network policy](../safety/network.md#allowlists), one rule per line.
 - Editing the script rebuilds its image, and the ones built on it, the next time they're used ([rebuilding](images.md#rebuilding)).
-- A layer's script changes the VM's disk, so `devvm layer add mailpit` gives a VM you have the layer by making the VM again, keeping its home folder and settings ([adding layers to a VM](images.md#adding-layers-to-a-vm)). A layer can't be taken out of a VM. To drop one, run `devvm rm` and make the VM again.
+- A layer's script changes the VM's disk, so `devvm layer add mailpit` gives a VM you have the layer by making the VM again, keeping its home folder and settings ([adding layers to a VM](images.md#adding-layers-to-a-vm)), and `devvm layer rm mailpit` takes it out again in the same way ([taking layers out of a VM](images.md#taking-layers-out-of-a-vm)).
 
 To edit layers with an agent in a VM, keep them in a repo of their own and copy them in, because devvm refuses a VM for a folder inside `~/.config/devvm` ([details](../internals/security.md#only-the-project-folder)).
 

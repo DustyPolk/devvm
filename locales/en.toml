@@ -365,6 +365,10 @@ other = "There's no layer {{.layer}}. Did you mean {{.like}}?"
 description = "layers is a space-separated list of layers: docker nix"
 other = "{{.vm}} has {{.layers}} already"
 
+[lacks_layers]
+description = "layers is a space-separated list of layers: docker nix"
+other = "{{.vm}} doesn't have {{.layers}}"
+
 [vm_current]
 description = "image is the VM's image: docker+desktop"
 other = "{{.vm}} is current, because nothing in {{.image}} changed since devvm made it"
@@ -995,7 +999,7 @@ other = "The --ports flag applies only to new VMs. To change this VM's ports, ru
 other = "{{.vm}} gets its new size when it next starts. Run devvm restart to apply it now."
 
 [parts_flags_ignored]
-other = "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools, and to add a layer, devvm layer add."
+other = "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools, and to change its layers, devvm layer add or devvm layer rm."
 
 [has_tools]
 description = "tools is a space-separated list of shared tools: python claude"
@@ -1323,7 +1327,7 @@ other = "{{.vm}} gets {{.tools}} as its shared tools and {{.layers}} as its laye
 other = "Choose what {{.vm}} gets. Use up and down to move, space to toggle and enter to confirm."
 
 [pick_vm_help]
-other = "Choose {{.vm}}'s shared tools. Its layers are greyed out, and devvm layer add adds one. Use up and down to move, space to toggle and enter to confirm."
+other = "Choose {{.vm}}'s shared tools. Its layers are greyed out, and devvm layer add and devvm layer rm change them. Use up and down to move, space to toggle and enter to confirm."
 
 [pick_toolchains]
 other = "Toolchains"
@@ -1955,7 +1959,7 @@ description = "has is a space-separated list of the VM's shared tools, or none"
 other = "{{.vm}} doesn't have the shared tool {{.tool}}. Its shared tools are {{.has}}."
 
 [custom_layer_remove]
-other = "You can't remove a layer from {{.vm}}. To drop {{.layer}}, save your work outside the project folder, then run devvm rm and devvm again."
+other = "{{.layer}} is one of {{.vm}}'s layers, not a shared tool. To take it out, run devvm layer rm {{.layer}}."
 
 [tools_newest]
 other = "{{.vm}} has the newest shared tools."

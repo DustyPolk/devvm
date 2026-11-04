@@ -44,4 +44,4 @@ devvm layer add LAYER... [flags]
 
 ## See also
 
-- [devvm layer](devvm_layer.md): Make image layers of your own, or add layers to this folder's VM
+- [devvm layer](devvm_layer.md): Make image layers of your own, or change this folder's VM's layers

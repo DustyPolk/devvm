@@ -489,7 +489,7 @@ func CreatingFromUbuntu(vm string) M {
 	return M{id: "creating_from_ubuntu", vals: []val{{"vm", vm}}}
 }
 
-// CustomLayerRemove is [custom_layer_remove]: "You can't remove a layer from {{.vm}}. To drop {{.layer}}, save your work outside the project folder, then run devvm rm and devvm again."
+// CustomLayerRemove is [custom_layer_remove]: "{{.layer}} is one of {{.vm}}'s layers, not a shared tool. To take it out, run devvm layer rm {{.layer}}."
 func CustomLayerRemove(layer string, vm string) M {
 	return M{id: "custom_layer_remove", vals: []val{{"layer", layer}, {"vm", vm}}}
 }
@@ -1464,6 +1464,11 @@ func KVMAccess(fix string) M {
 	return M{id: "kvm_access", vals: []val{{"fix", fix}}}
 }
 
+// LacksLayers is [lacks_layers]: "{{.vm}} doesn't have {{.layers}}"
+func LacksLayers(layers string, vm string) M {
+	return M{id: "lacks_layers", vals: []val{{"layers", layers}, {"vm", vm}}}
+}
+
 // LayerCreated is [layer_created]: "devvm created {{.script}} and its allowlist {{.policy}}. Edit them, then run devvm build {{.layer}} to build the image, or devvm --layers {{.layer}} to make a VM with it."
 func LayerCreated(layer string, policy string, script string) M {
 	return M{id: "layer_created", vals: []val{{"layer", layer}, {"policy", policy}, {"script", script}}}
@@ -2154,7 +2159,7 @@ func PartOtherFlag(flag string, given string, other string) M {
 	return M{id: "part_other_flag", vals: []val{{"flag", flag}, {"given", given}, {"other", other}}}
 }
 
-// PartsFlagsIgnored is [parts_flags_ignored]: "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools, and to add a layer, devvm layer add."
+// PartsFlagsIgnored is [parts_flags_ignored]: "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools, and to change its layers, devvm layer add or devvm layer rm."
 func PartsFlagsIgnored(vm string) M {
 	return M{id: "parts_flags_ignored", vals: []val{{"vm", vm}}}
 }
@@ -2209,7 +2214,7 @@ func PickToolchains() M {
 	return M{id: "pick_toolchains"}
 }
 
-// PickVMHelp is [pick_vm_help]: "Choose {{.vm}}'s shared tools. Its layers are greyed out, and devvm layer add adds one. Use up and down to move, space to toggle and enter to confirm."
+// PickVMHelp is [pick_vm_help]: "Choose {{.vm}}'s shared tools. Its layers are greyed out, and devvm layer add and devvm layer rm change them. Use up and down to move, space to toggle and enter to confirm."
 func PickVMHelp(vm string) M {
 	return M{id: "pick_vm_help", vals: []val{{"vm", vm}}}
 }
@@ -3498,6 +3503,7 @@ var specs = map[string]spec{
 	"key_loaded_keychain":              {},
 	"keychain_save_failed":             {fields: []string{"secret"}},
 	"kvm_access":                       {fields: []string{"fix"}},
+	"lacks_layers":                     {fields: []string{"layers", "vm"}},
 	"layer_created":                    {fields: []string{"layer", "policy", "script"}},
 	"layer_exists":                     {fields: []string{"file"}},
 	"layer_name_invalid":               {fields: []string{"layer"}},

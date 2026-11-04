@@ -1,6 +1,6 @@
 ---
 title: devvm network deny
-weight: 30
+weight: 31
 ---
 
 Deny hosts for this folder's VM

@@ -12,21 +12,22 @@ import (
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// newLayerCmd is devvm layer: new NAME and add LAYER....
+// newLayerCmd is devvm layer: new NAME, add LAYER... and rm LAYER....
 func newLayerCmd(u *ui.UI) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "layer",
-		Short: "Make image layers of your own, or add layers to this folder's VM",
-		Long: "Make image layers of your own, which are scripts in ~/.config/devvm/layers that an image runs on top of base, or add layers to this folder's VM. " +
+		Short: "Make image layers of your own, or change this folder's VM's layers",
+		Long: "Make image layers of your own, which are scripts in ~/.config/devvm/layers that an image runs on top of base, or add layers to this folder's VM and take them out. " +
 			"An image names them as it names devvm's built-in layers, bottom first, such as docker+NAME, and a new VM gets them with --layers.",
 		Example: examples(
 			"devvm layer new mailpit", "start a layer named mailpit",
 			"devvm layer add docker", "make this folder's VM again with the docker layer added",
+			"devvm layer rm docker", "make this folder's VM again without it",
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
-	cmd.AddCommand(newLayerAddCmd(u))
+	cmd.AddCommand(newLayerAddCmd(u), newLayerRmCmd(u))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "new NAME",
 		Short: "Start a layer of your own",
@@ -82,6 +83,42 @@ func newLayerAddCmd(u *ui.UI) *cobra.Command {
 			command := "devvm layer add " + strings.Join(args, " ")
 			withEnv(u, func(env *vm.Env) error {
 				return vm.Lifecycle{Env: env}.AddLayers(cmd.Context(), command, args, o)
+			}, msg.RemakeFailed)
+			return nil
+		},
+		ValidArgsFunction: completeLayerNames,
+	}
+	addRemakeFlags(cmd.Flags(), &o)
+	return cmd
+}
+
+// newLayerRmCmd is devvm layer rm LAYER... [--force] [--no-export]
+// [--clean-home].
+func newLayerRmCmd(u *ui.UI) *cobra.Command {
+	var o vm.RemakeOptions
+	cmd := &cobra.Command{
+		Use:   "rm LAYER...",
+		Short: "Make this folder's VM again without some of its layers, then open a shell in it",
+		Long: "Make this folder's VM again from an image without each LAYER, its other layers kept in their order, then open a shell in it, after asking in a terminal. " +
+			"devvm keeps its home folder, the project folder and its settings, and everything else on its disk is lost. " +
+			"When its image has an agent, devvm first exports the agents' history, unless you give --no-export.",
+		Example: examples(
+			"devvm layer rm desktop", "take the desktop layer out of the VM, after asking",
+			"devvm layer rm docker nix", "take out docker and nix",
+			"devvm layer rm desktop --force", "take it out without asking, as a script must",
+			"devvm layer rm docker --clean-home", "take out docker, and start from the image's home folder",
+		),
+		Args: cobra.MatchAll(minArgs(1), func(_ *cobra.Command, args []string) error {
+			dirs, err := paths.FromEnv()
+			if err != nil {
+				return err
+			}
+			return vm.CheckLayerNames(args, (&build.Env{Dirs: dirs}).Layers()[1:])
+		}),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			command := "devvm layer rm " + strings.Join(args, " ")
+			withEnv(u, func(env *vm.Env) error {
+				return vm.Lifecycle{Env: env}.RemoveLayers(cmd.Context(), command, args, o)
 			}, msg.RemakeFailed)
 			return nil
 		},

@@ -87,7 +87,19 @@ Everything else on the VM's disk is lost: the packages you installed with apt, p
 
 ### A remake that stops halfway
 
-If devvm itself is killed while it makes a VM again, such as when this machine loses power, the VM's state records the remake. The next `devvm`, `devvm layer add` or `devvm update` in the folder finishes it without asking. When the old disk is still set aside, devvm puts it back and makes the VM again from the start, and when it's gone, devvm makes the new VM with the home folder it saved. Until then, other commands on the VM refuse and name `devvm`, and `devvm rm` deletes the VM together with its old disk.
+If devvm itself is killed while it makes a VM again, such as when this machine loses power, the VM's state records the remake. The next `devvm`, `devvm layer add`, `devvm layer rm` or `devvm update` in the folder finishes it without asking. When the old disk is still set aside, devvm puts it back and makes the VM again from the start, and when it's gone, devvm makes the new VM with the home folder it saved. Until then, other commands on the VM refuse and name `devvm`, and `devvm rm` deletes the VM together with its old disk.
+
+## Taking layers out of a VM
+
+`devvm layer rm LAYER...` takes layers out of a VM by making it again, in the same way that `devvm layer add` puts them in. devvm builds an image of the VM's other layers, in the order they had, and gives the VM a new disk, copied from that image. A VM of `docker+nix+desktop` without `nix` is made again from `docker+desktop`, and a VM without any of its layers is made again from `base`. devvm names the layers that the VM doesn't have and leaves them out, and when the VM has none of them, devvm says so and changes nothing.
+
+```sh
+devvm layer rm desktop          # make this folder's VM again without the desktop layer
+devvm layer rm docker nix       # take out docker and nix
+devvm layer rm desktop --force  # the same without asking, as a script must
+```
+
+The VM keeps what [a VM made again keeps](#what-a-vm-made-again-keeps), its home folder included, and everything else on its disk is lost, such as what the layers you took out installed and Docker's images. So devvm asks first in a terminal, with no as the default, and refuses without one unless you give `--force`. It takes the same flags as `devvm layer add`, works in the same steps and refuses the same VMs, before it changes anything: a `--clone` VM, one whose creation didn't finish, and one whose backend can't run the layers left. It also refuses `base`, a shared tool's name, which `devvm tools rm` takes out instead, and a name that isn't a layer. You can still take out a layer of yours whose script you deleted, and that's the one way to make such a VM again with its home folder and settings, because `devvm layer add` and `devvm update` need every layer's script to build the VM's image.
 
 ## Shared tools
 

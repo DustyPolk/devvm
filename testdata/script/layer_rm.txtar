@@ -1,0 +1,105 @@
+# devvm layer rm LAYER...: the folder's VM made again from its image
+# without those layers, the rest in their order, after asking, keeping
+# its settings and its home folder: devvm layer add's remake. A layer it
+# lacks is said, and one of the user's whose script is gone can be taken
+# out. devvm tools rm of a layer names devvm layer rm.
+env LAYERS=$XDG_CONFIG_HOME/devvm/layers
+
+# Usage errors, before anything runs.
+! exec devvm layer rm
+stderr '^devvm: arg_missing args=LAYER\.\.\. command=devvm layer rm$'
+! exec devvm layer rm base
+stderr '^devvm: unknown_layer layer=base layers=desktop docker nix$'
+! exec devvm layer rm node
+stderr '^devvm: tool_not_layer tool=node$'
+exec devvm __complete layer rm d
+stdout '^desktop\ndocker\n'
+
+# No VM.
+project web
+! exec devvm layer rm docker --force
+stderr '^devvm: no_vm dir=/\S*/web$'
+
+# A VM of docker, nix and a layer of the user's, with ports, a rule and
+# files in its project folder and its home.
+exec devvm layer new foo
+exec devvm --no-network-policy --no-git-protect --agents claude --layers docker,nix,foo --ports 3000
+vm_name WEB web
+exec devvm network allow example.com
+exec sh -c 'echo kept > notes && mkdir -p "$STUB_DIR/vmhome-$WEB" && echo ls > "$STUB_DIR/vmhome-$WEB/.bash_history"'
+vm_state $WEB_dir/vm.json
+stdout '^image=docker\+nix\+foo$'
+
+# devvm tools rm of a layer names devvm layer rm.
+! exec devvm tools rm docker
+stderr '^devvm: custom_layer_remove layer=docker vm=devvm-web-[0-9a-f]{14}$'
+
+# A layer it lacks is said, and nothing runs; a name that isn't a layer
+# is refused.
+stub_reset
+exec devvm layer rm desktop --force
+stdout '^==> lacks_layers layers=desktop vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm layer rm dockr --force
+stderr '^devvm: unknown_layer_like layer=dockr like=docker$'
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+
+# Without a terminal it refuses unless --force; in one it asks, and no
+# keeps the VM.
+! exec devvm layer rm nix
+stderr '^devvm: force_needed command=devvm layer rm nix$'
+ttyin -stdin $WORK/no.txt
+exec devvm layer rm nix
+stderr '^remake_confirm image=docker\+foo vm=devvm-web-[0-9a-f]{14} \[y/N\] '
+stdout '==> kept vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+
+# --force: built, exported, home saved, stopped and set aside, made again
+# and started, home put back, the old machine deleted, then a shell.
+stub_reset
+exec devvm layer rm nix --force
+stdout '==> exported '
+stdout '==> saving_home vm=devvm-web-[0-9a-f]{14}$'
+stdout '==> creating_from image=docker\+foo vm=devvm-web-[0-9a-f]{14}$'
+stdout '==> remade image=docker\+foo vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout 'limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl rename --tty=false devvm-web-[0-9a-f]{14} devvm-[0-9a-f]{14}-old\n(.*\n)*limactl clone --tty=false devvm-img-[0-9a-f]+ devvm-web-[0-9a-f]{14} .*\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n(.*\n)*.*tar -xzf - --skip-old-files.*\n(.*\n)*limactl delete -f devvm-[0-9a-f]{14}-old\n(.*\n)*limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n'
+vm_state $WEB_dir/vm.json
+stdout '^image=docker\+foo$'
+stdout '^ports.forward=3000$'
+stdout '^tools.names=claude$'
+! stdout '^remake'
+grep '^example\.com$' $WEB_dir/policy
+grep '^kept$' notes
+
+# The user's layer's script gone: the VM can't be updated or have a
+# layer added, and devvm layer rm takes it out.
+rm $LAYERS/foo.sh
+! exec devvm layer add nix --force
+stderr '^devvm: unknown_layer layer=foo '
+stub_reset
+exec devvm layer rm foo --force --no-export --clean-home
+! stdout exported
+! stdout saving_home
+stdout '==> remade image=docker vm=devvm-web-[0-9a-f]{14}$'
+vm_state $WEB_dir/vm.json
+stdout '^image=docker$'
+
+# Every layer out: base.
+exec devvm layer rm docker --force --no-export
+vm_state $WEB_dir/vm.json
+stdout '^image=base$'
+
+# Refused: a --clone VM, and a parent folder's VM without a terminal.
+json_set $WEB_dir/vm.json 'clone:={"on":true}'
+! exec devvm layer rm docker --force
+stderr '^devvm: remake_clone vm=devvm-web-[0-9a-f]{14}$'
+json_set $WEB_dir/vm.json 'clone:={}'
+mkdir sub
+cd sub
+! exec devvm layer rm docker --force
+stderr '^devvm: remake_parent_vm command=devvm layer rm docker dir=/\S*/web vm=devvm-web-[0-9a-f]{14}$'
+
+-- no.txt --
+n

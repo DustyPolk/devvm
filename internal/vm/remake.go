@@ -58,16 +58,49 @@ func remakePending(st *state.VM) bool {
 // has them all, nothing changes. command is the command as typed. A
 // remake of it that didn't finish is finished first.
 func (e Lifecycle) AddLayers(ctx context.Context, command string, layers []string, o RemakeOptions) error {
+	return e.remakeLayers(ctx, command, o, func(t *found) (string, error) {
+		img, had := addedImage(t.st.Image, layers)
+		if len(had) > 0 {
+			e.Info(msg.HasLayers(strings.Join(had, " "), t.f.Name))
+		}
+		return img, nil
+	})
+}
+
+// RemoveLayers makes the folder's VM again from its image with layers
+// taken out, the rest in their order (docker+nix+desktop without nix is
+// docker+desktop), after the user agrees (remakeTo), then opens a shell
+// in it. A layer it lacks is said and left out, and one that isn't a
+// layer at all is refused (CheckLayers); when it lacks them all,
+// nothing changes. command is the command as typed. A remake of it that
+// didn't finish is finished first.
+func (e Lifecycle) RemoveLayers(ctx context.Context, command string, layers []string, o RemakeOptions) error {
+	return e.remakeLayers(ctx, command, o, func(t *found) (string, error) {
+		img, lacks := removedImage(t.st.Image, layers)
+		if err := CheckLayers(lacks, e.builder(t.b, t.st.From).Layers()[1:]); err != nil {
+			return "", err
+		}
+		if len(lacks) > 0 {
+			e.Info(msg.LacksLayers(strings.Join(lacks, " "), t.f.Name))
+		}
+		return img, nil
+	})
+}
+
+// remakeLayers makes the folder's VM again from the image that layers
+// works out from it (devvm layer add's, devvm layer rm's), after the user
+// agrees (remakeTo). When that's the image it has, nothing changes, but
+// a VM whose remake was just finished gets its shell.
+func (e Lifecycle) remakeLayers(ctx context.Context, command string, o RemakeOptions, layers func(*found) (string, error)) error {
 	t, resumed, err := e.toRemake(ctx, command)
 	if err != nil || t == nil {
 		return err
 	}
-	vm, st := t.f.Name, t.st
-	img, had := addedImage(st.Image, layers)
-	if len(had) > 0 {
-		e.Info(msg.HasLayers(strings.Join(had, " "), vm))
+	img, err := layers(t)
+	if err != nil {
+		return err
 	}
-	if img == st.Image {
+	if img == t.st.Image {
 		if resumed {
 			return Launch(e).open(ctx, Options{}, t)
 		}
@@ -115,6 +148,19 @@ func addedImage(img string, layers []string) (string, []string) {
 		}
 	}
 	return image.Of(inOrder(was, slices.Concat(was, layers))), had
+}
+
+// removedImage is the image img makes with layers taken out, the rest in
+// their order (base when none is left), and those of layers img lacks.
+func removedImage(img string, layers []string) (string, []string) {
+	was := image.LayersOf(img)
+	var lacks []string
+	for _, l := range layers {
+		if !slices.Contains(was, l) && !slices.Contains(lacks, l) {
+			lacks = append(lacks, l)
+		}
+	}
+	return image.Of(slices.DeleteFunc(was, func(l string) bool { return slices.Contains(layers, l) })), lacks
 }
 
 // toRemake finds the folder's VM for a command that makes it again
