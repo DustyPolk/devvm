@@ -296,20 +296,81 @@ same_script=false
 started=$SECONDS ncheck=0
 date +%s > "$work/mark"
 mins() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
-heartbeat() {
+# hb_line: the heartbeat's line: how long since the last check, and the newest output, a check's or
+# devvm's own run log.
+hb_line() {
   local esc=$'\033' s f
-  while sleep 60; do
-    s=$(( $(date +%s) - $(cat "$work/mark") ))
-    # The newest output: a check's, or devvm's own run log.
-    # shellcheck disable=SC2012  # names without spaces
-    f=$(ls -1t "$work/last.log" "$work/check.log" "$XDG_DATA_HOME"/devvm/logs/runs/*.log 2>/dev/null | head -1)
-    printf '        ... %s since the last check: %s\n' "$(mins "$s")" \
-      "$( [[ -f $f ]] && tail -1 "$f" | tr -d '\r' | sed "s/${esc}\[[0-9;?]*[A-Za-z]//g" | cut -c1-100)"
+  s=$(( $(date +%s) - $(cat "$work/mark") ))
+  # shellcheck disable=SC2012  # names without spaces
+  f=$(ls -1t "$work/last.log" "$work/check.log" "$XDG_DATA_HOME"/devvm/logs/runs/*.log 2>/dev/null | head -1)
+  printf '... %s since the last check: %s\n' "$(mins "$s")" \
+    "$( [[ -f $f ]] && tail -1 "$f" | tr -d '\r' | sed "s/${esc}\[[0-9;?]*[A-Za-z]//g" | cut -c1-100)"
+}
+# Time limits: each check's command gets limit_of its label, from when it starts; the steps between
+# two checks (launches, which may build images) get limit_build. window LIMIT KIND opens one (KIND
+# check or setup): $work/deadline is "END LIMIT KIND", and $work/keep the processes already running
+# (descendants), which the heartbeat leaves alone. Past END, the heartbeat writes $work/timedout (the
+# deadline's line, then why, with its own last line), sends every other process of the run TERM, as
+# Ctrl+C would, then after 30 s KILL each second, to whatever is left or new, until the next window.
+limit_floor=120 limit_default=600 limit_build=3600
+# builds: the checks whose own command can build base or a --from base (each run, or when its
+# cached image is stale), so 3 times their last time, cached, isn't enough.
+builds=(
+  "build base"
+  "base builds from ubuntu:26.04"
+  "behind a company proxy, --from's conversion and the builds on it reach it through devvm's own proxies"
+  "built behind a company proxy, the layer leaves no proxy settings for nix-daemon in its image"
+)
+# limit_of LABEL: 3 times the check's longest time in the last complete run, at least limit_floor;
+# limit_default with none; limit_build at least for one in builds.
+limit_of() { local t lim=$limit_default b
+  t=$(awk -F'\t' -v l="$1" '$1 == l && (!f || $2 + 0 > m) { m = $2 + 0; f = 1 } END { if (f) print m }' "$timings" 2>/dev/null)
+  if [[ -n $t ]]; then lim=$((3 * t)); (( lim >= limit_floor )) || lim=$limit_floor; fi
+  for b in "${builds[@]}"; do [[ $b != "$1" ]] || (( lim >= limit_build )) || lim=$limit_build; done
+  echo "$lim"
+}
+# descendants KEEP: the run's processes (the main shell's descendants), but those listed in the file
+# KEEP and theirs.
+descendants() {
+  ps -A -o pid= -o ppid= 2>/dev/null | awk -v root=$$ -v keepf="$1" '
+    function walk(p,   n, a, i) { n = split(kids[p], a, " "); for (i = 1; i <= n; i++) if (!(a[i] in keep)) { print a[i]; walk(a[i]) } }
+    BEGIN { while ((getline k < keepf) > 0) keep[k] = 1 }
+    { kids[$2] = kids[$2] " " $1 }
+    END { walk(root) }'
+}
+window() {
+  descendants /dev/null > "$work/keep.new" && mv "$work/keep.new" "$work/keep"
+  echo "$(( $(date +%s) + $1 )) $1 $2" > "$work/deadline.new" && mv "$work/deadline.new" "$work/deadline"
+}
+# timed_out: why the window open now ran out of time, when it did.
+timed_out() { [[ -s $work/timedout && "$(head -1 "$work/timedout")" == "$(cat "$work/deadline" 2>/dev/null)" ]] && tail -n +2 "$work/timedout"; }
+rm -f "$work/deadline" "$work/timedout" "$work/keep"
+heartbeat() {
+  local n=0 now d end lim kind fired="" since=0 sig p
+  while sleep 1; do
+    now=$(date +%s); d=$(cat "$work/deadline" 2>/dev/null)
+    read -r end lim kind <<<"${d:-0 0 none}"
+    if [[ $kind != none ]] && (( now >= end )); then
+      if [[ $d != "$fired" ]]; then
+        fired=$d; since=$now
+        if [[ $kind == check ]]; then p="the check ran past its limit of $(mins "$lim"), and its processes were stopped"
+        else p="the steps before this check ran past their limit of $(mins "$lim"), and their processes were stopped"; fi
+        printf '%s\ntimed out: %s\nthe heartbeat'"'"'s last line: %s\n' "$d" "$p" "$(hb_line)" > "$work/timedout.new"
+        mv "$work/timedout.new" "$work/timedout"
+        echo "        ... time limit reached ($(mins "$lim")): stopping what the $kind started"
+      fi
+      sig=TERM; (( now - since < 30 )) || sig=KILL
+      if [[ $sig == KILL ]] || (( now == since )); then
+        for p in $(descendants "$work/keep"); do kill -s "$sig" "$p" 2>/dev/null; done
+      fi
+    fi
+    n=$((n + 1)); (( n % 60 )) || echo "        $(hb_line)"
   done
 }
 heartbeat &
 hb=$!
 trap 'kill $hb 2>/dev/null; cleanup' EXIT
+window "$limit_build" setup
 
 pass=0 fail=0 failed=() retried=()
 # retry: the only checks run a second time when they fail, by label, each for the reason above it.
@@ -327,21 +388,33 @@ retry=(
 )
 # retries LABEL: the check is on the retry list.
 retries() { local l; for l in "${retry[@]}"; do [[ $l == "$1" ]] && return 0; done; return 1; }
+# attempt LIMIT CMD...: run CMD in a window of LIMIT seconds, its output in $work/check.log; past
+# it, CMD fails, the reason last in its output.
+attempt() { local lim=$1 s t; shift
+  window "$lim" check
+  "$@" >"$work/check.log" 2>&1; s=$?
+  t=$(timed_out) || return "$s"
+  echo "$t" >> "$work/check.log"; return 1
+}
 # check LABEL CMD...: run CMD, count and print the result; on failure, CMD's lines that start with
 # "failed: " (the step that failed), then its last other lines: 5, or $check_lines when the call
 # sets it (check_lines=40 check ...). A check on the retry list that fails runs once more, its first
 # output shown, and says so in its result, the timings ("label<TAB>seconds<TAB>retried") and the
-# summary.
+# summary. When the steps before it ran out of time, it fails without running.
 check() {
-  local label=$1 r=PASS dur left again=""; shift
-  if ! "$@" >"$work/check.log" 2>&1; then
+  local label=$1 r=PASS dur left again="" lim late; shift
+  lim=$(limit_of "$label")
+  if late=$(timed_out); then
+    r=FAIL; echo "$late" > "$work/check.log"
+  elif ! attempt "$lim" "$@"; then
     r=FAIL
     if retries "$label"; then
       again=retried; retried+=("$label")
       echo "  RETRY [$((ncheck + 1))/$total] $label: its first run failed"; check_tail
-      ! "$@" >"$work/check.log" 2>&1 || r=PASS
+      ! attempt "$lim" "$@" || r=PASS
     fi
   fi
+  window "$limit_build" setup
   if [[ $r == PASS ]]; then pass=$((pass + 1)); else fail=$((fail + 1)); failed+=("$label"); fi
   ncheck=$((ncheck + 1))
   dur=$(( $(date +%s) - $(cat "$work/mark") )); date +%s > "$work/mark"
