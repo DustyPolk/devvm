@@ -93,27 +93,16 @@ func (b *Env) plan(in inputs, name string) ([]planned, error) {
 	return plans, nil
 }
 
-// basePlan is base's: the files the backend reads itself (its own,
-// base.yaml and with From the conversion's scripts), then base.sh and its
-// chosen features' scripts, in order.
+// basePlan is base's: the backend's own steps (Origin), then base.sh and
+// its chosen features' scripts, in order.
 func (b *Env) basePlan(in inputs) (planned, error) {
-	p := planned{Input: image.Input{Image: image.Base, Own: map[string][]byte{}}, from: in.from}
+	p := planned{Input: image.Input{Image: image.Base}, from: in.from}
 	if in.from != nil {
 		p.From, p.FromDigest = in.from.Ref, in.from.Digest
 	}
-	for name, data := range b.Backend.KeyFiles() {
-		p.Own["backend "+name] = data
-	}
-	own := []string{"base.yaml"}
-	if in.from != nil {
-		own = append(own, image.ConversionScripts...)
-	}
-	for _, name := range own {
-		data, err := fs.ReadFile(b.Assets, name)
-		if err != nil {
-			return planned{}, fmt.Errorf("reading devvm's %s: %w", name, err)
-		}
-		p.Own[name] = data
+	var err error
+	if p.Recipe.Origin, err = b.Backend.Origin(in.from); err != nil {
+		return planned{}, err
 	}
 	data, err := fs.ReadFile(b.Assets, "layers/base.sh")
 	if err != nil {

@@ -1,6 +1,7 @@
 package build
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -17,17 +18,17 @@ import (
 )
 
 // keyEnv is testEnv with devvm's features fzf and omb, the user's mine,
-// devvm's docker layer and base's policy, the conversion's scripts and
-// try.sh, and the features fzf and mine chosen; with from, base starts
-// from it, its digest recorded.
+// devvm's docker layer and base's policy, and the features fzf and mine
+// chosen; with from, base starts from it, its digest recorded. (The
+// backend's own files, such as Lima's base.yaml, are its origin's: Lima's
+// tests check them.)
 func keyEnv(t *testing.T, from string) *Env {
 	t.Helper()
 	b, _ := testEnv(t)
 	own := assetsDir(b)
 	for name, data := range map[string]string{
 		"features/fzf.sh": "# fzf\n", "features/omb.sh": "# omb\n", "layers/docker.sh": "# docker\n",
-		"layers/base.policy": "example.com\n", "oci/build.sh": "# build\n", "oci/bootify.sh": "# bootify\n",
-		"oci/kernel.sh": "# kernel\n", "oci/try.sh": "# try\n",
+		"layers/base.policy": "example.com\n",
 	} {
 		write(t, filepath.Join(own, name), data)
 	}
@@ -95,13 +96,12 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		change func(t *testing.T, b *Env)
 		want   []string // the images whose keys change
 	}{
-		{"base.yaml", "", func(t *testing.T, b *Env) { edit(t, own(b, "base.yaml")) }, all},
 		{"layers/base.sh", "", func(t *testing.T, b *Env) { edit(t, own(b, "layers/base.sh")) }, all},
 		{"the backend", "", func(_ *testing.T, b *Env) { b.Backend = backendtest.New("other", b.Backend.Caps()) }, all},
-		{"a backend's own file", "", func(_ *testing.T, b *Env) {
-			b.Backend.(*backendtest.Fake).OwnFiles = map[string][]byte{"ubuntu.img": []byte("x")}
+		{"a backend's origin step", "", func(_ *testing.T, b *Env) {
+			b.Backend.(*backendtest.Fake).OriginSteps = []image.Step{{Name: "ubuntu.img", Args: []string{"x"}}}
 		}, all},
-		{"no backend files is none", "", func(_ *testing.T, b *Env) { b.Backend.(*backendtest.Fake).OwnFiles = map[string][]byte{} }, nil},
+		{"no origin steps is none", "", func(_ *testing.T, b *Env) { b.Backend.(*backendtest.Fake).OriginSteps = []image.Step{} }, nil},
 		{"a chosen built-in feature's script", "", func(t *testing.T, b *Env) { edit(t, own(b, "features/fzf.sh")) }, all},
 		{"a chosen user feature's script", "", func(t *testing.T, b *Env) { edit(t, feature(b, "mine.sh")) }, all},
 		{"a chosen user feature deleted", "", func(t *testing.T, b *Env) { remove(t, feature(b, "mine.sh")) }, all},
@@ -122,7 +122,6 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		{"a user feature named like a built-in one", "", func(t *testing.T, b *Env) { edit(t, feature(b, "fzf.sh")) }, nil},
 		{"a policy file", "", func(t *testing.T, b *Env) { edit(t, own(b, "layers/base.policy")) }, nil},
 		{"another layer", "", func(t *testing.T, b *Env) { edit(t, layer(b, "baz.sh")) }, nil},
-		{"oci scripts without --from", "", func(t *testing.T, b *Env) { edit(t, own(b, "oci/build.sh")) }, nil},
 		{"a rebuild counter for --from", "", func(t *testing.T, b *Env) { bump(t, b, "fake", "node:24", "foo") }, nil},
 		{"another backend's rebuild counter", "", func(t *testing.T, b *Env) { bump(t, b, "qemu", "", "base") }, nil},
 		{"the tools' build script", "", func(t *testing.T, b *Env) { edit(t, own(b, "shared-tools/build.sh")) }, nil},
@@ -133,13 +132,9 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 			}
 		}, all},
 		{"another --from", "node:24", func(_ *testing.T, b *Env) { b.From = "node:25" }, all},
-		{"oci/build.sh", "node:24", func(t *testing.T, b *Env) { edit(t, own(b, "oci/build.sh")) }, all},
-		{"oci/bootify.sh", "node:24", func(t *testing.T, b *Env) { edit(t, own(b, "oci/bootify.sh")) }, all},
-		{"oci/kernel.sh", "node:24", func(t *testing.T, b *Env) { edit(t, own(b, "oci/kernel.sh")) }, all},
 		{"a rebuild counter with --from", "node:24", func(t *testing.T, b *Env) { bump(t, b, "fake", "node:24", "foo") }, above},
 		{"another --from's counter, once written alike", "node:24", func(t *testing.T, b *Env) { bump(t, b, "fake", "node-24", "foo") }, nil},
 		{"another backend's counter with --from", "node:24", func(t *testing.T, b *Env) { bump(t, b, "qemu", "node:24", "base") }, nil},
-		{"oci/try.sh", "node:24", func(t *testing.T, b *Env) { edit(t, own(b, "oci/try.sh")) }, nil},
 		{"a rebuild counter without --from", "node:24", func(t *testing.T, b *Env) { bump(t, b, "fake", "", "foo") }, nil},
 	}
 	for _, tt := range tests {
@@ -216,16 +211,19 @@ func TestKeyRefuses(t *testing.T) {
 	if _, err := unnamed.Key(image.Base); err == nil {
 		t.Error("no backend: no error")
 	}
-	for _, name := range []string{"base.yaml", "layers/docker.sh", "layers/base.sh"} {
+	for _, name := range []string{"layers/docker.sh", "layers/base.sh"} {
 		remove(t, filepath.Join(assetsDir(b), name))
 		if _, err := b.Key("foo+docker"); err == nil {
 			t.Errorf("no %s: no error", name)
 		}
 	}
-	from := keyEnv(t, "node:24")
-	remove(t, filepath.Join(assetsDir(from), "oci/kernel.sh"))
-	if _, err := from.Key(image.Base); err == nil {
-		t.Error("--from without oci/kernel.sh: no error")
+	// The backend's origin failing.
+	f := backendtest.New("fake", b.Backend.Caps())
+	f.Errs = map[string]error{"Origin": errors.New("no origin")}
+	failing := *b
+	failing.Backend = f
+	if _, err := failing.Key(image.Base); err == nil {
+		t.Error("no origin: no error")
 	}
 }
 

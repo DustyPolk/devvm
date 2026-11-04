@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,9 +22,10 @@ import (
 // BuildImage builds the image's instance, devvm-img-<key>, which is then
 // the image: base is a VM made from Ubuntu's cloud image with base.yaml's
 // settings (with spec.From, from that image converted into a disk:
-// convert), a layer a clone of its parent's instance. Neither mounts
-// anything from the host. It starts confined as spec.Net asks (no port
-// forwards, and on macOS a sandbox), runs the scripts in order, and stops.
+// convert), all from its recipe's origin (Origin, checked by originOf), a
+// layer a clone of its parent's instance. Neither mounts anything from the
+// host. It starts confined as spec.Net asks (no port forwards, and on
+// macOS a sandbox), runs its recipe's steps in order, and stops.
 //
 // Until it's built, an interrupted run deletes the instance, and so does a
 // failed create or clone: a cleanup on the ui stack, which runs after the
@@ -95,7 +95,12 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 	var built backend.Built
 	var conv *converted
 	if spec.Parent == "" {
-		want, size, err := l.buildSize()
+		// What it's made from is its recipe's origin, as given.
+		o, err := l.originOf(spec.Recipe.Origin, spec.From)
+		if err != nil {
+			return backend.Built{}, err
+		}
+		want, size, err := l.buildSize(o.yaml)
 		if err != nil {
 			return backend.Built{}, err
 		}
@@ -103,16 +108,16 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 			size.MemoryGiB = spec.MemoryGiB
 		}
 		if spec.From == nil {
-			img, err := l.createFromUbuntu(ctx, inst, size)
+			img, err := l.createFromUbuntu(ctx, inst, o.yaml, size)
 			if err != nil {
 				return backend.Built{}, err
 			}
 			built = backend.Built{Origin: img.String(), Libc: "gnu"}
 		} else {
-			if conv, err = l.convert(ctx, spec.From, size, spec.Trust.Add); err != nil {
+			if conv, err = l.convert(ctx, spec.From, o, size, spec.Trust.Add); err != nil {
 				return backend.Built{}, err
 			}
-			if err := l.create(ctx, msg.Creating(inst), inst, createArgs(inst, convertedImages(conv.dir, conv.cmdline, l.Arch), size)); err != nil {
+			if err := l.create(ctx, msg.Creating(inst), inst, o.yaml, createArgs(inst, convertedImages(conv.dir, conv.cmdline, l.Arch), size)); err != nil {
 				return backend.Built{}, err
 			}
 			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc}
@@ -246,17 +251,18 @@ func layerArgs(parent, inst string) []string {
 	return []string{"clone", "--tty=false", "--mount-none", parent, inst}
 }
 
-// createFromUbuntu creates a VM from Ubuntu's newest cloud image, with
-// base.yaml's settings and nothing from the host mounted, or the mounts a
-// --set in opts gives it (--set applies after --mount-none). It returns
-// the image it used. It gets size's CPUs and memory (buildSize's).
-func (l *images) createFromUbuntu(ctx context.Context, vm string, size backend.Size, opts ...string) (ubuntu.Image, error) {
+// createFromUbuntu creates a VM from Ubuntu's cloud image, the one base's
+// origin pins, with yaml's settings (base.yaml) and nothing from the host
+// mounted, or the mounts a --set in opts gives it (--set applies after
+// --mount-none). It returns the image it used. It gets size's CPUs and
+// memory (buildSize's).
+func (l *images) createFromUbuntu(ctx context.Context, vm string, yaml []byte, size backend.Size, opts ...string) (ubuntu.Image, error) {
 	img, err := l.Ubuntu(ctx)
 	if err != nil {
 		return ubuntu.Image{}, err
 	}
 	images := []limaImage{{Location: img.URL, Arch: limaArch(l.Arch), Digest: img.Digest}}
-	if err := l.create(ctx, msg.CreatingFromUbuntu(vm), vm, createArgs(vm, images, size, opts...)); err != nil {
+	if err := l.create(ctx, msg.CreatingFromUbuntu(vm), vm, yaml, createArgs(vm, images, size, opts...)); err != nil {
 		return ubuntu.Image{}, err
 	}
 	return img, nil
@@ -271,13 +277,10 @@ func createArgs(vm string, images []limaImage, size backend.Size, opts ...string
 	return append(args, "--cpus="+strconv.Itoa(size.CPUs), "--memory="+gibString(size.MemoryGiB), "-")
 }
 
-// create runs limactl create with args (createArgs) as step, base.yaml
-// from devvm's own files on its standard input: no copy of it on disk.
-func (l *images) create(ctx context.Context, step msg.M, vm string, args []string) error {
-	yaml, err := fs.ReadFile(l.Assets, "base.yaml")
-	if err != nil {
-		return err
-	}
+// create runs limactl create with args (createArgs) as step, yaml
+// (base.yaml, as base's origin has it) on its standard input: no copy of
+// it on disk.
+func (l *images) create(ctx context.Context, step msg.M, vm string, yaml []byte, args []string) error {
 	cmd := l.limactl(ctx, args...)
 	cmd.Stdin = bytes.NewReader(yaml)
 	if err := l.Runner.Run(ctx, step, cmd); err != nil {
@@ -353,16 +356,12 @@ var (
 	memoryLine = regexp.MustCompile(`(?m)^memory:\s*([0-9.]+)GiB\s*$`)
 )
 
-// buildSize is base's CPUs and memory: base.yaml's (want), and got, them
-// fitted to the host (backend.FitCPUs, backend.FitMemory), so a host with
-// fewer CPUs gets its own count and one that base.yaml's memory would
-// leave less than 2 GiB gets half its memory. Images built from base, and
-// their VMs, keep got.
-func (l *images) buildSize() (want, got backend.Size, err error) {
-	data, err := fs.ReadFile(l.Assets, "base.yaml")
-	if err != nil {
-		return want, got, err
-	}
+// buildSize is base's CPUs and memory: data's, base.yaml's (want), and
+// got, them fitted to the host (backend.FitCPUs, backend.FitMemory), so a
+// host with fewer CPUs gets its own count and one that base.yaml's memory
+// would leave less than 2 GiB gets half its memory. Images built from
+// base, and their VMs, keep got.
+func (l *images) buildSize(data []byte) (want, got backend.Size, err error) {
 	c := cpusLine.FindSubmatch(data)
 	if c == nil {
 		return want, got, errors.New("lima: base.yaml sets no CPUs")

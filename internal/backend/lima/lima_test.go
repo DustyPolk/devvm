@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"os/user"
@@ -16,11 +17,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -313,30 +316,104 @@ func TestCaps(t *testing.T) {
 	}
 }
 
-// base's key hashes the pinned Ubuntu cloud image for the host, one per
-// architecture, and the user a --from base's conversion makes.
-func TestKeyFilesPinUbuntu(t *testing.T) {
+// stepNames are steps' names, in order.
+func stepNames(steps []image.Step) []string {
+	names := make([]string, len(steps))
+	for i, s := range steps {
+		names[i] = s.Name
+	}
+	return names
+}
+
+// Base's origin is the pinned Ubuntu cloud image for the host, one per
+// architecture, and base.yaml; with --from, the conversion's scripts in
+// between, build.sh as root with the user it makes the image's, and none
+// of oci/'s other files. Without the user, or devvm's files, there's
+// none.
+func TestOrigin(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
 	l.User = func() (*user.User, error) { return &user.User{Username: "me", Uid: "501"}, nil }
+	f := &backend.From{Ref: "debian:12", Digest: "debian@sha256:aaaa"}
 	pins := map[string]bool{}
 	for _, arch := range []string{"arm64", "amd64"} {
 		l.Arch = arch
-		kf := l.KeyFiles()
-		if got, want := string(kf["ubuntu-image"]), ubuntu.CloudPin(arch); len(kf) != 2 || got != want {
-			t.Errorf("%s: KeyFiles = %q, want ubuntu-image %q", arch, kf, want)
+		steps, err := l.Origin(nil)
+		if err != nil || !slices.Equal(stepNames(steps), []string{originUbuntu, originConfig}) ||
+			!slices.Equal(steps[0].Args, []string{ubuntu.CloudPin(arch)}) {
+			t.Fatalf("%s: Origin = %+v, %v", arch, steps, err)
 		}
-		if got := string(kf["conversion"]); got != "me\x00501\x00/home/me.guest\x00"+convertedSize {
-			t.Errorf("%s: the conversion's %q", arch, got)
+		if yaml, _ := fs.ReadFile(assets.FS, "base.yaml"); !bytes.Equal(steps[1].Data, yaml) {
+			t.Errorf("%s: base.yaml isn't devvm's", arch)
 		}
-		pins[string(kf["ubuntu-image"])] = true
+		pins[steps[0].Args[0]] = true
 	}
 	if len(pins) != 2 {
 		t.Errorf("pins: %v, want one per architecture", pins)
 	}
-	// Without the user, a conversion fails: nothing to hash.
+	steps, err := l.Origin(f)
+	if want := slices.Concat([]string{originUbuntu}, conversionScripts, []string{originConfig}); err != nil || !slices.Equal(stepNames(steps), want) {
+		t.Fatalf("Origin(--from) = %q, %v; want %q", stepNames(steps), err, want)
+	}
+	build := steps[1]
+	if want := []string{f.Digest, f.Ref, "me", "501", "/home/me.guest", convertedSize}; !build.Root || !slices.Equal(build.Args, want) || len(want) != convertArgs {
+		t.Errorf("build.sh: root %v, %q; want %q", build.Root, build.Args, want)
+	}
+	if _, err := l.originOf(steps, f); err != nil {
+		t.Errorf("originOf(Origin(f)) = %v", err)
+	}
 	l.User = func() (*user.User, error) { return nil, errors.New("no user") }
-	if kf := l.KeyFiles(); len(kf) != 1 {
-		t.Errorf("KeyFiles without a user = %q", kf)
+	if _, err := l.Origin(f); err == nil {
+		t.Error("Origin without a user: no error")
+	}
+	if _, err := l.Origin(nil); err != nil {
+		t.Errorf("Ubuntu's base needs no user: %v", err)
+	}
+	for _, own := range []fstest.MapFS{{}, {"base.yaml": {Data: []byte("x")}}} {
+		l.Assets = own
+		if _, err := l.Origin(f); err == nil {
+			t.Errorf("Origin without devvm's files %v: no error", slices.Collect(maps.Keys(own)))
+		}
+	}
+}
+
+// BuildImage runs only the origin it's given, and refuses one Origin
+// wouldn't make: another Ubuntu, no base.yaml, a conversion that isn't
+// what --from asks for or names other files.
+func TestOriginOfRefuses(t *testing.T) {
+	l, _, _ := testLima(t, "darwin")
+	l.User = func() (*user.User, error) { return &user.User{Username: "me", Uid: "501"}, nil }
+	f := &backend.From{Ref: "debian:12", Digest: "debian@sha256:aaaa"}
+	good, err := l.Origin(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ubuntuOnly, err := l.Origin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change := func(fn func(steps []image.Step) []image.Step) []image.Step {
+		steps := slices.Clone(good)
+		steps[1].Args = slices.Clone(steps[1].Args)
+		return fn(steps)
+	}
+	for name, c := range map[string]struct {
+		steps []image.Step
+		from  *backend.From
+	}{
+		"another Ubuntu":            {change(func(s []image.Step) []image.Step { s[0].Args = []string{"x"}; return s }), f},
+		"no base.yaml":              {change(func(s []image.Step) []image.Step { return s[:len(s)-1] }), f},
+		"a conversion without one":  {good, nil},
+		"no conversion with --from": {ubuntuOnly, f},
+		"another digest":            {change(func(s []image.Step) []image.Step { s[1].Args[0] = "debian@sha256:bbbb"; return s }), f},
+		"a script of its own":       {change(func(s []image.Step) []image.Step { s[2].Name = "oci/../../x"; return s }), f},
+		"another script's arguments": {change(func(s []image.Step) []image.Step {
+			s[1].Args = s[1].Args[:2]
+			return s
+		}), f},
+	} {
+		if _, err := l.originOf(c.steps, c.from); err == nil {
+			t.Errorf("%s: no error", name)
+		}
 	}
 }
 

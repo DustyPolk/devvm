@@ -39,7 +39,7 @@ import (
 // base's C library and deleting an image.
 type Env struct {
 	Dirs    paths.Dirs
-	Assets  fs.FS // devvm's own files (assets.FS): base.yaml, layers/, features/, oci/
+	Assets  fs.FS // devvm's own files (assets.FS): layers/, features/, guest/ca.sh
 	Backend backend.Backend
 	Review  backend.Review // what Backend's features are checked against
 	Tools   *tools.Env     // the shared tools image names hold

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -138,12 +139,20 @@ func scenario(fx fixture) []step {
 	env := map[string]string{"LANG": "C.UTF-8"}
 	return []step{
 		{"base from Ubuntu's image", func(ctx context.Context, l *Lima) error {
-			_, err := l.createFromUbuntu(ctx, dummyBase, size)
+			yaml, err := fs.ReadFile(l.Assets, originConfig)
+			if err != nil {
+				return err
+			}
+			_, err = l.createFromUbuntu(ctx, dummyBase, yaml, size)
 			return err
 		}},
 		{"base's build start", start(dummyBase, nil, backend.Confinement{Net: backend.NetInternet})},
 		{"base from a conversion", func(ctx context.Context, l *Lima) error {
-			return l.create(ctx, msg.M{}, dummyFrom, createArgs(dummyFrom, convertedImages(fx.converted, "root=/dev/vda rw console=hvc0", l.Arch), size))
+			yaml, err := fs.ReadFile(l.Assets, originConfig)
+			if err != nil {
+				return err
+			}
+			return l.create(ctx, msg.M{}, dummyFrom, yaml, createArgs(dummyFrom, convertedImages(fx.converted, "root=/dev/vda rw console=hvc0", l.Arch), size))
 		}},
 		{"a layer", func(ctx context.Context, l *Lima) error {
 			return l.Runner.Run(ctx, msg.M{}, l.limactl(ctx, layerArgs(dummyBase, dummyLayer)...))
@@ -161,7 +170,11 @@ func scenario(fx fixture) []step {
 			if err != nil {
 				return err
 			}
-			_, err = l.createFromUbuntu(ctx, OCIVM, size, "--set", mounts)
+			yaml, err := fs.ReadFile(l.Assets, originConfig)
+			if err != nil {
+				return err
+			}
+			_, err = l.createFromUbuntu(ctx, OCIVM, yaml, size, "--set", mounts)
 			return err
 		}},
 		{"a project VM", func(ctx context.Context, l *Lima) error {

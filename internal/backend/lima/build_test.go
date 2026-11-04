@@ -60,6 +60,20 @@ func buildLima(t *testing.T, os string, parentStatus string) (*Lima, *fakeRunner
 	return l, f
 }
 
+// baseSpec is base's build from Ubuntu on l, its origin l's own and its
+// one step base.sh.
+func baseSpec(t *testing.T, l *Lima) backend.ImageSpec {
+	t.Helper()
+	origin, err := l.Origin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return backend.ImageSpec{
+		Image: "base", Key: baseKey, Net: backend.NetInternet,
+		Recipe: image.Recipe{Origin: origin, Steps: []image.Step{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}}},
+	}
+}
+
 func writeTestFile(t *testing.T, path, data string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -97,10 +111,7 @@ func TestBuildImageBase(t *testing.T) {
 		}
 		do(c)
 	}
-	built, err := l.BuildImage(t.Context(), backend.ImageSpec{
-		Image: "base", Key: baseKey, Net: backend.NetInternet,
-		Recipe: image.Recipe{Steps: []image.Step{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}}},
-	})
+	built, err := l.BuildImage(t.Context(), baseSpec(t, l))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,10 +384,7 @@ func TestBuildImageScriptFails(t *testing.T) {
 	l, f := buildLima(t, "darwin", "")
 	inst := "devvm-img-" + baseKey
 	f.fail = []string{"limactl shell " + inst + " bash -s"}
-	_, err := l.BuildImage(t.Context(), backend.ImageSpec{
-		Image: "base", Key: baseKey, Net: backend.NetInternet,
-		Recipe: image.Recipe{Steps: []image.Step{{Name: "base.sh", Data: []byte("#!/bin/bash\n")}}},
-	})
+	_, err := l.BuildImage(t.Context(), baseSpec(t, l))
 	e, ok := errors.AsType[*backend.LoggedError](err)
 	if !ok || e.Msg.ID() != "script_failed" {
 		t.Fatalf("BuildImage = %v, want a logged script_failed", err)
@@ -428,6 +436,7 @@ func TestBuildImageRefuses(t *testing.T) {
 				l.Assets = fstest.MapFS{}
 			}
 			spec := base
+			spec.Recipe.Origin, _ = l.Origin(nil) // none without base.yaml
 			change(&spec)
 			if _, err := l.BuildImage(t.Context(), spec); err == nil {
 				t.Error("BuildImage succeeded")
@@ -445,14 +454,14 @@ func TestBuildImageRefuses(t *testing.T) {
 // build reports them as fitted; on a 16 GiB host of 8 CPUs, nothing is.
 func TestBuildImageSmallHost(t *testing.T) {
 	l, _ := buildLima(t, "darwin", "")
-	built, err := l.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet})
+	built, err := l.BuildImage(t.Context(), baseSpec(t, l))
 	if err != nil || built.Fitted != (backend.Size{}) {
 		t.Errorf("on a big host: fitted %+v, %v; want none", built.Fitted, err)
 	}
 	l, f := buildLima(t, "darwin", "")
 	l.CPUs = func() int { return 2 }
 	l.Memory = func() (uint64, error) { return 8 * gib, nil }
-	built, err = l.BuildImage(t.Context(), backend.ImageSpec{Image: "base", Key: baseKey, Net: backend.NetInternet})
+	built, err = l.BuildImage(t.Context(), baseSpec(t, l))
 	if err != nil {
 		t.Fatal(err)
 	}

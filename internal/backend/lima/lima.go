@@ -25,6 +25,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/from"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
@@ -68,9 +69,10 @@ type Lima struct {
 	// while it starts, ten times at most.
 	Spawn func(daemon.Cmd) (*daemon.Handle, error)
 	Tick  time.Duration
-	// Assets holds devvm's own files (assets.FS): base.yaml, which limactl
-	// create reads on its standard input, and the conversion's oci/, which
-	// each conversion writes into its own temporary folder.
+	// Assets holds devvm's own files (assets.FS): base.yaml and the
+	// conversion's oci/ scripts, which Origin puts in base's recipe and
+	// BuildImage runs from there, and guest/ca.sh for a conversion with
+	// the user's CAs.
 	Assets fs.FS
 	// SSHTimeout is how long a degraded start waits for ssh.
 	SSHTimeout time.Duration
@@ -171,15 +173,74 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string,
 // Name returns lima.
 func (l *Lima) Name() string { return Name }
 
-// KeyFiles is the pinned Ubuntu cloud image base starts from, for the
-// host's architecture, and what a --from base's conversion makes of its
-// image (madeArgs), without which a conversion fails.
-func (l *images) KeyFiles() map[string][]byte {
-	files := map[string][]byte{"ubuntu-image": []byte(ubuntu.CloudPin(l.Arch))}
-	if made, err := l.madeArgs(); err == nil {
-		files["conversion"] = []byte(strings.Join(made, "\x00"))
+// Origin is what Lima makes base from, which BuildImage is given back:
+// the pinned Ubuntu cloud image for the host's architecture (which a
+// --from conversion's VM boots too), with f, the conversion's scripts
+// (convertSteps), and then base.yaml, the settings limactl create reads.
+func (l *images) Origin(f *backend.From) ([]image.Step, error) {
+	steps := []image.Step{{Name: originUbuntu, Args: []string{ubuntu.CloudPin(l.Arch)}}}
+	if f != nil {
+		conv, err := l.convertSteps(f)
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps, conv...)
 	}
-	return files
+	yaml, err := fs.ReadFile(l.Assets, originConfig)
+	if err != nil {
+		return nil, err
+	}
+	return append(steps, image.Step{Name: originConfig, Data: yaml}), nil
+}
+
+// The names of Lima's origin steps: the Ubuntu image's pin, and
+// base.yaml.
+const (
+	originUbuntu = "ubuntu-image"
+	originConfig = "base.yaml"
+)
+
+// origin is base's origin steps as BuildImage runs them.
+type origin struct {
+	yaml       []byte       // base.yaml, for limactl create
+	conversion []image.Step // with --from, the conversion's (convertSteps); nil without
+}
+
+// originOf reads base's origin steps from its recipe, as Origin makes
+// them: the Ubuntu image they pin must be this devvm's for the host, and
+// with f, the conversion's must be there, converting f.
+func (l *images) originOf(steps []image.Step, f *backend.From) (origin, error) {
+	var o origin
+	pin := ""
+	for _, s := range steps {
+		switch {
+		case s.Name == originUbuntu && len(s.Args) == 1:
+			pin = s.Args[0]
+		case s.Name == originConfig:
+			o.yaml = s.Data
+		case strings.HasPrefix(s.Name, "oci/"):
+			o.conversion = append(o.conversion, s)
+		}
+	}
+	switch {
+	case pin != ubuntu.CloudPin(l.Arch):
+		return origin{}, fmt.Errorf("lima: base's recipe pins Ubuntu %q, not %q", pin, ubuntu.CloudPin(l.Arch))
+	case o.yaml == nil:
+		return origin{}, errors.New("lima: base's recipe has no base.yaml")
+	case (f != nil) != (o.conversion != nil):
+		return origin{}, errors.New("lima: base's recipe has another conversion than its --from asks for")
+	case f == nil:
+		return o, nil
+	}
+	// The conversion's names become its files' names: only its own.
+	names := make([]string, len(o.conversion))
+	for i, s := range o.conversion {
+		names[i] = s.Name
+	}
+	if args := o.conversion[0].Args; !slices.Equal(names, conversionScripts) || len(args) != convertArgs || args[0] != f.Digest || args[1] != f.Ref {
+		return origin{}, fmt.Errorf("lima: base's recipe converts %q with %q", f.Ref, names)
+	}
+	return o, nil
 }
 
 // DiskDirs is devvm's Lima home, which holds every image's and VM's disk.

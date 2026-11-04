@@ -43,8 +43,9 @@ type converted struct {
 
 // convert turns spec.From into a disk, kernel and initrd, without Docker
 // (unless only Docker has the image): a throwaway VM from Ubuntu's cloud
-// image runs oci/build.sh, from devvm's files written into the
-// conversion's own temporary folder (writeScripts) and mounted read-only,
+// image (o's base.yaml) runs oci/build.sh, o's conversion steps written
+// into the conversion's own temporary folder (writeScripts) and mounted
+// read-only,
 // where crane pulls exactly the recorded digest and bootify.sh
 // adds what a container lacks. The image's own code runs as
 // root in that VM, so everything it writes is untrusted: it gets only a
@@ -54,7 +55,7 @@ type converted struct {
 // build's Trust.Add), the build VM trusts them, and build.sh has the
 // image's chroot trust them while bootify.sh runs, with guest/ca.sh
 // written and mounted read-only too.
-func (l *images) convert(ctx context.Context, f *backend.From, size backend.Size, trust backend.Script) (*converted, error) {
+func (l *images) convert(ctx context.Context, f *backend.From, o origin, size backend.Size, trust backend.Script) (*converted, error) {
 	if f.Digest == "" {
 		return nil, msg.NoDigest(f.Ref)
 	}
@@ -100,7 +101,7 @@ func (l *images) convert(ctx context.Context, f *backend.From, size backend.Size
 	if err := l.deleteIfThere(ctx, OCIVM); err != nil {
 		return nil, err
 	}
-	oci, guest, err := writeScripts(l.Assets, out, len(trust.Data) > 0)
+	oci, guest, err := writeScripts(l.Assets, o.conversion, out, len(trust.Data) > 0)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +113,7 @@ func (l *images) convert(ctx context.Context, f *backend.From, size backend.Size
 	if err != nil {
 		return nil, err
 	}
-	if _, err := l.createFromUbuntu(ctx, OCIVM, size, "--set", mounts); err != nil {
+	if _, err := l.createFromUbuntu(ctx, OCIVM, o.yaml, size, "--set", mounts); err != nil {
 		return nil, err
 	}
 	// crane pulls from the registry, behind a company proxy through a
@@ -127,12 +128,10 @@ func (l *images) convert(ctx context.Context, f *backend.From, size backend.Size
 	if err := l.runScript(ctx, OCIVM, trust, true); err != nil {
 		return nil, err
 	}
-	made, err := l.madeArgs()
-	if err != nil {
-		return nil, err
-	}
+	// build.sh's step's arguments, as given, after the folders; the
+	// digest is "-" for Docker's export.
 	script := filepath.Join(oci, "build.sh")
-	args := slices.Concat([]string{"shell", "--workdir", "/", OCIVM, "sudo", "bash", script, oci, vmOut, ref, f.Ref}, made)
+	args := slices.Concat([]string{"shell", "--workdir", "/", OCIVM, "sudo", "bash", script, oci, vmOut, ref}, o.conversion[0].Args[1:])
 	if len(trust.Data) > 0 {
 		args = append(args, filepath.Join(guest, "ca.sh"))
 	}
@@ -163,35 +162,52 @@ func (l *images) convert(ctx context.Context, f *backend.From, size backend.Size
 	return c, nil
 }
 
-// madeArgs are build.sh's arguments that say what it makes of the image:
-// the host's user, as the image's user (name, uid and home), and the
-// converted disk's size. base's key hashes them (KeyFiles).
-func (l *images) madeArgs() ([]string, error) {
+// conversionScripts are devvm's scripts that convert a --from image, in
+// oci/: build.sh runs the others.
+var conversionScripts = []string{"oci/build.sh", "oci/bootify.sh", "oci/kernel.sh"}
+
+// convertArgs is how many arguments build.sh's step has (convertSteps).
+const convertArgs = 6
+
+// convertSteps are the conversion's origin steps for f, from devvm's
+// files: build.sh, run as root with what it makes of the image as its
+// arguments (f's digest and reference, the host's user as the image's
+// user, its name, uid and home, and the converted disk's size), then the
+// scripts it runs. The conversion runs these as they are.
+func (l *images) convertSteps(f *backend.From) ([]image.Step, error) {
 	u, err := l.User()
 	if err != nil {
 		return nil, err
 	}
-	return []string{u.Username, u.Uid, "/home/" + u.Username + ".guest", convertedSize}, nil
+	steps := make([]image.Step, len(conversionScripts))
+	for i, name := range conversionScripts {
+		if steps[i].Data, err = fs.ReadFile(l.Assets, name); err != nil {
+			return nil, err
+		}
+		steps[i].Name = name
+	}
+	steps[0].Root = true
+	steps[0].Args = []string{f.Digest, f.Ref, u.Username, u.Uid, "/home/" + u.Username + ".guest", convertedSize}
+	return steps, nil
 }
 
-// writeScripts writes the conversion's scripts from devvm's own files
-// into out, the conversion's own temporary folder: those base's key
-// hashes (image.ConversionScripts) and, with the user's CAs (cas),
-// guest/ca.sh, beside vm/ rather than in it, as the build VM writes vm/.
-// Files are the user's alone (state.WriteFile). It returns the two
-// folders, which the build VM mounts read-only; the conversion's cleanup
-// deletes them with out.
-func writeScripts(own fs.FS, out string, cas bool) (oci, guest string, err error) {
-	names := slices.Clone(image.ConversionScripts)
+// writeScripts writes the conversion's steps (convertSteps) into out, the
+// conversion's own temporary folder, and with the user's CAs (ca, a
+// build's Trust.Add), devvm's guest/ca.sh from own, beside vm/ rather
+// than in it, as the build VM writes vm/. Files are the user's alone
+// (state.WriteFile). It returns the two folders, which the build VM
+// mounts read-only; the conversion's cleanup deletes them with out.
+func writeScripts(own fs.FS, steps []image.Step, out string, cas bool) (oci, guest string, err error) {
+	files := slices.Clone(steps)
 	if cas {
-		names = append(names, "guest/ca.sh")
-	}
-	for _, name := range names {
-		data, err := fs.ReadFile(own, name)
+		ca, err := fs.ReadFile(own, "guest/ca.sh")
 		if err != nil {
 			return "", "", err
 		}
-		if err := state.WriteFile(filepath.Join(out, filepath.FromSlash(name)), data); err != nil {
+		files = append(files, image.Step{Name: "guest/ca.sh", Data: ca})
+	}
+	for _, f := range files {
+		if err := state.WriteFile(filepath.Join(out, filepath.FromSlash(f.Name)), f.Data); err != nil {
 			return "", "", err
 		}
 	}

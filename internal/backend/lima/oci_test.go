@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"io/fs"
 	"os"
+	"os/user"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 )
 
@@ -66,10 +68,9 @@ func TestExportIs(t *testing.T) {
 	}
 }
 
-// The conversion's scripts are written from devvm's files into its own
-// folder, beside vm/, owner-only: the scripts base's key hashes, and
-// guest/ca.sh only with the user's CAs; nothing else of devvm's files,
-// oci/try.sh included.
+// The conversion's steps are written into its own folder, beside vm/,
+// owner-only, and devvm's guest/ca.sh only with the user's CAs; nothing
+// else of devvm's files, oci/try.sh included.
 func TestWriteScripts(t *testing.T) {
 	own := fstest.MapFS{
 		"oci/build.sh": {Data: []byte("build\n")}, "oci/bootify.sh": {Data: []byte("bootify\n")},
@@ -77,9 +78,16 @@ func TestWriteScripts(t *testing.T) {
 		"oci/sub/x.sh": {Data: []byte("x\n")}, "guest/ca.sh": {Data: []byte("ca\n")},
 		"guest/sync.sh": {Data: []byte("sync\n")}, "base.yaml": {Data: []byte("cpus: 4\n")},
 	}
+	l, _, _ := testLima(t, "darwin")
+	l.Assets = own
+	l.User = func() (*user.User, error) { return &user.User{Username: "me", Uid: "501"}, nil }
+	steps, err := l.convertSteps(&backend.From{Ref: "debian:12", Digest: "debian@sha256:aaaa"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, cas := range []bool{false, true} {
 		out := t.TempDir()
-		oci, guest, err := writeScripts(own, out, cas)
+		oci, guest, err := writeScripts(own, steps, out, cas)
 		if err != nil || oci != filepath.Join(out, "oci") || guest != filepath.Join(out, "guest") {
 			t.Fatalf("writeScripts = %q, %q, %v", oci, guest, err)
 		}
@@ -110,13 +118,10 @@ func TestWriteScripts(t *testing.T) {
 			t.Errorf("build.sh = %q", b)
 		}
 	}
-	// devvm's files lacking ca.sh, or a conversion script: an error.
+	// devvm's files lacking ca.sh: an error.
 	delete(own, "guest/ca.sh")
-	if _, _, err := writeScripts(own, t.TempDir(), true); err == nil {
+	if _, _, err := writeScripts(own, steps, t.TempDir(), true); err == nil {
 		t.Error("no ca.sh, no error")
-	}
-	if _, _, err := writeScripts(fstest.MapFS{"oci/build.sh": {Data: []byte("b\n")}}, t.TempDir(), false); err == nil {
-		t.Error("no bootify.sh, no error")
 	}
 }
 

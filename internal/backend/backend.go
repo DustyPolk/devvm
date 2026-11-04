@@ -83,11 +83,14 @@ type Images interface {
 	// (compressed EROFS), else a name of the backend's that changes
 	// whenever what it makes of them does.
 	ToolFormat() string
-	// KeyFiles is the files of the backend's own that it puts into base
-	// (scripts it runs before devvm's, the image it starts from), which
-	// base's key hashes too: by name, their contents. None for a backend
-	// that puts nothing in.
-	KeyFiles() map[string][]byte
+	// Origin is the backend's own steps that base starts with, for base
+	// from f (nil for the backend's own Ubuntu): what it makes base's
+	// disk from, such as its settings, the image it starts from and a
+	// conversion. They go first in base's recipe (image.Recipe's
+	// Origin), so base's key hashes them, and BuildImage is given them
+	// back and runs those, not its own files. None for a backend that
+	// puts nothing of its own in.
+	Origin(f *From) ([]image.Step, error)
 }
 
 // Machines makes, starts and reaches VMs. A VM is made as its spec wants

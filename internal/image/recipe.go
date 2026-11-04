@@ -4,13 +4,19 @@ package image
 // key hashes it (Input), and its backend runs it as it is
 // (backend.ImageSpec).
 type Recipe struct {
+	// Origin is base's first steps, its backend's own
+	// (backend.Images's Origin): what the backend makes base's disk from,
+	// such as Lima's base.yaml, its pinned Ubuntu image and a --from
+	// image's conversion, each run as that backend says. None above base.
+	Origin []Step
 	// Steps run in order in the image's VM: base.sh and then base's
 	// features, or a layer's script.
 	Steps []Step
 }
 
 // Step is one step of a recipe: a script fed on its standard input to
-// bash with Args, as the VM's user, who has sudo, or as root.
+// bash with Args, as the VM's user, who has sudo, or as root. An origin
+// step is the backend's to run as it says.
 type Step struct {
 	Name string // for status lines and errors: base.sh
 	Data []byte

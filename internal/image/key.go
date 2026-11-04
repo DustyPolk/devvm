@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"hash"
 	"io/fs"
-	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -24,8 +23,8 @@ const Base = "base"
 const keyFormat = "devvm image key 1"
 
 // Input is everything an image's key hashes: what its build is given
-// (backend.ImageSpec's name, parent, From and Recipe), what its backend
-// reads itself, the backend, and its rebuild counter.
+// (backend.ImageSpec's name, parent, From and Recipe), the backend, and
+// its rebuild counter.
 type Input struct {
 	// Backend is the backend that builds the image: lima.
 	Backend string
@@ -36,10 +35,6 @@ type Input struct {
 	// From is the container image base starts from, as given, and its
 	// digest; "" for Ubuntu's.
 	From, FromDigest string
-	// Own is base's files that its recipe doesn't hold, by name: the
-	// backend's own (backend.Images's KeyFiles), and devvm's that it
-	// reads itself (base.yaml; with From, ConversionScripts).
-	Own map[string][]byte
 	// Recipe is what its build runs.
 	Recipe Recipe
 	// Missing is the script of a layer the user deleted, which it has
@@ -60,11 +55,11 @@ func (in Input) Key() string {
 		k.field("from", in.From)
 		k.field("from-digest", in.FromDigest)
 	}
-	for _, name := range slices.Sorted(maps.Keys(in.Own)) {
-		k.bytes("own "+name, in.Own[name])
+	for _, s := range in.Recipe.Origin {
+		k.step("origin", s)
 	}
 	for _, s := range in.Recipe.Steps {
-		k.step(s)
+		k.step("step", s)
 	}
 	if in.Missing != "" {
 		k.field("missing", in.Missing)
@@ -74,11 +69,6 @@ func (in Input) Key() string {
 	}
 	return k.sum()
 }
-
-// ConversionScripts are the scripts of devvm's that convert a --from
-// image, which its base's key hashes: the conversion is given these and
-// nothing else of oci/.
-var ConversionScripts = []string{"oci/build.sh", "oci/bootify.sh", "oci/kernel.sh"}
 
 // Link is one image in a chain and its key.
 type Link struct {
@@ -213,10 +203,11 @@ func (k keyHash) own(fsys fs.FS, name string) error {
 	return nil
 }
 
-// step hashes a recipe's step: its name, its script, how many arguments
-// it has and each one, and whether it runs as root.
-func (k keyHash) step(s Step) {
-	k.field("step", s.Name)
+// step hashes a recipe's step, tagged as an origin step or one of its
+// steps: its name, its script, how many arguments it has and each one,
+// and whether it runs as root.
+func (k keyHash) step(tag string, s Step) {
+	k.field(tag, s.Name)
 	k.bytes("script", s.Data)
 	k.field("args", strconv.Itoa(len(s.Args)))
 	for _, a := range s.Args {

@@ -85,7 +85,8 @@ func TestFakeRunningAndNone(t *testing.T) {
 	u, uerr := f.Usage(ctx)
 	ss, serr := f.Strays(ctx)
 	cs, cerr := f.DevvmCache(ctx)
-	if where != "" || !isDefault || f.DiskDirs() != nil || f.Floors() != (backend.Floors{}) || f.KeyFiles() != nil ||
+	os, oerr := f.Origin(nil)
+	if where != "" || !isDefault || f.DiskDirs() != nil || f.Floors() != (backend.Floors{}) || os != nil || oerr != nil ||
 		u.VMs != nil || uerr != nil || ss != nil || serr != nil || cs != nil || cerr != nil {
 		t.Error("the fake has something of a role it has none of")
 	}

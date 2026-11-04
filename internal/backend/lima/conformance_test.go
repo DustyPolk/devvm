@@ -2,6 +2,7 @@ package lima
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,7 +19,11 @@ import (
 // conformance suite checks it.
 func conformanceSubject(t *testing.T, l *Lima) backendtest.Subject {
 	t.Helper()
-	if _, err := l.createFromUbuntu(t.Context(), dummyBase, backend.Size{CPUs: 2, MemoryGiB: 3}); err != nil {
+	yaml, err := fs.ReadFile(l.Assets, originConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.createFromUbuntu(t.Context(), dummyBase, yaml, backend.Size{CPUs: 2, MemoryGiB: 3}); err != nil {
 		t.Fatal(err)
 	}
 	return backendtest.Subject{Backend: l, Image: strings.TrimPrefix(dummyBase, ImagePrefix), Dir: filepath.Join(l.Dirs.Home, "conformance")}

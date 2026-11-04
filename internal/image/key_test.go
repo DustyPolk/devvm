@@ -12,8 +12,7 @@ import (
 func input() Input {
 	return Input{
 		Backend: "lima", Image: "foo", Parent: "0123456789ab", From: "node:24", FromDigest: "node@sha256:aaaa",
-		Own: map[string][]byte{"base.yaml": []byte("cpus: 4\n")},
-		Recipe: Recipe{Steps: []Step{
+		Recipe: Recipe{Origin: []Step{{Name: "base.yaml", Data: []byte("cpus: 4\n")}}, Steps: []Step{
 			{Name: "foo.sh", Data: []byte("echo foo\n"), Args: []string{"a", "b"}},
 			{Name: "bar.sh", Data: []byte("echo bar\n"), Root: true},
 		}},
@@ -34,8 +33,8 @@ func TestKeyChangesWithEachField(t *testing.T) {
 		"the parent":        func(in *Input) { in.Parent = "ba9876543210" },
 		"--from":            func(in *Input) { in.From = "node:25" },
 		"--from's digest":   func(in *Input) { in.FromDigest = "node@sha256:bbbb" },
-		"an own file":       func(in *Input) { in.Own["base.yaml"] = []byte("cpus: 2\n") },
-		"another own file":  func(in *Input) { in.Own["x"] = nil },
+		"an origin step":    func(in *Input) { in.Recipe.Origin[0].Data = []byte("cpus: 2\n") },
+		"no origin":         func(in *Input) { in.Recipe.Origin = nil },
 		"a step's name":     func(in *Input) { in.Recipe.Steps[0].Name = "x.sh" },
 		"a step's script":   func(in *Input) { in.Recipe.Steps[0].Data = []byte("echo x\n") },
 		"a step's argument": func(in *Input) { in.Recipe.Steps[0].Args = []string{"a", "c"} },
@@ -78,9 +77,10 @@ func TestKeyFieldsAreSeparate(t *testing.T) {
 			t.Errorf("%s: the same key", name)
 		}
 	}
-	own := func(files map[string][]byte) string { return Input{Backend: "lima", Image: Base, Own: files}.Key() }
-	if own(map[string][]byte{"a": []byte("b")}) == own(map[string][]byte{"ab": nil}) {
-		t.Error("own files a (b) and ab (empty) have the same key")
+	// The same step as the backend's origin or as one of base's own.
+	s := Step{Name: "a.sh"}
+	if (Input{Backend: "lima", Image: Base, Recipe: Recipe{Origin: []Step{s}}}).Key() == steps(s) {
+		t.Error("an origin step and a step have the same key")
 	}
 }
 
@@ -135,15 +135,6 @@ func TestBuiltins(t *testing.T) {
 	}
 	if IsBuiltin("base") || IsBuiltin("mine") {
 		t.Error("IsBuiltin took base or a layer of the user's")
-	}
-}
-
-// The conversion's scripts are devvm's.
-func TestConversionScripts(t *testing.T) {
-	for _, name := range ConversionScripts {
-		if _, err := fs.Stat(assets.FS, name); err != nil {
-			t.Error(err)
-		}
 	}
 }
 

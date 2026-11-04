@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -51,7 +52,7 @@ type Fake struct {
 	LifelineFile string            // Running's Lifeline
 	Missing      []backend.Problem // Problems' answer
 	Format       string            // ToolFormat's answer
-	OwnFiles     map[string][]byte // KeyFiles' answer
+	OriginSteps  []image.Step      // Origin's answer, for any base
 	// ExecFunc, when set, is what Exec returns after recording the call
 	// (Errs aside).
 	ExecFunc func(vm string, argv []string, o backend.ExecOpts) error
@@ -152,8 +153,16 @@ func (f *host) DiskDirs() []string { return nil }
 // Floors is none.
 func (f *host) Floors() backend.Floors { return backend.Floors{} }
 
-// KeyFiles is OwnFiles: none unless a test sets them.
-func (f *images) KeyFiles() map[string][]byte { return f.OwnFiles }
+// Origin is OriginSteps, none unless a test sets them, or Errs' error for
+// it. It isn't recorded: every key asks it.
+func (f *images) Origin(*backend.From) ([]image.Step, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.Errs["Origin"]; err != nil {
+		return nil, err
+	}
+	return f.OriginSteps, nil
+}
 
 // Usage is none: the fake can't tell what its VMs take.
 func (f *housekeeping) Usage(context.Context) (backend.Usage, error) { return backend.Usage{}, nil }

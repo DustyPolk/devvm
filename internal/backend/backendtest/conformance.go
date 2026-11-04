@@ -115,7 +115,7 @@ func imageChecks() []check {
 	return []check{
 		{"images", anySubject, checkImages},
 		{"delete-image", anySubject, checkDeleteImage},
-		{"key-files", anySubject, checkKeyFiles},
+		{"origin", anySubject, checkOrigin},
 		{"build-image", booting, checkBuildImage},
 	}
 }
@@ -277,11 +277,17 @@ func checkDeleteImage(ctx context.Context, s Subject) error {
 	return nil
 }
 
-// Base's key hashes the backend's own files by name.
-func checkKeyFiles(_ context.Context, s Subject) error {
-	for name := range s.Backend.KeyFiles() {
-		if name == "" {
-			return errors.New("KeyFiles: a file without a name")
+// Base's origin steps, from Ubuntu or a container image, each have a name.
+func checkOrigin(_ context.Context, s Subject) error {
+	for _, f := range []*backend.From{nil, {Ref: "debian:12", Digest: "debian@sha256:" + strings.Repeat("a", 64)}} {
+		steps, err := s.Backend.Origin(f)
+		if err != nil {
+			return fmt.Errorf("Origin(%v): %w", f, err)
+		}
+		for _, st := range steps {
+			if st.Name == "" {
+				return errors.New("Origin: a step without a name")
+			}
 		}
 	}
 	return nil
