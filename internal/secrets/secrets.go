@@ -141,6 +141,13 @@ func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
 	return c.Data, err
 }
 
+// ClaudeCopy returns the copy of ~/.claude.json a VM without network
+// policy gets: its settings, account state and MCP servers, without
+// anything else (agentlogin.ClaudeCopy).
+func (s *Store) ClaudeCopy() ([]byte, error) {
+	return agentlogin.ClaudeCopy(LoginFile(s.Dirs.Home, agentlogin.Claude))
+}
+
 // MCPSecrets returns the MCP servers in ~/.claude.json whose settings hold
 // secrets; none when it can't be read.
 func (s *Store) MCPSecrets() []string {

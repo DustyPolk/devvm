@@ -685,12 +685,34 @@ func scrubArgs(v any) (any, bool) {
 
 func argsHoldSecrets(v any) bool { _, changed := scrubArgs(v); return changed }
 
-func claudeVM(m map[string]any, salt string) map[string]any {
+// claudeTop drops what of ~/.claude.json no VM gets, with network policy or without: all but
+// claudeTopKeys.
+func claudeTop(m map[string]any) map[string]any {
 	for k := range m {
 		if !claudeTopKeys[k] {
 			delete(m, k)
 		}
 	}
+	return m
+}
+
+// ClaudeCopy returns the copy of the ~/.claude.json at path that a VM without network policy gets:
+// only claudeTopKeys, so never primaryApiKey or the projects' history, and its MCP servers as they
+// are.
+func ClaudeCopy(path string) ([]byte, error) {
+	m, err := readJSON(path)
+	if err != nil {
+		return nil, err
+	}
+	b, err := json.MarshalIndent(claudeTop(m), "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(b, '\n'), nil
+}
+
+func claudeVM(m map[string]any, salt string) map[string]any {
+	claudeTop(m)
 	names, servers := claudeServers(m)
 	for _, n := range names {
 		s := obj(servers, n)

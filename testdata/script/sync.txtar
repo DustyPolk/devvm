@@ -32,8 +32,12 @@ stdout '^claude\.json$'
 ! stdout 'history|projects|^ca/'
 exec tar -xOf $STUB_DIR/sync.tar home/.claude/settings.json
 stdout testfake-settings
+# ~/.claude.json's copy holds only settings, account state and MCP servers:
+# never an API key or the projects' history, network policy or not.
 exec tar -xOf $STUB_DIR/sync.tar claude.json
 stdout testfake-mcp
+stdout '"theme": *"dark"'
+! stdout 'testfake-history|testfake-apikey|primaryApiKey|customApiKeyResponses|projects'
 exec tar -xOf $STUB_DIR/sync.tar links
 stdout '^\.claude/skills\n\.claude/agents\n\.claude/commands\n\.claude/output-styles\n\.claude/plugins\n\.codex/prompts\n\.codex/skills\n\z'
 exec tar -xOf $STUB_DIR/sync.tar host_home
@@ -95,6 +99,13 @@ exec sh -c 'key=$(sed -n "s/.*\"proxy_key\": \"\([^\"]*\)\".*/\1/p" "$NET_dir/vm
 cmp $HOME/.codex/auth.json $WORK/codex.json
 cmp $HOME/.claude.json $WORK/claude.json
 
+# A ~/.claude.json devvm can't read stops the setup, network policy or not.
+cp $WORK/bad.json $HOME/.claude.json
+project badclaude
+! exec devvm --no-network-policy --no-git-protect --agents claude
+stderr '^devvm: login_copy_failed agent=claude reason=.* vm=devvm-badclaude-[0-9a-f]{14}$'
+cp $WORK/claude.json $HOME/.claude.json
+
 # A setup that fails says so, and leaves nothing of what it was sent.
 mkdir $WORK/tmp $WORK/fails
 cd $WORK/fails
@@ -135,12 +146,14 @@ first=$(sed -n '/"files": \[/{n;s/.*"\([^"]*\)".*/\1/p;}' "$FAILS_dir/vm.json")
 -- settings.json --
 {"env":{"ANTHROPIC_API_KEY":"testfake-settings"},"theme":"dark"}
 -- claude.json --
-{"theme":"dark","mcpServers":{"srv":{"command":"x","env":{"API_KEY":"testfake-mcp"}}},"projects":{"/p":{"history":["testfake-history"]}}}
+{"theme":"dark","primaryApiKey":"testfake-apikey","customApiKeyResponses":{"approved":["testfake-apikey"]},"mcpServers":{"srv":{"command":"x","env":{"API_KEY":"testfake-mcp"}}},"projects":{"/p":{"history":["testfake-history"]}}}
 -- codex.json --
 {"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}
 -- config.toml --
 note = """
 testfake-unclosed
+-- bad.json --
+{"theme":
 -- opencode-env --
 MY_SERVICE=testfake-dotenv
 -- opencode-agents --

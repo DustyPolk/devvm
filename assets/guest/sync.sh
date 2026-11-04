@@ -3,8 +3,9 @@
 #   home/        agent config files and credentials, copied into ~
 #   links        paths (relative to the host home) mounted read-only at the host path; linked into ~
 #   host_home    the host's home path
-#   claude.json  host ~/.claude.json, merged in without its per-project history (with network
-#                policy, MCP servers' env values and headers are placeholders)
+#   claude.json  host ~/.claude.json's settings, account state and MCP servers (never its API key
+#                or per-project history), merged in (with network policy, MCP servers' env values
+#                and headers are placeholders)
 #   env          exports (LANG, CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN: placeholders with network policy),
 #                installed as ~/.config/devvm/env
 #   ca/          the CAs the VM trusts besides its system's, one certificate per file: devvm-proxy.crt,

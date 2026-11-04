@@ -410,6 +410,32 @@ func TestClaudeMCP(t *testing.T) {
 	}
 }
 
+// Without network policy, ~/.claude.json's copy keeps only its settings, account state and MCP
+// servers (these as they are), never an API key or the projects' history.
+func TestClaudeCopy(t *testing.T) {
+	p := writeFile(t, map[string]any{ //nolint:gosec // fake values
+		"theme": "dark", "primaryApiKey": "sk-ant-api03-fake", "customApiKeyResponses": map[string]any{"approved": []any{"fake-approved"}},
+		"projects":   map[string]any{"/x": map[string]any{"history": []any{"fake-history"}}},
+		"mcpServers": map[string]any{"local": map[string]any{"command": "npx", "env": map[string]any{"API_KEY": "fake-mcp-env"}}},
+	})
+	b, err := ClaudeCopy(p)
+	must(t, err)
+	out := string(b)
+	for _, s := range []string{"sk-ant-api03-fake", "fake-approved", "fake-history", "projects", "primaryApiKey"} {
+		if strings.Contains(out, s) {
+			t.Errorf("the copy holds %q:\n%s", s, out)
+		}
+	}
+	for _, s := range []string{`"theme": "dark"`, `"fake-mcp-env"`} {
+		if !strings.Contains(out, s) {
+			t.Errorf("the copy lost %s:\n%s", s, out)
+		}
+	}
+	if _, err := ClaudeCopy(filepath.Join(t.TempDir(), "none.json")); err == nil {
+		t.Error("ClaudeCopy of no file")
+	}
+}
+
 // One lookup at a time per login folder: a second waits until the first has written back.
 func TestLockLogin(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "auth.json")

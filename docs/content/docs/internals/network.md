@@ -219,7 +219,7 @@ On each launch, devvm merges this machine's settings and MCP servers from `~/.cl
 - devvm removes the servers it copied before that you no longer have.
 - Servers added in the VM stay.
 
-The copy holds only your settings, onboarding and account state, and MCP servers. The VM keeps its own per-project entries, such as trust and allowed tools, and yours never go in.
+The copy holds only your settings, onboarding and account state, and MCP servers, whether the VM has network policy or not. Everything else stays on this machine, such as `primaryApiKey`, `customApiKeyResponses` and your per-project entries, and the VM keeps its own value of each. So the VM keeps its own per-project entries, such as trust and allowed tools, and yours never go in. If devvm can't read `~/.claude.json`, it stops the VM's setup (`login_copy_failed`).
 
 With network policy, an HTTPS server's headers become bindings for its host, which must be a DNS name on port 443. devvm replaces these with `devvm-redacted`: env values, plain-HTTP servers' headers, user info and secret-looking values in URLs, and secret-named or key-shaped arguments. Without network policy, devvm copies the servers' env values and headers as they are, and names the servers that have them (`claude_mcp_secrets_copied`).
 

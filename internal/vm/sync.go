@@ -285,15 +285,16 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 			}
 		}
 	}
-	if slices.Contains(agents, "claude") {
-		if err := s.copy("claude.json", secrets.LoginFile(e.Dirs.Home, "claude")); err != nil {
-			return nil, err
+	// ~/.claude.json's settings, account state and MCP servers, never the
+	// rest of it. With network policy the copy holds placeholders (stageNet).
+	if !net && slices.Contains(store.Logins(names), "claude") {
+		data, err := store.ClaudeCopy()
+		if err != nil {
+			return nil, msg.LoginCopyFailed("claude", err.Error(), vm).Because(err)
 		}
-		// With network policy the copy holds placeholders (below).
-		if s.has("claude.json") && !net {
-			if servers := store.MCPSecrets(); len(servers) > 0 {
-				e.Warn(msg.ClaudeMcpSecretsCopied(strings.Join(servers, " "), vm))
-			}
+		s.put("claude.json", 0o600, data)
+		if servers := store.MCPSecrets(); len(servers) > 0 {
+			e.Warn(msg.ClaudeMcpSecretsCopied(strings.Join(servers, " "), vm))
 		}
 	}
 
@@ -474,8 +475,6 @@ type stage struct{ files []stageFile }
 func (s *stage) index(name string) int {
 	return slices.IndexFunc(s.files, func(f stageFile) bool { return f.name == name })
 }
-
-func (s *stage) has(name string) bool { return s.index(name) >= 0 }
 
 func (s *stage) add(f stageFile) {
 	if i := s.index(f.name); i >= 0 {
