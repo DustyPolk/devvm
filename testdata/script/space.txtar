@@ -27,7 +27,7 @@ json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima
 mkdir $VMS/12345612345601/logs $VMS/12345612345602/logs
 json_set $VMS/12345612345601/vm.json version:=1 id=p name=devvm-p-12345612345601 image=base dir=/p backend=lima created=2020-01-01T00:00:00Z tools.names:=["go"] tools.made.libc=gnu tools.made.files:=["go-1.20.0-0123456789ab.erofs"]
 json_set $VMS/12345612345602/vm.json version:=1 id=gone name=devvm-gone-12345612345602 image=base dir=/q backend=lima created=2020-01-01T00:00:00Z tools.names:=["go"] tools.made.libc=gnu
-exec sh -c 'echo devvm-p-12345612345601 >> "$STUB_DIR/instances"'
+exec stub vm devvm-p-12345612345601 Stopped
 mkdir $DATA/exports $DATA/logs $DATA/cache/mise/2026.1.1
 exec sh -c 'echo x > "$DATA/exports/devvm-old-12345612345612-20260101-000000.tar.gz"'
 # The VM's network and proxy logs are network logs; the gone one's are

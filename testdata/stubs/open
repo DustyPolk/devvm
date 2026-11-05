@@ -1,6 +1,0 @@
-#!/bin/bash
-# Stand-in for macOS's open in tests: never opens anything. Logs every call to $STUB_LOG, and fails
-# with $STUB_DIR/open-fails.
-set -euo pipefail
-"${0%/*}/stub-log" "$STUB_LOG" open "$@"
-[[ ! -e $STUB_DIR/open-fails ]]

@@ -16,7 +16,7 @@ stdout '^==> interrupted_start vm=devvm-net-[0-9a-f]{14}$'
 rm $STUB_DIR/start-hangs-running
 stub_calls
 stdout '^limactl start --tty=false devvm-net-[0-9a-f]{14}\n(.*\n)*limactl stop devvm-net-[0-9a-f]{14}$'
-exec sh -c 'grep "^$NET " "$STUB_DIR/instances"'
+exec sh -c 'stub vms | grep "^$NET "'
 stdout ' Stopped$'
 exec sh -c 'pgrep -f "[_]proxy .* -vm $NET " || echo none'
 stdout '^none$'

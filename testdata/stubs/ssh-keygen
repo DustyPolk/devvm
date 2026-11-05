@@ -1,7 +1,0 @@
-#!/bin/bash
-# Stand-in for ssh-keygen in tests: -lf FILE prints a fingerprint for a key
-# file's contents (SHA256:fp-<contents>, as the ssh-add stub holds it), and
-# fails for an empty one; anything else fails.
-set -euo pipefail
-[[ ${1:-} == -lf && -s ${2:-} ]] || exit 1
-echo "256 SHA256:fp-$(cat "$2") c (ED25519)"

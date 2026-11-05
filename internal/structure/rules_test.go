@@ -212,6 +212,15 @@ func layerCases() []ruleCase {
 			want:  &want{ruleLayers, "internal/stubtest imports only"},
 		},
 		{
+			name:  "the stub's state in stubtest",
+			files: map[string]string{"internal/stubtest/a.go": imports("stubtest", "internal/stubtest/stubstate")},
+		},
+		{
+			name:  "the stubs' binary importing devvm",
+			files: map[string]string{"internal/stubtest/stub/a.go": imports("main", "internal/msg")},
+			want:  &want{ruleLayers, "the stubs' binary and its state import nothing of devvm's"},
+		},
+		{
 			name:  "proxy importing devvm",
 			files: map[string]string{"internal/proxy/a.go": imports("proxy", "internal/msg")},
 			want:  &want{ruleLayers, "standard library only"},

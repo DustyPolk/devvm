@@ -94,12 +94,19 @@ func devvm() rules {
 			},
 			{
 				name: "stubtest is for tests",
-				from: []string{"..."}, exceptFrom: []string{"internal/stubtest"},
-				to: []string{"internal/stubtest"},
+				from: []string{"..."}, exceptFrom: []string{"internal/stubtest/..."},
+				to: []string{"internal/stubtest/..."},
 			},
 			{
-				name: "internal/stubtest imports only internal/msg",
-				from: []string{"internal/stubtest"}, exceptTo: []string{"internal/msg"},
+				name: "internal/stubtest imports only internal/msg and its own",
+				from: []string{"internal/stubtest/..."}, exceptTo: []string{"internal/msg", "internal/stubtest/..."},
+				to: []string{"..."},
+			},
+			{
+				// The stubs' binary is built apart from devvm: it can't
+				// share devvm's code, only stand in for the tools it runs.
+				name: "the stubs' binary and its state import nothing of devvm's",
+				from: []string{"internal/stubtest/stub", "internal/stubtest/stubstate"}, exceptTo: []string{"internal/stubtest/stubstate"},
 				to: []string{"..."},
 			},
 			{
@@ -237,6 +244,8 @@ func devvmExecSites() map[string]string {
 		"internal/platform/keychain_darwin.go": "security and tmutil: secrets on stdin and stdout, never in a log",
 		"internal/platform/folder_darwin.go":   "chflags, for .git protection",
 		"internal/daemon/daemon.go":            "devvm's background processes, which outlive the run and its context",
+		"internal/stubtest/build.go":           "go build of the test stubs, once for a test process, and their names from the binary",
+		"internal/stubtest/stub/process.go":    "the stubs' stand-in VM's own commands (git on its files, tar) and the real uname and sw_vers, run in the stub's place",
 	}
 }
 

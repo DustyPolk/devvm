@@ -210,12 +210,13 @@ exec sh -c 'ls "$TMPDIR"'
 # Ctrl+C during the conversion deletes the build VM and the temporary
 # folder; nothing is left in Lima.
 stub_reset
-exec sh -c 'echo oci/build.sh > "$STUB_DIR/interrupt-on"; cp "$STUB_DIR/instances" "$WORK/before"'
+exec sh -c 'echo oci/build.sh > "$STUB_DIR/interrupt-on"; stub vms > "$WORK/before"'
 ! exec devvm rebuild --force --from $PIN base
 ! stderr convert_failed
 stub_calls
 stdout '^limactl delete -f devvm-oci-build$'
-cmp $STUB_DIR/instances $WORK/before
+exec stub vms
+cmp stdout $WORK/before
 exec sh -c 'ls "$TMPDIR"'
 ! stdout .
 
@@ -230,7 +231,7 @@ exec sh -c 'echo 2.24 > "$STUB_DIR/build-glibc"; echo 2.28 > "$STUB_DIR/tools-gl
 project old
 ! exec devvm --from $OLD --no-network-policy --no-git-protect --tools node
 stderr '^devvm: tool_needs_glibc has=2\.24 needs=2\.28 tool=node version=[0-9.]+$'
-exec cat $STUB_DIR/instances
+exec stub vms
 ! stdout devvm-old-
 exec sh -c 'grep -lxF "  \"from\": \"$OLD\"," "$IMAGES"/????????????/record.json | xargs cat'
 stdout '^  "libc": "gnu",$'
@@ -270,7 +271,7 @@ env DEB9=debian:9@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 project old2
 ! exec devvm --from $DEB9 --no-network-policy --no-git-protect --tools python
 stderr '^devvm: tools_wrong_base key=[0-9a-f]{12}$'
-exec cat $STUB_DIR/instances
+exec stub vms
 ! stdout devvm-old2-
 # With devvm's own base not built, the first gnu tools of a --from VM
 # say so, then build it first. uv needs a newer glibc than the image

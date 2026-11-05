@@ -28,6 +28,7 @@ import (
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/vmssh"
 )
@@ -75,7 +76,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
 	tl := tools.New(d, assets.FS, testVersion, testUI{t}, platform.Host{})
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
-	tl.Mise = filepath.Join(repo, "testdata", "stubs", "mise")
+	tl.Mise = stubtest.Command(t, "mise")
 	dir := filepath.Join(root, "web")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)

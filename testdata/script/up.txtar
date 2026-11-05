@@ -138,7 +138,7 @@ stdout '^limactl delete -f devvm-slow-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/*/vm.json'
 ! stdout devvm-slow
 stdout '"name": "devvm-web-'
-exec sh -c 'grep -c devvm-slow "$STUB_DIR/instances" || true'
+exec sh -c 'stub vms | grep -c devvm-slow || true'
 stdout '^0$'
 rm $STUB_DIR/start-hangs
 

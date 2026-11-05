@@ -20,6 +20,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/ubuntu"
 	"github.com/w3cj/devvm/internal/vmname"
 )
@@ -31,10 +32,7 @@ const testBuildFlag = "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes
 // TestScript runs testdata/script/*.txtar against a built devvm, in a sandbox.
 func TestScript(t *testing.T) {
 	bin := buildDevvm(t)
-	stubs, err := filepath.Abs(filepath.Join("..", "..", "testdata", "stubs"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	stubs := stubtest.Bin(t)
 	testscript.Run(t, testscript.Params{
 		Dir:                 scriptsDir(),
 		RequireExplicitExec: true,
@@ -157,9 +155,10 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		// And VMs' port forwarders.
 		_ = exec.CommandContext(context.Background(), "pkill", "-f", "_ports -vm .* -lifeline "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
 		// And client VMs' link sessions, named only by their VM: by their
-		// pid files, then the stub ssh's masters they leave.
+		// pid files, then the stub ssh's masters they and the forwarders
+		// leave, which outlive them as ssh's do.
 		stopLinkSessions(root)
-		_ = exec.CommandContext(context.Background(), "pkill", "-f", "IO::Socket::UNIX.* "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
+		_ = exec.CommandContext(context.Background(), "pkill", "-f", "[-]M -S "+root+"/").Run() //nolint:gosec,forbidigo // the test's own folder; a cleanup, after the scripts' contexts end
 		_ = os.RemoveAll(root)
 	})
 
@@ -221,14 +220,14 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	}
 	// The shared tools' versions: the stub mise, which resolves the
 	// fixture lock.
-	env.Setenv("DEVVM_HOST_MISE", filepath.Join(stubs, "mise"))
-	env.Setenv("MISE_STUB_LOCK", filepath.Join(filepath.Dir(stubs), "mise.lock"))
-	env.Setenv("DEVVM_BIN", bin) // for scripts that set their own PATH
-	if err := scriptCoverDir(env); err != nil {
-		return err
-	}
 	repo, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
+		return err
+	}
+	env.Setenv("DEVVM_HOST_MISE", filepath.Join(stubs, "mise"))
+	env.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
+	env.Setenv("DEVVM_BIN", bin) // for scripts that set their own PATH
+	if err := scriptCoverDir(env); err != nil {
 		return err
 	}
 	env.Setenv("DEVVM_REPO", repo) // for the repo's own scripts (scripts/, assets/)

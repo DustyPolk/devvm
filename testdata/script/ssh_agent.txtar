@@ -135,7 +135,7 @@ stdout '^Host devvm-fwd devvm-fwd-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent yes\n'
 # agent lacks loaded again (after a reboot here); so do devvm's
 # connections, and its entry, which names it as the agent, so OpenSSH
 # forwards it however the editor was started.
-rm $STUB_DIR/agent-up
+exec stub agent-stop
 stub_reset
 exec devvm restart
 stub_calls
@@ -179,7 +179,7 @@ exec sh -c 'cat "$DATA/agent-keys.json"'
 stdout '"keys": \[\]'
 ! stdout deploy
 exists $WORK/keys/deploy
-exec sh -c 'cat "$STUB_DIR/agent-held"'
+exec stub agent
 ! stdout deploy
 exec devvm ssh-agent
 stdout '\Aoff\n\z'

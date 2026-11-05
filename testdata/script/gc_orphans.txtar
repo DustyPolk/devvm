@@ -12,7 +12,7 @@ exec sh -c 'printf %s "$DEVVM_LIMA_HOME" | { sha256sum 2>/dev/null || shasum -a 
 # port files; one made in another Lima home, and one that doesn't say
 # where it was made while this run's home isn't the default; one being
 # made.
-exec sh -c 'echo devvm-live-12345612345601 >> "$STUB_DIR/instances"'
+exec stub vm devvm-live-12345612345601 Stopped
 exec sh -c 'for v in live:01 gone:02 new:03; do sh $WORK/vmjson "devvm-${v%:*}-123456123456${v#*:}" "/p/${v%:*}" lima "$(cat at)"; done'
 exec sh $WORK/vmjson devvm-moved-12345612345604 /p/moved lima 0000000000000000
 exec sh $WORK/vmjson devvm-norec-12345612345605 /p/norec lima
@@ -48,7 +48,7 @@ exists $VMS/12345612345604/vm.json
 exists $VMS/12345612345603/vm.json
 exists $VMS/12345612345605/vm.json
 exists $VMS/12345612345607/vm.json
-exec sh -c 'grep -c . "$STUB_DIR/instances"'
+exec sh -c 'stub vms | grep -c .'
 stdout '^1$'
 stub_calls
 ! stdout 'limactl delete'

@@ -1,4 +1,0 @@
-#!/bin/bash
-# Stand-in for chflags in tests: logs the call to $STUB_LOG and changes no
-# flags, so test folders stay deletable.
-"${0%/*}/stub-log" "$STUB_LOG" chflags "$@"

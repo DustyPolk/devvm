@@ -4,11 +4,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/internal/msg"
 )
@@ -21,11 +22,7 @@ func TestStubs(t *testing.T) {
 	if !strings.HasPrefix(s.Dir, "/") || os.Getenv("STUB_DIR") != s.Dir || os.Getenv("STUB_LOG") != s.Log() {
 		t.Fatalf("Dir %q, STUB_DIR %q, STUB_LOG %q", s.Dir, os.Getenv("STUB_DIR"), os.Getenv("STUB_LOG"))
 	}
-	stubs, err := Folder()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, err := exec.LookPath("open"); err != nil || got != filepath.Join(stubs, "open") {
+	if got, err := exec.LookPath("open"); err != nil || got != filepath.Join(Bin(t), "open") {
 		t.Fatalf("open = %q, %v: not the stub", got, err)
 	}
 	if s.Calls(t) != nil {
@@ -149,28 +146,98 @@ func hammer(log string, done <-chan struct{}) error {
 	}
 }
 
-// Every stub logs its calls through stub-log, never with the shell's
-// own append, which can write a long line in pieces.
-func TestStubsLogWithStubLog(t *testing.T) {
-	stubs, err := Folder()
-	if err != nil {
-		t.Fatal(err)
+// Lima's instances, made by limactl processes running at once, are all
+// kept: the state is changed under its lock.
+func TestCreatesAtOnce(t *testing.T) {
+	s := New(t)
+	t.Setenv("LIMA_HOME", filepath.Join(s.Dir, "lima"))
+	const n = 20
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	for i := range n {
+		wg.Go(func() {
+			errs <- exec.CommandContext(t.Context(), "limactl", "create", "--name=vm"+strconv.Itoa(i), "--tty=false", "-").Run() //nolint:gosec // the limactl stub, with the test's own name
+		})
 	}
-	files, err := os.ReadDir(stubs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	appends := regexp.MustCompile(`>>\s*"?\$\{?(STUB_LOG|STUB_DIR)`)
-	for _, f := range files {
-		b, err := os.ReadFile(filepath.Join(stubs, f.Name())) //nolint:gosec // the repo's own stubs
+	wg.Wait()
+	close(errs)
+	for err := range errs {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for i, line := range strings.Split(string(b), "\n") {
-			if appends.MatchString(line) {
-				t.Errorf("%s:%d appends with the shell, not stub-log: %s", f.Name(), i+1, strings.TrimSpace(line))
-			}
+	}
+	if got := s.VMs(t); len(got) != n {
+		t.Errorf("%d instances, want %d: %q", len(got), n, got)
+	}
+}
+
+// The binary builds into a folder with a link for each stub; its folder's
+// name changes with its sources; a folder a day old is removed, but the
+// one in use.
+func TestBuild(t *testing.T) {
+	root, err := moduleRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := buildInto(root, dir); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := os.Readlink(filepath.Join(dir, "limactl")); err != nil || l != "stub" {
+		t.Errorf("limactl links to %q, %v", l, err)
+	}
+	sum, err := sourcesHash(root)
+	if err != nil || len(sum) != 16 {
+		t.Errorf("sourcesHash = %q, %v", sum, err)
+	}
+	if other, _ := sourcesHash(t.TempDir()); other == sum {
+		t.Error("the hash doesn't change with the sources")
+	}
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	old, keep, fresh := filepath.Join(tmp, "devvm-stubs-old"), filepath.Join(tmp, "devvm-stubs-keep"), filepath.Join(tmp, "devvm-stubs-new")
+	day := time.Now().Add(-25 * time.Hour)
+	for _, d := range []string{old, keep, fresh} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
 		}
+	}
+	for _, d := range []string{old, keep} {
+		if err := os.Chtimes(d, day, day); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prune(keep)
+	if exists(old) || !exists(keep) || !exists(fresh) {
+		t.Errorf("after prune: old %v, keep %v, new %v", exists(old), exists(keep), exists(fresh))
+	}
+	t.Chdir(t.TempDir())
+	if _, err := moduleRoot(); err == nil {
+		t.Error("a module root outside the repo")
+	}
+}
+
+// The state's helpers: an instance listed, its size, the Keychain.
+func TestState(t *testing.T) {
+	s := New(t)
+	t.Setenv("LIMA_HOME", filepath.Join(s.Dir, "lima"))
+	s.VM(t, "b", "Running")
+	s.VM(t, "a", "Stopped")
+	s.Size(t, "a", 2, 3, 4)
+	s.VM(t, "a", "Running")
+	if got, want := s.VMs(t), []string{"a Running", "b Running"}; !slices.Equal(got, want) {
+		t.Errorf("VMs = %q, want %q", got, want)
+	}
+	out, err := exec.CommandContext(t.Context(), "limactl", "list", "--json").Output()
+	if err != nil || !strings.HasPrefix(string(out), `{"name":"a","status":"Running",`) || !strings.Contains(string(out), `"cpus":2,"memory":3,"disk":4,`) {
+		t.Errorf("list: %v\n%s", err, out)
+	}
+	if _, ok := s.Keychain(t, "github"); ok {
+		t.Error("an item before any")
+	}
+	s.SetKeychain(t, "github", "v")
+	if v, ok := s.Keychain(t, "github"); !ok || v != "v" {
+		t.Errorf("Keychain = %q, %v", v, ok)
 	}
 }
 

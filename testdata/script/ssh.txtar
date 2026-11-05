@@ -43,8 +43,9 @@ exec sh -c 'ls -l "$DATA/ssh_config" "$WEB_dir/run/known_hosts"'
 # A stopped VM drops out; its keys stay. A project folder named like an
 # image (img-foo) is a project VM; images and build VMs aren't listed.
 cp $WEB_dir/run/known_hosts $WORK/web-keys
-exec sh -c 'sed "s/^\(devvm-web-[0-9a-f]*\) Running$/\1 Stopped/" "$STUB_DIR/instances" > "$STUB_DIR/i" && mv "$STUB_DIR/i" "$STUB_DIR/instances"'
-exec sh -c 'echo "devvm-img-0123456789ab Running" >> "$STUB_DIR/instances" && echo "devvm-tools-build Running" >> "$STUB_DIR/instances"'
+exec stub vm $WEB Stopped
+exec stub vm devvm-img-0123456789ab Running
+exec stub vm devvm-tools-build Running
 project img-foo
 exec devvm --no-network-policy --no-git-protect
 catg $DATA/ssh_config
@@ -58,7 +59,7 @@ stdout '^devvm-img-foo-[0-9a-f]{14} ssh-ed25519 '
 
 # A second folder named web: its VM by its full name only, as the first
 # VM keeps devvm-web, chosen when it was made.
-exec sh -c 'sed "s/^\(devvm-web-[0-9a-f]*\) Stopped$/\1 Running/" "$STUB_DIR/instances" > "$STUB_DIR/i" && mv "$STUB_DIR/i" "$STUB_DIR/instances"'
+exec stub vm $WEB Running
 mkdir $WORK/other/web
 cd $WORK/other/web
 exec devvm --no-network-policy --no-git-protect
@@ -81,7 +82,7 @@ catg $IMG_dir/run/known_hosts
 stdout '^devvm-img-foo-[0-9a-f]{14} ssh-ed25519 '
 
 # A VM that doesn't show its host keys gets no entry: ssh couldn't check it.
-exec sh -c ': > "$STUB_DIR/hostkeys-fail"'
+exec sh -c ': > "$STUB_DIR/hostkeys-fails"'
 project nokeys
 exec devvm --no-network-policy --no-git-protect
 vm_name NOKEYS nokeys
@@ -89,5 +90,5 @@ catg $DATA/ssh_config
 ! stdout devvm-nokeys
 stdout '^Host devvm-img-foo '
 ! exists $NOKEYS_dir/run/known_hosts
-rm $STUB_DIR/hostkeys-fail
+rm $STUB_DIR/hostkeys-fails
 ! exists $HOME/.ssh

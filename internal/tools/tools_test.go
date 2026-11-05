@@ -27,6 +27,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/stubtest"
 )
 
 // Lima's targets: build.sh's own format. gnu's build in devvm's own
@@ -164,7 +165,7 @@ func newEnv(t *testing.T) env {
 	tl.Self = "/devvm"
 	tl.Arch = "arm64"
 	tl.Getenv = func(string) string { return "" }
-	tl.Mise = repo(t, "testdata", "stubs", "mise")
+	tl.Mise = stubtest.Command(t, "mise")
 	tl.ShareNote = time.Millisecond
 	tl.RetryDelay = time.Millisecond
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }

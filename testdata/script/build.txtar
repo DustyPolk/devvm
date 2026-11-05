@@ -130,7 +130,7 @@ stderr '^devvm: script_failed script=apt\.sh vm=devvm-img-[0-9a-f]{12}$'
 stub_calls
 stdout '^limactl stop devvm-img-[0-9a-f]{12}$'
 ! stdout 'limactl delete'
-exec sh -c 'grep -c . "$STUB_DIR/instances"; grep -c " Stopped$" "$STUB_DIR/instances"; ls "$IMAGES"/????????????/record.json | grep -c .'
+exec sh -c 'stub vms | grep -c .; stub vms | grep -c " Stopped$"; ls "$IMAGES"/????????????/record.json | grep -c .'
 stdout '^3\n3\n2\n$'
 rm $STUB_DIR/shell-fails
 
@@ -156,7 +156,7 @@ stdout '^==> interrupted_image vm=devvm-img-[0-9a-f]{12}$'
 ! stderr script_failed
 stub_calls
 stdout -count=2 '^limactl delete -f devvm-img-[0-9a-f]{12}$'
-exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES"/????????????/record.json | grep -c .'
+exec sh -c 'stub vms | grep -c .; ls "$IMAGES"/????????????/record.json | grep -c .'
 stdout '^2\n2\n$'
 rm $STUB_DIR/shell-hangs
 
@@ -167,7 +167,7 @@ stderr '^devvm: vm_create_failed vm=devvm-img-[0-9a-f]{12}$'
 stdout '^==> unfinished_image vm=devvm-img-[0-9a-f]{12}$'
 stub_calls
 stdout -count=1 '^limactl delete -f devvm-img-[0-9a-f]{12}$'
-exec sh -c 'grep -c . "$STUB_DIR/instances"; ls "$IMAGES"/????????????/record.json | grep -c .'
+exec sh -c 'stub vms | grep -c .; ls "$IMAGES"/????????????/record.json | grep -c .'
 stdout '^2\n2\n$'
 rm $STUB_DIR/clone-fails
 

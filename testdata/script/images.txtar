@@ -20,7 +20,8 @@ stdout '^limactl list --json\n\z'
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 exec devvm build foo
-exec sh -c 'printf "devvm-img-000000000000\ndevvm-proj-12345612345601\n" >> "$STUB_DIR/instances"'
+exec stub vm devvm-img-000000000000 Stopped
+exec stub vm devvm-proj-12345612345601 Stopped
 exec sh -c 'for i in base foo; do grep -lxF "  \"name\": \"$i\"," "$IMAGES"/*/record.json | xargs dirname | xargs basename > "$i.key"; done'
 exec devvm images
 stdout '^base +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+\nfoo +ubuntu 26\.04 \(\d{8}\) +[0-9a-f]{12} +[0-9a-f]{12} +current +\S+\n- +- +- +000000000000 +unfinished +-\n\n'

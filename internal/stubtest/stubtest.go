@@ -1,9 +1,10 @@
-// Package stubtest is for tests: it puts the repo's stub commands
-// (testdata/stubs) first on PATH, in place of the host's, with a new
-// folder of their own for one test, and reads and writes what they keep
-// there. The stubs find that folder in STUB_DIR and log each call they
-// get to STUB_LOG, its calls file, one line each, written whole by
-// stub-log so that stubs running at once never mix their lines.
+// Package stubtest is for tests: it puts the stubs (internal/stubtest/stub,
+// one binary standing in for each host command devvm runs) first on
+// PATH, in place of the host's, with a new folder of their own for one
+// test, and reads and writes what they keep there. The stubs find that
+// folder in STUB_DIR and log each call they get to STUB_LOG, its calls
+// file, one line each, written whole so that stubs running at once never
+// mix their lines.
 package stubtest
 
 import (
@@ -17,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/stubtest/stubstate"
 )
 
 // Stubs is one test's stubs: Dir is their folder, STUB_DIR.
@@ -29,6 +31,7 @@ type Stubs struct {
 // that t's end removes.
 func New(t testing.TB, only ...string) *Stubs {
 	t.Helper()
+	all := Bin(t)
 	dir, err := os.MkdirTemp("/tmp", "stub.")
 	if err != nil {
 		t.Fatal(err)
@@ -37,23 +40,14 @@ func New(t testing.TB, only ...string) *Stubs {
 	if dir, err = filepath.EvalSymlinks(dir); err != nil {
 		t.Fatal(err)
 	}
-	stubs, err := Folder()
-	if err != nil {
-		t.Fatal(err)
-	}
-	bin := stubs
+	bin := all
 	if len(only) > 0 {
 		bin = filepath.Join(dir, "bin")
 		if err := os.Mkdir(bin, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		// stub-log too, which the stubs run from their own folder.
-		for _, name := range append(slices.Clip(only), "stub-log") {
-			stub := filepath.Join(stubs, name)
-			if _, err := os.Stat(stub); err != nil {
-				t.Fatalf("no stub %s: %v", name, err)
-			}
-			if err := os.Symlink(stub, filepath.Join(bin, name)); err != nil {
+		for _, name := range only {
+			if err := os.Symlink(Command(t, name), filepath.Join(bin, name)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -65,23 +59,25 @@ func New(t testing.TB, only ...string) *Stubs {
 	return s
 }
 
-// Folder returns the repo's stubs folder, testdata/stubs, found from the
-// test's own folder up to the module's root.
-func Folder() (string, error) {
-	dir, err := os.Getwd()
+// Bin returns the folder of the stubs: the stub binary, built once (see
+// built), and a link to it named for each command it stands in for.
+func Bin(t testing.TB) string {
+	t.Helper()
+	dir, err := built()
 	if err != nil {
-		return "", err
+		t.Fatal(err)
 	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return filepath.Join(dir, "testdata", "stubs"), nil
-		}
-		up := filepath.Dir(dir)
-		if up == dir {
-			return "", errors.New("stubtest: no go.mod above the test's folder")
-		}
-		dir = up
+	return dir
+}
+
+// Command returns the path of the stub for the command name.
+func Command(t testing.TB, name string) string {
+	t.Helper()
+	p := filepath.Join(Bin(t), name)
+	if _, err := os.Lstat(p); err != nil {
+		t.Fatalf("no stub %s: %v", name, err)
 	}
+	return p
 }
 
 // Path returns the path of the file name in the stubs' folder.
@@ -137,6 +133,76 @@ func (s *Stubs) Read(t testing.TB, name string) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// update changes the stubs' state.
+func (s *Stubs) update(t testing.TB, fn func(*stubstate.State)) {
+	t.Helper()
+	if err := stubstate.Update(s.Dir, func(st *stubstate.State) error { fn(st); return nil }); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// state reads the stubs' state.
+func (s *Stubs) state(t testing.TB) *stubstate.State {
+	t.Helper()
+	st, err := stubstate.Read(s.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// VM has Lima list the instance name in status, with Lima's default size
+// unless it has one.
+func (s *Stubs) VM(t testing.TB, name, status string) {
+	t.Helper()
+	s.update(t, func(st *stubstate.State) {
+		if in := st.Instances[name]; in != nil {
+			in.Status = status
+			return
+		}
+		st.Instances[name] = stubstate.NewInstance(status)
+	})
+}
+
+// Size gives the instance name its size: memory and disk in bytes.
+func (s *Stubs) Size(t testing.TB, name string, cpus int, memory, disk int64) {
+	t.Helper()
+	s.update(t, func(st *stubstate.State) {
+		in := st.Instances[name]
+		if in == nil {
+			t.Fatalf("no instance %s", name)
+		}
+		in.CPUs, in.Memory, in.Disk = cpus, memory, disk
+	})
+}
+
+// VMs returns Lima's instances, "NAME STATUS" each, sorted.
+func (s *Stubs) VMs(t testing.TB) []string {
+	t.Helper()
+	var out []string
+	for name, in := range s.state(t).Instances {
+		if in.Status != "" {
+			out = append(out, name+" "+in.Status)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// SetKeychain saves value as the Keychain's item for account.
+func (s *Stubs) SetKeychain(t testing.TB, account, value string) {
+	t.Helper()
+	s.update(t, func(st *stubstate.State) { st.Keychain[account] = value })
+}
+
+// Keychain returns the Keychain's item for account, and whether there's
+// one.
+func (s *Stubs) Keychain(t testing.TB, account string) (string, bool) {
+	t.Helper()
+	v, ok := s.state(t).Keychain[account]
+	return v, ok
 }
 
 // ExecRunner runs commands as they are, here the stubs: it's a backend's

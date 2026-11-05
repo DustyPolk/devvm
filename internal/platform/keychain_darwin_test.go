@@ -16,7 +16,7 @@ func TestKeychainGet(t *testing.T) {
 	if _, err := KeychainGet(t.Context(), "devvm-test", "github"); !errors.Is(err, ErrNoSecret) {
 		t.Errorf("no item: %v", err)
 	}
-	s.Write(t, "keychain/github", "ghp_x\n")
+	s.SetKeychain(t, "github", "ghp_x")
 	if v, err := KeychainGet(t.Context(), "devvm-test", "github"); v != "ghp_x" || err != nil {
 		t.Errorf("KeychainGet = %q, %v", v, err)
 	}

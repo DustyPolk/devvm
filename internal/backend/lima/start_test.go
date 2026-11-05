@@ -583,16 +583,16 @@ func TestSBString(t *testing.T) {
 func TestDegradedStart(t *testing.T) {
 	l, warned, stubs := stubLima(t)
 	vm := "devvm-img-0123456789ab"
-	stubs.Write(t, "instances", vm+" Stopped\n")
-	stubs.Write(t, "start-fails", "")
+	stubs.VM(t, vm, "Stopped")
+	stubs.Touch(t, "start-fails")
 	if err := l.start(t.Context(), vm, nil, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"started_with_warnings vm=" + vm}; !slices.Equal(warned.Names(), want) {
 		t.Errorf("warned %q, want %q", warned.Names(), want)
 	}
-	stubs.Write(t, "instances", vm+" Stopped\n")
-	stubs.Write(t, "shell-hangs", "")
+	stubs.VM(t, vm, "Stopped")
+	stubs.Touch(t, "shell-hangs")
 	l.SSHTimeout = 200 * time.Millisecond
 	err := l.start(t.Context(), vm, nil, backend.Confinement{})
 	le, ok := errors.AsType[*backend.LoggedError](err)

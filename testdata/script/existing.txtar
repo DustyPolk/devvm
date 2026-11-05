@@ -50,7 +50,7 @@ stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}$'
 stdout '^ssh -F none -M .* -l stub 127\.0\.0\.1 sh -s$'
 stdout 'sh -c .*/etc/ssh/ssh_host_'
 # (The stub's VM gets the size its edit asked for.)
-exec sh -c 'echo "6 8589934592 107374182400" > "$STUB_DIR/size-$WEB"'
+exec stub size $WEB 6 8589934592 107374182400
 exec limactl stop $WEB
 stub_reset
 exec devvm

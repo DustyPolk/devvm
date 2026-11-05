@@ -46,7 +46,10 @@ stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +unenforced +- +/'
 mkdir $VMS/0123456789ab01 $VMS/0123456789ab02
 cp $WORK/clone.json $VMS/0123456789ab01/vm.json
 cp $WORK/from.json $VMS/0123456789ab02/vm.json
-exec sh -c 'printf "devvm-cl-0123456789ab01\ndevvm-from-0123456789ab02 Running\ndevvm-half-0123456789ab03\ndevvm-tools-build\n" >> "$STUB_DIR/instances"'
+exec stub vm devvm-cl-0123456789ab01 Stopped
+exec stub vm devvm-from-0123456789ab02 Running
+exec stub vm devvm-half-0123456789ab03 Stopped
+exec stub vm devvm-tools-build Stopped
 exec devvm ls
 stdout '^devvm-cl-0123456789ab01 +Stopped +base +node,claude +clone +on +- +/p/cl \(gone\)\n'
 stdout '^devvm-from-0123456789ab02 +Running +image_from from=node:24 image=base +- +on +off +- +/p/from \(gone\)\n'

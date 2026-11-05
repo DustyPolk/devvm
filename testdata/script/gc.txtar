@@ -25,7 +25,7 @@ exec devvm rm --force --no-export
 cd $WORK
 exec sh -c 'for i in base foo; do grep -lxF "  \"name\": \"$i\"," "$IMAGES"/*/record.json | xargs dirname | xargs basename > "$i.key"; done'
 exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/layers/foo.sh"'
-exec sh -c 'printf "devvm-img-000000000000\ndevvm-img-111111111111\ndevvm-img-node\ndevvm-img-foo-12345612345601\ndevvm-web-12345612345602\n" >> "$STUB_DIR/instances"'
+exec sh -c 'for vm in devvm-img-000000000000 devvm-img-111111111111 devvm-img-node devvm-img-foo-12345612345601 devvm-web-12345612345602; do stub vm "$vm" Stopped; done'
 mkdir $IMAGES/111111111111
 exec sh -c 'echo "not a record" > "$IMAGES/111111111111/record.json"'
 
@@ -77,9 +77,9 @@ cmp stdout deleted
 
 # What's left: base, the project VMs and their records; the tool images
 # that are current or listed; nothing in the share is locked.
-exec sh -c 'grep -c . "$STUB_DIR/instances"'
+exec sh -c 'stub vms | grep -c .'
 stdout '^3$'
-exec sh -c 'grep -q "^devvm-img-$(cat base.key) " "$STUB_DIR/instances" && grep -q "^devvm-img-foo-12345612345601" "$STUB_DIR/instances" && grep -q "^devvm-web-12345612345602" "$STUB_DIR/instances"'
+exec sh -c 'v=$WORK/vms; stub vms > "$v" && grep -q "^devvm-img-$(cat base.key) " "$v" && grep -q "^devvm-img-foo-12345612345601" "$v" && grep -q "^devvm-web-12345612345602" "$v"'
 exec sh -c 'test -f "$IMAGES/$(cat base.key)/record.json" && ! test -e "$IMAGES/$(cat foo.key)" && ! test -e "$IMAGES/111111111111"'
 ! exists $SHARE/go-1.9.0-0123456789ab.erofs
 ! exists $SHARE/go-1.9.0-0123456789ab.erofs.json

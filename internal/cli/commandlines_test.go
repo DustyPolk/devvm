@@ -157,7 +157,7 @@ func commandLineFiles(t *testing.T) []string {
 	t.Helper()
 	sources := []string{
 		"README.md", "AGENTS.md", "CHANGELOG.md", "SECURITY.md", "CONTRIBUTING.md", "install.sh",
-		"docs/content", "locales", "internal", "cmd", "assets", "tests", "testdata/script", "testdata/stubs",
+		"docs/content", "locales", "internal", "cmd", "assets", "tests", "testdata/script",
 		"scripts", "packaging", ".github", ".agents/skills/cli", ".agents/skills/docs-voice",
 	}
 	var files []string

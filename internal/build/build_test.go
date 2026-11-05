@@ -23,6 +23,7 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ubuntu"
 )
@@ -75,7 +76,7 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 	tl := tools.New(d, os.DirFS(root), testVersion, quietUI{}, platform.Host{})
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Getenv = func(string) string { return "" }
-	tl.Mise = filepath.Join(repo, "testdata", "stubs", "mise")
+	tl.Mise = stubtest.Command(t, "mise")
 	// The cloud image the backend pinned, which base's recorded package
 	// lists must be as new as.
 	pin := state.UbuntuPin{Release: testRelease, File: "ubuntu-26.04-server-cloudimg-arm64.img", Digest: "sha256:" + strings.Repeat("1", 64)}

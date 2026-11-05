@@ -816,7 +816,7 @@ func TestExecAndShell(t *testing.T) {
 func TestStubStopBroken(t *testing.T) {
 	l, _, stubs := stubLima(t)
 	vm := "devvm-p-0123456789abcd"
-	stubs.Write(t, "instances", vm+" Broken\n")
+	stubs.VM(t, vm, "Broken")
 	if err := l.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
@@ -834,9 +834,9 @@ func TestStubStopBroken(t *testing.T) {
 // Against the limactl stub: VMs stop, start and go.
 func TestStubLifecycle(t *testing.T) {
 	l, _, stubs := stubLima(t)
-	stubs.Write(t, "instances", "devvm-p-0123456789abcd Stopped\n")
 	ctx := t.Context()
 	vm := "devvm-p-0123456789abcd"
+	stubs.VM(t, vm, "Stopped")
 	if err := l.Start(ctx, vm, backend.Want{}, backend.Confinement{}); err != nil {
 		t.Fatal(err)
 	}
@@ -885,12 +885,12 @@ func TestStubRename(t *testing.T) {
 	ctx := t.Context()
 	vm := "devvm-p-0123456789abcd"
 	aside, _ := vmname.Aside(vm)
-	stubs.Write(t, "instances", vm+" Running\n")
-	stubs.Write(t, "size-"+vm, "2 4294967296 107374182400\n")
+	stubs.VM(t, vm, "Running")
+	stubs.Size(t, vm, 2, 4294967296, 107374182400)
 	if err := l.Rename(ctx, vm, aside); err == nil || msg.IDOf(err) != "" {
 		t.Errorf("running: %v", err)
 	}
-	stubs.Write(t, "instances", vm+" Stopped\n")
+	stubs.VM(t, vm, "Stopped")
 	if err := l.Rename(ctx, vm, strings.Repeat("x", l.NameMax()+1)); msg.IDOf(err) != "lima_home_too_long" {
 		t.Errorf("too long: %v", err)
 	}
