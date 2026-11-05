@@ -1,6 +1,6 @@
 ---
 title: devvm link publish
-weight: 29
+weight: 30
 ---
 
 Show or add the ports this folder's VM offers to links

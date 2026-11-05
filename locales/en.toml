@@ -2197,6 +2197,58 @@ other = "Reading the login in {{.file}} failed: {{.reason}}."
 description = "reason is an error from the system, in English"
 other = "Importing the agents' settings and logins failed: {{.reason}}."
 
+[agent_save_no_agent]
+other = "{{.vm}} has no agent, so there are no settings to save."
+
+[agent_save_none]
+other = "{{.vm}} doesn't have {{.agent}}, so devvm saves nothing of it."
+
+[agent_save_nothing]
+other = "The settings of {{.vm}}'s agents are the same as devvm's agent store has."
+
+[agent_save_ask]
+other = "Save these settings from {{.vm}} into devvm's agent store, for every VM with these agents?"
+
+[agent_save_runs]
+other = "Every VM with these agents runs the hooks, the MCP servers' commands and the plugins you save."
+
+[agent_save_refused]
+other = "devvm agent save shows what changed and asks before it saves. Run it in a terminal."
+
+[nothing_saved]
+other = "nothing saved"
+
+[agent_settings_saved]
+other = "devvm saved {{.agent}}'s settings from {{.vm}} into {{.dir}}."
+
+[agent_save_unsafe]
+other = "{{.vm}} sent {{.path}}, which isn't among the agents' settings, so devvm saved nothing."
+
+[agent_save_too_much]
+other = "{{.vm}} sent more than devvm saves at once, so devvm saved nothing. Take out what the agents' settings folders don't need, such as a plugin's build files."
+
+[agent_save_link_left_out]
+other = "devvm left out the link {{.path}} in {{.vm}}, because it saves only links to files inside the same settings folder."
+
+[agent_save_kind_left_out]
+other = "devvm left out {{.path}} in {{.vm}}, because it saves only files, folders and links to files."
+
+[agent_save_unparsed]
+other = "devvm left out {{.path}} in {{.vm}}, because it isn't a settings file devvm can read."
+
+[agent_save_placeholder]
+other = "devvm left out {{.path}} in {{.vm}}, because it holds a placeholder for a secret that devvm can't put back. Change the file in devvm's agent store instead."
+
+[agent_save_withheld]
+other = "devvm left out {{.path}} in {{.vm}}, because no VM gets that file from devvm's agent store. Change the store's file instead."
+
+[agent_save_not_read]
+other = "Reading the agents' settings from {{.vm}} failed."
+
+[agent_save_failed]
+description = "reason is an error from the system, in English"
+other = "Saving the agents' settings failed: {{.reason}}."
+
 [next_start_size]
 other = "{{.vm}} gets its new size only when it starts."
 

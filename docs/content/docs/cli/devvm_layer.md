@@ -1,6 +1,6 @@
 ---
 title: devvm layer
-weight: 22
+weight: 23
 ---
 
 Make image layers of your own, or change this folder's VM's layers

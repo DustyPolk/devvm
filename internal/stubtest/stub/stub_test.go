@@ -409,6 +409,17 @@ func TestShell(t *testing.T) {
 	if out := s.ok("", "limactl", sh("sudo", "sh", "-c", "tar -c -C /out .")...); out != "out" {
 		t.Errorf("packages %q", out)
 	}
+	// devvm agent save's stream: an empty one, the test's, and a failure.
+	if out := s.ok("", "limactl", sh("bash", "-c", "tar -cf - -C \"$t\" .devvm-save")...); len(out) != 1024 {
+		t.Errorf("no agent settings: %d bytes", len(out))
+	}
+	s.write("agent-save.tar", "settings")
+	if out := s.ok("", "limactl", sh("bash", "-c", "tar -cf - -C \"$t\" .devvm-save")...); out != "settings" {
+		t.Errorf("agent settings %q", out)
+	}
+	s.write("shell-fails-on", ".devvm-save\n")
+	s.fails(1, "limactl", sh("bash", "-c", "tar -cf - -C \"$t\" .devvm-save")...)
+	s.rm("shell-fails-on")
 	// A home folder's copy, out and in.
 	s.ok("", "limactl", sh("sh", "-c", "cd ~ && tar -czf - --one-file-system .")...)
 	if got := s.replaced[len(s.replaced)-1]; !slices.Equal(got, []string{"tar", "-czf", "-", "-C", filepath.Join(s.dir, "vmhome-vm"), "."}) ||

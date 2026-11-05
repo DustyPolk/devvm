@@ -169,9 +169,89 @@ func AgentOnRisk(vm string) M {
 	return M{id: "agent_on_risk", vals: []val{{"vm", vm}}}
 }
 
+// AgentSaveAsk is [agent_save_ask]: "Save these settings from {{.vm}} into devvm's agent store, for every VM with these agents?"
+func AgentSaveAsk(vm string) M {
+	return M{id: "agent_save_ask", vals: []val{{"vm", vm}}}
+}
+
+// AgentSaveFailed is [agent_save_failed]: "Saving the agents' settings failed: {{.reason}}."
+func AgentSaveFailed(reason string) M {
+	return M{id: "agent_save_failed", vals: []val{{"reason", reason}}}
+}
+
+// AgentSaveKindLeftOut is [agent_save_kind_left_out]: "devvm left out {{.path}} in {{.vm}}, because it saves only files, folders and links to files."
+func AgentSaveKindLeftOut(path string, vm string) M {
+	return M{id: "agent_save_kind_left_out", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// AgentSaveLinkLeftOut is [agent_save_link_left_out]: "devvm left out the link {{.path}} in {{.vm}}, because it saves only links to files inside the same settings folder."
+func AgentSaveLinkLeftOut(path string, vm string) M {
+	return M{id: "agent_save_link_left_out", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// AgentSaveNoAgent is [agent_save_no_agent]: "{{.vm}} has no agent, so there are no settings to save."
+func AgentSaveNoAgent(vm string) M {
+	return M{id: "agent_save_no_agent", vals: []val{{"vm", vm}}}
+}
+
+// AgentSaveNone is [agent_save_none]: "{{.vm}} doesn't have {{.agent}}, so devvm saves nothing of it."
+func AgentSaveNone(agent string, vm string) M {
+	return M{id: "agent_save_none", vals: []val{{"agent", agent}, {"vm", vm}}}
+}
+
+// AgentSaveNotRead is [agent_save_not_read]: "Reading the agents' settings from {{.vm}} failed."
+func AgentSaveNotRead(vm string) M {
+	return M{id: "agent_save_not_read", vals: []val{{"vm", vm}}}
+}
+
+// AgentSaveNothing is [agent_save_nothing]: "The settings of {{.vm}}'s agents are the same as devvm's agent store has."
+func AgentSaveNothing(vm string) M {
+	return M{id: "agent_save_nothing", vals: []val{{"vm", vm}}}
+}
+
+// AgentSavePlaceholder is [agent_save_placeholder]: "devvm left out {{.path}} in {{.vm}}, because it holds a placeholder for a secret that devvm can't put back. Change the file in devvm's agent store instead."
+func AgentSavePlaceholder(path string, vm string) M {
+	return M{id: "agent_save_placeholder", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// AgentSaveRefused is [agent_save_refused]: "devvm agent save shows what changed and asks before it saves. Run it in a terminal."
+func AgentSaveRefused() M {
+	return M{id: "agent_save_refused"}
+}
+
+// AgentSaveRuns is [agent_save_runs]: "Every VM with these agents runs the hooks, the MCP servers' commands and the plugins you save."
+func AgentSaveRuns() M {
+	return M{id: "agent_save_runs"}
+}
+
+// AgentSaveTooMuch is [agent_save_too_much]: "{{.vm}} sent more than devvm saves at once, so devvm saved nothing. Take out what the agents' settings folders don't need, such as a plugin's build files."
+func AgentSaveTooMuch(vm string) M {
+	return M{id: "agent_save_too_much", vals: []val{{"vm", vm}}}
+}
+
+// AgentSaveUnparsed is [agent_save_unparsed]: "devvm left out {{.path}} in {{.vm}}, because it isn't a settings file devvm can read."
+func AgentSaveUnparsed(path string, vm string) M {
+	return M{id: "agent_save_unparsed", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// AgentSaveUnsafe is [agent_save_unsafe]: "{{.vm}} sent {{.path}}, which isn't among the agents' settings, so devvm saved nothing."
+func AgentSaveUnsafe(path string, vm string) M {
+	return M{id: "agent_save_unsafe", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// AgentSaveWithheld is [agent_save_withheld]: "devvm left out {{.path}} in {{.vm}}, because no VM gets that file from devvm's agent store. Change the store's file instead."
+func AgentSaveWithheld(path string, vm string) M {
+	return M{id: "agent_save_withheld", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
 // AgentSettingsImported is [agent_settings_imported]: "devvm imported {{.agent}}'s settings into {{.dir}}."
 func AgentSettingsImported(agent string, dir string) M {
 	return M{id: "agent_settings_imported", vals: []val{{"agent", agent}, {"dir", dir}}}
+}
+
+// AgentSettingsSaved is [agent_settings_saved]: "devvm saved {{.agent}}'s settings from {{.vm}} into {{.dir}}."
+func AgentSettingsSaved(agent string, dir string, vm string) M {
+	return M{id: "agent_settings_saved", vals: []val{{"agent", agent}, {"dir", dir}, {"vm", vm}}}
 }
 
 // AgentStartFailed is [agent_start_failed]: "The SSH agent devvm runs didn't start at {{.sock}}."
@@ -2289,6 +2369,11 @@ func NothingImported() M {
 	return M{id: "nothing_imported"}
 }
 
+// NothingSaved is [nothing_saved]: "nothing saved"
+func NothingSaved() M {
+	return M{id: "nothing_saved"}
+}
+
 // NothingToClean is [nothing_to_clean]: "nothing to clean up"
 func NothingToClean() M {
 	return M{id: "nothing_to_clean"}
@@ -3544,7 +3629,23 @@ var specs = map[string]spec{
 	"agent_login_read_failed":        {fields: []string{"file", "reason"}},
 	"agent_no_keys":                  {},
 	"agent_on_risk":                  {fields: []string{"vm"}},
+	"agent_save_ask":                 {fields: []string{"vm"}},
+	"agent_save_failed":              {fields: []string{"reason"}},
+	"agent_save_kind_left_out":       {fields: []string{"path", "vm"}},
+	"agent_save_link_left_out":       {fields: []string{"path", "vm"}},
+	"agent_save_no_agent":            {fields: []string{"vm"}},
+	"agent_save_none":                {fields: []string{"agent", "vm"}},
+	"agent_save_not_read":            {fields: []string{"vm"}},
+	"agent_save_nothing":             {fields: []string{"vm"}},
+	"agent_save_placeholder":         {fields: []string{"path", "vm"}},
+	"agent_save_refused":             {},
+	"agent_save_runs":                {},
+	"agent_save_too_much":            {fields: []string{"vm"}},
+	"agent_save_unparsed":            {fields: []string{"path", "vm"}},
+	"agent_save_unsafe":              {fields: []string{"path", "vm"}},
+	"agent_save_withheld":            {fields: []string{"path", "vm"}},
 	"agent_settings_imported":        {fields: []string{"agent", "dir"}},
+	"agent_settings_saved":           {fields: []string{"agent", "dir", "vm"}},
 	"agent_start_failed":             {fields: []string{"sock"}},
 	"agent_unload_failed":            {fields: []string{"key"}},
 	"agents_help":                    {},
@@ -3968,6 +4069,7 @@ var specs = map[string]spec{
 	"nothing_changed":                {},
 	"nothing_deleted":                {},
 	"nothing_imported":               {},
+	"nothing_saved":                  {},
 	"nothing_to_clean":               {},
 	"oci_waiting":                    {},
 	"opencode_login_kept":            {fields: []string{"providers"}},

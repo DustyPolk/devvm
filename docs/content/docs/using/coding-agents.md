@@ -44,7 +44,7 @@ Agents are [shared tools](images.md#shared-tools), like the toolchains, so you c
 
 ## devvm's agent store
 
-devvm keeps the agents' settings and logins on this machine in a store of its own, and every VM with an agent gets that agent's settings and logins from there. devvm never reads the agents' own files in your home folder for a VM, such as `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.config/opencode` or `~/.local/share/opencode`, so a VM gets the same settings and logins whether or not this machine has the agent. The one command that reads those files is [`devvm agent import`](#importing-from-this-machine), which copies them into the store when you run it.
+devvm keeps the agents' settings and logins on this machine in a store of its own, and every VM with an agent gets that agent's settings and logins from there. devvm never reads the agents' own files in your home folder for a VM, such as `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.config/opencode` or `~/.local/share/opencode`, so a VM gets the same settings and logins whether or not this machine has the agent. The one command that reads those files is [`devvm agent import`](#importing-from-this-machine), which copies them into the store when you run it, and [`devvm agent save`](#saving-a-vms-settings) copies the settings you changed in a VM into the store.
 
 The store has two folders for each agent, and each one holds the agent's files at the same paths below it as the agent keeps them in a home folder:
 
@@ -68,6 +68,7 @@ flowchart TD
   home -- "devvm agent import,<br>never your history" --> store
   folders -- "mounted<br>read-only" --> links
   files -- "copied on every<br>launch, without<br>your secrets" --> copies
+  copies -- "devvm agent save,<br>after a diff and a yes" --> store
   own -- "devvm history export,<br>devvm rm" --> export["a .tar.gz<br>on this machine"]
   export -. "devvm history import,<br>or yes when a new VM<br>offers it" .-> own
 ```
@@ -97,6 +98,23 @@ devvm reads each agent's settings inside the agent's own folder, such as `~/.cla
 When the store already has settings or a login of an agent you import, devvm asks in a terminal whether to replace them, and the answer is no unless you type `y`. Without a terminal, or with `--no-input`, devvm refuses and names `--force`, which replaces them without asking. A replacement writes each file again and takes out what your home folder no longer has, but it keeps the store's folders, so a running VM's mounts still show them. An agent whose settings aren't in your home folder keeps the store's settings, and one without a login there keeps the store's login.
 
 On macOS, Claude Code keeps its own login in the Keychain, and devvm neither reads it nor copies it. A VM's Claude Code logs in with a Claude Code token that devvm keeps with its secrets instead ([Claude Code login](#claude-code-login)).
+
+### Saving a VM's settings
+
+When you change an agent's settings in a VM, for example by installing a plugin or writing a skill there, `devvm agent save` copies them into the store, so every VM with that agent gets them. With no argument it saves every agent that the folder's VM has, and `devvm agent save claude` saves only the agents you name. devvm starts a stopped VM for it.
+
+```sh
+devvm agent save          # show what changed in the VM's agents' settings, then save them
+devvm agent save codex    # save only Codex's
+```
+
+The save reads only the settings in the table above from the VM's home, and never the logins, so it never reads your history, `~/.claude/.credentials.json`, `~/.codex/auth.json` or opencode's `auth.json`. From the VM's `~/.claude.json` it keeps only the settings, account state and MCP servers, as the import does, and the VM leaves out its per-project entries before it sends anything. devvm puts that part in the store's logins folder, where the import keeps it too. A folder that the store already has is mounted read-only in the VM, so the agent there can't change it, and the save leaves it as it is. A folder that the store doesn't have yet is the VM's own until you save it, and once the VM next starts with the store's new folder mounted, its setup links that folder in place of its own ([mounts](#mounts)).
+
+Before it saves anything, devvm shows what would change. For each folder it lists the files it adds (A), changes (M) and removes (D), and then it shows a diff of each file it adds or changes against the store's copy, with a line when a file's mode changes. The diff shows the settings files and `~/.claude.json` as a VM gets them, written out again with `devvm-redacted` in place of the values that look like secrets, so it never prints your secrets, and it says so when only those values or the file's layout changed. Every character that a terminal wouldn't show, such as a control character, a zero-width character or a character that reverses the text, appears in the diff as its code, such as `\u{200b}`, so a VM can't hide a line from you. The diff names a binary file without showing it, and it shows a file of more than 1 MiB or 10,000 lines, and every line past the first 20,000 of the whole diff, only as a count. Then devvm says that every VM with these agents runs the hooks, the MCP servers' commands and the plugins you save, and it asks whether to save them, and the answer is no unless you type `y`. Read the diff before you answer, because a hook or a plugin that a [rogue agent](../safety/attack-vectors.md#rogue-agents) added in one VM runs in every VM once you save it. devvm agent save always asks, and no flag answers for you, so without a terminal, or with `--no-input`, it shows what would change and then refuses.
+
+devvm treats everything the VM sends as untrusted, because the agent in the VM could have changed any of it. It reads at most 128 MiB from the VM, in at most 20,000 files, folders and links, none of the files larger than 16 MiB, and when the VM sends more, or sends a path outside the agents' settings or a name with a character that a terminal wouldn't show, devvm saves nothing. Each file it saves is yours alone (mode 600), or mode 700 when it was executable in the VM, so it never keeps a set-user-ID or set-group-ID bit. A link in a settings folder that leads to a file in the same folder becomes a copy of that file. devvm leaves out any other link, any other kind of file, such as a socket, and a settings file that it can't parse whole, such as a `settings.json` that isn't JSON, and it warns you about each. When it leaves out a file in a folder, the store keeps its own copy of that file. A settings file that the VM doesn't have stays in the store. A folder that the VM sends replaces the store's folder whole, so devvm writes each of its files again and takes out the files that the VM's folder doesn't have, but it keeps the store's folder itself, so a running VM's mounts still show it.
+
+The VM's [copies](#copies) of the settings files and of `~/.claude.json` hold placeholders, such as `devvm-redacted`, where the store has your secrets. devvm puts the store's secret back in place of each placeholder, as long as the VM's copy had that placeholder in that place and nothing around it changed, such as the URL of the MCP server that a header is for. When something around a placeholder changed, devvm leaves the whole file out and warns you, so a VM can't send a secret it never saw to another host, and you can make that change in the store's file yourself. devvm also leaves out any other file that holds a placeholder, such as a skill. No VM gets opencode's files in `~/.config/opencode` that are neither settings nor Markdown, such as a `.env`, so devvm leaves out the VM's own file of that name and keeps the store's.
 
 ## Mounts
 

@@ -209,8 +209,11 @@ func jwtExp(tok string) (time.Time, bool) {
 // same claims give the same placeholder (bindings name it).
 func fakeJWT(claims map[string]any) string {
 	enc := func(v any) string { b, _ := json.Marshal(v); return base64.RawURLEncoding.EncodeToString(b) }
-	return enc(map[string]string{"alg": "none", "typ": "JWT"}) + "." + enc(claims) + ".devvm-placeholder"
+	return enc(map[string]string{"alg": "none", "typ": "JWT"}) + "." + enc(claims) + "." + jwtMark
 }
+
+// jwtMark is the signature of every JWT-shaped placeholder (fakeJWT).
+const jwtMark = "devvm-placeholder"
 
 // The account claims Codex and opencode read from tokens, without anything that grants access.
 func accountClaims(tok, salt string) map[string]any {
@@ -730,11 +733,7 @@ func ClaudeCopy(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	b, err := json.MarshalIndent(claudeTop(m), "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	return append(b, '\n'), nil
+	return encode("json", claudeTop(m))
 }
 
 func claudeVM(m map[string]any, salt string) map[string]any {

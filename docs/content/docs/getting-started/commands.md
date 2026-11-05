@@ -292,6 +292,7 @@ A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the 
 | --- | --- |
 | `devvm setup [--features LIST\|none] [--agents LIST\|none] [--layers LIST\|none]` | choose base's features and the coding agents and layers new VMs get, and in a terminal also new VMs' size and network tier ([details](../using/settings.md#devvm-setup)) |
 | `devvm agent import [AGENT...]` | copy the agents' settings and logins from your home folder into devvm's agent store, which every VM gets them from, never their history, asking before it replaces the store's ([details](../using/coding-agents.md#importing-from-this-machine)) |
+| `devvm agent save [AGENT...]` | copy the agents' settings from this folder's VM into devvm's agent store, never their logins or history, after showing what changed and asking ([details](../using/coding-agents.md#saving-a-vms-settings)) |
 | `devvm doctor` | check what devvm needs on this machine and say how to get what's missing ([details](install.md#checking-what-devvm-needs)) |
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
 | `devvm limactl ARGS...` | run Lima's `limactl` on the VMs and images in devvm's own Lima home, not `~/.lima`, for debugging, which starts VMs unconfined, whatever their tier ([details](../backends/lima.md#running-limactl)) |
@@ -342,7 +343,7 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 
 `--force` only skips a confirmation, and it never deletes more than the command does without it. A command that would delete something asks first in a terminal, and where devvm can't ask, it refuses unless you give `--force`.
 
-A few questions protect work that only you can judge, so no flag answers them, and devvm asks them only in a terminal. They are `devvm rm` deleting the VM of a folder this one is inside or the VM made for an earlier folder at this path, a `--clone` VM's commits that this repo hasn't fetched and its uncommitted changes, and a command giving the VM of a folder this one is inside more access. Where devvm can't ask, each of them refuses and says what to run instead.
+A few questions protect work that only you can judge, so no flag answers them, and devvm asks them only in a terminal. They are `devvm rm` deleting the VM of a folder this one is inside or the VM made for an earlier folder at this path, a `--clone` VM's commits that this repo hasn't fetched and its uncommitted changes, a command giving the VM of a folder this one is inside more access, and `devvm agent save` saving a VM's settings for every VM. Where devvm can't ask, each of them refuses and says what to run instead.
 
 With `--no-input`, devvm asks nothing even in a terminal, and it never reads an answer from a pipe or a file either. A question that has no usual answer fails instead, after devvm shows the question, and the error names the flag or command that answers it. A question fails the same way when you press Ctrl+D at the prompt, which ends the input before an answer.
 

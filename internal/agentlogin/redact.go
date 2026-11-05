@@ -12,19 +12,11 @@ package agentlogin
 // env var's name, {env:X} or ${X}, a path), and non-strings.
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"regexp"
 	"sort"
 	"strings"
 	"unicode"
-
-	"github.com/BurntSushi/toml"
-
-	"github.com/w3cj/devvm/internal/jsonc"
 )
 
 var (
@@ -85,39 +77,14 @@ func wholeTable(path, k string) bool {
 // the replaced values' paths, sorted. A file that doesn't parse is an error: it's refused rather
 // than copied unread.
 func Redact(format string, data []byte) ([]byte, []string, error) {
+	v, err := decode(format, data)
+	if err != nil {
+		return nil, nil, err
+	}
 	var r redaction
-	var out []byte
-	switch format {
-	case "json":
-		d := json.NewDecoder(bytes.NewReader(jsonc.Strip(data)))
-		d.UseNumber()
-		var v any
-		if err := d.Decode(&v); err != nil {
-			return nil, nil, fmt.Errorf("not JSON: %w", err)
-		}
-		if _, err := d.Token(); !errors.Is(err, io.EOF) {
-			return nil, nil, errors.New("not JSON: more after its value")
-		}
-		var b bytes.Buffer
-		e := json.NewEncoder(&b)
-		e.SetEscapeHTML(false)
-		e.SetIndent("", "  ")
-		if err := e.Encode(r.value(v, "", "", false)); err != nil {
-			return nil, nil, err
-		}
-		out = b.Bytes()
-	case "toml":
-		var m map[string]any
-		if _, err := toml.Decode(string(data), &m); err != nil {
-			return nil, nil, fmt.Errorf("not TOML: %w", err)
-		}
-		var b bytes.Buffer
-		if err := toml.NewEncoder(&b).Encode(r.value(m, "", "", false)); err != nil {
-			return nil, nil, err
-		}
-		out = b.Bytes()
-	default:
-		return nil, nil, fmt.Errorf("unknown format %q", format)
+	out, err := encode(format, r.value(v, "", "", false))
+	if err != nil {
+		return nil, nil, err
 	}
 	sort.Strings(r.paths)
 	return out, r.paths, nil

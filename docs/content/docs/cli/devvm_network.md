@@ -1,6 +1,6 @@
 ---
 title: devvm network
-weight: 33
+weight: 34
 ---
 
 Show or change the network tier of this folder's VM

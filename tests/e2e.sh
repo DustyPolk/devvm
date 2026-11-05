@@ -2357,6 +2357,22 @@ check "the VM gets the host's git identity, timezone and its hostname" in_vm "$v
 check "an open VM gets the Claude Code token's placeholder, never the token" bash -c "
   [[ \$(limactl shell --workdir / $vm bash -lc 'printenv CLAUDE_CODE_OAUTH_TOKEN' </dev/null) == sk-ant-oat01-devvm-proxy-managed-$(st_get "$(vmdir "$vm")" net.made.proxy_salt) ]] &&
   ! limactl shell --workdir / $vm sudo grep -rqs -e e2efake-plain /etc /home /root </dev/null"
+# devvm agent save: the VM's changed settings file and a folder of its own, with a link out of it and a
+# fake login beside them; refused without a terminal, saved after a yes, never the login or the link.
+in_vm "$vm" 'echo "{\"theme\":\"e2e-settings\",\"e2eSaved\":true}" > ~/.claude/settings.json && mkdir -p ~/.claude/commands &&
+  echo "# e2e command" > ~/.claude/commands/e2e.md && ln -s /etc/hostname ~/.claude/commands/escape &&
+  echo e2e-credentials > ~/.claude/.credentials.json'
+check "devvm agent save without a terminal shows what changed, then saves nothing" bash -c "cd '$a' &&
+  ! HOME='$ah' '$D' agent save </dev/null >'$work/last.log' 2>&1 &&
+  grep -q '^+  \"e2eSaved\": true' '$work/last.log' && grep -qx '  A e2e.md' '$work/last.log' &&
+  grep -qF \"\$(m agent_save_refused)\" '$work/last.log' && ! grep -q e2eSaved '$store/.claude/settings.json' && [[ ! -e '$store/.claude/commands' ]]"
+check "after a yes it saves them into the store, never the VM's login or a link out of the folder" bash -c "cd '$a' &&
+  printf 'y\n' | DEVVM_PIPED_ANSWERS=1 HOME='$ah' '$D' agent save >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m agent_settings_saved agent=claude dir=$store vm=$vm)\" '$work/last.log' &&
+  grep -qF \"\$(m agent_save_link_left_out path=.claude/commands/escape vm=$vm)\" '$work/last.log' &&
+  grep -q e2eSaved '$store/.claude/settings.json' && grep -q 'e2e command' '$store/.claude/commands/e2e.md' &&
+  [[ ! -e '$store/.claude/commands/escape' && ! -L '$store/.claude/commands/escape' ]] &&
+  ! grep -rqs e2e-credentials '$store' '$XDG_DATA_HOME/devvm/logins'"
 mkdir -p "$store/.claude/agents"
 check "a new agent folder in the store is noticed on launch, and waits for a restart" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' 2>&1 |
   grep -qF \"\$(m next_start_mounts vm=$vm | head -1)\""
@@ -3087,6 +3103,19 @@ check "the next launch, going directly, gives the VM the captured login as place
   ! grep -q e2efake '$work/vm-codex.json' && [[ \$(jget '$work/vm-codex.json' tokens.refresh_token) == devvm-proxy-managed ]] &&
   [[ \$(jget '$work/vm-codex.json' tokens.access_token) == \$(jget '$work/cap1.json' access_token) ]] &&
   [[ \$(jget '$work/vm-codex.json' OPENAI_API_KEY) == sk-devvm-proxy-managed-codex-$salt ]]"
+# devvm agent save from the VM with network policy: its ~/.claude.json holds the MCP server's header as
+# a placeholder, which the save puts the store's value back for, and a changed URL around it is refused.
+in_vm "$vm" 'jq ".theme = \"e2e-saved\"" ~/.claude.json > ~/.claude.json.t && mv ~/.claude.json.t ~/.claude.json'
+check "devvm agent save puts the store's MCP header back for the VM's placeholder" bash -c "cd '$n' &&
+  printf 'y\n' | DEVVM_PIPED_ANSWERS=1 HOME='$nh' '$D' agent save claude >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m agent_settings_saved agent=claude dir=$XDG_CONFIG_HOME/devvm/agents/claude vm=$vm)\" '$work/last.log' &&
+  grep -q e2e-saved '$logins/claude/.claude.json' && grep -q e2efake-mcp '$logins/claude/.claude.json' &&
+  ! grep -q devvm-proxy-managed '$logins/claude/.claude.json' && ! grep -q projects '$logins/claude/.claude.json'"
+in_vm "$vm" 'jq ".mcpServers.e2e.url = \"https://example.com/devvm-e2e-mcp\"" ~/.claude.json > ~/.claude.json.t && mv ~/.claude.json.t ~/.claude.json'
+check "... and refuses it when the server's URL changed, so the header never goes to another host" bash -c "cd '$n' &&
+  printf 'y\n' | DEVVM_PIPED_ANSWERS=1 HOME='$nh' '$D' agent save claude >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m agent_save_placeholder path=.claude.json vm=$vm)\" '$work/last.log' &&
+  grep -q 'api.github.com/devvm-e2e-mcp' '$logins/claude/.claude.json' && ! grep -q example.com '$logins/claude/.claude.json'"
 # devvm secret with a fake GitHub token: in the Keychain under this run's service on macOS, else in
 # the sandbox's config folder; deleted at the end. macOS finds the Keychain through HOME, so the
 # VM's home links the Keychains folder (the link alone goes at the end).

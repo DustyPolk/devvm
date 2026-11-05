@@ -29,6 +29,8 @@ import (
 //	sync-fails-with     the setup fails, and this file is the VM's /run/devvm/tools-unmounted
 //	history-unsafe      an import of agents' history finds a path outside them (and fails)
 //	packages-out.tar    the packages a base build gives back, else none
+//	agent-save.tar      the stream devvm agent save reads of the VM's agents' settings, else
+//	                    an empty one
 //	net-direct          a direct connection (curl --noproxy, past the VM's proxy) works,
 //	                    which fails as a confined VM's does without it
 //	hostkeys-fails      the VM doesn't show its ssh host keys, which are otherwise one
@@ -174,6 +176,12 @@ func (g *guest) files() (code int, done bool) {
 			return 1, true
 		}
 		return 0, false
+	case strings.Contains(all, ".devvm-save"):
+		if g.on("shell-fails") || g.mentions("shell-fails-on") {
+			return 1, true
+		}
+		g.print(string(g.raw("agent-save.tar", string(make([]byte, 1024)))))
+		return 0, true
 	case strings.Contains(all, "tar -x -C "):
 		return g.status(g.copyIn("packages-in.tar")), true
 	case strings.Contains(all, "tar -c -C "):

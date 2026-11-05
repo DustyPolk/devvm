@@ -1,0 +1,106 @@
+# devvm agent save: the folder's VM's agents' settings read from the VM
+# (the stub's agent-save.tar stands for its stream), shown as a diff and a
+# list of a folder's files, then saved into devvm's store after a yes. It
+# always asks: without a terminal or with --no-input it's refused, and the
+# store stays as it is. A stream with anything outside the agents'
+# settings saves nothing.
+env COPYFILE_DISABLE=1
+
+# Its arguments are agents; without a VM there's nothing to save from.
+! exec devvm agent save nope
+stderr '^devvm: arg_not_choice choices=claude, codex, opencode command=devvm agent save given=nope$'
+project agent
+! exec devvm agent save
+stderr '^devvm: no_vm dir=\S*/agent$'
+
+# A VM with Claude Code: an agent it doesn't have is warned about, and
+# an empty stream is nothing to save.
+exec devvm --network open --no-git-protect --agents claude
+vm_name AGENT agent
+stub_reset
+exec devvm agent save codex
+stderr '^devvm: agent_save_none agent=codex vm='$AGENT'$'
+exec devvm agent save
+stdout '^==> agent_save_nothing vm='$AGENT'$'
+stub_calls
+stdout '\.devvm-save'
+stdout 'jq --argjson k'
+
+# The VM's settings: without a terminal, the diff and the folder's files,
+# then the refusal; nothing saved.
+mkdir $CFG/agents/claude/.claude
+cp $WORK/old-settings.json $CFG/agents/claude/.claude/settings.json
+exec tar -cf $STUB_DIR/agent-save.tar -C $WORK/vm .devvm-save .claude/settings.json .claude/skills
+! exec devvm agent save
+stdout '^--- \S*/config/devvm/agents/claude/\.claude/settings\.json$'
+stdout '^\+\+\+ '$AGENT':~/\.claude/settings\.json$'
+stdout '^-  "theme": "dark"$'
+stdout '^\+  "theme": "light"$'
+stdout '^~/\.claude/skills in '$AGENT', into \S*/config/devvm/agents/claude/\.claude/skills:$'
+stdout '^  A s/SKILL\.md$'
+stdout '^\+\+\+ '$AGENT':~/\.claude\.json$'
+stderr '^devvm: agent_save_refused$'
+! stderr agent_save_ask
+cmp $CFG/agents/claude/.claude/settings.json $WORK/old-settings.json
+! exists $CFG/agents/claude/.claude/skills
+! exec devvm agent save --no-input
+stderr '^devvm: agent_save_refused$'
+
+# In a terminal it says what saved settings run, and asks: no saves
+# nothing, yes saves them, with ~/.claude.json's subset, never its
+# projects.
+ttyin -stdin $WORK/no.txt
+exec devvm agent save
+stderr '^agent_save_runs$'
+stderr 'agent_save_ask vm='$AGENT' \[y/N\] '
+stdout '^==> nothing_saved$'
+cmp $CFG/agents/claude/.claude/settings.json $WORK/old-settings.json
+ttyin -stdin $WORK/yes.txt
+exec devvm agent save claude
+stdout '^==> agent_settings_saved agent=claude dir=\S*/config/devvm/agents/claude vm='$AGENT'$'
+cmp $CFG/agents/claude/.claude/settings.json $WORK/vm/.claude/settings.json
+cmp $CFG/agents/claude/.claude/skills/s/SKILL.md $WORK/vm/.claude/skills/s/SKILL.md
+grep '"theme": "light"' $DATA/logins/claude/.claude.json
+! grep projects $DATA/logins/claude/.claude.json
+
+# Saved, it's the same as the store's.
+exec devvm agent save
+stdout '^==> agent_save_nothing vm='$AGENT'$'
+
+# A stream with a path outside the agents' settings saves nothing.
+cp $WORK/new-settings.json $WORK/vm/.claude/settings.json
+exec tar -cf $STUB_DIR/agent-save.tar -C $WORK/vm .devvm-save .claude/settings.json .bashrc
+env DEVVM_PIPED_ANSWERS=1
+stdin $WORK/yes.txt
+! exec devvm agent save
+env DEVVM_PIPED_ANSWERS=
+stderr '^devvm: agent_save_unsafe path=\.bashrc vm='$AGENT'$'
+! stdout '^\+\+\+'
+cmp $CFG/agents/claude/.claude/settings.json $WORK/old-light.json
+
+# The VM's tar failing is a failed read.
+exec sh -c 'echo .devvm-save > "$STUB_DIR/shell-fails-on"'
+! exec devvm agent save
+stderr '^devvm: agent_save_not_read vm='$AGENT'$'
+rm $STUB_DIR/shell-fails-on
+
+-- old-settings.json --
+{"theme": "dark"}
+-- old-light.json --
+{"theme": "light"}
+-- new-settings.json --
+{"theme": "blue"}
+-- vm/.claude/settings.json --
+{"theme": "light"}
+-- vm/.claude/skills/s/SKILL.md --
+# a skill made in the VM
+-- vm/.bashrc --
+echo hi
+-- vm/.devvm-save/home --
+/home/u.linux
+-- vm/.devvm-save/claude.json --
+{"theme": "light", "projects": {"/p": {"history": ["testfake-history"]}}}
+-- no.txt --
+n
+-- yes.txt --
+y

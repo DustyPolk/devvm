@@ -1,6 +1,6 @@
 ---
 title: devvm tools
-weight: 57
+weight: 58
 ---
 
 Show or choose this folder's VM's shared tools

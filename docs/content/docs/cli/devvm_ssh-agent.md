@@ -1,6 +1,6 @@
 ---
 title: devvm ssh-agent
-weight: 53
+weight: 54
 ---
 
 Show or change SSH agent forwarding for this folder's VM

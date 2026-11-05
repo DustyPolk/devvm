@@ -132,11 +132,21 @@ func agentDirs(home, agent string) []string {
 	}
 	var dirs []string
 	for _, e := range readDir(filepath.Join(home, opencodeDir)) {
-		if e.IsDir() && e.Name() != "node_modules" {
+		if e.IsDir() && opencodeFolder(e.Name()) {
 			dirs = append(dirs, opencodeDir+"/"+e.Name())
 		}
 	}
 	return dirs
+}
+
+// opencodeFolder reports whether a folder of opencode's config folder,
+// by its name, is among its settings: all but node_modules.
+func opencodeFolder(name string) bool { return name != "node_modules" }
+
+// opencodeFile reports whether a file of opencode's config folder, by its
+// name, is among its settings: all but lock files and the like.
+func opencodeFile(name string) bool {
+	return !strings.HasSuffix(name, ".lock") && name != "package-lock.json" && name != ".gitignore" && name != ".DS_Store"
 }
 
 // agentFiles returns an agent's settings files, relative to home, a home
@@ -148,9 +158,8 @@ func agentFiles(home, agent string) []string {
 		return files
 	}
 	for _, e := range readDir(filepath.Join(home, opencodeDir)) {
-		n := e.Name()
-		if e.Type().IsRegular() && !strings.HasSuffix(n, ".lock") && n != "package-lock.json" && n != ".gitignore" && n != ".DS_Store" {
-			files = append(files, opencodeDir+"/"+n)
+		if e.Type().IsRegular() && opencodeFile(e.Name()) {
+			files = append(files, opencodeDir+"/"+e.Name())
 		}
 	}
 	return files
