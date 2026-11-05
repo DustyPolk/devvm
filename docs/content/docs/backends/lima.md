@@ -42,6 +42,7 @@ devvm limactl shell --start devvm-img-<key>
 ```
 
 - It runs from devvm's data folder, as devvm's own `limactl` commands do, so give files by their absolute path.
+- It runs without your SSH agent, so a VM never gets your agent through it, whatever its [SSH agent](../using/ssh.md#agent-forwarding) choice says ([why](../internals/security.md)).
 - A VM you start this way, with `devvm limactl start` or `shell --start`, runs unconfined, without its network policy, and `devvm ls` shows it as `unenforced` ([confinement](../internals/lima.md#confinement)). Start project VMs with devvm.
 
 ## File watchers

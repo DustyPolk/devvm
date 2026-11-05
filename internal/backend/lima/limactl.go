@@ -70,7 +70,8 @@ func (l *Lima) limactl(ctx context.Context, args ...string) *exec.Cmd {
 // Limactl is devvm limactl: limactl with args, on devvm's own Lima home,
 // in devvm's place, so its input, output, terminal and exit code are the
 // user's. It runs in devvm's data folder, as devvm's own limactl commands
-// do. It returns only when it can't run limactl.
+// do. It carries no SSH agent (limactlEnv). It returns only when it can't
+// run limactl.
 func Limactl(d paths.Dirs, args []string) error {
 	path, err := exec.LookPath("limactl")
 	if err != nil {
@@ -83,7 +84,17 @@ func Limactl(d paths.Dirs, args []string) error {
 		return err
 	}
 	argv := append([]string{"limactl"}, args...)
-	return platform.Exec(path, argv, setEnv(os.Environ(), "LIMA_HOME="+d.Lima))
+	return platform.Exec(path, argv, limactlEnv(os.Environ(), d))
+}
+
+// limactlEnv is devvm limactl's environment: env on devvm's Lima home,
+// without SSH_AUTH_SOCK. Lima's ssh shares one connection per VM
+// (ControlMaster auto, ControlPersist yes), and an agent forwarded over it
+// is the agent of the ssh that opened it, so a limactl shell that opened
+// it with the user's agent would hand that agent to devvm's later
+// sessions of a VM whose choice is devvm's own agent or none.
+func limactlEnv(env []string, d paths.Dirs) []string {
+	return setEnv(env, "SSH_AUTH_SOCK", "LIMA_HOME="+d.Lima)
 }
 
 // withAgent gives a limactl command that reaches a VM the VM's SSH agent,

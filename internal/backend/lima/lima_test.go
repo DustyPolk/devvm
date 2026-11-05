@@ -845,6 +845,16 @@ func TestExecAndShell(t *testing.T) {
 	}
 }
 
+// devvm limactl passes the user's environment on, but on devvm's Lima home
+// and without the user's SSH agent, which a shared ssh connection it
+// opened would carry into devvm's own sessions.
+func TestLimactlEnv(t *testing.T) {
+	env := limactlEnv([]string{"PATH=/bin", "SSH_AUTH_SOCK=/user/agent", "LIMA_HOME=/mine"}, paths.Dirs{Lima: "/d/lima"})
+	if want := []string{"PATH=/bin", "LIMA_HOME=/d/lima"}; !slices.Equal(env, want) {
+		t.Errorf("limactlEnv = %q, want %q", env, want)
+	}
+}
+
 // Against the limactl stub: a VM Lima reports as broken (its start cut
 // short before its hostagent answers) is stopped with --force, which
 // limactl stop alone refuses.
