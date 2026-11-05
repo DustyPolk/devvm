@@ -2096,6 +2096,24 @@ check "stopped, devvm starts it again, on a new ssh port when a program here has
   [[ \$(limactl list --format '{{.SSHLocalPort}}' $vm) == \"\$sp\" ]] && kill -0 '$hostprog'"
 kill "$hostprog" 2>/dev/null; wait "$hostprog" 2>/dev/null; hostprog=""
 check "running, devvm opens it as it is" bash -c "cd '$p' && printf 'echo e2e-running\n' | '$D' 2>&1 | grep -qx e2e-running"
+# unsynced_kept: a file written without sync, then devvm stop at once, is there with its checksum
+# after the next start: the guest shut down cleanly. The stop's seconds and any forced stop Lima
+# logged go in the run's output, pass or fail.
+unsynced_kept() {
+  local ha=$DEVVM_LIMA_HOME/$vm/ha.stderr.log sum t0 t1 after
+  sum=$(in_vm "$vm" 'head -c 1048576 /dev/urandom > ~/e2e-unsynced && sha256sum ~/e2e-unsynced' | awk '{print $1}')
+  t0=$(date +%s)
+  (cd "$p" && "$D" stop </dev/null >/dev/null 2>&1) || { echo "stop failed"; return 1; }
+  t1=$(date +%s)
+  echo "unsynced: stop took $((t1 - t0))s" | tee "$work/unsynced.txt"
+  grep -i 'forc' "$ha" 2>/dev/null | sed 's/^/unsynced: lima: /' | tee -a "$work/unsynced.txt"
+  (cd "$p" && printf 'exit\n' | "$D" >/dev/null 2>&1) || { echo "start failed"; return 1; }
+  after=$(in_vm "$vm" 'sha256sum ~/e2e-unsynced 2>&1; rm -f ~/e2e-unsynced' | awk '{print $1}')
+  echo "unsynced: before $sum after $after"
+  [[ -n $sum && $sum == "$after" ]]
+}
+check "a file written without sync just before devvm stop is kept" unsynced_kept
+sed 's/^/  /' "$work/unsynced.txt" 2>/dev/null; rm -f "$work/unsynced.txt"
 # devvm host with a home of its own, so the Include line is offered for an empty one (and, without a
 # terminal, not added).
 mkdir -p "$sc/home"
