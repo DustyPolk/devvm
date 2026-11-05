@@ -415,9 +415,11 @@ func TestReady(t *testing.T) {
 	}
 }
 
-// A process just started whose arguments can't be read yet (Linux's
-// moment between exec letting its parent go on and the program loaded)
-// is still waited for; one whose arguments are another program's isn't.
+// A process just started whose arguments don't say it's this one yet is
+// still waited for while they read as its parent's, devvm's own (Linux's
+// moment after exec lets the parent go on, before it replaces the
+// child's memory), then as none (before the program is loaded); one
+// whose arguments are another program's isn't.
 func TestReadyArgsUnread(t *testing.T) {
 	p, start, ours := proc(t)
 	status := filepath.Join(t.TempDir(), "v.status")
@@ -426,16 +428,20 @@ func TestReadyArgsUnread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	args, unread := p.Args, 3
+	args, parents, unread := p.Args, 2, 2
 	p.Args = func(pid int) ([]string, error) {
-		if unread > 0 {
+		switch {
+		case parents > 0:
+			parents--
+			return slices.Clone(os.Args), nil
+		case unread > 0:
 			unread--
 			return nil, errors.New("no arguments yet")
 		}
 		return args(pid)
 	}
-	if got, ok := p.Ready(status, pid, 20*time.Millisecond, 100); !ok || got != "127.0.0.1:3128" || unread != 0 {
-		t.Errorf("Ready = %q, %v; %d unread looks left", got, ok, unread)
+	if got, ok := p.Ready(status, pid, 20*time.Millisecond, 100); !ok || got != "127.0.0.1:3128" || parents+unread != 0 {
+		t.Errorf("Ready = %q, %v; %d parent's and %d unread looks left", got, ok, parents, unread)
 	}
 	delete(ours, pid)
 	if _, ok := p.Ready(status, pid, time.Millisecond, 10); ok {

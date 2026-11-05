@@ -129,18 +129,20 @@ func (p Proc) Ready(status string, pid int, tick time.Duration, tries int) (stri
 }
 
 // starting reports whether pid, which Start just started, still runs as
-// this one, as runs does, except that one whose arguments can't be read
-// yet still counts: Linux lets the parent go on as exec replaces the
-// process's memory, then shows its new arguments only once the program
-// is loaded, so for a moment they read as none. One that has ended is
-// reaped (Detach), so it no longer counts once it's gone.
+// this one, as runs does, except that one whose arguments don't say so
+// yet still counts while they read as none or as devvm's own: Linux lets
+// the parent go on as exec begins, while the child still has the
+// parent's memory, and so its arguments, then shows none as exec
+// replaces that memory, and its new ones only once the program is
+// loaded. One that has ended is reaped (Detach), so it no longer counts
+// once it's gone.
 func (p Proc) starting(pid int) bool {
 	cur, ok := readLine(p.PIDFile)
 	if !ok || cur != pid || !Alive(pid) {
 		return false
 	}
 	args, err := p.Args(pid)
-	return err != nil || p.Is(args)
+	return err != nil || p.Is(args) || slices.Equal(args, os.Args)
 }
 
 // writeLine writes s as a file's one line, mode 600, in a single write:
