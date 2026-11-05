@@ -38,7 +38,9 @@ func newDoctorCmd(a *app) *cobra.Command {
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			reg, b, err := doctorBackend(a)
-			fail(u, err, msg.DoctorFailed)
+			if err != nil {
+				return failed(err, msg.DoctorFailed)
+			}
 			d := doctor{
 				Path: onPath{LookPath: exec.LookPath, Executable: os.Executable},
 				Free: reg.Host.FreeSpace,
@@ -62,11 +64,7 @@ func newDoctorCmd(a *app) *cobra.Command {
 			if asJSON {
 				return printJSON(u, d.report(cmd.Context(), u.Text, reg.All(), b))
 			}
-			err = d.run(cmd.Context(), u, b)
-			if m, ok := errors.AsType[msg.M](err); ok {
-				u.Die(m)
-			}
-			return err
+			return d.run(cmd.Context(), u, b)
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print what it found as JSON, and succeed whatever is missing")

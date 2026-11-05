@@ -26,7 +26,7 @@ func newGitProtectCmd(a *app) *cobra.Command {
 		ValidArgs: gitprotect.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var mode string
-			a.env(func(env *vm.Env) error {
+			err := a.env(func(env *vm.Env) error {
 				s := vm.Settings{Env: env}
 				if len(args) == 1 {
 					return s.SetGitProtect(cmd.Context(), args[0])
@@ -35,8 +35,8 @@ func newGitProtectCmd(a *app) *cobra.Command {
 				mode, err = s.GitProtect(cmd.Context())
 				return err
 			}, msg.GitProtectFailed)
-			if len(args) == 1 {
-				return nil
+			if err != nil || len(args) == 1 {
+				return err
 			}
 			return printValue(a.u, asJSON, "mode", mode)
 		},

@@ -29,17 +29,18 @@ func newCloneCmd(a *app) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				command := "devvm clone " + args[0]
-				a.env(func(env *vm.Env) error {
+				return a.env(func(env *vm.Env) error {
 					return vm.Lifecycle{Env: env}.SetClone(cmd.Context(), command, args[0], o)
 				}, msg.RemakeFailed)
-				return nil
 			}
 			var mode string
-			a.env(func(env *vm.Env) error {
+			if err := a.env(func(env *vm.Env) error {
 				var err error
 				mode, err = vm.Settings{Env: env}.Clone(cmd.Context())
 				return err
-			}, msg.CloneShowFailed)
+			}, msg.CloneShowFailed); err != nil {
+				return err
+			}
 			return printValue(a.u, asJSON, "clone", mode)
 		},
 	}

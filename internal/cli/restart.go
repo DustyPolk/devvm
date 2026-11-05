@@ -19,8 +19,7 @@ func newRestartCmd(a *app) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			a.env(func(env *vm.Env) error { return vm.Launch{Env: env}.Restart(cmd.Context(), vm.Options{}) }, msg.UpFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Launch{Env: env}.Restart(cmd.Context(), vm.Options{}) }, msg.UpFailed)
 		},
 	}
 	addFolderFlags(cmd, a)

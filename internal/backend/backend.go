@@ -224,8 +224,8 @@ func Check(ctx context.Context, b Backend) error {
 var ErrNotFound = errors.New("no such VM")
 
 // LoggedError is a failure whose details are in the run log, from a
-// command run into it: the CLI ends with the UI's DieLogged(e.Msg), which
-// shows the log's end, rather than Die.
+// command run into it: the CLI shows it with the UI's ErrorLogged(e.Msg),
+// the log's end first, rather than the message alone.
 type LoggedError struct{ Msg msg.M }
 
 // Logged returns m as a LoggedError.

@@ -25,18 +25,18 @@ func newForwarderCmd(a *app) *cobra.Command {
 		Hidden:             true,
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fail := func(err error) { u.Die(msg.ForwarderFailed(err.Error()).Because(err)) }
+			fail := func(err error) error { return msg.ForwarderFailed(err.Error()).Because(err) }
 			d, err := a.dirs()
 			if err != nil {
-				fail(err)
+				return fail(err)
 			}
 			script, err := fs.ReadFile(assets.FS, "guest/ports.sh")
 			if err != nil {
-				fail(err)
+				return fail(err)
 			}
 			reserved := func(vm string) (map[int]bool, error) { return ports.Used(d, vm) }
 			if err := vmssh.Main(cmd.Context(), args, script, reserved, u.Stderr()); err != nil {
-				fail(err)
+				return fail(err)
 			}
 			return nil
 		},

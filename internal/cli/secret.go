@@ -66,8 +66,7 @@ func newSecretSetCmd(a *app) *cobra.Command {
 			"devvm secret set proxy", "save the company proxy's password, asking for it",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			saveSecret(cmd, a, args[0], stdin)
-			return nil
+			return saveSecret(cmd, a, args[0], stdin)
 		},
 	}
 	oneSecret(cmd)
@@ -77,7 +76,7 @@ func newSecretSetCmd(a *app) *cobra.Command {
 
 // saveSecret asks for a secret's token (with stdin, reads a line) and
 // saves it.
-func saveSecret(cmd *cobra.Command, a *app, name string, stdin bool) {
+func saveSecret(cmd *cobra.Command, a *app, name string, stdin bool) error {
 	u := a.u
 	var given string
 	if stdin {
@@ -95,7 +94,7 @@ func saveSecret(cmd *cobra.Command, a *app, name string, stdin bool) {
 		}
 		given = u.Secret(prompt)
 	}
-	a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
+	return a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
 }
 
 func newSecretRmCmd(a *app) *cobra.Command {
@@ -112,13 +111,14 @@ func newSecretRmCmd(a *app) *cobra.Command {
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ok, err := confirmed(u, force, "devvm secret rm", func() bool { return u.Ask(msg.SecretRmConfirm(args[0])) })
-			fail(u, err, msg.SecretFailed)
+			if err != nil {
+				return failed(err, msg.SecretFailed)
+			}
 			if !ok {
 				u.Info(msg.NothingDeleted())
 				return nil
 			}
-			a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretRm(cmd.Context(), args[0]) }, msg.SecretFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretRm(cmd.Context(), args[0]) }, msg.SecretFailed)
 		},
 	}
 	oneSecret(cmd)
@@ -143,11 +143,13 @@ type secretJSON struct {
 func listSecrets(cmd *cobra.Command, a *app, asJSON bool) error {
 	u := a.u
 	var ss []vm.SecretListed
-	a.env(func(env *vm.Env) error {
+	if err := a.env(func(env *vm.Env) error {
 		var err error
 		ss, err = vm.Net{Env: env}.Secrets(cmd.Context())
 		return err
-	}, msg.SecretFailed)
+	}, msg.SecretFailed); err != nil {
+		return err
+	}
 	if asJSON {
 		out := secretOutput{Secrets: make([]secretJSON, 0, len(ss))}
 		for _, s := range ss {
@@ -186,8 +188,7 @@ func newSecretUseCmd(a *app, name string, use bool) *cobra.Command {
 		Long:    long,
 		Example: example,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretUse(cmd.Context(), args[0], use) }, msg.SecretFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretUse(cmd.Context(), args[0], use) }, msg.SecretFailed)
 		},
 	}
 	oneSecret(cmd)

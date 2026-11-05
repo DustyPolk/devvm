@@ -30,7 +30,9 @@ func newLsCmd(a *app) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ls, err := listVMs(cmd, a)
-			fail(u, err, msg.LsFailed)
+			if err != nil {
+				return failed(err, msg.LsFailed)
+			}
 			if asJSON {
 				return printJSON(u, lsJSON(ls))
 			}

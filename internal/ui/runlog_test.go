@@ -117,20 +117,24 @@ func TestRunLogsFolder(t *testing.T) {
 	}
 }
 
-func TestDieLoggedShowsTheLogsEnd(t *testing.T) {
+func TestErrorLoggedShowsTheLogsEnd(t *testing.T) {
 	t.Parallel()
 	u, _, errOut := testUI(t, "")
 	_ = u.logged(t.Context(), msg.M{}, "sh", "-c", `printf 'guest\033]0;title\007 \302\233line\n'; exit 1`)
-	if code := exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) }); code != 1 {
-		t.Errorf("exit code %d, want 1", code)
-	}
+	u.ErrorLogged(msg.MsgUnknown("x"))
 	want := "--- log_end file=" + u.logPath() + "\n+ sh -c printf 'guest\\033]0;title\\007 \\302\\233line\\n'; exit 1\nguest]0;title line\n---\ndevvm: msg_unknown name=x\n"
 	if got := errOut.String(); got != want {
 		t.Errorf("got %q\nwant %q", got, want)
 	}
+	// Interrupted, nothing.
+	errOut.Reset()
+	u.interrupted.Store(true)
+	if u.ErrorLogged(msg.MsgUnknown("x")); errOut.Len() != 0 {
+		t.Errorf("interrupted: stderr %q, want nothing", errOut)
+	}
 	// Without a log, just the message.
 	u, _, errOut = testUI(t, "")
-	exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) })
+	u.ErrorLogged(msg.MsgUnknown("x"))
 	if got, want := errOut.String(), "devvm: msg_unknown name=x\n"; got != want {
 		t.Errorf("no log: got %q, want %q", got, want)
 	}
@@ -227,7 +231,7 @@ func TestRedactingWriter(t *testing.T) {
 
 // What a guest command writes through LogWriter is redacted too, a password split across writes
 // and calls included: a line's end still to come is written, redacted, at a logged command's
-// start, at DieLogged and at the run's end, and verbose streams it the same.
+// start, at ErrorLogged and at the run's end, and verbose streams it the same.
 func TestLogWriterRedacts(t *testing.T) {
 	t.Parallel()
 	pass := "e2e-not-a-secret" //nolint:gosec // a fake password
@@ -245,13 +249,13 @@ func TestLogWriterRedacts(t *testing.T) {
 		t.Errorf("log %q, stderr %q\nwant %q", got, errOut, want)
 	}
 
-	// DieLogged shows the line LogWriter holds, redacted.
+	// ErrorLogged shows the line LogWriter holds, redacted.
 	u, _, errOut = testUI(t, "")
 	_, _ = io.WriteString(u.LogWriter(), "failed: https://carol:"+pass+"@proxy")
-	exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) })
+	u.ErrorLogged(msg.MsgUnknown("x"))
 	if log := readFile(t, u.logPath()); log != "failed: https://carol:<password>@proxy" || strings.Contains(errOut.String(), pass) ||
 		!strings.Contains(errOut.String(), "carol:<password>@proxy") {
-		t.Errorf("DieLogged: log %q, stderr %q", log, errOut)
+		t.Errorf("ErrorLogged: log %q, stderr %q", log, errOut)
 	}
 
 	// The run's end writes it too.

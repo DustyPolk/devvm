@@ -58,16 +58,16 @@ func newNetworkCmd(a *app) *cobra.Command {
 			return []cobra.Completion{settings.NetworkOn, settings.NetworkOff}, cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			failed := msg.NetworkFailed
+			what := msg.NetworkFailed
 			if global {
-				failed = msg.NetDefaultFailed
+				what = msg.NetDefaultFailed
 			}
 			var (
 				mode  settings.Value
 				label string
 				shown vm.NetworkShown
 			)
-			a.env(func(env *vm.Env) error {
+			err := a.env(func(env *vm.Env) error {
 				n := vm.Net{Env: env}
 				var err error
 				switch {
@@ -82,10 +82,10 @@ func newNetworkCmd(a *app) *cobra.Command {
 					err = n.SetNetwork(cmd.Context(), args[0] == settings.NetworkOn)
 				}
 				return err
-			}, failed)
+			}, what)
 			switch {
-			case len(args) == 1:
-				return nil
+			case err != nil || len(args) == 1:
+				return err
 			case global:
 				return printDefault(u, asJSON, "policy", mode, label)
 			}
@@ -169,10 +169,9 @@ func newNetworkRuleCmds(a *app) []*cobra.Command {
 				return nil
 			}),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				a.env(func(env *vm.Env) error {
+				return a.env(func(env *vm.Env) error {
 					return vm.Net{Env: env}.PolicyChange(cmd.Context(), args, deny, remove, global)
 				}, msg.PolicyFailed)
-				return nil
 			},
 		}
 		c.Flags().BoolVarP(&global, "global", "g", false, "change your rules for every VM instead")
@@ -228,8 +227,7 @@ func newNetworkLogCmd(a *app) *cobra.Command {
 			if asJSON {
 				return printLogJSON(cmd, a, o)
 			}
-			a.env(func(env *vm.Env) error { return vm.Net{Env: env}.Log(cmd.Context(), a.u.Stdout(), o) }, msg.LogFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Net{Env: env}.Log(cmd.Context(), a.u.Stdout(), o) }, msg.LogFailed)
 		},
 	}
 	f := cmd.Flags()
@@ -286,7 +284,7 @@ func printLogJSON(cmd *cobra.Command, a *app, o vm.LogOptions) error {
 		events []netpolicy.Event
 		blocks []netpolicy.Block
 	)
-	a.env(func(env *vm.Env) error {
+	if err := a.env(func(env *vm.Env) error {
 		var err error
 		if o.Blocked {
 			blocks, err = vm.Net{Env: env}.LogBlocks(cmd.Context())
@@ -294,7 +292,9 @@ func printLogJSON(cmd *cobra.Command, a *app, o vm.LogOptions) error {
 			events, err = vm.Net{Env: env}.LogEvents(cmd.Context(), o.Lines)
 		}
 		return err
-	}, msg.LogFailed)
+	}, msg.LogFailed); err != nil {
+		return err
+	}
 	if o.Blocked {
 		out := blockedOutput{Blocked: make([]blockJSON, 0, len(blocks))}
 		for _, b := range blocks {

@@ -174,12 +174,12 @@ func (a *app) builder() (*build.Env, error) {
 	})
 }
 
-// env runs do in this folder's environment, failing with what's message
-// for an error that isn't one.
-func (a *app) env(do func(*vm.Env) error, what func(reason string) msg.M) {
+// env runs do in this folder's environment and returns its failure
+// (failed), with what's message for an error that isn't one.
+func (a *app) env(do func(*vm.Env) error, what func(reason string) msg.M) error {
 	env, err := a.vmEnv()
 	if err == nil {
 		err = do(env)
 	}
-	fail(a.u, err, what)
+	return failed(err, what)
 }

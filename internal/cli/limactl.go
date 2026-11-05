@@ -27,8 +27,7 @@ func newLimactlCmd(a *app) *cobra.Command {
 			if err == nil {
 				err = lima.Limactl(d, args)
 			}
-			fail(a.u, err, msg.LimactlFailed)
-			return nil
+			return failed(err, msg.LimactlFailed)
 		},
 	}
 	// --help is limactl's: hidden from devvm's help for this command.

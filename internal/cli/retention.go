@@ -54,10 +54,14 @@ func newRetentionCmd(a *app) *cobra.Command {
 		}),
 		RunE: func(_ *cobra.Command, args []string) error {
 			dirs, err := a.dirs()
-			fail(u, err, msg.RetentionSettingsFailed)
+			if err != nil {
+				return failed(err, msg.RetentionSettingsFailed)
+			}
 			if len(args) == 0 {
 				def, err := settings.Read(dirs)
-				fail(u, err, msg.RetentionSettingsFailed)
+				if err != nil {
+					return failed(err, msg.RetentionSettingsFailed)
+				}
 				if asJSON {
 					return printJSON(u, retentionJSON(def.Retention))
 				}
@@ -66,7 +70,9 @@ func newRetentionCmd(a *app) *cobra.Command {
 			}
 			change, _ := settings.ParseRetention(args) // checked by Args
 			_, err = settings.Save(dirs, settings.Values{Retention: change})
-			fail(u, err, msg.RetentionSettingsFailed)
+			if err != nil {
+				return failed(err, msg.RetentionSettingsFailed)
+			}
 			u.Info(msg.RetentionSaved(dirs.Settings()))
 			return nil
 		},

@@ -18,10 +18,9 @@ func newLinksCmd(a *app) *cobra.Command {
 		Hidden: true,
 		Args:   exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error {
+			return a.env(func(env *vm.Env) error {
 				return vm.Links{Env: env}.Session(cmd.Context(), args[0], a.u.Stderr())
 			}, msg.LinkSessionFailed)
-			return nil
 		},
 	}
 }

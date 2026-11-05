@@ -32,15 +32,16 @@ func newToolsCmd(a *app) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !asJSON && u.CanPick() {
-				a.env(func(env *vm.Env) error { return vm.Tools{Env: env}.Pick(cmd.Context(), vm.Options{}) }, msg.UpFailed)
-				return nil
+				return a.env(func(env *vm.Env) error { return vm.Tools{Env: env}.Pick(cmd.Context(), vm.Options{}) }, msg.UpFailed)
 			}
 			var ts []tools.VMTool
-			a.env(func(env *vm.Env) error {
+			if err := a.env(func(env *vm.Env) error {
 				var err error
 				ts, err = vm.Tools{Env: env}.List(cmd.Context())
 				return err
-			}, msg.ToolsFailed)
+			}, msg.ToolsFailed); err != nil {
+				return err
+			}
 			if asJSON {
 				return printJSON(u, toolsJSON(ts))
 			}
@@ -107,8 +108,7 @@ func newToolsAddCmd(a *app) *cobra.Command {
 		),
 		Args: toolNames("add"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error { return vm.Tools{Env: env}.Add(cmd.Context(), vm.Options{}, args) }, msg.UpFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Tools{Env: env}.Add(cmd.Context(), vm.Options{}, args) }, msg.UpFailed)
 		},
 		ValidArgsFunction: completeToolNames,
 	}, a)
@@ -126,8 +126,7 @@ func newToolsRmCmd(a *app) *cobra.Command {
 		),
 		Args: toolNames("rm"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error { return vm.Tools{Env: env}.Remove(cmd.Context(), vm.Options{}, args) }, msg.UpFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Tools{Env: env}.Remove(cmd.Context(), vm.Options{}, args) }, msg.UpFailed)
 		},
 		ValidArgsFunction: completeToolNames,
 	}, a)
@@ -144,8 +143,7 @@ func newToolsUpdateCmd(a *app) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			a.env(func(env *vm.Env) error { return vm.Tools{Env: env}.Update(cmd.Context(), vm.Options{}) }, msg.UpFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Tools{Env: env}.Update(cmd.Context(), vm.Options{}) }, msg.UpFailed)
 		},
 	}, a)
 }

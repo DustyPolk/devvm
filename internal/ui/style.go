@@ -14,7 +14,7 @@ import (
 const (
 	sgrBold  = "1"
 	sgrDim   = "2"
-	sgrError = "1;31" // Die's devvm: label, bold red
+	sgrError = "1;31" // Error's devvm: label, bold red
 	sgrWarn  = "1;33" // Warn's devvm: label, bold yellow
 	sgrLink  = "4;34" // doc links, underlined blue
 	sgrDone  = "32"   // the done mark, green
@@ -137,7 +137,7 @@ func plainText(parts []part) string {
 }
 
 // labelled renders m with a "devvm: " label, painted with code, before
-// each line: Warn's and Die's.
+// each line: Warn's and Error's.
 func (s style) labelled(code string, m msg.M) string {
 	return prefixLines(s.paint(code, "devvm:")+" ", s.message(m))
 }

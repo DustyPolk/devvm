@@ -21,8 +21,7 @@ func newRefreshToolsCmd(a *app) *cobra.Command {
 			if err == nil {
 				err = tools.Versions{Env: t}.Refresh(cmd.Context())
 			}
-			fail(a.u, err, func(string) msg.M { return msg.ToolsCheckFailed() })
-			return nil
+			return failed(err, func(string) msg.M { return msg.ToolsCheckFailed() })
 		},
 	}
 }

@@ -72,11 +72,10 @@ func (uf *upFlags) options() vm.Options {
 // up opens a shell in this folder's VM, making it first.
 func up(ctx context.Context, a *app, uf *upFlags) error {
 	o := uf.options()
-	a.env(func(env *vm.Env) error {
+	return a.env(func(env *vm.Env) error {
 		env.AddInclude = uf.sshConfig
 		return vm.Launch{Env: env}.Up(ctx, o)
 	}, msg.UpFailed)
-	return nil
 }
 
 // pickParts returns what shows the tools picker in u's terminal, each

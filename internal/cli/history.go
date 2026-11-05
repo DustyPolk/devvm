@@ -35,7 +35,9 @@ func newHistoryCmd(a *app) *cobra.Command {
 			if err == nil {
 				es, err = vm.Exports{Dirs: d}.List()
 			}
-			fail(u, err, msg.HistoryFailed)
+			if err != nil {
+				return failed(err, msg.HistoryFailed)
+			}
 			if asJSON {
 				return printJSON(u, historyJSON(es))
 			}
@@ -94,7 +96,7 @@ func newHistoryExportCmd(a *app) *cobra.Command {
 		),
 		Args: maxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error {
+			return a.env(func(env *vm.Env) error {
 				file := ""
 				if len(args) == 1 {
 					abs, err := filepath.Abs(args[0])
@@ -105,7 +107,6 @@ func newHistoryExportCmd(a *app) *cobra.Command {
 				}
 				return vm.Lifecycle{Env: env}.Export(cmd.Context(), file)
 			}, msg.ExportFailed)
-			return nil
 		},
 	}
 	addFolderFlags(cmd, a)
@@ -126,7 +127,7 @@ func newHistoryImportCmd(a *app) *cobra.Command {
 		),
 		Args: maxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error {
+			return a.env(func(env *vm.Env) error {
 				file := ""
 				if len(args) == 1 {
 					abs, err := filepath.Abs(args[0])
@@ -137,7 +138,6 @@ func newHistoryImportCmd(a *app) *cobra.Command {
 				}
 				return vm.Lifecycle{Env: env}.Import(cmd.Context(), file)
 			}, msg.ImportFailed)
-			return nil
 		},
 	}
 	addFolderFlags(cmd, a)

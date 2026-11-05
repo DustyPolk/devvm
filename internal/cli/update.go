@@ -23,10 +23,9 @@ func newUpdateCmd(a *app) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			a.env(func(env *vm.Env) error {
+			return a.env(func(env *vm.Env) error {
 				return vm.Lifecycle{Env: env}.Update(cmd.Context(), "devvm update", o)
 			}, msg.RemakeFailed)
-			return nil
 		},
 	}
 	addRemakeFlags(cmd.Flags(), &o)

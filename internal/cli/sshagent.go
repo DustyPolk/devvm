@@ -32,23 +32,23 @@ func newSSHAgentCmd(a *app) *cobra.Command {
 		ValidArgs: sshagent.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
-				a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.SetSSHAgent(cmd.Context(), args[0]) }, msg.SSHAgentFailed)
-				return nil
+				return a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.SetSSHAgent(cmd.Context(), args[0]) }, msg.SSHAgentFailed)
 			}
 			var mode string
-			a.env(func(env *vm.Env) error {
+			if err := a.env(func(env *vm.Env) error {
 				var err error
 				mode, err = vm.Settings{Env: env}.SSHAgent(cmd.Context())
 				return err
-			}, msg.SSHAgentFailed)
+			}, msg.SSHAgentFailed); err != nil {
+				return err
+			}
 			if asJSON {
 				return printAgentJSON(cmd, a, mode)
 			}
 			if _, err := io.WriteString(u.Stdout(), mode+"\n"); err != nil {
 				return err
 			}
-			a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
 		},
 	}
 	jsonFlag(cmd, &asJSON)
@@ -75,11 +75,13 @@ type agentKeyJSON struct {
 // keys as sshAgentOutput.
 func printAgentJSON(cmd *cobra.Command, a *app, mode string) error {
 	var keys []sshagent.ListedKey
-	a.env(func(env *vm.Env) error {
+	if err := a.env(func(env *vm.Env) error {
 		var err error
 		keys, err = vm.Settings{Env: env}.AgentKeyList(cmd.Context())
 		return err
-	}, msg.AgentKeysFailed)
+	}, msg.AgentKeysFailed); err != nil {
+		return err
+	}
 	out := sshAgentOutput{Mode: mode, Keys: make([]agentKeyJSON, 0, len(keys))}
 	for _, k := range keys {
 		out.Keys = append(out.Keys, agentKeyJSON(k))
@@ -105,8 +107,7 @@ func newSSHAgentAddCmd(a *app) *cobra.Command {
 			return nil, cobra.ShellCompDirectiveDefault
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.AgentAdd(cmd.Context(), args[0], o) }, msg.AgentKeysFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.AgentAdd(cmd.Context(), args[0], o) }, msg.AgentKeysFailed)
 		},
 	}
 	f := cmd.Flags()
@@ -130,8 +131,7 @@ func newSSHAgentRmCmd(a *app) *cobra.Command {
 			return nil, cobra.ShellCompDirectiveDefault
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.AgentRemove(cmd.Context(), args[0]) }, msg.AgentKeysFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.AgentRemove(cmd.Context(), args[0]) }, msg.AgentKeysFailed)
 		},
 	}
 }

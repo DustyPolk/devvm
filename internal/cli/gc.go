@@ -54,8 +54,7 @@ func newGCCmd(a *app) *cobra.Command {
 		Args: func(_ *cobra.Command, args []string) error { return o.checkArgs(args) },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.ToolNames = args
-			fail(a.u, gc(cmd.Context(), a, o), msg.GCFailed)
-			return nil
+			return failed(gc(cmd.Context(), a, o), msg.GCFailed)
 		},
 	}
 	f := c.Flags()

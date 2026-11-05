@@ -21,11 +21,10 @@ func newHostCmd(a *app) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			a.env(func(env *vm.Env) error {
+			return a.env(func(env *vm.Env) error {
 				env.AddInclude = include
 				return vm.Launch{Env: env}.ShowHost(cmd.Context())
 			}, msg.SSHFailed)
-			return nil
 		},
 	}
 	addSSHConfigFlag(cmd.Flags(), &include)

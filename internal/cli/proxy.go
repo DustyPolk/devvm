@@ -23,17 +23,16 @@ func newProxyCmd(a *app) *cobra.Command {
 		DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
 			store, err := a.secrets()
-			if err != nil {
-				u.Die(msg.ProxyFailed(err.Error()).Because(err))
+			if err == nil {
+				err = proxy.Main(args, proxy.IO{
+					Stdout: u.Stdout(),
+					Stderr: u.Stderr(),
+					FS:     assets.FS, // the built-in policies, read from the binary
+					Secret: store.Get,
+				})
 			}
-			err = proxy.Main(args, proxy.IO{
-				Stdout: u.Stdout(),
-				Stderr: u.Stderr(),
-				FS:     assets.FS, // the built-in policies, read from the binary
-				Secret: store.Get,
-			})
 			if err != nil {
-				u.Die(msg.ProxyFailed(err.Error()).Because(err))
+				return msg.ProxyFailed(err.Error()).Because(err)
 			}
 			return nil
 		},

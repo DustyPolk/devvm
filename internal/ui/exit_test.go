@@ -37,6 +37,10 @@ func helper(mode string) int {
 		}
 	}
 	return Main(func(ctx context.Context, u *UI) int {
+		if mode == "stuck without cleanups" {
+			u.Say(msg.MsgUnknown("ready"))
+			return blocked(ctx, "stuck command", record)
+		}
 		u.AddCleanup(func(context.Context) {
 			record("cleanup interrupted=" + map[bool]string{true: "yes", false: "no"}[u.Interrupted()])
 			if mode == "slow cleanup" {
@@ -45,16 +49,33 @@ func helper(mode string) int {
 			}
 		})
 		u.Say(msg.MsgUnknown("ready"))
+		if mode == "blocked command" || mode == "stuck command" {
+			return blocked(ctx, mode, record)
+		}
 		argv := []string{"sleep", "30"}
 		if mode == "command interrupts" { // as Ctrl+C reaches both, the command ending first
 			argv = []string{"sh", "-c", "kill -INT $PPID; exit 130"}
 		}
 		if err := u.logged(ctx, msg.MsgUnknown("sleeping"), argv...); err != nil {
-			u.DieLogged(msg.MsgUnknown("sleep failed"))
+			u.ErrorLogged(msg.MsgUnknown("sleep failed"))
+			return 1
 		}
 		record("not interrupted")
 		return 0
 	})
+}
+
+// blocked is a command whose own code takes a while to return once its
+// context is canceled ("blocked command"), or never does ("stuck
+// command"), as a question waiting for its answer doesn't.
+func blocked(ctx context.Context, mode string, record func(string)) int {
+	<-ctx.Done()
+	if mode == "stuck command" {
+		time.Sleep(time.Minute)
+	}
+	time.Sleep(300 * time.Millisecond)
+	record("command returned")
+	return 1
 }
 
 func TestCleanupsRunLastFirst(t *testing.T) {
@@ -62,7 +83,7 @@ func TestCleanupsRunLastFirst(t *testing.T) {
 	u, _, errOut := testUI(t, "")
 	code := u.main(func(context.Context) int {
 		u.AddCleanup(func(context.Context) { u.Note(msg.MsgUnknown("first")) })
-		u.AddCleanup(func(context.Context) { u.Die(msg.MsgUnknown("dying cleanup")) })
+		u.AddCleanup(func(context.Context) { u.die(msg.MsgUnknown("dying cleanup")) })
 		remove := u.AddCleanup(func(context.Context) { u.Note(msg.MsgUnknown("removed")) })
 		u.AddCleanup(func(ctx context.Context) {
 			if ctx.Err() != nil {
@@ -72,7 +93,7 @@ func TestCleanupsRunLastFirst(t *testing.T) {
 		})
 		remove()
 		remove()
-		u.Die(msg.MsgUnknown("failed"))
+		u.die(msg.MsgUnknown("failed"))
 		return 0
 	})
 	if code != 1 {
@@ -178,6 +199,62 @@ func TestSignalsRunTheCleanups(t *testing.T) {
 				t.Errorf("stderr %q, want a newline only", got)
 			}
 		})
+	}
+}
+
+// The cleanups wait for the command to return: they'd otherwise undo its
+// work while its own code still runs.
+func TestSignalsWaitForTheCommandBeforeTheCleanups(t *testing.T) {
+	cmd, record, stderr := startHelper(t, "blocked command")
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	if code := exitStatus(t, cmd.Wait()); code != InterruptedCode {
+		t.Errorf("exit code %d, want %d", code, InterruptedCode)
+	}
+	if got, want := readFile(t, record), "command returned\ncleanup interrupted=yes\n"; got != want {
+		t.Errorf("record %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "\n" {
+		t.Errorf("stderr %q, want a newline only", got)
+	}
+}
+
+// A command that never returns keeps the cleanups waiting for
+// returnGrace, no longer.
+func TestSignalsWaitForAStuckCommandAWhile(t *testing.T) {
+	cmd, record, _ := startHelper(t, "stuck command")
+	start := time.Now()
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	if code := exitStatus(t, cmd.Wait()); code != InterruptedCode {
+		t.Errorf("exit code %d, want %d", code, InterruptedCode)
+	}
+	if took := time.Since(start); took < returnGrace || took > returnGrace+10*time.Second {
+		t.Errorf("took %v, want about %v", took, returnGrace)
+	}
+	if got, want := readFile(t, record), "cleanup interrupted=yes\n"; got != want {
+		t.Errorf("record %q, want %q", got, want)
+	}
+}
+
+// Without cleanups, nothing waits: a background process that doesn't
+// watch its context (the proxy) still ends as soon as it's told to.
+func TestSignalsWithoutCleanupsEndAtOnce(t *testing.T) {
+	cmd, record, _ := startHelper(t, "stuck without cleanups")
+	start := time.Now()
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := exitStatus(t, cmd.Wait()); code != InterruptedCode {
+		t.Errorf("exit code %d, want %d", code, InterruptedCode)
+	}
+	if took := time.Since(start); took >= returnGrace {
+		t.Errorf("took %v, want less than %v", took, returnGrace)
+	}
+	if _, err := os.Stat(record); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the command returned (record: %v), want it still blocked as the run ended", err)
 	}
 }
 

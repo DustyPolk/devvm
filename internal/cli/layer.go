@@ -47,7 +47,9 @@ func newLayerCmd(a *app) *cobra.Command {
 			if err == nil {
 				script, policy, err = build.NewLayer(dirs, args[0])
 			}
-			fail(u, err, msg.LayerNewFailed)
+			if err != nil {
+				return failed(err, msg.LayerNewFailed)
+			}
 			u.Info(msg.LayerCreated(args[0], policy, script))
 			return nil
 		},
@@ -80,10 +82,9 @@ func newLayerAddCmd(a *app) *cobra.Command {
 		}),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			command := "devvm layer add " + strings.Join(args, " ")
-			a.env(func(env *vm.Env) error {
+			return a.env(func(env *vm.Env) error {
 				return vm.Lifecycle{Env: env}.AddLayers(cmd.Context(), command, args, o)
 			}, msg.RemakeFailed)
-			return nil
 		},
 		ValidArgsFunction: completeLayerNames(a),
 	}
@@ -116,10 +117,9 @@ func newLayerRmCmd(a *app) *cobra.Command {
 		}),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			command := "devvm layer rm " + strings.Join(args, " ")
-			a.env(func(env *vm.Env) error {
+			return a.env(func(env *vm.Env) error {
 				return vm.Lifecycle{Env: env}.RemoveLayers(cmd.Context(), command, args, o)
 			}, msg.RemakeFailed)
-			return nil
 		},
 		ValidArgsFunction: completeLayerNames(a),
 	}

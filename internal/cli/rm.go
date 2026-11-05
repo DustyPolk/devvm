@@ -27,12 +27,10 @@ func newRmCmd(a *app) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				name := args[0]
-				a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.RmVM(cmd.Context(), name, o) },
+				return a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.RmVM(cmd.Context(), name, o) },
 					func(reason string) msg.M { return msg.RmVMFailed(reason, name) })
-				return nil
 			}
-			a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Rm(cmd.Context(), o) }, msg.RmFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Rm(cmd.Context(), o) }, msg.RmFailed)
 		},
 	}
 	addForceFlag(cmd.Flags(), &o.Force)

@@ -30,11 +30,13 @@ func newLinkCmd(a *app) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var ls []vm.LinkListed
-			a.env(func(env *vm.Env) error {
+			if err := a.env(func(env *vm.Env) error {
 				var err error
 				ls, err = vm.Links{Env: env}.List(cmd.Context())
 				return err
-			}, msg.LinkFailed)
+			}, msg.LinkFailed); err != nil {
+				return err
+			}
 			if asJSON {
 				return printJSON(u, linkJSON(ls))
 			}
@@ -110,10 +112,9 @@ func newLinkAddCmd(a *app) *cobra.Command {
 		Args: cobra.MatchAll(exactArgs(2), linkPortArg),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			port, _ := vm.ParseLinkPort(args[1])
-			a.env(func(env *vm.Env) error {
+			return a.env(func(env *vm.Env) error {
 				return vm.Links{Env: env}.Add(cmd.Context(), vm.LinkAdd{Target: args[0], Port: port, As: as})
 			}, msg.LinkFailed)
-			return nil
 		},
 	}
 	cmd.Flags().StringVar(&as, "as", "", "the `NAME` the VM reaches the link by (default: the target's folder name)")
@@ -133,8 +134,7 @@ func newLinkRmCmd(a *app) *cobra.Command {
 		Args: cobra.MatchAll(exactArgs(2), linkPortArg),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			port, _ := vm.ParseLinkPort(args[1])
-			a.env(func(env *vm.Env) error { return vm.Links{Env: env}.Rm(cmd.Context(), args[0], port) }, msg.LinkFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Links{Env: env}.Rm(cmd.Context(), args[0], port) }, msg.LinkFailed)
 		},
 	}, a)
 }
@@ -164,7 +164,7 @@ func newLinkPublishCmd(a *app) *cobra.Command {
 		Args: showsOnly(cobra.MatchAll(maxArgs(1), publishArg)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var ports string
-			a.env(func(env *vm.Env) error {
+			err := a.env(func(env *vm.Env) error {
 				l := vm.Links{Env: env}
 				if len(args) == 1 {
 					return l.Publish(cmd.Context(), args[0], true)
@@ -173,8 +173,8 @@ func newLinkPublishCmd(a *app) *cobra.Command {
 				ports, err = l.Published(cmd.Context())
 				return err
 			}, msg.LinkFailed)
-			if len(args) == 1 {
-				return nil
+			if err != nil || len(args) == 1 {
+				return err
 			}
 			return printValue(a.u, asJSON, "ports", ports)
 		},
@@ -194,8 +194,7 @@ func newLinkUnpublishCmd(a *app) *cobra.Command {
 		),
 		Args: cobra.MatchAll(exactArgs(1), publishArg),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error { return vm.Links{Env: env}.Publish(cmd.Context(), args[0], false) }, msg.LinkFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Links{Env: env}.Publish(cmd.Context(), args[0], false) }, msg.LinkFailed)
 		},
 	}, a)
 }

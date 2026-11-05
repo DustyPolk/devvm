@@ -2,9 +2,17 @@ package cli
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -46,6 +54,46 @@ func TestExecuteExitCodes(t *testing.T) {
 		}
 		if failed := errOut.Len() > 0; failed != (tc.want != 0) {
 			t.Errorf("Execute(%q) printed %q", tc.args, errOut)
+		}
+	}
+}
+
+// execute shows what a command's RunE returned, each kind of error as
+// its own, and exits 1.
+func TestExecuteShowsEachFailure(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir()) // the run log's folder
+	m := msg.MsgUnknown("m")
+	corrupt := &state.CorruptError{Path: "/x/vm.json", Reason: "bad: ", Msg: msg.MsgUnknown("v")}
+	for _, tc := range []struct {
+		name string
+		err  func(u *ui.UI) error
+		want string
+	}{
+		{"message", func(*ui.UI) error { return m }, "devvm: msg_unknown name=m\n"},
+		{"failed message", func(*ui.UI) error { return failed(fmt.Errorf("x: %w", m), msg.LsFailed) }, "devvm: msg_unknown name=m\n"},
+		{"failed error", func(*ui.UI) error { return failed(errors.New("boom"), msg.LsFailed) }, "devvm: ls_failed reason=boom\n"},
+		{
+			"failed corrupt file", func(*ui.UI) error { return failed(corrupt, msg.LsFailed) },
+			"devvm: ls_failed reason=" + corrupt.Shown(msg.M.Names) + "\n",
+		}, // its message as names mode shows it
+		{"other error", func(*ui.UI) error { return errors.New("short write") }, "devvm: output_failed reason=short write\n"},
+		{"logged", func(u *ui.UI) error {
+			_ = u.LoggedCmd(t.Context(), msg.M{}, exec.CommandContext(t.Context(), "sh", "-c", "echo from-the-log; exit 1"))
+			return failed(backend.Logged(m), msg.LsFailed)
+		}, "from-the-log\n---\ndevvm: msg_unknown name=m\n"},
+	} {
+		u, out, errOut := testUI()
+		root := &cobra.Command{Use: "devvm", SilenceErrors: true, SilenceUsage: true}
+		root.AddCommand(&cobra.Command{Use: "x", Args: noArgs, RunE: func(*cobra.Command, []string) error { return tc.err(u) }})
+		checkCommands(root)
+		if code := execute(t.Context(), u, root, []string{"x"}); code != 1 {
+			t.Errorf("%s: exit code %d, want 1", tc.name, code)
+		}
+		if got := errOut.String(); !strings.HasSuffix(got, tc.want) || out.Len() != 0 {
+			t.Errorf("%s: stderr %q, stdout %q; want it to end %q", tc.name, got, out, tc.want)
+		}
+		if tc.name == "logged" && !strings.HasPrefix(errOut.String(), "--- log_end file=") {
+			t.Errorf("logged: stderr %q, want the log's end first", errOut)
 		}
 	}
 }

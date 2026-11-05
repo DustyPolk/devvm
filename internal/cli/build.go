@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -89,8 +87,7 @@ func imageCmd(ctx context.Context, a *app, f imageFlags, name string, do func(bu
 	if err == nil {
 		err = do(build.Builds{Env: b}, ctx, img)
 	}
-	fail(a.u, err, func(reason string) msg.M { return msg.BuildFailed(name, reason) })
-	return nil
+	return failed(err, func(reason string) msg.M { return msg.BuildFailed(name, reason) })
 }
 
 // pickFeatures returns what asks which features base gets, in u's
@@ -108,26 +105,4 @@ func pickFeatures(u *ui.UI) func([]build.Feature) []build.Feature {
 		}
 		return out
 	}
-}
-
-// fail ends the run on an error, through u: with the run log's end when
-// its details are there, with what failed (an error that isn't a message,
-// as what's reason) otherwise, quietly once interrupted.
-func fail(u *ui.UI, err error, what func(reason string) msg.M) {
-	if err == nil {
-		return
-	}
-	if e, ok := errors.AsType[*backend.LoggedError](err); ok {
-		u.DieLogged(e.Msg)
-	}
-	if m, ok := errors.AsType[msg.M](err); ok {
-		u.Die(m)
-	}
-	reason := err.Error()
-	if c, ok := errors.AsType[*state.CorruptError](err); ok && c.Error() == reason {
-		// A file devvm can't read, unwrapped: its message as the UI
-		// shows messages, names in names mode.
-		reason = c.Shown(u.Text)
-	}
-	u.Die(what(reason).Because(err))
 }

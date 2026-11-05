@@ -101,13 +101,13 @@ func (u *UI) openLog() *os.File {
 	dir, err := u.runLogs()
 	if err != nil {
 		if m, ok := errors.AsType[msg.M](err); ok {
-			u.Die(m)
+			u.die(m)
 		}
-		u.Die(msg.RunLogFailed("", err.Error()).Because(err))
+		u.die(msg.RunLogFailed("", err.Error()).Because(err))
 	}
 	f, err := createLog(dir, time.Now(), os.Getpid())
 	if err != nil {
-		u.Die(msg.RunLogFailed(dir, err.Error()).Because(err))
+		u.die(msg.RunLogFailed(dir, err.Error()).Because(err))
 	}
 	u.log.f, u.log.path = f, f.Name()
 	pruneLogs(dir, cmp.Or(u.log.keep, keepLogs))
@@ -169,7 +169,7 @@ func (u *UI) LogNote() {
 // too while verbose, through the run's one redacting writer, so a password
 // split across writes is still found. The end of a line still to come is
 // written at the next flush point (flushLog): a logged command's start, as
-// far as its last word, and DieLogged and the run's end, all of it.
+// far as its last word, and ErrorLogged and the run's end, all of it.
 func (u *UI) LogWriter() io.Writer {
 	f := u.openLog()
 	u.log.Lock()
@@ -180,7 +180,7 @@ func (u *UI) LogWriter() io.Writer {
 	return u.log.w
 }
 
-// flushLog writes what u's LogWriter holds of a line, redacted: all of it at the end (DieLogged,
+// flushLog writes what u's LogWriter holds of a line, redacted: all of it at the end (ErrorLogged,
 // the run's end), or as far as its last word while the run goes on (flushPart).
 func flushLog(u *UI, end bool) {
 	u.log.Lock()
@@ -291,8 +291,8 @@ func count(ctx context.Context, step string) (label, logLine string) {
 // LoggedCmd runs cmd into the run log, with a status line in a terminal
 // showing step. A step may be the zero msg.M: the status line then shows
 // the command and its first argument. ctx carries the phase's step count.
-// It returns the command's error; the caller dies with what failed
-// (DieLogged).
+// It returns the command's error; the caller fails with what failed,
+// which ErrorLogged shows with the log's end.
 func (u *UI) LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error {
 	f := u.openLog()
 	w := logTo(u, f)

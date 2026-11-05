@@ -44,7 +44,9 @@ func newImagesCmd(a *app) *cobra.Command {
 					imgs, ts, err = l.Images, l.Tools, l.FailUnlisted()
 				}
 			}
-			fail(u, err, msg.ImagesFailed)
+			if err != nil {
+				return failed(err, msg.ImagesFailed)
+			}
 			nix := nixCacheOf(u, b.Dirs)
 			if asJSON {
 				err = printJSON(u, imagesJSON(imgs, ts, nix))
@@ -107,8 +109,7 @@ func newImagesRmCmd(a *app) *cobra.Command {
 			} else if err == nil {
 				u.Info(msg.NothingDeleted())
 			}
-			fail(u, err, msg.ImagesRmFailed)
-			return nil
+			return failed(err, msg.ImagesRmFailed)
 		},
 	}
 	f.add(c)

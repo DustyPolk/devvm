@@ -20,7 +20,7 @@ func newPortsCmd(a *app) *cobra.Command {
 			def   settings.Value
 			label string
 		)
-		a.env(func(env *vm.Env) error {
+		err := a.env(func(env *vm.Env) error {
 			s := vm.Settings{Env: env}
 			var err error
 			switch {
@@ -36,8 +36,8 @@ func newPortsCmd(a *app) *cobra.Command {
 			return err
 		}, msg.PortsFailed)
 		switch {
-		case c != nil:
-			return nil
+		case err != nil || c != nil:
+			return err
 		case global:
 			return printDefault(u, asJSON, "ports", def, label)
 		}

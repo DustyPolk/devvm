@@ -7,13 +7,14 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"syscall"
+	"time"
 )
 
 // InterruptedCode is the exit code of a run ended by Ctrl+C or a closed
 // terminal (INT, TERM, HUP).
 const InterruptedCode = 130
 
-// exitError is what Die panics with, for Main to recover.
+// exitError is what die panics with, for Main to recover.
 type exitError struct{ code int }
 
 func exit(code int) { panic(exitError{code}) }
@@ -29,7 +30,7 @@ type cleanup struct {
 func (u *UI) Interrupted() bool { return u.interrupted.Load() }
 
 // AddCleanup adds f to the cleanup stack, which runs, last added first, when
-// the run ends: normally, through Die, or interrupted. f gets a context of
+// the run ends: normally, failed, or interrupted. f gets a context of
 // its own, as the run's is canceled by then. Call remove once there's
 // nothing left to clean up.
 func (u *UI) AddCleanup(f func(ctx context.Context)) (remove func()) {
@@ -74,10 +75,10 @@ func (u *UI) runCleanups() {
 
 type result struct {
 	code  int
-	panic any // a panic that isn't Die's, with its stack
+	panic any // a panic that isn't die's, with its stack
 }
 
-// call runs fn, turning Die's panic into its exit code.
+// call runs fn, turning die's panic into its exit code.
 func call(ctx context.Context, fn func(context.Context) int) (r result) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -91,15 +92,25 @@ func call(ctx context.Context, fn func(context.Context) int) (r result) {
 	return result{code: fn(ctx)}
 }
 
+// returnGrace is how long an interrupted run waits for fn to return,
+// once the commands it ran have ended, before the cleanups run. With its
+// context canceled, fn fails at its next step and returns in far less;
+// what it can't stop, a question waiting for an answer above all, keeps
+// the cleanups waiting no longer than this, so Ctrl+C still ends the run
+// promptly.
+const returnGrace = 2 * time.Second
+
 // Main makes the UI on devvm's own streams and runs fn, the whole of
-// devvm's run, with it. It returns the exit code: fn's, or 1 after Die.
-// Then it runs the cleanup stack.
+// devvm's run, with it. It returns the exit code: fn's, or 1 when a
+// question has no answer. Then it runs the cleanup stack.
 //
 // INT, TERM and HUP cancel fn's context, which stops the command running,
-// and then run the cleanups and return InterruptedCode. A second signal
-// during the cleanups is ignored, so they aren't stopped halfway. fn's own
-// code keeps running until it next starts a command (which fails, its
-// context being canceled) or dies, quietly.
+// and return InterruptedCode. With cleanups to run, they wait first for fn
+// to return, or returnGrace after the commands it ran ended, whichever is
+// first; then the cleanups run. A
+// second signal during the cleanups is ignored, so they aren't stopped
+// halfway. fn's own code fails at its next step, as its context is
+// canceled, and prints nothing.
 func Main(fn func(ctx context.Context, u *UI) int) int {
 	u := onTerminal()
 	return u.main(func(ctx context.Context) int { return fn(ctx, u) })
@@ -119,13 +130,7 @@ func (u *UI) main(fn func(ctx context.Context) int) int {
 	select {
 	case r = <-done:
 	case <-sigs:
-		u.interrupted.Store(true)
-		cancel()
-		u.stopStatus()
-		u.commands.Lock() // the commands running have ended
-		u.commands.Unlock()
-		u.write(u.stderr, "\n")
-		r = result{code: InterruptedCode}
+		r = interrupt(u, cancel, done)
 	}
 	u.stopStatus()
 	u.runCleanups()
@@ -134,4 +139,39 @@ func (u *UI) main(fn func(ctx context.Context) int) int {
 		panic(r.panic)
 	}
 	return r.code
+}
+
+// interrupt ends a run a signal interrupted: it cancels fn's context,
+// waits for the commands running to end, then, when there are cleanups
+// to run, for fn to return (done), up to returnGrace. Without cleanups,
+// nothing could undo fn's work, so the run ends at once: the proxy and
+// devvm's other background processes stop as soon as they're told to.
+// The run's code is InterruptedCode, whatever fn returned, but a panic of
+// fn's own still panics.
+func interrupt(u *UI, cancel context.CancelFunc, done <-chan result) result {
+	u.interrupted.Store(true)
+	cancel()
+	u.stopStatus()
+	u.commands.Lock()   // the commands running have ended
+	u.commands.Unlock() //nolint:staticcheck // the lock is only waited for: each logged command holds it to read
+	r := result{code: InterruptedCode}
+	if hasCleanups(u) {
+		t := time.NewTimer(returnGrace)
+		defer t.Stop()
+		select {
+		case late := <-done:
+			r.panic = late.panic
+		case <-t.C:
+		}
+	}
+	u.write(u.stderr, "\n")
+	return r
+}
+
+// hasCleanups reports whether u's cleanup stack has any left to run.
+func hasCleanups(u *UI) bool {
+	c := &u.cleanups
+	c.Lock()
+	defer c.Unlock()
+	return len(c.funcs) > 0
 }

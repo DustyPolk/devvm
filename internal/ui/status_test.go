@@ -135,14 +135,12 @@ func TestStatusLineInATerminal(t *testing.T) {
 
 // While verbose, a logged failure names the run log, whose lines were
 // streamed, instead of printing its end again.
-func TestDieLoggedVerbose(t *testing.T) {
+func TestErrorLoggedVerbose(t *testing.T) {
 	t.Parallel()
 	u, _, errOut := testUI(t, "")
 	u.SetFlags(Flags{Verbose: true})
 	_ = u.logged(t.Context(), msg.M{}, "sh", "-c", "echo failing; exit 1")
-	if code := exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) }); code != 1 {
-		t.Errorf("exit code %d, want 1", code)
-	}
+	u.ErrorLogged(msg.MsgUnknown("x"))
 	want := "+ sh -c echo failing; exit 1\nfailing\nlog_details file=" + u.logPath() + "\ndevvm: msg_unknown name=x\n"
 	if got := errOut.String(); got != want {
 		t.Errorf("stderr %q, want %q", got, want)

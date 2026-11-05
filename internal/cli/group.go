@@ -26,11 +26,13 @@ func newGroupCmd(a *app) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var g vm.GroupShown
-			a.env(func(env *vm.Env) error {
+			if err := a.env(func(env *vm.Env) error {
 				var err error
 				g, err = vm.Groups{Env: env}.Show(cmd.Context())
 				return err
-			}, msg.GroupFailed)
+			}, msg.GroupFailed); err != nil {
+				return err
+			}
 			if asJSON {
 				return printJSON(u, groupJSON(g))
 			}
@@ -95,8 +97,7 @@ func newGroupJoinCmd(a *app) *cobra.Command {
 		),
 		Args: cobra.MatchAll(exactArgs(1), groupNameArg),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			a.env(func(env *vm.Env) error { return vm.Groups{Env: env}.Join(cmd.Context(), args[0], as) }, msg.GroupFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Groups{Env: env}.Join(cmd.Context(), args[0], as) }, msg.GroupFailed)
 		},
 	}
 	cmd.Flags().StringVar(&as, "as", "", "the `NAME` the group's other VMs reach this VM by (default: its folder name)")
@@ -114,8 +115,7 @@ func newGroupLeaveCmd(a *app) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			a.env(func(env *vm.Env) error { return vm.Groups{Env: env}.Leave(cmd.Context()) }, msg.GroupFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Groups{Env: env}.Leave(cmd.Context()) }, msg.GroupFailed)
 		},
 	}, a)
 }

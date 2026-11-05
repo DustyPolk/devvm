@@ -33,7 +33,7 @@ func newSizeCmd(a *app) *cobra.Command {
 		Args: showsOnly(noArgs, "cpus", "memory", "disk"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var shown vm.SizeShown
-			a.env(func(env *vm.Env) error {
+			err := a.env(func(env *vm.Env) error {
 				set := vm.Settings{Env: env}
 				if s != (vm.Size{}) {
 					return set.SetSize(cmd.Context(), s, global)
@@ -43,12 +43,12 @@ func newSizeCmd(a *app) *cobra.Command {
 				return err
 			}, msg.SizeFailed)
 			switch {
-			case s != (vm.Size{}):
-				return nil
+			case err != nil || s != (vm.Size{}):
+				return err
 			case asJSON:
 				return printJSON(u, sizeJSON(shown))
 			}
-			_, err := io.WriteString(u.Stdout(), shown.Text())
+			_, err = io.WriteString(u.Stdout(), shown.Text())
 			return err
 		},
 	}

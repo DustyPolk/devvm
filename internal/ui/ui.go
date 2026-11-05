@@ -1,8 +1,9 @@
 // Package ui is the only place devvm prints. A UI prints messages (Say,
-// Info, Note, Warn, Die), asks questions (Ask, Confirm, Pick), runs
+// Info, Note, Warn, Error), asks questions (Ask, Confirm, Pick), runs
 // commands into the run's log behind a status line (LoggedCmd), and keeps
-// the run's cleanup stack. Main makes the one a run has: it recovers Die,
-// runs the cleanups and handles Ctrl+C.
+// the run's cleanup stack. Main makes the one a run has: it runs the
+// cleanups and handles Ctrl+C, and ends the run where a question has no
+// answer.
 package ui
 
 import (
@@ -214,25 +215,19 @@ func prefixLines(prefix, s string) string {
 	return b.String()
 }
 
-// Error prints the message as Die does, without ending the run: for an
-// error the caller returns its own exit code for.
-func (u *UI) Error(m msg.M) { u.write(u.stderr, u.errStyle.labelled(sgrError, m)) }
-
-// Die prints the message like Warn, its label red in a terminal, and ends
-// the run with exit code 1: it panics, and Main runs the cleanups and
-// returns 1. Once the run is interrupted it prints nothing, as the failure
-// is the interrupt's.
-func (u *UI) Die(m msg.M) {
+// Error prints the message like Warn, its label red in a terminal: a
+// failure, which the caller returns its own exit code for. Once the run
+// is interrupted it prints nothing, as the failure is the interrupt's.
+func (u *UI) Error(m msg.M) {
 	if !u.Interrupted() {
-		u.Error(m)
+		u.write(u.stderr, u.errStyle.labelled(sgrError, m))
 	}
-	exit(1)
 }
 
-// DieLogged is Die after printing the last 25 lines of the run's log, if it
-// has one, without control characters, dim in a terminal. While verbose,
-// those lines are on stderr already, so only the log's path is.
-func (u *UI) DieLogged(m msg.M) {
+// ErrorLogged is Error after printing the last 25 lines of the run's log,
+// if it has one, without control characters, dim in a terminal. While
+// verbose, those lines are on stderr already, so only the log's path is.
+func (u *UI) ErrorLogged(m msg.M) {
 	flushLog(u, true)
 	path := u.logPath()
 	switch {
@@ -243,7 +238,16 @@ func (u *UI) DieLogged(m msg.M) {
 		tail := "--- " + u.errStyle.line(msg.LogEnd(path)) + "\n" + msg.Printable(tailLines(path, 25)) + "---\n"
 		u.write(u.stderr, u.errStyle.paintLines(sgrDim, tail))
 	}
-	u.Die(m)
+	u.Error(m)
+}
+
+// die is Error, then the end of the run with exit code 1, for the UI's own
+// failures where no caller can return one (a question without an answer,
+// a run log that can't be opened): it panics, and Main runs the cleanups
+// and returns 1.
+func (u *UI) die(m msg.M) {
+	u.Error(m)
+	exit(1)
 }
 
 // Ask asks a yes-or-no question, no by default: it's true only for an answer
@@ -335,9 +339,9 @@ func unanswered(u *UI, q msg.M, shown bool) {
 		u.Note(q)
 	}
 	if a := msg.AnswerFor(q.ID()); a != "" {
-		u.Die(msg.NoInput(a))
+		u.die(msg.NoInput(a))
 	}
-	u.Die(msg.NoInputTerminal())
+	u.die(msg.NoInputTerminal())
 }
 
 // answer prints q's prompt to stderr when the input is a terminal, and

@@ -23,8 +23,7 @@ func newDesktopCmd(a *app) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			a.env(func(env *vm.Env) error { return vm.Desktop{Env: env}.Open(cmd.Context(), o) }, msg.DesktopFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Desktop{Env: env}.Open(cmd.Context(), o) }, msg.DesktopFailed)
 		},
 	}
 	f := c.Flags()

@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
@@ -36,18 +37,21 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			u.SetFlags(*fl)
 			if wantsJSON(cmd) {
 				u.DataOnly() // stdout is the JSON's alone
 			}
 			makePrivate(a)
 			if !skipsLayout(cmd) {
-				checkLayout(cmd.Context(), a)
+				if err := checkLayout(cmd.Context(), a); err != nil {
+					return ranError{err}
+				}
 			}
 			if !skipsRetention(cmd) {
 				autoRetain(cmd.Context(), a)
 			}
+			return nil
 		},
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -85,22 +89,61 @@ func makePrivate(a *app) {
 }
 
 // checkLayout checks the layout version of devvm's folders before the
-// command runs (state.CheckLayout), and ends the run when a newer devvm
-// changed them or a version file can't be read. Without a HOME there
-// are no folders, and the command says so itself.
-func checkLayout(ctx context.Context, a *app) {
-	d, err := a.dirs()
-	if err != nil {
-		return
+// command runs (state.CheckLayout), and fails when a newer devvm changed
+// them or a version file can't be read. Without a HOME there are no
+// folders, and the command says so itself.
+func checkLayout(ctx context.Context, a *app) error {
+	if d, err := a.dirs(); err == nil {
+		return failed(state.CheckLayout(ctx, d), msg.LayoutUnchecked)
 	}
-	err = state.CheckLayout(ctx, d)
+	return nil
+}
+
+// failure is a command's failure and what failed, the message for an
+// error that isn't one: what failed returns, which execute shows.
+type failure struct {
+	err  error
+	what func(reason string) msg.M
+}
+
+func (f failure) Error() string { return f.err.Error() }
+func (f failure) Unwrap() error { return f.err }
+
+// failed is err as a command's failure, nil for nil, which its RunE
+// returns: execute shows it as showFailure says, with what failed for an
+// error that isn't a message.
+func failed(err error, what func(reason string) msg.M) error {
 	if err == nil {
+		return nil
+	}
+	return failure{err, what}
+}
+
+// showFailure prints what a command's RunE returned: the run log's end
+// and its message when the details are there (a backend.LoggedError),
+// the message err is or carries, or else what failed (output_failed
+// without failed's), err's text its reason. Once the run is interrupted
+// it prints nothing, as the failure is the interrupt's.
+func showFailure(u *ui.UI, err error) {
+	if e, ok := errors.AsType[*backend.LoggedError](err); ok {
+		u.ErrorLogged(e.Msg)
 		return
 	}
 	if m, ok := errors.AsType[msg.M](err); ok {
-		a.u.Die(m)
+		u.Error(m)
+		return
 	}
-	a.u.Die(msg.LayoutUnchecked(err.Error()).Because(err))
+	what := msg.OutputFailed
+	if f, ok := errors.AsType[failure](err); ok {
+		what, err = f.what, f.err
+	}
+	reason := err.Error()
+	if c, ok := errors.AsType[*state.CorruptError](err); ok && c.Error() == reason {
+		// A file devvm can't read, unwrapped: its message as the UI
+		// shows messages, names in names mode.
+		reason = c.Shown(u.Text)
+	}
+	u.Error(what(reason).Because(err))
 }
 
 // skipsLayout reports whether cmd runs without checking the layout
@@ -144,11 +187,7 @@ func execute(ctx context.Context, u *ui.UI, root *cobra.Command, args []string) 
 		cmd = root
 	}
 	if e, ok := errors.AsType[ranError](err); ok {
-		m, ok := errors.AsType[msg.M](e.err)
-		if !ok {
-			m = msg.OutputFailed(e.err.Error()).Because(e.err)
-		}
-		u.Error(m)
+		showFailure(u, e.err)
 		return 1
 	}
 	// Anything else is the parser's, before the command ran. A word that

@@ -71,7 +71,7 @@ func TestMessagesColored(t *testing.T) {
 		{"info", (*UI).Info, "\033[1m==>\033[0m " + text + "\n\033[4;34m" + link + "\033[0m\n", ""},
 		{"note", (*UI).Note, "", text + "\n\033[4;34m" + link + "\033[0m\n"},
 		{"warn", (*UI).Warn, "", "\033[1;33mdevvm:\033[0m " + text + "\n\033[1;33mdevvm:\033[0m \033[4;34m" + link + "\033[0m\n"},
-		{"die", func(u *UI, m msg.M) { exitCode(func() { u.Die(m) }) }, "", "\033[1;31mdevvm:\033[0m " + text + "\n\033[1;31mdevvm:\033[0m \033[4;34m" + link + "\033[0m\n"},
+		{"error", (*UI).Error, "", "\033[1;31mdevvm:\033[0m " + text + "\n\033[1;31mdevvm:\033[0m \033[4;34m" + link + "\033[0m\n"},
 	} {
 		u, out, errOut := testUI(t, "")
 		u.outStyle, u.errStyle = style{on: true}, style{on: true}
@@ -125,13 +125,13 @@ func TestNamesMode(t *testing.T) {
 	}
 }
 
-func TestDieLoggedColored(t *testing.T) {
+func TestErrorLoggedColored(t *testing.T) {
 	u, _, errOut := testUI(t, "")
 	u.errStyle = style{on: true, names: true}
 	if err := u.logged(t.Context(), msg.M{}, "sh", "-c", "printf 'one\\n\\033[31mtwo\\n'"); err != nil {
 		t.Fatal(err)
 	}
-	exitCode(func() { u.DieLogged(msg.MsgUnknown("x")) })
+	u.ErrorLogged(msg.MsgUnknown("x"))
 	got := errOut.String()
 	// Each line of the log's end dim, the log's own codes dropped; then the
 	// message, its label red.
@@ -139,7 +139,7 @@ func TestDieLoggedColored(t *testing.T) {
 	want := "\033[2mone\033[0m\n\033[2m[31mtwo\033[0m\n\033[2m---\033[0m\n" +
 		"\033[1;31mdevvm:\033[0m msg_unknown name=x\n"
 	if !strings.HasPrefix(got, head) || !strings.HasSuffix(got, want) {
-		t.Errorf("DieLogged colored:\n%q\nwant it to end\n%q", got, want)
+		t.Errorf("ErrorLogged colored:\n%q\nwant it to end\n%q", got, want)
 	}
 }
 

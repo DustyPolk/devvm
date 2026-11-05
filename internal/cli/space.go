@@ -58,7 +58,9 @@ func newSpaceCmd(a *app) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			r, err := space(cmd.Context(), a)
-			fail(u, err, msg.SpaceFailed)
+			if err != nil {
+				return failed(err, msg.SpaceFailed)
+			}
 			for _, b := range r.Unknown {
 				u.Note(msg.SpaceBackendUnknown(b))
 			}

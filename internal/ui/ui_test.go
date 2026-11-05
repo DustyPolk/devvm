@@ -35,7 +35,7 @@ func testUI(t *testing.T, in string) (u *UI, out, errOut *bytes.Buffer) {
 	return u, out, errOut
 }
 
-// exitCode runs f, returning the code it exits with through Die, or -1.
+// exitCode runs f, returning the code it exits with through die, or -1.
 func exitCode(f func()) (code int) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -97,7 +97,7 @@ func TestWarnAndDiePrefixEveryLine(t *testing.T) {
 func TestDiePrintsAndExits1(t *testing.T) {
 	t.Parallel()
 	u, out, errOut := testUI(t, "")
-	if code := exitCode(func() { u.Die(msg.MsgUnknown("VM")) }); code != 1 {
+	if code := exitCode(func() { u.die(msg.MsgUnknown("VM")) }); code != 1 {
 		t.Errorf("exit code %d, want 1", code)
 	}
 	if got, want := errOut.String(), "devvm: msg_unknown name=VM\n"; got != want || out.Len() != 0 {
@@ -106,7 +106,7 @@ func TestDiePrintsAndExits1(t *testing.T) {
 	// Interrupted, it dies quietly.
 	errOut.Reset()
 	u.interrupted.Store(true)
-	if code := exitCode(func() { u.Die(msg.MsgUnknown("VM")) }); code != 1 || errOut.Len() != 0 {
+	if code := exitCode(func() { u.die(msg.MsgUnknown("VM")) }); code != 1 || errOut.Len() != 0 {
 		t.Errorf("interrupted: exit code %d, stderr %q; want 1 and nothing", code, errOut)
 	}
 }

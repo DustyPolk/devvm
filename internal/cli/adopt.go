@@ -27,8 +27,7 @@ func newAdoptCmd(a *app) *cobra.Command {
 			if len(args) == 1 {
 				name = args[0]
 			}
-			a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Adopt(cmd.Context(), name, force) }, msg.AdoptFailed)
-			return nil
+			return a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Adopt(cmd.Context(), name, force) }, msg.AdoptFailed)
 		},
 	}
 	addForceFlag(cmd.Flags(), &force)

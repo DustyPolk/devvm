@@ -44,7 +44,8 @@ func usage(err error) usageError {
 	return usageError{m}
 }
 
-// ranError is an error a command's RunE returned, once it ran: a failure,
+// ranError is an error a command's RunE returned, once it ran, or the
+// root's layout check (checkLayout): a failure, which showFailure prints,
 // not a usage error.
 type ranError struct{ err error }
 
@@ -52,7 +53,7 @@ func (e ranError) Error() string { return e.err.Error() }
 func (e ranError) Unwrap() error { return e.err }
 
 // checkCommands makes every command under root check its flags and
-// arguments before anything else runs (root's PersistentPreRun, any VM
+// arguments before anything else runs (root's PersistentPreRunE, any VM
 // lookup), each error a usage error, and marks what RunE returns as a
 // failure. The parser's flag errors become usage errors too (flagError).
 func checkCommands(root *cobra.Command) {
@@ -222,7 +223,7 @@ func checkFlags(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	// Cobra checks these only after the root's PersistentPreRun: a group
+	// Cobra checks these only after the root's PersistentPreRunE: a group
 	// marked without exclusive, or a required flag, is refused first too,
 	// in usage_error.
 	if err := cmd.ValidateRequiredFlags(); err != nil {

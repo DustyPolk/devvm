@@ -50,8 +50,7 @@ func newSetupCmd(a *app) *cobra.Command {
 			if cmd.Flags().Changed("layers") {
 				c.layers = partFlag(layers)
 			}
-			fail(a.u, newSetup(a).run(c), msg.SetupFailed)
-			return nil
+			return failed(newSetup(a).run(c), msg.SetupFailed)
 		},
 	}
 	f := cmd.Flags()

@@ -40,7 +40,7 @@ Once it listens, it says so with the address it listens on (`daemon.Ready`) in t
 
 ## How devvm runs it
 
-`internal/cli/proxy.go` is the hidden `devvm _proxy` command: it hands its arguments to `Main` with the run UI's streams (`IO`: the event log and `-help` on its `Stdout`, the proxy's own log lines on its `Stderr`) and devvm's own files (`IO.FS`, which is `assets.FS`, so the package never imports `assets`) and the lookup of secrets' values (`IO.Secret`, which is `secrets.Store.Get`, so the package never imports `internal/secrets` or `internal/agentlogin`), and ends an error with its `Die`. The package itself prints nothing.
+`internal/cli/proxy.go` is the hidden `devvm _proxy` command: it hands its arguments to `Main` with the run UI's streams (`IO`: the event log and `-help` on its `Stdout`, the proxy's own log lines on its `Stderr`) and devvm's own files (`IO.FS`, which is `assets.FS`, so the package never imports `assets`) and the lookup of secrets' values (`IO.Secret`, which is `secrets.Store.Get`, so the package never imports `internal/secrets` or `internal/agentlogin`), and returns an error as its failure, in `proxy_failed`. The package itself prints nothing.
 
 ```text
 devvm _proxy -config ~/.local/share/devvm/vms/<hash>/run/proxy.json

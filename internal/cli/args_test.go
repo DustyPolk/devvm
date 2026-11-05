@@ -17,7 +17,7 @@ import (
 
 // stubbedRun is devvm's command tree with nothing run: each command's
 // RunE only records that it ran (returning fail), and the root's
-// PersistentPreRun is gone.
+// PersistentPreRunE is gone.
 type stubbedRun struct {
 	root   *cobra.Command
 	u      *ui.UI
@@ -28,7 +28,7 @@ type stubbedRun struct {
 func stubbed(fail error) *stubbedRun {
 	u, _, errOut := testUI()
 	s := &stubbedRun{root: NewRoot(u), u: u, errOut: errOut}
-	s.root.PersistentPreRun = nil
+	s.root.PersistentPreRunE = nil
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
 		if c.RunE != nil || c.Run != nil {

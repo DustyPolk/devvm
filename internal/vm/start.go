@@ -458,7 +458,7 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 	// reviewed): a VM without it starts all the same.
 	conf.SSH = s.Registry.Require(b, vm, backend.FeatureSSH) == nil
 	if conf.Net == backend.NetProxy {
-		defer s.AddCleanup(undoStart(s.Env, b, vm))()
+		defer interruptCleanup(s.Env, undoStart(s.Env, b, vm))()
 	}
 	// What its state asks of it, which the start makes it where it
 	// differs: its size, its project folder where it is now (moved),
@@ -520,6 +520,19 @@ func (s starter) confine(ctx context.Context, b backend.Backend, st *state.VM, c
 		return conf, err
 	}
 	return p, nil
+}
+
+// interruptCleanup adds f, a cleanup only for an interrupt, to the run's
+// cleanups and returns what removes it, which keeps it once the run is
+// interrupted: the run's cleanups wait for the command to return, so the
+// undo outlives the function that added it.
+func interruptCleanup(e *Env, f func(context.Context)) (remove func()) {
+	done := e.AddCleanup(f)
+	return func() {
+		if !e.Interrupted() {
+			done()
+		}
+	}
 }
 
 // undoStart is a start's cleanup for a VM with network policy: an
