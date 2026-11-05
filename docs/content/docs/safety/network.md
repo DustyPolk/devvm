@@ -42,7 +42,7 @@ Changing a VM from one confined tier to another applies at once, because the VM'
 
 ## Choosing a tier
 
-A new VM gets the allowlist tier unless you choose another. When devvm creates a VM in a terminal, it says what each tier reaches and asks for one, and pressing Enter gives the VM allowlist:
+A new VM gets the allowlist tier unless you choose another, and the summary devvm shows before it makes the VM names its tier. When you customize the VM in a terminal, devvm says what each tier reaches and asks for one, and pressing Enter gives the VM allowlist ([what a new VM gets](../using/images.md#what-a-new-vm-gets)):
 
 ```text
 Choose the network tier for devvm-some-project-71a99b1076d92c. With open it reaches anything this machine can, with internet any public host, with allowlist only the hosts you allow (recommended), and with none only its agents' and secrets' hosts and its links.

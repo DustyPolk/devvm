@@ -14,7 +14,24 @@ cd ~/some-project
 devvm
 ```
 
-devvm lists what the new VM can get, under three headings: its toolchains, its coding agents and its layers. The toolchains your folder's files call for are already checked, each with the file that calls for it, such as node for `package.json` or python for `pyproject.toml`. Move with the arrow keys, press space to check or uncheck a row, and press enter when the list is what you want:
+The first time, devvm asks for the CPUs and memory that new VMs get. It shows how many CPUs and how much memory this machine has, and offers the base image's 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them. Press Enter to keep each value, or type another, and devvm asks again when this machine can't give what you typed. devvm saves what you type as the size new VMs get, which you can change later with `devvm setup` or `devvm size -g`, and when you keep both values it saves nothing ([choosing new VMs' size](../using/ports-size.md#choosing-new-vms-size)). It also asks which coding agents new VMs get, and you can change them later with `devvm setup --agents`.
+
+Then devvm shows what the new VM gets and asks whether you want to change it:
+
+```text
+==> devvm-some-project-71a99b1076d92c gets:
+  toolchain node, for package.json
+  agent claude, from devvm setup
+  layers: none
+  size: 4 CPUs, 8 GiB of memory and a 100 GiB disk
+  network tier: allowlist
+  ports: all
+Customize it? [y/N]
+```
+
+The toolchains are the ones your folder's files call for, each with the file that calls for it, such as node for `package.json` or python for `pyproject.toml`. The agents and layers are the ones you chose for new VMs, and the network tier is allowlist, which reaches only the hosts you allow. Press Enter to make the VM as shown.
+
+If you type y, devvm lists what the new VM can get, under three headings: its toolchains, its coding agents and its layers, with what the summary showed already checked. Move with the arrow keys, press space to check or uncheck a row, and press enter when the list is what you want:
 
 ```text
 Choose what devvm-some-project-71a99b1076d92c gets. Use up and down to move, space to toggle and enter to confirm.
@@ -33,14 +50,12 @@ Layers, which a VM gets only when devvm makes it
   [ ] nix        Nix, direnv and nix-direnv
 ```
 
-Check Claude Code, Codex or opencode to give the VM a coding agent. You can add toolchains and agents later, but a VM gets layers only when devvm makes it. To have a layer checked for every new VM, such as `desktop`, choose it with [`devvm setup --layers`](../using/settings.md#layers-for-new-vms). To choose without the list, give `--tools`, `--agents` and `--layers`, such as `devvm --agents claude`, and each one you leave out keeps what the list would have checked ([what a new VM gets](../using/images.md#what-a-new-vm-gets)).
+Check Claude Code, Codex or opencode to give the VM a coding agent. You can add toolchains and agents later, but a VM gets layers only when devvm makes it. To have a layer checked for every new VM, such as `desktop`, choose it with [`devvm setup --layers`](../using/settings.md#layers-for-new-vms).
 
-The first time, devvm asks for the CPUs and memory that new VMs get. It shows how many CPUs and how much memory this machine has, and offers the base image's 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them. Press Enter to keep each value, or type another, and devvm asks again when this machine can't give what you typed. devvm saves what you type as the size new VMs get, which you can change later with `devvm setup` or `devvm size -g`, and when you keep both values it saves nothing ([choosing new VMs' size](../using/ports-size.md#choosing-new-vms-size)). It also asks which coding agents new VMs get, which the list then checks for every new VM, and you can change them later with `devvm setup --agents`.
-
-For each new VM, after the list, devvm asks for its network tier, and pressing Enter gives it allowlist, which reaches only the hosts you allow. To answer once for every new VM, run `devvm network -g allowlist`.
+After the list, devvm asks for the VM's network tier, and pressing Enter gives it allowlist. To answer once for every new VM, run `devvm network -g allowlist`, and devvm then skips that question. Then it asks for the VM's CPUs and memory, and pressing Enter keeps each value the summary showed. What you type here is for this VM alone, and devvm saves none of it for new VMs. Flags such as `--tools`, `--agents`, `--layers`, `--network`, `--cpus` and `--memory` choose a part beforehand, as in `devvm --agents claude`, and each part you leave out keeps what the summary would have shown. devvm asks nothing when the flags choose everything ([what a new VM gets](../using/images.md#what-a-new-vm-gets)).
 
 > [!TIP]
-> Answer yes, the default. [Network policy](../safety/network.md) limits the VM to the hosts you allow and keeps your secrets on your machine.
+> Keep allowlist, the default, unless the VM needs more. [Network policy](../safety/network.md) limits the VM to the hosts you allow and keeps your secrets on your machine.
 
 The first time, devvm also asks which optional extras every VM gets, such as oh-my-bash and fzf, then builds the base image, which takes a few minutes once:
 
@@ -58,10 +73,11 @@ Later VMs start in seconds.
 ```mermaid
 flowchart TD
   run["devvm in a project folder"] --> first{{"the first time?"}}
-  first -- "yes" --> size["asks: how many CPUs and how much memory, and which agents?"] --> pick
-  first -- "no" --> pick["lists the toolchains, agents and layers to check"]
-  pick --> net["asks: network policy?"]
-  net --> built{{"base built?"}}
+  first -- "yes" --> size["asks: how many CPUs and how much memory, and which agents?"] --> summary
+  first -- "no" --> summary["shows what the VM gets"]
+  summary --> custom{{"Customize it?"}}
+  custom -- "y" --> pick["lists the toolchains, agents and layers to check,<br>then asks: network tier? CPUs and memory?"] --> built
+  custom -- "Enter" --> built{{"base built?"}}
   built -- "no, the first time" --> extras["asks: which extras?"] --> build["builds base, a few minutes"] --> copy
   built -- "yes" --> copy["copies the image into a new VM"]
   copy --> start["starts it"] --> shell["opens a shell in ~/some-project"]

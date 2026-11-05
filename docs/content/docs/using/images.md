@@ -16,7 +16,7 @@ flowchart TD
 
 ## Base
 
-`base` is the image that every other image is built on. It is Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq and mise added, followed by the optional [features](customizing.md#base-image-features) you chose, such as oh-my-bash and fzf. Docker comes as a [layer of devvm's](#built-in-layers), so you check it in the list devvm shows for a new VM, or give `devvm --layers docker`. With `--from`, base starts from a container image instead of Ubuntu's ([details](from.md)).
+`base` is the image that every other image is built on. It is Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq and mise added, followed by the optional [features](customizing.md#base-image-features) you chose, such as oh-my-bash and fzf. Docker comes as a [layer of devvm's](#built-in-layers), so you check it in the list devvm shows when you customize a new VM, or give `devvm --layers docker`. With `--from`, base starts from a container image instead of Ubuntu's ([details](from.md)).
 
 A VM made from base gets 4 CPUs, 8 GiB of memory and a 100 GiB disk unless you give it another [size](ports-size.md#size). On a small machine it gets fewer CPUs and less memory, which [the size section](ports-size.md#size-and-ports) explains.
 
@@ -121,25 +121,43 @@ A new VM gets the tools chosen for it when devvm makes it, and keeps those versi
 ```mermaid
 flowchart TD
   run["devvm in a folder<br>without a VM"] --> defaults["the defaults: the folder's toolchains,<br>devvm setup's agents and layers"]
-  defaults --> flags{{"--tools, --agents<br>or --layers given?"}}
-  flags -- "yes" --> replace["each flag given<br>replaces its part"] --> say
-  flags -- "no" --> term{{"a terminal,<br>without --no-input?"}}
-  term -- "yes" --> pick["the list, the defaults checked:<br>you check what the VM gets"] --> copy
-  term -- "no" --> say["one line says<br>what the VM gets"]
-  say --> copy["its image built if it isn't,<br>and the VM is a copy of it,<br>with its shared tools mounted"]
+  defaults --> flags["each flag given replaces its part:<br>--tools, --agents, --layers, --network, --cpus, --memory"]
+  flags --> summary["the summary says what the VM gets"]
+  summary --> term{{"a terminal, without --no-input,<br>and something left to choose?"}}
+  term -- "no" --> copy
+  term -- "yes" --> ask{{"Customize it? [y/N]"}}
+  ask -- "Enter" --> copy
+  ask -- "y" --> pick["the list, then the tier,<br>then the CPUs and memory"] --> copy
+  copy["its image built if it isn't,<br>and the VM is a copy of it,<br>with its shared tools mounted"]
 ```
 
-A new VM gets three parts besides base: its toolchains, its coding agents and its layers. In a terminal, devvm shows them in one list under three headings, Toolchains, Coding agents and Layers, with each part's defaults checked. Up and down move, space checks or unchecks, and enter makes the VM with what's checked. The Layers heading says that a VM gets layers only when devvm makes it.
+Before devvm makes a new VM, it shows a summary of what the VM gets. The summary names each toolchain, coding agent and layer with why the VM gets it, such as `for package.json`, `from devvm setup` or `from --tools`, and then the VM's size, its network tier, its ports and the folder's `devcontainer.json`, when there is one:
+
+```text
+==> devvm-some-project-71a99b1076d92c gets:
+  toolchain node, for package.json
+  agent claude, from devvm setup
+  layers: none
+  size: 4 CPUs, 8 GiB of memory and a 100 GiB disk
+  network tier: allowlist
+  ports: all
+  devcontainer.json: .devcontainer/devcontainer.json, which devvm --no-devcontainer skips
+Customize it? [y/N]
+```
+
+In a terminal, devvm then asks whether to customize the VM. Pressing Enter makes it as shown. When you type y, devvm shows the three parts in one list under three headings, Toolchains, Coding agents and Layers, with what the summary showed checked. Up and down move, space checks or unchecks, and enter confirms what's checked. The Layers heading says that a VM gets layers only when devvm makes it. Then devvm asks for the VM's network tier, where Enter gives allowlist, unless you saved a tier for new VMs with `devvm network -g` ([choosing a tier](../safety/network.md#choosing-a-tier)). Last, it asks for the VM's CPUs and memory, starting from the summary's, and Enter keeps each one. The size you type is this VM's alone, and devvm saves it for no other VM.
 
 Each part has a default:
 
-- **Toolchains:** the ones the folder's files call for, each row naming its file, such as `package.json`.
-- **Coding agents:** the ones you chose with [devvm setup](settings.md#coding-agents-for-new-vms), with a row saying so. Until you choose some, there are none.
-- **Layers:** the ones you chose with [devvm setup](settings.md#layers-for-new-vms), bottom first, with a row saying so. Until you choose some, there are none. A layer that a project file calls for, such as `nix` for a `flake.nix`, names the file in its row but isn't checked unless devvm setup chose it, so you check it when you want it.
+- **Toolchains:** the ones the folder's files call for, each naming its file in the summary and the list, such as `package.json`.
+- **Coding agents:** the ones you chose with [devvm setup](settings.md#coding-agents-for-new-vms), which the summary and the list say. The summary says `from config.toml` for the ones that `config.toml` sets. Until you choose some, there are none.
+- **Layers:** the ones you chose with [devvm setup](settings.md#layers-for-new-vms), bottom first, which the summary and the list say in the same way. Until you choose some, there are none. A layer that a project file calls for, such as `nix` for a `flake.nix`, names the file in its row of the list but isn't checked unless devvm setup chose it, so you check it when you want it.
 
-Three flags choose the parts on the command line, and any of them skips the list. `--tools` takes the toolchains, as in `--tools node,python`, `--agents` takes the coding agents, as in `--agents claude,codex`, and `--layers` takes the layers bottom first, as in `--layers docker,mine`. Each is the exact list for its part and replaces that part's default, and `none` chooses none of it, as in `--agents none`. A part whose flag you leave out takes its default. devvm checks each name before it does anything. For a name that belongs to another part, such as `--tools claude`, it names the flag that takes it, and for a name it doesn't know, it suggests the closest one.
+Three flags choose the parts on the command line. `--tools` takes the toolchains, as in `--tools node,python`, `--agents` takes the coding agents, as in `--agents claude,codex`, and `--layers` takes the layers bottom first, as in `--layers docker,mine`. Each is the exact list for its part and replaces that part's default, and `none` chooses none of it, as in `--agents none`. A part whose flag you leave out takes its default. devvm checks each name before it does anything. For a name that belongs to another part, such as `--tools claude`, it names the flag that takes it, and for a name it doesn't know, it suggests the closest one.
 
-Without a terminal, or with `--no-input`, devvm shows no list and doesn't fail. The VM gets the defaults, with any of the three flags replacing its part, and devvm says in one line what the VM gets and which flags choose others.
+A part, tier or size that a flag gives is taken as given, and the summary says so. devvm still asks whether to customize the VM while anything is left to choose, because a flag answers only its own part. When you customize it, the list shows a part that a flag gave greyed out, and the cursor skips it. devvm skips the list when `--tools`, `--agents` and `--layers` give all three parts, skips the tier when you give `--network` or saved a tier, and skips the CPUs or the memory when you give `--cpus` or `--memory`. devvm doesn't ask at all when the flags give every part, the CPUs and the memory, and the tier is given or saved. It doesn't ask about the tier on a backend whose VMs can only be open, either.
+
+Without a terminal, or with `--no-input`, devvm asks nothing and doesn't fail. The VM gets what the summary shows, and the summary ends with the flags that choose others.
 
 devvm looks at the folder's top level for the files that call for a toolchain, in this order:
 
@@ -150,9 +168,9 @@ devvm looks at the folder's top level for the files that call for a toolchain, i
 | rust | `Cargo.toml` |
 | go | `go.mod` |
 
-If more than one toolchain matches, they're all checked, so `package.json` and `pyproject.toml` give node and python. A Nix project's files call for the [`nix` layer](#nix), whose row names them. Those files are `flake.nix`, `shell.nix` and `devenv.nix`, and a `default.nix` that makes a shell with `mkShell`. In a folder with none of these files, the default is no toolchains, so a VM made without a terminal or flags gets devvm setup's layers and agents.
+If more than one toolchain matches, the VM gets them all, so `package.json` and `pyproject.toml` give node and python. A Nix project's files call for the [`nix` layer](#nix), whose row names them. Those files are `flake.nix`, `shell.nix` and `devenv.nix`, and a `default.nix` that makes a shell with `mkShell`. In a folder with none of these files, the default is no toolchains, so a VM made without a terminal or flags gets devvm setup's layers and agents.
 
-A folder's `devcontainer.json` adds what its features map to, such as toolchains or the `docker` layer, to the defaults, each row naming the file ([`devcontainer.json`](devcontainer.md)). Its layers go on top of devvm setup's.
+A folder's `devcontainer.json` adds what its features map to, such as toolchains or the `docker` layer, to the defaults, each naming the file in the summary and the list ([`devcontainer.json`](devcontainer.md)). Its layers go on top of devvm setup's.
 
 The VM's image is base with its layers, in the order you give them, bottom first, so `--layers docker,mine` makes the image `docker+mine`. When you check layers in the list, devvm setup's stay in their order at the bottom, and the ones you add go on top in the list's order. Its shared tools are a list of their own, the toolchains first, then the agents.
 

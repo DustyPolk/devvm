@@ -389,10 +389,12 @@ func (e creation) firstRun(o Options, size Size) (settings.Defaults, error) {
 }
 
 // plan checks and chooses what a new VM gets, all before the build,
-// which can take minutes: its image, size, ports, network policy (asked
-// for), SSH agent and the backend features it needs, with what the
-// folder's devcontainer.json says (its From and its plan, which the
-// new VM keeps: o stays as it was asked for).
+// which can take minutes: devvm's first run's questions (firstRun), then
+// its image, size, ports and network policy, shown in its summary and
+// customized when the user says so (choose), its SSH agent and the
+// backend features it needs, with what the folder's devcontainer.json
+// says (its From and its plan, which the new VM keeps: o stays as it
+// was asked for).
 func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backend.Backend) (newVM, error) {
 	vm := f.Name
 	size, err := o.Size.Parse()
@@ -407,7 +409,7 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 		return newVM{}, err
 	}
 	n := newVM{agent: sshagent.Off}
-	if n.from, n.dc, err = e.devcontainers.prepare(ctx, o, vm, f.Dir); err != nil {
+	if n.from, n.dc, err = e.devcontainers.prepare(ctx, o, f.Dir); err != nil {
 		return newVM{}, err
 	}
 	def, err := e.firstRun(o, size)
@@ -430,16 +432,13 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 		return newVM{}, err
 	}
 	n.builder = e.Builder(b, n.from)
-	parts, err := e.chooseParts(o, vm, f.Dir, n.dc, n.builder, def)
+	parts, err := e.choose(o, f, b, def, host, &n)
 	if err != nil {
 		return newVM{}, err
 	}
 	n.img, n.tools = parts.image(), parts.tools()
 	n.dcGave = fileParts(o, f.Dir, n.dc, def, parts)
 	n.spec = e.machineSpec(b, f, n.tools, o.SSHAgent, n.size, o.Clone)
-	if n.net, err = e.chooseNet(o, b, vm, def.Network.Value); err != nil {
-		return newVM{}, err
-	}
 	if o.SSHAgent {
 		n.agent = sshagent.On
 	}
@@ -478,11 +477,12 @@ func newPorts(given string, def settings.Defaults, dc *devcontainer.Plan) (list 
 	return filePorts(def.Ports.Value, nil, nil, dc.Ports)
 }
 
-// chooseNet returns a new VM's tier: --network's, else the default's
-// (config.toml's, else devvm network -g's or devvm setup's), else asked
-// for (ask), allowlist by default. A backend b that may not confine a VM
-// to its proxy (egress-proxy) offers open alone: any other tier is
-// refused in one line (net_tier_backend), unasked, never dropped.
+// chooseNet returns the tier a new VM's summary shows: --network's, else
+// the default's (config.toml's, else devvm network -g's or devvm
+// setup's), else allowlist (TierDefault), which customizing it may change.
+// A backend b that may not confine a VM to its proxy (egress-proxy)
+// offers open alone: any other tier is refused in one line
+// (net_tier_backend), unasked, never dropped.
 func (e creation) chooseNet(o Options, b backend.Backend, vm, saved string) (netpolicy.Tier, error) {
 	tier := o.Network
 	if tier == "" && saved != settings.NetworkAsk {
@@ -494,9 +494,75 @@ func (e creation) chooseNet(o Options, b backend.Backend, vm, saved string) (net
 	case !e.Registry.Allowed(b, backend.FeatureEgressProxy):
 		return "", msg.NetTierBackend(b.Name(), vm)
 	case tier == "":
-		return e.Proxy.Choose(vm), nil
+		return netpolicy.TierDefault, nil
 	}
 	return tier, nil
+}
+
+// choose works out a new VM's parts, as its flags and defaults have them
+// (partsFor), and its tier (chooseNet), shows its summary with its size
+// and ports (n's), and asks whether to customize it: only where the
+// picker shows (CanPick) and something is left to choose (leftToChoose).
+// Enter, or where it can't ask, makes it as shown; yes customizes it
+// (customize). Where the question isn't asked, the summary ends with the
+// flags that choose others.
+func (e creation) choose(o Options, f project.Folder, b backend.Backend, def settings.Defaults, host Host, n *newVM) (Parts, error) {
+	vm := f.Name
+	d, p, err := e.partsFor(o, vm, f.Dir, n.dc, n.builder, def)
+	if err != nil {
+		return Parts{}, err
+	}
+	if n.net, err = e.chooseNet(o, b, vm, def.Network.Value); err != nil {
+		return Parts{}, err
+	}
+	s := summary{
+		vm: vm, o: o, d: d, p: p, agentsFrom: chosenBy(def.Agents.Source), layersFrom: chosenBy(def.Layers.Source),
+		size: shownSize(n.size, host), tier: n.net, ports: n.ports,
+	}
+	if n.dc != nil {
+		s.dc = n.dc.File
+	}
+	lines := s.lines()
+	e.Info(lines[0])
+	for _, m := range lines[1:] {
+		e.Say(m)
+	}
+	// The tier is asked as before the summary was: only without --network
+	// or a saved tier, where the backend may confine the VM.
+	tierOpen := o.Network == "" && def.Network.Value == settings.NetworkAsk && e.Registry.Allowed(b, backend.FeatureEgressProxy)
+	switch {
+	case !leftToChoose(o, tierOpen):
+		return p, nil
+	case !e.CanPick() || e.PickParts == nil:
+		e.Say(msg.NewVMChoose())
+		return p, nil
+	}
+	// Refused, as when the input ends, it's no: the VM made as shown.
+	if yes, _ := e.Ask(msg.NewVMCustomize().AnsweredBy("--tools, --agents, --layers, --network, --cpus and --memory")); !yes {
+		return p, nil
+	}
+	return e.customize(s, host, tierOpen, n)
+}
+
+// customize asks for what of a new VM no flag gave, starting from its
+// summary s: the picker, a part a flag gave greyed out (skipped when the
+// flags give every part), then its tier when tierOpen (Choose, Enter for
+// allowlist, which the summary showed), then its
+// CPUs and memory (AskVM), each into n. It returns the parts chosen,
+// checked as the defaults are.
+func (e creation) customize(s summary, host Host, tierOpen bool, n *newVM) (Parts, error) {
+	p := s.p
+	if !allGiven(s.o) {
+		var err error
+		if p, err = e.checkParts(s.vm, e.pickNew(s.vm, s.o, s.d, p, n.builder), s.d, n.builder); err != nil {
+			return Parts{}, err
+		}
+	}
+	if tierOpen {
+		n.net = e.Proxy.Choose(s.vm)
+	}
+	n.size = SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.AskVM(n.size, s.size, s.o.Size)
+	return p, n.size.Check(host, backend.BaseDiskGiB, s.vm)
 }
 
 // record sets a new VM's choices in its state, before it's written, with

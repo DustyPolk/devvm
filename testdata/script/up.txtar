@@ -16,7 +16,7 @@ stub_calls
 # devvm's forwarder over Lima's ssh, set up, and devvm's last act is the
 # shell, in the folder.
 exec devvm --network open
-stdout '^==> new_vm_gets layers=none tools=none vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> new_vm_summary vm=devvm-web-[0-9a-f]{14}\nnew_vm_toolchains_none\nnew_vm_agents_none\nnew_vm_layers_none\nnew_vm_size cpus=4 disk=100 memory=8\nnew_vm_network tier=open\nnew_vm_ports ports=all\nnew_vm_choose\n'
 stdout '^==> building_image image=base key=[0-9a-f]{12}$'
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
@@ -170,15 +170,18 @@ stderr '^devvm: part_none_alone flag=--layers$'
 ! stub_calls
 ! vm_name PARTS parts
 
-# Without a terminal a new VM gets the defaults, said in one line: the
-# toolchains the folder's files call for, devvm setup's agents, no
-# layers; the same with --no-input.
+# Without a terminal a new VM gets the defaults, as its summary says,
+# each with why: the toolchains the folder's files call for, devvm
+# setup's agents, no layers; the summary ends with the flags that choose
+# others, and nothing is asked. The same with --no-input.
 project dflt git
 exec sh -c 'echo "{}" > package.json'
 exec devvm setup --agents codex
 exec devvm --network open --no-git-protect --no-input
-stdout '^==> new_vm_gets layers=none tools=node codex vm=devvm-dflt-[0-9a-f]{14}$'
-stdout -count=1 new_vm_gets
+stdout '^==> new_vm_summary vm=devvm-dflt-[0-9a-f]{14}\nnew_vm_toolchain_for file=package.json tool=node\nnew_vm_agent_from agent=codex from=devvm setup\nnew_vm_layers_none\n'
+stdout -count=1 new_vm_summary
+stdout '^new_vm_choose$'
+! stderr new_vm_customize
 vm_name DFLT dflt
 vm_state $DFLT_dir/vm.json
 stdout '^image=base$'
@@ -189,7 +192,7 @@ stdout '^tools.names=node codex$'
 project flags git
 exec sh -c 'echo "{}" > package.json'
 exec devvm --network open --no-git-protect --tools go --agents none
-stdout '^==> new_vm_gets layers=none tools=go vm=devvm-flags-[0-9a-f]{14}$'
+stdout '^new_vm_toolchain_from from=--tools tool=go\nnew_vm_agents_none\nnew_vm_layers_none\n'
 vm_name FLAGS flags
 vm_state $FLAGS_dir/vm.json
 stdout '^image=base$'
@@ -197,4 +200,4 @@ stdout '^tools.names=go$'
 project nonetools git
 exec sh -c 'echo "{}" > package.json'
 exec devvm --network open --no-git-protect --tools none
-stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-nonetools-[0-9a-f]{14}$'
+stdout '^new_vm_toolchains_none\nnew_vm_agent_from agent=codex from=devvm setup\nnew_vm_layers_none\n'

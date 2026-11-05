@@ -194,23 +194,38 @@ vm_state $DEFAULT_dir/vm.json
 stdout '^net\.tier=allowlist$'
 stdout '^net\.made\.check=ok$'
 
-# In a terminal, devvm asks for the tier: Enter would take allowlist, a
-# word that isn't a tier is warned about and asked again, and a tier is
-# the VM's.
+# In a terminal, without customizing the VM, its summary shows allowlist
+# and nothing asks for the tier. Customizing it asks, after the agents of
+# the first run and the picker: Enter would take allowlist, a word that
+# isn't a tier is warned about and asked again, and a tier is the VM's.
+# The picker shows with a terminal on stdout too, which a test build's
+# DEVVM_PICK_ON_PIPE stands in for.
+env DEVVM_PICK_ON_PIPE=1
+project shown
+exec devvm setup --agents none
+ttyin -stdin $WORK/enter.txt
+exec devvm --no-git-protect
+stdout '^new_vm_network tier=allowlist$'
+! stderr 'net_about|net_ask'
+vm_name SHOWN shown
+vm_state $SHOWN_dir/vm.json
+stdout '^net\.tier=allowlist$'
 project asked
 ttyin -stdin $WORK/tiers.txt
 exec devvm --no-git-protect
-stderr '^net_about vm=devvm-asked-[0-9a-f]{14}$'
+stderr 'new_vm_customize \[y/N\] net_about vm=devvm-asked-[0-9a-f]{14}$'
 stderr 'net_ask tier=allowlist'
 stderr 'devvm: net_tier_unknown choices=open, internet, allowlist, none given=on$'
 vm_name ASKED asked
 vm_state $ASKED_dir/vm.json
 stdout '^net\.tier=internet$'
-# --network: the tier, unasked.
+# --network: the tier, unasked, the rest still customized.
 project flagged
-ttyin -stdin $WORK/tiers.txt
+ttyin -stdin $WORK/enter.txt
 exec devvm --network none --no-git-protect
+stderr new_vm_customize
 ! stderr 'net_about|net_ask'
+env DEVVM_PICK_ON_PIPE=
 vm_name FLAGGED flagged
 vm_state $FLAGGED_dir/vm.json
 stdout '^net\.tier=none$'
@@ -337,8 +352,14 @@ netwrk = "open"
 -- config-maybe.toml --
 network = "maybe"
 
+-- enter.txt --
+
 -- tiers.txt --
+y
+
 on
 internet
+
+
 -- codex.json --
 {"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}

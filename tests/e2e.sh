@@ -2276,7 +2276,8 @@ quiet "$D" ports -g none
 launch "$dc" 'echo "dc-env=$E2E_DC"' --network open
 "$D" ports -g all </dev/null >/dev/null 2>&1
 check "devvm makes the VM as its devcontainer.json says, and says so" bash -c "[[ -n '$vm' && \$(status_of '$vm') == Running ]] &&
-  grep -qF \"\$(m devcontainer_using file=.devcontainer/devcontainer.json vm=$vm)\" '$work/last.log' &&
+  grep -qF \"\$(m new_vm_summary vm=$vm)\" '$work/last.log' &&
+  grep -qF \"\$(m new_vm_devcontainer file=.devcontainer/devcontainer.json)\" '$work/last.log' &&
   vm_state '$(vmdir "$vm")' | grep -Eqx 'devcontainer\.sum=[0-9a-f]{64}' &&
   vm_state '$(vmdir "$vm")' | grep -qx 'devcontainer.file=.devcontainer/devcontainer.json' && vm_state '$(vmdir "$vm")' | grep -qx ports.forward=$P47180"
 check "its forwardPorts join your ports, as the file's" bash -c "vm_state '$(vmdir "$vm")' | grep -qx 'devcontainer.ports_gave=$P47180'"
@@ -3287,7 +3288,9 @@ export -f in_vm
 nv=$(sed -n 's/^nix_version=//p' "$root/assets/layers/nix.sh")
 dv=$(sed -n 's/^direnv_version=//p' "$root/assets/layers/nix.sh")
 check "a flake.nix and a package.json: a node VM with the nix layer and network policy, Nix and direnv at their pins" bash -c "
-  [[ -n '$vm' ]] && grep -qF \"\$(m new_vm_gets layers=nix tools=node vm=$vm)\" '$work/last.log' &&
+  [[ -n '$vm' ]] && grep -qF \"\$(m new_vm_summary vm=$vm)\" '$work/last.log' &&
+  grep -qF \"\$(m new_vm_toolchain_for file=package.json tool=node)\" '$work/last.log' &&
+  grep -qF \"\$(m new_vm_layer_from from=--layers layer=nix)\" '$work/last.log' &&
   vm_state '$(vmdir "$vm")' | grep -qx image=nix && vm_state '$(vmdir "$vm")' | grep -qx tools.names=node &&
   vm_state '$(vmdir "$vm")' | grep -qx net.tier=allowlist && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok &&
   in_vm '$vm' '[[ \$(nix --version) == \"nix (Nix) $nv\" && \$(direnv version) == $dv ]]'"

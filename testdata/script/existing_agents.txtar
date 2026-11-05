@@ -80,7 +80,7 @@ stdout '\A{\n  "version": 1,\n  "tools": \[\n    {\n      "tool": "go",\n      "
 project web
 cp $WORK/package.json package.json
 exec devvm --network open --no-git-protect --agents claude
-stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-web-[0-9a-f]{14}$'
+stdout '^new_vm_toolchain_for file=package\.json tool=node\nnew_vm_agent_from agent=claude from=--agents\nnew_vm_layers_none\n'
 vm_name WEB web
 ! exec devvm tools rm node,claude
 stderr '^devvm: tools_joined cmd=rm given=node,claude$'

@@ -123,29 +123,44 @@ func (e creation) requireSetupLayers(vm string, layers []string, d partsDefault,
 	return nil
 }
 
-// chooseParts chooses what a new VM gets of each part: the flags', each
+// partFlag is a part's flag: its name, the list it was given (nil when
+// it wasn't), and the part of a Parts it sets.
+type partFlag struct {
+	name  string
+	given *[]string
+	part  *[]string
+}
+
+// partFlags are o's --tools, --agents and --layers, each with the part
+// of p it sets, in the picker's order.
+func partFlags(o Options, p *Parts) []partFlag {
+	return []partFlag{
+		{"--tools", o.Toolchains, &p.Toolchains}, {"--agents", o.Agents, &p.Agents}, {"--layers", o.Layers, &p.Layers},
+	}
+}
+
+// partsFor works out what a new VM gets of each part: the flags', each
 // the exact list for its part, and the defaults for those left out (def's
-// agents and layers). In a terminal without any of the flags, the picker
-// shows the defaults checked; otherwise an info line says what the VM
-// gets. The layers are checked against b's.
-func (e creation) chooseParts(o Options, vm, dir string, dc *devcontainer.Plan, b *build.Env, def settings.Defaults) (Parts, error) {
+// agents and layers), checked (checkParts). It returns the defaults too,
+// which its summary and the picker say why of.
+func (e creation) partsFor(o Options, vm, dir string, dc *devcontainer.Plan, b *build.Env, def settings.Defaults) (partsDefault, Parts, error) {
 	d := e.defaults(dir, dc, def)
 	if o.Layers == nil {
 		e.addSetupLayers(&d, vm, def, b)
 	}
 	p := d.Parts
-	given := false
-	for _, f := range []struct {
-		flag *[]string
-		part *[]string
-	}{{o.Toolchains, &p.Toolchains}, {o.Agents, &p.Agents}, {o.Layers, &p.Layers}} {
-		if f.flag != nil {
-			*f.part, given = *f.flag, true
+	for _, f := range partFlags(o, &p) {
+		if f.given != nil {
+			*f.part = *f.given
 		}
 	}
-	if !given && e.CanPick() && e.PickParts != nil {
-		p = e.pickNew(vm, d, b)
-	}
+	p, err := e.checkParts(vm, p, d, b)
+	return d, p, err
+}
+
+// checkParts returns p with its layers in its image's order, once they're
+// checked against b's and its backend's (requireSetupLayers).
+func (e creation) checkParts(vm string, p Parts, d partsDefault, b *build.Env) (Parts, error) {
 	img := p.image()
 	p.Layers = img.Layers()
 	if err := (build.Names{Env: b}).Check(img); err != nil {
@@ -154,15 +169,19 @@ func (e creation) chooseParts(o Options, vm, dir string, dc *devcontainer.Plan, 
 	if err := e.requireSetupLayers(vm, p.Layers, d, b); err != nil {
 		return Parts{}, err
 	}
-	if given || !e.CanPick() || e.PickParts == nil {
-		e.Info(msg.NewVMGets(listOrNone(p.Layers), listOrNone(p.tools()), vm))
-	}
 	return p, nil
 }
 
-// pickNew shows the picker for a new VM, its defaults checked, and
-// returns the parts chosen.
-func (e creation) pickNew(vm string, d partsDefault, b *build.Env) Parts {
+// allGiven reports whether o's flags give every part, so the picker has
+// nothing to choose.
+func allGiven(o Options) bool {
+	return o.Toolchains != nil && o.Agents != nil && o.Layers != nil
+}
+
+// pickNew shows the picker for a new VM, what it gets (p) checked: each
+// part's defaults saying why, and a part a flag gave greyed out as it
+// was given. It returns the parts chosen.
+func (e creation) pickNew(vm string, o Options, d partsDefault, p Parts, b *build.Env) Parts {
 	why := func(name string) msg.M {
 		if f, ok := d.why[name]; ok {
 			return msg.PickCalledFor(f)
@@ -171,10 +190,10 @@ func (e creation) pickNew(vm string, d partsDefault, b *build.Env) Parts {
 	}
 	var toolchains, agents, layers []PickRow
 	for _, t := range image.Toolchains {
-		toolchains = append(toolchains, PickRow{Name: t, Desc: why(t), On: slices.Contains(d.Toolchains, t)})
+		toolchains = append(toolchains, PickRow{Name: t, Desc: why(t), On: slices.Contains(p.Toolchains, t)})
 	}
 	for _, a := range image.Agents {
-		r := PickRow{Name: a, On: slices.Contains(d.Agents, a)}
+		r := PickRow{Name: a, On: slices.Contains(p.Agents, a)}
 		if slices.Contains(d.setup, a) {
 			r.Desc = msg.PickFromSetup()
 		}
@@ -189,12 +208,23 @@ func (e creation) pickNew(vm string, d partsDefault, b *build.Env) Parts {
 		default:
 			desc = layerDesc(l)
 		}
-		layers = append(layers, PickRow{Name: l, Desc: desc, On: slices.Contains(d.Layers, l)})
+		layers = append(layers, PickRow{Name: l, Desc: desc, On: slices.Contains(p.Layers, l)})
 	}
-	got := e.PickParts(msg.PickNewHelp(vm), []PickPart{
-		{msg.PickToolchains(), toolchains}, {msg.PickAgents(), agents}, {msg.PickLayers(), layers},
-	})
-	return Parts{Toolchains: checked(got[0]), Agents: checked(got[1]), Layers: inOrder(d.Layers, checked(got[2]))}
+	parts := []PickPart{{msg.PickToolchains(), toolchains}, {msg.PickAgents(), agents}, {msg.PickLayers(), layers}}
+	for i, f := range partFlags(o, &p) {
+		if f.given == nil {
+			continue
+		}
+		for j := range parts[i].Rows {
+			r := &parts[i].Rows[j]
+			r.Fixed = true
+			if r.On {
+				r.Desc = msg.PickFromFlag(f.name)
+			}
+		}
+	}
+	got := e.PickParts(msg.PickNewHelp(vm), parts)
+	return Parts{Toolchains: checked(got[0]), Agents: checked(got[1]), Layers: inOrder(p.Layers, checked(got[2]))}
 }
 
 // inOrder is the layers chosen, those of was first in its order, bottom

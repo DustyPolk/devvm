@@ -192,7 +192,6 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"branch_names_invalid":          "using/clone#deleting-the-vm",
 	"git_protect_clone":             "safety/git-protection#turning-it-on-or-off",
 	"git_protect_failed":            "safety/git-protection#turning-it-on-or-off",
-	"devcontainer_using":            "using/devcontainer",
 	"devcontainer_flag_wins":        "using/devcontainer#when-its-read",
 	"devcontainer_ignored":          "using/devcontainer#properties",
 	"devcontainer_unknown":          "using/devcontainer#properties",

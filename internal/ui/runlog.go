@@ -43,14 +43,20 @@ type Flags struct {
 	// terminal, a line each, without their prompts: the CLI tests' way to
 	// answer, which only a test build turns on.
 	PipedAnswers bool
+	// PickOnPipe shows the picker when stdin is a terminal and stdout
+	// isn't (CanPick): the CLI tests' way to reach it, as testscript's
+	// ttyin gives a command a terminal on stdin alone. Only a test build
+	// turns it on.
+	PickOnPipe bool
 }
 
 // SetFlags sets the run's -v/--verbose and --no-input, and whether
-// answers are piped.
+// answers are piped and the picker shown on a pipe.
 func (u *UI) SetFlags(f Flags) {
 	u.verboseOn.Store(f.Verbose)
 	u.noInput.Store(f.NoInput)
 	u.pipedAnswers.Store(f.PipedAnswers)
+	u.pickOnPipe.Store(f.PickOnPipe)
 }
 
 // verbose reports whether u streams the run log (Flags.Verbose).

@@ -60,7 +60,7 @@ func (f rootFS) Open(name string) (fs.File, error) {
 // pinned) and its plan (nil without one): its features' layers go under
 // IMAGE's, its forwardPorts add to the default ports. What's given on the
 // command line wins: --from, --ports. It says what it ignores.
-func (e devcontainers) prepare(ctx context.Context, o Options, vm, dir string) (fromRef string, dc *devcontainer.Plan, err error) {
+func (e devcontainers) prepare(ctx context.Context, o Options, dir string) (fromRef string, dc *devcontainer.Plan, err error) {
 	if o.NoDevcontainer {
 		return o.From, nil, nil
 	}
@@ -75,7 +75,6 @@ func (e devcontainers) prepare(ctx context.Context, o Options, vm, dir string) (
 	if err != nil {
 		return "", nil, err
 	}
-	e.Info(msg.DevcontainerUsing(file, vm))
 	for _, m := range p.Notes {
 		e.Warn(m)
 	}

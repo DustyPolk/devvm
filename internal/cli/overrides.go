@@ -21,6 +21,9 @@ type Overrides struct {
 	// that isn't a terminal, a line each (ui.Flags), where devvm would
 	// refuse them.
 	PipedAnswers bool
+	// PickOnPipe (DEVVM_PICK_ON_PIPE=1) shows the picker with a terminal
+	// on stdin alone (ui.Flags), as testscript's ttyin gives.
+	PickOnPipe bool
 }
 
 // readOverrides reads a test build's overrides with getenv; a release's
@@ -42,5 +45,6 @@ func readOverrides(getenv func(string) string) Overrides {
 		},
 		HostMise:     getenv("DEVVM_HOST_MISE"),
 		PipedAnswers: getenv("DEVVM_PIPED_ANSWERS") == "1",
+		PickOnPipe:   getenv("DEVVM_PICK_ON_PIPE") == "1",
 	}
 }

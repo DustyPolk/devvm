@@ -26,7 +26,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		Use:   "devvm",
 		Short: "Open a shell in this folder's VM, creating it first",
 		Long: "Open a shell in this folder's VM, at the same path, and create the VM first when the folder has none. " +
-			"In a terminal you choose a new VM's toolchains, coding agents and layers in a list, and --tools, --agents and --layers choose them without it. " +
+			"devvm shows what a new VM gets, and in a terminal you can customize its toolchains, coding agents, layers, tier and size, which --tools, --agents, --layers, --network, --cpus and --memory choose without asking. " +
 			"The VM mounts only this folder read-write, and with --clone it gets its own clone of the repo instead.",
 		Example: examples(
 			"devvm", "open this folder's VM, choosing what a new one gets",
@@ -39,7 +39,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			f := *fl
-			f.PipedAnswers = a.testOverrides().PipedAnswers
+			f.PipedAnswers, f.PickOnPipe = a.testOverrides().PipedAnswers, a.testOverrides().PickOnPipe
 			u.SetFlags(f)
 			if wantsJSON(cmd) {
 				u.DataOnly() // stdout is the JSON's alone

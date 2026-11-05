@@ -230,11 +230,11 @@ func TestUpTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	var said msg.Recorder
-	fake(e).OnInfo = said.Add
+	fake(e).OnSay = said.Add
 	if err := (Launch{e}).Up(t.Context(), Options{Agents: &[]string{"claude"}, Network: "open"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if !slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets layers=none tools=node claude vm=") }) {
+	if got := strings.Join(partLines(said.Names()), ","); got != "new_vm_toolchain_for file=package.json tool=node,new_vm_agent_from agent=claude from=--agents,new_vm_layers_none" {
 		t.Errorf("said %q", said.Names())
 	}
 	// A tools build for each of node, pnpm, bun and claude.
@@ -345,8 +345,16 @@ func TestUpFromTools(t *testing.T) {
 // A new VM's defaults: the toolchains the folder's files call for, devvm
 // setup's agents, and no layers, the nix layer a flake.nix calls for
 // included; each flag replaces its part, none with an empty list. Without
-// a terminal one line says what the VM gets.
+// a terminal the summary says what the VM gets of each and why, then the
+// flags that choose others.
 func TestUpParts(t *testing.T) {
+	const (
+		nodeGo   = "new_vm_toolchain_for file=package.json tool=node,new_vm_toolchain_for file=go.mod tool=go,"
+		noAgents = "new_vm_agents_none,"
+		noLayers = "new_vm_layers_none"
+		setup    = "new_vm_layer_from from=devvm setup layer="
+		flag     = "new_vm_layer_from from=--layers layer="
+	)
 	for _, tc := range []struct {
 		name                 string
 		o                    Options
@@ -356,22 +364,25 @@ func TestUpParts(t *testing.T) {
 		warned               string   // what's warned, when anything is
 		withFlake, withLayer bool
 	}{
-		{name: "setup's layers", setupLayers: []string{"nix", "mine"}, img: "nix+mine", tools: "node go", gets: "layers=nix mine tools=node go", withLayer: true},
-		{name: "--layers replaces setup's", o: Options{Layers: &[]string{"docker"}}, setupLayers: []string{"nix"}, img: "docker", tools: "node go", gets: "layers=docker tools=node go"},
-		{name: "--layers none", o: Options{Layers: &[]string{}}, setupLayers: []string{"nix"}, img: "base", tools: "node go", gets: "layers=none tools=node go"},
+		{name: "setup's layers", setupLayers: []string{"nix", "mine"}, img: "nix+mine", tools: "node go", gets: nodeGo + noAgents + setup + "nix," + setup + "mine", withLayer: true},
+		{name: "--layers replaces setup's", o: Options{Layers: &[]string{"docker"}}, setupLayers: []string{"nix"}, img: "docker", tools: "node go", gets: nodeGo + noAgents + flag + "docker"},
+		{name: "--layers none", o: Options{Layers: &[]string{}}, setupLayers: []string{"nix"}, img: "base", tools: "node go", gets: nodeGo + noAgents + noLayers},
 		{
-			name: "setup's layer gone", setupLayers: []string{"mine", "nix"}, img: "nix", tools: "node go", gets: "layers=nix tools=node go",
+			name: "setup's layer gone", setupLayers: []string{"mine", "nix"}, img: "nix", tools: "node go", gets: nodeGo + noAgents + setup + "nix",
 			warned: "default_layer_gone dir=LAYERS layer=mine vm=VM",
 		},
-		{name: "a gone layer --layers replaces", o: Options{Layers: &[]string{}}, setupLayers: []string{"mine"}, img: "base", tools: "node go", gets: "layers=none tools=node go"},
-		{name: "the defaults", img: "base", tools: "node go", gets: "layers=none tools=node go", withFlake: true},
-		{name: "setup's agents", setup: []string{"codex"}, img: "base", tools: "node go codex", gets: "layers=none tools=node go codex"},
-		{name: "setup's none", setup: []string{}, img: "base", tools: "node go", gets: "layers=none tools=node go"},
-		{name: "--tools", o: Options{Toolchains: &[]string{"python"}}, img: "base", tools: "python", gets: "layers=none tools=python"},
-		{name: "--tools none", o: Options{Toolchains: &[]string{}}, setup: []string{"claude"}, img: "base", tools: "claude", gets: "layers=none tools=claude"},
-		{name: "--agents none", o: Options{Agents: &[]string{}}, setup: []string{"claude"}, img: "base", tools: "node go", gets: "layers=none tools=node go"},
-		{name: "--layers", o: Options{Layers: &[]string{"mine", "nix"}}, img: "mine+nix", tools: "node go", gets: "layers=mine nix tools=node go", withLayer: true},
-		{name: "all none", o: Options{Toolchains: &[]string{}, Agents: &[]string{}, Layers: &[]string{}}, img: "base", gets: "layers=none tools=none"},
+		{name: "a gone layer --layers replaces", o: Options{Layers: &[]string{}}, setupLayers: []string{"mine"}, img: "base", tools: "node go", gets: nodeGo + noAgents + noLayers},
+		{name: "the defaults", img: "base", tools: "node go", gets: nodeGo + noAgents + noLayers, withFlake: true},
+		{name: "setup's agents", setup: []string{"codex"}, img: "base", tools: "node go codex", gets: nodeGo + "new_vm_agent_from agent=codex from=devvm setup," + noLayers},
+		{name: "setup's none", setup: []string{}, img: "base", tools: "node go", gets: nodeGo + noAgents + noLayers},
+		{name: "--tools", o: Options{Toolchains: &[]string{"python"}}, img: "base", tools: "python", gets: "new_vm_toolchain_from from=--tools tool=python," + noAgents + noLayers},
+		{
+			name: "--tools none", o: Options{Toolchains: &[]string{}}, setup: []string{"claude"}, img: "base", tools: "claude",
+			gets: "new_vm_toolchains_none,new_vm_agent_from agent=claude from=devvm setup," + noLayers,
+		},
+		{name: "--agents none", o: Options{Agents: &[]string{}}, setup: []string{"claude"}, img: "base", tools: "node go", gets: nodeGo + noAgents + noLayers},
+		{name: "--layers", o: Options{Layers: &[]string{"mine", "nix"}}, img: "mine+nix", tools: "node go", gets: nodeGo + noAgents + flag + "mine," + flag + "nix", withLayer: true},
+		{name: "all none", o: Options{Toolchains: &[]string{}, Agents: &[]string{}, Layers: &[]string{}}, img: "base", gets: "new_vm_toolchains_none," + noAgents + noLayers},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e, f, _ := upEnv(t, allNative())
@@ -403,8 +414,8 @@ func TestUpParts(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			var said, warned msg.Recorder
-			fake(e).OnInfo, fake(e).OnWarn = said.Add, warned.Add
+			var said, says, warned msg.Recorder
+			fake(e).OnInfo, fake(e).OnSay, fake(e).OnWarn = said.Add, says.Add, warned.Add
 			o := tc.o
 			o.Network, o.Ports = "open", "none"
 			if err := (Launch{e}).Up(t.Context(), o); err != nil {
@@ -415,8 +426,14 @@ func TestUpParts(t *testing.T) {
 			if get(st, keyImage) != tc.img || get(st, keyToolNames) != tc.tools {
 				t.Errorf("image=%q tool_names=%q, want %q and %q", get(st, keyImage), get(st, keyToolNames), tc.img, tc.tools)
 			}
-			if !slices.Contains(said.Names(), "new_vm_gets "+tc.gets+" vm="+spec.Name) {
-				t.Errorf("said %q, want new_vm_gets %s", said.Names(), tc.gets)
+			if !slices.Contains(said.Names(), "new_vm_summary vm="+spec.Name) {
+				t.Errorf("said %q, want new_vm_summary", said.Names())
+			}
+			if got := strings.Join(partLines(says.Names()), ","); got != tc.gets {
+				t.Errorf("summary's parts %q, want %q", got, tc.gets)
+			}
+			if names := says.Names(); !slices.Contains(names, "new_vm_choose") {
+				t.Errorf("summary %q doesn't say new_vm_choose", names)
 			}
 			want := strings.NewReplacer("LAYERS", e.Dirs.Layers(), "VM", spec.Name).Replace(tc.warned)
 			var layerWarnings []string
@@ -453,11 +470,12 @@ func TestUpSetupLayerLacks(t *testing.T) {
 	}
 }
 
-// In a terminal without the flags, the picker shows the defaults checked,
-// each detected toolchain naming its file and setup's agents and layers
-// saying so, the nix layer naming the flake.nix, and the other layers
-// unchecked; what's checked is what the VM gets, and no line says it. On
-// the first run it asks for setup's agents first.
+// In a terminal, once the user says to customize the VM, the picker
+// shows the defaults checked, each detected toolchain naming its file
+// and setup's agents and layers saying so, the nix layer naming the
+// flake.nix, and the other layers unchecked; what's checked is what the
+// VM gets. On the first run it asks for setup's agents first, before the
+// summary.
 func TestUpPicker(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	for _, file := range []string{"package.json", "flake.nix"} {
@@ -465,14 +483,20 @@ func TestUpPicker(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	fake(e).Picks = true
+	// Enter at each size question: the first run's, then the VM's.
+	fake(e).Picks, fake(e).Terminal = true, true
+	fake(e).OnAsk = func(m msg.M) bool { return m.ID() == "new_vm_customize" }
+	fake(e).OnAnswer = func(msg.M) string { return "" }
 	if _, err := settings.Save(e.Dirs, settings.Values{Layers: &[]string{"nix", "desktop"}}); err != nil {
 		t.Fatal(err)
 	}
 	var asked []string
 	var shown []PickPart
+	var said msg.Recorder
+	fake(e).OnAny = said.Add
 	e.PickParts = func(help msg.M, parts []PickPart) []PickPart {
 		asked = append(asked, help.ID())
+		said.Add(help)
 		if help.ID() == "agents_help" {
 			parts[0].Rows[1].On = true // codex
 			return parts
@@ -486,13 +510,18 @@ func TestUpPicker(t *testing.T) {
 		out[2].Rows[1].On = true // docker
 		return out
 	}
-	var said msg.Recorder
-	fake(e).OnInfo = said.Add
 	if err := (Launch{e}).Up(t.Context(), Options{Network: "open", Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if !slices.Equal(asked, []string{"agents_help", "pick_new_help"}) {
 		t.Fatalf("asked %q", asked)
+	}
+	// setup's agents, then the summary, then the picker.
+	order := slices.DeleteFunc(said.Names(), func(s string) bool {
+		return !strings.HasPrefix(s, "agents_help") && !strings.HasPrefix(s, "new_vm_summary") && !strings.HasPrefix(s, "pick_new_help")
+	})
+	if len(order) != 3 || order[0] != "agents_help" || !strings.HasPrefix(order[1], "new_vm_summary") || !strings.HasPrefix(order[2], "pick_new_help") {
+		t.Errorf("order %q", order)
 	}
 	if def, _ := settings.Read(e.Dirs); !def.Agents.Chosen || !slices.Equal(def.Agents.Names, []string{"codex"}) {
 		t.Errorf("setup's agents = %+v", def.Agents)
@@ -539,24 +568,112 @@ func TestUpPicker(t *testing.T) {
 	if get(st, keyImage) != "nix+desktop+docker" || get(st, keyToolNames) != "node python codex" {
 		t.Errorf("image=%q tool_names=%q", get(st, keyImage), get(st, keyToolNames))
 	}
-	if slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets") }) {
+	if slices.Contains(said.Names(), "new_vm_choose") {
 		t.Errorf("said %q", said.Names())
 	}
 }
 
-// Any of the flags skips the picker.
-func TestUpFlagsSkipPicker(t *testing.T) {
-	e, _, _ := upEnv(t, allNative())
-	fake(e).Picks = true
-	if _, err := settings.Save(e.Dirs, settings.Values{Agents: &[]string{}}); err != nil {
-		t.Fatal(err)
-	}
-	e.PickParts = func(help msg.M, parts []PickPart) []PickPart {
-		t.Errorf("asked %s", help.Names())
-		return parts
-	}
-	if err := (Launch{e}).Up(t.Context(), Options{Layers: &[]string{}, Network: "open", Ports: "none"}); err != nil {
-		t.Fatal(msg.NamesOf(err))
+// A new VM's summary is followed by the question whether to customize
+// it, where the picker shows and anything is left to choose: no makes it
+// as shown, yes shows the picker, a part a flag gave greyed out, then
+// asks its tier, where neither a flag nor devvm network -g chose it, and
+// its CPUs and memory, each only where no flag gave it.
+// Without the picker, or with nothing left, there's no question, and
+// only the first ends with the flags that choose others.
+func TestUpCustomize(t *testing.T) {
+	none := &[]string{}
+	for _, tc := range []struct {
+		name      string
+		o         Options
+		picks     bool
+		yes       bool
+		saved     string // the tier devvm network -g saved, "" for ask
+		asked     string // what's asked, in order
+		net, cpus string // what the VM gets
+		choose    bool   // the summary ends with new_vm_choose
+		fixed     bool   // the picker's layers are greyed out, docker's from --layers
+	}{
+		{name: "Enter", picks: true, asked: "new_vm_customize", net: "allowlist"},
+		{name: "no picker", net: "allowlist", choose: true},
+		{
+			name: "everything given", picks: true, net: "open", cpus: "2",
+			o: Options{Toolchains: none, Agents: none, Layers: none, Network: "open", Size: Size{CPUs: "2", Memory: "4"}},
+		},
+		{
+			name: "yes", picks: true, yes: true, net: "internet", cpus: "2",
+			asked: "new_vm_customize,pick_new_help,net_ask,new_vm_cpus_prompt,new_vm_memory_prompt",
+		},
+		{
+			name: "yes with layers and cpus given", picks: true, yes: true, net: "internet", cpus: "3", fixed: true,
+			o:     Options{Layers: &[]string{"docker"}, Size: Size{CPUs: "3"}},
+			asked: "new_vm_customize,pick_new_help,net_ask,new_vm_memory_prompt",
+		},
+		{
+			name: "yes with a saved tier", picks: true, yes: true, saved: "none", net: "none", cpus: "2",
+			asked: "new_vm_customize,pick_new_help,new_vm_cpus_prompt,new_vm_memory_prompt",
+		},
+		{
+			name: "yes with every part and the tier given", picks: true, yes: true, net: "none", cpus: "2",
+			o:     Options{Toolchains: none, Agents: none, Layers: none, Network: "none"},
+			asked: "new_vm_customize,new_vm_cpus_prompt,new_vm_memory_prompt",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, f, _ := upEnv(t, allNative())
+			// Past the first run: its agents and base's features chosen.
+			v := settings.Values{Agents: none, Features: none}
+			if tc.saved != "" {
+				v.Network = &tc.saved
+			}
+			if _, err := settings.Save(e.Dirs, v); err != nil {
+				t.Fatal(err)
+			}
+			hostKeys := f.ExecFunc
+			f.ExecFunc = func(vm string, argv []string, o backend.ExecOpts) error {
+				if err := noDirect(vm, argv, o); err != nil {
+					return err
+				}
+				return hostKeys(vm, argv, o)
+			}
+			var asked []string
+			var says msg.Recorder
+			fk := fake(e)
+			fk.Picks, fk.Terminal, fk.OnSay = tc.picks, tc.picks, says.Add
+			fk.OnAsk = func(m msg.M) bool { asked = append(asked, m.ID()); return tc.yes }
+			fk.OnAnswer = func(m msg.M) string {
+				asked = append(asked, m.ID())
+				return map[string]string{"net_ask": "internet", "new_vm_cpus_prompt": "2"}[m.ID()]
+			}
+			e.Proxy.Reporter = fk
+			var layers PickPart
+			e.PickParts = func(help msg.M, parts []PickPart) []PickPart {
+				asked = append(asked, help.ID())
+				layers = parts[2]
+				return parts
+			}
+			if err := (Launch{e}).Up(t.Context(), tc.o); err != nil {
+				t.Fatal(msg.NamesOf(err))
+			}
+			if got := strings.Join(asked, ","); got != tc.asked {
+				t.Errorf("asked %q, want %q", got, tc.asked)
+			}
+			spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+			st, _ := state.ReadVM(e.Dirs, spec.Name)
+			if get(st, KeyNet) != tc.net || get(st, KeyCPUs) != tc.cpus {
+				t.Errorf("net=%q cpus=%q, want %q and %q", get(st, KeyNet), get(st, KeyCPUs), tc.net, tc.cpus)
+			}
+			if got := slices.Contains(says.Names(), "new_vm_choose"); got != tc.choose {
+				t.Errorf("said %q", says.Names())
+			}
+			if !tc.fixed {
+				return
+			}
+			for _, r := range layers.Rows {
+				if !r.Fixed || r.On != (r.Name == "docker") || r.On && r.Desc.Names() != "pick_from_flag flag=--layers" {
+					t.Errorf("layer row %+v", r)
+				}
+			}
+		})
 	}
 }
 

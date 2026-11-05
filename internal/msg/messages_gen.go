@@ -819,11 +819,6 @@ func DevcontainerUnreadable(file string) M {
 	return M{id: "devcontainer_unreadable", vals: []val{{"file", file}}}
 }
 
-// DevcontainerUsing is [devcontainer_using]: "devvm makes {{.vm}} as {{.file}} says. To skip the file, run devvm --no-devcontainer."
-func DevcontainerUsing(file string, vm string) M {
-	return M{id: "devcontainer_using", vals: []val{{"file", file}, {"vm", vm}}}
-}
-
 // DevcontainerVariable is [devcontainer_variable]: "{{.file}} uses {{.variable}}, which devvm doesn't fill in. Remove it, or run devvm --no-devcontainer."
 func DevcontainerVariable(file string, variable string) M {
 	return M{id: "devcontainer_variable", vals: []val{{"file", file}, {"variable", variable}}}
@@ -1984,6 +1979,36 @@ func NetworkFailed(reason string) M {
 	return M{id: "network_failed", vals: []val{{"reason", reason}}}
 }
 
+// NewVMAgentFrom is [new_vm_agent_from]: "  agent {{.agent}}, from {{.from}}"
+func NewVMAgentFrom(agent string, from string) M {
+	return M{id: "new_vm_agent_from", vals: []val{{"agent", agent}, {"from", from}}}
+}
+
+// NewVMAgentsNone is [new_vm_agents_none]: "  agents: none"
+func NewVMAgentsNone() M {
+	return M{id: "new_vm_agents_none"}
+}
+
+// NewVMChoose is [new_vm_choose]: "To choose others, give --tools, --agents, --layers, --network, --cpus or --memory."
+func NewVMChoose() M {
+	return M{id: "new_vm_choose"}
+}
+
+// NewVMCpusPrompt is [new_vm_cpus_prompt]: "CPUs for the VM [{{.cpus}}]:"
+func NewVMCpusPrompt(cpus string) M {
+	return M{id: "new_vm_cpus_prompt", vals: []val{{"cpus", cpus}}}
+}
+
+// NewVMCustomize is [new_vm_customize]: "Customize it? [y/N]"
+func NewVMCustomize() M {
+	return M{id: "new_vm_customize"}
+}
+
+// NewVMDevcontainer is [new_vm_devcontainer]: "  devcontainer.json: {{.file}}, which devvm --no-devcontainer skips"
+func NewVMDevcontainer(file string) M {
+	return M{id: "new_vm_devcontainer", vals: []val{{"file", file}}}
+}
+
 // NewVMFlagsIgnored is [new_vm_flags_ignored]: "Only a new VM takes {{.flags}}, so {{.vm}} keeps its own settings."
 func NewVMFlagsIgnored(flags string, vm string) M {
 	return M{id: "new_vm_flags_ignored", vals: []val{{"flags", flags}, {"vm", vm}}}
@@ -1994,9 +2019,64 @@ func NewVMFlagsIgnoredRun(command string, flags string, vm string) M {
 	return M{id: "new_vm_flags_ignored_run", vals: []val{{"command", command}, {"flags", flags}, {"vm", vm}}}
 }
 
-// NewVMGets is [new_vm_gets]: "{{.vm}} gets {{.tools}} as its shared tools and {{.layers}} as its layers. To choose others, give --tools, --agents and --layers."
-func NewVMGets(layers string, tools string, vm string) M {
-	return M{id: "new_vm_gets", vals: []val{{"layers", layers}, {"tools", tools}, {"vm", vm}}}
+// NewVMLayerFor is [new_vm_layer_for]: "  layer {{.layer}}, for {{.file}}"
+func NewVMLayerFor(file string, layer string) M {
+	return M{id: "new_vm_layer_for", vals: []val{{"file", file}, {"layer", layer}}}
+}
+
+// NewVMLayerFrom is [new_vm_layer_from]: "  layer {{.layer}}, from {{.from}}"
+func NewVMLayerFrom(from string, layer string) M {
+	return M{id: "new_vm_layer_from", vals: []val{{"from", from}, {"layer", layer}}}
+}
+
+// NewVMLayersNone is [new_vm_layers_none]: "  layers: none"
+func NewVMLayersNone() M {
+	return M{id: "new_vm_layers_none"}
+}
+
+// NewVMMemoryPrompt is [new_vm_memory_prompt]: "Memory for the VM in GiB [{{.memory}}]:"
+func NewVMMemoryPrompt(memory string) M {
+	return M{id: "new_vm_memory_prompt", vals: []val{{"memory", memory}}}
+}
+
+// NewVMNetwork is [new_vm_network]: "  network tier: {{.tier}}"
+func NewVMNetwork(tier string) M {
+	return M{id: "new_vm_network", vals: []val{{"tier", tier}}}
+}
+
+// NewVMPorts is [new_vm_ports]: "  ports: {{.ports}}"
+func NewVMPorts(ports string) M {
+	return M{id: "new_vm_ports", vals: []val{{"ports", ports}}}
+}
+
+// NewVMSize is [new_vm_size]: "  size: {{.cpus}} CPUs, {{.memory}} GiB of memory and a {{.disk}} GiB disk"
+func NewVMSize(cpus string, disk string, memory string) M {
+	return M{id: "new_vm_size", vals: []val{{"cpus", cpus}, {"disk", disk}, {"memory", memory}}}
+}
+
+// NewVMSizeQuestion is [new_vm_size_question]: "This machine has {{.have_cpus}} CPUs and {{.have_memory}} GiB of memory. Type the CPUs and memory the VM gets, or press Enter to keep the size in brackets."
+func NewVMSizeQuestion(haveCpus string, haveMemory string) M {
+	return M{id: "new_vm_size_question", vals: []val{{"have_cpus", haveCpus}, {"have_memory", haveMemory}}}
+}
+
+// NewVMSummary is [new_vm_summary]: "{{.vm}} gets:"
+func NewVMSummary(vm string) M {
+	return M{id: "new_vm_summary", vals: []val{{"vm", vm}}}
+}
+
+// NewVMToolchainFor is [new_vm_toolchain_for]: "  toolchain {{.tool}}, for {{.file}}"
+func NewVMToolchainFor(file string, tool string) M {
+	return M{id: "new_vm_toolchain_for", vals: []val{{"file", file}, {"tool", tool}}}
+}
+
+// NewVMToolchainFrom is [new_vm_toolchain_from]: "  toolchain {{.tool}}, from {{.from}}"
+func NewVMToolchainFrom(from string, tool string) M {
+	return M{id: "new_vm_toolchain_from", vals: []val{{"from", from}, {"tool", tool}}}
+}
+
+// NewVMToolchainsNone is [new_vm_toolchains_none]: "  toolchains: none"
+func NewVMToolchainsNone() M {
+	return M{id: "new_vm_toolchains_none"}
 }
 
 // NewerTools is [newer_tools]: "There are newer shared tools: {{.tools}}. Run devvm update to move this VM to them."
@@ -2312,6 +2392,11 @@ func PickAgents() M {
 // PickCalledFor is [pick_called_for]: "for {{.file}}"
 func PickCalledFor(file string) M {
 	return M{id: "pick_called_for", vals: []val{{"file", file}}}
+}
+
+// PickFromFlag is [pick_from_flag]: "from {{.flag}}"
+func PickFromFlag(flag string) M {
+	return M{id: "pick_from_flag", vals: []val{{"flag", flag}}}
 }
 
 // PickFromSetup is [pick_from_setup]: "from devvm setup"
@@ -3589,7 +3674,6 @@ var specs = map[string]spec{
 	"devcontainer_reread":            {fields: []string{"file", "vm"}},
 	"devcontainer_unknown":           {fields: []string{"file", "keys"}},
 	"devcontainer_unreadable":        {fields: []string{"file"}},
-	"devcontainer_using":             {fields: []string{"file", "vm"}},
 	"devcontainer_variable":          {fields: []string{"file", "variable"}},
 	"devvm_other_first":              {fields: []string{"first", "self"}},
 	"disk_free_unknown":              {fields: []string{"dir"}},
@@ -3822,9 +3906,26 @@ var specs = map[string]spec{
 	"network_default_none":           {},
 	"network_default_open":           {},
 	"network_failed":                 {fields: []string{"reason"}},
+	"new_vm_agent_from":              {fields: []string{"agent", "from"}},
+	"new_vm_agents_none":             {},
+	"new_vm_choose":                  {},
+	"new_vm_cpus_prompt":             {fields: []string{"cpus"}},
+	"new_vm_customize":               {},
+	"new_vm_devcontainer":            {fields: []string{"file"}},
 	"new_vm_flags_ignored":           {fields: []string{"flags", "vm"}},
 	"new_vm_flags_ignored_run":       {fields: []string{"command", "flags", "vm"}},
-	"new_vm_gets":                    {fields: []string{"layers", "tools", "vm"}},
+	"new_vm_layer_for":               {fields: []string{"file", "layer"}},
+	"new_vm_layer_from":              {fields: []string{"from", "layer"}},
+	"new_vm_layers_none":             {},
+	"new_vm_memory_prompt":           {fields: []string{"memory"}},
+	"new_vm_network":                 {fields: []string{"tier"}},
+	"new_vm_ports":                   {fields: []string{"ports"}},
+	"new_vm_size":                    {fields: []string{"cpus", "disk", "memory"}},
+	"new_vm_size_question":           {fields: []string{"have_cpus", "have_memory"}},
+	"new_vm_summary":                 {fields: []string{"vm"}},
+	"new_vm_toolchain_for":           {fields: []string{"file", "tool"}},
+	"new_vm_toolchain_from":          {fields: []string{"from", "tool"}},
+	"new_vm_toolchains_none":         {},
 	"newer_tools":                    {fields: []string{"tools"}},
 	"next_start":                     {plural: true, fields: []string{"count", "vm"}},
 	"next_start_agent":               {fields: []string{"vm"}},
@@ -3888,6 +3989,7 @@ var specs = map[string]spec{
 	"password_prompt":                {},
 	"pick_agents":                    {},
 	"pick_called_for":                {fields: []string{"file"}},
+	"pick_from_flag":                 {fields: []string{"flag"}},
 	"pick_from_setup":                {},
 	"pick_layer_desktop":             {},
 	"pick_layer_docker":              {},

@@ -77,20 +77,14 @@ func (c SizeChoice) Ask() error {
 		into   *string
 		parse  func(string) (Size, error)
 	}{
-		{settings.KeyCPUs, def.CPUs, msg.SizeCpusPrompt(shown.CPUs), &typed.CPUs, func(v string) (Size, error) {
-			v, err := settings.ParseCPUs("--cpus", v)
-			return Size{CPUs: v}, err
-		}},
-		{settings.KeyMemory, def.Memory, msg.SizeMemoryPrompt(shown.Memory), &typed.Memory, func(v string) (Size, error) {
-			v, err := settings.ParseGiB("--memory", v)
-			return Size{Memory: v}, err
-		}},
+		{settings.KeyCPUs, def.CPUs, msg.SizeCpusPrompt(shown.CPUs), &typed.CPUs, typedCPUs},
+		{settings.KeyMemory, def.Memory, msg.SizeMemoryPrompt(shown.Memory), &typed.Memory, typedMemory},
 	} {
 		if q.from.Source == settings.FromConfig {
 			c.Info(msg.SetupInConfig(c.Dirs.ConfigFile(), q.key))
 			continue
 		}
-		if *q.into, err = c.ask(q.prompt, about, q.parse); err != nil {
+		if *q.into, err = c.ask(q.prompt.AnsweredBy("devvm size -g"), about, q.parse); err != nil {
 			return err
 		}
 		about = nil
@@ -104,12 +98,55 @@ func (c SizeChoice) Ask() error {
 	return nil
 }
 
-// ask asks with prompt, about said first the first time, until the
-// answer is empty, or parse takes it and the host can give it; it
-// returns the parsed value, "" for Enter, or the question's refusal.
-func (c SizeChoice) ask(prompt msg.M, about []msg.M, parse func(string) (Size, error)) (string, error) {
+// typedCPUs and typedMemory are the CPUs and the memory typed at a size
+// question, parsed as --cpus and --memory take them.
+func typedCPUs(v string) (Size, error) {
+	v, err := settings.ParseCPUs("--cpus", v)
+	return Size{CPUs: v}, err
+}
+
+func typedMemory(v string) (Size, error) {
+	v, err := settings.ParseGiB("--memory", v)
+	return Size{Memory: v}, err
+}
+
+// AskVM asks for a new VM's CPUs and memory, once its summary showed
+// shown and the user chose to customize it, each starting from shown's
+// and skipped when given (--cpus, --memory) set it. Enter keeps one; a
+// value the host can't give is said, and asked for again. It returns s
+// with what's typed; where it can't ask, s as it is. Nothing is saved.
+func (c SizeChoice) AskVM(s, shown, given Size) Size {
+	about := []msg.M{msg.NewVMSizeQuestion(strconv.Itoa(c.Host.CPUs), strconv.Itoa(c.Host.MemoryGiB))}
+	for _, q := range []struct {
+		given  string
+		prompt msg.Question
+		into   *string
+		parse  func(string) (Size, error)
+	}{
+		{given.CPUs, msg.NewVMCpusPrompt(shown.CPUs).AnsweredBy("--cpus"), &s.CPUs, typedCPUs},
+		{given.Memory, msg.NewVMMemoryPrompt(shown.Memory).AnsweredBy("--memory"), &s.Memory, typedMemory},
+	} {
+		if q.given != "" {
+			continue
+		}
+		v, err := c.ask(q.prompt, about, q.parse)
+		if err != nil {
+			return s
+		}
+		if v != "" {
+			*q.into = v
+		}
+		about = nil
+	}
+	return s
+}
+
+// ask asks q, about said first the first time, until the answer is
+// empty, or parse takes it and the host can give it; it returns the
+// parsed value, "" for Enter, or the question's refusal.
+func (c SizeChoice) ask(q msg.Question, about []msg.M, parse func(string) (Size, error)) (string, error) {
 	for {
-		v, err := c.Answer(prompt.AnsweredBy("devvm size -g").About(about...))
+		v, err := c.Answer(q.About(about...))
 		if err != nil || v == "" {
 			return "", err
 		}

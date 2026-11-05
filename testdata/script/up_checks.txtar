@@ -64,11 +64,12 @@ env DEVVM_LIMA_HOME=$LIMA_HOME
 ! vm_name ROOMLESS roomless
 
 # Without a terminal, a new VM gets the defaults: nothing detected is base
-# with no shared tools, said in one line naming the flags. --no-input is
-# the same in a terminal.
+# with no shared tools, as its summary says, ending with the flags.
+# --no-input is the same in a terminal.
 project empty
 exec devvm --network open --no-input
-stdout '^==> new_vm_gets layers=none tools=none vm=devvm-empty-[0-9a-f]{14}$'
+stdout '^==> new_vm_summary vm=devvm-empty-[0-9a-f]{14}\nnew_vm_toolchains_none\nnew_vm_agents_none\nnew_vm_layers_none\n'
+stdout '^new_vm_choose$'
 stdout '^==> creating_from image=base vm=devvm-empty-[0-9a-f]{14}$'
 vm_name EMPTY empty
 vm_state $EMPTY_dir/vm.json
@@ -102,7 +103,7 @@ stub_calls
 # Each flag is the exact list of its part: --layers alone keeps the
 # toolchains the folder calls for.
 exec devvm --network open --layers foo
-stdout '^==> new_vm_gets layers=foo tools=node vm=devvm-node-[0-9a-f]{14}$'
+stdout '^new_vm_toolchain_for file=package\.json tool=node\nnew_vm_agents_none\nnew_vm_layer_from from=--layers layer=foo\n'
 stdout '^==> creating_from image=foo vm=devvm-node-[0-9a-f]{14}$'
 vm_name NODE node
 vm_state $NODE_dir/vm.json
@@ -118,7 +119,7 @@ cp $WORK/package.json package.json
 cp $WORK/flake.nix flake.nix
 exec devvm setup --agents claude
 exec devvm --network open --no-git-protect
-stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-flake-[0-9a-f]{14}$'
+stdout '^new_vm_toolchain_for file=package\.json tool=node\nnew_vm_agent_from agent=claude from=devvm setup\nnew_vm_layers_none\n'
 stdout '^==> creating_from image=base vm=devvm-flake-[0-9a-f]{14}$'
 vm_name FLAKE flake
 vm_state $FLAKE_dir/vm.json
@@ -127,7 +128,7 @@ stdout '^chain=base=[0-9a-f]{12}$'
 project flake2
 cp $WORK/package.json package.json
 exec devvm --network open --no-git-protect --tools none --layers nix
-stdout '^==> new_vm_gets layers=nix tools=claude vm=devvm-flake2-[0-9a-f]{14}$'
+stdout '^new_vm_toolchains_none\nnew_vm_agent_from agent=claude from=devvm setup\nnew_vm_layer_from from=--layers layer=nix\n'
 vm_name FLAKE2 flake2
 vm_state $FLAKE2_dir/vm.json
 stdout '^image=nix$'

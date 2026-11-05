@@ -1403,9 +1403,71 @@ other = "{{.vm}} doesn't reach {{.links}} through the group {{.group}} any more.
 [group_link_name_clash]
 other = "{{.vm}} has a link of its own called {{.name}}, so it gets none of the group's links to {{.target}}. To get them, remove that link with devvm link rm."
 
-[new_vm_gets]
-description = "tools and layers are space-separated lists of names, or none"
-other = "{{.vm}} gets {{.tools}} as its shared tools and {{.layers}} as its layers. To choose others, give --tools, --agents and --layers."
+[new_vm_summary]
+other = "{{.vm}} gets:"
+
+[new_vm_toolchain_for]
+description = "file is the project's file that calls for the toolchain, such as package.json, or its devcontainer.json"
+other = "  toolchain {{.tool}}, for {{.file}}"
+
+[new_vm_toolchain_from]
+description = "from is the flag that gave it: --tools"
+other = "  toolchain {{.tool}}, from {{.from}}"
+
+[new_vm_toolchains_none]
+other = "  toolchains: none"
+
+[new_vm_agent_from]
+description = "from is what chose it: --agents, devvm setup or config.toml"
+other = "  agent {{.agent}}, from {{.from}}"
+
+[new_vm_agents_none]
+other = "  agents: none"
+
+[new_vm_layer_for]
+description = "file is the devcontainer.json whose features call for the layer"
+other = "  layer {{.layer}}, for {{.file}}"
+
+[new_vm_layer_from]
+description = "from is what chose it: --layers, devvm setup or config.toml"
+other = "  layer {{.layer}}, from {{.from}}"
+
+[new_vm_layers_none]
+other = "  layers: none"
+
+[new_vm_size]
+description = "memory and disk are in GiB"
+other = "  size: {{.cpus}} CPUs, {{.memory}} GiB of memory and a {{.disk}} GiB disk"
+
+[new_vm_network]
+description = "tier is open, internet, allowlist or none"
+other = "  network tier: {{.tier}}"
+
+[new_vm_ports]
+description = "ports is all, none or a list of ports, as devvm ports shows them"
+other = "  ports: {{.ports}}"
+
+[new_vm_devcontainer]
+description = "file is the devcontainer.json's path in the project folder"
+other = "  devcontainer.json: {{.file}}, which devvm --no-devcontainer skips"
+
+[new_vm_choose]
+other = "To choose others, give --tools, --agents, --layers, --network, --cpus or --memory."
+
+[new_vm_customize]
+other = "Customize it? [y/N]"
+
+[new_vm_size_question]
+description = "have_cpus and have_memory are this machine's CPUs and memory in GiB"
+other = "This machine has {{.have_cpus}} CPUs and {{.have_memory}} GiB of memory. Type the CPUs and memory the VM gets, or press Enter to keep the size in brackets."
+
+[new_vm_cpus_prompt]
+description = "cpus is what the VM gets unless you type another number"
+other = "CPUs for the VM [{{.cpus}}]:"
+
+[new_vm_memory_prompt]
+description = "memory is in GiB, what the VM gets unless you type another size"
+other = "Memory for the VM in GiB [{{.memory}}]:"
 
 [pick_new_help]
 other = "Choose what {{.vm}} gets. Use up and down to move, space to toggle and enter to confirm."
@@ -1428,6 +1490,10 @@ other = "for {{.file}}"
 
 [pick_from_setup]
 other = "from devvm setup"
+
+[pick_from_flag]
+description = "flag is the flag that gave the part: --tools, --agents or --layers"
+other = "from {{.flag}}"
 
 [pick_layer_desktop]
 other = "an Xfce desktop, which devvm desktop opens"
@@ -2292,10 +2358,6 @@ other = "The VM gets opencode's {{.providers}} login unchanged."
 [opencode_login_withheld]
 description = "providers lists opencode's OAuth login providers, comma-separated"
 other = "The VM gets opencode's {{.providers}} login without its OAuth tokens, because network policy keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine and run devvm agent import --force opencode."
-
-[devcontainer_using]
-description = "file is the devcontainer.json's path in the project folder"
-other = "devvm makes {{.vm}} as {{.file}} says. To skip the file, run devvm --no-devcontainer."
 
 [devcontainer_flag_wins]
 description = "key is a devcontainer.json property (image, forwardPorts), flag the devvm flag given instead (from, ports)"

@@ -101,7 +101,7 @@ grep '^  "agents": \[\]$' $SAVED
 exec devvm setup --agents codex
 project agents git
 exec devvm --network open --no-git-protect
-stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-agents-[0-9a-f]{14}$'
+stdout '^new_vm_toolchains_none\nnew_vm_agent_from agent=codex from=devvm setup\nnew_vm_layers_none\n'
 vm_name AGENTS agents
 vm_state $AGENTS_dir/vm.json
 stdout '^tools.names=codex$'
@@ -127,16 +127,16 @@ grep '^  "layers": \[\]$' $SAVED
 exec devvm setup --layers desktop
 project layers git
 exec devvm --network open --no-git-protect
-stdout '^==> new_vm_gets layers=desktop tools=codex vm=devvm-layers-[0-9a-f]{14}$'
+stdout '^new_vm_agent_from agent=codex from=devvm setup\nnew_vm_layer_from from=devvm setup layer=desktop\n'
 vm_name LAYERS layers
 vm_state $LAYERS_dir/vm.json
 stdout '^image=desktop$'
 project layersflag git
 exec devvm --network open --no-git-protect --layers docker
-stdout '^==> new_vm_gets layers=docker tools=codex vm=devvm-layersflag-[0-9a-f]{14}$'
+stdout '^new_vm_agent_from agent=codex from=devvm setup\nnew_vm_layer_from from=--layers layer=docker\n'
 project layersnone git
 exec devvm --network open --no-git-protect --layers none
-stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-layersnone-[0-9a-f]{14}$'
+stdout '^new_vm_agent_from agent=codex from=devvm setup\nnew_vm_layers_none\n'
 cd $WORK
 # A default layer of yours whose script is gone: warned, naming it, and
 # the VM is made without it.
@@ -148,7 +148,7 @@ rm $CFG/layers/mailpit.sh
 project gone git
 exec devvm --network open --no-git-protect
 stderr '^devvm: default_layer_gone dir=\S*/config/devvm/layers layer=mailpit vm=devvm-gone-[0-9a-f]{14}$'
-stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-gone-[0-9a-f]{14}$'
+stdout '^new_vm_agent_from agent=codex from=devvm setup\nnew_vm_layers_none\n'
 cd $WORK
 exec devvm setup --layers none
 
@@ -171,7 +171,7 @@ stdout '^==> setup_in_config file=\S*/config/devvm/config\.toml key=features$'
 # A new VM gets config.toml's layers.
 project configlayers git
 exec devvm --network open --no-git-protect
-stdout '^==> new_vm_gets layers=nix tools=opencode vm=devvm-configlayers-[0-9a-f]{14}$'
+stdout '^new_vm_agent_from agent=opencode from=config\.toml\nnew_vm_layer_from from=config\.toml layer=nix\n'
 cd $WORK
 rm $CFG/config.toml
 

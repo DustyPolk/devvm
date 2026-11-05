@@ -213,11 +213,11 @@ func chosen(t netpolicy.Tier, err error) string {
 	return string(t)
 }
 
-// A new VM is on the allowlist tier unless it's given another, asked with
-// allowlist for Enter in a terminal, the docker layer's VMs as any other.
-// On a backend without egress-proxy, a VM can only be open: any other
-// tier is refused in one line, unasked, in a terminal or not, never
-// dropped.
+// A new VM's summary shows the allowlist tier unless it's given another,
+// the docker layer's VMs as any other, and nothing is asked here, in a
+// terminal or not: customizing it asks. On a backend without
+// egress-proxy, a VM can only be open: any other tier is refused in one
+// line, never dropped.
 func TestChooseNet(t *testing.T) {
 	noEgress := allNative()
 	delete(noEgress, backend.FeatureEgressProxy)
@@ -225,26 +225,19 @@ func TestChooseNet(t *testing.T) {
 	unreviewed[backend.FeatureEgressProxy] = backend.Emulated(false)
 	const refused = "net_tier_backend backend=fake vm=v"
 	for _, tc := range []struct {
-		name     string
-		o        Options
-		caps     backend.Caps
-		terminal bool
-		answer   string
-		want     string // the tier, or the refusal
-		asked    bool
+		name string
+		o    Options
+		caps backend.Caps
+		want string // the tier, or the refusal
 	}{
-		{"no terminal", Options{}, nil, false, "", "allowlist", false},
-		{"enter", Options{}, nil, true, "", "allowlist", true},
-		{"open", Options{}, nil, true, "open", "open", true},
-		{"none", Options{}, nil, true, "none", "none", true},
-		{"--network internet", Options{Network: "internet"}, nil, true, "open", "internet", false},
-		{"--network open", Options{Network: "open"}, nil, false, "", "open", false},
-		{"the docker layer", Options{Layers: &[]string{"docker"}}, nil, true, "", "allowlist", true},
-		{"no egress-proxy", Options{}, noEgress, true, "", refused, false},
-		{"no egress-proxy, no terminal", Options{}, noEgress, false, "", refused, false},
-		{"unreviewed egress-proxy", Options{}, unreviewed, false, "", refused, false},
-		{"no egress-proxy, --network none", Options{Network: "none"}, noEgress, true, "", refused, false},
-		{"no egress-proxy, --network open", Options{Network: "open"}, noEgress, true, "", "open", false},
+		{"the default", Options{}, nil, "allowlist"},
+		{"--network internet", Options{Network: "internet"}, nil, "internet"},
+		{"--network open", Options{Network: "open"}, nil, "open"},
+		{"the docker layer", Options{Layers: &[]string{"docker"}}, nil, "allowlist"},
+		{"no egress-proxy", Options{}, noEgress, refused},
+		{"unreviewed egress-proxy", Options{}, unreviewed, refused},
+		{"no egress-proxy, --network none", Options{Network: "none"}, noEgress, refused},
+		{"no egress-proxy, --network open", Options{Network: "open"}, noEgress, "open"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			caps := tc.caps
@@ -252,20 +245,18 @@ func TestChooseNet(t *testing.T) {
 				caps = allNative()
 			}
 			e, f, _ := upEnv(t, caps)
-			asked := false
-			e.Proxy.Reporter = &msg.Fake{Terminal: tc.terminal, OnAnswer: func(msg.M) string { asked = true; return tc.answer }}
-			got := chosen(creation{Launch{e}}.chooseNet(tc.o, f, "v", settings.NetworkAsk))
-			if got != tc.want || asked != tc.asked {
-				t.Errorf("chooseNet = %s (asked %v), want %s (asked %v)", got, asked, tc.want, tc.asked)
+			e.Proxy.Reporter = &msg.Fake{Terminal: true, OnAnswer: func(m msg.M) string { t.Errorf("asked %s", m.Names()); return "" }}
+			if got := chosen(creation{Launch{e}}.chooseNet(tc.o, f, "v", settings.NetworkAsk)); got != tc.want {
+				t.Errorf("chooseNet = %s, want %s", got, tc.want)
 			}
 		})
 	}
 }
 
 // The default (config.toml's, devvm network -g's or devvm setup's): a
-// tier gives a new VM that tier unasked, open even where it couldn't be
-// anything else, and a confined one that can't have it is refused;
-// --network beats it, and ask asks.
+// tier gives a new VM's summary that tier, open even where it couldn't
+// be anything else, and a confined one that can't have it is refused;
+// --network beats it, and ask shows allowlist.
 func TestChooseNetSaved(t *testing.T) {
 	noEgress := allNative()
 	delete(noEgress, backend.FeatureEgressProxy)
@@ -283,7 +274,7 @@ func TestChooseNetSaved(t *testing.T) {
 		{"none", "none", Options{}, nil, "none"},
 		{"allowlist, --network open", "allowlist", Options{Network: "open"}, nil, "open"},
 		{"allowlist, no egress-proxy", "allowlist", Options{}, noEgress, "net_tier_backend backend=fake vm=v"},
-		{"ask", "ask", Options{}, nil, "internet"},
+		{"ask", "ask", Options{}, nil, "allowlist"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			caps := tc.caps
@@ -291,11 +282,8 @@ func TestChooseNetSaved(t *testing.T) {
 				caps = allNative()
 			}
 			e, f, _ := upEnv(t, caps)
-			asked := false
-			e.Proxy.Reporter = &msg.Fake{Terminal: true, OnAnswer: func(msg.M) string { asked = true; return "internet" }}
-			got := chosen(creation{Launch{e}}.chooseNet(tc.o, f, "v", tc.saved))
-			if got != tc.want || asked != (tc.saved == settings.NetworkAsk) {
-				t.Errorf("chooseNet = %s (asked %v), want %s", got, asked, tc.want)
+			if got := chosen(creation{Launch{e}}.chooseNet(tc.o, f, "v", tc.saved)); got != tc.want {
+				t.Errorf("chooseNet = %s, want %s", got, tc.want)
 			}
 		})
 	}

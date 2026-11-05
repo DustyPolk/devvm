@@ -49,9 +49,10 @@ type UI struct {
 	// getenv reads the terminal's character set.
 	getenv func(string) string
 	// verboseOn streams the run log to stderr, noInput refuses every
-	// question, and pipedAnswers reads answers from input that isn't a
-	// terminal (SetFlags).
-	verboseOn, noInput, pipedAnswers atomic.Bool
+	// question, pipedAnswers reads answers from input that isn't a
+	// terminal, and pickOnPipe shows the picker with stdout that isn't one
+	// (SetFlags).
+	verboseOn, noInput, pipedAnswers, pickOnPipe atomic.Bool
 	// asking counts the questions waiting for an answer (waiting).
 	asking atomic.Int32
 	// runLogs returns the run logs' folder.
@@ -132,8 +133,10 @@ func isTerminal(f *os.File) bool { return term.IsTerminal(fd(f)) }
 
 // CanPick reports whether the picker is shown: in a terminal someone can
 // see, without --no-input. Without one, the picker keeps its choices as
-// they are.
-func (u *UI) CanPick() bool { return u.stdinTTY && u.stdoutTTY && !u.noInput.Load() }
+// they are. A test build's PickOnPipe (Flags) counts stdout as one.
+func (u *UI) CanPick() bool {
+	return u.stdinTTY && (u.stdoutTTY || u.pickOnPipe.Load()) && !u.noInput.Load()
+}
 
 // Stdout is where data output goes: tables, values, help. Not messages: they
 // go through Say and the rest.

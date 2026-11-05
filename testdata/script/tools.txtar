@@ -8,7 +8,7 @@ cp $WORK/package.json package.json
 # An agent chosen in a node project goes with node: the VM's image is
 # base, and its shared tools are a list in its state.
 exec devvm --network open --no-git-protect --agents claude
-stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-web-[0-9a-f]{14}$'
+stdout '^new_vm_toolchain_for file=package.json tool=node\nnew_vm_agent_from agent=claude from=--agents\nnew_vm_layers_none\n'
 stdout '^==> resolving_tools$'
 stdout '^==> building_tools tools=node 24\.21\.0, pnpm 12\.10\.1, bun 1\.4\.2, claude 2\.1\.295$'
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'

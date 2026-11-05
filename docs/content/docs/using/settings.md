@@ -108,7 +108,7 @@ devvm reads all of `config.toml` each time it needs a default, and it checks eve
 
 1. The [features](customizing.md#choosing-features) that base gets.
 2. The [CPUs and memory](ports-size.md#choosing-new-vms-size) that new VMs get, as `devvm size -g` saves them.
-3. The [network tier](../safety/network.md#network-tiers) that new VMs get, as `devvm network -g` saves it. With `ask`, the default, devvm asks for each new VM's tier in a terminal, and a new VM gets allowlist when there's no terminal to ask in. With a tier, `open`, `internet`, `allowlist` or `none`, devvm gives every new VM that tier without asking. `--network TIER` chooses for one VM and wins over the saved choice.
+3. The [network tier](../safety/network.md#network-tiers) that new VMs get, as `devvm network -g` saves it. With `ask`, the default, a new VM gets allowlist unless you customize it in a terminal, where devvm asks for its tier ([what a new VM gets](images.md#what-a-new-vm-gets)). With a tier, `open`, `internet`, `allowlist` or `none`, devvm gives every new VM that tier without asking. `--network TIER` chooses for one VM and wins over the saved choice.
 4. The [coding agents](#coding-agents-for-new-vms) that new VMs get.
 5. The [layers](#layers-for-new-vms) that new VMs get.
 
@@ -124,13 +124,13 @@ devvm setup --layers docker          # new VMs' layers, without asking
 
 ### Coding agents for new VMs
 
-The coding agents you choose in `devvm setup` are the ones checked for a new VM in the list devvm shows in a terminal, each row saying it comes from devvm setup, and the ones a new VM gets without a terminal ([what a new VM gets](images.md#what-a-new-vm-gets)). `--agents` chooses others for one VM. The choice is for new VMs only, so a VM that exists keeps its agents, and `devvm tools` changes them.
+The coding agents you choose in `devvm setup` are the ones a new VM gets unless you choose others for it. The summary devvm shows before it makes the VM names each of them as coming from devvm setup, and when you customize the VM, they're checked in the list ([what a new VM gets](images.md#what-a-new-vm-gets)). `--agents` chooses others for one VM. The choice is for new VMs only, so a VM that exists keeps its agents, and `devvm tools` changes them.
 
 devvm asks for them on its first run in a terminal, together with the size and base's features, until you've chosen them. Until then, and when you choose `none`, new VMs get no agents by default. `devvm setup --agents claude,codex` and `devvm setup --agents none` choose them without asking, and devvm refuses a name that isn't an agent's, suggesting the closest.
 
 ### Layers for new VMs
 
-The layers you choose in `devvm setup` are the ones every new VM gets unless you choose others for it. They can be devvm's [built-in layers](images.md#built-in-layers), `desktop`, `docker` and `nix`, and [your own](customizing.md#your-own-layers), which is how you give every new VM an extra of your own ([extras of your own](customizing.md#extras-of-your-own)). In the list devvm shows for a new VM in a terminal, they're checked under Layers, each row saying it comes from devvm setup, and you can uncheck any of them for that VM. Without a terminal, a new VM gets them, and devvm says so in one line ([what a new VM gets](images.md#what-a-new-vm-gets)).
+The layers you choose in `devvm setup` are the ones every new VM gets unless you choose others for it. They can be devvm's [built-in layers](images.md#built-in-layers), `desktop`, `docker` and `nix`, and [your own](customizing.md#your-own-layers), which is how you give every new VM an extra of your own ([extras of your own](customizing.md#extras-of-your-own)). The summary devvm shows before it makes a new VM names each of them as coming from devvm setup. When you customize the VM in a terminal, they're checked under Layers in the list, and you can uncheck any of them for that VM ([what a new VM gets](images.md#what-a-new-vm-gets)).
 
 ```sh
 devvm setup --layers docker,desktop   # every new VM gets docker, with desktop on top

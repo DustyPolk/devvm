@@ -1,0 +1,113 @@
+# A new VM in a terminal: its summary, then whether to customize it. The
+# question needs the picker, which shows only with a terminal on stdout
+# too: a test build's DEVVM_PICK_ON_PIPE stands in for that, with
+# ttyin's terminal on stdin.
+env DEVVM_PICK_ON_PIPE=1
+
+# The first run: its size and agents asked first and saved, then the
+# summary shows what they chose, then the question; Enter makes the VM
+# as shown, and base's features are asked as base is first built. Each
+# input file answers every question asked, as a terminal's input never
+# ends: the space toggles claude in the agents picker.
+rm $DATA/settings.json
+project first
+exec sh -c 'echo "{}" > package.json'
+ttyin -stdin $WORK/first.txt
+exec devvm --no-git-protect --network open
+stderr 'size_question have_cpus=8 have_memory=16'
+stdout '==> default_agents agents=claude$'
+stdout '^==> new_vm_summary vm=devvm-first-[0-9a-f]{14}\nnew_vm_toolchain_for file=package\.json tool=node\nnew_vm_agent_from agent=claude from=devvm setup\nnew_vm_layers_none\nnew_vm_size cpus=2 disk=100 memory=8\nnew_vm_network tier=open\nnew_vm_ports ports=all\n'
+stderr 'new_vm_customize \[y/N\]'
+! stdout 'new_vm_choose|pick_new_help'
+grep '"cpus": "2"' $DATA/settings.json
+vm_name FIRST first
+vm_state $FIRST_dir/vm.json
+stdout '^tools\.names=node claude$'
+stdout '^net\.tier=open$'
+exec devvm setup --agents none
+
+# Enter: made as shown, nothing else asked.
+project enter
+ttyin -stdin $WORK/enter.txt
+exec devvm --no-git-protect
+stdout '^==> new_vm_summary vm=devvm-enter-[0-9a-f]{14}$'
+stdout '^new_vm_network tier=allowlist$'
+stderr 'new_vm_customize \[y/N\]'
+! stdout 'new_vm_choose|pick_new_help'
+! stderr 'net_ask|new_vm_cpus_prompt'
+vm_name ENTER enter
+vm_state $ENTER_dir/vm.json
+stdout '^net\.tier=allowlist$'
+stdout '^size\.cpus=2$'
+! stdout '^size\.memory'
+
+# y: the picker, whose Enter keeps what it shows checked, then the tier
+# and the CPUs and memory, each starting from the summary's; Enter keeps
+# the memory, and nothing is saved for new VMs.
+project custom
+exec sh -c 'echo "{}" > package.json'
+ttyin -stdin $WORK/custom.txt
+exec devvm --no-git-protect
+stdout '^pick_new_help vm=devvm-custom-[0-9a-f]{14}\r$'
+stderr 'net_ask tier=allowlist'
+stderr 'new_vm_size_question have_cpus=8 have_memory=16'
+stderr 'new_vm_cpus_prompt cpus=2'
+stderr 'new_vm_memory_prompt memory=8'
+vm_name CUSTOM custom
+vm_state $CUSTOM_dir/vm.json
+stdout '^tools\.names=node$'
+stdout '^net\.tier=internet$'
+stdout '^size\.cpus=3$'
+! stdout '^size\.memory'
+grep '"cpus": "2"' $DATA/settings.json
+
+# Flags given are taken as given and shown so, and the question is still
+# asked while something is left: the picker greys the toolchains out,
+# and --network's tier isn't asked.
+project given
+ttyin -stdin $WORK/given.txt
+exec devvm --no-git-protect --tools go --network open
+stdout '^new_vm_toolchain_from from=--tools tool=go$'
+stderr 'new_vm_customize \[y/N\]'
+stdout 'go +pick_from_flag flag=--tools'
+! stderr net_ask
+stderr 'new_vm_cpus_prompt cpus=2'
+vm_name GIVEN given
+vm_state $GIVEN_dir/vm.json
+stdout '^tools\.names=go$'
+stdout '^net\.tier=open$'
+
+# Everything given: nothing left to choose, so nothing is asked.
+project all
+ttyin -stdin $WORK/enter.txt
+exec devvm --no-git-protect --tools none --agents none --layers none --network open --cpus 2 --memory 4
+stdout '^==> new_vm_summary vm=devvm-all-[0-9a-f]{14}$'
+! stderr new_vm_customize
+! stdout new_vm_choose
+
+# --no-input in a terminal: no question, the summary ends with the flags.
+project noinput
+ttyin -stdin $WORK/custom.txt
+exec devvm --no-git-protect --no-input
+! stderr new_vm_customize
+stdout '^new_vm_choose$'
+
+-- first.txt --
+2
+
+ .
+
+
+-- enter.txt --
+
+-- custom.txt --
+y
+
+internet
+3
+
+-- given.txt --
+y
+
+
+

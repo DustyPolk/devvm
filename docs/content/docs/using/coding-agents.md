@@ -17,10 +17,10 @@ In the VM the agent sees only your project folder, and your agents' settings fro
 
 ## Supported agents
 
-A new VM gets an agent when you check it in the list that devvm shows as it makes the VM, or when you name it with `--agents`. A VM that exists gets one from `devvm tools`, which shows the same list with the VM's agents checked, or from `devvm tools add`:
+A new VM gets an agent when you check it in the list that devvm shows when you customize the VM, or when you name it with `--agents`. A VM that exists gets one from `devvm tools`, which shows the same list with the VM's agents checked, or from `devvm tools add`:
 
 ```sh
-devvm                          # a new VM: check claude, codex or opencode in the list
+devvm                          # a new VM: type y to customize it, then check claude, codex or opencode
 devvm --agents claude,codex    # a new VM with Claude Code and Codex, without the list
 devvm tools                    # the VM that exists: check or uncheck its agents in the list
 devvm tools add opencode       # the VM that exists: add opencode without the list

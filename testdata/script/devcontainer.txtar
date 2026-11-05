@@ -60,7 +60,7 @@ cd $WORK/web
 exec git init -q
 cp $WORK/web.json .devcontainer/devcontainer.json
 exec devvm --network open --layers docker,extra
-stdout '^==> devcontainer_using file=\.devcontainer/devcontainer\.json vm=devvm-web-[0-9a-f]{14}$'
+stdout '^new_vm_devcontainer file=\.devcontainer/devcontainer\.json$'
 stderr '^devvm: from_cached_unreachable from=node:24 host=registry-1\.docker\.io$'
 stderr '^devvm: devcontainer_initialize file=\.devcontainer/devcontainer\.json$'
 stderr '^devvm: devcontainer_feature_options features=ghcr\.io/devcontainers/features/docker-in-docker:2 file=\.devcontainer/devcontainer\.json$'
@@ -112,7 +112,7 @@ cp $WORK/changed.json .devcontainer/devcontainer.json
 exec devvm --no-devcontainer
 stderr '^devvm: devcontainer_changed file=\.devcontainer/devcontainer\.json vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: new_vm_flags_ignored flags=--no-devcontainer vm=devvm-web-[0-9a-f]{14}$'
-! stdout 'running_script|devcontainer_using'
+! stdout 'running_script|new_vm_devcontainer'
 ! stderr 'devcontainer_(ignored|unknown|initialize)'
 # Gone: the same.
 rm .devcontainer/devcontainer.json
@@ -139,7 +139,7 @@ project fail
 cp $WORK/web.json .devcontainer.json
 exec sh -c 'echo "''echo a''" > "$STUB_DIR/shell-fails-on"'
 exec devvm --network open
-stdout '^==> new_vm_gets layers=docker tools=none vm=devvm-fail-[0-9a-f]{14}$'
+stdout '^new_vm_toolchains_none\nnew_vm_agents_none\nnew_vm_layer_for file=\.devcontainer\.json layer=docker\n'
 stderr '^devvm: devcontainer_command_failed command=postCreateCommand a vm=devvm-fail-[0-9a-f]{14}$'
 ! stdout 'running_script script=postCreateCommand b'
 stdout '^==> running_script script=postStartCommand vm=devvm-fail-[0-9a-f]{14}$'
@@ -152,7 +152,7 @@ rm $STUB_DIR/shell-fails-on
 project skip
 cp $WORK/build.json .devcontainer.json
 exec devvm --network open --no-devcontainer
-! stdout devcontainer_using
+! stdout new_vm_devcontainer
 vm_name SKIP skip
 vm_state $SKIP_dir/vm.json
 stdout '^devcontainer.off=true$'

@@ -7,7 +7,7 @@ A VM has no screen of its own, but with the `desktop` layer it gets an Xfce desk
 
 ## Adding the desktop
 
-The desktop is one of devvm's [built-in layers](images.md#built-in-layers), so only the VMs you choose it for get it, and `base` and the other VMs stay without it. To add it to a new VM, check `desktop` under Layers in the list devvm shows for a new VM, or name it with `--layers`:
+The desktop is one of devvm's [built-in layers](images.md#built-in-layers), so only the VMs you choose it for get it, and `base` and the other VMs stay without it. To add it to a new VM, check `desktop` under Layers in the list devvm shows when you customize a new VM, or name it with `--layers`:
 
 ```sh
 devvm --layers desktop          # a VM of base with the desktop
