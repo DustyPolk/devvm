@@ -39,6 +39,7 @@ You start the agent in the VM's shell, whose prompt starts with `(devvm)`, so th
 | `devvm host` | get this folder's VM ready for ssh and editors, and show the host name they reach it by, such as `devvm-website` ([details](../using/ssh.md#devvm-host-and-devvm-code)) |
 | `devvm history` | list the exports of agents' history that devvm saved in `~/.local/share/devvm/exports` ([details](../using/coding-agents.md#history)) |
 | `devvm history export [FILE]` | save the history of this folder's VM's agents to FILE, or to a new `.tar.gz` in `~/.local/share/devvm/exports` ([details](../using/coding-agents.md#history)) |
+| `devvm history import [FILE]` | put the agents' history in FILE, or in the newest export devvm saved for this folder, into this folder's VM ([details](../using/coding-agents.md#importing-history)) |
 
 In a folder without a VM of its own, every command that acts on this folder's VM, except `devvm adopt`, uses the VM of the nearest folder with one that it's inside, unless a git repo of its own is in between, and devvm says which VM that is. Each of these commands takes `--here`, which uses only this folder's own VM, and `--parent`, which uses that folder's VM even across a repo of its own. `devvm rm` also asks before it deletes that VM, and so does each command that gives that VM more access before it changes the VM ([a subfolder](#a-subfolder)).
 

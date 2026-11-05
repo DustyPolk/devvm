@@ -17,8 +17,9 @@ import (
 // remake reads it). What it's sent is kept: a script fed to bash -s has
 // its first line past devvm's prelude appended to $STUB_DIR/scripts, a
 // VM's setup is $STUB_DIR/sync.tar, a base build's packages
-// $STUB_DIR/packages-in.tar, and what a remake puts in a new disk's home
-// $STUB_DIR/home-in.tgz. Its switches, in $STUB_DIR:
+// $STUB_DIR/packages-in.tar, what a remake puts in a new disk's home
+// $STUB_DIR/home-in.tgz, and an import of agents' history
+// $STUB_DIR/history-in.tgz. Its switches, in $STUB_DIR:
 //
 //	shell-fails         every shell fails
 //	shell-fails-on      a shell whose arguments hold its text fails (a home folder's copy too)
@@ -26,6 +27,7 @@ import (
 //	shell-waits-on      a shell whose arguments hold its text touches waiting, then waits
 //	                    until this file is gone and carries on
 //	sync-fails-with     the setup fails, and this file is the VM's /run/devvm/tools-unmounted
+//	history-unsafe      an import of agents' history finds a path outside them (and fails)
 //	packages-out.tar    the packages a base build gives back, else none
 //	net-direct          a direct connection (curl --noproxy, past the VM's proxy) works,
 //	                    which fails as a confined VM's does without it
@@ -163,6 +165,15 @@ func (g *guest) files() (code int, done bool) {
 		return g.replace([]string{"tar", "-czf", "-", "-C", home, "."}, []string{"COPYFILE_DISABLE=1"}), true
 	case in:
 		return g.status(g.copyIn("home-in.tgz")), true
+	case strings.Contains(all, "--quoting-style=escape"):
+		if err := g.copyIn("history-in.tgz"); err != nil {
+			return g.status(err), true
+		}
+		if g.on("history-unsafe") {
+			g.print("devvm-history-unsafe\n")
+			return 1, true
+		}
+		return 0, false
 	case strings.Contains(all, "tar -x -C "):
 		return g.status(g.copyIn("packages-in.tar")), true
 	case strings.Contains(all, "tar -c -C "):

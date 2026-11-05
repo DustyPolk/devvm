@@ -1098,6 +1098,30 @@ other = "Exporting the agent history of this folder's VM failed: {{.reason}}."
 description = "reason is an error from the system, in English"
 other = "Listing the exports of agents' history failed: {{.reason}}."
 
+[imported]
+other = "imported the agent history in {{.file}} into {{.vm}}"
+
+[history_not_imported]
+other = "Importing the agent history in {{.file}} into {{.vm}} failed."
+
+[history_import_unsafe]
+other = "{{.file}} holds paths outside the agents' history folders, so devvm imported nothing from it."
+
+[history_no_export]
+other = "There's no export of agents' history for {{.dir}}. Give devvm history import the FILE to import."
+
+[import_failed]
+description = "reason is an error from the system, in English"
+other = "Importing agent history into this folder's VM failed: {{.reason}}."
+
+[history_import_ask]
+description = "file is the newest export of agents' history devvm saved for this folder, its name ending in the date and time devvm wrote it"
+other = "devvm saved this folder's agent history in {{.file}}.\nImport it into {{.vm}}?"
+
+[history_import_later]
+description = "file is the newest export of agents' history made for this folder"
+other = "devvm saved this folder's agent history in {{.file}}. Run devvm history import in this folder to put it into {{.vm}}."
+
 [tools_failed]
 description = "reason is an error from the system, in English"
 other = "Reading the shared tools of this folder's VM failed: {{.reason}}."

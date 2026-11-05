@@ -1,0 +1,112 @@
+# history import: an export of agents' history into the folder's VM, the
+# newest devvm saved for the folder or a file, streamed in as it is for
+# the VM's tar, which leaves out the agents' logins and devvm's own copies
+# and refuses paths outside the agents' history. A new VM with an agent
+# offers the folder's newest export in a terminal, [y/N], and without one
+# says how to import it later. (Each new VM here ends in a failed setup,
+# after the import, so devvm's run ends and writes its coverage.)
+env EXPORTS=$DATA/exports
+project agent
+! exec devvm history import
+stderr '^devvm: no_vm dir=\S*/agent$'
+
+# A VM with an agent, no export yet: nothing offered, nothing to import.
+exec devvm --no-network-policy --no-git-protect --agents claude
+! stderr 'history_import_(ask|later)'
+vm_name AGENT agent
+! exec devvm history import
+stderr '^devvm: history_no_export dir=\S*/agent$'
+
+# The newest export saved for this folder, streamed into the VM as it is,
+# for its tar, which is told to check the paths and leave out the logins,
+# ~/.claude.json and the files devvm's setup writes.
+exec devvm history export
+stub_reset
+exec devvm history import
+stdout '^==> imported file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
+exec sh -c 'cmp "$STUB_DIR/history-in.tgz" "$EXPORTS"/*.tar.gz'
+stub_calls
+stdout 'tar -tzf "\$t/export" --absolute-names --quoting-style=escape'
+stdout 'devvm-history-unsafe'
+stdout 'tar -xzf "\$t/export" -C "\$t/x" .*--no-same-owner.*--no-same-permissions.*--anchored'
+stdout 'find "\$t/x" -type l'
+stdout 'tar --extract --file=- --directory ~ --skip-old-files .*--no-same-owner.*--no-same-permissions'
+stdout '--exclude=\.claude/\.credentials\.json'
+stdout '--exclude=\.claude\.json'
+stdout '--exclude=\.codex/auth\.json'
+stdout '--exclude=\.local/share/opencode/auth\.json'
+stdout '--exclude=\.claude/settings\.json'
+stdout '--exclude=\.claude/skills'
+! stdout 'tar (-xzf|--extract) .*(--absolute-names|-P\b)'
+
+# A file of your own, relative to here; one that isn't there fails before
+# anything runs in the VM.
+cp $WORK/mine.tar.gz mine.tar.gz
+exec devvm history import mine.tar.gz
+stdout '^==> imported file=\S*/agent/mine\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
+cmp $STUB_DIR/history-in.tgz mine.tar.gz
+stub_reset
+! exec devvm history import nope.tar.gz
+stderr '^devvm: import_failed reason=.*nope\.tar\.gz.*$'
+stub_calls
+! stdout quoting-style
+
+# The VM's tar finds a path outside the agents' history: nothing imported.
+# Its tar failing otherwise is a failed import.
+exec sh -c ': > "$STUB_DIR/history-unsafe"'
+! exec devvm history import mine.tar.gz
+stderr '^devvm: history_import_unsafe file=\S*/agent/mine\.tar\.gz$'
+rm $STUB_DIR/history-unsafe
+exec sh -c 'echo quoting-style > "$STUB_DIR/shell-fails-on"'
+! exec devvm history import mine.tar.gz
+stderr '^devvm: history_not_imported file=\S*/agent/mine\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
+rm $STUB_DIR/shell-fails-on
+
+# rm saves one more. A new VM without a terminal says how to import it.
+exec devvm rm --force
+stdout '^==> exported '
+rm $STUB_DIR/history-in.tgz
+exec sh -c 'echo "tar -xf - " > "$STUB_DIR/shell-fails-on"'
+! exec devvm --no-network-policy --no-git-protect --agents claude
+stderr '^history_import_later file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
+! exists $STUB_DIR/history-in.tgz
+exec devvm rm --force --no-export
+
+# In a terminal it asks: no imports nothing, yes imports the newest.
+ttyin -stdin $WORK/no.txt
+! exec devvm --no-network-policy --no-git-protect --agents claude
+stderr '^history_import_ask file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14} \[y/N\] '
+! stdout imported
+! exists $STUB_DIR/history-in.tgz
+exec devvm rm --force --no-export
+ttyin -stdin $WORK/yes.txt
+! exec devvm --no-network-policy --no-git-protect --agents claude
+stdout '^==> imported file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
+exists $STUB_DIR/history-in.tgz
+exec devvm rm --force --no-export
+rm $STUB_DIR/history-in.tgz
+
+# A refused import still makes the VM, with a warning.
+exec sh -c ': > "$STUB_DIR/history-unsafe"'
+ttyin -stdin $WORK/yes.txt
+! exec devvm --no-network-policy --no-git-protect --agents claude
+stderr '\[y/N\] devvm: history_import_unsafe file=\S*/exports/devvm-agent-'
+stderr '^devvm: sync_failed'
+rm $STUB_DIR/history-unsafe
+exec devvm rm --force --no-export
+
+# A VM without an agent, and another folder's VM, are offered nothing.
+! exec devvm --no-network-policy --no-git-protect --agents none
+! stderr 'history_import_(ask|later)'
+exec devvm rm --force --no-export
+project other
+! exec devvm --no-network-policy --no-git-protect --agents claude
+! stderr 'history_import_(ask|later)'
+rm $STUB_DIR/shell-fails-on
+
+-- mine.tar.gz --
+not really a tarball: the VM's tar reads it
+-- no.txt --
+n
+-- yes.txt --
+y

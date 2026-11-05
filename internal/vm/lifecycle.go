@@ -366,6 +366,103 @@ func (e Lifecycle) export(ctx context.Context, t *found, file string, failed err
 	return nil
 }
 
+// Import puts an export of agents' history into the folder's VM: file
+// (absolute), or the newest export devvm saved for the VM's folder when
+// it's "", never another folder's. devvm starts a stopped VM for it.
+func (e Lifecycle) Import(ctx context.Context, file string) error {
+	t, err := finder(e).target(ctx, need{has: hasMade})
+	if err != nil {
+		return err
+	}
+	if file == "" {
+		x, ok, err := (Exports{Dirs: e.Dirs}).Newest(t.f.Dir)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return msg.HistoryNoExport(t.f.Dir)
+		}
+		file = x.Path
+	} else if _, err := os.Stat(file); err != nil {
+		return err
+	}
+	if err := e.ensureRunning(ctx, t); err != nil {
+		return err
+	}
+	return importHistory(ctx, e.Env, t, file)
+}
+
+// importHistory puts the export of agents' history at file into t's VM,
+// which is running. The file is streamed in as it is, and the VM's tar
+// reads it (historyImport): it comes from a VM, so the host never reads
+// what's in it, and only a VM's own home gets it.
+func importHistory(ctx context.Context, e *Env, t *found, file string) error {
+	vm := t.f.Name
+	f, err := os.Open(file) //nolint:gosec // the export the user named, or the one devvm saved for this folder
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	out := &capped{max: len(historyUnsafe) + 1}
+	err = t.exec(ctx, []string{"bash", "-c", historyImport()}, backend.ExecOpts{Stdin: f, Stdout: out, Stderr: e.LogWriter()})
+	switch {
+	case err == nil:
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case strings.TrimSpace(out.String()) == historyUnsafe:
+		return msg.HistoryImportUnsafe(file)
+	default:
+		return backend.Logged(msg.HistoryNotImported(file, vm))
+	}
+	e.Info(msg.Imported(file, vm))
+	return nil
+}
+
+// offerHistory returns the export of agents' history the new VM vm, of
+// the folder dir, gets: the newest devvm saved for dir, never another
+// folder's, when the VM has an agent among its shared tools (names) and
+// the user says yes in a terminal ([y/N]: the export is an old VM's
+// content). Without a question it says how to import it later, and
+// returns "".
+func (e creation) offerHistory(vm, dir string, names []string) string {
+	if len(image.AgentsOf(names)) == 0 {
+		return ""
+	}
+	x, ok, err := (Exports{Dirs: e.Dirs}).Newest(dir)
+	if err != nil || !ok {
+		return ""
+	}
+	if e.CanAsk == nil || !e.CanAsk() {
+		e.Note(msg.HistoryImportLater(x.Path, vm))
+		return ""
+	}
+	if !e.Ask(msg.HistoryImportAsk(x.Path, vm)) {
+		return ""
+	}
+	return x.Path
+}
+
+// importOffered imports the export the user said yes to (offerHistory)
+// into t's new VM, started and not yet set up; none when file is "". The VM is
+// made either way, so a failed import only warns, and devvm history
+// import can try again.
+func (e creation) importOffered(ctx context.Context, t *found, file string) error {
+	if file == "" {
+		return nil
+	}
+	err := importHistory(ctx, e.Env, t, file)
+	switch m, ok := errors.AsType[msg.M](err); {
+	case err == nil:
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case ok:
+		e.Warn(m)
+	default:
+		e.Warn(msg.HistoryNotImported(file, t.f.Name))
+	}
+	return nil
+}
+
 // delete deletes the VM, then what devvm keeps for it (teardown): its
 // folder, its proxy and link session, .git's locks or the repo's remote
 // for its clone, other VMs' links to it, its host keys and its ssh config

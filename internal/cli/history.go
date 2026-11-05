@@ -26,6 +26,7 @@ func newHistoryCmd(a *app) *cobra.Command {
 		Example: examples(
 			"devvm history", "list the saved exports",
 			"devvm history export", "save this folder's VM's agent history",
+			"devvm history import", "put the newest export back into this folder's VM",
 		),
 		Args: noArgs,
 		RunE: func(*cobra.Command, []string) error {
@@ -42,7 +43,7 @@ func newHistoryCmd(a *app) *cobra.Command {
 		},
 	}
 	jsonFlag(cmd, &asJSON)
-	cmd.AddCommand(newHistoryExportCmd(a))
+	cmd.AddCommand(newHistoryExportCmd(a), newHistoryImportCmd(a))
 	return cmd
 }
 
@@ -104,6 +105,38 @@ func newHistoryExportCmd(a *app) *cobra.Command {
 				}
 				return vm.Lifecycle{Env: env}.Export(cmd.Context(), file)
 			}, msg.ExportFailed)
+			return nil
+		},
+	}
+	addFolderFlags(cmd, a)
+	return cmd
+}
+
+// newHistoryImportCmd is devvm history import [FILE].
+func newHistoryImportCmd(a *app) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "import [FILE]",
+		Short: "Put an export of agent history into this folder's VM",
+		Long: "Put the agent history in FILE, a .tar.gz that devvm history export or devvm rm saved, into this folder's VM, " +
+			"or the newest export devvm saved for this folder. " +
+			"It leaves out the agents' logins and the files devvm copies in, and keeps every file the VM already has.",
+		Example: examples(
+			"devvm history import", "import the newest export saved for this folder",
+			"devvm history import ~/claude.tar.gz", "import a file of your own",
+		),
+		Args: maxArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			a.env(func(env *vm.Env) error {
+				file := ""
+				if len(args) == 1 {
+					abs, err := filepath.Abs(args[0])
+					if err != nil {
+						return err
+					}
+					file = abs
+				}
+				return vm.Lifecycle{Env: env}.Import(cmd.Context(), file)
+			}, msg.ImportFailed)
 			return nil
 		},
 	}

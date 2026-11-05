@@ -7,7 +7,7 @@ project web
 ! exec devvm history export
 stderr '^devvm: no_vm dir=\S*/web$'
 ! exec devvm history now
-stderr '^devvm: no_subcommand command=devvm history commands=export given=now$'
+stderr '^devvm: no_subcommand command=devvm history commands=export, import given=now$'
 
 # None yet: the header alone, no VM needed.
 exec devvm history

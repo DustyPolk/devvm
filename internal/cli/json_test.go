@@ -264,6 +264,7 @@ func TestShowCommandsTakeJSON(t *testing.T) {
 		"devvm group join":     "it changes a setting",
 		"devvm group leave":    "it changes a setting",
 		"devvm history export": "it writes an export",
+		"devvm history import": "it changes the VM's files",
 		"devvm layer":          "it prints its help",
 		"devvm layer new":      "it writes a file",
 		"devvm restart":        "it restarts the VM",

@@ -1364,9 +1364,34 @@ func HistoryFailed(reason string) M {
 	return M{id: "history_failed", vals: []val{{"reason", reason}}}
 }
 
+// HistoryImportAsk is [history_import_ask]: "devvm saved this folder's agent history in {{.file}}.\nImport it into {{.vm}}?"
+func HistoryImportAsk(file string, vm string) M {
+	return M{id: "history_import_ask", vals: []val{{"file", file}, {"vm", vm}}}
+}
+
+// HistoryImportLater is [history_import_later]: "devvm saved this folder's agent history in {{.file}}. Run devvm history import in this folder to put it into {{.vm}}."
+func HistoryImportLater(file string, vm string) M {
+	return M{id: "history_import_later", vals: []val{{"file", file}, {"vm", vm}}}
+}
+
+// HistoryImportUnsafe is [history_import_unsafe]: "{{.file}} holds paths outside the agents' history folders, so devvm imported nothing from it."
+func HistoryImportUnsafe(file string) M {
+	return M{id: "history_import_unsafe", vals: []val{{"file", file}}}
+}
+
+// HistoryNoExport is [history_no_export]: "There's no export of agents' history for {{.dir}}. Give devvm history import the FILE to import."
+func HistoryNoExport(dir string) M {
+	return M{id: "history_no_export", vals: []val{{"dir", dir}}}
+}
+
 // HistoryNotExported is [history_not_exported]: "Exporting {{.vm}}'s agent history failed."
 func HistoryNotExported(vm string) M {
 	return M{id: "history_not_exported", vals: []val{{"vm", vm}}}
+}
+
+// HistoryNotImported is [history_not_imported]: "Importing the agent history in {{.file}} into {{.vm}} failed."
+func HistoryNotImported(file string, vm string) M {
+	return M{id: "history_not_imported", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
 // HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path. Set it to your home folder."
@@ -1452,6 +1477,16 @@ func ImagesTotal(size string) M {
 // ImagesUnused is [images_unused]: "Unused shared tool images take {{.size}}. Run devvm gc to free it."
 func ImagesUnused(size string) M {
 	return M{id: "images_unused", vals: []val{{"size", size}}}
+}
+
+// ImportFailed is [import_failed]: "Importing agent history into this folder's VM failed: {{.reason}}."
+func ImportFailed(reason string) M {
+	return M{id: "import_failed", vals: []val{{"reason", reason}}}
+}
+
+// Imported is [imported]: "imported the agent history in {{.file}} into {{.vm}}"
+func Imported(file string, vm string) M {
+	return M{id: "imported", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
 // InterruptedImage is [interrupted_image]: "interrupted: deleting the unfinished image {{.vm}}"
@@ -3693,7 +3728,12 @@ var specs = map[string]spec{
 	"has_layers":                       {fields: []string{"layers", "vm"}},
 	"has_tools":                        {fields: []string{"tools", "vm"}},
 	"history_failed":                   {fields: []string{"reason"}},
+	"history_import_ask":               {fields: []string{"file", "vm"}},
+	"history_import_later":             {fields: []string{"file", "vm"}},
+	"history_import_unsafe":            {fields: []string{"file"}},
+	"history_no_export":                {fields: []string{"dir"}},
 	"history_not_exported":             {fields: []string{"vm"}},
+	"history_not_imported":             {fields: []string{"file", "vm"}},
 	"home_not_absolute":                {},
 	"host_cpus_few":                    {fields: []string{"have", "want"}},
 	"host_memory_low":                  {fields: []string{"have", "want"}},
@@ -3711,6 +3751,8 @@ var specs = map[string]spec{
 	"images_stale_note":                {plural: true, fields: []string{"count"}},
 	"images_total":                     {fields: []string{"size"}},
 	"images_unused":                    {fields: []string{"size"}},
+	"import_failed":                    {fields: []string{"reason"}},
+	"imported":                         {fields: []string{"file", "vm"}},
 	"interrupted_image":                {fields: []string{"vm"}},
 	"interrupted_start":                {fields: []string{"vm"}},
 	"interrupted_vm":                   {fields: []string{"vm"}},

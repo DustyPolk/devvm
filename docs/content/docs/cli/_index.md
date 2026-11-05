@@ -20,6 +20,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm group leave](devvm_group_leave.md): Take this folder's VM out of its group
 - [devvm history](devvm_history.md): List the saved exports of agents' history
 - [devvm history export](devvm_history_export.md): Save this folder's VM's agent history to a .tar.gz
+- [devvm history import](devvm_history_import.md): Put an export of agent history into this folder's VM
 - [devvm host](devvm_host.md): Get this folder's VM ready for ssh and editors, and show its host name
 - [devvm images](devvm_images.md): List the images and the shared tools
 - [devvm images rm](devvm_images_rm.md): Delete images, by name or by key

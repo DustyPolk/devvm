@@ -1,6 +1,6 @@
 ---
 title: devvm secret rm
-weight: 43
+weight: 44
 ---
 
 Delete a saved secret

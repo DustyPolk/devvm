@@ -1,6 +1,6 @@
 ---
 title: devvm tools add
-weight: 55
+weight: 56
 ---
 
 Add shared tools to this folder's VM, then open a shell in it

@@ -3,6 +3,7 @@ package vm
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -10,6 +11,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -39,6 +41,67 @@ var (
 		".local/share/opencode/auth.json", ".local/share/opencode/account.json", ".local/share/opencode/bin",
 	}
 )
+
+// historyUnsafe is what historyImport prints when it imports nothing
+// because a path in the export is outside the agents' history.
+const historyUnsafe = "devvm-history-unsafe"
+
+// importSkips are the paths in an export of agents' history, relative to
+// the home folder, that an import leaves out, because devvm's setup
+// writes them: the agents' logins (historyExcludes), ~/.claude.json,
+// whose copy holds the old VM's placeholders, and every agent's folders
+// linked to their mounts and files copied from the host. Sorted.
+func importSkips() []string {
+	skips := append(slices.Clone(historyExcludes), ".claude.json")
+	for _, of := range []map[string][]string{agentDirsOf, agentFilesOf} {
+		for _, paths := range of {
+			skips = append(skips, paths...)
+		}
+	}
+	slices.Sort(skips)
+	return slices.Compact(skips)
+}
+
+// historyImport is the script that puts an export of agents' history,
+// on its stdin, into the VM's home, run there as the VM's user, so the
+// host never reads the export. It saves the export in a folder of its
+// own and lists its paths as they are in it (--absolute-names, which
+// only the listing takes: tar would list them with their leading / and
+// .. parts taken off), each on one line (GNU tar's escape quoting). It
+// imports nothing when one is outside historyPaths, absolute or has a
+// .. part, printing historyUnsafe instead. Otherwise GNU tar unpacks it
+// in a folder of its own, without its owners or modes (the user's umask
+// applies) and without importSkips (anchored, each with what's below
+// it); the symlinks there that point outside it (absolute, or with a ..
+// part) are taken out, so an agent's write never follows one out of its
+// history; then what's left of historyPaths goes into the home folder,
+// without replacing a file or folder the VM has (--skip-old-files,
+// which implies --no-overwrite-dir).
+func historyImport() string {
+	allowed := make([]string, len(historyPaths))
+	for i, p := range historyPaths {
+		allowed[i] = regexp.QuoteMeta(p)
+	}
+	own := []string{"--no-same-owner", "--no-same-permissions"}
+	unpack := append(slices.Clone(own), "--anchored")
+	for _, p := range importSkips() {
+		unpack = append(unpack, "--exclude="+p)
+	}
+	return strings.Join([]string{
+		"set -o pipefail",
+		`mkdir -p ~/.cache && t=$(mktemp -d ~/.cache/devvm-import.XXXXXX) || exit 1`,
+		`trap 'rm -rf "$t"' EXIT`,
+		`cat > "$t/export" && tar -tzf "$t/export" --absolute-names --quoting-style=escape > "$t/names" || exit 1`,
+		"if grep -vqE " + shell.Quote("^("+strings.Join(allowed, "|")+")(/|$)") + ` "$t/names" || ` +
+			"grep -qE " + shell.Quote(`(^|/)\.\.(/|$)`) + ` "$t/names"; then echo ` + historyUnsafe + "; exit 1; fi",
+		`mkdir "$t/x" && tar -xzf "$t/export" -C "$t/x" ` + shell.QuoteJoin(unpack) + " || exit 1",
+		`find "$t/x" -type l -print0 | while IFS= read -r -d '' l; do`,
+		`  case $(readlink "$l") in /* | .. | ../* | */.. | */../*) echo "devvm: left out the link $l" >&2; rm -f "$l" ;; esac`,
+		"done",
+		`cd "$t/x" && set -- && for p in ` + shell.QuoteJoin(historyPaths) + `; do if [ -e "$p" ] || [ -L "$p" ]; then set -- "$@" "$p"; fi; done`,
+		`[ "$#" -eq 0 ] || tar -cf - "$@" | tar --extract --file=- --directory ~ --skip-old-files ` + shell.QuoteJoin(own),
+	}, "\n")
+}
 
 // opencodeDir is opencode's config folder, whose subfolders are mounted
 // and whose files are copied.

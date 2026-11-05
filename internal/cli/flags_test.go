@@ -246,7 +246,7 @@ func TestUpFlagsAreUpsAlone(t *testing.T) {
 func folderCommands() []string {
 	return []string{
 		"devvm", "devvm restart", "devvm stop", "devvm update", "devvm rm", "devvm code", "devvm desktop", "devvm host",
-		"devvm history export", "devvm tools", "devvm tools add", "devvm tools rm", "devvm tools update", "devvm size",
+		"devvm history export", "devvm history import", "devvm tools", "devvm tools add", "devvm tools rm", "devvm tools update", "devvm size",
 		"devvm ports", "devvm ports add", "devvm ports rm", "devvm network", "devvm network allow", "devvm network deny",
 		"devvm network rm", "devvm network log", "devvm ssh-agent", "devvm git-protect", "devvm clone",
 		"devvm secret use", "devvm secret unuse", "devvm layer add", "devvm layer rm", "devvm group", "devvm group join",

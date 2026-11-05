@@ -185,6 +185,9 @@ type newVM struct {
 	dc      *devcontainer.Plan
 	spec    backend.VMSpec
 	builder *build.Env
+	// history is the export of agents' history it gets once it's started,
+	// as the user said yes to (offerHistory); "" for none.
+	history string
 }
 
 // creation makes a new VM: its plan, its build and its cleanup.
@@ -284,8 +287,14 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	locking.Store(!o.Clone && !o.NoGitProtect)
 	// Started as every start does, its folder checked as a new VM's,
 	// before the setup and the shell.
-	started, err := starter(e.Launch).bringUp(ctx, &found{f: f, st: st, b: b, exists: true}, upOpts{made: true})
+	t := &found{f: f, st: st, b: b, exists: true}
+	started, err := starter(e.Launch).bringUp(ctx, t, upOpts{made: true})
 	if err != nil {
+		return err
+	}
+	// The agents' history it was offered, before its setup, which writes
+	// what the import leaves out.
+	if err := e.importOffered(ctx, t, n.history); err != nil {
 		return err
 	}
 	cmd, err := e.setUp(ctx, b, st, f, started)
@@ -444,6 +453,7 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if err := (backend.Space{Free: e.FreeSpace}).Check(b, vm, func(f backend.Floors) uint64 { return f.VM }); err != nil {
 		return newVM{}, err
 	}
+	n.history = e.offerHistory(vm, f.Dir, n.tools)
 	return n, nil
 }
 

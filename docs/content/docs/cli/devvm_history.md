@@ -18,6 +18,7 @@ devvm history [flags]
 ```text
   devvm history         # list the saved exports
   devvm history export  # save this folder's VM's agent history
+  devvm history import  # put the newest export back into this folder's VM
 ```
 
 ## Options
@@ -42,3 +43,4 @@ devvm history [flags]
 
 - [devvm](devvm.md): Open a shell in this folder's VM, creating it first
 - [devvm history export](devvm_history_export.md): Save this folder's VM's agent history to a .tar.gz
+- [devvm history import](devvm_history_import.md): Put an export of agent history into this folder's VM

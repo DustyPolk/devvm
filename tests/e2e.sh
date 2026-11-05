@@ -13,7 +13,7 @@
 #                again, restart, devvm size, devvm ports (a running VM's at once, never a listed port a
 #                program here has, a bad list a usage error), a mistyped command refused with a suggestion,
 #                devvm git-protect and rm, a VM from a devcontainer.json (its ports, variables, commands
-#                once and at each start, a changed file, an image on this machine's registry refused), an agent VM's folders and history (devvm history export, rm's export), and SSH agent forwarding
+#                once and at each start, a changed file, an image on this machine's registry refused), an agent VM's folders and history (devvm history export, rm's export, a new VM's offer, devvm history import and its refusal), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone (pushed past an insteadOf), the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps, then a git worktree's clone; gc deletes a stale
@@ -2245,6 +2245,22 @@ check "rm exports its agents' history, without their logins, only yours to read,
   ! limactl list -q | grep -qx $vm && f=\$(ls \"\$ex\"/$vm-*.tar.gz) && tar -tzf \"\$f\" > '$work/export.list' &&
   grep -qx '\.claude/projects/e2e/t\.jsonl' '$work/export.list' && ! grep -q 'credentials' '$work/export.list' &&
   [[ \$(stat -c %a \"\$ex\" 2>/dev/null || stat -f %Lp \"\$ex\") == 700 ]] && [[ \$(stat -c %a \"\$f\" 2>/dev/null || stat -f %Lp \"\$f\") == 600 ]]"
+# The same folder's new VM: without a terminal it names the export rm saved, and devvm history
+# import puts it in, without the logins; an export with a path outside the history imports nothing.
+check "a new VM in the same folder names the export, without a terminal" bash -c "cd '$a' &&
+  f=\$(ls '$XDG_DATA_HOME/devvm/exports'/$vm-*.tar.gz) &&
+  HOME='$ah' '$D' --no-network-policy --no-git-protect --agents claude </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m history_import_later file=\$f vm=$vm)\" '$work/last.log'"
+check "history import puts the agents' history into it, without their logins" bash -c "cd '$a' &&
+  HOME='$ah' '$D' history import </dev/null >'$work/last.log' 2>&1 &&
+  limactl shell --workdir / $vm bash -c '[[ \$(cat ~/.claude/projects/e2e/t.jsonl) == e2e-transcript && ! -e ~/.claude/.credentials.json ]] &&
+    grep -q e2e-settings ~/.claude/settings.json && [[ -z \$(ls -A ~/.cache | grep devvm-import) ]]' </dev/null"
+check "an export with a path outside the agents' history imports nothing" bash -c "ev='$work/export/evil' && rm -rf \"\$ev\" &&
+  mkdir -p \"\$ev/d\" && echo e2e-escape > \"\$ev/e2e-escape\" && (cd \"\$ev/d\" && tar -czPf ../evil.tar.gz ../e2e-escape) &&
+  cd '$a' && ! HOME='$ah' '$D' history import \"\$ev/evil.tar.gz\" </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m history_import_unsafe file=\$ev/evil.tar.gz)\" '$work/last.log' &&
+  ! limactl shell --workdir / $vm sudo grep -rqs e2e-escape /home /root /tmp /etc </dev/null"
+(cd "$a" && HOME=$ah quiet "$D" rm --force --no-export)
 
 section "SSH agents"
 # A home of its own, without keys. A throwaway agent with a throwaway key stands for yours; devvm's

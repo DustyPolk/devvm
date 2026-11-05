@@ -1,11 +1,16 @@
 package vm
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
@@ -138,4 +143,159 @@ func TestUpdateAgentDirs(t *testing.T) {
 			_ = os.Remove(mine)
 		})
 	}
+}
+
+// An import leaves out the agents' logins, ~/.claude.json and what
+// devvm's setup writes, and the VM's tar is told to check the paths
+// first, keep no owner or mode, and never take absolute paths.
+func TestHistoryImportScript(t *testing.T) {
+	skips := importSkips()
+	for _, p := range []string{
+		".claude/.credentials.json", ".codex/auth.json", ".local/share/opencode/auth.json", ".local/share/opencode/account.json",
+		".claude.json", ".claude/settings.json", ".claude/CLAUDE.md", ".claude/skills", ".codex/config.toml", ".codex/prompts",
+	} {
+		if !slices.Contains(skips, p) {
+			t.Errorf("%s isn't left out", p)
+		}
+	}
+	if !slices.IsSorted(skips) || len(slices.Compact(slices.Clone(skips))) != len(skips) {
+		t.Errorf("skips %q aren't sorted once each", skips)
+	}
+	s := historyImport()
+	for _, want := range []string{
+		`tar -tzf "$t/export" --absolute-names --quoting-style=escape`, "grep -vqE '^(\\.claude|\\.claude\\.json|\\.codex|",
+		`grep -qE '(^|/)\.\.(/|$)'`, "echo " + historyUnsafe + "; exit 1",
+		`tar -xzf "$t/export" -C "$t/x" '--no-same-owner' '--no-same-permissions' '--anchored' '--exclude=`,
+		"'--exclude=.claude.json' ", `find "$t/x" -type l`, "/* | .. | ../* | */.. | */../*) ",
+		"for p in '.claude' '.claude.json' '.codex' '.local/share/opencode' '.local/state/opencode'; do",
+		"tar --extract --file=- --directory ~ --skip-old-files '--no-same-owner' '--no-same-permissions'",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("script lacks %q:\n%s", want, s)
+		}
+	}
+	// Only the listing takes the paths as they are; the unpacking never.
+	unpacks := 0
+	for line := range strings.SplitSeq(s, "\n") {
+		if !strings.Contains(line, "tar -xzf") && !strings.Contains(line, "tar --extract") {
+			continue
+		}
+		unpacks++
+		for _, bad := range []string{" -P", "--absolute-names", "--same-owner", "--preserve-permissions", "--overwrite"} {
+			if strings.Contains(line, bad) {
+				t.Errorf("tar gets %q: %s", bad, line)
+			}
+		}
+	}
+	if unpacks != 2 || strings.Count(s, "--absolute-names") != 1 {
+		t.Errorf("%d unpacks, --absolute-names beyond the listing:\n%s", unpacks, s)
+	}
+}
+
+// exportOf is a gzipped tarball of these entries: a name ending in / is
+// a folder, one with "->" a symlink, else a file whose content is its name.
+func exportOf(t *testing.T, names ...string) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	zw := gzip.NewWriter(&b)
+	tw := tar.NewWriter(zw)
+	for _, n := range names {
+		h := &tar.Header{Name: n, Mode: 0o4755, ModTime: time.Unix(1e9, 0), Typeflag: tar.TypeReg, Size: int64(len(n))}
+		if strings.HasSuffix(n, "/") {
+			h.Typeflag, h.Size = tar.TypeDir, 0
+		} else if name, target, ok := strings.Cut(n, "->"); ok {
+			h.Name, h.Linkname, h.Typeflag, h.Size = name, target, tar.TypeSymlink, 0
+		}
+		if err := tw.WriteHeader(h); err != nil {
+			t.Fatal(err)
+		}
+		if h.Typeflag == tar.TypeReg {
+			if _, err := tw.Write([]byte(n)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// The import script, run by GNU tar as the VM's does (skipped where
+// there's none): a tarball with a path outside the agents' history,
+// absolute or with .., imports nothing; the rest leave out importSkips
+// and keep the files the VM has.
+func TestHistoryImportRuns(t *testing.T) {
+	if out, err := exec.CommandContext(t.Context(), "tar", "--version").Output(); err != nil || !strings.Contains(string(out), "GNU tar") {
+		t.Skip("no GNU tar")
+	}
+	run := func(t *testing.T, home string, export []byte) (string, error) {
+		t.Helper()
+		cmd := exec.CommandContext(t.Context(), "bash", "-c", historyImport()) //nolint:gosec // devvm's own import script
+		cmd.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
+		var stderr bytes.Buffer
+		cmd.Stdin, cmd.Stderr = bytes.NewReader(export), &stderr
+		out, err := cmd.Output()
+		if err != nil {
+			t.Logf("tar's stderr: %s", stderr.String())
+		}
+		return string(out), err
+	}
+	for _, names := range [][]string{
+		{".claude/a", "/etc/devvm-import-test"},
+		{".claude/a", ".claude/../.bashrc"},
+		{".claude/../../devvm-import-test"},
+		{".claude/../.claude.json"},
+		{".bashrc"},
+		{"./.claude/a"},
+		{".claudex/a"},
+	} {
+		t.Run(names[len(names)-1], func(t *testing.T) {
+			home := t.TempDir()
+			out, err := run(t, home, exportOf(t, names...))
+			if err == nil || strings.TrimSpace(out) != historyUnsafe {
+				t.Errorf("imported: %q, %v", out, err)
+			}
+			if es, _ := os.ReadDir(home); len(es) != 1 || es[0].Name() != ".cache" {
+				t.Errorf("home has %v", es)
+			}
+			if es, _ := os.ReadDir(filepath.Join(home, ".cache")); len(es) != 0 {
+				t.Errorf("its temp folder stayed: %v", es)
+			}
+		})
+	}
+	t.Run("history", func(t *testing.T) {
+		home := t.TempDir()
+		mkdirs(t, home, ".claude/projects")
+		newer := filepath.Join(home, ".claude/projects/kept.jsonl")
+		if err := state.WriteFile(newer, []byte("the VM's own\n")); err != nil {
+			t.Fatal(err)
+		}
+		export := exportOf(t, ".claude/", ".claude/projects/", ".claude/projects/p.jsonl", ".claude/projects/kept.jsonl",
+			".claude/.credentials.json", ".claude/settings.json", ".claude/skills/", ".claude/skills/x", ".claude.json",
+			".claude/link->/etc", ".claude/projects/up->../../.bashrc", ".claude/projects/in->p.jsonl", ".codex/",
+			".codex/sessions/s", ".codex/auth.json", ".local/share/opencode/auth.json", ".local/state/opencode/x")
+		if out, err := run(t, home, export); err != nil {
+			t.Fatalf("%q, %v", out, err)
+		}
+		for p, want := range map[string]bool{
+			".claude/projects/p.jsonl": true, ".codex/sessions/s": true, ".local/state/opencode/x": true, ".claude/projects/in": true,
+			".claude/.credentials.json": false, ".claude/settings.json": false, ".claude/skills": false, ".claude.json": false,
+			".codex/auth.json": false, ".local/share/opencode/auth.json": false, ".claude/link": false, ".claude/projects/up": false,
+		} {
+			if _, err := os.Lstat(filepath.Join(home, p)); (err == nil) != want {
+				t.Errorf("%s: there %v, want %v", p, err == nil, want)
+			}
+		}
+		if data, _ := os.ReadFile(newer); string(data) != "the VM's own\n" { //nolint:gosec // the test's own file
+
+			t.Errorf("the VM's file was replaced: %q", data)
+		}
+		if fi, err := os.Stat(filepath.Join(home, ".claude/projects/p.jsonl")); err != nil || fi.Mode()&os.ModeSetuid != 0 {
+			t.Errorf("p.jsonl's mode: %v, %v", fi, err)
+		}
+	})
 }

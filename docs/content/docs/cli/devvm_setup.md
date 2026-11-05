@@ -1,6 +1,6 @@
 ---
 title: devvm setup
-weight: 47
+weight: 48
 ---
 
 Choose base's features, and new VMs' size, network policy, coding agents and layers
