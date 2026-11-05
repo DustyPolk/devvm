@@ -2,7 +2,11 @@ package lima
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -61,17 +65,67 @@ func views(t *testing.T, l *Lima) []view {
 }
 
 // play runs the scenario on l, returning the instances as devvm reads
-// them after each step.
-func play(t *testing.T, l *Lima, fx fixture) [][]view {
+// them after each step, and limactl list --json's output after the step
+// that leaves the most.
+func play(t *testing.T, l *Lima, fx fixture) ([][]view, []byte) {
 	t.Helper()
 	var out [][]view
+	var fullest []byte
+	most := 0
 	for _, s := range scenario(fx) {
 		if err := s.do(t.Context(), l); err != nil {
 			t.Fatalf("%s: %v", s.name, err)
 		}
-		out = append(out, views(t, l))
+		vs := views(t, l)
+		if len(vs) > most {
+			most = len(vs)
+			var err error
+			if fullest, err = l.Runner.Output(l.limactl(t.Context(), "list", "--json")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		out = append(out, vs)
 	}
-	return out
+	return out, fullest
+}
+
+// goldenVar names the folder that TestLimactlStubContract writes real
+// Lima's golden fixtures to, when it's set (tests/e2e.sh --golden sets it
+// to testdata/golden/<os>): limactl --version's output, and limactl list
+// --json's with the scenario's stopped dummy instances, the sandbox's
+// folders and this user's name replaced.
+const goldenVar = "STUB_GOLDEN"
+
+// writeGolden writes real Lima's fixtures for TestGoldenShapes.
+func writeGolden(t *testing.T, l *Lima, dir string, list []byte) {
+	t.Helper()
+	version, err := l.Runner.Output(l.limactl(t.Context(), "--version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	me, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string][]byte{"limactl-version.txt": version, "limactl-list-stopped.json": list} {
+		if err := os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec // the folder tests/e2e.sh --golden names
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(anonymous(string(data), filepath.Dir(l.Dirs.Home), me.Username)), 0o600); err != nil { //nolint:gosec // the folder tests/e2e.sh --golden names
+			t.Fatal(err)
+		}
+	}
+}
+
+// anonymous is a fixture without this machine's own: home is /home/me,
+// the user's name me, its full name, the timezone and a VM's environment
+// made up. tests/e2e.sh's golden does the same to what it captures.
+func anonymous(s, home, name string) string {
+	s = strings.ReplaceAll(s, home, "/home/me")
+	s = regexp.MustCompile(`\b`+regexp.QuoteMeta(name)+`\b`).ReplaceAllString(s, "me")
+	s = regexp.MustCompile(`"comment":"[^"]*"`).ReplaceAllString(s, `"comment":"me"`)
+	s = regexp.MustCompile(`"timezone":"[^"]*"`).ReplaceAllString(s, `"timezone":"UTC"`)
+	return regexp.MustCompile(`"env":\{[^{}]*\}`).ReplaceAllString(s, `"env":{"NAME":"value"}`)
 }
 
 // The limactl stub is a contract with real Lima: the scenario, run on
@@ -86,12 +140,16 @@ func TestLimactlStubContract(t *testing.T) {
 	var onLima, stub [][]view
 	t.Run("lima", func(t *testing.T) {
 		l, fx := dummyLima(t, sandboxDirs(t), realRunner{t})
-		onLima = play(t, l, fx)
+		var list []byte
+		onLima, list = play(t, l, fx)
+		if dir := os.Getenv(goldenVar); dir != "" {
+			writeGolden(t, l, dir, list)
+		}
 	})
 	t.Run("stub", func(t *testing.T) {
 		stubtest.New(t)
 		l, fx := dummyLima(t, sandboxDirs(t), stubtest.ExecRunner{})
-		stub = play(t, l, fx)
+		stub, _ = play(t, l, fx)
 	})
 	if t.Failed() {
 		return

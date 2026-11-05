@@ -2,11 +2,59 @@ package platform
 
 import (
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/stubtest"
 )
+
+// golden reads a golden fixture of macOS's, as tests/e2e.sh --golden
+// captured it from the real command.
+func golden(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "golden", "darwin", name)) //nolint:gosec // the repo's own fixture
+	if err != nil {
+		t.Fatalf("%v: run tests/e2e.sh --golden on macOS", err)
+	}
+	return string(b)
+}
+
+// Real security's answer for an item that isn't there, and real tmutil
+// isexcluded's, as the golden fixtures have them: the stubs answer
+// alike, with the same exit status and the same form.
+func TestGoldenSecurityTmutil(t *testing.T) {
+	m := regexp.MustCompile(`(?m)^exit (\d+)$`).FindStringSubmatch(golden(t, "security-missing.txt"))
+	if m == nil {
+		t.Fatal("security-missing.txt has no exit status")
+	}
+	want, _ := strconv.Atoi(m[1])
+	if want != 44 {
+		t.Errorf("security exits %d for a missing item, which KeychainGet reads as an error, not ErrNoSecret", want)
+	}
+	s := stubtest.New(t)
+	err := exec.CommandContext(t.Context(), "security", "find-generic-password", "-s", "devvm-test", "-a", "none", "-w").Run()
+	if exit, ok := errors.AsType[*exec.ExitError](err); !ok || exit.ExitCode() != want {
+		t.Errorf("the stub's security: %v, want exit %d", err, want)
+	}
+	form := regexp.MustCompile(`\A\[(Included|Excluded)\] +/\S+\n\z`)
+	if tm := golden(t, "tmutil-isexcluded.txt"); !form.MatchString(tm) {
+		t.Fatalf("tmutil isexcluded printed %q", tm)
+	}
+	for _, args := range [][]string{{"isexcluded", "/d"}, {"addexclusion", "/d"}, {"isexcluded", "/d"}} {
+		out, err := exec.CommandContext(t.Context(), "tmutil", args...).Output() //nolint:gosec // the tmutil stub
+		if err != nil || args[0] == "isexcluded" && !form.Match(out) {
+			t.Errorf("the stub's tmutil %q: %q, %v", args, out, err)
+		}
+	}
+	if calls := s.Calls(t); len(calls) != 2 {
+		t.Errorf("calls %q", calls)
+	}
+}
 
 // The stubs come first on PATH in these tests, never the real security
 // or tmutil.

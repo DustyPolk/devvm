@@ -1,6 +1,6 @@
 #!/bin/bash
 # End-to-end tests with real VMs, in a sandbox. Hosted CI can't run nested VMs on macOS.
-#   tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N | --newest-base]
+#   tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N | --newest-base] [--golden]
 #     (default)  every section but from: minutes, more on a first run (base's and the tools' builds, and
 #                Ubuntu's cloud image to download). images builds, rebuilds and interrupts images, and
 #                builds base again from its recorded packages with the mirror unreachable;
@@ -67,6 +67,12 @@
 #                of its own (slot 0's paths with -newest, its ports +1000), whose images and package
 #                cache it deletes first; images, project and tools unless --only says. A failure is
 #                upstream drift, which its summary names with the release
+#     --golden   also capture the golden fixtures the test stubs are checked against, into this
+#                checkout's testdata/golden/<os>/, this machine's home, user name and timezone
+#                replaced: images, real Lima's dummy instances (TestLimactlStubContract), limactl
+#                --version, qemu-img info of base's disk (Linux), security's answer for an item
+#                that isn't there and tmutil isexcluded (macOS); project, a running VM's limactl
+#                list --json, and its overlay disk's qemu-img info (Linux)
 # The sandbox: Lima home ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME), state under /tmp/devvm-go-e2e, Keychain
 # service devvm-go-e2e and the lock /tmp/devvm-go-e2e.lock: slot 0's. Slot N's add -N to each, and
 # 100 × N to each fixed port. It refuses to run against ~/.lima or devvm's own Lima home, deletes only
@@ -75,8 +81,8 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sections_all="images project clone gc tools network desktop nix from link"
-usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N | --newest-base]  (sections: $sections_all)" >&2; exit 2; }
-clean=false sel="images project clone gc tools network nix link" every=false slot=0 slots=1 newest=false chosen=false
+usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N | --newest-base] [--golden]  (sections: $sections_all)" >&2; exit 2; }
+clean=false sel="images project clone gc tools network nix link" every=false slot=0 slots=1 newest=false chosen=false golden=false
 while (( $# )); do
   case $1 in
     --clean) clean=true ;;
@@ -87,6 +93,7 @@ while (( $# )); do
     --slots) [[ ${2:-} =~ ^[1-9]$ ]] || usage; slots=$2; shift ;;
     --slot)  [[ ${2:-} =~ ^[0-9]$ ]] || usage; slot=$2; shift ;;
     --newest-base) newest=true ;;
+    --golden) golden=true ;;
     *) usage ;;
   esac
   shift
@@ -303,6 +310,7 @@ run_slots() {
   for ((k = 0; k < slots; k++)); do lock_drop "$(slot_work "$k").lock"; done
   ! $clean || extra+=(--clean)
   ! $features_on || extra+=(--every-feature)
+  ! $golden || extra+=(--golden)
   # Go found once, its folder first on PATH: slots that each ran mise exec at once would each have
   # mise install the repo's tools, over one another.
   if ! command -v go >/dev/null; then
@@ -409,6 +417,25 @@ go_e2e() {
   (cd "$root" && for kv in "$@"; do export "${kv?}"; done
    CGO_ENABLED=0 "${gocmd[@]}" test -count=1 -v -run "^$test\$" "./internal/$pkg") >"$work/go-e2e.log" 2>&1
   cat "$work/go-e2e.log"; grep -q -- "^--- PASS: $test (" "$work/go-e2e.log"
+}
+# golden NAME CMD...: with --golden, CMD's output and errors as the golden fixture NAME, in
+# testdata/golden/<os>/, this machine's home, user name, full name and timezone replaced, and a
+# VM's environment made up (internal/backend/lima's anonymous does the same). A capture isn't a
+# check, so a run without --golden runs as many checks; one that fails says so and keeps the
+# fixture it had.
+golden_dir=$root/testdata/golden/$(uname -s | tr '[:upper:]' '[:lower:]')
+golden() { local name=$1 f; shift
+  $golden || return 0
+  f=$golden_dir/$name
+  mkdir -p "$golden_dir"
+  if "$@" </dev/null 2>&1 | GOLDEN_HOME=$HOME GOLDEN_USER=$(id -un) perl -pe '
+      s/\Q$ENV{GOLDEN_HOME}\E/\/home\/me/g; s/\b\Q$ENV{GOLDEN_USER}\E\b/me/g;
+      s/"comment":"[^"]*"/"comment":"me"/g; s/"timezone":"[^"]*"/"timezone":"UTC"/g;
+      s/"env":\{[^{}]*\}/"env":{"NAME":"value"}/g' >"$f.new"; then
+    mv "$f.new" "$f"; echo "golden: $name"
+  else
+    rm -f "$f.new"; echo "golden: capturing $name failed"
+  fi
 }
 # A test build: DEVVM_UNREVIEWED and the other test overrides count in it
 # (never in a release).
@@ -1858,6 +1885,20 @@ check "with the mirror unreachable, base builds again under the same key from th
   grep -q ' file:/var/cache/devvm/packages/in ' \"\$runlog\" && ! grep -qE '^(Get|Hit|Err|Ign):[0-9]+ https?://' \"\$runlog\" &&
   [[ \$(status_of devvm-img-$kb) == Stopped && -f '$images/$kb/record.json' ]]"
 cp "$work/config.toml.saved" "$XDG_CONFIG_HOME/devvm/config.toml"
+# The golden fixtures (--golden): real Lima's dummy instances and its version, base's disk, and
+# the Keychain's and Time Machine's answers.
+if $golden; then
+  if (cd "$root" && STUB_GOLDEN=$golden_dir CGO_ENABLED=0 "${gocmd[@]}" test -count=1 -run '^TestLimactlStubContract$' ./internal/backend/lima) >"$work/golden.log" 2>&1; then
+    echo "golden: limactl-version.txt limactl-list-stopped.json"
+  else
+    echo "golden: capturing real Lima's dummy instances failed"; tail -5 "$work/golden.log"
+  fi
+  [[ $host_os != Linux || -z $kb ]] || golden qemu-img-info.json qemu-img info -U --output=json "$DEVVM_LIMA_HOME/devvm-img-$kb/disk"
+  if [[ $host_os == Darwin ]]; then
+    golden security-missing.txt bash -c 'security find-generic-password -s devvm-go-e2e-golden -a none -w; echo "exit $?"'
+    golden tmutil-isexcluded.txt tmutil isexcluded "$work"
+  fi
+fi
 fi
 
 if begin project; then
@@ -1867,6 +1908,11 @@ p=$(newproj web); git -C "$p" init -q
 launch "$p" 'pwd; echo e2e-shell-ran' --no-network-policy --cpus 2 --memory 3 --disk 120
 # The launch's output, for the .git protection checks: the checks before them overwrite last.log.
 cp "$work/last.log" "$work/web-launch.log"
+# A running VM, as the golden fixtures have it (--golden), and its overlay disk on Linux.
+if [[ -n $vm ]]; then
+  golden limactl-list-running.json limactl list --json "$vm"
+  [[ $host_os != Linux ]] || golden qemu-img-info-overlay.json qemu-img info -U --output=json "$DEVVM_LIMA_HOME/$vm/disk"
+fi
 check "devvm creates the VM from base, and opens a shell in the folder" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx '$p' '$work/last.log' && grep -qx e2e-shell-ran '$work/last.log' &&
   vm_state '$(vmdir "$vm")' | grep -qx image=base && vm_state '$(vmdir "$vm")' | grep -qx net.on=false &&

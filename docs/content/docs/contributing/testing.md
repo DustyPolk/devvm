@@ -116,6 +116,24 @@ Each test walks through `scenario`, which makes every kind of Lima config devvm 
 
 `TestLimactlStubContract` in `contract_test.go` keeps the `limactl` stub in `internal/stubtest/stub` honest, because the CLI tests and most Go tests trust it to act as Lima does. It runs `scenario` twice, once through the real `limactl` and once through the stub, and after each step it compares every instance as devvm reads it from `limactl list --json`. It compares the order of the instances, each one's status, size, mounts, agent forwarding, ssh port and networks, and the edits each kind of start would make to it. When Lima and the stub differ, the test names the step and the fields that differ, and the stub gets fixed to match Lima.
 
+## Golden fixtures
+
+The golden fixtures are what the real tools printed, kept in `testdata/golden/darwin/` and `testdata/golden/linux/`, so the tests can check both devvm's parsers and the [stubs](_index.md#stubs) against real output on any machine. Each system's folder holds what its tools printed there:
+
+| Fixture | The real output of | Captured from |
+| --- | --- | --- |
+| `limactl-version.txt` | `limactl --version` | `TestLimactlStubContract`'s run on real Lima |
+| `limactl-list-stopped.json` | `limactl list --json` | the contract test's dummy instances, after the step that leaves the most |
+| `limactl-list-running.json` | `limactl list --json` of a running VM | the `project` section's first VM |
+| `qemu-img-info.json` | `qemu-img info -U --output=json` of base's disk | the `images` section, on Linux |
+| `qemu-img-info-overlay.json` | the same, of a project VM's overlay disk | the `project` section, on Linux |
+| `security-missing.txt` | `security find-generic-password` for an item that isn't there, and its exit status | the `images` section, on macOS |
+| `tmutil-isexcluded.txt` | `tmutil isexcluded` | the `images` section, on macOS |
+
+`tests/e2e.sh --golden` captures them on a real machine, into the checkout, and you commit what changed. It runs the contract test with `STUB_GOLDEN` set to the system's folder for the dummy instances' fixtures, and runs the other commands itself, so a run needs the `images` section, and the `project` section for a running VM. Each fixture has this machine's home folder replaced with `/home/me`, the user's name with `me`, and the user's full name, the timezone and a VM's environment made up, so it holds nothing of yours. A capture isn't a check, so a run with `--golden` runs as many checks as one without, and a capture that fails says so and keeps the fixture it had. Run it on a Mac and on a [Linux host](#linux-hosts) after Lima or QEMU changes what it prints.
+
+`TestGoldenLimactlVersion`, `TestGoldenLimactlList` and `TestGoldenQemuImgInfo` in `internal/backend/lima/golden_test.go` read every system's fixtures with devvm's own parsers, so a change in what the tools print that devvm would misread fails them on any machine. Each also runs the stub and checks that its output has the same form, or the same shape for JSON: every field the stub prints is one that the real tool prints, with a value of the same kind. For `limactl list --json`, the stub's output is its listing after the contract test's scenario. `TestGoldenSecurityTmutil` in `internal/platform` checks the stub's `security` and `tmutil` against macOS's fixtures the same way, on macOS.
+
 ## Unreviewed emulations
 
 devvm refuses an emulated feature until its review passes, yet the review needs end-to-end checks of it. In a [test build](#test-builds), `DEVVM_UNREVIEWED` lets the ones it names through, as `backend:feature` pairs, comma-separated, each time with a warning (`backend_unreviewed_used`). A release ignores it:

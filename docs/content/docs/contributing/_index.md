@@ -325,7 +325,7 @@ A switch is a file a test makes in `$STUB_DIR` to change what a stub does, such 
 
 `docker` stands in only for what `--from` asks of it. It has an image only when `$STUB_DIR/docker-image` holds its ID, its `save` writes a tarball naming that image (or `$STUB_DIR/docker-saved`'s, a tag that moved), and it isn't running when `$STUB_DIR/docker-down` exists. `ssh` answers a port forwarder's master with `$STUB_DIR/guest-ports`, and a link session's master listens on its control socket. Either master outlives the process that started it, as ssh's does, until the sandbox's cleanup stops it or 5 minutes pass. A direct connection from a VM (the self-check's) fails, as a confined VM's does, unless `$STUB_DIR/net-direct` exists. A `--clone` VM's git runs on the host, on `$STUB_DIR/vmfs/<folder>`, and `ssh` pushes to and fetches from there (it fails with `$STUB_DIR/ssh-fails`). `security` stands in for the Keychain and `tmutil` for Time Machine, both keeping their items in the state, never in the real ones. `mise` writes `$MISE_STUB_LOCK` as the lock (`$MISE_STUB_OLDER_LOCK` for a list of versions), lists `$MISE_STUB_VERSIONS`, and fails like mise offline with `MISE_STUB_FAIL` set. `chflags` sets no flags, so `.git` protection leaves test folders deletable. `qemu-img` and QEMU are there so Linux hosts pass devvm's checks.
 
-To add a stub, write its function in `internal/stubtest/stub`, with a comment that says what it does and lists its switches, and add it to `stubs()` under the command's name. It logs its call with `c.log()` first, keeps what it must remember in the state through `c.update`, and reads its switches with `c.on` and `c.text`. A new command the state needs goes in `control`. To add a switch, read it in the stub's function, name it for what it does as above, and add it to that function's comment. Each stub has unit tests in `stub_test.go`, which run it in the test's own process.
+To add a stub, write its function in `internal/stubtest/stub`, with a comment that says what it does and lists its switches, and add it to `stubs()` under the command's name. It logs its call with `c.log()` first, keeps what it must remember in the state through `c.update`, and reads its switches with `c.on` and `c.text`. A new command the state needs goes in `control`. To add a switch, read it in the stub's function, name it for what it does as above, and add it to that function's comment. Each stub has unit tests in `stub_test.go`, which run it in the test's own process. Where a stub prints what devvm parses, such as `limactl list --json`, the [golden fixtures](testing.md#golden-fixtures) check that it prints what the real tool prints.
 
 devvm runs in `$WORK` or a folder made in it (`mkdir`, then `cd`), never in `HOME` or devvm's own folders, which it refuses as project folders.
 
@@ -355,9 +355,10 @@ tests/e2e.sh --only images  # just these sections
 tests/e2e.sh --clean        # delete the sandbox's cached images and tool images first
 tests/e2e.sh --slots 3      # the sections spread over 3 sandboxes that run at once
 tests/e2e.sh --newest-base  # base from Ubuntu's newest image and packages, in a sandbox of its own
+tests/e2e.sh --golden       # also capture the stubs' golden fixtures from the real tools
 ```
 
-`--newest-base` builds base as a user's first build does, in place of the pinned release that the other runs use, and [Maintaining](maintaining.md#checking-base-against-ubuntus-newest) says when to run it and what to do when it fails.
+`--newest-base` builds base as a user's first build does, in place of the pinned release that the other runs use, and [Maintaining](maintaining.md#checking-base-against-ubuntus-newest) says when to run it and what to do when it fails. `--golden` writes the [golden fixtures](testing.md#golden-fixtures) of this system into the checkout, for you to commit.
 
 The sections so far:
 

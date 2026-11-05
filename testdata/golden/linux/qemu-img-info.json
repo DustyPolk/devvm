@@ -1,0 +1,38 @@
+{
+    "children": [
+        {
+            "name": "file",
+            "info": {
+                "children": [
+                ],
+                "virtual-size": 1504378880,
+                "filename": "/home/me/.lt-e2e-go/devvm-img-b3b7490a45c9/disk",
+                "format": "file",
+                "actual-size": 1286311936,
+                "format-specific": {
+                    "type": "file",
+                    "data": {
+                    }
+                },
+                "dirty-flag": false
+            }
+        }
+    ],
+    "virtual-size": 107374182400,
+    "filename": "/home/me/.lt-e2e-go/devvm-img-b3b7490a45c9/disk",
+    "cluster-size": 65536,
+    "format": "qcow2",
+    "actual-size": 1286311936,
+    "format-specific": {
+        "type": "qcow2",
+        "data": {
+            "compat": "1.1",
+            "compression-type": "zlib",
+            "lazy-refcounts": false,
+            "refcount-bits": 16,
+            "corrupt": false,
+            "extended-l2": false
+        }
+    },
+    "dirty-flag": false
+}
