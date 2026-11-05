@@ -167,17 +167,17 @@ func (s starter) runningConfinement(ctx context.Context, b backend.Backend, st *
 // forwarding, its agent folder mounts (mountsLater: the user didn't
 // restart it), its project folder's mount once the folder moved, and
 // network policy turned off while it ran confined (conf, as it runs).
+// It warns of each change by name, then once that devvm restart applies
+// them (next_start).
 func (s starter) nextStart(st *state.VM, in backend.Instance, conf backend.Confinement, mountsLater bool) {
-	for _, c := range nextStartChanges(st, in, mountsLater, conf.Net == backend.NetProxy) {
-		s.Warn(c.later)
+	cs := nextStartChanges(st, in, mountsLater, conf.Net == backend.NetProxy)
+	if len(cs) == 0 {
+		return
 	}
-}
-
-// nextChange is a change a running VM gets only at its next start: the
-// line that names it before restartForNextStart's question, and the
-// warning that says when it applies.
-type nextChange struct {
-	named, later msg.M
+	for _, c := range cs {
+		s.Warn(c)
+	}
+	s.Warn(msg.NextStart(len(cs), st.Name()))
 }
 
 // projectMount is the project folder the VM's start mounts: its state's
@@ -190,24 +190,25 @@ func projectMount(st *state.VM) string {
 }
 
 // nextStartChanges lists what a running VM, as in is, gets only at its
-// next start, in nextStart's order; confined: it runs on its proxy.
-func nextStartChanges(st *state.VM, in backend.Instance, mountsLater, confined bool) []nextChange {
+// next start, in nextStart's order, each as the line that names it;
+// confined: it runs on its proxy.
+func nextStartChanges(st *state.VM, in backend.Instance, mountsLater, confined bool) []msg.M {
 	vm := st.Name()
-	var cs []nextChange
+	var cs []msg.M
 	if pendingSize(st, in.Size) != (backend.Size{}) {
-		cs = append(cs, nextChange{msg.NextStartSize(vm), msg.SizeNextStart(vm)})
+		cs = append(cs, msg.NextStartSize(vm))
 	}
 	if in.AgentForwarding != sshagent.Forwards(sshagent.Mode(st)) {
-		cs = append(cs, nextChange{msg.NextStartAgent(vm), msg.AgentNextStart(vm)})
+		cs = append(cs, msg.NextStartAgent(vm))
 	}
 	if mountsLater {
-		cs = append(cs, nextChange{msg.NextStartMounts(vm), msg.MountsNextStart(vm)})
+		cs = append(cs, msg.NextStartMounts(vm))
 	}
 	if in.Project != projectMount(st) {
-		cs = append(cs, nextChange{msg.NextStartFolder(st.Dir, vm), msg.FolderNextStart(st.Dir, vm)})
+		cs = append(cs, msg.NextStartFolder(st.Dir, vm))
 	}
 	if confined && !netpolicy.On(st) {
-		cs = append(cs, nextChange{msg.NextStartNetOff(vm), msg.NetOffNextStart(vm)})
+		cs = append(cs, msg.NextStartNetOff(vm))
 	}
 	return cs
 }
@@ -215,15 +216,11 @@ func nextStartChanges(st *state.VM, in backend.Instance, mountsLater, confined b
 // nextStartContext is the context of restartForNextStart's question, at
 // most two lines: a line naming each change, or past two, the first one
 // and how many more wait (next_start_more).
-func nextStartContext(cs []nextChange) []msg.M {
+func nextStartContext(cs []msg.M) []msg.M {
 	if len(cs) > 2 {
-		return []msg.M{cs[0].named, msg.NextStartMore(len(cs) - 1)}
+		return []msg.M{cs[0], msg.NextStartMore(len(cs) - 1)}
 	}
-	ms := make([]msg.M, len(cs))
-	for i, c := range cs {
-		ms[i] = c.named
-	}
-	return ms
+	return cs
 }
 
 // restartForNextStart asks once, for a running VM, as in is, that gets

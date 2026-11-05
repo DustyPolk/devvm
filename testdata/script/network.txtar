@@ -149,23 +149,23 @@ cd $WORK/off
 exec devvm network
 stdout '^off$'
 exec devvm network on
-stdout '^==> net_set_running state=on vm=devvm-off-[0-9a-f]{14}$'
+stdout '^==> next_start count=1 vm=devvm-off-[0-9a-f]{14}$'
 stderr '^net_on_old_tokens vm=devvm-off-[0-9a-f]{14}$'
 vm_state $OFF_dir/vm.json
 stdout '^net\.on=true$'
 exec devvm network on
-stdout '^==> net_already state=on vm=devvm-off-[0-9a-f]{14}$'
+stdout '^==> setting_already command=devvm network on vm=devvm-off-[0-9a-f]{14}$'
 ! stderr .
 # Running, but not started confined: unenforced until devvm restart.
 exec devvm network
 stdout '^unenforced$'
 exec devvm network off
-stdout '^==> net_set_running state=off vm=devvm-off-[0-9a-f]{14}$'
+stdout '^==> next_start count=1 vm=devvm-off-[0-9a-f]{14}$'
 ! stderr .
 # Stopped, it changes at its next start.
 exec limactl stop $OFF
 exec devvm network on
-stdout '^==> net_set_stopped state=on vm=devvm-off-[0-9a-f]{14}$'
+stdout '^==> setting_set vm=devvm-off-[0-9a-f]{14}$'
 exec devvm network
 stdout '^on$'
 

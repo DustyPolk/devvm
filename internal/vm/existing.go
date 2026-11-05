@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"slices"
+	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
@@ -61,9 +62,6 @@ func (e Launch) open(ctx context.Context, o Options, t *target) error {
 	if o.Clone && !isClone(st) {
 		return msg.CloneNeedsNewVM(vm)
 	}
-	if o.From != "" && o.From != st.From {
-		e.Warn(msg.FromIgnored(vm))
-	}
 	builder := e.Builder(b, st.From)
 	if err := (build.Builds{Env: builder}).WarnIfOutdated(st.Chain); err != nil {
 		return err
@@ -78,7 +76,7 @@ func (e Launch) open(ctx context.Context, o Options, t *target) error {
 	if err := (tools.Versions{Env: e.Tools}).RefreshDaily(); err != nil {
 		return err
 	}
-	e.warnIgnored(o, vm)
+	e.warnIgnored(o, st)
 	conf, err := e.launch(ctx, t, upOpts{agentDirs: true})
 	if err != nil {
 		return err
@@ -102,29 +100,57 @@ func (e Launch) launch(ctx context.Context, t *target, o upOpts) (backend.Confin
 	return e.starter.bringUp(ctx, t, o)
 }
 
-// warnIgnored warns about the flags only new VMs take, on the VM vm.
-func (e Launch) warnIgnored(o Options, vm string) {
-	if o.Toolchains != nil || o.Agents != nil || o.Layers != nil {
-		e.Warn(msg.PartsFlagsIgnored(vm))
+// warnIgnored warns about the flags only new VMs take, given to st's VM,
+// which exists: once for each group of them (ignoredFlags), with the
+// command that changes the same on it.
+func (e Launch) warnIgnored(o Options, st *state.VM) {
+	vm := st.Name()
+	for _, g := range ignoredFlags(o, st.From) {
+		flags := strings.Join(g.flags, ", ")
+		if g.command == "" {
+			e.Warn(msg.NewVMFlagsIgnored(flags, vm))
+		} else {
+			e.Warn(msg.NewVMFlagsIgnoredRun(g.command, flags, vm))
+		}
 	}
-	if o.NetworkPolicy || o.NoNetworkPolicy {
-		e.Warn(msg.NetFlagIgnored())
+}
+
+// flagGroup is flags given that only a new VM takes, and the command that
+// changes the same on a VM that exists, "" for none.
+type flagGroup struct {
+	flags   []string
+	command string
+}
+
+// ignoredFlags groups the flags in o that only a new VM takes, by the
+// command that changes the same on a VM that exists; from is what the VM
+// was made from, which --from naming again changes nothing.
+func ignoredFlags(o Options, from string) []flagGroup {
+	var gs []flagGroup
+	// add adds command's group: those of flags given, each "" when not.
+	add := func(command string, flags ...string) {
+		if g := (flagGroup{slices.DeleteFunc(flags, func(f string) bool { return f == "" }), command}); len(g.flags) > 0 {
+			gs = append(gs, g)
+		}
 	}
-	if o.NoGitProtect {
-		e.Warn(msg.GitProtectFlagIgnored())
+	add("", flagIf(o.From != "" && o.From != from, "--from"), flagIf(o.NoDevcontainer, "--no-devcontainer"))
+	add("devvm tools", flagIf(o.Toolchains != nil, "--tools"), flagIf(o.Agents != nil, "--agents"))
+	add("devvm layer add", flagIf(o.Layers != nil, "--layers"))
+	add("devvm network on", flagIf(o.NetworkPolicy, "--network-policy"))
+	add("devvm network off", flagIf(o.NoNetworkPolicy, "--no-network-policy"))
+	add("devvm git-protect off", flagIf(o.NoGitProtect, "--no-git-protect"))
+	add("devvm size", flagIf(o.Size.CPUs != "", "--cpus"), flagIf(o.Size.Memory != "", "--memory"), flagIf(o.Size.Disk != "", "--disk"))
+	add("devvm ports LIST", flagIf(o.Ports != "", "--ports"))
+	add("devvm ssh-agent on", flagIf(o.SSHAgent, "--ssh-agent"))
+	return gs
+}
+
+// flagIf is flag when given, else "".
+func flagIf(given bool, flag string) string {
+	if given {
+		return flag
 	}
-	if o.Size != (Size{}) {
-		e.Warn(msg.SizeFlagsIgnored())
-	}
-	if o.Ports != "" {
-		e.Warn(msg.PortsFlagIgnored())
-	}
-	if o.SSHAgent {
-		e.Warn(msg.SSHAgentFlagIgnored())
-	}
-	if o.NoDevcontainer {
-		e.Warn(msg.NoDevcontainerFlagIgnored())
-	}
+	return ""
 }
 
 // toolTarget is what a VM's tool images are built for: its base's C

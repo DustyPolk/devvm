@@ -43,7 +43,7 @@ json_set $WEB_dir/vm.json size.cpus=6
 stub_reset
 exec devvm host
 ! stdout 'starting|ssh_include'
-stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: next_start_size vm=devvm-web-[0-9a-f]{14}\ndevvm: next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
 stdout '^ssh_host_info dir=/\S*/web host=devvm-web$'
 stub_calls
 ! stdout 'limactl (start|edit)'

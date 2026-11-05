@@ -75,7 +75,7 @@ func (l *Lima) limactl(ctx context.Context, args ...string) *exec.Cmd {
 func Limactl(d paths.Dirs, args []string) error {
 	path, err := exec.LookPath("limactl")
 	if err != nil {
-		return msg.LimaMissing()
+		return limaMissing()
 	}
 	if err := os.MkdirAll(d.Data, 0o700); err != nil {
 		return err

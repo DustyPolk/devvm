@@ -15,8 +15,8 @@ import (
 	"github.com/w3cj/devvm/internal/vmssh"
 )
 
-// ParsePortList checks a list of ports and ranges, as devvm ports add and
-// rm take it.
+// ParsePortList checks a list of ports and ranges, never all or none, as
+// devvm ports add and rm and devvm link publish and unpublish take it.
 func ParsePortList(list string) (string, error) {
 	l, err := settings.ParsePorts(list)
 	if err != nil {

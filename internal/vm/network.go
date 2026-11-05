@@ -96,7 +96,7 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 		to = "on"
 	}
 	if netpolicy.On(st) == on {
-		e.Info(msg.NetAlready(to, vm))
+		e.Info(msg.SettingAlready("devvm network "+to, vm))
 		return nil
 	}
 	// A group's members all have network policy or none do.
@@ -124,14 +124,14 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	}
 	switch {
 	case !running:
-		e.Info(msg.NetSetStopped(to, vm))
+		e.Info(msg.SettingSet(vm))
 	case e.restartNow(vm, e.Confirm, 1):
 		if on {
 			e.Note(msg.NetOnOldTokens(vm))
 		}
 		return e.launcher.Restart(ctx, Options{})
 	default:
-		e.Info(msg.NetSetRunning(to, vm))
+		e.Info(msg.NextStart(1, vm))
 	}
 	if on {
 		e.Note(msg.NetOnOldTokens(vm))

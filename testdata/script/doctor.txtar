@@ -56,39 +56,39 @@ env PATH=$WORK/qemu${:}$DEVVM_BIN
 stdout '^FEATURE +SUPPORT\n'
 stdout '^docker_missing\n'
 ! stdout doctor_ok
-stderr '^devvm: lima_missing$'
+stderr '^devvm: program_missing name=Lima program=limactl$'
 exec devvm doctor --json
-stdout '^      "key": "lima",\n      "fix": null,\n      "message": "lima_missing"\n'
+stdout '^      "key": "lima",\n      "fix": null,\n      "message": "program_missing name=Lima program=limactl"\n'
 stdout '^  "docker": false,$'
 ! stderr .
 
 # Every command that needs the backend stops at the first problem.
 ! exec devvm build base
-stderr '^devvm: lima_missing$'
+stderr '^devvm: program_missing name=Lima program=limactl$'
 mkdir p
 cd p
 ! exec devvm --no-network-policy
-stderr '^devvm: lima_missing$'
+stderr '^devvm: program_missing name=Lima program=limactl$'
 cd ..
 
 # With Homebrew, its command.
 env PATH=$WORK/brew${:}$WORK/qemu${:}$DEVVM_BIN
 exec devvm doctor --json
-stdout '^      "key": "lima",\n      "fix": "brew install lima",\n      "message": "lima_missing_fix fix=brew install lima"\n'
+stdout '^      "key": "lima",\n      "fix": "brew install lima",\n      "message": "program_missing_fix fix=brew install lima name=Lima program=limactl"\n'
 
 # A limactl that doesn't run, as one built for another processor.
 env PATH=$WORK/broken${:}$WORK/brew${:}$WORK/qemu${:}$DEVVM_BIN
 exec devvm doctor --json
-stdout '^      "key": "lima",\n      "fix": "brew reinstall lima",\n      "message": "lima_broken_fix fix=brew reinstall lima"\n'
+stdout '^      "key": "lima",\n      "fix": "brew reinstall lima",\n      "message": "program_broken_fix command=limactl --version fix=brew reinstall lima name=Lima"\n'
 ! exec devvm doctor
-stderr '^devvm: lima_broken_fix fix=brew reinstall lima$'
+stderr '^devvm: program_broken_fix command=limactl --version fix=brew reinstall lima name=Lima$'
 
 # One of Lima's global configs in devvm's Lima home, listed after the
 # rest.
 mkdir $DEVVM_LIMA_HOME/_config
 cp default.yaml $DEVVM_LIMA_HOME/_config/default.yaml
 ! exec devvm doctor
-stderr '^devvm: lima_broken_fix fix=brew reinstall lima\ndevvm: lima_global_config files=\S+/_config/default.yaml\n\z'
+stderr '^devvm: program_broken_fix command=limactl --version fix=brew reinstall lima name=Lima\ndevvm: lima_global_config files=\S+/_config/default.yaml\n\z'
 env PATH=$ALL
 ! exec devvm doctor
 stderr '^devvm: lima_global_config files=\S+/_config/default.yaml$'

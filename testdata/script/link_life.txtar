@@ -17,7 +17,7 @@ exec sh -c 'ls "$VMS"/*/run | grep "links.pid" || true'
 # its session started, which carries it.
 exec devvm link add db 5432
 stdout '^==> link_added name=db port=5432 '
-! stdout links_next_start
+! stdout setting_set
 exec sh -c 'for i in $(seq 60); do grep -qx "devvm links: 127\.77\.0\.1:5432: carried" "$APP_dir"/logs/links.log && exit 0; sleep 0.5; done; exit 1'
 exec sh -c 'kill -0 "$(cat "$APP_dir"/run/links.pid)"'
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
@@ -43,7 +43,7 @@ exec sh -c 'pid=$(cat "$APP_dir"/run/links.pid 2>/dev/null) || exit 0; ! kill -0
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$" || true'
 ! stdout .
 exec devvm link rm db 80
-stdout '^==> links_next_start vm=devvm-app-[0-9a-f]{14}$'
+stdout '^==> setting_set vm=devvm-app-[0-9a-f]{14}$'
 
 # A launch with the target stopped: warned once, the target left stopped,
 # and the session started all the same.

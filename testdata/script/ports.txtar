@@ -121,7 +121,7 @@ stdout '\Aall\n\z'
 
 # --ports on it is ignored, with a warning naming devvm ports.
 exec devvm --ports none
-stderr '^devvm: ports_flag_ignored$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm ports LIST flags=--ports vm=devvm-web-[0-9a-f]{14}$'
 
 # A listed port a program on this machine has, on any address, isn't
 # forwarded, warned, by a start or a running VM's change that finds it so:

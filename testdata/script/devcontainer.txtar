@@ -111,7 +111,7 @@ stub_calls
 cp $WORK/changed.json .devcontainer/devcontainer.json
 exec devvm --no-devcontainer
 stderr '^devvm: devcontainer_changed file=\.devcontainer/devcontainer\.json vm=devvm-web-[0-9a-f]{14}$'
-stderr '^devvm: no_devcontainer_flag_ignored$'
+stderr '^devvm: new_vm_flags_ignored flags=--no-devcontainer vm=devvm-web-[0-9a-f]{14}$'
 ! stdout 'running_script|devcontainer_using'
 ! stderr 'devcontainer_(ignored|unknown|initialize)'
 # Gone: the same.

@@ -67,20 +67,24 @@ func TestOpenNetworkPolicy(t *testing.T) {
 }
 
 // --tools, --agents and --layers change nothing on a VM that exists: it
-// opens as it is, with a warning naming devvm tools.
+// opens as it is, with a warning naming devvm tools or devvm layer add.
 func TestPartsFlagsIgnored(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	l := Launch{e}
 	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, NoNetworkPolicy: true})
 	vm := st.Name()
-	for _, o := range []Options{{Agents: &[]string{"claude"}}, {Toolchains: &[]string{}}, {Layers: &[]string{"docker"}}} {
+	for o, want := range map[*Options]string{
+		{Agents: &[]string{"claude"}}: "command=devvm tools flags=--agents",
+		{Toolchains: &[]string{}}:     "command=devvm tools flags=--tools",
+		{Layers: &[]string{"docker"}}: "command=devvm layer add flags=--layers",
+	} {
 		var warned msg.Recorder
 		fake(e).OnWarn = warned.Add
 		before := len(f.Calls())
-		if err := l.Up(t.Context(), o); err != nil {
+		if err := l.Up(t.Context(), *o); err != nil {
 			t.Fatalf("Up %+v = %v", o, msg.NamesOf(err))
 		}
-		if !slices.Equal(warned.Names(), []string{"parts_flags_ignored vm=" + vm}) {
+		if !slices.Equal(warned.Names(), []string{"new_vm_flags_ignored_run " + want + " vm=" + vm}) {
 			t.Errorf("Up %+v warned %q", o, warned.Names())
 		}
 		if ms := f.Methods()[before:]; slices.Contains(ms, "BuildTools") || slices.Contains(ms, "BuildImage") {
@@ -89,6 +93,42 @@ func TestPartsFlagsIgnored(t *testing.T) {
 	}
 	if st, _ = state.ReadVM(e.Dirs, vm); st.Image != "base" || get(st, keyToolNames) != "go" {
 		t.Errorf("image %s, tool_names %s", st.Image, get(st, keyToolNames))
+	}
+}
+
+// The flags only a new VM takes group by the command that changes the
+// same on a VM that exists, naming only those given; --from naming what
+// the VM was made from isn't one.
+func TestIgnoredFlags(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		o    Options
+		want []string // command: flags
+	}{
+		{"none", Options{}, nil},
+		{"--from the same", Options{From: "debian:12"}, nil},
+		{"--from another, --no-devcontainer", Options{From: "alpine", NoDevcontainer: true}, []string{": --from --no-devcontainer"}},
+		{"--memory and --disk", Options{Size: Size{Memory: "8", Disk: "50"}}, []string{"devvm size: --memory --disk"}},
+		{
+			"every other",
+			Options{
+				Toolchains: &[]string{}, Layers: &[]string{}, NetworkPolicy: true, NoGitProtect: true,
+				Size: Size{CPUs: "2"}, Ports: "8000", SSHAgent: true,
+			},
+			[]string{
+				"devvm tools: --tools", "devvm layer add: --layers", "devvm network on: --network-policy",
+				"devvm git-protect off: --no-git-protect", "devvm size: --cpus", "devvm ports LIST: --ports", "devvm ssh-agent on: --ssh-agent",
+			},
+		},
+		{"--no-network-policy", Options{NoNetworkPolicy: true}, []string{"devvm network off: --no-network-policy"}},
+	} {
+		var got []string
+		for _, g := range ignoredFlags(c.o, "debian:12") {
+			got = append(got, g.command+": "+strings.Join(g.flags, " "))
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
 	}
 }
 
@@ -435,19 +475,19 @@ func TestRestartToApply(t *testing.T) {
 	}{
 		{
 			"devvm size --cpus 2", func(e *Env) error { return Settings{e}.SetSize(t.Context(), Size{CPUs: "2"}, false) },
-			"size_next_start", nil,
+			"next_start count=1", nil,
 		},
 		{
 			"devvm network on", func(e *Env) error { return Net{e}.SetNetwork(t.Context(), true) },
-			"net_set_running state=on", nil,
+			"next_start count=1", nil,
 		},
 		{
 			"devvm network off", func(e *Env) error { return Net{e}.SetNetwork(t.Context(), false) },
-			"net_set_running state=off", nil,
+			"next_start count=1", nil,
 		},
 		{
 			"devvm ssh-agent on", func(e *Env) error { return Settings{e}.SetSSHAgent(t.Context(), sshagent.On) },
-			"agent_set_running mode=on", nil,
+			"next_start count=1", nil,
 		},
 		{
 			"devvm git-protect strict", func(e *Env) error { return Settings{e}.SetGitProtect(t.Context(), gitprotect.Strict) },

@@ -144,7 +144,7 @@ func publishArg(_ *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	_, err := vm.ParsePublish(args[0])
+	_, err := vm.ParsePortList(args[0])
 	return err
 }
 

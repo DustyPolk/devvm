@@ -642,11 +642,7 @@ func (e Lifecycle) SetClone(ctx context.Context, command, mode string, o RemakeO
 	defer release()
 	vm, on := t.f.Name, mode == CloneOn
 	if isClone(t.st) == on {
-		if on {
-			e.Info(msg.CloneOnAlready(vm))
-		} else {
-			e.Info(msg.CloneOffAlready(vm))
-		}
+		e.Info(msg.SettingAlready(command, vm))
 		if resumed {
 			return e.launcher.open(ctx, Options{}, t)
 		}

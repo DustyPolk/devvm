@@ -100,7 +100,7 @@ func TestDoctorReport(t *testing.T) {
 	t.Parallel()
 	b := backendtest.New("lima", backend.Caps{backend.FeatureSSH: backend.Native})
 	b.Missing = []backend.Problem{
-		{Key: "lima", Fix: "brew install lima", Msg: msg.LimaMissingFix("brew install lima")},
+		{Key: "lima", Fix: "brew install lima", Msg: msg.ProgramMissingFix("brew install lima", "Lima", "limactl")},
 		{Key: "kvm", Msg: msg.NoKVM()},
 	}
 	d := doctor{
@@ -112,7 +112,7 @@ func TestDoctorReport(t *testing.T) {
 	}
 	r := d.report(t.Context(), msg.M.Names, []backend.Backend{b}, b)
 	fix := "brew install lima"
-	want := []problemJSON{{Key: "lima", Fix: &fix, Message: "lima_missing_fix fix=brew install lima"}, {Key: "kvm", Message: "no_kvm"}}
+	want := []problemJSON{{Key: "lima", Fix: &fix, Message: "program_missing_fix fix=brew install lima name=Lima program=limactl"}, {Key: "kvm", Message: "no_kvm"}}
 	if len(r.Problems) != 2 || r.Problems[0].Fix == nil || *r.Problems[0].Fix != fix || r.Problems[1].Fix != nil ||
 		r.Problems[0].Message != want[0].Message || r.Problems[1].Key != "kvm" {
 		t.Errorf("problems %+v, want %+v", r.Problems, want)
@@ -130,7 +130,7 @@ func TestDoctorReport(t *testing.T) {
 	// install.sh reads this layout: a field a line, the problems' indented
 	// six spaces.
 	layout := "\n  \"problems\": [\n    {\n      \"key\": \"lima\",\n      \"fix\": \"brew install lima\",\n" +
-		"      \"message\": \"lima_missing_fix fix=brew install lima\"\n    },\n    {\n      \"key\": \"kvm\",\n      \"fix\": null,\n"
+		"      \"message\": \"program_missing_fix fix=brew install lima name=Lima program=limactl\"\n    },\n    {\n      \"key\": \"kvm\",\n      \"fix\": null,\n"
 	if !strings.Contains(out.String(), layout) || !strings.HasPrefix(out.String(), "{\n  \"version\": 1,\n") {
 		t.Errorf("printed %s", out)
 	}
@@ -176,7 +176,7 @@ func TestDoctorSmallHostWarnsOnly(t *testing.T) {
 	}{
 		{"big, nothing missing", vm.Host{CPUs: 8, MemoryGiB: 16}, nil, "", false},
 		{"small, nothing missing", vm.Host{CPUs: 2, MemoryGiB: 4}, nil, "", true},
-		{"small, Lima missing", vm.Host{CPUs: 2, MemoryGiB: 4}, []backend.Problem{{Key: "lima", Msg: msg.LimaMissing()}}, "lima_missing", true},
+		{"small, Lima missing", vm.Host{CPUs: 2, MemoryGiB: 4}, []backend.Problem{{Key: "lima", Msg: msg.ProgramMissing("Lima", "limactl")}}, "program_missing name=Lima program=limactl", true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			b := backendtest.New("lima", backend.Caps{})

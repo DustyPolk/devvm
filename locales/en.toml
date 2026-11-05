@@ -135,44 +135,37 @@ other = "{{.vm}} runs on the {{.backend}} backend, which this devvm doesn't have
 description = "version is quoted, as the tools lock has it"
 other = "The tools lock has {{.tool}} at version {{.version}}, which isn't a version. Run devvm tools update to resolve the shared tools again."
 
-[lima_missing]
-other = "Lima isn't installed. Install Lima 2.0 or newer."
+[program_missing]
+description = "program is the program looked for on PATH (limactl, qemu-img), name what installs it (Lima, QEMU)"
+other = "{{.program}} isn't installed. Install {{.name}}."
 
-[lima_broken]
-other = "Lima is installed, but limactl --version fails. Reinstall Lima."
+[program_missing_fix]
+description = "program is the program looked for on PATH (limactl, qemu-img), name what installs it (Lima, QEMU), fix the command that does, such as brew install lima"
+other = "{{.program}} isn't installed. Run {{.fix}} to install {{.name}}."
 
-[lima_old]
-other = "Lima {{.version}} is too old. Upgrade to Lima 2.0 or newer."
+[program_broken]
+description = "name is what's installed (Lima), command the command of it that fails (limactl --version)"
+other = "{{.name}} is installed, but {{.command}} fails. Reinstall {{.name}}."
+
+[program_broken_fix]
+description = "name is what's installed (Lima), command the command of it that fails (limactl --version), fix the command that reinstalls it, such as brew reinstall lima"
+other = "{{.name}} is installed, but {{.command}} fails. Run {{.fix}} to reinstall it."
+
+[program_old]
+description = "name is what's too old (Lima, macOS), version its version here, min the oldest the lima backend runs with (2.0, 13)"
+other = "{{.name}} {{.version}} is too old. Upgrade to {{.name}} {{.min}} or newer."
+
+[program_old_fix]
+description = "name is what's too old (Lima), version its version here, fix the command that upgrades it, such as brew upgrade lima"
+other = "{{.name}} {{.version}} is too old. Run {{.fix}} to upgrade it."
 
 [lima_host_unsupported]
 description = "os is Go's name for the host's system (windows)"
 other = "The lima backend doesn't run on {{.os}}. Use macOS or Linux."
 
-[qemu_missing]
-other = "{{.program}} isn't installed. Install QEMU."
-
-[lima_missing_fix]
-description = "fix is a command, such as brew install lima"
-other = "Lima isn't installed. Run {{.fix}} to install it."
-
-[lima_broken_fix]
-description = "fix is a command, such as brew reinstall lima"
-other = "Lima is installed, but limactl --version fails. Run {{.fix}} to reinstall it."
-
-[lima_old_fix]
-description = "fix is a command, such as brew upgrade lima"
-other = "Lima {{.version}} is too old. Run {{.fix}} to upgrade it."
-
-[qemu_missing_fix]
-description = "fix is a package manager's command"
-other = "{{.program}} isn't installed. Run {{.fix}} to install QEMU."
-
 [lima_arch_unsupported]
 description = "arch is Go's name for the host's processor (riscv64)"
 other = "The lima backend doesn't run on {{.arch}}. Use an arm64 or x86_64 machine."
-
-[macos_old]
-other = "macOS {{.version}} is too old for the lima backend. Upgrade to macOS 13 or newer."
 
 [no_kvm]
 other = "/dev/kvm doesn't exist. Turn on virtualization in the firmware, or nested virtualization if this machine is a VM."
@@ -534,9 +527,6 @@ other = "{{.image}} (from {{.from}})"
 [bad_from]
 description = "from is quoted like a Go string when it holds control characters"
 other = "{{.from}} isn't a container image reference. Give --from one such as node:24, or ghcr.io/org/image@sha256:… with a digest."
-
-[from_ignored]
-other = "{{.vm}} keeps what it was made from, because --from applies only to new VMs."
 
 [from_unreachable]
 other = "{{.host}} didn't answer when devvm looked up {{.from}}. Check that you're online."
@@ -1072,25 +1062,15 @@ other = "using {{.vm}}, made for {{.dir}}"
 other = "Creating {{.vm}} didn't finish, so nothing of yours is in it.\nDelete {{.vm}} and make it again?"
 
 [vm_unfinished]
-other = "Creating {{.vm}} didn't finish. Run devvm rm to delete it, then devvm to make it again."
+other = "Creating {{.vm}} didn't finish, so nothing of yours is in it. Run devvm rm to delete it, then devvm to make it again."
 
-[net_flag_ignored]
-other = "--network-policy and --no-network-policy apply only to new VMs. To change this VM's network policy, run devvm network on or devvm network off."
+[new_vm_flags_ignored]
+description = "flags is the flags given that only a new VM takes, comma-separated: --from, --no-devcontainer"
+other = "Only a new VM takes {{.flags}}, so {{.vm}} keeps its own settings."
 
-[git_protect_flag_ignored]
-other = "--no-git-protect applies only to new VMs. To turn off .git protection for this VM, run devvm git-protect off."
-
-[size_flags_ignored]
-other = "The --cpus, --memory and --disk flags apply only to new VMs. To resize this VM, run devvm size --cpus N."
-
-[ports_flag_ignored]
-other = "The --ports flag applies only to new VMs. To change this VM's ports, run devvm ports LIST."
-
-[size_next_start]
-other = "{{.vm}} gets its new size when it next starts. Run devvm restart to apply it now."
-
-[parts_flags_ignored]
-other = "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools, and to change its layers, devvm layer add or devvm layer rm."
+[new_vm_flags_ignored_run]
+description = "flags is the flags given that only a new VM takes, comma-separated: --cpus, --memory; command the devvm command that changes the same on vm, such as devvm size --cpus N"
+other = "Only a new VM takes {{.flags}}, so {{.vm}} keeps its own settings. To change them, run {{.command}}."
 
 [has_tools]
 description = "tools is a space-separated list of shared tools: python claude"
@@ -1219,7 +1199,7 @@ other = "{{.value}} isn't a port list. Use all, none, or ports and ranges such a
 
 [ports_list_needed]
 description = "value is quoted, as given"
-other = "{{.value}} isn't a list of ports. devvm ports add and rm take ports and ranges, such as 5173,8000-8010."
+other = "{{.value}} isn't a list of ports. Give ports and ranges, such as 5173,8000-8010."
 
 [ports_rm_all]
 other = "Every port is forwarded, so none can be removed. Set the ones to keep instead, as in devvm ports 5173,8000-8010."
@@ -1251,9 +1231,6 @@ other = "There's no VM for {{.dir}}. Run devvm --ports PORTS to make one that fo
 description = "reason is an error from the system, in English"
 other = "Showing or changing the forwarded ports failed: {{.reason}}."
 
-[no_vm_link]
-other = "There's no VM for {{.dir}}, so it has no links or published ports. Run devvm to make one."
-
 [link_failed]
 description = "reason is an error from the system, in English"
 other = "Showing or changing the links failed: {{.reason}}."
@@ -1261,10 +1238,6 @@ other = "Showing or changing the links failed: {{.reason}}."
 [link_port_invalid]
 description = "value is quoted, as given"
 other = "{{.value}} isn't a port. Give one port from 1 to 65535, such as 5432."
-
-[link_ports_invalid]
-description = "value is quoted, as given"
-other = "{{.value}} isn't a list of ports. devvm link publish and unpublish take ports and ranges, such as 5432,8000-8010."
 
 [link_unknown_target]
 description = "target is TARGET, as given"
@@ -1325,9 +1298,6 @@ other = "{{.vm}} doesn't offer {{.ports}} to links any more."
 [unpublished_linked]
 description = "vms lists the VMs with links to the ports withdrawn, comma-separated"
 other = "{{.vms}} link to those ports of {{.vm}}, so their next connections there are refused. To remove those links, run devvm link rm in their folders."
-
-[links_next_start]
-other = "{{.vm}} isn't running, so it gets the change when it next starts."
 
 [link_target_stopped]
 other = "{{.vm}}'s links to {{.target}} don't work until {{.target}} runs, because devvm never starts a VM for a link. To start it, run devvm in its folder."
@@ -1533,21 +1503,6 @@ other = "{{.vm}} wasn't started confined to its proxy, so its network policy isn
 
 [net_unenforced]
 other = "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
-
-[net_off_next_start]
-other = "{{.vm}} keeps using its proxy until it next starts, and then its network policy is off. To turn it off now, run devvm restart."
-
-[net_already]
-description = "state is on or off"
-other = "Network policy is already {{.state}} for {{.vm}}."
-
-[net_set_running]
-description = "state is on or off"
-other = "devvm turned network policy {{.state}} for {{.vm}}. It applies when you run devvm restart."
-
-[net_set_stopped]
-description = "state is on or off"
-other = "devvm turned network policy {{.state}} for {{.vm}}. It applies when the VM next starts."
 
 [net_on_old_tokens]
 other = "The secrets {{.vm}} got while network policy was off still work wherever it kept them. Rotate them if that matters."
@@ -1768,9 +1723,6 @@ other = "The key is loaded. To load it automatically after a reboot, add this to
 [load_key_with]
 other = "To load your key, run {{.cmd}}."
 
-[ssh_agent_flag_ignored]
-other = "The --ssh-agent flag applies only to new VMs. To change this VM's SSH agent forwarding, run devvm ssh-agent on."
-
 [ssh_agent_failed]
 description = "reason is an error from the system, in English"
 other = "Showing or changing the SSH agent forwarding of this folder's VM failed: {{.reason}}."
@@ -1782,26 +1734,11 @@ other = "Using devvm's SSH agent failed: {{.reason}}."
 [no_vm_ssh_agent]
 other = "There's no VM for {{.dir}}. Run devvm to make one, or devvm --ssh-agent to make one that forwards your SSH agent."
 
-[agent_already]
-description = "mode is on (the user's agent), devvm (devvm's own) or off"
-other = "SSH agent forwarding is already {{.mode}} for {{.vm}}"
-
 [agent_on_risk]
 other = "While you're connected, anything in {{.vm}} can use the keys in your SSH agent."
 
 [agent_devvm_risk]
 other = "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent to list them."
-
-[agent_set_running]
-description = "mode is on (the user's agent), devvm (devvm's own) or off"
-other = "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}. Run devvm restart to apply it."
-
-[agent_set_stopped]
-description = "mode is on (the user's agent), devvm (devvm's own) or off"
-other = "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}, and it applies when the VM next starts."
-
-[agent_next_start]
-other = "{{.vm}}'s SSH agent forwarding changes when it next starts. Run devvm restart to apply it now."
 
 [agent_start_failed]
 other = "The SSH agent devvm runs didn't start at {{.sock}}."
@@ -1872,12 +1809,6 @@ other = "{{.vm}} mounts this folder, so --clone doesn't change it. To give it it
 [clone_show_failed]
 description = "reason is an error from the system, in English"
 other = "Showing whether this folder's VM has its own clone of the repo failed: {{.reason}}."
-
-[clone_on_already]
-other = "{{.vm}} has its own clone of the repo already"
-
-[clone_off_already]
-other = "{{.vm}} mounts this folder already"
 
 [clone_switch_on]
 other = "devvm makes {{.vm}} again with its own clone of the repo instead of this folder mounted, and copies the repo's branches into it as it starts."
@@ -2191,12 +2122,17 @@ description = "count is how many changes the restart applies"
 one = "Restarting {{.vm}} applies the change now, and anything running in it stops. Restart it now?"
 other = "Restarting {{.vm}} applies the changes now, and anything running in it stops. Restart it now?"
 
-[mounts_next_start]
-other = "{{.vm}}'s agent folder mounts change when it next starts."
+[next_start]
+description = "count is how many changes wait for the running VM's next start"
+one = "{{.vm}} is running, so it gets the change when it next starts. To apply it now, run devvm restart."
+other = "{{.vm}} is running, so it gets the changes when it next starts. To apply them now, run devvm restart."
 
-[folder_next_start]
-description = "dir is vm's project folder, which moved there"
-other = "{{.vm}} mounts its project folder at {{.dir}} when it next starts. Run devvm restart to apply it now."
+[setting_set]
+other = "{{.vm}} isn't running, so it gets the change when it next starts."
+
+[setting_already]
+description = "command is the command that changes the setting, as typed: devvm network on, devvm clone off"
+other = "{{.vm}} is that way already, so {{.command}} changes nothing."
 
 [mounts_updated]
 other = "updated {{.vm}}'s agent folder mounts"
@@ -2332,9 +2268,6 @@ other = "The VM gets opencode's {{.providers}} login without its OAuth tokens, b
 [devcontainer_using]
 description = "file is the devcontainer.json's path in the project folder"
 other = "devvm makes {{.vm}} as {{.file}} says. To skip the file, run devvm --no-devcontainer."
-
-[no_devcontainer_flag_ignored]
-other = "The --no-devcontainer flag applies only to new VMs."
 
 [devcontainer_flag_wins]
 description = "key is a devcontainer.json property (image, forwardPorts), flag the devvm flag given instead (from, ports)"

@@ -81,7 +81,7 @@ stdout '\Aon\n\z'
 # Again: said, and nothing made.
 stub_reset
 exec devvm clone on --force
-stdout '^==> clone_on_already vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> setting_already command=devvm clone on vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl (stop|rename|clone)'
 

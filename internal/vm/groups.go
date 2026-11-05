@@ -296,7 +296,7 @@ func (e Groups) change(ctx context.Context, st *state.VM, group string, before, 
 	case err != nil:
 		e.Warn(msg.LinksUpdateFailed(vm).Because(err))
 	case !running:
-		e.Info(msg.LinksNextStart(vm))
+		e.Info(msg.SettingSet(vm))
 	}
 	return nil
 }

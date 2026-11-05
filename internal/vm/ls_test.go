@@ -158,8 +158,8 @@ func TestList(t *testing.T) {
 	if _, err := list(t, d, reg); err == nil || err.Error() != "list failed" {
 		t.Errorf("used broken backend: %v", err)
 	}
-	broken.Missing = []backend.Problem{{Key: "lima", Msg: msg.LimaMissing()}}
-	if _, err := list(t, d, reg); msg.IDOf(err) != "lima_missing" {
+	broken.Missing = []backend.Problem{{Key: "lima", Msg: msg.ProgramMissing("Lima", "limactl")}}
+	if _, err := list(t, d, reg); msg.IDOf(err) != "program_missing" {
 		t.Errorf("used broken backend, check failing: %v", err)
 	}
 }

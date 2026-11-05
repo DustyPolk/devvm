@@ -60,7 +60,7 @@ flowchart TD
   running ~~~ outdated
 ```
 
-These options are for a new VM, and only `devvm` takes them. Another command given one of them, such as `devvm ls --cpus 4`, fails as it does for any flag it doesn't know, and a VM that exists ignores them with a warning.
+These options are for a new VM, and only `devvm` takes them. Another command given one of them, such as `devvm ls --cpus 4`, fails as it does for any flag it doesn't know, and a VM that exists ignores them with a warning. The warning names the command that changes the same on that VM, such as `devvm size` for `--cpus` and `devvm tools` for `--tools`, and for `--from` and `--no-devcontainer` it names none.
 
 | | |
 | --- | --- |

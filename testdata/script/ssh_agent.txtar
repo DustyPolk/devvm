@@ -34,7 +34,7 @@ stdout '\Aoff\n\z'
 exec devvm ssh-agent --json
 stdout '\A{\n  "version": 1,\n  "mode": "off",\n  "keys": \[\]\n}\n\z'
 exec devvm --ssh-agent
-stderr '^devvm: ssh_agent_flag_ignored$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm ssh-agent on flags=--ssh-agent vm=devvm-web-[0-9a-f]{14}$'
 
 # --ssh-agent: yours, checked first (not running here, with a key in
 # ~/.ssh: it says so), on every connection; no hint for an SSH origin.
@@ -112,13 +112,13 @@ stderr '^devvm: json_shows_only command=devvm ssh-agent$'
 cd $WORK/web
 exec devvm ssh-agent devvm
 stderr '^devvm: agent_devvm_risk vm=devvm-web-[0-9a-f]{14}$'
-stdout '^==> agent_set_running mode=devvm vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
 exec devvm ssh-agent
 stdout '\Adevvm\n256 SHA256:fp-deploy '
 exec devvm ssh-agent devvm
-stdout '^==> agent_already mode=devvm vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> setting_already command=devvm ssh-agent devvm vm=devvm-web-[0-9a-f]{14}$'
 exec devvm
-stderr '^devvm: agent_next_start vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: next_start_agent vm=devvm-web-[0-9a-f]{14}\ndevvm: next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
 exec sh -c 'cat "$STUB_DIR/shell-agent"'
 stdout '\Aunset\n\z'
 exec sh -c 'cat "$DATA/ssh_config"'
@@ -150,7 +150,7 @@ stdout '^Host devvm-web devvm-web-[0-9a-f]{14}\n(  .*\n)*  ForwardAgent "\S*/dat
 # Off again: from its next start; until then devvm's connections and its
 # entry keep devvm's agent, then carry none.
 exec devvm ssh-agent off
-stdout '^==> agent_set_running mode=off vm=devvm-web-[0-9a-f]{14}$'
+stdout '^==> next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
 ! stderr risk
 exec devvm
 exec sh -c 'cat "$STUB_DIR/shell-agent"'

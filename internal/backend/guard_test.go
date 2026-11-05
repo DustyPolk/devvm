@@ -22,8 +22,8 @@ func TestCheck(t *testing.T) {
 	if err := backend.Check(t.Context(), f); err != nil {
 		t.Errorf("no problems: %v", err)
 	}
-	f.Missing = []backend.Problem{{Key: "lima", Msg: msg.LimaMissing()}, {Key: "qemu", Msg: msg.NoKVM()}}
-	if got := msg.IDOf(backend.Check(t.Context(), f)); got != "lima_missing" {
+	f.Missing = []backend.Problem{{Key: "lima", Msg: msg.ProgramMissing("Lima", "limactl")}, {Key: "qemu", Msg: msg.NoKVM()}}
+	if got := msg.IDOf(backend.Check(t.Context(), f)); got != "program_missing" {
 		t.Errorf("two problems: %s, want the first", got)
 	}
 }

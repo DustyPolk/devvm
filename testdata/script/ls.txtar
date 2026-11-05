@@ -89,7 +89,7 @@ rm $VMS/0123456789ab04 $VMS/0123456789ab05
 env PATH=$DEVVM_BIN
 ! exec devvm ls
 ! stdout .
-stderr '^devvm: lima_missing$'
+stderr '^devvm: program_missing name=Lima program=limactl$'
 rm $VMS
 exec devvm ls
 cmp stdout $WORK/header.txt

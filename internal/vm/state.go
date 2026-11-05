@@ -89,7 +89,7 @@ type desktopInVM struct {
 // as a client, and its group.
 type linksInVM struct {
 	// Publish is the ports and ranges the VM offers to links from the
-	// user's other VMs (ParsePublish, never all); "" for none.
+	// user's other VMs (ParsePortList, never all); "" for none.
 	Publish string `json:"publish,omitempty"`
 	Links   []Link `json:"links,omitempty"`
 	// Group is the group the VM is in, "" for none; GroupAs the name the

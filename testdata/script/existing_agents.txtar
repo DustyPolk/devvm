@@ -100,7 +100,7 @@ stderr '^devvm: arg_missing args=TOOL\.\.\. command=devvm tools rm$'
 # The flags add nothing to a VM that exists: it opens with a warning
 # naming devvm tools, and nothing changes.
 exec devvm --tools python --agents claude
-stderr '^devvm: parts_flags_ignored vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm tools flags=--tools, --agents vm=devvm-web-[0-9a-f]{14}$'
 vm_state $WEB_dir/vm.json
 stdout '^tools.names=node$'
 

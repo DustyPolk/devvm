@@ -28,7 +28,7 @@ stderr '^devvm: The arguments for QEMU don''t have exactly one -netdev user'
 env PATH=$WORK/wrap${:}.${:}$DEVVM_BIN
 env DEVVM_MESSAGES=names
 ! exec $WORK/wrap/qemu-system-aarch64 -accel help
-stderr '^devvm: qemu_missing program=qemu-system-aarch64$'
+stderr '^devvm: program_missing name=QEMU program=qemu-system-aarch64$'
 
 # Its usage.
 ! exec devvm _qemu nope

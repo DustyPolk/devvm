@@ -170,7 +170,7 @@ func findQEMU(name, skip, path string) (string, error) {
 			return p, nil
 		}
 	}
-	return "", msg.QEMUMissing(name)
+	return "", qemuMissing(name)
 }
 
 // realDir is a folder on PATH as an absolute physical path

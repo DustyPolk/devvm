@@ -147,7 +147,7 @@ func TestFindQEMU(t *testing.T) {
 	if err != nil || got != filepath.Join(realQEMU, "qemu-system-aarch64") {
 		t.Errorf("findQEMU = %q, %v", got, err)
 	}
-	if _, err := findQEMU("qemu-system-aarch64", wrapper, wrapper+":."); msg.IDOf(err) != "qemu_missing" {
+	if _, err := findQEMU("qemu-system-aarch64", wrapper, wrapper+":."); msg.NamesOf(err) != "program_missing name=QEMU program=qemu-system-aarch64" {
 		t.Errorf("none outside the wrapper: %v", err)
 	}
 }

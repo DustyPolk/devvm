@@ -194,7 +194,7 @@ exec devvm stop
 cd $WORK/db
 exec devvm link publish 7000
 stdout '^==> group_links_added group=web links=db:7000 vm=devvm-api-[0-9a-f]{14}$'
-stdout '^==> links_next_start vm=devvm-api-[0-9a-f]{14}$'
+stdout '^==> setting_set vm=devvm-api-[0-9a-f]{14}$'
 
 # leave: only the group's links go, each named; the user's stay.
 cd $WORK/app

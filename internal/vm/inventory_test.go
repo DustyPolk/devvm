@@ -47,7 +47,7 @@ func TestInventoryBackends(t *testing.T) {
 		{name: "every backend lists", named: true, asked: AllBackends},
 		{name: "one no state names can't list", listErr: errors.New("list failed"), asked: AllBackends},
 		{name: "one a state names can't list", listErr: errors.New("list failed"), named: true, asked: AllBackends, wantErr: "list failed"},
-		{name: "its check says why", listErr: errors.New("list failed"), missing: true, named: true, asked: AllBackends, wantErr: "lima_missing"},
+		{name: "its check says why", listErr: errors.New("list failed"), missing: true, named: true, asked: AllBackends, wantErr: "program_missing"},
 		{name: "one a state names hangs", hang: true, named: true, asked: AllBackends, wantErr: context.DeadlineExceeded.Error()},
 		{name: "one no state names hangs", hang: true, asked: AllBackends},
 		{name: "used backends: one no state names isn't asked", listErr: errors.New("list failed"), asked: UsedBackends, wantUnasked: true},
@@ -67,7 +67,7 @@ func TestInventoryBackends(t *testing.T) {
 				other.Errs = map[string]error{"List": tc.listErr}
 			}
 			if tc.missing {
-				other.Missing = []backend.Problem{{Key: "lima", Msg: msg.LimaMissing()}}
+				other.Missing = []backend.Problem{{Key: "lima", Msg: msg.ProgramMissing("Lima", "limactl")}}
 			}
 			var ob backend.Backend = other
 			if tc.hang {

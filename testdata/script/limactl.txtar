@@ -30,7 +30,7 @@ stdout '^home=\S*/data/devvm/lima$'
 # No Lima.
 env PATH=$DEVVM_BIN
 ! exec devvm limactl list
-stderr '^devvm: lima_missing$'
+stderr '^devvm: program_missing name=Lima program=limactl$'
 
 -- calls --
 limactl list -q

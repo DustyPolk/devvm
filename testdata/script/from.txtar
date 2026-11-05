@@ -100,12 +100,12 @@ vm_state $WEB_dir/vm.json
 stdout '^from=node:24@sha256:a{64}$'
 stub_reset
 exec devvm --from debian:13
-stderr '^devvm: from_ignored vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: new_vm_flags_ignored flags=--from vm=devvm-web-[0-9a-f]{14}$'
 ! stdout building_image
 stub_calls
 ! stdout 'limactl create|docker image'
 exec devvm --from $PIN
-! stderr from_ignored
+! stderr new_vm_flags_ignored
 cd $WORK
 
 # An image only Docker has, offline: Docker's ID, recorded; docker save

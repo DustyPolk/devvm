@@ -36,12 +36,13 @@ func TestLinkArgs(t *testing.T) {
 			t.Errorf("ParseLinkPort(%q) = %v", bad, msg.NamesOf(err))
 		}
 	}
-	if got, err := ParsePublish("8000-8010, 5432,5432"); got != "8000-8010,5432" || err != nil {
-		t.Errorf("ParsePublish = %q, %v", got, msg.NamesOf(err))
+	// devvm link publish takes ports as devvm ports add does.
+	if got, err := ParsePortList("8000-8010, 5432,5432"); got != "8000-8010,5432" || err != nil {
+		t.Errorf("ParsePortList = %q, %v", got, msg.NamesOf(err))
 	}
-	for _, bad := range []string{"all", "none", "0", "x"} {
-		if _, err := ParsePublish(bad); msg.NamesOf(err) != `link_ports_invalid value="`+bad+`"` {
-			t.Errorf("ParsePublish(%q) = %v", bad, msg.NamesOf(err))
+	for bad, want := range map[string]string{"all": "ports_list_needed", "none": "ports_list_needed", "0": "port_invalid", "x": "port_invalid"} {
+		if _, err := ParsePortList(bad); msg.NamesOf(err) != want+` value="`+bad+`"` {
+			t.Errorf("ParsePortList(%q) = %v", bad, msg.NamesOf(err))
 		}
 	}
 }

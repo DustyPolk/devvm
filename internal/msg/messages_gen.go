@@ -44,11 +44,6 @@ func AdoptVM(vm string, was string) M {
 	return M{id: "adopt_vm", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
-// AgentAlready is [agent_already]: "SSH agent forwarding is already {{.mode}} for {{.vm}}"
-func AgentAlready(mode string, vm string) M {
-	return M{id: "agent_already", vals: []val{{"mode", mode}, {"vm", vm}}}
-}
-
 // AgentConfirmNeedsAskpass is [agent_confirm_needs_askpass]: "The --confirm flag needs an ssh-askpass program to ask with, and macOS doesn't have one. Run brew install theseal/ssh-askpass/ssh-askpass to get it."
 func AgentConfirmNeedsAskpass() M {
 	return M{id: "agent_confirm_needs_askpass"}
@@ -129,11 +124,6 @@ func AgentLoadFailed(key string) M {
 	return M{id: "agent_load_failed", vals: []val{{"key", key}}}
 }
 
-// AgentNextStart is [agent_next_start]: "{{.vm}}'s SSH agent forwarding changes when it next starts. Run devvm restart to apply it now."
-func AgentNextStart(vm string) M {
-	return M{id: "agent_next_start", vals: []val{{"vm", vm}}}
-}
-
 // AgentNoKeys is [agent_no_keys]: "The SSH agent devvm runs has no keys, so git over SSH won't work in VMs that use it. Run devvm ssh-agent add KEY_FILE to add one."
 func AgentNoKeys() M {
 	return M{id: "agent_no_keys"}
@@ -142,16 +132,6 @@ func AgentNoKeys() M {
 // AgentOnRisk is [agent_on_risk]: "While you're connected, anything in {{.vm}} can use the keys in your SSH agent."
 func AgentOnRisk(vm string) M {
 	return M{id: "agent_on_risk", vals: []val{{"vm", vm}}}
-}
-
-// AgentSetRunning is [agent_set_running]: "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}. Run devvm restart to apply it."
-func AgentSetRunning(mode string, vm string) M {
-	return M{id: "agent_set_running", vals: []val{{"mode", mode}, {"vm", vm}}}
-}
-
-// AgentSetStopped is [agent_set_stopped]: "devvm turned SSH agent forwarding {{.mode}} for {{.vm}}, and it applies when the VM next starts."
-func AgentSetStopped(mode string, vm string) M {
-	return M{id: "agent_set_stopped", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
 // AgentStartFailed is [agent_start_failed]: "The SSH agent devvm runs didn't start at {{.sock}}."
@@ -407,16 +387,6 @@ func CloneNoCommits() M {
 // CloneNotTop is [clone_not_top]: "--clone needs the top folder of a git repo, and {{.dir}} isn't one. Run devvm --clone in the repo's top folder."
 func CloneNotTop(dir string) M {
 	return M{id: "clone_not_top", vals: []val{{"dir", dir}}}
-}
-
-// CloneOffAlready is [clone_off_already]: "{{.vm}} mounts this folder already"
-func CloneOffAlready(vm string) M {
-	return M{id: "clone_off_already", vals: []val{{"vm", vm}}}
-}
-
-// CloneOnAlready is [clone_on_already]: "{{.vm}} has its own clone of the repo already"
-func CloneOnAlready(vm string) M {
-	return M{id: "clone_on_already", vals: []val{{"vm", vm}}}
 }
 
 // CloneReady is [clone_ready]: "The VM has its own clone of your branches, without untracked or ignored files.\nTo get its work, run git fetch {{.remote}}, then review it with git log -p {{.branch}}..{{.remote}}/{{.branch}} before you merge."
@@ -964,11 +934,6 @@ func FlagsExclusive(flag string, other string) M {
 	return M{id: "flags_exclusive", vals: []val{{"flag", flag}, {"other", other}}}
 }
 
-// FolderNextStart is [folder_next_start]: "{{.vm}} mounts its project folder at {{.dir}} when it next starts. Run devvm restart to apply it now."
-func FolderNextStart(dir string, vm string) M {
-	return M{id: "folder_next_start", vals: []val{{"dir", dir}, {"vm", vm}}}
-}
-
 // FoldersNotPrivate is [folders_not_private]: "The folders {{.data}} and {{.config}} can't be made yours alone, so others may be able to read devvm's files in them. Check that you own both folders."
 func FoldersNotPrivate(config string, data string) M {
 	return M{id: "folders_not_private", vals: []val{{"config", config}, {"data", data}}}
@@ -992,11 +957,6 @@ func FromCachedNotFound(from string, host string) M {
 // FromCachedUnreachable is [from_cached_unreachable]: "{{.host}} didn't answer when devvm looked up {{.from}}, so devvm uses the digest it last saw."
 func FromCachedUnreachable(from string, host string) M {
 	return M{id: "from_cached_unreachable", vals: []val{{"from", from}, {"host", host}}}
-}
-
-// FromIgnored is [from_ignored]: "{{.vm}} keeps what it was made from, because --from applies only to new VMs."
-func FromIgnored(vm string) M {
-	return M{id: "from_ignored", vals: []val{{"vm", vm}}}
 }
 
 // FromNotFound is [from_not_found]: "{{.host}} doesn't have {{.from}}, or it's private. devvm takes only public images and images that Docker has."
@@ -1232,11 +1192,6 @@ func GitProtectClone(vm string) M {
 // GitProtectFailed is [git_protect_failed]: "Showing or changing .git protection failed: {{.reason}}."
 func GitProtectFailed(reason string) M {
 	return M{id: "git_protect_failed", vals: []val{{"reason", reason}}}
-}
-
-// GitProtectFlagIgnored is [git_protect_flag_ignored]: "--no-git-protect applies only to new VMs. To turn off .git protection for this VM, run devvm git-protect off."
-func GitProtectFlagIgnored() M {
-	return M{id: "git_protect_flag_ignored"}
 }
 
 // GitProtectNeedsMacosNew is [git_protect_needs_macos_new]: ".git protection needs macOS, so this VM can change the hooks and config in .git, which run on this machine. To keep a VM out of .git, use devvm --clone."
@@ -1614,16 +1569,6 @@ func LimaArchUnsupported(arch string) M {
 	return M{id: "lima_arch_unsupported", vals: []val{{"arch", arch}}}
 }
 
-// LimaBroken is [lima_broken]: "Lima is installed, but limactl --version fails. Reinstall Lima."
-func LimaBroken() M {
-	return M{id: "lima_broken"}
-}
-
-// LimaBrokenFix is [lima_broken_fix]: "Lima is installed, but limactl --version fails. Run {{.fix}} to reinstall it."
-func LimaBrokenFix(fix string) M {
-	return M{id: "lima_broken_fix", vals: []val{{"fix", fix}}}
-}
-
 // LimaEditFailed is [lima_edit_failed]: "Changing {{.vm}}'s Lima settings failed."
 func LimaEditFailed(vm string) M {
 	return M{id: "lima_edit_failed", vals: []val{{"vm", vm}}}
@@ -1647,26 +1592,6 @@ func LimaHostUnsupported(os string) M {
 // LimaLogUnredacted is [lima_log_unredacted]: "Taking proxy passwords out of Lima's log {{.file}} failed: {{.reason}}. Delete the file if it holds a password."
 func LimaLogUnredacted(file string, reason string) M {
 	return M{id: "lima_log_unredacted", vals: []val{{"file", file}, {"reason", reason}}}
-}
-
-// LimaMissing is [lima_missing]: "Lima isn't installed. Install Lima 2.0 or newer."
-func LimaMissing() M {
-	return M{id: "lima_missing"}
-}
-
-// LimaMissingFix is [lima_missing_fix]: "Lima isn't installed. Run {{.fix}} to install it."
-func LimaMissingFix(fix string) M {
-	return M{id: "lima_missing_fix", vals: []val{{"fix", fix}}}
-}
-
-// LimaOld is [lima_old]: "Lima {{.version}} is too old. Upgrade to Lima 2.0 or newer."
-func LimaOld(version string) M {
-	return M{id: "lima_old", vals: []val{{"version", version}}}
-}
-
-// LimaOldFix is [lima_old_fix]: "Lima {{.version}} is too old. Run {{.fix}} to upgrade it."
-func LimaOldFix(fix string, version string) M {
-	return M{id: "lima_old_fix", vals: []val{{"fix", fix}, {"version", version}}}
 }
 
 // LimactlFailed is [limactl_failed]: "Running limactl failed: {{.reason}}."
@@ -1739,11 +1664,6 @@ func LinkPortTaken(name string, port string, vm string) M {
 	return M{id: "link_port_taken", vals: []val{{"name", name}, {"port", port}, {"vm", vm}}}
 }
 
-// LinkPortsInvalid is [link_ports_invalid]: "{{.value}} isn't a list of ports. devvm link publish and unpublish take ports and ranges, such as 5432,8000-8010."
-func LinkPortsInvalid(value string) M {
-	return M{id: "link_ports_invalid", vals: []val{{"value", value}}}
-}
-
 // LinkRemoved is [link_removed]: "{{.vm}} doesn't reach {{.name}}:{{.port}} any more."
 func LinkRemoved(name string, port string, vm string) M {
 	return M{id: "link_removed", vals: []val{{"name", name}, {"port", port}, {"vm", vm}}}
@@ -1792,11 +1712,6 @@ func LinkTrust(target string, vm string) M {
 // LinkUnknownTarget is [link_unknown_target]: "There's no VM for {{.target}}. Give a folder's name or path, or a VM's name, as devvm ls lists them."
 func LinkUnknownTarget(target string) M {
 	return M{id: "link_unknown_target", vals: []val{{"target", target}}}
-}
-
-// LinksNextStart is [links_next_start]: "{{.vm}} isn't running, so it gets the change when it next starts."
-func LinksNextStart(vm string) M {
-	return M{id: "links_next_start", vals: []val{{"vm", vm}}}
 }
 
 // LinksTargetGone is [links_target_gone]: "{{.vms}} have no links to {{.vm}} any more."
@@ -1854,11 +1769,6 @@ func LsFailed(reason string) M {
 	return M{id: "ls_failed", vals: []val{{"reason", reason}}}
 }
 
-// MacosOld is [macos_old]: "macOS {{.version}} is too old for the lima backend. Upgrade to macOS 13 or newer."
-func MacosOld(version string) M {
-	return M{id: "macos_old", vals: []val{{"version", version}}}
-}
-
 // MakingWaiting is [making_waiting]: "waiting for another devvm to finish deleting shared tools"
 func MakingWaiting() M {
 	return M{id: "making_waiting"}
@@ -1877,11 +1787,6 @@ func MiseDownloadFailed(version string) M {
 // MountComma is [mount_comma]: "Lima can't mount {{.path}} because its path has a comma."
 func MountComma(path string) M {
 	return M{id: "mount_comma", vals: []val{{"path", path}}}
-}
-
-// MountsNextStart is [mounts_next_start]: "{{.vm}}'s agent folder mounts change when it next starts."
-func MountsNextStart(vm string) M {
-	return M{id: "mounts_next_start", vals: []val{{"vm", vm}}}
 }
 
 // MountsUpdated is [mounts_updated]: "updated {{.vm}}'s agent folder mounts"
@@ -1934,11 +1839,6 @@ func NetAbout(vm string) M {
 	return M{id: "net_about", vals: []val{{"vm", vm}}}
 }
 
-// NetAlready is [net_already]: "Network policy is already {{.state}} for {{.vm}}."
-func NetAlready(state string, vm string) M {
-	return M{id: "net_already", vals: []val{{"state", state}, {"vm", vm}}}
-}
-
 // NetAsk is [net_ask]: "Turn it on?"
 func NetAsk() M {
 	return M{id: "net_ask"}
@@ -1959,11 +1859,6 @@ func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
 }
 
-// NetFlagIgnored is [net_flag_ignored]: "--network-policy and --no-network-policy apply only to new VMs. To change this VM's network policy, run devvm network on or devvm network off."
-func NetFlagIgnored() M {
-	return M{id: "net_flag_ignored"}
-}
-
 // NetOffBackend is [net_off_backend]: "{{.vm}} gets no network policy, because the {{.backend}} backend can't confine it to its proxy here."
 func NetOffBackend(backend string, vm string) M {
 	return M{id: "net_off_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
@@ -1972,11 +1867,6 @@ func NetOffBackend(backend string, vm string) M {
 // NetOffLog is [net_off_log]: "Network policy is off for {{.vm}}, so devvm logs only the connections of its links to your other VMs. To log the rest of its traffic, run devvm network on."
 func NetOffLog(vm string) M {
 	return M{id: "net_off_log", vals: []val{{"vm", vm}}}
-}
-
-// NetOffNextStart is [net_off_next_start]: "{{.vm}} keeps using its proxy until it next starts, and then its network policy is off. To turn it off now, run devvm restart."
-func NetOffNextStart(vm string) M {
-	return M{id: "net_off_next_start", vals: []val{{"vm", vm}}}
 }
 
 // NetOffPolicy is [net_off_policy]: "Network policy is off for {{.vm}}, so its rules don't apply. To turn it on, run devvm network on."
@@ -1992,16 +1882,6 @@ func NetOnOldTokens(vm string) M {
 // NetProxyDownStopped is [net_proxy_down_stopped]: "{{.vm}}'s network policy proxy couldn't start, so devvm stopped the VM, which doesn't run without it. devvm starts both again at the VM's next launch."
 func NetProxyDownStopped(vm string) M {
 	return M{id: "net_proxy_down_stopped", vals: []val{{"vm", vm}}}
-}
-
-// NetSetRunning is [net_set_running]: "devvm turned network policy {{.state}} for {{.vm}}. It applies when you run devvm restart."
-func NetSetRunning(state string, vm string) M {
-	return M{id: "net_set_running", vals: []val{{"state", state}, {"vm", vm}}}
-}
-
-// NetSetStopped is [net_set_stopped]: "devvm turned network policy {{.state}} for {{.vm}}. It applies when the VM next starts."
-func NetSetStopped(state string, vm string) M {
-	return M{id: "net_set_stopped", vals: []val{{"state", state}, {"vm", vm}}}
 }
 
 // NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
@@ -2059,6 +1939,16 @@ func NetworkOnLinked(targets string, vm string) M {
 	return M{id: "network_on_linked", vals: []val{{"targets", targets}, {"vm", vm}}}
 }
 
+// NewVMFlagsIgnored is [new_vm_flags_ignored]: "Only a new VM takes {{.flags}}, so {{.vm}} keeps its own settings."
+func NewVMFlagsIgnored(flags string, vm string) M {
+	return M{id: "new_vm_flags_ignored", vals: []val{{"flags", flags}, {"vm", vm}}}
+}
+
+// NewVMFlagsIgnoredRun is [new_vm_flags_ignored_run]: "Only a new VM takes {{.flags}}, so {{.vm}} keeps its own settings. To change them, run {{.command}}."
+func NewVMFlagsIgnoredRun(command string, flags string, vm string) M {
+	return M{id: "new_vm_flags_ignored_run", vals: []val{{"command", command}, {"flags", flags}, {"vm", vm}}}
+}
+
 // NewVMGets is [new_vm_gets]: "{{.vm}} gets {{.tools}} as its shared tools and {{.layers}} as its layers. To choose others, give --tools, --agents and --layers."
 func NewVMGets(layers string, tools string, vm string) M {
 	return M{id: "new_vm_gets", vals: []val{{"layers", layers}, {"tools", tools}, {"vm", vm}}}
@@ -2067,6 +1957,11 @@ func NewVMGets(layers string, tools string, vm string) M {
 // NewerTools is [newer_tools]: "There are newer shared tools: {{.tools}}. Run devvm update to move this VM to them."
 func NewerTools(tools string) M {
 	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
+}
+
+// NextStart is [next_start]: "{{.vm}} is running, so it gets the changes when it next starts. To apply them now, run devvm restart."
+func NextStart(count int, vm string) M {
+	return M{id: "next_start", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"vm", vm}}}
 }
 
 // NextStartAgent is [next_start_agent]: "{{.vm}}'s SSH agent forwarding changes only when it starts."
@@ -2122,11 +2017,6 @@ func NoCommandLike(command string, word string) M {
 // NoCommandPart is [no_command_part]: "There's no command devvm {{.word}}. To make a new VM with {{.word}}, run devvm {{.flags}}."
 func NoCommandPart(flags string, word string) M {
 	return M{id: "no_command_part", vals: []val{{"flags", flags}, {"word", word}}}
-}
-
-// NoDevcontainerFlagIgnored is [no_devcontainer_flag_ignored]: "The --no-devcontainer flag applies only to new VMs."
-func NoDevcontainerFlagIgnored() M {
-	return M{id: "no_devcontainer_flag_ignored"}
 }
 
 // NoDigest is [no_digest]: "{{.from}} has no digest that devvm recorded."
@@ -2222,11 +2112,6 @@ func NoVMGitProtect(dir string) M {
 // NoVMGroup is [no_vm_group]: "There's no VM for {{.dir}}, so it isn't in a group. Run devvm to make one."
 func NoVMGroup(dir string) M {
 	return M{id: "no_vm_group", vals: []val{{"dir", dir}}}
-}
-
-// NoVMLink is [no_vm_link]: "There's no VM for {{.dir}}, so it has no links or published ports. Run devvm to make one."
-func NoVMLink(dir string) M {
-	return M{id: "no_vm_link", vals: []val{{"dir", dir}}}
 }
 
 // NoVMPolicy is [no_vm_policy]: "There's no VM for {{.dir}}. Run devvm to make one, or add -g to change every VM's rules."
@@ -2364,11 +2249,6 @@ func PartOtherFlag(flag string, given string, other string) M {
 	return M{id: "part_other_flag", vals: []val{{"flag", flag}, {"given", given}, {"other", other}}}
 }
 
-// PartsFlagsIgnored is [parts_flags_ignored]: "{{.vm}} exists, so --tools, --agents and --layers change nothing. To change its shared tools, run devvm tools, and to change its layers, devvm layer add or devvm layer rm."
-func PartsFlagsIgnored(vm string) M {
-	return M{id: "parts_flags_ignored", vals: []val{{"vm", vm}}}
-}
-
 // PasswordPrompt is [password_prompt]: "Password:"
 func PasswordPrompt() M {
 	return M{id: "password_prompt"}
@@ -2474,11 +2354,6 @@ func PortsFailed(reason string) M {
 	return M{id: "ports_failed", vals: []val{{"reason", reason}}}
 }
 
-// PortsFlagIgnored is [ports_flag_ignored]: "The --ports flag applies only to new VMs. To change this VM's ports, run devvm ports LIST."
-func PortsFlagIgnored() M {
-	return M{id: "ports_flag_ignored"}
-}
-
 // PortsForwardFailed is [ports_forward_failed]: "Forwarding {{.vm}}'s ports didn't start. Check {{.log}} for the reason."
 func PortsForwardFailed(log string, vm string) M {
 	return M{id: "ports_forward_failed", vals: []val{{"log", log}, {"vm", vm}}}
@@ -2489,7 +2364,7 @@ func PortsForwarding(ports string, vm string) M {
 	return M{id: "ports_forwarding", vals: []val{{"ports", ports}, {"vm", vm}}}
 }
 
-// PortsListNeeded is [ports_list_needed]: "{{.value}} isn't a list of ports. devvm ports add and rm take ports and ranges, such as 5173,8000-8010."
+// PortsListNeeded is [ports_list_needed]: "{{.value}} isn't a list of ports. Give ports and ranges, such as 5173,8000-8010."
 func PortsListNeeded(value string) M {
 	return M{id: "ports_list_needed", vals: []val{{"value", value}}}
 }
@@ -2507,6 +2382,36 @@ func PortsRmAll() M {
 // PortsTaken is [ports_taken]: "{{.vm}} doesn't forward ports {{.ports}} for now because they're in use on this machine."
 func PortsTaken(count int, ports string, vm string) M {
 	return M{id: "ports_taken", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"ports", ports}, {"vm", vm}}}
+}
+
+// ProgramBroken is [program_broken]: "{{.name}} is installed, but {{.command}} fails. Reinstall {{.name}}."
+func ProgramBroken(command string, name string) M {
+	return M{id: "program_broken", vals: []val{{"command", command}, {"name", name}}}
+}
+
+// ProgramBrokenFix is [program_broken_fix]: "{{.name}} is installed, but {{.command}} fails. Run {{.fix}} to reinstall it."
+func ProgramBrokenFix(command string, fix string, name string) M {
+	return M{id: "program_broken_fix", vals: []val{{"command", command}, {"fix", fix}, {"name", name}}}
+}
+
+// ProgramMissing is [program_missing]: "{{.program}} isn't installed. Install {{.name}}."
+func ProgramMissing(name string, program string) M {
+	return M{id: "program_missing", vals: []val{{"name", name}, {"program", program}}}
+}
+
+// ProgramMissingFix is [program_missing_fix]: "{{.program}} isn't installed. Run {{.fix}} to install {{.name}}."
+func ProgramMissingFix(fix string, name string, program string) M {
+	return M{id: "program_missing_fix", vals: []val{{"fix", fix}, {"name", name}, {"program", program}}}
+}
+
+// ProgramOld is [program_old]: "{{.name}} {{.version}} is too old. Upgrade to {{.name}} {{.min}} or newer."
+func ProgramOld(min string, name string, version string) M {
+	return M{id: "program_old", vals: []val{{"min", min}, {"name", name}, {"version", version}}}
+}
+
+// ProgramOldFix is [program_old_fix]: "{{.name}} {{.version}} is too old. Run {{.fix}} to upgrade it."
+func ProgramOldFix(fix string, name string, version string) M {
+	return M{id: "program_old_fix", vals: []val{{"fix", fix}, {"name", name}, {"version", version}}}
 }
 
 // ProxyCAFailed is [proxy_ca_failed]: "Creating the network policy proxy's CA in {{.dir}} failed."
@@ -2557,16 +2462,6 @@ func ProxyStopFailed(vm string) M {
 // Published is [published]: "{{.vm}} offers {{.ports}} to links from your other VMs."
 func Published(ports string, vm string) M {
 	return M{id: "published", vals: []val{{"ports", ports}, {"vm", vm}}}
-}
-
-// QEMUMissing is [qemu_missing]: "{{.program}} isn't installed. Install QEMU."
-func QEMUMissing(program string) M {
-	return M{id: "qemu_missing", vals: []val{{"program", program}}}
-}
-
-// QEMUMissingFix is [qemu_missing_fix]: "{{.program}} isn't installed. Run {{.fix}} to install QEMU."
-func QEMUMissingFix(fix string, program string) M {
-	return M{id: "qemu_missing_fix", vals: []val{{"fix", fix}, {"program", program}}}
 }
 
 // QEMURefused is [qemu_refused]: "The arguments for QEMU don't have exactly one -netdev user,id=net0,… for devvm to restrict, so devvm didn't start it."
@@ -2954,6 +2849,16 @@ func SetidRootFiles(files string) M {
 	return M{id: "setid_root_files", vals: []val{{"files", files}}}
 }
 
+// SettingAlready is [setting_already]: "{{.vm}} is that way already, so {{.command}} changes nothing."
+func SettingAlready(command string, vm string) M {
+	return M{id: "setting_already", vals: []val{{"command", command}, {"vm", vm}}}
+}
+
+// SettingSet is [setting_set]: "{{.vm}} isn't running, so it gets the change when it next starts."
+func SettingSet(vm string) M {
+	return M{id: "setting_set", vals: []val{{"vm", vm}}}
+}
+
 // SetupFailed is [setup_failed]: "Saving the settings failed: {{.reason}}."
 func SetupFailed(reason string) M {
 	return M{id: "setup_failed", vals: []val{{"reason", reason}}}
@@ -2984,19 +2889,9 @@ func SizeFailed(reason string) M {
 	return M{id: "size_failed", vals: []val{{"reason", reason}}}
 }
 
-// SizeFlagsIgnored is [size_flags_ignored]: "The --cpus, --memory and --disk flags apply only to new VMs. To resize this VM, run devvm size --cpus N."
-func SizeFlagsIgnored() M {
-	return M{id: "size_flags_ignored"}
-}
-
 // SizeMemoryPrompt is [size_memory_prompt]: "Memory for new VMs in GiB [{{.memory}}]:"
 func SizeMemoryPrompt(memory string) M {
 	return M{id: "size_memory_prompt", vals: []val{{"memory", memory}}}
-}
-
-// SizeNextStart is [size_next_start]: "{{.vm}} gets its new size when it next starts. Run devvm restart to apply it now."
-func SizeNextStart(vm string) M {
-	return M{id: "size_next_start", vals: []val{{"vm", vm}}}
 }
 
 // SizeNotGib is [size_not_gib]: "{{.flag}} takes a size in GiB, such as 16, 16G or 16GiB, not {{.value}}."
@@ -3052,11 +2947,6 @@ func SSHAgentEmpty() M {
 // SSHAgentFailed is [ssh_agent_failed]: "Showing or changing the SSH agent forwarding of this folder's VM failed: {{.reason}}."
 func SSHAgentFailed(reason string) M {
 	return M{id: "ssh_agent_failed", vals: []val{{"reason", reason}}}
-}
-
-// SSHAgentFlagIgnored is [ssh_agent_flag_ignored]: "The --ssh-agent flag applies only to new VMs. To change this VM's SSH agent forwarding, run devvm ssh-agent on."
-func SSHAgentFlagIgnored() M {
-	return M{id: "ssh_agent_flag_ignored"}
 }
 
 // SSHFailed is [ssh_failed]: "Getting this folder's VM ready for ssh failed: {{.reason}}."
@@ -3469,7 +3359,7 @@ func VMToolsNow(tools string, vm string) M {
 	return M{id: "vm_tools_now", vals: []val{{"tools", tools}, {"vm", vm}}}
 }
 
-// VMUnfinished is [vm_unfinished]: "Creating {{.vm}} didn't finish. Run devvm rm to delete it, then devvm to make it again."
+// VMUnfinished is [vm_unfinished]: "Creating {{.vm}} didn't finish, so nothing of yours is in it. Run devvm rm to delete it, then devvm to make it again."
 func VMUnfinished(vm string) M {
 	return M{id: "vm_unfinished", vals: []val{{"vm", vm}}}
 }
@@ -3509,7 +3399,6 @@ var specs = map[string]spec{
 	"adopt_move_refused":             {fields: []string{"vm"}},
 	"adopt_move_vm":                  {fields: []string{"vm", "was"}},
 	"adopt_vm":                       {fields: []string{"vm", "was"}},
-	"agent_already":                  {fields: []string{"mode", "vm"}},
 	"agent_confirm_needs_askpass":    {},
 	"agent_devvm_risk":               {fields: []string{"vm"}},
 	"agent_dir_comma":                {fields: []string{"path"}},
@@ -3526,11 +3415,8 @@ var specs = map[string]spec{
 	"agent_key_unpinned":             {fields: []string{"key"}},
 	"agent_keys_failed":              {fields: []string{"reason"}},
 	"agent_load_failed":              {fields: []string{"key"}},
-	"agent_next_start":               {fields: []string{"vm"}},
 	"agent_no_keys":                  {},
 	"agent_on_risk":                  {fields: []string{"vm"}},
-	"agent_set_running":              {fields: []string{"mode", "vm"}},
-	"agent_set_stopped":              {fields: []string{"mode", "vm"}},
 	"agent_start_failed":             {fields: []string{"sock"}},
 	"agent_unload_failed":            {fields: []string{"key"}},
 	"agents_help":                    {},
@@ -3582,8 +3468,6 @@ var specs = map[string]spec{
 	"clone_needs_new_vm":             {fields: []string{"vm"}},
 	"clone_no_commits":               {},
 	"clone_not_top":                  {fields: []string{"dir"}},
-	"clone_off_already":              {fields: []string{"vm"}},
-	"clone_on_already":               {fields: []string{"vm"}},
 	"clone_ready":                    {fields: []string{"branch", "remote"}},
 	"clone_seed_failed":              {fields: []string{"vm"}},
 	"clone_show_failed":              {fields: []string{"reason"}},
@@ -3693,13 +3577,11 @@ var specs = map[string]spec{
 	"flag_needs_value":               {fields: []string{"flag", "form"}},
 	"flag_unknown":                   {fields: []string{"command", "flag"}},
 	"flags_exclusive":                {fields: []string{"flag", "other"}},
-	"folder_next_start":              {fields: []string{"dir", "vm"}},
 	"folders_not_private":            {fields: []string{"config", "data"}},
 	"forgot_orphan":                  {fields: []string{"vm"}},
 	"forwarder_failed":               {fields: []string{"reason"}},
 	"from_cached_not_found":          {fields: []string{"from", "host"}},
 	"from_cached_unreachable":        {fields: []string{"from", "host"}},
-	"from_ignored":                   {fields: []string{"vm"}},
 	"from_not_found":                 {fields: []string{"from", "host"}},
 	"from_unreachable":               {fields: []string{"from", "host"}},
 	"gc_backend_skipped":             {fields: []string{"backend"}},
@@ -3747,7 +3629,6 @@ var specs = map[string]spec{
 	"git_not_locked":                 {fields: []string{"path"}},
 	"git_protect_clone":              {fields: []string{"vm"}},
 	"git_protect_failed":             {fields: []string{"reason"}},
-	"git_protect_flag_ignored":       {},
 	"git_protect_needs_macos_new":    {},
 	"git_protect_next_stop":          {fields: []string{"mode", "vm"}},
 	"git_protect_on_needs_macos":     {},
@@ -3823,17 +3704,11 @@ var specs = map[string]spec{
 	"layout_newer":                   {fields: []string{"current", "path", "version"}},
 	"layout_unchecked":               {fields: []string{"reason"}},
 	"lima_arch_unsupported":          {fields: []string{"arch"}},
-	"lima_broken":                    {},
-	"lima_broken_fix":                {fields: []string{"fix"}},
 	"lima_edit_failed":               {fields: []string{"vm"}},
 	"lima_global_config":             {fields: []string{"files"}},
 	"lima_home_too_long":             {fields: []string{"home", "vm"}},
 	"lima_host_unsupported":          {fields: []string{"os"}},
 	"lima_log_unredacted":            {fields: []string{"file", "reason"}},
-	"lima_missing":                   {},
-	"lima_missing_fix":               {fields: []string{"fix"}},
-	"lima_old":                       {fields: []string{"version"}},
-	"lima_old_fix":                   {fields: []string{"fix", "version"}},
 	"limactl_failed":                 {fields: []string{"reason"}},
 	"link_added":                     {fields: []string{"name", "port", "target", "vm"}},
 	"link_ambiguous_target":          {fields: []string{"target", "vms"}},
@@ -3848,7 +3723,6 @@ var specs = map[string]spec{
 	"link_policy_mismatch":           {fields: []string{"target", "vm"}},
 	"link_port_invalid":              {fields: []string{"value"}},
 	"link_port_taken":                {fields: []string{"name", "port", "vm"}},
-	"link_ports_invalid":             {fields: []string{"value"}},
 	"link_removed":                   {fields: []string{"name", "port", "vm"}},
 	"link_self":                      {fields: []string{"vm"}},
 	"link_session_failed":            {fields: []string{"reason"}},
@@ -3859,7 +3733,6 @@ var specs = map[string]spec{
 	"link_target_unusable":           {fields: []string{"target", "vm"}},
 	"link_trust":                     {fields: []string{"target", "vm"}},
 	"link_unknown_target":            {fields: []string{"target"}},
-	"links_next_start":               {fields: []string{"vm"}},
 	"links_target_gone":              {plural: true, fields: []string{"count", "vm", "vms"}},
 	"links_update_failed":            {fields: []string{"vm"}},
 	"load_key":                       {fields: []string{"cmd", "key"}},
@@ -3871,12 +3744,10 @@ var specs = map[string]spec{
 	"login_copy_failed":              {fields: []string{"agent", "reason", "vm"}},
 	"login_read_failed":              {fields: []string{"file", "reason"}},
 	"ls_failed":                      {fields: []string{"reason"}},
-	"macos_old":                      {fields: []string{"version"}},
 	"making_waiting":                 {},
 	"mise_checksum":                  {fields: []string{"version"}},
 	"mise_download_failed":           {fields: []string{"version"}},
 	"mount_comma":                    {fields: []string{"path"}},
-	"mounts_next_start":              {fields: []string{"vm"}},
 	"mounts_updated":                 {fields: []string{"vm"}},
 	"move_folder_changed":            {fields: []string{"dir", "vm"}},
 	"move_vm":                        {fields: []string{"vm", "was"}},
@@ -3887,20 +3758,15 @@ var specs = map[string]spec{
 	"msg_unexpected_value":           {fields: []string{"key", "name"}},
 	"msg_unknown":                    {fields: []string{"name"}},
 	"net_about":                      {fields: []string{"vm"}},
-	"net_already":                    {fields: []string{"state", "vm"}},
 	"net_ask":                        {},
 	"net_ask_global":                 {},
 	"net_default_failed":             {fields: []string{"reason"}},
 	"net_direct_route":               {fields: []string{"vm"}},
-	"net_flag_ignored":               {},
 	"net_off_backend":                {fields: []string{"backend", "vm"}},
 	"net_off_log":                    {fields: []string{"vm"}},
-	"net_off_next_start":             {fields: []string{"vm"}},
 	"net_off_policy":                 {fields: []string{"vm"}},
 	"net_on_old_tokens":              {fields: []string{"vm"}},
 	"net_proxy_down_stopped":         {fields: []string{"vm"}},
-	"net_set_running":                {fields: []string{"state", "vm"}},
-	"net_set_stopped":                {fields: []string{"state", "vm"}},
 	"net_unenforced":                 {fields: []string{"vm"}},
 	"net_unenforced_restart":         {fields: []string{"vm"}},
 	"net_unenforced_stop":            {fields: []string{"vm"}},
@@ -3912,8 +3778,11 @@ var specs = map[string]spec{
 	"network_failed":                 {fields: []string{"reason"}},
 	"network_off_linked":             {fields: []string{"vm", "vms"}},
 	"network_on_linked":              {fields: []string{"targets", "vm"}},
+	"new_vm_flags_ignored":           {fields: []string{"flags", "vm"}},
+	"new_vm_flags_ignored_run":       {fields: []string{"command", "flags", "vm"}},
 	"new_vm_gets":                    {fields: []string{"layers", "tools", "vm"}},
 	"newer_tools":                    {fields: []string{"tools"}},
+	"next_start":                     {plural: true, fields: []string{"count", "vm"}},
 	"next_start_agent":               {fields: []string{"vm"}},
 	"next_start_folder":              {fields: []string{"dir", "vm"}},
 	"next_start_more":                {plural: true, fields: []string{"count"}},
@@ -3925,7 +3794,6 @@ var specs = map[string]spec{
 	"no_command":                     {fields: []string{"word"}},
 	"no_command_like":                {fields: []string{"command", "word"}},
 	"no_command_part":                {fields: []string{"flags", "word"}},
-	"no_devcontainer_flag_ignored":   {},
 	"no_digest":                      {fields: []string{"from"}},
 	"no_feature":                     {fields: []string{"feature", "features"}},
 	"no_github_token":                {fields: []string{"vm"}},
@@ -3945,7 +3813,6 @@ var specs = map[string]spec{
 	"no_vm":                          {fields: []string{"dir"}},
 	"no_vm_git_protect":              {fields: []string{"dir"}},
 	"no_vm_group":                    {fields: []string{"dir"}},
-	"no_vm_link":                     {fields: []string{"dir"}},
 	"no_vm_policy":                   {fields: []string{"dir"}},
 	"no_vm_ports":                    {fields: []string{"dir"}},
 	"no_vm_size":                     {fields: []string{"dir"}},
@@ -3973,7 +3840,6 @@ var specs = map[string]spec{
 	"packages_take_failed":           {fields: []string{"vm"}},
 	"part_none_alone":                {fields: []string{"flag"}},
 	"part_other_flag":                {fields: []string{"flag", "given", "other"}},
-	"parts_flags_ignored":            {fields: []string{"vm"}},
 	"password_prompt":                {},
 	"pick_agents":                    {},
 	"pick_called_for":                {fields: []string{"file"}},
@@ -3995,13 +3861,18 @@ var specs = map[string]spec{
 	"ports_all_already":              {},
 	"ports_default":                  {fields: []string{"ports"}},
 	"ports_failed":                   {fields: []string{"reason"}},
-	"ports_flag_ignored":             {},
 	"ports_forward_failed":           {fields: []string{"log", "vm"}},
 	"ports_forwarding":               {fields: []string{"ports", "vm"}},
 	"ports_list_needed":              {fields: []string{"value"}},
 	"ports_now":                      {fields: []string{"ports", "vm"}},
 	"ports_rm_all":                   {},
 	"ports_taken":                    {plural: true, fields: []string{"count", "ports", "vm"}},
+	"program_broken":                 {fields: []string{"command", "name"}},
+	"program_broken_fix":             {fields: []string{"command", "fix", "name"}},
+	"program_missing":                {fields: []string{"name", "program"}},
+	"program_missing_fix":            {fields: []string{"fix", "name", "program"}},
+	"program_old":                    {fields: []string{"min", "name", "version"}},
+	"program_old_fix":                {fields: []string{"fix", "name", "version"}},
 	"proxy_ca_failed":                {fields: []string{"dir"}},
 	"proxy_failed":                   {fields: []string{"reason"}},
 	"proxy_needs_policy":             {fields: []string{"file", "vm_name"}},
@@ -4012,8 +3883,6 @@ var specs = map[string]spec{
 	"proxy_start_failed":             {fields: []string{"log", "vm"}},
 	"proxy_stop_failed":              {fields: []string{"vm"}},
 	"published":                      {fields: []string{"ports", "vm"}},
-	"qemu_missing":                   {fields: []string{"program"}},
-	"qemu_missing_fix":               {fields: []string{"fix", "program"}},
 	"qemu_refused":                   {},
 	"reading_images":                 {},
 	"reading_space":                  {},
@@ -4091,15 +3960,15 @@ var specs = map[string]spec{
 	"set_in_config":                  {fields: []string{"file", "key"}},
 	"setid_files":                    {fields: []string{"files"}},
 	"setid_root_files":               {fields: []string{"files"}},
+	"setting_already":                {fields: []string{"command", "vm"}},
+	"setting_set":                    {fields: []string{"vm"}},
 	"setup_failed":                   {fields: []string{"reason"}},
 	"setup_in_config":                {fields: []string{"file", "key"}},
 	"share_waiting":                  {fields: []string{"dir"}},
 	"size_cpus_prompt":               {fields: []string{"cpus"}},
 	"size_defaults":                  {fields: []string{"size"}},
 	"size_failed":                    {fields: []string{"reason"}},
-	"size_flags_ignored":             {},
 	"size_memory_prompt":             {fields: []string{"memory"}},
-	"size_next_start":                {fields: []string{"vm"}},
 	"size_not_gib":                   {fields: []string{"flag", "value"}},
 	"size_pending":                   {fields: []string{"size", "vm"}},
 	"size_question":                  {fields: []string{"have_cpus", "have_memory"}},
@@ -4111,7 +3980,6 @@ var specs = map[string]spec{
 	"space_stray":                    {fields: []string{"backend", "data", "vm"}},
 	"ssh_agent_empty":                {},
 	"ssh_agent_failed":               {fields: []string{"reason"}},
-	"ssh_agent_flag_ignored":         {},
 	"ssh_failed":                     {fields: []string{"reason"}},
 	"ssh_host_info":                  {fields: []string{"dir", "host"}},
 	"ssh_include_added":              {},

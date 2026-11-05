@@ -74,7 +74,7 @@ stdout '\A{\n  "version": 1,\n  "cpus": 2,\n  "memory_gib": 8,\n  "disk_gib": 10
 ! stderr .
 stub_reset
 exec devvm size --cpus 1 --memory 3
-stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
 ! stdout vm_size
 stub_calls
 ! stdout 'limactl edit'
@@ -121,15 +121,15 @@ stderr '^devvm: disk_shrink have=120 vm=devvm-web-[0-9a-f]{14} want=100$'
 
 # --cpus on devvm is ignored, with a warning naming devvm size.
 exec devvm --cpus 3
-stderr '^devvm: size_flags_ignored$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm size flags=--cpus vm=devvm-web-[0-9a-f]{14}$'
 
-# Opening it while a new size waits: without a terminal, the warning
+# Opening it while a new size waits: without a terminal, the warnings
 # alone, and it keeps running.
 exec devvm size --cpus 2
-stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
 stub_reset
 exec devvm
-stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: next_start_size vm=devvm-web-[0-9a-f]{14}\ndevvm: next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
 ! stderr 'restart_now'
 stub_calls
 ! stdout 'limactl (stop|edit)'
@@ -140,7 +140,7 @@ ttyin -stdin $WORK/no.txt
 exec devvm
 stderr '^next_start_size vm=devvm-web-[0-9a-f]{14}$'
 stderr '^restart_now count=1 vm=devvm-web-[0-9a-f]{14} \[y/N\] '
-stderr 'devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stderr 'devvm: next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl (stop|edit)'
 # Yes stops it and starts it with its new size, then sets it up (which
@@ -150,7 +150,7 @@ exec sh -c ': > "$STUB_DIR/sync-fails-with"'
 ttyin -stdin $WORK/yes.txt
 ! exec devvm
 stderr '^restart_now count=1 vm=devvm-web-[0-9a-f]{14} \[y/N\] '
-! stderr 'size_next_start'
+! stderr 'next_start '
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl edit --tty=false devvm-web-[0-9a-f]{14} --cpus 2( |$)'

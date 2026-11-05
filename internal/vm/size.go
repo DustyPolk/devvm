@@ -263,7 +263,7 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	case pending == (backend.Size{}):
 		e.Info(msg.VMSize(SizeText(in.Size), vm))
 	case in.Status == backend.StatusRunning:
-		return e.restartOr(ctx, vm, e.Warn, msg.SizeNextStart(vm))
+		return e.restartOr(ctx, vm, e.Warn, msg.NextStart(1, vm))
 	default:
 		e.Info(msg.SizePending(SizeText(pending), vm))
 	}

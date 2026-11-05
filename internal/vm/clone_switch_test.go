@@ -116,7 +116,7 @@ func TestSetCloneOn(t *testing.T) {
 	if err := lc.SetClone(t.Context(), "devvm clone on", CloneOn, RemakeOptions{Force: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if !slices.Equal(said.Names(), []string{"clone_on_already vm=" + vm}) || slices.Contains(f.Methods()[n:], "CreateVM") {
+	if !slices.Equal(said.Names(), []string{"setting_already command=devvm clone on vm=" + vm}) || slices.Contains(f.Methods()[n:], "CreateVM") {
 		t.Errorf("again: said %q, then %q", said.Names(), f.Methods()[n:])
 	}
 

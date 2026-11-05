@@ -13,10 +13,18 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 )
 
-// Problems lists what Lima needs that this host lacks: macOS 13 or Linux
-// on arm64 or x86_64, Lima 2 or newer, on Linux QEMU and /dev/kvm, and
-// none of Lima's global configs in devvm's home. A fix is Homebrew's for
-// Lima, when it's installed, and the package manager's for QEMU.
+// The oldest versions the lima backend runs with, as messages name them;
+// only their first number is compared (major).
+const (
+	minMacOS = "13"
+	minLima  = "2.0"
+)
+
+// Problems lists what Lima needs that this host lacks: macOS minMacOS or
+// Linux on arm64 or x86_64, Lima minLima or newer, on Linux QEMU and
+// /dev/kvm, and none of Lima's global configs in devvm's home. A fix is
+// Homebrew's for Lima, when it's installed, and the package manager's for
+// QEMU.
 func (l *host) Problems(ctx context.Context) []backend.Problem {
 	if l.OS != "darwin" && l.OS != "linux" {
 		return []backend.Problem{{Key: "os", Msg: msg.LimaHostUnsupported(l.OS)}}
@@ -26,8 +34,8 @@ func (l *host) Problems(ctx context.Context) []backend.Problem {
 	}
 	var ps []backend.Problem
 	if l.OS == "darwin" {
-		if v := l.MacOS(); v != "" && major(v) < 13 {
-			ps = append(ps, backend.Problem{Key: "macos", Msg: msg.MacosOld(v)})
+		if v := l.MacOS(); v != "" && major(v) < major(minMacOS) {
+			ps = append(ps, backend.Problem{Key: "macos", Msg: msg.ProgramOld(minMacOS, "macOS", v)})
 		}
 	}
 	if p, ok := l.limaProblem(ctx); ok {
@@ -48,7 +56,7 @@ func (l *host) Problems(ctx context.Context) []backend.Problem {
 }
 
 // limaProblem is a missing Lima, one that doesn't run (built for another
-// processor, say) or one older than 2.0.
+// processor, say) or one older than minLima.
 func (l *host) limaProblem(ctx context.Context) (backend.Problem, bool) {
 	brew := has("brew")
 	problem := func(fix string, plain msg.M, fixed func(fix string) msg.M) (backend.Problem, bool) {
@@ -58,17 +66,21 @@ func (l *host) limaProblem(ctx context.Context) (backend.Problem, bool) {
 		return backend.Problem{Key: "lima", Fix: fix, Msg: fixed(fix)}, true
 	}
 	if !has("limactl") {
-		return problem("brew install lima", msg.LimaMissing(), msg.LimaMissingFix)
+		return problem("brew install lima", limaMissing(), func(fix string) msg.M { return msg.ProgramMissingFix(fix, "Lima", "limactl") })
 	}
 	ver := l.limaVersion(ctx)
+	const command = "limactl --version"
 	switch n := major(strings.TrimPrefix(ver, "v")); {
 	case n < 0:
-		return problem("brew reinstall lima", msg.LimaBroken(), msg.LimaBrokenFix)
-	case n < 2:
-		return problem("brew upgrade lima", msg.LimaOld(ver), func(fix string) msg.M { return msg.LimaOldFix(fix, ver) })
+		return problem("brew reinstall lima", msg.ProgramBroken(command, "Lima"), func(fix string) msg.M { return msg.ProgramBrokenFix(command, fix, "Lima") })
+	case n < major(minLima):
+		return problem("brew upgrade lima", msg.ProgramOld(minLima, "Lima", ver), func(fix string) msg.M { return msg.ProgramOldFix(fix, "Lima", ver) })
 	}
 	return backend.Problem{}, false
 }
+
+// limaMissing is the message for limactl not on PATH.
+func limaMissing() msg.M { return msg.ProgramMissing("Lima", "limactl") }
 
 // limaVersion is the version limactl --version prints last, or "" when
 // it fails.
@@ -88,12 +100,15 @@ func (l *host) qemuProblem() (backend.Problem, bool) {
 			continue
 		}
 		if fix := qemuInstall(l.Arch); fix != "" {
-			return backend.Problem{Key: "qemu", Fix: fix, Msg: msg.QEMUMissingFix(fix, prog)}, true
+			return backend.Problem{Key: "qemu", Fix: fix, Msg: msg.ProgramMissingFix(fix, "QEMU", prog)}, true
 		}
-		return backend.Problem{Key: "qemu", Msg: msg.QEMUMissing(prog)}, true
+		return backend.Problem{Key: "qemu", Msg: qemuMissing(prog)}, true
 	}
 	return backend.Problem{}, false
 }
+
+// qemuMissing is the message for QEMU's program prog not on PATH.
+func qemuMissing(prog string) msg.M { return msg.ProgramMissing("QEMU", prog) }
 
 // qemuInstall is the command that installs QEMU with the first package
 // manager found, or "". apt's leaves out QEMU's recommended GUI and audio

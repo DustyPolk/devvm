@@ -18,13 +18,14 @@ stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 exec grep -c '^devvm-web-' $WEB_dir/run/known_hosts
 stdout '^1$'
 
-# Flags for new VMs: ignored, with a warning each.
-exec devvm --network-policy --cpus 2 --ports none
-stderr '^devvm: net_flag_ignored$'
-stderr '^devvm: size_flags_ignored$'
-stderr '^devvm: ports_flag_ignored$'
+# Flags for new VMs: ignored, with a warning for each command that
+# changes the same on the VM.
+exec devvm --network-policy --cpus 2 --disk 50 --ports none
+stderr '^devvm: new_vm_flags_ignored_run command=devvm network on flags=--network-policy vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm size flags=--cpus, --disk vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm ports LIST flags=--ports vm=devvm-web-[0-9a-f]{14}$'
 exec devvm --no-git-protect
-stderr '^devvm: git_protect_flag_ignored$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm git-protect off flags=--no-git-protect vm=devvm-web-[0-9a-f]{14}$'
 vm_state $WEB_dir/vm.json
 stdout '^net.on=false$'
 
@@ -33,7 +34,7 @@ stdout '^net.on=false$'
 json_set $WEB_dir/vm.json size.cpus=6
 stub_reset
 exec devvm
-stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: next_start_size vm=devvm-web-[0-9a-f]{14}\ndevvm: next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl edit'
 
@@ -66,16 +67,18 @@ stdout '^limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl start --tty=false d
 stdout '^limactl shell --workdir /\S*/web devvm-web-[0-9a-f]{14}\n\z'
 
 # --tools, --agents and --layers change nothing on a VM that exists: it
-# opens as it is, warning that devvm tools changes its shared tools.
+# opens as it is, warning that devvm tools changes its shared tools and
+# devvm layer add its layers.
 exec devvm --tools go --layers docker
-stderr '^devvm: parts_flags_ignored vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm tools flags=--tools vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm layer add flags=--layers vm=devvm-web-[0-9a-f]{14}$'
 ! stdout new_vm_gets
 vm_state $WEB_dir/vm.json
 stdout '^image=base$'
 ! stdout '^tools.names=.'
 # Without them, nothing is said.
 exec devvm
-! stderr parts_flags_ignored
+! stderr new_vm_flags_ignored
 
 # A VM whose creation didn't finish (its state records no created time)
 # never starts: without a terminal devvm refuses it, and rm deletes it.

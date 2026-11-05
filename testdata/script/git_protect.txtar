@@ -120,7 +120,7 @@ stub_calls
 
 # --no-git-protect on an existing VM names devvm git-protect off.
 exec devvm --no-git-protect
-stderr '^devvm: git_protect_flag_ignored$'
+stderr '^devvm: new_vm_flags_ignored_run command=devvm git-protect off flags=--no-git-protect vm=devvm-web-[0-9a-f]{14}$'
 
 # Strict is kept on launches, and rm unlocks it.
 exec limactl stop $WEB

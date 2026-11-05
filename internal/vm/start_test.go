@@ -120,7 +120,7 @@ func TestStartPaths(t *testing.T) {
 		{
 			name: "network policy turned off while running", net: true,
 			prep: func(v startVM) { v.set(keyNet, "off") },
-			want: startRun{warned: []string{"net_off_next_start vm=%s"}, proxy: true},
+			want: startRun{warned: []string{"next_start_net_off vm=%s", "next_start count=1 vm=%s"}, proxy: true},
 		},
 		{
 			name: "network policy turned off, then stopped", net: true,
@@ -130,7 +130,7 @@ func TestStartPaths(t *testing.T) {
 		{
 			name: "agent turned on while running",
 			prep: func(v startVM) { v.set(keyAgent, sshagent.On) },
-			want: startRun{warned: []string{"agent_next_start vm=%s"}},
+			want: startRun{warned: []string{"next_start_agent vm=%s", "next_start count=1 vm=%s"}},
 		},
 		{
 			name: "agent turned on, then stopped",
@@ -288,12 +288,12 @@ func TestOpenAsksToRestart(t *testing.T) {
 			vm := st.Name()
 			skills := filepath.Join(e.Dirs.Home, ".claude", "skills")
 			v := startVM{t, e, f, st}
-			later := map[string]string{
-				"size": "size_next_start", "agent": "agent_next_start", "mounts": "mounts_next_start", "net": "net_off_next_start",
+			named := map[string]string{
+				"size": "next_start_size", "agent": "next_start_agent", "mounts": "next_start_mounts", "net": "next_start_net_off",
 			}
 			var wantLater []string
 			for _, c := range tc.changes {
-				wantLater = append(wantLater, later[c]+" vm="+vm)
+				wantLater = append(wantLater, named[c]+" vm="+vm)
 				switch c {
 				case "size":
 					v.set(keyCPUs, "2")
@@ -337,8 +337,8 @@ func TestOpenAsksToRestart(t *testing.T) {
 					wantNoted = append(wantNoted, n)
 				}
 			}
-			if !restarted {
-				wantWarned = wantLater
+			if !restarted && len(wantLater) > 0 {
+				wantWarned = slices.Concat(wantLater, []string{"next_start count=" + strconv.Itoa(len(wantLater)) + " vm=" + vm})
 			}
 			if restarted && slices.Equal(tc.changes, all) {
 				w, _ := f.Calls()[before+start].Args[1].(backend.Want)
@@ -348,7 +348,7 @@ func TestOpenAsksToRestart(t *testing.T) {
 			}
 			// The launch's other warnings, of the agent folder found and
 			// the agent's login, aren't the question's.
-			warned := slices.DeleteFunc(run.warned, func(n string) bool { return !strings.Contains(n, "_next_start ") })
+			warned := slices.DeleteFunc(run.warned, func(n string) bool { return !strings.HasPrefix(n, "next_start") })
 			if !slices.Equal(asked, wantAsked) || !slices.Equal(noted.Names(), wantNoted) || !slices.Equal(warned, wantWarned) {
 				t.Errorf("asked %q, noted %q, warned %q", asked, noted.Names(), warned)
 			}

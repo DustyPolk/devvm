@@ -61,16 +61,6 @@ func ParseLinkPort(v string) (int, error) {
 	return p, nil
 }
 
-// ParsePublish checks the ports devvm link publish and unpublish take:
-// ports and ranges, never all or none. It returns them as ParsePorts does.
-func ParsePublish(v string) (string, error) {
-	l, err := settings.ParsePorts(v)
-	if err != nil || l == settings.PortsAll || l == settings.PortsNone {
-		return "", msg.LinkPortsInvalid(strconv.Quote(v))
-	}
-	return l, nil
-}
-
 // ReadLinks returns a client VM's links, sorted by name, then port. A
 // link that isn't one (checkLink) is an error naming the VM.
 func ReadLinks(st *state.VM) ([]Link, error) {
@@ -236,7 +226,7 @@ func (e Links) changeLinks(ctx context.Context, t *target, links, added []Link, 
 	said()
 	running, err := runs.apply(ctx, t.b, t.st, added, from)
 	if err == nil && !running {
-		e.Info(msg.LinksNextStart(t.f.Name))
+		e.Info(msg.SettingSet(t.f.Name))
 	}
 	return err
 }
@@ -332,7 +322,7 @@ type LinkListed struct {
 // List returns the folder's VM's links, with each target's folder and
 // status and whether the link applies.
 func (e Links) List(ctx context.Context) ([]LinkListed, error) {
-	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +378,7 @@ type LinkAdd struct {
 // have links, and the name is free. A running target whose network policy
 // isn't in force is warned of (warnUnenforced), and refused nothing.
 func (e Links) Add(ctx context.Context, a LinkAdd) error {
-	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
@@ -507,7 +497,7 @@ func linkNameFor(t *target, links []Link, target, id, as string) (string, error)
 // Rm removes the folder's VM's link to target's port, where target is the
 // link's name, its target VM's name, or what devvm link add takes.
 func (e Links) Rm(ctx context.Context, target string, port int) error {
-	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
@@ -557,22 +547,22 @@ func (e Links) Rm(ctx context.Context, target string, port int) error {
 // Published returns the ports and ranges the folder's VM publishes, or
 // none.
 func (e Links) Published(ctx context.Context) (string, error) {
-	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return "", err
 	}
 	return cmp.Or(linksOf(t.st).Publish, settings.PortsNone), nil
 }
 
-// Publish offers list's ports and ranges (ParsePublish) to links from the
-// user's other VMs, or with publish false, withdraws them, each as
+// Publish offers list's ports and ranges (ParsePortList) to links from
+// the user's other VMs, or with publish false, withdraws them, each as
 // listed.
 func (e Links) Publish(ctx context.Context, list string, publish bool) error {
-	l, err := ParsePublish(list)
+	l, err := ParsePortList(list)
 	if err != nil {
 		return err
 	}
-	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}

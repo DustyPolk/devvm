@@ -10,9 +10,9 @@ stdout '^Links between VMs:\n  group .*\n  link '
 # No VM yet.
 project app
 ! exec devvm link
-stderr '^devvm: no_vm_link dir=\S*/app$'
+stderr '^devvm: no_vm dir=\S*/app$'
 ! exec devvm link publish
-stderr '^devvm: no_vm_link dir=\S*/app$'
+stderr '^devvm: no_vm dir=\S*/app$'
 
 # Usage errors, before devvm looks for the VM.
 ! exec devvm link nope
@@ -28,12 +28,12 @@ stderr '^devvm: link_name_invalid name="Bad_Name"$'
 ! exec devvm link add db 5432 --as 123
 stderr '^devvm: link_name_invalid name="123"$'
 ! exec devvm link publish all
-stderr '^devvm: link_ports_invalid value="all"$'
+stderr '^devvm: ports_list_needed value="all"$'
 ! exec devvm link unpublish none
-stderr '^devvm: link_ports_invalid value="none"$'
+stderr '^devvm: ports_list_needed value="none"$'
 ! exec devvm link publish --json 5432
 stderr '^devvm: json_shows_only command=devvm link publish$'
-! stderr no_vm_link
+! stderr no_vm
 
 # The VMs: app, the client; db, a target; two folders called api.
 exec devvm --no-network-policy --no-git-protect

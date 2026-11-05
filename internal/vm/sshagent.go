@@ -39,7 +39,7 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 	}
 	vm, st, b := t.f.Name, t.st, t.b
 	if sshagent.Mode(st) == mode {
-		e.Info(msg.AgentAlready(mode, vm))
+		e.Info(msg.SettingAlready("devvm ssh-agent "+mode, vm))
 		return nil
 	}
 	in := t.in
@@ -69,9 +69,9 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 		e.Warn(msg.AgentDevvmRisk(vm))
 	}
 	if in.Status == backend.StatusRunning {
-		return e.restartOr(ctx, vm, e.Info, msg.AgentSetRunning(mode, vm))
+		return e.restartOr(ctx, vm, e.Info, msg.NextStart(1, vm))
 	}
-	e.Info(msg.AgentSetStopped(mode, vm))
+	e.Info(msg.SettingSet(vm))
 	return nil
 }
 

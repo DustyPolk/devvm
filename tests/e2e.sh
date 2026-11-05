@@ -2125,7 +2125,7 @@ check "a word that's neither a command nor an image is a usage error suggesting 
   grep -qF \"\$(m no_command_like command=stop word=stoop)\" '$work/last.log' && [[ \$(status_of $vm) == Running ]]"
 check "a port added to a running VM reaches this machine at once, and once removed doesn't, the VM never restarted" ports_live "$p" "$vm" $P47178 lima_serve lima_boot
 in_vm "$vm" "pkill -f '[h]ttp.server -b 0.0.0.0 $P47178'" >/dev/null 2>&1
-check "its new size waits for its next start" bash -c "cd '$p' && '$D' size --cpus 3 2>&1 | grep -qF \"\$(m size_next_start vm=$vm)\" &&
+check "its new size waits for its next start" bash -c "cd '$p' && '$D' size --cpus 3 2>&1 | grep -qF \"\$(m next_start count=1 vm=$vm | head -1)\" &&
   '$D' size 2>&1 >/dev/null | grep -qF \"\$(m size_pending size=cpus=3 vm=$vm)\""
 check "and applies on restart, its ports kept" bash -c "cd '$p' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
   [[ \$('$D' ports 2>&1) == $P47170-$P47173 && \$(limactl shell --workdir / $vm nproc </dev/null) == 3 &&
@@ -2294,7 +2294,7 @@ check "the VM gets the host's git identity, timezone and its hostname" in_vm "$v
 check "without network policy, the Claude token itself" in_vm "$vm" '[[ $CLAUDE_CODE_OAUTH_TOKEN == sk-ant-oat01-e2efake-plain ]]'
 mkdir -p "$ah/.claude/agents"
 check "a new agent folder is noticed on launch, and waits for a restart" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' 2>&1 |
-  grep -qF \"\$(m mounts_next_start vm=$vm | head -1)\""
+  grep -qF \"\$(m next_start_mounts vm=$vm | head -1)\""
 check "restart mounts it" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' restart >'$work/last.log' 2>&1 &&
   limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm | grep -qF '$ah/.claude/agents ' &&
   limactl shell --workdir / $vm ls '$ah/.claude/agents' </dev/null"
@@ -2665,7 +2665,7 @@ check "devvm node is an unknown command: a usage error in one line, nothing chan
   grep -qx 'usage_help command=devvm' '$work/last.log' && ! vm_state '$(vmdir "$vm")' | grep -q '^tools\.names=.*node'"
 check "--tools on it adds nothing: warned, naming devvm tools, and opened as it is" bash -c "cd '$t2' &&
   printf 'exit\n' | DEVVM_MESSAGES=names '$D' --tools node >'$work/last.log' 2>&1 &&
-  grep -qx 'devvm: parts_flags_ignored vm=$vm' '$work/last.log' && ! vm_state '$(vmdir "$vm")' | grep -q '^tools\.names=.*node'"
+  grep -qx 'devvm: new_vm_flags_ignored_run command=devvm tools flags=--tools vm=$vm' '$work/last.log' && ! vm_state '$(vmdir "$vm")' | grep -q '^tools\.names=.*node'"
 check "devvm tools add node mounts it again, nothing built" bash -c "cd '$t2' && n=\$(find '$share' -name '*.erofs' | wc -l) &&
   printf 'node -v\nexit\n' | '$D' tools add node >'$work/last.log' 2>&1 && grep -qx v$(lockv node) '$work/last.log' &&
   vm_state '$(vmdir "$vm")' | grep -qx image=base && vm_state '$(vmdir "$vm")' | grep -qx tools.names=node && (( \$(find '$share' -name '*.erofs' | wc -l) == n ))"
@@ -3037,14 +3037,14 @@ check_lines=60 check "without network policy, the shell's proxy password reaches
   grep -qF \"devvm:\$stars@127.0.0.1:$P18766\" '$DEVVM_LIMA_HOME/$vm/ha.stderr.log'"
 corp_stop
 check "devvm network on while it runs, without a terminal: unenforced until devvm restart starts it confined" bash -c "cd '$n' &&
-  '$D' network on </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_set_running state=on vm=$vm | head -1)\" '$work/last.log' &&
+  '$D' network on </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m next_start count=1 vm=$vm | head -1)\" '$work/last.log' &&
   [[ \$('$D' network | head -1) == unenforced ]] &&
   printf 'exit\n' | HOME='$nh' '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == on ]] &&
   vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok && pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
 check "devvm network off while it runs confined, without a terminal: launched, it keeps its proxy until it next starts" bash -c "cd '$n' &&
-  '$D' network off </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_set_running state=off vm=$vm | head -1)\" '$work/last.log' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m net_off_next_start vm=$vm | head -1)\" '$work/last.log' &&
+  '$D' network off </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m next_start count=1 vm=$vm | head -1)\" '$work/last.log' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m next_start_net_off vm=$vm | head -1)\" '$work/last.log' &&
   pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
 check "rm --force deletes it, its proxy and its state" bash -c "cd '$n' && HOME='$nh' '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 &&
