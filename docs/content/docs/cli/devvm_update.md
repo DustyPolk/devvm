@@ -7,7 +7,7 @@ Bring this folder's VM up to date, then open a shell in it
 
 ## Synopsis
 
-Move this folder's VM to the newest shared tools, as devvm tools update does, then open a shell in it. When its image changed since devvm made the VM, devvm then asks to make the VM again from the image's new build, with the same layers, keeping its home folder, the project folder and its settings, and everything else on its disk is lost. When its image has an agent, devvm first exports the agents' history, unless you give --no-export.
+Move this folder's VM to the newest shared tools, as devvm tools update does, then open a shell in it. When its image changed since devvm made the VM, or the folder's devcontainer.json did, devvm then asks to make the VM again from the image's new build and the file as it is now, keeping its home folder, the project folder and its settings, and everything else on its disk is lost. When its image has an agent, devvm first exports the agents' history, unless you give --no-export.
 
 ```text
 devvm update [flags]

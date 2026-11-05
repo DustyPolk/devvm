@@ -2362,10 +2362,6 @@ other = "The initializeCommand in {{.file}} never runs, because it would run on 
 description = "features is a space-separated list of feature IDs"
 other = "{{.file}} gives options to {{.features}}, and devvm ignores them."
 
-[devcontainer_ports_not_forwarded]
-description = "ports is a ports list (3000,5173)"
-other = "Your ports setting limits what {{.file}} can forward, so devvm doesn't forward all of forwardPorts {{.ports}}. Run devvm ports add {{.ports}} to forward them."
-
 [devcontainer_ports_ignored]
 description = "ports is a space-separated list of forwardPorts entries"
 other = "The forwardPorts {{.ports}} in {{.file}} have no effect, because a VM's ports reach only this machine's localhost."
@@ -2405,10 +2401,18 @@ other = "Reading {{.file}} failed. Fix it, or run devvm --no-devcontainer."
 other = "The container image {{.from}} in {{.file}} isn't public in its registry, and devvm uses only public images from a project's file. Run devvm --from {{.from}} to use it anyway."
 
 [devcontainer_changed]
-other = "{{.vm}} was made from another version of {{.file}}, and the file never changes an existing VM. To make the VM again, run devvm rm, then devvm."
+other = "{{.vm}} was made from another version of {{.file}}, and the file changes an existing VM only when devvm makes it again. To make the VM again as the file says now, run devvm update."
 
 [devcontainer_new]
-other = "{{.vm}} was made without {{.file}}, and the file never changes an existing VM. To make the VM again, run devvm rm, then devvm."
+other = "{{.vm}} was made without {{.file}}, and the file changes an existing VM only when devvm makes it again. To make the VM again as the file says, run devvm update."
+
+[devcontainer_reread]
+description = "file is the devcontainer.json's path in the project folder"
+other = "devvm makes {{.vm}} again as {{.file}} says now."
+
+[devcontainer_gone]
+description = "file is the devcontainer.json's path in the project folder, as the VM was made from it"
+other = "{{.file}} is gone, so devvm makes {{.vm}} again without it."
 
 [devcontainer_command_failed]
 description = "command is a devcontainer.json property, with a named command's name after it"

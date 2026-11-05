@@ -20,9 +20,9 @@ The settings devvm supports are the container image to start from, the features 
 
 ## When it's read
 
-- **Only when the folder's VM is made.** Comments and trailing commas are allowed. devvm reads the file only within the folder, so it doesn't follow a link out of the folder, and it reads only a regular file of up to 1 MiB. devvm never writes anything to the project folder.
+- **When the folder's VM is made, and again by `devvm update`.** Comments and trailing commas are allowed. devvm reads the file only within the folder, so it doesn't follow a link out of the folder, and it reads only a regular file of up to 1 MiB. devvm never writes anything to the project folder.
 - **What you give on the command line wins.** `--from` wins over `image`, which wins over `$DEVVM_FROM`, and `--ports` wins over `forwardPorts`, and devvm says so in one line for each. The toolchains and layers that the features map to are checked by default in the list devvm shows for the new VM, each row naming the file, and you can uncheck them there. `--tools` and `--layers` replace them, as they replace any part's default ([what a new VM gets](images.md#what-a-new-vm-gets)).
-- **An existing VM never changes.** Its state records the file's SHA-256. When the file differs from it on a launch, or is gone, or has appeared since, devvm warns once, and running `devvm rm` and then `devvm` makes the VM again from the file as it is. devvm doesn't check a VM made with `--no-devcontainer`.
+- **An existing VM changes only when devvm makes it again.** Its state records the file's SHA-256. When the file differs from it on a launch, or is gone, or has appeared since, devvm warns once and names `devvm update`. devvm doesn't check a VM made with `--no-devcontainer`, and `devvm update` doesn't read the file for it.
 
 A new VM takes each of these from the first place that sets it.
 
@@ -30,7 +30,7 @@ A new VM takes each of these from the first place that sets it.
 flowchart TD
   subgraph ports["Its ports"]
     direction TB
-    flag["--ports"] -- "or else" --> fwd["forwardPorts, as far<br>as your ports allow"]
+    flag["--ports"] -- "or else" --> fwd["your ports, with<br>forwardPorts added"]
   end
   subgraph base["Its base starts from"]
     direction TB
@@ -42,13 +42,26 @@ flowchart TD
 
 When devvm refuses something in the file, it stops with one line that names the file, before it makes anything. For invalid JSON, it names the line and column.
 
+## Updating a VM from the file
+
+When you change the file, run `devvm update`. devvm reads the file as it is now, and before it changes anything, it refuses what it would refuse for a new VM. Then it asks to make the VM again from the file, keeping its home folder, the project folder and its settings, as for an [outdated VM](images.md#outdated-vms), and everything else on the VM's disk is lost. `devvm update --force` doesn't ask, and without a terminal devvm refuses unless you give `--force`.
+
+devvm replaces only what the file gave the VM, and it keeps what you chose:
+
+- **Toolchains and layers.** The ones the file's features gave the VM go when the file no longer has those features, and the ones the file's new features map to are added. The ones you chose yourself stay, whether you gave them with `--tools` or `--layers`, `devvm setup` chose them, or the folder's other files call for them. One you unchecked in the list, or took out later, stays out.
+- **The container image.** The VM's base starts from the file's new `image`, pinned as for a new VM. When the file no longer has one, the base starts from `$DEVVM_FROM`, or else from Ubuntu's cloud image. A VM made with `--from` keeps its base, and devvm says that it ignores `image`.
+- **The ports.** The ports the file added go when the file no longer lists them, and the ones it lists anew are added, as `devvm ports add` adds them. The ports you added with `devvm ports add` stay, and one of the file's that you took out with `devvm ports rm` stays out. A VM made with `--ports` gets the ports the file lists anew, but not the ones `--ports` won over.
+- **The environment and the commands.** They're the file's new ones, and the commands that run once run again on the new disk.
+
+When the file is gone, devvm makes the VM again without it, so what the file gave goes, and so do its environment and commands. When a file appears for a VM made without one, devvm makes the VM again as the file says, as it would a new VM.
+
 ## Properties
 
 | Property | What devvm does |
 | --- | --- |
 | `image` | The VM's base starts from it, as with [`--from`](from.md). devvm uses only an image that its registry gives anyone who asks anonymously, pinned to that digest. It never uses an image only Docker has, one only your registry login reaches, or one on this machine or its network, which is `localhost` or a registry whose address is loopback, private or link-local, by name or as it resolves. |
 | `features` | `ghcr.io/devcontainers/features/docker-in-docker` is devvm's [docker layer](images.md#built-in-layers). `node`, `python`, `rust` and `go` under `ghcr.io/devcontainers/features/` are the [shared toolchains](images.md#shared-tools). devvm ignores their options and says so in one line. It refuses `docker-outside-of-docker`, which is this machine's Docker, and every other feature. devvm never fetches or runs a feature's script. |
-| `forwardPorts` | devvm forwards numbers, `localhost:N` and `127.0.0.1:N` as far as your ports allow ([ports](ports-size.md#ports)). With every port forwarded, which is the default, they're among them. devvm names the ones your ports leave out in one line and never adds them, and `devvm ports add` forwards them. It ignores other hosts' ports and says so in one line. |
+| `forwardPorts` | devvm forwards numbers, `localhost:N` and `127.0.0.1:N` to this machine's `localhost` alone, adding them to your ports as `devvm ports add` does ([ports](ports-size.md#ports)). With every port forwarded, which is the default, they're among them already. `devvm ports rm` takes one out, as for any port. It ignores other hosts' ports and says so in one line. |
 | `containerEnv`, `remoteEnv` | The VM's environment, which login shells and the commands below get. `remoteEnv` wins over `containerEnv`, and devvm's own variables, such as `LANG` and secrets, win over both. A `remoteEnv` of `null` sets nothing. |
 | `onCreateCommand`, `updateContentCommand`, `postCreateCommand` | They run once, in that order, once the VM is made and set up ([commands](#commands)). |
 | `postStartCommand` | It runs at each start, on the first launch after the VM started. |
@@ -77,4 +90,6 @@ devvm leaves any other `${…}` as it is, for the VM's shell, such as `${HOME}` 
 
 ## Security
 
-The file belongs to the project, so a VM can rewrite it for the folder's next VM, and devvm never lets it run anything on this machine, reach this machine's files or environment, add a mount or weaken confinement. An `image` from it can still be any public container image, whose own code runs as root while devvm builds the VM's base, as with `--from` ([security model](../internals/security.md#a-projects-devcontainerjson)).
+The file belongs to the project, so a VM can rewrite it for the folder's next VM, or for itself when you run `devvm update`, and devvm never lets it run anything on this machine, reach this machine's files or environment, add a mount or weaken confinement. An `image` from it can still be any public container image, whose own code runs as root while devvm builds the VM's base, as with `--from` ([security model](../internals/security.md#a-projects-devcontainerjson)).
+
+Its `forwardPorts` open ports on this machine, even when you've narrowed your ports with `devvm ports -g` or `devvm ports`. devvm forwards them only to this machine's `localhost`, never to its other addresses, and never takes a port that a program on this machine already has, just as for `devvm ports add`. Anything on this machine that connects to such a port reaches what the VM serves there, including a web page in your browser, so for a repo you don't trust, check its file first, or run `devvm --ports none` or `devvm --no-devcontainer` ([ports the VM listens on](../safety/attack-vectors.md#network)).

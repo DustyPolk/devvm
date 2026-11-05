@@ -7,15 +7,20 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/from"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ports"
+	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
 )
 
 // devcontainerUnreadable is the sum of a file that can't be read now.
@@ -80,58 +85,210 @@ func (e devcontainers) prepare(ctx context.Context, o Options, vm, dir string) (
 	case o.FromSet:
 		e.Warn(msg.DevcontainerFlagWins(file, "from", "image"))
 	default:
-		if err := from.Check(p.Image); err != nil {
+		if fromRef, err = e.pin(ctx, file, p.Image); err != nil {
 			return "", nil, err
 		}
-		pinned, err := e.PublicImage(ctx, p.Image)
-		if errors.Is(err, from.ErrNotFound) {
-			return "", nil, msg.DevcontainerImageNotPublic(file, p.Image).Because(err)
-		} else if err != nil {
-			return "", nil, err
-		}
-		fromRef = pinned
 	}
 	if p.Ports != "" && o.Ports != "" {
+		// newPorts leaves the file's out, and they're recorded as the
+		// file's, so devvm update adds only those it lists anew.
 		e.Warn(msg.DevcontainerFlagWins(file, "ports", "forwardPorts"))
-		p.Ports = ""
 	}
 	return fromRef, &p, nil
 }
 
+// pin pins ref, the image file names, to the digest its registry gives
+// anyone, refusing one it doesn't.
+func (e devcontainers) pin(ctx context.Context, file, ref string) (string, error) {
+	if err := from.Check(ref); err != nil {
+		return "", err
+	}
+	pinned, err := e.PublicImage(ctx, ref)
+	if errors.Is(err, from.ErrNotFound) {
+		return "", msg.DevcontainerImageNotPublic(file, ref).Because(err)
+	}
+	return pinned, err
+}
+
 // record sets what a new VM is made from in its state, before it's
-// written: the file (dc, its plan) and what it maps to of the VM's own
-// (its variables, its commands), or none, off with --no-devcontainer.
-func (e devcontainers) record(st *state.VM, off bool, dc *devcontainer.Plan) error {
-	d := devcontainerInVM{Off: off}
-	if p := dc; p != nil && !off {
+// written: the file (dc, its plan), what it maps to of the VM's own (its
+// variables, its commands), and what of the VM is the file's (gave: its
+// parts it got from the file alone; portsGave: the ports the file added;
+// its base's image) and what the user's (--from), or none, off with
+// --no-devcontainer.
+func (e devcontainers) record(st *state.VM, o Options, dc *devcontainer.Plan, gave, portsGave []string) error {
+	d := devcontainerInVM{Off: o.NoDevcontainer}
+	if !o.NoDevcontainer {
+		d.FromFlag = o.FromSet
+	}
+	if p := dc; p != nil && !o.NoDevcontainer {
 		d.File, d.Sum, d.Env, d.Create, d.Start = p.File, p.Sum, p.Env, p.Create, p.Start
+		d.Parts, d.Gave = p.Layers, gave
+		d.Ports, d.PortsGave = portList(p.Ports), portsGave
+		if !o.FromSet {
+			d.Image = p.Image
+		}
 	}
 	return state.SetSection(st, devcontainerSection, d)
 }
 
-// check warns, once a launch, when the folder's devcontainer.json isn't
-// the one the VM was made from (changed, gone, or new): nothing in it
-// changes an existing VM.
-func (e devcontainers) check(st *state.VM, dir string) {
-	was := sectionOf[devcontainerInVM](st, devcontainerSection)
-	if was.Off {
-		return
+// fileParts is what a new VM made for the folder dir gets from its
+// devcontainer.json (dc) alone of got, its parts: the toolchains and
+// layers the file's features map to, unless the user's --tools or
+// --layers chose that part's list, devvm setup's layers (def's) have
+// it, or the folder's other files call for it.
+func fileParts(o Options, dir string, dc *devcontainer.Plan, def settings.Defaults, got Parts) []string {
+	if dc == nil {
+		return nil
 	}
-	file, data, err := e.find(dir)
-	sum := ""
+	var others []string
+	for _, f := range detectFiles(dir) {
+		others = append(others, f.Name)
+	}
+	var gave []string
+	for _, p := range dc.Layers {
+		tool := image.IsTool(p)
+		switch {
+		case tool && (o.Toolchains != nil || !slices.Contains(got.Toolchains, p) || slices.Contains(others, p)):
+		case !tool && (o.Layers != nil || !slices.Contains(got.Layers, p) || slices.Contains(def.Layers.Names, p)):
+		default:
+			gave = append(gave, p)
+		}
+	}
+	return gave
+}
+
+// now is the folder's devcontainer.json as it is now, for a VM made
+// from was: its path ("" for none), its contents and its SHA-256
+// (devcontainerUnreadable for one that can't be read), and whether it's
+// the one the VM was made from.
+func (e devcontainers) now(was devcontainerInVM, dir string) (file string, data []byte, sum string, same bool, err error) {
+	file, data, err = e.find(dir)
 	switch {
 	case err != nil:
 		sum = devcontainerUnreadable
 	case file != "":
 		sum = devcontainer.Sum(data)
 	}
+	return file, data, sum, file == was.File && sum == was.Sum, err
+}
+
+// check warns, once a launch, when the folder's devcontainer.json isn't
+// the one the VM was made from (changed, gone, or new): nothing in it
+// changes an existing VM until devvm update makes it again from the
+// file (reread).
+func (e devcontainers) check(st *state.VM, dir string) {
+	was := sectionOf[devcontainerInVM](st, devcontainerSection)
+	if was.Off {
+		return
+	}
+	file, _, _, same, _ := e.now(was, dir)
 	switch {
-	case file == was.File && sum == was.Sum:
+	case same:
 	case was.File == "":
 		e.Warn(msg.DevcontainerNew(file, st.Name()))
 	default:
 		e.Warn(msg.DevcontainerChanged(was.File, st.Name()))
 	}
+}
+
+// reread reads the folder's devcontainer.json again for devvm update,
+// when it isn't the one t's VM was made from (changed, gone, or new), and
+// returns what the VM is made again with: its image's name and what
+// rereadInVM holds (its tools' files are found once that image is
+// built). What the file gave the VM is replaced by what it says now
+// (devcontainer.Reread for its parts, filePorts for its ports), and what
+// the user chose is kept: --from over its image, and the VM's own ports.
+// A file whose image is gone leaves the VM's base starting
+// from defaultFrom ($DEVVM_FROM's). nil when the file is the one the VM
+// was made from, or the VM was made with --no-devcontainer; an
+// unreadable file, or one Parse refuses, fails.
+func (e devcontainers) reread(ctx context.Context, t *target, defaultFrom string) (string, *rereadInVM, error) {
+	st, vm := t.st, t.f.Name
+	was := sectionOf[devcontainerInVM](st, devcontainerSection)
+	if was.Off {
+		return "", nil, nil
+	}
+	file, data, _, same, err := e.now(was, t.f.Dir)
+	switch {
+	case err != nil:
+		return "", nil, msg.DevcontainerUnreadable(file).Because(err)
+	case same:
+		return "", nil, nil
+	}
+	var p devcontainer.Plan
+	if file == "" {
+		e.Info(msg.DevcontainerGone(was.File, vm))
+	} else {
+		if p, err = devcontainer.Parse(file, data, t.f.Dir); err != nil {
+			return "", nil, err
+		}
+		e.Info(msg.DevcontainerReread(file, vm))
+		for _, m := range p.Notes {
+			e.Warn(m)
+		}
+	}
+	r := &rereadInVM{From: st.From}
+	d := devcontainerInVM{File: p.File, Sum: p.Sum, Env: p.Env, Create: p.Create, Start: p.Start, FromFlag: was.FromFlag, Image: was.Image, Parts: p.Layers}
+	switch {
+	case was.FromFlag:
+		if p.Image != "" {
+			e.Warn(msg.DevcontainerFlagWins(file, "from", "image"))
+		}
+	case p.Image == was.Image:
+	case p.Image == "":
+		r.From, d.Image = defaultFrom, ""
+	default:
+		if r.From, err = e.pin(ctx, file, p.Image); err != nil {
+			return "", nil, err
+		}
+		d.Image = p.Image
+	}
+	cur := sectionOf[ports.Ports](st, ports.Section).Forward
+	if r.Forward, d.PortsGave, err = filePorts(cur, was.Ports, was.PortsGave, p.Ports); err != nil {
+		return "", nil, err
+	}
+	d.Ports = portList(p.Ports)
+	img, names, gave := rereadParts(st, was, p.Layers)
+	d.Gave = gave
+	r.Tools.Names, r.Devcontainer = names, d
+	return img, r, nil
+}
+
+// portList is a Plan's ports list (3000,5173) as its ports, each on its
+// own; none for "".
+func portList(list string) []string {
+	if list == "" {
+		return nil
+	}
+	return strings.Split(list, ",")
+}
+
+// rereadParts is st's VM's image and shared tools once what was, its
+// devcontainer section, gave it of now, what the file's features map to
+// now, is replaced (devcontainer.Reread), and what the VM then has from
+// the file alone.
+func rereadParts(st *state.VM, was devcontainerInVM, now []string) (string, []string, []string) {
+	img, names := image.Name(st.Image), slices.Clone(tools.Names(st))
+	add, drop, gave := devcontainer.Reread(was.Parts, was.Gave, slices.Concat(img.Layers(), names), now)
+	var addLayers, dropLayers []string
+	for _, p := range add {
+		if image.IsTool(p) {
+			names = append(names, p)
+		} else {
+			addLayers = append(addLayers, p)
+		}
+	}
+	for _, p := range drop {
+		if image.IsTool(p) {
+			names = slices.DeleteFunc(names, func(n string) bool { return n == p })
+		} else {
+			dropLayers = append(dropLayers, p)
+		}
+	}
+	img, _ = removedImage(img, dropLayers)
+	img, _ = addedImage(img, addLayers)
+	return img.String(), image.SortTools(names), gave
 }
 
 // run runs a VM's devcontainer.json commands, once it's set up: those

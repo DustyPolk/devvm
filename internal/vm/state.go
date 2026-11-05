@@ -41,15 +41,34 @@ type cloneMade struct {
 
 // devcontainerInVM is a VM's devcontainer section: the devcontainer.json
 // it was made from, what that maps to of the VM's own (its variables, its
-// commands), and which of its commands ran.
+// commands), what of the VM came from the file and what from the user,
+// which devvm update reads the file again by (devcontainers.reread), and
+// which of its commands ran.
 type devcontainerInVM struct {
-	Off    bool                   `json:"off,omitempty"`  // made with --no-devcontainer
-	File   string                 `json:"file,omitempty"` // the file, in the project folder; "" for none
-	Sum    string                 `json:"sum,omitempty"`  // its SHA-256 then
-	Env    []devcontainer.Var     `json:"env,omitempty"`
-	Create []devcontainer.Command `json:"create,omitempty"` // run once, at its first launch
-	Start  []devcontainer.Command `json:"start,omitempty"`  // run once each start
-	Made   devcontainerMade       `json:"made,omitzero"`
+	Off  bool   `json:"off,omitempty"`  // made with --no-devcontainer
+	File string `json:"file,omitempty"` // the file, in the project folder; "" for none
+	Sum  string `json:"sum,omitempty"`  // its SHA-256 then
+	// Image is the file's image, as it names it, when the VM's base
+	// starts from it (pinned: the VM's From); "" when the file has none,
+	// or --from won.
+	Image string `json:"image,omitempty"`
+	// FromFlag: the VM was made with --from, which wins over the file's
+	// image.
+	FromFlag bool `json:"from_flag,omitempty"`
+	// Parts are the toolchains and layers the file's features mapped to;
+	// Gave those of them the VM got from the file alone, not from the
+	// user's flags, devvm setup's layers or the folder's other files.
+	Parts []string `json:"parts,omitempty"`
+	Gave  []string `json:"gave,omitempty"`
+	// Ports are the file's forwardPorts when it was last read; PortsGave
+	// those of them it added to the VM's ports (filePorts), not the
+	// user's own.
+	Ports     []string               `json:"ports,omitempty"`
+	PortsGave []string               `json:"ports_gave,omitempty"`
+	Env       []devcontainer.Var     `json:"env,omitempty"`
+	Create    []devcontainer.Command `json:"create,omitempty"` // run once, at its first launch
+	Start     []devcontainer.Command `json:"start,omitempty"`  // run once each start
+	Made      devcontainerMade       `json:"made,omitzero"`
 }
 
 // devcontainerMade is which of a VM's devcontainer.json commands ran.

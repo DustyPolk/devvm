@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/settings"
@@ -56,6 +57,46 @@ func RemovePorts(old, list string) (string, error) {
 		return "", err
 	}
 	return dropPorts(old, l, msg.PortNotListed)
+}
+
+// filePorts returns cur, a VM's ports value, with a devcontainer.json's
+// ports as devvm ports add and rm would change it (AddPorts,
+// RemovePorts): was is the file's ports when it was last read, gave
+// those of them the file added to the VM, and now its ports list now
+// (3000,5173; "" for none). Like the file's parts (devcontainer.Reread),
+// the file's ports it no longer lists go, the ones it lists anew are
+// added, and the user's stay: one the user removed stays removed, and one
+// cur forwards already, all of them included, is the user's. gaveNow is
+// what the file then gave the VM. A port that's part of a range of cur's
+// stays, as the user's.
+func filePorts(cur string, was, gave []string, now string) (string, []string, error) {
+	fwd, err := ports.Forwarding(cur)
+	if err != nil {
+		return "", nil, err
+	}
+	listed := portList(now)
+	var has []string
+	for _, p := range slices.Concat(gave, listed) {
+		if n, err := strconv.Atoi(p); err == nil && fwd.Has(n) {
+			has = append(has, p)
+		}
+	}
+	add, drop, gaveNow := devcontainer.Reread(was, gave, has, listed)
+	list := orAll(cur)
+	for _, p := range drop {
+		if list == settings.PortsAll {
+			break
+		}
+		if l, err := RemovePorts(list, p); err == nil {
+			list = l
+		}
+	}
+	if len(add) > 0 {
+		if list, err = AddPorts(list, strings.Join(add, ",")); err != nil {
+			return "", nil, err
+		}
+	}
+	return list, gaveNow, nil
 }
 
 // dropPorts returns a parsed list of ports and ranges, old, without those

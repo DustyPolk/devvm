@@ -13,7 +13,7 @@
 #                again, restart, devvm size, devvm ports (a running VM's at once, never a listed port a
 #                program here has, a bad list a usage error), a mistyped command refused with a suggestion,
 #                devvm git-protect and rm, a VM from a devcontainer.json (its ports, variables, commands
-#                once and at each start, a changed file, an image on this machine's registry refused), an agent VM's folders and history (devvm history export, rm's export, a new VM's offer, devvm history import and its refusal), and SSH agent forwarding
+#                once and at each start, a changed file, devvm update reading it again, an image on this machine's registry refused), an agent VM's folders and history (devvm history export, rm's export, a new VM's offer, devvm history import and its refusal), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone (pushed past an insteadOf), the remote, fetching, and rm's checks
 #                for unfetched commits and uncommitted changes and the work it keeps, then a git worktree's clone; gc deletes a stale
@@ -2213,9 +2213,10 @@ check "rm deletes only this VM, with its state and ssh config entry, and unlocks
   [[ -z \$(ls '$XDG_DATA_HOME/devvm/exports' 2>/dev/null) ]]"
 
 section "a devcontainer.json"
-# Its forwardPorts beyond the user's ports said, not forwarded (the default is none for this VM), its
+# Its forwardPorts added to the user's ports (none for this VM) and reaching this machine, its
 # variables in the shell and its commands, its postCreateCommand once, its postStartCommand at each
-# start; nothing written to the folder, and a changed file only warned about.
+# start; nothing written to the folder, a changed file only warned about, then devvm update makes
+# the VM again as it says, its home kept and the file's new port forwarded in place of its old one.
 dc=$(newproj dc); mkdir -p "$dc/.devcontainer"
 printf '%s\n' '{' '  // e2e' '  "name": "dc",' "  \"forwardPorts\": [$P47180]," \
   '  "containerEnv": {"E2E_DC": "dc-${containerWorkspaceFolderBasename}"},' \
@@ -2228,17 +2229,16 @@ launch "$dc" 'echo "dc-env=$E2E_DC"' --no-network-policy
 check "devvm makes the VM as its devcontainer.json says, and says so" bash -c "[[ -n '$vm' && \$(status_of '$vm') == Running ]] &&
   grep -qF \"\$(m devcontainer_using file=.devcontainer/devcontainer.json vm=$vm)\" '$work/last.log' &&
   vm_state '$(vmdir "$vm")' | grep -Eqx 'devcontainer\.sum=[0-9a-f]{64}' &&
-  vm_state '$(vmdir "$vm")' | grep -qx 'devcontainer.file=.devcontainer/devcontainer.json' && vm_state '$(vmdir "$vm")' | grep -qx ports.forward=none"
-check "its forwardPorts don't widen your ports: said, not added" \
-  grep -qF "$(m devcontainer_ports_not_forwarded file=.devcontainer/devcontainer.json ports=$P47180)" "$work/last.log"
+  vm_state '$(vmdir "$vm")' | grep -qx 'devcontainer.file=.devcontainer/devcontainer.json' && vm_state '$(vmdir "$vm")' | grep -qx ports.forward=$P47180"
+check "its forwardPorts join your ports, as the file's" bash -c "vm_state '$(vmdir "$vm")' | grep -qx 'devcontainer.ports_gave=$P47180'"
 check "its shell has the file's variables" grep -qx dc-env=dc-dc "$work/last.log"
 check "postCreateCommand ran once, in the VM, in the folder, with them" in_vm "$vm" "[[ \$(cat ~/dc-created) == 'dc-dc $dc' ]]"
 check "postStartCommand ran at its start" in_vm "$vm" '[[ $(cat ~/dc-started) == started ]]'
 check "nothing was written to the project folder" bash -c "[[ \$(ls -A '$dc') == .devcontainer && \$(ls -A '$dc/.devcontainer') == devcontainer.json ]] &&
   cmp -s '$dc/.devcontainer/devcontainer.json' '$work/dc.json'"
 in_vm "$vm" "setsid -f python3 -m http.server -b 0.0.0.0 $P47180 </dev/null >/dev/null 2>&1; setsid -f python3 -m http.server -b 0.0.0.0 $P47181 </dev/null >/dev/null 2>&1" >/dev/null 2>&1
-check "... and don't reach this machine" bash -c \
-  'sleep 5; ! nc -z 127.0.0.1 $P47180 && ! nc -z 127.0.0.1 $P47181'
+check "... its forwardPorts reach this machine's localhost, and other ports don't" bash -c \
+  'for _ in $(seq 20); do nc -z 127.0.0.1 $P47180 && break; sleep 1; done; nc -z 127.0.0.1 $P47180 && ! nc -z 127.0.0.1 $P47181'
 check "launched again, running: nothing runs again" bash -c "cd '$dc' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
   limactl shell --workdir / $vm bash -c '[[ \$(wc -l < ~/dc-created) == 1 && \$(wc -l < ~/dc-started) == 1 ]]' </dev/null"
 check "restarted: postStartCommand runs again, postCreateCommand doesn't" bash -c "cd '$dc' && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
@@ -2246,7 +2246,16 @@ check "restarted: postStartCommand runs again, postCreateCommand doesn't" bash -
 printf '%s\n' "{\"forwardPorts\": [$P47182], \"postCreateCommand\": \"touch ~/dc-changed\"}" >"$dc/.devcontainer/devcontainer.json"
 check "a changed file is warned about, and changes nothing" bash -c "cd '$dc' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m devcontainer_changed file=.devcontainer/devcontainer.json vm=$vm | head -1)\" '$work/last.log' &&
-  vm_state '$(vmdir "$vm")' | grep -qx ports.forward=none && limactl shell --workdir / $vm bash -c '[[ ! -e ~/dc-changed ]]' </dev/null"
+  vm_state '$(vmdir "$vm")' | grep -qx ports.forward=$P47180 && limactl shell --workdir / $vm bash -c '[[ ! -e ~/dc-changed ]]' </dev/null"
+check "devvm update makes it again as the changed file says, keeping its home" bash -c "cd '$dc' && printf 'echo \"dc-env=\$E2E_DC.\"; exit\n' | '$D' update --force >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m devcontainer_reread file=.devcontainer/devcontainer.json vm=$vm)\" '$work/last.log' &&
+  grep -qx dc-env=. '$work/last.log' && vm_state '$(vmdir "$vm")' | grep -qx ports.forward=$P47182 &&
+  limactl shell --workdir / $vm bash -c '[[ -e ~/dc-changed && \$(cat ~/dc-created) == \"dc-dc $dc\" ]]' </dev/null"
+in_vm "$vm" "setsid -f python3 -m http.server -b 0.0.0.0 $P47180 </dev/null >/dev/null 2>&1; setsid -f python3 -m http.server -b 0.0.0.0 $P47182 </dev/null >/dev/null 2>&1" >/dev/null 2>&1
+check "... the file's new port reaches this machine, and its old one no longer does" bash -c \
+  'for _ in $(seq 20); do nc -z 127.0.0.1 $P47182 && break; sleep 1; done; nc -z 127.0.0.1 $P47182 && ! nc -z 127.0.0.1 $P47180'
+check "... and a launch no longer warns about the file" bash -c "cd '$dc' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
+  ! grep -qF \"\$(m devcontainer_changed file=.devcontainer/devcontainer.json vm=$vm | head -1)\" '$work/last.log'"
 check "rm deletes it" bash -c "cd '$dc' && '$D' rm --force --no-export </dev/null >'$work/last.log' 2>&1 && ! limactl list -q | grep -qx $vm"
 printf '%s\n' '{"image": "localhost:5000/app:1"}' > "$dc/.devcontainer/devcontainer.json"
 check "an image on this machine's registry is refused, nothing made" bash -c "cd '$dc' && ! '$D' --no-network-policy </dev/null >'$work/last.log' 2>&1 &&

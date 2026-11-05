@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -32,6 +33,10 @@ type RemakeOptions struct {
 	// NoCloneCheck (--no-clone-check, devvm clone off's): the clone isn't
 	// checked for work the repo lacks first, which is lost.
 	NoCloneCheck bool
+	// DefaultFrom is what devvm update starts a VM's base from once its
+	// devcontainer.json no longer names the image it started from:
+	// $DEVVM_FROM's, "" for Ubuntu's cloud image.
+	DefaultFrom string
 }
 
 // The clone modes a remake makes a VM in (remakeInVM.Clone), as devvm
@@ -63,6 +68,33 @@ type remakeInVM struct {
 	// recorded, so the new machine is the VM, and only deleting the old
 	// one is left.
 	Done bool `json:"done,omitempty"`
+	// Reread is what devvm update read again of the folder's
+	// devcontainer.json (devcontainers.reread), which its new machine is
+	// made with; nil keeps the VM's. Its tools' files are set once its
+	// image is built (remaking.build).
+	Reread *rereadInVM `json:"reread,omitempty"`
+	// Was is what the VM had of Reread's when its new machine was made,
+	// which putBack gives it back.
+	Was *rereadInVM `json:"was,omitempty"`
+}
+
+// rereadInVM is what a remake of a VM changes when devvm update reads
+// its devcontainer.json again: the from its base starts from, its shared
+// tools, the ports it forwards (a ports value, as devvm ports sets it)
+// and its devcontainer section.
+type rereadInVM struct {
+	From         string           `json:"from,omitempty"`
+	Tools        tools.InVM       `json:"tools"`
+	Forward      string           `json:"forward,omitempty"`
+	Devcontainer devcontainerInVM `json:"devcontainer"`
+}
+
+// fromOf is the from p makes t's VM again from: Reread's, else the VM's.
+func fromOf(t *target, p remakeInVM) string {
+	if p.Reread != nil {
+		return p.Reread.From
+	}
+	return t.st.From
 }
 
 // remakePending reports whether a remake of the VM didn't finish.
@@ -139,26 +171,26 @@ func plan(img, command string, o RemakeOptions) remakeInVM {
 // First it moves the VM to any newer shared tools (Tools.update), which
 // needs no remake, as they're mounted. Then, when its own image or one
 // it's built on changed since the VM was made (outdated:
-// Builds.Outdated, the warning a launch gives), it says which changed
-// and makes the VM again from that image as it builds now, after the
-// user agrees (agreed). Without --force or a terminal, an outdated VM is
-// refused before anything changes. A VM with the newest tools that isn't
-// outdated is said to be current, and nothing changes. command is the
-// command as typed. A remake of it that didn't finish is finished first.
+// Builds.Outdated, the warning a launch gives), it says which changed,
+// and when the folder's devcontainer.json isn't the one the VM was made
+// from (devcontainers.reread, the warning a launch gives), it reads the
+// file again; either way, it makes the VM again from its image as it
+// builds now, with what the file says now, after the user agrees
+// (agreed). Without --force or a terminal, such a VM is refused before
+// anything changes. A VM with the newest tools that's neither is said to
+// be current, and nothing changes. command is the command as typed. A
+// remake of it that didn't finish is finished first.
 func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) error {
 	t, resumed, release, err := e.toRemake(ctx, command, false)
 	if err != nil || t == nil {
 		return err
 	}
 	defer release()
-	vm, st := t.f.Name, t.st
-	changed, err := (build.Builds{Env: e.Builder(t.b, st.From)}).Outdated(st.Chain)
+	p, remake, err := e.updatePlan(ctx, t, command, o)
 	if err != nil {
 		return err
 	}
-	p := plan(st.Image, command, o)
-	if len(changed) > 0 {
-		e.Info(msg.VMChanged(strings.Join(changed, ", "), vm))
+	if remake {
 		if err := e.canRemake(t, p, o); err != nil {
 			return err
 		}
@@ -168,15 +200,38 @@ func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) 
 		return err
 	}
 	switch {
-	case len(changed) > 0 && e.agreed(t, p, o):
+	case remake && e.agreed(t, p, o):
 		return e.remakeNow(ctx, t, p)
 	case newer || resumed:
 		// Its newer tools take effect as its shell opens, kept or not.
 		return e.launcher.open(ctx, Options{}, t)
-	case len(changed) == 0:
-		e.Info(msg.VMCurrent(st.Image, vm))
+	case !remake:
+		e.Info(msg.VMCurrent(t.st.Image, t.f.Name))
 	}
 	return nil
+}
+
+// updatePlan is the remake devvm update makes of t's VM, and whether it
+// makes one: when its image, or one it's built on, changed (said), or its
+// devcontainer.json did (reread).
+func (e Lifecycle) updatePlan(ctx context.Context, t *target, command string, o RemakeOptions) (remakeInVM, bool, error) {
+	st := t.st
+	changed, err := (build.Builds{Env: e.Builder(t.b, st.From)}).Outdated(st.Chain)
+	if err != nil {
+		return remakeInVM{}, false, err
+	}
+	if len(changed) > 0 {
+		e.Info(msg.VMChanged(strings.Join(changed, ", "), t.f.Name))
+	}
+	p := plan(st.Image, command, o)
+	img, r, err := e.devcontainers.reread(ctx, t, o.DefaultFrom)
+	if err != nil {
+		return remakeInVM{}, false, err
+	}
+	if r != nil {
+		p.Image, p.Reread = img, r
+	}
+	return p, len(changed) > 0 || r != nil, nil
 }
 
 // addedImage is the image img makes with layers added on top, in the
@@ -288,7 +343,7 @@ func (e remaking) hold(ctx context.Context, t *target) (release func(), err erro
 		return nil, err
 	}
 	t.st = st
-	if sectionOf[remakeInVM](st, remakeSection) != was {
+	if !reflect.DeepEqual(sectionOf[remakeInVM](st, remakeSection), was) {
 		if err := t.refresh(ctx); err != nil {
 			unlock()
 			return nil, err
@@ -362,13 +417,16 @@ type remaking struct{ *Env }
 // too), or the disk lacks room for a VM.
 func (e remaking) check(t *target, p remakeInVM) error {
 	vm, b, img := t.f.Name, t.b, image.Name(p.Image)
-	if err := (build.Names{Env: e.Builder(b, t.st.From)}).Check(img); err != nil {
+	if err := (build.Names{Env: e.Builder(b, fromOf(t, p))}).Check(img); err != nil {
 		return err
 	}
 	spec := e.spec(t, p)
 	cur, err := ports.Of(t.st)
 	if err != nil {
 		return err
+	}
+	if p.Reread != nil {
+		cur.Forward = p.Reread.Forward
 	}
 	forward, err := ports.Forwarding(cur.Forward)
 	if err != nil {
@@ -414,7 +472,12 @@ func wantsClone(st *state.VM, p remakeInVM) bool {
 // it has, the old one is deleted.
 func (e remaking) remake(ctx context.Context, t *target, p remakeInVM) error {
 	vm := t.f.Name
-	chain, err := e.build(ctx, t, p.Image)
+	unmaking, err := e.holdTools(ctx, p)
+	if err != nil {
+		return err
+	}
+	defer unmaking()
+	chain, err := e.build(ctx, t, &p)
 	if err != nil {
 		return err
 	}
@@ -447,10 +510,12 @@ func (e remaking) remake(ctx context.Context, t *target, p remakeInVM) error {
 	return nil
 }
 
-// build builds img (a remake's, as its record has it) for t's VM, as a
-// new VM's is built, and returns its build chain.
-func (e remaking) build(ctx context.Context, t *target, recorded string) (chainOf, error) {
-	b, img := e.Builder(t.b, t.st.From), image.Name(recorded)
+// build builds p's image (as its record has it) for t's VM, from p's
+// from, as a new VM's is built, and returns its build chain. A reread
+// devcontainer.json's tools (p.Reread) are then built for that image's
+// base, as a new VM's are, and their files set in p.
+func (e remaking) build(ctx context.Context, t *target, p *remakeInVM) (chainOf, error) {
+	b, img := e.Builder(t.b, fromOf(t, *p)), image.Name(p.Image)
 	if err := (build.Builds{Env: b}).Build(ctx, img); err != nil {
 		return chainOf{}, err
 	}
@@ -458,7 +523,39 @@ func (e remaking) build(ctx context.Context, t *target, recorded string) (chainO
 	if err != nil {
 		return chainOf{}, err
 	}
+	if p.Reread != nil {
+		if p.Reread.Tools.Made, err = e.buildTools(ctx, b, p.Reread.Tools.Names); err != nil {
+			return chainOf{}, err
+		}
+	}
 	return chainOf{key: c.Key(), chain: c.String()}, nil
+}
+
+// buildTools builds the shared tools names for a VM of b's base, built,
+// as a new VM's are, and returns what it gets of them.
+func (e remaking) buildTools(ctx context.Context, b *build.Env, names []string) (tools.Made, error) {
+	tg, err := b.ToolTarget()
+	if err != nil {
+		return tools.Made{}, err
+	}
+	files, err := (tools.Versions{Env: e.Tools}).Files(ctx, names, tg)
+	if err != nil {
+		return tools.Made{}, err
+	}
+	if err := e.launcher.buildTools(ctx, b, tg, files); err != nil {
+		return tools.Made{}, err
+	}
+	return tools.Made{Files: files, Libc: tg.Libc, Glibc: tg.Glibc}, nil
+}
+
+// holdTools holds the lock VMs being made hold while p, a remake that
+// changes the VM's tools (Reread), makes it, so gc keeps their images
+// until its state lists them.
+func (e remaking) holdTools(ctx context.Context, p remakeInVM) (func(), error) {
+	if p.Reread == nil {
+		return func() {}, nil
+	}
+	return tools.Making{Dirs: e.Dirs, Reporter: e.Reporter}.Hold(ctx)
 }
 
 // chainOf is an image's build chain, as a VM is made from it (its key)
@@ -491,20 +588,18 @@ func (e remaking) finish(ctx context.Context, t *target, p remakeInVM, c chainOf
 		return err
 	}
 	t.exists = true
-	// The new machine is the one by its name now, in its clone mode, and
-	// its devcontainer.json's commands run again on its new disk.
+	// The new machine is the one by its name now, in its clone mode, with
+	// what p read again, and its devcontainer.json's commands run again
+	// on its new disk.
 	mode := ""
 	if p.Clone == CloneOff {
 		mode = e.Protector(t.f.Dir).NewMode(false)
 	}
 	err := st.Update(ctx, func(st *state.VM) error {
-		if err := edit(st, remakeSection, func(r *remakeInVM) error { r.Made = true; return nil }); err != nil {
+		if err := madeWith(st, p); err != nil {
 			return err
 		}
-		if err := switchedTo(st, p.Clone, mode); err != nil {
-			return err
-		}
-		return edit(st, devcontainerSection, func(d *devcontainerInVM) error { d.Made = devcontainerMade{}; return nil })
+		return switchedTo(st, p.Clone, mode)
 	})
 	if err != nil {
 		return err
@@ -536,6 +631,63 @@ func (e remaking) finish(ctx context.Context, t *target, p remakeInVM, c chainOf
 		return err
 	}
 	return e.dropOld(ctx, t, p)
+}
+
+// madeWith records in st, inside st.Update, that its remake p made its
+// new machine (Made): what the VM had of what p may read again
+// (rereadOf) kept in Was the first time, for putBack, then p's reread
+// devcontainer.json in its place (setReread), and its commands run again.
+func madeWith(st *state.VM, p remakeInVM) error {
+	r, err := state.Section[remakeInVM](st, remakeSection)
+	if err != nil {
+		return err
+	}
+	if !r.Made {
+		was, err := rereadOf(st)
+		if err != nil {
+			return err
+		}
+		r.Made, r.Was = true, &was
+		if err := state.SetSection(st, remakeSection, r); err != nil {
+			return err
+		}
+	}
+	if p.Reread != nil {
+		return setReread(st, *p.Reread)
+	}
+	return edit(st, devcontainerSection, func(d *devcontainerInVM) error { d.Made = devcontainerMade{}; return nil })
+}
+
+// rereadOf is what st's VM has of what devvm update reads again of its
+// devcontainer.json: its from, shared tools and devcontainer section.
+func rereadOf(st *state.VM) (rereadInVM, error) {
+	tl, err := tools.Of(st)
+	if err != nil {
+		return rereadInVM{}, err
+	}
+	d, err := state.Section[devcontainerInVM](st, devcontainerSection)
+	if err != nil {
+		return rereadInVM{}, err
+	}
+	p, err := ports.Of(st)
+	if err != nil {
+		return rereadInVM{}, err
+	}
+	return rereadInVM{From: st.From, Tools: tl, Forward: p.Forward, Devcontainer: d}, nil
+}
+
+// setReread gives st's VM r's from, shared tools, forwarded ports (as
+// devvm ports sets them: ports.SetForward) and devcontainer section, in
+// st alone: inside st.Update.
+func setReread(st *state.VM, r rereadInVM) error {
+	st.From = r.From
+	if err := tools.Set(st, r.Tools); err != nil {
+		return err
+	}
+	if err := ports.SetForward(st, r.Forward); err != nil {
+		return err
+	}
+	return state.SetSection(st, devcontainerSection, r.Devcontainer)
 }
 
 // dropOld ends a remake of t's VM whose new machine is done (p.Done):
@@ -598,7 +750,8 @@ func (e remaking) putBack(ctx context.Context, t *target) error {
 		return err
 	}
 	t.exists = true
-	// The machine by its name is the old one again, in its clone mode.
+	// The machine by its name is the old one again, in its clone mode,
+	// with what it had of what the remake read again.
 	r := sectionOf[remakeInVM](t.st, remakeSection)
 	if r.Made && r.Clone == CloneOff {
 		e.unmountFolder(ctx, t)
@@ -609,7 +762,12 @@ func (e remaking) putBack(ctx context.Context, t *target) error {
 				return err
 			}
 		}
-		return edit(st, remakeSection, func(r *remakeInVM) error { r.Made = false; return nil })
+		if r.Made && r.Was != nil {
+			if err := setReread(st, *r.Was); err != nil {
+				return err
+			}
+		}
+		return edit(st, remakeSection, func(r *remakeInVM) error { r.Made, r.Was = false, nil; return nil })
 	})
 }
 
@@ -657,7 +815,7 @@ func (e remaking) finishPending(ctx context.Context, t *target) error {
 		if err := e.check(t, p); err != nil {
 			return err
 		}
-		p.Made = false
+		p.Made, p.Was = false, nil
 		return e.remake(ctx, t, p)
 	}
 	return e.makeNew(ctx, t, p)
@@ -681,7 +839,12 @@ func (e remaking) makeNew(ctx context.Context, t *target, p remakeInVM) error {
 		e.Warn(msg.RemakeHomeLost(vm))
 		p.Home = false
 	}
-	c, err := e.build(ctx, t, p.Image)
+	unmaking, err := e.holdTools(ctx, p)
+	if err != nil {
+		return err
+	}
+	defer unmaking()
+	c, err := e.build(ctx, t, &p)
 	if err != nil {
 		return err
 	}

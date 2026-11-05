@@ -68,7 +68,7 @@ func TestUpDevcontainer(t *testing.T) {
 	}
 	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	for k, want := range map[string]string{
-		keyFrom: "node@sha256:" + strings.Repeat("a", 64), KeyPorts: "5173",
+		keyFrom: "node@sha256:" + strings.Repeat("a", 64), KeyPorts: "5173,3000",
 		KeyDevcontainerCreate: "", KeyDevcontainerEnv: `[{"name":"A","value":"'web'"}]`,
 	} {
 		if got := get(st, k); got != want {
@@ -94,9 +94,12 @@ func TestUpDevcontainer(t *testing.T) {
 	if env := string(s.files[s.index("env")].data); !strings.HasPrefix(env, "export A='web'\n") {
 		t.Errorf("env = %q", env)
 	}
-	// Its ports beyond the user's are said, not added.
-	if want := []string{"devcontainer_ports_not_forwarded file=.devcontainer.json ports=3000"}; !slices.Equal(warned.Names(), want) {
-		t.Errorf("warned %q, want %q", warned.Names(), want)
+	// Its ports are added to the user's, recorded as the file's.
+	if d := sectionOf[devcontainerInVM](st, devcontainerSection); !slices.Equal(d.Ports, []string{"3000"}) || !slices.Equal(d.PortsGave, []string{"3000"}) {
+		t.Errorf("file's ports %q, gave %q", d.Ports, d.PortsGave)
+	}
+	if len(warned.Names()) > 0 {
+		t.Errorf("warned %q", warned.Names())
 	}
 	warned.Reset()
 
@@ -176,7 +179,7 @@ func TestUpDevcontainerRefused(t *testing.T) {
 // the user's are said, not added. The new VM keeps the file's From and
 // plan; the options stay as they were asked for.
 func TestPlanDevcontainerFrom(t *testing.T) {
-	e, _, warned := devcontainerTestEnv(t, `{"image": "node:24", "forwardPorts": [3000]}`)
+	e, _, _ := devcontainerTestEnv(t, `{"image": "node:24", "forwardPorts": [3000]}`)
 	if _, err := settings.Save(e.Dirs, settings.Values{Ports: settings.Of("5173")}); err != nil {
 		t.Fatal(err)
 	}
@@ -196,11 +199,8 @@ func TestPlanDevcontainerFrom(t *testing.T) {
 	if n.dc == nil || n.dc.Ports != "3000" {
 		t.Errorf("devcontainer plan = %+v", n.dc)
 	}
-	if n.size.Memory != "4" || n.spec.Size.MemoryGiB != 4 || n.ports != "5173" {
-		t.Errorf("size %+v (spec %+v), ports %q", n.size, n.spec.Size, n.ports)
-	}
-	if want := "devcontainer_ports_not_forwarded file=.devcontainer.json ports=3000"; !slices.Contains(warned.Names(), want) {
-		t.Errorf("warned %q, want %q", warned.Names(), want)
+	if n.size.Memory != "4" || n.spec.Size.MemoryGiB != 4 || n.ports != "5173,3000" || !slices.Equal(n.dcPorts, []string{"3000"}) {
+		t.Errorf("size %+v (spec %+v), ports %q, the file's %q", n.size, n.spec.Size, n.ports, n.dcPorts)
 	}
 }
 

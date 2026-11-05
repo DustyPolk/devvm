@@ -1,7 +1,8 @@
 // Package devcontainer reads a project's devcontainer.json as input for a
-// new VM: Find finds it in the project folder, Parse reads it (JSON with
-// comments and trailing commas) into a Plan, what devvm does with it, and
-// refuses what devvm won't do. The file is the project's, so the VM's: a
+// new VM, or one devvm update makes again: Find finds it in the project
+// folder, Parse reads it (JSON with comments and trailing commas) into a
+// Plan, what devvm does with it, and refuses what devvm won't do, and
+// Reread works out what a VM's parts become when it's read again. The file is the project's, so the VM's: a
 // plan only shapes what runs inside the VM, and nothing in it ever runs on
 // the host, reaches its paths or environment, or adds mounts.
 package devcontainer

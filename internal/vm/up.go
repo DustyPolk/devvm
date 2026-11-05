@@ -182,9 +182,12 @@ type newVM struct {
 	from string
 	// dc is what the folder's devcontainer.json says it gets
 	// (devcontainers.prepare); nil without one.
-	dc      *devcontainer.Plan
-	spec    backend.VMSpec
-	builder *build.Env
+	dc *devcontainer.Plan
+	// dcGave is what it gets of its parts from the devcontainer.json
+	// alone (fileParts), dcPorts of its ports (newPorts).
+	dcGave, dcPorts []string
+	spec            backend.VMSpec
+	builder         *build.Env
 	// history is the export of agents' history it gets once it's started,
 	// as the user said yes to (offerHistory); "" for none.
 	history string
@@ -263,7 +266,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err := n.record(st, tg, files); err != nil {
 		return err
 	}
-	if err := e.devcontainers.record(st, o.NoDevcontainer, n.dc); err != nil {
+	if err := e.devcontainers.record(st, o, n.dc, n.dcGave, n.dcPorts); err != nil {
 		return err
 	}
 	// Its alias, chosen now for good, as its name was, under the claims
@@ -419,7 +422,7 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if err := n.size.Check(host, backend.BaseDiskGiB, vm); err != nil {
 		return newVM{}, err
 	}
-	if n.ports, err = e.newPorts(o.Ports, def, n.dc); err != nil {
+	if n.ports, n.dcPorts, err = newPorts(o.Ports, def, n.dc); err != nil {
 		return newVM{}, err
 	}
 	forward, err := ports.Forwarding(n.ports)
@@ -432,6 +435,7 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 		return newVM{}, err
 	}
 	n.img, n.tools = parts.image(), parts.tools()
+	n.dcGave = fileParts(o, f.Dir, n.dc, def, parts)
 	n.spec = e.machineSpec(b, f, n.tools, o.SSHAgent, n.size, o.Clone)
 	n.net = e.chooseNet(o, b, vm, def.Network.Value)
 	if o.SSHAgent {
@@ -460,30 +464,19 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	return n, nil
 }
 
-// newPorts returns the ports a new VM forwards: given's (--ports, parsed),
-// else def's. The user's ports stay a limit its devcontainer.json (dc)
-// can't widen: the file's ports beyond them are said, not added.
-func (e creation) newPorts(given string, def settings.Defaults, dc *devcontainer.Plan) (string, error) {
-	list := ""
+// newPorts returns the ports a new VM forwards: given's (--ports,
+// parsed), which win over its devcontainer.json's (dc), else def's with
+// the file's added, as devvm ports add adds them (filePorts), and the
+// file's ports it added (gave).
+func newPorts(given string, def settings.Defaults, dc *devcontainer.Plan) (list string, gave []string, err error) {
 	if given != "" {
-		var err error
-		if list, err = settings.ParsePorts(given); err != nil {
-			return "", err
-		}
+		list, err = settings.ParsePorts(given)
+		return list, nil, err
 	}
-	if list == "" {
-		list = def.Ports.Value
+	if dc == nil || dc.Ports == "" {
+		return def.Ports.Value, nil, nil
 	}
-	if dc != nil && dc.Ports != "" {
-		wider, err := AddPorts(list, dc.Ports)
-		if err != nil {
-			return "", err
-		}
-		if wider != list {
-			e.Warn(msg.DevcontainerPortsNotForwarded(dc.File, dc.Ports))
-		}
-	}
-	return list, nil
+	return filePorts(def.Ports.Value, nil, nil, dc.Ports)
 }
 
 // chooseNet returns whether a new VM gets network policy: the flags', else

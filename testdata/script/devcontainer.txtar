@@ -2,8 +2,9 @@
 # the VM's --from (pinned to the digest its registry gives anyone), its
 # features devvm's layers, its forwardPorts the VM's listed ports, its
 # variables the VM's environment, its commands run in the VM, once or at
-# each start. A later launch only warns when the file changed. Nothing is
-# written to the project folder, and nothing in the file runs on the host.
+# each start. A later launch only warns when the file changed, and devvm
+# update makes the VM again as it says now. Nothing is written to the
+# project folder, and nothing in the file runs on the host.
 # Registries are never reached: HTTPS_PROXY points at nothing, so lookups
 # are offline, and a digest recorded before stands for the registry's.
 env HTTPS_PROXY=http://127.0.0.1:9
@@ -51,7 +52,8 @@ cmp stdout $WORK/bad-ls
 # A new VM: made as the file says, its image's recorded digest standing in
 # for the registry's (offline), --layers the exact list of its layers (the
 # docker layer docker-in-docker calls for, and the user's on top), the
-# localhost ports listed; what's ignored is said, initializeCommand never
+# localhost ports forwarded, added to the user's (none here) as devvm
+# ports add adds them; what's ignored is said, initializeCommand never
 # runs.
 mkdir $WORK/web/.devcontainer
 cd $WORK/web
@@ -63,7 +65,6 @@ stderr '^devvm: from_cached_unreachable from=node:24 host=registry-1\.docker\.io
 stderr '^devvm: devcontainer_initialize file=\.devcontainer/devcontainer\.json$'
 stderr '^devvm: devcontainer_feature_options features=ghcr\.io/devcontainers/features/docker-in-docker:2 file=\.devcontainer/devcontainer\.json$'
 stderr '^devvm: devcontainer_ports_ignored file=\.devcontainer/devcontainer\.json ports="db:5432"$'
-stderr '^devvm: devcontainer_ports_not_forwarded file=\.devcontainer/devcontainer\.json ports=3000,5173$'
 stderr '^devvm: devcontainer_ignored file=\.devcontainer/devcontainer\.json keys=runArgs$'
 stderr '^devvm: devcontainer_unknown file=\.devcontainer/devcontainer\.json keys=bogus$'
 stdout '^==> building_image_from from=node@sha256:a{64} image=base key=[0-9a-f]{12}$'
@@ -86,7 +87,9 @@ stdout '^devcontainer.file=\.devcontainer/devcontainer\.json$'
 stdout '^devcontainer.sum=[0-9a-f]{64}$'
 stdout '^from=node@sha256:a{64}$'
 stdout '^image=docker\+extra$'
-stdout '^ports.forward=none$'
+stdout '^ports.forward=3000,5173$'
+stdout '^devcontainer.ports=3000 5173$'
+stdout '^devcontainer.ports_gave=3000 5173$'
 stdout '^devcontainer.made.created=true$'
 stdout '^devcontainer.start.0.name=postStartCommand$'
 stdout '^devcontainer.start.0.argv=sh -c echo started >> ~/started$'
@@ -178,9 +181,111 @@ vm_name FLAGS flags
 vm_state $FLAGS_dir/vm.json
 stdout '^from=node:24@sha256:a{64}$'
 stdout '^ports.forward=8080$'
+stdout '^devcontainer.from_flag=true$'
+! stdout '^devcontainer.ports_gave='
+# devvm update reads the changed file: --from still wins, and the port
+# the file lists anew is added.
+cp $WORK/changed.json .devcontainer.json
+exec devvm update --force
+stdout '^==> devcontainer_reread file=\.devcontainer\.json vm=devvm-flags-[0-9a-f]{14}$'
+stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=from key=image$'
+vm_state $FLAGS_dir/vm.json
+stdout '^from=node:24@sha256:a{64}$'
+stdout '^ports.forward=8080,9000$'
+stdout '^devcontainer.ports_gave=9000$'
+! stdout '^remake'
+exec devvm
+! stderr devcontainer
+
+# devvm update after the file changed: made again as it says now. What
+# the file gave (the docker layer, its image) is replaced, and what the
+# user chose (claude) stays; its new image is pinned; its ports are the
+# file's new ones and the user's own, and one the user removed stays
+# removed; its variables and commands are the new file's, which run on
+# the new disk; the home folder is kept.
+project upd
+cp $WORK/web.json .devcontainer.json
+exec devvm --no-network-policy --agents claude
+vm_name UPD upd
+vm_state $UPD_dir/vm.json
+stdout '^image=docker$'
+stdout '^devcontainer.gave=docker$'
+stdout '^devcontainer.image=node:24$'
+stdout '^ports.forward=3000,5173$'
+exec devvm ports add 9000
+exec devvm ports rm 5173
+exec sh -c 'mkdir -p "$STUB_DIR/vmhome-$UPD" && echo ls > "$STUB_DIR/vmhome-$UPD/.bash_history"'
+cp $WORK/updated.json .devcontainer.json
+exec devvm
+stderr '^devvm: devcontainer_changed file=\.devcontainer\.json vm=devvm-upd-[0-9a-f]{14}$'
+# Without a terminal it's refused before anything changes.
+stub_reset
+! exec devvm update
+stdout '^==> devcontainer_reread file=\.devcontainer\.json vm=devvm-upd-[0-9a-f]{14}$'
+stderr '^devvm: force_needed command=devvm update$'
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+vm_state $UPD_dir/vm.json
+stdout '^image=docker$'
+stub_reset
+exec devvm update --force
+stdout '^==> devcontainer_reread file=\.devcontainer\.json vm=devvm-upd-[0-9a-f]{14}$'
+stdout '^==> building_image_from from=node@sha256:b{64} image=base key=[0-9a-f]{12}$'
+stdout '^==> creating_from image=base vm=devvm-upd-[0-9a-f]{14}$'
+stdout '^==> running_script script=postCreateCommand vm=devvm-upd-[0-9a-f]{14}$'
+stdout '^==> remade image=base vm=devvm-upd-[0-9a-f]{14}$'
+stub_calls
+stdout 'limactl rename --tty=false devvm-upd-[0-9a-f]{14} devvm-[0-9a-f]{14}-old\n(.*\n)*.*tar -xzf - --skip-old-files.*\n(.*\n)*limactl delete -f devvm-[0-9a-f]{14}-old\n'
+stdout 'echo updated > ~/updated'
+exec tar -tzf $STUB_DIR/home-in.tgz
+stdout '^\.bash_history$'
+exec tar -xOf $STUB_DIR/sync.tar env
+stdout '\Aexport STAGE=''two''\n'
+vm_state $UPD_dir/vm.json
+stdout '^image=base$'
+stdout '^from=node@sha256:b{64}$'
+stdout '^tools.names=node claude$'
+stdout '^devcontainer.image=node:22$'
+stdout '^devcontainer.gave=node$'
+stdout '^devcontainer.parts=node$'
+stdout '^devcontainer.made.created=true$'
+stdout '^ports.forward=9000,8000$'
+stdout '^devcontainer.ports_gave=8000$'
+! stdout '^remake'
+exec devvm
+! stderr devcontainer
+# Current: nothing runs.
+stub_reset
+exec devvm update --force
+stdout '^==> vm_current image=base vm=devvm-upd-[0-9a-f]{14}$'
+# Gone: what the file gave goes, and the base starts from $DEVVM_FROM's.
+rm .devcontainer.json
+env DEVVM_FROM=$PIN
+exec devvm update --force
+stdout '^==> devcontainer_gone file=\.devcontainer\.json vm=devvm-upd-[0-9a-f]{14}$'
+vm_state $UPD_dir/vm.json
+stdout '^from=node:24@sha256:a{64}$'
+stdout '^tools.names=claude$'
+stdout '^ports.forward=9000$'
+! stdout '^devcontainer\.(file|image|gave|ports|ports_gave)='
+env DEVVM_FROM=
+
+# devvm update after a file appeared for a VM made without one.
+cd $WORK/plain
+exec devvm update --force
+stdout '^==> devcontainer_reread file=\.devcontainer\.json vm=devvm-plain-[0-9a-f]{14}$'
+stdout '^==> creating_from image=docker vm=devvm-plain-[0-9a-f]{14}$'
+vm_state $PLAIN_dir/vm.json
+stdout '^from=node@sha256:a{64}$'
+stdout '^image=docker$'
+stdout '^devcontainer.file=\.devcontainer\.json$'
+stdout '^devcontainer.gave=docker$'
+stdout '^ports.forward=3000,5173$'
+exec devvm
+! stderr devcontainer
 
 -- digests.json --
-{"digests": {"node:24": "node@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
+{"digests": {"node:24": "node@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "node:22": "node@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}
 -- extra.sh --
 #!/bin/bash
 echo extra
@@ -227,3 +332,11 @@ echo extra
 }
 -- changed.json --
 {"image": "node:24", "forwardPorts": [9000]}
+-- updated.json --
+{
+  "image": "node:22",
+  "features": {"ghcr.io/devcontainers/features/node:1": {}},
+  "forwardPorts": [8000],
+  "containerEnv": {"STAGE": "two"},
+  "postCreateCommand": "echo updated > ~/updated",
+}
