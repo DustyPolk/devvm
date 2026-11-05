@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf16"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
@@ -207,6 +209,45 @@ func (e Launch) updateAgentDirs(st *state.VM, in backend.Instance) (later bool) 
 }
 
 func shownList(paths []string) string { return strings.Join(paths, ", ") }
+
+// claudeSlugMax is how long a slug of Claude Code's is before it's cut.
+const claudeSlugMax = 200
+
+// claudeSlug is the name of the folder Claude Code keeps a project
+// folder's sessions in, under ~/.claude/projects, from the folder's path,
+// as Claude Code computes it: each UTF-16 unit of the path that isn't an
+// ASCII letter or digit becomes a dash, and a name longer than 200 is cut
+// there and ends with a dash and its path's hash (claudeHash) in base 36.
+func claudeSlug(path string) string {
+	units := utf16.Encode([]rune(path))
+	b := make([]byte, len(units))
+	for i, u := range units {
+		switch {
+		case u >= 'a' && u <= 'z', u >= 'A' && u <= 'Z', u >= '0' && u <= '9':
+			b[i] = byte(u)
+		default:
+			b[i] = '-'
+		}
+	}
+	if len(b) <= claudeSlugMax {
+		return string(b)
+	}
+	h := int64(claudeHash(units))
+	if h < 0 {
+		h = -h
+	}
+	return string(b[:claudeSlugMax]) + "-" + strconv.FormatInt(h, 36)
+}
+
+// claudeHash is the hash Claude Code ends a long slug with: h*31 + u over
+// the path's UTF-16 units, in 32 bits.
+func claudeHash(units []uint16) int32 {
+	var h int32
+	for _, u := range units {
+		h = h*31 + int32(u)
+	}
+	return h
+}
 
 // missing returns what of a isn't in b.
 func missing(a, b []string) []string {

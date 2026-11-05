@@ -2173,10 +2173,21 @@ else
 fi
 # A folder moved keeps its VM once you say so: without a terminal devvm refuses, naming devvm
 # adopt; in one, a yes moves it, its home folder as it was, and its next start mounts the folder at
-# its new path, never the old one, which isn't made again. Moved back, devvm adopt --force moves it.
+# its new path, never the old one, which isn't made again. Claude Code's sessions and its
+# .claude.json entry, kept by the folder's path, follow it (made here as Claude Code would make them).
+# Moved back, devvm adopt --force moves it.
 pm=$p-moved
 (cd "$p" && printf 'exit\n' | "$D" >/dev/null 2>&1)
 in_vm "$vm" 'echo e2e-home-kept > ~/e2e-moved' >/dev/null 2>&1
+claude_slug() { echo "${1//[^a-zA-Z0-9]/-}"; }
+in_vm "$vm" "mkdir -p ~/.claude/projects/$(claude_slug "$p") && echo e2e > ~/.claude/projects/$(claude_slug "$p")/e2e.jsonl &&
+  f=~/.claude.json && { [ -s \$f ] || echo '{}' > \$f; } && jq --arg p '$p' '.projects[\$p] = {e2e: true}' \$f > \$f.tmp && mv \$f.tmp \$f" >/dev/null 2>&1
+# moved_history FROM TO: the session and the .claude.json entry are TO's, and FROM has neither.
+moved_history() {
+  in_vm "$vm" "[ -f ~/.claude/projects/$(claude_slug "$2")/e2e.jsonl ] && [ ! -e ~/.claude/projects/$(claude_slug "$1") ] &&
+    jq -e --arg o '$1' --arg n '$2' '.projects[\$n].e2e == true and (.projects | has(\$o) | not)' ~/.claude.json >/dev/null" ||
+    { echo "failed: Claude Code's history isn't $2's"; in_vm "$vm" 'ls ~/.claude/projects; jq -c .projects ~/.claude.json'; return 1; }
+}
 (cd "$p" && "$D" stop </dev/null >/dev/null 2>&1)
 mv "$p" "$pm"
 moved_refused() {
@@ -2195,16 +2206,18 @@ moved_opened() { local ms
   [[ ! -e $p ]] || { echo "failed: $p made again"; return 1; }
   # In the VM, the new path is mounted and the old one isn't (an empty folder may stay there).
   in_vm "$vm" "mountpoint -q '$pm' && ! mountpoint -q '$p'" || { echo "failed: the VM's mounts"; in_vm "$vm" "grep devvm-go-e2e /proc/mounts"; return 1; }
+  moved_history "$p" "$pm"
 }
 moved_back() {
   (cd "$pm" && "$D" stop </dev/null >/dev/null 2>&1) && mv "$pm" "$p" &&
     (cd "$p" && "$D" adopt --force </dev/null >"$work/last.log" 2>&1) && grep -qF "$(m vm_adopted dir="$p" vm="$vm")" "$work/last.log" &&
-    (cd "$p" && printf 'pwd\n' | "$D" >"$work/last.log" 2>&1) && grep -qxF "$p" "$work/last.log" && grep -qxF "$p" <<<"$(mounts_of "$vm")"
+    (cd "$p" && printf 'pwd\n' | "$D" >"$work/last.log" 2>&1) && grep -qxF "$p" "$work/last.log" && grep -qxF "$p" <<<"$(mounts_of "$vm")" &&
+    moved_history "$pm" "$p"
 }
 check "a moved folder's VM is refused without a terminal, naming devvm adopt" moved_refused
 check "in a terminal, a yes moves the VM to the folder's new path" moved_yes
-check "opened there, its home is as it was and it mounts the new path alone" moved_opened
-check "moved back, devvm adopt --force moves it back" moved_back
+check "opened there, its home is as it was, it mounts the new path alone, and Claude Code's history followed it" moved_opened
+check "moved back, devvm adopt --force moves it back, Claude Code's history too" moved_back
 [[ -e $p ]] || mv "$pm" "$p"
 check "rm deletes only this VM, with its state and ssh config entry, and unlocks" bash -c "cd '$p' && '$D' rm --force </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! grep -q '^Host devvm-web ' '$XDG_DATA_HOME/devvm/ssh_config' &&

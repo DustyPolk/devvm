@@ -223,3 +223,27 @@ func TestReadUnmountedWait(t *testing.T) {
 		t.Errorf("hung read took %s", d)
 	}
 }
+
+// A setup clears the move it followed, and not one another move recorded
+// meanwhile.
+func TestFollowed(t *testing.T) {
+	e, _, _ := upEnv(t, allNative())
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	if err := update(t.Context(), st, movedSection, func(m *movedInVM) error { m.From = "/a"; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	for _, sent := range []movedInVM{{}, {From: "/b"}} {
+		if err := followed(t.Context(), st, sent); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := state.ReadVM(e.Dirs, st.Name()); sectionOf[movedInVM](got, movedSection).From != "/a" {
+			t.Errorf("followed %+v cleared /a", sent)
+		}
+	}
+	if err := followed(t.Context(), st, movedInVM{From: "/a"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := state.ReadVM(e.Dirs, st.Name()); sectionOf[movedInVM](got, movedSection) != (movedInVM{}) {
+		t.Errorf("still recorded: %+v", sectionOf[movedInVM](got, movedSection))
+	}
+}

@@ -37,15 +37,20 @@ stdout '==> vm_adopted dir=/\S*/site vm=devvm-web-[0-9a-f]{14}$'
 stdout '==> already_stopped vm=devvm-web-[0-9a-f]{14}$'
 vm_state $WEB_dir/vm.json
 stdout '^dir=/\S*/site$'
+grep '"moved": \{\s*"from": "/\S*/web"\s*\}' $WEB_dir/vm.json
 
 # Found by that folder from then on, asking nothing; its start mounts the
-# folder where it is now, in the one edit.
+# folder where it is now, in the one edit, and its setup moves the agents'
+# state from the old path, clearing the record.
 stub_reset
 exec devvm
 ! stderr 'vm_moved_here|move_vm'
 stub_calls
 stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.mounts = \[\{"location":"/\S*/site","writable":true\}'
 stdout '^limactl shell --workdir /\S*/site devvm-web-[0-9a-f]{14}\n\z'
+exec tar -xOf $STUB_DIR/sync.tar moved
+stdout '^moved_from=''/\S*/web''\nmoved_to=''/\S*/site''\nclaude_from=''-\S*-web''\nclaude_to=''-\S*-site''\n\z'
+! grep '"moved"' $WEB_dir/vm.json
 exec devvm ls --json
 stdout '"folder": "/\S*/site",'
 

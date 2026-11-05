@@ -49,7 +49,8 @@ func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug 
 	if err != nil {
 		return err
 	}
-	s, err := e.stage(ctx, st, setupInputs{slug: slug, files: files, proxyURL: b.ProxyURL(conf), links: links})
+	moved := sectionOf[movedInVM](st, movedSection)
+	s, err := e.stage(ctx, st, setupInputs{slug: slug, files: files, proxyURL: b.ProxyURL(conf), links: links, moved: moved.From})
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,21 @@ func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug 
 		}
 		return backend.Logged(msg.SyncFailed(vm))
 	}
-	return nil
+	return followed(ctx, st, moved)
+}
+
+// followed clears st's moved section once its setup moved what it
+// recorded (moved), unless another move recorded more meanwhile.
+func followed(ctx context.Context, st *state.VM, moved movedInVM) error {
+	if moved.From == "" {
+		return nil
+	}
+	return update(ctx, st, movedSection, func(m *movedInVM) error {
+		if *m == moved {
+			*m = movedInVM{}
+		}
+		return nil
+	})
 }
 
 // unmountedFile is where devvm-tools (guest/tools.sh) lists the tool
@@ -121,11 +136,12 @@ func reported(files []string, report []byte) []string {
 
 // setupInputs is what devvm gives a VM's setup besides its state: its
 // hostname (the folder's slug), its tool files, its proxy's address (empty
-// without network policy) and its links.
+// without network policy), its links, and the path its folder moved
+// from, "" when it didn't (its moved section).
 type setupInputs struct {
-	slug, proxyURL string
-	files          []string
-	links          []GuestLink
+	slug, proxyURL, moved string
+	files                 []string
+	links                 []GuestLink
 }
 
 // GuestLink is one target a client VM reaches through its links: the
@@ -222,7 +238,10 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	store := e.Proxy.Secrets
 	s := &stage{}
 	s.put("hosts", 0o644, linkHosts(in.links))
-	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh"} {
+	if m := claudeMoved(in.moved, st.Dir); m != nil {
+		s.put("moved", 0o644, m)
+	}
+	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh", "claude.sh"} {
 		data, err := fs.ReadFile(e.Assets, "guest/"+name)
 		if err != nil {
 			return nil, err
@@ -352,6 +371,25 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	s.put("env", 0o600, env.Bytes())
 	s.put("links", 0o644, links.Bytes())
 	return s, nil
+}
+
+// claudeMoved is the setup's moved file for a project folder that moved
+// from from to dir, its paths and their Claude Code slugs (claudeSlug),
+// for guest/claude.sh's claude_project_moved; nil when it didn't move.
+func claudeMoved(from, dir string) []byte {
+	if from == "" || from == dir {
+		return nil
+	}
+	var b bytes.Buffer
+	for _, kv := range [][2]string{
+		{"moved_from", from},
+		{"moved_to", dir},
+		{"claude_from", claudeSlug(from)},
+		{"claude_to", claudeSlug(dir)},
+	} {
+		b.WriteString(kv[0] + "=" + shell.Quote(kv[1]) + "\n")
+	}
+	return b.Bytes()
 }
 
 // stageNet adds what a VM with network policy gets: devvm's CA, its

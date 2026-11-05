@@ -17,6 +17,9 @@
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
 #   hosts        the VM's links (devvm checked them): a line per target, "ADDRESS NAME
 #                NAME.devvm.internal...", for /etc/hosts
+#   moved        only after the project folder moved: moved_from and moved_to, its old path and
+#                its new, and claude_from and claude_to, their Claude Code slugs; claude.sh moves
+#                Claude Code's sessions and settings from the old to the new
 set -euo pipefail
 # devvm reads devvm-tools' report when this setup fails, so an older one (from boot) goes first.
 sudo rm -f /run/devvm/tools-unmounted
@@ -167,6 +170,16 @@ merge_claude_json() {
 }
 if [[ -f "$s/claude.json" ]]; then
   merge_claude_json ~/.claude.json "$s/claude.json" ~/.local/state/devvm/claude-mcp-copied.json
+fi
+# The project folder moved since the last setup: Claude Code's sessions and settings, kept by its old
+# path, follow it.
+# shellcheck source-path=SCRIPTDIR source=claude.sh
+. "$s/claude.sh"
+if [[ -f "$s/moved" ]]; then
+  # shellcheck source=/dev/null
+  . "$s/moved"
+  # shellcheck disable=SC2154 # the moved file sets them
+  claude_project_moved "$moved_from" "$moved_to" "$claude_from" "$claude_to"
 fi
 
 # VS Code over Remote-SSH (devvm code): its settings for this machine turn off what reaches the host

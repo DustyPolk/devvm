@@ -14,8 +14,9 @@ import (
 )
 
 // The sections of a VM's state (state.VM) this package keeps: its size,
-// a --clone VM's clone, its devcontainer.json, its desktop, its links and
-// a remake that hasn't finished. The others are their packages':
+// a --clone VM's clone, its devcontainer.json, its desktop, its links, a
+// remake that hasn't finished and a move its setup hasn't followed yet.
+// The others are their packages':
 // netpolicy's, gitprotect's, ports', sshagent's, secrets' and tools'.
 const (
 	sizeSection         = "size"
@@ -24,7 +25,31 @@ const (
 	desktopSection      = "desktop"
 	linksSection        = "links"
 	remakeSection       = "remake"
+	movedSection        = "moved"
 )
+
+// movedInVM is a VM's moved section: the path its project folder had
+// before it moved (recordMove), under which the agents in the VM keep
+// what they keep by the folder's path. The VM's next setup moves that to
+// the folder's path now (claudeMoved), then clears the section.
+type movedInVM struct {
+	From string `json:"from,omitempty"`
+}
+
+// movedTo is the moved section of a VM whose folder moved from was to
+// dir, its last record from: the path the agents' state is under, kept
+// across moves until a setup follows them, and none for a folder back
+// where that state is.
+func movedTo(last movedInVM, was, dir string) movedInVM {
+	from := last.From
+	if from == "" {
+		from = was
+	}
+	if from == dir {
+		return movedInVM{}
+	}
+	return movedInVM{From: from}
+}
 
 // cloneInVM is a VM's clone section: whether it was made with --clone,
 // and what devvm made of its clone.
@@ -135,7 +160,7 @@ func checkState(st *state.VM) error {
 		check(st, secrets.Of), check(st, tools.Of),
 		section[Size](st, sizeSection), section[cloneInVM](st, cloneSection),
 		section[devcontainerInVM](st, devcontainerSection), section[desktopInVM](st, desktopSection),
-		section[remakeInVM](st, remakeSection), check(st, ReadLinks),
+		section[remakeInVM](st, remakeSection), section[movedInVM](st, movedSection), check(st, ReadLinks),
 	} {
 		if err != nil {
 			return err

@@ -280,7 +280,9 @@ func (e finder) stopForMove(ctx context.Context, st *state.VM) error {
 
 // recordMove records dir, whose identity is id, as st's project folder,
 // under its lock, refusing a state whose folder changed since it was read
-// (create_running); fresh clears .git's protection record.
+// (create_running), and the path the agents' state is under (movedTo),
+// which the VM's next setup moves to dir; fresh clears .git's protection
+// record.
 func recordMove(ctx context.Context, st *state.VM, dir, id string, fresh bool) error {
 	was, wasID := st.Dir, st.Folder
 	return st.Update(ctx, func(st *state.VM) error {
@@ -288,6 +290,9 @@ func recordMove(ctx context.Context, st *state.VM, dir, id string, fresh bool) e
 			return msg.CreateRunning(st.Name())
 		}
 		st.Dir, st.Folder = dir, id
+		if err := edit(st, movedSection, func(m *movedInVM) error { *m = movedTo(*m, was, dir); return nil }); err != nil {
+			return err
+		}
 		if !fresh {
 			return nil
 		}

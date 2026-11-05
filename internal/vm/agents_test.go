@@ -320,3 +320,138 @@ func TestHistoryImportRuns(t *testing.T) {
 		}
 	})
 }
+
+// Claude Code's slug of a path, as Claude Code 2.1 computes it (the
+// values its own function gives): every UTF-16 unit but an ASCII letter
+// or digit a dash, and a slug over 200 cut there, then the path's hash.
+func TestClaudeSlug(t *testing.T) {
+	long := "/Users/me/" + strings.Repeat("projects/", 25) + "app"
+	wide := "/home/é/" + strings.Repeat("x😀", 100)
+	for path, want := range map[string]string{
+		"/Users/me/dev/devvm-go": "-Users-me-dev-devvm-go",
+		"/home/me/my_app.v2/src": "-home-me-my-app-v2-src",
+		"/x/😀é":                  "-x----",
+		long:                     "-Users-me" + strings.Repeat("-projects", 21) + "-p-f0zgrx",
+		wide:                     "-home---" + strings.Repeat("x--", 64) + "-m9buex",
+	} {
+		if got := claudeSlug(path); got != want {
+			t.Errorf("claudeSlug(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
+
+// The setup's moved file names both paths and their slugs, quoted for
+// the shell; a folder that didn't move gets none.
+func TestClaudeMoved(t *testing.T) {
+	got := string(claudeMoved("/a/it's", "/b/c"))
+	want := "moved_from='/a/it'\\''s'\nmoved_to='/b/c'\nclaude_from='-a-it-s'\nclaude_to='-b-c'\n"
+	if got != want {
+		t.Errorf("claudeMoved = %q, want %q", got, want)
+	}
+	if claudeMoved("", "/b") != nil || claudeMoved("/b", "/b") != nil {
+		t.Error("a folder that didn't move got a moved file")
+	}
+}
+
+// guest/claude.sh's claude_project_moved moves a project's sessions'
+// folder and its .claude.json entry to its new path, merging into the new
+// path's own without replacing any of it, leaves links and a file that
+// isn't JSON as they are, and changes nothing run again.
+func TestClaudeProjectMoved(t *testing.T) {
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("no jq")
+	}
+	script, err := fs.ReadFile(assets.FS, "guest/claude.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lib := filepath.Join(t.TempDir(), "claude.sh")
+	if err := state.WriteFile(lib, script); err != nil {
+		t.Fatal(err)
+	}
+	run := func(t *testing.T, home string) string {
+		t.Helper()
+		cmd := exec.CommandContext(t.Context(), "bash", "-c", `set -euo pipefail; . "$1"; claude_project_moved /old/p /new/p -old-p -new-p`, "_", lib) //nolint:gosec // devvm's own script
+		cmd.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("claude_project_moved: %v: %s", err, out)
+		}
+		return string(out)
+	}
+	write := func(t *testing.T, path, data string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := state.WriteFile(path, []byte(data)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func(path string) string { b, _ := os.ReadFile(path); return string(b) } //nolint:gosec // the test's own temp files
+	projects := func(t *testing.T, home string) string {
+		t.Helper()
+		out, err := exec.CommandContext(t.Context(), "jq", "-cS", ".projects", filepath.Join(home, ".claude.json")).Output() //nolint:gosec // the test's own temp file
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	t.Run("renamed", func(t *testing.T) {
+		home := t.TempDir()
+		write(t, filepath.Join(home, ".claude/projects/-old-p/s.jsonl"), "s\n")
+		write(t, filepath.Join(home, ".claude.json"), `{"a":1,"projects":{"/old/p":{"trust":true},"/other":{}}}`)
+		for range 2 {
+			run(t, home)
+			if read(filepath.Join(home, ".claude/projects/-new-p/s.jsonl")) != "s\n" {
+				t.Error("the session isn't under the new slug")
+			}
+			if _, err := os.Lstat(filepath.Join(home, ".claude/projects/-old-p")); err == nil {
+				t.Error("the old slug's folder stayed")
+			}
+			if got := projects(t, home); got != `{"/new/p":{"trust":true},"/other":{}}` {
+				t.Errorf("projects = %s", got)
+			}
+		}
+	})
+	t.Run("merged", func(t *testing.T) {
+		home := t.TempDir()
+		write(t, filepath.Join(home, ".claude/projects/-old-p/a.jsonl"), "old a\n")
+		write(t, filepath.Join(home, ".claude/projects/-old-p/b.jsonl"), "old b\n")
+		write(t, filepath.Join(home, ".claude/projects/-new-p/b.jsonl"), "new b\n")
+		write(t, filepath.Join(home, ".claude.json"), `{"projects":{"/old/p":{"o":1},"/new/p":{"n":1}}}`)
+		run(t, home)
+		p := filepath.Join(home, ".claude/projects")
+		if read(p+"/-new-p/a.jsonl") != "old a\n" || read(p+"/-new-p/b.jsonl") != "new b\n" || read(p+"/-old-p/b.jsonl") != "old b\n" {
+			t.Error("not merged without replacing")
+		}
+		if got := projects(t, home); got != `{"/new/p":{"n":1},"/old/p":{"o":1}}` {
+			t.Errorf("projects = %s", got)
+		}
+	})
+	t.Run("links and not JSON", func(t *testing.T) {
+		home := t.TempDir()
+		target := t.TempDir()
+		mkdirs(t, home, ".claude/projects")
+		if err := os.Symlink(target, filepath.Join(home, ".claude/projects/-old-p")); err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(home, ".claude.json"), "not json")
+		if out := run(t, home); !strings.Contains(out, "isn't plain JSON") {
+			t.Errorf("said %q", out)
+		}
+		if l, err := os.Readlink(filepath.Join(home, ".claude/projects/-old-p")); err != nil || l != target {
+			t.Errorf("the link: %q, %v", l, err)
+		}
+		if read(filepath.Join(home, ".claude.json")) != "not json" {
+			t.Error(".claude.json changed")
+		}
+	})
+	t.Run("nothing there", func(t *testing.T) {
+		home := t.TempDir()
+		run(t, home)
+		if es, _ := os.ReadDir(home); len(es) != 0 {
+			t.Errorf("made %v", es)
+		}
+	})
+}

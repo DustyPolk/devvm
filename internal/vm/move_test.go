@@ -16,6 +16,26 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
+// A move records the path the agents' state is under: the first move's
+// old path, kept through more moves until a setup follows it, and none
+// once the folder is back there.
+func TestMovedTo(t *testing.T) {
+	for _, c := range []struct {
+		last     movedInVM
+		was, dir string
+		want     movedInVM
+	}{
+		{movedInVM{}, "/a", "/b", movedInVM{From: "/a"}},
+		{movedInVM{From: "/a"}, "/b", "/c", movedInVM{From: "/a"}},
+		{movedInVM{From: "/a"}, "/b", "/a", movedInVM{}},
+		{movedInVM{}, "/a", "/a", movedInVM{}},
+	} {
+		if got := movedTo(c.last, c.was, c.dir); got != c.want {
+			t.Errorf("movedTo(%+v, %s, %s) = %+v, want %+v", c.last, c.was, c.dir, got, c.want)
+		}
+	}
+}
+
 // A VM's folder moved to h when it's h's folder itself (its identity, the
 // device in it included), unique and this user's, at another path, with
 // nothing left at the old one; its creation finished and it mounts its
@@ -155,6 +175,9 @@ func TestMoveHere(t *testing.T) {
 	if id, _ := platform.FolderID(now); err != nil || moved.Dir != now || moved.Folder != id {
 		t.Fatalf("its state: %+v, %v", moved, err)
 	}
+	if m := sectionOf[movedInVM](moved, movedSection); m.From != was {
+		t.Errorf("recorded it moved from %q, want %s", m.From, was)
+	}
 	// Found by the folder its state records, asking nothing.
 	asked = answers(t, e, false)
 	if tg, err = fd.target(t.Context(), need{has: hasMade}); err != nil || tg.f.Name != vm || tg.moved || len(*asked) != 0 {
@@ -171,6 +194,14 @@ func TestMoveHere(t *testing.T) {
 	if w := call(f, "Start").Args[1].(backend.Want); w.Project != now {
 		t.Errorf("started with %q mounted, want %s", w.Project, now)
 	}
+	// Its setup moved the agents' state from the old path, and the
+	// record is gone.
+	if got := staged(t, f)["moved"]; got == "" || got != string(claudeMoved(was, now)) {
+		t.Errorf("staged moved = %q", got)
+	}
+	if st, _ := state.ReadVM(e.Dirs, vm); sectionOf[movedInVM](st, movedSection) != (movedInVM{}) {
+		t.Errorf("still recorded: %+v", sectionOf[movedInVM](st, movedSection))
+	}
 	// Running with the old path mounted all the same: up restarts it for
 	// the new one, after asking, yes by default.
 	in := f.Instances[vm]
@@ -182,6 +213,9 @@ func TestMoveHere(t *testing.T) {
 	}
 	if !slices.Contains(*asked, "restart_now count=1 vm="+vm) || f.Instances[vm].Project != now {
 		t.Errorf("asked %q, mounts %q", *asked, f.Instances[vm].Project)
+	}
+	if got, ok := staged(t, f)["moved"]; ok {
+		t.Errorf("moved again: %q", got)
 	}
 	// A new folder at the old path: a VM of its own, by its next name.
 	if err := os.Mkdir(was, 0o700); err != nil {
