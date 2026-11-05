@@ -53,13 +53,13 @@ func (t Share) Built(file string) bool {
 	return err == nil
 }
 
-// Build builds the tool images these files name that the share lacks, in
-// a throwaway VM made from base's image (key base) on b, its features
-// checked against rv, in tg's format. base must be the base they're for
-// (buildsFor). The VM runs upstream installers, so
-// it never sees the share: it writes into a folder of its own, and each
-// image is checked to be a plain file, moved into the share and its hash
-// recorded.
+// Build builds the tool images these files name that the share lacks,
+// each in a throwaway VM of its own made from base's image (key base) on
+// b, its features checked against rv, in tg's format. base must be the
+// base they're for (buildsFor). The VMs run upstream installers, so none
+// sees the share, and none sees another tool's build: each writes into a
+// folder of its own, and its one image is checked to be a plain file,
+// moved into the share and its hash recorded.
 func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, base string, tg Target, files []string) error {
 	var todo []string
 	for _, f := range files {
@@ -128,7 +128,12 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 	}
 	t.Info(msg.BuildingTools(Label(build)))
 	t.LogNote()
-	return t.batch(ctx, b, base, tg, lock, build)
+	for _, f := range build {
+		if err := t.buildOne(ctx, b, base, tg, lock, f); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // buildsFor refuses to build tg's tool images in the image with key base
@@ -157,9 +162,11 @@ func (t Share) buildsFor(base string, tg Target) error {
 	return nil
 }
 
-// batch builds these tool images in one throwaway VM with a folder of its
-// own, for tg, then moves them into the share.
-func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Target, lock Lock, files []string) error {
+// buildOne builds one tool image in a throwaway VM with a folder of its
+// own, for tg, then moves it into the share. One VM and folder for each
+// tool: whatever a tool's installer does in its VM, as root or not, it
+// can't reach another tool's image, which its key doesn't hash.
+func (t Share) buildOne(ctx context.Context, b backend.Backend, base string, tg Target, lock Lock, file string) error {
 	out, err := os.MkdirTemp(t.Dirs.Data, paths.ToolsBuildPrefix)
 	if err != nil {
 		return err
@@ -189,11 +196,7 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 			return err
 		}
 	}
-	var args []string
-	tools, versions := split(files)
-	for i, f := range files {
-		args = append(args, tools[i], versions[i], f)
-	}
+	tool, version, _ := image.ParseToolFile(file)
 	// The user's CAs, trusted in the build VM, which is deleted: a tool
 	// image's key holds none of them.
 	cas, err := trust.Read(t.Dirs.TrustedCAs())
@@ -205,40 +208,40 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 		return err
 	}
 	spec := backend.ToolsSpec{
-		Name: Label(files), Base: base, Out: out, OutAt: ShareAt, Args: args, Format: tg.Format, Net: backend.NetInternet,
-		Script: backend.Script{Name: "build.sh", Data: script}, Trust: ca,
+		Name: Label([]string{file}), Base: base, Out: out, OutAt: ShareAt, Args: []string{tool, version, file}, Format: tg.Format,
+		Net: backend.NetInternet, Script: backend.Script{Name: "build.sh", Data: script}, Trust: ca,
 	}
 	if err := b.BuildTools(ctx, spec); err != nil {
 		return err
 	}
-	// The VM is gone: nothing changes out now. Plain files only (a link
-	// could name a host file). Only the images leave out; their hashes are
-	// written in the share, never through a name the VM could have
-	// planted.
-	for _, f := range files {
-		src := filepath.Join(out, f)
-		if fi, err := os.Lstat(src); err != nil || !fi.Mode().IsRegular() {
-			return msg.ToolBadOutput(f)
-		}
-		sum, err := image.SHA256File(src)
-		if err != nil {
-			return err
-		}
-		// Its file name doesn't say what it's built for: the record does.
-		rec := state.ToolImage{SHA256: sum, Libc: tg.Libc, Base: tg.Base, Format: tg.Format, Backend: b.Name(), Built: t.Now().UTC().Truncate(time.Second), MadeBy: t.Version}
-		if tg.Libc == "gnu" {
-			if rec.Glibc, err = neededGlibc(filepath.Join(out, f+".glibc")); err != nil {
-				return msg.ToolBadOutput(f + ".glibc")
-			}
-		}
-		if err := os.Rename(src, t.Dirs.ToolImage(f)); err != nil {
-			return err
-		}
-		if err := state.WriteToolImage(t.Dirs, f, rec); err != nil {
-			return err
+	return t.moveIn(b, out, tg, file)
+}
+
+// moveIn moves the tool image file that a build wrote into out, its VM
+// gone, so nothing changes out now, into the share, with its record. Plain
+// files only (a link could name a host file). Only the image leaves out;
+// its hash is written in the share, never through a name the VM could
+// have planted.
+func (t Share) moveIn(b backend.Backend, out string, tg Target, file string) error {
+	src := filepath.Join(out, file)
+	if fi, err := os.Lstat(src); err != nil || !fi.Mode().IsRegular() {
+		return msg.ToolBadOutput(file)
+	}
+	sum, err := image.SHA256File(src)
+	if err != nil {
+		return err
+	}
+	// Its file name doesn't say what it's built for: the record does.
+	rec := state.ToolImage{SHA256: sum, Libc: tg.Libc, Base: tg.Base, Format: tg.Format, Backend: b.Name(), Built: t.Now().UTC().Truncate(time.Second), MadeBy: t.Version}
+	if tg.Libc == "gnu" {
+		if rec.Glibc, err = neededGlibc(filepath.Join(out, file+".glibc")); err != nil {
+			return msg.ToolBadOutput(file + ".glibc")
 		}
 	}
-	return nil
+	if err := os.Rename(src, t.Dirs.ToolImage(file)); err != nil {
+		return err
+	}
+	return state.WriteToolImage(t.Dirs, file, rec)
 }
 
 // maxGlibcOutput caps what's read of build.sh's FILE.glibc: one version.

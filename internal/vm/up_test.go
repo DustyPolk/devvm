@@ -234,7 +234,8 @@ func TestUpTools(t *testing.T) {
 	if !slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets layers=none tools=node claude vm=") }) {
 		t.Errorf("said %q", said.Names())
 	}
-	if ms := f.Methods(); !slices.Equal(ms, []string{"Problems", "Inspect", "PinOrigin", "Images", "BuildImage", "Images", "BuildTools", "CreateVM", "Start", "SSH", "Running", "Exec", "Running", "Running", "Running", "Exec", "List", "SSH", "Running", "Running", "Shell"}) {
+	// A tools build for each of node, pnpm, bun and claude.
+	if ms := f.Methods(); !slices.Equal(ms, []string{"Problems", "Inspect", "PinOrigin", "Images", "BuildImage", "Images", "BuildTools", "BuildTools", "BuildTools", "BuildTools", "CreateVM", "Start", "SSH", "Running", "Exec", "Running", "Running", "Running", "Exec", "List", "SSH", "Running", "Running", "Shell"}) {
 		t.Errorf("calls = %q", ms)
 	}
 	data, err := os.ReadFile(e.Dirs.ToolLock())

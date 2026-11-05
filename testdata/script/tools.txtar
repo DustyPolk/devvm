@@ -17,12 +17,15 @@ exists $DATA/mise.lock.toml
 exists $DATA/mise.lock.checked
 stub_calls
 stdout '^mise lock --platform linux-(arm64|x64),linux-(arm64|x64)-musl$'
-# The build VM is a clone of base whose only mount is a folder of its own,
-# never the share; it gets the tools and versions, and goes.
+# Each tool's build VM is a clone of base whose only mount is a folder of
+# its own, never the share; it gets its one tool and version, and goes
+# before the next tool's is made.
 stdout '^limactl clone --tty=false --mount-none --set \.mounts = \[\{"location":"\S*/data/devvm/tools-build\.[0-9]+","mountPoint":"/mnt/devvm-tools","writable":true\}\] devvm-img-[0-9a-f]{12} devvm-tools-build$'
 ! stdout '"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":true'
-stdout '^limactl shell --workdir / devvm-tools-build bash -s -- node 24\.21\.0 node-24\.21\.0-[0-9a-f]{12}\.erofs pnpm \S+ pnpm-\S+\.erofs bun 1\.4\.2 bun-1\.4\.2-[0-9a-f]{12}\.erofs claude 2\.1\.295 claude-2\.1\.295-[0-9a-f]{12}\.erofs$'
-stdout '^limactl delete -f devvm-tools-build$'
+stdout '^limactl shell --workdir / devvm-tools-build bash -s -- node 24\.21\.0 node-24\.21\.0-[0-9a-f]{12}\.erofs\n(.*\n)*limactl delete -f devvm-tools-build\n(.*\n)*limactl clone .* devvm-tools-build\n(.*\n)*limactl shell --workdir / devvm-tools-build bash -s -- pnpm \S+ pnpm-\S+\.erofs\n(.*\n)*limactl shell --workdir / devvm-tools-build bash -s -- bun 1\.4\.2 bun-1\.4\.2-[0-9a-f]{12}\.erofs\n(.*\n)*limactl shell --workdir / devvm-tools-build bash -s -- claude 2\.1\.295 claude-2\.1\.295-[0-9a-f]{12}\.erofs\n(.*\n)*limactl delete -f devvm-tools-build$'
+exec sh -c 'grep -c "^limactl clone .* devvm-tools-build$" "$STUB_LOG"'
+stdout '^4$'
+stub_calls
 # The VM is made from base's image, with the share read-only.
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[.*\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
 vm_name WEB web

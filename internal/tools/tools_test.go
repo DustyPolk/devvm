@@ -774,8 +774,8 @@ func (e env) noLeftovers(t *testing.T) {
 	}
 }
 
-// The missing tool images build in one throwaway VM, with a folder of its
-// own (never the share); each moves into the share with its hash.
+// The missing tool images build each in a throwaway VM, with a folder of
+// its own (never the share); each moves into the share with its hash.
 func TestBuild(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
@@ -786,20 +786,22 @@ func TestBuild(t *testing.T) {
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, all); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if ms := f.Methods(); !slices.Equal(ms, []string{"BuildTools"}) {
+	if ms := f.Methods(); !slices.Equal(ms, []string{"BuildTools", "BuildTools", "BuildTools"}) {
 		t.Fatalf("calls = %q", ms)
 	}
-	spec, _ := f.Calls()[0].Args[0].(backend.ToolsSpec)
 	lock := parsed(t, fixture(t))
-	wantArgs := []string{
-		"node", lock.Version("node"), all[0], "bun", lock.Version("bun"), all[2], "claude", lock.Version("claude"), all[3],
-	}
-	if spec.Base != baseKey || spec.OutAt != ShareAt || spec.Net != backend.NetInternet || !slices.Equal(spec.Args, wantArgs) ||
-		spec.Script.Name != "build.sh" || !bytes.Equal(spec.Script.Data, slices.Concat(read(t, filepath.Join(e.root, "prelude.sh")), read(t, filepath.Join(e.root, "shared-tools", "build.sh")))) {
-		t.Errorf("spec = %+v", spec)
-	}
-	if filepath.Dir(spec.Out) != e.Dirs.Data || !strings.HasPrefix(filepath.Base(spec.Out), "tools-build.") {
-		t.Errorf("the build's folder is %s", spec.Out)
+	// pnpm is built: node, bun and claude are the three calls.
+	for c, i := range []int{0, 2, 3} {
+		tool, _, _ := image.ParseToolFile(all[i])
+		spec, _ := f.Calls()[c].Args[0].(backend.ToolsSpec)
+		if spec.Base != baseKey || spec.OutAt != ShareAt || spec.Net != backend.NetInternet || !slices.Equal(spec.Args, []string{tool, lock.Version(tool), all[i]}) ||
+			spec.Name != Label(all[i:i+1]) || spec.Script.Name != "build.sh" ||
+			!bytes.Equal(spec.Script.Data, slices.Concat(read(t, filepath.Join(e.root, "prelude.sh")), read(t, filepath.Join(e.root, "shared-tools", "build.sh")))) {
+			t.Errorf("%s's spec = %+v", tool, spec)
+		}
+		if filepath.Dir(spec.Out) != e.Dirs.Data || !strings.HasPrefix(filepath.Base(spec.Out), "tools-build.") {
+			t.Errorf("%s's build's folder is %s", tool, spec.Out)
+		}
 	}
 	want := "==> building_tools tools=" + Label([]string{all[0], all[2], all[3]})
 	if !slices.Contains(*e.said, want) {
@@ -808,7 +810,7 @@ func TestBuild(t *testing.T) {
 	e.checkHashes(t, []string{all[0], all[2], all[3]})
 	e.noLeftovers(t)
 	// Nothing to do when the share has them all.
-	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, all); err != nil || len(f.Calls()) != 1 {
+	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, all); err != nil || len(f.Calls()) != 3 {
 		t.Errorf("built again: %v %q", err, f.Methods())
 	}
 }
@@ -834,28 +836,43 @@ func TestBuildFolder(t *testing.T) {
 	e.noLeftovers(t)
 }
 
-// The tools build together, in one VM and folder.
-func TestBuildOneBatch(t *testing.T) {
+// Each tool builds in a VM and folder of its own, so one tool's installer
+// can't write into another tool's image: here node's build writes every
+// tool's file in its folder, before and after the others' builds would,
+// and only its own leaves it.
+func TestBuildOneVMEach(t *testing.T) {
 	e := newEnv(t)
 	e.locked(t, fixture(t))
 	f := fake()
 	files := e.files(t, "node", "go", "bun")
+	outs := map[string]bool{}
+	f.ToolsBuild = func(spec backend.ToolsSpec) error {
+		outs[spec.Out] = true
+		if len(spec.Args) != 3 {
+			t.Errorf("a build of %q", spec.Args)
+		}
+		if spec.Args[0] == "node" {
+			for _, other := range files {
+				write(t, filepath.Join(spec.Out, other), []byte("node's"))
+				write(t, filepath.Join(spec.Out, other+".glibc"), nil)
+			}
+			return nil
+		}
+		write(t, filepath.Join(spec.Out, spec.Args[2]), []byte(spec.Args[0]+"'s"))
+		write(t, filepath.Join(spec.Out, spec.Args[2]+".glibc"), nil)
+		return nil
+	}
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, files); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	var batches [][]string
-	outs := map[string]bool{}
-	for _, c := range f.Calls() {
-		spec, _ := c.Args[0].(backend.ToolsSpec)
-		batches = append(batches, spec.Args)
-		outs[spec.Out] = true
+	if len(f.Calls()) != 3 || len(outs) != 3 {
+		t.Errorf("%d builds in %d folders", len(f.Calls()), len(outs))
 	}
-	lock := parsed(t, fixture(t))
-	want := [][]string{
-		{"node", lock.Version("node"), files[0], "go", lock.Version("go"), files[1], "bun", lock.Version("bun"), files[2]},
-	}
-	if !slices.EqualFunc(batches, want, slices.Equal) || len(outs) != 1 {
-		t.Errorf("batches = %q in %d folders", batches, len(outs))
+	for _, file := range files {
+		tool, _, _ := image.ParseToolFile(file)
+		if got := string(read(t, e.Dirs.ToolImage(file))); got != tool+"'s" {
+			t.Errorf("%s holds %q", file, got)
+		}
 	}
 	e.checkHashes(t, files)
 	e.noLeftovers(t)
