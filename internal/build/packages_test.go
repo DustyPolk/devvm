@@ -253,7 +253,7 @@ func TestBasePackagesMissing(t *testing.T) {
 func TestBasePackagesReplaceChanged(t *testing.T) {
 	b, f := testEnv(t)
 	var log bytes.Buffer
-	b.LogWriter = func() io.Writer { return &log }
+	fake(b).Log = &log
 	git, curl := deb{"git", "git's file"}, deb{"curl", "curl's file"}
 	write(t, b.Dirs.PackageFile(git.sum()), "a corrupted file")
 	write(t, b.Dirs.PackageFile(curl.sum()), curl.file)

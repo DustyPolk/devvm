@@ -1,9 +1,7 @@
 package registry
 
 import (
-	"context"
 	"net/netip"
-	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -19,20 +17,6 @@ import (
 	"github.com/w3cj/devvm/internal/ubuntu"
 	"github.com/w3cj/devvm/internal/vmssh"
 )
-
-// quietUI prints nothing, runs commands as they are, counts no steps and
-// keeps no cleanups.
-type quietUI struct{}
-
-func (quietUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
-func (quietUI) Info(msg.M)                                                {}
-func (quietUI) Note(msg.M)                                                {}
-func (quietUI) Warn(msg.M)                                                {}
-func (quietUI) LogNote()                                                  {}
-func (quietUI) WithSteps(ctx context.Context, _ int) context.Context      { return ctx }
-func (quietUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
-func (quietUI) Interrupted() bool                                         { return false }
-func (quietUI) StdinIsTerminal() bool                                     { return false }
 
 // A test build's overrides reach the registry and every backend; without
 // them, the backends keep their own, whatever the environment says.
@@ -53,7 +37,7 @@ func TestOverrides(t *testing.T) {
 		o    Overrides
 		want bool
 	}{{Overrides{}, false}, {o, true}} {
-		r, err := New(d, assets.FS, quietUI{}, c.o, nil)
+		r, err := New(d, assets.FS, &msg.Fake{}, c.o, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,12 +73,12 @@ func TestBuild(t *testing.T) {
 		"an empty name": {backendtest.New("", nil)},
 		"a name twice":  {backendtest.New("lima", nil), backendtest.New("lima", nil)},
 	} {
-		if r, err := build(quietUI{}, host, "", bs...); err == nil || r != nil {
+		if r, err := build(&msg.Fake{}, host, "", bs...); err == nil || r != nil {
 			t.Errorf("%s: %v, %v", name, r, err)
 		}
 	}
-	r, err := build(quietUI{}, host, "fake:ports", backendtest.New("fake", nil))
-	if err != nil || r.Host != host || !r.Unreviewed["fake:ports"] || r.Warn == nil {
+	r, err := build(&msg.Fake{}, host, "fake:ports", backendtest.New("fake", nil))
+	if err != nil || r.Host != host || !r.Unreviewed["fake:ports"] || r.Reporter == nil {
 		t.Errorf("build: %+v, %v", r, err)
 	}
 }
@@ -103,7 +87,7 @@ func TestBuild(t *testing.T) {
 func TestLimaIsTheDefault(t *testing.T) {
 	t.Parallel()
 	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
-	r, err := New(d, assets.FS, quietUI{}, Overrides{}, nil)
+	r, err := New(d, assets.FS, &msg.Fake{}, Overrides{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +124,7 @@ func TestSocketsFit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(d, assets.FS, quietUI{}, Overrides{}, nil); err != nil {
+	if _, err := New(d, assets.FS, &msg.Fake{}, Overrides{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	vm := "devvm-" + strings.Repeat("a", 20) + "-0123456789abcd" // the longest folder part

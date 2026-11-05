@@ -236,7 +236,7 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 		return err
 	}
 	if global {
-		return SizeChoice{Dirs: e.Dirs, Host: host, Info: e.Info}.Set(s)
+		return SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.Set(s)
 	}
 	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMSize})
 	if err != nil {

@@ -85,6 +85,15 @@ type setup struct {
 	host     func() (vm.Host, error)
 }
 
+// answering is the run's UI, asking for values through answer: setup's,
+// which tests answer.
+type answering struct {
+	*ui.UI
+	answer func(msg.M) string
+}
+
+func (a answering) Answer(m msg.M) string { return a.answer(m) }
+
 // newSetup returns a setup on the run's folders, its UI's terminal and
 // prompts, on this machine.
 func newSetup(a *app) setup {
@@ -122,8 +131,8 @@ func (s setup) run(c setupChoice) error {
 			return err
 		}
 	}
-	agents := vm.AgentsChoice{Dirs: dirs, Pick: s.pick, Info: s.ui.Info}
-	layers := vm.LayersChoice{Dirs: dirs, Layers: (&build.Env{Dirs: dirs}).Layers()[1:], Pick: s.pick, Info: s.ui.Info}
+	agents := vm.AgentsChoice{Dirs: dirs, Pick: s.pick, Reporter: s.ui}
+	layers := vm.LayersChoice{Dirs: dirs, Layers: (&build.Env{Dirs: dirs}).Layers()[1:], Pick: s.pick, Reporter: s.ui}
 	if c.agents != nil {
 		if err := agents.Set(*c.agents); err != nil {
 			return err
@@ -139,7 +148,7 @@ func (s setup) run(c setupChoice) error {
 	if err != nil {
 		return err
 	}
-	sc := vm.SizeChoice{Dirs: dirs, Host: host, Answer: s.answer, Say: s.ui.Say, Warn: s.ui.Warn, Info: s.ui.Info}
+	sc := vm.SizeChoice{Dirs: dirs, Host: host, Reporter: answering{s.ui, s.answer}}
 	if err := sc.Ask(); err != nil {
 		return err
 	}
@@ -181,7 +190,7 @@ func (s setup) saveNetwork(dirs paths.Dirs) error {
 		choices[i] = ui.Choice{Name: m, Desc: s.ui.Text(descs[m]), On: m == def.Network.Value}
 	}
 	mode := modes[s.pickOne(msg.NetworkDefaultHelp(), choices)]
-	return vm.NetworkChoice{Dirs: dirs, Info: s.ui.Info}.Set(mode)
+	return vm.NetworkChoice{Dirs: dirs, Reporter: s.ui}.Set(mode)
 }
 
 // saveFeatures saves base's features: features' list, or asked for when
@@ -192,7 +201,7 @@ func (s setup) saveFeatures(dirs paths.Dirs, def settings.Defaults, features *st
 	}
 	// Choosing base's features reads devvm's folders and files and asks:
 	// no backend builds anything.
-	b := build.Choice{Env: &build.Env{Dirs: dirs, Assets: assets.FS, Info: s.ui.Info, Pick: pickFeatures(s.ui)}}
+	b := build.Choice{Env: &build.Env{Dirs: dirs, Assets: assets.FS, Reporter: s.ui, Pick: pickFeatures(s.ui)}}
 	var changed bool
 	var err error
 	switch {

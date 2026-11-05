@@ -102,16 +102,16 @@ type Protector struct {
 	// Locked reports whether a path has the user-immutable flag, not
 	// following a symlink (platform.Immutable).
 	Locked func(path string) bool
-	// Warn prints a warning.
-	Warn func(msg.M)
+	// Reporter is where it warns.
+	msg.Reporter
 }
 
 // New returns the protector for the project folder dir, ~ in git's paths
-// being home (paths.Dirs.Home), warning through warn.
-func New(dir, home string, warn func(msg.M)) *Protector {
+// being home (paths.Dirs.Home), warning through r.
+func New(dir, home string, r msg.Reporter) *Protector {
 	return &Protector{
 		Dir: dir, Home: home, CanLock: platform.HasImmutableFlag,
-		Chflags: platform.Chflags, Locked: platform.Immutable, Warn: warn,
+		Chflags: platform.Chflags, Locked: platform.Immutable, Reporter: r,
 	}
 }
 

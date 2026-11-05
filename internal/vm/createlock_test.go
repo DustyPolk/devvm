@@ -110,11 +110,11 @@ func TestTeardownDropsCreateLock(t *testing.T) {
 func TestUpInterruptedHoldsCreateLock(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	var cleanups []func(context.Context)
-	e.AddCleanup = func(c func(context.Context)) func() {
+	fake(e).OnCleanup = func(c func(context.Context)) func() {
 		cleanups = append(cleanups, c)
 		return func() {}
 	}
-	e.Interrupted = func() bool { return true }
+	fake(e).Interrupt = true
 	f.Errs = map[string]error{"CreateVM": context.Canceled}
 	if err := (Launch{e}).Up(t.Context(), newOpts()); err == nil {
 		t.Fatal("made")
@@ -163,8 +163,8 @@ func TestCreateLockRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.Terminal = func() bool { return true }
-	e.CanAsk = e.Terminal
+	fake(e).Terminal = true
+	e.CanAsk = func() bool { return true }
 	if err := (Launch{e}).Up(t.Context(), newOpts()); msg.NamesOf(err) != "create_running vm="+vm {
 		t.Errorf("up: %v", msg.NamesOf(err))
 	}

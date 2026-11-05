@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/assets"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/settings"
 )
@@ -30,7 +31,7 @@ func TestUbuntuThroughCompanyProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 	cp := settings.NewCompanyProxy(d, func(string) string { return "" }, nil)
-	l := New(d, assets.FS, testUI{}, platform.Host{}, "http://ubuntu.example", cp)
+	l := New(d, assets.FS, &msg.Fake{}, platform.Host{}, "http://ubuntu.example", cp)
 	if _, err := l.Ubuntu.Newest(t.Context(), ""); err == nil {
 		t.Error("a listing the proxy didn't have")
 	}

@@ -66,7 +66,7 @@ func (p *Proxy) Choose(on, off bool, vm string) bool {
 		return true
 	case off:
 		return false
-	case !p.Terminal():
+	case !p.StdinIsTerminal():
 		return true
 	}
 	p.Note(msg.NetAbout(vm))

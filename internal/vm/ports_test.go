@@ -68,7 +68,7 @@ func TestStartPorts(t *testing.T) {
 			starts := testForwarders(t, e, f)
 			e.PortInUse = func(_ context.Context, p int) bool { return p == 5174 || p == 8080 }
 			var warned msg.Recorder
-			e.Warn = warned.Add
+			fake(e).OnWarn = warned.Add
 			st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: tc.ports})
 			ms := f.Methods()
 			if i, j := slices.Index(ms, "Start"), slices.Index(ms, "SSH"); tc.starts > 0 && (i < 0 || j < i) {
@@ -106,8 +106,8 @@ func TestSetPortsRunning(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	starts := testForwarders(t, e, f)
 	var infos, warned msg.Recorder
-	e.Info = infos.Add
-	e.Warn = warned.Add
+	fake(e).OnInfo = infos.Add
+	fake(e).OnWarn = warned.Add
 	st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: "5173"})
 	vm := st.Name()
 	if err := set(t, st, "proxy_port", "30001"); err != nil {

@@ -37,13 +37,13 @@ func TestStartInterrupted(t *testing.T) {
 				t.Fatal(err)
 			}
 			var cleanups []func(context.Context)
-			e.AddCleanup = func(c func(context.Context)) func() {
+			fake(e).OnCleanup = func(c func(context.Context)) func() {
 				cleanups = append(cleanups, c)
 				return func() {}
 			}
-			e.Interrupted = func() bool { return tc.interrupted }
+			fake(e).Interrupt = tc.interrupted
 			var said []string
-			e.Info = func(m msg.M) { said = append(said, m.Names()) }
+			fake(e).OnInfo = func(m msg.M) { said = append(said, m.Names()) }
 			// The backend's start, cut short.
 			f.Errs = map[string]error{"Start": context.Canceled}
 			conf := backend.Confinement{Net: backend.NetDirect}

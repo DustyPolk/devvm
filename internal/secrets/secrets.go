@@ -101,17 +101,17 @@ type Store struct {
 	KeychainSet    func(ctx context.Context, service, account, label, value string) error
 	KeychainDelete func(ctx context.Context, service, account string) error
 	Getenv         func(string) string
-	// Warn prints a warning.
-	Warn func(msg.M)
+	// Reporter is where it warns.
+	msg.Reporter
 }
 
 // NewStore returns the store for devvm's folders and the user's home,
-// warning through warn.
-func NewStore(d paths.Dirs, warn func(msg.M)) *Store {
+// warning through r.
+func NewStore(d paths.Dirs, r msg.Reporter) *Store {
 	return &Store{
 		Dirs: d, Keychain: platform.HasKeychain, Getenv: os.Getenv,
 		KeychainGet: platform.KeychainGet, KeychainSet: platform.KeychainSet, KeychainDelete: platform.KeychainDelete,
-		Warn: warn,
+		Reporter: r,
 	}
 }
 

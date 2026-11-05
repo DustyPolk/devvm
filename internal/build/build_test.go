@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -73,7 +72,7 @@ func testEnv(t *testing.T) (*Env, *backendtest.Fake) {
 		write(t, filepath.Join(root, "shared-tools", name), string(data))
 	}
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
-	tl := tools.New(d, os.DirFS(root), testVersion, quietUI{}, platform.Host{})
+	tl := tools.New(d, os.DirFS(root), testVersion, &msg.Fake{}, platform.Host{})
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Getenv = func(string) string { return "" }
 	tl.Mise = stubtest.Command(t, "mise")
@@ -148,25 +147,13 @@ func sameScripts(a, b []image.Step) bool {
 // quiet makes b print nothing, keep the features chosen, and answer yes,
 // without a terminal.
 func quiet(b *Env) *Env {
-	none := func(msg.M) {}
-	b.Info, b.Warn, b.Say = none, none, none
-	b.Confirm = func(msg.M) bool { return true }
+	b.Reporter = &msg.Fake{OnConfirm: func(msg.M) bool { return true }}
 	b.Pick = func(fs []Feature) []Feature { return fs }
-	b.Terminal = func() bool { return false }
-	b.LogNote = func() {}
 	return b
 }
 
-// quietUI is the shared tools' UI: it prints nothing, runs commands as
-// they are, their output dropped, and keeps no cleanups.
-type quietUI struct{}
-
-func (quietUI) Info(msg.M)                                                {}
-func (quietUI) Warn(msg.M)                                                {}
-func (quietUI) LogNote()                                                  {}
-func (quietUI) Status(msg.M) func()                                       { return func() {} }
-func (quietUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
-func (quietUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
+// fake is what quiet gave b to print through, for a test to change.
+func fake(b *Env) *msg.Fake { return b.Reporter.(*msg.Fake) }
 
 // Layers are devvm's built-in ones and the user's scripts with names image
 // names can hold; nothing else gets past Names' Check.
@@ -404,7 +391,7 @@ func TestBuildSaysFitted(t *testing.T) {
 		b, f := testEnv(t)
 		f.Built.Fitted = c.fitted
 		var got []string
-		b.Info = func(m msg.M) {
+		fake(b).OnInfo = func(m msg.M) {
 			if m.ID() == "base_fitted" {
 				got = append(got, m.Names())
 			}
@@ -552,7 +539,7 @@ func TestBuildInProgress(t *testing.T) {
 		return false
 	}
 	var said msg.Recorder
-	b.Info = said.Add
+	fake(b).OnInfo = said.Add
 	b.WaitNote = time.Millisecond
 
 	soon, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
@@ -704,7 +691,7 @@ func TestBuildPinsOrigin(t *testing.T) {
 	b, f := testEnv(t)
 	ctx := t.Context()
 	var said []string
-	b.Info = func(m msg.M) { said = append(said, m.Names()) }
+	fake(b).OnInfo = func(m msg.M) { said = append(said, m.Names()) }
 	f.Pinned = "release-20260101"
 	pins := func() []backend.Pin {
 		var out []backend.Pin
@@ -771,7 +758,7 @@ func TestBuildFallsBack(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			b, f := testEnv(t)
 			var warned []string
-			b.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+			fake(b).OnWarn = func(m msg.M) { warned = append(warned, m.Names()) }
 			f.Pinned = c.pinned
 			n := 0
 			f.BuildErr = func(backend.ImageSpec) error {
@@ -830,7 +817,7 @@ func TestRebuildIsPerBackend(t *testing.T) {
 		t.Errorf("the other backend's base: %s, then %s, %v", before, after, err)
 	}
 	var warned msg.Recorder
-	other.Warn = warned.Add
+	fake(other).OnWarn = warned.Add
 	if err := (Builds{other}).WarnIfOutdated(before.String()); err != nil || len(warned.IDs()) != 0 {
 		t.Errorf("the other backend's VM warned %v, %v", warned.IDs(), err)
 	}
@@ -880,7 +867,7 @@ func fromEnv(t *testing.T, digest *string, lookups *int) (*Env, *backendtest.Fak
 		Dirs:     b.Dirs,
 		Registry: reg,
 		DockerID: func(context.Context, string) (string, bool) { t.Error("Docker asked"); return "", false },
-		Warn:     func(m msg.M) { t.Errorf("warned: %s", m.Names()) },
+		Reporter: &msg.Fake{OnWarn: func(m msg.M) { t.Errorf("warned: %s", m.Names()) }},
 	}
 	return b, f
 }

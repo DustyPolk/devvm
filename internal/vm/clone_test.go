@@ -274,7 +274,7 @@ func TestCloneRmStartsAsLaunch(t *testing.T) {
 	e.Proxy.Stop(vm)
 	direct = true
 	var warned msg.Recorder
-	e.Warn = warned.Add
+	fake(e).OnWarn = warned.Add
 	before := len(f.Calls())
 	err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true})
 	// What kept it from starting is said, then the way out, carrying it.
@@ -320,9 +320,9 @@ func TestCloneRmWorktrees(t *testing.T) {
 		t.Fatal(err)
 	}
 	var said msg.Recorder
-	e.Say = said.Add
+	fake(e).OnSay = said.Add
 	var out bytes.Buffer
-	e.Stdout = &out
+	fake(e).Out = &out
 
 	// check runs rm, declining, and compares what it said and printed.
 	check := func(want []string, wantOut string) {
@@ -428,7 +428,7 @@ func TestCloneRmTooManyWorktrees(t *testing.T) {
 		return inner(name, argv, o)
 	}
 	var said msg.Recorder
-	e.Say = said.Add
+	fake(e).OnSay = said.Add
 	asked := answers(t, e, false)
 	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))

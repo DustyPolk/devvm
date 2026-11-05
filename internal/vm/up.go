@@ -204,7 +204,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	}
 	// Held from before its tools are picked until it's made, so neither
 	// devvm gc --tool-images nor retention deletes any of them meanwhile.
-	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)
+	unmaking, err := tools.Making{Dirs: e.Dirs, Reporter: e.Reporter}.Hold(ctx)
 	if err != nil {
 		return err
 	}

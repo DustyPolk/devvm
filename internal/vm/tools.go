@@ -92,7 +92,7 @@ func (e Tools) change(ctx context.Context, t *target, add, gone []string) error 
 	if len(added) == 0 && len(gone) == 0 {
 		return nil
 	}
-	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)
+	unmaking, err := tools.Making{Dirs: e.Dirs, Reporter: e.Reporter}.Hold(ctx)
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func (e Tools) update(ctx context.Context, t *target) (changed bool, err error) 
 	}
 	buildFn := func(ctx context.Context, files []string) error { return e.launcher.buildTools(ctx, builder, tg, files) }
 	// Held until its state lists the new tools, as a new VM's.
-	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)
+	unmaking, err := tools.Making{Dirs: e.Dirs, Reporter: e.Reporter}.Hold(ctx)
 	if err != nil {
 		return false, err
 	}

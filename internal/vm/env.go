@@ -8,7 +8,6 @@ package vm
 import (
 	"context"
 	"errors"
-	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -91,34 +90,20 @@ type Env struct {
 	// addresses and names, for its /etc/hosts and, with network policy,
 	// its NO_PROXY (checkLinks checks them first); nil gives none.
 	Links func(st *state.VM) ([]GuestLink, error)
-	// What it prints and asks: Ask is [y/N], Confirm [Y/n]; PickFeatures
-	// asks which features base gets (build.Env.Pick), PickParts shows the
-	// tools picker (nil shows none); Terminal reports whether it can ask,
-	// Interactive whether someone can also see the question (stdout's a
-	// terminal too), CanPick whether the picker shows, which also needs no
-	// --no-input, CanAsk whether a question with a fallback is asked (a
-	// terminal, no --no-input; set by its caller); Answer asks for a value.
-	Info, Warn, Note, Say                  func(msg.M)
-	Ask, Confirm                           func(msg.M) bool
-	Answer                                 func(msg.M) string
-	PickFeatures                           func([]build.Feature) []build.Feature
-	PickParts                              func(msg.M, []PickPart) []PickPart
-	Terminal, Interactive, CanPick, CanAsk func() bool
+	// Reporter is where it prints and asks, data output, the run log
+	// (where the output of a backend's Exec goes too), and the run's
+	// cleanup stack.
+	msg.Reporter
+	// PickFeatures asks which features base gets (build.Env.Pick),
+	// PickParts shows the tools picker (nil shows none), and CanAsk
+	// reports whether a question with a fallback is asked (a terminal, no
+	// --no-input): each set by its caller.
+	PickFeatures func([]build.Feature) []build.Feature
+	PickParts    func(msg.M, []PickPart) []PickPart
+	CanAsk       func() bool
 	// AddInclude is --ssh-config: devvm's Include line goes in
 	// ~/.ssh/config, when it's missing, without asking.
 	AddInclude bool
-	// Stdout is where data output goes.
-	Stdout io.Writer
-	// The run log: LogNote says where it is, once a run; LogWriter is
-	// where the output of a backend's Exec goes; LoggedCmd runs a command
-	// into it.
-	LogNote   func()
-	LogWriter func() io.Writer
-	LoggedCmd func(ctx context.Context, step msg.M, cmd *exec.Cmd) error
-	// AddCleanup adds to the run's cleanup stack; Interrupted reports
-	// whether the run was interrupted.
-	AddCleanup  func(f func(context.Context)) (remove func())
-	Interrupted func() bool
 
 	// Its parts, each made once over it (wire): the commands and each
 	// other reach them here. The finder finds the VM a command acts on;
@@ -152,46 +137,30 @@ func wire(e *Env) *Env {
 	return e
 }
 
-// UI is what up and the commands on a VM need of devvm's UI: where they
-// print and ask, the run log, the cleanup stack, and data output.
-type UI interface {
-	tools.UI
-	netpolicy.UI
-	sshagent.UI
-	Say(msg.M)
-	Ask(msg.M) bool
-	Answer(msg.M) string
-	StdoutIsTerminal() bool
-	CanPick() bool
-	Interrupted() bool
-	Stdout() io.Writer
-	Stderr() io.Writer
-}
+// interactive reports whether someone can see a question asked through
+// r: its input and data output are terminals.
+func interactive(r msg.Reporter) bool { return r.StdinIsTerminal() && r.StdoutIsTerminal() }
 
 // NewEnv returns the environment up runs in, with devvm's own files
-// (assets), devvm being self at version, on u, with the run's registry,
+// (assets), devvm being self at version, on r, with the run's registry,
 // shared tools and secrets store. The shared tools' downloads and builds,
 // and --from's lookups, go through tl's company proxy, whose password
 // its caller takes from store, the same secrets as the VMs' proxies'.
 // Its caller sets PickFeatures and PickParts.
-func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Registry, tl *tools.Env, store *secrets.Store, u UI) *Env {
+func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Registry, tl *tools.Env, store *secrets.Store, r msg.Reporter) *Env {
 	e := &Env{
 		Dirs: d, Assets: assets, Registry: reg, Tools: tl,
-		Proxy: netpolicy.NewProxy(d, assets, self, store, u),
+		Proxy: netpolicy.NewProxy(d, assets, self, store, r),
 		OS:    runtime.GOOS, Version: version,
 		Host: func() (Host, error) { return ThisHost(reg.Host) }, Exec: execShell, OpenURL: openURL, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
-		SSHAdd: func(ctx context.Context, args ...string) int { return sshAdd(ctx, u.Stderr(), args...) },
-		Info:   u.Info, Warn: u.Warn, Note: u.Note, Say: u.Say,
-		Ask: u.Ask, Confirm: func(m msg.M) bool { return u.Confirm(m) }, Answer: u.Answer, Terminal: u.StdinIsTerminal,
-		Interactive: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() }, CanPick: u.CanPick,
-		Stdout: u.Stdout(), LogNote: u.LogNote, LogWriter: u.LogWriter, LoggedCmd: u.LoggedCmd,
-		AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
-		PortInUse: platform.PortInUse, Forwarders: vmssh.NewForwards(d, self), PublicImage: from.NewLookup(d, u.Warn, tl.Proxy).Public, FreeSpace: reg.Host.FreeSpace,
+		SSHAdd:    func(ctx context.Context, args ...string) int { return sshAdd(ctx, r.Stderr(), args...) },
+		Reporter:  r,
+		PortInUse: platform.PortInUse, Forwarders: vmssh.NewForwards(d, self), PublicImage: from.NewLookup(d, r, tl.Proxy).Public, FreeSpace: reg.Host.FreeSpace,
 	}
-	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, e.Warn) }
+	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, e.Reporter) }
 	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }
-	e.Agent = sshagent.New(d, e.mounts, u)
+	e.Agent = sshagent.New(d, e.mounts, r)
 	return wire(e)
 }
 
@@ -201,8 +170,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 func (e *Env) Builder(b backend.Backend, fromRef string) *build.Env {
 	return &build.Env{
 		Dirs: e.Dirs, Assets: e.Assets, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef, Version: e.Version,
-		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,
-		Terminal: e.Terminal, LogNote: e.LogNote, LogWriter: e.LogWriter, FreeSpace: e.FreeSpace,
+		Reporter: e.Reporter, Pick: e.PickFeatures, FreeSpace: e.FreeSpace,
 	}
 }
 
@@ -333,8 +301,7 @@ func (e *Env) mounts(context.Context) ([]sshagent.Mount, error) {
 // sshConfig is the ssh config for every backend's VMs.
 func (e *Env) sshConfig() *sshconfig.Config {
 	c := sshconfig.New(e.Dirs, e.Registry)
-	c.Info, c.Warn, c.Say, c.Confirm, c.Terminal = e.Info, e.Warn, e.Say, e.Confirm, e.Terminal
-	c.AddInclude = e.AddInclude
+	c.Reporter, c.AddInclude = e.Reporter, e.AddInclude
 	return c
 }
 

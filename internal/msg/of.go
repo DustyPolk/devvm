@@ -27,7 +27,7 @@ func NamesOf(err error) string {
 }
 
 // A Recorder keeps the messages its Add is given, in order, for a test
-// to check: its Add stands in for a package's Info or Warn. It's safe
+// to check: its Add is a Fake's OnInfo or OnWarn. It's safe
 // for concurrent use; its zero value is empty and ready.
 type Recorder struct {
 	mu sync.Mutex

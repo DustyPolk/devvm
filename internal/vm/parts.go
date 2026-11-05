@@ -244,10 +244,10 @@ func checked(p PickPart) []string {
 // asked for (Ask). Existing VMs keep their agents.
 type AgentsChoice struct {
 	Dirs paths.Dirs
-	// Pick shows the question and returns the rows as chosen; Info says
-	// what's saved.
+	// Pick shows the question and returns the rows as chosen; Reporter
+	// says what's saved.
 	Pick func(msg.M, []PickPart) []PickPart
-	Info func(msg.M)
+	msg.Reporter
 }
 
 // Set saves agents as new VMs' agents: none for none. A name that isn't an
@@ -301,10 +301,10 @@ type LayersChoice struct {
 	// Layers are the layers there are, the built-in ones and the user's
 	// (build.Env's Layers, without base).
 	Layers []string
-	// Pick shows the question and returns the rows as chosen; Info says
-	// what's saved.
+	// Pick shows the question and returns the rows as chosen; Reporter
+	// says what's saved.
 	Pick func(msg.M, []PickPart) []PickPart
-	Info func(msg.M)
+	msg.Reporter
 }
 
 // Set saves layers as new VMs' layers, bottom first as given: none for
@@ -401,5 +401,5 @@ func (e creation) firstRunAgents(o Options, def settings.Defaults) error {
 	if o.Agents != nil || !e.CanPick() || e.PickParts == nil || def.Agents.Chosen {
 		return nil
 	}
-	return AgentsChoice{Dirs: e.Dirs, Pick: e.PickParts, Info: e.Info}.Ask()
+	return AgentsChoice{Dirs: e.Dirs, Pick: e.PickParts, Reporter: e.Reporter}.Ask()
 }

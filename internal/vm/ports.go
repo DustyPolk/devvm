@@ -180,6 +180,6 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 // a host program has, and warnings, as the Env has them.
 func (e *Env) forwards() vmssh.Forwards {
 	f := e.Forwarders
-	f.InUse, f.Warn = e.PortInUse, e.Warn
+	f.InUse, f.Reporter = e.PortInUse, e.Reporter
 	return f
 }

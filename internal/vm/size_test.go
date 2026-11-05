@@ -139,7 +139,7 @@ func TestSetSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	var said msg.Recorder
-	e.Info = said.Add
+	fake(e).OnInfo = said.Add
 	before = len(f.Calls())
 	if err := s.SetSize(t.Context(), Size{Disk: "120"}, false); err != nil {
 		t.Fatal(msg.NamesOf(err))

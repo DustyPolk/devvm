@@ -98,14 +98,15 @@ type Lookup struct {
 	// DockerID returns Docker's ID for an image, when Docker runs and has
 	// it.
 	DockerID func(ctx context.Context, ref string) (string, bool)
-	Warn     func(msg.M)
+	// Reporter is where it warns.
+	msg.Reporter
 }
 
 // NewLookup returns a Lookup on the internet, through the company proxy
 // cp (nil for the environment's), and this machine's Docker, warning
-// through warn.
-func NewLookup(d paths.Dirs, warn func(msg.M), cp *settings.CompanyProxy) *Lookup {
-	return &Lookup{Dirs: d, Registry: NewRegistry(cp.Route), PublicRegistry: NewPublicRegistry(cp.Route), DockerID: DockerID, Warn: warn}
+// through r.
+func NewLookup(d paths.Dirs, r msg.Reporter, cp *settings.CompanyProxy) *Lookup {
+	return &Lookup{Dirs: d, Registry: NewRegistry(cp.Route), PublicRegistry: NewPublicRegistry(cp.Route), DockerID: DockerID, Reporter: r}
 }
 
 // Refresh looks up ref's digest and records it: its registry's, else

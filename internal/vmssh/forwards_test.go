@@ -56,8 +56,8 @@ func testForwards(t *testing.T) (*Forwards, *[][]string, *msg.Recorder) {
 			}
 			return nil, errors.New("not ours")
 		},
-		InUse: func(context.Context, int) bool { return false },
-		Warn:  warned.Add,
+		InUse:    func(context.Context, int) bool { return false },
+		Reporter: &msg.Fake{OnWarn: warned.Add},
 	}
 	return f, &starts, warned
 }

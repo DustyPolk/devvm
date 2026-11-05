@@ -61,7 +61,7 @@ func newTestLookup(t *testing.T) *testLookup {
 			id, ok := tl.docker[ref]
 			return id, ok
 		},
-		Warn: tl.warned.Add,
+		Reporter: &msg.Fake{OnWarn: tl.warned.Add},
 	}
 	return tl
 }

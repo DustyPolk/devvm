@@ -81,7 +81,7 @@ func (a *app) secrets() (*secrets.Store, error) {
 		if err != nil {
 			return nil, err
 		}
-		return secrets.NewStore(d, a.u.Warn), nil
+		return secrets.NewStore(d, a.u), nil
 	})
 }
 

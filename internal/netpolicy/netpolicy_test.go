@@ -234,17 +234,17 @@ func TestKeyAndSalt(t *testing.T) {
 // The flag wins; without one and without a terminal, on; in a terminal,
 // the answer, asked yes by default ([Y/n]) after the tradeoff.
 func TestChoose(t *testing.T) {
-	tty, answer, asked := false, false, 0
+	answer, asked := false, 0
 	var said []string
-	p := &Proxy{
-		Note:     func(m msg.M) { said = append(said, m.Names()) },
-		Confirm:  func(m msg.M) bool { asked++; said = append(said, m.Names()); return answer },
-		Terminal: func() bool { return tty },
+	ui := &msg.Fake{
+		OnNote:    func(m msg.M) { said = append(said, m.Names()) },
+		OnConfirm: func(m msg.M) bool { asked++; said = append(said, m.Names()); return answer },
 	}
+	p := &Proxy{Reporter: ui}
 	if !p.Choose(true, false, "vm") || p.Choose(false, true, "vm") || !p.Choose(false, false, "vm") || asked != 0 {
 		t.Error("without a terminal: not the flags, or off")
 	}
-	tty = true
+	ui.Terminal = true
 	if p.Choose(false, true, "vm") || !p.Choose(true, false, "vm") || asked != 0 {
 		t.Error("in a terminal: a flag asked, or wasn't followed")
 	}
@@ -326,30 +326,19 @@ func (f *proxies) count() int {
 }
 
 // testUI logs what the proxies and backends print, and refuses what they
-// ask, without a terminal; it runs commands as they are, counts no steps
-// and keeps no cleanups.
-type testUI struct{ t *testing.T }
-
-func (u testUI) Info(m msg.M)                                            { u.t.Log(m.Names()) }
-func (u testUI) Note(m msg.M)                                            { u.t.Log(m.Names()) }
-func (u testUI) Warn(m msg.M)                                            { u.t.Log(m.Names()) }
-func (testUI) Ask(msg.M) bool                                            { return false }
-func (testUI) Confirm(...msg.M) bool                                     { return false }
-func (testUI) StdinIsTerminal() bool                                     { return false }
-func (testUI) LogNote()                                                  {}
-func (testUI) WithSteps(ctx context.Context, _ int) context.Context      { return ctx }
-func (testUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
-func (testUI) Interrupted() bool                                         { return false }
-func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
+// ask, without a terminal.
+func testUI(t *testing.T) *msg.Fake {
+	return &msg.Fake{OnAny: func(m msg.M) { t.Log(m.Names()) }}
+}
 
 func testProxy(t *testing.T, d paths.Dirs) (*Proxy, *proxies) {
 	t.Helper()
 	home := d
 	home.Home = t.TempDir()
-	store := secrets.NewStore(home, testUI{t}.Warn)
+	store := secrets.NewStore(home, testUI(t))
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
 	f := &proxies{args: map[int][]string{}}
-	p := NewProxy(d, assets.FS, "/bin/sh", store, testUI{t})
+	p := NewProxy(d, assets.FS, "/bin/sh", store, testUI(t))
 	p.Start, p.Args, p.Tick = f.start(t), f.argsOf, time.Millisecond
 	p.Getenv = func(string) string { return "" } // not the host's proxy settings
 	p.Listening = func(context.Context, int) bool { return false }
@@ -611,7 +600,7 @@ func TestPrepareUpstream(t *testing.T) {
 	// None: none in its config, with a warning, as a shell without the
 	// settings would start it; the next start without one warns no more.
 	var warned []string
-	p.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	p.Reporter = &msg.Fake{OnWarn: func(m msg.M) { warned = append(warned, m.Names()) }}
 	env = map[string]string{}
 	if err := prepare(true); err != nil || f.count() != 3 {
 		t.Fatalf("none: %v, %d starts", msg.NamesOf(err), f.count())
@@ -761,7 +750,7 @@ func TestPrepareWarnsPolicy(t *testing.T) {
 	d, st := sandbox(t, "base")
 	p, _ := testProxy(t, d)
 	var warned msg.Recorder
-	p.Warn = warned.Add
+	p.Reporter = &msg.Fake{OnWarn: warned.Add}
 	f := d.VM(st.Name()).Policy()
 	if err := os.WriteFile(f, []byte("ok.test\n! bad.test\na b\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -943,7 +932,7 @@ func TestUnproxied(t *testing.T) {
 	f := backendtest.New("fake", nil)
 	f.Instances[vmV] = backend.Instance{Name: vmV, Status: backend.StatusRunning}
 	var warned msg.Recorder
-	p := &Proxy{Warn: warned.Add}
+	p := &Proxy{Reporter: &msg.Fake{OnWarn: warned.Add}}
 	if err := p.Unproxied(t.Context(), f, vmV, why); msg.NamesOf(err) != "proxy_start_failed log=/log vm="+vmV ||
 		f.Instances[vmV].Status != backend.StatusStopped {
 		t.Errorf("Unproxied = %v, VM %s", msg.NamesOf(err), f.Instances[vmV].Status)
@@ -1010,7 +999,7 @@ func TestSelfCheck(t *testing.T) {
 				}
 				return errors.New("curl: (7) failed")
 			}
-			p := &Proxy{Warn: func(msg.M) {}, Confirm: func(msg.M) bool { return tc.yes }, Terminal: func() bool { return tc.tty }}
+			p := &Proxy{Reporter: &msg.Fake{OnConfirm: func(msg.M) bool { return tc.yes }, Terminal: tc.tty}}
 			restarted := false
 			err := p.SelfCheck(t.Context(), f, st, func(context.Context) error {
 				restarted = true
@@ -1089,7 +1078,7 @@ func TestNixCache(t *testing.T) {
 	}
 	d, st := sandbox(t, "base")
 	var warned msg.Recorder
-	p := &Proxy{Dirs: d, Warn: warned.Add}
+	p := &Proxy{Dirs: d, Reporter: &msg.Fake{OnWarn: warned.Add}}
 	if dir, capped := p.nixCache(st); dir != "" || capped != 0 {
 		t.Errorf("base: %q %d", dir, capped)
 	}

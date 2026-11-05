@@ -27,11 +27,15 @@ import (
 func printed(t *testing.T, e *Env, tty bool) *[]string {
 	t.Helper()
 	var got []string
-	e.Terminal = func() bool { return tty }
-	e.CanAsk = e.Terminal
-	e.Warn = func(m msg.M) { got = append(got, m.Names()) }
-	e.Info = e.Warn
-	e.Confirm = func(m msg.M) bool { got = append(got, "asked "+m.Names()); return true }
+	if e.Reporter == nil {
+		e.Reporter = testUI(t)
+	}
+	f := fake(e)
+	f.Terminal = tty
+	e.CanAsk = func() bool { return tty }
+	f.OnWarn = func(m msg.M) { got = append(got, m.Names()) }
+	f.OnInfo = f.OnWarn
+	f.OnConfirm = func(m msg.M) bool { got = append(got, "asked "+m.Names()); return true }
 	return &got
 }
 

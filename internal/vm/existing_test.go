@@ -75,7 +75,7 @@ func TestPartsFlagsIgnored(t *testing.T) {
 	vm := st.Name()
 	for _, o := range []Options{{Agents: &[]string{"claude"}}, {Toolchains: &[]string{}}, {Layers: &[]string{"docker"}}} {
 		var warned msg.Recorder
-		e.Warn = warned.Add
+		fake(e).OnWarn = warned.Add
 		before := len(f.Calls())
 		if err := l.Up(t.Context(), o); err != nil {
 			t.Fatalf("Up %+v = %v", o, msg.NamesOf(err))
@@ -105,7 +105,7 @@ func TestToolsAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 	var said msg.Recorder
-	e.Info = said.Add
+	fake(e).OnInfo = said.Add
 	if err := f.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestToolsPick(t *testing.T) {
 	pick("", "")
 	before := len(*execs)
 	var said msg.Recorder
-	e.Info = said.Add
+	fake(e).OnInfo = said.Add
 	if err := tl.Pick(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
@@ -250,7 +250,7 @@ func TestToolsPick(t *testing.T) {
 func TestAgentsChoice(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	var said msg.Recorder
-	c := AgentsChoice{Dirs: e.Dirs, Info: said.Add}
+	c := AgentsChoice{Dirs: e.Dirs, Reporter: &msg.Fake{OnInfo: said.Add}}
 	if err := c.Set([]string{"codex", "claude"}); err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestAgentsChoice(t *testing.T) {
 func TestLayersChoice(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	var said msg.Recorder
-	c := LayersChoice{Dirs: e.Dirs, Layers: []string{"desktop", "docker", "mine", "nix"}, Info: said.Add}
+	c := LayersChoice{Dirs: e.Dirs, Layers: []string{"desktop", "docker", "mine", "nix"}, Reporter: &msg.Fake{OnInfo: said.Add}}
 	if err := c.Set([]string{"nix", "docker", "nix"}); err != nil {
 		t.Fatal(err)
 	}
@@ -482,9 +482,9 @@ func TestRestartToApply(t *testing.T) {
 				in.Size = backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}
 				f.Instances[vm] = in
 				var said msg.Recorder
-				e.Info, e.Warn = said.Add, said.Add
+				fake(e).OnInfo, fake(e).OnWarn = said.Add, said.Add
 				asked := answers(t, e, a.yes)
-				e.Terminal = func() bool { return a.terminal }
+				fake(e).Terminal = a.terminal
 				e.CanAsk = func() bool { return a.canAsk }
 				before, shells := len(f.Calls()), len(*execs)
 				if err := c.set(e); err != nil {

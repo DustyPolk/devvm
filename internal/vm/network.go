@@ -57,15 +57,15 @@ func (e Net) NetworkDefault() (settings.Value, error) {
 // SetNetworkDefault saves whether new VMs get network policy, as devvm
 // setup does (NetworkChoice).
 func (e Net) SetNetworkDefault(mode string) error {
-	return NetworkChoice{Dirs: e.Dirs, Info: e.Info}.Set(mode)
+	return NetworkChoice{Dirs: e.Dirs, Reporter: e.Reporter}.Set(mode)
 }
 
 // NetworkChoice chooses whether new VMs get network policy, which devvm
 // network -g and devvm setup save in settings.json. The flags of devvm
 // still choose for one VM.
 type NetworkChoice struct {
-	Dirs paths.Dirs
-	Info func(msg.M) // says what's saved
+	Dirs         paths.Dirs
+	msg.Reporter // says what's saved
 }
 
 // Set saves mode (a settings.NetworkChoices value) as new VMs' network
@@ -125,7 +125,7 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	switch {
 	case !running:
 		e.Info(msg.NetSetStopped(to, vm))
-	case e.restartNow(vm, e.Confirm, 1):
+	case e.restartNow(vm, e.confirm, 1):
 		if on {
 			e.Note(msg.NetOnOldTokens(vm))
 		}

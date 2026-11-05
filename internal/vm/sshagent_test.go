@@ -340,7 +340,7 @@ func TestSetSSHAgentRisk(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	e.Agent.Run = (&agentCalls{}).run
 	var warned msg.Recorder
-	e.Warn = warned.Add
+	fake(e).OnWarn = warned.Add
 	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
 	for _, mode := range []string{sshagent.On, sshagent.Devvm} {
@@ -363,7 +363,7 @@ func TestAgentToggleEmulated(t *testing.T) {
 	caps[backend.FeatureAgentToggle] = backend.Emulated(false)
 	e, f, _ := upEnv(t, caps)
 	var warned msg.Recorder
-	e.Registry.Warn = warned.Add
+	e.Registry.Reporter = &msg.Fake{OnWarn: warned.Add}
 	e.Registry.Unreviewed = map[string]bool{"fake:agent-toggle": true}
 	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
@@ -442,9 +442,10 @@ func TestCheckAgent(t *testing.T) {
 				return tc.rc
 			}}
 			var said strings.Builder
-			e.Warn = func(m msg.M) { said.WriteString("devvm: " + m.Names() + "\n") }
-			e.Confirm = func(msg.M) bool { return false }
-			e.Terminal = func() bool { return true }
+			e.Reporter = &msg.Fake{
+				OnWarn:   func(m msg.M) { said.WriteString("devvm: " + m.Names() + "\n") },
+				Terminal: true,
+			}
 			Launch{e}.checkAgent(t.Context())
 			out := said.String()
 			if !slices.Equal(calls, tc.calls) {

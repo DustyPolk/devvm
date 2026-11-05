@@ -187,10 +187,9 @@ func testConfig(t *testing.T) (*Config, *backendtest.Fake) {
 			"garbage\nssh-rsa not;base64\n*-evil AAAA\n")
 		return err
 	}
-	quiet := func(msg.M) {}
 	return &Config{
-		Dirs: paths.Dirs{Config: filepath.Join(root, "config"), Data: filepath.Join(root, "data")},
-		Info: quiet, Warn: quiet, Say: quiet, Terminal: func() bool { return false },
+		Dirs:     paths.Dirs{Config: filepath.Join(root, "config"), Data: filepath.Join(root, "data")},
+		Reporter: &msg.Fake{},
 	}, f
 }
 
@@ -633,11 +632,12 @@ func TestWriteNoAddress(t *testing.T) {
 func TestEnsureIncludeAsked(t *testing.T) {
 	t.Parallel()
 	c, _ := testConfig(t)
-	c.Terminal = func() bool { return true }
+	ui := &msg.Fake{Terminal: true}
+	c.Reporter = ui
 	home := t.TempDir()
 	cfg := filepath.Join(home, ".ssh", "config")
 	asked, answer := 0, false
-	c.Confirm = func(msg.M) bool { asked++; return answer }
+	ui.OnConfirm = func(msg.M) bool { asked++; return answer }
 	if ok, err := c.EnsureInclude(home); ok || err != nil || asked != 1 {
 		t.Errorf("no: %v, %v, asked %d", ok, err, asked)
 	}
@@ -674,7 +674,7 @@ func TestEnsureIncludeAsked(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
-	c.AddInclude, c.Terminal = true, func() bool { return false }
+	c.AddInclude, ui.Terminal = true, false
 	if ok, err := c.EnsureInclude(home2); !ok || err != nil || asked != 2 {
 		t.Errorf("--ssh-config: %v, %v, asked %d", ok, err, asked)
 	}

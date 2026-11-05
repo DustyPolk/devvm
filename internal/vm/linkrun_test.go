@@ -133,8 +133,8 @@ func TestUnlinkTarget(t *testing.T) {
 		f.Instances[st.Name()] = backend.Instance{Name: st.Name(), Status: backend.StatusStopped}
 	}
 	var said msg.Recorder
-	e.Info = said.Add
-	e.Warn = func(m msg.M) { t.Errorf("warned %s", m.Names()) }
+	fake(e).OnInfo = said.Add
+	fake(e).OnWarn = func(m msg.M) { t.Errorf("warned %s", m.Names()) }
 	if err := (linkRuns{e}).unlinkTarget(t.Context(), db.Name()); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestLinkRuns(t *testing.T) {
 	api := Link{Name: "api", Port: 3000, Addr: netip.MustParseAddr("127.77.0.2")}
 	r, started := linkRunsEnv(t, "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.2:3000: refused by the VM: exit status 255\n")
 	var warned msg.Recorder
-	r.Warn = warned.Add
+	fake(r.Env).OnWarn = warned.Add
 	if _, ok := r.pid(vm); ok {
 		t.Fatal("a session before any started")
 	}
@@ -367,7 +367,7 @@ func TestLinksAtLaunch(t *testing.T) {
 	setNet(t, app, "on")
 	setNet(t, db, "on")
 	var warned msg.Recorder
-	r.Warn = warned.Add
+	fake(r.Env).OnWarn = warned.Add
 	if err := r.atLaunch(t.Context(), f, app); err != nil || len(*started) != 1 {
 		t.Fatalf("atLaunch: %v, started %v", err, *started)
 	}

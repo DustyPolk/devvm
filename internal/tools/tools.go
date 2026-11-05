@@ -27,7 +27,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -82,15 +81,10 @@ type Env struct {
 	// ShareNote is how long LockShare waits for another devvm holding the
 	// share's lock before it says so.
 	ShareNote time.Duration
-	// What it prints: Warn says where the run log is too.
-	Info, Warn func(msg.M)
-	// LogNote says where the run log is, once a run; Status shows a status
-	// line until stop; LoggedCmd runs a command into the run log.
-	LogNote   func()
-	Status    func(label msg.M) (stop func())
-	LoggedCmd func(ctx context.Context, step msg.M, cmd *exec.Cmd) error
-	// AddCleanup adds to the run's cleanup stack.
-	AddCleanup func(f func(context.Context)) (remove func())
+	// Reporter is where it prints, the status line and run log its slow
+	// steps show on, and the run's cleanup stack. Env's own Warn says
+	// where the run log is too.
+	msg.Reporter
 	// FreeSpace returns the free space on the volume holding a path
 	// (platform.Host's), checked before a build; nil checks none.
 	FreeSpace func(path string) (uint64, error)
@@ -116,21 +110,16 @@ type Share struct{ *Env }
 // there, and moving the VM to them.
 type VMs struct{ *Env }
 
-// UI is where the shared tools print, the run log and status line their
-// slow steps show on, and the run's cleanup stack.
-type UI interface {
-	Info(msg.M)
-	Warn(msg.M)
-	LogNote()
-	Status(label msg.M) (stop func())
-	LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error
-	AddCleanup(f func(context.Context)) (remove func())
+// Warn prints a warning, and where the run log has more.
+func (t *Env) Warn(m msg.M) {
+	t.Reporter.Warn(m)
+	t.LogNote()
 }
 
 // New returns the shared tools in devvm's folders, with devvm's own files
-// (assets), for devvm's version, on u, checking host's free space before
+// (assets), for devvm's version, on r, checking host's free space before
 // a build.
-func New(d paths.Dirs, assets fs.FS, version string, u UI, host platform.Host) *Env {
+func New(d paths.Dirs, assets fs.FS, version string, r msg.Reporter, host platform.Host) *Env {
 	self, err := os.Executable()
 	if err == nil {
 		if r, rerr := filepath.EvalSymlinks(self); rerr == nil {
@@ -141,9 +130,7 @@ func New(d paths.Dirs, assets fs.FS, version string, u UI, host platform.Host) *
 		Dirs: d, Assets: assets, Self: self, Version: version, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Getenv: os.Getenv, Client: newClient(), RetryDelay: time.Second, Now: time.Now, Detach: daemon.Detach,
 		ShareNote: 3 * time.Second, miseURL: miseURL, miseSums: miseSHA256,
-		Info: u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
-		LogNote: u.LogNote, Status: u.Status, LoggedCmd: u.LoggedCmd, AddCleanup: u.AddCleanup,
-		FreeSpace: host.FreeSpace,
+		Reporter: r, FreeSpace: host.FreeSpace,
 	}
 	// The environment it reads is Getenv's, and the Proxy the one at each
 	// request: tests and callers change them.

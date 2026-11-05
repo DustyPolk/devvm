@@ -22,7 +22,7 @@ import (
 func chflagsCalls(e *Env) *[]string {
 	var calls []string
 	e.Protector = func(dir string) *gitprotect.Protector {
-		p := gitprotect.New(dir, e.Dirs.Home, quiet)
+		p := gitprotect.New(dir, e.Dirs.Home, &msg.Fake{})
 		p.CanLock = true
 		p.Chflags = func(ctx context.Context, flags, path string) error {
 			if flags == "uchg" && path == filepath.Join(dir, ".git", "config") {
@@ -111,7 +111,7 @@ func TestSetCloneOn(t *testing.T) {
 	}
 
 	var said msg.Recorder
-	e.Info = said.Add
+	fake(e).OnInfo = said.Add
 	n := len(f.Calls())
 	if err := lc.SetClone(t.Context(), "devvm clone on", CloneOn, RemakeOptions{Force: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -123,7 +123,7 @@ func TestSetCloneOn(t *testing.T) {
 	// Unfetched work, unchecked: lost, after a warning.
 	gitIn(t, vmfs+e.Dir, "commit", "-q", "--allow-empty", "-m", "from-vm")
 	var warned msg.Recorder
-	e.Warn = warned.Add
+	fake(e).OnWarn = warned.Add
 	*flags = nil
 	if err := lc.SetClone(t.Context(), "devvm clone off", CloneOff, RemakeOptions{Force: true, CleanHome: true, NoCloneCheck: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -233,7 +233,7 @@ func TestSetCloneUndo(t *testing.T) {
 	e, f, _ := cloneEnv(t)
 	flags := chflagsCalls(e)
 	var cleanups []func(context.Context)
-	e.AddCleanup = func(c func(context.Context)) func() {
+	fake(e).OnCleanup = func(c func(context.Context)) func() {
 		i := len(cleanups)
 		cleanups = append(cleanups, c)
 		return func() { cleanups[i] = nil }
@@ -286,7 +286,7 @@ func TestSetCloneUndo(t *testing.T) {
 	protector := e.Protector
 	e.Protector = func(dir string) *gitprotect.Protector {
 		p := protector(dir)
-		p.Warn = warned.Add
+		p.Reporter = &msg.Fake{OnWarn: warned.Add}
 		return p
 	}
 	undo()

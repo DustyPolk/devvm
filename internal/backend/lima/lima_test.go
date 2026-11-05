@@ -34,19 +34,6 @@ import (
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
-// testUI prints nothing, runs commands as they are, counts no steps and
-// keeps no cleanups.
-type testUI struct{}
-
-func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
-func (testUI) Info(msg.M)                                                {}
-func (testUI) Note(msg.M)                                                {}
-func (testUI) Warn(msg.M)                                                {}
-func (testUI) LogNote()                                                  {}
-func (testUI) WithSteps(ctx context.Context, _ int) context.Context      { return ctx }
-func (testUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
-func (testUI) Interrupted() bool                                         { return false }
-
 // call is a command the fake runner was given.
 type call struct {
 	argv  []string // the program's base name, then its arguments
@@ -180,7 +167,7 @@ func testLima(t *testing.T, goos string) (*Lima, *fakeRunner, *msg.Recorder) {
 func limaOn(t *testing.T, goos string) (*Lima, *fakeRunner, *msg.Recorder, *stubtest.Stubs) {
 	t.Helper()
 	d, stubs := sandbox(t)
-	l := New(d, assets.FS, testUI{}, platform.Host{}, "", nil)
+	l := New(d, assets.FS, &msg.Fake{}, platform.Host{}, "", nil)
 	f := &fakeRunner{out: map[string]string{}}
 	warned := &msg.Recorder{}
 	l.Runner, l.OS, l.Arch, l.Self = f, goos, "arm64", "/opt/my devvm/devvm"
@@ -192,7 +179,7 @@ func limaOn(t *testing.T, goos string) (*Lima, *fakeRunner, *msg.Recorder, *stub
 	if err := os.WriteFile(l.KVM, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	l.Warn = warned.Add
+	l.Reporter = &msg.Fake{OnWarn: warned.Add}
 	l.Ubuntu = &testFinder{}
 	pinUbuntu(t, l, testUbuntuURL, testUbuntuSum)
 	return l, f, warned, stubs

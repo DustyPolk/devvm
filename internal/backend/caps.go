@@ -159,8 +159,8 @@ type Review struct {
 	// as backend:feature (lima:ports): for the end-to-end checks
 	// that an emulation's review needs, which set DEVVM_UNREVIEWED.
 	Unreviewed map[string]bool
-	// Warn is told each time one is let through.
-	Warn func(msg.M)
+	// Reporter warns each time one is let through; nil tells no one.
+	msg.Reporter
 }
 
 // ParseUnreviewed reads DEVVM_UNREVIEWED's value: backend:feature pairs,
@@ -179,7 +179,11 @@ func ParseUnreviewed(v string) map[string]bool {
 // the refusal for the first one it lacks or only emulates unreviewed,
 // naming vm.
 func (r Review) Require(b Backend, vm string, features ...Feature) error {
-	return r.refusal(b, vm, r.Warn, features)
+	var warn func(msg.M)
+	if r.Reporter != nil {
+		warn = r.Warn
+	}
+	return r.refusal(b, vm, warn, features)
 }
 
 // refusal is Require's, telling warn of each unreviewed emulation let

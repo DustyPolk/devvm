@@ -20,8 +20,8 @@ import (
 // devvm starts don't inherit it.
 type Making struct {
 	Dirs paths.Dirs
-	// Info says Hold is waiting; nil says nothing.
-	Info func(msg.M)
+	// Reporter says Hold is waiting; nil says nothing.
+	msg.Reporter
 }
 
 // makingNote is how long Hold waits before it says it's waiting.
@@ -35,7 +35,7 @@ func (m Making) Hold(ctx context.Context) (unlock func(), err error) {
 		return nil, err
 	}
 	return platform.LockFileSharedWaiting(ctx, m.Dirs.MakingLock(), makingNote, func() {
-		if m.Info != nil {
+		if m.Reporter != nil {
 			m.Info(msg.MakingWaiting())
 		}
 	})

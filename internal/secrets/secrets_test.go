@@ -26,7 +26,7 @@ func testStore(t *testing.T, keychain bool, env map[string]string) (*Store, map[
 	t.Helper()
 	root := t.TempDir()
 	d := paths.Dirs{Home: filepath.Join(root, "home"), Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
-	s := NewStore(d, func(m msg.M) { t.Log(m.Names()) })
+	s := NewStore(d, &msg.Fake{OnWarn: func(m msg.M) { t.Log(m.Names()) }})
 	kc := map[string]string{}
 	s.Keychain = keychain
 	s.KeychainGet = func(_ context.Context, service, account string) (string, error) {
@@ -459,7 +459,7 @@ func writeLogin(t *testing.T, s *Store, kind, data string) {
 func TestVMCopies(t *testing.T) {
 	s, _ := testStore(t, false, nil)
 	var warned []string
-	s.Warn = func(m msg.M) { warned = append(warned, m.Names()) }
+	s.Reporter = &msg.Fake{OnWarn: func(m msg.M) { warned = append(warned, m.Names()) }}
 	if got := s.MCPSecrets(); got != nil {
 		t.Errorf("MCPSecrets without ~/.claude.json = %q", got)
 	}

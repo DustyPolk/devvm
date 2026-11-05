@@ -27,7 +27,7 @@ func devcontainerTestEnv(t *testing.T, src string) (*Env, *backendtest.Fake, *ms
 		t.Fatal(err)
 	}
 	warned := &msg.Recorder{}
-	e.Warn = warned.Add
+	fake(e).OnWarn = warned.Add
 	e.PublicImage = func(_ context.Context, ref string) (string, error) {
 		if ref == "private:1" {
 			return "", fmt.Errorf("%w: no", from.ErrNotFound)
@@ -244,10 +244,8 @@ func TestChooseNet(t *testing.T) {
 			}
 			e, f, _ := upEnv(t, caps)
 			asked, warned := false, ""
-			e.Warn = func(m msg.M) { warned += m.Names() }
-			e.Proxy.Terminal = func() bool { return tc.terminal }
-			e.Proxy.Note = func(msg.M) {}
-			e.Proxy.Confirm = func(msg.M) bool { asked = true; return tc.answer }
+			fake(e).OnWarn = func(m msg.M) { warned += m.Names() }
+			e.Proxy.Reporter = &msg.Fake{Terminal: tc.terminal, OnConfirm: func(msg.M) bool { asked = true; return tc.answer }}
 			got := fmt.Sprint(creation{Launch{e}}.chooseNet(tc.o, f, "v", settings.NetworkAsk))
 			if got != tc.want || asked != tc.asked || warned != tc.warned {
 				t.Errorf("chooseNet = %s (asked %v, warned %q), want %s (asked %v, warned %q)", got, asked, warned, tc.want, tc.asked, tc.warned)
@@ -286,10 +284,8 @@ func TestChooseNetSaved(t *testing.T) {
 			}
 			e, f, _ := upEnv(t, caps)
 			asked, warned := false, ""
-			e.Warn = func(m msg.M) { warned += m.Names() }
-			e.Proxy.Terminal = func() bool { return true }
-			e.Proxy.Note = func(msg.M) {}
-			e.Proxy.Confirm = func(msg.M) bool { asked = true; return true }
+			fake(e).OnWarn = func(m msg.M) { warned += m.Names() }
+			e.Proxy.Reporter = &msg.Fake{Terminal: true, OnConfirm: func(msg.M) bool { asked = true; return true }}
 			got := fmt.Sprint(creation{Launch{e}}.chooseNet(tc.o, f, "v", tc.saved))
 			if got != tc.want || warned != tc.warned || asked != (tc.saved == settings.NetworkAsk) {
 				t.Errorf("chooseNet = %s (asked %v, warned %q), want %s (warned %q)", got, asked, warned, tc.want, tc.warned)

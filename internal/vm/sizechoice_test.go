@@ -33,7 +33,12 @@ func (a *sizeAsker) answer(m msg.M) string {
 }
 
 func (a *sizeAsker) choice(d paths.Dirs, h Host) SizeChoice {
-	return SizeChoice{Dirs: d, Host: h, Answer: a.answer, Say: a.record, Warn: a.record, Info: a.record}
+	return SizeChoice{Dirs: d, Host: h, Reporter: a.ui()}
+}
+
+// ui asks for values with answer and records what it's told.
+func (a *sizeAsker) ui() *msg.Fake {
+	return &msg.Fake{OnAnswer: a.answer, OnSay: a.record, OnWarn: a.record, OnInfo: a.record}
 }
 
 // saveSize saves s as new VMs' size in d's settings.json.
@@ -209,9 +214,12 @@ func writeFile(t *testing.T, path, data string) {
 func TestFirstRunSize(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	a := &sizeAsker{t: t}
-	e.Interactive = func() bool { return true }
-	e.Answer = a.answer
-	e.Say, e.Warn, e.Info = a.record, a.record, a.record
+	ui := a.ui()
+	ui.OnAsk, ui.OnConfirm = unasked(t), unasked(t)
+	e.Reporter = ui
+	// terminals makes devvm's input and output terminals, or neither.
+	terminals := func(on bool) { ui.Terminal, ui.StdoutTerminal = on, on }
+	terminals(true)
 
 	asked := func(given Size) bool {
 		t.Helper()
@@ -228,11 +236,11 @@ func TestFirstRunSize(t *testing.T) {
 	if asked(Size{CPUs: "2"}) || asked(Size{Memory: "4"}) {
 		t.Error("asked with --cpus or --memory")
 	}
-	e.Interactive = func() bool { return false }
+	terminals(false)
 	if asked(Size{}) {
 		t.Error("asked without a terminal")
 	}
-	e.Interactive = func() bool { return true }
+	terminals(true)
 	writeFile(t, e.Dirs.ConfigFile(), "[size]\ndisk = 120\n")
 	if asked(Size{}) {
 		t.Error("asked with a size set")

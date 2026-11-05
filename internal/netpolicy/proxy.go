@@ -57,31 +57,20 @@ type Proxy struct {
 	// Getenv reads devvm's environment: the host's proxy settings, which a
 	// VM's proxy goes through over config.toml's (settings.HostProxy).
 	Getenv func(string) string
-	// What it prints, and asks ([Y/n]); Terminal reports whether it can
-	// ask.
-	Note, Warn func(msg.M)
-	Confirm    func(msg.M) bool
-	Terminal   func() bool
-}
-
-// UI is where the proxies print and ask.
-type UI interface {
-	Note(msg.M)
-	Warn(msg.M)
-	Confirm(q ...msg.M) bool
-	StdinIsTerminal() bool
+	// Reporter is where it prints, and asks ([Y/n]) when its input is a
+	// terminal.
+	msg.Reporter
 }
 
 // NewProxy returns the proxies of devvm's folders, run by self (devvm's
-// binary), with its own files (assets), printing and asking through u.
-func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, u UI) *Proxy {
+// binary), with its own files (assets), printing and asking through r.
+func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, r msg.Reporter) *Proxy {
 	return &Proxy{
 		Dirs: d, Assets: assets, Self: self, OS: runtime.GOOS, Secrets: store,
 		Start: daemon.Detach, Args: platform.ProcessArgs, ExcludeFromBackup: platform.ExcludeFromBackup,
 		InitCA:    trust.InitCA,
 		Listening: ports.Listening, PortRange: platform.ChoosablePorts(), Tick: 500 * time.Millisecond, Signal: daemon.Signal, Getenv: os.Getenv,
-		Note: u.Note, Warn: u.Warn, Confirm: func(m msg.M) bool { return u.Confirm(m) },
-		Terminal: u.StdinIsTerminal,
+		Reporter: r,
 	}
 }
 

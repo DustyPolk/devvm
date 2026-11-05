@@ -110,28 +110,10 @@ type Lima struct {
 	// User is the host's user, whom a --from base's conversion makes the
 	// image's user (user.Current).
 	User func() (*user.User, error)
-	// Info prints what the backend is doing.
-	Info func(msg.M)
-	// Warn prints a warning, and where the run log has more.
-	Warn func(msg.M)
-	// WithSteps numbers the logged commands of a phase of so many steps.
-	WithSteps func(ctx context.Context, total int) context.Context
-	// AddCleanup adds to the run's cleanup stack; Interrupted reports
-	// whether the run was interrupted.
-	AddCleanup  func(f func(context.Context)) (remove func())
-	Interrupted func() bool
-}
-
-// UI is where the backend prints, the run log its commands run into, and
-// the run's cleanup stack.
-type UI interface {
-	LoggedCmd(ctx context.Context, step msg.M, cmd *exec.Cmd) error
-	Info(msg.M)
-	Warn(msg.M)
-	LogNote()
-	WithSteps(ctx context.Context, total int) context.Context
-	AddCleanup(f func(context.Context)) (remove func())
-	Interrupted() bool
+	// Reporter is where the backend prints what it's doing, numbers its
+	// logged commands' steps, and the run's cleanup stack. Lima's own
+	// Warn says where the run log has more too.
+	msg.Reporter
 }
 
 // Lima's roles, each with the Lima it's part of: its fields, and the
@@ -152,11 +134,11 @@ func withRoles(l *Lima) *Lima {
 }
 
 // New returns the Lima backend for devvm's folders and its own files
-// (assets), on u, sizing base to host, finding Ubuntu's cloud image at
+// (assets), on r, sizing base to host, finding Ubuntu's cloud image at
 // ubuntuURL (ubuntu.DefaultURL when it's "") through the company proxy cp,
 // which builds go through too (nil for the one its Getenv and config.toml
 // name, without config.toml's password).
-func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string, cp *settings.CompanyProxy) *Lima {
+func New(d paths.Dirs, assets fs.FS, r msg.Reporter, host platform.Host, ubuntuURL string, cp *settings.CompanyProxy) *Lima {
 	ubuntuURL = strings.TrimRight(cmp.Or(ubuntuURL, ubuntu.DefaultURL), "/")
 	self, err := os.Executable()
 	if err == nil {
@@ -169,19 +151,24 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string,
 		t.Proxy = cp.Route
 	}
 	l := withRoles(&Lima{
-		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Company: cp, Ports: ports.Allocator{Dirs: d, Listening: ports.Listening},
+		Dirs: d, Runner: logRunner{r.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Company: cp, Ports: ports.Allocator{Dirs: d, Listening: ports.Listening},
 		Self: self, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
 		Ubuntu: finder, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: "/dev/kvm",
 		DockerRunning: from.DockerRunning,
 		User:          user.Current,
-		Info:          u.Info, Warn: func(m msg.M) { u.Warn(m); u.LogNote() },
-		WithSteps: u.WithSteps, AddCleanup: u.AddCleanup, Interrupted: u.Interrupted,
+		Reporter:      r,
 	})
 	if l.Company == nil {
 		l.Company = settings.NewCompanyProxy(d, func(k string) string { return l.Getenv(k) }, nil)
 	}
 	return l
+}
+
+// Warn prints a warning, and where the run log has more.
+func (l *Lima) Warn(m msg.M) {
+	l.Reporter.Warn(m)
+	l.LogNote()
 }
 
 // Name returns lima.

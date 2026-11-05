@@ -224,7 +224,7 @@ func TestLockOCI(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
 	l.OCINote = 10 * time.Millisecond
 	var infos msg.Recorder
-	l.Info = infos.Add
+	l.Reporter = &msg.Fake{OnInfo: infos.Add}
 
 	writeTestFile(t, l.Dirs.OCIBuildLock(), "")
 	unlock, err := l.lockOCI(t.Context())

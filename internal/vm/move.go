@@ -139,7 +139,7 @@ func (e finder) moveHere(ctx context.Context, dir string, mv moves, rec *recorde
 	st := found[0]
 	vm, was := st.Name(), st.Dir
 	if mv == moveAsk {
-		if !e.Terminal() {
+		if !e.StdinIsTerminal() {
 			return project.Folder{}, nil, msg.VMMovedHere(vm, was)
 		}
 		if !e.Ask(msg.MoveVM(vm, was)) {
@@ -198,7 +198,7 @@ func (e finder) adoptVM(ctx context.Context, name string, force bool) error {
 	}
 	switch {
 	case force:
-	case !e.Terminal():
+	case !e.StdinIsTerminal():
 		return msg.AdoptMoveRefused(vm)
 	case !e.Ask(msg.AdoptMoveVM(vm, st.Dir)):
 		return nil

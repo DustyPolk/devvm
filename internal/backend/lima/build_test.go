@@ -37,7 +37,6 @@ func buildLima(t *testing.T, os string, parentStatus string) (*Lima, *fakeRunner
 	l.Assets = fstest.MapFS{"base.yaml": {Data: []byte("containerd:\n  user: false\n")}}
 	l.Memory = func() (uint64, error) { return 16 * gib, nil }
 	l.CPUs = func() int { return 8 }
-	l.Info = func(msg.M) {}
 	list := ""
 	if parentStatus != "" {
 		list = `{"name":"devvm-img-` + baseKey + `","status":"` + parentStatus + `"}` + "\n"

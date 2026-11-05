@@ -127,7 +127,7 @@ func (e Launch) checkAgent(ctx context.Context) {
 	}
 	cmd := "ssh-add " + strings.Join(args, " ")
 	e.Warn(msg.SSHAgentEmpty())
-	if e.Terminal() && e.Confirm(msg.LoadKey(cmd, key)) && e.SSHAdd(ctx, args...) == 0 {
+	if e.StdinIsTerminal() && e.Confirm(msg.LoadKey(cmd, key)) && e.SSHAdd(ctx, args...) == 0 {
 		if e.OS == "darwin" {
 			e.Info(msg.KeyLoadedKeychain())
 		} else {

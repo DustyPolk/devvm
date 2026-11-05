@@ -309,7 +309,7 @@ func TestAddLayersAsks(t *testing.T) {
 	}
 	asked := answers(t, e, false)
 	var said []string
-	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	fake(e).OnInfo = func(m msg.M) { said = append(said, m.Names()) }
 	n := len(f.Calls())
 	if err := lc.AddLayers(t.Context(), "devvm layer add nix", []string{"nix"}, RemakeOptions{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -443,7 +443,7 @@ func TestRemoveLayers(t *testing.T) {
 	vm := st.Name()
 	lc := Lifecycle{e}
 	var said []string
-	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	fake(e).OnInfo = func(m msg.M) { said = append(said, m.Names()) }
 	change(t, st, func(st *state.VM) error { st.Image = "docker+gone+nix"; return nil })
 	before := readState(t, e.Dirs, vm)
 	rm := func(layers ...string) error {
@@ -503,7 +503,7 @@ func TestRemakeUndo(t *testing.T) {
 	vm := st.Name()
 	aside, _ := vmname.Aside(vm)
 	var cleanups []func(context.Context)
-	e.AddCleanup = func(c func(context.Context)) func() {
+	fake(e).OnCleanup = func(c func(context.Context)) func() {
 		i := len(cleanups)
 		cleanups = append(cleanups, c)
 		return func() { cleanups[i] = nil }
@@ -670,7 +670,7 @@ func TestRemakeDone(t *testing.T) {
 	vm := st.Name()
 	aside, _ := vmname.Aside(vm)
 	var cleanups []func(context.Context)
-	e.AddCleanup = func(c func(context.Context)) func() {
+	fake(e).OnCleanup = func(c func(context.Context)) func() {
 		i := len(cleanups)
 		cleanups = append(cleanups, c)
 		return func() { cleanups[i] = nil }
@@ -745,7 +745,7 @@ func TestUpdate(t *testing.T) {
 	vm := st.Name()
 	lc := Lifecycle{e}
 	var said []string
-	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	fake(e).OnInfo = func(m msg.M) { said = append(said, m.Names()) }
 	n := len(f.Calls())
 	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -837,7 +837,7 @@ func TestUpdateTools(t *testing.T) {
 	vm := st.Name()
 	lc := Lifecycle{e}
 	var said []string
-	e.Info = func(m msg.M) { said = append(said, m.Names()) }
+	fake(e).OnInfo = func(m msg.M) { said = append(said, m.Names()) }
 	steps := func(n int) []string {
 		var out []string
 		for _, m := range f.Methods()[n:] {
@@ -873,7 +873,7 @@ func TestUpdateTools(t *testing.T) {
 	}
 	staleTools(t, readState(t, e.Dirs, vm))
 	stale := get(readState(t, e.Dirs, vm), KeyTools)
-	e.Terminal = func() bool { return false }
+	fake(e).Terminal = false
 	said, n = nil, len(f.Calls())
 	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); msg.NamesOf(err) != "force_needed command=devvm update" {
 		t.Errorf("no terminal: %v", msg.NamesOf(err))

@@ -188,7 +188,7 @@ func TestUpInSubfolder(t *testing.T) {
 	web := e.Dir
 	existingVM(t, e, Options{NoNetworkPolicy: true})
 	var infos msg.Recorder
-	e.Info = infos.Add
+	fake(e).OnInfo = infos.Add
 	src := subfolder(t, e, web, "src")
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -288,7 +288,7 @@ func TestCommandsInSubfolder(t *testing.T) {
 	existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := vmName(t, e)
 	var infos msg.Recorder
-	e.Info = infos.Add
+	fake(e).OnInfo = infos.Add
 	subfolder(t, e, web, "src")
 	if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -378,7 +378,7 @@ func TestWidenParentVM(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		e.Terminal = func() bool { return false }
+		fake(e).Terminal = false
 		want := "widen_parent_vm_refused cmd=" + c.cmd + " dir=" + web + " vm=" + vm
 		if err := c.do(); msg.NamesOf(err) != want {
 			t.Errorf("%s without a terminal = %v, want %s", c.cmd, msg.NamesOf(err), want)
@@ -432,7 +432,7 @@ func TestWidenParentVM(t *testing.T) {
 	}
 	// In the parent folder itself, nothing asks.
 	e.Dir = web
-	e.Terminal = func() bool { return false }
+	fake(e).Terminal = false
 	if err := n.SetNetwork(t.Context(), false); err != nil {
 		t.Errorf("network off in the VM's own folder: %v", msg.NamesOf(err))
 	}
@@ -513,8 +513,8 @@ func TestSubfolderRepo(t *testing.T) {
 		t.Errorf("in a terminal: %d VMs, asked %q", n, *asked)
 	}
 	subfolder(t, e, web, "pkg/docs")
-	e.Terminal = func() bool { return false }
-	e.Ask, e.Confirm = unasked(t), unasked(t)
+	fake(e).Terminal = false
+	fake(e).OnAsk, fake(e).OnConfirm = unasked(t), unasked(t)
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}

@@ -83,13 +83,10 @@ func (lb limaBuild) build(t *testing.T) (sent, key string) {
 			t.Error(err)
 		}
 	}
-	none := func(msg.M) {}
 	b := &build.Env{
 		Dirs: l.Dirs, Assets: lb.own, Backend: l, From: lb.from, Version: "0.1.0-test",
-		Info: none, Warn: none, Say: none, LogNote: func() {},
-		Confirm:  func(msg.M) bool { return true },
+		Reporter: &msg.Fake{OnConfirm: func(msg.M) bool { return true }},
 		Pick:     func(fs []build.Feature) []build.Feature { return fs },
-		Terminal: func() bool { return false },
 	}
 	if err := (build.Builds{Env: b}).Build(t.Context(), image.Base); err != nil {
 		t.Fatal(err)

@@ -13,7 +13,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -53,17 +52,11 @@ type Env struct {
 	// Lookup looks up From's digest when building; nil for the internet's
 	// (from.NewLookup).
 	Lookup *from.Lookup
-	// What it prints and asks, its caller's: Confirm is [Y/n]; Pick asks
-	// which features base gets, each as chosen so far; Terminal reports
-	// whether it can ask; LogNote says where the run log is, once a run.
-	Info, Warn, Say func(msg.M)
-	Confirm         func(msg.M) bool
-	Pick            func([]Feature) []Feature
-	Terminal        func() bool
-	LogNote         func()
-	// LogWriter is the run log, for lines that aren't messages; nil
-	// drops them.
-	LogWriter func() io.Writer
+	// Reporter is where it prints and asks, its caller's, and the run
+	// log, for lines that aren't messages.
+	msg.Reporter
+	// Pick asks which features base gets, each as chosen so far.
+	Pick func([]Feature) []Feature
 	// Force is a rebuild's --force: it replaces the images built on the
 	// one it rebuilds without asking, which it needs without a terminal.
 	Force bool
@@ -127,7 +120,7 @@ func (b Builds) lookUp(ctx context.Context) error {
 	if b.From != "" {
 		l := b.Lookup
 		if l == nil {
-			l = from.NewLookup(b.Dirs, b.Warn, b.proxy())
+			l = from.NewLookup(b.Dirs, b.Reporter, b.proxy())
 		}
 		if err := l.Refresh(ctx, b.From); err != nil {
 			return err
@@ -460,11 +453,7 @@ func (b Builds) buildWith(ctx context.Context, spec backend.ImageSpec, name imag
 		pk.taken.discard()
 		return out, err
 	}
-	log := io.Discard
-	if b.LogWriter != nil {
-		log = b.LogWriter()
-	}
-	return out, pk.taken.commit(ctx, spec.Key, log)
+	return out, pk.taken.commit(ctx, spec.Key, b.LogWriter())
 }
 
 // sayFitted says what base got when the backend fitted it to the host
@@ -674,7 +663,7 @@ func (b Builds) Rebuild(ctx context.Context, name image.Name) error {
 		b.Say(msg.RebuildReplaces(strings.Join(above, " "), name.String()))
 		switch {
 		case b.Force:
-		case !b.Terminal():
+		case !b.StdinIsTerminal():
 			return msg.ForceNeeded("devvm rebuild")
 		case !b.Confirm(msg.Continue()):
 			b.Info(msg.NothingChanged())

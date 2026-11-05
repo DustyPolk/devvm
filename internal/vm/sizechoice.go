@@ -17,11 +17,10 @@ import (
 type SizeChoice struct {
 	Dirs paths.Dirs
 	Host Host
-	// Answer asks for a value and returns the line typed, "" for Enter;
-	// Say prints the question's context, Warn a refused answer, Info
-	// what's saved.
-	Answer          func(msg.M) string
-	Say, Warn, Info func(msg.M)
+	// Reporter asks for a value (Answer: the line typed, "" for Enter),
+	// says the question's context (Say), warns of a refused answer and
+	// says what's saved (Info).
+	msg.Reporter
 }
 
 // sizeValues is what s sets, as settings.Save takes it.
@@ -136,7 +135,7 @@ func (c SizeChoice) Fitted() Size {
 // a size and the user gave neither --cpus nor --memory. After it, base's
 // features are chosen, so it doesn't ask again.
 func (e creation) firstRunSize(given Size, def settings.Defaults) error {
-	if given.CPUs != "" || given.Memory != "" || !e.Interactive() || def.Features.Chosen {
+	if given.CPUs != "" || given.Memory != "" || !interactive(e.Reporter) || def.Features.Chosen {
 		return nil
 	}
 	for _, v := range []settings.Value{def.CPUs, def.Memory, def.Disk} {
@@ -148,8 +147,5 @@ func (e creation) firstRunSize(given Size, def settings.Defaults) error {
 	if err != nil {
 		return err
 	}
-	return SizeChoice{
-		Dirs: e.Dirs, Host: host,
-		Answer: e.Answer, Say: e.Say, Warn: e.Warn, Info: e.Info,
-	}.Ask()
+	return SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.Ask()
 }

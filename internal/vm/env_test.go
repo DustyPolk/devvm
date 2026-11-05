@@ -33,28 +33,18 @@ import (
 	"github.com/w3cj/devvm/internal/vmssh"
 )
 
-// testUI is devvm's UI for these tests: it prints nothing, fails the test
-// on a question, runs commands as they are, their output dropped, counts
-// no steps and keeps no cleanups.
-type testUI struct{ t *testing.T }
+// testUI is devvm's UI for these tests: it prints nothing and fails the
+// test on a question, without a terminal (msg.Fake's quiet rest).
+func testUI(t *testing.T) *msg.Fake {
+	return &msg.Fake{
+		OnAsk: unasked(t), OnConfirm: unasked(t),
+		OnAnswer: func(m msg.M) string { t.Errorf("asked %s", m.Names()); return "" },
+	}
+}
 
-func (testUI) Info(msg.M)                {}
-func (testUI) Warn(msg.M)                {}
-func (testUI) Note(msg.M)                {}
-func (testUI) Say(msg.M)                 {}
-func (u testUI) Ask(m msg.M) bool        { u.t.Errorf("asked %s", m.Names()); return false }
-func (u testUI) Confirm(q ...msg.M) bool { u.t.Errorf("asked %v", q); return false }
-func (testUI) StdinIsTerminal() bool     { return false }
-func (testUI) LogNote()                  {}
-func (testUI) LogWriter() io.Writer      { return io.Discard }
-func (testUI) Status(msg.M) func()       { return func() {} }
-func (testUI) Interrupted() bool         { return false }
-func (testUI) Stdout() io.Writer         { return io.Discard }
-func (testUI) Stderr() io.Writer         { return io.Discard }
-
-func (testUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
-
-func (testUI) AddCleanup(func(context.Context)) func() { return func() {} }
+// fake is the testUI e prints through and asks with, for a test to
+// change.
+func fake(e *Env) *msg.Fake { return e.Reporter.(*msg.Fake) }
 
 // testVersion is upEnv's devvm's version.
 const testVersion = "0.1.0-test"
@@ -74,7 +64,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 	// The shared tools' versions come from the stub mise: the fixture lock.
 	t.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config"), Lima: filepath.Join(root, "lima")}
-	tl := tools.New(d, assets.FS, testVersion, testUI{t}, platform.Host{})
+	tl := tools.New(d, assets.FS, testVersion, testUI(t), platform.Host{})
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	tl.Mise = stubtest.Command(t, "mise")
 	dir := filepath.Join(root, "web")
@@ -94,7 +84,7 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		Dirs: d, Assets: assets.FS, Registry: reg, Tools: tl, Proxy: testProxy(t, d), Dir: dir, OS: "darwin", Version: testVersion,
 		Host: func() (Host, error) { return Host{CPUs: 8, MemoryGiB: 32}, nil },
 		Protector: func(dir string) *gitprotect.Protector {
-			p := gitprotect.New(dir, d.Home, quiet)
+			p := gitprotect.New(dir, d.Home, &msg.Fake{})
 			p.CanLock = true // as macOS, the Env's OS
 			p.Chflags = func(context.Context, string, string) error { return nil }
 			return p
@@ -106,29 +96,21 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 			return map[string]string{"user.name": "A User", "user.email": "a@example.com"}[key]
 		},
 		// The user's own agent: one that holds keys.
-		SSHAdd: func(context.Context, ...string) int { return 0 },
-		Info:   quiet, Warn: quiet, Note: quiet, Say: quiet,
-		Ask: unasked(t), Confirm: unasked(t),
+		SSHAdd:       func(context.Context, ...string) int { return 0 },
+		Reporter:     testUI(t),
 		PickFeatures: func(fs []build.Feature) []build.Feature { return fs },
-		Terminal:     func() bool { return false }, Interactive: func() bool { return false }, CanPick: func() bool { return false },
-		Answer: func(m msg.M) string { t.Errorf("asked %s", m.Names()); return "" },
-		Stdout: io.Discard, LogNote: func() {}, LogWriter: testUI{t}.LogWriter, LoggedCmd: testUI{t}.LoggedCmd,
-		AddCleanup: testUI{t}.AddCleanup, Interrupted: testUI{t}.Interrupted,
-		PortInUse: func(context.Context, int) bool { return false },
+		PortInUse:    func(context.Context, int) bool { return false },
 	}
 	// The user's agent, as devvm started with it, which tests check stays
 	// as it is: each VM's agent travels with its own commands.
 	t.Setenv("SSH_AUTH_SOCK", "/user/agent")
 	e.Environ = []string{"SSH_AUTH_SOCK=/user/agent"}
-	e.Agent = sshagent.New(d, e.mounts, testUI{t})
+	e.Agent = sshagent.New(d, e.mounts, testUI(t))
 	e.Agent.Run = (&agentCalls{}).run
 	wire(e)
 	testForwarders(t, e, f)
 	return e, f, &execs
 }
-
-// quiet prints nothing.
-func quiet(msg.M) {}
 
 // unasked fails the test on a question it doesn't answer itself
 // (answers).
@@ -154,10 +136,9 @@ func (a *agentCalls) run(_ context.Context, _ bool, argv ...string) (string, int
 // no Keychain and no backups.
 func testProxy(t *testing.T, d paths.Dirs) *netpolicy.Proxy {
 	t.Helper()
-	store := secrets.NewStore(d, quiet)
+	store := secrets.NewStore(d, &msg.Fake{})
 	store.Keychain, store.Getenv = false, func(string) string { return "" }
-	p := netpolicy.NewProxy(d, assets.FS, "/devvm", store, testUI{t})
-	p.Terminal = func() bool { return false }
+	p := netpolicy.NewProxy(d, assets.FS, "/devvm", store, testUI(t))
 	var mu sync.Mutex
 	args := map[int][]string{}
 	p.Start = func(c daemon.Cmd) (int, error) {
@@ -318,10 +299,11 @@ func vmName(t *testing.T, e *Env) string {
 func answers(t *testing.T, e *Env, yes bool) *[]string {
 	t.Helper()
 	var asked []string
-	e.Terminal = func() bool { return true }
-	e.CanAsk = e.Terminal
-	e.Confirm = func(m msg.M) bool { asked = append(asked, m.Names()); return yes }
-	e.Ask = e.Confirm
+	f := fake(e)
+	f.Terminal = true
+	e.CanAsk = func() bool { return true }
+	f.OnConfirm = func(m msg.M) bool { asked = append(asked, m.Names()); return yes }
+	f.OnAsk = f.OnConfirm
 	return &asked
 }
 

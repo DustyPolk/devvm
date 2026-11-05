@@ -44,8 +44,8 @@ func newFixture(t *testing.T, name string) *fixture {
 			f.immutable[path] = flags == "uchg"
 			return nil
 		},
-		Locked: func(path string) bool { return f.immutable[path] },
-		Warn:   f.warns.Add,
+		Locked:   func(path string) bool { return f.immutable[path] },
+		Reporter: &msg.Fake{OnWarn: f.warns.Add},
 	}
 	f.vm, err = state.New(paths.Dirs{Data: filepath.Join(root, "data")}, "devvm-p-0123456789abcd")
 	if err != nil {

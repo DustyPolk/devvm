@@ -50,13 +50,13 @@ type Forwards struct {
 	// InUse reports whether a program on the host has a port, on any
 	// address (platform.PortInUse): a listed port it has isn't forwarded.
 	InUse func(ctx context.Context, port int) bool
-	// Warn prints a warning: ports_taken, ports_forward_failed.
-	Warn func(msg.M)
+	// Reporter is where it warns: ports_taken, ports_forward_failed.
+	msg.Reporter
 }
 
 // NewForwards returns the forwarders of devvm's folders, run by self
 // (devvm's binary), as processes of their own. Its caller sets InUse and
-// Warn.
+// Reporter.
 func NewForwards(d paths.Dirs, self string) Forwards {
 	return Forwards{Dirs: d, Self: self, Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond}
 }

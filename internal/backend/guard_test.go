@@ -164,7 +164,7 @@ func TestGuardLetsThrough(t *testing.T) {
 	})
 	f.ImageKeys = []string{baseKey}
 	var warned msg.Recorder
-	r.Unreviewed, r.Warn = backend.ParseUnreviewed("fake:egress-proxy"), warned.Add
+	r.Unreviewed, r.Reporter = backend.ParseUnreviewed("fake:egress-proxy"), &msg.Fake{OnWarn: warned.Add}
 	if err := b.CreateVM(ctx, baseKey, backend.VMSpec{Name: "devvm-x", Project: "/p"}); err != nil {
 		t.Errorf("CreateVM: %v", err)
 	}

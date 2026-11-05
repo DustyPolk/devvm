@@ -136,7 +136,7 @@ func TestRmVMChecksAgain(t *testing.T) {
 	}
 	e.Dir = t.TempDir()
 	answers(t, e, true)
-	e.Ask = func(msg.M) bool { return os.Mkdir(dir, 0o700) == nil }
+	fake(e).OnAsk = func(msg.M) bool { return os.Mkdir(dir, 0o700) == nil }
 	if err := lc.RmVM(t.Context(), vm, RmOptions{}); msg.NamesOf(err) != "rm_vm_folder_there dir="+dir+" vm="+vm {
 		t.Errorf("a folder back: %v", msg.NamesOf(err))
 	}
@@ -146,7 +146,7 @@ func TestRmVMChecksAgain(t *testing.T) {
 	if err := os.Remove(dir); err != nil {
 		t.Fatal(err)
 	}
-	e.Ask = func(msg.M) bool {
+	fake(e).OnAsk = func(msg.M) bool {
 		in := f.Instances[vm]
 		in.Status = backend.StatusStopped
 		f.Instances[vm] = in
@@ -282,7 +282,7 @@ func TestExportStartsAsLaunch(t *testing.T) {
 	gitIn(t, e.Dir, "init", "-q")
 	var locks []string
 	e.Protector = func(dir string) *gitprotect.Protector {
-		p := gitprotect.New(dir, e.Dirs.Home, quiet)
+		p := gitprotect.New(dir, e.Dirs.Home, &msg.Fake{})
 		p.CanLock = true
 		p.Chflags = func(_ context.Context, flags, path string) error {
 			locks = append(locks, flags+" "+path)
@@ -364,12 +364,12 @@ func TestAdopt(t *testing.T) {
 	if err := set(t, st, keyFolder, "0:0"); err != nil {
 		t.Fatal(err)
 	}
-	e.Terminal = func() bool { return false }
+	fake(e).Terminal = false
 	if err := lc.Adopt(t.Context(), "", false); msg.NamesOf(err) != "vm_other_folder_adopt vm="+st.Name()+" was="+e.Dir {
 		t.Errorf("no terminal: %v", msg.NamesOf(err))
 	}
 	asked = answers(t, e, false)
-	e.Terminal = func() bool { return false }
+	fake(e).Terminal = false
 	if err := lc.Adopt(t.Context(), "", true); err != nil || len(*asked) != 0 {
 		t.Fatalf("--force: %v, asked %q", msg.NamesOf(err), *asked)
 	}
@@ -398,7 +398,7 @@ func TestSetIDOnStop(t *testing.T) {
 	}
 	want := "setid_files files=" + filepath.Join(e.Dir, "tool")
 	var warned msg.Recorder
-	e.Warn = warned.Add
+	fake(e).OnWarn = warned.Add
 	existingVM(t, e, Options{NoNetworkPolicy: true})
 	if !slices.Equal(warned.Names(), []string{want}) {
 		t.Errorf("a new VM: warned %q, want %s", warned.Names(), want)

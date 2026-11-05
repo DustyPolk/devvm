@@ -273,7 +273,7 @@ func (e cloneCheck) run(ctx context.Context, t *target) (bool, error) {
 	}
 	if unfetched := unfetchedRefs(ctx, dir, refs); len(unfetched) > 0 {
 		e.Say(msg.UnfetchedCommits(quoted(unfetched)))
-		if !e.Terminal() {
+		if !e.StdinIsTerminal() {
 			return false, msg.NoTerminalFetch(e.command, remote)
 		}
 		if err := e.fetchUnfetched(ctx, t, remote, unfetched); err != nil {
@@ -283,7 +283,7 @@ func (e cloneCheck) run(ctx context.Context, t *target) (bool, error) {
 	if dirty, err := e.changes(ctx, b, vm, dir); err != nil || !dirty {
 		return false, err
 	}
-	if !e.Terminal() {
+	if !e.StdinIsTerminal() {
 		return false, msg.NoTerminalDelete(e.command)
 	}
 	if !e.remakes && !e.Ask(msg.DeleteAnyway()) || e.remakes && !e.Ask(msg.RemakeAnyway()) {
@@ -366,7 +366,7 @@ func (e clones) showChanges(status []byte, n int) int {
 	for ; i < n && s.Scan(); i++ {
 		shown.WriteString(msg.OneLine(s.Text()) + "\n")
 	}
-	_, _ = e.Stdout.Write([]byte(shown.String()))
+	_, _ = e.Stdout().Write([]byte(shown.String()))
 	return i
 }
 

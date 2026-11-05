@@ -22,6 +22,9 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 )
 
+// The UI is the Reporter devvm's packages report through.
+var _ msg.Reporter = (*UI)(nil)
+
 // UI is devvm's terminal for one run: its streams and whether each is a
 // terminal, the run log and the status line over it, the cleanup stack,
 // and whether the run was interrupted. Main makes the one a run has.

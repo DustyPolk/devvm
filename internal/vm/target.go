@@ -117,7 +117,7 @@ func (t *target) widen(cmd string) (bool, error) {
 	if t.sub == "" {
 		return true, nil
 	}
-	if !t.e.Terminal() {
+	if !t.e.StdinIsTerminal() {
 		return false, msg.WidenParentVMRefused(cmd, t.f.Dir, t.f.Name)
 	}
 	return t.e.Ask(msg.WidenParentVM(cmd, t.f.Dir, t.f.Name)), nil

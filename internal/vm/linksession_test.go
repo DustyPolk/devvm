@@ -318,7 +318,7 @@ func TestLinkRunCancelled(t *testing.T) {
 func TestWarnUnenforced(t *testing.T) {
 	e, f, client, target, _ := linkSessionEnv(t)
 	var warned msg.Recorder
-	e.Warn = warned.Add
+	e.Reporter = &msg.Fake{OnWarn: warned.Add}
 	want := "link_target_unenforced target=" + target.Name() + " vm=" + client.Name()
 	setNet(t, client, "on")
 	setNet(t, target, "on")

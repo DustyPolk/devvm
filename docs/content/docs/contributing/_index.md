@@ -246,7 +246,8 @@ Go tests are table tests next to the code they test, and they share a few helper
 - **`stubtest.New(t)`** puts the [stubs](#stubs) first on `PATH` for one test, as the CLI tests have them, with a new folder under `/tmp` as their `STUB_DIR` and its `calls` file as their `STUB_LOG`. The folder goes when the test ends. `stubtest.New(t, "ssh")` puts only the stubs it names on `PATH`, so the host's other commands, such as git, stay. Its `Calls` returns the calls the stubs logged, `Reset` forgets them, and `Touch`, `Write` and `Read` work on the files the stubs read, such as a switch, a file whose presence makes a stub fail. `VM`, `Size` and `VMs` set and read Lima's instances in the stubs' state, and `Keychain` and `SetKeychain` the Keychain's items. `stubtest.Command(t, "mise")` returns the path of one stub, for a test that runs it by its path, as `DEVVM_HOST_MISE` does.
 - **`stubtest.ExecRunner`** is a backend's runner that runs each command as it is, with no run log, so a backend under test runs the stubs.
 - **`msg.IDOf(err)`** returns the ID of the message an error carries, or "" when it carries none, and **`msg.NamesOf(err)`** returns the message's names, as names mode prints them, or the error's own text when it isn't a message. A test compares either with what it expects.
-- **A `msg.Recorder`** keeps the messages a package's `Info` or `Warn` is given. Set the field to the recorder's `Add`, then compare its `Names` or its `IDs`.
+- **A `msg.Fake`** is the `msg.Reporter` a package under test prints and asks through. Its zero value is quiet: it prints nothing, has no terminal, answers no to every question and runs a logged command as it is. Its fields change that: `OnInfo`, `OnWarn` and the other `On` funcs are given each message or question of their kind, `OnAny` every message, and `Terminal`, `Picks`, `Interrupt` and the writers stand for the terminal, the picker, an interrupt and the output.
+- **A `msg.Recorder`** keeps the messages it's given. Set a `msg.Fake`'s `OnInfo` or `OnWarn` to the recorder's `Add`, then compare its `Names` or its `IDs`.
 - **`backendtest.Stored`** is the fake backend with its disks on the host, for the free-space checks.
 
 ## CLI tests
@@ -402,7 +403,7 @@ Each slot's output appears as it comes, each line led by its slot's number, such
 
 ## Messages
 
-Every message devvm prints is a table in `locales/en.toml`, and Go code calls it through a function generated from it. `internal/msg` renders messages but never prints them; the run's `ui.UI` does. Only `cmd/devvm` and `internal/cli` hold it: other packages print through `Info`/`Warn` fields and the like, which cli sets from it.
+Every message devvm prints is a table in `locales/en.toml`, and Go code calls it through a function generated from it. `internal/msg` renders messages but never prints them; the run's `ui.UI` does. Only `cmd/devvm` and `internal/cli` hold it. Every other package prints and asks through the one `msg.Reporter` interface, which `ui.UI` implements: a package's type embeds it, its constructor takes it, and cli gives it the run's UI. Where a package's warnings also say where the run log is, as Lima's and the shared tools' do, its type has its own `Warn` method over the Reporter's.
 
 The locale files are in [go-i18n](https://github.com/nicksnyder/go-i18n)'s TOML format, with only go-i18n's own message fields, so go-i18n's loader reads them as they are and its `goi18n` tools work on them:
 

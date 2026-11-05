@@ -9,6 +9,7 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -28,7 +29,7 @@ func TestE2EExecQuoting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := New(d, assets.FS, quietUI{}, Overrides{}, nil)
+	r, err := New(d, assets.FS, &msg.Fake{}, Overrides{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,7 +3,6 @@ package sshagent
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,11 +73,11 @@ func (s *said) add(prefix string) func(msg.M) {
 	return func(m msg.M) { s.lines = append(s.lines, prefix+m.Names()) }
 }
 
-// said is the agent's UI: what it prints, by name, and no run log.
-func (s *said) Info(m msg.M)         { s.add("==> ")(m) }
-func (s *said) Note(m msg.M)         { s.add("")(m) }
-func (s *said) Warn(m msg.M)         { s.add("devvm: ")(m) }
-func (s *said) LogWriter() io.Writer { return io.Discard }
+// ui is the agent's UI, keeping what it prints in s, by name, with no
+// run log.
+func (s *said) ui() *msg.Fake {
+	return &msg.Fake{OnInfo: s.add("==> "), OnNote: s.add(""), OnWarn: s.add("devvm: ")}
+}
 
 // testAgent is devvm's agent on a fake, in a sandbox, with no VMs unless
 // mounts is set; tmp is a folder outside them for keys.
@@ -90,7 +89,7 @@ func testAgent(t *testing.T) (a *Agent, f *fakeAgent, out *said, tmp string, mou
 	}
 	f, out, mounts = &fakeAgent{}, &said{}, new([]Mount)
 	d := paths.Dirs{Data: filepath.Join(root, "data"), Config: filepath.Join(root, "config")}
-	a = New(d, func(context.Context) ([]Mount, error) { return *mounts, nil }, out)
+	a = New(d, func(context.Context) ([]Mount, error) { return *mounts, nil }, out.ui())
 	a.Run = f.run
 	a.Getenv = func(string) string { return "" }
 	a.LookPath = func(string) (string, error) { return "", exec.ErrNotFound }
@@ -491,7 +490,7 @@ func TestRealAgent(t *testing.T) {
 		t.Fatalf("ssh-keygen: %v\n%s", err, out)
 	}
 	var out said
-	a := New(d, func(context.Context) ([]Mount, error) { return nil, nil }, &out)
+	a := New(d, func(context.Context) ([]Mount, error) { return nil, nil }, out.ui())
 	if err := a.Add(t.Context(), key, AddOptions{Lifetime: "1h"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}

@@ -28,13 +28,13 @@ func TestE2ESelfCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := lima.New(d, assets.FS, testUI{t}, platform.Host{}, "", nil)
+	b := lima.New(d, assets.FS, testUI(t), platform.Host{}, "", nil)
 	st, err := state.ReadVM(d, vm)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := os.Getenv("DEVVM_E2E_WANT")
-	p := &Proxy{Warn: func(m msg.M) { t.Log(m.Names()) }, Terminal: func() bool { return false }}
+	p := &Proxy{Reporter: testUI(t)}
 	err = p.SelfCheck(t.Context(), b, st, func(context.Context) error { return errors.New("restarted without a terminal") })
 	if msg.NamesOf(err) != want {
 		t.Fatalf("SelfCheck = %v, want %q", msg.NamesOf(err), want)

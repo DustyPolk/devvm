@@ -143,7 +143,7 @@ func TestMoveHere(t *testing.T) {
 		t.Errorf("a no moved it: %s", got.Dir)
 	}
 	var infos []string
-	e.Info = func(m msg.M) { infos = append(infos, m.Names()) }
+	fake(e).OnInfo = func(m msg.M) { infos = append(infos, m.Names()) }
 	answers(t, e, true)
 	if tg, err = fd.target(t.Context(), need{}); err != nil || tg.f.Name != vm || !tg.moved || tg.f.Dir != now {
 		t.Fatalf("a yes: %+v, %v", tg, msg.NamesOf(err))
@@ -213,7 +213,7 @@ func TestMoveFolderChanged(t *testing.T) {
 	vm := existingVM(t, e, Options{NoNetworkPolicy: true}).Name()
 	was, now := moveFolder(t, e, "site")
 	answers(t, e, true)
-	e.Ask = func(msg.M) bool {
+	fake(e).OnAsk = func(msg.M) bool {
 		if err := os.Rename(now, now+".x"); err != nil {
 			t.Fatal(err)
 		}
@@ -281,7 +281,7 @@ func TestMoveHereSeveral(t *testing.T) {
 	}
 	moveFolder(t, e, "three")
 	var warned []string
-	e.Warn = func(m msg.M) { warned = append(warned, msg.IDOf(m)) }
+	fake(e).OnWarn = func(m msg.M) { warned = append(warned, msg.IDOf(m)) }
 	tg, err := (finder{e}).target(t.Context(), need{})
 	if err != nil || tg.exists || !slices.Contains(warned, "vms_moved_here") {
 		t.Errorf("several: %+v, %v, warned %q", tg, msg.NamesOf(err), warned)

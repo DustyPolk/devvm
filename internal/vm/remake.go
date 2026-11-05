@@ -219,7 +219,7 @@ func (e Lifecycle) toRemake(ctx context.Context, command string, cloneOK bool) (
 	}
 	vm := t.f.Name
 	if t.sub != "" {
-		if !e.Terminal() {
+		if !e.StdinIsTerminal() {
 			return nil, false, nil, msg.RemakeParentVM(command, t.f.Dir, vm)
 		}
 		if !e.Ask(msg.RemakeParentVMAsk(t.f.Dir, vm)) {
@@ -336,7 +336,7 @@ func (e Lifecycle) canRemake(t *target, p remakeInVM, o RemakeOptions) error {
 	if err := e.remaking.check(t, p); err != nil {
 		return err
 	}
-	if !o.Force && !e.Terminal() {
+	if !o.Force && !e.StdinIsTerminal() {
 		return msg.ForceNeeded(p.Command)
 	}
 	return nil

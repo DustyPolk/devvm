@@ -74,7 +74,7 @@ func (e Lifecycle) Adopt(ctx context.Context, name string, force bool) error {
 	was := st.Dir
 	switch {
 	case force:
-	case !e.Terminal():
+	case !e.StdinIsTerminal():
 		return msg.VMOtherFolderAdopt(vm, was)
 	case !e.Ask(msg.AdoptVM(vm, was)):
 		return nil
@@ -136,7 +136,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 	vm, st := t.f.Name, t.st
 	asked := false
 	if t.sub != "" {
-		if !e.Terminal() {
+		if !e.StdinIsTerminal() {
 			return msg.RmParentVM(t.f.Dir, vm)
 		}
 		if !e.Ask(msg.DeleteParentVM(t.f.Dir, vm)) {
@@ -146,7 +146,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 	}
 	if t.other {
 		was := st.Dir
-		if !e.Terminal() {
+		if !e.StdinIsTerminal() {
 			return msg.VMOtherFolderRm(vm, was)
 		}
 		if !e.Ask(msg.DeleteOtherFolderVM(vm, was)) {
@@ -155,7 +155,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 		asked, o.NoExport = true, true
 	}
 	confirm := !asked && !o.Force
-	if confirm && !e.Terminal() {
+	if confirm && !e.StdinIsTerminal() {
 		return msg.ForceNeeded("devvm rm")
 	}
 	// A VM whose creation didn't finish never ran: no history, no work.
@@ -243,10 +243,10 @@ func (e Lifecycle) rmGone(ctx context.Context, t *target, folder FolderState, o 
 		return err
 	}
 	unconnected := folder == FolderNotConnected
-	if unconnected && !e.Terminal() {
+	if unconnected && !e.StdinIsTerminal() {
 		return msg.RmVMNotConnected(st.Dir, vm)
 	}
-	if !o.Force && !e.Terminal() {
+	if !o.Force && !e.StdinIsTerminal() {
 		return msg.ForceNeeded("devvm rm")
 	}
 	if clone {

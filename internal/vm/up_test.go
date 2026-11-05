@@ -207,7 +207,7 @@ func TestUpWithoutEgressProxy(t *testing.T) {
 		t.Errorf("Up --network-policy = %v, calls %q", got, f.Methods())
 	}
 	var warned msg.Recorder
-	e.Warn = warned.Add
+	fake(e).OnWarn = warned.Add
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
@@ -227,7 +227,7 @@ func TestUpTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	var said msg.Recorder
-	e.Info = said.Add
+	fake(e).OnInfo = said.Add
 	if err := (Launch{e}).Up(t.Context(), Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
@@ -291,7 +291,7 @@ func TestUpFromTools(t *testing.T) {
 			e, f, _ := upEnv(t, allNative())
 			f.Built = backend.Built{Libc: tc.libc}
 			var said msg.Recorder
-			e.Info = said.Add
+			fake(e).OnInfo = said.Add
 			if err := (Launch{e}).Up(t.Context(), Options{From: tc.from, Toolchains: &[]string{"go"}, Agents: &[]string{}, NoNetworkPolicy: true}); err != nil {
 				t.Fatal(msg.NamesOf(err))
 			}
@@ -401,7 +401,7 @@ func TestUpParts(t *testing.T) {
 				}
 			}
 			var said, warned msg.Recorder
-			e.Info, e.Warn = said.Add, warned.Add
+			fake(e).OnInfo, fake(e).OnWarn = said.Add, warned.Add
 			o := tc.o
 			o.NoNetworkPolicy, o.Ports = true, "none"
 			if err := (Launch{e}).Up(t.Context(), o); err != nil {
@@ -462,7 +462,7 @@ func TestUpPicker(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	e.CanPick = func() bool { return true }
+	fake(e).Picks = true
 	if _, err := settings.Save(e.Dirs, settings.Values{Layers: &[]string{"nix", "desktop"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +484,7 @@ func TestUpPicker(t *testing.T) {
 		return out
 	}
 	var said msg.Recorder
-	e.Info = said.Add
+	fake(e).OnInfo = said.Add
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
@@ -544,7 +544,7 @@ func TestUpPicker(t *testing.T) {
 // Any of the flags skips the picker.
 func TestUpFlagsSkipPicker(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
-	e.CanPick = func() bool { return true }
+	fake(e).Picks = true
 	if _, err := settings.Save(e.Dirs, settings.Values{Agents: &[]string{}}); err != nil {
 		t.Fatal(err)
 	}
@@ -668,8 +668,8 @@ func TestRemakeUnfinished(t *testing.T) {
 			})
 			asked := false
 			e := &Env{
-				CanAsk: func() bool { return tc.canAsk },
-				Ask:    func(msg.M) bool { asked = true; return tc.ask },
+				CanAsk:   func() bool { return tc.canAsk },
+				Reporter: &msg.Fake{OnAsk: func(msg.M) bool { asked = true; return tc.ask }},
 			}
 			got := remakeUnfinished(e, &target{f: project.Folder{Name: st.Name()}, st: st, sub: tc.sub})
 			if got != tc.offered {

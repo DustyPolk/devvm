@@ -153,30 +153,21 @@ type Agent struct {
 	// Getenv and LookPath find an ssh-askpass, for --confirm.
 	Getenv   func(string) string
 	LookPath func(string) (string, error)
-	Info     func(msg.M)
-	Note     func(msg.M)
-	Warn     func(msg.M)
-}
-
-// UI is where the agent prints, and the run log ssh-add's output goes to
-// when it asks for a passphrase.
-type UI interface {
-	Info(msg.M)
-	Note(msg.M)
-	Warn(msg.M)
-	LogWriter() io.Writer
+	// Reporter is where the agent prints, and the run log ssh-add's
+	// output goes to when it asks for a passphrase.
+	msg.Reporter
 }
 
 // New returns devvm's agent, whose socket is in d's data folder; mounts
-// lists what project VMs mount. It prints through u.
-func New(d paths.Dirs, mounts func(ctx context.Context) ([]Mount, error), u UI) *Agent {
+// lists what project VMs mount. It prints through r.
+func New(d paths.Dirs, mounts func(ctx context.Context) ([]Mount, error), r msg.Reporter) *Agent {
 	sock := d.AgentSock()
 	return &Agent{
 		Dirs: d, Mounts: mounts, Getenv: os.Getenv, LookPath: exec.LookPath,
 		Run: func(ctx context.Context, terminal bool, argv ...string) (string, int) {
-			return run(ctx, sock, u.LogWriter, terminal, argv...)
+			return run(ctx, sock, r.LogWriter, terminal, argv...)
 		},
-		Info: u.Info, Note: u.Note, Warn: u.Warn,
+		Reporter: r,
 	}
 }
 

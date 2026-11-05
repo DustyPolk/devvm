@@ -31,11 +31,9 @@ const header = "# Written by devvm on every launch; edits are overwritten.\n"
 type Config struct {
 	Dirs   paths.Dirs
 	Review backend.Review // what their ssh is checked against
-	// What it prints, and asks: [Y/n]; Terminal reports whether it can
-	// ask.
-	Info, Warn, Say func(msg.M)
-	Confirm         func(msg.M) bool
-	Terminal        func() bool
+	// Reporter is where it prints, and asks ([Y/n]) when its input is a
+	// terminal.
+	msg.Reporter
 	// AddInclude adds the Include line without asking (--ssh-config).
 	AddInclude bool
 }
@@ -239,7 +237,7 @@ func (c *Config) EnsureInclude(home string) (bool, error) {
 	c.Say(msg.SSHIncludeNeeded(line))
 	switch {
 	case c.AddInclude:
-	case !c.Terminal():
+	case !c.StdinIsTerminal():
 		c.Warn(msg.SSHIncludeYourself())
 		return false, nil
 	case !c.Confirm(msg.AddItNow()):

@@ -42,7 +42,7 @@ func realLima(t *testing.T) (*Lima, fixture) {
 func dummyLima(t *testing.T, d paths.Dirs, r Runner) (*Lima, fixture) {
 	t.Helper()
 	fx := newFixture(t, d.Home)
-	l := New(d, assets.FS, testUI{}, platform.Host{}, "", nil)
+	l := New(d, assets.FS, &msg.Fake{}, platform.Host{}, "", nil)
 	// Project VMs' disks aren't overlays here: those are qemu-img's,
 	// not limactl's.
 	l.Runner, l.OS = r, "darwin"

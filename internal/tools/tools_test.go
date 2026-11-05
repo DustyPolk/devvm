@@ -43,17 +43,6 @@ const (
 	muslDigest = "alpine:3@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 )
 
-// quietUI prints nothing, runs commands as they are, their output
-// dropped, and keeps no cleanups.
-type quietUI struct{}
-
-func (quietUI) Info(msg.M)                                                {}
-func (quietUI) Warn(msg.M)                                                {}
-func (quietUI) LogNote()                                                  {}
-func (quietUI) Status(msg.M) func()                                       { return func() {} }
-func (quietUI) AddCleanup(func(context.Context)) func()                   { return func() {} }
-func (quietUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
-
 func repo(t *testing.T, parts ...string) string {
 	t.Helper()
 	p, err := filepath.Abs(filepath.Join(append([]string{"..", ".."}, parts...)...))
@@ -161,7 +150,10 @@ func newEnv(t *testing.T) env {
 	}
 	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
 	var said, detached []string
-	tl := New(d, os.DirFS(root), "0.1.0-test", quietUI{}, platform.Host{})
+	tl := New(d, os.DirFS(root), "0.1.0-test", &msg.Fake{
+		OnInfo: func(m msg.M) { said = append(said, "==> "+m.Names()) },
+		OnWarn: func(m msg.M) { said = append(said, "devvm: "+m.Names()) },
+	}, platform.Host{})
 	tl.Self = "/devvm"
 	tl.Arch = "arm64"
 	tl.Getenv = func(string) string { return "" }
@@ -169,8 +161,6 @@ func newEnv(t *testing.T) env {
 	tl.ShareNote = time.Millisecond
 	tl.RetryDelay = time.Millisecond
 	tl.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
-	tl.Info = func(m msg.M) { said = append(said, "==> "+m.Names()) }
-	tl.Warn = func(m msg.M) { said = append(said, "devvm: "+m.Names()) }
 	tl.Detach = func(c daemon.Cmd) (int, error) {
 		detached = append(detached, c.Path+" "+strings.Join(c.Args, " ")+" > "+c.Out.Name())
 		return 1, nil
@@ -1100,8 +1090,7 @@ func TestShareHolder(t *testing.T) {
 		t.Skip("run by TestLockShareKilled")
 	}
 	e := &Env{
-		Dirs: paths.Dirs{Data: data}, Info: func(msg.M) {},
-		AddCleanup: func(func(context.Context)) func() { return func() {} },
+		Dirs: paths.Dirs{Data: data}, Reporter: &msg.Fake{},
 	}
 	if _, err := e.LockShare(t.Context()); err != nil {
 		t.Fatal(err)
@@ -1363,7 +1352,7 @@ func TestMaking(t *testing.T) {
 	}
 	// Hold waiting says so, once, and gets it once Exclude's let go.
 	var said msg.Recorder
-	m.Info = said.Add
+	m.Reporter = &msg.Fake{OnInfo: said.Add}
 	got := make(chan error, 1)
 	go func() {
 		u, err := m.Hold(t.Context())

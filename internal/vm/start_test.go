@@ -56,7 +56,7 @@ func recordStart(t *testing.T, e *Env, f *backendtest.Fake, path func(context.Co
 	var r startRun
 	before := len(f.Calls())
 	var warned msg.Recorder
-	e.Warn = warned.Add
+	fake(e).OnWarn = warned.Add
 	err := path(t.Context(), e)
 	r.err = msg.NamesOf(err)
 	for _, c := range f.Calls()[before:] {
@@ -307,10 +307,10 @@ func TestOpenAsksToRestart(t *testing.T) {
 			}
 			var asked []string
 			e.CanAsk = func() bool { return tc.canAsk }
-			e.Ask = func(m msg.M) bool { asked = append(asked, "ask "+m.Names()); return tc.yes }
-			e.Confirm = func(m msg.M) bool { asked = append(asked, "confirm "+m.Names()); return tc.yes }
+			fake(e).OnAsk = func(m msg.M) bool { asked = append(asked, "ask "+m.Names()); return tc.yes }
+			fake(e).OnConfirm = func(m msg.M) bool { asked = append(asked, "confirm "+m.Names()); return tc.yes }
 			var noted msg.Recorder
-			e.Note = noted.Add
+			fake(e).OnNote = noted.Add
 			before := len(f.Calls())
 			run := recordStart(t, e, f, func(ctx context.Context, e *Env) error { return Launch{e}.Up(ctx, Options{}) })
 			if run.err != "" {

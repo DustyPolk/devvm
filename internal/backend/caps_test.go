@@ -180,7 +180,7 @@ func TestUnreviewedLetThrough(t *testing.T) {
 	var warned msg.Recorder
 	r := backend.Review{
 		Unreviewed: backend.ParseUnreviewed("lima:egress-proxy, fake:ssh"),
-		Warn:       warned.Add,
+		Reporter:   &msg.Fake{OnWarn: warned.Add},
 	}
 	if got := msg.NamesOf(r.Require(b, "devvm-x", backend.FeatureEgressProxy)); got != "backend_unreviewed backend=fake feature=egress-proxy vm=devvm-x" {
 		t.Errorf("another backend's: %s", got)
