@@ -393,7 +393,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err != nil {
 		return newVM{}, err
 	}
-	n.builder = e.builder(b, o.From)
+	n.builder = e.Builder(b, o.From)
 	parts, err := e.chooseParts(*o, vm, f.Dir, o.dc, n.builder, def)
 	if err != nil {
 		return newVM{}, err

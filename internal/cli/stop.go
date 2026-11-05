@@ -4,12 +4,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newStopCmd is devvm stop.
-func newStopCmd(u *ui.UI) *cobra.Command {
+func newStopCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
 		Short: "Stop this folder's VM",
@@ -20,7 +19,7 @@ func newStopCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Stop(cmd.Context()) }, msg.StopVMFailed)
+			a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Stop(cmd.Context()) }, msg.StopVMFailed)
 			return nil
 		},
 	}

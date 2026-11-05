@@ -4,12 +4,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newDesktopCmd is devvm desktop.
-func newDesktopCmd(u *ui.UI) *cobra.Command {
+func newDesktopCmd(a *app) *cobra.Command {
 	var o vm.DesktopOptions
 	c := &cobra.Command{
 		Use:   "desktop",
@@ -24,7 +23,7 @@ func newDesktopCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Desktop{Env: env}.Open(cmd.Context(), o) }, msg.DesktopFailed)
+			a.env(func(env *vm.Env) error { return vm.Desktop{Env: env}.Open(cmd.Context(), o) }, msg.DesktopFailed)
 			return nil
 		},
 	}

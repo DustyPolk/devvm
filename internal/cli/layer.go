@@ -7,13 +7,12 @@ import (
 
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newLayerCmd is devvm layer: new NAME, add LAYER... and rm LAYER....
-func newLayerCmd(u *ui.UI) *cobra.Command {
+func newLayerCmd(a *app) *cobra.Command {
+	u := a.u
 	cmd := &cobra.Command{
 		Use:   "layer",
 		Short: "Make image layers of your own, or change this folder's VM's layers",
@@ -27,7 +26,7 @@ func newLayerCmd(u *ui.UI) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
-	cmd.AddCommand(newLayerAddCmd(u), newLayerRmCmd(u))
+	cmd.AddCommand(newLayerAddCmd(a), newLayerRmCmd(a))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "new NAME",
 		Short: "Start a layer of your own",
@@ -43,7 +42,7 @@ func newLayerCmd(u *ui.UI) *cobra.Command {
 			return build.CheckLayerName(args[0])
 		}),
 		RunE: func(_ *cobra.Command, args []string) error {
-			dirs, err := paths.FromEnv()
+			dirs, err := a.dirs()
 			var script, policy string
 			if err == nil {
 				script, policy, err = build.NewLayer(dirs, args[0])
@@ -58,7 +57,7 @@ func newLayerCmd(u *ui.UI) *cobra.Command {
 
 // newLayerAddCmd is devvm layer add LAYER... [--force] [--no-export]
 // [--clean-home].
-func newLayerAddCmd(u *ui.UI) *cobra.Command {
+func newLayerAddCmd(a *app) *cobra.Command {
 	var o vm.RemakeOptions
 	cmd := &cobra.Command{
 		Use:   "add LAYER...",
@@ -73,7 +72,7 @@ func newLayerAddCmd(u *ui.UI) *cobra.Command {
 			"devvm layer add docker --clean-home", "add docker, and start from the image's home folder",
 		),
 		Args: cobra.MatchAll(minArgs(1), func(_ *cobra.Command, args []string) error {
-			dirs, err := paths.FromEnv()
+			dirs, err := a.dirs()
 			if err != nil {
 				return err
 			}
@@ -81,12 +80,12 @@ func newLayerAddCmd(u *ui.UI) *cobra.Command {
 		}),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			command := "devvm layer add " + strings.Join(args, " ")
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				return vm.Lifecycle{Env: env}.AddLayers(cmd.Context(), command, args, o)
 			}, msg.RemakeFailed)
 			return nil
 		},
-		ValidArgsFunction: completeLayerNames,
+		ValidArgsFunction: completeLayerNames(a),
 	}
 	addRemakeFlags(cmd.Flags(), &o)
 	return cmd
@@ -94,7 +93,7 @@ func newLayerAddCmd(u *ui.UI) *cobra.Command {
 
 // newLayerRmCmd is devvm layer rm LAYER... [--force] [--no-export]
 // [--clean-home].
-func newLayerRmCmd(u *ui.UI) *cobra.Command {
+func newLayerRmCmd(a *app) *cobra.Command {
 	var o vm.RemakeOptions
 	cmd := &cobra.Command{
 		Use:   "rm LAYER...",
@@ -109,7 +108,7 @@ func newLayerRmCmd(u *ui.UI) *cobra.Command {
 			"devvm layer rm docker --clean-home", "take out docker, and start from the image's home folder",
 		),
 		Args: cobra.MatchAll(minArgs(1), func(_ *cobra.Command, args []string) error {
-			dirs, err := paths.FromEnv()
+			dirs, err := a.dirs()
 			if err != nil {
 				return err
 			}
@@ -117,12 +116,12 @@ func newLayerRmCmd(u *ui.UI) *cobra.Command {
 		}),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			command := "devvm layer rm " + strings.Join(args, " ")
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				return vm.Lifecycle{Env: env}.RemoveLayers(cmd.Context(), command, args, o)
 			}, msg.RemakeFailed)
 			return nil
 		},
-		ValidArgsFunction: completeLayerNames,
+		ValidArgsFunction: completeLayerNames(a),
 	}
 	addRemakeFlags(cmd.Flags(), &o)
 	return cmd

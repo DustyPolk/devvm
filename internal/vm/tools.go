@@ -132,7 +132,7 @@ func (e Tools) build(ctx context.Context, t *found, names []string) ([]string, e
 	if len(names) == 0 {
 		return nil, nil
 	}
-	builder := e.builder(t.b, t.st.From)
+	builder := e.Builder(t.b, t.st.From)
 	tg, err := Launch(e).buildTarget(ctx, builder, t.b, t.st)
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func (e Tools) Pick(ctx context.Context, o Options) error {
 	for _, n := range image.Agents {
 		agents = append(agents, row(n))
 	}
-	b, img := e.builder(t.b, st.From), image.Name(st.Image)
+	b, img := e.Builder(t.b, st.From), image.Name(st.Image)
 	for _, l := range layerRows(b, img) {
 		layers = append(layers, PickRow{Name: l, Desc: layerDesc(l), On: img.Has(l), Fixed: true})
 	}
@@ -222,7 +222,7 @@ func (e Tools) Update(ctx context.Context, o Options) error {
 // first step. changed is false when it has the newest already.
 func (e Tools) update(ctx context.Context, t *found) (changed bool, err error) {
 	vm, st := t.f.Name, t.st
-	builder := e.builder(t.b, st.From)
+	builder := e.Builder(t.b, st.From)
 	tg, err := Launch(e).buildTarget(ctx, builder, t.b, st)
 	if err != nil {
 		return false, err

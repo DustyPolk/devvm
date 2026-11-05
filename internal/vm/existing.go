@@ -69,7 +69,7 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	if o.From != "" && o.From != st.From {
 		e.Warn(msg.FromIgnored(vm))
 	}
-	builder := e.builder(b, st.From)
+	builder := e.Builder(b, st.From)
 	if err := (build.Builds{Env: builder}).WarnIfOutdated(st.Chain); err != nil {
 		return err
 	}
@@ -342,7 +342,7 @@ func (e Launch) buildTools(ctx context.Context, builder *build.Env, tg tools.Tar
 // it builds it first (tools_need_own_base), before the build says it
 // builds base.
 func (e Launch) ownBase(b backend.Backend) (*build.Env, error) {
-	own := e.builder(b, "")
+	own := e.Builder(b, "")
 	key, err := own.Key(image.Base)
 	if err != nil {
 		return nil, err

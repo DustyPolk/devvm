@@ -16,7 +16,8 @@ import (
 
 // newNetworkCmd is devvm network [on|off], with -g [on|off|ask] for what
 // new VMs get, and allow, deny, rm RULE... [-g] and log.
-func newNetworkCmd(u *ui.UI) *cobra.Command {
+func newNetworkCmd(a *app) *cobra.Command {
+	u := a.u
 	var global, asJSON bool
 	cmd := &cobra.Command{
 		Use:   "network [on|off]",
@@ -66,7 +67,7 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 				label string
 				shown vm.NetworkShown
 			)
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				n := vm.Net{Env: env}
 				var err error
 				switch {
@@ -93,8 +94,8 @@ func newNetworkCmd(u *ui.UI) *cobra.Command {
 	}
 	cmd.Flags().BoolVarP(&global, "global", "g", false, "show or change whether new VMs get network policy instead")
 	jsonFlag(cmd, &asJSON)
-	cmd.AddCommand(newNetworkRuleCmds(u)...)
-	cmd.AddCommand(newNetworkLogCmd(u))
+	cmd.AddCommand(newNetworkRuleCmds(a)...)
+	cmd.AddCommand(newNetworkLogCmd(a))
 	return cmd
 }
 
@@ -148,7 +149,7 @@ func printNetwork(u *ui.UI, asJSON bool, s vm.NetworkShown) error {
 }
 
 // newNetworkRuleCmds are devvm network allow, deny and rm RULE... [-g].
-func newNetworkRuleCmds(u *ui.UI) []*cobra.Command {
+func newNetworkRuleCmds(a *app) []*cobra.Command {
 	sub := func(use, short, long, example string, deny, remove bool) *cobra.Command {
 		var global bool
 		c := &cobra.Command{
@@ -168,7 +169,7 @@ func newNetworkRuleCmds(u *ui.UI) []*cobra.Command {
 				return nil
 			}),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				withEnv(u, func(env *vm.Env) error {
+				a.env(func(env *vm.Env) error {
 					return vm.Net{Env: env}.PolicyChange(cmd.Context(), args, deny, remove, global)
 				}, msg.PolicyFailed)
 				return nil
@@ -204,7 +205,7 @@ func newNetworkRuleCmds(u *ui.UI) []*cobra.Command {
 }
 
 // newNetworkLogCmd is devvm network log [--follow] [-n N] [--blocked].
-func newNetworkLogCmd(u *ui.UI) *cobra.Command {
+func newNetworkLogCmd(a *app) *cobra.Command {
 	var lines uint
 	var o vm.LogOptions
 	var asJSON bool
@@ -225,9 +226,9 @@ func newNetworkLogCmd(u *ui.UI) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.Lines = int(min(lines, 1<<31-1))
 			if asJSON {
-				return printLogJSON(cmd, u, o)
+				return printLogJSON(cmd, a, o)
 			}
-			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.Log(cmd.Context(), u.Stdout(), o) }, msg.LogFailed)
+			a.env(func(env *vm.Env) error { return vm.Net{Env: env}.Log(cmd.Context(), a.u.Stdout(), o) }, msg.LogFailed)
 			return nil
 		},
 	}
@@ -279,12 +280,13 @@ type blockedOutput struct {
 
 // printLogJSON writes the folder's VM's network log as logOutput, or with
 // o.Blocked its blocks as blockedOutput.
-func printLogJSON(cmd *cobra.Command, u *ui.UI, o vm.LogOptions) error {
+func printLogJSON(cmd *cobra.Command, a *app, o vm.LogOptions) error {
+	u := a.u
 	var (
 		events []netpolicy.Event
 		blocks []netpolicy.Block
 	)
-	withEnv(u, func(env *vm.Env) error {
+	a.env(func(env *vm.Env) error {
 		var err error
 		if o.Blocked {
 			blocks, err = vm.Net{Env: env}.LogBlocks(cmd.Context())

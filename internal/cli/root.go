@@ -10,15 +10,15 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
 // NewRoot returns the devvm command with every subcommand registered, each
-// printing and asking through u. devvm itself is up: a shell in this
-// folder's VM.
+// printing and asking through u, on the run's services (app). devvm
+// itself is up: a shell in this folder's VM.
 func NewRoot(u *ui.UI) *cobra.Command {
+	a := newApp(u)
 	uf := new(upFlags)
 	fl := new(ui.Flags)
 	root := &cobra.Command{
@@ -41,17 +41,17 @@ func NewRoot(u *ui.UI) *cobra.Command {
 			if wantsJSON(cmd) {
 				u.DataOnly() // stdout is the JSON's alone
 			}
-			makePrivate(u)
+			makePrivate(a)
 			if !skipsLayout(cmd) {
-				checkLayout(cmd.Context(), u)
+				checkLayout(cmd.Context(), a)
 			}
 			if !skipsRetention(cmd) {
-				autoRetain(cmd.Context(), u)
+				autoRetain(cmd.Context(), a)
 			}
 		},
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return up(cmd.Context(), u, uf)
+			return up(cmd.Context(), a, uf)
 		},
 		SuggestionsMinimumDistance: msg.SuggestDistance,
 	}
@@ -60,10 +60,10 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	root.PersistentFlags().BoolVar(&fl.NoInput, "no-input", false, "never ask, and fail where devvm would ask, naming the flag that answers it")
 	addUpFlags(root, uf)
 	addVersion(root)
-	root.AddCommand(newBuildCmd(u), newRebuildCmd(u), newImagesCmd(u), newGCCmd(u), newSpaceCmd(u), newLayerCmd(u), newSetupCmd(u), newMsgCmd(u),
-		newRestartCmd(u), newStopCmd(u), newUpdateCmd(u), newToolsCmd(u), newAdoptCmd(u), newHistoryCmd(u), newRmCmd(u), newLsCmd(u), newNetworkCmd(u), newHostCmd(u), newCodeCmd(u), newDesktopCmd(u), newSSHAgentCmd(u), newGitProtectCmd(u), newCloneCmd(u), newPortsCmd(u), newSizeCmd(u), newDoctorCmd(u), newLimactlCmd(u), newQEMUCmd(u), newProxyCmd(u), newForwarderCmd(u), newRefreshToolsCmd(u), newSecretCmd(u),
-		newLinkCmd(u), newGroupCmd(u), newLinksCmd(u), newRetentionCmd(u), newVersionCmd(u), newCompletionCmd(u))
-	addCompletions(root)
+	root.AddCommand(newBuildCmd(a), newRebuildCmd(a), newImagesCmd(a), newGCCmd(a), newSpaceCmd(a), newLayerCmd(a), newSetupCmd(a), newMsgCmd(u),
+		newRestartCmd(a), newStopCmd(a), newUpdateCmd(a), newToolsCmd(a), newAdoptCmd(a), newHistoryCmd(a), newRmCmd(a), newLsCmd(a), newNetworkCmd(a), newHostCmd(a), newCodeCmd(a), newDesktopCmd(a), newSSHAgentCmd(a), newGitProtectCmd(a), newCloneCmd(a), newPortsCmd(a), newSizeCmd(a), newDoctorCmd(a), newLimactlCmd(a), newQEMUCmd(u), newProxyCmd(a), newForwarderCmd(a), newRefreshToolsCmd(a), newSecretCmd(a),
+		newLinkCmd(a), newGroupCmd(a), newLinksCmd(a), newRetentionCmd(a), newVersionCmd(u), newCompletionCmd(u))
+	addCompletions(root, a)
 	checkCommands(root)
 	addHelp(root)
 	addGroups(root)
@@ -74,13 +74,13 @@ func NewRoot(u *ui.UI) *cobra.Command {
 // makePrivate makes devvm's data and settings folders the user's alone on
 // every run, whatever mode they had. Without a HOME there are no folders,
 // and the command says so itself.
-func makePrivate(u *ui.UI) {
-	d, err := paths.FromEnv()
+func makePrivate(a *app) {
+	d, err := a.dirs()
 	if err != nil {
 		return
 	}
 	if err := state.MakePrivate(d); err != nil {
-		u.Warn(msg.FoldersNotPrivate(d.Config, d.Data).Because(err))
+		a.u.Warn(msg.FoldersNotPrivate(d.Config, d.Data).Because(err))
 	}
 }
 
@@ -88,8 +88,8 @@ func makePrivate(u *ui.UI) {
 // command runs (state.CheckLayout), and ends the run when a newer devvm
 // changed them or a version file can't be read. Without a HOME there
 // are no folders, and the command says so itself.
-func checkLayout(ctx context.Context, u *ui.UI) {
-	d, err := paths.FromEnv()
+func checkLayout(ctx context.Context, a *app) {
+	d, err := a.dirs()
 	if err != nil {
 		return
 	}
@@ -98,9 +98,9 @@ func checkLayout(ctx context.Context, u *ui.UI) {
 		return
 	}
 	if m, ok := errors.AsType[msg.M](err); ok {
-		u.Die(m)
+		a.u.Die(m)
 	}
-	u.Die(msg.LayoutUnchecked(err.Error()).Because(err))
+	a.u.Die(msg.LayoutUnchecked(err.Error()).Because(err))
 }
 
 // skipsLayout reports whether cmd runs without checking the layout

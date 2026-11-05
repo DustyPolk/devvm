@@ -5,13 +5,11 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // newLimactlCmd is devvm limactl: Lima's own command on the lima
 // backend's VMs and images.
-func newLimactlCmd(u *ui.UI) *cobra.Command {
+func newLimactlCmd(a *app) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "limactl [ARGS...]",
 		Short: "Run Lima's limactl for debugging, which starts VMs without network policy",
@@ -25,11 +23,11 @@ func newLimactlCmd(u *ui.UI) *cobra.Command {
 		DisableFlagParsing:    true,
 		DisableFlagsInUseLine: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			d, err := paths.FromEnv()
+			d, err := a.dirs()
 			if err == nil {
 				err = lima.Limactl(d, args)
 			}
-			fail(u, err, msg.LimactlFailed)
+			fail(a.u, err, msg.LimactlFailed)
 			return nil
 		},
 	}

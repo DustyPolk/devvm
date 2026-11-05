@@ -6,20 +6,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
 // newBuildCmd is devvm build IMAGE.
-func newBuildCmd(u *ui.UI) *cobra.Command {
+func newBuildCmd(a *app) *cobra.Command {
 	var f imageFlags
 	cmd := &cobra.Command{
 		Use:   "build IMAGE",
@@ -32,7 +29,7 @@ func newBuildCmd(u *ui.UI) *cobra.Command {
 			"devvm build foo+bar", "build base, foo and foo+bar"),
 		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), u, f, args[0], build.Builds.Build)
+			return imageCmd(cmd.Context(), a, f, args[0], build.Builds.Build)
 		},
 	}
 	f.add(cmd)
@@ -40,7 +37,7 @@ func newBuildCmd(u *ui.UI) *cobra.Command {
 }
 
 // newRebuildCmd is devvm rebuild IMAGE.
-func newRebuildCmd(u *ui.UI) *cobra.Command {
+func newRebuildCmd(a *app) *cobra.Command {
 	var f imageFlags
 	cmd := &cobra.Command{
 		Use:   "rebuild IMAGE",
@@ -54,7 +51,7 @@ func newRebuildCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return imageCmd(cmd.Context(), u, f, args[0], build.Builds.Rebuild)
+			return imageCmd(cmd.Context(), a, f, args[0], build.Builds.Rebuild)
 		},
 	}
 	f.add(cmd)
@@ -76,8 +73,8 @@ func (f *imageFlags) add(cmd *cobra.Command) {
 
 // imageCmd runs do on the builds of the backend new VMs get, once the
 // name is one (read once, here) and the backend can run.
-func imageCmd(ctx context.Context, u *ui.UI, f imageFlags, name string, do func(build.Builds, context.Context, image.Name) error) error {
-	b, err := builder(u)
+func imageCmd(ctx context.Context, a *app, f imageFlags, name string, do func(build.Builds, context.Context, image.Name) error) error {
+	b, err := a.builder()
 	if err == nil {
 		b.From, b.Force = fromRef(f.from), f.force
 		err = from.Check(b.From)
@@ -92,36 +89,8 @@ func imageCmd(ctx context.Context, u *ui.UI, f imageFlags, name string, do func(
 	if err == nil {
 		err = do(build.Builds{Env: b}, ctx, img)
 	}
-	fail(u, err, func(reason string) msg.M { return msg.BuildFailed(name, reason) })
+	fail(a.u, err, func(reason string) msg.M { return msg.BuildFailed(name, reason) })
 	return nil
-}
-
-// builder returns what builds images on the backend new VMs get.
-func builder(u *ui.UI) (*build.Env, error) {
-	dirs, err := paths.FromEnv()
-	if err != nil {
-		return nil, err
-	}
-	reg, err := newRegistry(dirs, assets.FS, u)
-	if err != nil {
-		return nil, err
-	}
-	c, err := reg.For(new(state.VM))
-	if err != nil {
-		return nil, err
-	}
-	return newBuilder(u, dirs, c.Backend, reg.Review, newTools(dirs, assets.FS, u, reg.Host), ""), nil
-}
-
-// newBuilder returns what builds images on be, its features checked
-// against rv, whose base starts from fromRef, printing and asking through
-// u.
-func newBuilder(u *ui.UI, dirs paths.Dirs, be backend.Backend, rv backend.Review, t *tools.Env, fromRef string) *build.Env {
-	return &build.Env{
-		Dirs: dirs, Assets: assets.FS, Backend: be, Review: rv, Tools: t, From: fromRef, Version: devvmVersion(),
-		Info: u.Info, Warn: u.Warn, Say: u.Say, Confirm: func(m msg.M) bool { return u.Confirm(m) },
-		Pick: pickFeatures(u), Terminal: u.StdinIsTerminal, LogNote: u.LogNote, LogWriter: u.LogWriter, FreeSpace: thisHost().FreeSpace,
-	}
 }
 
 // pickFeatures returns what asks which features base gets, in u's

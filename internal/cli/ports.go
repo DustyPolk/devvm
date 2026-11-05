@@ -5,13 +5,13 @@ import (
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newPortsCmd is devvm ports [all|none|LIST], and add and rm LIST, each
 // with -g for what new VMs forward.
-func newPortsCmd(u *ui.UI) *cobra.Command {
+func newPortsCmd(a *app) *cobra.Command {
+	u := a.u
 	var global, asJSON bool
 	// run shows the ports without a change, else makes it.
 	run := func(cmd *cobra.Command, c *vm.PortsChange) error {
@@ -20,7 +20,7 @@ func newPortsCmd(u *ui.UI) *cobra.Command {
 			def   settings.Value
 			label string
 		)
-		withEnv(u, func(env *vm.Env) error {
+		a.env(func(env *vm.Env) error {
 			s := vm.Settings{Env: env}
 			var err error
 			switch {

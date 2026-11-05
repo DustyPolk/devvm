@@ -2,13 +2,10 @@ package cli
 
 import (
 	"context"
-	"os"
 	"slices"
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/backend/registry"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
@@ -72,48 +69,13 @@ func (uf *upFlags) options() vm.Options {
 }
 
 // up opens a shell in this folder's VM, making it first.
-func up(ctx context.Context, u *ui.UI, uf *upFlags) error {
+func up(ctx context.Context, a *app, uf *upFlags) error {
 	o := uf.options()
-	withEnv(u, func(env *vm.Env) error {
+	a.env(func(env *vm.Env) error {
 		env.AddInclude = uf.sshConfig
 		return vm.Launch{Env: env}.Up(ctx, o)
 	}, msg.UpFailed)
 	return nil
-}
-
-// withEnv runs do in this folder's environment on u, failing with what's
-// message for an error that isn't one.
-func withEnv(u *ui.UI, do func(*vm.Env) error, what func(reason string) msg.M) {
-	env, err := newEnv(u)
-	if err == nil {
-		err = do(env)
-	}
-	fail(u, err, what)
-}
-
-func newEnv(u *ui.UI) (*vm.Env, error) {
-	dirs, err := paths.FromEnv()
-	if err != nil {
-		return nil, err
-	}
-	self, err := paths.Self()
-	if err != nil {
-		return nil, err
-	}
-	o := readOverrides(os.Getenv)
-	reg, err := registry.New(dirs, assets.FS, u, o.Overrides, companyProxy(dirs, u.Warn))
-	if err != nil {
-		return nil, err
-	}
-	e, err := vm.NewEnv(dirs, assets.FS, self, devvmVersion(), reg, u)
-	if err != nil {
-		return nil, err
-	}
-	e.Tools.Mise = o.HostMise
-	e.PickFeatures = pickFeatures(u)
-	e.PickParts = pickParts(u)
-	e.CanAsk = func() bool { return ui.CanAsk(u) }
-	return e, nil
 }
 
 // pickParts returns what shows the tools picker in u's terminal, each

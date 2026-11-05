@@ -4,12 +4,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newAdoptCmd is devvm adopt [--force].
-func newAdoptCmd(u *ui.UI) *cobra.Command {
+func newAdoptCmd(a *app) *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "adopt",
@@ -23,7 +22,7 @@ func newAdoptCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Adopt(cmd.Context(), force) }, msg.AdoptFailed)
+			a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Adopt(cmd.Context(), force) }, msg.AdoptFailed)
 			return nil
 		},
 	}

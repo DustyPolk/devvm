@@ -7,9 +7,7 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ports"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vmssh"
 )
 
@@ -19,7 +17,8 @@ import (
 // forwards (ports.Used) but its VM's own listed ones; its log lines are
 // data, written to devvm's stderr. Hidden: it's not for users. Its flags
 // are the forwarder's own, parsed by vmssh.Main.
-func newForwarderCmd(u *ui.UI) *cobra.Command {
+func newForwarderCmd(a *app) *cobra.Command {
+	u := a.u
 	return &cobra.Command{
 		Use:                vmssh.Cmd + " [flags]",
 		Short:              "Forward a VM's ports",
@@ -27,7 +26,7 @@ func newForwarderCmd(u *ui.UI) *cobra.Command {
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fail := func(err error) { u.Die(msg.ForwarderFailed(err.Error()).Because(err)) }
-			d, err := paths.FromEnv()
+			d, err := a.dirs()
 			if err != nil {
 				fail(err)
 			}

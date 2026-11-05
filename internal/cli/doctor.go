@@ -10,7 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -23,7 +22,8 @@ import (
 )
 
 // newDoctorCmd is devvm doctor.
-func newDoctorCmd(u *ui.UI) *cobra.Command {
+func newDoctorCmd(a *app) *cobra.Command {
+	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -37,21 +37,22 @@ func newDoctorCmd(u *ui.UI) *cobra.Command {
 		Args:              noArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			reg, b, err := doctorBackend(u)
+			reg, b, err := doctorBackend(a)
 			fail(u, err, msg.DoctorFailed)
 			d := doctor{
 				Path: onPath{LookPath: exec.LookPath, Executable: os.Executable},
 				Free: reg.Host.FreeSpace,
 				Host: func() (vm.Host, error) { return vm.ThisHost(reg.Host) },
+				Dirs: a.dirs,
 				Policies: func() []msg.M {
-					dirs, err := paths.FromEnv()
+					dirs, err := a.dirs()
 					if err != nil {
 						return nil
 					}
 					return netpolicy.NotRules(dirs)
 				},
 				Folders: func() []msg.M {
-					dirs, err := paths.FromEnv()
+					dirs, err := a.dirs()
 					if err != nil {
 						return nil
 					}
@@ -154,6 +155,9 @@ type doctor struct {
 	Path onPath
 	Free func(path string) (uint64, error) // free bytes on path's volume
 	Host func() (vm.Host, error)
+	// Dirs is devvm's folders, whose CA folder the company proxy's check
+	// reads (sayProxyCA).
+	Dirs func() (paths.Dirs, error)
 	// Policies are the warnings for your policy files' lines that aren't
 	// rules (netpolicy.NotRules); nil for none.
 	Policies func() []msg.M
@@ -176,7 +180,7 @@ func (d doctor) run(ctx context.Context, u *ui.UI, b backend.Backend) error {
 	} else {
 		u.Say(msg.DockerMissing())
 	}
-	sayProxyCA(u)
+	sayProxyCA(u, d.Dirs)
 	for _, m := range d.warnings(b) {
 		u.Warn(m)
 	}
@@ -211,8 +215,8 @@ func smallHost(host func() (vm.Host, error)) []msg.M {
 // (settings.HostProxy) and devvm's CA folder has no CAs, that a proxy that
 // inspects TLS needs its CA there: not a problem, as most proxies don't. A
 // folder devvm would refuse is warned about.
-func sayProxyCA(u *ui.UI) {
-	dirs, err := paths.FromEnv()
+func sayProxyCA(u *ui.UI, folders func() (paths.Dirs, error)) {
+	dirs, err := folders()
 	if err != nil {
 		return
 	}
@@ -230,12 +234,8 @@ func sayProxyCA(u *ui.UI) {
 }
 
 // doctorBackend returns devvm's backends and the one new VMs get.
-func doctorBackend(u *ui.UI) (*backend.Registry, backend.Backend, error) {
-	dirs, err := paths.FromEnv()
-	if err != nil {
-		return nil, nil, err
-	}
-	reg, err := newRegistry(dirs, assets.FS, u)
+func doctorBackend(a *app) (*backend.Registry, backend.Backend, error) {
+	reg, err := a.registry()
 	if err != nil {
 		return nil, nil, err
 	}

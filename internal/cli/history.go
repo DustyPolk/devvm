@@ -21,7 +21,8 @@ import (
 
 // newHistoryCmd is devvm history: the exports of agents' history in
 // devvm's exports folder, and history export, which writes one.
-func newHistoryCmd(u *ui.UI) *cobra.Command {
+func newHistoryCmd(a *app) *cobra.Command {
+	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "history",
@@ -34,7 +35,7 @@ func newHistoryCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(*cobra.Command, []string) error {
-			d, err := paths.FromEnv()
+			d, err := a.dirs()
 			var es []savedExport
 			if err == nil {
 				es, err = exports(d)
@@ -47,7 +48,7 @@ func newHistoryCmd(u *ui.UI) *cobra.Command {
 		},
 	}
 	jsonFlag(cmd, &asJSON)
-	cmd.AddCommand(newHistoryExportCmd(u))
+	cmd.AddCommand(newHistoryExportCmd(a))
 	return cmd
 }
 
@@ -85,7 +86,7 @@ func writeHistory(tab *ui.Table, es []savedExport) error {
 }
 
 // newHistoryExportCmd is devvm history export [FILE].
-func newHistoryExportCmd(u *ui.UI) *cobra.Command {
+func newHistoryExportCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "export [FILE]",
 		Short: "Save this folder's VM's agent history to a .tar.gz",
@@ -98,7 +99,7 @@ func newHistoryExportCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: maxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				file := ""
 				if len(args) == 1 {
 					abs, err := filepath.Abs(args[0])

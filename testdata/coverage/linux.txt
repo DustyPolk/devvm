@@ -32,7 +32,7 @@ internal/secrets 91.8
 internal/settings 96.2
 internal/shell 100.0
 internal/sshagent 84.2
-internal/sshconfig 91.8
+internal/sshconfig 91.9
 internal/state 94.0
 internal/stubtest 81.4
 internal/stubtest/stub 93.1

@@ -4,12 +4,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newRmCmd is devvm rm [VM] [--force] [--no-export] [--no-clone-check].
-func newRmCmd(u *ui.UI) *cobra.Command {
+func newRmCmd(a *app) *cobra.Command {
 	var o vm.RmOptions
 	cmd := &cobra.Command{
 		Use:   "rm [VM]",
@@ -28,11 +27,11 @@ func newRmCmd(u *ui.UI) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				name := args[0]
-				withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.RmVM(cmd.Context(), name, o) },
+				a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.RmVM(cmd.Context(), name, o) },
 					func(reason string) msg.M { return msg.RmVMFailed(reason, name) })
 				return nil
 			}
-			withEnv(u, func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Rm(cmd.Context(), o) }, msg.RmFailed)
+			a.env(func(env *vm.Env) error { return vm.Lifecycle{Env: env}.Rm(cmd.Context(), o) }, msg.RmFailed)
 			return nil
 		},
 	}

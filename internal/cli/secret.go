@@ -8,7 +8,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/secrets"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
@@ -28,7 +27,7 @@ func oneSecret(cmd *cobra.Command) {
 }
 
 // newSecretCmd is devvm secret: the secrets kept on this machine, listed.
-func newSecretCmd(u *ui.UI) *cobra.Command {
+func newSecretCmd(a *app) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "secret",
@@ -44,15 +43,15 @@ func newSecretCmd(u *ui.UI) *cobra.Command {
 			"devvm secret use github", "let this folder's VM use it",
 		),
 		Args: noArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, u, asJSON) },
+		RunE: func(cmd *cobra.Command, _ []string) error { return listSecrets(cmd, a, asJSON) },
 	}
 	jsonFlag(cmd, &asJSON)
-	cmd.AddCommand(newSecretSetCmd(u), newSecretRmCmd(u),
-		newSecretUseCmd(u, "use", true), newSecretUseCmd(u, "unuse", false))
+	cmd.AddCommand(newSecretSetCmd(a), newSecretRmCmd(a),
+		newSecretUseCmd(a, "use", true), newSecretUseCmd(a, "unuse", false))
 	return cmd
 }
 
-func newSecretSetCmd(u *ui.UI) *cobra.Command {
+func newSecretSetCmd(a *app) *cobra.Command {
 	var stdin bool
 	cmd := &cobra.Command{
 		Use:   "set NAME",
@@ -67,7 +66,7 @@ func newSecretSetCmd(u *ui.UI) *cobra.Command {
 			"devvm secret set proxy", "save the company proxy's password, asking for it",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			saveSecret(cmd, u, args[0], stdin)
+			saveSecret(cmd, a, args[0], stdin)
 			return nil
 		},
 	}
@@ -78,7 +77,8 @@ func newSecretSetCmd(u *ui.UI) *cobra.Command {
 
 // saveSecret asks for a secret's token (with stdin, reads a line) and
 // saves it.
-func saveSecret(cmd *cobra.Command, u *ui.UI, name string, stdin bool) {
+func saveSecret(cmd *cobra.Command, a *app, name string, stdin bool) {
+	u := a.u
 	var given string
 	if stdin {
 		given = u.Line()
@@ -95,10 +95,11 @@ func saveSecret(cmd *cobra.Command, u *ui.UI, name string, stdin bool) {
 		}
 		given = u.Secret(prompt)
 	}
-	withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
+	a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
 }
 
-func newSecretRmCmd(u *ui.UI) *cobra.Command {
+func newSecretRmCmd(a *app) *cobra.Command {
+	u := a.u
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "rm NAME",
@@ -116,7 +117,7 @@ func newSecretRmCmd(u *ui.UI) *cobra.Command {
 				u.Info(msg.NothingDeleted())
 				return nil
 			}
-			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.SecretRm(cmd.Context(), args[0]) }, msg.SecretFailed)
+			a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretRm(cmd.Context(), args[0]) }, msg.SecretFailed)
 			return nil
 		},
 	}
@@ -139,9 +140,10 @@ type secretJSON struct {
 
 // listSecrets writes the secrets as a table, or with asJSON as
 // secretOutput.
-func listSecrets(cmd *cobra.Command, u *ui.UI, asJSON bool) error {
+func listSecrets(cmd *cobra.Command, a *app, asJSON bool) error {
+	u := a.u
 	var ss []vm.SecretListed
-	withEnv(u, func(env *vm.Env) error {
+	a.env(func(env *vm.Env) error {
 		var err error
 		ss, err = vm.Net{Env: env}.Secrets(cmd.Context())
 		return err
@@ -166,7 +168,7 @@ func listSecrets(cmd *cobra.Command, u *ui.UI, asJSON bool) error {
 }
 
 // newSecretUseCmd is devvm secret use (use) or unuse.
-func newSecretUseCmd(u *ui.UI, name string, use bool) *cobra.Command {
+func newSecretUseCmd(a *app, name string, use bool) *cobra.Command {
 	short, long := "Let this folder's VM use a secret", "Let this folder's VM use a secret. "+
 		"Its proxy puts the secret in at once, and the VM gets its placeholder from its next launch, "+
 		"or the secret itself without network policy."
@@ -184,7 +186,7 @@ func newSecretUseCmd(u *ui.UI, name string, use bool) *cobra.Command {
 		Long:    long,
 		Example: example,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Net{Env: env}.SecretUse(cmd.Context(), args[0], use) }, msg.SecretFailed)
+			a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretUse(cmd.Context(), args[0], use) }, msg.SecretFailed)
 			return nil
 		},
 	}

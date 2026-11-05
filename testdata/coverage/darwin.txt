@@ -4,7 +4,7 @@ cmd/devvm 100.0
 internal/agentlogin 94.8
 internal/backend 97.1
 internal/backend/backendtest 74.4
-internal/backend/lima 90.7
+internal/backend/lima 90.8
 internal/backend/registry 100.0
 internal/build 88.5
 internal/cli 88.8
@@ -21,7 +21,7 @@ internal/image 99.4
 internal/jsonc 97.1
 internal/msg 69.5
 internal/msg/gen 93.3
-internal/netpolicy 88.4
+internal/netpolicy 88.5
 internal/paths 98.1
 internal/platform 86.3
 internal/ports 90.9
@@ -32,7 +32,7 @@ internal/secrets 92.3
 internal/settings 96.2
 internal/shell 100.0
 internal/sshagent 84.2
-internal/sshconfig 91.8
+internal/sshconfig 91.9
 internal/state 94.2
 internal/stubtest 81.4
 internal/stubtest/stub 92.9

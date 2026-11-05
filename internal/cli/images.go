@@ -20,7 +20,8 @@ import (
 )
 
 // newImagesCmd is devvm images, and devvm images rm.
-func newImagesCmd(u *ui.UI) *cobra.Command {
+func newImagesCmd(a *app) *cobra.Command {
+	u := a.u
 	var asJSON bool
 	c := &cobra.Command{
 		Use:   "images",
@@ -34,13 +35,13 @@ func newImagesCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			b, err := builder(u)
+			b, err := a.builder()
 			var imgs []listedImage
 			var ts []tools.Listed
 			if err == nil {
 				b.From = fromRef("")
 				var l imageListing
-				if l, err = listImages(cmd.Context(), u, b); err == nil {
+				if l, err = listImages(cmd.Context(), a, b); err == nil {
 					imgs, ts, err = l.images, l.tools, l.failUnlisted()
 				}
 			}
@@ -59,12 +60,13 @@ func newImagesCmd(u *ui.UI) *cobra.Command {
 		},
 	}
 	jsonFlag(c, &asJSON)
-	c.AddCommand(newImagesRmCmd(u))
+	c.AddCommand(newImagesRmCmd(a))
 	return c
 }
 
 // newImagesRmCmd is devvm images rm IMAGE|KEY....
-func newImagesRmCmd(u *ui.UI) *cobra.Command {
+func newImagesRmCmd(a *app) *cobra.Command {
+	u := a.u
 	var (
 		f     imageFlags
 		force bool
@@ -82,14 +84,14 @@ func newImagesRmCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: minArgs(1),
 		ValidArgsFunction: func(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-			dirs, err := paths.FromEnv()
+			dirs, err := a.dirs()
 			if err != nil {
 				return nil, cobra.ShellCompDirectiveNoFileComp
 			}
 			return joined(toComplete, (&build.Env{Dirs: dirs}).Layers()), cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			b, err := builder(u)
+			b, err := a.builder()
 			if err == nil {
 				b.From = fromRef(f.from)
 				err = from.Check(b.From)
@@ -267,18 +269,19 @@ type imageListing struct {
 // listImages lists the images on every backend, and the shared tools for
 // the base new VMs get on b (its backend and From). A backend that can't
 // list is left out, and named in unlisted when a VM's state names it.
-func listImages(ctx context.Context, u *ui.UI, b *build.Env) (imageListing, error) {
-	defer u.Status(msg.ReadingImages())()
+func listImages(ctx context.Context, a *app, b *build.Env) (imageListing, error) {
+	defer a.u.Status(msg.ReadingImages())()
 	var out imageListing
 	if err := from.Check(b.From); err != nil {
 		return out, err
 	}
-	reg, err := newRegistry(b.Dirs, b.Assets, u)
+	env, err := a.vmEnv()
 	if err != nil {
 		return out, err
 	}
+	reg := env.Registry
 	for _, be := range reg.All() {
-		on := build.Images{Env: newBuilder(u, b.Dirs, be, reg.Review, b.Tools, "")}
+		on := build.Images{Env: env.Builder(be, "")}
 		ls, err := on.Listing(ctx)
 		if err != nil {
 			if used, uerr := state.Backends(b.Dirs); uerr != nil {
@@ -303,7 +306,7 @@ func listImages(ctx context.Context, u *ui.UI, b *build.Env) (imageListing, erro
 	}
 	tgs := []tools.Target{tg}
 	for _, be := range reg.All() {
-		t, err := newBuilder(u, b.Dirs, be, reg.Review, b.Tools, b.From).ToolTarget()
+		t, err := env.Builder(be, b.From).ToolTarget()
 		if err != nil {
 			return out, err
 		}

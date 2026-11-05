@@ -33,6 +33,7 @@ func setupSandbox(t *testing.T, terminal bool) (setup, paths.Dirs, *[]string) {
 	u, _, _ := testUI()
 	s := setup{
 		ui:       u,
+		dirs:     func() (paths.Dirs, error) { return d, nil },
 		terminal: func() bool { return terminal },
 		pickOne: func(help msg.M, cs []ui.Choice) int {
 			if help.ID() != "network_default_help" {

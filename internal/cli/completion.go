@@ -9,7 +9,6 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ui"
 )
 
@@ -48,39 +47,41 @@ func newCompletionCmd(u *ui.UI) *cobra.Command {
 // and flags: image names for IMAGE, the toolchains, agents and layers for
 // --tools, --agents and --layers, and no file names, which none of them
 // take.
-func addCompletions(root *cobra.Command) {
+func addCompletions(root *cobra.Command, a *app) {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.CompletionOptions.SetDefaultShellCompDirective(cobra.ShellCompDirectiveNoFileComp)
 	for _, c := range root.Commands() {
 		switch c.Name() {
 		case "build", "rebuild":
-			c.ValidArgsFunction = completeImage
+			c.ValidArgsFunction = completeImage(a)
 		case "setup":
-			_ = c.RegisterFlagCompletionFunc("features", completeFeatures)
-			_ = c.RegisterFlagCompletionFunc("agents", completeParts("agents"))
-			_ = c.RegisterFlagCompletionFunc("layers", completeParts("layers"))
+			_ = c.RegisterFlagCompletionFunc("features", completeFeatures(a))
+			_ = c.RegisterFlagCompletionFunc("agents", completeParts(a, "agents"))
+			_ = c.RegisterFlagCompletionFunc("layers", completeParts(a, "layers"))
 		}
 	}
 	for _, flag := range []string{"tools", "agents", "layers"} {
-		_ = root.RegisterFlagCompletionFunc(flag, completeParts(flag))
+		_ = root.RegisterFlagCompletionFunc(flag, completeParts(a, flag))
 	}
 	_ = root.RegisterFlagCompletionFunc("ports", cobra.FixedCompletions([]string{"all", "none"}, cobra.ShellCompDirectiveNoFileComp))
 }
 
-// completeImage completes IMAGE: base and the layers, after the layers
-// already given.
-func completeImage(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	if len(args) > 0 {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+// completeImage returns what completes IMAGE: base and the layers, after
+// the layers already given.
+func completeImage(a *app) cobra.CompletionFunc {
+	return func(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		if len(args) > 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return joined(toComplete, layerNames(a, true)), cobra.ShellCompDirectiveNoFileComp
 	}
-	return joined(toComplete, layerNames(true)), cobra.ShellCompDirectiveNoFileComp
 }
 
-// layerNames is the layers there are, built-in and the user's, with base
-// first when withBase.
-func layerNames(withBase bool) []string {
+// layerNames is the layers there are in a's folders, built-in and the
+// user's, with base first when withBase.
+func layerNames(a *app, withBase bool) []string {
 	layers := slices.Concat([]string{image.Base}, image.Builtins)
-	if dirs, err := paths.FromEnv(); err == nil {
+	if dirs, err := a.dirs(); err == nil {
 		layers = (&build.Env{Dirs: dirs}).Layers()
 	}
 	if withBase {
@@ -92,11 +93,11 @@ func layerNames(withBase bool) []string {
 // completeParts returns what completes --tools, --agents and --layers
 // (flag): a comma-separated list of the part's names, after those already
 // given, or none.
-func completeParts(flag string) cobra.CompletionFunc {
+func completeParts(a *app, flag string) cobra.CompletionFunc {
 	return func(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 		names := map[string][]string{"tools": image.Toolchains, "agents": image.Agents}[flag]
 		if flag == "layers" {
-			names = layerNames(false)
+			names = layerNames(a, false)
 		}
 		out := joinedBy(",", toComplete, names)
 		if strings.HasPrefix(partsNone, toComplete) {
@@ -118,27 +119,31 @@ func completeToolNames(_ *cobra.Command, args []string, toComplete string) ([]co
 	return out, cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeLayerNames completes devvm layer add's and rm's LAYER...: the layers
-// there are, but those given.
-func completeLayerNames(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	var out []cobra.Completion
-	for _, n := range layerNames(false) {
-		if strings.HasPrefix(n, toComplete) && !slices.Contains(args, n) {
-			out = append(out, n)
+// completeLayerNames returns what completes devvm layer add's and rm's
+// LAYER...: the layers there are, but those given.
+func completeLayerNames(a *app) cobra.CompletionFunc {
+	return func(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		var out []cobra.Completion
+		for _, n := range layerNames(a, false) {
+			if strings.HasPrefix(n, toComplete) && !slices.Contains(args, n) {
+				out = append(out, n)
+			}
 		}
+		return out, cobra.ShellCompDirectiveNoFileComp
 	}
-	return out, cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeFeatures completes setup's --features: base's features, after
-// the ones already given.
-func completeFeatures(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	dirs, err := paths.FromEnv()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+// completeFeatures returns what completes setup's --features: base's
+// features, after the ones already given.
+func completeFeatures(a *app) cobra.CompletionFunc {
+	return func(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		dirs, err := a.dirs()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		features := (&build.Env{Dirs: dirs, Assets: assets.FS}).Features()
+		return joinedBy(",", toComplete, features), cobra.ShellCompDirectiveNoFileComp
 	}
-	features := (&build.Env{Dirs: dirs, Assets: assets.FS}).Features()
-	return joinedBy(",", toComplete, features), cobra.ShellCompDirectiveNoFileComp
 }
 
 // joined completes the last of the +-joined parts in toComplete with the

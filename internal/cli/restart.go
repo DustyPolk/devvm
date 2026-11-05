@@ -4,12 +4,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newRestartCmd is devvm restart.
-func newRestartCmd(u *ui.UI) *cobra.Command {
+func newRestartCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "restart",
 		Short: "Restart this folder's VM and open a shell in it",
@@ -20,7 +19,7 @@ func newRestartCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Launch{Env: env}.Restart(cmd.Context(), vm.Options{}) }, msg.UpFailed)
+			a.env(func(env *vm.Env) error { return vm.Launch{Env: env}.Restart(cmd.Context(), vm.Options{}) }, msg.UpFailed)
 			return nil
 		},
 	}

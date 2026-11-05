@@ -139,9 +139,12 @@ type UI interface {
 }
 
 // NewEnv returns the environment up runs in here, with devvm's own files
-// (assets), devvm being self at version, on u. Its caller sets
-// PickFeatures and PickParts.
-func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Registry, u UI) (*Env, error) {
+// (assets), devvm being self at version, on u, with the run's registry,
+// shared tools and secrets store. The shared tools' downloads and builds,
+// and --from's lookups, go through tl's company proxy, whose password
+// its caller takes from store, the same secrets as the VMs' proxies'.
+// Its caller sets PickFeatures and PickParts.
+func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Registry, tl *tools.Env, store *secrets.Store, u UI) (*Env, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -149,12 +152,6 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 	if wd, err = filepath.EvalSymlinks(wd); err != nil {
 		return nil, err
 	}
-	// The shared tools' downloads and builds, and --from's lookups, go
-	// through the company proxy, with config.toml's password from the
-	// same secrets as the VMs' proxies.
-	store := secrets.NewStore(d, u.Warn)
-	tl := tools.New(d, assets, version, u, reg.Host)
-	tl.Proxy.Password = store.ProxyPassword
 	e := &Env{
 		Dirs: d, Assets: assets, Registry: reg, Tools: tl,
 		Proxy: netpolicy.NewProxy(d, assets, self, store, u),
@@ -175,9 +172,10 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 	return e, nil
 }
 
-// builder returns what builds images on b whose base starts from
-// fromRef ("" for the backend's own).
-func (e *Env) builder(b backend.Backend, fromRef string) *build.Env {
+// Builder returns what builds images on b whose base starts from
+// fromRef ("" for the backend's own): the only one, which cli's
+// commands take too.
+func (e *Env) Builder(b backend.Backend, fromRef string) *build.Env {
 	return &build.Env{
 		Dirs: e.Dirs, Assets: e.Assets, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef, Version: e.Version,
 		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,

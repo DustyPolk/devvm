@@ -4,12 +4,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newCodeCmd is devvm code.
-func newCodeCmd(u *ui.UI) *cobra.Command {
+func newCodeCmd(a *app) *cobra.Command {
 	var include bool
 	cmd := &cobra.Command{
 		Use:   "code",
@@ -22,7 +21,7 @@ func newCodeCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				env.AddInclude = include
 				return vm.Launch{Env: env}.Code(cmd.Context())
 			}, msg.CodeFailed)

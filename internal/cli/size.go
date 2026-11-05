@@ -7,13 +7,13 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newSizeCmd is devvm size [--cpus N] [--memory GiB] [--disk GiB], with -g
 // for the size new VMs get.
-func newSizeCmd(u *ui.UI) *cobra.Command {
+func newSizeCmd(a *app) *cobra.Command {
+	u := a.u
 	var (
 		global, asJSON bool
 		s              vm.Size
@@ -33,7 +33,7 @@ func newSizeCmd(u *ui.UI) *cobra.Command {
 		Args: showsOnly(noArgs, "cpus", "memory", "disk"),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var shown vm.SizeShown
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				set := vm.Settings{Env: env}
 				if s != (vm.Size{}) {
 					return set.SetSize(cmd.Context(), s, global)

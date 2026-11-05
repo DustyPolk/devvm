@@ -6,18 +6,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newLsCmd is devvm ls.
-func newLsCmd(u *ui.UI) *cobra.Command {
+func newLsCmd(a *app) *cobra.Command {
+	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "ls",
@@ -30,11 +29,7 @@ func newLsCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			dirs, err := paths.FromEnv()
-			var ls []vm.Listed
-			if err == nil {
-				ls, err = listVMs(cmd, u, dirs)
-			}
+			ls, err := listVMs(cmd, a)
 			fail(u, err, msg.LsFailed)
 			if asJSON {
 				return printJSON(u, lsJSON(ls))
@@ -82,8 +77,12 @@ func lsJSON(ls []vm.Listed) lsOutput {
 	return out
 }
 
-func listVMs(cmd *cobra.Command, u *ui.UI, dirs paths.Dirs) ([]vm.Listed, error) {
-	reg, err := newRegistry(dirs, assets.FS, u)
+func listVMs(cmd *cobra.Command, a *app) ([]vm.Listed, error) {
+	dirs, err := a.dirs()
+	if err != nil {
+		return nil, err
+	}
+	reg, err := a.registry()
 	if err != nil {
 		return nil, err
 	}

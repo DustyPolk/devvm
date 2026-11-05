@@ -167,11 +167,11 @@ func TestToolsAddFrom(t *testing.T) {
 			if err := (Tools{e}).Add(t.Context(), Options{}, []string{"go"}); err != nil {
 				t.Fatal(msg.NamesOf(err))
 			}
-			own, err := e.builder(f, "").Key(image.Base)
+			own, err := e.Builder(f, "").Key(image.Base)
 			if err != nil {
 				t.Fatal(err)
 			}
-			theirs, err := e.builder(f, tc.from).Key(image.Base)
+			theirs, err := e.Builder(f, tc.from).Key(image.Base)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -5,12 +5,11 @@ import (
 
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newGitProtectCmd is devvm git-protect [on|strict|off].
-func newGitProtectCmd(u *ui.UI) *cobra.Command {
+func newGitProtectCmd(a *app) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "git-protect [on|strict|off]",
@@ -27,7 +26,7 @@ func newGitProtectCmd(u *ui.UI) *cobra.Command {
 		ValidArgs: gitprotect.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var mode string
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				s := vm.Settings{Env: env}
 				if len(args) == 1 {
 					return s.SetGitProtect(cmd.Context(), args[0])
@@ -39,7 +38,7 @@ func newGitProtectCmd(u *ui.UI) *cobra.Command {
 			if len(args) == 1 {
 				return nil
 			}
-			return printValue(u, asJSON, "mode", mode)
+			return printValue(a.u, asJSON, "mode", mode)
 		},
 	}
 	jsonFlag(cmd, &asJSON)

@@ -3,10 +3,8 @@ package cli
 import (
 	"testing"
 
-	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/lima"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/testbuild"
 )
@@ -29,12 +27,19 @@ func TestReleaseReadsNoOverrides(t *testing.T) {
 	} {
 		t.Setenv(k, "1")
 	}
-	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir(), Lima: t.TempDir()}
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("DEVVM_LIMA_HOME", t.TempDir())
 	u, _, _ := testUI()
-	if tl := newTools(d, assets.FS, u, thisHost()); tl.Mise != "" {
+	a := newApp(u)
+	tl, err := a.tools()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tl.Mise != "" {
 		t.Errorf("mise = %q", tl.Mise)
 	}
-	r, err := newRegistry(d, assets.FS, u)
+	r, err := a.registry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +47,7 @@ func TestReleaseReadsNoOverrides(t *testing.T) {
 	if l, _ := backend.As[*lima.Lima](b); l.KVM != "/dev/kvm" || len(r.Unreviewed) != 0 {
 		t.Errorf("KVM %q, let through %v", l.KVM, r.Unreviewed)
 	}
-	if got, want := thisHost().CPUs(), (platform.Host{}).CPUs(); got != want {
+	if got, want := a.host().CPUs(), (platform.Host{}).CPUs(); got != want {
 		t.Errorf("the host's CPUs = %d, want %d", got, want)
 	}
 }

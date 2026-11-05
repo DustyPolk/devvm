@@ -97,7 +97,7 @@ func (e Lifecycle) AddLayers(ctx context.Context, command string, layers []strin
 func (e Lifecycle) RemoveLayers(ctx context.Context, command string, layers []string, o RemakeOptions) error {
 	return e.remakeLayers(ctx, command, o, func(t *found) (string, error) {
 		img, lacks := removedImage(image.Name(t.st.Image), layers)
-		if err := CheckLayers(lacks, e.builder(t.b, t.st.From).Layers()[1:]); err != nil {
+		if err := CheckLayers(lacks, e.Builder(t.b, t.st.From).Layers()[1:]); err != nil {
 			return "", err
 		}
 		if len(lacks) > 0 {
@@ -153,7 +153,7 @@ func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) 
 	}
 	defer release()
 	vm, st := t.f.Name, t.st
-	changed, err := (build.Builds{Env: e.builder(t.b, st.From)}).Outdated(st.Chain)
+	changed, err := (build.Builds{Env: e.Builder(t.b, st.From)}).Outdated(st.Chain)
 	if err != nil {
 		return err
 	}
@@ -367,7 +367,7 @@ type remaking struct{ *Env }
 // for a VM.
 func (e remaking) check(t *found, p remakeInVM) error {
 	vm, b, img := t.f.Name, t.b, image.Name(p.Image)
-	if err := (build.Names{Env: e.builder(b, t.st.From)}).Check(img); err != nil {
+	if err := (build.Names{Env: e.Builder(b, t.st.From)}).Check(img); err != nil {
 		return err
 	}
 	spec := e.spec(t, p)
@@ -464,7 +464,7 @@ func (e remaking) remake(ctx context.Context, t *found, p remakeInVM) error {
 // build builds img (a remake's, as its record has it) for t's VM, as a
 // new VM's is built, and returns its build chain.
 func (e remaking) build(ctx context.Context, t *found, recorded string) (chainOf, error) {
-	b, img := e.builder(t.b, t.st.From), image.Name(recorded)
+	b, img := e.Builder(t.b, t.st.From), image.Name(recorded)
 	if err := (build.Builds{Env: b}).Build(ctx, img); err != nil {
 		return chainOf{}, err
 	}

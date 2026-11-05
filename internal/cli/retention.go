@@ -20,7 +20,6 @@ import (
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
@@ -30,7 +29,8 @@ const retainEvery = 24 * time.Hour
 
 // newRetentionCmd is devvm retention [KEY=VALUE...]: the retention
 // settings, shown bare.
-func newRetentionCmd(u *ui.UI) *cobra.Command {
+func newRetentionCmd(a *app) *cobra.Command {
+	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "retention [KEY=VALUE...]",
@@ -56,7 +56,7 @@ func newRetentionCmd(u *ui.UI) *cobra.Command {
 			return nil
 		}),
 		RunE: func(_ *cobra.Command, args []string) error {
-			dirs, err := paths.FromEnv()
+			dirs, err := a.dirs()
 			fail(u, err, msg.RetentionSettingsFailed)
 			if len(args) == 0 {
 				def, err := settings.Read(dirs)
@@ -133,7 +133,7 @@ func (r retained) report() msg.M {
 // used files while it's over nix-cache.size (or its default). Never a VM,
 // an image, or a tool image any VM's state lists. logs.runs is the run
 // log's own (KeepRunLogs).
-func retain(ctx context.Context, u *ui.UI, b *build.Env, r settings.Retention, orphans bool) (retained, error) {
+func retain(ctx context.Context, a *app, b *build.Env, r settings.Retention, orphans bool) (retained, error) {
 	var done retained
 	now := time.Now()
 	n, err := retainExports(b.Dirs, r, now)
@@ -145,12 +145,12 @@ func retain(ctx context.Context, u *ui.UI, b *build.Env, r settings.Retention, o
 		return done, err
 	}
 	if r.ToolsAge > 0 {
-		if done.tools, err = retainTools(ctx, u, b, r.ToolsAge, now); err != nil {
+		if done.tools, err = retainTools(ctx, a, b, r.ToolsAge, now); err != nil {
 			return done, err
 		}
 	}
 	if orphans && r.OrphansAge > 0 {
-		if done.orphans, err = retainOrphans(ctx, u, r.OrphansAge, now); err != nil {
+		if done.orphans, err = retainOrphans(ctx, a, r.OrphansAge, now); err != nil {
 			return done, err
 		}
 	}
@@ -194,7 +194,7 @@ func retainExports(d paths.Dirs, r settings.Retention, now time.Time) (int, erro
 // holding the share's lock throughout, then the lock VMs being made hold,
 // as gc --tool-images does. While a VM is being made it deletes none, and
 // leaves their idle records as they are.
-func retainTools(ctx context.Context, u *ui.UI, b *build.Env, age time.Duration, now time.Time) (int, error) {
+func retainTools(ctx context.Context, a *app, b *build.Env, age time.Duration, now time.Time) (int, error) {
 	unlock, err := b.Tools.LockShare(ctx)
 	if err != nil {
 		return 0, err
@@ -205,7 +205,7 @@ func retainTools(ctx context.Context, u *ui.UI, b *build.Env, age time.Duration,
 		return 0, err
 	}
 	defer unmaking()
-	ts, err := shareListing(ctx, u, b)
+	ts, err := shareListing(ctx, a, b)
 	if err != nil {
 		return 0, err
 	}
@@ -219,8 +219,8 @@ func retainTools(ctx context.Context, u *ui.UI, b *build.Env, age time.Duration,
 
 // shareListing lists the share as devvm images and gc do, without asking
 // any backend: current for the default base on every backend.
-func shareListing(ctx context.Context, u *ui.UI, b *build.Env) ([]tools.Listed, error) {
-	reg, err := newRegistry(b.Dirs, b.Assets, u)
+func shareListing(ctx context.Context, a *app, b *build.Env) ([]tools.Listed, error) {
+	env, err := a.vmEnv()
 	if err != nil {
 		return nil, err
 	}
@@ -228,13 +228,13 @@ func shareListing(ctx context.Context, u *ui.UI, b *build.Env) ([]tools.Listed, 
 	if err != nil {
 		return nil, err
 	}
-	return spaceEnv{u: u, b: b, reg: reg, inUse: inUse}.listTools(ctx)
+	return spaceEnv{b: b, env: env, inUse: inUse}.listTools(ctx)
 }
 
 // retainOrphans forgets the VMs their backend no longer has whose state
 // hasn't changed for age.
-func retainOrphans(ctx context.Context, u *ui.UI, age time.Duration, now time.Time) (int, error) {
-	env, err := newEnv(u)
+func retainOrphans(ctx context.Context, a *app, age time.Duration, now time.Time) (int, error) {
+	env, err := a.vmEnv()
 	if err != nil {
 		return 0, err
 	}
@@ -261,8 +261,9 @@ func retainOrphans(ctx context.Context, u *ui.UI, age time.Duration, now time.Ti
 // (one holding the lock is waited for by nobody), and again at once when
 // the clock went back. VMs' state of VMs gone from their backend waits
 // for devvm gc --retention, which asks the backends.
-func autoRetain(ctx context.Context, u *ui.UI) {
-	d, err := paths.FromEnv()
+func autoRetain(ctx context.Context, a *app) {
+	u := a.u
+	d, err := a.dirs()
 	if err != nil {
 		return
 	}
@@ -281,7 +282,7 @@ func autoRetain(ctx context.Context, u *ui.UI) {
 		return
 	}
 	defer unlock()
-	b, err := builder(u)
+	b, err := a.builder()
 	if err != nil {
 		return
 	}
@@ -290,7 +291,7 @@ func autoRetain(ctx context.Context, u *ui.UI) {
 	if b.Tools.ShareBusy() {
 		r.ToolsAge = 0
 	}
-	done, err := retain(ctx, u, b, r, false)
+	done, err := retain(ctx, a, b, r, false)
 	touchRetention(d)
 	if err != nil {
 		u.Warn(msg.RetentionFailed().Because(err))

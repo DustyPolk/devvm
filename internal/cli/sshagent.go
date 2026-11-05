@@ -7,13 +7,13 @@ import (
 
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/sshagent"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newSSHAgentCmd is devvm ssh-agent [on|devvm|off], and devvm's own
 // agent's add and rm.
-func newSSHAgentCmd(u *ui.UI) *cobra.Command {
+func newSSHAgentCmd(a *app) *cobra.Command {
+	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "ssh-agent [on|devvm|off]",
@@ -32,27 +32,27 @@ func newSSHAgentCmd(u *ui.UI) *cobra.Command {
 		ValidArgs: sshagent.Modes,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
-				withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.SetSSHAgent(cmd.Context(), args[0]) }, msg.SSHAgentFailed)
+				a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.SetSSHAgent(cmd.Context(), args[0]) }, msg.SSHAgentFailed)
 				return nil
 			}
 			var mode string
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				var err error
 				mode, err = vm.Settings{Env: env}.SSHAgent(cmd.Context())
 				return err
 			}, msg.SSHAgentFailed)
 			if asJSON {
-				return printAgentJSON(cmd, u, mode)
+				return printAgentJSON(cmd, a, mode)
 			}
 			if _, err := io.WriteString(u.Stdout(), mode+"\n"); err != nil {
 				return err
 			}
-			withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
+			a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.AgentKeys(cmd.Context(), u.Stdout()) }, msg.AgentKeysFailed)
 			return nil
 		},
 	}
 	jsonFlag(cmd, &asJSON)
-	cmd.AddCommand(newSSHAgentAddCmd(u), newSSHAgentRmCmd(u))
+	cmd.AddCommand(newSSHAgentAddCmd(a), newSSHAgentRmCmd(a))
 	return cmd
 }
 
@@ -73,9 +73,9 @@ type agentKeyJSON struct {
 
 // printAgentJSON writes the VM's forwarding mode and devvm's own agent's
 // keys as sshAgentOutput.
-func printAgentJSON(cmd *cobra.Command, u *ui.UI, mode string) error {
+func printAgentJSON(cmd *cobra.Command, a *app, mode string) error {
 	var keys []sshagent.ListedKey
-	withEnv(u, func(env *vm.Env) error {
+	a.env(func(env *vm.Env) error {
 		var err error
 		keys, err = vm.Settings{Env: env}.AgentKeyList(cmd.Context())
 		return err
@@ -84,10 +84,10 @@ func printAgentJSON(cmd *cobra.Command, u *ui.UI, mode string) error {
 	for _, k := range keys {
 		out.Keys = append(out.Keys, agentKeyJSON(k))
 	}
-	return printJSON(u, out)
+	return printJSON(a.u, out)
 }
 
-func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {
+func newSSHAgentAddCmd(a *app) *cobra.Command {
 	var o sshagent.AddOptions
 	cmd := &cobra.Command{
 		Use:   "add KEY_FILE",
@@ -105,7 +105,7 @@ func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {
 			return nil, cobra.ShellCompDirectiveDefault
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentAdd(cmd.Context(), args[0], o) }, msg.AgentKeysFailed)
+			a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.AgentAdd(cmd.Context(), args[0], o) }, msg.AgentKeysFailed)
 			return nil
 		},
 	}
@@ -115,7 +115,7 @@ func newSSHAgentAddCmd(u *ui.UI) *cobra.Command {
 	return cmd
 }
 
-func newSSHAgentRmCmd(u *ui.UI) *cobra.Command {
+func newSSHAgentRmCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "rm KEY_FILE",
 		Short: "Remove a key from devvm's own SSH agent",
@@ -130,7 +130,7 @@ func newSSHAgentRmCmd(u *ui.UI) *cobra.Command {
 			return nil, cobra.ShellCompDirectiveDefault
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Settings{Env: env}.AgentRemove(cmd.Context(), args[0]) }, msg.AgentKeysFailed)
+			a.env(func(env *vm.Env) error { return vm.Settings{Env: env}.AgentRemove(cmd.Context(), args[0]) }, msg.AgentKeysFailed)
 			return nil
 		},
 	}

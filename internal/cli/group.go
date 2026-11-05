@@ -10,7 +10,8 @@ import (
 
 // newGroupCmd is devvm group: the group this folder's VM is in, shown,
 // with join and leave.
-func newGroupCmd(u *ui.UI) *cobra.Command {
+func newGroupCmd(a *app) *cobra.Command {
+	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "group",
@@ -25,7 +26,7 @@ func newGroupCmd(u *ui.UI) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var g vm.GroupShown
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				var err error
 				g, err = vm.Groups{Env: env}.Show(cmd.Context())
 				return err
@@ -41,7 +42,7 @@ func newGroupCmd(u *ui.UI) *cobra.Command {
 		},
 	}
 	jsonFlag(cmd, &asJSON)
-	cmd.AddCommand(newGroupJoinCmd(u), newGroupLeaveCmd(u))
+	cmd.AddCommand(newGroupJoinCmd(a), newGroupLeaveCmd(a))
 	return cmd
 }
 
@@ -80,7 +81,7 @@ func writeGroup(tab *ui.Table, g vm.GroupShown) error {
 // groupNameArg checks devvm group join's NAME.
 func groupNameArg(_ *cobra.Command, args []string) error { return vm.CheckGroupName(args[0]) }
 
-func newGroupJoinCmd(u *ui.UI) *cobra.Command {
+func newGroupJoinCmd(a *app) *cobra.Command {
 	var as string
 	cmd := &cobra.Command{
 		Use:   "join NAME",
@@ -94,7 +95,7 @@ func newGroupJoinCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: cobra.MatchAll(exactArgs(1), groupNameArg),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Groups{Env: env}.Join(cmd.Context(), args[0], as) }, msg.GroupFailed)
+			a.env(func(env *vm.Env) error { return vm.Groups{Env: env}.Join(cmd.Context(), args[0], as) }, msg.GroupFailed)
 			return nil
 		},
 	}
@@ -102,7 +103,7 @@ func newGroupJoinCmd(u *ui.UI) *cobra.Command {
 	return cmd
 }
 
-func newGroupLeaveCmd(u *ui.UI) *cobra.Command {
+func newGroupLeaveCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "leave",
 		Short: "Take this folder's VM out of its group",
@@ -113,7 +114,7 @@ func newGroupLeaveCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Groups{Env: env}.Leave(cmd.Context()) }, msg.GroupFailed)
+			a.env(func(env *vm.Env) error { return vm.Groups{Env: env}.Leave(cmd.Context()) }, msg.GroupFailed)
 			return nil
 		},
 	}

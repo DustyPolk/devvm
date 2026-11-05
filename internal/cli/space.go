@@ -28,10 +28,10 @@ import (
 )
 
 // spaceTimeout bounds what devvm space asks each backend, so a backend
-// that hangs never holds it up; a test build
+// that hangs never holds it up; a test build's host (the registry's)
 // can set it (platform.TestListWait).
-func spaceTimeout(backend string) time.Duration {
-	return thisHost().ListTimeout(backend, 30*time.Second)
+func spaceTimeout(host platform.Host, backend string) time.Duration {
+	return host.ListTimeout(backend, 30*time.Second)
 }
 
 // What devvm space's KEPT column says of each kind of thing.
@@ -44,7 +44,8 @@ const (
 )
 
 // newSpaceCmd is devvm space.
-func newSpaceCmd(u *ui.UI) *cobra.Command {
+func newSpaceCmd(a *app) *cobra.Command {
+	u := a.u
 	var asJSON bool
 	c := &cobra.Command{
 		Use:   "space",
@@ -57,7 +58,7 @@ func newSpaceCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			r, err := space(cmd.Context(), u)
+			r, err := space(cmd.Context(), a)
 			fail(u, err, msg.SpaceFailed)
 			for _, b := range r.Unknown {
 				u.Note(msg.SpaceBackendUnknown(b))
@@ -164,12 +165,12 @@ type strayVM struct {
 	Data    string `json:"data"` // the data folder its label names
 }
 
-// spaceEnv is what devvm space reads: devvm's folders, its backends and
-// the shared tools.
+// spaceEnv is what devvm space reads: devvm's folders, its backends (the
+// VM environment's registry, whose Builder builds on each) and the shared
+// tools.
 type spaceEnv struct {
-	u     *ui.UI
 	b     *build.Env
-	reg   *backend.Registry
+	env   *vm.Env
 	inUse map[string]int
 	// vms is each backend's VMs, by name, for those that answered.
 	vms map[string]map[string]bool
@@ -179,17 +180,19 @@ type spaceEnv struct {
 
 // space reads what devvm keeps. Nothing it runs changes anything, and
 // each backend gets spaceTimeout.
-func space(ctx context.Context, u *ui.UI) (spaceReport, error) {
+func space(ctx context.Context, a *app) (spaceReport, error) {
+	u := a.u
 	defer u.Status(msg.ReadingSpace())()
 	var r spaceReport
-	b, err := builder(u)
+	b, err := a.builder()
 	if err != nil {
 		return r, err
 	}
-	reg, err := newRegistry(b.Dirs, b.Assets, u)
+	env, err := a.vmEnv()
 	if err != nil {
 		return r, err
 	}
+	reg := env.Registry
 	inUse, err := vm.ToolsInUse(b.Dirs)
 	if err != nil {
 		return r, err
@@ -198,7 +201,7 @@ func space(ctx context.Context, u *ui.UI) (spaceReport, error) {
 	if err != nil {
 		return r, err
 	}
-	e := spaceEnv{u: u, b: b, reg: reg, inUse: inUse, vms: map[string]map[string]bool{}, ret: def.Retention, now: time.Now()}
+	e := spaceEnv{b: b, env: env, inUse: inUse, vms: map[string]map[string]bool{}, ret: def.Retention, now: time.Now()}
 	used, err := state.Backends(b.Dirs)
 	if err != nil {
 		return r, err
@@ -213,7 +216,7 @@ func space(ctx context.Context, u *ui.UI) (spaceReport, error) {
 		}
 		r.Rows = append(r.Rows, rows...)
 		r.Caches = append(r.Caches, caches...)
-		r.Strays = append(r.Strays, strays(ctx, be)...)
+		r.Strays = append(r.Strays, strays(ctx, reg.Host, be)...)
 	}
 	toolRows, err := e.toolRows(ctx)
 	if err != nil {
@@ -238,7 +241,7 @@ func space(ctx context.Context, u *ui.UI) (spaceReport, error) {
 // backendRows are a backend's VMs and images, and its caches; ok is false
 // when it can't be asked (not installed, not running, too slow).
 func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []spaceRow, caches []cacheRow, ok bool) {
-	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(be.Name()))
+	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(e.env.Registry.Host, be.Name()))
 	defer cancel()
 	if backend.Check(ctx, be) != nil {
 		return nil, nil, false
@@ -247,7 +250,7 @@ func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []s
 	if err != nil {
 		return nil, nil, false
 	}
-	ls, err := build.Images{Env: newBuilder(e.u, e.b.Dirs, be, e.reg.Review, e.b.Tools, "")}.Listing(ctx)
+	ls, err := build.Images{Env: e.env.Builder(be, "")}.Listing(ctx)
 	if err != nil {
 		return nil, nil, false
 	}
@@ -282,8 +285,8 @@ func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []s
 
 // strays are a backend's VMs with devvm's label that this devvm has no
 // state for; none when it can't say.
-func strays(ctx context.Context, be backend.Backend) []strayVM {
-	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(be.Name()))
+func strays(ctx context.Context, host platform.Host, be backend.Backend) []strayVM {
+	ctx, cancel := context.WithTimeout(ctx, spaceTimeout(host, be.Name()))
 	defer cancel()
 	ss, err := be.Strays(ctx)
 	if err != nil {
@@ -354,8 +357,8 @@ func (e spaceEnv) listTools(_ context.Context) ([]tools.Listed, error) {
 		return nil, err
 	}
 	tgs := []tools.Target{tg}
-	for _, be := range e.reg.All() {
-		t, err := newBuilder(e.u, e.b.Dirs, be, e.reg.Review, e.b.Tools, e.b.From).ToolTarget()
+	for _, be := range e.env.Registry.All() {
+		t, err := e.env.Builder(be, e.b.From).ToolTarget()
 		if err != nil {
 			return nil, err
 		}

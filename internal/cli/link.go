@@ -13,7 +13,8 @@ import (
 // newLinkCmd is devvm link: this folder's VM's links to other VMs, listed,
 // with add and rm, and publish and unpublish for the ports it offers to
 // theirs.
-func newLinkCmd(u *ui.UI) *cobra.Command {
+func newLinkCmd(a *app) *cobra.Command {
+	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "link",
@@ -29,7 +30,7 @@ func newLinkCmd(u *ui.UI) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var ls []vm.LinkListed
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				var err error
 				ls, err = vm.Links{Env: env}.List(cmd.Context())
 				return err
@@ -41,7 +42,7 @@ func newLinkCmd(u *ui.UI) *cobra.Command {
 		},
 	}
 	jsonFlag(cmd, &asJSON)
-	cmd.AddCommand(newLinkAddCmd(u), newLinkRmCmd(u), newLinkPublishCmd(u), newLinkUnpublishCmd(u))
+	cmd.AddCommand(newLinkAddCmd(a), newLinkRmCmd(a), newLinkPublishCmd(a), newLinkUnpublishCmd(a))
 	return cmd
 }
 
@@ -93,7 +94,7 @@ func linkPortArg(_ *cobra.Command, args []string) error {
 	return err
 }
 
-func newLinkAddCmd(u *ui.UI) *cobra.Command {
+func newLinkAddCmd(a *app) *cobra.Command {
 	var as string
 	cmd := &cobra.Command{
 		Use:   "add TARGET PORT",
@@ -109,7 +110,7 @@ func newLinkAddCmd(u *ui.UI) *cobra.Command {
 		Args: cobra.MatchAll(exactArgs(2), linkPortArg),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			port, _ := vm.ParseLinkPort(args[1])
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				return vm.Links{Env: env}.Add(cmd.Context(), vm.LinkAdd{Target: args[0], Port: port, As: as})
 			}, msg.LinkFailed)
 			return nil
@@ -119,7 +120,7 @@ func newLinkAddCmd(u *ui.UI) *cobra.Command {
 	return cmd
 }
 
-func newLinkRmCmd(u *ui.UI) *cobra.Command {
+func newLinkRmCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "rm TARGET PORT",
 		Short: "Remove one of this folder's VM's links",
@@ -132,7 +133,7 @@ func newLinkRmCmd(u *ui.UI) *cobra.Command {
 		Args: cobra.MatchAll(exactArgs(2), linkPortArg),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			port, _ := vm.ParseLinkPort(args[1])
-			withEnv(u, func(env *vm.Env) error { return vm.Links{Env: env}.Rm(cmd.Context(), args[0], port) }, msg.LinkFailed)
+			a.env(func(env *vm.Env) error { return vm.Links{Env: env}.Rm(cmd.Context(), args[0], port) }, msg.LinkFailed)
 			return nil
 		},
 	}
@@ -147,7 +148,7 @@ func publishArg(_ *cobra.Command, args []string) error {
 	return err
 }
 
-func newLinkPublishCmd(u *ui.UI) *cobra.Command {
+func newLinkPublishCmd(a *app) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "publish [PORTS]",
@@ -163,7 +164,7 @@ func newLinkPublishCmd(u *ui.UI) *cobra.Command {
 		Args: showsOnly(cobra.MatchAll(maxArgs(1), publishArg)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var ports string
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				l := vm.Links{Env: env}
 				if len(args) == 1 {
 					return l.Publish(cmd.Context(), args[0], true)
@@ -175,14 +176,14 @@ func newLinkPublishCmd(u *ui.UI) *cobra.Command {
 			if len(args) == 1 {
 				return nil
 			}
-			return printValue(u, asJSON, "ports", ports)
+			return printValue(a.u, asJSON, "ports", ports)
 		},
 	}
 	jsonFlag(cmd, &asJSON)
 	return cmd
 }
 
-func newLinkUnpublishCmd(u *ui.UI) *cobra.Command {
+func newLinkUnpublishCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "unpublish PORTS",
 		Short: "Stop offering ports of this folder's VM to links",
@@ -193,7 +194,7 @@ func newLinkUnpublishCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: cobra.MatchAll(exactArgs(1), publishArg),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			withEnv(u, func(env *vm.Env) error { return vm.Links{Env: env}.Publish(cmd.Context(), args[0], false) }, msg.LinkFailed)
+			a.env(func(env *vm.Env) error { return vm.Links{Env: env}.Publish(cmd.Context(), args[0], false) }, msg.LinkFailed)
 			return nil
 		},
 	}

@@ -4,12 +4,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newHostCmd is devvm host [--ssh-config].
-func newHostCmd(u *ui.UI) *cobra.Command {
+func newHostCmd(a *app) *cobra.Command {
 	var include bool
 	cmd := &cobra.Command{
 		Use:   "host",
@@ -22,7 +21,7 @@ func newHostCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				env.AddInclude = include
 				return vm.Launch{Env: env}.ShowHost(cmd.Context())
 			}, msg.SSHFailed)

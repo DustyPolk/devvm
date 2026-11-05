@@ -3,28 +3,25 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/ui"
 )
 
 // newRefreshToolsCmd is devvm _refresh-tools: the daily check for newer
 // shared tools, which devvm starts in the background (tools.RefreshDaily).
 // Hidden: it's not for users.
-func newRefreshToolsCmd(u *ui.UI) *cobra.Command {
+func newRefreshToolsCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:    "_refresh-tools",
 		Short:  "Resolve the shared tools' versions again",
 		Hidden: true,
 		Args:   noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			dirs, err := paths.FromEnv()
+			t, err := a.tools()
 			if err == nil {
-				err = tools.Versions{Env: newTools(dirs, assets.FS, u, thisHost())}.Refresh(cmd.Context())
+				err = tools.Versions{Env: t}.Refresh(cmd.Context())
 			}
-			fail(u, err, func(string) msg.M { return msg.ToolsCheckFailed() })
+			fail(a.u, err, func(string) msg.M { return msg.ToolsCheckFailed() })
 			return nil
 		},
 	}

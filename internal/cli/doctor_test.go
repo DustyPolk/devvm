@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
@@ -185,6 +186,7 @@ func TestDoctorSmallHostWarnsOnly(t *testing.T) {
 				Path: onPath{LookPath: notFound, Executable: os.Executable},
 				Free: func(string) (uint64, error) { return 1 << 40, nil },
 				Host: func() (vm.Host, error) { return c.host, nil },
+				Dirs: paths.FromEnv,
 			}
 			err := d.run(t.Context(), u, b)
 			if err != nil && msg.IDOf(err) == "" {

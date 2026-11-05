@@ -53,7 +53,7 @@ type gcOpts struct {
 }
 
 // newGCCmd is devvm gc.
-func newGCCmd(u *ui.UI) *cobra.Command {
+func newGCCmd(a *app) *cobra.Command {
 	var o gcOpts
 	c := &cobra.Command{
 		Use:   "gc [--tool-images [TOOL...]]",
@@ -71,7 +71,7 @@ func newGCCmd(u *ui.UI) *cobra.Command {
 		Args: func(_ *cobra.Command, args []string) error { return o.checkArgs(args) },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.toolNames = args
-			fail(u, gc(cmd.Context(), u, o), msg.GCFailed)
+			fail(a.u, gc(cmd.Context(), a, o), msg.GCFailed)
 			return nil
 		},
 	}
@@ -137,23 +137,23 @@ type gcPlan struct {
 // gc lists what's stale or unused, asks in a terminal, and deletes it. It
 // holds the share's lock throughout, so no build moves a tool image in
 // and no update swaps the lock meanwhile.
-func gc(ctx context.Context, u *ui.UI, o gcOpts) error {
-	b, err := builder(u)
+func gc(ctx context.Context, a *app, o gcOpts) error {
+	b, err := a.builder()
 	if err != nil {
 		return err
 	}
 	b.From = fromRef("")
-	skipped, err := gcLocked(ctx, u, b, o)
+	skipped, err := gcLocked(ctx, a, b, o)
 	if err != nil {
 		return err
 	}
 	if o.retention {
-		if err := gcRetention(ctx, u, b); err != nil {
+		if err := gcRetention(ctx, a, b); err != nil {
 			return err
 		}
 	}
 	if o.caches {
-		return gcCaches(ctx, u, b, o, skipped)
+		return gcCaches(ctx, a, o, skipped)
 	}
 	return nil
 }
@@ -162,7 +162,7 @@ func gc(ctx context.Context, u *ui.UI, o gcOpts) error {
 // then tries the lock VMs being made hold (tools.Making), and holds it so
 // no VM picks its tools meanwhile. While one is being made, gc keeps every
 // current tool no VM has, as that VM may not list the tools it picked yet.
-func gcLocked(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bool, error) {
+func gcLocked(ctx context.Context, a *app, b *build.Env, o gcOpts) (map[string]bool, error) {
 	unlock, err := b.Tools.LockShare(ctx)
 	if err != nil {
 		return nil, err
@@ -179,12 +179,13 @@ func gcLocked(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string
 			o.making = true
 		}
 	}
-	return gcRun(ctx, u, b, o)
+	return gcRun(ctx, a, b, o)
 }
 
 // gcRetention applies the retention settings now, the VMs' leftovers
 // included, saying what it deleted in one line.
-func gcRetention(ctx context.Context, u *ui.UI, b *build.Env) error {
+func gcRetention(ctx context.Context, a *app, b *build.Env) error {
+	u := a.u
 	def, err := settings.Read(b.Dirs)
 	if err != nil {
 		return err
@@ -199,7 +200,7 @@ func gcRetention(ctx context.Context, u *ui.UI, b *build.Env) error {
 		return msg.RetentionBusy()
 	}
 	defer unlock()
-	done, err := retain(ctx, u, b, r, true)
+	done, err := retain(ctx, a, b, r, true)
 	touchRetention(b.Dirs)
 	if err != nil {
 		return err
@@ -211,8 +212,9 @@ func gcRetention(ctx context.Context, u *ui.UI, b *build.Env) error {
 // gcRun is gc's run but the backends' caches and retention: it lists what
 // it deletes, asks in a terminal, and deletes it. It returns the backends
 // it skipped, as they couldn't list their images.
-func gcRun(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bool, error) {
-	p, err := planGC(ctx, u, b, o)
+func gcRun(ctx context.Context, a *app, b *build.Env, o gcOpts) (map[string]bool, error) {
+	u := a.u
+	p, err := planGC(ctx, a, b, o)
 	if err != nil {
 		return nil, err
 	}
@@ -235,9 +237,10 @@ func gcRun(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (map[string]bo
 }
 
 // planGC gathers what gc deletes.
-func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, error) {
+func planGC(ctx context.Context, a *app, b *build.Env, o gcOpts) (gcPlan, error) {
+	u := a.u
 	p := gcPlan{share: tools.Share{Env: b.Tools}}
-	l, err := listImages(ctx, u, b)
+	l, err := listImages(ctx, a, b)
 	if err != nil {
 		return p, err
 	}
@@ -258,7 +261,7 @@ func planGC(ctx context.Context, u *ui.UI, b *build.Env, o gcOpts) (gcPlan, erro
 		p.exports = olderThan(es, o.age, time.Now())
 	}
 	if o.orphans {
-		env, err := newEnv(u)
+		env, err := a.vmEnv()
 		if err != nil {
 			return p, err
 		}

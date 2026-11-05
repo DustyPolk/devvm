@@ -4,13 +4,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newCloneCmd is devvm clone [on|off] [--force] [--no-export]
 // [--clean-home] [--no-clone-check].
-func newCloneCmd(u *ui.UI) *cobra.Command {
+func newCloneCmd(a *app) *cobra.Command {
 	var o vm.RemakeOptions
 	var asJSON bool
 	cmd := &cobra.Command{
@@ -30,18 +29,18 @@ func newCloneCmd(u *ui.UI) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				command := "devvm clone " + args[0]
-				withEnv(u, func(env *vm.Env) error {
+				a.env(func(env *vm.Env) error {
 					return vm.Lifecycle{Env: env}.SetClone(cmd.Context(), command, args[0], o)
 				}, msg.RemakeFailed)
 				return nil
 			}
 			var mode string
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				var err error
 				mode, err = vm.Settings{Env: env}.Clone(cmd.Context())
 				return err
 			}, msg.CloneShowFailed)
-			return printValue(u, asJSON, "clone", mode)
+			return printValue(a.u, asJSON, "clone", mode)
 		},
 	}
 	addRemakeFlags(cmd.Flags(), &o)

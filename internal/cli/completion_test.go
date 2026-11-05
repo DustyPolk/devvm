@@ -29,6 +29,8 @@ func TestJoined(t *testing.T) {
 func TestCompleteParts(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	u, _, _ := testUI()
+	a := newApp(u)
 	for _, tc := range []struct {
 		flag, in string
 		want     []string
@@ -40,7 +42,7 @@ func TestCompleteParts(t *testing.T) {
 		{"layers", "", []string{"desktop", "docker", "nix", "none"}},
 		{"layers", "de", []string{"desktop"}},
 	} {
-		if got, _ := completeParts(tc.flag)(nil, nil, tc.in); !slices.Equal(got, tc.want) {
+		if got, _ := completeParts(a, tc.flag)(nil, nil, tc.in); !slices.Equal(got, tc.want) {
 			t.Errorf("--%s %q = %q, want %q", tc.flag, tc.in, got, tc.want)
 		}
 	}

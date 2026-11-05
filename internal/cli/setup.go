@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
@@ -22,7 +22,7 @@ const featuresNone = "none"
 // newSetupCmd is devvm setup [--features LIST|none] [--agents LIST|none]
 // [--layers LIST|none]. Its --agents and --layers choose new VMs'
 // defaults.
-func newSetupCmd(u *ui.UI) *cobra.Command {
+func newSetupCmd(a *app) *cobra.Command {
 	var (
 		features, agents, layers string
 		c                        setupChoice
@@ -50,7 +50,7 @@ func newSetupCmd(u *ui.UI) *cobra.Command {
 			if cmd.Flags().Changed("layers") {
 				c.layers = partFlag(layers)
 			}
-			fail(u, newSetup(u).run(c), msg.SetupFailed)
+			fail(a.u, newSetup(a).run(c), msg.SetupFailed)
 			return nil
 		},
 	}
@@ -73,10 +73,12 @@ func (c setupChoice) none() bool {
 	return c.features == nil && c.agents == nil && c.layers == nil
 }
 
-// setup is devvm setup's run: the UI it prints through, whether it's in a
-// terminal, how it asks for the size, the network policy and the agents, and the host the size is checked against.
+// setup is devvm setup's run: the UI it prints through, devvm's folders,
+// whether it's in a terminal, how it asks for the size, the network policy
+// and the agents, and the host the size is checked against.
 type setup struct {
 	ui       *ui.UI
+	dirs     func() (paths.Dirs, error)
 	terminal func() bool
 	pickOne  func(msg.M, []ui.Choice) int
 	pick     func(msg.M, []vm.PickPart) []vm.PickPart
@@ -84,15 +86,18 @@ type setup struct {
 	host     func() (vm.Host, error)
 }
 
-// newSetup returns a setup on u's terminal and prompts, on this machine.
-func newSetup(u *ui.UI) setup {
+// newSetup returns a setup on the run's folders, its UI's terminal and
+// prompts, on this machine.
+func newSetup(a *app) setup {
+	u := a.u
 	return setup{
 		ui:       u,
+		dirs:     a.dirs,
 		terminal: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() },
 		pickOne:  u.PickOne,
 		pick:     pickParts(u),
 		answer:   u.Answer,
-		host:     func() (vm.Host, error) { return vm.ThisHost(thisHost()) },
+		host:     func() (vm.Host, error) { return vm.ThisHost(a.host()) },
 	}
 }
 
@@ -104,7 +109,7 @@ func newSetup(u *ui.UI) setup {
 // images. What config.toml sets isn't asked for, said, and a flag
 // choosing it is refused (set_in_config).
 func (s setup) run(c setupChoice) error {
-	dirs, err := paths.FromEnv()
+	dirs, err := s.dirs()
 	if err != nil {
 		return err
 	}
@@ -186,7 +191,9 @@ func (s setup) saveFeatures(dirs paths.Dirs, def settings.Defaults, features *st
 	if features == nil && s.inConfig(dirs, def, settings.KeyFeatures) {
 		return nil
 	}
-	b := build.Choice{Env: newBuilder(s.ui, dirs, nil, backend.Review{}, nil, "")}
+	// Choosing base's features reads devvm's folders and files and asks:
+	// no backend builds anything.
+	b := build.Choice{Env: &build.Env{Dirs: dirs, Assets: assets.FS, Info: s.ui.Info, Pick: pickFeatures(s.ui)}}
 	var changed bool
 	var err error
 	switch {

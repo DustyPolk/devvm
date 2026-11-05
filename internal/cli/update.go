@@ -4,12 +4,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
 // newUpdateCmd is devvm update [--force] [--no-export] [--clean-home].
-func newUpdateCmd(u *ui.UI) *cobra.Command {
+func newUpdateCmd(a *app) *cobra.Command {
 	var o vm.RemakeOptions
 	cmd := &cobra.Command{
 		Use:   "update",
@@ -24,7 +23,7 @@ func newUpdateCmd(u *ui.UI) *cobra.Command {
 		),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			withEnv(u, func(env *vm.Env) error {
+			a.env(func(env *vm.Env) error {
 				return vm.Lifecycle{Env: env}.Update(cmd.Context(), "devvm update", o)
 			}, msg.RemakeFailed)
 			return nil

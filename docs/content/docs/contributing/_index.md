@@ -205,6 +205,8 @@ devvm's commands follow one set of rules, so that a user who knows a few of them
 
 The tests check every rule that a machine can, as [The CLI rule tests](#the-cli-rule-tests) lists, and `mise run test` runs them. A reviewer checks the rest: where a command goes in the tree, whether it's rm or unX, which commands are settings, whether each argument is the thing acted on, whether a command that deletes asks first and deletes more only with a flag of its own, and the wording of its help and its usage errors. After changing a command's `Use`, `Short`, `Long`, `Example` or flags, run `mise run cli-docs` and commit the [CLI reference](#the-cli-reference) it writes.
 
+Each command gets the run's services from one `app`, in `internal/cli/app.go`, which `NewRoot` makes for the run's UI and hands to every command's constructor. The app holds devvm's folders (`dirs`), a test build's overrides, the secrets store, the backends' registry, the shared tools, the environment of the commands on this folder's VM (`vmEnv`) and the image builder of the backend new VMs get (`builder`, the VM environment's `Builder`). It makes each one the first time a command asks for it and keeps that one, or its error, for the rest of the run, so the retention that runs before a command and the command itself share them. A command on this folder's VM runs in `a.env`, which fails with the command's message for an error that isn't one. A new command takes its services from the app rather than making its own.
+
 ## Command arguments
 
 Each command checks its arguments and flags before it does anything else, so a usage error never looks for a VM, applies the retention settings or changes a file. `internal/cli/args.go` holds the checks:
