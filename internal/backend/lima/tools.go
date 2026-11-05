@@ -41,12 +41,9 @@ func (l *images) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	// A failure leaves it to the cleanup, which runs once the caller has
 	// shown the run log's end.
 	done := l.AddCleanup(func(ctx context.Context) { _ = l.deleteIfThere(ctx, ToolsVM) })
-	// Its steps: clone, configure (when Start edits it) and start, the
-	// script (the user's CAs before it), delete.
-	steps := 4
-	if cloneEdits(l.Lima, in.Config, spec.Net) {
-		steps++
-	}
+	// Its steps: clone, configure (its new ssh port) and start, the script
+	// (the user's CAs before it), delete.
+	steps := 5
 	if !spec.Trust.None() {
 		steps++
 	}

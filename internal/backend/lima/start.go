@@ -62,9 +62,10 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 		return nil
 	}
 	sshPort := c.SSHPort
-	if sshPort == 0 && l.OS == "darwin" && c.Net != backend.NetDirect {
-		// The profile names the port, so Lima can't pick it: a build VM's,
-		// chosen as a VM's are, held until its hostagent has it.
+	if sshPort == 0 && c.Net != backend.NetDirect {
+		// A build VM's, chosen as a VM's are and held until its hostagent
+		// has it, so no VM's forwarder takes it first (on macOS its
+		// profile names it too).
 		var release func()
 		if sshPort, release, err = l.Ports.Build(ctx, vm); err != nil {
 			return err

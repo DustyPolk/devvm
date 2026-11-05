@@ -84,8 +84,8 @@ type Lima struct {
 	Getenv func(string) string
 	// Company is the company proxy builds go through (buildUpstream).
 	Company *settings.CompanyProxy
-	// Ports chooses a build VM's ssh port on macOS, which its sandbox
-	// profile names (ports.Allocator.Build).
+	// Ports chooses a build VM's ssh port (ports.Allocator.Build), which
+	// no VM's state records.
 	Ports ports.Allocator
 	// Ubuntu finds Ubuntu's cloud image for base, which PinOrigin pins,
 	// at UbuntuURL, where Ubuntu's dated releases are listed

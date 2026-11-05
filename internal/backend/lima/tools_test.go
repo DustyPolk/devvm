@@ -33,7 +33,7 @@ func TestBuildTools(t *testing.T) {
 		"limactl delete -f " + ToolsVM,
 		`limactl clone --tty=false --mount-none --set .mounts = [{"location":"` + out +
 			`","mountPoint":"/mnt/devvm-tools","writable":true}] devvm-img-` + baseKey + " " + ToolsVM,
-		"limactl edit --tty=false " + ToolsVM + " --set .propagateProxyEnv=false --set .portForwards = ",
+		"limactl edit --tty=false " + ToolsVM + " --set .ssh.localPort=",
 		"limactl start --tty=false " + ToolsVM,
 		"limactl shell --workdir / " + ToolsVM + " bash -s -- node 24.21.0 node-24.21.0-0123456789ab.erofs",
 		"limactl delete -f " + ToolsVM,

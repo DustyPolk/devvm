@@ -28,6 +28,10 @@ stdout '^limactl start --tty=false devvm-img-[0-9a-f]{12}$'
 stdout '^limactl shell devvm-img-[0-9a-f]{12} bash -s$'
 stdout '^limactl shell --workdir / devvm-img-[0-9a-f]{12} sync$'
 stdout '^limactl stop devvm-img-[0-9a-f]{12}$'
+# Its ssh port is devvm's, on every host, given up once it has started.
+stdout '^limactl edit --tty=false devvm-img-[0-9a-f]{12} --set \.ssh\.localPort=[1-9][0-9]+ '
+exists $RUN/build-ports
+! exec sh -c 'ls -A "$RUN/build-ports" | grep .'
 grep 'Essentials, and mise' $STUB_DIR/scripts
 catg $IMAGES/????????????/record.json
 stdout '^  "name": "base",$'

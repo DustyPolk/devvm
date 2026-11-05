@@ -169,7 +169,7 @@ func TestBuildImageLayer(t *testing.T) {
 	checkLines(t, f.lines(), []string{
 		"limactl stop devvm-img-" + baseKey,
 		"limactl clone --tty=false --mount-none devvm-img-" + baseKey + " " + inst,
-		"limactl edit --tty=false " + inst + " --set .propagateProxyEnv=false --set .portForwards = ",
+		"limactl edit --tty=false " + inst + " --set .ssh.localPort=",
 		"limactl start --tty=false " + inst,
 		"limactl shell --workdir / " + inst + " sudo sh -s",
 		"limactl shell " + inst + " bash -s",

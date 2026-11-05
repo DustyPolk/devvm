@@ -40,7 +40,6 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		return backend.Built{}, err
 	}
 	parent := ImagePrefix + spec.Parent
-	edits := true // base's config is new: Start edits it
 	if spec.Parent != "" {
 		// Its parent stays as it is: stopped, as clones need.
 		in, err := l.inspect(ctx, parent)
@@ -49,7 +48,6 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 		} else if err != nil {
 			return backend.Built{}, err
 		}
-		edits = cloneEdits(l.Lima, in.Config, spec.Net)
 		if backend.Status(in.Status) != backend.StatusStopped {
 			if err := l.stop(ctx, parent); err != nil {
 				return backend.Built{}, err
@@ -63,13 +61,10 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 			l.unfinished(ctx, inst)
 		}
 	})
-	// Its steps: create or clone, configure (when Start edits it) and
-	// start, each of its recipe's, stop; with --from, the conversion's
-	// first, and an image only Docker has its export.
-	steps := 3 + len(spec.Recipe.Steps)
-	if edits {
-		steps++
-	}
+	// Its steps: create or clone, configure (its new ssh port, at each
+	// start) and start, each of its recipe's, stop; with --from, the
+	// conversion's first, and an image only Docker has its export.
+	steps := 4 + len(spec.Recipe.Steps)
 	if !spec.Trust.None() {
 		steps += 2
 	}
@@ -242,18 +237,6 @@ func convertedImages(dir, cmdline, goarch string) []limaImage {
 		Kernel: &limaKernel{Location: filepath.Join(dir, "kernel"), Cmdline: cmdline},
 		Initrd: &limaFile{Location: filepath.Join(dir, "initrd")},
 	}}
-}
-
-// cloneEdits reports whether Start edits a build VM cloned from an image
-// whose config is cfg, started with network n, for its step count: on
-// macOS always (its ssh port, new at each start), on Linux only when the
-// image's own build left its config otherwise, as a clone keeps it.
-func cloneEdits(l *Lima, cfg *config, n backend.Net) bool {
-	if l.OS == "darwin" {
-		return true
-	}
-	sets, _ := l.startSets(cfg, backend.Confinement{Net: n}, 0)
-	return len(sets) > 0
 }
 
 // layerArgs are limactl clone's arguments for a layer's instance (inst):

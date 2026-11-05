@@ -52,13 +52,11 @@ stdout -count=4 '\.erofs '
 exec tar -tf $STUB_DIR/sync.tar
 stdout '^sync\.sh$'
 stdout '^tools\.sh$'
-# The build's steps are numbered: clone, configure, start, build.sh, delete.
-# On Linux the clone keeps base's config, which needs no edit (no ssh port).
+# The build's steps are numbered: clone, configure (its new ssh port),
+# start, build.sh, delete.
 catg $DATA/logs/runs/*.log
-[darwin] stdout '^# \[4/5\] building_tools_in vm=devvm-tools-build$'
-[darwin] stdout '^# \[5/5\] deleting vm=devvm-tools-build$'
-[linux] stdout '^# \[3/4\] building_tools_in vm=devvm-tools-build$'
-[linux] stdout '^# \[4/4\] deleting vm=devvm-tools-build$'
+stdout '^# \[4/5\] building_tools_in vm=devvm-tools-build$'
+stdout '^# \[5/5\] deleting vm=devvm-tools-build$'
 
 # Without a terminal, devvm tools lists the VM's tools; add and rm change
 # its list and its tool files, built ones not built again.

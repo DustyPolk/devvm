@@ -215,26 +215,63 @@ func (a Allocator) SSH(ctx context.Context, st *state.VM, running bool) (int, er
 // and release, which gives it up: chosen as a VM's are (free), under the
 // claims lock, and recorded by the VM's name (paths.Dirs.BuildPorts),
 // where Used reads it, until release, once its backend has bound the port
-// (Listening sees it then) or failed to.
+// (Listening sees it then) or failed to. This process holds the record's
+// file lock until release, or until it ends, killed or not, so a record
+// whose lock no one holds is stale (clearStale).
 func (a Allocator) Build(ctx context.Context, vm string) (int, func(), error) {
 	rec := filepath.Join(a.Dirs.BuildPorts(), vm)
 	var n int
+	var unlock func()
 	err := state.Claims(ctx, a.Dirs, func() error {
 		var err error
 		if n, err = a.free(ctx); err != nil {
 			return err
 		}
-		return state.WriteFile(rec, []byte(strconv.Itoa(n)+"\n"))
+		if err := state.WriteFile(rec, []byte(strconv.Itoa(n)+"\n")); err != nil {
+			return err
+		}
+		// A new file: no other process has it, so the lock is had at once.
+		if unlock, err = platform.LockFile(ctx, rec); err != nil {
+			_ = os.Remove(rec)
+		}
+		return err
 	})
 	if err != nil {
 		return 0, nil, err
 	}
-	return n, func() { _ = os.Remove(rec) }, nil
+	return n, func() { _ = os.Remove(rec); unlock() }, nil
+}
+
+// staleAfter is how long a build port's record stays once no process
+// holds its lock: longer than Lima's start waits for a VM's ssh (10
+// minutes), as the backend's start, which a killed devvm leaves running,
+// may still bind the port until then.
+const staleAfter = 15 * time.Minute
+
+// clearStale removes the build ports' records whose file lock no process
+// holds (Build), written over staleAfter ago: left by a devvm that ended
+// before it gave its port up. It runs under the claims lock, which Build
+// holds from writing a record to locking it, so a record it finds
+// unlocked is never one being made.
+func clearStale(d paths.Dirs) {
+	es, _ := os.ReadDir(d.BuildPorts()) // none: nothing builds
+	for _, e := range es {
+		rec := filepath.Join(d.BuildPorts(), e.Name())
+		fi, err := e.Info()
+		if err != nil || time.Since(fi.ModTime()) < staleAfter {
+			continue
+		}
+		if held, err := platform.LockHeld(rec); err == nil && !held {
+			_ = os.Remove(rec)
+		}
+	}
 }
 
 // free returns a loopback port of Range (below the host's ephemeral
-// range) no program has (Listening) and no VM has.
+// range) no program has (Listening) and no VM has, once the build ports'
+// stale records are gone (clearStale). Its callers hold the claims lock.
 func (a Allocator) free(ctx context.Context) (int, error) {
+	clearStale(a.Dirs)
 	used, err := Used(a.Dirs, "")
 	if err != nil {
 		return 0, err

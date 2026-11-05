@@ -206,26 +206,3 @@ func missing(a, b []string) []string {
 	}
 	return out
 }
-
-// A build VM cloned from an image keeps the image's config, which its
-// own build's start made match: on Linux Start edits nothing (one step
-// fewer), on macOS it always edits its ssh port.
-func TestCloneEdits(t *testing.T) {
-	built := &config{PropagateProxyEnv: ptr(false), PortForwards: noForwards()}
-	for _, c := range []struct {
-		goos string
-		cfg  *config
-		net  backend.Net
-		want bool
-	}{
-		{"darwin", built, backend.NetInternet, true},
-		{"linux", built, backend.NetInternet, false},
-		{"linux", built, backend.NetNone, false},
-		{"linux", &config{}, backend.NetInternet, true},
-	} {
-		l, _, _ := testLima(t, c.goos)
-		if got := cloneEdits(l, c.cfg, c.net); got != c.want {
-			t.Errorf("%s, %+v, net %d: %v", c.goos, c.cfg, c.net, got)
-		}
-	}
-}

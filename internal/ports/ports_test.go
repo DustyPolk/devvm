@@ -2,6 +2,8 @@ package ports
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -268,6 +270,39 @@ func TestBuild(t *testing.T) {
 		t.Errorf("Used with a bad record = %v, %v", used, err)
 	}
 	releases[1]()
+	// A record no starting build holds (its devvm was killed mid-start)
+	// reserves its port while the start it left may still bind it, then
+	// only until the next port is chosen.
+	stale := filepath.Join(d.BuildPorts(), "devvm-img-killed00000")
+	if err := state.WriteFile(stale, []byte("20003\n")); err != nil {
+		t.Fatal(err)
+	}
+	a.Range = platform.PortRange{Lo: 20003, Hi: 20003}
+	if _, _, err := a.Build(t.Context(), builds[1]); err == nil {
+		t.Error("a build took the port a killed devvm's start may still bind")
+	}
+	old := time.Now().Add(-staleAfter - time.Minute)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if used, err := Used(d, ""); err != nil || !used[20003] {
+		t.Errorf("Used with a stale record = %v, %v", used, err)
+	}
+	n, release, err := a.Build(t.Context(), builds[1])
+	if err != nil || n != 20003 {
+		t.Fatalf("a build beside a stale record: %d, %v, want 20003", n, err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the stale record stays: %v", err)
+	}
+	// A starting build's record stays while it's held, however long.
+	if err := os.Chtimes(filepath.Join(d.BuildPorts(), builds[1]), old, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Choose(t.Context(), st, Proxy, func(int, Ports) bool { return false }); err == nil {
+		t.Error("a VM chose the port a starting build holds")
+	}
+	release()
 	// Without a claims lock it can take, there's no port.
 	bad := Allocator{Dirs: paths.Dirs{Data: filepath.Join(d.ClaimsLock(), "x")}, Listening: a.Listening}
 	if _, _, err := bad.Build(t.Context(), builds[0]); err == nil {

@@ -80,13 +80,13 @@ func TestStartConfined(t *testing.T) {
 			edits: []string{".ssh.localPort=2223", ".propagateProxyEnv=false", noForwardsSet()},
 		},
 		{
-			name: "Linux, a build with no network", os: "linux", c: backend.Confinement{Net: backend.NetNone}, qemu: true,
-			edits: []string{".propagateProxyEnv=false", noForwardsSet()},
+			name: "Linux, a build with no network", os: "linux", c: backend.Confinement{Net: backend.NetNone, SSHPort: 2224}, qemu: true,
+			edits: []string{".ssh.localPort=2224", ".propagateProxyEnv=false", noForwardsSet()},
 		},
 		{
 			// Not the host's proxy settings: its image would keep them.
-			name: "Linux, a build with the internet", os: "linux", c: backend.Confinement{Net: backend.NetInternet},
-			edits: []string{".propagateProxyEnv=false", noForwardsSet()},
+			name: "Linux, a build with the internet", os: "linux", c: backend.Confinement{Net: backend.NetInternet, SSHPort: 2225},
+			edits: []string{".ssh.localPort=2225", ".propagateProxyEnv=false", noForwardsSet()},
 		},
 		{name: "macOS, unconfined", os: "darwin", c: backend.Confinement{}, edits: []string{noForwardsSet()}},
 	} {
@@ -137,11 +137,17 @@ func TestStartConfined(t *testing.T) {
 	}
 }
 
-// A build VM on macOS starts with an ssh port the ports allocator chooses
-// (its sandbox profile names it): never a VM's, and held for it while it
-// starts, then given up.
+// A build VM starts with an ssh port the ports allocator chooses, on
+// every host: never a VM's, and held for it while it starts, then given
+// up.
 func TestStartBuildSSHPort(t *testing.T) {
-	l, f, _ := testLima(t, "darwin")
+	for _, goos := range []string{"darwin", "linux"} {
+		t.Run(goos, func(t *testing.T) { testStartBuildSSHPort(t, goos) })
+	}
+}
+
+func testStartBuildSSHPort(t *testing.T, goos string) {
+	l, f, _ := testLima(t, goos)
 	stoppedWithYAML(t, l, f)
 	st, err := state.New(l.Dirs, "devvm-web-0123456789abcd")
 	if err != nil {
