@@ -175,6 +175,10 @@ TZ=Pacific/Chatham mise run test
 TZ=Australia/Lord_Howe mise run test
 ```
 
+## Fuzzing
+
+`go test` runs only the seed inputs of each fuzz target, so the Fuzz workflow in `.github/workflows/fuzz.yml` fuzzes every target for two minutes each Monday, and you can start it by hand from the Actions tab. It finds the targets by reading each `func Fuzz` in the tests, so a new target is fuzzed without any change to the workflow, and the proxy's targets run first. When a target fails, the workflow uploads the input that broke it as an artifact named `crash-<target>`. Put that file in the package's `testdata/fuzz/<target>/` folder, fix the code, and commit both, because `go test` then runs the input as a seed every time. To fuzz one target on your machine, run `go test -run '^$' -fuzz '^FuzzParseRule$' -fuzztime 1m ./internal/proxy`.
+
 ## Manual checks
 
 What `tests/e2e.sh` leaves out, as it would change something of yours or needs something it doesn't have:
