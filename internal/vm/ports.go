@@ -105,13 +105,10 @@ func orAll(ports string) string {
 	return ports
 }
 
-// portsVM finds the folder's VM for devvm ports.
-func (e Settings) portsVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMPorts) }
-
 // Ports returns which ports the folder's VM forwards: all, none or a
 // list.
 func (e Settings) Ports(ctx context.Context) (string, error) {
-	t, err := e.portsVM(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMPorts})
 	if err != nil {
 		return "", err
 	}
@@ -144,7 +141,7 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 		e.Info(msg.PortsDefault(list))
 		return nil
 	}
-	t, err := e.portsVM(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMPorts})
 	if err != nil {
 		return err
 	}

@@ -215,7 +215,7 @@ func removedImage(img image.Name, layers []string) (image.Name, []string) {
 // disk. Once it has the VM, it holds the VM's remake lock (hold) until
 // release.
 func (e Lifecycle) toRemake(ctx context.Context, command string, cloneOK bool) (t *found, resumed bool, release func(), err error) {
-	if t, err = e.find(ctx); err != nil {
+	if t, err = finder(e).target(ctx, need{folder: true}); err != nil {
 		return nil, false, nil, err
 	}
 	vm := t.f.Name
@@ -226,9 +226,6 @@ func (e Lifecycle) toRemake(ctx context.Context, command string, cloneOK bool) (
 		if !e.Ask(msg.RemakeParentVMAsk(t.f.Dir, vm)) {
 			return nil, false, nil, nil
 		}
-	}
-	if err := e.checkFolder(t.f, t.st); err != nil {
-		return nil, false, nil, err
 	}
 	if release, err = remaking(e).hold(ctx, t); err != nil {
 		return nil, false, nil, err

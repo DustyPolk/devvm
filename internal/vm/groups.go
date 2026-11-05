@@ -378,9 +378,6 @@ func shownLinks(links []Link) string {
 	return strings.Join(out, ", ")
 }
 
-// groupVM finds the folder's VM for devvm group.
-func (e Groups) groupVM(ctx context.Context) (*found, error) { return e.folderVM(ctx, msg.NoVMGroup) }
-
 // GroupMember is one of a group's VMs as devvm group lists it.
 type GroupMember struct {
 	Name      string // the name the others reach it by
@@ -399,7 +396,7 @@ type GroupShown struct {
 // Show returns the folder's VM's group, with each member's name, folder
 // and published ports, sorted by name.
 func (e Groups) Show(ctx context.Context) (GroupShown, error) {
-	t, err := e.groupVM(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGroup})
 	if err != nil {
 		return GroupShown{}, err
 	}
@@ -427,7 +424,7 @@ func (e Groups) Show(ctx context.Context) (GroupShown, error) {
 // again once it holds the groups lock (lock), so a VM that joined
 // meanwhile counts.
 func (e Groups) Join(ctx context.Context, group, as string) error {
-	t, err := e.groupVM(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGroup})
 	if err != nil {
 		return err
 	}
@@ -573,7 +570,7 @@ func checkJoinName(group, vm, as string, members []*state.VM) error {
 // user made stay. The group goes with its last member. It holds the
 // groups lock throughout (lock).
 func (e Groups) Leave(ctx context.Context) error {
-	t, err := e.groupVM(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGroup})
 	if err != nil {
 		return err
 	}

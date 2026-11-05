@@ -1,0 +1,15 @@
+# The commands that act on no folder's VM never read the folder devvm runs
+# in: devvm build, rebuild, images, space and gc run from one that's gone.
+# A command on the folder's VM still needs it.
+exec sh -c 'mkdir gone && cd gone && rmdir ../gone && exec devvm build base'
+stdout '^==> building_image image=base key=[0-9a-f]{12}$'
+exec sh -c 'mkdir gone && cd gone && rmdir ../gone && exec devvm rebuild --force base'
+stdout '^==> building_image image=base key=[0-9a-f]{12}$'
+exec sh -c 'mkdir gone && cd gone && rmdir ../gone && exec devvm images'
+stdout '^base +'
+exec sh -c 'mkdir gone && cd gone && rmdir ../gone && exec devvm space'
+stdout '^total +'
+exec sh -c 'mkdir gone && cd gone && rmdir ../gone && exec devvm gc --force'
+stdout '^gc_packages '
+! exec sh -c 'mkdir gone && cd gone && rmdir ../gone && exec devvm stop'
+stderr '^devvm: stop_vm_failed reason='

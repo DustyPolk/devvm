@@ -10,8 +10,8 @@ import (
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
-// vmFolders finds and deletes VMs' folders in devvm's data folder: a
-// folder's VM by its path's hash, and every file a VM had when it goes.
+// vmFolders deletes VMs' folders in devvm's data folder: every file a VM
+// had when it goes.
 type vmFolders struct{ *Env }
 
 // teardown deletes what devvm keeps for a VM its backend no longer has (t):

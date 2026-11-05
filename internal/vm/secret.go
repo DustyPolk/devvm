@@ -99,7 +99,7 @@ func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 	if sec.HostOnly {
 		return msg.SecretHostOnly(name)
 	}
-	t, err := e.existing(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}

@@ -61,7 +61,7 @@ type Launch struct{ *Env }
 // the repo (seedClone). A VM that exists is opened as it is, with what's
 // changed since checked (open), and one whose remake didn't finish is
 // finished first (remaking.finishPending). Which VM it is, the folder's
-// own or a parent folder's opened in this folder, is find's (e.Folder);
+// own or a parent folder's opened in this folder, is the finder's (e.Folder);
 // --clone asks for the folder's own, as --here does. On success it
 // doesn't return: the shell takes devvm's place.
 func (e Launch) Up(ctx context.Context, o Options) error {
@@ -78,12 +78,9 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 			return err
 		}
 	}
-	// --clone asks for a new VM of the folder's own: as --here.
-	find := e.find
-	if o.Clone {
-		find = e.own
-	}
-	t, err := find(ctx)
+	// --clone asks for a new VM of the folder's own: as --here. One that
+	// has a VM (or a remake of it pending) has one made for this folder.
+	t, err := finder(e).target(ctx, need{own: o.Clone, folder: true})
 	if err != nil {
 		return err
 	}
@@ -100,9 +97,6 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 		}
 		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
 	}
-	if err := e.checkFolder(t.f, t.st); err != nil {
-		return err
-	}
 	if remakeUnfinished(e.Env, t) {
 		if err := Lifecycle(e).delete(ctx, t); err != nil {
 			return err
@@ -116,9 +110,6 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 // holding its remake lock, unless another devvm finished it meanwhile,
 // then opens it.
 func (e Launch) finishRemake(ctx context.Context, o Options, t *found) error {
-	if err := e.checkFolder(t.f, t.st); err != nil {
-		return err
-	}
 	release, err := remaking(e).hold(ctx, t)
 	if err != nil {
 		return err

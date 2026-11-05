@@ -2724,6 +2724,11 @@ func RmVMNotConnected(dir string, vm string) M {
 	return M{id: "rm_vm_not_connected", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
+// RmVMStateMismatch is [rm_vm_state_mismatch]: "{{.vm}}'s state says it was made for {{.dir}}, but its name is another folder's, so devvm won't delete it. Check its vm.json, which may have been changed by hand."
+func RmVMStateMismatch(dir string, vm string) M {
+	return M{id: "rm_vm_state_mismatch", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // RuleAdded is [rule_added]: "devvm added {{.rule}} to {{.vm}}'s rules."
 func RuleAdded(rule string, vm string) M {
 	return M{id: "rule_added", vals: []val{{"rule", rule}, {"vm", vm}}}
@@ -3925,6 +3930,7 @@ var specs = map[string]spec{
 	"rm_vm_folder_there":               {fields: []string{"dir", "vm"}},
 	"rm_vm_lost":                       {fields: []string{"vm"}},
 	"rm_vm_not_connected":              {fields: []string{"dir", "vm"}},
+	"rm_vm_state_mismatch":             {fields: []string{"dir", "vm"}},
 	"rule_added":                       {fields: []string{"rule", "vm"}},
 	"rule_added_global":                {fields: []string{"rule"}},
 	"rule_missing":                     {fields: []string{"file", "rule"}},

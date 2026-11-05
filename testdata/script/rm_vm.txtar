@@ -123,15 +123,15 @@ stdout '^==> deleted vm=devvm-agent-[0-9a-f]{14}$'
 
 # A --clone VM's work can't be fetched into a repo that's gone: refused
 # unless --no-clone-check, which warns.
-mkdir $VMS/0123456789ab01
-cp $WORK/clone.json $VMS/0123456789ab01/vm.json
-exec stub vm devvm-cl-0123456789ab01 Running
-! exec devvm rm devvm-cl-0123456789ab01 --force
-stderr '^devvm: rm_gone_clone dir=/p/cl vm=devvm-cl-0123456789ab01$'
-exec devvm rm devvm-cl-0123456789ab01 --force --no-clone-check --no-export
-stderr '^devvm: clone_check_skipped command=devvm rm vm=devvm-cl-0123456789ab01$'
-stdout '^==> deleted vm=devvm-cl-0123456789ab01$'
-! exists $VMS/0123456789ab01
+mkdir $VMS/f7999f634f79ad
+cp $WORK/clone.json $VMS/f7999f634f79ad/vm.json
+exec stub vm devvm-cl-f7999f634f79ad Running
+! exec devvm rm devvm-cl-f7999f634f79ad --force
+stderr '^devvm: rm_gone_clone dir=/p/cl vm=devvm-cl-f7999f634f79ad$'
+exec devvm rm devvm-cl-f7999f634f79ad --force --no-clone-check --no-export
+stderr '^devvm: clone_check_skipped command=devvm rm vm=devvm-cl-f7999f634f79ad$'
+stdout '^==> deleted vm=devvm-cl-f7999f634f79ad$'
+! exists $VMS/f7999f634f79ad
 
 # A folder that was on another device, as on a disk that isn't connected:
 # ls and space mark it not connected, and rm VM refuses it, --force too,
@@ -167,11 +167,20 @@ stdout '^==> deleted vm=devvm-usb-[0-9a-f]{14}$'
 ! exists $USB_dir
 
 # A VM its backend lost: gc --orphans' to forget.
-mkdir $VMS/0123456789ab02
-cp $WORK/lost.json $VMS/0123456789ab02/vm.json
-! exec devvm rm devvm-lost-0123456789ab02 --force
-stderr '^devvm: rm_vm_lost vm=devvm-lost-0123456789ab02$'
-exists $VMS/0123456789ab02/vm.json
+mkdir $VMS/be79df76493187
+cp $WORK/lost.json $VMS/be79df76493187/vm.json
+! exec devvm rm devvm-lost-be79df76493187 --force
+stderr '^devvm: rm_vm_lost vm=devvm-lost-be79df76493187$'
+exists $VMS/be79df76493187/vm.json
+
+# A VM whose state records a folder its name wasn't made for: refused.
+mkdir $VMS/0123456789ab03
+cp $WORK/lost.json $VMS/0123456789ab03/vm.json
+json_set $VMS/0123456789ab03/vm.json name=devvm-odd-0123456789ab03
+exec stub vm devvm-odd-0123456789ab03 Stopped
+! exec devvm rm devvm-odd-0123456789ab03 --force
+stderr '^devvm: rm_vm_state_mismatch dir=/p/lost vm=devvm-odd-0123456789ab03$'
+exists $VMS/0123456789ab03/vm.json
 
 -- yes.txt --
 y
@@ -181,7 +190,7 @@ n
 {
   "version": 1,
   "id": "0123456789abcdef0123456789abcd01",
-  "name": "devvm-cl-0123456789ab01",
+  "name": "devvm-cl-f7999f634f79ad",
   "image": "base",
   "dir": "/p/cl",
   "backend": "lima",
@@ -194,7 +203,7 @@ n
 {
   "version": 1,
   "id": "0123456789abcdef0123456789abcd02",
-  "name": "devvm-lost-0123456789ab02",
+  "name": "devvm-lost-be79df76493187",
   "image": "base",
   "dir": "/p/lost",
   "backend": "lima",

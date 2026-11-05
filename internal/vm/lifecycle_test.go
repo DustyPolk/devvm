@@ -160,6 +160,37 @@ func TestRmVMChecksAgain(t *testing.T) {
 	}
 }
 
+// rm VM refuses a VM whose state records a folder whose VM it isn't: its
+// path doesn't hash to the VM's name, so the state was changed by hand,
+// and the folder it names, this one, keeps its own VM.
+func TestRmVMFolderOfAnother(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	web := e.Dir
+	own := existingVM(t, e, Options{NoNetworkPolicy: true}).Name()
+	subfolder(t, e, filepath.Dir(web), "api")
+	e.Folder = FolderHere
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	other, err := (finder{e}).target(t.Context(), need{})
+	if err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if err := set(t, other.st, keyDir, web); err != nil {
+		t.Fatal(err)
+	}
+	e.Dir, e.Folder = web, FolderAuto
+	err = (Lifecycle{e}).RmVM(t.Context(), other.f.Name, RmOptions{Force: true, NoExport: true})
+	if msg.NamesOf(err) != "rm_vm_state_mismatch dir="+web+" vm="+other.f.Name {
+		t.Errorf("rm VM of another folder's state: %v", msg.NamesOf(err))
+	}
+	for _, vm := range []string{own, other.f.Name} {
+		if _, ok := f.Instances[vm]; !ok {
+			t.Errorf("%s deleted", vm)
+		}
+	}
+}
+
 // export saves the history to the exports folder or a file of the user's,
 // which a failed export leaves as it was; the VM is kept either way.
 func TestExport(t *testing.T) {

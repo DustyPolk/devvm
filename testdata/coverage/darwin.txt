@@ -7,7 +7,7 @@ internal/backend/backendtest 74.4
 internal/backend/lima 90.8
 internal/backend/registry 100.0
 internal/build 88.5
-internal/cli 88.8
+internal/cli 88.9
 internal/cli/docgen 85.3
 internal/daemon 97.9
 internal/desktop 77.2
@@ -24,7 +24,7 @@ internal/msg/gen 93.3
 internal/netpolicy 88.5
 internal/paths 98.1
 internal/platform 86.3
-internal/ports 90.9
+internal/ports 91.2
 internal/project 98.4
 internal/proxy 90.9
 internal/redact 97.7

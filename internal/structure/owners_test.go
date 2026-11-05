@@ -393,3 +393,34 @@ func checkPaths(m *module, r rules) []violation {
 	}
 	return vs
 }
+
+// checkCallers: outside tests and its own package, a function callers
+// lists is called only in its file, as pkg.Name for the name the file
+// imports its package as. A listed file that no longer calls it fails.
+func checkCallers(m *module, r rules) []violation {
+	var vs []violation
+	called := map[string]bool{}
+	for _, fn := range slices.Sorted(maps.Keys(r.callers)) {
+		dir, name := strings.TrimSuffix(fn, path.Ext(fn)), strings.TrimPrefix(path.Ext(fn), ".")
+		owner := r.callers[fn]
+		for _, f := range m.files {
+			pkg := importName(f, m.path+"/"+dir)
+			if f.test || pkg == "" {
+				continue
+			}
+			calls(f, func(call *ast.CallExpr) {
+				if callName(call) != pkg+"."+name {
+					return
+				}
+				called[fn] = called[fn] || f.name == owner
+				if f.name != owner {
+					vs = append(vs, violation{ruleOwners, m.pos(call), fmt.Sprintf("calls %s: only %s does, so find it there", path.Base(dir)+"."+name, owner)})
+				}
+			})
+		}
+		if !called[fn] {
+			vs = append(vs, violation{ruleOwners, "callers", owner + " doesn't call " + fn + ": take it out"})
+		}
+	}
+	return vs
+}

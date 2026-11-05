@@ -30,11 +30,11 @@ func subfolder(t *testing.T, e *Env, web, dir string) string {
 	return sub
 }
 
-// lookupVM is the VM find finds for the folder e runs in, a parent's
+// lookupVM is the VM the finder finds for the folder e runs in, a parent's
 // (its folder and the subfolder it's for), else "" for the folder's own.
 func lookupVM(t *testing.T, e *Env) (dir, sub string) {
 	t.Helper()
-	got, err := e.find(t.Context())
+	got, err := (finder{e}).target(t.Context(), need{})
 	if err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
@@ -122,7 +122,7 @@ func TestLookupParents(t *testing.T) {
 		t.Errorf("from src: %q, want its own", dir)
 	}
 	// So does its state, when its backend has lost the VM.
-	own, err := e.own(t.Context())
+	own, err := (finder{e}).target(t.Context(), need{own: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,8 +155,8 @@ func TestLookupParents(t *testing.T) {
 	if dir, _ := lookupVM(t, e); dir != "" {
 		t.Errorf("past another folder's VM: %q, want none", dir)
 	}
-	if _, err := e.findExisting(t.Context()); msg.NamesOf(err) != "no_vm dir="+lib {
-		t.Errorf("findExisting past another folder's VM = %v, want no_vm", msg.NamesOf(err))
+	if _, err := (finder{e}).target(t.Context(), need{has: hasVM}); msg.NamesOf(err) != "no_vm dir="+lib {
+		t.Errorf("finding one past another folder's VM = %v, want no_vm", msg.NamesOf(err))
 	}
 	// Never the home folder's, or one above it.
 	e.Dirs.Home = web
@@ -247,7 +247,7 @@ func TestShellDir(t *testing.T) {
 	web := e.Dir
 	existingVM(t, e, Options{NoNetworkPolicy: true})
 	src := subfolder(t, e, web, "src")
-	p, err := e.parentVM(t.Context())
+	p, err := (finder{e}).parentVM(t.Context())
 	if err != nil || p == nil {
 		t.Fatalf("parentVM = %+v, %v", p, msg.NamesOf(err))
 	}
@@ -473,14 +473,14 @@ func TestSubfolderRepo(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(pkg, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if p, err := e.parentVM(t.Context()); err != nil || p == nil || p.repo != pkg || p.f.Dir != web {
+	if p, err := (finder{e}).parentVM(t.Context()); err != nil || p == nil || p.repo != pkg || p.f.Dir != web {
 		t.Fatalf("parentVM = %+v, %v", p, msg.NamesOf(err))
 	}
 	// A .git file (a worktree's) in the folder itself is nearer.
 	if err := os.WriteFile(filepath.Join(src, ".git"), []byte("gitdir: /x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if p, err := e.parentVM(t.Context()); err != nil || p == nil || p.repo != src {
+	if p, err := (finder{e}).parentVM(t.Context()); err != nil || p == nil || p.repo != src {
 		t.Fatalf("parentVM = %+v, %v", p, msg.NamesOf(err))
 	}
 	if err := (Lifecycle{e}).Stop(t.Context()); msg.NamesOf(err) != "no_vm dir="+src {

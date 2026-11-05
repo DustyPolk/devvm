@@ -164,7 +164,7 @@ func TestLookupOtherBackend(t *testing.T) {
 		t.Fatalf("made %s on %s", st.Name(), st.Backend)
 	}
 	reg.NewVMs = "fake"
-	own, err := e.own(t.Context())
+	own, err := (finder{e}).target(t.Context(), need{own: true})
 	if err != nil || own.f.Name != st.Name() || own.b.Name() != "other" || !own.exists {
 		t.Errorf("own = %+v, %v", own, err)
 	}

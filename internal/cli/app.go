@@ -148,10 +148,7 @@ func (a *app) vmEnv() (*vm.Env, error) {
 		if err != nil {
 			return nil, err
 		}
-		e, err := vm.NewEnv(d, assets.FS, self, devvmVersion(), reg, tl, store, a.u)
-		if err != nil {
-			return nil, err
-		}
+		e := vm.NewEnv(d, assets.FS, self, devvmVersion(), reg, tl, store, a.u)
 		e.PickFeatures = pickFeatures(a.u)
 		e.PickParts = pickParts(a.u)
 		e.CanAsk = func() bool { return ui.CanAsk(a.u) }

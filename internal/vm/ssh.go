@@ -85,7 +85,7 @@ func (e Launch) reach(ctx context.Context) (string, *found, error) {
 // sets it up, which puts it in devvm's ssh config, and checks its backend
 // says how ssh reaches it.
 func ready(ctx context.Context, e Launch) (*found, error) {
-	t, err := e.existing(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade})
 	if err != nil {
 		return nil, err
 	}

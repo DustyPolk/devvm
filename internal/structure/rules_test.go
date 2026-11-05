@@ -570,11 +570,44 @@ func pathCases() []ruleCase {
 	}
 }
 
+// callerCases break and keep callers.
+func callerCases() []ruleCase {
+	r := rules{callers: map[string]string{"internal/state.ReadHash": "internal/vm/finder.go"}}
+	const finder = "package vm\n\nimport \"example.com/m/internal/state\"\n\nfunc f() { state.ReadHash() }\n"
+	return []ruleCase{
+		{
+			name: "its function called outside its file",
+			files: map[string]string{
+				"internal/vm/finder.go": finder,
+				"internal/vm/a.go":      "package vm\n\nimport st \"example.com/m/internal/state\"\n\nfunc g() { st.ReadHash() }\n",
+			},
+			r:    r,
+			want: &want{ruleOwners, "calls state.ReadHash: only internal/vm/finder.go does"},
+		},
+		{
+			name:  "its file no longer calling it",
+			files: map[string]string{"internal/vm/finder.go": "package vm\n"},
+			r:     r,
+			want:  &want{ruleOwners, "internal/vm/finder.go doesn't call internal/state.ReadHash: take it out"},
+		},
+		{
+			name: "its file, its own package and a test calling it",
+			files: map[string]string{
+				"internal/vm/finder.go":  finder,
+				"internal/state/a.go":    "package state\n\nfunc ReadHash() {}\n\nfunc g() { ReadHash() }\n",
+				"internal/vm/vm_test.go": "package vm\n\nimport \"example.com/m/internal/state\"\n\nfunc h() { state.ReadHash() }\n",
+				"internal/cli/a.go":      "package cli\n\nimport \"example.com/m/internal/state\"\n\nfunc h() { state.ReadVM() }\n",
+			},
+			r: r,
+		},
+	}
+}
+
 // Each rule fails on code that breaks it, naming the rule, and passes
 // what it allows.
 func TestRulesFail(t *testing.T) {
 	var broken []string // the layer violations' texts
-	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases(), ownerCases(), separatorCases(), runnerCases(), pathCases()) {
+	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases(), ownerCases(), separatorCases(), runnerCases(), pathCases(), callerCases()) {
 		t.Run(tc.name, func(t *testing.T) {
 			fsys := fstest.MapFS{"go.mod": {Data: []byte("module example.com/m\n\ngo 1.27\n")}}
 			for name, src := range tc.files {

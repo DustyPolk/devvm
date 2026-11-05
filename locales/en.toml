@@ -984,6 +984,10 @@ other = "There's no VM named {{.name}}. Give a VM's name, as devvm ls lists them
 description = "dir is the folder vm was made for, which is still there"
 other = "{{.vm}} was made for {{.dir}}, which is still there. To delete it, run devvm rm in {{.dir}}."
 
+[rm_vm_state_mismatch]
+description = "dir is the folder vm's state records, which isn't the folder vm's name was made for"
+other = "{{.vm}}'s state says it was made for {{.dir}}, but its name is another folder's, so devvm won't delete it. Check its vm.json, which may have been changed by hand."
+
 [rm_vm_lost]
 other = "{{.vm}}'s backend no longer has it. Run devvm gc --orphans to delete what devvm keeps for it."
 

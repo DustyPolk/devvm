@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -40,16 +39,17 @@ import (
 )
 
 // Env is what the commands on a folder's VM run with, shared by Launch,
-// Lifecycle, Settings and Net; its methods are what they share: finding
-// the folder's VM, starting it, its size and ports, the image builder and
-// the ssh config. NewEnv sets every field; tests change them.
+// Lifecycle, Settings and Net; its methods are what they share: starting
+// the folder's VM, which the finder finds (finder.go), its size and ports,
+// the image builder and the ssh config. NewEnv sets every field but Dir,
+// which the finder reads when it's needed; tests change them.
 type Env struct {
 	Dirs     paths.Dirs
 	Assets   fs.FS // devvm's own files (assets.FS)
 	Registry *backend.Registry
 	Tools    *tools.Env
 	Proxy    *netpolicy.Proxy // VMs' network policy proxies
-	Dir      string           // the folder devvm runs in, a physical path
+	Dir      string           // the folder devvm runs in, a physical path: "" until the finder needs it (finder.dir)
 	// Folder is which VM the folder uses when a folder it's inside has
 	// one (--here, --parent): resolveFolder's rule.
 	Folder FolderRule
@@ -141,24 +141,17 @@ type UI interface {
 	Stderr() io.Writer
 }
 
-// NewEnv returns the environment up runs in here, with devvm's own files
+// NewEnv returns the environment up runs in, with devvm's own files
 // (assets), devvm being self at version, on u, with the run's registry,
 // shared tools and secrets store. The shared tools' downloads and builds,
 // and --from's lookups, go through tl's company proxy, whose password
 // its caller takes from store, the same secrets as the VMs' proxies'.
 // Its caller sets PickFeatures and PickParts.
-func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Registry, tl *tools.Env, store *secrets.Store, u UI) (*Env, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	if wd, err = filepath.EvalSymlinks(wd); err != nil {
-		return nil, err
-	}
+func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Registry, tl *tools.Env, store *secrets.Store, u UI) *Env {
 	e := &Env{
 		Dirs: d, Assets: assets, Registry: reg, Tools: tl,
 		Proxy: netpolicy.NewProxy(d, assets, self, store, u),
-		Dir:   wd, OS: runtime.GOOS, Version: version,
+		OS:    runtime.GOOS, Version: version,
 		Host: func() (Host, error) { return ThisHost(reg.Host) }, Exec: execShell, OpenURL: openURL, Environ: os.Environ(),
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
 		SSHAdd: func(ctx context.Context, args ...string) int { return sshAdd(ctx, u.Stderr(), args...) },
@@ -172,7 +165,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, e.Warn) }
 	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }
 	e.Agent = sshagent.New(d, e.mounts, u)
-	return e, nil
+	return e
 }
 
 // Builder returns what builds images on b whose base starts from
@@ -201,300 +194,6 @@ func openURL(ctx context.Context, url string) error {
 	return exec.CommandContext(ctx, "open", url).Run() //nolint:gosec // devvm's own vnc://127.0.0.1:PORT
 }
 
-// found is the folder's VM as devvm finds it.
-type found struct {
-	f      project.Folder
-	st     *state.VM       // its state; one that doesn't exist for a new VM
-	b      backend.Backend // its backend: the one its state records, else a new VM's
-	exists bool            // the backend has it
-	// sub is the folder devvm runs in when the VM is a parent folder's
-	// (f.Dir), and so mounts it at the same path; "" when it's this
-	// folder's own.
-	sub string
-	// repo is, for a parent folder's VM, the nearest folder from sub up,
-	// below f.Dir, with a .git of its own; "" when none has one.
-	repo string
-}
-
-// FolderRule is which VM a command on the folder's VM uses when a folder
-// it's inside has one: --here and --parent, else the default.
-type FolderRule int
-
-const (
-	// FolderAuto is the default: the folder's own VM when it has one,
-	// else the nearest parent folder's, unless a repo of its own is in
-	// between.
-	FolderAuto FolderRule = iota
-	// FolderHere is --here: the folder's own, never a parent's.
-	FolderHere
-	// FolderParent is --parent: the nearest parent folder's, across a
-	// repo of its own and past the folder's own VM.
-	FolderParent
-)
-
-// folderUse is what resolveFolder decides a folder uses.
-type folderUse int
-
-const (
-	// useNone: neither its own VM nor a parent's, so up makes its own and
-	// every other command says no_vm.
-	useNone   folderUse = iota
-	useOwn              // the folder's own VM, which it has
-	useParent           // the nearest parent folder's VM
-)
-
-// resolveFolder decides which VM the folder dir uses under rule: own when
-// the folder has its own (its state, or its backend has it), else the VM
-// of the nearest parent folder with one, which parent finds (parentVM:
-// nil for none, with the repo of its own in between, if any), asked only
-// when the rule needs it. With FolderAuto the folder's own wins, and a
-// parent's is passed over below a repo of its own; FolderHere never asks
-// for a parent's; FolderParent takes the parent's whatever the folder
-// has, and refuses a folder that's inside none with a VM
-// (no_parent_vm).
-func resolveFolder(dir string, own bool, rule FolderRule, parent func() (*found, error)) (folderUse, *found, error) {
-	ownUse := useNone
-	if own {
-		ownUse = useOwn
-	}
-	if rule == FolderHere || rule == FolderAuto && own {
-		return ownUse, nil, nil
-	}
-	p, err := parent()
-	switch {
-	case err != nil:
-		return useNone, nil, err
-	case p == nil && rule == FolderParent:
-		return useNone, nil, msg.NoParentVM(dir)
-	case p == nil || rule == FolderAuto && p.repo != "":
-		return ownUse, nil, nil
-	}
-	return useParent, p, nil
-}
-
-// find finds the folder's VM, which needn't exist, with the backend that
-// has it or would make it: the folder's own (own) or the nearest parent
-// folder's, as resolveFolder decides under e.Folder, a parent's said in
-// an info line first.
-func (e *Env) find(ctx context.Context) (*found, error) {
-	t, err := e.own(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// A folder with state of its own has a VM, even one its backend has
-	// lost: never a parent's in its place, unless --parent.
-	use, p, err := resolveFolder(e.Dir, t.exists || t.st.Exists(), e.Folder, func() (*found, error) { return e.parentVM(ctx) })
-	if err != nil {
-		return nil, err
-	}
-	if use == useParent {
-		e.Info(msg.UsingParentVM(p.f.Dir, p.f.Name))
-		return p, nil
-	}
-	return t, nil
-}
-
-// own finds the folder's own VM, which needn't exist, never a parent
-// folder's. A folder's VM is found by its path's hash (project.Hash),
-// which names its folder in devvm's data folder: one that exists has the
-// name and the backend its state records, whichever backend is asked now.
-// Only a new VM gets a name, fitting its backend's.
-func (e *Env) own(ctx context.Context) (*found, error) {
-	f, st, err := vmFolders{e}.state(e.Dir)
-	if err != nil {
-		return nil, err
-	}
-	if !st.Exists() {
-		if f, err = (vmFolders{e}).newName(e.Dir); err != nil {
-			return nil, err
-		}
-		if st, err = state.ReadVM(e.Dirs, f.Name); err != nil {
-			return nil, err
-		}
-	}
-	return e.inspect(ctx, f, st)
-}
-
-// state reads the state of dir's VM, by its path's hash, and returns the
-// folder with the name it records ("" for none).
-func (e vmFolders) state(dir string) (project.Folder, *state.VM, error) {
-	if _, err := project.New(dir, 0); err != nil {
-		if bad, ok := errors.AsType[*project.BadPathError](err); ok {
-			return project.Folder{}, nil, msg.BadPath(bad.Dir)
-		}
-		return project.Folder{}, nil, err
-	}
-	st, err := state.ReadHash(e.Dirs, project.Hash(dir))
-	if err == nil {
-		err = checkState(st)
-	}
-	if err != nil {
-		return project.Folder{}, nil, err
-	}
-	return project.Folder{Dir: dir, Name: st.Name()}, st, nil
-}
-
-// newName is the name a new VM for dir gets: fitting the names of the
-// backend it would be made on.
-func (e vmFolders) newName(dir string) (project.Folder, error) {
-	first, err := e.Registry.For(new(state.VM))
-	if err != nil {
-		return project.Folder{}, err
-	}
-	nameMax := first.Backend.NameMax()
-	f, err := project.New(dir, nameMax)
-	if errors.Is(err, project.ErrNoRoom) {
-		return project.Folder{}, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(nameMax))
-	}
-	return f, err
-}
-
-// parentVM finds the VM of the nearest parent folder with state of its own
-// (project.Parents, stopping before home and the root) for
-// resolveFolder, else nil, with the nearest folder below it with a .git of
-// its own (repo), the folder devvm runs in included. Only folders without
-// state are passed over: the search stops at the first with state, which
-// gives nil unless its backend has its VM and it was made for that folder.
-// A VM in an outer folder can replace a nested folder through its mount,
-// and devvm then never skips the nested folder's VM for the outer one's.
-func (e *Env) parentVM(ctx context.Context) (*found, error) {
-	repo := ""
-	if hasGit(e.Dir) {
-		repo = e.Dir
-	}
-	for _, dir := range project.Parents(e.Dir, e.Dirs.Home) {
-		if _, err := project.New(dir, 0); err != nil {
-			continue // a folder no VM can be made for
-		}
-		pf, pst, err := vmFolders{e}.state(dir)
-		if err != nil {
-			return nil, err
-		}
-		if !pst.Exists() {
-			if repo == "" && hasGit(dir) {
-				repo = dir
-			}
-			continue
-		}
-		if !e.sameFolder(pf, pst) {
-			return nil, nil
-		}
-		p, err := e.inspect(ctx, pf, pst)
-		if err != nil || !p.exists {
-			return nil, err
-		}
-		p.sub, p.repo = e.Dir, repo
-		return p, nil
-	}
-	return nil, nil
-}
-
-// hasGit reports whether dir has a .git of its own: a repo, or a
-// worktree's or submodule's .git file.
-func hasGit(dir string) bool {
-	_, err := os.Lstat(filepath.Join(dir, ".git"))
-	return err == nil
-}
-
-// inspect finds the VM for folder f, whose state is st, on the backend
-// its state records, else a new VM's. One that exists gets devvm's
-// connections carrying its SSH agent.
-func (e *Env) inspect(ctx context.Context, f project.Folder, st *state.VM) (*found, error) {
-	choice, err := e.Registry.For(st)
-	if err != nil {
-		return nil, err
-	}
-	b := choice.Backend
-	if err := backend.Check(ctx, b); err != nil {
-		return nil, err
-	}
-	t := &found{f: f, st: st, b: b}
-	switch in, err := b.Inspect(ctx, f.Name); {
-	case err == nil:
-		t.exists = true
-		mode := sshagent.Mode(st)
-		if in.Status == backend.StatusRunning {
-			if mode, err = runningAgent(ctx, b, st); err != nil {
-				return nil, err
-			}
-		}
-		e.useAgent(mode)
-	case !errors.Is(err, backend.ErrNotFound):
-		return nil, err
-	}
-	return t, nil
-}
-
-// findExisting finds the folder's VM, which must exist, or be in the
-// middle of a remake (remakePending), whose machine may be gone.
-func (e *Env) findExisting(ctx context.Context) (*found, error) {
-	t, err := e.find(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !t.exists && !remakePending(t.st) {
-		return nil, msg.NoVM(t.f.Dir)
-	}
-	return t, nil
-}
-
-// existing finds the folder's VM, which must exist, be made for this
-// folder and have finished being made, and not be in the middle of a
-// remake.
-func (e *Env) existing(ctx context.Context) (*found, error) {
-	t, err := e.findExisting(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := e.checkMade(t); err != nil {
-		return nil, err
-	}
-	return t, nil
-}
-
-// folderVM finds the folder's VM for a command that shows or changes it,
-// which must exist (else noVM), be made for this folder and have finished
-// being made, and not be in the middle of a remake.
-func (e *Env) folderVM(ctx context.Context, noVM func(dir string) msg.M) (*found, error) {
-	t, err := e.find(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !t.exists && !remakePending(t.st) {
-		return nil, noVM(t.f.Dir)
-	}
-	if err := e.checkMade(t); err != nil {
-		return nil, err
-	}
-	return t, nil
-}
-
-// checkMade refuses a VM made for another folder at the same path, one
-// whose creation didn't finish, and one in the middle of a remake, which
-// devvm finishes first.
-func (e *Env) checkMade(t *found) error {
-	if err := e.checkFolder(t.f, t.st); err != nil {
-		return err
-	}
-	if remakePending(t.st) {
-		return msg.RemakePending(t.f.Dir, t.f.Name)
-	}
-	if !t.st.Finished() {
-		return msg.VMUnfinished(t.f.Name)
-	}
-	return nil
-}
-
-// checkFolder refuses a VM made for another folder at the same path: one
-// deleted and made again (another repo cloned there) never quietly gets
-// the old one's disk.
-func (e *Env) checkFolder(f project.Folder, st *state.VM) error {
-	if !e.sameFolder(f, st) {
-		return msg.VMOtherFolder(f.Name, st.Dir)
-	}
-	return nil
-}
-
 // widen is asked, with e's prompts, before a command that gives the VM more
 // access (cmd, as devvm network off) changes it: true for the folder's own
 // VM. A parent folder's VM, found from a subfolder, changes only after
@@ -507,16 +206,6 @@ func (t *found) widen(e *Env, cmd string) (bool, error) {
 		return false, msg.WidenParentVMRefused(cmd, t.f.Dir, t.f.Name)
 	}
 	return e.Ask(msg.WidenParentVM(cmd, t.f.Dir, t.f.Name)), nil
-}
-
-// sameFolder reports whether the VM was made for this folder: its path,
-// and the folder itself. A VM without state has no folder to differ.
-func (e *Env) sameFolder(f project.Folder, st *state.VM) bool {
-	if !st.Exists() {
-		return true
-	}
-	id, err := platform.FolderID(f.Dir)
-	return err == nil && st.Dir == f.Dir && st.Folder == id
 }
 
 // FolderState is what's at the path of the project folder a VM's state

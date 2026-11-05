@@ -55,6 +55,10 @@ type rules struct {
 	// pathsOwner is the one package that names what's in devvm's data
 	// and config folders (paths.Dirs's Data and Config).
 	pathsOwner string
+	// callers are functions only one file calls outside their package and
+	// tests: the function, as its package's folder then .Name, then the
+	// file, from the module's root.
+	callers map[string]string
 }
 
 // A literalOwner is the package whose string literals alone hold a text,
@@ -167,7 +171,8 @@ func load(fsys fs.FS) (*module, error) {
 // check runs every rule on m, the violations sorted.
 func check(m *module, r rules) []violation {
 	vs := slices.Concat(checkMethods(m, r), checkInit(m), checkVars(m, r), checkLayers(m, r), checkCommands(m, r),
-		checkExecSites(m, r), checkGuard(m, r), checkEnv(m, r), checkLiterals(m, r), checkSeparators(m, r), checkPaths(m, r))
+		checkExecSites(m, r), checkGuard(m, r), checkEnv(m, r), checkLiterals(m, r), checkSeparators(m, r), checkPaths(m, r),
+		checkCallers(m, r))
 	slices.SortFunc(vs, func(a, b violation) int { return strings.Compare(a.String(), b.String()) })
 	return vs
 }

@@ -46,6 +46,13 @@ func devvm() rules {
 		// paths names every file and folder devvm keeps, so the layout,
 		// its golden listing and a VM's teardown miss none.
 		pathsOwner: "internal/paths",
+		// The finder alone reads a folder's VM by its path's hash and looks
+		// through its parent folders, so every command finds the same VM
+		// and refuses what it needs refused.
+		callers: map[string]string{
+			"internal/state.ReadHash":  "internal/vm/finder.go",
+			"internal/project.Parents": "internal/vm/finder.go",
+		},
 		// readOverrides reads a test build's stand-ins, and a release
 		// none.
 		envOwner:    "internal/cli/overrides.go",

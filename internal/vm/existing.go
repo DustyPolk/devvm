@@ -21,7 +21,7 @@ import (
 // Restart stops the folder's VM, then opens it as Up does: what changes
 // only when it starts (its mounts, size, ports) applies.
 func (e Launch) Restart(ctx context.Context, o Options) error {
-	t, err := e.existing(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}

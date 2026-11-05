@@ -1,0 +1,379 @@
+package vm
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strconv"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/sshagent"
+	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/vmname"
+)
+
+// finder finds the VM a command acts on (target): the folder's own, the
+// nearest parent folder's, or one named, and refuses one that isn't what
+// the command needs. It's the one place a VM's state is read by its
+// folder's hash and the parent folders are looked through, and it reads
+// the folder devvm runs in only then (dir), so the commands that act on
+// no VM's folder run from one that's gone.
+type finder struct{ *Env }
+
+// found is the VM the finder finds.
+type found struct {
+	f      project.Folder
+	st     *state.VM       // its state; one that doesn't exist for a new VM
+	b      backend.Backend // its backend: the one its state records, else a new VM's
+	exists bool            // the backend has it
+	// other: it was made for an earlier folder at f.Dir, deleted and made
+	// again since (sameFolder).
+	other bool
+	// sub is the folder devvm runs in when the VM is a parent folder's
+	// (f.Dir), and so mounts it at the same path; "" when it's this
+	// folder's own.
+	sub string
+	// repo is, for a parent folder's VM, the nearest folder from sub up,
+	// below f.Dir, with a .git of its own; "" when none has one.
+	repo string
+}
+
+// need is what a command needs of the VM it acts on. The zero need is
+// the folder's VM, which needn't exist, as e.Folder decides which it is.
+type need struct {
+	// own: the folder's own VM, never a parent folder's (devvm --clone,
+	// devvm adopt).
+	own bool
+	// name: the project VM it names, by its name or its ssh alias, in the
+	// folder its state records (devvm rm VM), and never the folder's.
+	name string
+	has  has
+	// folder: one that has (exists, or its remake didn't finish) was made
+	// for this folder (vm_other_folder). hasMade implies it.
+	folder bool
+	// noVM is the refusal of a VM that hasn't what has asks, by the
+	// folder: msg.NoVM when nil.
+	noVM func(dir string) msg.M
+}
+
+// has is how much of the VM a need asks to be there.
+type has int
+
+const (
+	hasAny     has = iota // nothing: a new VM's name and backend, if none
+	hasVM                 // its backend has it, or its remake didn't finish (its machine may be gone)
+	hasMachine            // its backend has it
+	// hasMade: as hasVM, made for this folder, its creation finished,
+	// and no remake of it pending, which devvm finishes first.
+	hasMade
+)
+
+// FolderRule is which VM a command on the folder's VM uses when a folder
+// it's inside has one: --here and --parent, else the default.
+type FolderRule int
+
+const (
+	// FolderAuto is the default: the folder's own VM when it has one,
+	// else the nearest parent folder's, unless a repo of its own is in
+	// between.
+	FolderAuto FolderRule = iota
+	// FolderHere is --here: the folder's own, never a parent's.
+	FolderHere
+	// FolderParent is --parent: the nearest parent folder's, across a
+	// repo of its own and past the folder's own VM.
+	FolderParent
+)
+
+// folderUse is what resolveFolder decides a folder uses.
+type folderUse int
+
+const (
+	// useNone: neither its own VM nor a parent's, so up makes its own and
+	// every other command says no_vm.
+	useNone   folderUse = iota
+	useOwn              // the folder's own VM, which it has
+	useParent           // the nearest parent folder's VM
+)
+
+// target finds the VM a command acts on, as n says, and refuses one that
+// hasn't what n asks.
+func (e finder) target(ctx context.Context, n need) (*found, error) {
+	var t *found
+	var err error
+	switch {
+	case n.name != "":
+		t, err = e.named(ctx, n.name)
+	case n.own:
+		t, err = e.own(ctx)
+	default:
+		t, err = e.folders(ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return t, n.check(t)
+}
+
+// check refuses t when it hasn't what n asks, in this order: there (else
+// noVM), made for this folder, no remake pending, its creation finished.
+func (n need) check(t *found) error {
+	noVM := n.noVM
+	if noVM == nil {
+		noVM = msg.NoVM
+	}
+	pending := remakePending(t.st)
+	there := t.exists || pending
+	switch {
+	case n.has == hasMachine && !t.exists, (n.has == hasVM || n.has == hasMade) && !there:
+		return noVM(t.f.Dir)
+	case (n.folder || n.has == hasMade) && there && t.other:
+		return msg.VMOtherFolder(t.f.Name, t.st.Dir)
+	case n.has == hasMade && pending:
+		return msg.RemakePending(t.f.Dir, t.f.Name)
+	case n.has == hasMade && !t.st.Finished():
+		return msg.VMUnfinished(t.f.Name)
+	}
+	return nil
+}
+
+// dir is the folder devvm runs in, a physical path (e.Dir), read the
+// first time it's needed.
+func (e finder) dir() (string, error) {
+	if e.Dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		if e.Dir, err = filepath.EvalSymlinks(wd); err != nil {
+			return "", err
+		}
+	}
+	return e.Dir, nil
+}
+
+// folders finds the folder's VM, which needn't exist, with the backend
+// that has it or would make it: the folder's own (own) or the nearest
+// parent folder's, as resolveFolder decides under e.Folder, a parent's
+// said in an info line first.
+func (e finder) folders(ctx context.Context) (*found, error) {
+	t, err := e.own(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// A folder with state of its own has a VM, even one its backend has
+	// lost: never a parent's in its place, unless --parent.
+	use, p, err := resolveFolder(t.f.Dir, t.exists || t.st.Exists(), e.Folder, func() (*found, error) { return e.parentVM(ctx) })
+	if err != nil {
+		return nil, err
+	}
+	if use == useParent {
+		e.Info(msg.UsingParentVM(p.f.Dir, p.f.Name))
+		return p, nil
+	}
+	return t, nil
+}
+
+// resolveFolder decides which VM the folder dir uses under rule: own when
+// the folder has its own (its state, or its backend has it), else the VM
+// of the nearest parent folder with one, which parent finds (parentVM:
+// nil for none, with the repo of its own in between, if any), asked only
+// when the rule needs it. With FolderAuto the folder's own wins, and a
+// parent's is passed over below a repo of its own; FolderHere never asks
+// for a parent's; FolderParent takes the parent's whatever the folder
+// has, and refuses a folder that's inside none with a VM
+// (no_parent_vm).
+func resolveFolder(dir string, own bool, rule FolderRule, parent func() (*found, error)) (folderUse, *found, error) {
+	ownUse := useNone
+	if own {
+		ownUse = useOwn
+	}
+	if rule == FolderHere || rule == FolderAuto && own {
+		return ownUse, nil, nil
+	}
+	p, err := parent()
+	switch {
+	case err != nil:
+		return useNone, nil, err
+	case p == nil && rule == FolderParent:
+		return useNone, nil, msg.NoParentVM(dir)
+	case p == nil || rule == FolderAuto && p.repo != "":
+		return ownUse, nil, nil
+	}
+	return useParent, p, nil
+}
+
+// own finds the folder's own VM, which needn't exist, never a parent
+// folder's. A folder's VM is found by its path's hash (project.Hash),
+// which names its folder in devvm's data folder: one that exists has the
+// name and the backend its state records, whichever backend is asked now.
+// Only a new VM gets a name, fitting its backend's.
+func (e finder) own(ctx context.Context) (*found, error) {
+	dir, err := e.dir()
+	if err != nil {
+		return nil, err
+	}
+	f, st, err := e.state(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !st.Exists() {
+		if f, err = e.newName(dir); err != nil {
+			return nil, err
+		}
+		if st, err = state.ReadVM(e.Dirs, f.Name); err != nil {
+			return nil, err
+		}
+	}
+	return e.inspect(ctx, f, st)
+}
+
+// state reads the state of dir's VM, by its path's hash, and returns the
+// folder with the name it records ("" for none).
+func (e finder) state(dir string) (project.Folder, *state.VM, error) {
+	if _, err := project.New(dir, 0); err != nil {
+		if bad, ok := errors.AsType[*project.BadPathError](err); ok {
+			return project.Folder{}, nil, msg.BadPath(bad.Dir)
+		}
+		return project.Folder{}, nil, err
+	}
+	st, err := state.ReadHash(e.Dirs, project.Hash(dir))
+	if err == nil {
+		err = checkState(st)
+	}
+	if err != nil {
+		return project.Folder{}, nil, err
+	}
+	return project.Folder{Dir: dir, Name: st.Name()}, st, nil
+}
+
+// newName is the name a new VM for dir gets: fitting the names of the
+// backend it would be made on.
+func (e finder) newName(dir string) (project.Folder, error) {
+	first, err := e.Registry.For(new(state.VM))
+	if err != nil {
+		return project.Folder{}, err
+	}
+	nameMax := first.Backend.NameMax()
+	f, err := project.New(dir, nameMax)
+	if errors.Is(err, project.ErrNoRoom) {
+		return project.Folder{}, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(nameMax))
+	}
+	return f, err
+}
+
+// parentVM finds the VM of the nearest parent folder with state of its own
+// (project.Parents, stopping before home and the root) for
+// resolveFolder, else nil, with the nearest folder below it with a .git of
+// its own (repo), the folder devvm runs in included. Only folders without
+// state are passed over: the search stops at the first with state, which
+// gives nil unless its backend has its VM and it was made for that folder.
+// A VM in an outer folder can replace a nested folder through its mount,
+// and devvm then never skips the nested folder's VM for the outer one's.
+func (e finder) parentVM(ctx context.Context) (*found, error) {
+	here, err := e.dir()
+	if err != nil {
+		return nil, err
+	}
+	repo := ""
+	if hasGit(here) {
+		repo = here
+	}
+	for _, dir := range project.Parents(here, e.Dirs.Home) {
+		if _, err := project.New(dir, 0); err != nil {
+			continue // a folder no VM can be made for
+		}
+		pf, pst, err := e.state(dir)
+		if err != nil {
+			return nil, err
+		}
+		if !pst.Exists() {
+			if repo == "" && hasGit(dir) {
+				repo = dir
+			}
+			continue
+		}
+		if !sameFolder(pf, pst) {
+			return nil, nil
+		}
+		p, err := e.inspect(ctx, pf, pst)
+		if err != nil || !p.exists {
+			return nil, err
+		}
+		p.sub, p.repo = here, repo
+		return p, nil
+	}
+	return nil, nil
+}
+
+// named finds the project VM name names, by its name or its ssh alias,
+// in the folder its state records. It refuses a state whose folder isn't
+// the one its name was made for (its path's hash): a changed vm.json
+// never sends devvm rm VM to another folder's VM.
+func (e finder) named(ctx context.Context, name string) (*found, error) {
+	all, err := recordedVMs(e.Dirs)
+	if err != nil {
+		return nil, err
+	}
+	vm := project.Named(name, all)
+	if vm == "" {
+		return nil, msg.RmUnknownVM(name)
+	}
+	st, err := state.ReadVM(e.Dirs, vm)
+	if err != nil {
+		return nil, err
+	}
+	if h, _ := vmname.HashOf(vm); st.Dir != "" && project.Hash(st.Dir) != h {
+		return nil, msg.RmVMStateMismatch(st.Dir, vm)
+	}
+	return e.inspect(ctx, project.Folder{Dir: st.Dir, Name: vm}, st)
+}
+
+// hasGit reports whether dir has a .git of its own: a repo, or a
+// worktree's or submodule's .git file.
+func hasGit(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
+}
+
+// inspect finds the VM for folder f, whose state is st, on the backend
+// its state records, else a new VM's. One that exists gets devvm's
+// connections carrying its SSH agent.
+func (e finder) inspect(ctx context.Context, f project.Folder, st *state.VM) (*found, error) {
+	choice, err := e.Registry.For(st)
+	if err != nil {
+		return nil, err
+	}
+	b := choice.Backend
+	if err := backend.Check(ctx, b); err != nil {
+		return nil, err
+	}
+	t := &found{f: f, st: st, b: b, other: !sameFolder(f, st)}
+	switch in, err := b.Inspect(ctx, f.Name); {
+	case err == nil:
+		t.exists = true
+		mode := sshagent.Mode(st)
+		if in.Status == backend.StatusRunning {
+			if mode, err = runningAgent(ctx, b, st); err != nil {
+				return nil, err
+			}
+		}
+		e.useAgent(mode)
+	case !errors.Is(err, backend.ErrNotFound):
+		return nil, err
+	}
+	return t, nil
+}
+
+// sameFolder reports whether the VM was made for this folder: its path,
+// and the folder itself. A VM without state has no folder to differ.
+func sameFolder(f project.Folder, st *state.VM) bool {
+	if !st.Exists() {
+		return true
+	}
+	id, err := platform.FolderID(f.Dir)
+	return err == nil && st.Dir == f.Dir && st.Folder == id
+}

@@ -220,7 +220,7 @@ func (e Settings) ShowSize(ctx context.Context, global bool) (SizeShown, error) 
 		}
 		return s, nil
 	}
-	t, err := e.folderVM(ctx, msg.NoVMSize)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMSize})
 	if err != nil {
 		return SizeShown{}, err
 	}
@@ -251,7 +251,7 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	if global {
 		return SizeChoice{Dirs: e.Dirs, Host: host, Info: e.Info}.Set(s)
 	}
-	t, err := e.folderVM(ctx, msg.NoVMSize)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMSize})
 	if err != nil {
 		return err
 	}

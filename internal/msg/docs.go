@@ -100,6 +100,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"rm_unknown_vm":                    "getting-started/commands#a-vm-whose-folder-is-gone",
 	"rm_vm_folder_there":               "getting-started/commands#a-vm-whose-folder-is-gone",
 	"rm_vm_lost":                       "using/space#leftovers-of-a-vm-deleted-outside-devvm",
+	"rm_vm_state_mismatch":             "getting-started/commands#a-vm-whose-folder-is-gone",
 	"rm_gone_stopped":                  "getting-started/commands#a-vm-whose-folder-is-gone",
 	"rm_gone_clone":                    "getting-started/commands#a-vm-whose-folder-is-gone",
 	"rm_vm_export_failed":              "using/coding-agents#history",

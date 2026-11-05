@@ -18,15 +18,10 @@ import (
 // defaultKeys are the keys in ~/.ssh offered for loading, in order.
 var defaultKeys = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
 
-// agentVM finds the folder's VM for devvm ssh-agent.
-func (e Settings) agentVM(ctx context.Context) (*found, error) {
-	return e.folderVM(ctx, msg.NoVMSSHAgent)
-}
-
 // SSHAgent returns the folder's VM's SSH agent forwarding: off, on (the
 // user's agent) or devvm (devvm's own).
 func (e Settings) SSHAgent(ctx context.Context) (string, error) {
-	t, err := e.agentVM(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMSSHAgent})
 	if err != nil {
 		return "", err
 	}
@@ -38,7 +33,7 @@ func (e Settings) SSHAgent(ctx context.Context) (string, error) {
 // with its keys loaded now). A running VM restarts now once the user
 // agrees (restartOr).
 func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
-	t, err := e.agentVM(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMSSHAgent})
 	if err != nil {
 		return err
 	}

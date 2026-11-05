@@ -19,7 +19,7 @@ type Settings struct{ *Env }
 // or clone for a --clone VM, which mounts no .git (gitprotect.Mode, as
 // devvm ls shows it).
 func (e Settings) GitProtect(ctx context.Context) (string, error) {
-	t, err := e.folderVM(ctx, msg.NoVMGitProtect)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGitProtect})
 	if err != nil {
 		return "", err
 	}
@@ -29,7 +29,7 @@ func (e Settings) GitProtect(ctx context.Context) (string, error) {
 // Clone returns whether the folder's VM has its own clone of the repo,
 // CloneOn, or mounts the folder, CloneOff (devvm clone).
 func (e Settings) Clone(ctx context.Context) (string, error) {
-	t, err := e.folderVM(ctx, msg.NoVM)
+	t, err := finder(e).target(ctx, need{has: hasMade})
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +45,7 @@ func (e Settings) Clone(ctx context.Context) (string, error) {
 // finds it stopped (checkGit), which a restart the user agrees to does
 // now (restartOr). On and strict lock .git as it is then.
 func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
-	t, err := e.folderVM(ctx, msg.NoVMGitProtect)
+	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGitProtect})
 	if err != nil {
 		return err
 	}

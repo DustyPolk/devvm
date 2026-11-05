@@ -35,7 +35,7 @@ type NetworkShown struct {
 // Network returns the folder's VM's network policy and its allowlist.
 func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 	var s NetworkShown
-	t, err := e.existing(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade})
 	if err != nil {
 		return s, err
 	}
@@ -90,7 +90,7 @@ func (c NetworkChoice) Set(mode string) error {
 // while the VM is in a group, whose VMs all have network policy or none
 // do.
 func (e Net) SetNetwork(ctx context.Context, on bool) error {
-	t, err := e.existing(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func (e Net) LogBlocks(ctx context.Context) ([]netpolicy.Block, error) {
 // without network policy logs only its links' connections, and devvm says
 // so.
 func (e Net) netLog(ctx context.Context, follow bool) (*netpolicy.Log, string, error) {
-	t, err := e.findExisting(ctx)
+	t, err := finder(e).target(ctx, need{has: hasVM})
 	if err != nil {
 		return nil, "", err
 	}
@@ -213,25 +213,6 @@ func (e Net) netLog(ctx context.Context, follow bool) (*netpolicy.Log, string, e
 		return nil, vm, nil
 	}
 	return l, vm, nil
-}
-
-// policyVM finds the folder's VM for devvm network allow, deny and rm,
-// which must exist and be made for this folder.
-func (e Net) policyVM(ctx context.Context) (*found, error) {
-	t, err := e.find(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !t.exists {
-		return nil, msg.NoVMPolicy(t.f.Dir)
-	}
-	if err := e.checkFolder(t.f, t.st); err != nil {
-		return nil, err
-	}
-	if !netpolicy.On(t.st) {
-		e.Note(msg.NetOffPolicy(t.f.Name))
-	}
-	return t, nil
 }
 
 // widensPolicy returns the command, when a change to a VM's own rules gives
@@ -254,9 +235,13 @@ func widensPolicy(rules []string, deny, remove bool) string {
 func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, global bool) error {
 	file, vm := e.Dirs.Policy(), ""
 	if !global {
-		t, err := e.policyVM(ctx)
+		// The folder's VM, which its backend has, made for this folder.
+		t, err := finder(e).target(ctx, need{has: hasMachine, folder: true, noVM: msg.NoVMPolicy})
 		if err != nil {
 			return err
+		}
+		if !netpolicy.On(t.st) {
+			e.Note(msg.NetOffPolicy(t.f.Name))
 		}
 		if cmd := widensPolicy(rules, deny, remove); cmd != "" {
 			if ok, err := t.widen(e.Env, cmd); !ok {

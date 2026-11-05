@@ -14,7 +14,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -28,7 +27,7 @@ type Lifecycle struct{ *Env }
 // is locked again and checked (on Linux, set-id files too) as on a
 // launch that finds it stopped (checkGit), and its ssh config entry goes.
 func (e Lifecycle) Stop(ctx context.Context) error {
-	t, err := e.folderVM(ctx, msg.NoVM)
+	t, err := finder(e).target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
@@ -59,15 +58,12 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 // and allowlist. Its .git is locked as new at its next launch. Only the
 // VM named for this path is adopted, never a parent folder's.
 func (e Lifecycle) Adopt(ctx context.Context, force bool) error {
-	t, err := e.own(ctx)
+	t, err := finder(e).target(ctx, need{own: true, has: hasMachine})
 	if err != nil {
 		return err
 	}
-	if !t.exists {
-		return msg.NoVM(t.f.Dir)
-	}
 	vm, st := t.f.Name, t.st
-	if e.sameFolder(t.f, st) {
+	if !t.other {
 		e.Info(msg.VMAlreadyHere(vm))
 		return nil
 	}
@@ -122,7 +118,7 @@ type RmOptions struct {
 // never answers, and never without one; the earlier folder's isn't
 // exported, as its folder is gone.
 func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
-	t, err := e.findExisting(ctx)
+	t, err := finder(e).target(ctx, need{has: hasVM})
 	if err != nil {
 		return err
 	}
@@ -137,7 +133,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 		}
 		asked = true
 	}
-	if !e.sameFolder(t.f, st) {
+	if t.other {
 		was := st.Dir
 		if !e.Terminal() {
 			return msg.VMOtherFolderRm(vm, was)
@@ -152,7 +148,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 		return msg.ForceNeeded("devvm rm")
 	}
 	// A VM whose creation didn't finish never ran: no history, no work.
-	checkClone := st.Finished() && isClone(st) && e.sameFolder(t.f, st)
+	checkClone := st.Finished() && isClone(st) && !t.other
 	if checkClone && o.NoCloneCheck {
 		e.Warn(msg.CloneCheckSkipped("devvm rm", vm))
 		checkClone = false
@@ -187,30 +183,20 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 // make its folder again as it starts (its backend makes a missing mount's
 // folder), so it's refused instead, unless it's a --clone VM, which
 // mounts none. A --clone VM's work can't be fetched into a repo that's
-// gone, so it's deleted only with --no-clone-check.
+// gone, so it's deleted only with --no-clone-check. A VM whose state
+// records a folder its name wasn't made for is refused.
 func (e Lifecycle) RmVM(ctx context.Context, name string, o RmOptions) error {
-	all, err := recordedVMs(e.Dirs)
+	t, err := finder(e).target(ctx, need{name: name})
 	if err != nil {
 		return err
 	}
-	vm := project.Named(name, all)
-	if vm == "" {
-		return msg.RmUnknownVM(name)
-	}
-	st, err := state.ReadVM(e.Dirs, vm)
-	if err != nil {
-		return err
-	}
-	if st.Dir == e.Dir {
+	vm, st := t.f.Name, t.st
+	if here, err := finder(e).dir(); err == nil && st.Dir == here {
 		return e.Rm(ctx, o)
 	}
 	folder := FolderOf(st)
 	if folder == FolderThere {
 		return msg.RmVMFolderThere(st.Dir, vm)
-	}
-	t, err := e.inspect(ctx, project.Folder{Dir: st.Dir, Name: vm}, st)
-	if err != nil {
-		return err
 	}
 	if !t.exists {
 		return msg.RmVMLost(vm)
@@ -297,7 +283,7 @@ func (e Lifecycle) stillGone(ctx context.Context, t *found, folder FolderState, 
 // Export saves the folder's VM's agents' history to file (absolute), or
 // to the exports folder when it's empty, starting the VM if it's stopped.
 func (e Lifecycle) Export(ctx context.Context, file string) error {
-	t, err := e.existing(ctx)
+	t, err := finder(e).target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
