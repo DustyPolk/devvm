@@ -20,10 +20,10 @@ import (
 // Section is the name of the network policy section in a VM's state.
 const Section = "net"
 
-// Net is a VM's network policy section: whether it has network policy, as
-// asked, and what devvm made for it.
+// Net is a VM's network policy section: its tier, as asked, and what
+// devvm made for it.
 type Net struct {
-	On   bool    `json:"on"`
+	Tier Tier    `json:"tier"`
 	Made NetMade `json:"made,omitzero"`
 }
 
@@ -34,42 +34,55 @@ type NetMade struct {
 	ProxySalt string `json:"proxy_salt,omitempty"` // what ends the VM's placeholders (Salt)
 }
 
-// Of returns a VM's network policy section.
-func Of(st *state.VM) (Net, error) { return state.Section[Net](st, Section) }
+// Of returns a VM's network policy section. A section without a tier
+// has the default one (TierDefault); one with a tier devvm doesn't know
+// can't be read (Tier's UnmarshalJSON).
+func Of(st *state.VM) (Net, error) {
+	n, err := state.Section[Net](st, Section)
+	if err == nil && n.Tier == "" {
+		n.Tier = TierDefault
+	}
+	return n, err
+}
 
 // Set sets a VM's network policy section, in st alone: inside st.Update.
 func Set(st *state.VM, n Net) error { return state.SetSection(st, Section, n) }
 
-// SetOn sets whether a VM has network policy, in st alone: inside
-// st.Update.
-func SetOn(st *state.VM, on bool) error {
+// SetTier sets a VM's tier, in st alone: inside st.Update.
+func SetTier(st *state.VM, t Tier) error {
 	n, err := Of(st)
 	if err != nil {
 		return err
 	}
-	n.On = on
+	n.Tier = t
 	return Set(st, n)
 }
 
-// On reports whether a VM has network policy. A section that can't be
-// read (the folder's VM's is checked as it's found) has none.
-func On(st *state.VM) bool {
+// TierOf returns a VM's tier. A section that can't be read (the folder's
+// VM's is checked as it's found) reads as the strictest, never as open.
+func TierOf(st *state.VM) Tier {
 	n, err := Of(st)
-	return err == nil && n.On
+	if err != nil {
+		return TierNone
+	}
+	return n.Tier
 }
 
-// Choose returns whether a new VM gets network policy: what the flags say,
-// else the answer (yes by default), what it's about said first; where it
-// can't ask, on.
-func (p *Proxy) Choose(on, off bool, vm string) bool {
+// Choose returns a new VM's tier: allowlist with on, open with off, else
+// the answer, what it's about said first: allowlist for yes (the
+// default), open for no; where it can't ask, allowlist.
+func (p *Proxy) Choose(on, off bool, vm string) Tier {
 	switch {
 	case on:
-		return true
+		return TierAllowlist
 	case off:
-		return false
+		return TierOpen
 	}
 	yes, err := p.Confirm(msg.NetAsk().AnsweredBy("--network-policy or --no-network-policy").About(msg.NetAbout(vm)))
-	return err != nil || yes
+	if err != nil || yes {
+		return TierAllowlist
+	}
+	return TierOpen
 }
 
 // Key returns the VM's own random key, made the first time it's needed
@@ -115,22 +128,29 @@ func made(ctx context.Context, st *state.VM, field func(*NetMade) *string, mk fu
 	return v, err
 }
 
-// Policies returns the policies of the VM vm, of image img with these
-// shared tools, in the order its proxy reads them. builtin is devvm's own,
-// as paths in its files (assets.FS), which the proxy reads from the
-// binary: base's, then each shared tool's in shared-tools/, then each
-// built-in layer's in layers/. files is the user's: each of the image's
-// own layers' policy file, next to its script, the user's own for every
-// VM, the VM's own, and the hosts its secrets imply. A missing file has no
-// rules.
-func Policies(d paths.Dirs, vm string, img image.Name, tools []string) (builtin, files []string) {
-	builtin = []string{"layers/base.policy"}
-	for _, t := range tools {
-		// Only a shared tool's name names a file of devvm's.
-		if image.IsTool(t) {
-			builtin = append(builtin, "shared-tools/"+t+".policy")
-		}
-	}
+// PolicySet is the policies a VM's proxy reads, each list in its order.
+// Builtin is devvm's own, as paths in its files (assets.FS), which the
+// proxy reads from the binary. Files are the user's files and devvm's own
+// on disk whose every rule applies, and Denies the user's files whose
+// denies alone apply. A missing file has no rules.
+type PolicySet struct{ Builtin, Files, Denies []string }
+
+// InternetPolicy is the internet tier's built-in policy: every host, on
+// any port.
+const InternetPolicy = "network/internet.policy"
+
+// Policies returns the policies of the VM vm on tier t, of image img with
+// these shared tools. The user's files are each of the image's own
+// layers' policy file, next to its script, the user's own for every VM
+// and the VM's own; devvm's on disk is the hosts its secrets imply.
+//
+// On allowlist, devvm's built-in policies are base's, then each shared
+// tool's in shared-tools/, then each built-in layer's in layers/, and
+// every rule of the user's files applies. On internet, the one built-in
+// policy is InternetPolicy; on none, the VM's agents' policies alone. On
+// either, only the denies of the user's files apply. Open has none.
+func Policies(d paths.Dirs, vm string, t Tier, img image.Name, tools []string) PolicySet {
+	var builtin, files []string
 	for _, p := range img.Layers() {
 		switch {
 		case p == "" || p == "base" || image.IsTool(p):
@@ -142,7 +162,31 @@ func Policies(d paths.Dirs, vm string, img image.Name, tools []string) (builtin,
 		// A part that's no layer's name (../x) names no file: its path
 		// would leave the user's layers, so it adds no rules.
 	}
-	return builtin, append(files, d.Policy(), d.VM(vm).Policy(), d.VM(vm).SecretsPolicy())
+	files = append(files, d.Policy(), d.VM(vm).Policy())
+	secrets := d.VM(vm).SecretsPolicy()
+	switch t {
+	case TierOpen:
+		return PolicySet{}
+	case TierInternet:
+		return PolicySet{Builtin: []string{InternetPolicy}, Files: []string{secrets}, Denies: files}
+	case TierNone:
+		return PolicySet{Builtin: toolPolicies(image.AgentsOf(tools)), Files: []string{secrets}, Denies: files}
+	case TierAllowlist:
+	}
+	builtin = append(append([]string{"layers/base.policy"}, toolPolicies(tools)...), builtin...)
+	return PolicySet{Builtin: builtin, Files: append(files, secrets)}
+}
+
+// toolPolicies are the built-in policies of these shared tools, in order:
+// only a shared tool's name names a file of devvm's.
+func toolPolicies(tools []string) []string {
+	var out []string
+	for _, t := range tools {
+		if image.IsTool(t) {
+			out = append(out, "shared-tools/"+t+".policy")
+		}
+	}
+	return out
 }
 
 // Env is the guest environment a VM with network policy gets besides the

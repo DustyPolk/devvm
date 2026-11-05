@@ -56,6 +56,8 @@ Flags take one dash or two. The proxy has one, `-config`, and everything it runs
 | `password` | the VM's key: requests need it as the proxy password, user `devvm` |
 | `builtin_policies` | devvm's built-in policies, paths in `IO.FS` (`layers/base.policy`, `shared-tools/node.policy`), in order: read once as the proxy starts, ahead of `policies`, and never again; one that's missing, or holds a line that isn't a rule, is devvm's bug, so `Main` returns an error and the proxy never listens |
 | `policies` | the user's policy files, in order, each re-read when it changes; a missing file has no rules |
+| `deny_policies` | policy files after `policies`, read as they are, whose denies alone apply: their allows are dropped as they're read, and a broken deny still refuses everything (the internet and none tiers' user files) |
+| `open` | every host and address on every port, internal ones and this machine's included: no rule or floor applies, and a name the host can't resolve goes to `upstream` unjudged; refused together with any policy (an open VM's) |
 | `log` | the JSON-lines event log, mode 600, rotated past 10 MiB; none: stdout |
 | `proxy_log` | the file the proxy's stderr appends to (devvm opens it for the process): the proxy's own log lines, and its HTTP servers' errors, go through it and rotate past 10 MiB by copying, so the last error, written to stderr after `Main` returns, reaches the current file |
 | `lifeline` | the hostagent's pid file (`daemon.Lifeline`): wait up to 15 minutes for it to name a process that runs, past what it held when the proxy started, and return once it no longer holds what it held then or that process is gone |

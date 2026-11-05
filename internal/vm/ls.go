@@ -18,7 +18,7 @@ type Listed struct {
 	Tools   []string // its shared tools: node claude
 	From    string   // the container image its base started from (--from), if any
 	Git     string   // its .git protection: on, off, or clone for a --clone VM
-	Net     string   // its network policy: on, off or unenforced (netpolicy.Listed)
+	Net     string   // its tier, or unenforced (netpolicy.Listed)
 	Backend string
 	Folder  string
 	// FolderState is what's at Folder's path (FolderOf): a VM whose

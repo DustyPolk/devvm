@@ -163,7 +163,7 @@ func TestPolicyFileNotRegular(t *testing.T) {
 	errs := &syncBuffer{}
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("a.test\n!b.test\n"), 0o600))
-	p := newPolicy(nil, []string{f}, log.New(errs, "", 0))
+	p := newPolicy(nil, []string{f}, nil, log.New(errs, "", 0))
 	if ok, _ := p.decide("a.test", 443); !ok {
 		t.Fatal("a.test isn't allowed")
 	}

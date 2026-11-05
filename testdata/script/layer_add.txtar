@@ -69,7 +69,7 @@ vm_state $WEB_dir/vm.json
 stdout '^image=docker$'
 stdout '^ports.forward=3000,5173$'
 stdout '^secrets.names=github$'
-stdout '^net.on=true$'
+stdout '^net.tier=allowlist$'
 stdout '^tools.names=claude$'
 ! stdout '^remake'
 grep '^example\.com$' $WEB_dir/policy

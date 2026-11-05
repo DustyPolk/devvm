@@ -28,7 +28,7 @@
 #                pins, store and trust, nix-daemon's proxy, nix run nixpkgs#hello through the shared Nix
 #                cache (fetched by the host, a VM's writes and other requests refused, a second VM's
 #                hits), sudo nix, the flake's dev shell through direnv before the shared node, a blocked
-#                download named, and network off (no shared cache); link makes two small targets and
+#                download named, and network off (open: the proxy and the shared cache stay); link makes two small targets and
 #                a client that forwards every port, and checks links between them, each check a row
 #                of the design note's threat check: names alone (never the client's localhost, never
 #                forwarded to this machine), two targets on one port, port 80, publish, unpublish,
@@ -391,12 +391,12 @@ P47160=$((47160 + po)) P47161=$((47161 + po)) P47162=$((47162 + po)) P47163=$((4
 P47170=$((47170 + po)) P47171=$((47171 + po)) P47172=$((47172 + po)) P47173=$((47173 + po)) P47174=$((47174 + po))
 P47175=$((47175 + po)) P47176=$((47176 + po)) P47177=$((47177 + po)) P47178=$((47178 + po))
 P47180=$((47180 + po)) P47181=$((47181 + po)) P47182=$((47182 + po))
-P47195=$((47195 + po)) P47196=$((47196 + po)) P47197=$((47197 + po))
+P47195=$((47195 + po)) P47196=$((47196 + po)) P47197=$((47197 + po)) P47198=$((47198 + po))
 P47240=$((47240 + po)) P47241=$((47241 + po)) P47242=$((47242 + po)) P47243=$((47243 + po)) P47244=$((47244 + po))
 P47245=$((47245 + po)) P47246=$((47246 + po)) P47248=$((47248 + po)) P47249=$((47249 + po))
 P47613=$((47613 + po)) P18765=$((18765 + po)) P18766=$((18766 + po))
 export P47160 P47161 P47162 P47163 P47164 P47170 P47171 P47172 P47173 P47174 P47175 P47176 P47177 P47178 \
-  P47180 P47181 P47182 P47195 P47196 P47197 P47240 P47241 P47242 P47243 P47244 P47245 P47246 P47248 P47249 \
+  P47180 P47181 P47182 P47195 P47196 P47197 P47198 P47240 P47241 P47242 P47243 P47244 P47245 P47246 P47248 P47249 \
   P47613 P18765 P18766
 unset DEVVM_MESSAGES DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN DEVVM_FROM
 unset SSH_AUTH_SOCK   # your SSH agent is never reached: checks that need one start their own
@@ -484,7 +484,7 @@ vmdir() { if [[ $1 =~ ^devvm-.+-[0-9a-f]{14}$ ]]; then echo "$XDG_DATA_HOME/devv
   else echo "$XDG_DATA_HOME/devvm/run/builds/$1"; fi; }
 export -f vmdir
 # vm_state DIR_OR_FILE: a VM's state (DIR's vm.json, or FILE) as sorted KEY=VALUE lines, as the
-# CLI tests' vm_state prints it: a section's fields dotted (net.on=true), a list of strings
+# CLI tests' vm_state prints it: a section's fields dotted (net.tier=allowlist), a list of strings
 # space-separated, a list of objects by index (links.links.0.name=db), strings as they are and
 # anything else as JSON. Nothing for a VM without one.
 vm_state() {
@@ -507,7 +507,7 @@ st_get() { vm_state "$1" | sed -n "s/^$2=//p"; }
 export -f st_get
 # st_all: every VM's state, one vm_state after another.
 st_all() { local f; for f in "$vms"/*/vm.json; do vm_state "$f"; done; }
-# vm_set FILE KEY JSON: sets KEY (dotted: net.on) of a VM's vm.json to the JSON value, keeping the
+# vm_set FILE KEY JSON: sets KEY (dotted: net.tier) of a VM's vm.json to the JSON value, keeping the
 # rest, and writes the file back whole, the user's alone.
 vm_set() {
   perl -MJSON::PP -e '
@@ -517,7 +517,8 @@ vm_set() {
     open $fh, ">", "$f.tmp" or die "$f: $!\n"; print $fh JSON::PP->new->pretty->canonical->encode($v); close $fh;
     chmod 0600, "$f.tmp"; rename "$f.tmp", $f or die "$f: $!\n";' "$1" "$2" "$3"
 }
-projects=$work/p                     # the project folders, this run's
+export -f vm_set
+projects=$work/p                    # the project folders, this run's
 share=$XDG_DATA_HOME/devvm/tools     # the shared tool images
 lock=$XDG_DATA_HOME/devvm/mise.lock  # the shared tools' versions
 export DEVVM_NO_TOOL_CHECK=1         # never checked for newer ones but by the tools section
@@ -1274,7 +1275,8 @@ lk_vm_clean() { local vm=$1 l p bad; shift
 lk_event() { grep -F "\"event\":\"$2\",\"host\":\"$3\",\"port\":$4," "$(vmdir "$1")/logs/network.jsonl" 2>/dev/null | grep -qF -- "${5:-}"; }
 # lk_set_net VM on|off: its state's network policy set by hand, as nothing devvm runs would: the rule
 # broken under devvm, which checks it again on every connection and at each launch.
-lk_set_net() { local on=false; [[ $2 != on ]] || on=true; vm_set "$(vmdir "$1")/vm.json" net.on "$on"; }
+# lk_set_net VM on|off|TIER: the VM's tier, as its state has it (on: allowlist, off: open).
+lk_set_net() { local t=$2; [[ $t != on ]] || t=allowlist; [[ $t != off ]] || t=open; vm_set "$(vmdir "$1")/vm.json" net.tier "\"$t\""; }
 # lk_hostile VM [gateway]: root in the client loosens its sshd (any listen address, all forwarding;
 # with gateway, GatewayPorts yes too) and makes it read that; lk_honest VM puts it back.
 lk_hostile_sh='if [ -f /etc/devvm/ssh/sshd_config ]; then c=/etc/devvm/ssh/sshd_config
@@ -1366,6 +1368,7 @@ link_section() {
   check "devvm network log shows the links' connections with network policy" lk_log_on
   check "a client with network policy is refused by devvm link add for a target without it" lk_mismatch_add
   check "devvm network off is refused for a target that a client with network policy links to" lk_off_refused
+  check "the tier rule: an allowlist client's link to a target on none goes on, to one on internet is refused and warned of, and goes on once the target is back on allowlist" lk_tiers
   check "the rule broken under devvm: the link's next connection is refused, and the client's launch warns and runs on without it" lk_policy_broken
   check "the rule restored, the client's next launch has the link again" lk_policy_back
   if want from; then
@@ -1373,7 +1376,7 @@ link_section() {
   else
     skip "a port below 1024 on Lima's Alpine VMs: an Alpine client reaches its link to port 80 on the same port" "Alpine's image comes from the from section"
   fi
-  check "a group is all or none: a VM without network policy is refused by a group with it, and one with it by a group without; two with it reach each other through their group's links" gp_policy
+  check "a group is on one tier: an open VM is refused by an allowlist group, and an allowlist one by an open group; two on allowlist reach each other through their group's links" gp_policy
   check "devvm rm of the client leaves no link session, socket, pid file, log or link state" lk_rm_client
   (cd "$lk_p1" && quiet "$D" rm --force --no-export)
   (cd "$lk_p2" && quiet "$D" rm --force --no-export)
@@ -1381,7 +1384,7 @@ link_section() {
 }
 lk_made() { local v
   for v in "$lk_v1" "$lk_v2" "$lk_vc"; do
-    if ! { [[ -n $v ]] && lk_running "$v" && vm_state "$(vmdir "$v")" | grep -qx net.on=false; }; then echo "${v:-a VM} wasn't made"; return 1; fi; done
+    if ! { [[ -n $v ]] && lk_running "$v" && vm_state "$(vmdir "$v")" | grep -qx net.tier=open; }; then echo "${v:-a VM} wasn't made"; return 1; fi; done
   vm_state "$(vmdir "$lk_v1")" | grep -qx ports.forward=none && vm_state "$(vmdir "$lk_v2")" | grep -qx ports.forward=none &&
     ! vm_state "$(vmdir "$lk_vc")" | grep -q '^ports\.forward='; }
 lk_sshd_t() { local vm t want
@@ -1427,8 +1430,8 @@ lk_list() { local l j
 lk_on_refused() { local r=0
   lk_dv "$lk_pc" network on && r=1
   cat "$work/last.log"
-  (( r == 0 )) && grep -Eq "^devvm: network_on_linked targets=.*$lk_v1.* vm=$lk_vc\$" "$work/last.log" &&
-    grep -Eq "^devvm: network_on_linked targets=.*$lk_v2.* vm=$lk_vc\$" "$work/last.log" && vm_state "$(vmdir "$lk_vc")" | grep -qx net.on=false; }
+  (( r == 0 )) && grep -Eq "^devvm: tier_linked_targets targets=.*$lk_v1.* tier=allowlist vm=$lk_vc\$" "$work/last.log" &&
+    grep -Eq "^devvm: tier_linked_targets targets=.*$lk_v2.* tier=allowlist vm=$lk_vc\$" "$work/last.log" && vm_state "$(vmdir "$lk_vc")" | grep -qx net.tier=open; }
 lk_not_linked() { local a; a=$(lk_raw "$lk_vc" db $P47244 2>&1); echo "db:$P47244: ${a:-nothing}"
   ! lk_raw "$lk_vc" db $P47244 >/dev/null 2>&1; }
 lk_unpublish() {
@@ -1540,8 +1543,8 @@ lk_made_again() { local id0
 # proxy, its servers still up, and the client's link to it is refused then, and warned of by
 # devvm link add and the client's launch (lk_policy_unenforced).
 lk_policy_on() {
-  if ! { lk_dv "$lk_p1" network on && vm_state "$(vmdir "$lk_v1")" | grep -qx net.on=true; }; then echo "$lk_v1:"; tail -5 "$work/last.log"; return 1; fi
-  if ! { lk_dv "$lk_pc" network on && lk_up "$lk_pc" restart && vm_state "$(vmdir "$lk_vc")" | grep -qx net.on=true && vm_state "$(vmdir "$lk_vc")" | grep -qx net.made.check=ok; }; then
+  if ! { lk_dv "$lk_p1" network on && vm_state "$(vmdir "$lk_v1")" | grep -qx net.tier=allowlist; }; then echo "$lk_v1:"; tail -5 "$work/last.log"; return 1; fi
+  if ! { lk_dv "$lk_pc" network on && lk_up "$lk_pc" restart && vm_state "$(vmdir "$lk_vc")" | grep -qx net.tier=allowlist && vm_state "$(vmdir "$lk_vc")" | grep -qx net.made.check=ok; }; then
     echo "$lk_vc:"; tail -5 "$work/last.log"; return 1
   fi; }
 lk_policy_unenforced() {
@@ -1597,23 +1600,34 @@ lk_proxy_own() { local u c l0 l1 log; log=$(vmdir "$lk_vc")/logs/network.jsonl
   [[ $c == 403 && $l0 == "$l1" ]] && lk_via_gets "$lk_vc" http://db:$P47240/ "$lk_w1-$P47240"; }
 lk_log_on() { local t0 last
   t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  lk_gets "$lk_vc" db $P47240 "$lk_w1-$P47240" && vm_state "$(vmdir "$lk_vc")" | grep -qx net.on=true || return 1
+  lk_gets "$lk_vc" db $P47240 "$lk_w1-$P47240" && vm_state "$(vmdir "$lk_vc")" | grep -qx net.tier=allowlist || return 1
   last=$(cat "$(vmdir "$lk_vc")/logs/network.jsonl.1" "$(vmdir "$lk_vc")/logs/network.jsonl" 2>/dev/null |
     grep -F "\"event\":\"link\",\"host\":\"db\",\"port\":$P47240," | tail -1)
   echo "the last: ${last:-none}, since $t0"
   [[ $(sed -n 's/^{"time":"\([^"]*\)".*/\1/p' <<<"$last") > "$t0" || $(sed -n 's/^{"time":"\([^"]*\)".*/\1/p' <<<"$last") == "$t0" ]] &&
     lk_shows "$lk_pc" "  link +db:$P47240  to $lk_v1\$" network log -n 100000; }
 lk_mismatch_add() {
-  ! lk_dv "$lk_pc" link add "$lk_n2" $P47240 && lk_said "devvm: link_policy_mismatch target=$lk_v2 vm=$lk_vc" && ! lk_resolves "$lk_vc" "$lk_n2"; }
+  ! lk_dv "$lk_pc" link add "$lk_n2" $P47240 && lk_said "devvm: link_tier_mismatch target=$lk_v2 target_tier=open tier=allowlist vm=$lk_vc" && ! lk_resolves "$lk_vc" "$lk_n2"; }
 lk_off_refused() {
-  ! lk_dv "$lk_p1" network off && lk_said "devvm: network_off_linked vm=$lk_v1 vms=$lk_vc" && vm_state "$(vmdir "$lk_v1")" | grep -qx net.on=true; }
+  ! lk_dv "$lk_p1" network off && lk_said "devvm: tier_linked_clients tier=open vm=$lk_v1 vms=$lk_vc" && vm_state "$(vmdir "$lk_v1")" | grep -qx net.tier=allowlist; }
+# The tier rule both ways: the client on allowlist links to a stricter target, none, whose
+# connections go on, and not to a lower one, internet, whose next connection is refused; the
+# target back on allowlist, they go on again.
+lk_tiers() {
+  if ! { lk_set_net "$lk_v1" none && lk_up "$lk_p1" && lk_until 20 lk_curls "$lk_vc" http://db:$P47240/ "$lk_w1-$P47240"; }; then
+    echo "none:"; tail -5 "$work/last.log"; return 1
+  fi
+  if ! { lk_set_net "$lk_v1" internet && lk_up "$lk_p1"; }; then echo "internet:"; tail -5 "$work/last.log"; return 1; fi
+  lk_gets "$lk_vc" db $P47240 "" && lk_until 5 lk_event "$lk_vc" link_refused db $P47240 '"reason":"policy"' &&
+    lk_up "$lk_pc" && lk_said "devvm: link_tier_mismatch target=$lk_v1 target_tier=internet tier=allowlist vm=$lk_vc" || return 1
+  lk_set_net "$lk_v1" allowlist && lk_up "$lk_p1" && lk_up "$lk_pc" && lk_until 20 lk_curls "$lk_vc" http://db:$P47240/ "$lk_w1-$P47240"; }
 lk_policy_broken() {
   lk_set_net "$lk_v1" off || return 1
   lk_gets "$lk_vc" db $P47240 "" && lk_until 5 lk_event "$lk_vc" link_refused db $P47240 '"reason":"policy"' &&
-    lk_up "$lk_pc" && lk_said "devvm: link_policy_mismatch target=$lk_v1 vm=$lk_vc" && lk_running "$lk_vc" &&
+    lk_up "$lk_pc" && lk_said "devvm: link_tier_mismatch target=$lk_v1 target_tier=open tier=allowlist vm=$lk_vc" && lk_running "$lk_vc" &&
     lk_until 10 lk_not lk_resolves "$lk_vc" db; }
 lk_policy_back() {
-  lk_set_net "$lk_v1" on && lk_up "$lk_pc" && ! grep -q link_policy_mismatch "$work/last.log" &&
+  lk_set_net "$lk_v1" on && lk_up "$lk_pc" && ! grep -q link_tier_mismatch "$work/last.log" &&
     lk_until 10 lk_resolves "$lk_vc" db && lk_until 20 lk_curls "$lk_vc" http://db:$P47240/ "$lk_w1-$P47240"; }
 lk_alpine() { local pa va r=0
   pa=$(newproj "${lk_x}alp")
@@ -1658,7 +1672,7 @@ gp_publish() {
 # failing the checks after this one that need it off.
 gp_refused() {
   vm_state "$(vmdir "$lk_v2")" | grep -qx "links.group=$lk_g" || { echo "$lk_v2 isn't in $lk_g: network on not tried"; return 1; }
-  ! lk_dv "$lk_p2" network on &&lk_said "devvm: group_policy_mixed group=$lk_g vm=$lk_v2" && vm_state "$(vmdir "$lk_v2")" | grep -qx net.on=false &&
+  ! lk_dv "$lk_p2" network on &&lk_said "devvm: group_tier_fixed group=$lk_g vm=$lk_v2" && vm_state "$(vmdir "$lk_v2")" | grep -qx net.tier=open &&
     ! lk_dv "$lk_p2" group join "${lk_x}other" && lk_said "devvm: group_other group=$lk_g vm=$lk_v2" &&
     ! lk_dv "$lk_pc" link rm "$lk_n2" $P47240 && lk_said "devvm: link_from_group group=$lk_g name=$lk_n2 port=$P47240 vm=$lk_vc"; }
 # Each leaves, whatever comes of the checks, so the sections after run without a group.
@@ -1689,9 +1703,9 @@ gp_hostname() { local r=0 g=${lk_x}h n1=${lk_x}db
 # All or none, with the client and the first target with network policy and the second without.
 gp_policy() { local r=0 on=${lk_x}on off=${lk_x}off
   lk_dv "$lk_pc" group join "$on" && lk_said "==> group_made group=$on vm=$lk_vc" || r=1
-  (( r == 0 )) && ! lk_dv "$lk_p2" group join "$on" && lk_said "devvm: group_policy_on group=$on vm=$lk_v2" || r=1
+  (( r == 0 )) && ! lk_dv "$lk_p2" group join "$on" && lk_said "devvm: group_tier_mismatch group=$on tier=allowlist vm=$lk_v2 vm_tier=open" || r=1
   (( r == 0 )) && lk_dv "$lk_p2" group join "$off" && ! lk_dv "$lk_p1" group join "$off" &&
-    lk_said "devvm: group_policy_off group=$off vm=$lk_v1" && ! vm_state "$(vmdir "$lk_v1")" | grep -q "^links\.group=$off" || r=1
+    lk_said "devvm: group_tier_mismatch group=$off tier=open vm=$lk_v1 vm_tier=allowlist" && ! vm_state "$(vmdir "$lk_v1")" | grep -q "^links\.group=$off" || r=1
   # The client's own links to db are $P47240 and $P47242 (lk_proxy_added).
   (( r == 0 )) && lk_dv "$lk_p1" group join "$on" && lk_said "==> group_links_added group=$on links=db:80,$P47241,$P47244 vm=$lk_vc" &&
     lk_until 15 lk_gets "$lk_vc" db 80 "$lk_w1-80" && lk_curls "$lk_vc" http://db:80/ "$lk_w1-80" || r=1
@@ -1950,7 +1964,7 @@ if [[ -n $vm ]]; then
 fi
 check "devvm creates the VM from base, and opens a shell in the folder" bash -c "
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx '$p' '$work/last.log' && grep -qx e2e-shell-ran '$work/last.log' &&
-  vm_state '$(vmdir "$vm")' | grep -qx image=base && vm_state '$(vmdir "$vm")' | grep -qx net.on=false &&
+  vm_state '$(vmdir "$vm")' | grep -qx image=base && vm_state '$(vmdir "$vm")' | grep -qx net.tier=open &&
   vm_state '$(vmdir "$vm")' | grep -qx 'dir=$p'"
 # devvm in a subfolder opens the folder's VM there, says so, and makes none.
 mkdir -p "$p/src/lib"
@@ -1962,7 +1976,7 @@ check "it gets --cpus, --memory and --disk" in_vm "$vm" \
   '[[ $(nproc) == 2 ]] && (( $(awk "/^MemTotal:/ { print int(\$2 / 1048576 + 0.5) }" /proc/meminfo) == 3 )) && (( $(df -BG --output=size / | tail -1 | tr -dc 0-9) >= 115 ))'
 check "devvm size shows it" bash -c "cd '$p' && [[ \$('$D' size 2>&1) == 'cpus=2 memory=3GiB disk=120GiB' ]]"
 check "ls lists it, and no image" bash -c "'$D' ls >'$work/ls.out' 2>&1 &&
-  grep -Eq '^$vm +Running +base +- +(on|off) +off +- +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
+  grep -Eq '^$vm +Running +base +- +(on|off) +open +- +$p\$' '$work/ls.out' && ! grep -q '^devvm-img-' '$work/ls.out'"
 check "the folder is mounted read-write" bash -c "limactl shell --workdir / $vm bash -c 'echo from-vm > $p/vm.txt' </dev/null && grep -qx from-vm '$p/vm.txt'"
 # On Linux hosts the mount is 9p, whose subfolders' events reach no watcher, even the VM's own.
 if [[ "$(uname -s)" == Darwin ]]; then
@@ -1988,7 +2002,7 @@ check "Lima forwards nothing itself; devvm's forwarder runs, with the host keys 
   grep -q '^$vm ssh-ed25519 ' '$(vmdir "$vm")/run/known_hosts'"
 # Without network policy too: so no other VM's forwarder takes it before Lima binds it.
 check "its ssh port is the one its state records, on this machine's loopback alone" bash -c "
-  sp=\$(st_get '$(vmdir "$vm")' ports.host.ssh) && [[ -n \$sp ]] && ! vm_state '$(vmdir "$vm")' | grep -qx net.on=true &&
+  sp=\$(st_get '$(vmdir "$vm")' ports.host.ssh) && [[ -n \$sp ]] && ! vm_state '$(vmdir "$vm")' | grep -qx net.tier=allowlist &&
   [[ \$(limactl list --format '{{.SSHLocalPort}}' $vm) == \"\$sp\" ]] && loopback_only \"\$sp\""
 perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => shift, Listen => 5, ReuseAddr => 1) or die;
   while ($c = $s->accept) { print $c "host-program\n"; close $c }' $P47161 &
@@ -2444,7 +2458,7 @@ check "layer add --force makes it again with the layer, in a shell" bash -c "cd 
 owned e2eadd
 check "it keeps its ID, ports, rule, secret binding and network choice" bash -c "
   [[ \$(st_get '$rd' id) == '$id' && \$(st_get '$rd' ports.forward) == 3000,5173 && \$(st_get '$rd' secrets.names) == github ]] &&
-  [[ \$(st_get '$rd' net.on) == false ]] && grep -qx example.com '$rd/policy' && [[ ! -e '$rd/home.tar.gz' ]]"
+  [[ \$(st_get '$rd' net.tier) == open ]] && grep -qx example.com '$rd/policy' && [[ ! -e '$rd/home.tar.gz' ]]"
 check "it keeps the project folder and its home folder" bash -c "
   grep -qx in-project '$r/e2e-project.txt' && in_vm '$remade' 'grep -qx in-home ~/e2e-home.txt'"
 check "layer add --clean-home adds the next layer on top, with the image's home folder" bash -c "cd '$r' &&
@@ -2747,7 +2761,7 @@ events=$(vmdir "$vm")/logs/network.jsonl
 # pgrep -f looks for [_]proxy: Linux's pgrep also matches the check's own shell, whose command line
 # holds the pattern.
 check "--network-policy: the VM runs behind its proxy, and the self-check passed" bash -c "
-  [[ -n '$vm' && \$(status_of '$vm') == Running ]] && vm_state '$(vmdir "$vm")' | grep -qx net.on=true && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok &&
+  [[ -n '$vm' && \$(status_of '$vm') == Running ]] && vm_state '$(vmdir "$vm")' | grep -qx net.tier=allowlist && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok &&
   pgrep -f -- '[_]proxy -config $pxc' >/dev/null && grep -q '\"listen\": \"127.0.0.1:$pp\"' '$pxc'"
 check "the proxy's config is yours alone, holds its password, and is all its arguments name" bash -c "
   [[ \$(stat -c %a '$pxc' 2>/dev/null || stat -f %Lp '$pxc') == 600 ]] && grep -q '^  \"version\": 1,\$' '$pxc' &&
@@ -2786,7 +2800,7 @@ check "devvm network allow applies at once to the running VM's proxy, devvm netw
   pid=\$(pgrep -f -- '[_]proxy -config $pxc') && [[ -n \$pid ]] &&
   cmd=\$('$D' network log --blocked | awk '\$3 == \"example.com:443\" { sub(/^.* devvm /, \"\"); print }') &&
   [[ \$cmd == 'network allow example.com' ]] && '$D' \$cmd </dev/null >/dev/null &&
-  '$D' network >'$work/e' && [[ \$(head -1 '$work/e') == on ]] && grep -qx '  example.com' '$work/e' &&
+  '$D' network >'$work/e' && [[ \$(head -1 '$work/e') == allowlist ]] && grep -qx '  example.com' '$work/e' &&
   limactl shell --workdir / $vm bash -lc 'curl -fsS -m 20 -o /dev/null https://example.com' </dev/null &&
   '$D' network rm example.com >/dev/null &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://example.com/' </dev/null) == 403 ]] &&
@@ -3054,10 +3068,10 @@ wait "$ip"; rc=$?
 check "Ctrl+C during its start stops it and its proxy, and ls shows its policy on" bash -c "
   [[ $rc -eq 130 ]] && grep -qx '==> interrupted_start vm=$vm' '$work/int.log' && [[ \$(status_of '$vm') == Stopped ]] &&
   ! pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
-  '$D' ls | grep -Eq '^$vm +Stopped +base +[a-z,]*claude[a-z,]* +off +on +- +/'"
+  '$D' ls | grep -Eq '^$vm +Stopped +base +[a-z,]*claude[a-z,]* +off +allowlist +- +/'"
 (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" >"$work/last.log" 2>&1)
 check "ls shows its policy on, and unenforced once started outside devvm" bash -c "
-  '$D' ls | grep -Eq '^$vm +Running +base +[a-z,]*claude[a-z,]* +off +on +- +/' &&
+  '$D' ls | grep -Eq '^$vm +Running +base +[a-z,]*claude[a-z,]* +off +allowlist +- +/' &&
   limactl stop $vm >/dev/null 2>&1 && limactl start --tty=false $vm >/dev/null 2>&1 &&
   '$D' ls | grep -Eq '^$vm +Running +base +[a-z,]*claude[a-z,]* +off +unenforced +- +/'"
 check "started outside devvm again: without a terminal, devvm stops it and opens nothing" bash -c "
@@ -3068,35 +3082,67 @@ check "so does devvm host, which names nothing" bash -c "
   limactl start --tty=false $vm >/dev/null 2>&1 && cd '$n' &&
   ! HOME='$nh' '$D' host </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m net_unenforced_stop vm=$vm | head -1)\" '$work/last.log' &&
   ! grep -qF \"\$(m ssh_host_info dir=$n host=devvm-net | head -1)\" '$work/last.log' && [[ \$(status_of '$vm') == Stopped ]]"
-# Stopped by the self-check, it's still unenforced: its last self-check failed.
-check "devvm network off: its next start is direct, without a proxy" bash -c "cd '$n' &&
+# A server on this machine, on every address, and this machine's LAN address, for the tiers' checks:
+# an open VM reaches both through its proxy, a confined one neither.
+perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => shift, Listen => 5, ReuseAddr => 1) or die;
+  while ($c = $s->accept) { while (<$c>) { last if /^\r?$/ } print $c "HTTP/1.0 200 OK\r\nContent-Length: 9\r\n\r\nhost-lan\n"; close $c }' "$P47198" &
+lan_server=$!
+lan=$({ ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p'; ipconfig getifaddr en0 2>/dev/null; ipconfig getifaddr en1 2>/dev/null; } | head -1)
+echo "  e2e: this machine's LAN address: ${lan:-none}"
+# Stopped by the self-check, it's still unenforced: its last self-check failed. Open from its next
+# start: unconfined, so a direct connection works, and its proxy, an open one, set in it and
+# answering its self-check, reaches this machine's loopback and its LAN address for it.
+check "devvm network off: its next start is open: direct connections work, its proxy is set and answers, and through it the VM reaches this machine's loopback and LAN" bash -c "cd '$n' &&
   [[ \$('$D' network | head -1) == unenforced ]] && '$D' network off </dev/null >/dev/null &&
-  printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == off ]] &&
-  [[ \$(status_of '$vm') == Running ]] && ! pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
-  limactl shell --workdir / $vm curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null"
-# Without network policy, behind the run's company proxy on this machine's loopback, its password
-# fake: the shell's HTTPS_PROXY reaches the guest, which uses it, and Lima, which points it at the
-# VM's gateway, logs it as it starts the VM. Neither devvm's run logs nor Lima's hostagent log keep
-# the password: the run log has the line with <password>, the hostagent log with as many stars. The
-# check reads the password from its file, so it's in no command's arguments.
+  printf 'exit\n' | HOME='$nh' DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == open ]] &&
+  ! grep -q net_proxy_unreachable '$work/last.log' && [[ \$(status_of '$vm') == Running ]] &&
+  pgrep -f -- '[_]proxy -config $pxc' >/dev/null && grep -q '\"open\": true' '$pxc' && ! grep -q '\"ca\"' '$pxc' &&
+  limactl shell --workdir / $vm curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null &&
+  limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -q '^http://devvm:[0-9a-f]*@192\.168\.5\.2:$pp\$' &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'curl -fsS -m 10 --noproxy \"\" http://127.0.0.1:$P47198/' </dev/null) == host-lan ]] &&
+  [[ -n '$lan' && \$(limactl shell --workdir / $vm bash -lc 'curl -fsS -m 10 http://$lan:$P47198/' </dev/null) == host-lan ]] &&
+  '$D' network log | grep -q '  allowed  127\.0\.0\.1:$P47198 '"
+# Open, behind the run's company proxy on this machine's loopback, its password fake: the shell's
+# settings reach the VM's proxy, which goes through the company proxy, and never the guest or Lima.
+# The check reads the password from its file, so it's in no command's arguments.
 corp_start
-check_lines=60 check "without network policy, the shell's proxy password reaches the guest, and no run log or Lima log keeps it" bash -c "cd '$n' &&
-  pw=\$(cat '$work/corp.auth') && url=\"http://devvm:\$pw@127.0.0.1:$P18766\" && stars=\$(printf '%*s' \${#pw} '' | tr ' ' '*') &&
+check_lines=60 check "open behind a company proxy: the guest gets its own proxy, never the shell's settings, its proxy goes through the company proxy, and no log or guest file keeps the password" bash -c "cd '$n' &&
+  pw=\$(cat '$work/corp.auth') && url=\"http://devvm:\$pw@127.0.0.1:$P18766\" &&
   printf 'exit\n' | HOME='$nh' HTTPS_PROXY=\"\$url\" HTTP_PROXY=\"\$url\" '$D' restart >'$work/last.log' 2>&1 &&
-  grep -qF 'devvm:<password>@127.0.0.1:$P18766' \"\$(ls -t '$XDG_DATA_HOME'/devvm/logs/runs/*.log | head -1)\" &&
-  [[ \$('$D' network | head -1) == off ]] &&
-  [[ \$(limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null) == \"http://devvm:\$pw@192.168.5.2:$P18766\" ]] &&
+  [[ \$('$D' network | head -1) == open ]] &&
+  limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -q '^http://devvm:[0-9a-f]*@192\.168\.5\.2:$pp\$' &&
   limactl shell --workdir / $vm bash -lc 'curl -fsS -m 30 -o /dev/null https://github.com' </dev/null &&
   grep -q '\"event\":\"tunnel\",\"host\":\"github.com\",\"port\":443' '$work/corp.jsonl' &&
-  ! grep -rqsFf '$work/corp.auth' '$XDG_DATA_HOME/devvm/logs' '$(vmdir "$vm")/logs' '$DEVVM_LIMA_HOME/$vm/ha.stderr.log' '$work/last.log' &&
-  grep -qF \"devvm:\$stars@127.0.0.1:$P18766\" '$DEVVM_LIMA_HOME/$vm/ha.stderr.log'"
+  ! grep -rqsFf '$work/corp.auth' '$XDG_DATA_HOME/devvm/logs' '$(vmdir "$vm")/logs' '$DEVVM_LIMA_HOME/$vm/ha.stderr.log' '$DEVVM_LIMA_HOME/$vm/lima.yaml' '$work/last.log' &&
+  ! limactl shell --workdir / $vm sudo grep -rqsFf - /etc /root /home <'$work/corp.auth'"
 corp_stop
 check "devvm network on while it runs, without a terminal: unenforced until devvm restart starts it confined" bash -c "cd '$n' &&
   '$D' network on </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m next_start count=1 vm=$vm | head -1)\" '$work/last.log' &&
   [[ \$('$D' network | head -1) == unenforced ]] &&
-  printf 'exit\n' | HOME='$nh' '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == on ]] &&
+  printf 'exit\n' | HOME='$nh' '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == allowlist ]] &&
   vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok && pgrep -f -- '[_]proxy -config $pxc' >/dev/null &&
+  ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} --noproxy \"\" http://127.0.0.1:$P47198/' </dev/null) == 403 ]]"
+# Between confined tiers the change applies at its next launch, which starts its proxy again, the VM
+# running on. internet: every public host on any port, never this machine's addresses.
+check "the internet tier: a host off the allowlist and another port work through its proxy, this machine's LAN address doesn't, and a direct connection still fails" bash -c "cd '$n' &&
+  vm_set '$(vmdir "$vm")/vm.json' net.tier '\"internet\"' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
+  [[ \$('$D' network | head -1) == internet ]] && grep -q 'network/internet.policy' '$pxc' && grep -q '\"deny_policies\"' '$pxc' &&
+  limactl shell --workdir / $vm bash -lc 'curl -fsS -m 20 -o /dev/null https://example.com' </dev/null &&
+  limactl shell --workdir / $vm bash -c 'timeout 10 /usr/local/bin/devvm-ssh-proxy one.one.one.one 53 </dev/null; [ \$? -ne 1 ]' </dev/null &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 10 -o /dev/null -w %{http_code} http://$lan:$P47198/' </dev/null) == 403 ]] &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null"
+# none: its agents' hosts alone, and your denies on top.
+check "the none tier: github.com is refused, Claude Code's API isn't, and a deny of yours holds" bash -c "cd '$n' &&
+  vm_set '$(vmdir "$vm")/vm.json' net.tier '\"none\"' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
+  [[ \$('$D' network | head -1) == none ]] &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} http://github.com/' </dev/null) == 403 ]] &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} https://api.anthropic.com/' </dev/null) != 000 ]] &&
+  '$D' network deny api.anthropic.com </dev/null >/dev/null &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'curl -s -m 20 -o /dev/null -w %{http_code} https://api.anthropic.com/' </dev/null) == 000 ]] &&
+  '$D' network rm '!api.anthropic.com' </dev/null >/dev/null"
+(cd "$n" && vm_set "$(vmdir "$vm")/vm.json" net.tier '"allowlist"' && printf 'exit\n' | HOME=$nh "$D" >"$work/last.log" 2>&1)
+kill "$lan_server" 2>/dev/null; wait "$lan_server" 2>/dev/null
 check "devvm network off while it runs confined, without a terminal: launched, it keeps its proxy until it next starts" bash -c "cd '$n' &&
   '$D' network off </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m next_start count=1 vm=$vm | head -1)\" '$work/last.log' && printf 'exit\n' | HOME='$nh' '$D' >'$work/last.log' 2>&1 &&
   grep -qF \"\$(m next_start_net_off vm=$vm | head -1)\" '$work/last.log' &&
@@ -3227,7 +3273,7 @@ dv=$(sed -n 's/^direnv_version=//p' "$root/assets/layers/nix.sh")
 check "a flake.nix and a package.json: a node VM with the nix layer and network policy, Nix and direnv at their pins" bash -c "
   [[ -n '$vm' ]] && grep -qF \"\$(m new_vm_gets layers=nix tools=node vm=$vm)\" '$work/last.log' &&
   vm_state '$(vmdir "$vm")' | grep -qx image=nix && vm_state '$(vmdir "$vm")' | grep -qx tools.names=node &&
-  vm_state '$(vmdir "$vm")' | grep -qx net.on=true && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok &&
+  vm_state '$(vmdir "$vm")' | grep -qx net.tier=allowlist && vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok &&
   in_vm '$vm' '[[ \$(nix --version) == \"nix (Nix) $nv\" && \$(direnv version) == $dv ]]'"
 check "Nix's store is root's, builds are sandboxed, only root is trusted, and the user's own caches are ignored" in_vm "$vm" '
   [[ -z $(sudo find /nix/store -mindepth 1 -maxdepth 1 ! -user root -print -quit) ]] &&
@@ -3297,11 +3343,15 @@ nix_fetch='derivation { name = "e2e"; system = builtins.currentSystem; builder =
 check "a download from a host that isn't allowed fails, and devvm-why names it" in_vm "$vm" "
   ! nix build --no-link --impure --expr '$nix_fetch' 2>/tmp/fetch.err && grep -q 'response 403' /tmp/fetch.err &&
   devvm-why | grep -q 'devvm network allow example.com'"
-check "devvm network off: from the next start, nix-daemon gets no proxy" bash -c "cd '$x' &&
-  '$D' network off </dev/null >/dev/null && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 &&
-  in_vm '$vm' '[[ -z \$(ls -A /etc/systemd/system/nix-daemon.service.d 2>/dev/null) && -z \$(systemctl show nix-daemon.service -p Environment --value) ]]'"
-check "... and no shared cache: Nix goes to cache.nixos.org alone" in_vm "$vm" \
-  '[[ ! -e /etc/nix/devvm-cache.conf && $(nix config show substituters) != *devvm.proxy* ]]'
+# Open, it keeps its proxy, which applies no rules: nix-daemon still goes through it, so the host
+# the allowlist refused is reached, and the shared cache stays first.
+check "devvm network off: from the next start it's open, and nix-daemon still goes through its proxy" bash -c "cd '$x' &&
+  '$D' network off </dev/null >/dev/null && printf 'exit\n' | '$D' restart >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == open ]] &&
+  in_vm '$vm' 'systemctl show nix-daemon.service -p Environment --value | grep -q \"http_proxy=http://devvm:[0-9a-f]*@192\.168\.5\.2:\"'"
+check "... which, open, no longer refuses the host it did" in_vm "$vm" "
+  nix build --no-link --impure --expr '$nix_fetch' 2>/tmp/fetch.err || ! grep -q 'response 403' /tmp/fetch.err"
+check "... and the shared cache stays first" in_vm "$vm" \
+  '[[ -e /etc/nix/devvm-cache.conf && $(nix config show substituters) == http://devvm.proxy/nix* ]]'
 limactl stop "$vm" >/dev/null 2>&1
 fi
 

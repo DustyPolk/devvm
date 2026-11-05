@@ -142,7 +142,12 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 	}
 	own := &hostAddrs{}
 	own.load()
-	s.egress = &egress{pol: newPolicy(rs, c.Policies, l), own: own, up: up, log: l}
+	pol := newPolicy(rs, c.Policies, c.DenyPolicies, l)
+	pol.open = c.Open
+	if c.Open {
+		l.Printf("open: every host and address, no rules")
+	}
+	s.egress = &egress{pol: pol, own: own, up: up, log: l}
 	s.egress.pol.all()
 	maxSize := c.NixCacheMax
 	if maxSize == 0 {

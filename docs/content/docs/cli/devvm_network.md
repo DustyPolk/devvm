@@ -7,7 +7,7 @@ Show or change the network policy of this folder's VM
 
 ## Synopsis
 
-Show the network policy of this folder's VM, which is on, off or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. devvm network on or off changes it from the VM's next start, so in a terminal devvm offers to restart a running VM now. With -g, show or change whether new VMs get network policy instead: ask, on or off.
+Show the network tier of this folder's VM, which is open, internet, allowlist, none or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. devvm network on gives it the allowlist tier and off makes it open, from the VM's next start, so in a terminal devvm offers to restart a running VM now. With -g, show or change whether new VMs get network policy instead: ask, on or off.
 
 ```text
 devvm network [on|off] [flags]

@@ -13,6 +13,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/state"
 )
 
@@ -119,7 +120,8 @@ func TestUpLinksInvalid(t *testing.T) {
 	}
 }
 
-// Without network policy, the setup gets the hosts file too.
+// An open VM's setup gets the hosts file too, and its links aren't in its
+// NO_PROXY: it reaches them through its proxy.
 func TestUpLinksNoPolicy(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	e.Links = func(*state.VM) ([]GuestLink, error) {
@@ -128,7 +130,7 @@ func TestUpLinksNoPolicy(t *testing.T) {
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.Env["NO_PROXY"] != "" {
+	if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.Env["NO_PROXY"] != netpolicy.NoProxy || !c.GuestProxy() {
 		t.Errorf("Start's env = %q", c.Env)
 	}
 	if got := staged(t, f); got["hosts"] != "127.77.0.9 api api.devvm.internal\n" {

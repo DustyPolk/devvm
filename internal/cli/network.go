@@ -22,8 +22,8 @@ func newNetworkCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "network [on|off]",
 		Short: "Show or change the network policy of this folder's VM",
-		Long: "Show the network policy of this folder's VM, which is on, off or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. " +
-			"devvm network on or off changes it from the VM's next start, so in a terminal devvm offers to restart a running VM now. " +
+		Long: "Show the network tier of this folder's VM, which is open, internet, allowlist, none or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. " +
+			"devvm network on gives it the allowlist tier and off makes it open, from the VM's next start, so in a terminal devvm offers to restart a running VM now. " +
 			"With -g, show or change whether new VMs get network policy instead: ask, on or off.",
 		Example: examples(
 			"devvm network", "show the VM's network policy and allowlist",
@@ -79,7 +79,11 @@ func newNetworkCmd(a *app) *cobra.Command {
 				case len(args) == 0:
 					shown, err = n.Network(cmd.Context())
 				default:
-					err = n.SetNetwork(cmd.Context(), args[0] == settings.NetworkOn)
+					tier := netpolicy.TierOpen
+					if args[0] == settings.NetworkOn {
+						tier = netpolicy.TierAllowlist
+					}
+					err = n.SetTier(cmd.Context(), tier, "devvm network "+args[0])
 				}
 				return err
 			}, what)

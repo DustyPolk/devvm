@@ -497,7 +497,7 @@ func (f *Fake) bump(vm string) {
 // ProxyURL returns the proxy at proxy.test on c's port, with its user and
 // password.
 func (f *machines) ProxyURL(c backend.Confinement) string {
-	if c.Net != backend.NetProxy {
+	if !c.GuestProxy() {
 		return ""
 	}
 	return backend.ProxyURL("proxy.test", c.ProxyPort, c.ProxyPassword)

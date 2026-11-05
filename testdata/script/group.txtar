@@ -80,25 +80,25 @@ stdout '^links.links.2.name=db\nlinks.links.2.port=8001\n'
 stdout '^links.links.2.addr=127.77.0.1\nlinks.links.2.group=true\n'
 ! stdout '^links.links.3'
 
-# All or none: cache, with network policy, can't join a group whose VMs
-# have none, and a group of its own refuses those without.
+# One tier: cache, on allowlist, can't join a group whose VMs are open,
+# and a group of its own refuses those on another tier.
 cd $WORK/cache
 ! exec devvm group join web
-stderr '^devvm: group_policy_off group=web vm=devvm-cache-[0-9a-f]{14}$'
+stderr '^devvm: group_tier_mismatch group=web tier=open vm=devvm-cache-[0-9a-f]{14} vm_tier=allowlist$'
 exec devvm group join safe
 stdout '^==> group_made group=safe '
 cd $WORK/y/api
 ! exec devvm group join safe
-stderr '^devvm: group_policy_on group=safe vm=devvm-api-[0-9a-f]{14}$'
-# Network policy can't change for a member.
+stderr '^devvm: group_tier_mismatch group=safe tier=allowlist vm=devvm-api-[0-9a-f]{14} vm_tier=open$'
+# A member's tier can't change.
 cd $WORK/cache
 ! exec devvm network off
-stderr '^devvm: group_policy_mixed group=safe vm=devvm-cache-[0-9a-f]{14}$'
+stderr '^devvm: group_tier_fixed group=safe vm=devvm-cache-[0-9a-f]{14}$'
 vm_state $CACHE_dir/vm.json
-stdout '^net.on=true$'
+stdout '^net.tier=allowlist$'
 cd $WORK/db
 ! exec devvm network on
-stderr '^devvm: group_policy_mixed group=web vm=devvm-db-[0-9a-f]{14}$'
+stderr '^devvm: group_tier_fixed group=web vm=devvm-db-[0-9a-f]{14}$'
 cd $WORK/cache
 exec devvm group leave
 stdout '^==> group_left group=safe vm=devvm-cache-[0-9a-f]{14}$'
@@ -226,10 +226,10 @@ stdout '^==> group_gone group=web$'
 exec sh -c 'grep -l "\"group\": \"web\"" "$VMS"/*/vm.json || true'
 ! stdout .
 
-# Two VMs joining one group at once, app without network policy and
-# cache with it: they take turns, so only one gets in.
+# Two VMs joining one group at once, app open and cache on allowlist:
+# they take turns, so only one gets in.
 exec sh -c '(cd "$WORK/app" && devvm group join race) & (cd "$WORK/cache" && devvm group join race) & wait; true'
-stderr 'devvm: group_policy_o(n|ff) group=race '
+stderr 'devvm: group_tier_mismatch group=race '
 exec sh -c 'grep -l "\"group\": \"race\"" "$VMS"/*/vm.json | wc -l'
 stdout '^ *1$'
 exec sh -c 'for d in app cache; do (cd "$WORK/$d" && devvm group leave) || true; done'

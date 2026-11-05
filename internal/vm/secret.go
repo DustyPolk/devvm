@@ -116,7 +116,7 @@ func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 	}
 	if !use {
 		e.Info(msg.SecretUnused(name, vm))
-		if !netpolicy.On(st) {
+		if !netpolicy.TierOf(st).Confined() {
 			e.Note(msg.SecretUnuseCopied(name, vm))
 		}
 		return nil

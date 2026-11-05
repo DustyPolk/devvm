@@ -157,21 +157,88 @@ func TestPolicies(t *testing.T) {
 		{"", nil, []string{"layers/base.policy"}, user},
 		{"base+pg++docker", nil, []string{"layers/base.policy", "layers/docker.policy"}, slices.Concat([]string{"/c/layers/pg.policy"}, user)},
 	} {
-		builtin, files := Policies(d, "devvm-vm1-0123456789abc1", c.img, c.tools)
-		if !slices.Equal(builtin, c.builtin) || !slices.Equal(files, c.file) {
-			t.Errorf("Policies(%s, %q) = %q, %q; want %q, %q", c.img, c.tools, builtin, files, c.builtin, c.file)
+		s := Policies(d, "devvm-vm1-0123456789abc1", TierAllowlist, c.img, c.tools)
+		if !slices.Equal(s.Builtin, c.builtin) || !slices.Equal(s.Files, c.file) || len(s.Denies) > 0 {
+			t.Errorf("Policies(%s, %q) = %q; want %q, %q", c.img, c.tools, s, c.builtin, c.file)
 		}
 	}
 	// A part that's no layer's name never names a file outside the
 	// user's layers, and a name that's no shared tool's names none of
-	// devvm's.
-	for _, bad := range []image.Name{"../x", "pg+../../etc/x", "a/b", "X", ".x"} {
-		builtin, files := Policies(d, "devvm-vm1-0123456789abc1", bad, []string{"../x", "X"})
-		if got := slices.Concat(builtin, files); slices.ContainsFunc(got, func(f string) bool {
-			return strings.Contains(f, "x.policy") || strings.Contains(f, "b.policy") || strings.Contains(f, "X.policy")
-		}) {
-			t.Errorf("Policies(%q) = %q", bad, got)
+	// devvm's, on any tier.
+	for _, tier := range Tiers() {
+		for _, bad := range []image.Name{"../x", "pg+../../etc/x", "a/b", "X", ".x"} {
+			s := Policies(d, "devvm-vm1-0123456789abc1", tier, bad, []string{"../x", "X"})
+			if got := slices.Concat(s.Builtin, s.Files, s.Denies); slices.ContainsFunc(got, func(f string) bool {
+				return strings.Contains(f, "x.policy") || strings.Contains(f, "b.policy") || strings.Contains(f, "X.policy")
+			}) {
+				t.Errorf("Policies(%s, %q) = %q", tier, bad, got)
+			}
 		}
+	}
+}
+
+// Each tier's policies: open has none; internet allows every public host
+// and port, and none its agents' hosts alone, each with its secrets'
+// hosts, and with only the denies of the user's files, layers' included.
+func TestTierPolicies(t *testing.T) {
+	d := paths.Dirs{Data: "/d", Config: "/c", Lima: "/l"}
+	vm, img, tools := "devvm-vm1-0123456789abc1", image.Name("base+pg+docker"), []string{"node", "claude", "codex"}
+	secrets := []string{"/d/vms/0123456789abc1/run/secrets.policy"}
+	denies := []string{"/c/layers/pg.policy", "/c/policy", "/d/vms/0123456789abc1/policy"}
+	for _, c := range []struct {
+		tier Tier
+		want PolicySet
+	}{
+		{TierOpen, PolicySet{}},
+		{TierInternet, PolicySet{Builtin: []string{InternetPolicy}, Files: secrets, Denies: denies}},
+		{TierNone, PolicySet{Builtin: []string{"shared-tools/claude.policy", "shared-tools/codex.policy"}, Files: secrets, Denies: denies}},
+	} {
+		got := Policies(d, vm, c.tier, img, tools)
+		if !slices.Equal(got.Builtin, c.want.Builtin) || !slices.Equal(got.Files, c.want.Files) || !slices.Equal(got.Denies, c.want.Denies) {
+			t.Errorf("%s: %q, want %q", c.tier, got, c.want)
+		}
+	}
+	if _, err := fs.Stat(assets.FS, InternetPolicy); err != nil {
+		t.Errorf("the internet tier's policy: %v", err)
+	}
+}
+
+// The tiers' order, what each confines, and a VM's tier as its state has
+// it: the default without one, refused when it's no tier's, the
+// strictest where it can't be read.
+func TestTiers(t *testing.T) {
+	if !TierNone.AtLeast(TierAllowlist) || !TierAllowlist.AtLeast(TierInternet) || !TierInternet.AtLeast(TierOpen) ||
+		!TierOpen.AtLeast(TierOpen) || TierOpen.AtLeast(TierInternet) || TierAllowlist.AtLeast(TierNone) ||
+		Tier("x").AtLeast(TierOpen) || TierNone.AtLeast("x") {
+		t.Error("the tiers' order")
+	}
+	for _, tier := range Tiers() {
+		want := backend.NetProxy
+		if tier == TierOpen {
+			want = backend.NetDirect
+		}
+		if tier.Confined() != (tier != TierOpen) || tier.Net() != want {
+			t.Errorf("%s: confined %v, net %v", tier, tier.Confined(), tier.Net())
+		}
+	}
+	d, st := sandbox(t, "base")
+	if n, err := Of(st); err != nil || n.Tier != TierDefault || TierOf(st) != TierAllowlist {
+		t.Errorf("no tier: %+v, %v", n, err)
+	}
+	change := func(v any) {
+		t.Helper()
+		if err := st.Update(t.Context(), func(st *state.VM) error { return state.SetSection(st, Section, v) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	change(map[string]string{"tier": "open"})
+	if TierOf(st) != TierOpen {
+		t.Errorf("open read as %s", TierOf(st))
+	}
+	change(map[string]string{"tier": "wide"})
+	again, _ := state.ReadVM(d, st.Name())
+	if _, err := Of(again); err == nil || TierOf(again) != TierNone {
+		t.Errorf("an unknown tier: %v, read as %s", err, TierOf(again))
 	}
 }
 
@@ -184,7 +251,7 @@ func TestEveryPartHasAPolicy(t *testing.T) {
 		if image.IsTool(p) {
 			img, tools = "base", []string{p}
 		}
-		builtin, _ := Policies(d, "devvm-vm1-0123456789abc1", img, tools)
+		builtin := Policies(d, "devvm-vm1-0123456789abc1", TierAllowlist, img, tools).Builtin
 		if p != "base" {
 			builtin = builtin[1:]
 		}
@@ -231,8 +298,9 @@ func TestKeyAndSalt(t *testing.T) {
 	}
 }
 
-// The flag wins; without one and without a terminal, on; in a terminal,
-// the answer, asked yes by default ([Y/n]) after the tradeoff.
+// The flag wins; without one and without a terminal, allowlist; in a
+// terminal, the answer, asked yes (allowlist) by default ([Y/n]) after
+// the tradeoff, no for open.
 func TestChoose(t *testing.T) {
 	answer, asked := false, 0
 	var said []string
@@ -241,18 +309,19 @@ func TestChoose(t *testing.T) {
 		OnConfirm: func(m msg.M) bool { asked++; said = append(said, m.Names()); return answer },
 	}
 	p := &Proxy{Reporter: ui}
-	if !p.Choose(true, false, "vm") || p.Choose(false, true, "vm") || !p.Choose(false, false, "vm") || asked != 0 {
-		t.Error("without a terminal: not the flags, or off")
+	on, open := TierAllowlist, TierOpen
+	if p.Choose(true, false, "vm") != on || p.Choose(false, true, "vm") != open || p.Choose(false, false, "vm") != on || asked != 0 {
+		t.Error("without a terminal: not the flags, or open")
 	}
 	ui.Terminal = true
-	if p.Choose(false, true, "vm") || !p.Choose(true, false, "vm") || asked != 0 {
+	if p.Choose(false, true, "vm") != open || p.Choose(true, false, "vm") != on || asked != 0 {
 		t.Error("in a terminal: a flag asked, or wasn't followed")
 	}
-	if p.Choose(false, false, "vm") || asked != 1 {
+	if p.Choose(false, false, "vm") != open || asked != 1 {
 		t.Error("no answered yes")
 	}
 	answer = true
-	if !p.Choose(false, false, "vm") || asked != 2 {
+	if p.Choose(false, false, "vm") != on || asked != 2 {
 		t.Error("yes answered no")
 	}
 	if want := "net_about vm=vm,net_ask,net_about vm=vm,net_ask"; strings.Join(said, ",") != want {
@@ -701,37 +770,90 @@ func TestPrepareStopsTheOldProxy(t *testing.T) {
 	}
 }
 
-// A VM starting without network policy loses its proxy and its CAs, keys
-// and all, but not while a proxy that won't stop may sign with them; one
-// without CAs has nothing to delete.
-func TestUnconfined(t *testing.T) {
-	d, st := sandbox(t, "base")
+// An open VM starts on its backend's own network with its proxy, which
+// carries its requests as they are: open, without policies, a CA or
+// secrets. The CAs a confined tier made go, keys and all, but not while
+// a proxy that won't stop may sign with them.
+func TestPrepareOpen(t *testing.T) {
+	d, st := sandbox(t, "base", "node")
 	p, _ := testProxy(t, d)
 	p.Tick = 20 * time.Millisecond
 	vm, ca := st.Name(), d.VM(st.Name()).CA()
-	if err := p.Unconfined(t.Context(), vm); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
+	setNet(t, st, func(n *Net) { n.Tier = TierOpen })
 	signal := p.Signal
 	p.Signal = func(int, syscall.Signal) error { return nil } // signals that never arrive
-	if err := p.Unconfined(t.Context(), vm); err != nil {
-		t.Fatal(err)
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); msg.NamesOf(err) != "proxy_stop_failed vm="+vm {
+		t.Errorf("a proxy that won't stop: %v", msg.NamesOf(err))
 	}
 	if _, err := os.Stat(ca.Key()); err != nil {
 		t.Errorf("the CAs went while their proxy runs: %v", err)
 	}
 	p.Signal = signal
-	if err := p.Unconfined(t.Context(), vm); err != nil {
-		t.Fatal(err)
+	conf, err := p.Prepare(t.Context(), lifelined(), st, false)
+	if err != nil {
+		t.Fatal(msg.NamesOf(err))
 	}
-	if _, ok := p.PID(vm); ok {
-		t.Error("the proxy still runs")
+	if conf.Net != backend.NetDirect || conf.ProxyPort == 0 || conf.ProxyPassword == "" || !conf.GuestProxy() {
+		t.Errorf("open's confinement: %+v", conf)
 	}
 	if _, err := os.Lstat(ca.Dir); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the CAs are still there: %v", err)
+	}
+	cfg, err := proxy.ReadConfig(d.VM(vm).ProxyConfig())
+	if err != nil || !cfg.Open || cfg.CA != "" || cfg.Secrets != "" || len(cfg.BuiltinPolicies)+len(cfg.Policies)+len(cfg.DenyPolicies) > 0 {
+		t.Errorf("open's proxy: %+v, %v", cfg, err)
+	}
+	if _, ok := p.PID(vm); !ok {
+		t.Error("no proxy runs")
+	}
+}
+
+// A running VM keeps the confinement it started with: one made open while
+// it ran confined stays on its proxy alone until its next start, and one
+// given a confined tier while it ran open gets its proxy's.
+func TestPrepareRunning(t *testing.T) {
+	for _, tc := range []struct {
+		tier     Tier
+		confined bool
+		want     backend.Net
+	}{
+		{TierOpen, true, backend.NetProxy},
+		{TierOpen, false, backend.NetDirect},
+		{TierAllowlist, false, backend.NetProxy},
+		{TierNone, true, backend.NetProxy},
+	} {
+		d, st := sandbox(t, "base")
+		p, _ := testProxy(t, d)
+		setNet(t, st, func(n *Net) { n.Tier = tc.tier })
+		b := lifelined()
+		b.Instances[st.Name()] = backend.Instance{Name: st.Name(), Status: backend.StatusRunning}
+		b.Unconfined = !tc.confined
+		if conf, err := p.Prepare(t.Context(), b, st, true); err != nil || conf.Net != tc.want {
+			t.Errorf("%s, confined %v: %v, %v; want %v", tc.tier, tc.confined, conf.Net, msg.NamesOf(err), tc.want)
+		}
+	}
+}
+
+// Each tier's proxy: internet's built-in policy and the user's denies,
+// none's agents' policies and its secrets' hosts, each with the CA and
+// secrets a confined tier has.
+func TestPrepareTiers(t *testing.T) {
+	for _, tier := range []Tier{TierInternet, TierNone} {
+		d, st := sandbox(t, "base", "node", "claude")
+		p, _ := testProxy(t, d)
+		setNet(t, st, func(n *Net) { n.Tier = tier })
+		if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+			t.Fatal(msg.NamesOf(err))
+		}
+		cfg, err := proxy.ReadConfig(d.VM(st.Name()).ProxyConfig())
+		want := Policies(d, st.Name(), tier, "base", []string{"node", "claude"})
+		if err != nil || cfg.Open || cfg.CA == "" || cfg.Secrets == "" || !slices.Equal(cfg.BuiltinPolicies, want.Builtin) ||
+			!slices.Equal(cfg.Policies, want.Files) || !slices.Equal(cfg.DenyPolicies, want.Denies) {
+			t.Errorf("%s's proxy: %+v, %v", tier, cfg, err)
+		}
 	}
 }
 
@@ -989,7 +1111,7 @@ func TestSelfCheck(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := paths.Dirs{Data: t.TempDir()}
 			st := newVM(t, d, vmV, "base")
-			setNet(t, st, func(n *Net) { n.On = true })
+			setNet(t, st, func(n *Net) { n.Tier = TierAllowlist })
 			f := backendtest.New("fake", nil)
 			f.Instances[vmV] = backend.Instance{Name: vmV, Status: backend.StatusRunning}
 			f.Unconfined = tc.unconfined
@@ -1020,12 +1142,38 @@ func TestSelfCheck(t *testing.T) {
 			}
 		})
 	}
-	// Without network policy, nothing is checked.
-	d := paths.Dirs{Data: t.TempDir()}
-	st := newVM(t, d, vmV, "base")
-	f := backendtest.New("fake", nil)
-	if err := (&Proxy{}).SelfCheck(t.Context(), f, st, nil); err != nil || len(f.Calls()) > 0 {
-		t.Errorf("no policy: %v, %q", err, f.Methods())
+}
+
+// An open VM's self-check asks its proxy through the VM's own settings:
+// one that doesn't answer is warned of, and the VM is used as it is.
+func TestSelfCheckOpen(t *testing.T) {
+	for _, answers := range []bool{true, false} {
+		d := paths.Dirs{Data: t.TempDir()}
+		st := newVM(t, d, vmV, "base")
+		setNet(t, st, func(n *Net) { n.Tier = TierOpen })
+		f := backendtest.New("fake", nil)
+		f.Instances[vmV] = backend.Instance{Name: vmV, Status: backend.StatusRunning}
+		var ran [][]string
+		f.ExecFunc = func(_ string, argv []string, _ backend.ExecOpts) error {
+			ran = append(ran, argv)
+			if answers {
+				return nil
+			}
+			return errors.New("curl: (7) failed")
+		}
+		var warned msg.Recorder
+		err := (&Proxy{Reporter: &msg.Fake{OnWarn: warned.Add}}).SelfCheck(t.Context(), f, st, nil)
+		want := ""
+		if !answers {
+			want = "net_proxy_unreachable vm=" + vmV
+		}
+		if err != nil || strings.Join(warned.Names(), ",") != want || len(ran) != 1 || !slices.Equal(ran[0], proxyArgv) ||
+			slices.Contains(f.Methods(), "Stop") {
+			t.Errorf("answers %v: %v, warned %q, ran %q, %q", answers, err, warned.Names(), ran, f.Methods())
+		}
+		if strings.Contains(strings.Join(proxyArgv, " "), "devvm:") {
+			t.Error("the password in the check's arguments")
+		}
 	}
 }
 
@@ -1039,13 +1187,16 @@ func TestListed(t *testing.T) {
 		asks                bool
 	}{
 		{name: "unfinished", want: ""},
-		{name: "off", net: "off", running: true, want: "off"},
-		{name: "on, stopped", net: "on", want: "on"},
-		{name: "on, stopped, unconfined", net: "on", unconfined: true, want: "on"},
-		{name: "on, running", net: "on", running: true, want: "on", asks: true},
-		{name: "on, running elsewhere", net: "on", running: true, unconfined: true, want: "unenforced", asks: true},
-		{name: "failed self-check", net: "on", check: "unenforced", running: true, want: "unenforced"},
-		{name: "failed self-check, stopped", net: "on", check: "unenforced", want: "unenforced"},
+		{name: "open", net: "open", running: true, want: "open"},
+		{name: "open, failed self-check", net: "open", check: "unenforced", want: "open"},
+		{name: "allowlist, stopped", net: "allowlist", want: "allowlist"},
+		{name: "allowlist, stopped, unconfined", net: "allowlist", unconfined: true, want: "allowlist"},
+		{name: "allowlist, running", net: "allowlist", running: true, want: "allowlist", asks: true},
+		{name: "internet, running", net: "internet", running: true, want: "internet", asks: true},
+		{name: "none, running elsewhere", net: "none", running: true, unconfined: true, want: "unenforced", asks: true},
+		{name: "allowlist, running elsewhere", net: "allowlist", running: true, unconfined: true, want: "unenforced", asks: true},
+		{name: "failed self-check", net: "allowlist", check: "unenforced", running: true, want: "unenforced"},
+		{name: "failed self-check, stopped", net: "internet", check: "unenforced", want: "unenforced"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := paths.Dirs{Data: t.TempDir()}
@@ -1053,7 +1204,7 @@ func TestListed(t *testing.T) {
 			if tc.net == "" {
 				change(t, st, func(st *state.VM) error { st.Created = time.Time{}; return nil })
 			}
-			setNet(t, st, func(n *Net) { n.On, n.Made.Check = tc.net == "on", tc.check })
+			setNet(t, st, func(n *Net) { n.Tier, n.Made.Check = Tier(tc.net), tc.check })
 			f := backendtest.New("fake", nil)
 			f.Unconfined = tc.unconfined
 			if tc.running {

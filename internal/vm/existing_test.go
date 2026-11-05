@@ -478,11 +478,13 @@ func TestRestartToApply(t *testing.T) {
 			"next_start count=1", nil,
 		},
 		{
-			"devvm network on", func(e *Env) error { return Net{e}.SetNetwork(t.Context(), true) },
+			"devvm network on", func(e *Env) error {
+				return Net{e}.SetTier(t.Context(), netpolicy.TierAllowlist, "devvm network on")
+			},
 			"next_start count=1", nil,
 		},
 		{
-			"devvm network off", func(e *Env) error { return Net{e}.SetNetwork(t.Context(), false) },
+			"devvm network off", func(e *Env) error { return Net{e}.SetTier(t.Context(), netpolicy.TierOpen, "devvm network off") },
 			"next_start count=1", nil,
 		},
 		{

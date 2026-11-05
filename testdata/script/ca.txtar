@@ -5,8 +5,8 @@
 env CAS=$XDG_CONFIG_HOME/devvm/ca
 
 # No folder: nothing sent but ca.sh, and every VM's environment points
-# tools at the CAs all the same, set when it's made: its start edits
-# nothing.
+# tools at the CAs all the same, set when it's made: its start's one edit
+# adds its proxy, an open VM's included, the password's stand-in alone.
 project none
 exec devvm --no-network-policy --no-git-protect
 exec tar -tf $STUB_DIR/sync.tar
@@ -14,7 +14,7 @@ stdout '^ca\.sh$'
 ! stdout '^ca/'
 stub_calls
 stdout '^limactl clone --tty=false \S+ devvm-none-[0-9a-f]{14} .* --set \.env = \{"NODE_EXTRA_CA_CERTS":"/etc/ssl/devvm\.pem","PIP_CERT":"/etc/ssl/certs/ca-certificates\.crt","REQUESTS_CA_BUNDLE":"/etc/ssl/certs/ca-certificates\.crt","SSL_CERT_FILE":"/etc/ssl/certs/ca-certificates\.crt","UV_SYSTEM_CERTS":"1"\}$'
-! stdout 'limactl edit --tty=false devvm-none'
+stdout '^limactl edit --tty=false devvm-none-[0-9a-f]{14} --set \.env = \{"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192\.168\.5\.2:[0-9]+",.*"NODE_EXTRA_CA_CERTS":"/etc/ssl/devvm\.pem",'
 
 # A CA, in a file with text around it, and a file of another name, left
 # alone: the certificate alone is sent.

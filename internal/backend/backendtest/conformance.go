@@ -461,21 +461,27 @@ func checkStartShrink(ctx context.Context, s Subject) error {
 }
 
 // The proxy's URL carries its user and the VM's password, for NetProxy
-// alone.
+// and for NetDirect with a proxy port (an open VM's) alone.
 func checkProxyURL(_ context.Context, s Subject) error {
-	for _, n := range []backend.Net{backend.NetDirect, backend.NetInternet, backend.NetNone} {
-		if u := s.Backend.ProxyURL(backend.Confinement{Net: n, ProxyPort: 3128, ProxyPassword: "pw"}); u != "" {
-			return fmt.Errorf("ProxyURL with network %d: %q", n, u)
+	for _, c := range []backend.Confinement{
+		{Net: backend.NetDirect},
+		{Net: backend.NetInternet, ProxyPort: 3128, ProxyPassword: "pw"},
+		{Net: backend.NetNone, ProxyPort: 3128, ProxyPassword: "pw"},
+	} {
+		if u := s.Backend.ProxyURL(c); u != "" {
+			return fmt.Errorf("ProxyURL with network %d: %q", c.Net, u)
 		}
 	}
 	const password = "0123456789abcdef"
-	raw := s.Backend.ProxyURL(backend.Confinement{Net: backend.NetProxy, ProxyPort: 3128, ProxyPassword: password})
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return fmt.Errorf("ProxyURL: %q: %w", raw, err)
-	}
-	if pw, _ := u.User.Password(); u.User.Username() != backend.ProxyUser || pw != password {
-		return fmt.Errorf("ProxyURL: %q, want user %s and the password", raw, backend.ProxyUser)
+	for _, n := range []backend.Net{backend.NetProxy, backend.NetDirect} {
+		raw := s.Backend.ProxyURL(backend.Confinement{Net: n, ProxyPort: 3128, ProxyPassword: password})
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" {
+			return fmt.Errorf("ProxyURL with network %d: %q: %w", n, raw, err)
+		}
+		if pw, _ := u.User.Password(); u.User.Username() != backend.ProxyUser || pw != password {
+			return fmt.Errorf("ProxyURL with network %d: %q, want user %s and the password", n, raw, backend.ProxyUser)
+		}
 	}
 	return nil
 }

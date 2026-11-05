@@ -3,7 +3,7 @@ title: Network policy
 weight: 1
 ---
 
-A VM with network policy reaches only the hosts on its allowlist, through a proxy that devvm runs on this machine, and it never holds your secrets. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key. New VMs get network policy by default. Without it, a VM reaches anything this machine can, including this machine's own services on `localhost`.
+Every VM goes through a proxy that devvm runs for it on this machine, and the VM's network tier decides what the proxy lets it reach. A VM on the allowlist tier, which is network policy as the rest of this page describes it, reaches only the hosts on its allowlist, and it never holds your secrets. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key. New VMs get network policy by default. An open VM, one without network policy, reaches anything this machine can, including this machine's own services on `localhost` and your LAN.
 
 ```mermaid
 sequenceDiagram
@@ -21,6 +21,25 @@ sequenceDiagram
 
 This page covers what you do with network policy and what you see. [How it works › Network policy](../internals/network.md) explains how devvm confines a VM to its proxy and how the proxy handles each connection.
 
+## Network tiers
+
+A VM is on one of four tiers, from the lowest to the highest:
+
+| Tier | What the VM reaches | Confined to its proxy |
+| --- | --- | --- |
+| `open` | whatever this machine reaches, its `localhost` and the LAN included; the proxy applies no rules | no |
+| `internet` | every public host, on any port, apart from your denies; never this machine's addresses or its networks' | yes |
+| `allowlist` | only the hosts its [allowlists](#allowlists) allow, apart from your denies | yes |
+| `none` | only its agents' hosts, the hosts of its secrets and logins, and its [links](#links-between-vms), apart from your denies | yes |
+
+`devvm network on` gives a VM the allowlist tier, and `devvm network off` makes it open. `--network-policy` and `--no-network-policy` choose the same two for a new VM. A higher tier is stricter, and a VM on any tier but open is confined: it reaches nothing but its proxy, and a direct connection from it fails.
+
+An open VM runs on its backend's own network, so it reaches this machine and your LAN directly, as a VM without a proxy would. Its environment names its proxy all the same (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms), and the proxy reaches every host and address for it, this machine's `localhost` and your LAN included, so a tool behaves the same through the proxy as it does directly. Its `NO_PROXY` names the VM itself and this machine as the VM reaches it, `host.lima.internal`, so requests to those go directly. Every launch checks that an open VM's proxy is set in the VM and answers it, and when it doesn't, devvm warns you and opens the VM all the same. An open VM still gets the real value of each secret it may use, so a secret it got still works wherever the VM kept it.
+
+On the internet and none tiers, devvm reads only the denies of your policy files: the internet tier allows every public host itself, and the none tier allows only what the VM's agents, secrets and links need. `devvm network` marks each such file `(denies only)`, and when you add an allow to a VM on either tier, devvm says that the allow changes nothing until the VM is on the allowlist tier. On the open tier no rule applies at all.
+
+Changing a VM from one confined tier to another applies at once, because the VM's proxy starts again with the new tier's rules and the VM keeps running. A change into or out of the open tier applies from the VM's next start, as [below](#turning-it-on-or-off) describes. `devvm ls` and `devvm network` show a VM's tier, or `unenforced` when a confined tier isn't in force ([when it isn't enforced](#when-it-isnt-enforced)).
+
 ## Turning it on or off
 
 A new VM gets network policy unless you turn it off. When devvm creates a VM in a terminal, it shows what each choice means and asks whether to turn network policy on, with yes as the default:
@@ -37,15 +56,15 @@ Turn it on? [Y/n]
 
 To answer the question for every new VM, save `on` or `off` with `devvm network -g on` or `devvm network -g off`, or choose it in [devvm setup](../using/settings.md#devvm-setup), and devvm makes each new VM that way without asking. `devvm network -g ask` brings the question back, and `devvm network -g` shows what new VMs get: `ask`, which is the default, `on` or `off`, followed by where it came from after a `#`. `devvm network -g --json` prints it as `policy`, with `source`. devvm reads the saved answer only when it creates a VM, so the VMs you already have keep their own network policy, and the two flags still choose for one new VM. You can also set it with `network` in [`config.toml`](../using/settings.md#configtoml), which wins over the saved answer, and then `devvm network -g` refuses to change it and names the file ([where a default comes from](../using/settings.md#where-a-default-comes-from)).
 
-Lima confines every VM to its proxy, so every VM can have network policy, the docker layer's included. devvm never starts a VM you asked network policy for with an open network, so if a VM's backend couldn't confine it, devvm would refuse `--network-policy` and `devvm network on` for it ([when a backend lacks something](../backends/_index.md#when-a-backend-lacks-something)).
+Lima confines every VM to its proxy, so every VM can have network policy, the docker layer's included. devvm never starts a VM you asked network policy for with an open network, so if a VM's backend couldn't confine it, the VM could only be open: devvm would refuse to make it on any other tier unless you give `--no-network-policy`, and it would refuse `devvm network on` for it ([when a backend lacks something](../backends/_index.md#when-a-backend-lacks-something)).
 
 | | |
 | --- | --- |
-| `devvm network` | print this folder's VM's network policy as `devvm ls` shows it, `on`, `off` or `unenforced`, and then its [allowlist](#changing-rules) |
+| `devvm network` | print this folder's VM's tier as `devvm ls` shows it, `open`, `internet`, `allowlist`, `none` or `unenforced`, and then its [allowlist](#changing-rules) |
 | `devvm network on\|off` | change it from the VM's next start, which `devvm restart` gives you, and for a running VM, ask in a terminal whether to restart it now |
 | `devvm network -g [on\|off\|ask]` | show or change what new VMs get |
 
-When the VM is running, devvm asks in a terminal whether to restart it now, which stops anything running in it, and if you answer yes, it restarts the VM as `devvm restart` does, so the change applies at once. If you answer no, or there's no terminal, or you pass `--no-input`, the change waits until the VM starts again. If you turn network policy on while the VM is running, the VM isn't confined yet, so `devvm ls` shows it as `unenforced`, and its next launch offers to restart it confined, as it does for a VM started outside devvm. If you turn it off while the VM is running confined, its launches keep it on its proxy with your secrets still out of it, and they warn you that network policy turns off when the VM next starts. In a terminal, each of those launches first asks whether to restart the VM now, with no as the answer unless you type y or an agent's new folders wait too ([restarting](../getting-started/commands.md#restarting-and-stopping)).
+When the VM is running, devvm asks in a terminal whether to restart it now, which stops anything running in it, and if you answer yes, it restarts the VM as `devvm restart` does, so the change applies at once. If you answer no, or there's no terminal, or you pass `--no-input`, the change waits until the VM starts again. If you turn network policy on while the VM is running, the VM isn't confined yet, so `devvm ls` shows it as `unenforced`, and its next launch offers to restart it confined, as it does for a VM started outside devvm. If you turn it off while the VM is running confined, its launches keep it confined to its proxy, which now applies an open VM's rules, until it next starts, and they warn you that the VM leaves its proxy's confinement when it next starts. In a terminal, each of those launches first asks whether to restart the VM now, with no as the answer unless you type y or an agent's new folders wait too ([restarting](../getting-started/commands.md#restarting-and-stopping)).
 
 Secrets the VM got while network policy was off still work wherever the VM kept them, so rotate them if that matters.
 
@@ -75,12 +94,13 @@ A policy file holds one rule per line. `#` starts a comment, and matching ignore
 | --- | --- |
 | `example.com` | that host only |
 | `*.example.com` | any subdomain, at any depth, not `example.com` itself |
-| `**` | any host |
+| `**` | any host, and any address, though an internal address still needs its own rule |
 | `10.0.0.5`, `10.0.0.0/8`, `fd00::/8` | addresses, IPv4 or IPv6 (also what lets a connection past the internal-address refusal) |
 | `RULE:22`, `[fd00::1]:22`, `10.0.0.0/8:8080` | only that port; without a port, 443 and 80 |
+| `RULE:*`, `**:*` | any port |
 | `!RULE` | deny: a deny beats any allow |
 
-A rule is plain ASCII with no spaces in it, and a port is a number from 1 to 65535. A host's one trailing dot is dropped, so `example.com.` matches `example.com`. Brackets hold only an IPv6 address, and an address can't follow `*.`. A line that holds anything else, such as `example.com:x`, `a*.example.com` or `! example.com` with a space after the `!`, isn't a rule.
+A rule is plain ASCII with no spaces in it, and a port is a number from 1 to 65535, or `*` for any port. A host's one trailing dot is dropped, so `example.com.` matches `example.com`. Brackets hold only an IPv6 address, and an address can't follow `*.`. A line that holds anything else, such as `example.com:x`, `a*.example.com` or `! example.com` with a space after the `!`, isn't a rule.
 
 When a line that isn't a rule starts with `!`, it reads as a deny, but the proxy can't tell what it would deny. So while the line is there, the proxy of every VM that reads the file denies every new connection apart from the VM's [links](#links-between-vms), whatever the other rules allow. Connections that are already open stay open. Each refusal names the file and the line, and it suggests no `devvm network allow` command, because no rule would help. Any other line that isn't a rule is skipped, and the file's other lines still apply. The proxy names each such line in its own log.
 
@@ -90,10 +110,10 @@ The proxy never dials a denied address, even for an allowed name that resolves t
 
 ### Changing rules
 
-`devvm network` shows this folder's VM's allowlist after its network policy. It prints each of the VM's policies that holds more than comments, and then its rules without their comments. A built-in policy has its name after `# devvm:`, because it has no file you could edit, and one of your files has its path after `#`. A line that isn't a rule is marked `# not a rule, skipped`, with its line number:
+`devvm network` shows this folder's VM's allowlist after its tier. It prints each of the VM's policies that holds more than comments, and then its rules without their comments. A built-in policy has its name after `# devvm:`, because it has no file you could edit, and one of your files has its path after `#`, followed by `(denies only)` on the internet and none tiers, where it shows only the file's denies. An open VM has no policies, so `devvm network` prints its tier alone. A line that isn't a rule is marked `# not a rule, skipped`, with its line number:
 
 ```text
-on
+allowlist
 # devvm: layers/base.policy
   ports.ubuntu.com
   github.com
@@ -109,13 +129,13 @@ on
 | `devvm network rm RULE...` | remove the lines with these rules, a deny with its `!`, and warn about one that isn't there |
 | `-g`, `--global` | with `allow`, `deny` or `rm`, change `~/.config/devvm/policy`, for every VM, instead, which needs no VM |
 
-A rule is what [Rules](#rules) lists, without spaces or a comment. devvm refuses anything else before it adds any rule, and it also refuses `allow !RULE`. A rule that's already in the file, in any case, isn't added again. Each change applies at once, from the next connection. For a VM without network policy, devvm notes that the rules don't apply. When `devvm network log --blocked` or a blocked request in the VM suggests a `devvm network allow` command, its rule is one that `devvm network allow` takes.
+A rule is what [Rules](#rules) lists, without spaces or a comment. devvm refuses anything else before it adds any rule, and it also refuses `allow !RULE`. A rule that's already in the file, in any case, isn't added again. Each change applies at once, from the next connection. For an open VM, devvm notes that no rule applies to it, and for an allow on the internet or none tier, that only denies apply there. When `devvm network log --blocked` or a blocked request in the VM suggests a `devvm network allow` command, its rule is one that `devvm network allow` takes.
 
 If a VM was deleted outside devvm, devvm deletes what it kept for that VM when it makes a new VM for the same project folder, so the new VM never gets the old one's rules.
 
 ### devvm network --json
 
-`devvm network --json` prints the VM's network policy and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `on`, `off` or `unenforced`, and `allowlist` has each policy that holds more than comments, in the order the proxy reads them. Each has `builtin`, a built-in policy's name, or `file`, the path of one of your files, then its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`, and `source`, which says where it came from: `config.toml`, `settings.json` for what `devvm network -g` or `devvm setup` saved, or `built-in` ([where a default comes from](../using/settings.md#where-a-default-comes-from)). With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
+`devvm network --json` prints the VM's tier and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `open`, `internet`, `allowlist`, `none` or `unenforced`, and `allowlist` has each policy that holds more than comments, in the order the proxy reads them. Each has `builtin`, a built-in policy's name, or `file`, the path of one of your files, then its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`, and `source`, which says where it came from: `config.toml`, `settings.json` for what `devvm network -g` or `devvm setup` saved, or `built-in` ([where a default comes from](../using/settings.md#where-a-default-comes-from)). With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
 
 ```json
 {
@@ -128,7 +148,7 @@ If a VM was deleted outside devvm, devvm deletes what it kept for that VM when i
 ```json
 {
   "version": 1,
-  "policy": "on",
+  "policy": "allowlist",
   "allowlist": [
     {
       "builtin": "layers/base.policy",
@@ -156,7 +176,7 @@ If a VM was deleted outside devvm, devvm deletes what it kept for that VM when i
 
 ## Inside the VM
 
-Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at the VM's own CAs. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)). A direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
+Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at the VM's own CAs. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)), on every tier. On a confined tier, a direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
 
 A blocked request gets `403`, and the response names the host, the reason and the rule that would allow it. The proxy also answers at `http://devvm.proxy/`:
 
@@ -171,7 +191,7 @@ In the VM, `devvm-why` prints what the proxy blocked lately, and a note before e
 
 In a VM with the [`nix` layer](../using/images.md#nix), Nix's daemon makes most of Nix's downloads, and devvm also points it at the proxy, so its downloads go through the same allowlists. The layer's allowlist has `cache.nixos.org` for Nix's binary cache, and `channels.nixos.org` and `releases.nixos.org` for its channels and flake registry, and GitHub, where most flakes' inputs come from, is in devvm's rules for every VM.
 
-Nix asks the proxy's shared cache, `http://devvm.proxy/nix`, before cache.nixos.org, so every VM with network policy and the layer shares the packages that any of them downloaded ([shared downloads](../using/toolchains.md#nix-projects)). The proxy fetches what the cache doesn't have from cache.nixos.org alone, and only while the VM's allowlist allows `cache.nixos.org`. It keeps a package only when cache.nixos.org's signature on it checks, and the VM's Nix checks that signature again. A VM can only make the proxy fetch from cache.nixos.org: the proxy refuses anything a VM sends to store, and every request that isn't for one of Nix's cache files. Each request shows in `devvm network log` as `cache`, with whether it was a `hit`, `fetched`, or why it wasn't found. What one VM can learn of another through the cache is under [Attack vectors](attack-vectors.md#network). A VM without network policy has no proxy, so it gets no shared cache: its Nix downloads from cache.nixos.org directly, and nothing runs or listens on this machine for it.
+Nix asks the proxy's shared cache, `http://devvm.proxy/nix`, before cache.nixos.org, so every VM with network policy and the layer shares the packages that any of them downloaded ([shared downloads](../using/toolchains.md#nix-projects)). The proxy fetches what the cache doesn't have from cache.nixos.org alone, and only while the VM's allowlist allows `cache.nixos.org`. It keeps a package only when cache.nixos.org's signature on it checks, and the VM's Nix checks that signature again. A VM can only make the proxy fetch from cache.nixos.org: the proxy refuses anything a VM sends to store, and every request that isn't for one of Nix's cache files. Each request shows in `devvm network log` as `cache`, with whether it was a `hit`, `fetched`, or why it wasn't found. What one VM can learn of another through the cache is under [Attack vectors](attack-vectors.md#network). An open VM has its proxy too, so it shares the cache as well, and its proxy fetches from cache.nixos.org for it.
 
 When a package isn't in the binary cache, Nix builds it from source, and the build downloads its sources from their own hosts, such as `ftpmirror.gnu.org`. The proxy blocks those hosts until you allow them, so the build fails, and the error, `devvm-why` and `devvm network log --blocked` name the host and the `devvm network allow` command that allows it.
 
@@ -198,7 +218,9 @@ The company proxy sees the name and port of every host the VM reaches, and if it
 
 ### Without network policy
 
-A VM without network policy gets the proxy settings of the shell that starts it in its environment, and uses the company proxy directly. Lima prints a setting, password and all, as it starts the VM when it changes the setting, such as a proxy on `localhost` that it points at the VM's gateway. devvm keeps the password out of its [run log](../using/troubleshooting.md#a-command-fails), and once the VM has started, it replaces the password with as many `*` in the log Lima keeps for the VM. The VM itself has the password, because its tools need it, and so do the files Lima writes in the VM's folder to set up the VM's environment at each start. The VM never gets `config.toml`'s `[proxy]`, because the VM would then need the company proxy's password, and that password never leaves this machine. So when `config.toml` is the only place that names a company proxy, devvm warns you each time it starts such a VM. Turn network policy on for the VM with `devvm network on`, so that its requests go through the company proxy with the password kept on this machine, or start the VM from a shell that has the settings.
+An open VM goes through its proxy as every VM does, and its proxy sends its requests through the company proxy, from the shell's settings or `config.toml`'s, so the company proxy's password stays on this machine for it too. The VM never gets the shell's proxy settings, and Lima gets none to pass on to it. What an open VM reaches directly, past its proxy, such as the hosts its `NO_PROXY` names, doesn't go through the company proxy.
+
+Lima prints each proxy setting it gives a VM, password and all, as it starts the VM. devvm keeps the password out of its [run log](../using/troubleshooting.md#a-command-fails), and once the VM has started, it replaces the password with as many `*` in the log Lima keeps for the VM.
 
 Builds never get your company proxy's settings, and images never keep them. A build goes through the shell's company proxy, or else `config.toml`'s, as a VM's proxy does. When devvm builds an image, builds the shared tools or converts a `--from` container image on Lima behind a company proxy, the build goes through a proxy of devvm's on this machine, made for that build alone, which goes through your company proxy. The build's commands get only that proxy's address, with a password devvm makes for the build, while they run, and devvm stops the proxy when the build ends. So the code a build runs, which includes a container image's own, never sees your company proxy's address or password. That proxy also runs on this machine, so a company proxy on `localhost`, such as one a VPN client runs, works for builds too.
 
@@ -230,11 +252,11 @@ Agents' logins work the same way. When a VM's image has Codex or opencode and yo
 
 devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devvm/secrets/<name>`, a file only you can read ([details](../internals/network.md#where-secrets-are-saved)). No devvm command prints a saved secret, because each VM's proxy reads the values it needs itself. devvm drops whitespace in a secret's value, except inside the `proxy` password, which loses only the whitespace around it. It refuses a value with a quote, a backslash or a control character, and a `claude` value that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
 
-Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`. A VM without network policy gets the real value instead.
+Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`. An open VM gets the real value instead.
 
 To put a secret in, the proxy shows the VM a certificate from the VM's own CA, which no other VM trusts, so one VM's proxy can't make certificates that another VM accepts. Each CA lasts 30 days, and its key stays on this machine. Each launch installs the VM's current CA and the next one, which starts a week before the current one ends, and the proxy switches to the next CA then on its own, without a launch. So a VM that you don't open again keeps working for at least 30 days after its last launch with `devvm` in its folder. Connecting with `ssh` alone isn't a launch. When a VM runs past its next CA's end without a launch, its proxy refuses its HTTPS connections to secrets' hosts, and `devvm network log --blocked` gives the reason `devvm's CA has ended`. The VM's other requests keep working. Run `devvm` in the VM's folder to install new CAs, which also starts the VM's proxy again and ends the connections open through it ([how](../internals/network.md#the-vms-ca)). `devvm rm` deletes a VM's CAs with the VM, and the VM's first start after `devvm network off` deletes them too.
 
-`devvm secret unuse` and `devvm secret rm` take nothing back from a VM without network policy, because the value it got still works wherever it kept it, and devvm says so on `unuse`. Neither command revokes what a VM made with the secret ([minting credentials with a secret](attack-vectors.md#secrets-and-keys-the-vm-may-use)), so rotate it if that matters. Use a fine-grained GitHub token, scoped to the repos your VMs need.
+`devvm secret unuse` and `devvm secret rm` take nothing back from an open VM, because the value it got still works wherever it kept it, and devvm says so on `unuse`. Neither command revokes what a VM made with the secret ([minting credentials with a secret](attack-vectors.md#secrets-and-keys-the-vm-may-use)), so rotate it if that matters. Use a fine-grained GitHub token, scoped to the repos your VMs need.
 
 #### devvm secret --json
 
@@ -282,7 +304,7 @@ To put a secret in, the proxy shows the VM a certificate from the VM's own CA, w
 | `--follow` | then each new one as it happens, until Ctrl+C |
 | `--blocked` | the blocks instead, one row per host and port, by when last blocked: `LAST`, `COUNT`, `HOST` and `ALLOW WITH`, the `devvm network allow` command that allows it |
 
-`ALLOW WITH` is `-` for a request that the proxy refuses whatever the allowlist says, such as a GitHub call that makes a credential, and for a host that isn't a host name or an address. A VM without network policy logs only the connections of its links to your other VMs, and `devvm network log` says so. The proxy keeps each VM's log to its last 10 to 20 MiB by starting a new file once the current one reaches 10 MiB and keeping one older file, which `devvm network log` reads too. `devvm rm` deletes the VM's logs, and [How it works](../internals/network.md#log-files) describes the files.
+`ALLOW WITH` is `-` for a request that the proxy refuses whatever the allowlist says, such as a GitHub call that makes a credential, and for a host that isn't a host name or an address. An open VM's log holds what went through its proxy and its links' connections, but not what the VM reached directly, and `devvm network log` says so. The proxy keeps each VM's log to its last 10 to 20 MiB by starting a new file once the current one reaches 10 MiB and keeping one older file, which `devvm network log` reads too. `devvm rm` deletes the VM's logs, and [How it works](../internals/network.md#log-files) describes the files.
 
 ### devvm network log --json
 
@@ -338,12 +360,12 @@ A [link between VMs](../using/links.md) lets a program in one VM, the client, re
 
 A link joins the two VMs' trust. Code in the client can often run code in the target through the target's service, such as Postgres's `COPY … TO PROGRAM`, and it then has whatever the target has: its network, the secrets it may use and its project folder. So devvm keeps two rules:
 
-- **A client with network policy links only to a target with network policy.** A link to a target without it would let the client reach the internet through the target, around its own proxy. devvm checks this when you add a link, at each launch of the client and on every connection, and on every connection the target's network policy must be in force as it runs, so devvm refuses the connection while the target shows as `unenforced`, and it warns you of such a target when you add the link, when you publish a port in its folder that the client links to, and when the client starts. While such a link exists, devvm refuses `devvm network off` for the target, and it refuses `devvm network on` for a client that links to a target without network policy. A client without network policy may link to any target, and it then has the target's secrets and project folder within reach as well as its own network.
+- **A client links only to a target on its own tier or a stricter one.** An allowlist client links to allowlist and none targets, but not to internet or open ones, because a link to a target on a lower tier would let the client reach more through the target, around its own proxy. devvm checks this when you add a link, at each launch of the client and on every connection, and for a client on a confined tier, on every connection the target's tier must be in force as it runs, so devvm refuses the connection while the target shows as `unenforced`, and it warns you of such a target when you add the link, when you publish a port in its folder that the client links to, and when the client starts. While such a link exists, devvm refuses to give the target a tier lower than the client's, such as `devvm network off`, and it refuses to give the client a tier higher than a target's, such as `devvm network on` for a client that links to an open target. An open client may link to any target, and it then has the target's secrets and project folder within reach as well as its own network.
 - **The target publishes.** A link reaches only a port that the target's folder publishes with `devvm link publish`, and only on the target's own loopback. Publishing offers the port to any of your VMs, and each link is still added in the client's folder, so a VM reaches another's service only when you've run a command in both folders.
 
-The first rule keeps a client's network policy whole, but it doesn't keep the target's data in the target. A client with network policy can read whatever the target's service gives it and send that out through the hosts on its own allowlist. Link two VMs only when you'd trust each with what the other has.
+The first rule keeps a client's tier whole, but it doesn't keep the target's data in the target. A client on a confined tier can read whatever the target's service gives it and send that out through the hosts its own tier reaches. Link two VMs only when you'd trust each with what the other has.
 
-A [group](../using/links.md#groups) links each of its VMs to the ports that the others publish, once you've run `devvm group join` in each VM's folder. Its VMs all have network policy or none do, so every link it makes keeps the first rule, and devvm refuses `devvm network on` and `devvm network off` for a VM while it's in a group. A group joins the trust of all its VMs, so put VMs in one only when you'd trust each with what the others have.
+A [group](../using/links.md#groups) links each of its VMs to the ports that the others publish, once you've run `devvm group join` in each VM's folder. Its VMs are all on one tier, so every link it makes keeps the first rule, and devvm refuses to change a VM's tier, `devvm network on` and `devvm network off` included, while it's in a group. A group joins the trust of all its VMs, so put VMs in one only when you'd trust each with what the others have.
 
 ## Not covered
 

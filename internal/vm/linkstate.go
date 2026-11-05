@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -46,19 +47,18 @@ func linkClients(d paths.Dirs, target, id string, picks func(client *state.VM, l
 	return out, err
 }
 
-// policyLinked refuses a change of a VM's network policy that would break
-// links' policy rule: turning it off (on false) for a target that clients
-// with network policy link to, or on for a client that links to a target
-// without it. Links to a target that's gone or was made again don't
-// count.
-func policyLinked(d paths.Dirs, st *state.VM, on bool) error {
-	vm := st.Name()
-	if !on {
-		clients, err := linkClients(d, vm, st.ID, func(c *state.VM, _ Link) bool { return !policyRule(policyOf(c), policySide{ok: true}) })
-		if err != nil || len(clients) == 0 {
-			return err
-		}
-		return msg.NetworkOffLinked(vm, strings.Join(clients, ", "))
+// tierLinked refuses a change of a VM's tier to to that would break
+// links' tier rule: a tier lower than that of a client that links to it,
+// or higher than that of a target it links to. Links to a target that's
+// gone or was made again don't count.
+func tierLinked(d paths.Dirs, st *state.VM, to netpolicy.Tier) error {
+	vm, side := st.Name(), policySide{tier: to, ok: true}
+	clients, err := linkClients(d, vm, st.ID, func(c *state.VM, _ Link) bool { return !policyRule(policyOf(c), side) })
+	if err != nil {
+		return err
+	}
+	if len(clients) > 0 {
+		return msg.TierLinkedClients(string(to), vm, strings.Join(clients, ", "))
 	}
 	links, err := ReadLinks(st)
 	if err != nil {
@@ -70,14 +70,14 @@ func policyLinked(d paths.Dirs, st *state.VM, on bool) error {
 		if err != nil {
 			return err
 		}
-		if tst.Exists() && tst.ID == l.TargetID && !policyRule(policySide{on: true, ok: true}, policyOf(tst)) && !slices.Contains(targets, l.Target) {
+		if tst.Exists() && tst.ID == l.TargetID && !policyRule(side, policyOf(tst)) && !slices.Contains(targets, l.Target) {
 			targets = append(targets, l.Target)
 		}
 	}
 	if len(targets) == 0 {
 		return nil
 	}
-	return msg.NetworkOnLinked(strings.Join(targets, ", "), vm)
+	return msg.TierLinkedTargets(strings.Join(targets, ", "), string(to), vm)
 }
 
 // unlinkTarget removes every link to target, a VM devvm deletes or

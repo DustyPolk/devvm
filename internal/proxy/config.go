@@ -42,6 +42,13 @@ type Config struct {
 	// Policies are the user's policy files, in order, each read again when it changes; a missing
 	// one has no rules.
 	Policies []string `json:"policies,omitempty"`
+	// DenyPolicies are policy files, after Policies, whose denies alone apply: their allows are
+	// skipped, a broken deny's refusal of everything included.
+	DenyPolicies []string `json:"deny_policies,omitempty"`
+	// Open allows every host and address on every port, internal ones and this machine's
+	// included: no rule or floor applies, so it takes no policies. Links, secrets and the log
+	// work as they do with rules.
+	Open bool `json:"open,omitempty"`
 	// Log is the JSON-lines event log, rotated past LogLimit; "": IO.Stdout.
 	Log string `json:"log,omitempty"`
 	// ProxyLog is the file the proxy's stderr appends to, devvm opens it for the process: the
@@ -162,6 +169,9 @@ func (c Config) check() error {
 	}
 	if ap, err := netip.ParseAddrPort(c.Listen); err != nil || !ap.Addr().IsLoopback() {
 		return fmt.Errorf("listen %q isn't a loopback address and port", c.Listen)
+	}
+	if c.Open && len(c.BuiltinPolicies)+len(c.Policies)+len(c.DenyPolicies) > 0 {
+		return errors.New("open takes no policies")
 	}
 	if c.NixCacheMax < 0 {
 		return errors.New("nix_cache_max is below 0")

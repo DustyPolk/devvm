@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"syscall"
 	"time"
@@ -94,15 +95,11 @@ func (p *Proxy) PID(vm string) (int, bool) { return p.proc(vm).PID() }
 // proxy of the VM's runs then.
 func (p *Proxy) Stop(vm string) bool { return p.proc(vm).Stop(4 * p.Tick) }
 
-// Unconfined is a VM starting without network policy: its proxy stopped,
-// and its CAs deleted, keys and all, as nothing signs with them any more
-// and the VM's setup takes their certificates out of the VM. Network
-// policy turned on again makes new ones. The CAs stay while a proxy of
-// the VM's still runs, which may sign with them.
-func (p *Proxy) Unconfined(ctx context.Context, vm string) error {
-	if !p.Stop(vm) {
-		return nil
-	}
+// dropCA deletes an open VM's CAs, keys and all, once no proxy of the
+// VM's that may sign with them runs: its proxy carries no secret, so
+// nothing signs with them any more, and the VM's setup takes their
+// certificates out of the VM. A confined tier makes new ones.
+func (p *Proxy) dropCA(ctx context.Context, vm string) error {
 	ca := p.Dirs.VM(vm).CA()
 	if _, err := os.Lstat(ca.Dir); errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -117,45 +114,44 @@ func (p *Proxy) Unconfined(ctx context.Context, vm string) error {
 	return os.RemoveAll(ca.Dir)
 }
 
-// Prepare readies a VM with network policy to start on b, or a running one
-// to go on: the VM's own CA, its secret files, its ports, and its proxy
-// running. It returns the confinement its backend starts it with. The proxy
-// follows the host process that runs the VM (its Run.Lifeline): a VM
-// started again gets a new proxy.
+// Prepare readies a VM to start on b, or a running one to go on, on its
+// tier: on a confined tier the VM's own CA and its secret files; its
+// ports, and its proxy running. It returns the confinement its backend
+// starts it with (Tier.Net): a running VM keeps the one it started with
+// until its next start, on its proxy alone when it started so or its tier
+// is confined. The proxy follows the host process that runs the VM (its
+// Run.Lifeline): a VM started again gets a new proxy.
 func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, running bool) (backend.Confinement, error) {
-	vm := st.Name()
+	vm, tier := st.Name(), TierOf(st)
+	// The tier as its state has it now: a command that read the state
+	// before devvm network changed it never starts the proxy with the
+	// tier before.
+	if now, err := state.ReadVM(p.Dirs, vm); err == nil && now.Exists() && now.ID == st.ID {
+		tier = TierOf(now)
+	}
 	none := backend.Confinement{}
 	run, err := b.Running(ctx, vm)
 	if err != nil {
 		return none, err
 	}
-	lifeline := run.Lifeline
-	// The VM's own CA, and the next one, which it trusts too (trust.InitCA).
-	// Kept out of backups: a copy of a key elsewhere could impersonate any
-	// site to the VM.
-	ca := p.Dirs.VM(vm).CA()
-	if err := p.InitCA(ctx, ca); err != nil {
-		return none, msg.ProxyCAFailed(ca.Dir).Because(err)
-	}
-	if p.OS == "darwin" {
-		_ = p.ExcludeFromBackup(ctx, ca.Dir)
+	net := tier.Net()
+	if running && run.Confined {
+		net = backend.NetProxy
 	}
 	key, err := Key(ctx, st)
 	if err != nil {
 		return none, err
 	}
-	salt, err := Salt(ctx, st)
-	if err != nil {
-		return none, err
-	}
-	if err := p.Secrets.WriteFiles(ctx, st, salt); err != nil {
-		return none, err
+	if tier.Confined() {
+		if err := p.secretsReady(ctx, st); err != nil {
+			return none, err
+		}
 	}
 	// A stopped VM's proxy follows the hostagent it started with: a new
 	// start gets a new one. A running VM's proxy starts again, on the same
 	// port, when its config would differ from the one it started with
 	// (stale).
-	cfg, err := p.config(ctx, st, key, lifeline)
+	cfg, err := p.config(ctx, st, tier, key, run.Lifeline)
 	if err != nil {
 		return none, err
 	}
@@ -163,6 +159,11 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		// Never the old one kept: it would go on with what it started with.
 		if !p.Stop(vm) {
 			return none, msg.ProxyStopFailed(vm)
+		}
+	}
+	if !tier.Confined() {
+		if err := p.dropCA(ctx, vm); err != nil {
+			return none, err
 		}
 	}
 	sp, err := p.Ports().SSH(ctx, st, running)
@@ -175,7 +176,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		return none, err
 	}
 	conf := backend.Confinement{
-		Net: backend.NetProxy, ProxyPort: pp, ProxyPassword: key, Env: Env, SSHPort: sp,
+		Net: net, ProxyPort: pp, ProxyPassword: key, Env: Env, SSHPort: sp,
 	}
 	// The logs hold each VM's requests: the user's alone.
 	for _, d := range []string{p.Dirs.Run(), p.Dirs.VM(vm).Run(), p.Dirs.VM(vm).Logs()} {
@@ -190,20 +191,41 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	return conf, p.start(vm, cfg)
 }
 
-// config is the config the VM's proxy would start with now, listening on
-// the proxy port the VM has (none: port 0), with its key (the password)
-// and following its lifeline. It holds everything that, changed, starts a
-// running VM's proxy again: its policies (tools added or removed, a layer
-// of the user's), devvm's binary (an upgrade, which may change the
-// built-in policies' rules), the VM's CAs (replaced, so it would mint
-// certificates the VM no longer trusts after its next setup), the user's
-// CAs, which it trusts for its own connections, the company proxy it goes
-// through (upstream), and the shared Nix cache's cap.
-func (p *Proxy) config(ctx context.Context, st *state.VM, key, lifeline string) (proxy.Config, error) {
+// secretsReady readies what a confined VM's proxy puts its secrets in
+// with: the VM's own CA, and the next one, which it trusts too
+// (trust.InitCA), kept out of backups, as a copy of a key elsewhere could
+// impersonate any site to the VM; and its secret files, with its salt.
+func (p *Proxy) secretsReady(ctx context.Context, st *state.VM) error {
+	ca := p.Dirs.VM(st.Name()).CA()
+	if err := p.InitCA(ctx, ca); err != nil {
+		return msg.ProxyCAFailed(ca.Dir).Because(err)
+	}
+	if p.OS == "darwin" {
+		_ = p.ExcludeFromBackup(ctx, ca.Dir)
+	}
+	salt, err := Salt(ctx, st)
+	if err != nil {
+		return err
+	}
+	return p.Secrets.WriteFiles(ctx, st, salt)
+}
+
+// config is the config the VM's proxy would start with now, on tier t,
+// listening on the proxy port the VM has (none: port 0), with its key
+// (the password) and following its lifeline. It holds everything that,
+// changed, starts a running VM's proxy again: its tier and policies
+// (tools added or removed, a layer of the user's), devvm's binary (an
+// upgrade, which may change the built-in policies' rules), the VM's CAs
+// (replaced, so it would mint certificates the VM no longer trusts after
+// its next setup), the user's CAs, which it trusts for its own
+// connections, the company proxy it goes through (upstream), and the
+// shared Nix cache's cap. An open VM's proxy has no CA and no secrets: it
+// carries the VM's requests as they are.
+func (p *Proxy) config(ctx context.Context, st *state.VM, t Tier, key, lifeline string) (proxy.Config, error) {
 	vm, files := st.Name(), p.Dirs.VM(st.Name())
 	ca := files.CA()
-	builtin, policies := Policies(p.Dirs, vm, image.Name(st.Image), tools.Names(st))
-	for _, m := range PolicyWarnings(policies) {
+	set := Policies(p.Dirs, vm, t, image.Name(st.Image), tools.Names(st))
+	for _, m := range PolicyWarnings(append(slices.Clone(set.Files), set.Denies...)) {
 		p.Warn(m)
 	}
 	cas, err := trust.Read(p.Dirs.TrustedCAs())
@@ -219,17 +241,19 @@ func (p *Proxy) config(ctx context.Context, st *state.VM, key, lifeline string) 
 		return proxy.Config{}, err
 	}
 	bin, _ := image.SHA256File(p.Self)
-	caSum, _ := image.SHA256File(ca.Cert())
-	nextSum, _ := image.SHA256File(ca.NextCert())
 	c := proxy.Config{
 		Listen: listenOn(pp.Host.Proxy), VM: vm, Password: key,
-		BuiltinPolicies: builtin, Policies: policies,
+		BuiltinPolicies: set.Builtin, Policies: set.Files, DenyPolicies: set.Denies, Open: t == TierOpen,
 		Log: files.EventLog(), ProxyLog: files.ProxyLog(), Lifeline: lifeline,
-		CA: ca.Cert(), CAKey: ca.Key(), CANext: ca.NextCert(), CANextKey: ca.NextKey(),
-		Secrets:     files.Secrets(),
 		UpstreamCAs: string(cas.Bundle()), Upstream: upstream,
 		Links: files.LinkList(), LinkSockets: p.Dirs.Run(),
-		DevvmSHA256: bin, CASHA256: caSum, CANextSHA256: nextSum,
+		DevvmSHA256: bin,
+	}
+	if t.Confined() {
+		c.CA, c.CAKey, c.CANext, c.CANextKey = ca.Cert(), ca.Key(), ca.NextCert(), ca.NextKey()
+		c.Secrets = files.Secrets()
+		c.CASHA256, _ = image.SHA256File(ca.Cert())
+		c.CANextSHA256, _ = image.SHA256File(ca.NextCert())
 	}
 	c.NixCache, c.NixCacheMax = p.nixCache(st)
 	return c, nil

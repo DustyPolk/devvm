@@ -114,15 +114,15 @@ exec devvm network allow -g ok3.test
 ! stderr .
 exec devvm network rm -g ok3.test
 
-# A VM without network policy: devvm network shows it off, with its
-# rules, and changing them says they don't apply.
+# An open VM: devvm network shows its tier and no rules, as none apply,
+# and changing them says so.
 project off
 exec devvm --no-network-policy --no-git-protect
 exec devvm network
-stdout '\Aoff\n# devvm: layers/base\.policy\n'
+stdout '\Aopen\n\z'
 ! stderr .
 exec devvm network allow example.com
-stderr '^net_off_policy vm=devvm-off-[0-9a-f]{14}$'
+stderr '^net_open_policy vm=devvm-off-[0-9a-f]{14}$'
 
 # A new VM doesn't get the rules of one by its name deleted outside devvm.
 vm_name OFF off
@@ -131,6 +131,35 @@ exec limactl delete $OFF
 exec devvm --no-network-policy --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
 ! exists $OFF_dir/policy
+
+# The internet tier: every public host on any port, its built-in policy,
+# then the denies alone of your files, so an allow says it changes
+# nothing; none: the VM's agents' policies alone (here it has none), with
+# the same denies. Its proxy reads them as devvm network shows them.
+project tiers
+exec devvm --network-policy --no-git-protect
+vm_name TIERS tiers
+exec limactl stop $TIERS
+cp $WORK/vm.policy $TIERS_dir/policy
+json_set $TIERS_dir/vm.json net.tier=internet
+exec devvm network
+stdout '\Ainternet\n# devvm: network/internet\.policy\n  \*\*:\*\n'
+stdout '^# \S*/vms/[0-9a-f]{14}/policy \(denies only\)\n  !bad\.example\.com\n'
+! stdout '^  example\.com$'
+exec devvm network --json
+stdout '"policy": "internet"'
+stdout '"builtin": "network/internet.policy",\n      "rules": \[\n        "\*\*:\*"\n      \]'
+exec devvm network allow ok.test:*
+stderr '^net_allows_unused tier=internet vm=devvm-tiers-[0-9a-f]{14}$'
+exec devvm network deny worse.test
+! stderr net_allows_unused
+json_set $TIERS_dir/vm.json net.tier=none
+exec devvm network
+stdout '\Anone\n# \S*/vms/[0-9a-f]{14}/policy \(denies only\)\n  !bad\.example\.com\n  !worse\.test\n\z'
+exec devvm
+exec cat $TIERS_dir/run/proxy.json
+stdout '"deny_policies": \['
+! stdout '"builtin_policies"|"open"'
 
 -- global.policy --
 *.corp.test

@@ -69,4 +69,4 @@ exists $VMS/12345612345604/vm.json
 # network policy, in its folder in $VMS.
 at=
 [ -z "$4" ] || at=", \"backend_at\": \"$4\""
-printf '{"version": 1, "id": "x", "name": "%s", "image": "base", "dir": "%s", "backend": "%s"%s, "created": "2020-01-01T00:00:00Z", "net": {"on": false}}\n' "$1" "$2" "$3" "$at" > "$VMS/${1##*-}/vm.json"
+printf '{"version": 1, "id": "x", "name": "%s", "image": "base", "dir": "%s", "backend": "%s"%s, "created": "2020-01-01T00:00:00Z", "net": {"tier": "open"}}\n' "$1" "$2" "$3" "$at" > "$VMS/${1##*-}/vm.json"

@@ -203,6 +203,7 @@ func devvmVars() map[string]string {
 		"internal/msg/gen.initialisms":            table,
 		"internal/netpolicy.Env":                  table,
 		"internal/netpolicy.directArgv":           table,
+		"internal/netpolicy.proxyArgv":            table,
 		"internal/vm.nixMarkers":                  table,
 		"internal/proxy.notPublic":                table,
 		"internal/proxy.nat64":                    table,

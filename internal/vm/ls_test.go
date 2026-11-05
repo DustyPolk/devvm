@@ -95,10 +95,10 @@ func TestList(t *testing.T) {
 		name string
 		kv   map[string]string
 	}{
-		{web, map[string]string{keyImage: "docker", keyToolNames: "node claude", keyDir: webDir, KeyNet: "on", keyGitProtect: "on"}},
-		{img, map[string]string{keyDir: "/p/img-foo", keyFrom: "node:24", KeyNet: "off", keyGitProtect: "off"}},
-		{clone, map[string]string{keyDir: "/p/cl", KeyNet: "on", keyCheck: "unenforced", KeyMode: ModeClone, keyGitProtect: gitprotect.Clone}},
-		{other, map[string]string{keyToolNames: "go", keyDir: "/p/api", KeyNet: "off", keyGitProtect: "on"}},
+		{web, map[string]string{keyImage: "docker", keyToolNames: "node claude", keyDir: webDir, KeyNet: "allowlist", keyGitProtect: "on"}},
+		{img, map[string]string{keyDir: "/p/img-foo", keyFrom: "node:24", KeyNet: "open", keyGitProtect: "off"}},
+		{clone, map[string]string{keyDir: "/p/cl", KeyNet: "allowlist", keyCheck: "unenforced", KeyMode: ModeClone, keyGitProtect: gitprotect.Clone}},
+		{other, map[string]string{keyToolNames: "go", keyDir: "/p/api", KeyNet: "open", keyGitProtect: "on"}},
 	} {
 		be := "lima"
 		if v.name == other {
@@ -136,10 +136,10 @@ func TestList(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Listed{
-		{Name: other, Status: "Running", Image: "base", Tools: []string{"go"}, Git: "on", Net: "off", Backend: "other", Folder: "/p/api", FolderState: FolderGone},
+		{Name: other, Status: "Running", Image: "base", Tools: []string{"go"}, Git: "on", Net: "open", Backend: "other", Folder: "/p/api", FolderState: FolderGone},
 		{Name: clone, Status: "Stopped", Image: "base", Git: "clone", Net: "unenforced", Backend: "lima", Folder: "/p/cl", FolderState: FolderGone},
 		{Name: half, Status: "Stopped", Backend: "lima", FolderState: FolderThere},
-		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "off", Backend: "lima", Folder: "/p/img-foo", FolderState: FolderGone},
+		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "open", Backend: "lima", Folder: "/p/img-foo", FolderState: FolderGone},
 		{Name: web, Status: "Running", Image: "docker", Tools: []string{"node", "claude"}, Git: "on", Net: "unenforced", Backend: "lima", Folder: webDir, FolderState: FolderThere},
 	}
 	if !reflect.DeepEqual(got, want) {

@@ -51,18 +51,16 @@ exec devvm
 ! stderr upstream_proxy_gone
 exec devvm secret rm --force proxy
 
-# A VM without network policy gets the shell's proxy settings alone, never
-# config.toml's, so each start with config.toml's alone warns; one from a
-# shell with the settings doesn't.
+# An open VM goes through its proxy too, which goes through config.toml's
+# company proxy, so the VM needs none of the shell's settings; Lima
+# passes the shell's on to no VM with devvm's proxy.
 project plain
 cp $WORK/nouser.toml $CFG/config.toml
 exec devvm --no-network-policy --no-git-protect
-stderr '^devvm: proxy_needs_policy file=\S*/config/devvm/config\.toml vm_name=devvm-plain-[0-9a-f]{14}$'
-exec devvm stop
-env HTTPS_PROXY=http://proxy.corp.example:3128
-exec devvm
-! stderr proxy_needs_policy
-env HTTPS_PROXY=
+vm_name PLAIN plain
+exec cat $PLAIN_dir/run/proxy.json
+stdout '"upstream": \{\n    "https": "http://proxy\.corp\.example:3128"'
+stdout '"open": true'
 
 -- password.toml --
 features = []

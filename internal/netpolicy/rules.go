@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -94,7 +95,10 @@ func RemoveRule(path, rule string) (bool, error) {
 type RuleFile struct {
 	Path    string // the file's path, or the built-in policy's name
 	Builtin bool
-	Lines   []proxy.PolicyLine
+	// DeniesOnly is a file whose denies alone apply (PolicySet.Denies):
+	// its Lines are its denies and its lines that aren't rules.
+	DeniesOnly bool
+	Lines      []proxy.PolicyLine
 }
 
 // Rules are the file's rules, as written, comments left out.
@@ -134,15 +138,49 @@ func ReadRules(own fs.FS, builtin, files []string) ([]RuleFile, error) {
 		}
 	}
 	for _, f := range files {
-		lines, err := readRules(f)
+		rf, err := readPolicyFile(f, false)
 		if err != nil {
 			return nil, err
 		}
-		if pl := proxy.ParsePolicy(strings.Join(lines, "\n")); len(pl) > 0 {
-			out = append(out, RuleFile{Path: f, Lines: pl})
+		if len(rf.Lines) > 0 {
+			out = append(out, rf)
 		}
 	}
 	return out, nil
+}
+
+// ReadPolicies is ReadRules for a VM's policies (Policies): the built-in
+// ones and its files, then the files whose denies alone apply, each with
+// only its denies and its lines that aren't rules.
+func ReadPolicies(own fs.FS, s PolicySet) ([]RuleFile, error) {
+	out, err := ReadRules(own, s.Builtin, s.Files)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range s.Denies {
+		rf, err := readPolicyFile(f, true)
+		if err != nil {
+			return nil, err
+		}
+		if len(rf.Lines) > 0 {
+			out = append(out, rf)
+		}
+	}
+	return out, nil
+}
+
+// readPolicyFile is the user's policy file f with its lines; with
+// deniesOnly, those of them that are denies or aren't rules.
+func readPolicyFile(f string, deniesOnly bool) (RuleFile, error) {
+	lines, err := readRules(f)
+	if err != nil {
+		return RuleFile{}, err
+	}
+	pl := proxy.ParsePolicy(strings.Join(lines, "\n"))
+	if deniesOnly {
+		pl = slices.DeleteFunc(pl, func(l proxy.PolicyLine) bool { return l.OK && !strings.HasPrefix(l.Text, "!") })
+	}
+	return RuleFile{Path: f, DeniesOnly: deniesOnly, Lines: pl}, nil
 }
 
 // notRuleMark follows a line that isn't a rule in WriteRules' output.
@@ -152,6 +190,10 @@ const notRuleMark = "  # not a rule, skipped"
 // name: it comes with devvm, so it has no path.
 const builtinMark = "devvm: "
 
+// deniesOnlyMark follows the path of a file whose denies alone apply in
+// WriteRules' output.
+const deniesOnlyMark = " (denies only)"
+
 // WriteRules writes each policy's rules to w: after #, a file's path or
 // a built-in policy's name, labelled so, then its lines, indented, each
 // that isn't a rule marked so, with its line number.
@@ -160,6 +202,9 @@ func WriteRules(w io.Writer, files []RuleFile) error {
 		label := f.Path
 		if f.Builtin {
 			label = builtinMark + f.Path
+		}
+		if f.DeniesOnly {
+			label += deniesOnlyMark
 		}
 		if _, err := fmt.Fprintf(w, "# %s\n", label); err != nil {
 			return err

@@ -30,7 +30,10 @@ func execAgents(calls []backendtest.Call, vm string) []string {
 		if c.Method != "Exec" || c.Args[0] != vm {
 			continue
 		}
-		if argv, _ := c.Args[1].([]string); strings.Contains(strings.Join(argv, " "), "/etc/ssh/ssh_host_") {
+		// Host keys, and the self-check of the VM's network, which carries
+		// no agent.
+		if argv, _ := c.Args[1].([]string); strings.Contains(strings.Join(argv, " "), "/etc/ssh/ssh_host_") ||
+			strings.Contains(strings.Join(argv, " "), "http://devvm.proxy/") {
 			continue
 		}
 		o, _ := c.Args[2].(backend.ExecOpts)

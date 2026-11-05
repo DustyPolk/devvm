@@ -216,7 +216,7 @@ func TestGroupJoinsAtOnce(t *testing.T) {
 	if err := (Launch{&e2}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if err := (Net{&e2}).SetNetwork(t.Context(), true); err != nil {
+	if err := setNetwork(t.Context(), Net{&e2}, true); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	vms, err := state.VMNames(e.Dirs)
@@ -238,7 +238,7 @@ func TestGroupJoinsAtOnce(t *testing.T) {
 			t.Fatalf("members %d, joins %q, %q", len(members), msg.NamesOf(errs[0]), msg.NamesOf(errs[1]))
 		}
 		for i, env := range []*Env{e, &e2} {
-			want := []string{"group_policy_on group=web vm=", "group_policy_off group=web vm="}[i]
+			want := []string{"group_tier_mismatch group=web tier=allowlist vm=", "group_tier_mismatch group=web tier=open vm="}[i]
 			if errs[i] != nil && !strings.HasPrefix(msg.NamesOf(errs[i]), want) {
 				t.Errorf("join %d: %s", i, msg.NamesOf(errs[i]))
 			}

@@ -21,16 +21,17 @@ import (
 )
 
 // A new VM: built, created with the folder, its state written, started
-// without network policy, and the backend's shell run.
+// open, its proxy first, and the backend's shell run.
 func TestUp(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Size: Size{CPUs: "2"}, Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	ms := f.Methods()
-	// The ssh config's entry, once it runs: how to reach it, its host keys
-	// for its start (asked which start, read, then asked again).
-	want := []string{"Problems", "Inspect", "PinOrigin", "Images", "BuildImage", "CreateVM", "Start", "Running", "Exec", "List", "SSH", "Running", "Exec", "Running", "Shell"}
+	// Its proxy's lifeline (Running) before it starts; the open self-check
+	// (Exec) once it runs; the ssh config's entry: how to reach it, its
+	// host keys for its start (asked which start, read, then asked again).
+	want := []string{"Problems", "Inspect", "PinOrigin", "Images", "BuildImage", "CreateVM", "Running", "Start", "Running", "Exec", "Exec", "List", "SSH", "Running", "Exec", "Running", "Shell"}
 	if !slices.Equal(ms, want) {
 		t.Errorf("calls = %q, want %q", ms, want)
 	}
@@ -63,7 +64,7 @@ func TestUp(t *testing.T) {
 		t.Errorf("Start confinement = %+v, VMSpec's ssh port %d, state's %q", c, spec.SSHPort, sp)
 	}
 	for k, v := range map[string]string{
-		keyImage: "base", keyDir: e.Dir, keyBackend: "fake", KeyNet: "off", KeyCPUs: "2",
+		keyImage: "base", keyDir: e.Dir, keyBackend: "fake", KeyNet: "open", KeyCPUs: "2",
 		KeyPorts: "none", keyGitProtect: "on",
 	} {
 		if got := get(st, k); got != v {
@@ -128,7 +129,7 @@ func TestUpNetworkPolicy(t *testing.T) {
 		strconv.Itoa(c.ProxyPort) != get(st, keyProxyPort) || strconv.Itoa(c.SSHPort) != get(st, keySSHPort) {
 		t.Errorf("Start confinement = %+v", c)
 	}
-	if get(st, KeyNet) != "on" || get(st, keyCheck) != "ok" {
+	if get(st, KeyNet) != "allowlist" || get(st, keyCheck) != "ok" {
 		t.Errorf("state net=%q net_check=%q", get(st, KeyNet), get(st, keyCheck))
 	}
 	if _, ok := e.Proxy.PID(spec.Name); !ok {
@@ -171,7 +172,7 @@ func TestUpKeepsTheNetworkChoice(t *testing.T) {
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	st, _ := state.ReadVM(e.Dirs, spec.Name)
-	if get(st, KeyNet) != "on" || slices.Contains(f.Methods(), "Start") {
+	if get(st, KeyNet) != "allowlist" || slices.Contains(f.Methods(), "Start") {
 		t.Errorf("net=%q, calls %q", get(st, KeyNet), f.Methods())
 	}
 }
@@ -183,7 +184,7 @@ func TestUpRequiresEgressProxy(t *testing.T) {
 	caps[backend.FeatureEgressProxy] = backend.Emulated(false)
 	e, f, _ := upEnv(t, caps)
 	err := Launch{e}.Up(t.Context(), Options{NetworkPolicy: true})
-	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_unreviewed backend=fake feature=egress-proxy vm=devvm-web-") {
+	if got := msg.NamesOf(err); !strings.HasPrefix(got, "net_tier_backend backend=fake vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
 	if slices.Contains(f.Methods(), "BuildImage") {
@@ -195,26 +196,28 @@ func TestUpRequiresEgressProxy(t *testing.T) {
 	}
 }
 
-// On a backend without egress-proxy, a VM made without either flag is
-// made without network policy, warned, and --network-policy is refused.
+// On a backend without egress-proxy, a VM can only be open: without
+// --no-network-policy it's refused before anything is built, and with it
+// it's made open, its proxy set in it.
 func TestUpWithoutEgressProxy(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureEgressProxy)
 	e, f, _ := upEnv(t, caps)
-	err := Launch{e}.Up(t.Context(), Options{NetworkPolicy: true})
-	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=egress-proxy vm=devvm-web-") ||
-		slices.Contains(f.Methods(), "BuildImage") {
-		t.Errorf("Up --network-policy = %v, calls %q", got, f.Methods())
+	for _, o := range []Options{{NetworkPolicy: true}, {}} {
+		err := Launch{e}.Up(t.Context(), o)
+		if got := msg.NamesOf(err); !strings.HasPrefix(got, "net_tier_backend backend=fake vm=devvm-web-") ||
+			slices.Contains(f.Methods(), "BuildImage") {
+			t.Errorf("Up %+v = %v, calls %q", o, got, f.Methods())
+		}
 	}
-	var warned msg.Recorder
-	fake(e).OnWarn = warned.Add
-	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	st, _ := state.ReadVM(e.Dirs, spec.Name)
-	if get(st, KeyNet) != "off" || !slices.Contains(warned.Names(), "net_off_backend backend=fake vm="+spec.Name) {
-		t.Errorf("net=%q, warned %q", get(st, KeyNet), warned.Names())
+	c, _ := call(f, "Start").Args[2].(backend.Confinement)
+	if get(st, KeyNet) != "open" || c.Net != backend.NetDirect || !c.GuestProxy() {
+		t.Errorf("net=%q, started %+v", get(st, KeyNet), c)
 	}
 }
 
@@ -235,7 +238,7 @@ func TestUpTools(t *testing.T) {
 		t.Errorf("said %q", said.Names())
 	}
 	// A tools build for each of node, pnpm, bun and claude.
-	if ms := f.Methods(); !slices.Equal(ms, []string{"Problems", "Inspect", "PinOrigin", "Images", "BuildImage", "Images", "BuildTools", "BuildTools", "BuildTools", "BuildTools", "CreateVM", "Start", "SSH", "Running", "Exec", "Running", "Running", "Running", "Exec", "List", "SSH", "Running", "Shell"}) {
+	if ms := f.Methods(); !slices.Equal(ms, []string{"Problems", "Inspect", "PinOrigin", "Images", "BuildImage", "Images", "BuildTools", "BuildTools", "BuildTools", "BuildTools", "CreateVM", "Running", "Start", "SSH", "Running", "Exec", "Running", "Running", "Running", "Exec", "Exec", "List", "SSH", "Running", "Shell"}) {
 		t.Errorf("calls = %q", ms)
 	}
 	data, err := os.ReadFile(e.Dirs.ToolLock())

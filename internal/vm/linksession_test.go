@@ -108,11 +108,11 @@ func TestLinkConn(t *testing.T) {
 	f.Instances[target.Name()] = backend.Instance{Name: target.Name(), Status: backend.StatusRunning}
 
 	// The policy rule: a client with network policy, a target without.
-	if err := set(t, client, KeyNet, "on"); err != nil {
+	if err := set(t, client, KeyNet, "allowlist"); err != nil {
 		t.Fatal(err)
 	}
 	check(vmssh.EventLinkRefused, LinkPolicy)
-	if err := set(t, target, KeyNet, "on"); err != nil {
+	if err := set(t, target, KeyNet, "allowlist"); err != nil {
 		t.Fatal(err)
 	}
 	check("", "")
@@ -129,12 +129,12 @@ func TestLinkConn(t *testing.T) {
 	}
 	check(vmssh.EventLinkRefused, LinkUnenforced)
 	f.Unconfined = true
-	if err := set(t, client, KeyNet, "off"); err != nil {
+	if err := set(t, client, KeyNet, "open"); err != nil {
 		t.Fatal(err)
 	}
 	check("", "")
 	f.Unconfined = false
-	if err := set(t, client, KeyNet, "on"); err != nil {
+	if err := set(t, client, KeyNet, "allowlist"); err != nil {
 		t.Fatal(err)
 	}
 	if err := set(t, target, keyCheck, netpolicy.CheckOK); err != nil {

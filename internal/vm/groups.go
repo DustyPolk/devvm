@@ -496,8 +496,8 @@ func (e Groups) join(ctx context.Context, t *target, group, as string, members [
 }
 
 // checkJoin checks that client t can join group as as ("" for its folder
-// part), and returns the group's members: every member has network
-// policy or none does, the names are as checkJoinName wants them, and
+// part), and returns the group's members: every member is on one tier,
+// the names are as checkJoinName wants them, and
 // every backend has links.
 func (e Groups) checkJoin(t *target, group, as string) ([]*state.VM, error) {
 	vm := t.f.Name
@@ -508,17 +508,12 @@ func (e Groups) checkJoin(t *target, group, as string) ([]*state.VM, error) {
 	if err := CheckLinkName(cmp.Or(as, t.f.Slug())); err != nil {
 		return nil, err
 	}
-	// The group links each member to every other: the policy rule holds
-	// both ways.
-	on := netpolicy.On(t.st)
+	// The group links each member to every other: the tier rule holds
+	// both ways, so they're all on one tier.
 	self := policyOf(t.st)
 	for _, m := range members {
-		switch other := policyOf(m); {
-		case policyRule(self, other) && policyRule(other, self):
-		case on:
-			return nil, msg.GroupPolicyOff(group, vm)
-		default:
-			return nil, msg.GroupPolicyOn(group, vm)
+		if other := policyOf(m); !policyRule(self, other) || !policyRule(other, self) {
+			return nil, msg.GroupTierMismatch(group, string(netpolicy.TierOf(m)), vm, string(netpolicy.TierOf(t.st)))
 		}
 	}
 	if err := checkJoinName(group, vm, as, members); err != nil {

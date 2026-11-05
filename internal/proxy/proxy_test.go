@@ -40,7 +40,7 @@ func policyFiles(t *testing.T, rules string) []string {
 
 func writePolicy(t *testing.T, rules string) *policy {
 	t.Helper()
-	return newPolicy(nil, policyFiles(t, rules), quiet())
+	return newPolicy(nil, policyFiles(t, rules), nil, quiet())
 }
 
 // testServer is a proxy of the test's own, made as Main makes one (newServer), from c with a
@@ -227,7 +227,7 @@ func TestPolicySkipsBadLines(t *testing.T) {
 	var logged strings.Builder
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("**\nexample.com:x\n!example.org.\n!::ffff:10.0.0.0/104\n"), 0o600))
-	p := newPolicy(nil, []string{f}, log.New(&logged, "", 0))
+	p := newPolicy(nil, []string{f}, nil, log.New(&logged, "", 0))
 	if ok, why := p.decide("example.org", 443); ok {
 		t.Errorf("example.org allowed (%s): the deny with a trailing dot was skipped", why)
 	}
@@ -254,7 +254,7 @@ func TestPolicyBrokenDeny(t *testing.T) {
 	good, f := filepath.Join(dir, "good"), filepath.Join(dir, "policy")
 	must(t, os.WriteFile(good, []byte("**\n10.0.0.0/8\n"), 0o600))
 	must(t, os.WriteFile(f, []byte("ok.test\n! bad.example.com # a space after the !\n"), 0o600))
-	p := newPolicy(nil, []string{good, f}, log.New(&logged, "", 0))
+	p := newPolicy(nil, []string{good, f}, nil, log.New(&logged, "", 0))
 	for _, h := range []string{"bad.example.com", "other.test", "10.0.0.1"} {
 		ok, why, refused := p.verdict(h, 443)
 		if ok || !refused || !strings.Contains(why, f+":2 isn't a rule but reads as a deny") {
@@ -311,7 +311,7 @@ func TestPolicyFileBack(t *testing.T) {
 	dir := t.TempDir()
 	f, away := filepath.Join(dir, "policy"), filepath.Join(dir, "away")
 	must(t, os.WriteFile(f, []byte("\xef\xbb\xbf!bad.test\n**\n"), 0o600))
-	p := newPolicy(nil, []string{f}, quiet())
+	p := newPolicy(nil, []string{f}, nil, quiet())
 	if ok, _ := p.decide("bad.test", 443); ok {
 		t.Fatal("bad.test allowed: the byte-order mark hid its deny")
 	}
@@ -342,7 +342,7 @@ func TestPolicyReload(t *testing.T) {
 	t.Parallel()
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("a.test\n"), 0o600))
-	p := newPolicy(nil, []string{f}, quiet())
+	p := newPolicy(nil, []string{f}, nil, quiet())
 	if ok, _ := p.decide("b.test", 443); ok {
 		t.Fatal("b.test allowed before it was added")
 	}
@@ -380,7 +380,7 @@ func TestBuiltinPolicies(t *testing.T) {
 	}
 	f := filepath.Join(t.TempDir(), "policy")
 	must(t, os.WriteFile(f, []byte("mine.test\n!node.test\n"), 0o600))
-	p := newPolicy(rs, []string{f}, quiet())
+	p := newPolicy(rs, []string{f}, nil, quiet())
 	all, _ := p.all()
 	var texts []string
 	for _, r := range all {
@@ -435,6 +435,93 @@ func TestInternal(t *testing.T) {
 		if own.internal(netip.MustParseAddr(s)) {
 			t.Errorf("%s shouldn't be internal", s)
 		}
+	}
+}
+
+// :* is every port, for allows and denies alike, and for addresses too.
+func TestAnyPort(t *testing.T) {
+	t.Parallel()
+	p := writePolicy(t, "**:*\n!evil.test:*\n!blocked.test\n10.1.0.0/16:*\n")
+	for _, c := range []struct {
+		host string
+		port int
+		want bool
+	}{
+		{"example.com", 443, true},
+		{"example.com", 22, true},
+		{"example.com", 65535, true},
+		{"example.com", 1, true},
+		{"example.com", 0, false},
+		{"example.com", 65536, false},
+		{"evil.test", 8443, false},
+		{"evil.test", 443, false},
+		{"blocked.test", 443, false},
+		{"blocked.test", 8080, true}, // a deny without a port: 443 and 80 alone
+		{"10.1.2.3", 5432, true},
+		{"1.1.1.1", 53, true}, // ** covers addresses; the floor judges them apart
+		{"[2606:4700::1111]", 853, true},
+	} {
+		if got, why := p.decide(c.host, c.port); got != c.want {
+			t.Errorf("decide(%s, %d) = %v (%s), want %v", c.host, c.port, got, why, c.want)
+		}
+	}
+	if !p.addrAllowed(netip.MustParseAddr("10.1.2.3"), 5432) || p.addrAllowed(netip.MustParseAddr("10.2.0.1"), 5432) {
+		t.Error("an address rule on every port")
+	}
+	// ** lifts no floor: an internal address it allows is still refused.
+	e := testServer(t, Config{}, "**:*\n").egress
+	for _, a := range []string{"127.0.0.1", "10.0.0.1", "192.168.1.5", "169.254.169.254", "::1"} {
+		if _, err := e.resolve(t.Context(), a, 22); !errors.Is(err, errFloor) {
+			t.Errorf("**:* let %s past the floor: %v", a, err)
+		}
+	}
+}
+
+// A file whose denies alone apply: its allows are skipped, its denies
+// and a broken deny hold, and the other files' rules apply whole.
+func TestDenyPolicies(t *testing.T) {
+	t.Parallel()
+	full := policyFiles(t, "**:*\n")[:1]
+	denies := policyFiles(t, "allowed.test:22\n!evil.test\n10.0.0.5\n")[:1]
+	p := newPolicy(nil, full, denies, quiet())
+	if ok, _ := p.decide("evil.test", 443); ok {
+		t.Error("a deny-only file's deny didn't apply")
+	}
+	if ok, _ := p.decide("allowed.test", 22); !ok {
+		t.Error("the full file's allow didn't apply")
+	}
+	if p.addrAllowed(netip.MustParseAddr("10.0.0.5"), 443) {
+		t.Error("a deny-only file's address allow lifted the floor")
+	}
+	only := newPolicy(nil, nil, denies, quiet())
+	if ok, _ := only.decide("allowed.test", 22); ok {
+		t.Error("a deny-only file's allow applied")
+	}
+	must(t, os.WriteFile(denies[0], []byte("! evil.test\n"), 0o600))
+	broken := newPolicy(nil, full, denies, quiet())
+	if ok, _ := broken.decide("example.com", 443); ok {
+		t.Error("a deny-only file's broken deny didn't deny everything")
+	}
+}
+
+// An open proxy allows every host and address on every port, this
+// machine's and its networks' included, and no rule or floor applies.
+func TestOpen(t *testing.T) {
+	t.Parallel()
+	e := testServer(t, Config{Open: true}, "!example.com\n").egress
+	for _, host := range []string{"example.com", "localhost", "127.0.0.1", "10.0.0.1", "192.168.1.5", "::1"} {
+		if ok, rule := e.pol.decide(host, 22); !ok || rule != openRule {
+			t.Errorf("open: %s blocked (%s)", host, rule)
+		}
+		if a, err := e.resolve(t.Context(), host, 5432); err != nil || len(a) == 0 {
+			t.Errorf("open: %s's floor: %v", host, err)
+		}
+	}
+	if !e.pol.byName("unresolvable.test", 443) || e.pol.addrDenied(netip.MustParseAddr("127.0.0.1"), 22) {
+		t.Error("open: a name or an address held back")
+	}
+	if err := (Config{Open: true, Password: "pw", Listen: "127.0.0.1:0", Policies: []string{"/p"}}).check(); err == nil {
+		t.Error("an open config with policies")
 	}
 }
 
@@ -695,6 +782,14 @@ func TestValidRule(t *testing.T) {
 		{"::ffff:10.0.0.0/104", true},
 		{"::ffff:0.0.0.0/80", false},
 		{"127.1", false},
+		{"**:*", true},
+		{"example.com:*", true},
+		{"!*.example.com:*", true},
+		{"10.0.0.0/8:*", true},
+		{"[fd00::1]:*", true},
+		{"example.com:**", false},
+		{"example.com:*1", false},
+		{"*:*", false},
 	} {
 		if got := ValidRule(c.rule); got != c.ok {
 			t.Errorf("ValidRule(%q) = %v; want %v", c.rule, got, c.ok)
@@ -1008,7 +1103,7 @@ func FuzzRequest(f *testing.F) {
 		if err := os.WriteFile(file, []byte(ruleFor(host, port)+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if ok, why := newPolicy(nil, []string{file}, quiet()).decide(host, port); !ok {
+		if ok, why := newPolicy(nil, []string{file}, nil, quiet()).decide(host, port); !ok {
 			t.Fatalf("%q: the rule %q doesn't allow %s port %d: %s", raw, ruleFor(host, port), host, port, why)
 		}
 	})

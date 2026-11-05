@@ -27,7 +27,7 @@ stderr '^devvm: new_vm_flags_ignored_run command=devvm ports LIST flags=--ports 
 exec devvm --no-git-protect
 stderr '^devvm: new_vm_flags_ignored_run command=devvm git-protect off flags=--no-git-protect vm=devvm-web-[0-9a-f]{14}$'
 vm_state $WEB_dir/vm.json
-stdout '^net.on=false$'
+stdout '^net.tier=open$'
 
 # A size its state asks for: a running VM's waits for its next start; a
 # stopped one's is applied once.

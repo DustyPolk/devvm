@@ -19,7 +19,7 @@ stderr '^devvm: rm_unknown_vm name=api$'
 # folder is there from another folder, naming that folder; named in its
 # own folder, it's rm.
 exec devvm ls
-stdout '^devvm-api-[0-9a-f]{14} +Running +base +- +off +off +- +/\S*/api\n'
+stdout '^devvm-api-[0-9a-f]{14} +Running +base +- +off +open +- +/\S*/api\n'
 ! stdout gone
 exec devvm ls --json
 stdout '"folder_state": "there"'
@@ -43,7 +43,7 @@ exists $API_dir/vm.json
 cd $WORK/web
 rm $WORK/api
 exec devvm ls
-stdout '^devvm-api-[0-9a-f]{14} +Running +base +- +off +off +- +/\S*/api \(gone\)\n'
+stdout '^devvm-api-[0-9a-f]{14} +Running +base +- +off +open +- +/\S*/api \(gone\)\n'
 stdout '^devvm-web-[0-9a-f]{14} +Running +.* +/\S*/web\n'
 exec devvm ls --json
 stdout '"folder": "/\S*/api",\n      "folder_state": "gone",\n'
@@ -209,7 +209,7 @@ n
   "created": "2026-01-01T00:00:00Z",
   "clone": {"on": true},
   "git": {"mode": "clone"},
-  "net": {"on": false}
+  "net": {"tier": "open"}
 }
 -- lost.json --
 {
@@ -220,5 +220,5 @@ n
   "dir": "/p/lost",
   "backend": "lima",
   "created": "2026-01-01T00:00:00Z",
-  "net": {"on": false}
+  "net": {"tier": "open"}
 }

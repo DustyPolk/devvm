@@ -36,12 +36,15 @@ stub_calls
 ! stdout 'create|clone'
 
 # The flags: the VM's size changes after the clone, once, and its state
-# says so and which ports it forwards, Lima's own forwards off.
+# says so and which ports it forwards, Lima's own forwards off. Its start
+# edits only its proxy into its environment.
 exec devvm --no-network-policy --cpus 2 --memory=3G --disk 120GiB --ports '5173, 8000-8010,5173'
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},'
+stdout -count=1 '^limactl edit --tty=false devvm-sized-[0-9a-f]{14} --cpus'
 stdout '^limactl edit --tty=false devvm-sized-[0-9a-f]{14} --cpus 2 --memory 3 --disk 120$'
-! stdout '(?s)limactl edit --tty=false devvm-sized.*limactl edit --tty=false devvm-sized'
+stdout -count=2 'limactl edit --tty=false devvm-sized'
+stdout '^limactl edit --tty=false devvm-sized-[0-9a-f]{14} --set \.env = '
 vm_name SIZED sized
 ! exists $SIZED_dir/backend/ports
 vm_state $SIZED_dir/vm.json
@@ -75,7 +78,7 @@ stub_reset
 exec devvm --no-network-policy
 stub_calls
 stdout '^limactl clone .* --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1"'
-! stdout 'limactl edit --tty=false devvm-all'
+! stdout 'limactl edit --tty=false devvm-all\S* --(cpus|memory|disk)'
 vm_name ALL all
 vm_state $ALL_dir/vm.json
 ! stdout '^size\.|^ports\.forward='

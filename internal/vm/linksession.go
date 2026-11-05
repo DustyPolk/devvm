@@ -302,21 +302,22 @@ func endedSince(ctx context.Context, b backend.Backend, target, start string) bo
 }
 
 // policyEnforced checks the policy rule against a running target as it
-// runs, not only as its state has it: for a client with network policy,
-// the target's must be enforced, as devvm ls shows it. A target given
-// network policy while it ran still runs outside its proxy until its next
-// start, and one whose self-check failed may reach the internet directly,
-// so either would carry the client out (LinkUnenforced).
+// runs, not only as its state has it: for a client on a confined tier,
+// the target's confined tier must be enforced, as devvm ls shows it. A
+// target given a confined tier while it ran still runs outside its proxy
+// until its next start, and one whose self-check failed may reach the
+// internet directly, so either would carry the client out
+// (LinkUnenforced).
 func policyEnforced(ctx context.Context, b backend.Backend, client, target *state.VM) (string, error) {
 	// A client whose section can't be read is held to it.
-	if c := policyOf(client); c.ok && !c.on {
+	if c := policyOf(client); c.ok && !c.tier.Confined() {
 		return "", nil
 	}
 	listed, err := netpolicy.Listed(ctx, b, target, true)
 	switch {
 	case err != nil:
 		return "", err
-	case listed != "on":
+	case !netpolicy.Tier(listed).Valid() || !netpolicy.Tier(listed).Confined():
 		return LinkUnenforced, nil
 	}
 	return "", nil
@@ -337,7 +338,7 @@ func policyUnenforced(ctx context.Context, b backend.Backend, client, target *st
 // runs with its network policy not in force (policyUnenforced). A stopped
 // target isn't warned of, as its policy applies when it next starts.
 func (e Links) warnUnenforced(ctx context.Context, client, target *state.VM) {
-	if !netpolicy.On(client) {
+	if !netpolicy.TierOf(client).Confined() {
 		return
 	}
 	c, err := e.Registry.For(target)

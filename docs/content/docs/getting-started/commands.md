@@ -168,7 +168,7 @@ Every command that acts on this folder's VM, `devvm` included, takes `--here` an
 | `IMAGE` | its image, base and its layers, with a base from a container image as `base (from node:24)` ([details](../using/from.md)) |
 | `TOOLS` | its shared tools, joined with commas, such as `node,claude`, or `-` for none |
 | `GIT` | its [`.git` protection](../safety/git-protection.md), `on`, `strict` or `off`, or `clone` for a [`--clone`](../using/clone.md) VM |
-| `NET` | its [network policy](../safety/network.md), `on`, `off`, or `unenforced` ([the self-check](../internals/network.md#the-self-check)) |
+| `NET` | its [network tier](../safety/network.md#network-tiers), `open`, `internet`, `allowlist` or `none`, or `unenforced` ([the self-check](../internals/network.md#the-self-check)) |
 | `LINKS` | how many [links](../using/links.md) it has to ports of your other VMs, or `-` for none |
 | `FOLDER` | its project folder, with `(gone)` after it when nothing is at that path, which `devvm rm VM` deals with ([a VM whose folder is gone](#a-vm-whose-folder-is-gone)), or `(not connected)` when the folder was on a disk that isn't connected ([details](#a-folder-on-a-disk-that-isnt-connected)) |
 
@@ -221,7 +221,7 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm ports [all\|none\|LIST]` | show or change which ports this folder's VM forwards to this machine's `localhost`, even while it runs ([details](../using/ports-size.md#ports)) |
 | `devvm ports add\|rm LIST` | forward more ports, or stop forwarding some ([details](../using/ports-size.md#ports)) |
 | `devvm ports -g ...` | show or change what new VMs forward ([details](../using/ports-size.md#ports)) |
-| `devvm network [on\|off]` | show this folder's VM's network policy, `on`, `off` or `unenforced`, and then its allowlist, file by file, or change its network policy from its next start, offering to restart a running VM now ([details](../safety/network.md#turning-it-on-or-off)) |
+| `devvm network [on\|off]` | show this folder's VM's tier, `open`, `internet`, `allowlist`, `none` or `unenforced`, and then its allowlist, file by file, or make it `allowlist` (on) or `open` (off) from its next start, offering to restart a running VM now ([details](../safety/network.md#turning-it-on-or-off)) |
 | `devvm network -g [on\|off\|ask]` | show or change whether new VMs get network policy, which is `ask` until you change it ([details](../safety/network.md#turning-it-on-or-off)) |
 | `devvm network allow\|deny\|rm RULE... [-g]` | add allow or deny rules to this folder's VM's own, or remove them, at once, and with `-g`, change yours for every VM ([details](../safety/network.md#changing-rules)) |
 | `devvm network log [--follow] [-n N] [--blocked]` | show what this folder's VM connected to and what its network policy blocked ([details](../safety/network.md#logs)) |

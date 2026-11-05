@@ -27,7 +27,8 @@ func vmState(t *testing.T, d paths.Dirs, name string, set ...func(*state.VM) err
 		t.Fatal(err)
 	}
 	st.Image, st.Dir, st.Backend, st.Created = "base", "/p", "fake", time.Now()
-	for _, f := range set {
+	// Open unless set says otherwise.
+	for _, f := range append([]func(*state.VM) error{withNet(false)}, set...) {
 		if err := f(st); err != nil {
 			t.Fatal(err)
 		}
@@ -51,9 +52,18 @@ func withTools(names ...string) func(*state.VM) error {
 	return func(st *state.VM) error { return tools.Set(st, tools.InVM{Names: names}) }
 }
 
-// withNet gives a VM network policy, or none.
+// withNet gives a VM the allowlist tier, or the open one.
 func withNet(on bool) func(*state.VM) error {
-	return func(st *state.VM) error { return netpolicy.SetOn(st, on) }
+	t := netpolicy.TierOpen
+	if on {
+		t = netpolicy.TierAllowlist
+	}
+	return withTier(t)
+}
+
+// withTier gives a VM a tier.
+func withTier(t netpolicy.Tier) func(*state.VM) error {
+	return func(st *state.VM) error { return netpolicy.SetTier(st, t) }
 }
 
 // withPublish has a VM publish ports (linksInVM.Publish).

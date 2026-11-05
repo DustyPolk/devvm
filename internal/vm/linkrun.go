@@ -207,7 +207,7 @@ func (e linkRuns) warnTargets(ctx context.Context, st *state.VM, links []Link) e
 		case why == LinkGone || why == LinkReplaced || why == LinkUngrouped:
 			continue // devvm link says so
 		case !linkPolicy(st, tst):
-			e.Warn(msg.LinkPolicyMismatch(l.Target, st.Name()))
+			e.Warn(tierMismatch(st, tst))
 			continue
 		}
 		c, err := e.Registry.For(tst)

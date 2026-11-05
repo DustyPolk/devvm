@@ -2,17 +2,25 @@
 # started before the VM), the confined start, the self-check, and the
 # VM's secrets as the proxy sees them.
 
-# --no-network-policy: off, with no proxy and no CA.
+# --no-network-policy: open, unconfined, with its proxy, which applies no
+# rules and holds no CA and no secret; its self-check asks the proxy
+# through the VM's own settings, and no confined one runs.
 project off
 exec devvm --no-network-policy --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
 vm_name OFF off
 vm_state $OFF_dir/vm.json
-stdout '^net\.on=false$'
-! stdout 'proxy_|net_check'
+stdout '^net\.tier=open$'
+stdout '^net\.made\.proxy_key=[0-9a-f]{64}$'
+! stdout 'proxy_salt|net_check'
 stub_calls
-! stdout curl
+stdout 'curl -sSf -m 3 -o /dev/null --proxy "\$HTTPS_PROXY" http://devvm\.proxy/blocked'
+! stdout 'noproxy'
+! stdout 'sandbox-exec'
 ! exists $OFF_dir/run/ca
+exec cat $OFF_dir/run/proxy.json
+stdout '"open": true'
+! stdout '"ca"|"secrets"|"policies"|"builtin_policies"'
 
 # --network-policy: the VM's own CA and its next one, the keys the user's
 # alone (kept out of Time Machine on macOS), the
@@ -35,7 +43,7 @@ exec ls -ld $NET_dir/run/ca
 stdout '^drwx------\S* '
 ! exists $DATA/ca
 vm_state $NET_dir/vm.json
-stdout '^net\.on=true$'
+stdout '^net\.tier=allowlist$'
 stdout '^net\.made\.check=ok$'
 stdout '^net\.made\.proxy_key=[0-9a-f]{64}$'
 stdout '^net\.made\.proxy_salt=[0-9a-f]{32}$'
@@ -148,12 +156,12 @@ stderr '^devvm: no_vm dir=\S*/none$'
 stderr '^devvm: arg_not_choice choices=on, off command=devvm network given=sideways$'
 cd $WORK/off
 exec devvm network
-stdout '^off$'
+stdout '^open$'
 exec devvm network on
 stdout '^==> next_start count=1 vm=devvm-off-[0-9a-f]{14}$'
 stderr '^net_on_old_tokens vm=devvm-off-[0-9a-f]{14}$'
 vm_state $OFF_dir/vm.json
-stdout '^net\.on=true$'
+stdout '^net\.tier=allowlist$'
 exec devvm network on
 stdout '^==> setting_already command=devvm network on vm=devvm-off-[0-9a-f]{14}$'
 ! stderr .
@@ -168,7 +176,7 @@ exec limactl stop $OFF
 exec devvm network on
 stdout '^==> setting_set vm=devvm-off-[0-9a-f]{14}$'
 exec devvm network
-stdout '^on$'
+stdout '^allowlist$'
 
 # Without a flag, and without a terminal to ask in: on, unasked.
 project default
@@ -177,7 +185,7 @@ stdout '^==> creating_from image=base vm=devvm-default-[0-9a-f]{14}$'
 ! stderr 'net_about|net_ask|net_off_'
 vm_name DEFAULT default
 vm_state $DEFAULT_dir/vm.json
-stdout '^net\.on=true$'
+stdout '^net\.tier=allowlist$'
 stdout '^net\.made\.check=ok$'
 
 # devvm network -g: what new VMs get, ask until it's saved; ask is only
@@ -206,27 +214,27 @@ exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
 vm_name OFFSAVED offsaved
 vm_state $OFFSAVED_dir/vm.json
-stdout '^net\.on=false$'
+stdout '^net\.tier=open$'
 project offflag
 exec devvm --network-policy --no-git-protect
 vm_name OFFFLAG offflag
 vm_state $OFFFLAG_dir/vm.json
-stdout '^net\.on=true$'
+stdout '^net\.tier=allowlist$'
 cd $WORK/default
 exec limactl stop $DEFAULT
 exec devvm
 vm_state $DEFAULT_dir/vm.json
-stdout '^net\.on=true$'
+stdout '^net\.tier=allowlist$'
 stdout '^net\.made\.check=ok$'
-# Turned off, its next start stops its proxy and deletes its CAs, keys and
-# all; on again, it gets new ones.
+# Turned off, its next start starts it open, its proxy too, as open's,
+# and deletes its CAs, keys and all; on again, it gets new ones.
 cp $DEFAULT_dir/run/ca/ca.pem $WORK/default-ca.pem
 exec devvm network off
 exec limactl stop $DEFAULT
 exec devvm
 ! exists $DEFAULT_dir/run/ca
-exec sh -c 'ps -axww -o command= | grep "[_]proxy -config $DEFAULT_dir/run/proxy.json" || true'
-! stdout .
+exec cat $DEFAULT_dir/run/proxy.json
+stdout '"open": true'
 exec devvm network on
 exec limactl stop $DEFAULT
 exec devvm
@@ -241,12 +249,12 @@ exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
 vm_name ONSAVED onsaved
 vm_state $ONSAVED_dir/vm.json
-stdout '^net\.on=true$'
+stdout '^net\.tier=allowlist$'
 project onflag
 exec devvm --no-network-policy --no-git-protect
 vm_name ONFLAG onflag
 vm_state $ONFLAG_dir/vm.json
-stdout '^net\.on=false$'
+stdout '^net\.tier=open$'
 
 # ask again. config.toml's network wins over what devvm saved, devvm
 # network -g shows it came from there, and devvm network -g refuses to
@@ -267,7 +275,7 @@ exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
 vm_name CONFIGON configon
 vm_state $CONFIGON_dir/vm.json
-stdout '^net\.on=true$'
+stdout '^net\.tier=allowlist$'
 
 # A config.toml edited by hand with a typo: every command that reads it is
 # refused, naming the file and the line, with a flag or without.

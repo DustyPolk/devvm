@@ -129,7 +129,7 @@ const (
 	LinkGone        = "gone"        // the target has no state: deleted
 	LinkReplaced    = "replaced"    // the target was made again: another ID
 	LinkUnpublished = "unpublished" // the target doesn't publish the port
-	LinkPolicy      = "policy"      // the client has network policy, the target doesn't
+	LinkPolicy      = "policy"      // the target's tier is lower than the client's
 	LinkUngrouped   = "ungrouped"   // a group made it, and the two aren't in one group now
 )
 
@@ -162,28 +162,38 @@ func CheckLink(d paths.Dirs, client *state.VM, l Link) (string, *state.VM, error
 	return "", tst, nil
 }
 
-// policySide is one VM of a link as links' policy rule reads it: whether
-// it has network policy (on), and whether its section could be read (ok).
-type policySide struct{ on, ok bool }
+// policySide is one VM of a link as links' tier rule reads it: its tier,
+// and whether its section could be read (ok).
+type policySide struct {
+	tier netpolicy.Tier
+	ok   bool
+}
 
 // policyOf is st's policySide.
 func policyOf(st *state.VM) policySide {
 	n, err := netpolicy.Of(st)
-	return policySide{on: n.On, ok: err == nil}
+	return policySide{tier: n.Tier, ok: err == nil}
 }
 
-// policyRule is links' policy rule, the one check of it: a link from a
-// client to a target holds when the client has no network policy or the
-// target has it, so a link never carries a client with network policy
-// past its proxy. A VM whose section can't be read breaks it either way:
-// it's refused, never read as off.
+// policyRule is links' tier rule, the one check of it: a link from a
+// client to a target holds when the target is on the client's tier or a
+// stricter one, so a link never carries a client to more than its own
+// tier lets it reach. A VM whose section can't be read breaks it either
+// way: it's refused, never read as open.
 func policyRule(client, target policySide) bool {
-	return client.ok && target.ok && (!client.on || target.on)
+	return client.ok && target.ok && target.tier.AtLeast(client.tier)
 }
 
 // linkPolicy is policyRule for a link from client to target, as their
 // states have them now.
 func linkPolicy(client, target *state.VM) bool { return policyRule(policyOf(client), policyOf(target)) }
+
+// tierMismatch is the refusal of a link from client to target that
+// breaks the tier rule (linkPolicy), naming both tiers; a section that
+// can't be read reads as none there, as TierOf has it.
+func tierMismatch(client, target *state.VM) msg.M {
+	return msg.LinkTierMismatch(target.Name(), string(netpolicy.TierOf(target)), string(netpolicy.TierOf(client)), client.Name())
+}
 
 // Published reports whether a VM publishes port.
 func Published(st *state.VM, port int) bool { return publishedIn(linksOf(st).Publish, port) }
@@ -253,7 +263,7 @@ func (e Links) publishChanged(t *target, old string) error {
 // again.
 func (e Links) publishUnenforced(ctx context.Context, t *target, old string) error {
 	clients, err := linkClients(e.Dirs, t.f.Name, t.st.ID, func(c *state.VM, l Link) bool {
-		return netpolicy.On(c) && !publishedIn(old, l.Port) && Published(t.st, l.Port)
+		return netpolicy.TierOf(c).Confined() && !publishedIn(old, l.Port) && Published(t.st, l.Port)
 	})
 	if err != nil {
 		return err
@@ -436,7 +446,7 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 }
 
 // checkTarget checks a new link's target for client t: made and finished,
-// publishing port, with network policy if the client has it, and on a
+// publishing port, on the client's tier or a stricter one, and on a
 // backend with links, as the client's is. It returns the target's state.
 func (e Links) checkTarget(t *target, target string, port int) (*state.VM, error) {
 	tst, err := state.ReadVM(e.Dirs, target)
@@ -450,7 +460,7 @@ func (e Links) checkTarget(t *target, target string, port int) (*state.VM, error
 		return nil, msg.LinkNotPublished(strconv.Itoa(port), target)
 	}
 	if !linkPolicy(t.st, tst) {
-		return nil, msg.LinkPolicyMismatch(target, t.f.Name)
+		return nil, tierMismatch(t.st, tst)
 	}
 	c, err := e.Registry.For(tst)
 	if err != nil {

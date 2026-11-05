@@ -1,0 +1,3 @@
+# The internet tier: every public host, on any port. The proxy still refuses this machine's addresses
+# and its networks' (loopback, private, link-local), and your denies apply on top.
+**:*

@@ -343,7 +343,7 @@ func TestWidenParentVM(t *testing.T) {
 	web := e.Dir
 	st := existingVM(t, e, Options{NoNetworkPolicy: true})
 	vm := st.Name()
-	if err := (Net{e}).SetNetwork(t.Context(), true); err != nil {
+	if err := setNetwork(t.Context(), Net{e}, true); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if err := set(t, st, keyGitProtect, gitprotect.On); err != nil {
@@ -357,8 +357,8 @@ func TestWidenParentVM(t *testing.T) {
 		changed func() bool
 	}{
 		{
-			"devvm network off", func() error { return n.SetNetwork(t.Context(), false) },
-			func() bool { return get(reread(t, e, vm), KeyNet) == "off" },
+			"devvm network off", func() error { return setNetwork(t.Context(), n, false) },
+			func() bool { return get(reread(t, e, vm), KeyNet) == "open" },
 		},
 		{
 			"devvm secret use", func() error { return n.SecretUse(t.Context(), "github", true) },
@@ -409,7 +409,7 @@ func TestWidenParentVM(t *testing.T) {
 	// what this checks.)
 	asked := answers(t, e, false)
 	fake(e).OnConfirm = func(msg.M) bool { return false }
-	if err := n.SetNetwork(t.Context(), true); err != nil {
+	if err := setNetwork(t.Context(), n, true); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, true, false, false); err != nil {
@@ -433,7 +433,7 @@ func TestWidenParentVM(t *testing.T) {
 	// In the parent folder itself, nothing asks.
 	e.Dir = web
 	fake(e).Terminal = false
-	if err := n.SetNetwork(t.Context(), false); err != nil {
+	if err := setNetwork(t.Context(), n, false); err != nil {
 		t.Errorf("network off in the VM's own folder: %v", msg.NamesOf(err))
 	}
 }

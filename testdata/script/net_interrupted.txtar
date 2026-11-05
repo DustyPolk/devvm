@@ -21,12 +21,12 @@ stdout ' Stopped$'
 exec sh -c 'pgrep -f "[_]proxy .* -vm $NET " || echo none'
 stdout '^none$'
 vm_state $NET_dir/vm.json
-stdout '^net.on=true$'
+stdout '^net.tier=allowlist$'
 stdout '^image=base$'
 stdout '^tools.names=claude$'
 stdout '^tools.made.files=claude-\S+$'
 exec devvm ls --json
-stdout '"net": "on"'
+stdout '"net": "allowlist"'
 ! stdout unenforced
 
 # The next launch starts it confined, unasked. (Its hostagent here: the
@@ -36,4 +36,4 @@ exec devvm
 ! stderr net_unenforced
 exec devvm ls --json
 stdout '"status": "Running"'
-stdout '"net": "on"'
+stdout '"net": "allowlist"'

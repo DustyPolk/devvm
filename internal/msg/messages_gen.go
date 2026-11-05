@@ -1354,19 +1354,14 @@ func GroupOther(group string, vm string) M {
 	return M{id: "group_other", vals: []val{{"group", group}, {"vm", vm}}}
 }
 
-// GroupPolicyMixed is [group_policy_mixed]: "{{.vm}} is in the group {{.group}}, whose VMs all have network policy or none do, so its network policy can't change. Run devvm group leave first."
-func GroupPolicyMixed(group string, vm string) M {
-	return M{id: "group_policy_mixed", vals: []val{{"group", group}, {"vm", vm}}}
+// GroupTierFixed is [group_tier_fixed]: "{{.vm}} is in the group {{.group}}, whose VMs are all on one tier, so its tier can't change. Run devvm group leave first."
+func GroupTierFixed(group string, vm string) M {
+	return M{id: "group_tier_fixed", vals: []val{{"group", group}, {"vm", vm}}}
 }
 
-// GroupPolicyOff is [group_policy_off]: "The VMs in the group {{.group}} have no network policy and {{.vm}} has it, and a group's VMs all have it or none do. Join a group whose VMs have network policy instead."
-func GroupPolicyOff(group string, vm string) M {
-	return M{id: "group_policy_off", vals: []val{{"group", group}, {"vm", vm}}}
-}
-
-// GroupPolicyOn is [group_policy_on]: "The VMs in the group {{.group}} have network policy and {{.vm}} doesn't, and a group's VMs all have it or none do. Turn it on with devvm network on first, or join another group."
-func GroupPolicyOn(group string, vm string) M {
-	return M{id: "group_policy_on", vals: []val{{"group", group}, {"vm", vm}}}
+// GroupTierMismatch is [group_tier_mismatch]: "The group {{.group}} has a VM on the {{.tier}} tier and {{.vm}} is on {{.vm_tier}}, and a group's VMs are all on one tier. Give {{.vm}} the group's tier first, or join another group."
+func GroupTierMismatch(group string, tier string, vm string, vmTier string) M {
+	return M{id: "group_tier_mismatch", vals: []val{{"group", group}, {"tier", tier}, {"vm", vm}, {"vm_tier", vmTier}}}
 }
 
 // GroupTrust is [group_trust]: "The group {{.group}} joins the trust of all its VMs. Code in any of them can often run code in the others through the ports they publish, and then has whatever that VM has."
@@ -1694,11 +1689,6 @@ func LinkNotPublished(port string, vm string) M {
 	return M{id: "link_not_published", vals: []val{{"port", port}, {"vm", vm}}}
 }
 
-// LinkPolicyMismatch is [link_policy_mismatch]: "{{.vm}} has network policy and {{.target}} doesn't, so a link would let {{.vm}} reach the internet through it. Turn on network policy for {{.target}} with devvm network on in its folder first."
-func LinkPolicyMismatch(target string, vm string) M {
-	return M{id: "link_policy_mismatch", vals: []val{{"target", target}, {"vm", vm}}}
-}
-
 // LinkPortInvalid is [link_port_invalid]: "{{.value}} isn't a port. Give one port from 1 to 65535, such as 5432."
 func LinkPortInvalid(value string) M {
 	return M{id: "link_port_invalid", vals: []val{{"value", value}}}
@@ -1747,6 +1737,11 @@ func LinkTargetUnenforced(target string, vm string) M {
 // LinkTargetUnusable is [link_target_unusable]: "{{.vm}}'s links to {{.target}} don't work, because {{.target}}'s backend can't carry links."
 func LinkTargetUnusable(target string, vm string) M {
 	return M{id: "link_target_unusable", vals: []val{{"target", target}, {"vm", vm}}}
+}
+
+// LinkTierMismatch is [link_tier_mismatch]: "{{.vm}} is on the {{.tier}} tier and {{.target}} on {{.target_tier}}, a lower one, so a link would let {{.vm}} reach more through it. Give {{.target}} the {{.tier}} tier or a stricter one first."
+func LinkTierMismatch(target string, targetTier string, tier string, vm string) M {
+	return M{id: "link_tier_mismatch", vals: []val{{"target", target}, {"target_tier", targetTier}, {"tier", tier}, {"vm", vm}}}
 }
 
 // LinkTrust is [link_trust]: "A link joins the two VMs' trust. Code in {{.vm}} can often run code in {{.target}} through the service it reaches, and then has whatever {{.target}} has."
@@ -1884,6 +1879,11 @@ func NetAbout(vm string) M {
 	return M{id: "net_about", vals: []val{{"vm", vm}}}
 }
 
+// NetAllowsUnused is [net_allows_unused]: "{{.vm}} is on the {{.tier}} tier, where only your denies apply, so this allow changes nothing until it's on the allowlist tier."
+func NetAllowsUnused(tier string, vm string) M {
+	return M{id: "net_allows_unused", vals: []val{{"tier", tier}, {"vm", vm}}}
+}
+
 // NetAsk is [net_ask]: "Turn it on?"
 func NetAsk() M {
 	return M{id: "net_ask"}
@@ -1904,29 +1904,34 @@ func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
 }
 
-// NetOffBackend is [net_off_backend]: "{{.vm}} gets no network policy, because the {{.backend}} backend can't confine it to its proxy here."
-func NetOffBackend(backend string, vm string) M {
-	return M{id: "net_off_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
-}
-
-// NetOffLog is [net_off_log]: "Network policy is off for {{.vm}}, so devvm logs only the connections of its links to your other VMs. To log the rest of its traffic, run devvm network on."
-func NetOffLog(vm string) M {
-	return M{id: "net_off_log", vals: []val{{"vm", vm}}}
-}
-
-// NetOffPolicy is [net_off_policy]: "Network policy is off for {{.vm}}, so its rules don't apply. To turn it on, run devvm network on."
-func NetOffPolicy(vm string) M {
-	return M{id: "net_off_policy", vals: []val{{"vm", vm}}}
-}
-
-// NetOnOldTokens is [net_on_old_tokens]: "The secrets {{.vm}} got while network policy was off still work wherever it kept them. Rotate them if that matters."
+// NetOnOldTokens is [net_on_old_tokens]: "The secrets {{.vm}} got while it was open still work wherever it kept them. Rotate them if that matters."
 func NetOnOldTokens(vm string) M {
 	return M{id: "net_on_old_tokens", vals: []val{{"vm", vm}}}
+}
+
+// NetOpenLog is [net_open_log]: "{{.vm}} is open, so devvm logs only what goes through its proxy, not what it reaches directly."
+func NetOpenLog(vm string) M {
+	return M{id: "net_open_log", vals: []val{{"vm", vm}}}
+}
+
+// NetOpenPolicy is [net_open_policy]: "{{.vm}} is open, so no rule applies to it. To have its rules apply, run devvm network on."
+func NetOpenPolicy(vm string) M {
+	return M{id: "net_open_policy", vals: []val{{"vm", vm}}}
 }
 
 // NetProxyDownStopped is [net_proxy_down_stopped]: "{{.vm}}'s network policy proxy couldn't start, so devvm stopped the VM, which doesn't run without it. devvm starts both again at the VM's next launch."
 func NetProxyDownStopped(vm string) M {
 	return M{id: "net_proxy_down_stopped", vals: []val{{"vm", vm}}}
+}
+
+// NetProxyUnreachable is [net_proxy_unreachable]: "{{.vm}}'s proxy doesn't answer it, so its tools that use the proxy fail. To start both again, run devvm restart."
+func NetProxyUnreachable(vm string) M {
+	return M{id: "net_proxy_unreachable", vals: []val{{"vm", vm}}}
+}
+
+// NetTierBackend is [net_tier_backend]: "The {{.backend}} backend can't confine {{.vm}} to its proxy here, so the VM can only be open. Make it with --no-network-policy."
+func NetTierBackend(backend string, vm string) M {
+	return M{id: "net_tier_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
 // NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
@@ -1974,16 +1979,6 @@ func NetworkFailed(reason string) M {
 	return M{id: "network_failed", vals: []val{{"reason", reason}}}
 }
 
-// NetworkOffLinked is [network_off_linked]: "{{.vms}} have network policy and link to {{.vm}}, so it keeps its network policy. Remove those links with devvm link rm in their folders first."
-func NetworkOffLinked(vm string, vms string) M {
-	return M{id: "network_off_linked", vals: []val{{"vm", vm}, {"vms", vms}}}
-}
-
-// NetworkOnLinked is [network_on_linked]: "{{.vm}} links to {{.targets}}, which have no network policy, so it can't have network policy either. Remove those links with devvm link rm first, or turn on network policy for each of them."
-func NetworkOnLinked(targets string, vm string) M {
-	return M{id: "network_on_linked", vals: []val{{"targets", targets}, {"vm", vm}}}
-}
-
 // NewVMFlagsIgnored is [new_vm_flags_ignored]: "Only a new VM takes {{.flags}}, so {{.vm}} keeps its own settings."
 func NewVMFlagsIgnored(flags string, vm string) M {
 	return M{id: "new_vm_flags_ignored", vals: []val{{"flags", flags}, {"vm", vm}}}
@@ -2029,7 +2024,7 @@ func NextStartMounts(vm string) M {
 	return M{id: "next_start_mounts", vals: []val{{"vm", vm}}}
 }
 
-// NextStartNetOff is [next_start_net_off]: "{{.vm}}'s network policy turns off only when it starts."
+// NextStartNetOff is [next_start_net_off]: "{{.vm}} leaves its proxy's confinement for the open tier only when it starts."
 func NextStartNetOff(vm string) M {
 	return M{id: "next_start_net_off", vals: []val{{"vm", vm}}}
 }
@@ -2474,11 +2469,6 @@ func ProxyFailed(reason string) M {
 	return M{id: "proxy_failed", vals: []val{{"reason", reason}}}
 }
 
-// ProxyNeedsPolicy is [proxy_needs_policy]: "{{.vm_name}} has no network policy, so it doesn't go through the company proxy in {{.file}}. Turn network policy on with devvm network on, or set HTTPS_PROXY in the shell that starts it."
-func ProxyNeedsPolicy(file string, vmName string) M {
-	return M{id: "proxy_needs_policy", vals: []val{{"file", file}, {"vm_name", vmName}}}
-}
-
 // ProxyPasswordHowto is [proxy_password_howto]: "Type the company proxy's password for the user that config.toml's proxy names. Only devvm's proxies on this machine send it, and only to the company proxy."
 func ProxyPasswordHowto() M {
 	return M{id: "proxy_password_howto"}
@@ -2849,7 +2839,7 @@ func SecretSavedKeychain(secret string) M {
 	return M{id: "secret_saved_keychain", vals: []val{{"secret", secret}}}
 }
 
-// SecretUnuseCopied is [secret_unuse_copied]: "Network policy is off for {{.vm}}, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."
+// SecretUnuseCopied is [secret_unuse_copied]: "{{.vm}} is open, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."
 func SecretUnuseCopied(secret string, vm string) M {
 	return M{id: "secret_unuse_copied", vals: []val{{"secret", secret}, {"vm", vm}}}
 }
@@ -3057,6 +3047,16 @@ func Stopping(vm string) M {
 // SyncFailed is [sync_failed]: "Setting up {{.vm}} failed."
 func SyncFailed(vm string) M {
 	return M{id: "sync_failed", vals: []val{{"vm", vm}}}
+}
+
+// TierLinkedClients is [tier_linked_clients]: "{{.vms}} link to {{.vm}} from a stricter tier than {{.tier}}, so it keeps its tier. Remove those links with devvm link rm in their folders first."
+func TierLinkedClients(tier string, vm string, vms string) M {
+	return M{id: "tier_linked_clients", vals: []val{{"tier", tier}, {"vm", vm}, {"vms", vms}}}
+}
+
+// TierLinkedTargets is [tier_linked_targets]: "{{.vm}} links to {{.targets}}, on a lower tier than {{.tier}}, so it can't have that tier. Remove those links with devvm link rm first, or give each of them that tier or a stricter one."
+func TierLinkedTargets(targets string, tier string, vm string) M {
+	return M{id: "tier_linked_targets", vals: []val{{"targets", targets}, {"tier", tier}, {"vm", vm}}}
 }
 
 // TokenPrompt is [token_prompt]: "Token:"
@@ -3696,9 +3696,8 @@ var specs = map[string]spec{
 	"group_named":                    {fields: []string{"group", "name", "vm"}},
 	"group_none":                     {fields: []string{"vm"}},
 	"group_other":                    {fields: []string{"group", "vm"}},
-	"group_policy_mixed":             {fields: []string{"group", "vm"}},
-	"group_policy_off":               {fields: []string{"group", "vm"}},
-	"group_policy_on":                {fields: []string{"group", "vm"}},
+	"group_tier_fixed":               {fields: []string{"group", "vm"}},
+	"group_tier_mismatch":            {fields: []string{"group", "tier", "vm", "vm_tier"}},
 	"group_trust":                    {fields: []string{"group"}},
 	"group_waiting":                  {},
 	"has_layers":                     {fields: []string{"layers", "vm"}},
@@ -3764,7 +3763,6 @@ var specs = map[string]spec{
 	"link_name_taken":                {fields: []string{"name", "target", "vm"}},
 	"link_not_found":                 {fields: []string{"port", "target", "vm"}},
 	"link_not_published":             {fields: []string{"port", "vm"}},
-	"link_policy_mismatch":           {fields: []string{"target", "vm"}},
 	"link_port_invalid":              {fields: []string{"value"}},
 	"link_port_taken":                {fields: []string{"name", "port", "vm"}},
 	"link_removed":                   {fields: []string{"name", "port", "vm"}},
@@ -3775,6 +3773,7 @@ var specs = map[string]spec{
 	"link_target_stopped":            {fields: []string{"target", "vm"}},
 	"link_target_unenforced":         {fields: []string{"target", "vm"}},
 	"link_target_unusable":           {fields: []string{"target", "vm"}},
+	"link_tier_mismatch":             {fields: []string{"target", "target_tier", "tier", "vm"}},
 	"link_trust":                     {fields: []string{"target", "vm"}},
 	"link_unknown_target":            {fields: []string{"target"}},
 	"links_target_gone":              {plural: true, fields: []string{"count", "vm", "vms"}},
@@ -3802,15 +3801,17 @@ var specs = map[string]spec{
 	"msg_unexpected_value":           {fields: []string{"key", "name"}},
 	"msg_unknown":                    {fields: []string{"name"}},
 	"net_about":                      {fields: []string{"vm"}},
+	"net_allows_unused":              {fields: []string{"tier", "vm"}},
 	"net_ask":                        {},
 	"net_ask_global":                 {},
 	"net_default_failed":             {fields: []string{"reason"}},
 	"net_direct_route":               {fields: []string{"vm"}},
-	"net_off_backend":                {fields: []string{"backend", "vm"}},
-	"net_off_log":                    {fields: []string{"vm"}},
-	"net_off_policy":                 {fields: []string{"vm"}},
 	"net_on_old_tokens":              {fields: []string{"vm"}},
+	"net_open_log":                   {fields: []string{"vm"}},
+	"net_open_policy":                {fields: []string{"vm"}},
 	"net_proxy_down_stopped":         {fields: []string{"vm"}},
+	"net_proxy_unreachable":          {fields: []string{"vm"}},
+	"net_tier_backend":               {fields: []string{"backend", "vm"}},
 	"net_unenforced":                 {fields: []string{"vm"}},
 	"net_unenforced_restart":         {fields: []string{"vm"}},
 	"net_unenforced_stop":            {fields: []string{"vm"}},
@@ -3820,8 +3821,6 @@ var specs = map[string]spec{
 	"network_default_off":            {},
 	"network_default_on":             {},
 	"network_failed":                 {fields: []string{"reason"}},
-	"network_off_linked":             {fields: []string{"vm", "vms"}},
-	"network_on_linked":              {fields: []string{"targets", "vm"}},
 	"new_vm_flags_ignored":           {fields: []string{"flags", "vm"}},
 	"new_vm_flags_ignored_run":       {fields: []string{"command", "flags", "vm"}},
 	"new_vm_gets":                    {fields: []string{"layers", "tools", "vm"}},
@@ -3920,7 +3919,6 @@ var specs = map[string]spec{
 	"program_old_fix":                {fields: []string{"fix", "name", "version"}},
 	"proxy_ca_failed":                {fields: []string{"dir"}},
 	"proxy_failed":                   {fields: []string{"reason"}},
-	"proxy_needs_policy":             {fields: []string{"file", "vm_name"}},
 	"proxy_password_howto":           {},
 	"proxy_password_in_config":       {fields: []string{"key"}},
 	"proxy_password_missing":         {},
@@ -4037,6 +4035,8 @@ var specs = map[string]spec{
 	"stopped":                        {fields: []string{"vm"}},
 	"stopping":                       {fields: []string{"vm"}},
 	"sync_failed":                    {fields: []string{"vm"}},
+	"tier_linked_clients":            {fields: []string{"tier", "vm", "vms"}},
+	"tier_linked_targets":            {fields: []string{"targets", "tier", "vm"}},
 	"token_prompt":                   {},
 	"token_quotes":                   {},
 	"too_many_cpus":                  {fields: []string{"have", "want"}},

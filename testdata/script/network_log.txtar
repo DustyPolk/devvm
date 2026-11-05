@@ -72,12 +72,12 @@ cmp stdout $WORK/evil-blocked.txt
 exec devvm network log
 cmp stdout $WORK/evil.txt
 
-# A VM without network policy logs nothing new, and devvm says so.
+# An open VM logs only what goes through its proxy, and devvm says so.
 project off
 exec devvm --no-network-policy --no-git-protect
 exec devvm network log
 stdout '^==> log_empty vm=devvm-off-[0-9a-f]{14}$'
-stderr '^net_off_log vm=devvm-off-[0-9a-f]{14}$'
+stderr '^net_open_log vm=devvm-off-[0-9a-f]{14}$'
 
 -- events.jsonl --
 {"time":"2026-10-09T10:00:00Z","vm":"x","event":"blocked","host":"a.test","port":443,"method":"CONNECT","reason":"not on the allowlist"}

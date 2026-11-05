@@ -80,7 +80,7 @@ project off git
 exec devvm --no-git-protect
 vm_name OFF off
 vm_state $OFF_dir/vm.json
-stdout '^net.on=false$'
+stdout '^net.tier=open$'
 cd $WORK
 
 # --agents: the coding agents new VMs get, without asking; none for none.

@@ -50,6 +50,8 @@ func TestStartConfined(t *testing.T) {
 		Net: backend.NetProxy, ProxyPort: 23456, ProxyPassword: "0123456789abcdef0123456789abcdef",
 		SSHPort: 2222, Env: map[string]string{"NO_PROXY": "localhost"},
 	}
+	open := proxy
+	open.Net = backend.NetDirect
 	for _, tc := range []struct {
 		name, os string
 		c        backend.Confinement
@@ -89,9 +91,30 @@ func TestStartConfined(t *testing.T) {
 			edits: []string{".ssh.localPort=2225", ".propagateProxyEnv=false", noForwardsSet()},
 		},
 		{name: "macOS, unconfined", os: "darwin", c: backend.Confinement{}, edits: []string{noForwardsSet()}},
+		{
+			// Open: unconfined, the proxy on Lima's host address, Lima's
+			// host name past it, and no host proxy settings.
+			name: "macOS, open", os: "darwin", c: open,
+			edits: []string{
+				".ssh.localPort=2222",
+				`.env = {"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","HTTP_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","NO_PROXY":"localhost,host.lima.internal,192.168.5.2","http_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456","https_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456"}`,
+				".propagateProxyEnv=false", noForwardsSet(),
+			},
+		},
+		{
+			// Open on Linux: no wrapper, so no restrict=on, and QEMU's
+			// user-mode network reaches the proxy on host loopback.
+			name: "Linux, open", os: "linux", c: open,
+			edits: []string{
+				".ssh.localPort=2222",
+				`.env = {"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","HTTP_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","NO_PROXY":"localhost,host.lima.internal,192.168.5.2","http_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456","https_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456"}`,
+				".propagateProxyEnv=false", noForwardsSet(),
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			l, f, _ := testLima(t, tc.os)
+			l.Getenv = func(k string) string { return map[string]string{"HTTPS_PROXY": "http://corp.test:8080"}[k] }
 			t.Setenv(GuestFwdEnv, "left over")
 			yaml := stoppedWithYAML(t, l, f)
 			if err := l.start(t.Context(), "v", nil, tc.c); err != nil {
@@ -127,6 +150,11 @@ func TestStartConfined(t *testing.T) {
 			}
 			if fwd, _ := envOf(s, GuestFwdEnv); tc.qemu && fwd != tc.guestfwd {
 				t.Errorf("%s=%q, want %q", GuestFwdEnv, fwd, tc.guestfwd)
+			}
+			// Lima propagates the host's proxy settings only to a VM on its
+			// own network without devvm's proxy.
+			if _, ok := envOf(s, "HTTPS_PROXY"); ok != (tc.c.Net == backend.NetDirect && !tc.c.GuestProxy()) {
+				t.Errorf("limactl start has the host's HTTPS_PROXY: %v", ok)
 			}
 			if r, err := l.Running(t.Context(), "v"); err != nil {
 				t.Fatal(err)
@@ -306,7 +334,7 @@ func checkLimaYAML(t *testing.T, l *Lima, yaml string, c backend.Confinement) {
 		t.Fatal(err)
 	}
 	u := l.ProxyURL(c)
-	if c.Net != backend.NetProxy {
+	if !c.GuestProxy() {
 		if u != "" || string(data) != "cpus: 4\n" {
 			t.Errorf("ProxyURL = %q, lima.yaml:\n%s", u, data)
 		}

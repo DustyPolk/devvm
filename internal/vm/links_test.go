@@ -142,16 +142,16 @@ func TestCheckLink(t *testing.T) {
 		}
 		check("")
 	}
-	if err := set(t, client, KeyNet, "on"); err != nil {
+	if err := set(t, client, KeyNet, "allowlist"); err != nil {
 		t.Fatal(err)
 	}
 	check(LinkPolicy)
-	if err := set(t, target, KeyNet, "on"); err != nil {
+	if err := set(t, target, KeyNet, "allowlist"); err != nil {
 		t.Fatal(err)
 	}
 	check("")
 	// A client without network policy may link to a target with it.
-	if err := set(t, client, KeyNet, "off"); err != nil {
+	if err := set(t, client, KeyNet, "open"); err != nil {
 		t.Fatal(err)
 	}
 	check("")
@@ -167,24 +167,33 @@ func TestCheckLink(t *testing.T) {
 	check(LinkGone)
 }
 
-// Links' policy rule: a client with network policy links only to a target
-// with it, and a VM whose network policy section can't be read is
-// refused on either side, never read as off.
+// Links' tier rule: a client links only to a target on its tier or a
+// stricter one, and a VM whose network policy section can't be read is
+// refused on either side, never read as open.
 func TestPolicyRule(t *testing.T) {
-	on, off, unread := policySide{on: true, ok: true}, policySide{ok: true}, policySide{}
+	side := func(t netpolicy.Tier) policySide { return policySide{tier: t, ok: true} }
+	on, off, unread := side(netpolicy.TierAllowlist), side(netpolicy.TierOpen), policySide{}
+	internet, none := side(netpolicy.TierInternet), side(netpolicy.TierNone)
 	for _, tc := range []struct {
 		name           string
 		client, target policySide
 		holds          bool
 	}{
-		{"both on", on, on, true},
-		{"both off", off, off, true},
-		{"client off", off, on, true},
-		{"target off", on, off, false},
+		{"both allowlist", on, on, true},
+		{"both open", off, off, true},
+		{"client open", off, on, true},
+		{"target open", on, off, false},
+		{"allowlist to none", on, none, true},
+		{"allowlist to internet", on, internet, false},
+		{"internet to allowlist", internet, on, true},
+		{"internet to open", internet, off, false},
+		{"none to allowlist", none, on, false},
+		{"both none", none, none, true},
+		{"open to none", off, none, true},
 		{"client unread", unread, on, false},
-		{"client unread, target off", unread, off, false},
+		{"client unread, target open", unread, off, false},
 		{"target unread", on, unread, false},
-		{"target unread, client off", off, unread, false},
+		{"target unread, client open", off, unread, false},
 	} {
 		if got := policyRule(tc.client, tc.target); got != tc.holds {
 			t.Errorf("%s: %v, want %v", tc.name, got, tc.holds)

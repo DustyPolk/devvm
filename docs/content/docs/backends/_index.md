@@ -33,4 +33,4 @@ The `--json` output of `devvm ls`, `devvm images` and `devvm space` names each V
 
 When a VM needs something its backend can't do, devvm stops and says so in one line, naming the VM and what to do. It never falls back to something weaker, so a VM that asks for network policy never starts with an open network.
 
-Network policy is the one exception, because it's on by default. When a backend can't give a new VM network policy, devvm makes the VM without it and warns you, unless you gave `--network-policy`, which devvm then refuses ([turning it on or off](../safety/network.md#turning-it-on-or-off)).
+That holds for network policy too, though it's on by default. When a backend can't confine a new VM to its proxy, the VM can only be open, so devvm refuses to make it unless you give `--no-network-policy`, and it says so in one line ([network tiers](../safety/network.md#network-tiers)).

@@ -230,7 +230,7 @@ func (e syncer) checkStartLinks(st *state.VM) error {
 
 // stage returns what sync sends; see devvm's guest/sync.sh for each file.
 func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage, error) {
-	vm, names, net := st.Name(), tools.Names(st), netpolicy.On(st)
+	vm, names, net := st.Name(), tools.Names(st), netpolicy.TierOf(st).Confined()
 	slug, files, proxyURL := in.slug, in.files, in.proxyURL
 	if err := checkLinks(vm, slug, in.links); err != nil {
 		return nil, err

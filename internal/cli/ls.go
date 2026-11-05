@@ -136,7 +136,7 @@ func writeList(tab *ui.Table, ls []vm.Listed) error {
 
 // vmStatuses, gitModes and netModes color devvm ls's STATUS, GIT and NET
 // columns: a status other than running or stopped (Broken) is red, and so
-// is a network policy that isn't enforced.
+// is a tier that isn't enforced; a confined tier is green.
 func vmStatuses(s string) ui.Role {
 	switch backend.Status(s) {
 	case backend.StatusRunning:
@@ -158,11 +158,11 @@ func gitModes(s string) ui.Role {
 }
 
 func netModes(s string) ui.Role {
-	switch s {
-	case "on":
-		return ui.Good
-	case netpolicy.CheckUnenforced:
+	switch t := netpolicy.Tier(s); {
+	case s == netpolicy.CheckUnenforced:
 		return ui.Bad
+	case t.Valid() && t.Confined():
+		return ui.Good
 	}
 	return ui.Plain
 }

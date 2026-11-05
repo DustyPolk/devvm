@@ -43,7 +43,7 @@ const (
 )
 
 const (
-	keyNet          = "net"          // netpolicy's On: on or off
+	keyNet          = "net"          // netpolicy's Tier: open, internet, allowlist or none
 	keyCheck        = "net_check"    // netpolicy's Made.Check
 	keyProxyKey     = "proxy_key"    // netpolicy's Made.ProxyKey
 	keySSHPort      = "ssh_port"     // ports' Host.SSH
@@ -106,7 +106,7 @@ func get(st *state.VM, key string) string {
 		if _, ok := sectionRaw(st, netpolicy.Section); !ok {
 			return ""
 		}
-		return yes(n.On, "on") + yes(!n.On, "off")
+		return string(n.Tier)
 	case keyCheck:
 		return n.Made.Check
 	case keyProxyKey:
@@ -266,7 +266,7 @@ func setField(st *state.VM, key, val string) error {
 		if val == "" {
 			return state.SetSection(st, netpolicy.Section, struct{}{})
 		}
-		return np(func(n *netpolicy.Net) { n.On = val == "on" })
+		return np(func(n *netpolicy.Net) { n.Tier = netpolicy.Tier(val) })
 	case keyCheck:
 		return np(func(n *netpolicy.Net) { n.Made.Check = val })
 	case keySSHPort:

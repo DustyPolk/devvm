@@ -122,7 +122,7 @@ If you press Ctrl+C while devvm starts a VM with network policy, devvm stops the
 
 ## The proxy doesn't start
 
-A VM with network policy runs only with its proxy, so when the proxy doesn't start, devvm stops the VM, and the next `devvm` starts both again. When devvm says the proxy didn't start, read the log it names for why. When it says another program took the proxy's port, devvm picks another port the next time it starts the VM, so run `devvm restart`. When the proxy doesn't stop for new settings, run `devvm stop`, then `devvm` ([the proxy](../internals/network.md#the-proxy)).
+A VM with network policy runs only with its proxy, so when the proxy doesn't start, devvm stops the VM, and the next `devvm` starts both again. When devvm says the proxy didn't start, read the log it names for why. When it says another program took the proxy's port, devvm picks another port the next time it starts the VM, so run `devvm restart`. When the proxy doesn't stop for new settings, run `devvm stop`, then `devvm` ([the proxy](../internals/network.md#the-proxy)). An open VM runs on when its proxy doesn't answer it, and devvm warns you, because its tools that use the proxy fail, so run `devvm restart`, which starts both again.
 
 ## A request is blocked
 

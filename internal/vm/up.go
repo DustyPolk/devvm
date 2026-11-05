@@ -174,7 +174,7 @@ type newVM struct {
 	tools []string   // its shared tools
 	size  Size
 	ports string
-	net   bool
+	net   netpolicy.Tier
 	agent string // sshagent.On or Off
 	clone bool   // --clone
 	git   string // its .git protection (gitprotect.Protector.NewMode), or gitprotect.Clone
@@ -438,7 +438,9 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	n.img, n.tools = parts.image(), parts.tools()
 	n.dcGave = fileParts(o, f.Dir, n.dc, def, parts)
 	n.spec = e.machineSpec(b, f, n.tools, o.SSHAgent, n.size, o.Clone)
-	n.net = e.chooseNet(o, b, vm, def.Network.Value)
+	if n.net, err = e.chooseNet(o, b, vm, def.Network.Value); err != nil {
+		return newVM{}, err
+	}
 	if o.SSHAgent {
 		n.agent = sshagent.On
 	}
@@ -449,10 +451,7 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	}
 	// Its ports, which devvm's forwarder forwards from the backend's ssh,
 	// and a clone, copied in and fetched over ssh.
-	need := needs{spec: &n.spec, ports: forward, img: n.img, ssh: o.Clone}
-	if n.net {
-		need.net = backend.NetProxy
-	}
+	need := needs{spec: &n.spec, ports: forward, img: n.img, ssh: o.Clone, net: n.net.Net()}
 	if err := e.Registry.Require(b, vm, requirements(need)...); err != nil {
 		return newVM{}, err
 	}
@@ -480,26 +479,24 @@ func newPorts(given string, def settings.Defaults, dc *devcontainer.Plan) (list 
 	return filePorts(def.Ports.Value, nil, nil, dc.Ports)
 }
 
-// chooseNet returns whether a new VM gets network policy: the flags', else
-// the default's (config.toml's, else devvm network -g's or devvm setup's),
-// else asked for, on by default. A default of off makes the VM without
-// it, unsaid. A VM whose backend b may not confine it to its proxy
-// (egress-proxy) is made without it, unasked and said; --network-policy
-// on such a VM is refused by Require, never dropped.
-func (e creation) chooseNet(o Options, b backend.Backend, vm, saved string) bool {
+// chooseNet returns a new VM's tier: the flags' (--network-policy:
+// allowlist, --no-network-policy: open), else the default's (config.toml's,
+// else devvm network -g's or devvm setup's: on is allowlist, off open),
+// else asked for, allowlist by default. A backend b that may not confine
+// a VM to its proxy (egress-proxy) offers open alone: any other tier is
+// refused in one line (net_tier_backend), unasked, never dropped.
+func (e creation) chooseNet(o Options, b backend.Backend, vm, saved string) (netpolicy.Tier, error) {
 	if o.NetworkPolicy || o.NoNetworkPolicy {
 		saved = settings.NetworkAsk
 	}
+	confines := e.Registry.Allowed(b, backend.FeatureEgressProxy)
 	switch {
 	case o.NoNetworkPolicy, saved == settings.NetworkOff:
-		return false
-	case !o.NetworkPolicy && !e.Registry.Allowed(b, backend.FeatureEgressProxy):
-		e.Warn(msg.NetOffBackend(b.Name(), vm))
-		return false
-	case o.NetworkPolicy:
-		return true
+		return netpolicy.TierOpen, nil
+	case !confines:
+		return "", msg.NetTierBackend(b.Name(), vm)
 	}
-	return e.Proxy.Choose(saved == settings.NetworkOn, false, vm)
+	return e.Proxy.Choose(o.NetworkPolicy || saved == settings.NetworkOn, false, vm), nil
 }
 
 // record sets a new VM's choices in its state, before it's written, with
@@ -510,7 +507,7 @@ func (n newVM) record(st *state.VM, tg tools.Target, files []string) error {
 		forward = ""
 	}
 	for _, err := range []error{
-		netpolicy.Set(st, netpolicy.Net{On: n.net}),
+		netpolicy.Set(st, netpolicy.Net{Tier: n.net}),
 		gitprotect.Set(st, gitprotect.InVM{Mode: n.git}),
 		sshagent.Set(st, sshagent.InVM{Mode: n.agent}),
 		tools.Set(st, tools.InVM{Names: n.tools, Made: tools.Made{Files: files, Libc: tg.Libc, Glibc: tg.Glibc}}),

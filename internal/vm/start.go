@@ -130,30 +130,22 @@ func (s starter) instance(ctx context.Context, t *target, o upOpts) error {
 	return nil
 }
 
-// confinementFor is the confinement a VM starts with, as its state says:
-// on its proxy with network policy, else direct.
+// confinementFor is the confinement a VM starts with, as its tier says
+// (Tier.Net): on its proxy alone on a confined tier, else on its
+// backend's own network, with the proxy set in its environment.
 func confinementFor(st *state.VM) backend.Confinement {
-	if netpolicy.On(st) {
-		return backend.Confinement{Net: backend.NetProxy}
-	}
-	return backend.Confinement{Net: backend.NetDirect}
+	return backend.Confinement{Net: netpolicy.TierOf(st).Net()}
 }
 
-// runningConfinement is the confinement a running VM runs with: its
-// proxy's, made ready (Prepare), when it runs on one, network policy
-// turned off while it ran confined included, as it stays on its proxy,
-// tokens out of it, until it starts again; else direct. A VM with network
-// policy whose proxy can't start is stopped (Unproxied): it never runs on
-// without it. Its agent is the one mode, the choice it runs with
-// (runningAgent), says.
+// runningConfinement is the confinement a running VM runs with, its proxy
+// made ready (Prepare): its proxy's alone when it runs on one, a tier
+// made open while it ran confined included, as it stays on its proxy
+// until it starts again, or its tier is confined; else its backend's own
+// network, with the proxy. A VM whose proxy can't start is stopped
+// (Unproxied): it never runs on without it. Its agent is the one mode,
+// the choice it runs with (runningAgent), says.
 func (s starter) runningConfinement(ctx context.Context, b backend.Backend, st *state.VM, mode string) (backend.Confinement, error) {
 	vm := st.Name()
-	if !netpolicy.On(st) {
-		run, err := b.Running(ctx, vm)
-		if err != nil || !run.Confined {
-			return backend.Confinement{Net: backend.NetDirect, AgentSocket: s.agentSocket(mode)}, err
-		}
-	}
 	c, err := s.Proxy.Prepare(ctx, b, st, true)
 	if err != nil {
 		return c, s.Proxy.Unproxied(ctx, b, vm, err)
@@ -166,7 +158,7 @@ func (s starter) runningConfinement(ctx context.Context, b backend.Backend, st *
 // where it differs from what its state asks for: its size, its SSH agent
 // forwarding, its agent folder mounts (mountsLater: the user didn't
 // restart it), its project folder's mount once the folder moved, and
-// network policy turned off while it ran confined (conf, as it runs).
+// its tier made open while it ran confined (conf, as it runs).
 // It warns of each change by name, then once that devvm restart applies
 // them (next_start).
 func (s starter) nextStart(st *state.VM, in backend.Instance, conf backend.Confinement, mountsLater bool) {
@@ -207,7 +199,7 @@ func nextStartChanges(st *state.VM, in backend.Instance, mountsLater, confined b
 	if in.Project != projectMount(st) {
 		cs = append(cs, msg.NextStartFolder(st.Dir, vm))
 	}
-	if confined && !netpolicy.On(st) {
+	if confined && !netpolicy.TierOf(st).Confined() {
 		cs = append(cs, msg.NextStartNetOff(vm))
 	}
 	return cs
@@ -240,7 +232,7 @@ func (s starter) restartForNextStart(ctx context.Context, t *target, mountsLater
 	}
 	vm := st.Name()
 	confined := false
-	if !netpolicy.On(st) {
+	if !netpolicy.TierOf(st).Confined() {
 		// An error here is runningConfinement's to return.
 		run, err := t.running(ctx)
 		confined = err == nil && run.Confined
@@ -418,12 +410,11 @@ func (s starter) reloadAgent(ctx context.Context, mode string) error {
 
 // start starts a stopped VM confined as conf says (confinementFor), and
 // returns the confinement it got: bringUp's, and the self-check's when it
-// starts the VM again. With network policy its proxy starts first, and
-// the backend gets the proxy's confinement; a start that fails stops the
-// proxy again. Without it, a proxy left from when it had it stops. Its
-// host keys are read again once it runs: a VM whose backend config
-// changed can get new ones when it boots. t is what the start made it
-// once it runs (target.started).
+// starts the VM again. Its proxy starts first, on every tier, and the
+// backend gets the proxy's confinement; a start that fails stops the
+// proxy again. Its host keys are read again once it runs: a VM whose
+// backend config changed can get new ones when it boots. t is what the
+// start made it once it runs (target.started).
 func (s starter) start(ctx context.Context, t *target, conf backend.Confinement) (backend.Confinement, error) {
 	vm, st, b := t.f.Name, t.st, t.b
 	if err := vmssh.ForgetHostKeys(s.Dirs, vm); err != nil {
@@ -448,8 +439,8 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 	if err != nil {
 		return conf, err
 	}
-	// Tools pointed at the CAs devvm adds, with network policy or
-	// without, whether there are any or not.
+	// Tools pointed at the CAs devvm adds, on every tier, whether there
+	// are any or not.
 	conf.Env = trust.GuestEnv(conf.Env)
 	// ssh for editors, where the backend has it (an emulation once it's
 	// reviewed): a VM without it starts all the same.
@@ -466,9 +457,7 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 		AgentForwarding: sshagent.Forwards(mode),
 	}
 	if err := b.Start(ctx, vm, want, conf); err != nil {
-		if conf.Net == backend.NetProxy {
-			s.Proxy.Stop(vm)
-		}
+		s.Proxy.Stop(vm)
 		return conf, err
 	}
 	t.started(want)
@@ -484,29 +473,12 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 	return conf, sshagent.RecordStart(ctx, st, mode, run.ID)
 }
 
-// confine is start's network: with network policy, the proxy's
-// confinement, its proxy started and the VM's links checked, with the
-// agent conf chose; without it, conf, its proxy stopped and its ssh port
-// recorded, so other VMs' forwarders never take it before its backend
-// binds it.
+// confine is start's network: the proxy's confinement for the VM's tier
+// (Prepare), its proxy started, its ssh port recorded, so other VMs'
+// forwarders never take it before its backend binds it, and the VM's
+// links checked, with the agent conf chose.
 func (s starter) confine(ctx context.Context, b backend.Backend, st *state.VM, conf backend.Confinement) (backend.Confinement, error) {
 	vm := st.Name()
-	if conf.Net != backend.NetProxy {
-		// It gets the shell's proxy settings alone: config.toml's
-		// password never goes into a VM.
-		if conf.Net == backend.NetDirect && s.Proxy.Company().ConfigOnly() {
-			s.Warn(msg.ProxyNeedsPolicy(s.Dirs.ConfigFile(), vm))
-		}
-		if err := s.Proxy.Unconfined(ctx, vm); err != nil {
-			return conf, err
-		}
-		sp, err := s.Proxy.Ports().SSH(ctx, st, false)
-		if err != nil {
-			return conf, err
-		}
-		conf.SSHPort = sp
-		return conf, nil
-	}
 	p, err := s.Proxy.Prepare(ctx, b, st, false)
 	if err != nil {
 		return conf, err

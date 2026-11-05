@@ -134,7 +134,7 @@ type Machines interface {
 	// confined, and its lifeline, which a stopped VM has too.
 	Running(ctx context.Context, vm string) (Run, error)
 	// ProxyURL is devvm's proxy as a VM started with c reaches it, its
-	// user and password included; "" unless c.Net is NetProxy.
+	// user and password included; "" unless c names it (GuestProxy).
 	ProxyURL(c Confinement) string
 	// Stop stops a VM. A stopped one is left as it is.
 	Stop(ctx context.Context, vm string) error
@@ -413,9 +413,9 @@ type VMSpec struct {
 	// SSHPort is the host port the VM's ssh is forwarded from, as devvm
 	// records it (Confinement.SSHPort at each start); 0 for none yet.
 	SSHPort int
-	// Env is the guest environment a start without network policy gives
-	// it (Confinement.Env): a backend that keeps it in the VM's config
-	// sets it at create, so the first start changes nothing.
+	// Env is the guest environment every start gives it besides its
+	// proxy's (Confinement.Env): a backend that keeps it in the VM's
+	// config sets it at create.
 	Env map[string]string
 }
 
@@ -441,10 +441,12 @@ type Net int
 
 const (
 	// NetDirect is the backend's own network: the internet and host
-	// loopback, unfiltered. Project VMs without network policy.
+	// loopback, unfiltered. Project VMs on the open tier, whose guest
+	// proxy settings name devvm's proxy (Confinement.ProxyPort set): every
+	// backend reaches a port on host loopback from its own network.
 	NetDirect Net = iota
 	// NetProxy reaches nothing but devvm's proxy on host loopback, which
-	// the guest's proxy settings name. Project VMs with network policy.
+	// the guest's proxy settings name. Project VMs on a confined tier.
 	NetProxy
 	// NetInternet reaches the internet but not host loopback, and has no
 	// port forwards. Image and tool builds.
@@ -456,8 +458,9 @@ const (
 // Confinement is how a VM is started.
 type Confinement struct {
 	Net Net
-	// NetProxy: the port devvm's proxy listens on (host 127.0.0.1), and the
-	// password the guest's proxy settings carry, with ProxyUser (ProxyURL).
+	// NetProxy, and NetDirect with a ProxyPort (GuestProxy): the port
+	// devvm's proxy listens on (host 127.0.0.1), and the password the
+	// guest's proxy settings carry, with ProxyUser (ProxyURL).
 	ProxyPort     int
 	ProxyPassword string
 	// Env is more guest environment, for every login (the proxy's CA
@@ -478,6 +481,13 @@ type Confinement struct {
 	// NoAgent is set when the VM's choice is no agent: a backend whose VM
 	// forwards one anyway (made so, for agent-toggle) gives it none.
 	NoAgent bool
+}
+
+// GuestProxy reports whether the guest's proxy settings name devvm's
+// proxy: NetProxy, or NetDirect with a ProxyPort, an open VM's. A build's
+// NetInternet proxy goes to its scripts on their input instead.
+func (c Confinement) GuestProxy() bool {
+	return c.Net == NetProxy || c.Net == NetDirect && c.ProxyPort != 0
 }
 
 // Status is a VM's state as its backend reports it.

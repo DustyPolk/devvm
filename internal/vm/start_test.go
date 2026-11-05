@@ -100,9 +100,10 @@ func TestStartPaths(t *testing.T) {
 			want: startRun{starts: 1, net: backend.NetProxy, selfChecks: 1, proxy: true},
 		},
 		{
+			// Open: its backend's own network, its proxy running.
 			name: "stopped, no network policy",
 			prep: func(v startVM) { v.stop() },
-			want: startRun{starts: 1, net: backend.NetDirect},
+			want: startRun{starts: 1, net: backend.NetDirect, proxy: true},
 		},
 		{
 			name: "running with its proxy", net: true,
@@ -115,33 +116,45 @@ func TestStartPaths(t *testing.T) {
 		},
 		{
 			name: "running, no network policy",
-			want: startRun{},
+			want: startRun{proxy: true},
+		},
+		{
+			name: "running open, its proxy gone",
+			prep: func(v startVM) { v.e.Proxy.Stop(v.st.Name()) },
+			want: startRun{proxy: true},
 		},
 		{
 			name: "network policy turned off while running", net: true,
-			prep: func(v startVM) { v.set(keyNet, "off") },
+			prep: func(v startVM) { v.set(keyNet, "open") },
 			want: startRun{warned: []string{"next_start_net_off vm=%s", "next_start count=1 vm=%s"}, proxy: true},
 		},
 		{
 			name: "network policy turned off, then stopped", net: true,
-			prep: func(v startVM) { v.set(keyNet, "off"); v.stop() },
-			want: startRun{starts: 1, net: backend.NetDirect},
+			prep: func(v startVM) { v.set(keyNet, "open"); v.stop() },
+			want: startRun{starts: 1, net: backend.NetDirect, proxy: true},
+		},
+		{
+			// A confined tier for another: its proxy's rules at once, and no
+			// restart.
+			name: "allowlist turned none while running", net: true,
+			prep: func(v startVM) { v.set(keyNet, "none") },
+			want: startRun{selfChecks: 1, proxy: true},
 		},
 		{
 			name: "agent turned on while running",
 			prep: func(v startVM) { v.set(keyAgent, sshagent.On) },
-			want: startRun{warned: []string{"next_start_agent vm=%s", "next_start count=1 vm=%s"}},
+			want: startRun{warned: []string{"next_start_agent vm=%s", "next_start count=1 vm=%s"}, proxy: true},
 		},
 		{
 			name: "agent turned on, then stopped",
 			prep: func(v startVM) { v.set(keyAgent, sshagent.On); v.stop() },
-			want: startRun{starts: 1, net: backend.NetDirect},
+			want: startRun{starts: 1, net: backend.NetDirect, proxy: true},
 		},
 		{
 			name: "agent turned on, no agent-toggle",
 			caps: func(c backend.Caps) { c[backend.FeatureAgentToggle] = backend.None },
 			prep: func(v startVM) { v.set(keyAgent, sshagent.On) },
-			want: startRun{err: "backend_lacks backend=fake feature=agent-toggle vm=%s"},
+			want: startRun{err: "backend_lacks backend=fake feature=agent-toggle vm=%s", proxy: true},
 		},
 		{
 			name: "agent forwarding, no agent-forwarding",
@@ -150,7 +163,7 @@ func TestStartPaths(t *testing.T) {
 				v.stop()
 				v.f.Capabilities[backend.FeatureAgentForwarding] = backend.None
 			},
-			want: startRun{err: "backend_lacks backend=fake feature=agent-forwarding vm=%s"},
+			want: startRun{err: "backend_lacks backend=fake feature=agent-forwarding vm=%s", proxy: true},
 		},
 		{
 			name: "network policy, no egress-proxy", net: true,
@@ -164,7 +177,7 @@ func TestStartPaths(t *testing.T) {
 		{
 			name: "ports, no ports-all",
 			prep: func(v startVM) { v.stop(); v.f.Capabilities[backend.FeaturePortsAll] = backend.None },
-			want: startRun{err: "backend_lacks backend=fake feature=ports-all vm=%s"},
+			want: startRun{err: "backend_lacks backend=fake feature=ports-all vm=%s", proxy: true},
 		},
 	} {
 		for _, p := range startPaths() {
@@ -205,7 +218,7 @@ func TestStartNew(t *testing.T) {
 		want startRun
 	}{
 		{"network policy", true, startRun{starts: 1, net: backend.NetProxy, selfChecks: 1, proxy: true}},
-		{"no network policy", false, startRun{starts: 1, net: backend.NetDirect}},
+		{"no network policy", false, startRun{starts: 1, net: backend.NetDirect, proxy: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e, f := startEnv(t, allNative())
@@ -301,7 +314,7 @@ func TestOpenAsksToRestart(t *testing.T) {
 				case "mounts":
 					mkdirs(t, agentStore(e.Dirs, "claude"), ".claude/skills")
 				case "net":
-					v.set(keyNet, "off")
+					v.set(keyNet, "open")
 				}
 			}
 			var asked []string

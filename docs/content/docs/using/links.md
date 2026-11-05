@@ -50,7 +50,7 @@ TARGET takes one of four forms:
 - **A VM's name,** as `devvm ls` lists it.
 - **A VM's ssh alias,** such as `devvm-db`, as you'd give it to ssh ([SSH access by name](ssh.md#ssh-access-by-name)).
 
-devvm refuses a target that has no VM, the client's own VM, and a port that the target doesn't publish. It also refuses a link that [network policy](#links-and-network-policy) doesn't allow. When devvm makes the link, it says what the client reaches it as, and that the link joins the two VMs' trust.
+devvm refuses a target that has no VM, the client's own VM, and a port that the target doesn't publish. It also refuses a link that [the two VMs' tiers](#links-and-network-tiers) don't allow. When devvm makes the link, it says what the client reaches it as, and that the link joins the two VMs' trust.
 
 ### Names
 
@@ -75,13 +75,13 @@ A link stays with the VM it was made for, because devvm records the target VM's 
 
 Code in the client can often run code in the target through the target's own service, such as Postgres's `COPY … TO PROGRAM`. It then has whatever the target has: its network, the secrets it may use and its project folder. devvm doesn't stop that, because it's what the service itself allows. So add a link only between VMs you'd trust with each other's reach, and publish only the ports that you mean other VMs to use. [Network policy](../safety/network.md#links-between-vms) explains what this means for a VM with network policy.
 
-## Links and network policy
+## Links and network tiers
 
-A client with network policy links only to a target with network policy, because a link to a target without it would let the client reach the internet through the target. A client without network policy may link to any target. When devvm can't read whether the client or the target has network policy, because that part of its state was changed by hand, it refuses the link rather than take it as off ([a file devvm can't read](troubleshooting.md#a-file-devvm-cant-read)).
+A client links only to a target on its own [network tier](../safety/network.md#network-tiers) or a stricter one, because a link to a target on a lower tier would let the client reach more through the target. So an allowlist client links to allowlist and none targets, but not to internet or open ones, and an open client may link to any target. When devvm can't read a client's or a target's tier, because that part of its state was changed by hand, it refuses the link rather than take it as open ([a file devvm can't read](troubleshooting.md#a-file-devvm-cant-read)).
 
-devvm checks this rule when you add a link, at each launch of the client and on every connection. On every connection, the target's network policy must also be in force as the target runs. If you turn it on while the target is running, `devvm ls` shows it as `unenforced` until the target starts again behind its proxy, and devvm refuses the client's connections to it until then, so start the target again with `devvm restart` in its folder. devvm also warns you of such a target when you add a link to it, when you publish a port in its folder that the client links to, and each time the client starts. The warning names the target and refuses nothing, and devvm doesn't warn of a stopped target, because its network policy applies when it next starts. While such a link exists, devvm refuses `devvm network off` in the target's folder and names the clients that link to it, and it refuses `devvm network on` for a client that links to a VM without network policy. Remove those links with `devvm link rm` first, or turn on network policy for the target.
+devvm checks this rule when you add a link, at each launch of the client and on every connection. For a client on a confined tier, on every connection the target's tier must also be in force as the target runs. If you turn network policy on while the target is running, `devvm ls` shows it as `unenforced` until the target starts again behind its proxy, and devvm refuses the client's connections to it until then, so start the target again with `devvm restart` in its folder. devvm also warns you of such a target when you add a link to it, when you publish a port in its folder that the client links to, and each time the client starts. The warning names the target and refuses nothing, and devvm doesn't warn of a stopped target, because its tier applies when it next starts. While such a link exists, devvm refuses to give the target a tier lower than a client's, such as `devvm network off` in its folder, and names the clients that link to it, and it refuses to give the client a tier higher than a target's, such as `devvm network on` for a client that links to an open VM. Remove those links with `devvm link rm` first, or give the target the client's tier.
 
-With network policy, a program that uses the VM's proxy settings, such as curl, sends its requests for a link to the VM's proxy, and the proxy carries a request for one of the link's names and its port, such as `db:5432` or `db.devvm.internal:5432`, to the link. Other programs reach the link by its name, as they do in a VM without network policy. The proxy passes a link's connection on as it is, so it doesn't look into it and puts none of your secrets into it.
+Every VM has its proxy, so a program that uses the VM's proxy settings, such as curl, sends its requests for a link to the VM's proxy, and the proxy carries a request for one of the link's names and its port, such as `db:5432` or `db.devvm.internal:5432`, to the link. Other programs reach the link by its name directly. The proxy passes a link's connection on as it is, so it doesn't look into it and puts none of your secrets into it.
 
 Network policy's rules don't apply to links. The allowlist doesn't allow or block a link's connections, and `devvm network deny db` doesn't stop the link `db`. The rule above and the published ports decide which connections a link carries, and `devvm network log` shows them ([the link log](#the-link-log)). To stop a link, remove it with `devvm link rm`, or unpublish its port in the target's folder.
 
@@ -214,11 +214,11 @@ The group's other VMs reach a VM by its folder name, as VM names have it, unless
 
 A group joins the trust of every VM in it, as [a link joins the two VMs' trust](#a-link-joins-the-two-vms-trust), because code in any of them can often run code in the others through the ports they publish. A VM that joins later gets the same reach into every VM in the group, and they get the same reach into it, so devvm says so on every join. Put VMs in a group only when you'd trust each of them with the others' reach.
 
-### Groups and network policy
+### Groups and network tiers
 
-A group's VMs all have network policy or none do. devvm refuses to put a VM with network policy in a group whose VMs have none, and a VM without network policy in a group whose VMs have it. It checks joins one at a time, so when two VMs join a group at once, the second is checked against the first, and a devvm that waits for another says so. While a VM is in a group, devvm refuses `devvm network on` and `devvm network off` in its folder, so run `devvm group leave` first.
+A group's VMs are all on one tier. devvm refuses to put a VM in a group whose VMs are on another tier, and it names both tiers. It checks joins one at a time, so when two VMs join a group at once, the second is checked against the first, and a devvm that waits for another says so. While a VM is in a group, devvm refuses to change its tier, `devvm network on` and `devvm network off` included, so run `devvm group leave` first.
 
-Because every VM in a group with network policy has it, the group's links keep [the rule](#links-and-network-policy) that a client with network policy links only to a target with network policy. Each of their connections is still refused while the target's network policy isn't in force as it runs, and devvm warns you of such a target when the group makes a link to it.
+Because every VM in a group is on one tier, the group's links keep [the rule](#links-and-network-tiers) that a client links only to a target on its tier or a stricter one. Each of their connections is still refused while the target's tier isn't in force as it runs, and devvm warns you of such a target when the group makes a link to it.
 
 ### Leaving a group
 
@@ -258,6 +258,6 @@ A container that the [docker layer](images.md#built-in-layers) runs in the clien
 2026-11-01T10:05:00Z  REFUSED  db:5432  to devvm-db-71a99b1076d92c: it isn't running
 ```
 
-When the client has network policy and the target's isn't in force yet, the line says `unenforced`, as [Links and network policy](#links-and-network-policy) describes.
+When the client is on a confined tier and the target's isn't in force yet, the line says `unenforced`, as [Links and network tiers](#links-and-network-tiers) describes.
 
 A client has at most 256 of its links' connections carried at once, and devvm refuses and logs the next one. [devvm network log --json](../safety/network.md#devvm-network-log---json) describes the events in JSON.

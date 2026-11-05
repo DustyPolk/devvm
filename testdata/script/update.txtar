@@ -87,7 +87,7 @@ stdout 'tar -czf - --one-file-system.*\n(.*\n)*limactl stop devvm-web-[0-9a-f]{1
 vm_state $WEB_dir/vm.json
 stdout '^image=foo$'
 stdout '^ports.forward=3000$'
-stdout '^net.on=false$'
+stdout '^net.tier=open$'
 stdout '^tools.names=claude$'
 ! stdout '^remake'
 grep '^example\.com$' $WEB_dir/policy

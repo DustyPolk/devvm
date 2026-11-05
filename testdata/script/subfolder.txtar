@@ -122,7 +122,8 @@ exec devvm network deny bad.example.com
 stdout 'rule_added'
 ! exec devvm network rm '!bad.example.com'
 stderr '^devvm: widen_parent_vm_refused cmd=devvm network rm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}$'
-exec devvm network
+vm_name APP app
+exec cat $APP_dir/policy
 stdout '!bad.example.com'
 ! stdout '^example.com'
 

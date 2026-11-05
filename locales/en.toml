@@ -215,9 +215,9 @@ other = "Lima can't mount {{.path}} because its path has a comma."
 [ports_forward_failed]
 other = "Forwarding {{.vm}}'s ports didn't start. Check {{.log}} for the reason."
 
-[net_off_backend]
+[net_tier_backend]
 description = "backend is a backend's name (lima)"
-other = "{{.vm}} gets no network policy, because the {{.backend}} backend can't confine it to its proxy here."
+other = "The {{.backend}} backend can't confine {{.vm}} to its proxy here, so the VM can only be open. Make it with --no-network-policy."
 
 [disk_low]
 description = "free and need are sizes in GiB; name is the image, shared tools or VM being made"
@@ -1247,8 +1247,9 @@ other = "{{.vm}} is this folder's VM, and a VM can't link to itself. Programs in
 [link_not_published]
 other = "{{.vm}} doesn't publish port {{.port}}. Run devvm link publish {{.port}} in its folder first."
 
-[link_policy_mismatch]
-other = "{{.vm}} has network policy and {{.target}} doesn't, so a link would let {{.vm}} reach the internet through it. Turn on network policy for {{.target}} with devvm network on in its folder first."
+[link_tier_mismatch]
+description = "tier and target_tier are the network tiers of vm, the link's client, and of target"
+other = "{{.vm}} is on the {{.tier}} tier and {{.target}} on {{.target_tier}}, a lower one, so a link would let {{.vm}} reach more through it. Give {{.target}} the {{.tier}} tier or a stricter one first."
 
 [link_name_invalid]
 description = "name is quoted, as given"
@@ -1312,13 +1313,13 @@ other = "{{.vms}} have no links to {{.vm}} any more."
 description = "the reason follows"
 other = "Updating {{.vm}}'s links failed, so it gets them when it next starts."
 
-[network_off_linked]
-description = "vms lists the VMs with network policy that link to vm, comma-separated"
-other = "{{.vms}} have network policy and link to {{.vm}}, so it keeps its network policy. Remove those links with devvm link rm in their folders first."
+[tier_linked_clients]
+description = "vms lists the VMs on a stricter tier than tier that link to vm, comma-separated"
+other = "{{.vms}} link to {{.vm}} from a stricter tier than {{.tier}}, so it keeps its tier. Remove those links with devvm link rm in their folders first."
 
-[network_on_linked]
-description = "targets lists the VMs without network policy that vm links to, comma-separated"
-other = "{{.vm}} links to {{.targets}}, which have no network policy, so it can't have network policy either. Remove those links with devvm link rm first, or turn on network policy for each of them."
+[tier_linked_targets]
+description = "targets lists the VMs on a lower tier than tier that vm links to, comma-separated"
+other = "{{.vm}} links to {{.targets}}, on a lower tier than {{.tier}}, so it can't have that tier. Remove those links with devvm link rm first, or give each of them that tier or a stricter one."
 
 [port_not_published]
 other = "{{.port}} isn't published. The published ports are {{.ports}}."
@@ -1358,14 +1359,12 @@ other = "{{.vm}} is in the group {{.group}} already, as {{.name}}. To give it an
 [group_trust]
 other = "The group {{.group}} joins the trust of all its VMs. Code in any of them can often run code in the others through the ports they publish, and then has whatever that VM has."
 
-[group_policy_on]
-other = "The VMs in the group {{.group}} have network policy and {{.vm}} doesn't, and a group's VMs all have it or none do. Turn it on with devvm network on first, or join another group."
+[group_tier_mismatch]
+description = "tier is the tier of a VM in the group; vm_tier is vm's"
+other = "The group {{.group}} has a VM on the {{.tier}} tier and {{.vm}} is on {{.vm_tier}}, and a group's VMs are all on one tier. Give {{.vm}} the group's tier first, or join another group."
 
-[group_policy_off]
-other = "The VMs in the group {{.group}} have no network policy and {{.vm}} has it, and a group's VMs all have it or none do. Join a group whose VMs have network policy instead."
-
-[group_policy_mixed]
-other = "{{.vm}} is in the group {{.group}}, whose VMs all have network policy or none do, so its network policy can't change. Run devvm group leave first."
+[group_tier_fixed]
+other = "{{.vm}} is in the group {{.group}}, whose VMs are all on one tier, so its tier can't change. Run devvm group leave first."
 
 [group_name_taken]
 description = "name is the name this VM would join as; member is the VM in the group that has it, as its name or its folder's"
@@ -1499,16 +1498,23 @@ other = "{{.vm}} wasn't started confined to its proxy, so its network policy isn
 other = "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
 
 [net_on_old_tokens]
-other = "The secrets {{.vm}} got while network policy was off still work wherever it kept them. Rotate them if that matters."
+other = "The secrets {{.vm}} got while it was open still work wherever it kept them. Rotate them if that matters."
 
-[net_off_log]
-other = "Network policy is off for {{.vm}}, so devvm logs only the connections of its links to your other VMs. To log the rest of its traffic, run devvm network on."
+[net_open_log]
+other = "{{.vm}} is open, so devvm logs only what goes through its proxy, not what it reaches directly."
 
 [log_empty]
 other = "{{.vm}}'s network log is empty so far."
 
-[net_off_policy]
-other = "Network policy is off for {{.vm}}, so its rules don't apply. To turn it on, run devvm network on."
+[net_open_policy]
+other = "{{.vm}} is open, so no rule applies to it. To have its rules apply, run devvm network on."
+
+[net_allows_unused]
+description = "tier is the VM's network tier: internet or none"
+other = "{{.vm}} is on the {{.tier}} tier, where only your denies apply, so this allow changes nothing until it's on the allowlist tier."
+
+[net_proxy_unreachable]
+other = "{{.vm}}'s proxy doesn't answer it, so its tools that use the proxy fail. To start both again, run devvm restart."
 
 [net_default_failed]
 description = "reason is an error from the system, in English"
@@ -1625,9 +1631,6 @@ other = "{{.key}} holds a password, and config.toml never keeps one. Leave only 
 [proxy_password_missing]
 other = "config.toml's proxy names a user, and no password for it is saved. Save it with devvm secret set proxy."
 
-[proxy_needs_policy]
-description = "file is config.toml's path"
-other = "{{.vm_name}} has no network policy, so it doesn't go through the company proxy in {{.file}}. Turn network policy on with devvm network on, or set HTTPS_PROXY in the shell that starts it."
 
 [upstream_proxy_gone]
 description = "file is config.toml's path"
@@ -2130,7 +2133,7 @@ other = "{{.vm}}'s SSH agent forwarding changes only when it starts."
 other = "{{.vm}}'s agent folder mounts change only when it starts."
 
 [next_start_net_off]
-other = "{{.vm}}'s network policy turns off only when it starts."
+other = "{{.vm}} leaves its proxy's confinement for the open tier only when it starts."
 
 [next_start_folder]
 description = "dir is vm's project folder, which moved there"
@@ -2275,7 +2278,7 @@ other = "{{.vm}} doesn't use the {{.secret}} secret any more."
 other = "{{.vm}} has Claude Code, so the VM always uses the Claude Code token. To stop it, run devvm tools rm claude."
 
 [secret_unuse_copied]
-other = "Network policy is off for {{.vm}}, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."
+other = "{{.vm}} is open, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."
 
 [codex_login_kept]
 description = "keys lists auth.json's top-level keys, comma-separated"

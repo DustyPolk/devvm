@@ -26,6 +26,9 @@ import (
 // /etc/hosts reaches it too.
 const limaHost = "192.168.5.2"
 
+// limaHostName is limaHost's name in every Lima guest.
+const limaHostName = "host.lima.internal"
+
 // haPIDFile is the pid file of the VM's hostagent, in Lima's own folder
 // for it.
 func (l *Lima) haPIDFile(vm string) string { return filepath.Join(l.Dirs.LimaVM(vm), "ha.pid") }
@@ -160,9 +163,10 @@ func (l *machines) confine(vm string, c backend.Confinement, sshPort int, forwar
 	if agent != "" {
 		env = append(env, "SSH_AUTH_SOCK="+agent)
 	}
-	// A VM on Lima's own network gets the host's proxy settings from Lima
-	// (propagateProxyEnv), which limactl otherwise runs without.
-	if c.Net == backend.NetDirect {
+	// A VM on Lima's own network without devvm's proxy gets the host's
+	// proxy settings from Lima (propagateProxyEnv), which limactl
+	// otherwise runs without.
+	if c.Net == backend.NetDirect && !c.GuestProxy() {
 		for _, k := range backend.ClientProxyVars() {
 			if v := l.Getenv(k); v != "" {
 				env = append(env, k+"="+v)
@@ -174,6 +178,9 @@ func (l *machines) confine(vm string, c backend.Confinement, sshPort int, forwar
 		p := profile{LimaDir: l.Dirs.LimaVM(vm), SSHPort: sshPort}
 		switch c.Net {
 		case backend.NetDirect:
+			// Unconfined, an open VM's included: no profile. Its guest
+			// reaches devvm's proxy on host loopback as Lima's network has
+			// it (proxyURL).
 			return nil, env, nil
 		case backend.NetProxy:
 			p.ProxyPort, p.NoBinds = c.ProxyPort, true
@@ -194,7 +201,9 @@ func (l *machines) confine(vm string, c backend.Confinement, sshPort int, forwar
 	case "linux":
 		switch c.Net {
 		case backend.NetDirect, backend.NetInternet:
-			// QEMU can't keep the internet and drop host loopback.
+			// QEMU can't keep the internet and drop host loopback. An open
+			// VM's guest reaches devvm's proxy as host loopback, without
+			// the wrapper (proxyURL).
 			return nil, env, nil
 		case backend.NetProxy, backend.NetNone:
 		}
@@ -262,15 +271,16 @@ func (l *machines) startSets(cfg *config, c backend.Confinement, sshPort int) (o
 			stand := c
 			stand.ProxyPassword = passwordStandIn
 			sets = append(sets, ".env = "+yqJSON(l.guestEnv(stand)))
-			fill = proxy
+			fill = c.GuestProxy()
 		}
 	}
-	// The host's own proxy settings only for a VM on Lima's own network:
-	// Lima writes them into the guest's /etc/environment, which a build
-	// VM's image would keep, password and all (its scripts get them on
-	// their input instead: buildproxy.go), and a VM with network policy
-	// goes through devvm's proxy.
-	direct := c.Net == backend.NetDirect
+	// The host's own proxy settings only for a VM on Lima's own network
+	// without devvm's proxy: Lima writes them into the guest's
+	// /etc/environment, which a build VM's image would keep, password and
+	// all (its scripts get them on their input instead: buildproxy.go),
+	// and a project VM goes through devvm's proxy, which goes through the
+	// company proxy itself.
+	direct := c.Net == backend.NetDirect && !c.GuestProxy()
 	propagates := cfg.PropagateProxyEnv == nil || *cfg.PropagateProxyEnv
 	if !direct && propagates {
 		sets = append(sets, ".propagateProxyEnv=false")
@@ -305,17 +315,28 @@ func (l *machines) startSets(cfg *config, c backend.Confinement, sshPort int) (o
 	return opts, fill
 }
 
-// guestEnv is the VM's guest environment as c has it: c.Env, and for
-// NetProxy the proxy's address.
+// guestEnv is the VM's guest environment as c has it: c.Env, and where
+// the guest's proxy settings name devvm's proxy (GuestProxy), its
+// address. An open VM reaches this machine as Lima's network has it
+// (host.lima.internal) without the proxy, which can't resolve that name:
+// its NO_PROXY names it.
 func (l *machines) guestEnv(c backend.Confinement) map[string]string {
 	env := maps.Clone(c.Env)
 	if env == nil {
 		env = map[string]string{}
 	}
-	if c.Net == backend.NetProxy {
-		u := l.proxyURL(c)
-		for _, k := range backend.GuestProxyVars() {
-			env[k] = u
+	if !c.GuestProxy() {
+		return env
+	}
+	u := l.proxyURL(c)
+	for _, k := range backend.GuestProxyVars() {
+		env[k] = u
+	}
+	if c.Net == backend.NetDirect {
+		for _, k := range []string{"NO_PROXY", "no_proxy"} {
+			if v, ok := env[k]; ok {
+				env[k] = v + "," + limaHostName + "," + limaHost
+			}
 		}
 	}
 	return env
@@ -345,10 +366,12 @@ func (l *machines) fillPassword(vm string, c backend.Confinement) error {
 }
 
 // proxyURL is devvm's proxy as the guest reaches it, with the VM's
-// password: on macOS the host's address on Lima's network and the proxy's
-// own port, on Linux QEMU's guestfwd address.
+// password: the host's address on Lima's network and the proxy's own port
+// on macOS, and for an open VM (NetDirect), whose user-mode network
+// reaches host loopback there on Linux too; else on Linux QEMU's guestfwd
+// address.
 func (l *machines) proxyURL(c backend.Confinement) string {
-	if l.OS == "darwin" {
+	if l.OS == "darwin" || c.Net == backend.NetDirect {
 		return backend.ProxyURL(limaHost, c.ProxyPort, c.ProxyPassword)
 	}
 	return backend.ProxyURL(guestFwdHost, guestFwdPort, c.ProxyPassword)
@@ -405,7 +428,7 @@ func (l *machines) Running(_ context.Context, vm string) (backend.Run, error) {
 
 // ProxyURL is devvm's proxy as a VM started with c reaches it.
 func (l *machines) ProxyURL(c backend.Confinement) string {
-	if c.Net != backend.NetProxy {
+	if !c.GuestProxy() {
 		return ""
 	}
 	return l.proxyURL(c)

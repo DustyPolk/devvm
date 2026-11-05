@@ -18,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -83,10 +84,10 @@ func TestGuestLinks(t *testing.T) {
 	}
 }
 
-// Turning network policy off for a target that clients with it link to,
-// or on for a client linked to a target without it, is refused; links to
-// a VM that's gone or was made again don't count.
-func TestPolicyLinked(t *testing.T) {
+// A tier lower than a linked client's for a target, or higher than a
+// linked target's for a client, is refused; links to a VM that's gone or
+// was made again don't count.
+func TestTierLinked(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
 	vms := linkVMs(t, d, "app", "web", "db")
 	app, web, db := vms[0], vms[1], vms[2]
@@ -95,26 +96,30 @@ func TestPolicyLinked(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	check := func(st *state.VM, on bool, want string) {
+	check := func(st *state.VM, to netpolicy.Tier, want string) {
 		t.Helper()
-		if got := msg.NamesOf(policyLinked(d, st, on)); got != want {
-			t.Errorf("policyLinked(%s, %v) = %q, want %q", st.Name(), on, got, want)
+		if got := msg.NamesOf(tierLinked(d, st, to)); got != want {
+			t.Errorf("tierLinked(%s, %s) = %q, want %q", st.Name(), to, got, want)
 		}
 	}
-	check(db, false, "")
-	check(app, true, "network_on_linked targets="+db.Name()+" vm="+app.Name())
+	check(db, netpolicy.TierOpen, "")
+	check(app, netpolicy.TierAllowlist, "tier_linked_targets targets="+db.Name()+" tier=allowlist vm="+app.Name())
 	setNet(t, db, "on")
-	check(app, true, "")
+	check(app, netpolicy.TierAllowlist, "")
+	check(app, netpolicy.TierInternet, "")
+	check(app, netpolicy.TierNone, "tier_linked_targets targets="+db.Name()+" tier=none vm="+app.Name())
 	setNet(t, app, "on")
 	setNet(t, web, "on")
-	check(db, false, "network_off_linked vm="+db.Name()+" vms="+app.Name()+", "+web.Name())
+	check(db, netpolicy.TierNone, "")
+	check(db, netpolicy.TierOpen, "tier_linked_clients tier=open vm="+db.Name()+" vms="+app.Name()+", "+web.Name())
+	check(db, netpolicy.TierInternet, "tier_linked_clients tier=internet vm="+db.Name()+" vms="+app.Name()+", "+web.Name())
 	setNet(t, web, "off")
-	check(db, false, "network_off_linked vm="+db.Name()+" vms="+app.Name())
+	check(db, netpolicy.TierOpen, "tier_linked_clients tier=open vm="+db.Name()+" vms="+app.Name())
 	// db made again: app's link is to the one before.
 	db = vmState(t, d, db.Name(), withNet(false))
-	check(db, false, "")
+	check(db, netpolicy.TierOpen, "")
 	setNet(t, app, "off")
-	check(app, true, "")
+	check(app, netpolicy.TierAllowlist, "")
 }
 
 // A target's removal takes the links to it out of every client's state,
@@ -373,7 +378,7 @@ func TestLinksAtLaunch(t *testing.T) {
 	}
 	want := []string{
 		"link_target_stopped target=" + db.Name() + " vm=" + app.Name(),
-		"link_policy_mismatch target=" + web.Name() + " vm=" + app.Name(),
+		"link_tier_mismatch target=" + web.Name() + " target_tier=open tier=allowlist vm=" + app.Name(),
 	}
 	if !slices.Equal(warned.Names(), want) {
 		t.Errorf("warned %q, want %q", warned.Names(), want)
@@ -390,7 +395,7 @@ func TestLinksAtLaunch(t *testing.T) {
 	}
 	want = []string{
 		"link_target_unenforced target=" + db.Name() + " vm=" + app.Name(),
-		"link_policy_mismatch target=" + web.Name() + " vm=" + app.Name(),
+		"link_tier_mismatch target=" + web.Name() + " target_tier=open tier=allowlist vm=" + app.Name(),
 	}
 	if !slices.Equal(warned.Names(), want) {
 		t.Errorf("unenforced: warned %q, want %q", warned.Names(), want)

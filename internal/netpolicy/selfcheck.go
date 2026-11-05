@@ -19,8 +19,17 @@ const (
 // past its proxy settings: it must fail.
 var directArgv = []string{"curl", "--noproxy", "*", "-sS", "-m", "3", "-o", "/dev/null", "https://1.1.1.1"}
 
-// SelfCheck checks, after a VM with network policy starts, that its policy
-// is enforced: on the host, that the VM runs on the process its backend
+// proxyArgv asks the VM's proxy for its blocks, through the proxy its
+// guest environment names (HTTPS_PROXY, from /etc/environment, which a
+// command run in the VM may not have read): it fails when the VM has no
+// proxy set, or its proxy doesn't answer it. The password stays in the
+// VM: the command names the variable, not its value.
+var proxyArgv = []string{"sh", "-c", `set -a; . /etc/environment 2>/dev/null; set +a; ` +
+	`[ -n "${HTTPS_PROXY:-}" ] && curl -sSf -m 3 -o /dev/null --proxy "$HTTPS_PROXY" http://devvm.proxy/blocked`}
+
+// SelfCheck checks, after a VM starts, that its tier holds. An open VM's
+// proxy is set in the VM and answers it (checkOpen). On a confined tier,
+// it checks that its policy is enforced: on the host, that the VM runs on the process its backend
 // started confined (Confined), then that a direct connection from the VM
 // fails (the VM answers that one, so it only catches the honest case). The
 // result goes in the VM's state.
@@ -34,10 +43,11 @@ var directArgv = []string{"curl", "--noproxy", "*", "-sS", "-m", "3", "-o", "/de
 // left reaching the internet. A restart declined is warned about, and the
 // VM is used as it is.
 func (p *Proxy) SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, restart func(context.Context) error) error {
-	if !On(st) {
+	vm := st.Name()
+	if !TierOf(st).Confined() {
+		p.checkOpen(ctx, b, vm)
 		return nil
 	}
-	vm := st.Name()
 	ok, err := enforced(ctx, b, vm)
 	if err != nil {
 		return err
@@ -77,6 +87,16 @@ func (p *Proxy) SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, 
 	return setCheck(ctx, st, CheckOK)
 }
 
+// checkOpen is an open VM's self-check: its proxy is set in the VM and
+// answers it (proxyArgv). An open VM isn't confined, so one whose proxy
+// doesn't answer it reaches what it reaches all the same, but its tools
+// that use the proxy fail: a warning, and the VM is used as it is.
+func (p *Proxy) checkOpen(ctx context.Context, b backend.Backend, vm string) {
+	if err := b.Exec(ctx, vm, proxyArgv, backend.ExecOpts{}); err != nil && ctx.Err() == nil {
+		p.Warn(msg.NetProxyUnreachable(vm))
+	}
+}
+
 // setCheck records the self-check's result in the VM's state.
 func setCheck(ctx context.Context, st *state.VM, result string) error {
 	return st.Update(ctx, func(st *state.VM) error {
@@ -89,8 +109,8 @@ func setCheck(ctx context.Context, st *state.VM, result string) error {
 	})
 }
 
-// Listed is a VM's network policy as devvm ls shows it: off, on, or
-// unenforced: on, but the last self-check failed, or the VM runs but not
+// Listed is a VM's tier as devvm ls shows it: its name, or unenforced: a
+// confined tier, but the last self-check failed, or the VM runs but not
 // confined (started some other way since). A stopped VM starts confined
 // next time, unless that self-check failed. "" when its creation didn't
 // finish.
@@ -101,12 +121,12 @@ func Listed(ctx context.Context, b backend.Backend, st *state.VM, running bool) 
 		return "", err
 	case !st.Finished():
 		return "", nil
-	case !n.On:
-		return "off", nil
+	case !n.Tier.Confined():
+		return string(n.Tier), nil
 	case n.Made.Check == CheckUnenforced:
 		return CheckUnenforced, nil
 	case !running:
-		return "on", nil
+		return string(n.Tier), nil
 	}
 	run, err := b.Running(ctx, st.Name())
 	if err != nil {
@@ -115,7 +135,7 @@ func Listed(ctx context.Context, b backend.Backend, st *state.VM, running bool) 
 	if !run.Confined {
 		return CheckUnenforced, nil
 	}
-	return "on", nil
+	return string(n.Tier), nil
 }
 
 // enforced reports whether the VM runs confined and can't connect out

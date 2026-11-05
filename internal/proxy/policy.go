@@ -16,9 +16,10 @@ import (
 //
 //	example.com       exactly that host
 //	*.example.com     any subdomain, at any depth (not example.com itself)
-//	**                any host
+//	**                any host, or address (the floor still refuses internal ones)
 //	10.0.0.5, 10.0.0.0/8, fd00::/8   addresses (also needed to reach private ranges, see floor)
 //	…:22              only that port; without a port, 443 and 80
+//	…:*               any port
 //	!rule             deny; a deny beats any allow
 //
 // Matching is case-insensitive.
@@ -27,8 +28,11 @@ type rule struct {
 	deny   bool
 	host   string       // "", "**", "*.example.com" or "example.com"
 	prefix netip.Prefix // for address rules
-	port   int          // 0: 443 and 80
+	port   int          // 0: 443 and 80; anyPort: every port
 }
+
+// anyPort is a rule's port for :*, every port.
+const anyPort = -1
 
 // parseRule reads one rule, strictly: s is the whole rule, without a comment or spaces. It
 // refuses anything that wouldn't match as written: a port that isn't 1 to 65535 in digits, a host
@@ -82,7 +86,8 @@ func parseRule(s string) (rule, bool) {
 }
 
 // cutPort takes a rule's port off: host:port, 1.2.3.4:port, [v6]:port or cidr:port, the port 1 to
-// 65535 in digits. Without one, the rule is as it was and the port 0. false: a port that isn't one.
+// 65535 in digits, or * for every port (anyPort). Without one, the rule is as it was and the port
+// 0. false: a port that isn't one.
 func cutPort(s string) (string, int, bool) {
 	h, p, err := net.SplitHostPort(s)
 	if err == nil && strings.HasPrefix(s, "[") {
@@ -97,6 +102,9 @@ func cutPort(s string) (string, int, bool) {
 		}
 		h, p = s[:i], s[i+1:]
 	}
+	if p == "*" {
+		return h, anyPort, true
+	}
 	n, err := strconv.Atoi(p)
 	if err != nil || strings.Trim(p, "0123456789") != "" || n < 1 || n > 65535 {
 		return "", 0, false
@@ -106,8 +114,8 @@ func cutPort(s string) (string, int, bool) {
 
 // ValidRule reports whether s is one rule, as devvm network allow writes it
 // and the proxy takes it from a policy file's line: a host name, *.name, **
-// or an address or CIDR (no zone), optionally with a port and a leading !,
-// and no spaces or comment. AllowRule's rules are valid.
+// or an address or CIDR (no zone), optionally with a port (or :* for any)
+// and a leading !, and no spaces or comment. AllowRule's rules are valid.
 func ValidRule(s string) bool {
 	_, ok := parseRule(s)
 	return ok
@@ -149,8 +157,11 @@ func parsePolicy(text string) ([]PolicyLine, []rule) {
 }
 
 func (r rule) portOK(port int) bool {
-	if r.port == 0 {
+	switch r.port {
+	case 0:
 		return port == 443 || port == 80
+	case anyPort:
+		return port >= 1 && port <= 65535
 	}
 	return r.port == port
 }
@@ -190,6 +201,9 @@ type policy struct {
 	// builtin is the built-in policies' rules (readBuiltins), ahead of the files'.
 	builtin []rule
 	files   []*watched[policyFile]
+	// open allows every host and address on every port, the floor's included: no rule applies
+	// (Config.Open).
+	open bool
 }
 
 // policyFile is what one policy file holds.
@@ -203,18 +217,24 @@ type policyFile struct {
 // PolicyMax bounds a policy file that the proxy, devvm network and devvm doctor read.
 const PolicyMax = 1 << 20
 
-// newPolicy is the policy of builtin and files, logging to l, the proxy's own log, what was
-// read and what was skipped.
-func newPolicy(builtin []rule, files []string, l *log.Logger) *policy {
+// newPolicy is the policy of builtin, files and denies, whose denies alone apply, logging to l,
+// the proxy's own log, what was read and what was skipped.
+func newPolicy(builtin []rule, files, denies []string, l *log.Logger) *policy {
 	p := &policy{builtin: builtin}
-	for _, f := range files {
+	add := func(f string, deniesOnly bool) {
 		p.files = append(p.files, &watched[policyFile]{
 			// A FIFO or a device there (a link to /dev/zero) is refused, not read (ReadRegular).
 			path: f, follow: true, keep: true,
 			read:   func(path string) ([]byte, error) { return ReadRegular(path, PolicyMax) },
-			parse:  func(b []byte) (policyFile, error) { return loadPolicy(f, string(b), l), nil },
+			parse:  func(b []byte) (policyFile, error) { return loadPolicy(f, string(b), deniesOnly, l), nil },
 			onFail: func(err error) { l.Printf("policy %v; its last rules kept", err) },
 		})
+	}
+	for _, f := range files {
+		add(f, false)
+	}
+	for _, f := range denies {
+		add(f, true)
 	}
 	return p
 }
@@ -264,10 +284,13 @@ func (p *policy) all() ([]rule, string) {
 	return out, why
 }
 
-// loadPolicy is file f's rules from its text b, logging to l each line that isn't a rule and
-// noting the first broken deny.
-func loadPolicy(f, b string, l *log.Logger) policyFile {
+// loadPolicy is file f's rules from its text b, its denies alone with deniesOnly, logging to l
+// each line that isn't a rule and noting the first broken deny.
+func loadPolicy(f, b string, deniesOnly bool, l *log.Logger) policyFile {
 	lines, rs := parsePolicy(b)
+	if deniesOnly {
+		rs = slices.DeleteFunc(rs, func(r rule) bool { return !r.deny })
+	}
 	pf := policyFile{rules: rs}
 	for _, line := range lines {
 		switch {
@@ -284,6 +307,9 @@ func loadPolicy(f, b string, l *log.Logger) policyFile {
 	return pf
 }
 
+// openRule is what an open policy logs as the rule that allowed a request.
+const openRule = "open"
+
 // decide whether host:port may be reached. host is a name or an address literal. It returns the
 // matching rule's text, or why not.
 func (p *policy) decide(host string, port int) (bool, string) {
@@ -293,6 +319,9 @@ func (p *policy) decide(host string, port int) (bool, string) {
 
 // verdict is decide, and whether a refusal is one no allow rule would lift: a broken deny's.
 func (p *policy) verdict(host string, port int) (bool, string, bool) {
+	if p.open {
+		return true, openRule, false
+	}
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	rs, broken := p.all()
 	if broken != "" {
@@ -305,7 +334,9 @@ func (p *policy) verdict(host string, port int) (bool, string, bool) {
 			return false
 		}
 		if isAddr {
-			return r.matchAddr(addr)
+			// ** is any host, an address too; the floor still refuses an
+			// internal one that no address rule names (addrAllowed).
+			return r.matchAddr(addr) || r.host == "**"
 		}
 		return r.matchHost(host)
 	}
@@ -325,6 +356,9 @@ func (p *policy) verdict(host string, port int) (bool, string, bool) {
 // byName: an allow rule that names host, as itself or under *.domain, for port: one that's more
 // than **, which allows any host. None while a deny is broken.
 func (p *policy) byName(host string, port int) bool {
+	if p.open {
+		return true
+	}
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	rs, broken := p.all()
 	if broken != "" {
@@ -340,6 +374,9 @@ func (p *policy) byName(host string, port int) bool {
 
 // addrAllowed: an explicit address rule for a (needed to pass the floor), and no deny for it.
 func (p *policy) addrAllowed(a netip.Addr, port int) bool {
+	if p.open {
+		return true
+	}
 	if p.addrDenied(a, port) {
 		return false
 	}
@@ -359,6 +396,9 @@ func (p *policy) addrAllowed(a netip.Addr, port int) bool {
 // allow, including a host rule whose name resolves to a, so every address the proxy dials is
 // checked against it.
 func (p *policy) addrDenied(a netip.Addr, port int) bool {
+	if p.open {
+		return false
+	}
 	rs, broken := p.all()
 	if broken != "" {
 		return true

@@ -23,8 +23,8 @@ exec sh -c 'kill -0 "$(cat "$APP_dir"/run/links.pid)"'
 exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$"'
 exec devvm ls
 stdout '^NAME +STATUS +IMAGE +TOOLS +GIT +NET +LINKS +FOLDER$'
-stdout '^devvm-app-[0-9a-f]{14} +Running +base +- +off +off +1 +/'
-stdout '^devvm-db-[0-9a-f]{14} +Running +base +- +off +off +- +/'
+stdout '^devvm-app-[0-9a-f]{14} +Running +base +- +off +open +1 +/'
+stdout '^devvm-db-[0-9a-f]{14} +Running +base +- +off +open +- +/'
 exec devvm ls --json
 stdout '"links": 1'
 
@@ -56,9 +56,9 @@ exec sh -c 'kill -0 "$(cat "$APP_dir"/run/links.pid)"'
 exec devvm ls
 stdout '^devvm-db-[0-9a-f]{14} +Stopped '
 
-# devvm network log says what it logs for a VM without network policy.
+# devvm network log says what it logs for an open VM.
 exec devvm network log
-stderr '^net_off_log vm=devvm-app-[0-9a-f]{14}$'
+stderr '^net_open_log vm=devvm-app-[0-9a-f]{14}$'
 
 # A session killed leaves its sockets: gc --orphans deletes them, and the
 # links to a VM whose state is gone.

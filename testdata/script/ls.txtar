@@ -10,23 +10,28 @@ stub_calls
 stdout '^limactl list --json\n\z'
 
 # A folder named img-foo gives a VM named like an image: listed, while
-# the image it was made from isn't. No network policy: off.
+# the image it was made from isn't. No network policy: its tier, open.
 project img-foo
 exec devvm --no-network-policy --no-git-protect
 exec devvm ls
 stdout '^NAME +STATUS +IMAGE +TOOLS +GIT +NET +LINKS +FOLDER\n'
-stdout '^devvm-img-foo-[0-9a-f]{14} +Running +base +- +off +off +- +/\S*/img-foo\n\z'
+stdout '^devvm-img-foo-[0-9a-f]{14} +Running +base +- +off +open +- +/\S*/img-foo\n\z'
 ! stdout '^devvm-img-[0-9a-f]{12} '
 
-# Network policy: on while it runs on the hostagent devvm started (here
-# the test's runner, which runs on); started some other way since, or a
-# failed self-check, unenforced. Stopped, it starts confined next time.
+# Network policy: its tier, allowlist, while it runs on the hostagent
+# devvm started (here the test's runner, which runs on); started some
+# other way since, or a failed self-check, unenforced. Stopped, it starts
+# confined next time.
 project net
 exec devvm --network-policy --no-git-protect
 vm_name NET net
 exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$NET_dir/run/started"'
 exec devvm ls
-stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +on +- +/'
+stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +allowlist +- +/'
+json_set $NET_dir/vm.json net.tier=none
+exec devvm ls
+stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +none +- +/'
+json_set $NET_dir/vm.json net.tier=allowlist
 # (The exit keeps limactl start sh's child, so its hostagent is sh, soon
 # gone: bash 5.2 and newer as sh, Fedora's, runs a last command in sh's
 # place, which would make the runner, which lasts, its hostagent.)
@@ -35,7 +40,7 @@ exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Running +base +- +off +unenforced +- +/'
 exec limactl stop $NET
 exec devvm ls
-stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +on +- +/'
+stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +allowlist +- +/'
 json_set $NET_dir/vm.json net.made.check=unenforced
 exec devvm ls
 stdout '^devvm-net-[0-9a-f]{14} +Stopped +base +- +off +unenforced +- +/'
@@ -51,8 +56,8 @@ exec stub vm devvm-from-0123456789ab02 Running
 exec stub vm devvm-half-0123456789ab03 Stopped
 exec stub vm devvm-tools-build Stopped
 exec devvm ls
-stdout '^devvm-cl-0123456789ab01 +Stopped +base +node,claude +clone +on +- +/p/cl \(gone\)\n'
-stdout '^devvm-from-0123456789ab02 +Running +image_from from=node:24 image=base +- +on +off +- +/p/from \(gone\)\n'
+stdout '^devvm-cl-0123456789ab01 +Stopped +base +node,claude +clone +allowlist +- +/p/cl \(gone\)\n'
+stdout '^devvm-from-0123456789ab02 +Running +image_from from=node:24 image=base +- +on +open +- +/p/from \(gone\)\n'
 stdout '^devvm-half-0123456789ab03 +Stopped +- +- +- +- +- +-\n'
 ! stdout devvm-tools-build
 # Sorted by name.
@@ -62,7 +67,7 @@ stdout '\ndevvm-cl-.*\ndevvm-from-.*\ndevvm-half-.*\ndevvm-img-foo-.*\ndevvm-net
 exec devvm ls --json
 stdout '^{\n  "version": 1,\n  "vms": \[\n'
 stdout '^      "name": "devvm-cl-0123456789ab01",\n      "status": "Stopped",\n      "image": "base",\n      "tools": \[\n        "node",\n        "claude"\n      \],\n'
-stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "off",\n      "backend": "lima",\n      "folder": "/p/from",\n      "folder_state": "gone",\n      "links": 0\n'
+stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "open",\n      "backend": "lima",\n      "folder": "/p/from",\n      "folder_state": "gone",\n      "links": 0\n'
 stdout '^      "name": "devvm-half-0123456789ab03",\n      "status": "Stopped",\n      "image": "",\n      "tools": \[\],\n      "git": "",\n'
 ! stdout '^NAME'
 
@@ -77,7 +82,7 @@ exec stub vm devvm-esc-0123456789ab05 Stopped
 exec devvm ls
 stdout '^devvm-bad-0123456789ab04 +Running +- +- +- +- +- +-\n'
 stdout '^devvm-cl-0123456789ab01 +Stopped '
-stdout '^devvm-esc-0123456789ab05 +Stopped +base +- +on +off +- +/p/e\[2Jsc \(gone\)\n'
+stdout '^devvm-esc-0123456789ab05 +Stopped +base +- +on +open +- +/p/e\[2Jsc \(gone\)\n'
 ! stdout '\x1b'
 stderr '^devvm: vm_state_unreadable path=\S+/0123456789ab04/vm.json$'
 exec devvm ls --json
@@ -114,7 +119,7 @@ NAME  STATUS  IMAGE  TOOLS  GIT  NET  LINKS  FOLDER
   "created": "2026-01-01T00:00:00Z",
   "clone": {"on": true},
   "git": {"mode": "clone"},
-  "net": {"on": true},
+  "net": {"tier": "allowlist"},
   "tools": {"names": ["node", "claude"]}
 }
 -- broken.json --
@@ -129,7 +134,7 @@ NAME  STATUS  IMAGE  TOOLS  GIT  NET  LINKS  FOLDER
   "backend": "lima",
   "created": "2026-01-01T00:00:00Z",
   "git": {"mode": "on"},
-  "net": {"on": false}
+  "net": {"tier": "open"}
 }
 -- from.json --
 {
@@ -142,5 +147,5 @@ NAME  STATUS  IMAGE  TOOLS  GIT  NET  LINKS  FOLDER
   "backend": "lima",
   "created": "2026-01-01T00:00:00Z",
   "git": {"mode": "on"},
-  "net": {"on": false}
+  "net": {"tier": "open"}
 }
