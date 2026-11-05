@@ -247,6 +247,31 @@ func TestBasePackagesMissing(t *testing.T) {
 	}
 }
 
+// A recording keeps a file already in the cache only when its SHA-256 is
+// still its name: a changed one is replaced with what the build gave
+// back, which the run log notes.
+func TestBasePackagesReplaceChanged(t *testing.T) {
+	b, f := testEnv(t)
+	var log bytes.Buffer
+	b.LogWriter = func() io.Writer { return &log }
+	git, curl := deb{"git", "git's file"}, deb{"curl", "curl's file"}
+	write(t, b.Dirs.PackageFile(git.sum()), "a corrupted file")
+	write(t, b.Dirs.PackageFile(curl.sum()), curl.file)
+	f.PackagesOut = given(t, git, curl)
+	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []deb{git, curl} {
+		if data, err := os.ReadFile(b.Dirs.PackageFile(d.sum())); err != nil || string(data) != d.file {
+			t.Errorf("%s in the cache: %q, %v", d.name, data, err)
+		}
+	}
+	want := "package cache: replaced " + b.Dirs.PackageFile(git.sum()) + " (git 1.0-1ubuntu1), which had changed\n"
+	if log.String() != want {
+		t.Errorf("the run log: %q", log.String())
+	}
+}
+
 // What a build gives back that isn't exactly packages with their entries
 // is refused, and none of it is kept: no set, nothing in the cache, no
 // image record.

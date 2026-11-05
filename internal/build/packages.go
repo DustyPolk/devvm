@@ -712,8 +712,9 @@ func packageOf(entry string) (state.Package, error) {
 
 // commit stores what the build gave back, once the image is built: each
 // file in the cache under its SHA-256 (one there already is the same
-// file), then key's set, under the cache's lock.
-func (t *taken) commit(ctx context.Context, key string) error {
+// file, once its SHA-256 says so; one that changed is replaced, which the
+// run log, log, notes), then key's set, under the cache's lock.
+func (t *taken) commit(ctx context.Context, key string, log io.Writer) error {
 	defer t.discard()
 	if err := os.MkdirAll(t.dirs.ImageLocks(), 0o700); err != nil {
 		return err
@@ -725,8 +726,11 @@ func (t *taken) commit(ctx context.Context, key string) error {
 	defer unlock()
 	for _, p := range t.set.Packages {
 		dst := t.dirs.PackageFile(p.SHA256)
-		if _, err := os.Stat(dst); err == nil {
-			continue
+		if _, err := os.Lstat(dst); err == nil {
+			if sum, size, err := hashFile(dst); err == nil && sum == p.SHA256 && size == p.Size {
+				continue
+			}
+			_, _ = io.WriteString(log, "package cache: replaced "+dst+" ("+p.Name+" "+p.Version+"), which had changed\n")
 		}
 		if err := os.Rename(t.dir+"/"+p.SHA256+".deb", dst); err != nil {
 			return err

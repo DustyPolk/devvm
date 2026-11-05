@@ -181,7 +181,7 @@ func (e *Env) builder(b backend.Backend, fromRef string) *build.Env {
 	return &build.Env{
 		Dirs: e.Dirs, Assets: e.Assets, Backend: b, Review: e.Registry.Review, Tools: e.Tools, From: fromRef, Version: e.Version,
 		Info: e.Info, Warn: e.Warn, Say: e.Say, Confirm: e.Confirm, Pick: e.PickFeatures,
-		Terminal: e.Terminal, LogNote: e.LogNote, FreeSpace: e.FreeSpace,
+		Terminal: e.Terminal, LogNote: e.LogNote, LogWriter: e.LogWriter, FreeSpace: e.FreeSpace,
 	}
 }
 

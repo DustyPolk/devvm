@@ -120,7 +120,7 @@ func newBuilder(u *ui.UI, dirs paths.Dirs, be backend.Backend, rv backend.Review
 	return &build.Env{
 		Dirs: dirs, Assets: assets.FS, Backend: be, Review: rv, Tools: t, From: fromRef, Version: devvmVersion(),
 		Info: u.Info, Warn: u.Warn, Say: u.Say, Confirm: func(m msg.M) bool { return u.Confirm(m) },
-		Pick: pickFeatures(u), Terminal: u.StdinIsTerminal, LogNote: u.LogNote, FreeSpace: thisHost().FreeSpace,
+		Pick: pickFeatures(u), Terminal: u.StdinIsTerminal, LogNote: u.LogNote, LogWriter: u.LogWriter, FreeSpace: thisHost().FreeSpace,
 	}
 }
 

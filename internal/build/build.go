@@ -13,6 +13,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -60,6 +61,9 @@ type Env struct {
 	Pick            func([]Feature) []Feature
 	Terminal        func() bool
 	LogNote         func()
+	// LogWriter is the run log, for lines that aren't messages; nil
+	// drops them.
+	LogWriter func() io.Writer
 	// Force is a rebuild's --force: it replaces the images built on the
 	// one it rebuilds without asking, which it needs without a terminal.
 	Force bool
@@ -453,7 +457,11 @@ func (b Builds) buildWith(ctx context.Context, spec backend.ImageSpec, name imag
 		pk.taken.discard()
 		return out, err
 	}
-	return out, pk.taken.commit(ctx, spec.Key)
+	log := io.Discard
+	if b.LogWriter != nil {
+		log = b.LogWriter()
+	}
+	return out, pk.taken.commit(ctx, spec.Key, log)
 }
 
 // sayFitted says what base got when the backend fitted it to the host
