@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
@@ -290,11 +289,6 @@ func (e Lifecycle) Export(ctx context.Context, file string) error {
 	return e.export(ctx, t, file, backend.Logged(msg.HistoryNotExported(t.f.Name)))
 }
 
-// exportFile is a new export's file in the exports folder.
-func (e Lifecycle) exportFile(vm string) string {
-	return filepath.Join(e.Dirs.Exports(), vm+"-"+time.Now().Format("20060102-150405")+".tar.gz")
-}
-
 // export saves the VM's agents' history (transcripts, sessions) to a
 // tarball at file, or a new one in the exports folder when it's "", with
 // a file beside it naming the VM's folder (paths.ExportFolder), for devvm
@@ -306,9 +300,10 @@ func (e Lifecycle) exportFile(vm string) string {
 // keeps its own.
 func (e Lifecycle) export(ctx context.Context, t *found, file string, failed error) error {
 	vm, b := t.f.Name, t.b
+	x := Exports{Dirs: e.Dirs}
 	own := file == ""
 	if own {
-		file = e.exportFile(vm)
+		file = x.newFile(vm, time.Now())
 	}
 	if err := e.ensureRunning(ctx, t); err != nil {
 		return err
@@ -351,7 +346,7 @@ func (e Lifecycle) export(ctx context.Context, t *found, file string, failed err
 		return err
 	}
 	if own {
-		if err := state.WriteFile(paths.ExportFolder(file), []byte(t.f.Dir+"\n")); err != nil {
+		if err := x.writeFolder(file, t.f.Dir); err != nil {
 			return err
 		}
 	}

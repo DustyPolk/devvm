@@ -7,7 +7,7 @@ internal/backend/backendtest 74.4
 internal/backend/lima 90.8
 internal/backend/registry 100.0
 internal/build 88.5
-internal/cli 89.1
+internal/cli 90.4
 internal/cli/docgen 85.3
 internal/daemon 97.9
 internal/desktop 77.2

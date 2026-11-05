@@ -6,38 +6,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/settings"
 )
-
-// history.age deletes those that old; history.count then keeps the newest;
-// off deletes none.
-func TestExportsToRetire(t *testing.T) {
-	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	day := 24 * time.Hour
-	es := []savedExport{{VM: "a", At: now.Add(-40 * day)}, {VM: "b", At: now.Add(-20 * day)}, {VM: "c", At: now.Add(-10 * day)}, {VM: "d", At: now}}
-	vms := func(es []savedExport) string {
-		s := ""
-		for _, e := range es {
-			s += e.VM
-		}
-		return s
-	}
-	for _, tt := range []struct {
-		r    settings.Retention
-		want string
-	}{
-		{settings.Retention{}, ""},
-		{settings.Retention{ExportsAge: 30 * day}, "a"},
-		{settings.Retention{ExportsCount: 2}, "ab"},
-		{settings.Retention{ExportsAge: 30 * day, ExportsCount: 2}, "ab"},
-		{settings.Retention{ExportsAge: 15 * day, ExportsCount: 1}, "abc"},
-		{settings.Retention{ExportsCount: 9}, ""},
-	} {
-		if got := vms(exportsToRetire(es, tt.r, now)); got != tt.want {
-			t.Errorf("%+v: got %q, want %q", tt.r, got, tt.want)
-		}
-	}
-}
 
 // Retention runs at most once a day, again at once after the clock went
 // back, and never in two devvms at once, however long one takes.

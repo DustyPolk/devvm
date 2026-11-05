@@ -77,7 +77,7 @@ func TestJSONShapes(t *testing.T) {
 		},
 		{
 			"images", imagesJSON(
-				[]listedImage{{Listed: build.Listed{Image: build.Image{Key: "k", Name: "base"}, SHA256: "ab", State: "current", Origin: "ubuntu 26.04", Size: 1, Sized: true}, Backend: "lima"}},
+				[]vm.ListedImage{{Listed: build.Listed{Image: build.Image{Key: "k", Name: "base"}, SHA256: "ab", State: "current", Origin: "ubuntu 26.04", Size: 1, Sized: true}, Backend: "lima"}},
 				[]tools.Listed{{
 					Name: "node", Tool: "node", Version: "24", Built: true, Size: 2, VMs: 1, State: "current",
 					Backend: "lima", Target: tools.Target{Libc: "gnu"}, Targeted: true,
@@ -167,7 +167,7 @@ func TestJSONShapes(t *testing.T) {
 			[]string{"group: string", "members[].folder: string", "members[].name: string", "members[].published: string", "members[].vm: string"},
 		},
 		{
-			"history", historyJSON([]savedExport{{Path: "/e.tar.gz", VM: "devvm-a", Folder: "/a", At: at, Size: 3}}),
+			"history", historyJSON([]vm.Export{{Path: "/e.tar.gz", VM: "devvm-a", Folder: "/a", At: at, Size: 3}}),
 			[]string{"exports[].date: string", "exports[].file: string", "exports[].folder: string", "exports[].size: number", "exports[].vm: string"},
 		},
 		{"space", spaceReport{

@@ -11,7 +11,7 @@ devvm, the tools it runs and Lima keep files on this machine outside your projec
 
 | Column | |
 | --- | --- |
-| `WHAT` | `VMs`, `images`, `tools gnu` or `tools musl` for the shared tools' builds for each C library, `history` for the exports of agents' history, `network logs` for the VMs' logs and the daily tools check's log, `run logs`, `mise`, `packages` for the copies of [base's packages](images.md#base), `Nix cache` for the [shared Nix cache](toolchains.md#nix-projects), `leftover state` for the whole folder of each VM that its backend no longer has, and `state` for the rest of devvm's data folder, which includes the rest of the VMs' folders |
+| `WHAT` | `VMs`, `images`, `tools gnu` or `tools musl` for the shared tools' builds for each C library, `history` for the exports of agents' history, `network logs` for the VMs' logs and the daily tools check's log, `run logs`, `mise`, `packages` for the copies of [base's packages](images.md#base), `Nix cache` for the [shared Nix cache](toolchains.md#nix-projects), `leftover state` for the whole folder of each VM that `devvm gc --orphans` would forget, and `state` for the rest of devvm's data folder, which includes the rest of the VMs' folders |
 | `COUNT`, `SIZE` | how many there are and the disk they take, in powers of 1024 (`2.1G`) |
 | `KEPT` | `remade` when devvm makes it again when it's needed, `only copy` for VMs and exports, which nothing else has, `log` for logs, `state` for what devvm knows of its VMs and images, and `leftover` |
 | `GC` | what `devvm gc` frees of it now, which for the Nix cache is what it takes beyond its cap |
@@ -142,7 +142,7 @@ When you delete a VM with its backend's own command instead of `devvm rm`, such 
 
 Forgetting a VM also removes your other VMs' [links](links.md) to it, as `devvm rm` does. `devvm gc --orphans` also removes links to VMs whose state is already gone, naming each one, and deletes the sockets that a link session leaves on your machine when it's killed, which are the ones nothing listens on.
 
-Once a VM's state is gone, `devvm gc` treats its shared tools like any others. `devvm space` counts the whole folder of each VM that its backend doesn't list as `leftover state`, and each socket a link session left counts there too.
+Once a VM's state is gone, `devvm gc` treats its shared tools like any others. `devvm space` counts the whole folder of each VM that `devvm gc --orphans` would forget as `leftover state`, and each socket a link session left counts there too. A VM that gc leaves alone for one of the reasons above isn't leftover state, so its folder counts as `state` and its logs as `network logs`.
 
 ### VMs devvm has no state for
 

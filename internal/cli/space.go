@@ -168,15 +168,18 @@ type strayVM struct {
 // VM environment's registry, whose Builder builds on each) and the shared
 // tools.
 type spaceEnv struct {
-	b     *build.Env
-	env   *vm.Env
-	inUse map[string]int
+	b   *build.Env
+	env *vm.Env
 	// inv is the VMs, read once (vm.ReadInventory); answered the
 	// backends that listed their VMs and images.
 	inv      *vm.Inventory
 	answered map[string]bool
-	ret      settings.Retention // the retention settings
-	now      time.Time
+	// left is what devvm gc --orphans would forget, by inv
+	// (vm.Leftovers.FindIn): its orphans and link sockets are leftover
+	// state.
+	left vm.LeftoverReport
+	ret  settings.Retention // the retention settings
+	now  time.Time
 }
 
 // space reads what devvm keeps. Nothing it runs changes anything, and
@@ -198,15 +201,15 @@ func space(ctx context.Context, a *app) (spaceReport, error) {
 	if err != nil {
 		return r, err
 	}
-	inUse, err := inv.ToolsInUse()
-	if err != nil {
-		return r, err
-	}
 	def, err := settings.Read(b.Dirs)
 	if err != nil {
 		return r, err
 	}
-	e := spaceEnv{b: b, env: env, inUse: inUse, inv: inv, answered: map[string]bool{}, ret: def.Retention, now: time.Now()}
+	left, err := vm.Leftovers{Env: env}.FindIn(ctx, inv)
+	if err != nil {
+		return r, err
+	}
+	e := spaceEnv{b: b, env: env, inv: inv, answered: map[string]bool{}, left: left, ret: def.Retention, now: time.Now()}
 	for _, be := range reg.All() {
 		rows, caches, ok := e.backendRows(ctx, be)
 		if !ok {
@@ -219,7 +222,7 @@ func space(ctx context.Context, a *app) (spaceReport, error) {
 		r.Caches = append(r.Caches, caches...)
 		r.Strays = append(r.Strays, strays(ctx, reg.Host, be)...)
 	}
-	toolRows, err := e.toolRows(ctx)
+	toolRows, err := e.toolRows()
 	if err != nil {
 		return r, err
 	}
@@ -301,8 +304,8 @@ func nonEmpty(rows ...spaceRow) []spaceRow {
 
 // toolRows are the shared tools' builds, by backend and C library: what
 // devvm gc frees of them is what devvm images lists as unused.
-func (e spaceEnv) toolRows(ctx context.Context) ([]spaceRow, error) {
-	ts, err := e.listTools(ctx)
+func (e spaceEnv) toolRows() ([]spaceRow, error) {
+	ts, err := vm.Housekeeping{Env: e.env}.ShareListing(e.b, e.inv)
 	if err != nil {
 		return nil, err
 	}
@@ -344,30 +347,12 @@ func (e spaceEnv) idleFor(t tools.Listed) time.Duration {
 	return tools.Share{Env: e.b.Tools}.IdleFor(t, e.now)
 }
 
-// listTools lists the share as devvm images and devvm gc do: current for
-// the default base on every backend.
-func (e spaceEnv) listTools(_ context.Context) ([]tools.Listed, error) {
-	tg, err := e.b.ToolTarget()
-	if err != nil {
-		return nil, err
-	}
-	tgs := []tools.Target{tg}
-	for _, be := range e.env.Registry.All() {
-		t, err := e.env.Builder(be, e.b.From).ToolTarget()
-		if err != nil {
-			return nil, err
-		}
-		tgs = append(tgs, t)
-	}
-	return tools.Share{Env: e.b.Tools}.List(tgs, e.inUse)
-}
-
 // dataRows are the rest of devvm's data folder: exports, logs, devvm's
 // own mise, what's left of VMs gone from their
 // backends, and its other state. Each file is counted once.
 func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 	d := e.b.Dirs
-	es, err := exports(d)
+	es, err := vm.Exports{Dirs: d}.List()
 	if err != nil {
 		return nil, err
 	}
@@ -401,18 +386,15 @@ func (e spaceEnv) dataRows(ctx context.Context) ([]spaceRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	left, err := e.leftovers(ctx)
-	if err != nil {
-		return nil, err
-	}
+	left := e.leftovers()
 	nix, err := e.nixCacheRow()
 	if err != nil {
 		return nil, err
 	}
 	other := otherState(d) - left.Size - vmLogs.size
 	exportsRow := spaceRow{
-		What: "history", Count: len(es), Size: exportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --history",
-		Retain: e.retainOf(settings.RetainHistoryAge, settings.RetainHistoryCount), RetainFrees: exportsSize(exportsToRetire(es, e.ret, e.now)),
+		What: "history", Count: len(es), Size: vm.ExportsSize(es), Sized: true, Kept: keptOnlyCopy, Rest: "gc --history",
+		Retain: e.retainOf(settings.RetainHistoryAge, settings.RetainHistoryCount), RetainFrees: vm.ExportsSize(vm.ExportsToRetire(es, e.ret, e.now)),
 	}
 	runsRow := spaceRow{
 		What: "run logs", Count: runs.count, Size: runs.size, Sized: true, Kept: keptLog,
@@ -443,53 +425,53 @@ func (e spaceEnv) nixCacheRow() (spaceRow, error) {
 	}, err
 }
 
-// leftovers is what devvm keeps for VMs whose backend answered but no
-// longer has them: their state, run and backend files. Their logs are
-// network logs'. A VM whose backend didn't answer is never one. The link
-// sessions' sockets that nothing listens on count too, one each.
-func (e spaceEnv) leftovers(ctx context.Context) (spaceRow, error) {
+// leftovers is what devvm gc --orphans would forget (vm.Leftovers.FindIn):
+// the whole folder of each orphan, its state, run and backend files, and
+// the link sessions' sockets that nothing listens on, one each. Its
+// retention frees the orphans orphans.age reaches, as retention would.
+func (e spaceEnv) leftovers() spaceRow {
 	row := spaceRow{What: "leftover state", Sized: true, Kept: keptLeftover, Rest: "gc --orphans", Retain: e.retainOf(settings.RetainOrphansAge)}
-	socks, err := vm.LeftoverSockets(ctx, e.b.Dirs)
-	if err != nil {
-		return row, err
-	}
-	row.Count = len(socks)
-	orphans, _ := e.vmFolders()
-	for _, k := range orphans {
+	row.Count = len(e.left.Sockets)
+	for _, o := range e.left.Orphans {
 		row.Count++
-		files := e.b.Dirs.VM(k.Name)
-		n64 := du(files.Dir)
+		n64 := du(e.b.Dirs.VM(o.Name).Dir)
 		row.Size += n64
-		if fi, err := os.Stat(files.State()); err == nil && e.ret.OrphansAge > 0 && e.now.Sub(fi.ModTime()) >= e.ret.OrphansAge {
+		if since := e.now.Sub(o.Changed); e.ret.OrphansAge > 0 && since >= e.ret.OrphansAge {
 			row.RetainFrees += n64
 		}
 	}
-	return row, nil
+	return row
 }
 
-// vmFolders sorts the VMs' folders that have a state file into those of
-// VMs whose backend answered without them (orphans, whose whole folder is
-// leftover state) and the rest, a state that can't be read among them.
-func (e spaceEnv) vmFolders() (orphans, rest []vm.Known) {
+// isOrphan reports whether k is a state's row of one of the orphans.
+func (e spaceEnv) isOrphan(k vm.Known) bool {
+	return !k.Listed && k.Err == nil && slices.ContainsFunc(e.left.Orphans, func(o vm.Orphan) bool {
+		return o.Name == k.Name && o.Backend == k.State.Backend
+	})
+}
+
+// vmFolders are the VMs' folders that have a state file but the orphans'
+// (whose whole folder is leftover state), a state that can't be read
+// among them.
+func (e spaceEnv) vmFolders() []vm.Known {
+	var rest []vm.Known
 	for _, k := range e.inv.VMs {
 		switch {
 		case k.Err == nil && !k.State.Exists():
 			// A backend's VM without state: no folder of devvm's.
-		case k.Err == nil && e.answered[k.State.Backend] && !k.Listed:
-			orphans = append(orphans, k)
+		case e.isOrphan(k):
 		case !k.Listed || k.Err != nil || k.State.Backend == k.Backend.Name():
 			rest = append(rest, k)
 		}
 	}
-	return orphans, rest
+	return rest
 }
 
 // folderGone are the VMs whose backend answered with them and whose
 // project folder is gone, then those whose folder is on a disk that isn't
 // connected, by name.
 func (e spaceEnv) folderGone() (gone, unconnected []goneVM) {
-	_, rest := e.vmFolders()
-	for _, k := range rest {
+	for _, k := range e.vmFolders() {
 		st := k.State
 		if k.Err != nil || !k.Listed || !e.answered[st.Backend] {
 			continue
@@ -510,8 +492,7 @@ func (e spaceEnv) folderGone() (gone, unconnected []goneVM) {
 // their proxies' and link sessions' output.
 func (e spaceEnv) vmLogs() (counted, error) {
 	var c counted
-	_, rest := e.vmFolders()
-	for _, k := range rest {
+	for _, k := range e.vmFolders() {
 		l, err := filesIn(paths.VM{Dir: e.b.Dirs.VMDir(k.Hash)}.Logs(), func(string) bool { return true })
 		if err != nil {
 			return c, err

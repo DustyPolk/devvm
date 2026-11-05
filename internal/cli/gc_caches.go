@@ -6,6 +6,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/vm"
 )
 
 // gcCaches frees devvm's share of each backend's own caches (gc
@@ -13,12 +14,9 @@ import (
 // no image or VM of devvm's needs. It lists each backend's apart and asks
 // for each; it never runs a backend's own prune, which reaches the user's
 // own entries too. Never one gc skipped, as it couldn't list its images.
-func gcCaches(ctx context.Context, a *app, o gcOpts, skipped map[string]bool) error {
+func gcCaches(ctx context.Context, a *app, env *vm.Env, o gcOpts, skipped map[string]bool) error {
 	u := a.u
-	reg, err := a.registry()
-	if err != nil {
-		return err
-	}
+	reg := env.Registry
 	for _, be := range reg.All() {
 		if skipped[be.Name()] {
 			continue

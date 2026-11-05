@@ -45,12 +45,14 @@ func TestEntriesIn(t *testing.T) {
 
 // An orphan's leftover state is its whole folder: its state, logs and
 // run files, the temporary files of its unfinished writes; a VM
-// its backend has is none, and its logs are logs. A VM whose
-// backend didn't answer is never an orphan.
+// its backend has is none, and its logs are logs. Orphans are what
+// devvm gc --orphans would forget: a VM whose backend didn't answer is
+// never one, nor one whose state changed in the last hour, which may be
+// being made.
 func TestLeftoverFolders(t *testing.T) {
 	d := paths.Dirs{Data: t.TempDir()}
-	const orphan, live, unasked = "devvm-a-0123456789abc1", "devvm-b-0123456789abc2", "devvm-c-0123456789abc3"
-	for vm, be := range map[string]string{orphan: "fake", live: "fake", unasked: "other"} {
+	const orphan, live, unasked, recent = "devvm-a-0123456789abc1", "devvm-b-0123456789abc2", "devvm-c-0123456789abc3", "devvm-e-0123456789abc5"
+	for vm, be := range map[string]string{orphan: "fake", live: "fake", unasked: "other", recent: "fake"} {
 		v := d.VM(vm)
 		for _, f := range []string{v.Logs() + "/network.jsonl", v.ProxyPID(), v.ForwarderLog(), filepath.Join(v.Run(), ".proxy.json.tmp-1")} {
 			if err := state.WriteFile(f, []byte(strings.Repeat("x", 5000))); err != nil {
@@ -82,77 +84,35 @@ func TestLeftoverFolders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	old := time.Now().Add(-2 * time.Hour)
+	for _, n := range []string{orphan, live, unasked} {
+		if err := os.Chtimes(d.VM(n).State(), old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
 	inv, err := vm.ReadInventory(t.Context(), d, reg, vm.AllBackends)
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := spaceEnv{b: &build.Env{Dirs: d}, inv: inv, answered: map[string]bool{"fake": true}, now: time.Now()}
-	row, err := e.leftovers(t.Context())
-	if err != nil || row.Count != 1 || row.Size != du(d.VM(orphan).Dir) || row.Size == 0 {
-		t.Errorf("leftovers = %+v, %v; want %s's folder, %d", row, err, orphan, du(d.VM(orphan).Dir))
-	}
-	logs, err := e.vmLogs()
-	// Every log of theirs: the network logs and the port forwarders'.
-	want := du(d.VM(live).EventLog()) + du(d.VM(unasked).EventLog()) + du(d.VM(live).ForwarderLog()) + du(d.VM(unasked).ForwarderLog()) + du(broken.EventLog())
-	if err != nil || logs.count != 5 || logs.size != want {
-		t.Errorf("vmLogs = %+v, %v; want 5, %d", logs, err, want)
-	}
-}
-
-func TestParseExportName(t *testing.T) {
-	for _, c := range []struct {
-		name, vm, stamp string
-		ok              bool
-	}{
-		{"devvm-web-0123456789abcd-20260101-120000.tar.gz", "devvm-web-0123456789abcd", "20260101-120000", true},
-		{"devvm-img-keep-0123456789abcd-20260101-120000.tar.gz", "devvm-img-keep-0123456789abcd", "20260101-120000", true},
-		{"devvm-img-0123456789ab-20260101-120000.tar.gz", "", "", false},
-		{"devvm-web-0123456789abcd-2026010-120000.tar.gz", "", "", false},
-		{"devvm-web-0123456789abcd-20260101-120000.tar", "", "", false},
-		{"devvm-web-0123456789abcd.tar.gz", "", "", false},
-		{".devvm-export-1", "", "", false},
-	} {
-		if vm, stamp, ok := parseExportName(c.name); vm != c.vm || stamp != c.stamp || ok != c.ok {
-			t.Errorf("parseExportName(%q) = %q, %q, %v", c.name, vm, stamp, ok)
-		}
-	}
-}
-
-// Exports: only plain files named as devvm names them, oldest first; the
-// age filter keeps those at least that old.
-func TestExports(t *testing.T) {
-	d := paths.Dirs{Data: t.TempDir()}
-	if err := os.MkdirAll(d.Exports(), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range []string{
-		"devvm-b-12345612345612-20260301-000000.tar.gz", "devvm-a-12345612345612-20260101-120000.tar.gz",
-		".devvm-export-1", "notes.tar.gz", "devvm-c-1234-20260101-000000.tar.gz",
-	} {
-		if err := os.WriteFile(filepath.Join(d.Exports(), f), []byte("x"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	es, err := exports(d)
+	left, err := vm.Leftovers{Env: &vm.Env{Dirs: d, Registry: reg}}.FindIn(t.Context(), inv)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(es) != 2 || es[0].VM != "devvm-a-12345612345612" || es[1].VM != "devvm-b-12345612345612" {
-		t.Fatalf("exports = %+v", es)
+	e := spaceEnv{b: &build.Env{Dirs: d}, inv: inv, answered: map[string]bool{"fake": true}, left: left, now: time.Now()}
+	e.ret.OrphansAge = time.Hour
+	row := e.leftovers()
+	if row.Count != 1 || row.Size != du(d.VM(orphan).Dir) || row.Size == 0 || row.RetainFrees != row.Size {
+		t.Errorf("leftovers = %+v; want %s's folder, %d", row, orphan, du(d.VM(orphan).Dir))
 	}
-	// Now is counted from b's parsed date, so the zone the test runs in
-	// doesn't matter: exactly 30d after b both are that old, a second
-	// short only a.
-	age := 30 * 24 * time.Hour
-	boundary := es[1].At.Add(age)
-	if got := olderThan(es, age, boundary); len(got) != 2 {
-		t.Errorf("olderThan 30d, at b's 30d = %+v", got)
+	logs, err := e.vmLogs()
+	// Every log of theirs: the network logs and the port forwarders'.
+	var want int64
+	for _, v := range []paths.VM{d.VM(live), d.VM(unasked), d.VM(recent)} {
+		want += du(v.EventLog()) + du(v.ForwarderLog())
 	}
-	if got := olderThan(es, age, boundary.Add(-time.Second)); len(got) != 1 || got[0].VM != "devvm-a-12345612345612" {
-		t.Errorf("olderThan 30d, a second short = %+v", got)
-	}
-	if got := olderThan(es, 0, boundary); len(got) != 2 {
-		t.Errorf("olderThan 0 = %+v", got)
+	want += du(broken.EventLog())
+	if err != nil || logs.count != 7 || logs.size != want {
+		t.Errorf("vmLogs = %+v, %v; want 7, %d", logs, err, want)
 	}
 }
 

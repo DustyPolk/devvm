@@ -35,13 +35,13 @@ func newImagesCmd(a *app) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			b, err := a.builder()
-			var imgs []listedImage
+			var imgs []vm.ListedImage
 			var ts []tools.Listed
 			if err == nil {
 				b.From = fromRef("")
-				var l imageListing
+				var l vm.ImageListing
 				if l, err = listImages(cmd.Context(), a, b); err == nil {
-					imgs, ts, err = l.images, l.tools, l.failUnlisted()
+					imgs, ts, err = l.Images, l.Tools, l.FailUnlisted()
 				}
 			}
 			fail(u, err, msg.ImagesFailed)
@@ -124,6 +124,16 @@ type nixCacheJSON struct {
 	Cap   int64 `json:"cap"`
 }
 
+// nixCacheCap is the shared Nix cache's cap as the retention settings
+// give it: its default, with a warning, when they can't be read.
+func nixCacheCap(u *ui.UI, d paths.Dirs) int64 {
+	n, err := vm.NixCacheCap(d)
+	if err != nil {
+		u.Warn(msg.RetentionUnreadable().Because(err))
+	}
+	return n
+}
+
 // nixCacheOf reads what the shared Nix cache holds; none when it can't.
 func nixCacheOf(u *ui.UI, d paths.Dirs) nixCacheJSON {
 	n, size, err := proxy.NixCacheUsage(d.NixCache())
@@ -136,8 +146,8 @@ func nixCacheOf(u *ui.UI, d paths.Dirs) nixCacheJSON {
 // imagesNotes says, after devvm images' tables, how many images aren't
 // current, what the unused tools take, the total, and the Nix cache's
 // use of its cap.
-func imagesNotes(u *ui.UI, imgs []listedImage, ts []tools.Listed, nix nixCacheJSON) {
-	if n := len(staleImages(imgs)); n > 0 {
+func imagesNotes(u *ui.UI, imgs []vm.ListedImage, ts []tools.Listed, nix nixCacheJSON) {
+	if n := len(vm.StaleImages(imgs)); n > 0 {
 		u.Note(msg.ImagesStaleNote(n))
 	}
 	if size := toolsSize(tools.Unused(ts)); size > 0 {
@@ -186,7 +196,7 @@ type toolImageJSON struct {
 	State   string `json:"state"`
 }
 
-func imagesJSON(imgs []listedImage, ts []tools.Listed, nix nixCacheJSON) imagesOutput {
+func imagesJSON(imgs []vm.ListedImage, ts []tools.Listed, nix nixCacheJSON) imagesOutput {
 	out := imagesOutput{
 		Images: make([]imageJSON, 0, len(imgs)), Tools: make([]toolImageJSON, 0, len(ts)),
 		Total: imagesSize(imgs) + toolsSize(ts), UnusedTools: toolsSize(tools.Unused(ts)), NixCache: nix,
@@ -212,27 +222,8 @@ func imagesJSON(imgs []listedImage, ts []tools.Listed, nix nixCacheJSON) imagesO
 	return out
 }
 
-// listedImage is an image, its backend's name and the images on it.
-type listedImage struct {
-	build.Listed
-	Backend string
-	images  build.Images
-}
-
-// staleImages returns the images that are stale or unfinished, never one
-// another devvm is building.
-func staleImages(imgs []listedImage) []listedImage {
-	var out []listedImage
-	for _, l := range imgs {
-		if l.State == build.StateStale || l.State == build.StateUnfinished {
-			out = append(out, l)
-		}
-	}
-	return out
-}
-
 // imagesSize is the disk the images take, those whose size is known.
-func imagesSize(imgs []listedImage) int64 {
+func imagesSize(imgs []vm.ListedImage) int64 {
 	var n int64
 	for _, l := range imgs {
 		n += l.Size
@@ -249,91 +240,22 @@ func toolsSize(ts []tools.Listed) int64 {
 	return n
 }
 
-// unlisted is a backend a VM's state names that couldn't list its images,
-// and why: its Check's error, else its listing's.
-type unlisted struct {
-	backend string
-	err     error
-}
-
-// imageListing is what listImages found: the images on every backend
-// that listed them, the shared tools, and the backends a VM uses that
-// couldn't list.
-type imageListing struct {
-	images   []listedImage
-	tools    []tools.Listed
-	unlisted []unlisted
-}
-
-// listImages lists the images on every backend, and the shared tools for
-// the base new VMs get on b (its backend and From). A backend that can't
-// list is left out, and named in unlisted when a VM's state names it.
-func listImages(ctx context.Context, a *app, b *build.Env) (imageListing, error) {
+// listImages lists the images on every backend and the shared tools
+// (vm.Housekeeping.ListImages), on the run's registry, saying so in the
+// status line.
+func listImages(ctx context.Context, a *app, b *build.Env) (vm.ImageListing, error) {
 	defer a.u.Status(msg.ReadingImages())()
-	var out imageListing
-	if err := from.Check(b.From); err != nil {
-		return out, err
-	}
 	env, err := a.vmEnv()
 	if err != nil {
-		return out, err
+		return vm.ImageListing{}, err
 	}
-	reg := env.Registry
-	inv, err := vm.ReadStates(b.Dirs)
-	if err != nil {
-		return out, err
-	}
-	for _, be := range reg.All() {
-		on := build.Images{Env: env.Builder(be, "")}
-		ls, err := on.Listing(ctx)
-		if err != nil {
-			if !inv.Used(be.Name()) {
-				continue
-			}
-			if cerr := backend.Check(ctx, be); cerr != nil {
-				err = cerr
-			}
-			out.unlisted = append(out.unlisted, unlisted{backend: be.Name(), err: err})
-			continue
-		}
-		for _, l := range ls {
-			out.images = append(out.images, listedImage{Listed: l, Backend: be.Name(), images: on})
-		}
-	}
-	// Current for the default backend's new VMs, or any backend's.
-	tg, err := b.ToolTarget()
-	if err != nil {
-		return out, err
-	}
-	tgs := []tools.Target{tg}
-	for _, be := range reg.All() {
-		t, err := env.Builder(be, b.From).ToolTarget()
-		if err != nil {
-			return out, err
-		}
-		tgs = append(tgs, t)
-	}
-	inUse, err := inv.ToolsInUse()
-	if err != nil {
-		return out, err
-	}
-	out.tools, err = tools.Share{Env: b.Tools}.List(tgs, inUse)
-	return out, err
-}
-
-// failUnlisted is the error of the first backend a VM uses that couldn't
-// list its images, for devvm images, which lists every backend's or none.
-func (l imageListing) failUnlisted() error {
-	if len(l.unlisted) > 0 {
-		return l.unlisted[0].err
-	}
-	return nil
+	return vm.Housekeeping{Env: env}.ListImages(ctx, b)
 }
 
 // writeImages writes the images, then the shared tools with the C
 // library each is built for, as their records say, as tables, each with a header; a value one lacks is -. States are
 // colored by what they mean, digests and keys dim.
-func writeImages(tab *ui.Table, imgs []listedImage, ts []tools.Listed) error {
+func writeImages(tab *ui.Table, imgs []vm.ListedImage, ts []tools.Listed) error {
 	tab.Header("IMAGE", "FROM", "DIGEST", "KEY", "STATE", "SIZE")
 	for _, l := range imgs {
 		size := ""

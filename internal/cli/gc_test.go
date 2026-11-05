@@ -1,74 +1,44 @@
 package cli
 
 import (
-	"errors"
-	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// An image the backend refuses to delete with a message (on Linux hosts,
-// one whose disk VMs use) stays, with its record, and gc goes on; any
-// other failure ends it.
-func TestDeleteStaleKeepsImagesInUse(t *testing.T) {
-	dir := t.TempDir()
-	d := paths.Dirs{Data: filepath.Join(dir, "data"), Config: filepath.Join(dir, "config"), Lima: filepath.Join(dir, "lima")}
-	f := backendtest.New("fake", backend.Caps{})
-	f.ImageKeys = []string{"0123456789ab", "ba9876543210"}
-	if err := state.WriteImage(d, "0123456789ab", state.Image{Name: "base"}); err != nil {
-		t.Fatal(err)
+// What gc deleted is said in the order it did: an image its backend
+// refused with the backend's message, on stderr, and nothing for what it
+// had none of; the package cache's sets alone still say it.
+func TestShowGCDone(t *testing.T) {
+	u, out, errOut := testUI()
+	img := func(name, key string) vm.ListedImage {
+		return vm.ListedImage{Listed: build.Listed{Image: build.Image{Key: key, Name: name}}}
 	}
-	b := build.Images{Env: &build.Env{Dirs: d, Backend: f}}
-	imgs := []listedImage{
-		{Listed: build.Listed{Image: build.Image{Key: "0123456789ab", Name: "base"}}, images: b},
-		{Listed: build.Listed{Image: build.Image{Key: "ba9876543210"}}, images: b},
-	}
-	f.Errs = map[string]error{"DeleteImage": msg.ImageInUse("0123456789ab", "devvm-p-0123456789abcd")}
-	u, _, errOut := testUI()
-	if err := deleteStale(t.Context(), u, imgs); err != nil {
-		t.Fatal(err)
-	}
-	if got := f.Methods(); !slices.Equal(got, []string{"DeleteImage", "DeleteImage"}) {
-		t.Errorf("calls: %v", got)
+	showGCDone(u, vm.GCDone{
+		Forgot: []string{"devvm-a-0123456789abcd"}, LinkSockets: 2,
+		Images: []vm.DeletedImage{
+			{ListedImage: img("base", "0123456789ab")},
+			{ListedImage: img("", "ba9876543210")},
+			{ListedImage: img("foo", "aaaaaaaaaaaa"), Refused: true, Why: msg.ImageInUse("aaaaaaaaaaaa", "devvm-p-0123456789abcd")},
+		},
+		PackagesDeleted: true, History: 1, ToolsNoVM: 3, NixFiles: 4, NixFreed: 2048,
+	})
+	want := "==> forgot_orphan vm=devvm-a-0123456789abcd\n" +
+		"==> deleted_link_sockets count=2\n" +
+		"==> deleted_image image=base key=0123456789ab\n" +
+		"==> deleted_unfinished_build key=ba9876543210\n" +
+		"==> deleted_packages count=0\n" +
+		"==> deleted_history count=1\n" +
+		"==> deleted_tools_no_vm count=3\n" +
+		"==> deleted_nix_cache count=4 size=2.0K\n"
+	if out.String() != want {
+		t.Errorf("stdout\n%s\nwant\n%s", out, want)
 	}
 	if !strings.HasPrefix(errOut.String(), "devvm: image_in_use ") {
 		t.Errorf("stderr %q, want image_in_use", errOut)
-	}
-	if _, err := state.ReadImage(d, "0123456789ab"); err != nil {
-		t.Errorf("the image in use lost its record: %v", err)
-	}
-	boom := errors.New("boom")
-	f.Errs = map[string]error{"DeleteImage": boom}
-	if err := deleteStale(t.Context(), u, imgs); !errors.Is(err, boom) {
-		t.Errorf("deleteStale = %v, want %v", err, boom)
-	}
-}
-
-// A skipped backend's orphans aren't forgotten: its VMs' state stays, and
-// the backend is named once among those that couldn't be asked.
-func TestWithoutSkipped(t *testing.T) {
-	r := vm.LeftoverReport{
-		Orphans: []vm.Orphan{{Name: "a", Backend: "lima"}, {Name: "b", Backend: "qemu"}, {Name: "c", Backend: "qemu"}, {Name: "d", Backend: "fake"}},
-		Unknown: []string{"fake"},
-	}
-	got := withoutSkipped(r, map[string]bool{"qemu": true, "fake": true})
-	if len(got.Orphans) != 1 || got.Orphans[0].Name != "a" {
-		t.Errorf("orphans %+v, want a alone", got.Orphans)
-	}
-	if !slices.Equal(got.Unknown, []string{"fake", "qemu"}) {
-		t.Errorf("unknown %v", got.Unknown)
-	}
-	if got := withoutSkipped(r, nil); len(got.Orphans) != 4 || len(got.Unknown) != 1 {
-		t.Errorf("nothing skipped: %+v", got)
 	}
 }
 

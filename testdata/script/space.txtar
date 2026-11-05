@@ -26,7 +26,10 @@ exec sh -c 'cd "$SHARE" && echo x > go-1.20.0-0123456789ab.erofs && echo x > go-
 json_set $SHARE/go-1.20.0-0123456789ab.erofs.json sha256=x libc=gnu backend=lima built=2020-01-01T00:00:00Z
 mkdir $VMS/12345612345601/logs $VMS/12345612345602/logs
 json_set $VMS/12345612345601/vm.json version:=1 id=p name=devvm-p-12345612345601 image=base dir=/p backend=lima created=2020-01-01T00:00:00Z tools.names:=["go"] tools.made.libc=gnu tools.made.files:=["go-1.20.0-0123456789ab.erofs"]
-json_set $VMS/12345612345602/vm.json version:=1 id=gone name=devvm-gone-12345612345602 image=base dir=/q backend=lima created=2020-01-01T00:00:00Z tools.names:=["go"] tools.made.libc=gnu
+# The one Lima no longer has was made in this run's Lima home, its state
+# unchanged for over an hour: what devvm gc --orphans would forget.
+exec sh -c 'printf %s "$DEVVM_LIMA_HOME" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16 > at'
+exec sh -c 'printf "{\"version\": 1, \"id\": \"gone\", \"name\": \"devvm-gone-12345612345602\", \"image\": \"base\", \"dir\": \"/q\", \"backend\": \"lima\", \"backend_at\": \"%s\", \"created\": \"2020-01-01T00:00:00Z\", \"tools\": {\"names\": [\"go\"], \"made\": {\"libc\": \"gnu\"}}}\n" "$(cat at)" > "$VMS/12345612345602/vm.json" && touch -t 202001010000 "$VMS/12345612345602/vm.json"'
 exec stub vm devvm-p-12345612345601 Stopped
 mkdir $DATA/exports $DATA/logs $DATA/cache/mise/2026.1.1
 exec sh -c 'echo x > "$DATA/exports/devvm-old-12345612345612-20260101-000000.tar.gz"'
@@ -50,6 +53,24 @@ stdout '^total +- +\S+ +- +\S+ +- +-$'
 stderr '\Aspace_folder_gone dir=/p vm=devvm-p-12345612345601\n\z'
 stub_calls
 ! stdout 'create|clone|delete|start|stop|edit|rm |prune|shell'
+
+# Leftover state is only what devvm gc --orphans would forget: never a VM
+# Lima no longer has whose state changed in the last hour (it may be being
+# made), nor one made in another Lima home.
+mkdir $VMS/12345612345604 $VMS/12345612345605
+exec sh -c 'printf "{\"version\": 1, \"id\": \"new\", \"name\": \"devvm-new-12345612345604\", \"image\": \"base\", \"dir\": \"/n\", \"backend\": \"lima\", \"backend_at\": \"%s\", \"created\": \"2020-01-01T00:00:00Z\"}\n" "$(cat at)" > "$VMS/12345612345604/vm.json"'
+json_set $VMS/12345612345605/vm.json version:=1 id=moved name=devvm-moved-12345612345605 image=base dir=/m backend=lima backend_at=0000000000000000 created=2020-01-01T00:00:00Z
+exec touch -t 202001010000 $VMS/12345612345605/vm.json
+exec devvm space
+stdout '^leftover state +1 +\S+ +leftover +- +gc --orphans +-$'
+# gc lists the same one, and without a terminal or --force deletes nothing.
+! exec devvm gc --orphans
+stdout '^gc_orphans count=1$'
+stdout '^gc_orphan backend=lima dir=/q vm=devvm-gone-12345612345602$'
+stderr '^devvm: force_needed command=devvm gc$'
+stderr '^gc_orphan_recent vm=devvm-new-12345612345604$'
+stderr '^gc_orphan_elsewhere vm=devvm-moved-12345612345605$'
+rm $VMS/12345612345604 $VMS/12345612345605
 
 # --backend is no flag of space's.
 ! exec devvm space --backend lima

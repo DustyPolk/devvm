@@ -2,12 +2,9 @@ package cli
 
 import (
 	"context"
-	"errors"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -21,35 +18,21 @@ import (
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// gcOpts are what devvm gc is asked for besides its default run, which
-// each option adds to.
+// gcOpts are devvm gc's flags: what it's asked for besides its default
+// run (vm.GCOpts), and what it does after.
 type gcOpts struct {
-	// tools is --tool-images: also the current tool images no VM has, of
-	// toolNames when there are any.
-	tools     bool
-	toolNames []string
+	vm.GCOpts
+	// olderThan is --older-than as written, which checkArgs parses into
+	// Age.
+	olderThan string
 	// force is --force: gc deletes without asking, which it needs without
 	// a terminal.
 	force bool
-	// making is set with --tool-images while a VM is being made: gc keeps every
-	// current tool image no VM has, and says so.
-	making bool
-	// history is --history: also the exports of agents' history, only
-	// those older than --older-than when it's given.
-	history   bool
-	olderThan string
-	age       time.Duration
-	// orphans is --orphans: also what devvm keeps for VMs their backend
-	// no longer has.
-	orphans bool
 	// caches is --caches: then devvm's share of the backends' own
 	// caches, each backend asked for apart, only in a terminal.
 	caches bool
 	// retention is --retention: then the retention settings, at once.
 	retention bool
-	// nixCache is --nix-cache: also the whole shared Nix cache, not only
-	// what's over its cap.
-	nixCache bool
 }
 
 // newGCCmd is devvm gc.
@@ -57,7 +40,7 @@ func newGCCmd(a *app) *cobra.Command {
 	var o gcOpts
 	c := &cobra.Command{
 		Use:   "gc [--tool-images [TOOL...]]",
-		Short: "Delete stale images and unused tool images",
+		Short: "Delete stale images, unused tools, old files and the Nix cache over its cap",
 		Long: "Delete the stale and unfinished images, the shared tools devvm images lists as unused, " +
 			"the files devvm itself no longer needs, and the shared Nix cache's least recently used files while it's over its cap, " +
 			"after listing them and asking in a terminal. " +
@@ -70,18 +53,18 @@ func newGCCmd(a *app) *cobra.Command {
 		),
 		Args: func(_ *cobra.Command, args []string) error { return o.checkArgs(args) },
 		RunE: func(cmd *cobra.Command, args []string) error {
-			o.toolNames = args
+			o.ToolNames = args
 			fail(a.u, gc(cmd.Context(), a, o), msg.GCFailed)
 			return nil
 		},
 	}
 	f := c.Flags()
-	f.BoolVar(&o.tools, "tool-images", false, "also delete the current shared tool images no VM has, or only those of the TOOLs named")
+	f.BoolVar(&o.Tools, "tool-images", false, "also delete the current shared tool images no VM has, or only those of the TOOLs named")
 	addForceFlag(f, &o.force)
-	f.BoolVar(&o.history, "history", false, "also delete the saved exports of agents' history")
+	f.BoolVar(&o.History, "history", false, "also delete the saved exports of agents' history")
 	f.StringVar(&o.olderThan, "older-than", "", "with --history, only those older than `DURATION`, such as 30d")
-	f.BoolVar(&o.nixCache, "nix-cache", false, "also delete the whole shared Nix cache")
-	f.BoolVar(&o.orphans, "orphans", false, "also delete what devvm keeps for VMs their backend no longer has")
+	f.BoolVar(&o.NixCache, "nix-cache", false, "also delete the whole shared Nix cache")
+	f.BoolVar(&o.Orphans, "orphans", false, "also delete what devvm keeps for VMs their backend no longer has")
 	f.BoolVar(&o.caches, "caches", false, "then free devvm's share of Lima's own caches, after asking")
 	f.BoolVar(&o.retention, "retention", false, "then apply the retention settings")
 	return c
@@ -91,16 +74,16 @@ func newGCCmd(a *app) *cobra.Command {
 // with --tool-images, and an age only with --history.
 func (o *gcOpts) checkArgs(args []string) error {
 	if o.olderThan != "" {
-		if !o.history {
+		if !o.History {
 			return msg.GCOlderThanNeedsHistory()
 		}
 		age, err := state.ParseDuration(o.olderThan)
 		if err != nil {
 			return err
 		}
-		o.age = age
+		o.Age = age
 	}
-	if len(args) > 0 && !o.tools {
+	if len(args) > 0 && !o.Tools {
 		return msg.GCNamesNeedTools(args[0])
 	}
 	for _, a := range args {
@@ -111,80 +94,52 @@ func (o *gcOpts) checkArgs(args []string) error {
 	return nil
 }
 
-// gcPlan is what devvm gc deletes, gathered before it asks.
-type gcPlan struct {
-	images  []listedImage  // stale and unfinished images, each with its backend's
-	tools   []tools.Listed // unused tool images
-	current []tools.Listed // with --tool-images, current tool images no VM has
-	// with --tool-images while a VM is being made, the current tool images
-	// no VM has, which gc keeps and says so
-	making  []tools.Listed
-	exports []savedExport // with --history, the exports old enough
-	// with --orphans, the VMs their backend no longer has, and what
-	// forgets them
-	orphans   vm.LeftoverReport
-	leftovers vm.Leftovers
-	mise      []string            // older versions of devvm's own mise
-	packages  build.StalePackages // the package cache's: sets and files nothing needs
-	cache     build.Images        // what deletes them
-	nix       nixCachePlan
-	share     tools.Share // where the tool images are
-	// skipped are the backends a VM uses that couldn't list their
-	// images: gc leaves everything of theirs alone.
-	skipped map[string]bool
-}
-
-// gc lists what's stale or unused, asks in a terminal, and deletes it. It
-// holds the share's lock throughout, so no build moves a tool image in
-// and no update swaps the lock meanwhile.
+// gc lists what's stale or unused, asks in a terminal, and deletes it,
+// then applies retention and frees the backends' caches when asked. One
+// registry, the run's, serves it all.
 func gc(ctx context.Context, a *app, o gcOpts) error {
+	env, err := a.vmEnv()
+	if err != nil {
+		return err
+	}
 	b, err := a.builder()
 	if err != nil {
 		return err
 	}
 	b.From = fromRef("")
-	skipped, err := gcLocked(ctx, a, b, o)
+	h := vm.Housekeeping{Env: env}
+	skipped, err := gcLocked(ctx, a, h, b, o)
 	if err != nil {
 		return err
 	}
 	if o.retention {
-		if err := gcRetention(ctx, a, b); err != nil {
+		if err := gcRetention(ctx, a, h, b); err != nil {
 			return err
 		}
 	}
 	if o.caches {
-		return gcCaches(ctx, a, o, skipped)
+		return gcCaches(ctx, a, env, o, skipped)
 	}
 	return nil
 }
 
-// gcLocked is gcRun holding the share's lock throughout. With --tool-images it
-// then tries the lock VMs being made hold (tools.Making), and holds it so
-// no VM picks its tools meanwhile. While one is being made, gc keeps every
-// current tool no VM has, as that VM may not list the tools it picked yet.
-func gcLocked(ctx context.Context, a *app, b *build.Env, o gcOpts) (map[string]bool, error) {
-	unlock, err := b.Tools.LockShare(ctx)
+// gcLocked is gcRun holding the share's lock throughout, and with
+// --tool-images the lock VMs being made hold (vm.Housekeeping.LockGC).
+// While one is being made, gc keeps every current tool no VM has, as that
+// VM may not list the tools it picked yet.
+func gcLocked(ctx context.Context, a *app, h vm.Housekeeping, b *build.Env, o gcOpts) (map[string]bool, error) {
+	unlock, making, err := h.LockGC(ctx, b, o.Tools)
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
-	if o.tools {
-		unmaking, ok, err := (tools.Making{Dirs: b.Dirs}).Exclude()
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			defer unmaking()
-		} else {
-			o.making = true
-		}
-	}
-	return gcRun(ctx, a, b, o)
+	o.Making = making
+	return gcRun(ctx, a, h, b, o)
 }
 
 // gcRetention applies the retention settings now, the VMs' leftovers
 // included, saying what it deleted in one line.
-func gcRetention(ctx context.Context, a *app, b *build.Env) error {
+func gcRetention(ctx context.Context, a *app, h vm.Housekeeping, b *build.Env) error {
 	u := a.u
 	def, err := settings.Read(b.Dirs)
 	if err != nil {
@@ -200,179 +155,94 @@ func gcRetention(ctx context.Context, a *app, b *build.Env) error {
 		return msg.RetentionBusy()
 	}
 	defer unlock()
-	done, err := retain(ctx, a, b, r, true)
+	done, err := h.Retain(ctx, b, r, true)
 	touchRetention(b.Dirs)
 	if err != nil {
 		return err
 	}
-	u.Info(done.report())
+	u.Info(retainedReport(done))
 	return nil
 }
 
 // gcRun is gc's run but the backends' caches and retention: it lists what
 // it deletes, asks in a terminal, and deletes it. It returns the backends
 // it skipped, as they couldn't list their images.
-func gcRun(ctx context.Context, a *app, b *build.Env, o gcOpts) (map[string]bool, error) {
+func gcRun(ctx context.Context, a *app, h vm.Housekeeping, b *build.Env, o gcOpts) (map[string]bool, error) {
 	u := a.u
-	p, err := planGC(ctx, a, b, o)
+	done := u.Status(msg.ReadingImages())
+	p, err := h.PlanGC(ctx, b, o.GCOpts)
+	done()
 	if err != nil {
 		return nil, err
 	}
-	if p.empty() {
-		p.showOrphans(u)
-		if !p.showMaking(u) {
+	for _, w := range p.Warnings {
+		u.Warn(w)
+	}
+	if p.Empty() {
+		showOrphans(u, p.Orphans)
+		if !showMaking(u, p) {
 			u.Info(msg.NothingToClean())
 		}
-		return p.skipped, nil
+		return p.Skipped, nil
 	}
-	p.show(u)
-	p.showMaking(u)
+	showGC(u, p)
+	showMaking(u, p)
 	if ok, err := confirmed(u, o.force, "devvm gc", func() bool { return u.Confirm(msg.GCConfirm()) }); !ok {
 		if err == nil {
 			u.Info(msg.NothingDeleted())
 		}
-		return p.skipped, err
+		return p.Skipped, err
 	}
-	return p.skipped, p.run(ctx, u)
-}
-
-// planGC gathers what gc deletes.
-func planGC(ctx context.Context, a *app, b *build.Env, o gcOpts) (gcPlan, error) {
-	u := a.u
-	p := gcPlan{share: tools.Share{Env: b.Tools}}
-	l, err := listImages(ctx, a, b)
-	if err != nil {
-		return p, err
-	}
-	imgs, ts := l.images, l.tools
-	p.images, p.tools = staleImages(imgs), tools.Unused(ts)
-	if o.tools {
-		p.current = p.share.NoVM(ts, o.toolNames)
-		if o.making {
-			p.current, p.making = nil, p.current
-		}
-	}
-	p.skip(u, l.unlisted)
-	if o.history {
-		es, err := exports(b.Dirs)
-		if err != nil {
-			return p, err
-		}
-		p.exports = olderThan(es, o.age, time.Now())
-	}
-	if o.orphans {
-		env, err := a.vmEnv()
-		if err != nil {
-			return p, err
-		}
-		p.leftovers = vm.Leftovers{Env: env}
-		if p.orphans, err = p.leftovers.Find(ctx); err != nil {
-			return p, err
-		}
-		p.orphans = withoutSkipped(p.orphans, p.skipped)
-	}
-	if p.mise, err = (tools.Versions{Env: b.Tools}).StaleMise(); err != nil {
-		return p, err
-	}
-	p.cache = build.Images{Env: b}
-	if p.packages, err = p.cache.Stale(ctx); err != nil {
-		return p, err
-	}
-	p.nix, err = planNixCache(u, b.Dirs, o.nixCache)
-	return p, err
-}
-
-// skip warns for each backend a VM uses that couldn't list its images and
-// leaves out its shared tool images, and those without a record naming
-// their backend, which may be its: gc carries on with the other backends.
-func (p *gcPlan) skip(u *ui.UI, unlisted []unlisted) {
-	if len(unlisted) == 0 {
-		return
-	}
-	p.skipped = map[string]bool{}
-	for _, s := range unlisted {
-		u.Warn(msg.GCBackendSkipped(s.backend).Because(s.err))
-		p.skipped[s.backend] = true
-	}
-	keep := func(ts []tools.Listed) []tools.Listed {
-		var out []tools.Listed
-		for _, t := range ts {
-			if t.Backend != "" && !p.skipped[t.Backend] {
-				out = append(out, t)
-			}
-		}
-		return out
-	}
-	p.tools, p.current, p.making = keep(p.tools), keep(p.current), keep(p.making)
-}
-
-// withoutSkipped moves the orphans of a skipped backend to the backends
-// that couldn't be asked, so their state stays.
-func withoutSkipped(r vm.LeftoverReport, skipped map[string]bool) vm.LeftoverReport {
-	var orphans []vm.Orphan
-	for _, o := range r.Orphans {
-		if !skipped[o.Backend] {
-			orphans = append(orphans, o)
-		} else if !slices.Contains(r.Unknown, o.Backend) {
-			r.Unknown = append(r.Unknown, o.Backend)
-		}
-	}
-	r.Orphans = orphans
-	return r
+	deleted, err := p.Apply(ctx)
+	showGCDone(u, deleted)
+	return p.Skipped, err
 }
 
 // showMaking says which current tool images no VM has gc keeps because a
 // VM is being made, reporting whether there were any.
-func (p gcPlan) showMaking(u *ui.UI) bool {
-	if len(p.making) == 0 {
+func showMaking(u *ui.UI, p vm.GCPlan) bool {
+	if len(p.Making) == 0 {
 		return false
 	}
-	u.Info(msg.GCToolsMaking(len(p.making), tools.Label(toolFiles(p.making))))
+	u.Info(msg.GCToolsMaking(len(p.Making), tools.Label(vm.ToolFiles(p.Making))))
 	return true
-}
-
-// empty reports whether gc has nothing to delete; the tool images it
-// keeps while a VM is being made aren't any.
-func (p gcPlan) empty() bool {
-	return len(p.images)+len(p.tools)+len(p.current)+len(p.exports)+len(p.orphans.Orphans)+len(p.mise) == 0 &&
-		len(p.orphans.Links)+len(p.orphans.Sockets)+len(p.packages.Sets)+len(p.packages.Files) == 0 && !p.nix.any()
 }
 
 // showOrphans lists the VMs gc --orphans forgets, then says which it
 // leaves alone and why.
-func (p gcPlan) showOrphans(u *ui.UI) {
-	if orphans := p.orphans.Orphans; len(orphans) > 0 {
+func showOrphans(u *ui.UI, r vm.LeftoverReport) {
+	if orphans := r.Orphans; len(orphans) > 0 {
 		u.Say(msg.GCOrphans(len(orphans)))
 		for _, o := range orphans {
 			u.Say(msg.GCOrphan(o.Backend, o.Dir, o.Name))
 		}
 	}
-	if links := p.orphans.Links; len(links) > 0 {
+	if links := r.Links; len(links) > 0 {
 		u.Say(msg.GCDeadLinks(len(links)))
 		for _, l := range links {
 			u.Say(msg.GCDeadLink(l.Name, strconv.Itoa(l.Port), l.Target, l.Client))
 		}
 	}
-	if n := len(p.orphans.Sockets); n > 0 {
+	if n := len(r.Sockets); n > 0 {
 		u.Say(msg.GCLinkSockets(n))
 	}
-	for _, b := range p.orphans.Unknown {
+	for _, b := range r.Unknown {
 		u.Note(msg.GCOrphansUnknown(b))
 	}
-	for _, n := range p.orphans.Elsewhere {
+	for _, n := range r.Elsewhere {
 		u.Note(msg.GCOrphanElsewhere(n))
 	}
-	for _, n := range p.orphans.Recent {
+	for _, n := range r.Recent {
 		u.Note(msg.GCOrphanRecent(n))
 	}
 }
 
-// show lists what gc deletes.
-func (p gcPlan) show(u *ui.UI) {
-	p.showOrphans(u)
-	if len(p.images) > 0 {
+// showGC lists what gc deletes.
+func showGC(u *ui.UI, p vm.GCPlan) {
+	showOrphans(u, p.Orphans)
+	if len(p.Images) > 0 {
 		u.Say(msg.GCImages())
-		for _, l := range p.images {
+		for _, l := range p.Images {
 			if l.Name == "" {
 				u.Say(msg.GCUnfinished(l.Key))
 			} else {
@@ -380,96 +250,74 @@ func (p gcPlan) show(u *ui.UI) {
 			}
 		}
 	}
-	if len(p.tools) > 0 {
-		u.Say(msg.GCTools(len(p.tools), humanSize(toolsSize(p.tools))))
+	if len(p.Tools) > 0 {
+		u.Say(msg.GCTools(len(p.Tools), humanSize(toolsSize(p.Tools))))
 	}
-	if len(p.current) > 0 {
-		u.Say(msg.GCToolsNoVM(len(p.current), humanSize(toolsSize(p.current)), tools.Label(toolFiles(p.current))))
+	if len(p.Current) > 0 {
+		u.Say(msg.GCToolsNoVM(len(p.Current), humanSize(toolsSize(p.Current)), tools.Label(vm.ToolFiles(p.Current))))
 	}
-	if len(p.mise) > 0 {
-		u.Say(msg.GCMise(len(p.mise), humanSize(dirsSize(p.mise))))
+	if len(p.Mise) > 0 {
+		u.Say(msg.GCMise(len(p.Mise), humanSize(dirsSize(p.Mise))))
 	}
-	if n := len(p.packages.Files); n > 0 || len(p.packages.Sets) > 0 {
-		u.Say(msg.GCPackages(n, humanSize(p.packages.Size)))
+	if n := len(p.Packages.Files); n > 0 || len(p.Packages.Sets) > 0 {
+		u.Say(msg.GCPackages(n, humanSize(p.Packages.Size)))
 	}
-	p.nix.show(u)
-	if len(p.exports) > 0 {
-		u.Say(msg.GCHistory(len(p.exports), humanSize(exportsSize(p.exports))))
-		for _, e := range p.exports {
+	showNixCache(u, p.Nix)
+	if len(p.Exports) > 0 {
+		u.Say(msg.GCHistory(len(p.Exports), humanSize(vm.ExportsSize(p.Exports))))
+		for _, e := range p.Exports {
 			u.Say(msg.GCHistoryExport(exportDate(e.At), humanSize(e.Size), e.VM))
 		}
 	}
 }
 
-// run deletes what's planned.
-func (p gcPlan) run(ctx context.Context, u *ui.UI) error {
-	for _, o := range p.orphans.Orphans {
-		if err := p.leftovers.Forget(ctx, o); err != nil {
-			return err
-		}
-		u.Info(msg.ForgotOrphan(o.Name))
+// showNixCache says what gc deletes of the shared Nix cache.
+func showNixCache(u *ui.UI, p vm.NixCachePlan) {
+	switch {
+	case !p.Any():
+	case p.Limit == 0:
+		u.Say(msg.GCNixCache(p.Files, humanSize(p.Size)))
+	default:
+		u.Say(msg.GCNixCacheOver(humanSize(p.Cap), humanSize(p.Size)))
 	}
-	if len(p.orphans.Links)+len(p.orphans.Sockets) > 0 {
-		if err := p.leftovers.ForgetLinks(ctx); err != nil {
-			return err
-		}
-		if n := len(p.orphans.Sockets); n > 0 {
-			u.Info(msg.DeletedLinkSockets(n))
-		}
-	}
-	if err := deleteStale(ctx, u, p.images); err != nil {
-		return err
-	}
-	if err := removeAll(p.mise); err != nil {
-		return err
-	}
-	if len(p.mise) > 0 {
-		u.Info(msg.DeletedMise(len(p.mise)))
-	}
-	if len(p.packages.Sets)+len(p.packages.Files) > 0 {
-		if err := p.cache.DeletePackages(ctx, p.packages); err != nil {
-			return err
-		}
-		u.Info(msg.DeletedPackages(len(p.packages.Files)))
-	}
-	if err := removeAll(exportPaths(p.exports)); err != nil {
-		return err
-	}
-	if len(p.exports) > 0 {
-		u.Info(msg.DeletedHistory(len(p.exports)))
-	}
-	if len(p.tools) > 0 {
-		if err := p.share.Delete(toolFiles(p.tools)); err != nil {
-			return err
-		}
-		u.Info(msg.DeletedTools(len(p.tools)))
-	}
-	if len(p.current) > 0 {
-		if err := p.share.Delete(toolFiles(p.current)); err != nil {
-			return err
-		}
-		u.Info(msg.DeletedToolsNoVM(len(p.current)))
-	}
-	return p.nix.run(u)
 }
 
-// toolFiles are these tool images' files in the share.
-func toolFiles(ts []tools.Listed) []string {
-	files := make([]string, 0, len(ts))
-	for _, t := range ts {
-		files = append(files, t.File)
+// showGCDone says what gc deleted, in the order it did; an image its
+// backend refused stays, with the backend's message.
+func showGCDone(u *ui.UI, d vm.GCDone) {
+	for _, n := range d.Forgot {
+		u.Info(msg.ForgotOrphan(n))
 	}
-	return files
-}
-
-// removeAll deletes these files and folders.
-func removeAll(paths []string) error {
-	for _, p := range paths {
-		if err := os.RemoveAll(p); err != nil {
-			return err
+	if d.LinkSockets > 0 {
+		u.Info(msg.DeletedLinkSockets(d.LinkSockets))
+	}
+	for _, l := range d.Images {
+		switch {
+		case l.Refused:
+			u.Warn(l.Why)
+		case l.Name == "":
+			u.Info(msg.DeletedUnfinishedBuild(l.Key))
+		default:
+			u.Info(msg.DeletedImage(l.Name, l.Key))
 		}
 	}
-	return nil
+	if d.Mise > 0 {
+		u.Info(msg.DeletedMise(d.Mise))
+	}
+	if d.PackagesDeleted {
+		u.Info(msg.DeletedPackages(d.Packages))
+	}
+	for _, c := range []struct {
+		n    int
+		said func(int) msg.M
+	}{{d.History, msg.DeletedHistory}, {d.Tools, msg.DeletedTools}, {d.ToolsNoVM, msg.DeletedToolsNoVM}} {
+		if c.n > 0 {
+			u.Info(c.said(c.n))
+		}
+	}
+	if d.NixFiles > 0 {
+		u.Info(msg.DeletedNixCache(d.NixFiles, humanSize(d.NixFreed)))
+	}
 }
 
 // dirsSize is the disk these take.
@@ -479,25 +327,4 @@ func dirsSize(paths []string) int64 {
 		n += du(p)
 	}
 	return n
-}
-
-// deleteStale deletes these images, each on its backend. One the backend
-// refuses with a message (on Linux hosts, an image whose disk VMs use)
-// stays, saying so.
-func deleteStale(ctx context.Context, u *ui.UI, imgs []listedImage) error {
-	for _, l := range imgs {
-		if err := l.images.DeleteKey(ctx, l.Key); err != nil {
-			if m, ok := errors.AsType[msg.M](err); ok {
-				u.Warn(m)
-				continue
-			}
-			return err
-		}
-		if l.Name == "" {
-			u.Info(msg.DeletedUnfinishedBuild(l.Key))
-		} else {
-			u.Info(msg.DeletedImage(l.Name, l.Key))
-		}
-	}
-	return nil
 }

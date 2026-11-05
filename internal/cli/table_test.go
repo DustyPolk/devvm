@@ -74,7 +74,7 @@ func TestWriteListColored(t *testing.T) {
 }
 
 func TestWriteImagesColored(t *testing.T) {
-	imgs := []listedImage{
+	imgs := []vm.ListedImage{
 		{Listed: build.Listed{Name: "base", DigestID: "sha256:ab", Key: "k1", State: build.StateCurrent, Sized: true, Size: 1 << 30}, Backend: "lima"},
 		{Listed: build.Listed{Name: "node", Key: "k2", State: build.StateStale}, Backend: "lima"},
 	}

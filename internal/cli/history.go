@@ -1,26 +1,20 @@
 package cli
 
 import (
-	"errors"
-	"io/fs"
-	"os"
 	"path/filepath"
-	"regexp"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
-	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // newHistoryCmd is devvm history: the exports of agents' history in
-// devvm's exports folder, and history export, which writes one.
+// devvm's exports folder (vm.Exports), and history export, which writes
+// one.
 func newHistoryCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
@@ -36,9 +30,9 @@ func newHistoryCmd(a *app) *cobra.Command {
 		Args: noArgs,
 		RunE: func(*cobra.Command, []string) error {
 			d, err := a.dirs()
-			var es []savedExport
+			var es []vm.Export
 			if err == nil {
-				es, err = exports(d)
+				es, err = vm.Exports{Dirs: d}.List()
 			}
 			fail(u, err, msg.HistoryFailed)
 			if asJSON {
@@ -67,7 +61,7 @@ type exportJSON struct {
 	Size   int64  `json:"size"`
 }
 
-func historyJSON(es []savedExport) historyOutput {
+func historyJSON(es []vm.Export) historyOutput {
 	out := historyOutput{Exports: make([]exportJSON, 0, len(es))}
 	for _, e := range es {
 		out.Exports = append(out.Exports, exportJSON{File: e.Path, VM: e.VM, Folder: e.Folder, Date: e.At.Format(time.RFC3339), Size: e.Size})
@@ -77,7 +71,7 @@ func historyJSON(es []savedExport) historyOutput {
 
 // writeHistory writes the exports as a table, a header first; a folder
 // devvm has no record of is -.
-func writeHistory(tab *ui.Table, es []savedExport) error {
+func writeHistory(tab *ui.Table, es []vm.Export) error {
 	tab.Header("FILE", "VM", "FOLDER", "DATE", "SIZE")
 	for _, e := range es {
 		tab.Row(cell(e.Path), cell(e.VM), cell(e.Folder), cell(exportDate(e.At)), cell(humanSize(e.Size)))
@@ -115,110 +109,6 @@ func newHistoryExportCmd(a *app) *cobra.Command {
 	}
 	addFolderFlags(cmd, a)
 	return cmd
-}
-
-// exportName is an export's name in the exports folder, as devvm history
-// export and devvm rm write it: <vm>-<date>-<time>.tar.gz. Nothing else
-// there is one: an export being written (.devvm-export-…), the file
-// beside one that names its folder (paths.ExportFolder) or the user's
-// own.
-var exportName = regexp.MustCompile(`^(.+)-(\d{8}-\d{6})\.tar\.gz$`)
-
-// parseExportName returns the VM and the date and time of an export's
-// name (exportName), and whether it is one: its VM a project VM's
-// (vmname.IsVM).
-func parseExportName(name string) (vm, stamp string, ok bool) {
-	m := exportName.FindStringSubmatch(name)
-	if m == nil || !vmname.IsVM(m[1]) {
-		return "", "", false
-	}
-	return m[1], m[2], true
-}
-
-// savedExport is one of the exports in devvm's exports folder.
-type savedExport struct {
-	Path   string
-	VM     string    // the VM it's of
-	Folder string    // its project folder, from the file beside it; "" without one
-	At     time.Time // when it was written, from its name
-	Size   int64
-}
-
-// exportFolder reads the project folder the file beside an export names;
-// "" without one.
-func exportFolder(export string) string {
-	data, err := os.ReadFile(paths.ExportFolder(export))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
-// exports lists the exports in devvm's exports folder, oldest first: only
-// plain files named as devvm names them.
-func exports(d paths.Dirs) ([]savedExport, error) {
-	entries, err := os.ReadDir(d.Exports())
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-	var out []savedExport
-	for _, e := range entries {
-		vm, stamp, ok := parseExportName(e.Name())
-		if !ok || !e.Type().IsRegular() {
-			continue
-		}
-		// The name has no zone: it's the host's wall clock when the export
-		// was written (devvm history export names it in local time), so it's read
-		// in local time too and shown as written. An age is elapsed time
-		// from that instant (30d is 720 hours), so across a DST change an
-		// export reaches it an hour before or after the same wall-clock
-		// time 30 days on, and on a host moved to another zone it's off by
-		// the zones' difference.
-		at, err := time.ParseInLocation("20060102-150405", stamp, time.Local)
-		if err != nil {
-			continue
-		}
-		p := filepath.Join(d.Exports(), e.Name())
-		out = append(out, savedExport{Path: p, VM: vm, Folder: exportFolder(p), At: at, Size: du(p)})
-	}
-	slices.SortFunc(out, func(a, b savedExport) int { return a.At.Compare(b.At) })
-	return out, nil
-}
-
-// olderThan returns the exports written at least age before now; all of
-// them when age is 0.
-func olderThan(es []savedExport, age time.Duration, now time.Time) []savedExport {
-	if age == 0 {
-		return es
-	}
-	var out []savedExport
-	for _, e := range es {
-		if now.Sub(e.At) >= age {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
-// exportPaths are these exports' files, each with the file beside it
-// that names its folder.
-func exportPaths(es []savedExport) []string {
-	out := make([]string, 0, 2*len(es))
-	for _, e := range es {
-		out = append(out, e.Path, paths.ExportFolder(e.Path))
-	}
-	return out
-}
-
-// exportsSize is the disk these exports take.
-func exportsSize(es []savedExport) int64 {
-	var n int64
-	for _, e := range es {
-		n += e.Size
-	}
-	return n
 }
 
 // exportDate is how an export's list shows its date.

@@ -3,7 +3,7 @@ title: devvm gc
 weight: 9
 ---
 
-Delete stale images and unused tool images
+Delete stale images, unused tools, old files and the Nix cache over its cap
 
 ## Synopsis
 

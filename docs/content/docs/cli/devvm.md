@@ -63,7 +63,7 @@ devvm [flags]
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm desktop](devvm_desktop.md): Open this folder's VM's desktop in a VNC viewer
 - [devvm doctor](devvm_doctor.md): Check what devvm needs on this machine
-- [devvm gc](devvm_gc.md): Delete stale images and unused tool images
+- [devvm gc](devvm_gc.md): Delete stale images, unused tools, old files and the Nix cache over its cap
 - [devvm git-protect](devvm_git-protect.md): Show or change .git protection for this folder's VM
 - [devvm group](devvm_group.md): Show the group this folder's VM is in
 - [devvm history](devvm_history.md): List the saved exports of agents' history

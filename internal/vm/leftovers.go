@@ -56,11 +56,20 @@ type LeftoverReport struct {
 // state is over an hour old. A VM whose state can't be read is never one.
 // It changes nothing.
 func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
-	var r LeftoverReport
 	inv, err := ReadInventory(ctx, e.Dirs, e.Registry, UsedBackends)
 	if err != nil {
-		return r, err
+		return LeftoverReport{}, err
 	}
+	return e.FindIn(ctx, inv)
+}
+
+// FindIn is Find by an inventory already read, which must have asked the
+// backends some VM's state names: the one definition of an orphan, which
+// devvm gc --orphans forgets, retention's orphans.age too, and devvm space
+// counts as leftover state. A VM its backend has, its project folder gone
+// or not (FolderGone), is never one.
+func (e Leftovers) FindIn(ctx context.Context, inv *Inventory) (LeftoverReport, error) {
+	var r LeftoverReport
 	usable := map[string]bool{} // by backend: it listed, and its check passes
 	for _, k := range inv.VMs {
 		st := k.State
@@ -103,6 +112,7 @@ func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
 		}
 		r.Orphans = append(r.Orphans, Orphan{Name: n, Backend: bname, Dir: st.Dir, Changed: fi.ModTime()})
 	}
+	var err error
 	if r.Links, err = deadLinks(e.Dirs); err != nil {
 		return r, err
 	}
