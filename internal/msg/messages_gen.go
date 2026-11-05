@@ -869,6 +869,11 @@ func ExportFailed(reason string) M {
 	return M{id: "export_failed", vals: []val{{"reason", reason}}}
 }
 
+// ExportFailedKept is [export_failed_kept]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM as it was. Run {{.command}} --no-export to go ahead without exporting."
+func ExportFailedKept(command string, vm string) M {
+	return M{id: "export_failed_kept", vals: []val{{"command", command}, {"vm", vm}}}
+}
+
 // Exported is [exported]: "exported {{.vm}}'s agent history to {{.file}}"
 func Exported(file string, vm string) M {
 	return M{id: "exported", vals: []val{{"file", file}, {"vm", vm}}}
@@ -2044,7 +2049,7 @@ func NoImageNamedFrom(from string, image string) M {
 	return M{id: "no_image_named_from", vals: []val{{"from", from}, {"image", image}}}
 }
 
-// NoInput is [no_input]: "This question can't be asked without a terminal, after the input ends, or with --no-input. Give {{.answer}} to answer it instead."
+// NoInput is [no_input]: "This question can't be asked without a terminal, after the input ends, or with --no-input. Use {{.answer}} to answer it instead."
 func NoInput(answer string) M {
 	return M{id: "no_input", vals: []val{{"answer", answer}}}
 }
@@ -2074,12 +2079,12 @@ func NoSubcommand(command string, commands string, given string) M {
 	return M{id: "no_subcommand", vals: []val{{"command", command}, {"commands", commands}, {"given", given}}}
 }
 
-// NoTerminalDelete is [no_terminal_delete]: "Going ahead loses the uncommitted changes in the VM's clone, and there's no terminal to confirm in. Run {{.command}} in a terminal to confirm."
+// NoTerminalDelete is [no_terminal_delete]: "Going ahead loses the uncommitted changes in the VM's clone, which can't be confirmed here. Run {{.command}} in a terminal without --no-input to confirm."
 func NoTerminalDelete(command string) M {
 	return M{id: "no_terminal_delete", vals: []val{{"command", command}}}
 }
 
-// NoTerminalFetch is [no_terminal_fetch]: "There's no terminal to ask in, so devvm kept the VM as it is. Run git fetch {{.remote}} first, or {{.command}} in a terminal to choose."
+// NoTerminalFetch is [no_terminal_fetch]: "There's no way to ask here whether to fetch the clone's work, so devvm kept the VM as it is. Run git fetch {{.remote}} first, or {{.command}} in a terminal without --no-input to choose."
 func NoTerminalFetch(command string, remote string) M {
 	return M{id: "no_terminal_fetch", vals: []val{{"command", command}, {"remote", remote}}}
 }
@@ -2509,11 +2514,6 @@ func RemakeConfirmCleanHome(image string, vm string) M {
 	return M{id: "remake_confirm_clean_home", vals: []val{{"image", image}, {"vm", vm}}}
 }
 
-// RemakeExportFailed is [remake_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM as it was. Run {{.command}} --no-export to go ahead without exporting."
-func RemakeExportFailed(command string, vm string) M {
-	return M{id: "remake_export_failed", vals: []val{{"command", command}, {"vm", vm}}}
-}
-
 // RemakeFailed is [remake_failed]: "Making this folder's VM again failed: {{.reason}}."
 func RemakeFailed(reason string) M {
 	return M{id: "remake_failed", vals: []val{{"reason", reason}}}
@@ -2664,11 +2664,6 @@ func RmConfirm(vm string) M {
 	return M{id: "rm_confirm", vals: []val{{"vm", vm}}}
 }
 
-// RmExportFailed is [rm_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm --no-export to delete it without exporting."
-func RmExportFailed(vm string) M {
-	return M{id: "rm_export_failed", vals: []val{{"vm", vm}}}
-}
-
 // RmFailed is [rm_failed]: "Deleting this folder's VM failed: {{.reason}}."
 func RmFailed(reason string) M {
 	return M{id: "rm_failed", vals: []val{{"reason", reason}}}
@@ -2692,11 +2687,6 @@ func RmParentVM(dir string, vm string) M {
 // RmUnknownVM is [rm_unknown_vm]: "There's no VM named {{.name}}. Give a VM's name, as devvm ls lists them, or its ssh alias."
 func RmUnknownVM(name string) M {
 	return M{id: "rm_unknown_vm", vals: []val{{"name", name}}}
-}
-
-// RmVMExportFailed is [rm_vm_export_failed]: "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm {{.vm}} --no-export to delete it without exporting."
-func RmVMExportFailed(vm string) M {
-	return M{id: "rm_vm_export_failed", vals: []val{{"vm", vm}}}
 }
 
 // RmVMFailed is [rm_vm_failed]: "Deleting {{.vm}} failed: {{.reason}}."
@@ -3564,6 +3554,7 @@ var specs = map[string]spec{
 	"doctor_proxy_ca":                {fields: []string{"dir"}},
 	"downloading_mise":               {fields: []string{"version"}},
 	"export_failed":                  {fields: []string{"reason"}},
+	"export_failed_kept":             {fields: []string{"command", "vm"}},
 	"exported":                       {fields: []string{"file", "vm"}},
 	"exporting_docker":               {fields: []string{"from"}},
 	"features_help":                  {},
@@ -3892,7 +3883,6 @@ var specs = map[string]spec{
 	"remake_clone":                   {fields: []string{"vm"}},
 	"remake_confirm":                 {fields: []string{"image", "vm"}},
 	"remake_confirm_clean_home":      {fields: []string{"image", "vm"}},
-	"remake_export_failed":           {fields: []string{"command", "vm"}},
 	"remake_failed":                  {fields: []string{"reason"}},
 	"remake_home_failed":             {fields: []string{"command", "vm"}},
 	"remake_home_lost":               {fields: []string{"vm"}},
@@ -3923,13 +3913,11 @@ var specs = map[string]spec{
 	"retention_settings_failed":      {fields: []string{"reason"}},
 	"retention_unreadable":           {},
 	"rm_confirm":                     {fields: []string{"vm"}},
-	"rm_export_failed":               {fields: []string{"vm"}},
 	"rm_failed":                      {fields: []string{"reason"}},
 	"rm_gone_clone":                  {fields: []string{"dir", "vm"}},
 	"rm_gone_stopped":                {fields: []string{"dir", "vm"}},
 	"rm_parent_vm":                   {fields: []string{"dir", "vm"}},
 	"rm_unknown_vm":                  {fields: []string{"name"}},
-	"rm_vm_export_failed":            {fields: []string{"vm"}},
 	"rm_vm_failed":                   {fields: []string{"reason", "vm"}},
 	"rm_vm_folder_flag":              {fields: []string{"flag"}},
 	"rm_vm_folder_there":             {fields: []string{"dir", "vm"}},

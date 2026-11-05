@@ -174,7 +174,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 	// A remake that didn't finish may have left no machine by its name:
 	// its history was exported then, unless --no-export.
 	if !o.NoExport && t.exists && st.Finished() && len(image.AgentsOf(tools.Names(st))) > 0 {
-		if err := e.export(ctx, t, "", msg.RmExportFailed(vm)); err != nil {
+		if err := e.export(ctx, t, "", msg.ExportFailedKept("devvm rm", vm)); err != nil {
 			return err
 		}
 	}
@@ -255,7 +255,7 @@ func (e Lifecycle) rmGone(ctx context.Context, t *target, folder FolderState, o 
 		return err
 	}
 	if export {
-		if err := e.export(ctx, t, "", msg.RmVMExportFailed(vm)); err != nil {
+		if err := e.export(ctx, t, "", msg.ExportFailedKept("devvm rm "+vm, vm)); err != nil {
 			return err
 		}
 	}

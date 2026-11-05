@@ -52,6 +52,8 @@ type UI struct {
 	// question, and pipedAnswers reads answers from input that isn't a
 	// terminal (SetFlags).
 	verboseOn, noInput, pipedAnswers atomic.Bool
+	// asking counts the questions waiting for an answer (waiting).
+	asking atomic.Int32
 	// runLogs returns the run logs' folder.
 	runLogs func() (string, error)
 	// interruptGrace is how long a command a signal ended waits for
@@ -288,12 +290,20 @@ func (u *UI) Secret(q msg.Question) (string, error) {
 		return readLine(u, q)
 	}
 	u.write(u.stderr, u.errStyle.message(q.M())+" ")
-	v, err := u.readPassword()
+	v, err := waiting(u, u.readPassword)
 	u.write(u.stderr, "\n")
-	if err != nil {
+	if err != nil || u.Interrupted() {
 		return "", q.Refused(true)
 	}
 	return v, nil
+}
+
+// waiting is read's answer, the UI counted as waiting for one meanwhile
+// (asking), so an interrupt doesn't wait for a question to return.
+func waiting(u *UI, read func() (string, error)) (string, error) {
+	u.asking.Add(1)
+	defer u.asking.Add(-1)
+	return read()
 }
 
 // Line reads a line of input, without its line ending; at the end of the
@@ -335,9 +345,13 @@ func answer(u *UI, q msg.Question, prompt string) (string, error) {
 
 // readLine reads q's answer, a line without its line ending; at the end of
 // the input with none, it's q's refusal, after a newline that ends its
-// prompt in a terminal.
+// prompt in a terminal. An answer read once the run is interrupted is
+// refused too, so nothing goes ahead after Ctrl+C.
 func readLine(u *UI, q msg.Question) (string, error) {
-	line, err := u.stdin.ReadString('\n')
+	line, err := waiting(u, func() (string, error) { return u.stdin.ReadString('\n') })
+	if u.Interrupted() {
+		return "", q.Refused(true)
+	}
 	if err != nil && line == "" {
 		if u.stdinTTY {
 			u.write(u.stderr, "\n")

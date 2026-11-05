@@ -132,7 +132,7 @@ exec limactl stop $AGENT
 exec sh -c ': > "$STUB_DIR/shell-fails"'
 ! exec devvm rm --force
 stdout '^==> starting vm=devvm-agent-[0-9a-f]{14}$'
-stderr '^devvm: rm_export_failed vm=devvm-agent-[0-9a-f]{14}$'
+stderr '^devvm: export_failed_kept command=devvm rm vm=devvm-agent-[0-9a-f]{14}$'
 exists $AGENT_dir/vm.json
 exec sh -c 'ls "$DATA/exports" | wc -l'
 stdout '^ *0$'

@@ -26,7 +26,7 @@ devvm layer rm LAYER... [flags]
 
 ```text
       --clean-home   give the VM the image's home folder instead of keeping its own
-  -f, --force        don't ask to confirm, which devvm needs without a terminal
+  -f, --force        don't ask to confirm, which devvm needs without a terminal or with --no-input
   -h, --help         help for rm
       --here         use this folder's own VM, never that of a folder it's inside
       --no-export    don't export the agents' history first

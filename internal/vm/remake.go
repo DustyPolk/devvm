@@ -476,7 +476,7 @@ func (e remaking) remake(ctx context.Context, t *target, p remakeInVM) error {
 		return err
 	}
 	if !p.NoExport && len(image.AgentsOf(tools.Names(t.st))) > 0 {
-		if err := e.lifecycle.export(ctx, t, "", msg.RemakeExportFailed(p.Command, vm)); err != nil {
+		if err := e.lifecycle.export(ctx, t, "", msg.ExportFailedKept(p.Command, vm)); err != nil {
 			return err
 		}
 	}

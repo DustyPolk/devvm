@@ -23,7 +23,7 @@ devvm rebuild IMAGE [flags]
 ## Options
 
 ```text
-  -f, --force        don't ask to confirm, which devvm needs without a terminal
+  -f, --force        don't ask to confirm, which devvm needs without a terminal or with --no-input
       --from IMAGE   the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
   -h, --help         help for rebuild
 ```

@@ -58,7 +58,7 @@ func TestRm(t *testing.T) {
 		}
 		return nil
 	}
-	if err := lc.Rm(t.Context(), RmOptions{Force: true}); msg.NamesOf(err) != "rm_export_failed vm="+vm {
+	if err := lc.Rm(t.Context(), RmOptions{Force: true}); msg.NamesOf(err) != "export_failed_kept command=devvm rm vm="+vm {
 		t.Errorf("Rm = %v", msg.NamesOf(err))
 	}
 	if _, ok := f.Instances[vm]; !ok {

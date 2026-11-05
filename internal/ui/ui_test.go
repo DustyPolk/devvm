@@ -368,6 +368,20 @@ func TestPipedAnswers(t *testing.T) {
 	}
 }
 
+// An answer read once the run is interrupted is refused: a question that
+// waited through Ctrl+C never goes ahead.
+func TestAnswerAfterInterrupt(t *testing.T) {
+	t.Parallel()
+	for name, ask := range prompts() {
+		u, _, _ := atTerminal(t, "y\n")
+		u.readPassword = func() (string, error) { return "y", nil }
+		u.interrupted.Store(true)
+		if got, want := refusal(ask(u, question("x"))), " / no_input answer=--force"; got != want {
+			t.Errorf("%s: %s, want %s", name, got, want)
+		}
+	}
+}
+
 // Once the run is interrupted, a refusal prints nothing.
 func TestRefusedInterrupted(t *testing.T) {
 	t.Parallel()

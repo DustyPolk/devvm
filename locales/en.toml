@@ -84,7 +84,7 @@ other = "{{.command}} --json only shows, so it takes no value. Run it without --
 
 [no_input]
 description = "answer is the flag or command that answers the question, such as --force"
-other = "This question can't be asked without a terminal, after the input ends, or with --no-input. Give {{.answer}} to answer it instead."
+other = "This question can't be asked without a terminal, after the input ends, or with --no-input. Use {{.answer}} to answer it instead."
 
 [rm_confirm]
 other = "Delete {{.vm}}, with everything in it?"
@@ -389,8 +389,8 @@ other = "{{.vm}} was made for {{.dir}}, which this folder is inside, and may hol
 [remake_clone]
 other = "{{.vm}} keeps its clone of the repo on its own disk, so devvm can't make it again. Run devvm clone off first, which offers to fetch the clone's work into this repo."
 
-[remake_export_failed]
-description = "command is the command as typed, such as devvm layer add"
+[export_failed_kept]
+description = "command is the command that deletes or remakes vm, as typed, such as devvm rm, devvm rm VM or devvm layer add"
 other = "Exporting {{.vm}}'s agent history failed, so devvm kept the VM as it was. Run {{.command}} --no-export to go ahead without exporting."
 
 [remake_home_failed]
@@ -985,9 +985,6 @@ other = "{{.vm}} is stopped, and starting it to export its agents' history would
 description = "dir is the repo the --clone VM vm was made for, which is gone"
 other = "{{.vm}}'s repo {{.dir}} is gone, so devvm can't fetch the clone's work into it. Run devvm rm {{.vm}} --no-clone-check to delete the VM and that work with it."
 
-[rm_vm_export_failed]
-other = "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm {{.vm}} --no-export to delete it without exporting."
-
 [delete_gone_folder_vm]
 description = "dir is the folder vm was made for, which is gone"
 other = "{{.vm}} was made for {{.dir}}, which is gone. It may hold that project's work. Delete it?"
@@ -1086,9 +1083,6 @@ other = "{{.vm}}'s shared tools are now {{.tools}}"
 
 [exported]
 other = "exported {{.vm}}'s agent history to {{.file}}"
-
-[rm_export_failed]
-other = "Exporting {{.vm}}'s agent history failed, so devvm kept the VM. Run devvm rm --no-export to delete it without exporting."
 
 [history_not_exported]
 other = "Exporting {{.vm}}'s agent history failed."
@@ -1844,7 +1838,7 @@ other = "The VM has commits on {{.refs}} that this repo hasn't fetched."
 
 [no_terminal_fetch]
 description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
-other = "There's no terminal to ask in, so devvm kept the VM as it is. Run git fetch {{.remote}} first, or {{.command}} in a terminal to choose."
+other = "There's no way to ask here whether to fetch the clone's work, so devvm kept the VM as it is. Run git fetch {{.remote}} first, or {{.command}} in a terminal without --no-input to choose."
 
 [branch_names_invalid]
 description = "refs is a space-separated list of quoted branch names"
@@ -1895,7 +1889,7 @@ other = "The VM's clone has more than {{.max}} worktrees, and devvm checked only
 
 [no_terminal_delete]
 description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
-other = "Going ahead loses the uncommitted changes in the VM's clone, and there's no terminal to confirm in. Run {{.command}} in a terminal to confirm."
+other = "Going ahead loses the uncommitted changes in the VM's clone, which can't be confirmed here. Run {{.command}} in a terminal without --no-input to confirm."
 
 [delete_anyway]
 other = "Delete anyway?"

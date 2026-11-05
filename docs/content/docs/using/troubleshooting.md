@@ -71,7 +71,7 @@ When devvm says it couldn't read the free space, the error after the message say
 
 ## You pressed Ctrl+C
 
-Ctrl+C, or closing the terminal, stops the command that's running, cleans up what the run left unfinished, and exits with code 130. A second Ctrl+C doesn't stop the cleanup.
+Ctrl+C, or closing the terminal, stops the command that's running, cleans up what the run left unfinished, and exits with code 130. A second Ctrl+C doesn't stop the cleanup. At a question, Ctrl+C ends the run at once, and devvm doesn't take an answer you type after it, so nothing goes ahead.
 
 devvm deletes an interrupted new VM, with its state, until its first shell opens, because nothing of yours is in it yet. An interrupted build deletes the image it was building.
 

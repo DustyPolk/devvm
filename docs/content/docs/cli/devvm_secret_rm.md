@@ -23,7 +23,7 @@ devvm secret rm NAME [flags]
 ## Options
 
 ```text
-  -f, --force   don't ask to confirm, which devvm needs without a terminal
+  -f, --force   don't ask to confirm, which devvm needs without a terminal or with --no-input
   -h, --help    help for rm
 ```
 

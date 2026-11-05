@@ -85,7 +85,8 @@ exec cat $DATA/ssh_config
 
 # web has an agent. Stopped, its history can't be exported without
 # starting it, which would make its folder again: refused, unless
-# --no-export. Running, it's exported, then deleted.
+# --no-export. Running, it's exported, then deleted; an export that
+# fails keeps it.
 cd $WORK
 rm $WORK/web
 exec limactl stop $WEB
@@ -97,6 +98,11 @@ stub_calls
 exists $WEB_dir/vm.json
 ! exists $WORK/web
 exec limactl start --tty=false $WEB
+exec sh -c 'echo "tar -czf" > "$STUB_DIR/shell-fails-on"'
+! exec devvm rm $WEB --force
+stderr '^devvm: export_failed_kept command=devvm rm devvm-web-[0-9a-f]{14} vm=devvm-web-[0-9a-f]{14}$'
+exists $WEB_dir/vm.json
+rm $STUB_DIR/shell-fails-on
 stub_reset
 exec devvm rm $WEB --force
 stdout '^==> exported file=\S*/data/devvm/exports/devvm-web-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-web-[0-9a-f]{14}$'

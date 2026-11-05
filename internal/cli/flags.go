@@ -31,7 +31,7 @@ func addLayersFlag(f *pflag.FlagSet, p *string, usage string) {
 
 // addForceFlag adds -f/--force, which only skips a confirmation.
 func addForceFlag(f *pflag.FlagSet, p *bool) {
-	f.BoolVarP(p, "force", "f", false, "don't ask to confirm, which devvm needs without a terminal")
+	f.BoolVarP(p, "force", "f", false, "don't ask to confirm, which devvm needs without a terminal or with --no-input")
 }
 
 // addNoExportFlag adds --no-export, which skips exporting the agents'

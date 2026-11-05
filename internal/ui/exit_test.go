@@ -48,6 +48,9 @@ func helper(mode string) int {
 				record("cleanup done")
 			}
 		})
+		if mode == "question" { // its input stays open, without an answer
+			return unanswered(u, record)
+		}
 		u.Say(msg.MsgUnknown("ready"))
 		if mode == "blocked command" || mode == "stuck command" {
 			return blocked(ctx, mode, record)
@@ -63,6 +66,21 @@ func helper(mode string) int {
 		record("not interrupted")
 		return 0
 	})
+}
+
+// unanswered asks a question its input never answers, saying it's ready
+// once the question waits.
+func unanswered(u *UI, record func(string)) int {
+	u.SetFlags(Flags{PipedAnswers: true})
+	go func() {
+		for u.asking.Load() == 0 {
+			time.Sleep(time.Millisecond)
+		}
+		u.Say(msg.MsgUnknown("ready"))
+	}()
+	_, _ = u.Ask(msg.MsgUnknown("q").AnsweredBy("--force"))
+	record("answered")
+	return 1
 }
 
 // blocked is a command whose own code takes a while to return once its
@@ -153,6 +171,10 @@ func startHelper(t *testing.T, mode string) (cmd *exec.Cmd, record string, stder
 		"DEVVM_MESSAGES=names", "HOME="+t.TempDir(), "XDG_DATA_HOME="+t.TempDir())
 	stderr = &strings.Builder{}
 	cmd.Stderr = stderr
+	// Its input stays open until it ends, so a question waits.
+	if _, err := cmd.StdinPipe(); err != nil {
+		t.Fatal(err)
+	}
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -233,6 +255,25 @@ func TestSignalsWaitForAStuckCommandAWhile(t *testing.T) {
 	}
 	if took := time.Since(start); took < returnGrace || took > returnGrace+10*time.Second {
 		t.Errorf("took %v, want about %v", took, returnGrace)
+	}
+	if got, want := readFile(t, record), "cleanup interrupted=yes\n"; got != want {
+		t.Errorf("record %q, want %q", got, want)
+	}
+}
+
+// A question waiting for its answer isn't waited for: it doesn't return
+// at Ctrl+C, and an answer typed after it would be refused.
+func TestSignalsDontWaitForAQuestion(t *testing.T) {
+	cmd, record, _ := startHelper(t, "question")
+	start := time.Now()
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	if code := exitStatus(t, cmd.Wait()); code != InterruptedCode {
+		t.Errorf("exit code %d, want %d", code, InterruptedCode)
+	}
+	if took := time.Since(start); took >= returnGrace {
+		t.Errorf("took %v, want less than %v", took, returnGrace)
 	}
 	if got, want := readFile(t, record), "cleanup interrupted=yes\n"; got != want {
 		t.Errorf("record %q, want %q", got, want)

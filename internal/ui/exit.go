@@ -95,9 +95,9 @@ func call(ctx context.Context, fn func(context.Context) int) (r result) {
 // returnGrace is how long an interrupted run waits for fn to return,
 // once the commands it ran have ended, before the cleanups run. With its
 // context canceled, fn fails at its next step and returns in far less;
-// what it can't stop, a question waiting for an answer above all, keeps
-// the cleanups waiting no longer than this, so Ctrl+C still ends the run
-// promptly.
+// what it can't stop keeps the cleanups waiting no longer than this, so
+// Ctrl+C still ends the run promptly. A question waiting for an answer
+// isn't waited for at all.
 const returnGrace = 2 * time.Second
 
 // Main makes the UI on devvm's own streams and runs fn, the whole of
@@ -107,7 +107,7 @@ const returnGrace = 2 * time.Second
 // INT, TERM and HUP cancel fn's context, which stops the command running,
 // and return InterruptedCode. With cleanups to run, they wait first for fn
 // to return, or returnGrace after the commands it ran ended, whichever is
-// first; then the cleanups run. A
+// first, unless fn waits for an answer; then the cleanups run. A
 // second signal during the cleanups is ignored, so they aren't stopped
 // halfway. fn's own code fails at its next step, as its context is
 // canceled, and prints nothing.
@@ -146,6 +146,8 @@ func (u *UI) main(fn func(ctx context.Context) int) int {
 // to run, for fn to return (done), up to returnGrace. Without cleanups,
 // nothing could undo fn's work, so the run ends at once: the proxy and
 // devvm's other background processes stop as soon as they're told to.
+// Nor does it wait while fn waits for an answer: a question doesn't
+// return at Ctrl+C, and its answer would be refused (readLine).
 // The run's code is InterruptedCode, whatever fn returned, but a panic of
 // fn's own still panics.
 func interrupt(u *UI, cancel context.CancelFunc, done <-chan result) result {
@@ -155,7 +157,7 @@ func interrupt(u *UI, cancel context.CancelFunc, done <-chan result) result {
 	u.commands.Lock()   // the commands running have ended
 	u.commands.Unlock() //nolint:staticcheck // the lock is only waited for: each logged command holds it to read
 	r := result{code: InterruptedCode}
-	if hasCleanups(u) {
+	if hasCleanups(u) && u.asking.Load() == 0 {
 		t := time.NewTimer(returnGrace)
 		defer t.Stop()
 		select {

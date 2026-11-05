@@ -26,7 +26,7 @@ devvm gc [--tool-images [TOOL...]] [flags]
 
 ```text
       --caches                then free devvm's share of Lima's own caches, after asking
-  -f, --force                 don't ask to confirm, which devvm needs without a terminal
+  -f, --force                 don't ask to confirm, which devvm needs without a terminal or with --no-input
   -h, --help                  help for gc
       --history               also delete the saved exports of agents' history
       --nix-cache             also delete the whole shared Nix cache

@@ -26,7 +26,7 @@ devvm rm [VM] [flags]
 ## Options
 
 ```text
-  -f, --force            don't ask to confirm, which devvm needs without a terminal
+  -f, --force            don't ask to confirm, which devvm needs without a terminal or with --no-input
   -h, --help             help for rm
       --here             use this folder's own VM, never that of a folder it's inside
       --no-clone-check   don't check a --clone VM's clone for unfetched commits and uncommitted changes first, which are lost
