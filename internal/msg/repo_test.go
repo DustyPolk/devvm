@@ -142,6 +142,9 @@ func internalDocLinks() map[string]string {
 		// The tools' build wrote something other than a plain file: devvm's own
 		// failure.
 		"tool_bad_output": "internal failure",
+		// A tools build refused a base that isn't the one its images are
+		// for: devvm's own guard, which only a bug or a race reaches.
+		"tools_wrong_base": "internal failure",
 	}
 }
 

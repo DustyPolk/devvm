@@ -93,7 +93,7 @@ func TestToolFile(t *testing.T) {
 		{"the lock entry", root, func(t *Tool) { t.LockEntry = append(t.LockEntry, "# edit\n"...) }},
 		{"shared-tools/build.sh", toolRoot("#!/bin/bash\n# edit\n"), func(*Tool) {}},
 		{"the prelude", withPrelude(root, "# prelude\n# edit\n"), func(*Tool) {}},
-		{"the libc (an Alpine base)", root, func(t *Tool) { t.Libc = "musl" }},
+		{"the libc (an Alpine base)", root, func(t *Tool) { t.Libc, t.Base = "musl", "alpine@sha256:aaaa" }},
 		{"the version", root, func(t *Tool) { t.Version = "24.22.0" }},
 		{"the format (plain)", root, func(t *Tool) { t.Format = "plain-0123456789ab" }},
 		{"a setting in mise.toml", withConfig("#!/bin/bash\n", strings.Replace(miseConfig, "compile = false", "compile = true", 1)), func(*Tool) {}},
@@ -121,6 +121,15 @@ func TestToolFile(t *testing.T) {
 		if got := toolFile(t, withConfig("#!/bin/bash\n", config), node()); got != f {
 			t.Errorf("%s: %q, want %q", name, got, f)
 		}
+	}
+	// A musl image is keyed by the digest of the base it builds in, so
+	// one built in a base from another image is never another's.
+	musl := node()
+	musl.Libc, musl.Base = "musl", "alpine@sha256:aaaa"
+	m := toolFile(t, root, musl)
+	musl.Base = "alpine@sha256:bbbb"
+	if got := toolFile(t, root, musl); got == m {
+		t.Errorf("musl on another base: still %q", got)
 	}
 	if got := toolFile(t, withBase(root, baseScript+"# edit\nnode_version=1\n"), node()); got != f {
 		t.Errorf("the rest of base.sh: %q, want %q", got, f)
@@ -178,6 +187,8 @@ func TestToolFileRefuses(t *testing.T) {
 		"empty version": func(t *Tool) { t.Version = "" },
 		"tool name":     func(t *Tool) { t.Name = "no-de" },
 		"libc":          func(t *Tool) { t.Libc = "" },
+		"musl, no base": func(t *Tool) { t.Libc = "musl" },
+		"gnu, a base":   func(t *Tool) { t.Base = "debian@sha256:aaaa" },
 	} {
 		tool := node()
 		change(&tool)

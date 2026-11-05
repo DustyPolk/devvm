@@ -3124,7 +3124,21 @@ export -f nd in_vm; export work
 # nowhere: the bases stay cached until the pins move. The company proxy's check below keeps a tag.
 f=$(newproj fromdocker); echo '{}' > "$f/package.json"
 fh=$work/from-home; mkdir -p "$fh"   # the Claude Code VM's: no agent config of yours
+# tool_base FILE: the base digest in a tool image's record (musl's), else nothing.
+tool_base() { sed -n 's/^  "base": "\(.*\)",\{0,1\}$/\1/p' "$share/$1.json"; }
+# tools_built_in LOG: the keys of the images that LOG's tool builds cloned, one per line.
+tools_built_in() { sed -n 's/^+ limactl clone .* devvm-img-\([0-9a-f]\{12\}\) devvm-tools-build$/\1/p' "$1"; }
+export -f tool_base tools_built_in
+# newest_log: the newest run log, the last devvm's.
+# shellcheck disable=SC2012  # devvm's own names, without spaces
+newest_log() { ls -1t "$XDG_DATA_HOME"/devvm/logs/runs/*.log 2>/dev/null | head -1; }
 HOME=$fh nd launch "$f" exit --from "$from_node" --no-network-policy --tools node,python --agents claude --layers docker,nix   # node:24 is Debian 12
+fromlog=$(newest_log)
+# Any VM may mount gnu tool images, so a --from image's code never runs in their builds. They may be
+# cached from an earlier run: then the log has no build.
+check "its tool images built in a clone of devvm's own Ubuntu base, never the Debian image's, and record no base" bash -c "
+  for k in \$(tools_built_in '$fromlog'); do [[ \$(rec \$k name) == base && -z \$(rec \$k from) ]] || { echo \"built in \$k\"; exit 1; }; done &&
+  for f in \$(st_get '$(vmdir "$vm")' tools.made.files); do [[ -z \$(tool_base \$f) ]] || exit 1; done"
 # A build in Nix's sandbox, which fails without it (the nix layer's sandbox-fallback = false).
 nix_built='derivation { name = "e2e-sandboxed"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo ok > $out" ]; }'
 check "a VM with node, python, Claude Code and the docker and nix layers from node:24 (Debian 12) boots, its base keyed by its pinned digest" bash -c "
@@ -3157,6 +3171,11 @@ check "the nix layer's Nix runs in it (systemd): nix run nixpkgs#hello, and a bu
 al=$(newproj fromalpine); echo '{}' > "$al/package.json"
 nd launch "$al" exit --from "$from_alpine" --no-network-policy --layers docker,nix,desktop
 check "an Alpine VM runs node from musl tool images" bash -c "[[ -n '$vm' ]] && vm_state '$(vmdir "$vm")' | grep -qx tools.made.libc=musl && [[ \$(rec \"\$(from_record '$from_alpine')\" libc) == musl ]]"
+alog=$(newest_log)
+check "its musl tool images built in its own base, and are keyed and recorded by that base's digest" bash -c "
+  b=\$(from_record '$from_alpine') && d=\$(rec \$b digest) && [[ -n \$d ]] &&
+  for k in \$(tools_built_in '$alog'); do [[ \$k == \$b ]] || { echo \"built in \$k\"; exit 1; }; done &&
+  for f in \$(st_get '$(vmdir "$vm")' tools.made.files); do [[ \$(tool_base \$f) == \"\$d\" ]] || { echo \"\$f: \$(tool_base \$f)\"; exit 1; }; done"
 check "and node, pnpm work there" in_vm "$vm" \
   "grep -q '^ID=alpine' /etc/os-release && [[ \$(node -v) == v$(lockv node) ]] && node -e 'require(\"os\")' && pnpm -v"
 check "the docker layer's Docker runs in it (OpenRC)" in_vm "$vm" 'sudo docker run --rm hello-world | grep -q Hello'

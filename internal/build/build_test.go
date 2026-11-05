@@ -253,14 +253,16 @@ func TestBuildRefusesTools(t *testing.T) {
 	}
 }
 
-// The shared tools of a new VM are built for base's libc as it's built.
+// The shared tools of a new VM are built for base's libc as it's built,
+// and on a musl --from base, for its digest.
 func TestToolTarget(t *testing.T) {
 	b, f := testEnv(t)
+	b.From = "alpine:3@sha256:" + strings.Repeat("a", 64)
 	f.Built.Libc = "musl"
 	if err := (Builds{b}).Build(t.Context(), "base"); err != nil {
 		t.Fatal(err)
 	}
-	if tg, err := b.ToolTarget(); tg != (tools.Target{Libc: "musl"}) || err != nil {
+	if tg, err := b.ToolTarget(); tg != (tools.Target{Libc: "musl", Base: b.From}) || err != nil {
 		t.Errorf("ToolTarget = %+v, %v", tg, err)
 	}
 }

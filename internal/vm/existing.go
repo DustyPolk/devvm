@@ -2,11 +2,14 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"io"
+	"io/fs"
 	"slices"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
+	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -70,7 +73,11 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	if err := (build.Builds{Env: builder}).WarnIfOutdated(st.Chain); err != nil {
 		return err
 	}
-	if err := (tools.VMs{Env: e.Tools}).WarnNewer(ctx, tools.Names(st), tools.Files(st), toolTarget(b, st)); err != nil {
+	tg, err := e.toolTarget(b, st)
+	if err != nil {
+		return err
+	}
+	if err := (tools.VMs{Env: e.Tools}).WarnNewer(ctx, tools.Names(st), tools.Files(st), tg); err != nil {
 		return err
 	}
 	if err := (tools.Versions{Env: e.Tools}).RefreshDaily(); err != nil {
@@ -274,19 +281,48 @@ func (e Launch) reloadAgent(ctx context.Context, b backend.Backend, st *state.VM
 }
 
 // toolTarget is what a VM's tool images are built for: its base's C
-// library, with a --from gnu base's glibc version, and its backend's
-// format.
-func toolTarget(b backend.Backend, st *state.VM) tools.Target {
+// library, with a --from gnu base's glibc version, for musl the digest
+// its --from image has as last recorded, and its backend's format.
+func (e *Env) toolTarget(b backend.Backend, st *state.VM) (tools.Target, error) {
 	t, _ := tools.Of(st)
-	return tools.Target{Libc: t.Made.Libc, Glibc: t.Made.Glibc, Format: b.ToolFormat()}
+	tg := tools.Target{Libc: t.Made.Libc, Glibc: t.Made.Glibc, Format: b.ToolFormat()}
+	if tg.Libc == "musl" {
+		digest, err := from.Recorded(e.Dirs, st.From)
+		if err != nil {
+			return tools.Target{}, err
+		}
+		tg.Base = digest
+	}
+	return tg, nil
 }
 
-// buildTools builds the tool images the share lacks of files, from base's
-// image as it is now, built first if it isn't, then checks that each runs
-// on tg's base (tools.Share.Runs).
+// buildTarget is toolTarget for building the VM's tools with builder: a
+// musl VM's base is built first, its digest looked up, as its tool images
+// build in that base as it is now and their keys hash its digest.
+func (e Launch) buildTarget(ctx context.Context, builder *build.Env, b backend.Backend, st *state.VM) (tools.Target, error) {
+	if t, _ := tools.Of(st); t.Made.Libc == "musl" {
+		if err := (build.Builds{Env: builder}).Build(ctx, image.Base); err != nil {
+			return tools.Target{}, err
+		}
+	}
+	return e.toolTarget(b, st)
+}
+
+// buildTools builds the tool images the share lacks of files, then checks
+// that each runs on tg's base (tools.Share.Runs). They build in a base as
+// it is now, built first if it isn't: for gnu, devvm's own Ubuntu base on
+// builder's backend, whatever builder's base starts from, as any VM may
+// mount them, and for musl builder's own, as their keys hash its digest.
 func (e Launch) buildTools(ctx context.Context, builder *build.Env, tg tools.Target, files []string) error {
 	share := tools.Share{Env: e.Tools}
 	if slices.ContainsFunc(files, func(f string) bool { return !share.Built(f) }) {
+		if tg.Libc != "musl" && builder.From != "" {
+			own, err := e.ownBase(builder.Backend)
+			if err != nil {
+				return err
+			}
+			builder = own
+		}
 		if err := (build.Builds{Env: builder}).Build(ctx, image.Base); err != nil {
 			return err
 		}
@@ -299,4 +335,20 @@ func (e Launch) buildTools(ctx context.Context, builder *build.Env, tg tools.Tar
 		}
 	}
 	return share.Runs(files, tg)
+}
+
+// ownBase is what builds devvm's own Ubuntu base on b, which a --from
+// VM's gnu tool images build in. When it isn't built yet, it says that
+// it builds it first (tools_need_own_base), before the build says it
+// builds base.
+func (e Launch) ownBase(b backend.Backend) (*build.Env, error) {
+	own := e.builder(b, "")
+	key, err := own.Key(image.Base)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := state.ReadImage(e.Dirs, key); errors.Is(err, fs.ErrNotExist) {
+		e.Info(msg.ToolsNeedOwnBase())
+	}
+	return own, nil
 }

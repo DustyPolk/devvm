@@ -55,7 +55,8 @@ func (t Share) Built(file string) bool {
 
 // Build builds the tool images these files name that the share lacks, in
 // a throwaway VM made from base's image (key base) on b, its features
-// checked against rv, in tg's format. The VM runs upstream installers, so
+// checked against rv, in tg's format. base must be the base they're for
+// (buildsFor). The VM runs upstream installers, so
 // it never sees the share: it writes into a folder of its own, and each
 // image is checked to be a plain file, moved into the share and its hash
 // recorded.
@@ -68,6 +69,9 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 	}
 	if len(todo) == 0 {
 		return nil
+	}
+	if err := t.buildsFor(base, tg); err != nil {
+		return err
 	}
 	// The company proxy the build goes through, with config.toml's
 	// password saved, before anything starts.
@@ -125,6 +129,32 @@ func (t Share) Build(ctx context.Context, rv backend.Review, b backend.Backend, 
 	t.Info(msg.BuildingTools(Label(build)))
 	t.LogNote()
 	return t.batch(ctx, b, base, tg, lock, build)
+}
+
+// buildsFor refuses to build tg's tool images in the image with key base
+// unless its record says it's the base they're for: devvm's own Ubuntu
+// base for gnu, whatever base the VM has, and for musl a --from base
+// with tg's digest, which their keys hash. So a gnu image, which any VM
+// may mount, never builds in a --from image, whose code root in its
+// build ran, and a musl one is only ever another VM's on the same image.
+func (t Share) buildsFor(base string, tg Target) error {
+	rec, err := state.ReadImage(t.Dirs, base)
+	if err != nil {
+		return msg.ToolsWrongBase(base).Because(err)
+	}
+	ok := rec.Name == image.Base && rec.Libc == tg.Libc
+	switch tg.Libc {
+	case "gnu":
+		ok = ok && rec.From == "" && tg.Base == ""
+	case "musl":
+		ok = ok && rec.From != "" && rec.Digest != "" && rec.Digest == tg.Base
+	default:
+		ok = false
+	}
+	if !ok {
+		return msg.ToolsWrongBase(base)
+	}
+	return nil
 }
 
 // batch builds these tool images in one throwaway VM with a folder of its
@@ -195,7 +225,7 @@ func (t Share) batch(ctx context.Context, b backend.Backend, base string, tg Tar
 			return err
 		}
 		// Its file name doesn't say what it's built for: the record does.
-		rec := state.ToolImage{SHA256: sum, Libc: tg.Libc, Format: tg.Format, Backend: b.Name(), Built: t.Now().UTC().Truncate(time.Second), MadeBy: t.Version}
+		rec := state.ToolImage{SHA256: sum, Libc: tg.Libc, Base: tg.Base, Format: tg.Format, Backend: b.Name(), Built: t.Now().UTC().Truncate(time.Second), MadeBy: t.Version}
 		if tg.Libc == "gnu" {
 			if rec.Glibc, err = neededGlibc(filepath.Join(out, f+".glibc")); err != nil {
 				return msg.ToolBadOutput(f + ".glibc")

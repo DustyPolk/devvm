@@ -3104,6 +3104,11 @@ func ToolsJoined(cmd string, given string) M {
 	return M{id: "tools_joined", vals: []val{{"cmd", cmd}, {"given", given}}}
 }
 
+// ToolsNeedOwnBase is [tools_need_own_base]: "Shared tools for a VM on a Debian or Ubuntu container image build in devvm's own Ubuntu base, so devvm builds that first."
+func ToolsNeedOwnBase() M {
+	return M{id: "tools_need_own_base"}
+}
+
 // ToolsNeedResolve is [tools_need_resolve]: "Resolving the shared tools' versions failed, and devvm has to do it once, online. Try again when you're online."
 func ToolsNeedResolve() M {
 	return M{id: "tools_need_resolve"}
@@ -3127,6 +3132,11 @@ func ToolsSwitch(vm string) M {
 // ToolsUnmounted is [tools_unmounted]: "{{.vm}} couldn't mount its shared tools {{.tools}}. Run devvm tools update to build the missing ones."
 func ToolsUnmounted(tools string, vm string) M {
 	return M{id: "tools_unmounted", vals: []val{{"tools", tools}, {"vm", vm}}}
+}
+
+// ToolsWrongBase is [tools_wrong_base]: "Image {{.key}} isn't the base these shared tools are built for, so devvm didn't build them in it. Run the command again."
+func ToolsWrongBase(key string) M {
+	return M{id: "tools_wrong_base", vals: []val{{"key", key}}}
 }
 
 // UbuntuBadSignature is [ubuntu_bad_signature]: "Ubuntu's checksums for {{.release}} at {{.url}} don't have a valid signature from Ubuntu's cloud image key, so devvm didn't use them."
@@ -3991,11 +4001,13 @@ var specs = map[string]spec{
 	"tools_check_failed":               {},
 	"tools_failed":                     {fields: []string{"reason"}},
 	"tools_joined":                     {fields: []string{"cmd", "given"}},
+	"tools_need_own_base":              {},
 	"tools_need_resolve":               {},
 	"tools_newest":                     {fields: []string{"vm"}},
 	"tools_resolve_failed":             {},
 	"tools_switch":                     {fields: []string{"vm"}},
 	"tools_unmounted":                  {fields: []string{"tools", "vm"}},
+	"tools_wrong_base":                 {fields: []string{"key"}},
 	"ubuntu_bad_signature":             {fields: []string{"release", "url"}},
 	"ubuntu_mirror_invalid":            {fields: []string{"setting"}},
 	"ubuntu_newest_older":              {fields: []string{"newest", "pinned"}},

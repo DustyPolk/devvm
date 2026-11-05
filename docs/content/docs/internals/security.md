@@ -36,7 +36,7 @@ An existing VM never changes when the file does.
 
 devvm builds images with nothing from the host mounted, and it confines their builds so that they reach the internet but not your machine's own services ([details](lima.md#confinement)). Credentials never go into images.
 
-A tool build writes into a folder of its own and never into the shared tools, and devvm checks each tool image, moves it in and writes its record, with its hash ([details](images.md#building-tools)). devvm's VMs live in a Lima home of their own, so Lima settings you made for other VMs never reach them. devvm also refuses a VM with a network it didn't give the VM, because that network would reach around the proxy ([details](lima.md#a-lima-home-of-its-own)).
+A tool build writes into a folder of its own and never into the shared tools, and devvm checks each tool image, moves it in and writes its record, with its hash ([details](images.md#building-tools)). Tool images for glibc, which any VM may mount, build only in devvm's own Ubuntu base, never in a `--from` image, and musl ones are keyed by the digest of the `--from` base they build in, so a container image's code never reaches another VM's tools. devvm's VMs live in a Lima home of their own, so Lima settings you made for other VMs never reach them. devvm also refuses a VM with a network it didn't give the VM, because that network would reach around the proxy ([details](lima.md#a-lima-home-of-its-own)).
 
 ### `.git` protection
 

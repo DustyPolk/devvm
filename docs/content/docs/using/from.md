@@ -11,9 +11,9 @@ devvm build --from alpine:3 base     # just the image
 DEVVM_FROM=node:24 devvm             # a default for every new VM and build
 ```
 
-Everything above `base` builds and runs as usual, including base's own setup, the layers (`docker` and yours) and the [shared tools](images.md#shared-tools). devvm keeps the images from each container image apart, so each `base` and the images on it sit side by side with the others, and each image's record keeps the container image its base came from and that image's digest.
+Everything above `base` builds and runs as usual, including base's own setup and the layers (`docker` and yours). The VM gets its [shared tools](images.md#shared-tools) as any VM does, and [shared tools and glibc](#shared-tools-and-glibc) describes where devvm builds them. devvm keeps the images from each container image apart, so each `base` and the images on it sit side by side with the others, and each image's record keeps the container image its base came from and that image's digest.
 
-`--from` applies to new VMs and to `devvm build` and `devvm rebuild`, and `devvm images rm` takes it to delete an image on a base from that container image. An existing VM keeps what it was made from, and `devvm tools add` and `devvm tools update` build its shared tools on that `base`. devvm ignores another `--from` for an existing VM, with a warning.
+`--from` applies to new VMs and to `devvm build` and `devvm rebuild`, and `devvm images rm` takes it to delete an image on a base from that container image. An existing VM keeps what it was made from, and `devvm tools add` and `devvm tools update` build its shared tools for that `base`. devvm ignores another `--from` for an existing VM, with a warning.
 
 [Images and caching](../internals/images.md#how-its-converted) explains how devvm turns a container image into a VM's disk and how it treats the image's code as untrusted.
 
@@ -38,12 +38,17 @@ If the image's tag moves to another image while devvm builds, for example becaus
 
 - **Debian, Ubuntu and Alpine** and the distributions based on them. devvm refuses any other, and an image without a shell or `/etc/os-release`.
 - **This machine's architecture.** devvm refuses an image without an arm64 build (or amd64), and names the ones it has.
-- **Alpine** uses OpenRC and musl, so its VMs get musl builds of the shared tools, built apart from the others.
+- **Alpine** uses OpenRC and musl, so its VMs get musl builds of the shared tools, built on that image and kept apart for it.
 - **Unpinned packages.** While `base` builds, its packages come from the container image's own sources as they are then, apt's or Alpine's, and so do the [desktop layer](images.md#desktop)'s, the [docker layer](images.md#docker)'s on Alpine and the [nix layer](images.md#nix)'s. devvm keeps no copy of them, unlike base from Ubuntu's image, so building the same base again installs the sources' packages of that day, and it needs the network for them.
 - **A glibc new enough for your shared tools.** A Debian or Ubuntu image's glibc must be at least as new as each shared tool needs, which [shared tools and glibc](#shared-tools-and-glibc) covers.
 - **Tested.** The end-to-end tests make VMs from `node:24` (Debian 12, with node, python, claude and the docker and nix layers) and `alpine:3` (with node and the docker, nix and desktop layers), and build `base` from `ubuntu:26.04`.
 
 ## Shared tools and glibc
+
+A shared tool's build is mounted by every VM that gets the same version of the tool, so devvm never builds one where a container image's code could change it for other VMs:
+
+- **Debian and Ubuntu images:** their VMs get the same builds of the shared tools as VMs on Ubuntu's own image, which devvm builds in its own `base` from Ubuntu's cloud image, never in the container image. When that `base` isn't built yet, devvm says so and builds it first, as it does for a VM on Ubuntu's image.
+- **Alpine images:** musl builds need Alpine, so devvm builds them in the VM's own `base` and keeps them for the VMs on that exact image, by its digest. When the image's tag moves to a new image, devvm builds the tools it gives those VMs next again, on the new image.
 
 The [shared tools](images.md#shared-tools) are their projects' own prebuilt releases, and each one is built against a glibc version that it needs at least. devvm reads that version from each tool's files when it builds the tool's image, and it reads the container image's glibc version when it converts the image. When a Debian- or Ubuntu-based image has an older glibc than a tool needs, devvm refuses to give that tool to the VM. The error names the tool, the glibc version it needs and the one the image has, and devvm doesn't make the VM. The same happens when `devvm tools add`, `devvm tools update` or `devvm update` would give an existing VM such a tool.
 

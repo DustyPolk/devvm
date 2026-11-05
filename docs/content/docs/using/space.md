@@ -124,7 +124,7 @@ A build also makes a temporary folder in the data folder, `tools-build.<random>`
 
 ### Shared tools
 
-Each tool version is built once for each kind of VM that uses it, so `tools/` can hold more than one build of the same version. A base on Alpine needs its tools built for its C library, musl, rather than glibc, so a node 24 that both an Ubuntu VM and an Alpine VM use is two builds, and `devvm images` lists both. [Cleaning up](images.md#cleaning-up) says which ones `devvm gc` deletes.
+Each tool version is built once for each kind of VM that uses it, so `tools/` can hold more than one build of the same version. A base on Alpine needs its tools built for its C library, musl, rather than glibc, so a node 24 that both an Ubuntu VM and an Alpine VM use is two builds, and `devvm images` lists both. Each Alpine container image gets builds of its own, so VMs on two different Alpine images have two musl builds of it. [Cleaning up](images.md#cleaning-up) says which ones `devvm gc` deletes.
 
 ### Exports
 

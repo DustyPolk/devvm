@@ -258,8 +258,8 @@ func (b Names) checkLayer(p string) error {
 
 // ToolTarget is what the shared tools of a new VM on this backend are
 // built for: base's C library as it is now, its record's (gnu when it
-// isn't built), with the glibc version its record has, and the backend's
-// format.
+// isn't built), with the glibc version its record has, for musl its
+// digest, and the backend's format.
 func (b *Env) ToolTarget() (tools.Target, error) {
 	tg := tools.Target{Libc: "gnu", Format: b.Backend.ToolFormat()}
 	key, err := b.Key(image.Base)
@@ -275,8 +275,11 @@ func (b *Env) ToolTarget() (tools.Target, error) {
 	if rec.Libc != "" {
 		tg.Libc = rec.Libc
 	}
-	if tg.Libc == "gnu" {
+	switch tg.Libc {
+	case "gnu":
 		tg.Glibc = rec.Glibc
+	case "musl":
+		tg.Base = rec.Digest
 	}
 	return tg, nil
 }

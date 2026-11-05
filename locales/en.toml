@@ -2055,6 +2055,13 @@ other = "building shared tools: {{.tools}}"
 [building_tools_in]
 other = "building the shared tools in {{.vm}}"
 
+[tools_need_own_base]
+other = "Shared tools for a VM on a Debian or Ubuntu container image build in devvm's own Ubuntu base, so devvm builds that first."
+
+[tools_wrong_base]
+description = "key is an image key: 0123456789ab"
+other = "Image {{.key}} isn't the base these shared tools are built for, so devvm didn't build them in it. Run the command again."
+
 [tools_build_failed]
 other = "Building the shared tools failed."
 

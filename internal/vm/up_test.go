@@ -275,6 +275,69 @@ func TestUpTools(t *testing.T) {
 	}
 }
 
+// A --from VM's gnu tool images build in a clone of devvm's own Ubuntu
+// base, built first and said so, never in the --from image, as any VM
+// mounts them; a musl VM's build in its own base, keyed by its digest.
+func TestUpFromTools(t *testing.T) {
+	for _, tc := range []struct {
+		libc, from string
+		own        bool // they build in devvm's own base
+	}{
+		{"gnu", "evil/debian:12@sha256:" + strings.Repeat("e", 64), true},
+		{"musl", "evil/alpine:3@sha256:" + strings.Repeat("e", 64), false},
+	} {
+		t.Run(tc.libc, func(t *testing.T) {
+			e, f, _ := upEnv(t, allNative())
+			f.Built = backend.Built{Libc: tc.libc}
+			var said msg.Recorder
+			e.Info = said.Add
+			if err := (Launch{e}).Up(t.Context(), Options{From: tc.from, Toolchains: &[]string{"go"}, Agents: &[]string{}, NoNetworkPolicy: true}); err != nil {
+				t.Fatal(msg.NamesOf(err))
+			}
+			bases := map[bool]string{} // by whether it's from tc.from
+			for _, c := range f.Calls() {
+				if c.Method != "BuildImage" {
+					continue
+				}
+				if spec, ok := c.Args[0].(backend.ImageSpec); ok {
+					bases[spec.From != nil] = spec.Key
+				}
+			}
+			tspec, _ := call(f, "BuildTools").Args[0].(backend.ToolsSpec)
+			if want := bases[!tc.own]; want == "" || tspec.Base != want {
+				t.Errorf("tools built in %q, want %q (bases %v)", tspec.Base, want, bases)
+			}
+			if _, ok := bases[false]; ok != tc.own {
+				t.Errorf("devvm's own base built: %v", ok)
+			}
+			if got := slices.Contains(said.Names(), "tools_need_own_base"); got != tc.own {
+				t.Errorf("said %q", said.Names())
+			}
+			tg := tools.Target{Libc: tc.libc}
+			if !tc.own {
+				tg.Base = tc.from
+			}
+			data, err := os.ReadFile(e.Dirs.ToolLock())
+			if err != nil {
+				t.Fatal(err)
+			}
+			lock, err := tools.ParseLock(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			file, err := e.Tools.File(lock, "go", tg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
+			st, _ := state.ReadVM(e.Dirs, spec.Name)
+			if get(st, KeyTools) != file || get(st, KeyLibc) != tc.libc {
+				t.Errorf("state tools=%q libc=%q, want %s", get(st, KeyTools), get(st, KeyLibc), file)
+			}
+		})
+	}
+}
+
 // A new VM's defaults: the toolchains the folder's files call for, devvm
 // setup's agents, and no layers, the nix layer a flake.nix calls for
 // included; each flag replaces its part, none with an empty list. Without

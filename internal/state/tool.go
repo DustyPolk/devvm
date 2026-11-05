@@ -15,7 +15,10 @@ type ToolImage struct {
 	Libc   string `json:"libc"`   // the C library it's built for: gnu, or musl
 	// Glibc is, for gnu, the newest glibc version its programs and
 	// libraries need, as its build measured it: "" when they need none.
-	Glibc   string    `json:"glibc,omitempty"`
+	Glibc string `json:"glibc,omitempty"`
+	// Base is, for musl, the digest of the --from base it was built in,
+	// which its key hashes; gnu images build in devvm's own base.
+	Base    string    `json:"base,omitempty"`
 	Format  string    `json:"format"`  // its backend's ToolFormat: "" for shared-tools/build.sh's own
 	Backend string    `json:"backend"` // the backend that built it
 	Built   time.Time `json:"built"`   // when it was moved in

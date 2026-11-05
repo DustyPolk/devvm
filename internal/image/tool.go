@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -195,6 +196,11 @@ type Tool struct {
 	LockEntry []byte
 	// Libc is the C library it's built for: gnu, or musl.
 	Libc string
+	// Base is, for musl, the digest of the --from base its build runs in,
+	// so a musl image is only ever another VM's on that same base. A gnu
+	// image builds in devvm's own Ubuntu base, whatever its VM's base, and
+	// has none.
+	Base string
 	// Format is the image's EROFS format, as its backend names it (the
 	// backend's ToolFormat): "" for shared-tools/build.sh's own, compressed.
 	Format string
@@ -221,7 +227,8 @@ func ToolVersion(s string) bool { return toolVersion.MatchString(s) }
 // it, after the prelude (OwnScript), the [settings] of
 // devvm's shared-tools/mise.toml, which change what mise installs, the
 // version of mise that installs it (MiseVersion; not for a tool rustup
-// installs), the libc and, unless it's build.sh's own, the format.
+// installs), the libc, the base it builds in (devvm's own for gnu, for
+// musl its digest) and, unless it's build.sh's own, the format.
 func ToolFile(assets fs.FS, t Tool) (string, error) {
 	if !ToolName(t.Name) {
 		return "", fmt.Errorf("invalid tool name %q", t.Name)
@@ -229,8 +236,13 @@ func ToolFile(assets fs.FS, t Tool) (string, error) {
 	if !toolVersion.MatchString(t.Version) {
 		return "", msg.ToolBadVersion(t.Name, strconv.Quote(t.Version))
 	}
-	if t.Libc != "gnu" && t.Libc != "musl" {
+	switch {
+	case t.Libc != "gnu" && t.Libc != "musl":
 		return "", fmt.Errorf("invalid libc %q", t.Libc)
+	case t.Libc == "musl" && t.Base == "":
+		return "", errors.New("a musl tool image needs its base's digest")
+	case t.Libc == "gnu" && t.Base != "":
+		return "", errors.New("a gnu tool image builds in devvm's own base, which has no digest in its key")
 	}
 	k := newKeyHash()
 	k.field("tool", t.Name)
@@ -254,6 +266,13 @@ func ToolFile(assets fs.FS, t Tool) (string, error) {
 		k.field("mise", v)
 	}
 	k.field("libc", t.Libc)
+	// The base it builds in, devvm's own for gnu: only a gnu image built
+	// there has a gnu key.
+	if t.Base != "" {
+		k.field("base", t.Base)
+	} else {
+		k.field("base", "devvm")
+	}
 	if t.Format != "" {
 		k.field("format", t.Format)
 	}

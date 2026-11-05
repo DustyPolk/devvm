@@ -26,7 +26,11 @@ func (e Tools) List(ctx context.Context) ([]tools.VMTool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tools.VMs{Env: e.Env.Tools}.Show(tools.Files(t.st), toolTarget(t.b, t.st))
+	tg, err := e.toolTarget(t.b, t.st)
+	if err != nil {
+		return nil, err
+	}
+	return tools.VMs{Env: e.Env.Tools}.Show(tools.Files(t.st), tg)
 }
 
 // Add adds shared tools (node, claude) to the folder's VM, then opens it
@@ -128,12 +132,16 @@ func (e Tools) build(ctx context.Context, t *found, names []string) ([]string, e
 	if len(names) == 0 {
 		return nil, nil
 	}
-	tg := toolTarget(t.b, t.st)
+	builder := e.builder(t.b, t.st.From)
+	tg, err := Launch(e).buildTarget(ctx, builder, t.b, t.st)
+	if err != nil {
+		return nil, err
+	}
 	files, err := tools.Versions{Env: e.Env.Tools}.Files(ctx, names, tg)
 	if err != nil {
 		return nil, err
 	}
-	return files, Launch(e).buildTools(ctx, e.builder(t.b, t.st.From), tg, files)
+	return files, Launch(e).buildTools(ctx, builder, tg, files)
 }
 
 // Pick shows the picker for the folder's VM, its toolchains and agents
@@ -215,7 +223,10 @@ func (e Tools) Update(ctx context.Context, o Options) error {
 func (e Tools) update(ctx context.Context, t *found) (changed bool, err error) {
 	vm, st := t.f.Name, t.st
 	builder := e.builder(t.b, st.From)
-	tg := toolTarget(t.b, st)
+	tg, err := Launch(e).buildTarget(ctx, builder, t.b, st)
+	if err != nil {
+		return false, err
+	}
 	buildFn := func(ctx context.Context, files []string) error { return Launch(e).buildTools(ctx, builder, tg, files) }
 	// Held until its state lists the new tools, as a new VM's.
 	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)

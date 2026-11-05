@@ -43,10 +43,10 @@ func TestBuildGlibc(t *testing.T) {
 		write(t, filepath.Join(spec.Out, spec.Args[2]), []byte("image"))
 		return nil
 	}
-	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, muslT, []string{musl}); err != nil {
+	if err := e.Build(t.Context(), backend.Review{}, f, muslKey, muslT, []string{musl}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if rec, err := state.ReadToolImage(e.Dirs, musl); err != nil || rec.Glibc != "" || rec.Libc != "musl" {
+	if rec, err := state.ReadToolImage(e.Dirs, musl); err != nil || rec.Glibc != "" || rec.Libc != "musl" || rec.Base != muslDigest {
 		t.Errorf("musl's record: %+v, %v", rec, err)
 	}
 }

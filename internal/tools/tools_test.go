@@ -29,10 +29,17 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Lima's targets: build.sh's own format.
+// Lima's targets: build.sh's own format. gnu's build in devvm's own
+// base, baseKey; musl's in a --from base of muslDigest, muslKey.
 var (
 	gnuT  = Target{Libc: "gnu"}
-	muslT = Target{Libc: "musl"}
+	muslT = Target{Libc: "musl", Base: muslDigest}
+)
+
+const (
+	baseKey    = "0123456789ab"
+	muslKey    = "abcdef012345"
+	muslDigest = "alpine:3@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 )
 
 // quietUI prints nothing, runs commands as they are, their output
@@ -166,6 +173,15 @@ func newEnv(t *testing.T) env {
 	tl.Detach = func(c daemon.Cmd) (int, error) {
 		detached = append(detached, c.Path+" "+strings.Join(c.Args, " ")+" > "+c.Out.Name())
 		return 1, nil
+	}
+	// The bases tool images build in, as their records have them.
+	for key, rec := range map[string]state.Image{
+		baseKey: {Name: image.Base, Digest: "https://example.com/ubuntu.img sha256:1111", Libc: "gnu"},
+		muslKey: {Name: image.Base, From: "alpine:3", Digest: muslDigest, Libc: "musl"},
+	} {
+		if err := state.WriteImage(d, key, rec); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return env{Env: tl, Versions: Versions{tl}, Share: Share{tl}, VMs: VMs{tl}, root: root, log: log, said: &said, detach: &detached}
 }
@@ -705,8 +721,6 @@ func fake() *backendtest.Fake {
 	return backendtest.New("fake", caps)
 }
 
-const baseKey = "0123456789ab"
-
 func (e env) files(t *testing.T, tools ...string) []string {
 	t.Helper()
 	var out []string
@@ -882,6 +896,68 @@ func TestBuildHostileOutput(t *testing.T) {
 	e.checkHashes(t, node)
 }
 
+// Tool images build only in the base they're for: gnu ones, which any VM
+// may mount, in devvm's own Ubuntu base, never a --from image's, whose
+// code ran as root in its build; musl ones in a --from base with their
+// digest. So a hostile --from base can't build an image another VM
+// mounts: its musl images have names no VM on another base looks for.
+func TestBuildOnlyInItsBase(t *testing.T) {
+	e := newEnv(t)
+	e.locked(t, fixture(t))
+	const hostile, other = "badbadbad000", "0123456789cd"
+	for key, rec := range map[string]state.Image{
+		hostile:        {Name: image.Base, From: "evil/debian:12", Digest: "evil/debian@sha256:" + strings.Repeat("e", 64), Libc: "gnu", Glibc: "2.36"},
+		other:          {Name: image.Base, From: "evil/alpine:3", Digest: "evil/alpine@sha256:" + strings.Repeat("e", 64), Libc: "musl"},
+		"0123456789ef": {Name: "foo", Chain: "base=" + baseKey + " foo=0123456789ef", Libc: "gnu"},
+	} {
+		if err := state.WriteImage(e.Dirs, key, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lock := parsed(t, fixture(t))
+	gnu := e.files(t, "node")
+	musl, err := e.File(lock, "node", muslT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := fake()
+	for _, tc := range []struct {
+		name  string
+		base  string
+		tg    Target
+		files []string
+	}{
+		{"gnu in a --from gnu base", hostile, gnuT, gnu},
+		{"gnu in a musl base", muslKey, gnuT, gnu},
+		{"gnu in a layer on base", "0123456789ef", gnuT, gnu},
+		{"gnu in an image without a record", "fedcba987654", gnuT, gnu},
+		{"musl in Ubuntu's base", baseKey, muslT, []string{musl}},
+		{"musl in a base of another image", other, muslT, []string{musl}},
+	} {
+		if err := e.Build(t.Context(), backend.Review{}, f, tc.base, tc.tg, tc.files); msg.IDOf(err) != "tools_wrong_base" {
+			t.Errorf("%s: Build = %v", tc.name, msg.NamesOf(err))
+		}
+	}
+	if len(f.Calls()) > 0 {
+		t.Errorf("calls = %q", f.Methods())
+	}
+	if e.Built(gnu[0]) || e.Built(musl) {
+		t.Error("an image reached the share")
+	}
+	e.noLeftovers(t)
+	// What the hostile musl base builds is keyed by its own digest.
+	theirs, err := e.File(lock, "node", Target{Libc: "musl", Base: "evil/alpine@sha256:" + strings.Repeat("e", 64)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Build(t.Context(), backend.Review{}, f, other, Target{Libc: "musl", Base: "evil/alpine@sha256:" + strings.Repeat("e", 64)}, []string{theirs}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if theirs == musl || theirs == gnu[0] || !e.Built(theirs) || e.Built(musl) || e.Built(gnu[0]) {
+		t.Errorf("the hostile base's %s is another VM's: %s, %s", theirs, musl, gnu[0])
+	}
+}
+
 // A tool the lock would build from source for the VM's platform says so,
 // and builds nothing; so does a lock that moved on while devvm waited.
 func TestBuildRefuses(t *testing.T) {
@@ -893,7 +969,7 @@ func TestBuildRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, muslT, []string{musl}); msg.NamesOf(err) != "tool_unbuilt tool=node version="+parsed(t, lock).Version("node") {
+	if err := e.Build(t.Context(), backend.Review{}, f, muslKey, muslT, []string{musl}); msg.NamesOf(err) != "tool_unbuilt tool=node version="+parsed(t, lock).Version("node") {
 		t.Errorf("Build = %v", msg.NamesOf(err))
 	}
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, []string{"node-1.0.0-0123456789ab.erofs"}); msg.NamesOf(err) != "tools_changed" {

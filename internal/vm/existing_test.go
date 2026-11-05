@@ -9,6 +9,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/settings"
@@ -149,6 +150,36 @@ func TestToolsAdd(t *testing.T) {
 	if !slices.Equal(*asked, []string{"restart_now vm=" + vm}) || !slices.Contains(ms, "Stop") ||
 		!slices.Contains(f.Instances[vm].AgentDirs, prompts) {
 		t.Errorf("asked %q, calls %q, agent dirs %q", *asked, ms, f.Instances[vm].AgentDirs)
+	}
+}
+
+// Adding tools to a VM on a container image: gnu tools build in a clone of devvm's
+// own Ubuntu base, musl ones in the VM's base, keyed by its digest.
+func TestToolsAddFrom(t *testing.T) {
+	for _, tc := range []struct{ libc, from string }{
+		{"gnu", "debian:12@sha256:" + strings.Repeat("d", 64)},
+		{"musl", "alpine:3@sha256:" + strings.Repeat("a", 64)},
+	} {
+		t.Run(tc.libc, func(t *testing.T) {
+			e, f, _ := upEnv(t, allNative())
+			f.Built = backend.Built{Libc: tc.libc}
+			existingVM(t, e, Options{From: tc.from, Toolchains: &[]string{}, Agents: &[]string{}, NoNetworkPolicy: true})
+			if err := (Tools{e}).Add(t.Context(), Options{}, []string{"go"}); err != nil {
+				t.Fatal(msg.NamesOf(err))
+			}
+			own, err := e.builder(f, "").Key(image.Base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			theirs, err := e.builder(f, tc.from).Key(image.Base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]string{"gnu": own, "musl": theirs}[tc.libc]
+			if spec, _ := call(f, "BuildTools").Args[0].(backend.ToolsSpec); spec.Base != want {
+				t.Errorf("built in %s, want %s", spec.Base, want)
+			}
+		})
 	}
 }
 

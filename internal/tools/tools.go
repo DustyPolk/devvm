@@ -297,6 +297,11 @@ type Target struct {
 	// A gnu tool image is the same whatever glibc its base has, so its
 	// key doesn't hash it.
 	Glibc string
+	// Base is, for musl, the digest of the --from base the images build
+	// in (its record's), which their keys hash: musl images are never
+	// shared beyond VMs on that base. gnu images always build in devvm's
+	// own Ubuntu base, so have none.
+	Base string
 }
 
 // File returns a tool's image file at the lock's version, for a VM of
@@ -310,7 +315,7 @@ func (t *Env) File(lock Lock, tool string, tg Target) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return image.ToolFile(t.Assets, image.Tool{Name: tool, Version: v, LockEntry: entry, Libc: tg.Libc, Format: tg.Format})
+	return image.ToolFile(t.Assets, image.Tool{Name: tool, Version: v, LockEntry: entry, Libc: tg.Libc, Base: tg.Base, Format: tg.Format})
 }
 
 // Files returns the image files of the tools behind each of these names
