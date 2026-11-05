@@ -165,6 +165,8 @@ A Lima VM that doesn't answer over ssh within a minute of starting is stopped. R
 
 When devvm stops after it made a VM but before the VM was ready, such as when you press Ctrl+C at the wrong moment, devvm never starts that VM. The VM never opened a shell, so nothing of yours is in it. In a terminal, devvm asks whether to delete the VM and make it again, and the answer is no unless you type y. Without a terminal, with `--no-input` or when you answer no, devvm keeps the VM and says so, and you run `devvm rm` to delete it, then `devvm` to make it again.
 
+While another devvm is still making the folder's VM, such as one waiting for your answers in another terminal, `devvm` and `devvm rm` in that folder refuse at once and say so. Finish or stop the other devvm, then run the command again: once the VM is made, `devvm` opens it.
+
 ## The folder is gone
 
 When you delete or move a project folder, its VM stays and keeps its disk, and `devvm ls` writes `(gone)` after its folder. To keep the VM, move the folder back to its path. To delete it, run `devvm rm VM` with the name that `devvm ls` lists, in any folder. devvm asks first, and when the VM is stopped and has an agent, it needs `--no-export`, because starting the VM to export the history would make the folder again ([a VM whose folder is gone](../getting-started/commands.md#a-vm-whose-folder-is-gone)).

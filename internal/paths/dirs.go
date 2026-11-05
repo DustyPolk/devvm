@@ -174,6 +174,15 @@ func (d Dirs) Run() string { return filepath.Join(d.Data, "run") }
 // after the VM's own lock (VM.Lock), never before.
 func (d Dirs) ClaimsLock() string { return filepath.Join(d.Run(), "claims.lock") }
 
+// CreateLock is the creation lock of the project folder whose hash is
+// hash (project.Hash): held while a devvm makes the folder's VM, from
+// when it finds the folder has none until the VM's creation is recorded.
+// It's outside the VM's folder (VMDir), which a creation deletes and
+// makes again, so it stays when the VM goes.
+func (d Dirs) CreateLock(hash string) string {
+	return filepath.Join(d.Run(), "create-"+hash+".lock")
+}
+
 // QEMUWrapper is the folder of the wrapper a confined start on a Linux
 // host gives Lima as QEMU, which runs QEMU with the VM's network.
 func (d Dirs) QEMUWrapper() string { return filepath.Join(d.Run(), "qemu") }

@@ -74,26 +74,67 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 	if remakePending(t.st) {
 		return e.finishRemake(ctx, o, t)
 	}
-	if !t.exists {
+	// None, or the folder's own whose creation didn't finish, which
+	// another devvm may be making now: made under the folder's creation
+	// lock.
+	if !t.exists || !t.st.Finished() && t.sub == "" {
+		return e.makeHeld(ctx, o, t)
+	}
+	return e.openMade(ctx, o, t)
+}
+
+// openMade opens t, a VM that's made. One whose creation didn't finish,
+// kept, is refused before anything is checked or said, as any command
+// that needs it made refuses it.
+func (e Launch) openMade(ctx context.Context, o Options, t *found) error {
+	if err := (need{has: hasMade}).check(t); err != nil {
+		return err
+	}
+	return e.open(ctx, o, t)
+}
+
+// makeHeld makes the folder's VM, t, holding the folder's creation lock
+// (holdCreate) from before the plan's questions until its creation is
+// recorded, and refuses while another devvm holds it. Under the lock it
+// finds the VM again (finder.again), as another devvm may have made it
+// since t was found: one made meanwhile is opened as it is. A VM whose
+// creation didn't finish is deleted and made again only when the user
+// says so (remakeUnfinished). After an interrupt the lock is let go of
+// last, once create's cleanup has deleted what it made.
+func (e Launch) makeHeld(ctx context.Context, o Options, t *found) error {
+	release, err := holdCreate(e.Env, t.f.Name)
+	if err != nil {
+		return err
+	}
+	done := e.AddCleanup(func(context.Context) { release() })
+	unhold := func() { release(); done() }
+	defer func() {
+		if !e.Interrupted() {
+			unhold()
+		}
+	}()
+	if t, err = finder(e).again(ctx, t); err != nil {
+		return err
+	}
+	switch {
+	case remakePending(t.st):
+		unhold()
+		return e.finishRemake(ctx, o, t)
+	case !t.exists:
 		// The company proxy its builds and its proxy go through, checked
 		// before anything is built.
 		if _, err := e.Proxy.Upstream(ctx); err != nil {
 			return err
 		}
-		return creation{e}.create(ctx, o, t.f, t.b)
-	}
-	if remakeUnfinished(e.Env, t) {
+		return creation{e}.create(ctx, o, t.f, t.b, unhold)
+	case remakeUnfinished(e.Env, t):
 		if err := Lifecycle(e).delete(ctx, t); err != nil {
 			return err
 		}
-		return creation{e}.create(ctx, o, t.f, t.b)
+		return creation{e}.create(ctx, o, t.f, t.b, unhold)
 	}
-	// One kept is refused before anything is checked or said, as any
-	// command that needs it made refuses it.
-	if err := (need{has: hasMade}).check(t); err != nil {
-		return err
-	}
-	return e.open(ctx, o, t)
+	unhold()
+	return e.openMade(ctx, o, t)
 }
 
 // finishRemake finishes t's VM's remake that didn't (remaking.finishPending),
@@ -149,8 +190,10 @@ type newVM struct {
 // creation makes a new VM: its plan, its build and its cleanup.
 type creation struct{ Launch }
 
-// create makes the folder's VM and opens a shell in it.
-func (e creation) create(ctx context.Context, o Options, f project.Folder, b backend.Backend) error {
+// create makes the folder's VM and opens a shell in it, calling release
+// once its creation is recorded, before its first start: the folder's
+// creation lock is held until then (Launch.makeHeld).
+func (e creation) create(ctx context.Context, o Options, f project.Folder, b backend.Backend, release func()) error {
 	vm := f.Name
 	n, err := e.plan(ctx, o, f, b)
 	if err != nil {
@@ -233,6 +276,9 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err := e.makeMachine(ctx, b, st, chain.Key(), n.spec); err != nil {
 		return err
 	}
+	// Made: another devvm in the folder opens it from now on, and its
+	// start's questions never hold that one up.
+	release()
 	// A clone has no .git of the host's to protect, and no origin
 	// (hostChecks).
 	locking.Store(!o.Clone && !o.NoGitProtect)

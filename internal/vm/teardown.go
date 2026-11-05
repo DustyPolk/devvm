@@ -22,7 +22,8 @@ type vmFolders struct{ *Env }
 // links to it and its group, with leaves its backend's own leftovers,
 // backend.Forgetter, and the old machine a remake that didn't finish set
 // aside), then its folder, every file of its in it (its pinned host keys
-// among them), and last its ssh config entry. leaves is false after the backend
+// among them), its project folder's creation lock if a killed devvm left
+// it (dropCreateLock), and last its ssh config entry. leaves is false after the backend
 // deleted the VM itself, which took its leftovers with it.
 func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 	vm := t.f.Name
@@ -52,6 +53,7 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 	if err := state.RemoveFolder(ctx, e.Dirs, vm); err != nil {
 		return err
 	}
+	dropCreateLock(e.Env, vm)
 	return e.writeSSHConfig(ctx)
 }
 

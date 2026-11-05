@@ -115,12 +115,19 @@ type RmOptions struct {
 // for an earlier folder at this path, or a parent folder's VM found from
 // a subfolder, is deleted only after asking in a terminal, which --force
 // never answers, and never without one; the earlier folder's isn't
-// exported, as its folder is gone.
+// exported, as its folder is gone. While another devvm makes the folder's
+// VM it refuses (holdForRm).
 func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 	t, err := finder(e).target(ctx, need{has: hasVM})
 	if err != nil {
 		return err
 	}
+	// Never one another devvm is making.
+	release, err := holdForRm(e.Env, t)
+	if err != nil {
+		return err
+	}
+	defer release()
 	vm, st := t.f.Name, t.st
 	asked := false
 	if t.sub != "" {
@@ -207,6 +214,11 @@ func (e Lifecycle) RmVM(ctx context.Context, name string, o RmOptions) error {
 // One whose folder is on a disk that isn't connected is deleted only
 // after asking in a terminal, which --force never answers.
 func (e Lifecycle) rmGone(ctx context.Context, t *found, folder FolderState, o RmOptions) error {
+	release, err := holdForRm(e.Env, t)
+	if err != nil {
+		return err
+	}
+	defer release()
 	vm, st := t.f.Name, t.st
 	clone := st.Finished() && isClone(st)
 	if clone && !o.NoCloneCheck {

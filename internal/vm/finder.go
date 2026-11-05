@@ -254,6 +254,25 @@ func (e finder) own(ctx context.Context) (*found, error) {
 	return e.inspect(ctx, f, st)
 }
 
+// again finds t, the folder's own VM, found before (own), again when its
+// state changed since: another devvm made it, finished making it or
+// deleted it meanwhile. One whose state is as it was is t, as it was;
+// one found again is refused as up's target is (vm_other_folder).
+func (e finder) again(ctx context.Context, t *found) (*found, error) {
+	st, err := state.ReadHash(e.Dirs, project.Hash(t.f.Dir))
+	if err != nil {
+		return nil, err
+	}
+	if sameCreation(st, t.st) {
+		return t, nil
+	}
+	n, err := e.own(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return n, need{folder: true}.check(n)
+}
+
 // state reads the state of dir's VM, by its path's hash, and returns the
 // folder with the name it records ("" for none).
 func (e finder) state(dir string) (project.Folder, *state.VM, error) {

@@ -509,6 +509,11 @@ func CpusNotNumber(flag string, value string) M {
 	return M{id: "cpus_not_number", vals: []val{{"flag", flag}, {"value", value}}}
 }
 
+// CreateRunning is [create_running]: "Another devvm is making {{.vm}}. Run the command again once it has finished."
+func CreateRunning(vm string) M {
+	return M{id: "create_running", vals: []val{{"vm", vm}}}
+}
+
 // Creating is [creating]: "creating {{.vm}}"
 func Creating(vm string) M {
 	return M{id: "creating", vals: []val{{"vm", vm}}}
@@ -3517,6 +3522,7 @@ var specs = map[string]spec{
 	"converting_in_vm":                 {fields: []string{"from", "vm"}},
 	"copying_branches":                 {},
 	"cpus_not_number":                  {fields: []string{"flag", "value"}},
+	"create_running":                   {fields: []string{"vm"}},
 	"creating":                         {fields: []string{"vm"}},
 	"creating_from":                    {fields: []string{"image", "vm"}},
 	"creating_from_ubuntu":             {fields: []string{"vm"}},

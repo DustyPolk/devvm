@@ -109,6 +109,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"space_folder_not_connected":       "getting-started/commands#a-folder-on-a-disk-that-isnt-connected",
 	"rm_vm_not_connected":              "getting-started/commands#a-folder-on-a-disk-that-isnt-connected",
 	"vm_unfinished":                    "using/troubleshooting#a-vm-whose-creation-didnt-finish",
+	"create_running":                   "using/troubleshooting#a-vm-whose-creation-didnt-finish",
 	"no_parent_vm":                     "getting-started/commands#a-subfolder",
 	"using_parent_vm":                  "getting-started/commands#a-subfolder",
 	"rm_parent_vm":                     "getting-started/commands#a-subfolder",
