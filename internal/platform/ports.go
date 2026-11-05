@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"math/rand/v2"
-	"strconv"
-	"strings"
 )
 
 // PortRange is the ports from Lo to Hi, both included.
@@ -33,17 +31,6 @@ func PortsBelow(first int, ok bool) PortRange {
 // ChoosablePorts returns the range devvm chooses ports from on this host
 // (PortsBelow its ephemeral range).
 func ChoosablePorts() PortRange { return PortsBelow(ephemeralFirst()) }
-
-// parsePortRangeFirst reads the first field of Linux's
-// ip_local_port_range ("32768\t60999").
-func parsePortRangeFirst(s string) (int, bool) {
-	f := strings.Fields(s)
-	if len(f) == 0 {
-		return 0, false
-	}
-	n, err := strconv.Atoi(f[0])
-	return n, err == nil && n > 0 && n < 65536
-}
 
 // FreePort returns a random port of r that usable accepts, trying 1000.
 func FreePort(ctx context.Context, r PortRange, usable func(ctx context.Context, port int) bool) (int, error) {
