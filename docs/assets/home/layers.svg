@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 70" role="img" aria-labelledby="art-layers">
+  <title id="art-layers">The image docker+nix is the nix layer on the docker layer, on base. docker, nix and desktop are the built-in layers.</title>
+  <!-- The image, named bottom first: two built-in layers on base. -->
+  <text class="m" x="7" y="11">docker+nix</text>
+  <rect class="f" x="7" y="14" width="126" height="56"/>
+  <rect class="s" x="8" y="15" width="124" height="54"/>
+  <rect class="a" x="14" y="23" width="112" height="12"/>
+  <text class="k" x="21" y="33">nix</text>
+  <rect class="a" x="14" y="37" width="112" height="12"/>
+  <text class="k" x="21" y="47">docker</text>
+  <rect class="m" x="14" y="51" width="112" height="12"/>
+  <text class="k" x="21" y="61">base</text>
+  <!-- The built-in layers. -->
+  <g class="lit-chip lit-1">
+    <rect class="a" x="147" y="29" width="56" height="12"/>
+    <text class="k" x="154" y="39">docker</text>
+  </g>
+  <g class="lit-chip lit-2">
+    <rect class="a" x="147" y="43" width="35" height="12"/>
+    <text class="k" x="154" y="53">nix</text>
+  </g>
+  <g class="lit-chip lit-3">
+    <rect class="a" x="147" y="57" width="63" height="12"/>
+    <text class="k" x="154" y="67">desktop</text>
+  </g>
+</svg>

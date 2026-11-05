@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 254 181" role="img" aria-labelledby="art-step-cd">
+  <title id="art-step-cd">In a terminal on your machine, you type cd ~/some-project.</title>
+  <!-- A terminal on your machine. -->
+  <text class="m" x="7" y="11">your machine</text>
+  <rect class="f" x="7" y="14" width="240" height="160"/>
+  <rect class="bg" x="8" y="15" width="238" height="158"/>
+  <!-- The command, typed out: a cover over it shrinks a cell at a time as the caret moves along. -->
+  <text class="m" x="14" y="33">~ $</text>
+  <text class="t" x="42" y="33">cd ~/some-project</text>
+  <rect class="bg type type-cd" x="42" y="22" width="119" height="14"/>
+  <g class="caret caret-cd">
+    <text class="a caret-blink caret-blink-cd" x="42" y="33">█</text>
+  </g>
+</svg>

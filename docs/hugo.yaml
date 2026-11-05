@@ -2,6 +2,10 @@ baseURL: https://devvm.dev/
 title: devvm
 locale: en
 
+security:
+  http:
+    proxyFromEnvironment: true
+
 enableRobotsTXT: true
 enableGitInfo: true
 

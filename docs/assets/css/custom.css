@@ -86,6 +86,11 @@ html.dark .highlight .chroma .go {
   padding-top: 2rem;
 }
 
+/* The hero's art, under the buttons: centered in the column. */
+#content > .hx\:items-start > .devvm-art {
+  align-self: center;
+}
+
 /* Departure Mono: one weight, sized in 11px steps so its pixels stay whole. */
 #content > .hx\:items-start > h1 {
   font-family: var(--devvm-font-pixel);
@@ -341,12 +346,17 @@ html.dark .highlight .chroma .go {
   margin: 0 0 1rem;
 }
 
-/* What's supported: three short cards without art, under the section's heading, each a heading and a
-   sentence. One column, then three per row from 1024px. */
+/* Quick start and What's supported: three short cards under the section's heading, each a heading and a
+   sentence, and Quick start's with a terminal as their art. One column, then three per row from 1024px. */
 #content > .hx\:items-start > .devvm-features.devvm-features-3 {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   margin-top: 0;
+}
+
+/* Quick start's cards, after the install tabs: a gap between the two. */
+#content > .hx\:items-start > .devvm-install + .devvm-features.devvm-features-3 {
+  margin-top: 2rem;
 }
 
 @media (min-width: 1024px) {
@@ -396,6 +406,11 @@ html.dark .highlight .chroma .go {
   width: 100%;
   margin: auto 0 0;
   padding-top: 1.5rem;
+}
+
+/* A three-column card's terminal, 254 wide, at most twice its size, so it isn't huge in one column. */
+.devvm-features-3 .devvm-feature > .devvm-art {
+  max-width: 508px;
 }
 
 @media (min-width: 1024px) {
@@ -946,6 +961,222 @@ html.dark .highlight .chroma .go {
 
 .devvm-art .reach-4 {
   animation-name: devvm-reach-4;
+}
+
+/* Quick start's terminals (step-cd, step-pick and step-agent), each on a loop of its own. A command is
+   typed out: its .type cover shrinks from the right a cell at a time while its .caret moves along, both in
+   --chars steps across --width, then the caret blinks. The styles here are each part's end state, which
+   shows when there's no motion, and the keyframes start from the beginning. step-cd types from 0.6 to 2.4 s
+   of 6 s and step-agent from 0.4 to 1.6 s of 4 s. step-pick's 8 s: devvm typed from 0.4 to 1.4 s, the list
+   at 1.8 s, then the down arrow at 3.2 s, space at 4.4 s and enter at 5.6 s, each key lit as it's pressed. */
+.devvm-art .type {
+  transform: scaleX(0);
+  transform-box: fill-box;
+  transform-origin: right;
+  animation: devvm-type var(--duration) steps(var(--chars), jump-end) infinite;
+}
+
+.devvm-art .caret {
+  transform: translateX(var(--width));
+  animation: devvm-caret var(--duration) steps(var(--chars), jump-end) infinite;
+}
+
+.devvm-art .caret-blink {
+  animation: devvm-caret-blink var(--duration) step-end infinite;
+}
+
+.devvm-art .type-cd,
+.devvm-art .caret-cd,
+.devvm-art .caret-blink-cd {
+  --duration: 6s;
+  --chars: 17;
+  --width: 119px;
+}
+
+.devvm-art .type-agent,
+.devvm-art .caret-agent,
+.devvm-art .caret-blink-agent {
+  --duration: 4s;
+  --chars: 6;
+  --width: 42px;
+}
+
+.devvm-art .type-pick,
+.devvm-art .caret-pick,
+.devvm-art .caret-blink-pick,
+.devvm-art .pick-list,
+.devvm-art .pick-cursor,
+.devvm-art .pick-check,
+.devvm-art .key {
+  --duration: 8s;
+  --chars: 5;
+  --width: 35px;
+}
+
+.devvm-art .type-pick {
+  animation-name: devvm-type-pick;
+}
+
+.devvm-art .caret-pick {
+  animation-name: devvm-caret-pick;
+}
+
+.devvm-art .caret-blink-pick {
+  opacity: 0;
+  animation-name: devvm-caret-pick-blink;
+}
+
+.devvm-art .pick-list {
+  animation: devvm-pick-list var(--duration) step-end infinite;
+}
+
+.devvm-art .pick-cursor {
+  transform: translateY(37px);
+  animation: devvm-pick-cursor var(--duration) step-end infinite;
+}
+
+.devvm-art .pick-check {
+  animation: devvm-pick-check var(--duration) step-end infinite;
+}
+
+/* Each key's loop starts where its press is, 3.2, 4.4 or 5.6 s into the 8 s: a negative delay starts it
+   that far before its press, so it's dim from the page's start. */
+.devvm-art .key {
+  animation: devvm-key var(--duration) ease-out infinite;
+}
+
+.devvm-art .key-1 {
+  animation-delay: -4.8s;
+}
+
+.devvm-art .key-2 {
+  animation-delay: -3.6s;
+}
+
+.devvm-art .key-3 {
+  animation-delay: -2.4s;
+}
+
+@keyframes devvm-type {
+  0%,
+  10% {
+    transform: scaleX(1);
+  }
+
+  40%,
+  100% {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes devvm-caret {
+  0%,
+  10% {
+    transform: translateX(0);
+  }
+
+  40%,
+  100% {
+    transform: translateX(var(--width));
+  }
+}
+
+/* Solid while it types, then on and off. */
+@keyframes devvm-caret-blink {
+  0%,
+  56%,
+  72%,
+  88% {
+    opacity: 1;
+  }
+
+  48%,
+  64%,
+  80%,
+  96% {
+    opacity: 0;
+  }
+}
+
+@keyframes devvm-type-pick {
+  0%,
+  5% {
+    transform: scaleX(1);
+  }
+
+  17.5%,
+  100% {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes devvm-caret-pick {
+  0%,
+  5% {
+    transform: translateX(0);
+  }
+
+  17.5%,
+  100% {
+    transform: translateX(var(--width));
+  }
+}
+
+@keyframes devvm-caret-pick-blink {
+  0% {
+    opacity: 1;
+  }
+
+  22.5%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes devvm-pick-list {
+  0% {
+    opacity: 0;
+  }
+
+  22.5%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes devvm-pick-cursor {
+  0% {
+    transform: translateY(0);
+  }
+
+  40%,
+  100% {
+    transform: translateY(37px);
+  }
+}
+
+@keyframes devvm-pick-check {
+  0% {
+    opacity: 0;
+  }
+
+  55%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* A key, from its press: lit at once, then dim, and dim until its next press. */
+@keyframes devvm-key {
+  0%,
+  5% {
+    opacity: 1;
+  }
+
+  12%,
+  100% {
+    opacity: 0.35;
+  }
 }
 
 /* No motion when the visitor asks for less: everything shows as drawn, and the travelling blocks go. */

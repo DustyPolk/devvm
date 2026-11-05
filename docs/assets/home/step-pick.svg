@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 254 181" role="img" aria-labelledby="art-step-pick">
+  <title id="art-step-pick">You type devvm, and it lists toolchains and coding agents, with node already checked. You press the down arrow to move to claude, space to check it, and enter.</title>
+  <!-- A terminal on your machine. -->
+  <text class="m" x="7" y="11">your machine</text>
+  <rect class="f" x="7" y="14" width="240" height="160"/>
+  <rect class="bg" x="8" y="15" width="238" height="158"/>
+  <!-- devvm, typed out: a cover over it shrinks a cell at a time as the caret moves along. The caret goes
+       when the list shows. -->
+  <text class="m" x="14" y="33">~/some-project $</text>
+  <text class="t" x="133" y="33">devvm</text>
+  <rect class="bg type type-pick" x="133" y="22" width="35" height="14"/>
+  <g class="caret caret-pick">
+    <text class="a caret-blink caret-blink-pick" x="133" y="33">█</text>
+  </g>
+  <!-- The list, with node checked: the cursor moves from node down to claude, which space checks. -->
+  <g class="pick-list">
+    <text class="m" x="14" y="54">Toolchains</text>
+    <text class="t" x="28" y="70">[ ] node</text>
+    <text class="a" x="35" y="70">x</text>
+    <text class="m" x="14" y="91">Coding agents</text>
+    <text class="t" x="28" y="107">[ ] claude</text>
+    <text class="a pick-check" x="35" y="107">x</text>
+    <text class="t" x="28" y="123">[ ] codex</text>
+    <text class="t" x="28" y="139">[ ] opencode</text>
+    <text class="a pick-cursor" x="14" y="70">&gt;</text>
+    <!-- The keys, each lit as it's pressed. -->
+    <g class="key key-1">
+      <rect class="a" x="14" y="152" width="21" height="14"/>
+      <text class="k" x="21" y="163">↓</text>
+    </g>
+    <g class="key key-2">
+      <rect class="a" x="42" y="152" width="49" height="14"/>
+      <text class="k" x="49" y="163">space</text>
+    </g>
+    <g class="key key-3">
+      <rect class="a" x="98" y="152" width="49" height="14"/>
+      <text class="k" x="105" y="163">enter</text>
+    </g>
+  </g>
+</svg>

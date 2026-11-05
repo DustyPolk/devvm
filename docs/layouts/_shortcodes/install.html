@@ -1,8 +1,8 @@
 {{- /* The install command in a tab per operating system, on Hextra's tabs: macOS's Homebrew, Linux's install
    script (_partials/install-tabs.html), each tab's name after its system's icon. macOS's tab is selected, and _partials/install-os.html selects Linux's for Linux visitors.
-   {{< install >}}, or {{< install step="1" >}} to number its comment as a list's first step. */ -}}
+   {{< install >}}. */ -}}
 {{- $tabs := slice -}}
-{{- range $i, $tab := partial "install-tabs.html" (dict "page" .Page "step" (.Get "step") "position" .Position) -}}
+{{- range $i, $tab := partial "install-tabs.html" (dict "page" .Page "position" .Position) -}}
   {{- $name := partial "os-tab-name.html" (dict "name" $tab.name "position" $.Position) -}}
   {{- $tabs = $tabs | append (dict "id" (add $i 1) "name" $name "content" $tab.content "selected" (eq $i 0)) -}}
 {{- end -}}

@@ -1,8 +1,5 @@
 {{- /* The install shortcode's tabs, written here once for its HTML and its Markdown copy: macOS's Homebrew,
-   then Linux's install script, each a name and its Markdown. Takes the page, the step ("" or "1") and the
-   shortcode's position. */ -}}
-{{- $step := "" -}}
-{{- with .step }}{{ $step = printf "%s. " . }}{{ end -}}
+   then Linux's install script, each a name and its Markdown. Takes the page and the shortcode's position. */ -}}
 {{- $script := "curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash" -}}
 {{- $macNote := "The install script in the Linux tab also works on macOS." -}}
 {{- with site.GetPage "/docs/getting-started/install" -}}
@@ -12,6 +9,6 @@
 {{- else -}}
   {{- errorf "install: no Installing page (%s)" .position -}}
 {{- end -}}
-{{- $mac := printf "```sh\n# %sInstall devvm, and Lima with it\nbrew install w3cj/tap/devvm\n```\n\n%s" $step $macNote -}}
-{{- $linux := printf "```sh\n# %sInstall devvm and what it needs\n%s\n```\n\nThe script asks before it installs Lima, QEMU or access to `/dev/kvm`." $step $script -}}
+{{- $mac := printf "```sh\n# Install devvm, and Lima with it\nbrew install w3cj/tap/devvm\n```\n\n%s" $macNote -}}
+{{- $linux := printf "```sh\n# Install devvm and what it needs\n%s\n```\n\nThe script asks before it installs Lima, QEMU or access to `/dev/kvm`." $script -}}
 {{- return (slice (dict "name" "macOS" "content" $mac) (dict "name" "Linux" "content" $linux)) -}}

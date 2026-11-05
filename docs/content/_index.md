@@ -25,40 +25,31 @@ contextMenu: false
 
 ## Quick start {icon="rocket"}
 
-{{< install step="1" >}}
+{{< install >}}
 
-```sh
-# 2. Go to a project folder
-cd ~/some-project
-# 3. Make its VM, and check a coding agent in the list
-devvm
-```
+{{< features columns="3" >}}
 
-devvm lists what the new VM can get, with the toolchains your project's files call for already checked. Move with the arrow keys, press space to check Claude Code, Codex or opencode, and press enter. Here node and Claude Code are checked:
+{{< feature title=`1\. Go to your project` icon="file-folder" level="3" art="step-cd" >}}
 
-```text
-Toolchains
-> [x] node       for package.json
-  [ ] python
-  [ ] rust
-  [ ] go
-Coding agents, which you start in the VM's shell
-  [x] claude
-  [ ] codex
-  [ ] opencode
-Layers, which a VM gets only when devvm makes it
-  [ ] docker     Docker's engine, CLI, BuildKit and Compose
-  [ ] nix        Nix, direnv and nix-direnv
-```
+Open a terminal and `cd` into any project folder.
 
-devvm makes the VM and opens a shell in it, whose prompt starts with `(devvm)`. You're in the VM now, so start your agent there. Claude Code needs a Claude Code token before its first start, which [your first VM](docs/getting-started/first-vm.md#claude-codes-token) shows how to make on your machine and give to devvm:
+{{< /feature >}}
 
-```sh
-# 4. Start the agent in the VM's shell
-claude
-```
+{{< feature title=`2\. Run devvm` icon="prompt" level="3" art="step-pick" >}}
 
-The agent runs in the VM, and it sees only your project folder. The next time you run devvm in the folder, it opens the same VM, and `devvm tools` adds an agent to a VM you already have.
+devvm checks the toolchains your project's files call for. Check a coding agent, and devvm makes the VM.
+
+{{< /feature >}}
+
+{{< feature title=`3\. Start your agent` icon="robot" level="3" art="step-agent" >}}
+
+devvm opens a shell in the VM, whose prompt starts with `(devvm)`, so start your agent there.
+
+{{< /feature >}}
+
+{{< /features >}}
+
+Claude Code needs a Claude Code token before its first start, which [your first VM](docs/getting-started/first-vm.md#claude-codes-token) shows how to make on your machine and give to devvm. The agent runs in the VM, and it sees only your project folder. The next time you run devvm in the folder, it opens the same VM, and `devvm tools` adds an agent to a VM you already have.
 
 ## What's supported {icon="view-grid"}
 
@@ -76,9 +67,9 @@ Claude Code, Codex and opencode run in the VM. Check one in the list when devvm 
 
 {{< /feature >}}
 
-{{< feature title="Backends" icon="cube" level="3" art="backends" >}}
+{{< feature title="Layers" icon="copies" level="3" art="layers" >}}
 
-[Lima](https://lima-vm.io/) runs the VMs, with Apple's Virtualization framework on macOS and QEMU on Linux ([backends](docs/backends/_index.md)).
+devvm ships the `docker`, `nix` and `desktop` layers, which you check in the list when devvm makes the VM, and `devvm layer new` creates your own custom layers you can apply to any of your VMs ([layers](docs/using/images.md#layers)).
 
 {{< /feature >}}
 
@@ -145,7 +136,7 @@ Claude Code, Codex and opencode run in the VM. Check one in the list when devvm 
 
 ### What does it run on?
 
-`devvm` runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs [Lima](docs/backends/_index.md) 2.0 or newer, which Homebrew installs along with devvm and which on Linux also needs QEMU and access to `/dev/kvm`. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
+`devvm` runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs [Lima](https://lima-vm.io/) 2.0 or newer, which runs the VMs with Apple's Virtualization framework on macOS and QEMU on Linux ([backends](docs/backends/_index.md)). Homebrew installs Lima along with devvm, and on Linux, Lima also needs QEMU and access to `/dev/kvm`. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
 
 ### Does the agent run on my machine?
 

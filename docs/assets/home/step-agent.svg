@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 254 181" role="img" aria-labelledby="art-step-agent">
+  <title id="art-step-agent">In the VM's shell, whose prompt starts with (devvm), you type claude.</title>
+  <!-- The VM's shell. -->
+  <text class="m" x="7" y="11">VM</text>
+  <rect class="f" x="7" y="14" width="240" height="160"/>
+  <rect class="s" x="8" y="15" width="238" height="158"/>
+  <!-- The command, typed out: a cover over it shrinks a cell at a time as the caret moves along. -->
+  <text class="m" x="14" y="33">(devvm) ~/some-project $</text>
+  <text class="t" x="189" y="33">claude</text>
+  <rect class="s type type-agent" x="189" y="22" width="42" height="14"/>
+  <g class="caret caret-agent">
+    <text class="a caret-blink caret-blink-agent" x="189" y="33">█</text>
+  </g>
+</svg>

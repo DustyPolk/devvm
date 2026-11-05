@@ -2,7 +2,7 @@
    On wide screens, the cards go into two columns, the first, third and so on on the left and the rest on
    the right unless a card names its column, each card as tall as its content; on narrow screens they
    stack in the order written, which each card's order style keeps. {{< features columns="3" >}} is a grid of three cards in a row instead,
-   for short cards without art. */ -}}
+   for short cards, with art up to 254 wide or none. */ -}}
 {{- if eq (.Get "columns") "3" -}}
 <div class="devvm-features devvm-features-3">{{ .Inner }}</div>
 {{- else -}}
