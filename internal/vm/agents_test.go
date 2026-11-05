@@ -4,14 +4,17 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
@@ -189,6 +192,21 @@ func TestHistoryImportScript(t *testing.T) {
 	}
 	if unpacks != 2 || strings.Count(s, "--absolute-names") != 1 {
 		t.Errorf("%d unpacks, --absolute-names beyond the listing:\n%s", unpacks, s)
+	}
+}
+
+// The import needs GNU tar, which Debian and Ubuntu always have, and
+// base's Alpine branch installs over busybox's: its apk add has tar.
+func TestHistoryImportHasGNUTarOnAlpine(t *testing.T) {
+	b, err := fs.ReadFile(assets.FS, "layers/base.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, musl, ok := strings.Cut(string(b), "if [[ $devvm_libc == musl ]]; then")
+	musl, _, _ = strings.Cut(musl, "\nelse\n")
+	add := regexp.MustCompile(`(?m)^\s*sudo apk add [^\n]*(\\\n[^\n]*)*`).FindString(musl)
+	if !ok || !slices.Contains(strings.Fields(add), "tar") {
+		t.Errorf("base.sh's Alpine branch doesn't install GNU tar: %q", add)
 	}
 }
 

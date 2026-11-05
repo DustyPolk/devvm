@@ -69,7 +69,9 @@ func importSkips() []string {
 // only the listing takes: tar would list them with their leading / and
 // .. parts taken off), each on one line (GNU tar's escape quoting). It
 // imports nothing when one is outside historyPaths, absolute or has a
-// .. part, printing historyUnsafe instead. Otherwise GNU tar unpacks it
+// .. part, printing historyUnsafe instead. Every tar here is GNU tar,
+// which Debian and Ubuntu have and base's Alpine branch installs over
+// busybox's (TestHistoryImportHasGNUTarOnAlpine). GNU tar unpacks it
 // in a folder of its own, without its owners or modes (the user's umask
 // applies) and without importSkips (anchored, each with what's below
 // it); the symlinks there that point outside it (absolute, or with a ..

@@ -49,7 +49,8 @@
 #     --from     every section, with from, and every base image feature: the longest. from makes VMs
 #                from node:24 (Debian 12, with node, python, the docker and nix layers and claude) and
 #                alpine:3 (musl tools, the docker layer on OpenRC, the nix layer's daemon an OpenRC service,
-#                through the proxy once network policy is on, the desktop layer's programs), each with every
+#                through the proxy once network policy is on, the desktop layer's programs, devvm history
+#                import and its refusal), each with GNU tar and every
 #                feature, and builds base from ubuntu:26.04, with a
 #                docker that isn't running; each image by its pinned digest
 #     --only     just these sections; SECTIONS below
@@ -3233,6 +3234,7 @@ check "its node, claude and every feature work" in_vm "$vm" \
 check "python, python3 and claude are the locked versions" in_vm "$vm" \
   "[[ \$(python --version) == 'Python $(lockv python)' && \$(python3 --version) == 'Python $(lockv python)' && \$(claude --version) == '$(lockv claude) '* ]]"
 check "an interactive shell starts without errors" bash -c "out=\$(limactl shell --workdir / $vm bash -ic true </dev/null 2>&1) && ! grep -iE 'error|unknown option|not found' <<<\"\$out\""
+check "its commands run GNU tar, which devvm history import needs" bash -c "limactl shell --workdir / $vm bash -c 'tar --version | head -1 | grep -q \"GNU tar\"' </dev/null"
 check "the docker layer's Docker runs in it (Docker's Debian repository), for the VM's user too" in_vm "$vm" \
   'sudo docker run --rm hello-world | grep -q Hello && id -nG | grep -qw docker'
 check "the nix layer's Nix runs in it (systemd): nix run nixpkgs#hello, and a build in Nix's sandbox" in_vm "$vm" "
@@ -3270,6 +3272,20 @@ check "devvm network on: after devvm restart, its nix-daemon goes through the pr
   nd '$D' network on </dev/null >/dev/null 2>&1 && printf 'exit\n' | nd '$D' restart >'$work/last.log' 2>&1 &&
   vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok && in_vm '$vm' 'sudo grep -q \"^export http_proxy=http://devvm:\" /etc/conf.d/nix-daemon &&
     ! nix build --no-link --impure --expr '\''$nix_fetch'\'' 2>/tmp/fetch.err && grep -q \"response 403\" /tmp/fetch.err'"
+# devvm history import works on Alpine as on Ubuntu: base's Alpine branch installs GNU tar, which
+# the import's listing and unpacking need (busybox's refuses their options), and the rest of its
+# script runs on busybox's grep and find. busybox's grep -r over the home and /tmp runs past the
+# check's limit there, so the refusal's check looks for the file by name, on the root's disk alone.
+check "an Alpine VM's commands run GNU tar" bash -c "limactl shell --workdir / $vm bash -c 'tar --version | head -1 | grep -q \"GNU tar\"' </dev/null"
+check "history import puts an export into an Alpine VM" bash -c "x='$work/export/alpine' && rm -rf \"\$x\" && mkdir -p \"\$x/.claude/projects/e2e\" &&
+  echo e2e-alpine > \"\$x/.claude/projects/e2e/t.jsonl\" && (cd \"\$x\" && tar -czf ../alpine.tar.gz .claude) &&
+  cd '$al' && '$D' history import '$work/export/alpine.tar.gz' </dev/null >'$work/last.log' 2>&1 &&
+  limactl shell --workdir / $vm bash -c '[[ \$(cat ~/.claude/projects/e2e/t.jsonl) == e2e-alpine ]]' </dev/null"
+check "and an export with a path outside the agents' history imports nothing there" bash -c "ev='$work/export/evil' && rm -rf \"\$ev\" &&
+  mkdir -p \"\$ev/d\" && echo e2e-escape > \"\$ev/e2e-escape\" && (cd \"\$ev/d\" && tar -czPf ../evil.tar.gz ../e2e-escape) &&
+  cd '$al' && ! '$D' history import \"\$ev/evil.tar.gz\" </dev/null >'$work/last.log' 2>&1 &&
+  grep -qF \"\$(m history_import_unsafe file=\$ev/evil.tar.gz)\" '$work/last.log' &&
+  o=\$(limactl shell --workdir / $vm sudo find /home /root /tmp /etc -xdev -name e2e-escape </dev/null) && [[ -z \$o ]]"
 (cd "$al" && quiet "$D" rm --force --no-export)
 
 # Ubuntu's container image has empty package lists, which apt.sh fills from its own sources.
