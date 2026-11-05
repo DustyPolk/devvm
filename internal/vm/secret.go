@@ -60,18 +60,14 @@ type SecretListed struct {
 // Secrets returns the known secrets, each with whether a value is saved
 // and the VMs using it.
 func (e Net) Secrets(ctx context.Context) ([]SecretListed, error) {
-	names, err := state.VMNames(e.Dirs)
+	inv, err := ReadStates(e.Dirs)
 	if err != nil {
 		return nil, err
 	}
 	users := map[string][]string{}
-	for _, vm := range names {
-		st, err := state.ReadVM(e.Dirs, vm)
-		if err != nil {
-			continue // not a VM's state
-		}
+	for _, st := range inv.States() {
 		for _, s := range secrets.Names(st) {
-			users[s] = append(users[s], vm)
+			users[s] = append(users[s], st.Name())
 		}
 	}
 	out := make([]SecretListed, 0, len(secrets.Known))

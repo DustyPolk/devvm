@@ -259,10 +259,11 @@ func (e Links) publishUnenforced(ctx context.Context, t *found, old string) erro
 // to the folder devvm runs in), a VM's name or alias, or a folder's name,
 // which must match one VM alone.
 func (e Links) resolve(target string) (string, error) {
-	all, err := recordedVMs(e.Dirs)
+	inv, err := ReadStates(e.Dirs)
 	if err != nil {
 		return "", err
 	}
+	all := inv.Recorded()
 	var vms []string
 	if project.IsPath(target) {
 		dir := target

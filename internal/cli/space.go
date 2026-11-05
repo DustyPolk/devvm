@@ -21,7 +21,6 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/proxy"
 	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
@@ -172,10 +171,12 @@ type spaceEnv struct {
 	b     *build.Env
 	env   *vm.Env
 	inUse map[string]int
-	// vms is each backend's VMs, by name, for those that answered.
-	vms map[string]map[string]bool
-	ret settings.Retention // the retention settings
-	now time.Time
+	// inv is the VMs, read once (vm.ReadInventory); answered the
+	// backends that listed their VMs and images.
+	inv      *vm.Inventory
+	answered map[string]bool
+	ret      settings.Retention // the retention settings
+	now      time.Time
 }
 
 // space reads what devvm keeps. Nothing it runs changes anything, and
@@ -193,7 +194,11 @@ func space(ctx context.Context, a *app) (spaceReport, error) {
 		return r, err
 	}
 	reg := env.Registry
-	inUse, err := vm.ToolsInUse(b.Dirs)
+	inv, err := vm.ReadInventory(ctx, b.Dirs, reg, vm.AllBackends)
+	if err != nil {
+		return r, err
+	}
+	inUse, err := inv.ToolsInUse()
 	if err != nil {
 		return r, err
 	}
@@ -201,15 +206,11 @@ func space(ctx context.Context, a *app) (spaceReport, error) {
 	if err != nil {
 		return r, err
 	}
-	e := spaceEnv{b: b, env: env, inUse: inUse, vms: map[string]map[string]bool{}, ret: def.Retention, now: time.Now()}
-	used, err := state.Backends(b.Dirs)
-	if err != nil {
-		return r, err
-	}
+	e := spaceEnv{b: b, env: env, inUse: inUse, inv: inv, answered: map[string]bool{}, ret: def.Retention, now: time.Now()}
 	for _, be := range reg.All() {
 		rows, caches, ok := e.backendRows(ctx, be)
 		if !ok {
-			if used[be.Name()] {
+			if inv.Used(be.Name()) {
 				r.Unknown = append(r.Unknown, be.Name())
 			}
 			continue
@@ -228,9 +229,7 @@ func space(ctx context.Context, a *app) (spaceReport, error) {
 		return r, err
 	}
 	r.Rows = append(r.Rows, dataRows...)
-	if r.FolderGone, r.NotConnected, err = e.folderGone(); err != nil {
-		return r, err
-	}
+	r.FolderGone, r.NotConnected = e.folderGone()
 	for _, row := range r.Rows {
 		r.Total += row.Size
 		r.GC += row.GC
@@ -246,19 +245,15 @@ func (e spaceEnv) backendRows(ctx context.Context, be backend.Backend) (rows []s
 	if backend.Check(ctx, be) != nil {
 		return nil, nil, false
 	}
-	vms, err := be.List(ctx)
-	if err != nil {
+	vms, listed := e.inv.Lists[be.Name()]
+	if !listed {
 		return nil, nil, false
 	}
 	ls, err := build.Images{Env: e.env.Builder(be, "")}.Listing(ctx)
 	if err != nil {
 		return nil, nil, false
 	}
-	names := map[string]bool{}
-	for _, in := range vms {
-		names[in.Name] = true
-	}
-	e.vms[be.Name()] = names
+	e.answered[be.Name()] = true
 	usage, _ := be.Usage(ctx)
 	vmRow := spaceRow{What: "VMs", Backend: be.Name(), Count: len(vms), Sized: true, Kept: keptOnlyCopy, Rest: "devvm rm"}
 	for _, in := range vms {
@@ -459,13 +454,10 @@ func (e spaceEnv) leftovers(ctx context.Context) (spaceRow, error) {
 		return row, err
 	}
 	row.Count = len(socks)
-	orphans, _, err := e.vmFolders()
-	if err != nil {
-		return row, err
-	}
-	for _, n := range orphans {
+	orphans, _ := e.vmFolders()
+	for _, k := range orphans {
 		row.Count++
-		files := e.b.Dirs.VM(n)
+		files := e.b.Dirs.VM(k.Name)
 		n64 := du(files.Dir)
 		row.Size += n64
 		if fi, err := os.Stat(files.State()); err == nil && e.ret.OrphansAge > 0 && e.now.Sub(fi.ModTime()) >= e.ret.OrphansAge {
@@ -475,45 +467,34 @@ func (e spaceEnv) leftovers(ctx context.Context) (spaceRow, error) {
 	return row, nil
 }
 
-// vmFolders sorts the VMs that have state into those whose backend
-// answered without them (orphans, whose whole folder is leftover state)
-// and the rest.
-func (e spaceEnv) vmFolders() (orphans, rest []string, err error) {
-	names, err := state.VMNames(e.b.Dirs)
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, n := range names {
-		st, err := state.ReadVM(e.b.Dirs, n)
-		if err != nil {
-			return nil, nil, err
-		}
-		if have, asked := e.vms[st.Backend]; asked && !have[n] {
-			orphans = append(orphans, n)
-		} else {
-			rest = append(rest, n)
+// vmFolders sorts the VMs' folders that have a state file into those of
+// VMs whose backend answered without them (orphans, whose whole folder is
+// leftover state) and the rest, a state that can't be read among them.
+func (e spaceEnv) vmFolders() (orphans, rest []vm.Known) {
+	for _, k := range e.inv.VMs {
+		switch {
+		case k.Err == nil && !k.State.Exists():
+			// A backend's VM without state: no folder of devvm's.
+		case k.Err == nil && e.answered[k.State.Backend] && !k.Listed:
+			orphans = append(orphans, k)
+		case !k.Listed || k.Err != nil || k.State.Backend == k.Backend.Name():
+			rest = append(rest, k)
 		}
 	}
-	return orphans, rest, nil
+	return orphans, rest
 }
 
 // folderGone are the VMs whose backend answered with them and whose
 // project folder is gone, then those whose folder is on a disk that isn't
 // connected, by name.
-func (e spaceEnv) folderGone() (gone, unconnected []goneVM, err error) {
-	_, rest, err := e.vmFolders()
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, n := range rest {
-		st, err := state.ReadVM(e.b.Dirs, n)
-		if err != nil {
-			return nil, nil, err
-		}
-		if !e.vms[st.Backend][n] {
+func (e spaceEnv) folderGone() (gone, unconnected []goneVM) {
+	_, rest := e.vmFolders()
+	for _, k := range rest {
+		st := k.State
+		if k.Err != nil || !k.Listed || !e.answered[st.Backend] {
 			continue
 		}
-		g := goneVM{Backend: st.Backend, Name: n, Folder: st.Dir}
+		g := goneVM{Backend: st.Backend, Name: k.Name, Folder: st.Dir}
 		switch vm.FolderOf(st) {
 		case vm.FolderGone:
 			gone = append(gone, g)
@@ -522,19 +503,16 @@ func (e spaceEnv) folderGone() (gone, unconnected []goneVM, err error) {
 		case vm.FolderThere:
 		}
 	}
-	return gone, unconnected, nil
+	return gone, unconnected
 }
 
 // vmLogs are the logs of the VMs that aren't orphans: their network logs,
 // their proxies' and link sessions' output.
 func (e spaceEnv) vmLogs() (counted, error) {
 	var c counted
-	_, rest, err := e.vmFolders()
-	if err != nil {
-		return c, err
-	}
-	for _, n := range rest {
-		l, err := filesIn(e.b.Dirs.VM(n).Logs(), func(string) bool { return true })
+	_, rest := e.vmFolders()
+	for _, k := range rest {
+		l, err := filesIn(paths.VM{Dir: e.b.Dirs.VMDir(k.Hash)}.Logs(), func(string) bool { return true })
 		if err != nil {
 			return c, err
 		}

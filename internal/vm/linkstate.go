@@ -9,24 +9,19 @@ import (
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/vmname"
 )
 
 // clientStates calls each with the state and links of every project VM
-// but skip, by name.
+// but skip, by name (ReadStates). A VM whose state can't be read is left
+// out: it never starts, so its links reach nothing.
 func clientStates(d paths.Dirs, skip string, each func(st *state.VM, links []Link) error) error {
-	names, err := state.VMNames(d)
+	inv, err := ReadStates(d)
 	if err != nil {
 		return err
 	}
-	slices.Sort(names)
-	for _, n := range names {
-		if n == skip || !vmname.IsVM(n) {
+	for _, st := range inv.States() {
+		if st.Name() == skip {
 			continue
-		}
-		st, err := state.ReadVM(d, n)
-		if err != nil {
-			return err
 		}
 		links, err := ReadLinks(st)
 		if err != nil {

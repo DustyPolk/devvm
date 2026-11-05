@@ -224,7 +224,11 @@ func shareListing(ctx context.Context, a *app, b *build.Env) ([]tools.Listed, er
 	if err != nil {
 		return nil, err
 	}
-	inUse, err := vm.ToolsInUse(b.Dirs)
+	inv, err := vm.ReadStates(b.Dirs)
+	if err != nil {
+		return nil, err
+	}
+	inUse, err := inv.ToolsInUse()
 	if err != nil {
 		return nil, err
 	}

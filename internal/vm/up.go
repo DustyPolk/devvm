@@ -506,7 +506,7 @@ func (e Launch) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f 
 	if err := syncer(e).sync(ctx, b, st, f.Slug(), tools.Files(st), conf); err != nil {
 		return err
 	}
-	if err := e.sshConfig().Write(ctx); err != nil {
+	if err := e.writeSSHConfig(ctx); err != nil {
 		return err
 	}
 	// Its links, once its host key is pinned, which their session checks.

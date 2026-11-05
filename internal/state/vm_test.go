@@ -424,15 +424,59 @@ func TestVMNames(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(names, want) {
 		t.Errorf("VMNames = %v, %v; want %v", names, err, want)
 	}
-	used, err := Backends(d)
-	if err != nil || !reflect.DeepEqual(used, map[string]bool{"lima": true}) {
-		t.Errorf("Backends = %v, %v", used, err)
+}
+
+// ReadAll reads each VM folder's state on its own: one that can't be read
+// is its folder's error, and one whose name isn't its folder's is a
+// CorruptError with its state, which VMNames still names; the rest are
+// read.
+func TestReadAll(t *testing.T) {
+	d := testDirs(t)
+	const ok, bad, moved = "devvm-a-00000000000001", "devvm-b-00000000000002", "devvm-c-00000000000003"
+	write(t, d.VM(ok).State(), vmJSON(ok))
+	write(t, d.VM(bad).State(), "[]")
+	write(t, filepath.Join(d.VMDir("00000000000009"), "vm.json"), vmJSON(moved))
+	all, err := ReadAll(d)
+	if err != nil || len(all) != 3 {
+		t.Fatalf("ReadAll = %+v, %v", all, err)
+	}
+	for _, r := range all {
+		switch r.Hash {
+		case "00000000000001":
+			if r.Err != nil || r.VM.Name() != ok {
+				t.Errorf("readable: %+v", r)
+			}
+		case "00000000000002":
+			if r.VM != nil {
+				t.Errorf("unreadable: %+v", r)
+			}
+			wantCorrupt(t, r.Err, d.VM(bad).State(), 0)
+		case "00000000000009":
+			if r.VM == nil || r.VM.Name() != moved {
+				t.Errorf("moved: %+v", r)
+			}
+			wantCorrupt(t, r.Err, filepath.Join(d.VMDir("00000000000009"), "vm.json"), 0)
+		}
+	}
+	if err := os.Remove(d.VM(bad).State()); err != nil {
+		t.Fatal(err)
+	}
+	if names, err := VMNames(d); err != nil || !slices.Equal(names, []string{ok, moved}) {
+		t.Errorf("VMNames = %v, %v", names, err)
+	}
+	// Only the VMs' folder failing to be read fails it.
+	if err := os.RemoveAll(d.VMs()); err != nil {
+		t.Fatal(err)
+	}
+	write(t, d.VMs(), "")
+	if _, err := ReadAll(d); err == nil {
+		t.Error("ReadAll of a file for the VMs' folder: want an error")
 	}
 }
 
 // A state file that isn't a JSON object, lacks a core field or has a
-// section of the wrong shape is a CorruptError naming it; VMNames and
-// Backends stop at it.
+// section of the wrong shape is a CorruptError naming it; VMNames stops
+// at it.
 func TestVMCorrupt(t *testing.T) {
 	path := func(d paths.Dirs) string { return d.VM(vmP).State() }
 	for _, data := range []string{
@@ -449,8 +493,6 @@ func TestVMCorrupt(t *testing.T) {
 		_, err := ReadVM(d, vmP)
 		wantCorrupt(t, err, path(d), 0)
 		_, err = VMNames(d)
-		wantCorrupt(t, err, path(d), 0)
-		_, err = Backends(d)
 		wantCorrupt(t, err, path(d), 0)
 	}
 	d := testDirs(t)

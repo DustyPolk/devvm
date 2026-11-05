@@ -3354,6 +3354,11 @@ func VMSize(size string, vm string) M {
 	return M{id: "vm_size", vals: []val{{"size", size}, {"vm", vm}}}
 }
 
+// VMStateUnreadable is [vm_state_unreadable]: "The VM state file {{.path}} can't be read, so devvm ls shows the VM's name and status alone, and commands on the VM fail. Fix the file to use the VM again."
+func VMStateUnreadable(path string) M {
+	return M{id: "vm_state_unreadable", vals: []val{{"path", path}}}
+}
+
 // VMToolsNow is [vm_tools_now]: "{{.vm}}'s shared tools are now {{.tools}}"
 func VMToolsNow(tools string, vm string) M {
 	return M{id: "vm_tools_now", vals: []val{{"tools", tools}, {"vm", vm}}}
@@ -4056,6 +4061,7 @@ var specs = map[string]spec{
 	"vm_other_folder_rm":               {fields: []string{"vm", "was"}},
 	"vm_outdated":                      {fields: []string{"changed"}},
 	"vm_size":                          {fields: []string{"size", "vm"}},
+	"vm_state_unreadable":              {fields: []string{"path"}},
 	"vm_tools_now":                     {fields: []string{"tools", "vm"}},
 	"vm_unfinished":                    {fields: []string{"vm"}},
 	"vms_stray":                        {fields: []string{"path", "vms"}},

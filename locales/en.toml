@@ -940,6 +940,10 @@ other = "Stopping this folder's VM failed: {{.reason}}."
 description = "reason is an error from the system, in English"
 other = "Listing the VMs failed: {{.reason}}."
 
+[vm_state_unreadable]
+description = "devvm ls's warning for a VM's state file it can't read, which the error it carries explains; the VM's row has its name and status alone"
+other = "The VM state file {{.path}} can't be read, so devvm ls shows the VM's name and status alone, and commands on the VM fail. Fix the file to use the VM again."
+
 [bad_path]
 description = "dir is quoted like a Go string when it holds control characters"
 other = "The path {{.dir}} has a comma or a control character, so devvm can't mount it into a VM."

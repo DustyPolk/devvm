@@ -24,45 +24,71 @@ import (
 // each VM's folder (paths.Dirs.VMDir) records. Anything else in the VMs'
 // folder, and a folder without state, isn't a VM.
 func VMNames(d paths.Dirs) ([]string, error) {
+	all, err := ReadAll(d)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, r := range all {
+		if r.VM == nil {
+			return nil, r.Err
+		}
+		names = append(names, r.VM.Name())
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
+// Read is one VM folder's state as ReadAll read it: the state, or why it
+// can't be used.
+type Read struct {
+	Hash string // the folder's name (paths.Dirs.VMDir)
+	// VM is nil for a file that can't be read, and set, with Err, for a
+	// state whose name isn't its folder's.
+	VM  *VM
+	Err error
+}
+
+// ReadAll reads the state of every VM folder that has a state file, by
+// its hash, each on its own: a file that can't be read is its folder's
+// Err, and a state whose name isn't its folder's (a hand-edited or copied
+// vm.json) a CorruptError, so one never stops the rest being read. A
+// folder without a state file, or anything else in the VMs' folder, has
+// no VM. Only the VMs' folder failing to be read fails it.
+func ReadAll(d paths.Dirs) ([]Read, error) {
 	es, err := os.ReadDir(d.VMs())
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}
-	var names []string
+	var out []Read
 	for _, e := range es {
 		if !e.IsDir() || !vmname.IsHash(e.Name()) {
 			continue
 		}
-		v, err := ReadHash(d, e.Name())
-		if err != nil {
-			return nil, err
+		r := Read{Hash: e.Name()}
+		v, err := ReadHash(d, r.Hash)
+		switch {
+		case err != nil:
+			r.Err = err
+		case !v.Exists():
+			continue
+		case !inFolder(v.Name(), r.Hash):
+			r.VM, r.Err = v, &CorruptError{Path: v.file.State(), Reason: "its name " + v.Name() + " isn't its folder's"}
+		default:
+			r.VM = v
 		}
-		if v.Exists() {
-			names = append(names, v.Name())
-		}
+		out = append(out, r)
 	}
-	slices.Sort(names)
-	return names, nil
+	return out, nil
 }
 
-// Backends returns the backends the VMs' states name: the only ones that
-// hold devvm's VMs.
-func Backends(d paths.Dirs) (map[string]bool, error) {
-	vms, err := VMNames(d)
-	if err != nil {
-		return nil, err
-	}
-	used := map[string]bool{}
-	for _, vm := range vms {
-		st, err := ReadVM(d, vm)
-		if err != nil {
-			return nil, err
-		}
-		used[st.Backend] = true
-	}
-	return used, nil
+// inFolder reports whether the VM named name keeps its state in the
+// folder named hash.
+func inFolder(name, hash string) bool {
+	h, ok := vmname.HashOf(name)
+	return ok && h == hash
 }
 
 // vmVersion is the version of vm.json's format that this devvm writes.

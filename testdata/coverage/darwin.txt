@@ -7,7 +7,7 @@ internal/backend/backendtest 74.4
 internal/backend/lima 90.8
 internal/backend/registry 100.0
 internal/build 88.5
-internal/cli 88.9
+internal/cli 89.1
 internal/cli/docgen 85.3
 internal/daemon 97.9
 internal/desktop 77.2
@@ -32,8 +32,8 @@ internal/secrets 92.3
 internal/settings 96.2
 internal/shell 100.0
 internal/sshagent 84.2
-internal/sshconfig 91.9
-internal/state 94.2
+internal/sshconfig 94.8
+internal/state 94.3
 internal/stubtest 81.4
 internal/stubtest/stub 92.9
 internal/stubtest/stubstate 91.2
@@ -41,7 +41,7 @@ internal/testbuild 100.0
 internal/tools 89.7
 internal/trust 94.1
 internal/ubuntu 97.3
-internal/ui 94.6
-internal/vm 86.1
+internal/ui 94.7
+internal/vm 86.6
 internal/vmname 100.0
 internal/vmssh 88.7

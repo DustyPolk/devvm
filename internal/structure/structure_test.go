@@ -49,9 +49,12 @@ func devvm() rules {
 		// The finder alone reads a folder's VM by its path's hash and looks
 		// through its parent folders, so every command finds the same VM
 		// and refuses what it needs refused.
+		// The inventory alone reads every VM's state, so every listing
+		// shares its one failure policy.
 		callers: map[string]string{
 			"internal/state.ReadHash":  "internal/vm/finder.go",
 			"internal/project.Parents": "internal/vm/finder.go",
+			"internal/state.ReadAll":   "internal/vm/inventory.go",
 		},
 		// readOverrides reads a test build's stand-ins, and a release
 		// none.

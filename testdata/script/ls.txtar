@@ -66,6 +66,24 @@ stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\
 stdout '^      "name": "devvm-half-0123456789ab03",\n      "status": "Stopped",\n      "image": "",\n      "tools": \[\],\n      "git": "",\n'
 ! stdout '^NAME'
 
+# A VM whose vm.json can't be read is a row of its own, its name and
+# status alone, with a warning naming the file; the rest are listed as
+# before. A folder's control characters never reach the terminal.
+mkdir $VMS/0123456789ab04 $VMS/0123456789ab05
+cp $WORK/broken.json $VMS/0123456789ab04/vm.json
+cp $WORK/esc.json $VMS/0123456789ab05/vm.json
+exec stub vm devvm-bad-0123456789ab04 Running
+exec stub vm devvm-esc-0123456789ab05 Stopped
+exec devvm ls
+stdout '^devvm-bad-0123456789ab04 +Running +- +- +- +- +- +-\n'
+stdout '^devvm-cl-0123456789ab01 +Stopped '
+stdout '^devvm-esc-0123456789ab05 +Stopped +base +- +on +off +- +/p/e\[2Jsc \(gone\)\n'
+! stdout '\x1b'
+stderr '^devvm: vm_state_unreadable path=\S+/0123456789ab04/vm.json$'
+exec devvm ls --json
+stdout '"name": "devvm-bad-0123456789ab04",\n      "status": "Running",\n      "image": "",'
+rm $VMS/0123456789ab04 $VMS/0123456789ab05
+
 # Lima can't list (not installed): fails, as a VM's state names it; with
 # none, the header alone.
 env PATH=$DEVVM_BIN
@@ -98,6 +116,20 @@ NAME  STATUS  IMAGE  TOOLS  GIT  NET  LINKS  FOLDER
   "git": {"mode": "clone"},
   "net": {"on": true},
   "tools": {"names": ["node", "claude"]}
+}
+-- broken.json --
+{"version": 1, "name": "devvm-bad-0123456789ab04"
+-- esc.json --
+{
+  "version": 1,
+  "id": "0123456789abcdef0123456789abcd05",
+  "name": "devvm-esc-0123456789ab05",
+  "image": "base",
+  "dir": "/p/e\u001b[2Jsc",
+  "backend": "lima",
+  "created": "2026-01-01T00:00:00Z",
+  "git": {"mode": "on"},
+  "net": {"on": false}
 }
 -- from.json --
 {

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -75,23 +74,6 @@ func (r *Registry) All() []Backend {
 		bs = append(bs, r.byName[n])
 	}
 	return bs
-}
-
-// Used returns the backends some VM's state names, sorted by name. A
-// launch asks only these for VMs, so a backend nobody uses (not running,
-// not installed) never slows one down.
-func (r *Registry) Used(d paths.Dirs) ([]Backend, error) {
-	used, err := state.Backends(d)
-	if err != nil {
-		return nil, err
-	}
-	var bs []Backend
-	for _, b := range r.All() {
-		if used[b.Name()] {
-			bs = append(bs, b)
-		}
-	}
-	return bs, nil
 }
 
 // Choice is the backend a VM runs on.

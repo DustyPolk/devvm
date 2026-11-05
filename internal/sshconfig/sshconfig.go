@@ -26,14 +26,11 @@ import (
 // header starts the ssh config devvm writes.
 const header = "# Written by devvm on every launch; edits are overwritten.\n"
 
-// Config is devvm's ssh config. New sets its
-// backends; its caller sets what it prints and asks.
+// Config is devvm's ssh config. New sets what its VMs' ssh is checked
+// against; its caller sets what it prints and asks.
 type Config struct {
-	Dirs paths.Dirs
-	// Backends returns the backends asked for VMs: those some VM's state
-	// names, read as each config is written.
-	Backends func() ([]backend.Backend, error)
-	Review   backend.Review // what their ssh is checked against
+	Dirs   paths.Dirs
+	Review backend.Review // what their ssh is checked against
 	// What it prints, and asks: [Y/n]; Terminal reports whether it can
 	// ask.
 	Info, Warn, Say func(msg.M)
@@ -43,10 +40,9 @@ type Config struct {
 	AddInclude bool
 }
 
-// New returns the ssh config for the VMs of the backends in reg that some
-// VM's state names.
+// New returns the ssh config for the VMs of the backends in reg.
 func New(d paths.Dirs, reg *backend.Registry) *Config {
-	return &Config{Dirs: d, Backends: func() ([]backend.Backend, error) { return reg.Used(d) }, Review: reg.Review}
+	return &Config{Dirs: d, Review: reg.Review}
 }
 
 // ChooseAlias is the name ssh and editors will reach a new VM, vm, by
@@ -90,34 +86,13 @@ func (c *Config) Host(vm string) string {
 	return vm
 }
 
-type running struct {
-	b  backend.Backend
-	in backend.Instance
+// Running is a running project VM, as its backend's list has it.
+type Running struct {
+	Backend  backend.Backend
+	Instance backend.Instance
 }
 
-// running returns the running project VMs of the backends some VM's
-// state names. A backend that can't list runs nothing to reach.
-func (c *Config) running(ctx context.Context) ([]running, error) {
-	bs, err := c.Backends()
-	if err != nil {
-		return nil, err
-	}
-	var up []running
-	for _, b := range bs {
-		ins, err := b.List(ctx)
-		if err != nil {
-			continue
-		}
-		for _, in := range ins {
-			if vmname.IsVM(in.Name) && in.Status == backend.StatusRunning {
-				up = append(up, running{b, in})
-			}
-		}
-	}
-	return up, nil
-}
-
-// Write rewrites the ssh config with every running project VM, each by
+// Write rewrites the ssh config with the running project VMs up, each by
 // its alias (Host) and its full name, neither of which ever changes,
 // checked against the host keys devvm pins for its current start
 // (vmssh.PinHostKeys), read from it once. A VM whose host keys can't be
@@ -126,44 +101,42 @@ func (c *Config) running(ctx context.Context) ([]running, error) {
 // ssh isn't usable (an emulation not yet reviewed), or isn't a user and a
 // key on a host loopback port (vmssh.FromTarget). An alias an earlier
 // entry has (two VMs made at once) is left out: ssh would take the first.
-func (c *Config) Write(ctx context.Context) error {
-	up, err := c.running(ctx)
-	if err != nil {
-		return err
-	}
-	slices.SortFunc(up, func(a, b running) int { return strings.Compare(a.in.Name, b.in.Name) })
+func (c *Config) Write(ctx context.Context, up []Running) error {
+	up = slices.Clone(up)
+	slices.SortFunc(up, func(a, b Running) int { return strings.Compare(a.Instance.Name, b.Instance.Name) })
 	var buf strings.Builder
 	buf.WriteString(header)
 	taken := map[string]bool{}
 	for _, r := range up {
-		if !c.Review.Allowed(r.b, backend.FeatureSSH) {
+		b, in := r.Backend, r.Instance
+		if !vmname.IsVM(in.Name) || in.Status != backend.StatusRunning || !c.Review.Allowed(b, backend.FeatureSSH) {
 			continue
 		}
-		t, err := r.b.SSH(ctx, r.in.Name)
+		t, err := b.SSH(ctx, in.Name)
 		if err != nil {
 			continue
 		}
-		login, err := vmssh.FromTarget(r.in.Name, t)
+		login, err := vmssh.FromTarget(in.Name, t)
 		if err != nil {
 			continue
 		}
-		run, err := r.b.Running(ctx, r.in.Name)
+		run, err := b.Running(ctx, in.Name)
 		if err != nil {
 			continue
 		}
-		kh, err := vmssh.PinHostKeys(ctx, c.Dirs, r.b, r.in.Name)
+		kh, err := vmssh.PinHostKeys(ctx, c.Dirs, b, in.Name)
 		if errors.Is(err, vmssh.ErrNoHostKeys) {
 			continue
 		} else if err != nil {
 			return err
 		}
 		login.KnownHosts = kh
-		alias := c.Host(r.in.Name)
+		alias := c.Host(in.Name)
 		if taken[alias] {
-			alias = r.in.Name
+			alias = in.Name
 		}
 		taken[alias] = true
-		if err := c.entry(&buf, alias, r.in, login, t.Options, run.ID); err != nil {
+		if err := c.entry(&buf, alias, in, login, t.Options, run.ID); err != nil {
 			return err
 		}
 	}

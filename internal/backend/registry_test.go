@@ -3,8 +3,6 @@ package backend_test
 import (
 	"errors"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/backend"
@@ -97,48 +95,6 @@ func TestFor(t *testing.T) {
 			}
 			if c.Backend.Name() != tc.want {
 				t.Errorf("got %s, want %s", c.Backend.Name(), tc.want)
-			}
-		})
-	}
-}
-
-// Used is the registered backends some VM's state names, sorted: a state
-// without backend= and one naming a backend not here count for none.
-func TestUsed(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		vms   []string // each VM's backend
-		want  string
-		files string // a file that isn't a VM's state, in their folder
-	}{
-		{name: "no VMs", want: ""},
-		{name: "one backend's", vms: []string{"lima", "lima"}, want: "lima"},
-		{name: "two backends', sorted", vms: []string{"vz", "fake", "lima"}, want: "fake lima vz"},
-		{name: "unknown backends", vms: []string{"qemu", "vz"}, want: "vz"},
-		{name: "a VM's policy file", vms: []string{"lima"}, files: "0123456789abc0/policy", want: "lima"},
-		{name: "a folder that isn't a VM's", vms: []string{"lima"}, files: "other/vm.json", want: "lima"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			d := testDirs(t)
-			r := testRegistry(t, "lima", "vz", "fake")
-			for i, b := range tc.vms {
-				newState(t, d, "devvm-x-0123456789abc"+strconv.Itoa(i), b)
-			}
-			if tc.files != "" {
-				if err := state.WriteFile(filepath.Join(d.VMs(), tc.files), []byte(`{"backend": "fake"}`)); err != nil {
-					t.Fatal(err)
-				}
-			}
-			bs, err := r.Used(d)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var got []string
-			for _, b := range bs {
-				got = append(got, b.Name())
-			}
-			if g := strings.Join(got, " "); g != tc.want {
-				t.Errorf("got %q, want %q", g, tc.want)
 			}
 		})
 	}

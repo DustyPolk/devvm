@@ -314,11 +314,11 @@ func (e finder) parentVM(ctx context.Context) (*found, error) {
 // the one its name was made for (its path's hash): a changed vm.json
 // never sends devvm rm VM to another folder's VM.
 func (e finder) named(ctx context.Context, name string) (*found, error) {
-	all, err := recordedVMs(e.Dirs)
+	inv, err := ReadStates(e.Dirs)
 	if err != nil {
 		return nil, err
 	}
-	vm := project.Named(name, all)
+	vm := project.Named(name, inv.Recorded())
 	if vm == "" {
 		return nil, msg.RmUnknownVM(name)
 	}

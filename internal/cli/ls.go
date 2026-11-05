@@ -77,6 +77,8 @@ func lsJSON(ls []vm.Listed) lsOutput {
 	return out
 }
 
+// listVMs lists the VMs every backend has, warning of each state file it
+// can't read.
 func listVMs(cmd *cobra.Command, a *app) ([]vm.Listed, error) {
 	dirs, err := a.dirs()
 	if err != nil {
@@ -86,7 +88,18 @@ func listVMs(cmd *cobra.Command, a *app) ([]vm.Listed, error) {
 	if err != nil {
 		return nil, err
 	}
-	return vm.List(cmd.Context(), dirs, reg)
+	inv, err := vm.ReadInventory(cmd.Context(), dirs, reg, vm.AllBackends)
+	if err != nil {
+		return nil, err
+	}
+	ls, err := inv.List(cmd.Context())
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range inv.Unreadable() {
+		a.u.Warn(msg.VMStateUnreadable(k.Path).Because(k.Err))
+	}
+	return ls, nil
 }
 
 // writeList writes the VMs as a table, a header first; a value a VM lacks

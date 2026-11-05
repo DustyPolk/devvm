@@ -78,11 +78,22 @@ func (t *Table) Header(names ...string) {
 // Text is m as a cell's text, as the UI's Text has it.
 func (t *Table) Text(m msg.M) string { return t.st.line(m) }
 
-// Row adds a row.
-func (t *Table) Row(cells ...Cell) { t.rows = append(t.rows, tableRow{cells, false}) }
+// Row adds a row. Each cell's text is shown on one line, without control
+// or bidi characters (msg.OneLine): a VM's name, folder or status, as
+// its state or backend has it, never moves the cursor or breaks a row.
+func (t *Table) Row(cells ...Cell) { t.rows = append(t.rows, tableRow{oneLine(cells), false}) }
 
-// Total adds a totals row, bold in a terminal.
-func (t *Table) Total(cells ...Cell) { t.rows = append(t.rows, tableRow{cells, true}) }
+// Total adds a totals row, bold in a terminal, its cells as Row's.
+func (t *Table) Total(cells ...Cell) { t.rows = append(t.rows, tableRow{oneLine(cells), true}) }
+
+// oneLine is cells, each one's text on one line (msg.OneLine).
+func oneLine(cells []Cell) []Cell {
+	out := make([]Cell, len(cells))
+	for i, c := range cells {
+		out[i] = Cell{Text: msg.OneLine(c.Text), Role: c.Role}
+	}
+	return out
+}
 
 // Break writes the rows so far, then a blank line, and starts a new
 // table, whose columns line up on their own.

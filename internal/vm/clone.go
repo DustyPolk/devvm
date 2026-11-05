@@ -474,7 +474,7 @@ func (e cloneCheck) fetchUnfetched(ctx context.Context, b backend.Backend, vm, d
 	if !e.Confirm(msg.FetchBeforeDelete(prefix)) {
 		return nil
 	}
-	if err := e.sshConfig().Write(ctx); err != nil {
+	if err := e.writeSSHConfig(ctx); err != nil {
 		return err
 	}
 	// --refmap= : only the refspecs given, never a remote's of the same

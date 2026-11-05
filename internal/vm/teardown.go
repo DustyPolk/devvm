@@ -52,7 +52,7 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 	if err := state.RemoveFolder(ctx, e.Dirs, vm); err != nil {
 		return err
 	}
-	return e.sshConfig().Write(ctx)
+	return e.writeSSHConfig(ctx)
 }
 
 // clear deletes what a VM made for this folder before left in its

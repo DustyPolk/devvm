@@ -13,7 +13,6 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
@@ -280,13 +279,15 @@ func listImages(ctx context.Context, a *app, b *build.Env) (imageListing, error)
 		return out, err
 	}
 	reg := env.Registry
+	inv, err := vm.ReadStates(b.Dirs)
+	if err != nil {
+		return out, err
+	}
 	for _, be := range reg.All() {
 		on := build.Images{Env: env.Builder(be, "")}
 		ls, err := on.Listing(ctx)
 		if err != nil {
-			if used, uerr := state.Backends(b.Dirs); uerr != nil {
-				return out, uerr
-			} else if !used[be.Name()] {
+			if !inv.Used(be.Name()) {
 				continue
 			}
 			if cerr := backend.Check(ctx, be); cerr != nil {
@@ -312,7 +313,7 @@ func listImages(ctx context.Context, a *app, b *build.Env) (imageListing, error)
 		}
 		tgs = append(tgs, t)
 	}
-	inUse, err := vm.ToolsInUse(b.Dirs)
+	inUse, err := inv.ToolsInUse()
 	if err != nil {
 		return out, err
 	}

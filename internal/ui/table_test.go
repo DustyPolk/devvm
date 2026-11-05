@@ -70,6 +70,23 @@ func TestTableBreak(t *testing.T) {
 	}
 }
 
+// A cell's text is shown on one line, its control and bidi characters
+// dropped: a VM's folder with a newline or an escape never breaks a row
+// or moves the cursor.
+func TestTableCellsOneLine(t *testing.T) {
+	t.Parallel()
+	var out strings.Builder
+	tab := &Table{w: &out}
+	tab.Row(Cell{Text: "devvm-x\033[2J"}, Cell{Text: "/p/a\nb" + string(rune(0x202e))})
+	tab.Total(Cell{Text: "\tall"}, Cell{Text: "1\r"})
+	if err := tab.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), "devvm-x[2J  /p/ab\nall         1\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 // A UI's table is colored as its stdout is.
 func TestUITable(t *testing.T) {
 	t.Parallel()

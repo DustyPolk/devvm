@@ -189,9 +189,19 @@ func testConfig(t *testing.T) (*Config, *backendtest.Fake) {
 	}
 	quiet := func(msg.M) {}
 	return &Config{
-		Dirs: paths.Dirs{Config: filepath.Join(root, "config"), Data: filepath.Join(root, "data")}, Backends: func() ([]backend.Backend, error) { return []backend.Backend{f}, nil },
+		Dirs: paths.Dirs{Config: filepath.Join(root, "config"), Data: filepath.Join(root, "data")},
 		Info: quiet, Warn: quiet, Say: quiet, Terminal: func() bool { return false },
 	}, f
+}
+
+// up is every VM f has, as Write is given them: Write leaves out those
+// that aren't running project VMs.
+func up(f *backendtest.Fake) []Running {
+	var out []Running
+	for _, in := range f.Instances {
+		out = append(out, Running{Backend: f, Instance: in})
+	}
+	return out
 }
 
 func read(t *testing.T, path string) string {
@@ -236,7 +246,7 @@ func TestWriteAgent(t *testing.T) {
 		{"", "  ForwardAgent no\n", false},
 	} {
 		setAgent(t, c, web, tc.mode)
-		if err := c.Write(t.Context()); err != nil {
+		if err := c.Write(t.Context(), up(f)); err != nil {
 			t.Fatal(err)
 		}
 		got := read(t, c.Dirs.SSHConfig())
@@ -276,7 +286,7 @@ func TestWriteAgentStarted(t *testing.T) {
 		{"started outside devvm", "  ForwardAgent yes\n", func() { f.Restart(web) }},
 	} {
 		tc.do()
-		if err := c.Write(t.Context()); err != nil {
+		if err := c.Write(t.Context(), up(f)); err != nil {
 			t.Fatal(err)
 		}
 		if got := read(t, c.Dirs.SSHConfig()); !strings.Contains(got, tc.want) {
@@ -296,7 +306,7 @@ func TestWrite(t *testing.T) {
 	}
 	made(t, c.Dirs, web, api, imgish)
 	setAgent(t, c, imgish, sshagent.On)
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	khImg, khWeb := c.Dirs.VM(imgish).KnownHosts(), c.Dirs.VM(web).KnownHosts()
@@ -357,7 +367,7 @@ Host devvm-web ` + web + `
 			execs++
 		}
 	}
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range f.Methods() {
@@ -378,7 +388,7 @@ Host devvm-web ` + web + `
 
 	// Started again: its keys are read again, for the new start.
 	f.Restart(web)
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, khWeb); !strings.HasPrefix(got, "# devvm: host keys of start start-1\n") {
@@ -390,7 +400,7 @@ Host devvm-web ` + web + `
 	// the first entry alone.
 	made(t, c.Dirs, web2)
 	f.Instances[web2] = backend.Instance{Name: web2, Status: backend.StatusRunning}
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, c.Dirs.SSHConfig()); !strings.Contains(got, "\nHost devvm-web "+web+"\n") || !strings.Contains(got, "\nHost "+web2+"\n") {
@@ -399,7 +409,7 @@ Host devvm-web ` + web + `
 	if st, err := state.ReadVM(c.Dirs, web2); err != nil || st.Update(t.Context(), func(st *state.VM) error { st.Alias = "devvm-web"; return nil }) != nil {
 		t.Fatal(err)
 	}
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, c.Dirs.SSHConfig()); strings.Count(got, "Host devvm-web ") != 1 || !strings.Contains(got, "\nHost "+web2+"\n") {
@@ -408,7 +418,7 @@ Host devvm-web ` + web + `
 
 	// An alias that isn't the VM's own goes nowhere near the config.
 	setAlias(t, c.Dirs, web2, "devvm-web\n  ProxyCommand touch /tmp/x\nHost *")
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, c.Dirs.SSHConfig()); strings.Contains(got, "touch") || strings.Contains(got, "Host *") || !strings.Contains(got, "\nHost "+web2+"\n") {
@@ -416,14 +426,20 @@ Host devvm-web ` + web + `
 	}
 }
 
-// New's config asks the registry for the backends VMs' states name. A
-// backend that can't list, or can't say how a VM runs, gives no entries;
-// backends it can't name, or a run cancelled, write nothing.
+// New's config checks VMs' ssh against the registry's review, and writes
+// the running project VMs it's given alone: a stopped one, or one that
+// isn't a project VM, gets no entry. A backend that can't say how a VM
+// runs gives no entries; a run cancelled writes nothing.
 func TestWriteFailures(t *testing.T) {
 	t.Parallel()
 	c, f := testConfig(t)
-	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	f.Instances = map[string]backend.Instance{
+		web:                 {Name: web, Status: backend.StatusRunning},
+		api:                 {Name: api, Status: backend.StatusStopped},
+		"devvm-tools-build": {Name: "devvm-tools-build", Status: backend.StatusRunning},
+	}
 	made(t, c.Dirs, web)
+	made(t, c.Dirs, api)
 	if st, err := state.ReadVM(c.Dirs, web); err != nil || st.Update(t.Context(), func(st *state.VM) error { st.Backend = "fake"; return nil }) != nil {
 		t.Fatal(err)
 	}
@@ -431,30 +447,25 @@ func TestWriteFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := New(c.Dirs, reg).Write(t.Context()); err != nil {
+	if err := New(c.Dirs, reg).Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
-	if got := read(t, c.Dirs.SSHConfig()); !strings.Contains(got, "\nHost devvm-web "+web+"\n") {
+	got := read(t, c.Dirs.SSHConfig())
+	if !strings.Contains(got, "\nHost devvm-web "+web+"\n") || strings.Contains(got, api) || strings.Contains(got, "tools-build") {
 		t.Errorf("New's config:\n%s", got)
 	}
-	for _, method := range []string{"List", "Running"} {
-		f.Errs = map[string]error{method: errors.New("no")}
-		if err := c.Write(t.Context()); err != nil {
-			t.Fatal(err)
-		}
-		if got := read(t, c.Dirs.SSHConfig()); got != header {
-			t.Errorf("%s fails: %q", method, got)
-		}
+	f.Errs = map[string]error{"Running": errors.New("no")}
+	if err := c.Write(t.Context(), up(f)); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, c.Dirs.SSHConfig()); got != header {
+		t.Errorf("Running fails: %q", got)
 	}
 	f.Errs = nil
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := c.Write(cancelled); err == nil {
+	if err := c.Write(cancelled, up(f)); err == nil {
 		t.Error("written once cancelled")
-	}
-	c.Backends = func() ([]backend.Backend, error) { return nil, errors.New("no states") }
-	if err := c.Write(t.Context()); err == nil {
-		t.Error("written without its backends")
 	}
 }
 
@@ -467,8 +478,33 @@ func TestWriteUnreadableRecord(t *testing.T) {
 	if err := os.MkdirAll(c.Dirs.VM(web).KnownHosts(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Write(t.Context()); err == nil {
+	if err := c.Write(t.Context(), up(f)); err == nil {
 		t.Error("written past an unreadable record")
+	}
+}
+
+// A running VM whose state can't be read fails the ssh config, which
+// stays as it was; so does choosing an alias while any state can't be
+// read. A VM choosing again skips its own state.
+func TestUnreadableState(t *testing.T) {
+	t.Parallel()
+	c, f := testConfig(t)
+	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
+	made(t, c.Dirs, web, api)
+	if got, err := ChooseAlias(c.Dirs, web); err != nil || got != "devvm-web" {
+		t.Errorf("ChooseAlias(%s) with its own state = %s, %v", web, got, err)
+	}
+	if err := state.WriteFile(c.Dirs.VM(web).State(), []byte("[]")); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Write(t.Context(), up(f)); err == nil {
+		t.Error("written past a state it can't read")
+	}
+	if _, err := os.Stat(c.Dirs.SSHConfig()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("ssh config written: %v", err)
+	}
+	if _, err := ChooseAlias(c.Dirs, api); err == nil {
+		t.Error("ChooseAlias past a state it can't read")
 	}
 }
 
@@ -478,7 +514,7 @@ func TestWriteUnchecked(t *testing.T) {
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
 	f.ExecFunc = func(string, []string, backend.ExecOpts) error { return errors.New("no answer") }
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, c.Dirs.SSHConfig()); got != header {
@@ -492,11 +528,11 @@ func TestWriteUnchecked(t *testing.T) {
 		return err
 	}
 	f.Errs = map[string]error{"SSH": errors.New("no ssh")}
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	f.Errs = nil
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, c.Dirs.SSHConfig()); got != header {
@@ -523,7 +559,7 @@ func TestWriteUnreviewed(t *testing.T) {
 		{nil, map[string]bool{"fake:ssh": true}, false},
 	} {
 		f.Capabilities, c.Review.Unreviewed = tc.caps, tc.let
-		if err := c.Write(t.Context()); err != nil {
+		if err := c.Write(t.Context(), up(f)); err != nil {
 			t.Fatal(err)
 		}
 		if got := strings.Contains(read(t, c.Dirs.SSHConfig()), "Host devvm-web "); got != tc.want {
@@ -543,7 +579,7 @@ func TestEntriesWithRealSSH(t *testing.T) {
 	c, f := testConfig(t)
 	f.Instances = map[string]backend.Instance{web: {Name: web, Status: backend.StatusRunning}}
 	made(t, c.Dirs, web)
-	if err := c.Write(t.Context()); err != nil {
+	if err := c.Write(t.Context(), up(f)); err != nil {
 		t.Fatal(err)
 	}
 	user := filepath.Join(t.TempDir(), "config")
@@ -581,7 +617,7 @@ func TestWriteNoAddress(t *testing.T) {
 		{Host: "127.0.0.1", Port: 60022, User: "u"},
 	} {
 		f.Target = target
-		if err := c.Write(t.Context()); err != nil {
+		if err := c.Write(t.Context(), up(f)); err != nil {
 			t.Fatal(err)
 		}
 		if got := read(t, c.Dirs.SSHConfig()); got != header {

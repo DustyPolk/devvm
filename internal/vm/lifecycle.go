@@ -50,7 +50,7 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 	if err := checkGit(ctx, e.Env, t, false); err != nil {
 		return err
 	}
-	return e.sshConfig().Write(ctx)
+	return e.writeSSHConfig(ctx)
 }
 
 // Adopt gives the folder the VM made for an earlier folder at its path,

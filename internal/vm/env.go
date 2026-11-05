@@ -14,8 +14,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
+	"time"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/build"
@@ -27,14 +27,12 @@ import (
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/ports"
-	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/sshconfig"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 	"github.com/w3cj/devvm/internal/trust"
-	"github.com/w3cj/devvm/internal/vmname"
 	"github.com/w3cj/devvm/internal/vmssh"
 )
 
@@ -215,8 +213,8 @@ type FolderState string
 // The folder states. A VM whose folder is gone or not connected is
 // deleted only when asked for by name (Lifecycle.RmVM), never on its own.
 const (
-	// FolderThere: something is at the path, or it can't be read, or the
-	// state records no folder. A folder made again there is there too:
+	// FolderThere: something is at the path, or it can't be read (in
+	// time, too), or the state records no folder. A folder made again there is there too:
 	// sameFolder tells it apart.
 	FolderThere FolderState = "there"
 	// FolderGone: nothing is at the path, and the nearest folder above it
@@ -229,8 +227,30 @@ const (
 	FolderNotConnected FolderState = "not_connected"
 )
 
-// FolderOf is the state of the project folder st records.
-func FolderOf(st *state.VM) FolderState { return folderOf(st, platform.DeviceOf) }
+// FolderOf is the state of the project folder st records, as found within
+// folderWait: a folder whose disk doesn't answer (an NFS share that hangs)
+// is there, so it's never taken for gone.
+func FolderOf(st *state.VM) FolderState {
+	return folderWithin(st, func(st *state.VM) FolderState { return folderOf(st, platform.DeviceOf) }, folderWait)
+}
+
+// folderWait is how long FolderOf waits for a folder's disk.
+const folderWait = 5 * time.Second
+
+// folderWithin is of's answer for st, or FolderThere once wait is up. A
+// look that hangs is left to finish on its own.
+func folderWithin(st *state.VM, of func(*state.VM) FolderState, wait time.Duration) FolderState {
+	got := make(chan FolderState, 1)
+	go func() { got <- of(st) }()
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case s := <-got:
+		return s
+	case <-t.C:
+		return FolderThere
+	}
+}
 
 // folderOf is FolderOf with device, which returns the device of what's at
 // a path (platform.DeviceOf), a test seam.
@@ -253,24 +273,6 @@ func folderOf(st *state.VM, device func(string) (string, error)) FolderState {
 		}
 	}
 	return FolderGone
-}
-
-// recordedVMs returns the project VMs that have state, as their states
-// record them.
-func recordedVMs(d paths.Dirs) ([]project.Recorded, error) {
-	names, err := state.VMNames(d)
-	if err != nil {
-		return nil, err
-	}
-	var out []project.Recorded
-	for _, n := range names {
-		st, err := state.ReadVM(d, n)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, project.Recorded{Name: n, Alias: st.Alias, Dir: st.Dir})
-	}
-	return out, nil
 }
 
 // start starts a stopped VM confined as conf says, and returns the
@@ -450,38 +452,14 @@ func (e *Env) useAgent(mode string) {
 	}
 }
 
-// mounts returns the host folders project VMs mount, as their state and
-// backends have them: the project folder (not a --clone VM's), agent
-// folders, the tools share. Only backends some VM's state names are
-// asked; one that can't list runs no VMs.
-func (e *Env) mounts(ctx context.Context) ([]sshagent.Mount, error) {
-	bs, err := e.Registry.Used(e.Dirs)
+// mounts returns the host folders project VMs mount, as their states have
+// them (Inventory.Mounts): no backend is asked.
+func (e *Env) mounts(context.Context) ([]sshagent.Mount, error) {
+	inv, err := ReadStates(e.Dirs)
 	if err != nil {
 		return nil, err
 	}
-	var ms []sshagent.Mount
-	for _, b := range bs {
-		ins, err := b.List(ctx)
-		if err != nil {
-			continue
-		}
-		for _, in := range ins {
-			if !vmname.IsVM(in.Name) {
-				continue
-			}
-			st, err := state.ReadVM(e.Dirs, in.Name)
-			if err != nil {
-				return nil, err
-			}
-			if st.Dir != "" && !isClone(st) {
-				ms = append(ms, sshagent.Mount{VM: in.Name, Dir: st.Dir})
-			}
-			for _, d := range append(slices.Clone(in.AgentDirs), e.Dirs.Tools()) {
-				ms = append(ms, sshagent.Mount{VM: in.Name, Dir: d})
-			}
-		}
-	}
-	return ms, nil
+	return inv.Mounts(e.Dirs.Home, e.Dirs.Tools())
 }
 
 // sshConfig is the ssh config for every backend's VMs.
@@ -490,6 +468,20 @@ func (e *Env) sshConfig() *sshconfig.Config {
 	c.Info, c.Warn, c.Say, c.Confirm, c.Terminal = e.Info, e.Warn, e.Say, e.Confirm, e.Terminal
 	c.AddInclude = e.AddInclude
 	return c
+}
+
+// writeSSHConfig rewrites the ssh config with the running VMs of the
+// backends some VM's state names. One of them that can't list fails it
+// (Inventory.Err), and the config stays as it was.
+func (e *Env) writeSSHConfig(ctx context.Context) error {
+	inv, err := ReadInventory(ctx, e.Dirs, e.Registry, UsedBackends)
+	if err != nil {
+		return err
+	}
+	if err := inv.Err(); err != nil {
+		return err
+	}
+	return e.sshConfig().Write(ctx, inv.Running())
 }
 
 // checkSetID names set-id files in the folder on Linux hosts, where they

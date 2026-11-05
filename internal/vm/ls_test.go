@@ -131,7 +131,7 @@ func TestList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := List(t.Context(), d, reg)
+	got, err := list(t, d, reg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,15 +151,25 @@ func TestList(t *testing.T) {
 	broken := backendtest.New("broken", nil)
 	broken.Errs = map[string]error{"List": errors.New("list failed")}
 	reg, _ = backend.NewRegistry(broken)
-	if got, err := List(t.Context(), d, reg); err != nil || got != nil {
+	if got, err := list(t, d, reg); err != nil || got != nil {
 		t.Errorf("unused broken backend: %v, %v", got, err)
 	}
 	vmState(t, d, "devvm-b-0123456789abcd", func(st *state.VM) error { st.Backend = "broken"; return nil })
-	if _, err := List(t.Context(), d, reg); err == nil || err.Error() != "list failed" {
+	if _, err := list(t, d, reg); err == nil || err.Error() != "list failed" {
 		t.Errorf("used broken backend: %v", err)
 	}
 	broken.Missing = []backend.Problem{{Key: "lima", Msg: msg.LimaMissing()}}
-	if _, err := List(t.Context(), d, reg); msg.IDOf(err) != "lima_missing" {
+	if _, err := list(t, d, reg); msg.IDOf(err) != "lima_missing" {
 		t.Errorf("used broken backend, check failing: %v", err)
 	}
+}
+
+// list is devvm ls's list: every backend's VMs.
+func list(t *testing.T, d paths.Dirs, reg *backend.Registry) ([]Listed, error) {
+	t.Helper()
+	inv, err := ReadInventory(t.Context(), d, reg, AllBackends)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inv.List(t.Context())
 }

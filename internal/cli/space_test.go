@@ -1,16 +1,20 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/ui"
+	"github.com/w3cj/devvm/internal/vm"
 )
 
 // Counting a folder: only what's picked, and a folder that isn't there is
@@ -62,16 +66,36 @@ func TestLeftoverFolders(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	e := spaceEnv{b: &build.Env{Dirs: d}, vms: map[string]map[string]bool{"fake": {live: true}}, now: time.Now()}
+	// A VM whose state can't be read is never an orphan either: its logs
+	// are logs.
+	broken := d.VM("devvm-d-0123456789abc4")
+	for f, data := range map[string]string{broken.State(): "[]", broken.EventLog(): strings.Repeat("x", 5000)} {
+		if err := state.WriteFile(f, []byte(data)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fake := backendtest.New("fake", nil)
+	fake.Instances[live] = backend.Instance{Name: live, Status: backend.StatusStopped}
+	other := backendtest.New("other", nil)
+	other.Errs = map[string]error{"List": errors.New("no")}
+	reg, err := backend.NewRegistry(fake, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv, err := vm.ReadInventory(t.Context(), d, reg, vm.AllBackends)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := spaceEnv{b: &build.Env{Dirs: d}, inv: inv, answered: map[string]bool{"fake": true}, now: time.Now()}
 	row, err := e.leftovers(t.Context())
 	if err != nil || row.Count != 1 || row.Size != du(d.VM(orphan).Dir) || row.Size == 0 {
 		t.Errorf("leftovers = %+v, %v; want %s's folder, %d", row, err, orphan, du(d.VM(orphan).Dir))
 	}
 	logs, err := e.vmLogs()
 	// Every log of theirs: the network logs and the port forwarders'.
-	want := du(d.VM(live).EventLog()) + du(d.VM(unasked).EventLog()) + du(d.VM(live).ForwarderLog()) + du(d.VM(unasked).ForwarderLog())
-	if err != nil || logs.count != 4 || logs.size != want {
-		t.Errorf("vmLogs = %+v, %v; want 4, %d", logs, err, want)
+	want := du(d.VM(live).EventLog()) + du(d.VM(unasked).EventLog()) + du(d.VM(live).ForwarderLog()) + du(d.VM(unasked).ForwarderLog()) + du(broken.EventLog())
+	if err != nil || logs.count != 5 || logs.size != want {
+		t.Errorf("vmLogs = %+v, %v; want 5, %d", logs, err, want)
 	}
 }
 

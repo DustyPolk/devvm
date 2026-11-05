@@ -53,37 +53,33 @@ type LeftoverReport struct {
 
 // Find finds the VMs whose state names a backend that answers and
 // doesn't have them, made where that backend looks in this run, whose
-// state is over an hour old. It changes nothing.
+// state is over an hour old. A VM whose state can't be read is never one.
+// It changes nothing.
 func (e Leftovers) Find(ctx context.Context) (LeftoverReport, error) {
 	var r LeftoverReport
-	names, err := state.VMNames(e.Dirs)
+	inv, err := ReadInventory(ctx, e.Dirs, e.Registry, UsedBackends)
 	if err != nil {
 		return r, err
 	}
-	have := map[string]map[string]bool{} // by backend, nil when it can't be asked
-	for _, n := range names {
-		st, err := state.ReadVM(e.Dirs, n)
-		if err != nil {
-			return r, err
-		}
-		bname := st.Backend
-		b, ok := e.Registry.Lookup(bname)
-		if !ok {
-			r.unknown(bname)
+	usable := map[string]bool{} // by backend: it listed, and its check passes
+	for _, k := range inv.VMs {
+		st := k.State
+		if k.Err != nil || !st.Exists() || k.Listed {
 			continue
 		}
-		vms, asked := have[bname]
-		if !asked {
-			vms = backendVMs(ctx, b)
-			have[bname] = vms
+		n, bname, b := k.Name, st.Backend, k.Backend
+		ok, checked := usable[bname]
+		if !checked {
+			ok = b != nil && inv.Asked(bname) && checks(ctx, b)
+			usable[bname] = ok
 		}
-		if vms == nil {
+		if !ok {
 			r.unknown(bname)
 			continue
 		}
 		// A VM being made again may have no machine by its name: the
 		// next devvm in its folder finishes it.
-		if vms[n] || remakePending(st) {
+		if remakePending(st) {
 			continue
 		}
 		switch gone, err := gone(ctx, b, n); {
@@ -155,22 +151,13 @@ func (r *LeftoverReport) unknown(b string) {
 	r.Unknown = append(r.Unknown, b)
 }
 
-// backendVMs is the VMs b has, by name; nil when it can't be asked.
-func backendVMs(ctx context.Context, b backend.Backend) map[string]bool {
+// checks reports whether b's own check passes (backend.Check), within
+// leftoverAsk: its list alone doesn't say it can be trusted with what it
+// lacks.
+func checks(ctx context.Context, b backend.Backend) bool {
 	ctx, cancel := context.WithTimeout(ctx, leftoverAsk)
 	defer cancel()
-	if backend.Check(ctx, b) != nil {
-		return nil
-	}
-	ins, err := b.List(ctx)
-	if err != nil {
-		return nil
-	}
-	out := map[string]bool{}
-	for _, in := range ins {
-		out[in.Name] = true
-	}
-	return out
+	return backend.Check(ctx, b) == nil
 }
 
 // gone asks b for vm itself: true only when b says it has no such VM.
