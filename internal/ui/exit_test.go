@@ -117,9 +117,9 @@ func TestMainReturnsTheCode(t *testing.T) {
 	}); code != 3 || ran != 1 {
 		t.Errorf("exit code %d, cleanups run %d; want 3 and 1", code, ran)
 	}
-	// Answering nothing exits 1 too.
-	if code := u.main(func(context.Context) int { u.Ask(msg.MsgUnknown("x")); return 0 }); code != 1 {
-		t.Errorf("no answer: exit code %d, want 1", code)
+	// The UI's own failure (die) exits 1 too.
+	if code := u.main(func(context.Context) int { u.die(msg.MsgUnknown("x")); return 0 }); code != 1 {
+		t.Errorf("die: exit code %d, want 1", code)
 	}
 }
 

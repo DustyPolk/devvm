@@ -31,8 +31,7 @@ const header = "# Written by devvm on every launch; edits are overwritten.\n"
 type Config struct {
 	Dirs   paths.Dirs
 	Review backend.Review // what their ssh is checked against
-	// Reporter is where it prints, and asks ([Y/n]) when its input is a
-	// terminal.
+	// Reporter is where it prints and asks ([Y/n]).
 	msg.Reporter
 	// AddInclude adds the Include line without asking (--ssh-config).
 	AddInclude bool
@@ -211,7 +210,7 @@ func (c *Config) IncludeLine() string { return "Include " + c.Dirs.SSHConfig() }
 // EnsureInclude makes sure home's ~/.ssh/config includes devvm's ssh
 // config, asking first: once said yes to, the line goes at the top, where
 // it must be, before any Host block. It reports whether the line is
-// there. Without a terminal it says to add it.
+// there. Where it can't ask, it says to add it.
 func (c *Config) EnsureInclude(home string) (bool, error) {
 	line := c.IncludeLine()
 	sshDir := filepath.Join(home, ".ssh")
@@ -224,13 +223,16 @@ func (c *Config) EnsureInclude(home string) (bool, error) {
 		return true, nil
 	}
 	c.Say(msg.SSHIncludeNeeded(line))
-	switch {
-	case c.AddInclude:
-	case !c.StdinIsTerminal():
-		c.Warn(msg.SSHIncludeYourself())
-		return false, nil
-	case !c.Confirm(msg.AddItNow()):
-		return false, nil
+	if !c.AddInclude {
+		add, err := c.Confirm(msg.AddItNow().AnsweredBy("--ssh-config"))
+		if err != nil {
+			// Unasked, it's the user's to add.
+			c.Warn(msg.SSHIncludeYourself())
+			return false, nil //nolint:nilerr // a refusal falls back on the warning
+		}
+		if !add {
+			return false, nil
+		}
 	}
 	// The user's ~/.ssh, which may be a link (a dotfiles repo's): followed,
 	// as state.PrivateDir, for devvm's own folders, wouldn't.

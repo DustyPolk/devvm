@@ -301,7 +301,6 @@ func answers(t *testing.T, e *Env, yes bool) *[]string {
 	var asked []string
 	f := fake(e)
 	f.Terminal = true
-	e.CanAsk = func() bool { return true }
 	f.OnConfirm = func(m msg.M) bool { asked = append(asked, m.Names()); return yes }
 	f.OnAsk = f.OnConfirm
 	return &asked

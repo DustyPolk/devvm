@@ -304,7 +304,7 @@ func TestAddLayersAsks(t *testing.T) {
 	}()
 	vm := st.Name()
 	lc := Lifecycle{e}
-	if err := lc.AddLayers(t.Context(), "devvm layer add nix", []string{"nix"}, RemakeOptions{}); msg.NamesOf(err) != "force_needed command=devvm layer add nix" {
+	if err := lc.AddLayers(t.Context(), "devvm layer add nix", []string{"nix"}, RemakeOptions{}); msg.NamesOf(err) != "no_input answer=--force" {
 		t.Errorf("no terminal: %v", msg.NamesOf(err))
 	}
 	asked := answers(t, e, false)
@@ -761,7 +761,7 @@ func TestUpdate(t *testing.T) {
 	}
 	before := readState(t, e.Dirs, vm)
 	said = nil
-	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); msg.NamesOf(err) != "force_needed command=devvm update" {
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); msg.NamesOf(err) != "no_input answer=--force" {
 		t.Errorf("no terminal: %v", msg.NamesOf(err))
 	}
 	if !slices.Equal(said, []string{"vm_changed changed=base vm=" + vm}) {
@@ -875,7 +875,7 @@ func TestUpdateTools(t *testing.T) {
 	stale := get(readState(t, e.Dirs, vm), KeyTools)
 	fake(e).Terminal = false
 	said, n = nil, len(f.Calls())
-	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); msg.NamesOf(err) != "force_needed command=devvm update" {
+	if err := lc.Update(t.Context(), "devvm update", RemakeOptions{}); msg.NamesOf(err) != "no_input answer=--force" {
 		t.Errorf("no terminal: %v", msg.NamesOf(err))
 	}
 	if got := get(readState(t, e.Dirs, vm), KeyTools); got != stale || len(steps(n)) > 0 {

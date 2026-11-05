@@ -56,7 +56,7 @@ json_set $WEB_dir/vm.json tools.made.files:=["claude-1.0.0-0123456789ab.erofs"]
 stub_reset
 ! exec devvm update
 stdout '^==> vm_changed changed=foo vm=devvm-web-[0-9a-f]{14}$'
-stderr '^devvm: force_needed command=devvm update$'
+stderr '^devvm: no_input answer=--force$'
 ! stdout tools_switch
 vm_state $WEB_dir/vm.json
 stdout 'claude-1\.0\.0'

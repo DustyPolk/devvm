@@ -43,7 +43,7 @@ stderr '^devvm: clone_needs_new_vm vm=devvm-web-[0-9a-f]{14}$'
 # changes and asks, and no keeps the VM.
 stub_reset
 ! exec devvm clone on
-stderr '^devvm: force_needed command=devvm clone on$'
+stderr '^devvm: no_input answer=--force$'
 ttyin -stdin $WORK/no.txt
 exec devvm clone on
 stdout '^==> clone_switch_on vm=devvm-web-[0-9a-f]{14}$'

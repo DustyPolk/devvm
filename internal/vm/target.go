@@ -112,13 +112,11 @@ func (t *target) sshHost() string {
 // widen is asked before a command that gives the VM more access (cmd, as
 // devvm network off) changes it: true for the folder's own VM. A parent
 // folder's VM, found from a subfolder, changes only after asking, [y/N],
-// and never without a terminal.
+// which no flag answers.
 func (t *target) widen(cmd string) (bool, error) {
 	if t.sub == "" {
 		return true, nil
 	}
-	if !t.e.StdinIsTerminal() {
-		return false, msg.WidenParentVMRefused(cmd, t.f.Dir, t.f.Name)
-	}
-	return t.e.Ask(msg.WidenParentVM(cmd, t.f.Dir, t.f.Name)), nil
+	dir, vm := t.f.Dir, t.f.Name
+	return t.e.Ask(msg.WidenParentVM(cmd, dir, vm).RefusedWith(msg.WidenParentVMRefused(cmd, dir, vm)))
 }

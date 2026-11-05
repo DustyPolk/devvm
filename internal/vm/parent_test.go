@@ -408,7 +408,7 @@ func TestWidenParentVM(t *testing.T) {
 	// rm of a deny asks. (The restart a running VM's change offers isn't
 	// what this checks.)
 	asked := answers(t, e, false)
-	e.CanAsk = func() bool { return false }
+	fake(e).OnConfirm = func(msg.M) bool { return false }
 	if err := n.SetNetwork(t.Context(), true); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}

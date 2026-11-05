@@ -40,7 +40,7 @@ exec sh -c 'echo kept > notes && mkdir -p "$STUB_DIR/vmhome-$WEB/.config/devvm" 
 # keeps the VM.
 stub_reset
 ! exec devvm layer add docker
-stderr '^devvm: force_needed command=devvm layer add docker$'
+stderr '^devvm: no_input answer=--force$'
 ttyin -stdin $WORK/no.txt
 exec devvm layer add docker
 stderr '^remake_confirm image=docker vm=devvm-web-[0-9a-f]{14} \[y/N\] '

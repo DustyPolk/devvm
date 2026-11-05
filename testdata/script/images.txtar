@@ -69,7 +69,7 @@ stderr '^images_total size=\S+$'
 # A name is its image as it is now: foo is current again.
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 ! exec devvm images rm 000000000000 base+foo
-stderr '^devvm: force_needed command=devvm images rm$'
+stderr '^images_rm_confirm images=000000000000 base\+foo\ndevvm: no_input answer=--force$'
 exec devvm images rm --force 000000000000 base+foo
 stdout '^==> deleted_unfinished_build key=000000000000$'
 stdout '^==> deleted_image image=foo key=[0-9a-f]{12}$'

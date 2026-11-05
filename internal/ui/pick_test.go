@@ -212,20 +212,19 @@ func TestCanPick(t *testing.T) {
 	}
 }
 
-// CanAsk needs a terminal on stdin alone, without --no-input.
-func TestCanAsk(t *testing.T) {
+// With --no-input the picker isn't shown, even in a terminal: the
+// choices stay as given, and nothing is read or refused.
+func TestPickNoInput(t *testing.T) {
 	t.Parallel()
-	u, _, _ := testUI(t, "")
-	if CanAsk(u) {
-		t.Error("CanAsk without a terminal")
-	}
-	u.stdinTTY = true
-	if !CanAsk(u) {
-		t.Error("not CanAsk with a terminal on stdin")
-	}
+	u, out, _ := testUI(t, " \r")
+	restored := pickTerminal(u)
 	u.SetFlags(Flags{NoInput: true})
-	if CanAsk(u) {
-		t.Error("CanAsk with --no-input")
+	got := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: choices()}})[0].Choices
+	if !slices.Equal(onOf(got), []string{"a", "b"}) || out.Len() != 0 || *restored != 0 {
+		t.Errorf("chosen %q, printed %q, raw mode %d: want the choices as given, nothing printed", onOf(got), out, *restored)
+	}
+	if line := u.Line(); line != " " {
+		t.Errorf("input read: %q left", line)
 	}
 }
 

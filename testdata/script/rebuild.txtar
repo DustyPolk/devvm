@@ -14,7 +14,7 @@ stub_reset
 # goes ahead.
 ! exec devvm rebuild base+foo
 stdout '^rebuild_replaces above=foo\+bar image=foo$'
-stderr '^devvm: force_needed command=devvm rebuild$'
+stderr '^continue\ndevvm: no_input answer=--force$'
 ! stdout building_image
 exec devvm rebuild --force base+foo
 stdout '^rebuild_replaces above=foo\+bar image=foo$'

@@ -58,7 +58,7 @@ type Env struct {
 	// Pick asks which features base gets, each as chosen so far.
 	Pick func([]Feature) []Feature
 	// Force is a rebuild's --force: it replaces the images built on the
-	// one it rebuilds without asking, which it needs without a terminal.
+	// one it rebuilds without asking, the answer where it can't ask.
 	Force bool
 	// FreeSpace returns the free space on the volume holding a path
 	// (platform.Host's), checked before each build; nil checks none.
@@ -633,8 +633,8 @@ func (b Images) List(ctx context.Context) ([]Image, error) {
 // pin the newest of what it starts from (PinOrigin's PinNewest). Then it
 // deletes the stale images
 // (the old one and those built on it among them) that no VM uses. When
-// images are built on it, it asks first in a terminal, and refuses
-// without one (force_needed), unless Force.
+// images are built on it, it asks first, and where it can't ask returns
+// the question's refusal, unless Force.
 func (b Builds) Rebuild(ctx context.Context, name image.Name) error {
 	if err := Names(b).Check(name); err != nil {
 		return err
@@ -661,13 +661,15 @@ func (b Builds) Rebuild(ctx context.Context, name image.Name) error {
 	}
 	if len(above) > 0 {
 		b.Say(msg.RebuildReplaces(strings.Join(above, " "), name.String()))
-		switch {
-		case b.Force:
-		case !b.StdinIsTerminal():
-			return msg.ForceNeeded("devvm rebuild")
-		case !b.Confirm(msg.Continue()):
-			b.Info(msg.NothingChanged())
-			return nil
+		if !b.Force {
+			ok, err := b.Confirm(msg.Continue().AnsweredBy("--force"))
+			if err != nil {
+				return err
+			}
+			if !ok {
+				b.Info(msg.NothingChanged())
+				return nil
+			}
 		}
 	}
 	// Base starts again from the newest of what it starts from.

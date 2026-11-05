@@ -2,8 +2,8 @@
 // Info, Note, Warn, Error), asks questions (Ask, Confirm, Pick), runs
 // commands into the run's log behind a status line (LoggedCmd), and keeps
 // the run's cleanup stack. Main makes the one a run has: it runs the
-// cleanups and handles Ctrl+C, and ends the run where a question has no
-// answer.
+// cleanups and handles Ctrl+C. A question it can't ask returns its
+// refusal (msg.Refusal), which Refused prints.
 package ui
 
 import (
@@ -48,9 +48,10 @@ type UI struct {
 	rawInput func() (restore func(), err error)
 	// getenv reads the terminal's character set.
 	getenv func(string) string
-	// verboseOn streams the run log to stderr, and noInput refuses every
-	// question (SetFlags).
-	verboseOn, noInput atomic.Bool
+	// verboseOn streams the run log to stderr, noInput refuses every
+	// question, and pipedAnswers reads answers from input that isn't a
+	// terminal (SetFlags).
+	verboseOn, noInput, pipedAnswers atomic.Bool
 	// runLogs returns the run logs' folder.
 	runLogs func() (string, error)
 	// interruptGrace is how long a command a signal ended waits for
@@ -127,24 +128,10 @@ func fd(f *os.File) int { return int(f.Fd()) }
 
 func isTerminal(f *os.File) bool { return term.IsTerminal(fd(f)) }
 
-// StdinIsTerminal reports whether devvm's input is a terminal, so a question
-// can be asked.
-func (u *UI) StdinIsTerminal() bool { return u.stdinTTY }
-
-// StdoutIsTerminal reports whether data output goes to a terminal, where
-// someone could see it.
-func (u *UI) StdoutIsTerminal() bool { return u.stdoutTTY }
-
-// CanPick reports whether a question that has a default to fall back on
-// is shown: in a terminal someone can see, without --no-input. Without
-// one, its caller takes the default instead of asking.
+// CanPick reports whether the picker is shown: in a terminal someone can
+// see, without --no-input. Without one, the picker keeps its choices as
+// they are.
 func (u *UI) CanPick() bool { return u.stdinTTY && u.stdoutTTY && !u.noInput.Load() }
-
-// CanAsk reports whether a yes-or-no question that has something to fall
-// back on is asked: in a terminal, without --no-input. Without one, its
-// caller does what it would without the question. A function, not a
-// method, to keep UI within its methods.
-func CanAsk(u *UI) bool { return u.stdinTTY && !u.noInput.Load() }
 
 // Stdout is where data output goes: tables, values, help. Not messages: they
 // go through Say and the rest.
@@ -245,44 +232,35 @@ func (u *UI) ErrorLogged(m msg.M) {
 }
 
 // die is Error, then the end of the run with exit code 1, for the UI's own
-// failures where no caller can return one (a question without an answer,
-// a run log that can't be opened): it panics, and Main runs the cleanups
-// and returns 1.
+// failures where no caller can return one (a run log that can't be
+// opened): it panics, and Main runs the cleanups and returns 1.
 func (u *UI) die(m msg.M) {
 	u.Error(m)
 	exit(1)
 }
 
-// Ask asks a yes-or-no question, no by default: it's true only for an answer
-// starting with y. No answer at all (the end of input) ends the run with
-// exit code 1, naming what answers m as --no-input does, so nothing goes
-// ahead unanswered.
-func (u *UI) Ask(m msg.M) bool {
-	refuseInput(u, m)
-	a := u.answer(m, u.errStyle.message(m)+" [y/N] ")
-	return strings.HasPrefix(a, "y") || strings.HasPrefix(a, "Y")
+// Ask asks a yes-or-no question, no by default: it's true only for an
+// answer starting with y. Where it can't ask (asks), it returns q's
+// refusal, so nothing goes ahead unanswered.
+func (u *UI) Ask(q msg.Question) (bool, error) {
+	a, err := answer(u, q, u.errStyle.message(q.M())+" [y/N] ")
+	return strings.HasPrefix(a, "y") || strings.HasPrefix(a, "Y"), err
 }
 
 // Confirm asks a yes-or-no question, yes by default: it's true unless the
-// answer starts with n. Without a message it prompts only "[Y/n]", after a
-// question printed on its own. No answer at all ends the run like Ask.
-func (u *UI) Confirm(q ...msg.M) bool {
-	prompt, m := "[Y/n] ", msg.M{}
-	if len(q) > 0 {
-		m = q[0]
-		prompt = u.errStyle.message(m) + " " + prompt
-	}
-	refuseInput(u, m)
-	a := u.answer(m, prompt)
-	return !strings.HasPrefix(a, "n") && !strings.HasPrefix(a, "N")
+// answer starts with n. Where it can't ask, it returns q's refusal, as
+// Ask does.
+func (u *UI) Confirm(q msg.Question) (bool, error) {
+	a, err := answer(u, q, u.errStyle.message(q.M())+" [Y/n] ")
+	return err == nil && !strings.HasPrefix(a, "n") && !strings.HasPrefix(a, "N"), err
 }
 
 // Answer asks for a value: it prints the prompt and reads a line, without
-// the spaces around it, "" for Enter. No answer at all ends the run like
-// Ask.
-func (u *UI) Answer(prompt msg.M) string {
-	refuseInput(u, prompt)
-	return strings.TrimSpace(u.answer(prompt, u.errStyle.message(prompt)+" "))
+// the spaces around it, "" for Enter. Where it can't ask, it returns q's
+// refusal, as Ask does.
+func (u *UI) Answer(q msg.Question) (string, error) {
+	a, err := answer(u, q, u.errStyle.message(q.M())+" ")
+	return strings.TrimSpace(a), err
 }
 
 // readTerminal reads a line from the terminal without echoing it. A
@@ -299,64 +277,85 @@ func (u *UI) readTerminal() (string, error) {
 	return string(b), err
 }
 
-// Secret reads a value such as a token: in a terminal after the prompt on
-// stderr, without echoing it; else a line of input, as Line does.
-func (u *UI) Secret(prompt msg.M) string {
-	refuseInput(u, prompt)
-	if !u.stdinTTY {
-		return u.Line()
+// Secret reads a value such as a token: in a terminal after q's context
+// and prompt on stderr, without echoing it; with piped answers, a line
+// of input. Where it can't ask, it returns q's refusal, as Ask does.
+func (u *UI) Secret(q msg.Question) (string, error) {
+	if err := asks(u, q); err != nil {
+		return "", err
 	}
-	u.write(u.stderr, u.errStyle.message(prompt)+" ")
+	if !u.stdinTTY {
+		return readLine(u, q)
+	}
+	u.write(u.stderr, u.errStyle.message(q.M())+" ")
 	v, err := u.readPassword()
 	u.write(u.stderr, "\n")
 	if err != nil {
-		return ""
+		return "", q.Refused(true)
 	}
-	return v
+	return v, nil
 }
 
 // Line reads a line of input, without its line ending; at the end of the
-// input, what's left of it.
+// input, what's left of it. For a value a flag says to read (--stdin),
+// not a question's answer.
 func (u *UI) Line() string {
 	line, _ := u.stdin.ReadString('\n')
 	return strings.TrimRight(line, "\r\n")
 }
 
-// refuseInput ends the run instead of asking q with --no-input: q's text
-// first, then no_input naming what answers it (msg.AnswerFor), or
-// no_input_terminal for a question only a terminal answers.
-func refuseInput(u *UI, q msg.M) {
-	if u.noInput.Load() {
-		unanswered(u, q, false)
+// asks is nil where q can be asked, and says q's context first: in a
+// terminal, without --no-input, or, with piped answers (Flags), from
+// input that isn't a terminal, where it says nothing. Else it's q's
+// refusal (msg.Question.Refused), for the caller to return.
+func asks(u *UI, q msg.Question) error {
+	if u.noInput.Load() || !u.stdinTTY && !u.pipedAnswers.Load() {
+		return q.Refused(false)
 	}
+	if u.stdinTTY {
+		for _, m := range q.Context() {
+			u.Note(m)
+		}
+	}
+	return nil
 }
 
-// unanswered ends the run for q, which has no answer: q's text first
-// unless its prompt is shown, then no_input naming what answers it
-// (msg.AnswerFor), or no_input_terminal for a question only a terminal
-// answers.
-func unanswered(u *UI, q msg.M, shown bool) {
-	if shown {
-		u.write(u.stderr, "\n")
-	} else if q.ID() != "" {
-		u.Note(q)
+// answer asks q (asks), printing its prompt to stderr in a terminal, and
+// reads a line. At the end of the input with no answer, it returns q's
+// refusal.
+func answer(u *UI, q msg.Question, prompt string) (string, error) {
+	if err := asks(u, q); err != nil {
+		return "", err
 	}
-	if a := msg.AnswerFor(q.ID()); a != "" {
-		u.die(msg.NoInput(a))
-	}
-	u.die(msg.NoInputTerminal())
-}
-
-// answer prints q's prompt to stderr when the input is a terminal, and
-// reads a line. The end of the input with no answer ends the run, naming
-// what answers q.
-func (u *UI) answer(q msg.M, prompt string) string {
 	if u.stdinTTY {
 		u.write(u.stderr, prompt)
 	}
+	return readLine(u, q)
+}
+
+// readLine reads q's answer, a line without its line ending; at the end of
+// the input with none, it's q's refusal, after a newline that ends its
+// prompt in a terminal.
+func readLine(u *UI, q msg.Question) (string, error) {
 	line, err := u.stdin.ReadString('\n')
 	if err != nil && line == "" {
-		unanswered(u, q, u.stdinTTY)
+		if u.stdinTTY {
+			u.write(u.stderr, "\n")
+		}
+		return "", q.Refused(u.stdinTTY)
 	}
-	return strings.TrimRight(line, "\r\n")
+	return strings.TrimRight(line, "\r\n"), nil
+}
+
+// Refused prints r, a question's refusal: the question first unless its
+// prompt was shown, then the refusal as Error does. Once the run is
+// interrupted it prints nothing.
+func (u *UI) Refused(r *msg.Refusal) {
+	if u.Interrupted() {
+		return
+	}
+	if r.Question.ID() != "" {
+		u.Note(r.Question)
+	}
+	u.Error(r.Msg)
 }

@@ -21,7 +21,7 @@ func TestRmConfirms(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	lc := Lifecycle{e}
 	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true}).Name()
-	if err := lc.Rm(t.Context(), RmOptions{}); msg.NamesOf(err) != "force_needed command=devvm rm" {
+	if err := lc.Rm(t.Context(), RmOptions{}); msg.NamesOf(err) != "no_input answer=--force" {
 		t.Errorf("no terminal: %v", msg.NamesOf(err))
 	}
 	asked := answers(t, e, false)

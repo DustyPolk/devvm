@@ -84,14 +84,7 @@ other = "{{.command}} --json only shows, so it takes no value. Run it without --
 
 [no_input]
 description = "answer is the flag or command that answers the question, such as --force"
-other = "This question needs an answer, and devvm has no input to read it from. Give {{.answer}} instead."
-
-[no_input_terminal]
-other = "Only you can answer this question, in a terminal, and devvm has no input to read it from. Run the command again in a terminal without --no-input."
-
-[force_needed]
-description = "command is the command as typed, such as devvm rm"
-other = "{{.command}} deletes only after you confirm, and there's no terminal to confirm in. Add --force to go ahead without asking."
+other = "This question can't be asked without a terminal, after the input ends, or with --no-input. Give {{.answer}} to answer it instead."
 
 [rm_confirm]
 other = "Delete {{.vm}}, with everything in it?"

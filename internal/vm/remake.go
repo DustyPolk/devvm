@@ -25,7 +25,7 @@ import (
 // RemakeOptions are the flags of a command that makes the folder's VM
 // again (devvm layer add, devvm layer rm, devvm update, devvm clone).
 type RemakeOptions struct {
-	Force    bool // --force: no "make it again?" asked, which needs a terminal otherwise
+	Force    bool // --force: no "make it again?" asked, the answer where it can't be
 	NoExport bool // --no-export: the agents' history isn't exported first
 	// CleanHome (--clean-home): the new disk has the image's home folder,
 	// not the VM's.
@@ -176,10 +176,10 @@ func plan(img, command string, o RemakeOptions) remakeInVM {
 // from (devcontainers.reread, the warning a launch gives), it reads the
 // file again; either way, it makes the VM again from its image as it
 // builds now, with what the file says now, after the user agrees
-// (agreed). Without --force or a terminal, such a VM is refused before
-// anything changes. A VM with the newest tools that's neither is said to
-// be current, and nothing changes. command is the command as typed. A
-// remake of it that didn't finish is finished first.
+// (agreed), asked before anything changes, so where devvm can't ask,
+// such a VM is refused as it is. A VM with the newest tools that's
+// neither is said to be current, and nothing changes. command is the
+// command as typed. A remake of it that didn't finish is finished first.
 func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) error {
 	t, resumed, release, err := e.toRemake(ctx, command, false)
 	if err != nil || t == nil {
@@ -190,8 +190,13 @@ func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) 
 	if err != nil {
 		return err
 	}
+	agreed := false
 	if remake {
-		if err := e.canRemake(t, p, o); err != nil {
+		if err := e.remaking.check(t, p); err != nil {
+			return err
+		}
+		// Asked before anything changes, so a refusal leaves it as it is.
+		if agreed, err = e.agreed(t, p, o); err != nil {
 			return err
 		}
 	}
@@ -200,7 +205,7 @@ func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) 
 		return err
 	}
 	switch {
-	case remake && e.agreed(t, p, o):
+	case agreed:
 		return e.remakeNow(ctx, t, p)
 	case newer || resumed:
 		// Its newer tools take effect as its shell opens, kept or not.
@@ -262,8 +267,8 @@ func removedImage(img image.Name, layers []string) (image.Name, []string) {
 
 // toRemake finds the folder's VM for a command that makes it again
 // (command, as typed), and finishes a remake of it that didn't
-// (resumed). A parent folder's VM is made again only after asking in a
-// terminal, and never without one; nil when the user declines. It
+// (resumed). A parent folder's VM is made again only after asking, which
+// no flag answers; nil when the user declines. It
 // refuses a VM that's missing, made for another folder, unfinished, or,
 // unless cloneOK (devvm clone's), a --clone VM, whose clone is on its
 // disk. Once it has the VM, it holds the VM's remake lock (hold) until
@@ -274,11 +279,9 @@ func (e Lifecycle) toRemake(ctx context.Context, command string, cloneOK bool) (
 	}
 	vm := t.f.Name
 	if t.sub != "" {
-		if !e.StdinIsTerminal() {
-			return nil, false, nil, msg.RemakeParentVM(command, t.f.Dir, vm)
-		}
-		if !e.Ask(msg.RemakeParentVMAsk(t.f.Dir, vm)) {
-			return nil, false, nil, nil
+		yes, err := e.Ask(msg.RemakeParentVMAsk(t.f.Dir, vm).RefusedWith(msg.RemakeParentVM(command, t.f.Dir, vm)))
+		if err != nil || !yes {
+			return nil, false, nil, err
 		}
 	}
 	if release, err = e.remaking.hold(ctx, t); err != nil {
@@ -352,49 +355,40 @@ func (e remaking) hold(ctx context.Context, t *target) (release func(), err erro
 	return unlock, nil
 }
 
-// remakeTo makes t's VM again as p says (remaking.remake), once it's
-// checked that it can, and the user agrees: asked in a terminal ([y/N]),
-// which --force skips, and refused without either. Then it opens a shell
-// in it.
+// remakeTo makes t's VM again as p says (remaking.remake), once
+// remaking.check has checked that it can, and the user agrees (agreed).
+// Then it opens a shell in it.
 func (e Lifecycle) remakeTo(ctx context.Context, t *target, p remakeInVM, o RemakeOptions) error {
-	if err := e.canRemake(t, p, o); err != nil {
+	if err := e.remaking.check(t, p); err != nil {
 		return err
 	}
-	if !e.agreed(t, p, o) {
-		return nil
+	if ok, err := e.agreed(t, p, o); err != nil || !ok {
+		return err
 	}
 	return e.remakeNow(ctx, t, p)
 }
 
 // agreed reports whether the user agrees to make t's VM again from p's
-// image, once canRemake has checked that it can: asked in a terminal
-// ([y/N]), which --force skips. A no is said (kept).
-func (e Lifecycle) agreed(t *target, p remakeInVM, o RemakeOptions) bool {
+// image, once remaking.check has checked that it can: asked ([y/N]),
+// which --force answers, and refused where it can't be. A no is said
+// (kept).
+func (e Lifecycle) agreed(t *target, p remakeInVM, o RemakeOptions) (bool, error) {
 	vm := t.f.Name
 	if o.Force {
-		return true
+		return true, nil
 	}
 	ask := msg.RemakeConfirm(p.Image, vm)
 	if !p.Home {
 		ask = msg.RemakeConfirmCleanHome(p.Image, vm)
 	}
-	if !e.Ask(ask) {
+	yes, err := e.Ask(ask.AnsweredBy("--force"))
+	if err != nil {
+		return false, err
+	}
+	if !yes {
 		e.Info(msg.Kept(vm))
-		return false
 	}
-	return true
-}
-
-// canRemake refuses to make t's VM again as p says when remaking.check
-// does, or when there's neither --force nor a terminal to ask in.
-func (e Lifecycle) canRemake(t *target, p remakeInVM, o RemakeOptions) error {
-	if err := e.remaking.check(t, p); err != nil {
-		return err
-	}
-	if !o.Force && !e.StdinIsTerminal() {
-		return msg.ForceNeeded(p.Command)
-	}
-	return nil
+	return yes, nil
 }
 
 // remakeNow makes t's VM again as p says (remaking.remake), then opens a

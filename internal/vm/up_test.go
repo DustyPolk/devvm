@@ -667,10 +667,7 @@ func TestRemakeUnfinished(t *testing.T) {
 				return nil
 			})
 			asked := false
-			e := &Env{
-				CanAsk:   func() bool { return tc.canAsk },
-				Reporter: &msg.Fake{OnAsk: func(msg.M) bool { asked = true; return tc.ask }},
-			}
+			e := &Env{Reporter: &msg.Fake{Terminal: tc.canAsk, OnAsk: func(msg.M) bool { asked = true; return tc.ask }}}
 			got := remakeUnfinished(e, &target{f: project.Folder{Name: st.Name()}, st: st, sub: tc.sub})
 			if got != tc.offered {
 				t.Errorf("remakeUnfinished = %v, want %v", got, tc.offered)

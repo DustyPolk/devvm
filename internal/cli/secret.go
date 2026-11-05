@@ -89,10 +89,10 @@ func saveSecret(cmd *cobra.Command, a *app, name string, stdin bool) error {
 		case proxy.UpstreamSecret:
 			howto, prompt = msg.ProxyPasswordHowto(), msg.PasswordPrompt()
 		}
-		if u.StdinIsTerminal() {
-			u.Note(howto)
+		var err error
+		if given, err = u.Secret(prompt.AnsweredBy("--stdin").About(howto)); err != nil {
+			return err
 		}
-		given = u.Secret(prompt)
 	}
 	return a.env(func(env *vm.Env) error { return vm.Net{Env: env}.SecretSave(cmd.Context(), name, given) }, msg.SecretFailed)
 }
@@ -110,9 +110,12 @@ func newSecretRmCmd(a *app) *cobra.Command {
 			"devvm secret rm github --force", "delete it without asking, as a script must",
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ok, err := confirmed(u, force, "devvm secret rm", func() bool { return u.Ask(msg.SecretRmConfirm(args[0])) })
-			if err != nil {
-				return failed(err, msg.SecretFailed)
+			ok := force
+			if !ok {
+				var err error
+				if ok, err = u.Ask(msg.SecretRmConfirm(args[0]).AnsweredBy("--force")); err != nil {
+					return err
+				}
 			}
 			if !ok {
 				u.Info(msg.NothingDeleted())

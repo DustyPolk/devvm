@@ -3,7 +3,6 @@ package vm
 import (
 	"errors"
 	"strconv"
-	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
@@ -18,7 +17,7 @@ type SizeChoice struct {
 	Dirs paths.Dirs
 	Host Host
 	// Reporter asks for a value (Answer: the line typed, "" for Enter),
-	// says the question's context (Say), warns of a refused answer and
+	// the question's context said first, warns of a refused answer and
 	// says what's saved (Info).
 	msg.Reporter
 }
@@ -60,14 +59,16 @@ func (c SizeChoice) Set(s Size) error {
 // effect, else base's fitted to the host (Fitted), and says it skips one
 // config.toml sets. Enter keeps one; a value the host can't give is said,
 // and asked for again. Only what's typed is saved, so keeping both writes
-// nothing.
+// nothing, and where it can't ask, it returns the question's refusal,
+// having saved nothing.
 func (c SizeChoice) Ask() error {
 	def, err := settings.Read(c.Dirs)
 	if err != nil {
 		return err
 	}
 	shown := defaultSize(def).Or(c.Fitted())
-	c.Say(msg.SizeQuestion(strconv.Itoa(c.Host.CPUs), strconv.Itoa(c.Host.MemoryGiB)))
+	// Said before the first question asked.
+	about := []msg.M{msg.SizeQuestion(strconv.Itoa(c.Host.CPUs), strconv.Itoa(c.Host.MemoryGiB))}
 	var typed Size
 	for _, q := range []struct {
 		key    string
@@ -89,7 +90,10 @@ func (c SizeChoice) Ask() error {
 			c.Info(msg.SetupInConfig(c.Dirs.ConfigFile(), q.key))
 			continue
 		}
-		*q.into = c.ask(q.prompt, q.parse)
+		if *q.into, err = c.ask(q.prompt, about, q.parse); err != nil {
+			return err
+		}
+		about = nil
 	}
 	if typed != (Size{}) {
 		if _, err := settings.Save(c.Dirs, sizeValues(typed)); err != nil {
@@ -100,20 +104,22 @@ func (c SizeChoice) Ask() error {
 	return nil
 }
 
-// ask asks with prompt until the answer is empty, or parse takes it and
-// the host can give it; it returns the parsed value, "" for Enter.
-func (c SizeChoice) ask(prompt msg.M, parse func(string) (Size, error)) string {
+// ask asks with prompt, about said first the first time, until the
+// answer is empty, or parse takes it and the host can give it; it
+// returns the parsed value, "" for Enter, or the question's refusal.
+func (c SizeChoice) ask(prompt msg.M, about []msg.M, parse func(string) (Size, error)) (string, error) {
 	for {
-		v := strings.TrimSpace(c.Answer(prompt))
-		if v == "" {
-			return ""
+		v, err := c.Answer(prompt.AnsweredBy("devvm size -g").About(about...))
+		if err != nil || v == "" {
+			return "", err
 		}
+		about = nil
 		s, err := parse(v)
 		if err == nil {
 			err = s.Check(c.Host, 0, "")
 		}
 		if err == nil {
-			return s.CPUs + s.Memory
+			return s.CPUs + s.Memory, nil
 		}
 		if m, ok := errors.AsType[msg.M](err); ok {
 			c.Warn(m)
@@ -131,11 +137,12 @@ func (c SizeChoice) Fitted() Size {
 }
 
 // firstRunSize asks for the size new VMs get on devvm's first run, before
-// base's features are first chosen (def): in a terminal, when nothing sets
-// a size and the user gave neither --cpus nor --memory. After it, base's
-// features are chosen, so it doesn't ask again.
+// base's features are first chosen (def), when nothing sets a size and
+// the user gave neither --cpus nor --memory; where it can't ask, new VMs
+// keep the size they get. After it, base's features are chosen, so it
+// doesn't ask again.
 func (e creation) firstRunSize(given Size, def settings.Defaults) error {
-	if given.CPUs != "" || given.Memory != "" || !interactive(e.Reporter) || def.Features.Chosen {
+	if given.CPUs != "" || given.Memory != "" || def.Features.Chosen {
 		return nil
 	}
 	for _, v := range []settings.Value{def.CPUs, def.Memory, def.Disk} {
@@ -147,5 +154,9 @@ func (e creation) firstRunSize(given Size, def settings.Defaults) error {
 	if err != nil {
 		return err
 	}
-	return SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.Ask()
+	err = SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.Ask()
+	if _, unasked := errors.AsType[*msg.Refusal](err); unasked {
+		return nil
+	}
+	return err
 }

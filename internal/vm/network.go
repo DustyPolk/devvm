@@ -125,7 +125,7 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 	switch {
 	case !running:
 		e.Info(msg.NetSetStopped(to, vm))
-	case e.restartNow(vm, e.confirm, 1):
+	case e.restartNow(vm, e.Confirm, 1):
 		if on {
 			e.Note(msg.NetOnOldTokens(vm))
 		}

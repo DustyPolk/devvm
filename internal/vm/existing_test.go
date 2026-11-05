@@ -423,10 +423,9 @@ func TestRemoveUpdateRestart(t *testing.T) {
 }
 
 // A setting that a running VM gets only when it next starts offers to
-// restart it, where a question with a default shows: yes restarts it as
-// devvm restart does (stopped, started, a shell opened), and the setting
-// applies; no, no terminal and --no-input each say when it applies, the
-// last two without asking.
+// restart it: yes restarts it as devvm restart does (stopped, started, a
+// shell opened), and the setting applies; no, and a question refused (no
+// terminal, --no-input), each say when it applies.
 func TestRestartToApply(t *testing.T) {
 	for _, c := range []struct {
 		cmd     string
@@ -457,14 +456,13 @@ func TestRestartToApply(t *testing.T) {
 		},
 	} {
 		for _, a := range []struct {
-			name             string
-			terminal, canAsk bool
-			yes              bool
+			name   string
+			canAsk bool // the Reporter asks: false refuses, as no terminal and --no-input do
+			yes    bool
 		}{
-			{"yes", true, true, true},
-			{"no", true, true, false},
-			{"no terminal", false, false, true},
-			{"--no-input", true, false, true},
+			{"yes", true, true},
+			{"no", true, false},
+			{"unasked", false, true},
 		} {
 			// The name is a folder's (t.TempDir): no spaces or commas.
 			name := strings.Join(strings.Fields(c.cmd+" "+a.name), "-")
@@ -484,8 +482,7 @@ func TestRestartToApply(t *testing.T) {
 				var said msg.Recorder
 				fake(e).OnInfo, fake(e).OnWarn = said.Add, said.Add
 				asked := answers(t, e, a.yes)
-				fake(e).Terminal = a.terminal
-				e.CanAsk = func() bool { return a.canAsk }
+				fake(e).Terminal = a.canAsk
 				before, shells := len(f.Calls()), len(*execs)
 				if err := c.set(e); err != nil {
 					t.Fatal(msg.NamesOf(err))

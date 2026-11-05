@@ -80,7 +80,7 @@ type need struct {
 type moves int
 
 const (
-	moveAsk   moves = iota // after asking in a terminal, [y/N]; without one it refuses
+	moveAsk   moves = iota // after asking, [y/N]; where it can't ask it refuses
 	moveForce              // without asking (devvm adopt --force)
 	moveNone               // never: the folder has no VM then
 )

@@ -59,18 +59,17 @@ func On(st *state.VM) bool {
 }
 
 // Choose returns whether a new VM gets network policy: what the flags say,
-// else the answer in a terminal (yes by default), else on.
+// else the answer (yes by default), what it's about said first; where it
+// can't ask, on.
 func (p *Proxy) Choose(on, off bool, vm string) bool {
 	switch {
 	case on:
 		return true
 	case off:
 		return false
-	case !p.StdinIsTerminal():
-		return true
 	}
-	p.Note(msg.NetAbout(vm))
-	return p.Confirm(msg.NetAsk())
+	yes, err := p.Confirm(msg.NetAsk().AnsweredBy("--network-policy or --no-network-policy").About(msg.NetAbout(vm)))
+	return err != nil || yes
 }
 
 // Key returns the VM's own random key, made the first time it's needed

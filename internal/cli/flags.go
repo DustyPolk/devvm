@@ -9,7 +9,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
@@ -92,19 +91,6 @@ func addFolderFlags(cmd *cobra.Command, a *app) *cobra.Command {
 	}
 	exclusive(cmd, names...)
 	return cmd
-}
-
-// confirmed is whether a destructive command (command, as typed) goes
-// ahead: with --force without asking; in a terminal, when ask says yes;
-// without one, never, refused with force_needed.
-func confirmed(u *ui.UI, force bool, command string, ask func() bool) (bool, error) {
-	switch {
-	case force:
-		return true, nil
-	case !u.StdinIsTerminal():
-		return false, msg.ForceNeeded(command)
-	}
-	return ask(), nil
 }
 
 // fromRef is --from as given, else its default from the environment.

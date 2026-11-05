@@ -30,30 +30,21 @@ func (e Launch) Restart(ctx context.Context, o Options) error {
 
 // restartNow reports whether the user agrees to restart the VM vm, which
 // is running, so that a change that applies only when it starts applies
-// at once (restart_now). It asks only where a question with a fallback
-// is asked (CanAsk: a terminal, without --no-input); else it's no, and
-// the caller says when the change applies. ask is how it asks, confirm
-// ([Y/n]) or Ask ([y/N]); count is how many changes the restart applies,
-// and context, said first, what they are.
-func (e *Env) restartNow(vm string, ask func(msg.M) bool, count int, context ...msg.M) bool {
-	if e.CanAsk == nil || !e.CanAsk() {
-		return false
-	}
-	for _, m := range context {
-		e.Note(m)
-	}
-	return ask(msg.RestartNow(count, vm))
+// at once (restart_now). Where it can't ask it's no, and the caller says
+// when the change applies. ask is how it asks, Confirm ([Y/n]) or Ask
+// ([y/N]); count is how many changes the restart applies, and context,
+// said first, what they are.
+func (e *Env) restartNow(vm string, ask func(msg.Question) (bool, error), count int, context ...msg.M) bool {
+	yes, err := ask(msg.RestartNow(count, vm).AnsweredBy("devvm restart").About(context...))
+	return err == nil && yes
 }
-
-// confirm asks m, yes by default ([Y/n]): restartNow's ask, as Ask is.
-func (e *Env) confirm(m msg.M) bool { return e.Confirm(m) }
 
 // restartOr restarts the folder's VM vm, which is running, as devvm
 // restart does once the user agrees (restartNow), so that a setting just
 // changed applies now; otherwise say(later) tells the user when it
 // applies.
 func (e *Env) restartOr(ctx context.Context, vm string, say func(msg.M), later msg.M) error {
-	if !e.restartNow(vm, e.confirm, 1) {
+	if !e.restartNow(vm, e.Confirm, 1) {
 		say(later)
 		return nil
 	}

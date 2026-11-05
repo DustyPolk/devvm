@@ -974,11 +974,6 @@ func FoldersNotPrivate(config string, data string) M {
 	return M{id: "folders_not_private", vals: []val{{"config", config}, {"data", data}}}
 }
 
-// ForceNeeded is [force_needed]: "{{.command}} deletes only after you confirm, and there's no terminal to confirm in. Add --force to go ahead without asking."
-func ForceNeeded(command string) M {
-	return M{id: "force_needed", vals: []val{{"command", command}}}
-}
-
 // ForgotOrphan is [forgot_orphan]: "deleted what devvm kept for {{.vm}}"
 func ForgotOrphan(vm string) M {
 	return M{id: "forgot_orphan", vals: []val{{"vm", vm}}}
@@ -2159,14 +2154,9 @@ func NoImageNamedFrom(from string, image string) M {
 	return M{id: "no_image_named_from", vals: []val{{"from", from}, {"image", image}}}
 }
 
-// NoInput is [no_input]: "This question needs an answer, and devvm has no input to read it from. Give {{.answer}} instead."
+// NoInput is [no_input]: "This question can't be asked without a terminal, after the input ends, or with --no-input. Give {{.answer}} to answer it instead."
 func NoInput(answer string) M {
 	return M{id: "no_input", vals: []val{{"answer", answer}}}
-}
-
-// NoInputTerminal is [no_input_terminal]: "Only you can answer this question, in a terminal, and devvm has no input to read it from. Run the command again in a terminal without --no-input."
-func NoInputTerminal() M {
-	return M{id: "no_input_terminal"}
 }
 
 // NoKVM is [no_kvm]: "/dev/kvm doesn't exist. Turn on virtualization in the firmware, or nested virtualization if this machine is a VM."
@@ -3705,7 +3695,6 @@ var specs = map[string]spec{
 	"flags_exclusive":                {fields: []string{"flag", "other"}},
 	"folder_next_start":              {fields: []string{"dir", "vm"}},
 	"folders_not_private":            {fields: []string{"config", "data"}},
-	"force_needed":                   {fields: []string{"command"}},
 	"forgot_orphan":                  {fields: []string{"vm"}},
 	"forwarder_failed":               {fields: []string{"reason"}},
 	"from_cached_not_found":          {fields: []string{"from", "host"}},
@@ -3943,7 +3932,6 @@ var specs = map[string]spec{
 	"no_image_named":                 {fields: []string{"image"}},
 	"no_image_named_from":            {fields: []string{"from", "image"}},
 	"no_input":                       {fields: []string{"answer"}},
-	"no_input_terminal":              {},
 	"no_kvm":                         {},
 	"no_parent_vm":                   {fields: []string{"dir"}},
 	"no_secret":                      {fields: []string{"secret"}},

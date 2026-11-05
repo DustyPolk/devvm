@@ -311,8 +311,6 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"no_feature":                    "using/customizing#choosing-features",
 	"flag_blank":                    "getting-started/commands#flags-and-values",
 	"no_input":                      "getting-started/commands#questions-devvm-asks",
-	"no_input_terminal":             "getting-started/commands#questions-devvm-asks",
-	"force_needed":                  "getting-started/commands#questions-devvm-asks",
 	"arg_blank":                     "getting-started/commands#flags-and-values",
 	"no_image_named":                "using/images#listing-images",
 	"no_image_named_from":           "using/images#listing-images",

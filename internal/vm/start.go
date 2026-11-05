@@ -254,7 +254,7 @@ func (s starter) restartForNextStart(ctx context.Context, t *target, mountsLater
 	}
 	ask := s.Ask
 	if mountsLater || in.Project != projectMount(st) {
-		ask = s.confirm
+		ask = s.Confirm
 	}
 	if !s.restartNow(vm, ask, len(cs), nextStartContext(cs)...) {
 		return mountsLater, nil

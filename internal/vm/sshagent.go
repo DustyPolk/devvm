@@ -127,7 +127,8 @@ func (e Launch) checkAgent(ctx context.Context) {
 	}
 	cmd := "ssh-add " + strings.Join(args, " ")
 	e.Warn(msg.SSHAgentEmpty())
-	if e.StdinIsTerminal() && e.Confirm(msg.LoadKey(cmd, key)) && e.SSHAdd(ctx, args...) == 0 {
+	// Unasked, or declined, it's the user's to load.
+	if yes, err := e.Confirm(msg.LoadKey(cmd, key).AnsweredBy("devvm ssh-agent add KEY_FILE")); err == nil && yes && e.SSHAdd(ctx, args...) == 0 {
 		if e.OS == "darwin" {
 			e.Info(msg.KeyLoadedKeychain())
 		} else {

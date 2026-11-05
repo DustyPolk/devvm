@@ -38,7 +38,9 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			u.SetFlags(*fl)
+			f := *fl
+			f.PipedAnswers = a.testOverrides().PipedAnswers
+			u.SetFlags(f)
 			if wantsJSON(cmd) {
 				u.DataOnly() // stdout is the JSON's alone
 			}
@@ -119,12 +121,18 @@ func failed(err error, what func(reason string) msg.M) error {
 	return failure{err, what}
 }
 
-// showFailure prints what a command's RunE returned: the run log's end
-// and its message when the details are there (a backend.LoggedError),
-// the message err is or carries, or else what failed (output_failed
-// without failed's), err's text its reason. Once the run is interrupted
-// it prints nothing, as the failure is the interrupt's.
+// showFailure prints what a command's RunE returned: a question's
+// refusal (msg.Refusal: the question, then what answers it), the run
+// log's end and its message when the details are there (a
+// backend.LoggedError), the message err is or carries, or else what
+// failed (output_failed without failed's), err's text its reason. Once
+// the run is interrupted it prints nothing, as the failure is the
+// interrupt's.
 func showFailure(u *ui.UI, err error) {
+	if r, ok := errors.AsType[*msg.Refusal](err); ok {
+		u.Refused(r)
+		return
+	}
 	if e, ok := errors.AsType[*backend.LoggedError](err); ok {
 		u.ErrorLogged(e.Msg)
 		return

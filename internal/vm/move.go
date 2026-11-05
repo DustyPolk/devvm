@@ -102,8 +102,8 @@ func movedAway(st *state.VM, to string) bool {
 
 // moveHere finds, for dir, a folder without a VM, the VM made for it at
 // the path it had before it moved here (here.movedFrom), and moves it
-// here as mv says: after asking in a terminal, [y/N], refusing without
-// one (vm_moved_here); without asking with moveForce. It returns the VM's
+// here as mv says: after asking, [y/N], refusing where it can't ask
+// (vm_moved_here); without asking with moveForce. It returns the VM's
 // folder and state, or a state that doesn't exist for none, or when the
 // user says no, or when more than one VM was made for this folder, which
 // it warns of (vms_moved_here). Never on its own: a VM moves only after a
@@ -139,10 +139,11 @@ func (e finder) moveHere(ctx context.Context, dir string, mv moves, rec *recorde
 	st := found[0]
 	vm, was := st.Name(), st.Dir
 	if mv == moveAsk {
-		if !e.StdinIsTerminal() {
-			return project.Folder{}, nil, msg.VMMovedHere(vm, was)
+		yes, err := e.Ask(msg.MoveVM(vm, was).RefusedWith(msg.VMMovedHere(vm, was)))
+		if err != nil {
+			return project.Folder{}, nil, err
 		}
-		if !e.Ask(msg.MoveVM(vm, was)) {
+		if !yes {
 			return project.Folder{}, none, nil
 		}
 	}
@@ -156,8 +157,8 @@ func (e finder) moveHere(ctx context.Context, dir string, mv moves, rec *recorde
 // adoptVM moves the VM that name names (its name or alias, as devvm rm VM
 // finds it) to the folder devvm runs in: devvm adopt VM, for a folder
 // copied to another disk, which is another folder (its identity is new),
-// so moveHere never matches it. It asks first in a terminal, [y/N]
-// (adopt_move_vm), which force answers, and without either it refuses
+// so moveHere never matches it. It asks first, [y/N] (adopt_move_vm),
+// which force answers, and where it can't ask it refuses
 // (adopt_move_refused). It refuses a --clone VM (adopt_clone), one its
 // backend lost (rm_vm_lost) or whose creation didn't finish, one whose
 // folder is still there (adopt_folder_there), and a folder with a VM of
@@ -196,12 +197,11 @@ func (e finder) adoptVM(ctx context.Context, name string, force bool) error {
 	if err != nil {
 		return err
 	}
-	switch {
-	case force:
-	case !e.StdinIsTerminal():
-		return msg.AdoptMoveRefused(vm)
-	case !e.Ask(msg.AdoptMoveVM(vm, st.Dir)):
-		return nil
+	if !force {
+		yes, err := e.Ask(msg.AdoptMoveVM(vm, st.Dir).RefusedWith(msg.AdoptMoveRefused(vm)))
+		if err != nil || !yes {
+			return err
+		}
 	}
 	if err := e.move(ctx, st, dir, id, true); err != nil {
 		return err

@@ -3,6 +3,7 @@ package msg
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os/exec"
 	"slices"
@@ -22,10 +23,13 @@ func TestFakeQuiet(t *testing.T) {
 	f.LogNote()
 	f.Status(m)()
 	f.AddCleanup(func(context.Context) { t.Error("kept") })()
-	if f.Ask(m) || f.Confirm(m) || f.Confirm() || f.Answer(m) != "" {
-		t.Error("answered")
+	q := m.AnsweredBy("--force")
+	for _, err := range []error{second(f.Ask(q)), second(f.Confirm(q)), second(f.Answer(q))} {
+		if r, ok := errors.AsType[*Refusal](err); !ok || r.Msg.Names() != "no_input answer=--force" {
+			t.Errorf("not refused: %v", err)
+		}
 	}
-	if f.StdinIsTerminal() || f.StdoutIsTerminal() || f.CanPick() || f.Interrupted() {
+	if f.CanPick() || f.Interrupted() {
 		t.Error("a terminal, the picker or an interrupt")
 	}
 	for _, w := range []io.Writer{f.Stdout(), f.Stderr(), f.LogWriter()} {
@@ -55,9 +59,10 @@ func TestFakeRecords(t *testing.T) {
 		OnConfirm: func(m M) bool { asked = append(asked, "confirm "+m.Names()); return true },
 		OnAnswer:  func(m M) string { asked = append(asked, "answer "+m.Names()); return "4" },
 		OnCleanup: func(func(context.Context)) func() { cleanups++; return func() {} },
-		Terminal:  true, StdoutTerminal: true, Picks: true, Interrupt: true,
+		Terminal:  true, Picks: true, Interrupt: true,
 		Out: &out, Err: &errs, Log: &log,
 	}
+	answered := func(v any, err error) bool { return err == nil && (v == true || v == "4") }
 	f.Info(NoVM("/i"))
 	f.Say(NoVM("/s"))
 	f.Note(NoVM("/n"))
@@ -66,17 +71,25 @@ func TestFakeRecords(t *testing.T) {
 	if !slices.Equal(kinds.Names(), want) || !slices.Equal(all.Names(), want) {
 		t.Errorf("kinds %q, all %q", kinds.Names(), all.Names())
 	}
-	if !f.Ask(NoVM("/a")) || !f.Confirm(NoVM("/c")) || f.Answer(NoVM("/v")) != "4" {
+	kinds = Recorder{}
+	if !answered(f.Ask(NoVM("/a").AnsweredBy("--force").About(NoVM("/about")))) ||
+		!answered(f.Confirm(NoVM("/c").AnsweredBy("--force"))) || !answered(f.Answer(NoVM("/v").AnsweredBy("--force"))) {
 		t.Error("not answered")
 	}
 	if want := []string{"ask no_vm dir=/a", "confirm no_vm dir=/c", "answer no_vm dir=/v"}; !slices.Equal(asked, want) {
 		t.Errorf("asked %q", asked)
 	}
+	if want := []string{"no_vm dir=/about"}; !slices.Equal(kinds.Names(), want) {
+		t.Errorf("context %q, want %q", kinds.Names(), want)
+	}
 	f.AddCleanup(func(context.Context) {})
-	if cleanups != 1 || !f.StdinIsTerminal() || !f.StdoutIsTerminal() || !f.CanPick() || !f.Interrupted() {
+	if cleanups != 1 || !f.CanPick() || !f.Interrupted() {
 		t.Error("its fields aren't what it says")
 	}
 	if f.Stdout() != &out || f.Stderr() != &errs || f.LogWriter() != &log {
 		t.Error("not its writers")
 	}
 }
+
+// second is a two-value call's error.
+func second[T any](_ T, err error) error { return err }

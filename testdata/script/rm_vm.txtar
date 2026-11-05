@@ -61,7 +61,7 @@ exists $API_dir/vm.json
 # and yes deletes it, by its ssh alias too. Its folder isn't made again.
 stub_reset
 ! exec devvm rm $API
-stderr '^devvm: force_needed command=devvm rm$'
+stderr '^devvm: no_input answer=--force$'
 ttyin -stdin $WORK/no.txt
 exec devvm rm $API
 stderr '^delete_gone_folder_vm dir=/\S*/api vm=devvm-api-[0-9a-f]{14} \[y/N\] '

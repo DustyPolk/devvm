@@ -7,7 +7,7 @@ import (
 )
 
 // A Reporter is what devvm's packages need of the run's UI: where their
-// messages go, the questions they ask and whether they can, the status
+// messages go, the questions they ask and the picker, the status
 // line, the run log, output that isn't a message, and the run's cleanup
 // stack. internal/ui's UI is the one devvm runs with, which internal/cli
 // gives each package that embeds or takes a Reporter; tests give them a
@@ -24,15 +24,14 @@ type Reporter interface {
 
 	// Ask asks a yes-or-no question, no by default ([y/N]); Confirm one
 	// that's yes by default ([Y/n]); Answer asks for a value, "" for
-	// Enter.
-	Ask(M) bool
-	Confirm(q ...M) bool
-	Answer(prompt M) string
-	// StdinIsTerminal reports whether a question can be asked,
-	// StdoutIsTerminal whether data output goes to a terminal, and CanPick
-	// whether a question with a default to fall back on is shown.
-	StdinIsTerminal() bool
-	StdoutIsTerminal() bool
+	// Enter. Each returns the question's *Refusal instead when it can't
+	// ask: with --no-input, without a terminal, or at the end of the
+	// input.
+	Ask(Question) (bool, error)
+	Confirm(Question) (bool, error)
+	Answer(Question) (string, error)
+	// CanPick reports whether the picker is shown, which keeps its
+	// choices as they are when it isn't.
 	CanPick() bool
 
 	// LogNote says where the run log is, once a run; LogWriter is the run
@@ -57,26 +56,27 @@ type Reporter interface {
 var _ Reporter = (*Fake)(nil)
 
 // A Fake is a Reporter for tests. Its zero value is quiet: it prints
-// nothing, has no terminal, answers no to Ask and Confirm and "" to
-// Answer, drops the run log and data output, runs a logged command as
-// it is, its output dropped, counts no steps, keeps no cleanups and
-// isn't interrupted. Its fields change that: each On func, when set, is
-// given what its method is (a Recorder's Add records a kind of
-// message), and the rest stand for the terminal, the writers and an
-// interrupt. A test may change them after giving it to what it tests.
+// nothing, has no terminal, so it refuses every question, drops the run
+// log and data output, runs a logged command as it is, its output
+// dropped, counts no steps, keeps no cleanups and isn't interrupted. Its
+// fields change that: each On func, when set, is given what its method
+// is (a Recorder's Add records a kind of message), and the rest stand
+// for the terminal, the writers and an interrupt. A test may change them
+// after giving it to what it tests.
 type Fake struct {
 	OnInfo, OnSay, OnNote, OnWarn func(M)
 	// OnAny is given every message, whatever its kind, after its kind's
 	// On func.
 	OnAny func(M)
-	// OnConfirm is given Confirm's message, the zero M for none.
+	// OnAsk, OnConfirm and OnAnswer are given the question asked, each
+	// after its context goes to OnNote: no and "" without them.
 	OnAsk, OnConfirm func(M) bool
 	OnAnswer         func(M) string
 	// OnCleanup is AddCleanup.
 	OnCleanup func(f func(context.Context)) (remove func())
-	// Terminal is StdinIsTerminal, StdoutTerminal StdoutIsTerminal and
-	// Picks CanPick.
-	Terminal, StdoutTerminal, Picks bool
+	// Terminal is whether questions are asked: without it each is
+	// refused. Picks is CanPick.
+	Terminal, Picks bool
 	// Interrupt is Interrupted.
 	Interrupt bool
 	// Out is Stdout, Err Stderr and Log LogWriter: nil drops what's
@@ -99,33 +99,42 @@ func (f *Fake) Warn(m M) { f.say(f.OnWarn, m) }
 // Status shows nothing.
 func (f *Fake) Status(M) func() { return func() {} }
 
-// Ask is OnAsk's answer, no without one.
-func (f *Fake) Ask(m M) bool {
-	return f.OnAsk != nil && f.OnAsk(m)
-}
-
-// Confirm is OnConfirm's answer, no without one.
-func (f *Fake) Confirm(q ...M) bool {
-	var m M
-	if len(q) > 0 {
-		m = q[0]
+// Ask is OnAsk's answer, no without one; without Terminal, q's refusal.
+func (f *Fake) Ask(q Question) (bool, error) {
+	if err := f.ask(q); err != nil {
+		return false, err
 	}
-	return f.OnConfirm != nil && f.OnConfirm(m)
+	return f.OnAsk != nil && f.OnAsk(q.M()), nil
 }
 
-// Answer is OnAnswer's answer, "" without one.
-func (f *Fake) Answer(prompt M) string {
-	if f.OnAnswer == nil {
-		return ""
+// Confirm is OnConfirm's answer, no without one; without Terminal, q's
+// refusal.
+func (f *Fake) Confirm(q Question) (bool, error) {
+	if err := f.ask(q); err != nil {
+		return false, err
 	}
-	return f.OnAnswer(prompt)
+	return f.OnConfirm != nil && f.OnConfirm(q.M()), nil
 }
 
-// StdinIsTerminal is Terminal.
-func (f *Fake) StdinIsTerminal() bool { return f.Terminal }
+// Answer is OnAnswer's answer, "" without one; without Terminal, q's
+// refusal.
+func (f *Fake) Answer(q Question) (string, error) {
+	if err := f.ask(q); err != nil || f.OnAnswer == nil {
+		return "", err
+	}
+	return f.OnAnswer(q.M()), nil
+}
 
-// StdoutIsTerminal is StdoutTerminal.
-func (f *Fake) StdoutIsTerminal() bool { return f.StdoutTerminal }
+// ask is q's refusal without Terminal; with it, q's context said.
+func (f *Fake) ask(q Question) error {
+	if !f.Terminal {
+		return q.Refused(false)
+	}
+	for _, m := range q.Context() {
+		f.Note(m)
+	}
+	return nil
+}
 
 // CanPick is Picks.
 func (f *Fake) CanPick() bool { return f.Picks }

@@ -1,0 +1,52 @@
+# Where devvm can't ask, a question is refused in one way: the question
+# shown, then what answers it, named. It can't ask without a terminal,
+# with --no-input in one, or once its input ends. Piped answers
+# (DEVVM_PIPED_ANSWERS=1, which only a test build reads) answer from
+# input that isn't a terminal, a line each.
+project web
+exec devvm --no-network-policy --no-git-protect
+vm_name WEB web
+
+# Without a terminal: refused, and nothing is read.
+stdin $WORK/yes.txt
+! exec devvm rm
+stderr '^rm_confirm vm=devvm-web-[0-9a-f]{14}\ndevvm: no_input answer=--force$'
+exists $WEB_dir/vm.json
+
+# With --no-input in a terminal: refused before it's asked.
+ttyin -stdin $WORK/yes.txt
+! exec devvm --no-input rm
+stderr '^rm_confirm vm=devvm-web-[0-9a-f]{14}\ndevvm: no_input answer=--force$'
+! stderr '\[y/N\]'
+exists $WEB_dir/vm.json
+
+# A question only the user answers is refused with what to do instead,
+# alone: devvm rm of the folder's VM from a subfolder.
+mkdir sub
+cd sub
+! exec devvm rm
+stderr '^devvm: rm_parent_vm dir=\S*/web vm=devvm-web-[0-9a-f]{14}$'
+! stderr delete_parent_vm
+cd ..
+
+# Piped answers: a no keeps the VM, the end of the input is refused, and
+# a yes deletes it.
+env DEVVM_PIPED_ANSWERS=1
+stdin $WORK/no.txt
+exec devvm rm
+stdout '^==> kept vm=devvm-web-[0-9a-f]{14}$'
+! stderr .
+stdin $WORK/empty.txt
+! exec devvm rm
+stderr '^rm_confirm vm=devvm-web-[0-9a-f]{14}\ndevvm: no_input answer=--force$'
+exists $WEB_dir/vm.json
+stdin $WORK/yes.txt
+exec devvm rm
+! exists $WEB_dir/vm.json
+env DEVVM_PIPED_ANSWERS=
+
+-- yes.txt --
+y
+-- no.txt --
+n
+-- empty.txt --

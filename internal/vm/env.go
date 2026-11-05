@@ -94,13 +94,11 @@ type Env struct {
 	// (where the output of a backend's Exec goes too), and the run's
 	// cleanup stack.
 	msg.Reporter
-	// PickFeatures asks which features base gets (build.Env.Pick),
-	// PickParts shows the tools picker (nil shows none), and CanAsk
-	// reports whether a question with a fallback is asked (a terminal, no
-	// --no-input): each set by its caller.
+	// PickFeatures asks which features base gets (build.Env.Pick), and
+	// PickParts shows the tools picker (nil shows none): each set by its
+	// caller.
 	PickFeatures func([]build.Feature) []build.Feature
 	PickParts    func(msg.M, []PickPart) []PickPart
-	CanAsk       func() bool
 	// AddInclude is --ssh-config: devvm's Include line goes in
 	// ~/.ssh/config, when it's missing, without asking.
 	AddInclude bool
@@ -136,10 +134,6 @@ func wire(e *Env) *Env {
 	e.creation = creation{e.launcher}
 	return e
 }
-
-// interactive reports whether someone can see a question asked through
-// r: its input and data output are terminals.
-func interactive(r msg.Reporter) bool { return r.StdinIsTerminal() && r.StdoutIsTerminal() }
 
 // NewEnv returns the environment up runs in, with devvm's own files
 // (assets), devvm being self at version, on r, with the run's registry,

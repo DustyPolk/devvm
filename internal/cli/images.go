@@ -100,9 +100,9 @@ func newImagesRmCmd(a *app) *cobra.Command {
 			if err == nil {
 				err = backend.Check(cmd.Context(), b.Backend)
 			}
-			ok := false
-			if err == nil {
-				ok, err = confirmed(u, force, "devvm images rm", func() bool { return u.Ask(msg.ImagesRmConfirm(shownArgs(args))) })
+			ok := force
+			if err == nil && !ok {
+				ok, err = u.Ask(msg.ImagesRmConfirm(shownArgs(args)).AnsweredBy("--force"))
 			}
 			if err == nil && ok {
 				err = build.Images{Env: b}.Delete(cmd.Context(), args)

@@ -8,7 +8,7 @@ mkdir $XDG_DATA_HOME/devvm/cache/mise/2020.1.1
 exec touch -t 202001010000 $XDG_DATA_HOME/devvm/cache/mise/2020.1.1
 
 ! exec devvm gc --caches
-stderr '^devvm: force_needed command=devvm gc$'
+stderr '^devvm: no_input answer=--force$'
 exists $XDG_DATA_HOME/devvm/cache/mise/2020.1.1
 [darwin] exists $HOME/Library/Caches/lima/download/by-url-sha256/0123/data
 

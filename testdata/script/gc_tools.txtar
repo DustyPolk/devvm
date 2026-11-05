@@ -58,7 +58,7 @@ stdout '^==> nothing_to_clean$'
 exec devvm --tools node --agents none --no-network-policy --no-git-protect
 exec devvm rm --force --no-export
 ! exec devvm gc --tool-images node
-stderr '^devvm: force_needed command=devvm gc$'
+stderr '^devvm: no_input answer=--force$'
 exec sh -c 'cd "$SHARE" && ls *.erofs'
 stdout '^node-'
 

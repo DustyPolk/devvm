@@ -254,8 +254,8 @@ type cloneCheck struct {
 
 // run offers to fetch the branches whose commits the host's repo lacks,
 // and asks before uncommitted changes in the clone or its worktrees
-// (changes) are lost, starting the VM if it's stopped. Without a
-// terminal, either refuses. It reports whether to keep the VM as it is.
+// (changes) are lost, starting the VM if it's stopped. Where it can't
+// ask, either refuses. It reports whether to keep the VM as it is.
 // A VM never seeded has nothing of its own.
 func (e cloneCheck) run(ctx context.Context, t *target) (bool, error) {
 	vm, st, b, dir := t.f.Name, t.st, t.b, t.f.Dir
@@ -273,9 +273,6 @@ func (e cloneCheck) run(ctx context.Context, t *target) (bool, error) {
 	}
 	if unfetched := unfetchedRefs(ctx, dir, refs); len(unfetched) > 0 {
 		e.Say(msg.UnfetchedCommits(quoted(unfetched)))
-		if !e.StdinIsTerminal() {
-			return false, msg.NoTerminalFetch(e.command, remote)
-		}
 		if err := e.fetchUnfetched(ctx, t, remote, unfetched); err != nil {
 			return false, err
 		}
@@ -283,10 +280,15 @@ func (e cloneCheck) run(ctx context.Context, t *target) (bool, error) {
 	if dirty, err := e.changes(ctx, b, vm, dir); err != nil || !dirty {
 		return false, err
 	}
-	if !e.StdinIsTerminal() {
-		return false, msg.NoTerminalDelete(e.command)
+	q := msg.DeleteAnyway()
+	if e.remakes {
+		q = msg.RemakeAnyway()
 	}
-	if !e.remakes && !e.Ask(msg.DeleteAnyway()) || e.remakes && !e.Ask(msg.RemakeAnyway()) {
+	yes, err := e.Ask(q.RefusedWith(msg.NoTerminalDelete(e.command)))
+	if err != nil {
+		return false, err
+	}
+	if !yes {
 		e.Info(msg.Kept(vm))
 		return true, nil
 	}
@@ -474,8 +476,9 @@ func (e cloneCheck) fetchUnfetched(ctx context.Context, t *target, remote string
 	if !ok {
 		return msg.SavedNamesTaken(e.command, remote, vm)
 	}
-	if !e.Confirm(msg.FetchBeforeDelete(prefix)) {
-		return nil
+	fetch, err := e.Confirm(msg.FetchBeforeDelete(prefix).RefusedWith(msg.NoTerminalFetch(e.command, remote)))
+	if err != nil || !fetch {
+		return err
 	}
 	if err := e.writeSSHConfig(ctx); err != nil {
 		return err
@@ -654,8 +657,8 @@ func (e Lifecycle) SetClone(ctx context.Context, command, mode string, o RemakeO
 	if err := e.canSwitch(ctx, t, p, o); err != nil {
 		return err
 	}
-	if !e.agreed(t, p, o) {
-		return nil
+	if ok, err := e.agreed(t, p, o); err != nil || !ok {
+		return err
 	}
 	if !on && !o.NoCloneCheck {
 		keep, err := cloneCheck{clones: e.clones, command: command, remakes: true}.run(ctx, t)
@@ -667,9 +670,9 @@ func (e Lifecycle) SetClone(ctx context.Context, command, mode string, o RemakeO
 }
 
 // canSwitch refuses to make t's VM again in p's clone mode when
-// canRemake does, or, for its own clone, when the folder isn't a repo it
-// can clone (checkCloneRepo). Then it says what changes, and for the
-// folder mounted with --no-clone-check, what's lost.
+// remaking.check does, or, for its own clone, when the folder isn't a
+// repo it can clone (checkCloneRepo). Then it says what changes, and for
+// the folder mounted with --no-clone-check, what's lost.
 func (e Lifecycle) canSwitch(ctx context.Context, t *target, p remakeInVM, o RemakeOptions) error {
 	vm := t.f.Name
 	if p.Clone == CloneOn {
@@ -677,7 +680,7 @@ func (e Lifecycle) canSwitch(ctx context.Context, t *target, p remakeInVM, o Rem
 			return err
 		}
 	}
-	if err := e.canRemake(t, p, o); err != nil {
+	if err := e.remaking.check(t, p); err != nil {
 		return err
 	}
 	switch {

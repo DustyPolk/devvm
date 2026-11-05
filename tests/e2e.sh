@@ -2389,7 +2389,7 @@ check "a VM with ports, a rule and a secret binding" bash -c "cd '$r' &&
   in_vm '$remade' 'grep -qx in-home ~/e2e-home.txt'"
 check "layer add without a terminal or --force refuses, and changes nothing" bash -c "cd '$r' &&
   ! '$D' layer add e2eadd </dev/null >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m force_needed command='devvm layer add e2eadd')\" '$work/last.log' && [[ \$(st_get '$rd' image) == base ]]"
+  grep -qF \"\$(m no_input answer=--force)\" '$work/last.log' && [[ \$(st_get '$rd' image) == base ]]"
 check "layer add --force makes it again with the layer, in a shell" bash -c "cd '$r' &&
   printf 'echo e2e-remade-shell\n' | '$D' layer add e2eadd --force >'$work/last.log' 2>&1 &&
   grep -qx e2e-remade-shell '$work/last.log' && [[ \$(st_get '$rd' image) == e2eadd ]] &&
@@ -2502,7 +2502,7 @@ sd=$(vmdir "$svm")
 sid=$(st_get "$sd" id)
 sgit="GIT_SSH_COMMAND='ssh -F $XDG_DATA_HOME/devvm/ssh_config' git -C '$s'"
 check "clone without a terminal refuses on, and shows off" bash -c "cd '$s' &&
-  ! HOME='$ch' '$D' clone on </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m force_needed 'command=devvm clone on')\" '$work/last.log' &&
+  ! HOME='$ch' '$D' clone on </dev/null >'$work/last.log' 2>&1 && grep -qF \"\$(m no_input answer=--force)\" '$work/last.log' &&
   [[ \$(HOME='$ch' '$D' clone </dev/null 2>/dev/null) == off ]]"
 check "clone on --force makes it again with its own clone of every branch, only the shared tools mounted, .git unlocked, its home and ID kept" bash -c "cd '$s' &&
   printf 'pwd\n' | HOME='$ch' '$D' clone on --force >'$work/last.log' 2>&1 && grep -qx '$s' '$work/last.log' &&

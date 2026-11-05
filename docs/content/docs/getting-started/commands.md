@@ -310,13 +310,13 @@ Every duration is a whole number followed by a unit, which is `m` for minutes, `
 
 ## Questions devvm asks
 
-devvm asks a question only in a terminal, and each question has a flag or a command that answers it beforehand, so a script never needs to answer one. Without a terminal, devvm asks nothing. A question that only adds something, such as an agent's folders or the `Include` line, gets its usual answer or a warning that says what to do, and a command that deletes something refuses unless you give it `--force`.
+devvm asks a question only in a terminal, and each question has a flag or a command that answers it beforehand, so a script never needs to answer one. Without a terminal, with `--no-input`, or when the input ends before an answer, devvm can't ask, and every question is handled the same way in all three cases. A question that only adds something, such as an agent's folders or the `Include` line, gets its usual answer or a warning that says what to do, and a command that deletes something refuses unless you give it `--force`.
 
 | Question | Answered by |
 | --- | --- |
 | a new VM's toolchains, coding agents and layers | `--tools`, `--agents` and `--layers`, or nothing: without a terminal or with `--no-input`, the VM gets their defaults |
-| whether a new VM gets network policy | `--network-policy` or `--no-network-policy`, or `devvm network -g on` or `off` for every new VM |
-| the CPUs and memory new VMs get, on the first run | `--cpus` and `--memory`, or `devvm size -g` |
+| whether a new VM gets network policy | `--network-policy` or `--no-network-policy`, or `devvm network -g on` or `off` for every new VM, or nothing: where devvm can't ask, the VM gets network policy |
+| the CPUs and memory new VMs get, on the first run | `--cpus` and `--memory`, or `devvm size -g`, or nothing: where devvm can't ask, new VMs get the size they would anyway |
 | the coding agents new VMs get, on the first run and in `devvm setup` | `devvm setup --agents LIST` or `devvm setup --agents none` |
 | the layers new VMs get, in `devvm setup` | `devvm setup --layers LIST` or `devvm setup --layers none` |
 | a VM's toolchains and agents, in `devvm tools` | `devvm tools add` and `devvm tools rm`, or `--json` to show them |
@@ -331,11 +331,11 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 | whether to use the VM made for an earlier folder here, in `devvm adopt`, or to move a VM to this folder, in `devvm adopt VM` | `--force` |
 | whether to move the VM made for this folder at the path it had before, in any command on this folder's VM | `devvm adopt --force` |
 
-`--force` only skips a confirmation, and it never deletes more than the command does without it. A command that would delete something asks first in a terminal, and without a terminal it refuses unless you give `--force`.
+`--force` only skips a confirmation, and it never deletes more than the command does without it. A command that would delete something asks first in a terminal, and where devvm can't ask, it refuses unless you give `--force`.
 
-A few questions protect work that only you can judge, so no flag answers them, and devvm asks them only in a terminal. They are `devvm rm` deleting the VM of a folder this one is inside or the VM made for an earlier folder at this path, a `--clone` VM's commits that this repo hasn't fetched and its uncommitted changes, and a command giving the VM of a folder this one is inside more access. Without a terminal, each of them refuses and says what to run instead.
+A few questions protect work that only you can judge, so no flag answers them, and devvm asks them only in a terminal. They are `devvm rm` deleting the VM of a folder this one is inside or the VM made for an earlier folder at this path, a `--clone` VM's commits that this repo hasn't fetched and its uncommitted changes, and a command giving the VM of a folder this one is inside more access. Where devvm can't ask, each of them refuses and says what to run instead.
 
-With `--no-input`, devvm asks nothing even in a terminal. A question it would ask fails instead, after devvm shows the question, and the error names the flag or command that answers it. A question that only a terminal answers fails and tells you to run the command in a terminal without `--no-input`. A question also fails this way when devvm reads its answer from a pipe or a file and the input ends before an answer, or when you press Ctrl+D at the prompt.
+With `--no-input`, devvm asks nothing even in a terminal, and it never reads an answer from a pipe or a file either. A question that has no usual answer fails instead, after devvm shows the question, and the error names the flag or command that answers it. A question fails the same way when you press Ctrl+D at the prompt, which ends the input before an answer.
 
 ## devvm itself
 

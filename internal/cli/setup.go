@@ -73,46 +73,47 @@ func (c setupChoice) none() bool {
 }
 
 // setup is devvm setup's run: the UI it prints through, devvm's folders,
-// whether it's in a terminal, how it asks for the size, the network policy
-// and the agents, and the host the size is checked against.
+// whether its pickers are shown, how it asks for the size, the network
+// policy and the agents, and the host the size is checked against.
 type setup struct {
-	ui       *ui.UI
-	dirs     func() (paths.Dirs, error)
-	terminal func() bool
-	pickOne  func(msg.M, []ui.Choice) int
-	pick     func(msg.M, []vm.PickPart) []vm.PickPart
-	answer   func(msg.M) string
-	host     func() (vm.Host, error)
+	ui      *ui.UI
+	dirs    func() (paths.Dirs, error)
+	canPick func() bool
+	pickOne func(msg.M, []ui.Choice) int
+	pick    func(msg.M, []vm.PickPart) []vm.PickPart
+	answer  func(msg.Question) (string, error)
+	host    func() (vm.Host, error)
 }
 
 // answering is the run's UI, asking for values through answer: setup's,
 // which tests answer.
 type answering struct {
 	*ui.UI
-	answer func(msg.M) string
+	answer func(msg.Question) (string, error)
 }
 
-func (a answering) Answer(m msg.M) string { return a.answer(m) }
+func (a answering) Answer(q msg.Question) (string, error) { return a.answer(q) }
 
-// newSetup returns a setup on the run's folders, its UI's terminal and
+// newSetup returns a setup on the run's folders, its UI's pickers and
 // prompts, on this machine.
 func newSetup(a *app) setup {
 	u := a.u
 	return setup{
-		ui:       u,
-		dirs:     a.dirs,
-		terminal: func() bool { return u.StdinIsTerminal() && u.StdoutIsTerminal() },
-		pickOne:  u.PickOne,
-		pick:     pickParts(u),
-		answer:   u.Answer,
-		host:     func() (vm.Host, error) { return vm.ThisHost(a.host()) },
+		ui:      u,
+		dirs:    a.dirs,
+		canPick: u.CanPick,
+		pickOne: u.PickOne,
+		pick:    pickParts(u),
+		answer:  u.Answer,
+		host:    func() (vm.Host, error) { return vm.ThisHost(a.host()) },
 	}
 }
 
 // run saves what c chooses: base's features, then new VMs' agents and
-// layers. With nothing chosen, it asks in a terminal for those, with new
-// VMs' size and network policy before the agents; without one, it keeps
-// the features (every one until they're chosen) and saves them. A change
+// layers. With nothing chosen, it asks for those where its pickers are
+// shown (CanPick: what it saves is what they return), with new VMs' size
+// and network policy before the agents; otherwise it keeps the features
+// (every one until they're chosen) and saves them. A change
 // to the features says base rebuilds, and that devvm gc deletes the old
 // images. What config.toml sets isn't asked for, said, and a flag
 // choosing it is refused (set_in_config).
@@ -125,7 +126,7 @@ func (s setup) run(c setupChoice) error {
 	if err != nil {
 		return err
 	}
-	ask := c.none() && s.terminal()
+	ask := c.none() && s.canPick()
 	if c.features != nil || c.none() {
 		if err := s.saveFeatures(dirs, def, c.features); err != nil {
 			return err

@@ -186,11 +186,14 @@ func gcRun(ctx context.Context, a *app, h vm.Housekeeping, b *build.Env, o gcOpt
 	}
 	showGC(u, p)
 	showMaking(u, p)
-	if ok, err := confirmed(u, o.force, "devvm gc", func() bool { return u.Confirm(msg.GCConfirm()) }); !ok {
-		if err == nil {
-			u.Info(msg.NothingDeleted())
+	if !o.force {
+		yes, err := u.Confirm(msg.GCConfirm().AnsweredBy("--force"))
+		if err != nil || !yes {
+			if err == nil {
+				u.Info(msg.NothingDeleted())
+			}
+			return p.Skipped, err
 		}
-		return p.Skipped, err
 	}
 	deleted, err := p.Apply(ctx)
 	showGCDone(u, deleted)

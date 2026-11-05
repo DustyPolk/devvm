@@ -68,16 +68,15 @@ func (u *UI) PickOne(help msg.M, choices []Choice) int {
 }
 
 // pick runs pickLoop on the terminal, the sections' choices changed in
-// place; without one it leaves them as they are.
+// place; where it isn't shown (CanPick) it leaves them as they are.
 func (u *UI) pick(help msg.M, sections []Section, one bool) {
 	n := 0
 	for _, s := range sections {
 		n += len(s.Choices)
 	}
-	if n == 0 || !u.stdinTTY || !u.stdoutTTY {
+	if n == 0 || !u.CanPick() {
 		return
 	}
-	refuseInput(u, help)
 	restore, err := u.rawInput()
 	if err != nil {
 		return

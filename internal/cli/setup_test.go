@@ -32,9 +32,9 @@ func setupSandbox(t *testing.T, terminal bool) (setup, paths.Dirs, *[]string) {
 	var sized []string
 	u, _, _ := testUI()
 	s := setup{
-		ui:       u,
-		dirs:     func() (paths.Dirs, error) { return d, nil },
-		terminal: func() bool { return terminal },
+		ui:      u,
+		dirs:    func() (paths.Dirs, error) { return d, nil },
+		canPick: func() bool { return terminal },
 		pickOne: func(help msg.M, cs []ui.Choice) int {
 			if help.ID() != "network_default_help" {
 				t.Errorf("asked %s", help.ID())
@@ -48,7 +48,7 @@ func setupSandbox(t *testing.T, terminal bool) (setup, paths.Dirs, *[]string) {
 			parts[0].Rows[0].On = true
 			return parts
 		},
-		answer: func(m msg.M) string { sized = append(sized, m.Names()); return "" },
+		answer: func(q msg.Question) (string, error) { sized = append(sized, q.M().Names()); return "", nil },
 		host:   func() (vm.Host, error) { return vm.Host{CPUs: 8, MemoryGiB: 32}, nil },
 	}
 	return s, d, &sized

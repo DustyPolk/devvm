@@ -38,13 +38,19 @@ const streamWait = 2 * time.Second
 // on.
 type Flags struct {
 	Verbose bool // -v/--verbose: the run log streamed to stderr too
-	NoInput bool // --no-input: no question asked; each fails, naming its answer
+	NoInput bool // --no-input: no question asked; each is refused, naming its answer
+	// PipedAnswers reads questions' answers from input that isn't a
+	// terminal, a line each, without their prompts: the CLI tests' way to
+	// answer, which only a test build turns on.
+	PipedAnswers bool
 }
 
-// SetFlags sets the run's -v/--verbose and --no-input.
+// SetFlags sets the run's -v/--verbose and --no-input, and whether
+// answers are piped.
 func (u *UI) SetFlags(f Flags) {
 	u.verboseOn.Store(f.Verbose)
 	u.noInput.Store(f.NoInput)
+	u.pipedAnswers.Store(f.PipedAnswers)
 }
 
 // verbose reports whether u streams the run log (Flags.Verbose).

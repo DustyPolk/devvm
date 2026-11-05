@@ -32,7 +32,6 @@ func printed(t *testing.T, e *Env, tty bool) *[]string {
 	}
 	f := fake(e)
 	f.Terminal = tty
-	e.CanAsk = func() bool { return tty }
 	f.OnWarn = func(m msg.M) { got = append(got, m.Names()) }
 	f.OnInfo = f.OnWarn
 	f.OnConfirm = func(m msg.M) bool { got = append(got, "asked "+m.Names()); return true }

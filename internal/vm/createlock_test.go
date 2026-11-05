@@ -164,7 +164,6 @@ func TestCreateLockRefuses(t *testing.T) {
 		t.Fatal(err)
 	}
 	fake(e).Terminal = true
-	e.CanAsk = func() bool { return true }
 	if err := (Launch{e}).Up(t.Context(), newOpts()); msg.NamesOf(err) != "create_running vm="+vm {
 		t.Errorf("up: %v", msg.NamesOf(err))
 	}

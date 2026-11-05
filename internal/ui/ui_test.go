@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -111,65 +112,95 @@ func TestDiePrintsAndExits1(t *testing.T) {
 	}
 }
 
+// question is a question for the tests, --force its answer.
+func question(name string) msg.Question { return msg.MsgUnknown(name).AnsweredBy("--force") }
+
+// atTerminal returns a UI whose input, in, is a terminal.
+func atTerminal(t *testing.T, in string) (u *UI, out, errOut *bytes.Buffer) {
+	t.Helper()
+	u, out, errOut = testUI(t, in)
+	u.stdinTTY = true
+	return u, out, errOut
+}
+
+// refusal is err's refusal, its question and message by their names, or
+// "not refused".
+func refusal(err error) string {
+	r, ok := errors.AsType[*msg.Refusal](err)
+	if !ok {
+		return fmt.Sprintf("not refused: %v", err)
+	}
+	return r.Question.Names() + " / " + r.Msg.Names()
+}
+
 func TestConfirm(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		in   string
-		bare bool
-		want bool
-	}{
-		{"\n", false, true},
-		{"y\n", false, true},
-		{"n\n", false, false},
-		{"N\n", true, false},
-		{"no", false, false}, // the last line needn't end in a newline
+	for in, want := range map[string]bool{
+		"\n": true, "y\n": true, "n\n": false, "N\n": false,
+		"no": false, // the last line needn't end in a newline
 	} {
-		u, _, _ := testUI(t, tc.in)
-		var q []msg.M
-		if !tc.bare {
-			q = append(q, msg.MsgUnknown("x"))
-		}
-		if got := u.Confirm(q...); got != tc.want {
-			t.Errorf("Confirm with %q = %v, want %v", tc.in, got, tc.want)
+		u, _, _ := atTerminal(t, in)
+		if got, err := u.Confirm(question("x")); got != want || err != nil {
+			t.Errorf("Confirm with %q = %v, %v; want %v", in, got, err, want)
 		}
 	}
-	u, _, _ := testUI(t, "")
-	if code := exitCode(func() { u.Confirm(msg.MsgUnknown("x")) }); code != 1 {
-		t.Errorf("no answer at all: exit code %d, want 1", code)
+	u, _, _ := atTerminal(t, "")
+	if got, err := u.Confirm(question("x")); got || refusal(err) != " / no_input answer=--force" {
+		t.Errorf("no answer at all: %v, %s", got, refusal(err))
 	}
 }
 
 func TestAsk(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]bool{"y\n": true, "Yes\n": true, "n\n": false, "\n": false, "x\n": false} {
-		u, _, _ := testUI(t, in)
-		if got := u.Ask(msg.MsgUnknown("me")); got != want {
-			t.Errorf("Ask with %q = %v, want %v", in, got, want)
+		u, _, _ := atTerminal(t, in)
+		if got, err := u.Ask(question("me")); got != want || err != nil {
+			t.Errorf("Ask with %q = %v, %v; want %v", in, got, err, want)
 		}
 	}
-	u, _, _ := testUI(t, "")
-	if code := exitCode(func() { u.Ask(msg.MsgUnknown("me")) }); code != 1 {
-		t.Errorf("no answer at all: exit code %d, want 1", code)
+	u, _, _ := atTerminal(t, "")
+	if got, err := u.Ask(question("me")); got || refusal(err) != " / no_input answer=--force" {
+		t.Errorf("no answer at all: %v, %s", got, refusal(err))
 	}
 }
 
+// A question's prompt and context are printed in a terminal; with piped
+// answers, neither is.
 func TestPromptsOnlyAtATerminal(t *testing.T) {
 	t.Parallel()
-	u, _, errOut := testUI(t, "y\n\n")
-	u.Ask(msg.MsgUnknown("me"))
-	if errOut.Len() != 0 {
-		t.Errorf("input isn't a terminal, but the prompt was printed: %q", errOut)
+	q := question("me").About(msg.MsgUnknown("about"))
+	u, _, errOut := testUI(t, "y\n")
+	u.SetFlags(Flags{PipedAnswers: true})
+	if ok, err := u.Ask(q); !ok || err != nil || errOut.Len() != 0 {
+		t.Errorf("piped: %v, %v, printed %q", ok, err, errOut)
 	}
-	u.stdinTTY = true
-	u.Confirm()
-	if got, want := errOut.String(), "[Y/n] "; got != want {
+	u, _, errOut = atTerminal(t, "y\n\n")
+	if ok, err := u.Ask(q); !ok || err != nil {
+		t.Errorf("Ask: %v, %v", ok, err)
+	}
+	if got, want := errOut.String(), "msg_unknown name=about\nmsg_unknown name=me [y/N] "; got != want {
 		t.Errorf("prompt %q, want %q", got, want)
 	}
-	u, _, errOut = testUI(t, "y\n")
-	u.stdinTTY = true
-	u.Ask(msg.MsgUnknown("me"))
-	if got, want := errOut.String(), "msg_unknown name=me [y/N] "; got != want {
+	errOut.Reset()
+	if ok, err := u.Confirm(question("me")); !ok || err != nil {
+		t.Errorf("Confirm: %v, %v", ok, err)
+	}
+	if got, want := errOut.String(), "msg_unknown name=me [Y/n] "; got != want {
 		t.Errorf("prompt %q, want %q", got, want)
+	}
+}
+
+// Answer reads a value without the spaces around it, "" for Enter.
+func TestAnswer(t *testing.T) {
+	t.Parallel()
+	u, _, errOut := atTerminal(t, " 4 \n\n")
+	for _, want := range []string{"4", ""} {
+		if got, err := u.Answer(question("cpus")); got != want || err != nil {
+			t.Errorf("Answer = %q, %v; want %q", got, err, want)
+		}
+	}
+	if got, want := errOut.String(), "msg_unknown name=cpus msg_unknown name=cpus "; got != want {
+		t.Errorf("prompts %q, want %q", got, want)
 	}
 }
 
@@ -191,13 +222,19 @@ func TestStderrIsForLogLines(t *testing.T) {
 	}
 }
 
-// A secret is read without echo at a terminal, after the prompt; else as a
-// line, with no prompt.
+// A secret is read without echo at a terminal, after its context and
+// prompt; with piped answers as a line, with neither; without a terminal
+// it's refused. Line reads a line, all that's left at the end of input.
 func TestSecret(t *testing.T) {
 	t.Parallel()
+	q := msg.TokenPrompt().AnsweredBy("--stdin").About(msg.GithubTokenHowto())
 	u, out, errOut := testUI(t, "ghp_x\r\nrest")
-	if v := u.Secret(msg.TokenPrompt()); v != "ghp_x" || errOut.Len() != 0 {
-		t.Errorf("piped: %q, stderr %q", v, errOut)
+	if v, err := u.Secret(q); v != "" || refusal(err) != "token_prompt / no_input answer=--stdin" {
+		t.Errorf("no terminal: %q, %s", v, refusal(err))
+	}
+	u.SetFlags(Flags{PipedAnswers: true})
+	if v, err := u.Secret(q); v != "ghp_x" || err != nil || errOut.Len() != 0 {
+		t.Errorf("piped: %q, %v, stderr %q", v, err, errOut)
 	}
 	if v := u.Line(); v != "rest" {
 		t.Errorf("the end of input: %q", v)
@@ -205,58 +242,139 @@ func TestSecret(t *testing.T) {
 	if v := u.Line(); v != "" {
 		t.Errorf("after it: %q", v)
 	}
+	if v, err := u.Secret(q); v != "" || refusal(err) != "token_prompt / no_input answer=--stdin" {
+		t.Errorf("piped, at the end of input: %q, %s", v, refusal(err))
+	}
 	u.readPassword = func() (string, error) { return "ghp_y", nil }
 	u.stdinTTY = true
-	if v := u.Secret(msg.TokenPrompt()); v != "ghp_y" || errOut.String() != "token_prompt \n" || out.Len() != 0 {
-		t.Errorf("terminal: %q, stderr %q", v, errOut)
+	if v, err := u.Secret(q); v != "ghp_y" || err != nil || errOut.String() != "github_token_howto\ntoken_prompt \n" || out.Len() != 0 {
+		t.Errorf("terminal: %q, %v, stderr %q", v, err, errOut)
+	}
+	u.readPassword = func() (string, error) { return "", errors.New("closed") }
+	if _, err := u.Secret(q); refusal(err) != " / no_input answer=--stdin" {
+		t.Errorf("a terminal that can't be read: %s", refusal(err))
 	}
 }
 
-// At the end of the input, with no answer, a question fails as it does
-// with --no-input: the question shown first unless its prompt was, then
-// what answers it, or a terminal for one only a terminal answers.
-func TestNoAnswer(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		ask  func(u *UI)
-		tty  bool
-		want string
-	}{
-		{func(u *UI) { u.Ask(msg.GCConfirm()) }, false, "gc_confirm\ndevvm: no_input answer=--force\n"},
-		{func(u *UI) { u.Confirm(msg.NetAsk()) }, false, "net_ask\ndevvm: no_input answer=--network-policy or --no-network-policy\n"},
-		{func(u *UI) { u.Answer(msg.SizeCpusPrompt("4")) }, false, "size_cpus_prompt cpus=4\ndevvm: no_input answer=devvm size -g\n"},
-		{func(u *UI) { u.Ask(msg.DeleteAnyway()) }, false, "delete_anyway\ndevvm: no_input_terminal\n"},
-		{func(u *UI) { u.Ask(msg.GCConfirm()) }, true, "gc_confirm [y/N] \ndevvm: no_input answer=--force\n"},
-	} {
-		u, _, errOut := testUI(t, "")
-		u.stdinTTY = tc.tty
-		if code := exitCode(func() { tc.ask(u) }); code != 1 || errOut.String() != tc.want {
-			t.Errorf("exit %d, stderr %q, want 1 and %q", code, errOut, tc.want)
-		}
+// prompts are the UI's four prompts, each asking q.
+func prompts() map[string]func(u *UI, q msg.Question) error {
+	return map[string]func(u *UI, q msg.Question) error{
+		"ask":     func(u *UI, q msg.Question) error { _, err := u.Ask(q); return err },
+		"confirm": func(u *UI, q msg.Question) error { _, err := u.Confirm(q); return err },
+		"answer":  func(u *UI, q msg.Question) error { _, err := u.Answer(q); return err },
+		"secret":  func(u *UI, q msg.Question) error { _, err := u.Secret(q); return err },
 	}
 }
 
-// With --no-input every question fails before anything is read, after
-// showing it: naming what answers it, or a terminal for one only a
-// terminal answers.
+// refuse returns what the UI shows of err, a prompt's refusal, as a
+// command's failure shows it (Refused): stderr from then on.
+func refuse(u *UI, errOut *bytes.Buffer, err error) string {
+	r, ok := errors.AsType[*msg.Refusal](err)
+	if !ok {
+		return fmt.Sprintf("not refused: %v", err)
+	}
+	errOut.Reset()
+	u.Refused(r)
+	return errOut.String()
+}
+
+// With --no-input every prompt is refused before anything is read or
+// printed, even in a terminal: its refusal shows the question, then names
+// what answers it; one RefusedWith made is its own refusal alone.
 func TestNoInput(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		ask  func(u *UI)
-		want string
-	}{
-		{func(u *UI) { u.Ask(msg.GCConfirm()) }, "gc_confirm\ndevvm: no_input answer=--force\n"},
-		{func(u *UI) { u.Confirm(msg.NetAsk()) }, "net_ask\ndevvm: no_input answer=--network-policy or --no-network-policy\n"},
-		{func(u *UI) { u.Secret(msg.TokenPrompt()) }, "token_prompt\ndevvm: no_input answer=--stdin\n"},
-		{func(u *UI) { u.Ask(msg.DeleteAnyway()) }, "delete_anyway\ndevvm: no_input_terminal\n"},
-	} {
+	for name, ask := range prompts() {
+		for _, tc := range []struct {
+			q    msg.Question
+			want string
+		}{
+			{question("x"), "msg_unknown name=x\ndevvm: no_input answer=--force\n"},
+			{msg.DeleteAnyway().RefusedWith(msg.NoTerminalDelete("devvm rm")), "devvm: no_terminal_delete command=devvm rm\n"},
+		} {
+			want := tc.want
+			u, _, errOut := atTerminal(t, "y\n")
+			u.SetFlags(Flags{NoInput: true})
+			err := ask(u, tc.q.About(msg.MsgUnknown("about")))
+			if errOut.Len() != 0 {
+				t.Errorf("%s: printed %q before the refusal", name, errOut)
+			}
+			if got := refuse(u, errOut, err); got != want {
+				t.Errorf("%s: shown %q, want %q", name, got, want)
+			}
+			if line := u.Line(); line != "y" {
+				t.Errorf("%s: the answer was read: %q left", name, line)
+			}
+		}
+	}
+}
+
+// Without a terminal, every prompt is refused in the same way, with
+// nothing read or printed.
+func TestNoTerminal(t *testing.T) {
+	t.Parallel()
+	for name, ask := range prompts() {
 		u, _, errOut := testUI(t, "y\n")
-		u.SetFlags(Flags{NoInput: true})
-		if code := exitCode(func() { tc.ask(u) }); code != 1 || errOut.String() != tc.want {
-			t.Errorf("exit %d, stderr %q, want %q", code, errOut, tc.want)
+		err := ask(u, question("x").About(msg.MsgUnknown("about")))
+		if errOut.Len() != 0 {
+			t.Errorf("%s: printed %q before the refusal", name, errOut)
+		}
+		if got, want := refuse(u, errOut, err), "msg_unknown name=x\ndevvm: no_input answer=--force\n"; got != want {
+			t.Errorf("%s: shown %q, want %q", name, got, want)
 		}
 		if line := u.Line(); line != "y" {
-			t.Errorf("the answer was read: %q left", line)
+			t.Errorf("%s: the answer was read: %q left", name, line)
 		}
+	}
+}
+
+// At the end of the input with no answer, a prompt is refused as it is
+// with --no-input, after a newline ending the prompt in a terminal, where
+// the question isn't shown again; with piped answers, it is.
+func TestNoAnswer(t *testing.T) {
+	t.Parallel()
+	for name, ask := range prompts() {
+		if name == "secret" {
+			continue // a terminal's secret is read without the input (TestSecret)
+		}
+		u, _, errOut := atTerminal(t, "")
+		err := ask(u, question("x"))
+		if got, want := errOut.String(), "msg_unknown name=x"; !strings.HasPrefix(got, want) || !strings.HasSuffix(got, "\n") {
+			t.Errorf("%s: prompt %q, want %q and a newline", name, got, want)
+		}
+		if got, want := refuse(u, errOut, err), "devvm: no_input answer=--force\n"; got != want {
+			t.Errorf("%s: shown %q, want %q", name, got, want)
+		}
+	}
+	for name, ask := range prompts() {
+		u, _, errOut := testUI(t, "")
+		u.SetFlags(Flags{PipedAnswers: true})
+		if got, want := refuse(u, errOut, ask(u, question("x"))), "msg_unknown name=x\ndevvm: no_input answer=--force\n"; got != want {
+			t.Errorf("piped %s: shown %q, want %q", name, got, want)
+		}
+	}
+}
+
+// Piped answers answer each question with a line of input, in order,
+// without a terminal: the CLI tests' way to answer.
+func TestPipedAnswers(t *testing.T) {
+	t.Parallel()
+	u, _, errOut := testUI(t, "y\nn\n8\n")
+	u.SetFlags(Flags{PipedAnswers: true})
+	ask, _ := u.Ask(question("a"))
+	confirm, _ := u.Confirm(question("b"))
+	answer, err := u.Answer(question("c"))
+	if !ask || confirm || answer != "8" || err != nil || errOut.Len() != 0 {
+		t.Errorf("ask %v, confirm %v, answer %q, %v; printed %q", ask, confirm, answer, err, errOut)
+	}
+}
+
+// Once the run is interrupted, a refusal prints nothing.
+func TestRefusedInterrupted(t *testing.T) {
+	t.Parallel()
+	u, _, errOut := testUI(t, "")
+	u.interrupted.Store(true)
+	u.Refused(question("x").Refused(false))
+	if errOut.Len() != 0 {
+		t.Errorf("printed %q", errOut)
 	}
 }

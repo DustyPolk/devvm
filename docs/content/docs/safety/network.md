@@ -33,7 +33,7 @@ https://devvm.dev/docs/safety/network/#turning-it-on-or-off
 Turn it on? [Y/n]
 ```
 
-`--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, network policy is on. A VM keeps its choice. On an existing VM devvm ignores both flags and warns you.
+`--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, or you give `--no-input`, network policy is on. A VM keeps its choice. On an existing VM devvm ignores both flags and warns you.
 
 To answer the question for every new VM, save `on` or `off` with `devvm network -g on` or `devvm network -g off`, or choose it in [devvm setup](../using/settings.md#devvm-setup), and devvm makes each new VM that way without asking. `devvm network -g ask` brings the question back, and `devvm network -g` shows what new VMs get: `ask`, which is the default, `on` or `off`, followed by where it came from after a `#`. `devvm network -g --json` prints it as `policy`, with `source`. devvm reads the saved answer only when it creates a VM, so the VMs you already have keep their own network policy, and the two flags still choose for one new VM. You can also set it with `network` in [`config.toml`](../using/settings.md#configtoml), which wins over the saved answer, and then `devvm network -g` refuses to change it and names the file ([where a default comes from](../using/settings.md#where-a-default-comes-from)).
 

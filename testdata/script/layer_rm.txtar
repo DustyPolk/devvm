@@ -47,7 +47,7 @@ stub_calls
 # Without a terminal it refuses unless --force; in one it asks, and no
 # keeps the VM.
 ! exec devvm layer rm nix
-stderr '^devvm: force_needed command=devvm layer rm nix$'
+stderr '^devvm: no_input answer=--force$'
 ttyin -stdin $WORK/no.txt
 exec devvm layer rm nix
 stderr '^remake_confirm image=docker\+foo vm=devvm-web-[0-9a-f]{14} \[y/N\] '

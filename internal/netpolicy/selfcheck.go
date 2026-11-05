@@ -29,7 +29,7 @@ var directArgv = []string{"curl", "--noproxy", "*", "-sS", "-m", "3", "-o", "/de
 // network devvm didn't set up), which a restart wouldn't change. One
 // started some other way, or before its network policy was turned on, is
 // offered a restart, confined (restart starts
-// it again); without a terminal, or if it's still unenforced after the
+// it again); where devvm can't ask, or if it's still unenforced after the
 // restart, devvm stops. Either way the VM is stopped first, so it isn't
 // left reaching the internet. A restart declined is warned about, and the
 // VM is used as it is.
@@ -55,10 +55,11 @@ func (p *Proxy) SelfCheck(ctx context.Context, b backend.Backend, st *state.VM, 
 	if run.Confined {
 		return p.stop(ctx, b, vm, msg.NetDirectRoute(vm))
 	}
-	if !p.StdinIsTerminal() {
+	yes, err := p.Confirm(msg.NetUnenforcedRestart(vm).AnsweredBy("devvm restart"))
+	if err != nil {
 		return p.stop(ctx, b, vm, msg.NetUnenforcedStop(vm))
 	}
-	if !p.Confirm(msg.NetUnenforcedRestart(vm)) {
+	if !yes {
 		p.Warn(msg.NetUnenforced(vm))
 		return nil
 	}

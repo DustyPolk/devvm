@@ -33,11 +33,15 @@ func gcCaches(ctx context.Context, a *app, env *vm.Env, o gcOpts, skipped map[st
 		for _, e := range entries {
 			u.Say(msg.GCCacheEntry(humanSize(e.Size), e.What))
 		}
-		if ok, err := confirmed(u, o.force, "devvm gc --caches", func() bool { return u.Confirm(msg.GCCacheConfirm(be.Name())) }); err != nil {
-			return err
-		} else if !ok {
-			u.Info(msg.NothingDeleted())
-			continue
+		if !o.force {
+			yes, err := u.Confirm(msg.GCCacheConfirm(be.Name()).AnsweredBy("--force"))
+			if err != nil {
+				return err
+			}
+			if !yes {
+				u.Info(msg.NothingDeleted())
+				continue
+			}
 		}
 		if err := be.DeleteCache(ctx, entries); err != nil {
 			return err

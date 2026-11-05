@@ -155,15 +155,16 @@ func (e Launch) finishRemake(ctx context.Context, o Options, t *target) error {
 }
 
 // remakeUnfinished reports whether up deletes t, a VM whose creation
-// didn't finish, and makes it again: asked in a terminal, without
-// --no-input ([y/N]). It never ran a shell, so nothing of the user's is in
-// it. A finished VM is opened; an unfinished one not asked about (a parent
-// folder's, or no question) or kept is refused (vm_unfinished).
+// didn't finish, and makes it again: asked ([y/N]), and no where it can't
+// be. It never ran a shell, so nothing of the user's is in it. A finished
+// VM is opened; an unfinished one not asked about (a parent folder's, or
+// unasked) or kept is refused (vm_unfinished).
 func remakeUnfinished(e *Env, t *target) bool {
-	if t.st.Finished() || t.sub != "" || e.CanAsk == nil || !e.CanAsk() {
+	if t.st.Finished() || t.sub != "" {
 		return false
 	}
-	return e.Ask(msg.RemakeUnfinished(t.f.Name))
+	yes, err := e.Ask(msg.RemakeUnfinished(t.f.Name).AnsweredBy("devvm rm, then devvm"))
+	return err == nil && yes
 }
 
 // newVM is what create checked and chose for a new VM before building

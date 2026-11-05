@@ -49,7 +49,7 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 }
 
 // Adopt gives the folder the VM made for an earlier folder at its path,
-// after asking in a terminal, or with force (--force): its files, tokens
+// after asking, or with force (--force): its files, tokens
 // and allowlist. Its .git is locked as new at its next launch. Only the
 // VM of this path is adopted, never a parent folder's. A VM whose folder
 // moved here is moved here (finder.moveHere), --force answering its
@@ -72,12 +72,11 @@ func (e Lifecycle) Adopt(ctx context.Context, name string, force bool) error {
 		return nil
 	}
 	was := st.Dir
-	switch {
-	case force:
-	case !e.StdinIsTerminal():
-		return msg.VMOtherFolderAdopt(vm, was)
-	case !e.Ask(msg.AdoptVM(vm, was)):
-		return nil
+	if !force {
+		yes, err := e.Ask(msg.AdoptVM(vm, was).RefusedWith(msg.VMOtherFolderAdopt(vm, was)))
+		if err != nil || !yes {
+			return err
+		}
 	}
 	id, err := platform.FolderID(t.f.Dir)
 	if err != nil {
@@ -110,16 +109,16 @@ type RmOptions struct {
 	NoCloneCheck bool
 }
 
-// Rm deletes the folder's VM, after asking in a terminal, or with
-// --force; without either it refuses (force_needed). One in the middle of
+// Rm deletes the folder's VM, after asking, or with --force; where it
+// can't ask it refuses, naming --force. One in the middle of
 // a remake is deleted too, its old machine with it (teardown). Its agents' history
 // is exported first unless --no-export: an export that fails keeps it.
 // A --clone VM's branches the repo lacks and uncommitted changes are
-// checked first (cloneCheck), which asks only in a terminal, unless
+// checked first (cloneCheck), whose questions no flag answers, unless
 // --no-clone-check, which warns that they're lost instead. A VM made
 // for an earlier folder at this path, or a parent folder's VM found from
-// a subfolder, is deleted only after asking in a terminal, which --force
-// never answers, and never without one; the earlier folder's isn't
+// a subfolder, is deleted only after asking, which --force never
+// answers; the earlier folder's isn't
 // exported, as its folder is gone. While another devvm makes the folder's
 // VM it refuses (holdForRm).
 func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
@@ -136,27 +135,19 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 	vm, st := t.f.Name, t.st
 	asked := false
 	if t.sub != "" {
-		if !e.StdinIsTerminal() {
-			return msg.RmParentVM(t.f.Dir, vm)
-		}
-		if !e.Ask(msg.DeleteParentVM(t.f.Dir, vm)) {
-			return nil
+		yes, err := e.Ask(msg.DeleteParentVM(t.f.Dir, vm).RefusedWith(msg.RmParentVM(t.f.Dir, vm)))
+		if err != nil || !yes {
+			return err
 		}
 		asked = true
 	}
 	if t.other {
 		was := st.Dir
-		if !e.StdinIsTerminal() {
-			return msg.VMOtherFolderRm(vm, was)
-		}
-		if !e.Ask(msg.DeleteOtherFolderVM(vm, was)) {
-			return nil
+		yes, err := e.Ask(msg.DeleteOtherFolderVM(vm, was).RefusedWith(msg.VMOtherFolderRm(vm, was)))
+		if err != nil || !yes {
+			return err
 		}
 		asked, o.NoExport = true, true
-	}
-	confirm := !asked && !o.Force
-	if confirm && !e.StdinIsTerminal() {
-		return msg.ForceNeeded("devvm rm")
 	}
 	// A VM whose creation didn't finish never ran: no history, no work.
 	checkClone := st.Finished() && isClone(st) && !t.other
@@ -164,9 +155,15 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 		e.Warn(msg.CloneCheckSkipped("devvm rm", vm))
 		checkClone = false
 	}
-	if confirm && !e.Ask(msg.RmConfirm(vm)) {
-		e.Info(msg.Kept(vm))
-		return nil
+	if !asked && !o.Force {
+		yes, err := e.Ask(msg.RmConfirm(vm).AnsweredBy("--force"))
+		if err != nil {
+			return err
+		}
+		if !yes {
+			e.Info(msg.Kept(vm))
+			return nil
+		}
 	}
 	if checkClone {
 		keep, err := cloneCheck{clones: e.clones, command: "devvm rm"}.run(ctx, t)
@@ -188,8 +185,8 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 // it's this folder's (Rm) or its project folder is gone or not connected
 // (FolderOf); a
 // VM whose folder is still there is deleted from that folder. It asks
-// first in a terminal, or deletes with --force, and refuses without
-// either (force_needed), as Rm does. Its agents' history is exported
+// first, or deletes with --force, and refuses where it can't ask, as Rm
+// does. Its agents' history is exported
 // first unless --no-export, which needs the VM running: one stopped would
 // make its folder again as it starts (its backend makes a missing mount's
 // folder), so it's refused instead, unless it's a --clone VM, which
@@ -226,7 +223,7 @@ func (e Lifecycle) RmVM(ctx context.Context, name string, o RmOptions) error {
 
 // rmGone deletes t, a VM whose folder is gone or not connected, for RmVM.
 // One whose folder is on a disk that isn't connected is deleted only
-// after asking in a terminal, which --force never answers.
+// after asking, which --force never answers.
 func (e Lifecycle) rmGone(ctx context.Context, t *target, folder FolderState, o RmOptions) error {
 	release, err := holdForRm(e.Env, t)
 	if err != nil {
@@ -242,19 +239,14 @@ func (e Lifecycle) rmGone(ctx context.Context, t *target, folder FolderState, o 
 	if err := e.stillGone(ctx, t, folder, export && !clone); err != nil {
 		return err
 	}
-	unconnected := folder == FolderNotConnected
-	if unconnected && !e.StdinIsTerminal() {
-		return msg.RmVMNotConnected(st.Dir, vm)
-	}
-	if !o.Force && !e.StdinIsTerminal() {
-		return msg.ForceNeeded("devvm rm")
-	}
 	if clone {
 		e.Warn(msg.CloneCheckSkipped("devvm rm", vm))
 	}
-	if !e.askRmGone(t, unconnected, o.Force) {
-		e.Info(msg.Kept(vm))
-		return nil
+	if yes, err := e.askRmGone(t, folder == FolderNotConnected, o.Force); err != nil || !yes {
+		if err == nil {
+			e.Info(msg.Kept(vm))
+		}
+		return err
 	}
 	// While it asked, the folder may have come back (a disk plugged in
 	// again), another devvm may have made the VM again there, or stopped
@@ -273,11 +265,15 @@ func (e Lifecycle) rmGone(ctx context.Context, t *target, folder FolderState, o 
 // askRmGone asks, for rmGone, whether to delete t: with force, only when
 // its folder is on a disk that isn't connected (unconnected), which
 // --force never answers.
-func (e Lifecycle) askRmGone(t *target, unconnected, force bool) bool {
-	if unconnected {
-		return e.Ask(msg.DeleteNotConnectedFolderVM(t.st.Dir, t.f.Name))
+func (e Lifecycle) askRmGone(t *target, unconnected, force bool) (bool, error) {
+	dir, vm := t.st.Dir, t.f.Name
+	switch {
+	case unconnected:
+		return e.Ask(msg.DeleteNotConnectedFolderVM(dir, vm).RefusedWith(msg.RmVMNotConnected(dir, vm)))
+	case force:
+		return true, nil
 	}
-	return force || e.Ask(msg.DeleteGoneFolderVM(t.st.Dir, t.f.Name))
+	return e.Ask(msg.DeleteGoneFolderVM(dir, vm).AnsweredBy("--force"))
 }
 
 // stillGone checks, for rmGone, that t's state is still the one it read
@@ -435,9 +431,8 @@ func importHistory(ctx context.Context, e *Env, t *target, file string) error {
 // offerHistory returns the export of agents' history the new VM vm, of
 // the folder dir, gets: the newest devvm saved for dir, never another
 // folder's, when the VM has an agent among its shared tools (names) and
-// the user says yes in a terminal ([y/N]: the export is an old VM's
-// content). Without a question it says how to import it later, and
-// returns "".
+// the user says yes ([y/N]: the export is an old VM's content). Where it
+// can't ask, it says how to import it later, and returns "".
 func (e creation) offerHistory(vm, dir string, names []string) string {
 	if len(image.AgentsOf(names)) == 0 {
 		return ""
@@ -446,11 +441,12 @@ func (e creation) offerHistory(vm, dir string, names []string) string {
 	if err != nil || !ok {
 		return ""
 	}
-	if e.CanAsk == nil || !e.CanAsk() {
+	yes, err := e.Ask(msg.HistoryImportAsk(x.Path, vm).AnsweredBy("devvm history import"))
+	if err != nil {
 		e.Note(msg.HistoryImportLater(x.Path, vm))
 		return ""
 	}
-	if !e.Ask(msg.HistoryImportAsk(x.Path, vm)) {
+	if !yes {
 		return ""
 	}
 	return x.Path

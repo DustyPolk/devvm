@@ -36,9 +36,10 @@ func (a *sizeAsker) choice(d paths.Dirs, h Host) SizeChoice {
 	return SizeChoice{Dirs: d, Host: h, Reporter: a.ui()}
 }
 
-// ui asks for values with answer and records what it's told.
+// ui asks for values with answer, in a terminal, and records what it's
+// told.
 func (a *sizeAsker) ui() *msg.Fake {
-	return &msg.Fake{OnAnswer: a.answer, OnSay: a.record, OnWarn: a.record, OnInfo: a.record}
+	return &msg.Fake{Terminal: true, OnAnswer: a.answer, OnSay: a.record, OnNote: a.record, OnWarn: a.record, OnInfo: a.record}
 }
 
 // saveSize saves s as new VMs' size in d's settings.json.
@@ -82,7 +83,7 @@ func TestSizeChoiceAsk(t *testing.T) {
 		shown   []string
 	}{
 		{
-			name: "Enter keeps base's", host: big, answers: []string{"", " "},
+			name: "Enter keeps base's", host: big, answers: []string{"", ""},
 			shown: []string{
 				"size_question have_cpus=8 have_memory=32", "size_cpus_prompt cpus=4",
 				"size_memory_prompt memory=8", "size_defaults size=cpus=4 memory=8GiB",
@@ -126,7 +127,7 @@ func TestSizeChoiceAsk(t *testing.T) {
 			name: "config.toml's CPUs", host: big, config: "[size]\ncpus = 2\n", answers: []string{"16"},
 			want: &Size{CPUs: "2", Memory: "16"},
 			shown: []string{
-				"size_question have_cpus=8 have_memory=32", "setup_in_config file=$CONFIG key=size.cpus",
+				"setup_in_config file=$CONFIG key=size.cpus", "size_question have_cpus=8 have_memory=32",
 				"size_memory_prompt memory=8", "size_defaults size=cpus=2 memory=16GiB",
 			},
 		},
@@ -161,6 +162,21 @@ func TestSizeChoiceAsk(t *testing.T) {
 				t.Errorf("saved %+v, want %+v", got, want)
 			}
 		})
+	}
+}
+
+// Where its question is refused, Ask returns the refusal, naming devvm
+// size -g, having said and saved nothing.
+func TestSizeChoiceRefused(t *testing.T) {
+	d := testDirs(t)
+	a := &sizeAsker{t: t}
+	c := a.choice(d, Host{CPUs: 8, MemoryGiB: 32})
+	c.Reporter.(*msg.Fake).Terminal = false
+	if err := c.Ask(); msg.NamesOf(err) != "no_input answer=devvm size -g" {
+		t.Errorf("Ask: %v", msg.NamesOf(err))
+	}
+	if _, err := os.Stat(d.Settings()); err == nil || len(a.shown) != 0 {
+		t.Errorf("settings.json written, or said %q", a.shown)
 	}
 }
 
@@ -208,17 +224,18 @@ func writeFile(t *testing.T, path, data string) {
 	}
 }
 
-// The first run asks for new VMs' size in a terminal, before base's
-// features are chosen, when no size is set and none was given; the new
-// VM gets what's typed, and the next run doesn't ask.
+// The first run asks for new VMs' size, before base's features are
+// chosen, when no size is set and none was given; the new VM gets what's
+// typed, and the next run doesn't ask. Refused (no terminal), it goes on
+// with the size new VMs get.
 func TestFirstRunSize(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	a := &sizeAsker{t: t}
 	ui := a.ui()
 	ui.OnAsk, ui.OnConfirm = unasked(t), unasked(t)
 	e.Reporter = ui
-	// terminals makes devvm's input and output terminals, or neither.
-	terminals := func(on bool) { ui.Terminal, ui.StdoutTerminal = on, on }
+	// terminals has questions asked, or refused.
+	terminals := func(on bool) { ui.Terminal = on }
 	terminals(true)
 
 	asked := func(given Size) bool {

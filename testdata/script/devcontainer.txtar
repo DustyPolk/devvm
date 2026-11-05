@@ -222,7 +222,7 @@ stderr '^devvm: devcontainer_changed file=\.devcontainer\.json vm=devvm-upd-[0-9
 stub_reset
 ! exec devvm update
 stdout '^==> devcontainer_reread file=\.devcontainer\.json vm=devvm-upd-[0-9a-f]{14}$'
-stderr '^devvm: force_needed command=devvm update$'
+stderr '^devvm: no_input answer=--force$'
 stub_calls
 ! stdout 'limactl (stop|rename|clone|delete)'
 vm_state $UPD_dir/vm.json

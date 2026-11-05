@@ -67,7 +67,7 @@ stdout '^leftover state +1 +\S+ +leftover +- +gc --orphans +-$'
 ! exec devvm gc --orphans
 stdout '^gc_orphans count=1$'
 stdout '^gc_orphan backend=lima dir=/q vm=devvm-gone-12345612345602$'
-stderr '^devvm: force_needed command=devvm gc$'
+stderr '^devvm: no_input answer=--force$'
 stderr '^gc_orphan_recent vm=devvm-new-12345612345604$'
 stderr '^gc_orphan_elsewhere vm=devvm-moved-12345612345605$'
 rm $VMS/12345612345604 $VMS/12345612345605
