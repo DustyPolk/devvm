@@ -18,6 +18,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/vmname"
@@ -125,7 +126,7 @@ func TestCopyHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := copyHome(&in, &out, homeSkips(t.TempDir(), []string{"claude"})); err != nil {
+	if err := copyHome(&in, &out, homeSkips(paths.Dirs{Config: t.TempDir()}, []string{"claude"})); err != nil {
 		t.Fatal(err)
 	}
 	got := entries(t, out.Bytes())

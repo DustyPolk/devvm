@@ -126,6 +126,8 @@ func TestFiles(t *testing.T) {
 		{d.AgentKeys(), "/d/agent-keys.json"},
 		{d.Layers(), "/c/layers"},
 		{d.Secrets(), "/d/secrets"},
+		{d.AgentSettings("claude"), "/c/agents/claude"},
+		{d.AgentLogins("codex"), "/d/logins/codex"},
 		{d.SSHConfig(), "/d/ssh_config"},
 		{d.QEMUWrapper(), "/d/run/qemu"},
 		{d.ToolImage("go-1.2.0-0123456789ab.erofs"), "/d/tools/go-1.2.0-0123456789ab.erofs"},

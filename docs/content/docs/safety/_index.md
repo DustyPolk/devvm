@@ -14,7 +14,7 @@ Some of what devvm protects are your secrets. A secret is a credential devvm kee
 - **Keep [network policy](network.md) on, and keep allowlists short.** New VMs get it by default. Without it, code in the VM reaches everything this machine can, and with it, stolen data can go only to the hosts you allowed.
 - **Review the VM's changes before you run them on this machine or merge them.** Treat its commits as an untrusted contributor's.
 - **Use a fine-grained GitHub token, and bind only the secrets a VM needs.** A VM can do whatever its secrets allow, even when it never sees them ([secrets and keys the VM may use](attack-vectors.md#secrets-and-keys-the-vm-may-use)).
-- **Keep credentials out of the project folder and your agents' config folders.** The VM sees every file in them, including a `.env` file, with network policy or without ([mounts](../using/coding-agents.md#mounts)).
+- **Keep credentials out of the project folder and the settings folders of devvm's agent store.** The VM sees every file in them, including a `.env` file, with network policy or without ([mounts](../using/coding-agents.md#mounts)).
 - **Leave SSH agent forwarding off,** or use [devvm's own agent](../using/ssh.md#devvms-own-agent) with only the keys the VM needs.
 
 ## What a VM can reach
@@ -41,8 +41,8 @@ flowchart TB
   subgraph copied["Read-only or copied"]
     direction TB
     tools["the shared<br>tools,<br>read-only"]
-    folders["your agents'<br>config<br>folders,<br>read-only"]
-    files["copies of<br>their config<br>files, minus<br>your secrets<br>with network<br>policy"]
+    folders["devvm's<br>agent store's<br>folders,<br>read-only"]
+    files["copies of<br>its settings<br>files, minus<br>your secrets<br>with network<br>policy"]
     tools ~~~ folders ~~~ files
   end
   subgraph reach["The VM reaches"]
@@ -57,7 +57,7 @@ flowchart TB
 | --- | --- |
 | The project folder | The VM reads and writes it. With `--clone` the folder isn't mounted, and the VM has a clone of its own ([details](../using/clone.md)). |
 | `.git` hooks and config | devvm locks them on macOS, and it reports what a lock can't stop without preventing it ([details](git-protection.md)). With `--clone` they're out of reach. |
-| Your agents' config (skills, settings, logins) | The VM mounts its folders read-only and gets copies of its files, but never your agents' history ([details](../using/coding-agents.md)). |
+| Your agents' settings and logins (skills, settings, logins) | The VM mounts the folders of devvm's agent store read-only and gets copies of its files, but never your agents' history, and never the agents' own files in your home folder ([details](../using/coding-agents.md#devvms-agent-store)). |
 | The rest of your home folder, other projects | The VM doesn't mount them. |
 | Your SSH keys | Only with `devvm ssh-agent on`, and only while you're connected. With `devvm ssh-agent devvm`, the VM can use only the keys you added to devvm's own agent ([details](../using/ssh.md#agent-forwarding)). |
 | The network, with network policy | The VM reaches allowlisted hosts only, through a proxy on this machine ([details](network.md)). |

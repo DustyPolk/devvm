@@ -1,6 +1,6 @@
 ---
 title: devvm code
-weight: 5
+weight: 7
 ---
 
 Open this folder's VM in VS Code over Remote-SSH

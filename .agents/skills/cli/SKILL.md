@@ -13,7 +13,7 @@ The reasoning behind most rules is in the [Command Line Interface Guidelines](ht
 
 ## The tree
 
-devvm has 31 commands at the top, plus help. Each one is in a group of the root's help, in this order. The table shows each command with its subcommands and the values a setting takes, and each command's help lists its flags.
+devvm has 32 commands at the top, plus help. Each one is in a group of the root's help, in this order. The table shows each command with its subcommands and the values a setting takes, and each command's help lists its flags.
 
 | Group | Commands |
 | --- | --- |
@@ -22,7 +22,7 @@ devvm has 31 commands at the top, plus help. Each one is in a group of the root'
 | Links between VMs | group, group join NAME, with --as NAME, group leave; link, link add\|rm TARGET PORT, with --as NAME on add; link publish [PORTS], link unpublish PORTS |
 | Images | images, images rm IMAGE\|KEY..., build IMAGE, rebuild IMAGE, layer new NAME |
 | Disk space | space, gc, retention [KEY=VALUE...] |
-| This machine | setup, doctor, completion SHELL, limactl [ARGS...] |
+| This machine | setup, agent, agent import [AGENT...], doctor, completion SHELL, limactl [ARGS...] |
 
 size, ports and network take `-g` for what new VMs get, and network -g takes ask too. Every command takes `-h`/`--help`, `--no-input` and `-v`/`--verbose`, and the root takes `--version`. `devvm --help` prints the tree as it is, and `commandGroups` in `internal/cli/help.go` holds the groups. A subcommand can sit in a group other than its parent's, as layer add and layer rm do, and `devvm --help` then lists it by both names in that group.
 

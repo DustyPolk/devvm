@@ -28,7 +28,7 @@ func commandGroups() []commandGroup {
 		{"links", "Links between VMs:", []string{"link", "group"}},
 		{"images", "Images:", []string{"images", "build", "rebuild", "layer", "layer new"}},
 		{"space", "Disk space:", []string{"space", "gc", "retention"}},
-		{"machine", "This machine:", []string{"setup", "doctor", "completion", "limactl"}},
+		{"machine", "This machine:", []string{"setup", "agent", "doctor", "completion", "limactl"}},
 	}
 }
 

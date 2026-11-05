@@ -283,10 +283,9 @@ func TestOpenAsksToRestart(t *testing.T) {
 	} {
 		t.Run(strings.ReplaceAll(tc.name, ",", ""), func(t *testing.T) {
 			e, f := startEnv(t, allNative())
-			e.Dirs.Home = t.TempDir()
 			st := existingVM(t, e, Options{NetworkPolicy: true, Toolchains: &[]string{}, Agents: &[]string{"claude"}})
 			vm := st.Name()
-			skills := filepath.Join(e.Dirs.Home, ".claude", "skills")
+			skills := filepath.Join(agentStore(e.Dirs, "claude"), ".claude", "skills")
 			v := startVM{t, e, f, st}
 			named := map[string]string{
 				"size": "next_start_size", "agent": "next_start_agent", "mounts": "next_start_mounts", "net": "next_start_net_off",
@@ -300,7 +299,7 @@ func TestOpenAsksToRestart(t *testing.T) {
 				case "agent":
 					v.set(keyAgent, sshagent.On)
 				case "mounts":
-					mkdirs(t, e.Dirs.Home, ".claude/skills")
+					mkdirs(t, agentStore(e.Dirs, "claude"), ".claude/skills")
 				case "net":
 					v.set(keyNet, "off")
 				}

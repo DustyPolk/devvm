@@ -266,6 +266,8 @@ func TestShowCommandsTakeJSON(t *testing.T) {
 		"devvm history export": "it writes an export",
 		"devvm history import": "it changes the VM's files",
 		"devvm layer":          "it prints its help",
+		"devvm agent":          "it prints its help",
+		"devvm agent import":   "it copies files into devvm's store",
 		"devvm layer new":      "it writes a file",
 		"devvm restart":        "it restarts the VM",
 		"devvm stop":           "it stops the VM",

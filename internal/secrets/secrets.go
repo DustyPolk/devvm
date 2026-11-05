@@ -2,8 +2,8 @@
 // VM holds a placeholder of its own, and its proxy puts the real value into
 // requests for the token's hosts. Values live in the macOS Keychain, or in
 // files only the user can read elsewhere. Agents' logins (Codex, opencode,
-// Claude Code's MCP servers) stay in their own files on the host, read
-// with agentlogin.
+// Claude Code's MCP servers) stay in devvm's store of them on the host
+// (LoginFile), read with agentlogin.
 package secrets
 
 import (
@@ -79,28 +79,59 @@ var ErrNone = errors.New("no value saved")
 // loginKinds are the agents whose login files stay on the host, in order.
 var loginKinds = []string{agentlogin.Codex, agentlogin.Opencode, agentlogin.Claude}
 
-// LoginFile is an agent's login file under home: Codex's and opencode's
-// auth.json, and for claude ~/.claude.json (its MCP servers' secrets).
-func LoginFile(home, kind string) string {
+// LoginRel is an agent's login file, relative to a home folder, where the
+// agent keeps it and where devvm's store of its logins keeps it too:
+// Codex's and opencode's auth.json, and for claude .claude.json (its MCP
+// servers' secrets).
+func LoginRel(kind string) string {
 	switch kind {
 	case agentlogin.Codex:
-		return filepath.Join(home, ".codex", "auth.json")
+		return ".codex/auth.json"
 	case agentlogin.Opencode:
-		return filepath.Join(home, ".local", "share", "opencode", "auth.json")
+		return ".local/share/opencode/auth.json"
 	}
-	return filepath.Join(home, ".claude.json")
+	return ".claude.json"
+}
+
+// LoginFile is an agent's login file in devvm's store of its logins
+// (paths.Dirs.AgentLogins), the only one devvm reads for VMs: never the
+// home folder's.
+func LoginFile(d paths.Dirs, kind string) string {
+	return filepath.Join(d.AgentLogins(kind), filepath.FromSlash(LoginRel(kind)))
+}
+
+// SaveLogin puts an agent's login file into devvm's store, only the
+// user's to read (mode 600, its folders 700), the agent's logins folder
+// kept out of backups.
+func (s *Store) SaveLogin(ctx context.Context, kind string, data []byte) error {
+	dir := s.Dirs.AgentLogins(kind)
+	if err := state.PrivateDir(dir); err != nil {
+		return err
+	}
+	if err := s.ExcludeFromBackup(ctx, dir); err != nil {
+		return err
+	}
+	return state.WriteFile(LoginFile(s.Dirs, kind), data)
+}
+
+// HasLogin reports whether devvm's store has a login file for the agent.
+func (s *Store) HasLogin(kind string) bool {
+	fi, err := os.Lstat(LoginFile(s.Dirs, kind))
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // Store reads secrets' values and agents' logins. NewStore sets every
 // field; tests change them.
 type Store struct {
-	Dirs paths.Dirs // its Home holds the agents' login files
+	Dirs paths.Dirs // its AgentLogins hold the agents' login files
 	// Keychain: values are in the Keychain (KeychainGet), else in files.
 	Keychain       bool
 	KeychainGet    func(ctx context.Context, service, account string) (string, error)
 	KeychainSet    func(ctx context.Context, service, account, label, value string) error
 	KeychainDelete func(ctx context.Context, service, account string) error
 	Getenv         func(string) string
+	// ExcludeFromBackup keeps a folder out of backups (macOS).
+	ExcludeFromBackup func(ctx context.Context, dir string) error
 	// Reporter is where it warns.
 	msg.Reporter
 }
@@ -111,14 +142,14 @@ func NewStore(d paths.Dirs, r msg.Reporter) *Store {
 	return &Store{
 		Dirs: d, Keychain: platform.HasKeychain, Getenv: os.Getenv,
 		KeychainGet: platform.KeychainGet, KeychainSet: platform.KeychainSet, KeychainDelete: platform.KeychainDelete,
-		Reporter: r,
+		ExcludeFromBackup: platform.ExcludeFromBackup, Reporter: r,
 	}
 }
 
-// login is an agent's login file in the user's home, its placeholders
+// login is an agent's login file in devvm's store, its placeholders
 // ending in salt.
 func (s *Store) login(kind, salt string) agentlogin.File {
-	return agentlogin.File{Kind: kind, Path: LoginFile(s.Dirs.Home, kind), Salt: salt}
+	return agentlogin.File{Kind: kind, Path: LoginFile(s.Dirs, kind), Salt: salt}
 }
 
 // VMLogin returns the VM's copy of an agent's login file: placeholders
@@ -141,17 +172,17 @@ func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
 	return c.Data, err
 }
 
-// ClaudeCopy returns the copy of ~/.claude.json a VM without network
-// policy gets: its settings, account state and MCP servers, without
-// anything else (agentlogin.ClaudeCopy).
+// ClaudeCopy returns the copy of the store's .claude.json a VM without
+// network policy gets: its settings, account state and MCP servers,
+// without anything else (agentlogin.ClaudeCopy).
 func (s *Store) ClaudeCopy() ([]byte, error) {
-	return agentlogin.ClaudeCopy(LoginFile(s.Dirs.Home, agentlogin.Claude))
+	return agentlogin.ClaudeCopy(LoginFile(s.Dirs, agentlogin.Claude))
 }
 
-// MCPSecrets returns the MCP servers in ~/.claude.json whose settings hold
-// secrets; none when it can't be read.
+// MCPSecrets returns the MCP servers in the store's .claude.json whose
+// settings hold secrets; none when it can't be read.
 func (s *Store) MCPSecrets() []string {
-	servers, err := agentlogin.MCPSecrets(LoginFile(s.Dirs.Home, agentlogin.Claude))
+	servers, err := agentlogin.MCPSecrets(LoginFile(s.Dirs, agentlogin.Claude))
 	if err != nil {
 		return nil
 	}
@@ -386,15 +417,13 @@ func Bind(st *state.VM, name string, use bool) error {
 }
 
 // Logins returns the login kinds a VM with these shared tools uses: its
-// agents' (codex, opencode, claude) that have a login file on the host.
+// agents' (codex, opencode, claude) that have a login file in devvm's
+// store.
 func (s *Store) Logins(tools []string) []string {
 	as := image.AgentsOf(tools)
 	var kinds []string
 	for _, k := range loginKinds {
-		if !slices.Contains(as, k) {
-			continue
-		}
-		if fi, err := os.Stat(LoginFile(s.Dirs.Home, k)); err == nil && fi.Mode().IsRegular() {
+		if slices.Contains(as, k) && s.HasLogin(k) {
 			kinds = append(kinds, k)
 		}
 	}

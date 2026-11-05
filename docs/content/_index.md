@@ -115,7 +115,7 @@ Claude Code, Codex and opencode run in the VM. Check one in the list when devvm 
 
 {{< feature title="Isolated sandbox" icon="locked" art="isolated" >}}
 
-- The VM mounts your project folder at the same path. Apart from your agents' config, which it gets read-only, it sees nothing else in your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
+- The VM mounts your project folder at the same path. Apart from your agents' settings from devvm's own store, which it gets read-only, it sees nothing else in your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
 - New VMs get [network policy](docs/safety/network.md) by default, so they reach only an allowlist of hosts, through a proxy on your machine.
 - On macOS, `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)).
 - With [`--clone`](docs/using/clone.md), the VM works on a clone of the repo of its own instead of your folder, so nothing in it can touch your working tree or `.git`, and its work reaches your repo only when you fetch it.
@@ -149,7 +149,7 @@ Claude Code, Codex and opencode run in the VM. Check one in the list when devvm 
 
 ### Does the agent run on my machine?
 
-No. You start the agent in the VM's shell, so it runs in the VM. There it sees only your project folder, and your agents' config from your machine, such as their settings and skills, which it gets read-only.
+No. You start the agent in the VM's shell, so it runs in the VM, and you never install it on your machine. There it sees only your project folder, and your agents' settings and skills from devvm's own store on your machine, which it gets read-only.
 
 ### Is it free?
 

@@ -1,7 +1,7 @@
 ---
 title: Coding agents
 weight: 6
-description: "devvm runs Claude Code, Codex and opencode in VMs, with your config for each agent from this machine but never your history. This page covers which agents devvm supports, what each VM gets from this machine, the agents' logins and their history."
+description: "devvm runs Claude Code, Codex and opencode in VMs, with each agent's settings and logins from devvm's own store on this machine but never your history. This page covers which agents devvm supports, devvm's agent store and what each VM gets from it, the agents' logins and their history."
 ---
 
 ## Running an agent
@@ -13,7 +13,7 @@ An agent runs where you start it, so you start it in the VM's shell, not on this
 (devvm) ~/some-project $ claude
 ```
 
-In the VM the agent sees only your project folder, and your agents' config, which it gets read-only. Whatever it runs, such as a script a package installs, runs in the VM too.
+In the VM the agent sees only your project folder, and your agents' settings from [devvm's agent store](#devvms-agent-store), which it gets read-only. Whatever it runs, such as a script a package installs, runs in the VM too. You don't install any agent on this machine, because devvm installs each one in the VMs that have it.
 
 ## Supported agents
 
@@ -42,46 +42,73 @@ Agents are [shared tools](images.md#shared-tools), like the toolchains, so you c
 
 `devvm setup` chooses the agents that the list checks for every new VM, and that a new VM gets without a terminal. devvm asks for them on its first run in a terminal and again in `devvm setup`'s questions, and `devvm setup --agents claude,codex` or `devvm setup --agents none` sets them without asking. They're a setting for new VMs only, so a VM that exists keeps its agents ([devvm setup](settings.md#devvm-setup)).
 
-## Config from this machine
+## devvm's agent store
 
-When a VM has `claude`, `codex` or `opencode`, the VM gets your config for that agent from this machine, but never your history. Transcripts, sessions and databases stay where they are, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
+devvm keeps the agents' settings and logins on this machine in a store of its own, and every VM with an agent gets that agent's settings and logins from there. devvm never reads the agents' own files in your home folder for a VM, such as `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.config/opencode` or `~/.local/share/opencode`, so a VM gets the same settings and logins whether or not this machine has the agent. The one command that reads those files is [`devvm agent import`](#importing-from-this-machine), which copies them into the store when you run it.
+
+The store has two folders for each agent, and each one holds the agent's files at the same paths below it as the agent keeps them in a home folder:
+
+- **Settings** go in `~/.config/devvm/agents/<agent>/`, such as `~/.config/devvm/agents/claude/.claude/settings.json` and `~/.config/devvm/agents/claude/.claude/skills`. You can edit these files and make or delete these folders yourself, and a VM gets the change on its next launch, as [mounts](#mounts) and [copies](#copies) describe.
+- **Logins** go in `~/.local/share/devvm/logins/<agent>/`, such as `~/.local/share/devvm/logins/codex/.codex/auth.json` and `~/.local/share/devvm/logins/claude/.claude.json`. Only you can read them, because devvm makes each agent's logins folder yours alone (mode 700) and each login file mode 600. On macOS, devvm keeps each agent's logins folder out of Time Machine's backups.
+
+Each VM gets its agents' settings and logins from the store, but never your history. Transcripts, sessions and databases aren't in the store, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
 
 ```mermaid
 flowchart TD
-  subgraph host["This machine"]
-    folders["config folders:<br>skills, plugins…"]
-    files["config files<br>and logins"]
-    history["your history"]
+  home["the agents' files<br>in your home folder"]
+  subgraph store["devvm's agent store"]
+    folders["settings folders:<br>skills, plugins…"]
+    files["settings files<br>and logins"]
   end
   subgraph guest["The VM"]
     links["linked into ~"]
     copies["copies in ~"]
     own["its own history"]
   end
+  home -- "devvm agent import,<br>never your history" --> store
   folders -- "mounted<br>read-only" --> links
   files -- "copied on every<br>launch, with network<br>policy without<br>your secrets" --> copies
-  history -. "never<br>copied" .-x own
   own -- "devvm history export,<br>devvm rm" --> export["a .tar.gz<br>on this machine"]
   export -. "devvm history import,<br>or yes when a new VM<br>offers it" .-> own
 ```
 
+Each row lists the agent's paths in the VM's home, and the store keeps each one at the same path below the agent's settings or logins folder:
+
 | | Mounted read-only, linked into `~` | Copied in on every launch |
 | --- | --- | --- |
-| claude | `~/.claude/{skills,agents,commands,output-styles,plugins}` | `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `~/.claude.json` ([merged](#copies), only its settings, account state and MCP servers) |
-| codex | `~/.codex/{prompts,skills}` | `~/.codex/{config.toml,AGENTS.md,auth.json}` |
-| opencode | the subfolders of `~/.config/opencode` (not `node_modules`) | the files in `~/.config/opencode` (not lock files), `~/.local/share/opencode/auth.json` |
+| claude | `~/.claude/{skills,agents,commands,output-styles,plugins}` | `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, and from the logins `~/.claude.json` ([merged](#copies), only its settings, account state and MCP servers) |
+| codex | `~/.codex/{prompts,skills}` | `~/.codex/{config.toml,AGENTS.md}`, and from the logins `~/.codex/auth.json` |
+| opencode | the subfolders of `~/.config/opencode` (not `node_modules`) | the files in `~/.config/opencode` (not lock files), and from the logins `~/.local/share/opencode/auth.json` |
+
+### Importing from this machine
+
+When you already use an agent on this machine, `devvm agent import` copies its settings and logins from your home folder into the store, so your VMs get them. With no argument it imports every agent that your home folder has files of, and `devvm agent import claude codex` imports only the agents you name:
+
+```sh
+devvm agent import              # copy every agent's settings and logins into the store
+devvm agent import codex        # copy only Codex's
+devvm agent import --force      # replace what the store has without asking
+```
+
+The import copies only the paths in the table above, from `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.config/opencode` and `~/.local/share/opencode`, so it never copies your history, such as `~/.claude/projects` or `~/.codex`'s sessions, and never `~/.claude/.credentials.json`. From `~/.claude.json` it keeps only the settings, account state and MCP servers, so your API key and your per-project entries stay out of the store. Claude Code's plugin records name the plugins' folders by their paths, so the store's copies of the JSON files in `~/.claude/plugins` name the plugins' folders in the store, where the VMs mount them. devvm says which agents it imported and where, and an agent you named that your home folder has nothing of gets a warning.
+
+devvm reads each agent's settings inside the agent's own folder, such as `~/.claude`, and it never follows a link out of it. A link to a file inside the folder becomes a copy of that file, and a link that leads out of the folder, by a relative or an absolute path, or to a folder, is left out with a warning that names it. A login file that's a link is left out with a warning too. So when your settings live elsewhere, such as in a dotfiles repo with links into `~/.claude`, copy them into the store yourself.
+
+When the store already has settings or a login of an agent you import, devvm asks in a terminal whether to replace them, and the answer is no unless you type `y`. Without a terminal, or with `--no-input`, devvm refuses and names `--force`, which replaces them without asking. A replacement writes each file again and takes out what your home folder no longer has, but it keeps the store's folders, so a running VM's mounts still show them. An agent whose settings aren't in your home folder keeps the store's settings, and one without a login there keeps the store's login.
+
+On macOS, Claude Code keeps its own login in the Keychain, and devvm neither reads it nor copies it. A VM's Claude Code logs in with a Claude Code token that devvm keeps with its secrets instead ([Claude Code login](#claude-code-login)).
 
 ## Mounts
 
-devvm mounts the folders that exist when it creates the VM read-only, at the same path as on this machine, and links them from the VM's home. Absolute paths in them, such as Claude Code's plugin paths, still work. This machine enforces read-only, so even root in the VM can't write to them. devvm mounts each folder whole, with network policy or without, so the VM reads every file in it, a `.env` or a key file in a plugin's folder included, and the git config of a private plugin marketplace whose URL holds a password. devvm takes no secrets out of these folders, because they hold plugins, skills and their scripts that the agent runs as they are. So keep secrets out of these folders, as you keep them out of the project folder ([why devvm mounts them whole](../internals/network.md#what-stays-in-the-vms-copies)). The VM follows a symlink in these folders among its own files, so a link to a file outside the folder, by a relative or an absolute path, doesn't reach that file on this machine, on macOS's virtiofs mounts and on Linux's 9p mounts alike. devvm doesn't mount a folder whose path has a comma, on any backend, and it warns you. Lima can't mount such a path ([Lima's limits](../backends/lima.md#limits)).
+devvm mounts the store's settings folders that exist when it creates the VM read-only, at the same path as in the store on this machine, and links them from the VM's home. Absolute paths in them, such as Claude Code's plugin paths, still work. This machine enforces read-only, so even root in the VM can't write to them. devvm mounts each folder whole, with network policy or without, so the VM reads every file in it, a `.env` or a key file in a plugin's folder included, and the git config of a private plugin marketplace whose URL holds a password. devvm takes no secrets out of these folders, because they hold plugins, skills and their scripts that the agent runs as they are. So keep secrets out of these folders, as you keep them out of the project folder ([why devvm mounts them whole](../internals/network.md#what-stays-in-the-vms-copies)). The VM follows a symlink in these folders among its own files, so a link to a file outside the folder, by a relative or an absolute path, doesn't reach that file on this machine, on macOS's virtiofs mounts and on Linux's 9p mounts alike. devvm doesn't mount a folder whose path has a comma, on any backend, and it warns you. Lima can't mount such a path ([Lima's limits](../backends/lima.md#limits)).
 
-When you make or delete one of these folders on this machine later, devvm notices on the VM's next launch and names the folder. A VM's mounts change only when it starts, so a stopped VM gets the new mounts as the launch starts it. For a running VM, devvm asks in a terminal whether to restart it now, which stops anything running in it, in the one question that covers every change waiting for the VM's next start, and because the mounts are among those changes, the answer is yes unless you type n ([restarting](../getting-started/commands.md#restarting-and-stopping)). If you answer no, or there's no terminal, or you pass `--no-input`, the mounts change when the VM next starts, for example with `devvm restart`.
+When you make or delete one of these folders in the store later, by hand or with `devvm agent import`, devvm notices on the VM's next launch and names the folder. A VM's mounts change only when it starts, so a stopped VM gets the new mounts as the launch starts it. For a running VM, devvm asks in a terminal whether to restart it now, which stops anything running in it, in the one question that covers every change waiting for the VM's next start, and because the mounts are among those changes, the answer is yes unless you type n ([restarting](../getting-started/commands.md#restarting-and-stopping)). If you answer no, or there's no terminal, or you pass `--no-input`, the mounts change when the VM next starts, for example with `devvm restart`.
 
 ## Copies
 
-devvm copies the files into the VM's home on every launch, over the VM's own. With [network policy](../safety/network.md), the copies of the logins and settings files have your secrets taken out, and the VM's proxy puts them into requests instead ([agents' logins and settings](../internals/network.md#agents-logins-and-settings)).
+devvm copies the store's files into the VM's home on every launch, over the VM's own. With [network policy](../safety/network.md), the copies of the logins and settings files have your secrets taken out, and the VM's proxy puts them into requests instead ([agents' logins and settings](../internals/network.md#agents-logins-and-settings)).
 
-devvm merges your settings and MCP servers from `~/.claude.json` into the VM's own, so servers added in the VM stay ([MCP servers](../internals/network.md#mcp-servers)). Your API key, your answers about API keys and your per-project entries stay on this machine, with network policy or without. With network policy, devvm also replaces the secrets in the agents' settings files with `devvm-redacted`, and names what it replaced. Those are the values under keys that look like secrets, every env value and header, and the secrets in URLs and in arguments. In other text, such as a hook's command, devvm replaces the secrets in its URLs, the keys that start like a known key, such as `sk-` or `ghp_`, and the credential after `Bearer` or `Basic`, and keeps the words around them ([keys in settings files](../internals/network.md#keys-in-settings-files)). From the `env` of Claude Code's `settings.json`, the VM gets only Claude Code's own settings, such as `ANTHROPIC_MODEL`, the `CLAUDE_CODE_*`, `DISABLE_*` and `MAX_*` variables and those ending in `_TIMEOUT_MS`, but none whose name marks it as a credential, such as `ANTHROPIC_AUTH_TOKEN`. It also gets the values that only name where a secret is, base URLs without their passwords, `true`, `false` and short numbers. Every other env value, and every env value of an MCP server, becomes `devvm-redacted`. When devvm can't parse a settings file to take its secrets out, the VM doesn't get a copy of it, and neither does it get opencode's files in `~/.config/opencode` that are neither settings nor Markdown, such as a `.env`. devvm names each file it doesn't copy, and when it can't make the copy of a login, it says why. Without network policy, devvm copies the env values and headers of Claude Code's MCP servers unchanged, and it names those servers, so add network policy if they hold secrets the VM shouldn't have.
+devvm merges the settings and MCP servers from the store's `.claude.json` into the VM's own `~/.claude.json`, so servers added in the VM stay ([MCP servers](../internals/network.md#mcp-servers)). Your API key, your answers about API keys and your per-project entries never reach the VM, with network policy or without. With network policy, devvm also replaces the secrets in the agents' settings files with `devvm-redacted`, and names what it replaced. Those are the values under keys that look like secrets, every env value and header, and the secrets in URLs and in arguments. In other text, such as a hook's command, devvm replaces the secrets in its URLs, the keys that start like a known key, such as `sk-` or `ghp_`, and the credential after `Bearer` or `Basic`, and keeps the words around them ([keys in settings files](../internals/network.md#keys-in-settings-files)). From the `env` of Claude Code's `settings.json`, the VM gets only Claude Code's own settings, such as `ANTHROPIC_MODEL`, the `CLAUDE_CODE_*`, `DISABLE_*` and `MAX_*` variables and those ending in `_TIMEOUT_MS`, but none whose name marks it as a credential, such as `ANTHROPIC_AUTH_TOKEN`. It also gets the values that only name where a secret is, base URLs without their passwords, `true`, `false` and short numbers. Every other env value, and every env value of an MCP server, becomes `devvm-redacted`. When devvm can't parse a settings file to take its secrets out, the VM doesn't get a copy of it, and neither does it get opencode's files in `~/.config/opencode` that are neither settings nor Markdown, such as a `.env`. devvm names each file it doesn't copy, and when it can't make the copy of a login, it says why. Without network policy, devvm copies the env values and headers of Claude Code's MCP servers unchanged, and it names those servers, so add network policy if they hold secrets the VM shouldn't have.
 
 ### Claude Code login
 
@@ -94,7 +121,7 @@ devvm saves the Claude Code token with the other [secrets](../safety/network.md#
 
 ### Codex and opencode logins
 
-With network policy, the VM's `auth.json` holds placeholders, and its proxy holds the real API keys and logins. The proxy reads them from this machine's login files as it needs them and refreshes ChatGPT logins there, so when the agent in the VM stops getting answers, the proxy's own log, `proxy.log` in `~/.local/share/devvm/vms/<hash>/logs/`, may say that refreshing a login failed or that you're no longer logged in that way. Log in again with `codex` or `opencode` on this machine, and if you changed how you log in, run `devvm` in the VM's folder so the VM gets the new login's placeholders. The proxy puts in opencode's API keys for Anthropic, OpenAI and OpenRouter, and its OpenAI and GitHub Copilot logins. The VM gets opencode's API keys for other providers unchanged, and its well-known logins too, which an organization's own opencode config sets up, because devvm doesn't know which hosts those are for. devvm warns you about each. The VM gets opencode's other OAuth logins, such as Copilot Enterprise's, without their access and refresh tokens, so they don't work in the VM, and devvm warns you about each. To use such a provider in the VM, log in to it with an API key on this machine. Without network policy, the VM gets the file as it is, and a VM that refreshes an OAuth login can replace its refresh token and sign this machine out. An API key avoids this.
+With network policy, the VM's `auth.json` holds placeholders, and its proxy holds the real API keys and logins. The proxy reads them from the login files in devvm's store as it needs them and refreshes ChatGPT logins there, so when the agent in the VM stops getting answers, the proxy's own log, `proxy.log` in `~/.local/share/devvm/vms/<hash>/logs/`, may say that refreshing a login failed or that you're no longer logged in that way. Log in again with `codex` or `opencode` on this machine and run `devvm agent import --force codex` or `devvm agent import --force opencode`, and if you changed how you log in, run `devvm` in the VM's folder so the VM gets the new login's placeholders. The proxy puts in opencode's API keys for Anthropic, OpenAI and OpenRouter, and its OpenAI and GitHub Copilot logins. The VM gets opencode's API keys for other providers unchanged, and its well-known logins too, which an organization's own opencode config sets up, because devvm doesn't know which hosts those are for. devvm warns you about each. The VM gets opencode's other OAuth logins, such as Copilot Enterprise's, without their access and refresh tokens, so they don't work in the VM, and devvm warns you about each. To use such a provider in the VM, log in to it with an API key on this machine and import the login again. Without network policy, the VM gets the store's file as it is, and a VM that refreshes an OAuth login can replace its refresh token and sign the store's copy out. An API key avoids this.
 
 ## History
 
@@ -133,7 +160,7 @@ When devvm makes a new VM that has an agent, and it saved an export for the same
 
 An export holds what a VM wrote, so devvm treats it as untrusted. devvm never unpacks it on this machine. It streams the file into the VM as it is, and the VM's own `tar` unpacks it there as the VM's user, so it can only write what that user can write. Before unpacking anything, the VM lists the paths in the export, and when one of them is outside `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.local/share/opencode` and `~/.local/state/opencode`, starts with `/` or has a `..` part, devvm imports nothing and says so. The import keeps no owner or mode from the export, so the VM user's umask applies and no file is set-user-ID. It also takes out every symbolic link that points outside the folder it's in, which is any link to an absolute path or one with a `..` part, so an agent writing to a session file can't follow a link out of its history.
 
-The import leaves out what devvm puts in the VM itself. That's the agents' logins, `~/.claude/.credentials.json`, `~/.codex/auth.json`, and opencode's `auth.json`, `account.json` and `bin`. It's also `~/.claude.json`, whose copy in the old VM held that VM's own placeholders, and every agent's [mounted folders and copied files](#config-from-this-machine), which the new VM's setup links and copies from this machine. A file or folder the VM already has stays as it is, so importing into a VM that has history of its own adds the export's files without replacing any of its own.
+The import leaves out what devvm puts in the VM itself. That's the agents' logins, `~/.claude/.credentials.json`, `~/.codex/auth.json`, and opencode's `auth.json`, `account.json` and `bin`. It's also `~/.claude.json`, whose copy in the old VM held that VM's own placeholders, and every agent's [mounted folders and copied files](#devvms-agent-store), which the new VM's setup links and copies from devvm's agent store. A file or folder the VM already has stays as it is, so importing into a VM that has history of its own adds the export's files without replacing any of its own.
 
 ## The VM's setup
 

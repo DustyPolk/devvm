@@ -28,7 +28,7 @@ func devvm() rules {
 		// fake's own types each implement.
 		maxMethods: 24,
 		largeTypes: map[string]large{
-			"internal/paths.Dirs": {55, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
+			"internal/paths.Dirs": {57, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":      {45, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and their refusals, whether the picker shows, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: devvmVars(),
@@ -51,10 +51,15 @@ func devvm() rules {
 		// and refuses what it needs refused.
 		// The inventory alone reads every VM's state, so every listing
 		// shares its one failure policy.
+		// devvm's agent store alone holds what VMs get of the agents:
+		// agentStore its settings, secrets.LoginFile its logins, so
+		// nothing reads them from the home folder.
 		callers: map[string]string{
-			"internal/state.ReadHash":  "internal/vm/finder.go",
-			"internal/project.Parents": "internal/vm/finder.go",
-			"internal/state.ReadAll":   "internal/vm/inventory.go",
+			"internal/state.ReadHash":           "internal/vm/finder.go",
+			"internal/project.Parents":          "internal/vm/finder.go",
+			"internal/state.ReadAll":            "internal/vm/inventory.go",
+			"internal/paths.Dirs.AgentSettings": "internal/vm/agents.go",
+			"internal/paths.Dirs.AgentLogins":   "internal/secrets/secrets.go",
 		},
 		// readOverrides reads a test build's stand-ins, and a release
 		// none.
@@ -209,6 +214,7 @@ func devvmVars() map[string]string {
 		"internal/trust.Env":                      table,
 		"internal/vm.agentDirsOf":                 table,
 		"internal/vm.agentFilesOf":                table,
+		"internal/vm.agentFolderOf":               table,
 		"internal/vm.historyPaths":                table,
 		"internal/vm.historyExcludes":             table,
 		"internal/vm.defaultKeys":                 table,

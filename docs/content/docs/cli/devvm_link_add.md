@@ -1,6 +1,6 @@
 ---
 title: devvm link add
-weight: 26
+weight: 28
 ---
 
 Link this folder's VM to a port of another VM

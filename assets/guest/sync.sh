@@ -1,9 +1,9 @@
 #!/bin/bash
 # Runs inside a project VM on every devvm launch, from a staging dir the host sends over:
-#   home/        agent config files and credentials, copied into ~
-#   links        paths (relative to the host home) mounted read-only at the host path; linked into ~
-#   host_home    the host's home path
-#   claude.json  host ~/.claude.json's settings, account state and MCP servers (never its API key
+#   home/        agents' settings files and logins from devvm's store, copied into ~
+#   links        agents' settings folders from devvm's store, two lines each: the path relative to
+#                ~, then the folder's path, where it's mounted read-only; linked into ~
+#   claude.json  the store's .claude.json's settings, account state and MCP servers (never its API key
 #                or per-project history), merged in (with network policy, MCP servers' env values
 #                and headers are placeholders)
 #   env          exports (LANG, CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN: placeholders with network policy),
@@ -24,7 +24,6 @@ set -euo pipefail
 # devvm reads devvm-tools' report when this setup fails, so an older one (from boot) goes first.
 sudo rm -f /run/devvm/tools-unmounted
 s=$(cd "$(dirname "$0")" && pwd)
-host_home=$(cat "$s/host_home")
 
 # shellcheck source=/dev/null
 . "$s/vm"
@@ -144,11 +143,11 @@ git config --global --get-all safe.directory | grep -qx '\*' || git config --glo
 
 [[ -d "$s/home" ]] && cp -a "$s/home/." ~/
 
-while read -r rel; do
-  [[ -n "$rel" && -e "$host_home/$rel" ]] || continue
+while IFS= read -r rel && IFS= read -r mount; do
+  [[ -n "$rel" && -e "$mount" ]] || continue
   mkdir -p "$(dirname ~/"$rel")"
   [[ -L ~/"$rel" ]] || rm -rf ~/"$rel"
-  ln -sfn "$host_home/$rel" ~/"$rel"
+  ln -sfn "$mount" ~/"$rel"
 done < "$s/links"
 
 # merge_claude_json VM HOST COPIED: host settings win, but keep the VM's own per-folder state

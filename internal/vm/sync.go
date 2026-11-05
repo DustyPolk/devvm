@@ -258,7 +258,6 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		s.put("ca/"+trust.Name(i), 0o644, c)
 	}
 	s.put("tools", 0o644, tools.Mounts(files))
-	s.put("host_home", 0o644, []byte(e.Dirs.Home+"\n"))
 
 	// The host's settings, for every VM.
 	lang := e.Getenv("LC_ALL")
@@ -292,19 +291,14 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		env.WriteString("export LANG=" + shell.Quote(lang) + "\n")
 	}
 
-	// The agents' config: folders to link to their mounts, files copied.
-	// Never their history.
-	agents := image.AgentsOf(names)
-	var links bytes.Buffer
-	for _, a := range agents {
-		for _, rel := range agentDirs(e.Dirs.Home, a) {
-			links.WriteString(rel + "\n")
-		}
-		for _, rel := range agentFiles(e.Dirs.Home, a) {
-			if err := s.copy("home/"+rel, filepath.Join(e.Dirs.Home, rel)); err != nil {
-				return nil, err
-			}
-		}
+	// The agents' settings from devvm's store: folders to link to their
+	// mounts, each its path in the home folder and its mount's, files
+	// copied. Without network policy, Codex's and opencode's logins
+	// copied as they are (stageNet's copies hold placeholders). Never
+	// their history.
+	links, err := e.stageAgents(s, names, net)
+	if err != nil {
+		return nil, err
 	}
 	// ~/.claude.json's settings, account state and MCP servers, never the
 	// rest of it. With network policy the copy holds placeholders (stageNet).
@@ -369,8 +363,39 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	}
 	s.put("vm", 0o644, vmFile.Bytes())
 	s.put("env", 0o600, env.Bytes())
-	s.put("links", 0o644, links.Bytes())
+	s.put("links", 0o644, links)
 	return s, nil
+}
+
+// stageAgents adds the agents' settings from devvm's store (agentStore)
+// to s, and without network policy (net) Codex's and opencode's logins
+// from it as they are, and returns the setup's links file: two lines for
+// each folder, its path in the VM's home and its mount's path.
+func (e syncer) stageAgents(s *stage, names []string, net bool) ([]byte, error) {
+	var links bytes.Buffer
+	for _, a := range image.AgentsOf(names) {
+		store := agentStore(e.Dirs, a)
+		for _, rel := range agentDirs(store, a) {
+			links.WriteString(rel + "\n" + filepath.Join(store, rel) + "\n")
+		}
+		for _, rel := range agentFiles(store, a) {
+			if err := s.copy("home/"+rel, filepath.Join(store, rel)); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if net {
+		return links.Bytes(), nil
+	}
+	for _, kind := range e.Proxy.Secrets.Logins(names) {
+		if kind == agentlogin.Claude {
+			continue // merged by sync.sh from the staged claude.json
+		}
+		if err := s.copy("home/"+secrets.LoginRel(kind), secrets.LoginFile(e.Dirs, kind)); err != nil {
+			return nil, err
+		}
+	}
+	return links.Bytes(), nil
 }
 
 // claudeMoved is the setup's moved file for a project folder that moved
@@ -413,20 +438,16 @@ func (e syncer) stageNet(s *stage, store *secrets.Store, vm string, tools []stri
 		}
 		name := "claude.json" // merged by sync.sh, not copied
 		if kind != "claude" {
-			rel, err := filepath.Rel(store.Dirs.Home, secrets.LoginFile(store.Dirs.Home, kind))
-			if err != nil {
-				return err
-			}
-			name = "home/" + filepath.ToSlash(rel)
+			name = "home/" + secrets.LoginRel(kind)
 		}
 		s.put(name, 0o600, data)
 	}
 	for _, f := range slices.Clone(s.files) {
 		rel, ok := strings.CutPrefix(f.name, "home/")
-		if !ok {
+		if !ok || f.from == "" {
 			continue
 		}
-		shown := filepath.Join(e.Dirs.Home, rel)
+		shown := f.from
 		format, ok := settingsFormat(rel)
 		if !ok {
 			if withheld(rel) {
@@ -500,12 +521,13 @@ func gitConfig(ctx context.Context, dir, key string) string {
 	return strings.TrimRight(string(out), "\n")
 }
 
-// stageFile is one file sync sends.
+// stageFile is one file sync sends; from is the host file a copy is of.
 type stageFile struct {
 	name  string
 	mode  int64
 	mtime time.Time
 	data  []byte
+	from  string
 }
 
 // stage is the files sync sends, in order; a name added again replaces
@@ -545,7 +567,7 @@ func (s *stage) copy(name, path string) error {
 	if err != nil {
 		return err
 	}
-	s.add(stageFile{name: name, mode: int64(fi.Mode().Perm()), mtime: fi.ModTime(), data: data})
+	s.add(stageFile{name: name, mode: int64(fi.Mode().Perm()), mtime: fi.ModTime(), data: data, from: path})
 	return nil
 }
 

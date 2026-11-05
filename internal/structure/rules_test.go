@@ -600,6 +600,23 @@ func callerCases() []ruleCase {
 			},
 			r: r,
 		},
+		{
+			name: "its method called outside its file",
+			files: map[string]string{
+				"internal/vm/agents.go": "package vm\n\nfunc f(d interface{ AgentSettings(string) string }) { d.AgentSettings(\"x\") }\n",
+				"internal/vm/sync.go":   "package vm\n\nfunc g(e struct{ Dirs interface{ AgentSettings(string) string } }) { e.Dirs.AgentSettings(\"x\") }\n",
+			},
+			r:    rules{callers: map[string]string{"internal/paths.Dirs.AgentSettings": "internal/vm/agents.go"}},
+			want: &want{ruleOwners, "calls paths.AgentSettings: only internal/vm/agents.go does"},
+		},
+		{
+			name: "its method called in its file and its own package",
+			files: map[string]string{
+				"internal/vm/agents.go": "package vm\n\nfunc f(d interface{ AgentSettings(string) string }) { d.AgentSettings(\"x\") }\n",
+				"internal/paths/a.go":   "package paths\n\ntype Dirs struct{}\n\nfunc (Dirs) AgentSettings(string) string { return \"\" }\n\nfunc g() { Dirs{}.AgentSettings(\"x\") }\n",
+			},
+			r: rules{callers: map[string]string{"internal/paths.Dirs.AgentSettings": "internal/vm/agents.go"}},
+		},
 	}
 }
 

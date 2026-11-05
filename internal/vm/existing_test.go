@@ -140,7 +140,7 @@ func TestToolsAdd(t *testing.T) {
 	tl := Tools{e}
 	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, NoNetworkPolicy: true})
 	vm := st.Name()
-	skills := filepath.Join(e.Dirs.Home, ".claude", "skills")
+	skills := filepath.Join(agentStore(e.Dirs, "claude"), ".claude", "skills")
 	if err := os.MkdirAll(skills, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestToolsAdd(t *testing.T) {
 	}
 
 	// Running: a new agent's folders after a restart it asks for.
-	prompts := filepath.Join(e.Dirs.Home, ".codex", "prompts")
+	prompts := filepath.Join(agentStore(e.Dirs, "codex"), ".codex", "prompts")
 	if err := os.MkdirAll(prompts, 0o700); err != nil {
 		t.Fatal(err)
 	}

@@ -66,7 +66,7 @@ devvm also runs on a smaller machine, because it fits base to the machine. Base 
 
 Your first VM needs at least 8 GiB of free disk space, because devvm builds the base image first and then the VM's own image and shared tools. Each VM then grows its own disk as you work in it, and the disk never shrinks. devvm checks the free space before each build and each new VM, and refuses when it's low ([free space](../using/ports-size.md#free-space)).
 
-Everything else is installed inside the VMs, including the toolchains, the agents, and Docker for your projects with the [docker layer](../using/images.md#built-in-layers).
+Everything else is installed inside the VMs, including the toolchains, the agents, and Docker for your projects with the [docker layer](../using/images.md#built-in-layers). You don't install Claude Code, Codex or opencode on this machine, because the VMs get their settings and logins from devvm's own [agent store](../using/coding-agents.md#devvms-agent-store).
 
 On Linux hosts, devvm has a few limits, such as no `.git` protection, that [Known limits](../using/limits.md#linux-hosts) lists.
 
@@ -134,5 +134,5 @@ Images whose inputs changed are built again the next time you use them. Existing
    {{< /os-tab >}}
    {{< /os-tabs >}}
 
-6. Remove its state: `rm -rf ~/.local/share/devvm ~/.config/devvm`. That includes your layers, in `~/.config/devvm/layers`, so copy them somewhere first to keep them. It also includes your exports, the agents' history that `devvm rm` saved. On macOS, the Time Machine exclusion that devvm set on its CA folder goes with the folder.
+6. Remove its state: `rm -rf ~/.local/share/devvm ~/.config/devvm`. That includes your layers, in `~/.config/devvm/layers`, so copy them somewhere first to keep them. It also includes your exports, the agents' history that `devvm rm` saved, and devvm's agent store, the agents' settings in `~/.config/devvm/agents` and their logins in `~/.local/share/devvm/logins`. On macOS, the Time Machine exclusions that devvm set on its CA folders and logins folders go with the folders.
 7. If you let devvm add it, remove the `Include ~/.local/share/devvm/ssh_config` line from `~/.ssh/config`.

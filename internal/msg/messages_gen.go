@@ -59,12 +59,12 @@ func AgentDirComma(path string) M {
 	return M{id: "agent_dir_comma", vals: []val{{"path", path}}}
 }
 
-// AgentDirsAdded is [agent_dirs_added]: "This machine has new agent folders for {{.vm}}: {{.dirs}}."
+// AgentDirsAdded is [agent_dirs_added]: "devvm's agent store has new folders for {{.vm}}: {{.dirs}}."
 func AgentDirsAdded(dirs string, vm string) M {
 	return M{id: "agent_dirs_added", vals: []val{{"dirs", dirs}, {"vm", vm}}}
 }
 
-// AgentDirsRemoved is [agent_dirs_removed]: "These agent folders for {{.vm}} are gone from this machine: {{.dirs}}."
+// AgentDirsRemoved is [agent_dirs_removed]: "These agent folders for {{.vm}} are gone from devvm's agent store: {{.dirs}}."
 func AgentDirsRemoved(dirs string, vm string) M {
 	return M{id: "agent_dirs_removed", vals: []val{{"dirs", dirs}, {"vm", vm}}}
 }
@@ -77,6 +77,31 @@ func AgentHolds(keys string) M {
 // AgentHoldsNote is [agent_holds_note]: "VMs set to devvm ssh-agent devvm can use these keys while you're connected, and devvm loads them again after a reboot."
 func AgentHoldsNote() M {
 	return M{id: "agent_holds_note"}
+}
+
+// AgentImportFailed is [agent_import_failed]: "Importing the agents' settings and logins failed: {{.reason}}."
+func AgentImportFailed(reason string) M {
+	return M{id: "agent_import_failed", vals: []val{{"reason", reason}}}
+}
+
+// AgentImportLinkLeftOut is [agent_import_link_left_out]: "devvm left out the link {{.path}}, because it imports only links to files inside the agent's folder."
+func AgentImportLinkLeftOut(path string) M {
+	return M{id: "agent_import_link_left_out", vals: []val{{"path", path}}}
+}
+
+// AgentImportNone is [agent_import_none]: "There's nothing of {{.agent}} to import, because this machine has neither its settings nor its login."
+func AgentImportNone(agent string) M {
+	return M{id: "agent_import_none", vals: []val{{"agent", agent}}}
+}
+
+// AgentImportNothing is [agent_import_nothing]: "There's nothing to import, because this machine has no settings or logins of claude, codex or opencode."
+func AgentImportNothing() M {
+	return M{id: "agent_import_nothing"}
+}
+
+// AgentImportReplace is [agent_import_replace]: "Replace what devvm's agent store has of {{.agents}} with this machine's settings and logins?"
+func AgentImportReplace(agents string) M {
+	return M{id: "agent_import_replace", vals: []val{{"agents", agents}}}
 }
 
 // AgentKeyChanged is [agent_key_changed]: "{{.key}} isn't the key you added to devvm's SSH agent any more, so devvm didn't load it. If you replaced it, run devvm ssh-agent add {{.key}}."
@@ -124,6 +149,16 @@ func AgentLoadFailed(key string) M {
 	return M{id: "agent_load_failed", vals: []val{{"key", key}}}
 }
 
+// AgentLoginImported is [agent_login_imported]: "devvm imported {{.agent}}'s login into {{.file}}."
+func AgentLoginImported(agent string, file string) M {
+	return M{id: "agent_login_imported", vals: []val{{"agent", agent}, {"file", file}}}
+}
+
+// AgentLoginReadFailed is [agent_login_read_failed]: "Reading the login in {{.file}} failed: {{.reason}}."
+func AgentLoginReadFailed(file string, reason string) M {
+	return M{id: "agent_login_read_failed", vals: []val{{"file", file}, {"reason", reason}}}
+}
+
 // AgentNoKeys is [agent_no_keys]: "The SSH agent devvm runs has no keys, so git over SSH won't work in VMs that use it. Run devvm ssh-agent add KEY_FILE to add one."
 func AgentNoKeys() M {
 	return M{id: "agent_no_keys"}
@@ -132,6 +167,11 @@ func AgentNoKeys() M {
 // AgentOnRisk is [agent_on_risk]: "While you're connected, anything in {{.vm}} can use the keys in your SSH agent."
 func AgentOnRisk(vm string) M {
 	return M{id: "agent_on_risk", vals: []val{{"vm", vm}}}
+}
+
+// AgentSettingsImported is [agent_settings_imported]: "devvm imported {{.agent}}'s settings into {{.dir}}."
+func AgentSettingsImported(agent string, dir string) M {
+	return M{id: "agent_settings_imported", vals: []val{{"agent", agent}, {"dir", dir}}}
 }
 
 // AgentStartFailed is [agent_start_failed]: "The SSH agent devvm runs didn't start at {{.sock}}."
@@ -439,17 +479,17 @@ func CodexLoginKept(keys string) M {
 	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
 }
 
-// CodexNoChatgpt is [codex_no_chatgpt]: "Codex on this machine isn't logged in with ChatGPT any more, so the VM's proxy has no Codex login to put in. Log in with codex on this machine, then run devvm in the VM's folder."
+// CodexNoChatgpt is [codex_no_chatgpt]: "The Codex login in devvm's agent store isn't a ChatGPT login any more, so the VM's proxy has none to put in. Log in with codex on this machine and run devvm agent import --force codex, then devvm in the VM's folder."
 func CodexNoChatgpt() M {
 	return M{id: "codex_no_chatgpt"}
 }
 
-// CodexNoKey is [codex_no_key]: "Codex on this machine isn't logged in with an API key any more, so the VM's proxy has none to put in. Log in with codex on this machine, then run devvm in the VM's folder."
+// CodexNoKey is [codex_no_key]: "The Codex login in devvm's agent store has no API key any more, so the VM's proxy has none to put in. Log in with codex on this machine and run devvm agent import --force codex, then devvm in the VM's folder."
 func CodexNoKey() M {
 	return M{id: "codex_no_key"}
 }
 
-// CodexRefreshFailed is [codex_refresh_failed]: "Refreshing the Codex login on this machine failed: {{.reason}}. Log in again with codex on this machine."
+// CodexRefreshFailed is [codex_refresh_failed]: "Refreshing the Codex login in devvm's agent store failed: {{.reason}}. Log in again with codex on this machine and run devvm agent import --force codex."
 func CodexRefreshFailed(reason string) M {
 	return M{id: "codex_refresh_failed", vals: []val{{"reason", reason}}}
 }
@@ -2164,6 +2204,11 @@ func NothingDeleted() M {
 	return M{id: "nothing_deleted"}
 }
 
+// NothingImported is [nothing_imported]: "nothing imported"
+func NothingImported() M {
+	return M{id: "nothing_imported"}
+}
+
 // NothingToClean is [nothing_to_clean]: "nothing to clean up"
 func NothingToClean() M {
 	return M{id: "nothing_to_clean"}
@@ -2179,12 +2224,12 @@ func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
 }
 
-// OpencodeLoginWithheld is [opencode_login_withheld]: "The VM gets opencode's {{.providers}} login without its OAuth tokens, because network policy keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine."
+// OpencodeLoginWithheld is [opencode_login_withheld]: "The VM gets opencode's {{.providers}} login without its OAuth tokens, because network policy keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine and run devvm agent import --force opencode."
 func OpencodeLoginWithheld(providers string) M {
 	return M{id: "opencode_login_withheld", vals: []val{{"providers", providers}}}
 }
 
-// OpencodeRefreshFailed is [opencode_refresh_failed]: "Refreshing opencode's {{.provider}} login on this machine failed: {{.reason}}. Log in again with opencode on this machine."
+// OpencodeRefreshFailed is [opencode_refresh_failed]: "Refreshing opencode's {{.provider}} login in devvm's agent store failed: {{.reason}}. Log in again with opencode on this machine and run devvm agent import --force opencode."
 func OpencodeRefreshFailed(provider string, reason string) M {
 	return M{id: "opencode_refresh_failed", vals: []val{{"provider", provider}, {"reason", reason}}}
 }
@@ -3396,6 +3441,11 @@ var specs = map[string]spec{
 	"agent_dirs_removed":             {fields: []string{"dirs", "vm"}},
 	"agent_holds":                    {fields: []string{"keys"}},
 	"agent_holds_note":               {},
+	"agent_import_failed":            {fields: []string{"reason"}},
+	"agent_import_link_left_out":     {fields: []string{"path"}},
+	"agent_import_none":              {fields: []string{"agent"}},
+	"agent_import_nothing":           {},
+	"agent_import_replace":           {fields: []string{"agents"}},
 	"agent_key_changed":              {fields: []string{"key"}},
 	"agent_key_mounted":              {fields: []string{"key", "vm"}},
 	"agent_key_no_fingerprint":       {fields: []string{"key"}},
@@ -3405,8 +3455,11 @@ var specs = map[string]spec{
 	"agent_key_unpinned":             {fields: []string{"key"}},
 	"agent_keys_failed":              {fields: []string{"reason"}},
 	"agent_load_failed":              {fields: []string{"key"}},
+	"agent_login_imported":           {fields: []string{"agent", "file"}},
+	"agent_login_read_failed":        {fields: []string{"file", "reason"}},
 	"agent_no_keys":                  {},
 	"agent_on_risk":                  {fields: []string{"vm"}},
+	"agent_settings_imported":        {fields: []string{"agent", "dir"}},
 	"agent_start_failed":             {fields: []string{"sock"}},
 	"agent_unload_failed":            {fields: []string{"key"}},
 	"agents_help":                    {},
@@ -3813,6 +3866,7 @@ var specs = map[string]spec{
 	"not_setup_token":                {},
 	"nothing_changed":                {},
 	"nothing_deleted":                {},
+	"nothing_imported":               {},
 	"nothing_to_clean":               {},
 	"oci_waiting":                    {},
 	"opencode_login_kept":            {fields: []string{"providers"}},

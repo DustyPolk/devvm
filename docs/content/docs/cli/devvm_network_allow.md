@@ -1,6 +1,6 @@
 ---
 title: devvm network allow
-weight: 32
+weight: 34
 ---
 
 Allow hosts for this folder's VM

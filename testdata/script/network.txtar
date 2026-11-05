@@ -125,10 +125,11 @@ exec sh -c 'grep -Fx "  \"ca\": \"$AGENT_dir/run/ca/ca.pem\"," "$AGENT_dir/run/p
 ! cmp $AGENT_dir/run/ca/next.pem $NET_dir/run/ca/next.pem
 env CLAUDE_CODE_OAUTH_TOKEN=
 
-# A Codex login on the host: its bindings and hosts, with the VM's
+# A Codex login in devvm's store: its bindings and hosts, with the VM's
 # placeholders.
 mkdir $HOME/.codex
 cp $WORK/codex.json $HOME/.codex/auth.json
+exec devvm agent import codex
 project codex
 exec devvm --network-policy --no-git-protect --agents codex
 vm_name CODEX codex

@@ -459,8 +459,8 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 	}
 	// What its state asks of it, which the start makes it where it
 	// differs: its size, its project folder where it is now (moved),
-	// its agents' folders on the host now, its agent forwarding.
-	agentDirs, _ := agentMounts(s.Dirs.Home, tools.Names(st))
+	// its agents' folders in devvm's store now, its agent forwarding.
+	agentDirs, _ := agentMounts(s.Dirs, tools.Names(st))
 	want := backend.Want{
 		Size: sectionOf[Size](st, sizeSection).Backend(), Project: projectMount(st), AgentDirs: agentDirs,
 		AgentForwarding: sshagent.Forwards(mode),

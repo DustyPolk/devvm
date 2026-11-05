@@ -181,7 +181,7 @@ func TestInventoryRows(t *testing.T) {
 	if _, err := inv.ToolsInUse(); err == nil {
 		t.Error("ToolsInUse past a state it can't read")
 	}
-	if _, err := inv.Mounts(t.TempDir(), "/share"); err == nil {
+	if _, err := inv.Mounts(d); err == nil {
 		t.Error("Mounts past a state it can't read")
 	}
 	// devvm ls: what the backend has, a state it can't read with its
@@ -240,11 +240,10 @@ func TestInventoryTwoBackends(t *testing.T) {
 
 // Mounts are what the states have, whether the VM runs or not, and no
 // backend is asked: each VM's project folder (not a --clone VM's), its
-// agents' folders that exist, and the share.
+// agents' folders that exist in devvm's store, and the share.
 func TestInventoryMounts(t *testing.T) {
-	d := paths.Dirs{Data: t.TempDir()}
-	home := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".claude", "skills"), 0o700); err != nil {
+	d := paths.Dirs{Data: t.TempDir(), Config: t.TempDir()}
+	if err := os.MkdirAll(filepath.Join(agentStore(d, "claude"), ".claude", "skills"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	const web, cl = "devvm-web-0123456789abc1", "devvm-cl-0123456789abc2"
@@ -254,19 +253,20 @@ func TestInventoryMounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := inv.Mounts(home, "/share")
+	got, err := inv.Mounts(d)
 	if err != nil {
 		t.Fatal(err)
 	}
-	agents, _ := agentMounts(home, []string{"claude"})
-	if len(agents) == 0 {
-		t.Fatal("no agent folders")
+	agents, _ := agentMounts(d, []string{"claude"})
+	if len(agents) != 1 || agents[0] != filepath.Join(d.Config, "agents", "claude", ".claude", "skills") {
+		t.Fatalf("agent folders %q", agents)
 	}
-	want := []sshagent.Mount{{VM: cl, Dir: "/share"}, {VM: web, Dir: "/p"}}
+	share := d.Tools()
+	want := []sshagent.Mount{{VM: cl, Dir: share}, {VM: web, Dir: "/p"}}
 	for _, a := range agents {
 		want = append(want, sshagent.Mount{VM: web, Dir: a})
 	}
-	want = append(want, sshagent.Mount{VM: web, Dir: "/share"})
+	want = append(want, sshagent.Mount{VM: web, Dir: share})
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Mounts =\n%+v\nwant\n%+v", got, want)
 	}

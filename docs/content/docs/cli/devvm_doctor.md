@@ -1,6 +1,6 @@
 ---
 title: devvm doctor
-weight: 8
+weight: 10
 ---
 
 Check what devvm needs on this machine

@@ -270,7 +270,7 @@ func TestGet(t *testing.T) {
 	} {
 		writeLogin(t, s, kind, data)
 	}
-	mcp, err := agentlogin.File{Kind: agentlogin.Claude, Path: LoginFile(s.Dirs.Home, "claude")}.Bindings()
+	mcp, err := agentlogin.File{Kind: agentlogin.Claude, Path: LoginFile(s.Dirs, "claude")}.Bindings()
 	if err != nil || len(mcp) != 1 {
 		t.Fatalf("MCP bindings = %+v, %v", mcp, err)
 	}
@@ -344,7 +344,7 @@ func TestNamesAndLogins(t *testing.T) {
 		t.Errorf("Logins without files = %q", got)
 	}
 	for _, k := range loginKinds {
-		f := LoginFile(s.Dirs.Home, k)
+		f := LoginFile(s.Dirs, k)
 		if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -368,7 +368,7 @@ func TestWriteFiles(t *testing.T) {
 	d := s.Dirs
 	st := newVM(t, d, vm1, "node", "codex", "claude")
 	bind(t, st, "github")
-	auth := LoginFile(s.Dirs.Home, "codex")
+	auth := LoginFile(s.Dirs, "codex")
 	if err := os.MkdirAll(filepath.Dir(auth), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -442,10 +442,10 @@ func TestWriteFiles(t *testing.T) {
 	}
 }
 
-// writeLogin writes an agent's login file, data, in the store's home.
+// writeLogin writes an agent's login file, data, in devvm's store.
 func writeLogin(t *testing.T, s *Store, kind, data string) {
 	t.Helper()
-	f := LoginFile(s.Dirs.Home, kind)
+	f := LoginFile(s.Dirs, kind)
 	if err := os.MkdirAll(filepath.Dir(f), 0o700); err != nil {
 		t.Fatal(err)
 	}

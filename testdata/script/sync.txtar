@@ -1,12 +1,14 @@
-# A VM's setup on every launch: the host's settings, its agents' config
-# (never their history), their folders mounted read-only, and tokens: as
-# they are without network policy, placeholders with it.
+# A VM's setup on every launch: the host's settings, its agents' settings
+# and logins from devvm's store (never their history), their folders
+# mounted read-only, and tokens: as they are without network policy,
+# placeholders with it.
 env TZ=Europe/Paris
 env LANG=en_US.UTF-8
 exec git config --global user.name 'Test User'
 exec git config --global user.email test@example.com
 
-# The host's agent config, and their history.
+# The agents' files in the home folder, and their history: a VM gets
+# nothing of them before devvm agent import copies them into the store.
 mkdir $HOME/.claude/skills $HOME/.claude/projects/p $HOME/.codex/prompts
 cp $WORK/settings.json $HOME/.claude/settings.json
 cp $WORK/claude.json $HOME/.claude.json
@@ -14,16 +16,26 @@ cp $WORK/codex.json $HOME/.codex/auth.json
 cp $WORK/config.toml $HOME/.codex/config.toml
 cp $WORK/history.jsonl $HOME/.claude/projects/p/history.jsonl
 cp $WORK/history.jsonl $HOME/.codex/history.jsonl
+project before
+exec devvm --no-network-policy --no-git-protect --agents claude,codex
+! stderr claude_mcp_secrets_copied
+exec tar -tf $STUB_DIR/sync.tar
+! stdout '^home/|^claude\.json$'
+exec tar -xOf $STUB_DIR/sync.tar links
+! stdout /home/
+exec devvm agent import
+! exists $CFG/agents/claude/.claude/projects
+! exists $CFG/agents/codex/.codex/history.jsonl
 
-# Without network policy: the agents' folders mounted read-only, their
-# files and tokens copied as they are, with a warning naming the MCP
-# servers whose secrets go too.
+# Without network policy: the agents' folders in the store mounted
+# read-only, their files and tokens copied as they are, with a warning
+# naming the MCP servers whose secrets go too.
 project plain
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
 exec devvm --no-network-policy --no-git-protect --agents claude,codex
 stderr '^devvm: claude_mcp_secrets_copied servers=srv vm=devvm-plain-[0-9a-f]{14}$'
 stub_calls
-stdout '^limactl clone --tty=false \S+ devvm-plain-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/plain","writable":true\},\{"location":"\S*/home/\.claude/skills","writable":false\},\{"location":"\S*/home/\.codex/prompts","writable":false\},\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
+stdout '^limactl clone --tty=false \S+ devvm-plain-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/plain","writable":true\},\{"location":"\S*/config/devvm/agents/claude/\.claude/skills","writable":false\},\{"location":"\S*/config/devvm/agents/codex/\.codex/prompts","writable":false\},\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
 exec tar -tf $STUB_DIR/sync.tar
 stdout '^home/\.claude/settings\.json$'
 stdout '^home/\.codex/auth\.json$'
@@ -38,10 +50,9 @@ exec tar -xOf $STUB_DIR/sync.tar claude.json
 stdout testfake-mcp
 stdout '"theme": *"dark"'
 ! stdout 'testfake-history|testfake-apikey|primaryApiKey|customApiKeyResponses|projects'
+# Each folder to link: its path in the VM's home, then its mount's.
 exec tar -xOf $STUB_DIR/sync.tar links
-stdout '^\.claude/skills\n\.claude/agents\n\.claude/commands\n\.claude/output-styles\n\.claude/plugins\n\.codex/prompts\n\.codex/skills\n\z'
-exec tar -xOf $STUB_DIR/sync.tar host_home
-stdout '/home$'
+stdout '^\.claude/skills\n\S+/config/devvm/agents/claude/\.claude/skills\n\.claude/agents\n\S+/agents/claude/\.claude/agents\n\.claude/commands\n\S+/agents/claude/\.claude/commands\n\.claude/output-styles\n\S+/agents/claude/\.claude/output-styles\n\.claude/plugins\n\S+/agents/claude/\.claude/plugins\n\.codex/prompts\n\S+/config/devvm/agents/codex/\.codex/prompts\n\.codex/skills\n\S+/agents/codex/\.codex/skills\n\z'
 exec tar -xOf $STUB_DIR/sync.tar vm
 cmp stdout $WORK/vm-plain
 # Without links, the hosts file for /etc/hosts is empty.
@@ -71,12 +82,13 @@ stderr '^devvm: no_claude_token vm=devvm-notoken-[0-9a-f]{14}$'
 mkdir $HOME/.config/opencode
 cp $WORK/opencode-env $HOME/.config/opencode/.env
 cp $WORK/opencode-agents $HOME/.config/opencode/AGENTS.md
+exec devvm agent import opencode
 project net
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
 exec devvm --network-policy --no-git-protect --agents claude,codex,opencode
-stderr '^config_redacted file=\S*/home/\.claude/settings\.json keys=env\.ANTHROPIC_API_KEY vm=devvm-net-[0-9a-f]{14}$'
-stderr '^devvm: config_not_copied file=\S*/home/\.codex/config\.toml vm=devvm-net-[0-9a-f]{14}$'
-stderr '^devvm: config_not_copied file=\S*/home/\.config/opencode/\.env vm=devvm-net-[0-9a-f]{14}$'
+stderr '^config_redacted file=\S*/agents/claude/\.claude/settings\.json keys=env\.ANTHROPIC_API_KEY vm=devvm-net-[0-9a-f]{14}$'
+stderr '^devvm: config_not_copied file=\S*/agents/codex/\.codex/config\.toml vm=devvm-net-[0-9a-f]{14}$'
+stderr '^devvm: config_not_copied file=\S*/agents/opencode/\.config/opencode/\.env vm=devvm-net-[0-9a-f]{14}$'
 ! stderr claude_mcp_secrets_copied
 exec tar -tf $STUB_DIR/sync.tar
 ! stdout '^home/\.codex/config\.toml$'
@@ -97,14 +109,17 @@ stdout '"OPENAI_API_KEY": *"sk-devvm-proxy-managed'
 exec sh -c 'salt=$(sed -n "s/.*\"proxy_salt\": \"\([^\"]*\)\".*/\1/p" "$NET_dir/vm.json"); tar -xOf "$STUB_DIR/sync.tar" env | grep -Fx "export CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-devvm-proxy-managed-$salt''"'
 exec sh -c 'key=$(sed -n "s/.*\"proxy_key\": \"\([^\"]*\)\".*/\1/p" "$NET_dir/vm.json"); tar -xOf "$STUB_DIR/sync.tar" vm | grep -E "^DEVVM_PROXY=''http://devvm:$key@[0-9.]+:[0-9]+''$"'
 cmp $HOME/.codex/auth.json $WORK/codex.json
+cmp $DATA/logins/codex/.codex/auth.json $WORK/codex.json
 cmp $HOME/.claude.json $WORK/claude.json
 
-# A ~/.claude.json devvm can't read stops the setup, network policy or not.
-cp $WORK/bad.json $HOME/.claude.json
+# A .claude.json in the store devvm can't read stops the setup, network
+# policy or not.
+cp $DATA/logins/claude/.claude.json $WORK/store-claude.json
+cp $WORK/bad.json $DATA/logins/claude/.claude.json
 project badclaude
 ! exec devvm --no-network-policy --no-git-protect --agents claude
 stderr '^devvm: login_copy_failed agent=claude reason=.* vm=devvm-badclaude-[0-9a-f]{14}$'
-cp $WORK/claude.json $HOME/.claude.json
+cp $WORK/store-claude.json $DATA/logins/claude/.claude.json
 
 # A setup that fails says so, and leaves nothing of what it was sent.
 mkdir $WORK/tmp $WORK/fails

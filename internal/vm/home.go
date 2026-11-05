@@ -36,14 +36,15 @@ const homeIn = "cd ~ && tar -xzf - --skip-old-files"
 // remake doesn't keep, because the new VM's setup writes them itself:
 // devvm's own files (its environment, with the user's GitHub token
 // without network policy), the ssh key its backend logs in with, the
-// agents' folders linked to their mounts and the files copied from the
-// host, the agents' logins, and caches, which are made again.
-func homeSkips(home string, toolNames []string) []string {
+// agents' folders linked to their mounts and the files copied from
+// devvm's store, the agents' logins, and caches, which are made again.
+func homeSkips(d paths.Dirs, toolNames []string) []string {
 	skips := []string{".config/devvm", ".ssh/authorized_keys", ".cache"}
 	skips = append(skips, historyExcludes...)
 	for _, a := range image.AgentsOf(toolNames) {
-		skips = append(skips, agentDirs(home, a)...)
-		skips = append(skips, agentFiles(home, a)...)
+		store := agentStore(d, a)
+		skips = append(skips, agentDirs(store, a)...)
+		skips = append(skips, agentFiles(store, a)...)
 	}
 	return skips
 }
@@ -170,7 +171,7 @@ func (e remaking) saveHome(ctx context.Context, t *target, failed error) error {
 	pr, pw := io.Pipe()
 	copied := make(chan error, 1)
 	go func() {
-		err := copyHome(pr, out, homeSkips(e.Dirs.Home, tools.Names(t.st)))
+		err := copyHome(pr, out, homeSkips(e.Dirs, tools.Names(t.st)))
 		if err == nil {
 			// tar's padding after its end, which the VM still sends.
 			_, err = io.Copy(io.Discard, pr)

@@ -13,26 +13,38 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
 
-// What each agent shares from the host, as paths relative to the home
-// folder. Folders are mounted read-only at their host path and linked into
-// the VM's home; files are copied in on every launch. Host history
-// (transcripts, sessions, databases) is never shared.
+// Each agent's settings, as paths relative to the home folder, which
+// devvm's store of the agent's settings (agentStore) keeps at the same
+// paths below it. Folders are mounted read-only at their path in the
+// store and linked into the VM's home; files are copied in on every
+// launch. An agent's logins are in the store of its logins
+// (secrets.LoginFile). History (transcripts, sessions, databases) is in
+// neither.
 var (
 	agentDirsOf = map[string][]string{
 		"claude": {".claude/skills", ".claude/agents", ".claude/commands", ".claude/output-styles", ".claude/plugins"},
 		"codex":  {".codex/prompts", ".codex/skills"},
 	}
 	agentFilesOf = map[string][]string{
-		"claude":   {".claude/settings.json", ".claude/CLAUDE.md"},
-		"codex":    {".codex/config.toml", ".codex/AGENTS.md", ".codex/auth.json"},
-		"opencode": {".local/share/opencode/auth.json"},
+		"claude": {".claude/settings.json", ".claude/CLAUDE.md"},
+		"codex":  {".codex/config.toml", ".codex/AGENTS.md"},
 	}
+	// agentFolderOf is the folder of the home folder each agent's
+	// settings are in, which devvm agent import copies them from,
+	// following no link out of it.
+	agentFolderOf = map[string]string{"claude": ".claude", "codex": ".codex", "opencode": opencodeDir}
 )
+
+// agentStore is devvm's store of an agent's settings, laid out as they
+// are in the home folder: the one place devvm reads them from for VMs,
+// never the home folder.
+func agentStore(d paths.Dirs, agent string) string { return d.AgentSettings(agent) }
 
 // The agents' history in a VM, relative to its home: what devvm rm
 // exports, without their logins.
@@ -111,8 +123,9 @@ func historyImport() string {
 // and whose files are copied.
 const opencodeDir = ".config/opencode"
 
-// agentDirs returns the folders an agent shares, relative to home. For
-// opencode, its config folder's subfolders as they are now.
+// agentDirs returns an agent's settings folders, relative to home, a home
+// folder or the agent's store (agentStore). For opencode, its config
+// folder's subfolders there as they are now.
 func agentDirs(home, agent string) []string {
 	if agent != "opencode" {
 		return agentDirsOf[agent]
@@ -126,8 +139,9 @@ func agentDirs(home, agent string) []string {
 	return dirs
 }
 
-// agentFiles returns the files an agent shares, relative to home. For
-// opencode, its config folder's files too, but lock files.
+// agentFiles returns an agent's settings files, relative to home, a home
+// folder or the agent's store (agentStore). For opencode, its config
+// folder's files there, but lock files.
 func agentFiles(home, agent string) []string {
 	files := slices.Clone(agentFilesOf[agent])
 	if agent != "opencode" {
@@ -150,23 +164,24 @@ func readDir(dir string) []os.DirEntry {
 }
 
 // AgentMounts returns the host folders a VM with these shared tools
-// mounts: its agents' folders that exist under the home folder. One with a
-// comma in its path is left out on every backend, with a warning: Lima
-// splits mount options on commas.
+// mounts: its agents' settings folders that exist in devvm's store. One
+// with a comma in its path is left out on every backend, with a warning:
+// Lima splits mount options on commas.
 func (e Launch) AgentMounts(tools []string) []string {
-	dirs, comma := agentMounts(e.Dirs.Home, tools)
+	dirs, comma := agentMounts(e.Dirs, tools)
 	for _, p := range comma {
 		e.Warn(msg.AgentDirComma(p))
 	}
 	return dirs
 }
 
-// agentMounts returns the host folders under home a VM with these shared
+// agentMounts returns the folders of devvm's store a VM with these shared
 // tools mounts (AgentMounts), and those it leaves out for a comma.
-func agentMounts(home string, tools []string) (dirs, comma []string) {
+func agentMounts(d paths.Dirs, tools []string) (dirs, comma []string) {
 	for _, a := range image.AgentsOf(tools) {
-		for _, rel := range agentDirs(home, a) {
-			p := filepath.Join(home, rel)
+		store := agentStore(d, a)
+		for _, rel := range agentDirs(store, a) {
+			p := filepath.Join(store, rel)
 			if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
 				continue
 			}
@@ -181,8 +196,8 @@ func agentMounts(home string, tools []string) (dirs, comma []string) {
 }
 
 // updateAgentDirs says how an existing VM's agent folder mounts change to
-// match the host's folders, which can appear or go after it's made, from
-// in, its instance. Each start of a stopped VM mounts the host's
+// match the store's folders, which can appear or go after it's made, from
+// in, its instance. Each start of a stopped VM mounts the store's
 // (starter.start): a stopped VM's change as its launch starts it, a
 // running one's at its next start (later), which bringUp offers to make
 // now, with whatever else waits for it, in its one question

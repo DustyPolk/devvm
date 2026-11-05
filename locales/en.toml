@@ -2084,11 +2084,41 @@ other = "The agent folder {{.path}} isn't mounted, because devvm doesn't mount a
 
 [agent_dirs_added]
 description = "dirs is a comma-separated list of folders"
-other = "This machine has new agent folders for {{.vm}}: {{.dirs}}."
+other = "devvm's agent store has new folders for {{.vm}}: {{.dirs}}."
 
 [agent_dirs_removed]
 description = "dirs is a comma-separated list of folders"
-other = "These agent folders for {{.vm}} are gone from this machine: {{.dirs}}."
+other = "These agent folders for {{.vm}} are gone from devvm's agent store: {{.dirs}}."
+
+[agent_import_none]
+other = "There's nothing of {{.agent}} to import, because this machine has neither its settings nor its login."
+
+[agent_import_nothing]
+other = "There's nothing to import, because this machine has no settings or logins of claude, codex or opencode."
+
+[agent_import_replace]
+description = "agents is a space-separated list of agents"
+other = "Replace what devvm's agent store has of {{.agents}} with this machine's settings and logins?"
+
+[nothing_imported]
+other = "nothing imported"
+
+[agent_settings_imported]
+other = "devvm imported {{.agent}}'s settings into {{.dir}}."
+
+[agent_login_imported]
+other = "devvm imported {{.agent}}'s login into {{.file}}."
+
+[agent_import_link_left_out]
+other = "devvm left out the link {{.path}}, because it imports only links to files inside the agent's folder."
+
+[agent_login_read_failed]
+description = "reason is an error from the system, in English"
+other = "Reading the login in {{.file}} failed: {{.reason}}."
+
+[agent_import_failed]
+description = "reason is an error from the system, in English"
+other = "Importing the agents' settings and logins failed: {{.reason}}."
 
 [next_start_size]
 other = "{{.vm}} gets its new size only when it starts."
@@ -2175,21 +2205,21 @@ description = "secret is the name asked for, quoted when it holds a control char
 other = "There's no secret {{.secret}}."
 
 [codex_no_key]
-other = "Codex on this machine isn't logged in with an API key any more, so the VM's proxy has none to put in. Log in with codex on this machine, then run devvm in the VM's folder."
+other = "The Codex login in devvm's agent store has no API key any more, so the VM's proxy has none to put in. Log in with codex on this machine and run devvm agent import --force codex, then devvm in the VM's folder."
 
 [codex_no_chatgpt]
-other = "Codex on this machine isn't logged in with ChatGPT any more, so the VM's proxy has no Codex login to put in. Log in with codex on this machine, then run devvm in the VM's folder."
+other = "The Codex login in devvm's agent store isn't a ChatGPT login any more, so the VM's proxy has none to put in. Log in with codex on this machine and run devvm agent import --force codex, then devvm in the VM's folder."
 
 [codex_refresh_failed]
 description = "reason is an error from the system or OpenAI's token endpoint, in English"
-other = "Refreshing the Codex login on this machine failed: {{.reason}}. Log in again with codex on this machine."
+other = "Refreshing the Codex login in devvm's agent store failed: {{.reason}}. Log in again with codex on this machine and run devvm agent import --force codex."
 
 [opencode_refresh_failed]
 description = "provider is opencode's provider ID, such as openai; reason is an error from the system or the token endpoint, in English"
-other = "Refreshing opencode's {{.provider}} login on this machine failed: {{.reason}}. Log in again with opencode on this machine."
+other = "Refreshing opencode's {{.provider}} login in devvm's agent store failed: {{.reason}}. Log in again with opencode on this machine and run devvm agent import --force opencode."
 
 [login_read_failed]
-description = "file is an agent's login file on this machine; reason is an error from the system, in English"
+description = "file is an agent's login file in devvm's agent store; reason is an error from the system, in English"
 other = "Reading the login in {{.file}} for the VM's proxy failed: {{.reason}}."
 
 [secret_failed]
@@ -2257,7 +2287,7 @@ other = "The VM gets opencode's {{.providers}} login unchanged."
 
 [opencode_login_withheld]
 description = "providers lists opencode's OAuth login providers, comma-separated"
-other = "The VM gets opencode's {{.providers}} login without its OAuth tokens, because network policy keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine."
+other = "The VM gets opencode's {{.providers}} login without its OAuth tokens, because network policy keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine and run devvm agent import --force opencode."
 
 [devcontainer_using]
 description = "file is the devcontainer.json's path in the project folder"

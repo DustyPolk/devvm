@@ -290,6 +290,7 @@ A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the 
 | | |
 | --- | --- |
 | `devvm setup [--features LIST\|none] [--agents LIST\|none] [--layers LIST\|none]` | choose base's features and the coding agents and layers new VMs get, and in a terminal also new VMs' size and network policy ([details](../using/settings.md#devvm-setup)) |
+| `devvm agent import [AGENT...]` | copy the agents' settings and logins from your home folder into devvm's agent store, which every VM gets them from, never their history, asking before it replaces the store's ([details](../using/coding-agents.md#importing-from-this-machine)) |
 | `devvm doctor` | check what devvm needs on this machine and say how to get what's missing ([details](install.md#checking-what-devvm-needs)) |
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
 | `devvm limactl ARGS...` | run Lima's `limactl` on the VMs and images in devvm's own Lima home, not `~/.lima`, for debugging, which starts VMs without network policy ([details](../backends/lima.md#running-limactl)) |
@@ -332,6 +333,7 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 | a Claude Code token or a GitHub token | `devvm secret set NAME --stdin` |
 | whether to delete, in `devvm rm`, `devvm gc`, `devvm gc --caches`, `devvm images rm` and `devvm secret rm` | `--force` |
 | whether to replace the images built on one, in `devvm rebuild` | `--force` |
+| whether to replace what devvm's agent store has, in `devvm agent import` | `--force` |
 | whether to use the VM made for an earlier folder here, in `devvm adopt`, or to move a VM to this folder, in `devvm adopt VM` | `--force` |
 | whether to move the VM made for this folder at the path it had before, in any command on this folder's VM | `devvm adopt --force` |
 

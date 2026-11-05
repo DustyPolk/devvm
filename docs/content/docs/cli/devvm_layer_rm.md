@@ -1,6 +1,6 @@
 ---
 title: devvm layer rm
-weight: 23
+weight: 25
 ---
 
 Make this folder's VM again without some of its layers, then open a shell in it

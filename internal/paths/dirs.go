@@ -295,6 +295,17 @@ func (d Dirs) Policy() string { return filepath.Join(d.Config, "policy") }
 // VMs and builds trust besides their systems' (internal/trust).
 func (d Dirs) TrustedCAs() string { return filepath.Join(d.Config, "ca") }
 
+// AgentSettings is devvm's store of an agent's settings, laid out as the
+// agent's files are in the home folder (claude's .claude/settings.json,
+// .claude/skills…), which every VM with the agent gets: its folders
+// mounted read-only, its files copied in. devvm agent import fills it.
+func (d Dirs) AgentSettings(agent string) string { return filepath.Join(d.Config, "agents", agent) }
+
+// AgentLogins is devvm's store of an agent's logins, laid out as they are
+// in the home folder (codex's .codex/auth.json, claude's .claude.json),
+// only the user's to read and kept out of backups.
+func (d Dirs) AgentLogins(agent string) string { return filepath.Join(d.Data, "logins", agent) }
+
 // Secrets holds secrets' values on hosts without a Keychain, one file each.
 func (d Dirs) Secrets() string { return filepath.Join(d.Data, "secrets") }
 

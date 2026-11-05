@@ -2308,17 +2308,30 @@ printf '[user]\n\tname = E2E User\n\temail = e2e@example.com\n' > "$ah/.gitconfi
 mkdir -p "$ah/outside"; echo e2e-outside-marker > "$ah/outside/e2e-not-a-secret.txt"
 ln -s ../../outside/e2e-not-a-secret.txt "$ah/.claude/skills/escape"
 ln -s "$ah/outside/e2e-not-a-secret.txt" "$ah/.claude/skills/escape-abs"
+# devvm agent import copies the agent's settings into the sandbox's agent store, which the VM gets
+# them from, and leaves the links out.
+store=$XDG_CONFIG_HOME/devvm/agents/claude; rm -rf "$store"
+check "devvm agent import copies the settings into the store, without the history or the links out of the folder" bash -c "
+  HOME='$ah' '$D' agent import --force claude </dev/null >'$work/last.log' 2>&1 &&
+  grep -q e2e '$store/.claude/skills/e2e/SKILL.md' && grep -q e2e-settings '$store/.claude/settings.json' &&
+  [[ ! -e '$store/.claude/projects' && ! -e '$store/.claude/skills/escape' && ! -L '$store/.claude/skills/escape-abs' ]] &&
+  grep -qF \"\$(m agent_import_link_left_out path=$ah/.claude/skills/escape)\" '$work/last.log'"
 a=$(newproj agents)
 (cd "$a" && HOME=$ah TZ=Europe/Paris CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake-plain quiet "$D" --no-network-policy --no-git-protect --agents claude)
 vm=$(vm_of "$a"); [[ -z $vm ]] || created+=("$vm")
-check "an agent folder is mounted read-only at its host path, and linked into the VM's home" bash -c "
-  limactl list --format '{{range .Config.Mounts}}{{.Location}}|{{.Writable}} {{end}}' $vm | grep -qF '$ah/.claude/skills|false ' &&
-  ! limactl shell --workdir / $vm sudo touch '$ah/.claude/skills/x' </dev/null &&
+check "an agent folder of the store is mounted read-only at its path, and linked into the VM's home" bash -c "
+  limactl list --format '{{range .Config.Mounts}}{{.Location}}|{{.Writable}} {{end}}' $vm | grep -qF '$store/.claude/skills|false ' &&
+  ! limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm | grep -qF '$ah/' &&
+  ! limactl shell --workdir / $vm sudo touch '$store/.claude/skills/x' </dev/null &&
   limactl shell --workdir / $vm bash -c 'grep -q e2e ~/.claude/skills/e2e/SKILL.md' </dev/null"
+# Links in the store's folder that lead out of it, relative and absolute, as you might make there.
+ln -s ../../../../../../agent-home/outside/e2e-not-a-secret.txt "$store/.claude/skills/escape"
+ln -s "$ah/outside/e2e-not-a-secret.txt" "$store/.claude/skills/escape-abs"
 check "a symlink in an agent folder, relative or absolute, can't reach the host's files outside it" bash -c "
-  s='$ah/.claude/skills' && l=\$(limactl shell --workdir / $vm readlink \"\$s/escape\" \"\$s/escape-abs\" </dev/null) && echo \"links: \$l\" &&
+  s='$store/.claude/skills' && l=\$(limactl shell --workdir / $vm readlink \"\$s/escape\" \"\$s/escape-abs\" </dev/null) && echo \"links: \$l\" &&
   o=\$(limactl shell --workdir / $vm sudo cat \"\$s/escape\" \"\$s/escape-abs\" </dev/null 2>&1); echo \"read: \$o\" &&
   [[ \$l == *outside/e2e-not-a-secret.txt*outside/e2e-not-a-secret.txt && \$o != *e2e-outside-marker* ]]"
+rm -f "$store/.claude/skills/escape" "$store/.claude/skills/escape-abs"
 check "its settings are copied in, its history never" bash -c "
   limactl shell --workdir / $vm bash -c 'grep -q e2e-settings ~/.claude/settings.json && [[ ! -e ~/.claude/projects/p ]]' </dev/null &&
   ! limactl shell --workdir / $vm sudo grep -rqs e2e-history /home /root /etc </dev/null"
@@ -2326,13 +2339,13 @@ check "the VM gets the host's git identity, timezone and its hostname" in_vm "$v
   "[[ \$(git config --global user.name) == 'E2E User' && \$(git config --global user.email) == e2e@example.com &&
      \$(timedatectl show -p Timezone --value) == Europe/Paris && \$(hostname) == agents ]]"
 check "without network policy, the Claude token itself" in_vm "$vm" '[[ $CLAUDE_CODE_OAUTH_TOKEN == sk-ant-oat01-e2efake-plain ]]'
-mkdir -p "$ah/.claude/agents"
-check "a new agent folder is noticed on launch, and waits for a restart" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' 2>&1 |
+mkdir -p "$store/.claude/agents"
+check "a new agent folder in the store is noticed on launch, and waits for a restart" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' 2>&1 |
   grep -qF \"\$(m next_start_mounts vm=$vm | head -1)\""
 check "restart mounts it" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' restart >'$work/last.log' 2>&1 &&
-  limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm | grep -qF '$ah/.claude/agents ' &&
-  limactl shell --workdir / $vm ls '$ah/.claude/agents' </dev/null"
-rm -rf "$ah/.claude/skills"
+  limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm | grep -qF '$store/.claude/agents ' &&
+  limactl shell --workdir / $vm ls '$store/.claude/agents' </dev/null"
+rm -rf "$store/.claude/skills"
 check "a removed one is unmounted, and the VM starts" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' restart >'$work/last.log' 2>&1 &&
   ! limactl list --format '{{range .Config.Mounts}}{{.Location}} {{end}}' $vm | grep -q skills && [[ \$(status_of $vm) == Running ]]"
 in_vm "$vm" 'mkdir -p ~/.claude/projects/e2e && echo e2e-transcript > ~/.claude/projects/e2e/t.jsonl && echo secret > ~/.claude/.credentials.json'
@@ -2710,11 +2723,18 @@ if begin network; then
 section "network policy"
 # A VM with Claude Code and Codex, so the claude token is bound to it: a fake one in devvm's environment (its
 # proxy inherits it), a fake ~/.claude.json with an MCP server's header and a fake Codex login, in a
-# home of its own: no real token or login is read.
+# home of its own, which devvm agent import copies into the sandbox's agent store: no real token or
+# login is read.
 nh=$work/net-home; rm -rf "$nh"; mkdir -p "$nh/.codex"
 printf '%s\n' '{"mcpServers":{"e2e":{"type":"http","url":"https://api.github.com/devvm-e2e-mcp","headers":{"X-Devvm-E2e":"e2efake-mcp"}}}}' > "$nh/.claude.json"
 echo '{"OPENAI_API_KEY":"sk-e2efake-codex","last_refresh":null}' > "$nh/.codex/auth.json"
 cp "$nh/.claude.json" "$work/claude-before.json"; cp "$nh/.codex/auth.json" "$work/codex-before.json"
+logins=$XDG_DATA_HOME/devvm/logins
+check "devvm agent import copies the logins into the sandbox's agent store, only yours to read" bash -c "
+  HOME='$nh' '$D' agent import --force claude codex </dev/null >'$work/last.log' 2>&1 &&
+  cmp -s '$logins/codex/.codex/auth.json' '$work/codex-before.json' && grep -q e2efake-mcp '$logins/claude/.claude.json' &&
+  [[ \$(stat -c %a '$logins/codex' 2>/dev/null || stat -f %Lp '$logins/codex') == 700 ]] &&
+  [[ \$(stat -c %a '$logins/codex/.codex/auth.json' 2>/dev/null || stat -f %Lp '$logins/codex/.codex/auth.json') == 600 ]]"
 n=$(newproj net)
 ps_watch
 (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$D" --network-policy --no-git-protect --agents claude,codex >"$work/last.log" 2>&1)
@@ -2928,7 +2948,8 @@ check "and an MCP server's header for its host, from the VM's copy of the login"
 check "and Codex's API key, from the VM's copy of its login" bash -c "
   limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.openai.com/v1/models -H \"Authorization: Bearer \$(jq -r .OPENAI_API_KEY ~/.codex/auth.json)\"' </dev/null &&
   grep '\"path\":\"/v1/models\"' '$events' | grep -q '\"secrets\":\[\"codex-key\"\]'"
-check "the host's login files are unchanged" bash -c "cmp -s '$nh/.codex/auth.json' '$work/codex-before.json' && cmp -s '$nh/.claude.json' '$work/claude-before.json'"
+check "the home folder's and the store's login files are unchanged" bash -c "cmp -s '$nh/.codex/auth.json' '$work/codex-before.json' &&
+  cmp -s '$nh/.claude.json' '$work/claude-before.json' && cmp -s '$logins/codex/.codex/auth.json' '$work/codex-before.json'"
 # devvm secret with a fake GitHub token: in the Keychain under this run's service on macOS, else in
 # the sandbox's config folder; deleted at the end. macOS finds the Keychain through HOME, so the
 # VM's home links the Keychains folder (the link alone goes at the end).

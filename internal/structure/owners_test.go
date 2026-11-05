@@ -394,22 +394,35 @@ func checkPaths(m *module, r rules) []violation {
 	return vs
 }
 
+// callsMethod reports whether call calls a method named name: x.name(…)
+// on any expression x.
+func callsMethod(call *ast.CallExpr, name string) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == name
+}
+
 // checkCallers: outside tests and its own package, a function callers
 // lists is called only in its file, as pkg.Name for the name the file
-// imports its package as. A listed file that no longer calls it fails.
+// imports its package as. A method, listed as pkg.Type.Name, is called
+// only there by its name, on any value: its name is its type's alone in
+// the module. A listed file that no longer calls it fails.
 func checkCallers(m *module, r rules) []violation {
 	var vs []violation
 	called := map[string]bool{}
 	for _, fn := range slices.Sorted(maps.Keys(r.callers)) {
 		dir, name := strings.TrimSuffix(fn, path.Ext(fn)), strings.TrimPrefix(path.Ext(fn), ".")
+		method := path.Ext(dir) != ""
+		if method {
+			dir = strings.TrimSuffix(dir, path.Ext(dir))
+		}
 		owner := r.callers[fn]
 		for _, f := range m.files {
 			pkg := importName(f, m.path+"/"+dir)
-			if f.test || pkg == "" {
+			if f.test || f.dir == dir || (pkg == "" && !method) {
 				continue
 			}
 			calls(f, func(call *ast.CallExpr) {
-				if callName(call) != pkg+"."+name {
+				if method && !callsMethod(call, name) || !method && callName(call) != pkg+"."+name {
 					return
 				}
 				called[fn] = called[fn] || f.name == owner

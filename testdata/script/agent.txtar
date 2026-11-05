@@ -1,0 +1,71 @@
+# devvm agent import: the agents' settings and logins copied from the
+# home folder into devvm's store, never their history; logins only the
+# user's to read and kept out of Time Machine; links out of an agent's
+# folder left out; the store replaced only after asking, or with --force.
+
+# Bare, it prints its help; its arguments are agents.
+exec devvm agent
+stdout 'devvm agent import'
+! exec devvm agent import nope
+stderr '^devvm: arg_not_choice choices=claude, codex, opencode command=devvm agent import given=nope$'
+
+# Nothing to import: said once, or for each agent named.
+exec devvm agent import
+stdout '^==> agent_import_nothing$'
+exec devvm agent import codex
+stderr '^devvm: agent_import_none agent=codex$'
+! exists $CFG/agents
+
+# The home folder's files, its history and a link out of the folder.
+mkdir $HOME/.claude/skills/s $HOME/.claude/projects/p $HOME/outside
+cp $WORK/skill.md $HOME/.claude/skills/s/SKILL.md
+cp $WORK/settings.json $HOME/.claude/settings.json
+cp $WORK/claude.json $HOME/.claude.json
+cp $WORK/history.jsonl $HOME/.claude/projects/p/h.jsonl
+cp $WORK/skill.md $HOME/outside/secret.md
+symlink $HOME/.claude/skills/escape -> ../../outside/secret.md
+exec devvm agent import
+stdout '^==> agent_settings_imported agent=claude dir=\S*/config/devvm/agents/claude$'
+stdout '^==> agent_login_imported agent=claude file=\S*/data/devvm/logins/claude/\.claude\.json$'
+stderr '^devvm: agent_import_link_left_out path=\S*/home/\.claude/skills/escape$'
+cmp $CFG/agents/claude/.claude/settings.json $WORK/settings.json
+cmp $CFG/agents/claude/.claude/skills/s/SKILL.md $WORK/skill.md
+! exists $CFG/agents/claude/.claude/skills/escape
+! exists $CFG/agents/claude/.claude/projects
+grep '"theme": "dark"' $DATA/logins/claude/.claude.json
+! grep 'projects|testfake-history' $DATA/logins/claude/.claude.json
+[!darwin] exec sh -c 'stat -c %a "$DATA/logins/claude" "$DATA/logins/claude/.claude.json"'
+[darwin] exec sh -c 'stat -f %Lp "$DATA/logins/claude" "$DATA/logins/claude/.claude.json"'
+stdout '^700\n600\n$'
+stub_calls
+[darwin] stdout '^tmutil addexclusion \S*/data/devvm/logins/claude$'
+
+# The store has claude's: without a terminal the import is refused,
+# naming --force, and nothing changes; a yes replaces it, and so does
+# --force without asking.
+cp $WORK/settings2.json $HOME/.claude/settings.json
+! exec devvm agent import
+stderr '^agent_import_replace agents=claude\ndevvm: no_input answer=--force$'
+cmp $CFG/agents/claude/.claude/settings.json $WORK/settings.json
+env DEVVM_PIPED_ANSWERS=1
+stdin yes
+exec devvm agent import claude
+env DEVVM_PIPED_ANSWERS=
+cmp $CFG/agents/claude/.claude/settings.json $WORK/settings2.json
+cp $WORK/settings.json $HOME/.claude/settings.json
+exec devvm agent import --force
+! stderr agent_import_replace
+cmp $CFG/agents/claude/.claude/settings.json $WORK/settings.json
+
+-- yes --
+y
+-- skill.md --
+# a skill
+-- settings.json --
+{"theme":"dark"}
+-- settings2.json --
+{"theme":"light"}
+-- claude.json --
+{"theme":"dark","projects":{"/p":{"history":["testfake-history"]}}}
+-- history.jsonl --
+{"prompt":"testfake-history"}

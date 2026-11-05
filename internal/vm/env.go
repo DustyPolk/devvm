@@ -289,7 +289,7 @@ func (e *Env) mounts(context.Context) ([]sshagent.Mount, error) {
 	if err != nil {
 		return nil, err
 	}
-	return inv.Mounts(e.Dirs.Home, e.Dirs.Tools())
+	return inv.Mounts(e.Dirs)
 }
 
 // sshConfig is the ssh config for every backend's VMs.

@@ -282,9 +282,9 @@ func (inv *Inventory) ToolsInUse() (map[string]int, error) {
 
 // Mounts are the host folders project VMs mount, as their states have
 // them, the VM running or not: its project folder (not a --clone VM's),
-// its agents' folders in home, and the tools share. A state that can't
-// be read fails it: its VM may mount any folder.
-func (inv *Inventory) Mounts(home, share string) ([]sshagent.Mount, error) {
+// its agents' folders in devvm's store, and the tools share. A state
+// that can't be read fails it: its VM may mount any folder.
+func (inv *Inventory) Mounts(d paths.Dirs) ([]sshagent.Mount, error) {
 	if err := inv.unreadable(); err != nil {
 		return nil, err
 	}
@@ -294,9 +294,9 @@ func (inv *Inventory) Mounts(home, share string) ([]sshagent.Mount, error) {
 		if st.Dir != "" && !isClone(st) {
 			ms = append(ms, sshagent.Mount{VM: vm, Dir: st.Dir})
 		}
-		dirs, _ := agentMounts(home, tools.Names(st))
-		for _, d := range append(dirs, share) {
-			ms = append(ms, sshagent.Mount{VM: vm, Dir: d})
+		dirs, _ := agentMounts(d, tools.Names(st))
+		for _, dir := range append(dirs, d.Tools()) {
+			ms = append(ms, sshagent.Mount{VM: vm, Dir: dir})
 		}
 	}
 	return ms, nil

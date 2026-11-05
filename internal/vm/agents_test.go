@@ -47,20 +47,25 @@ func mkdirs(t *testing.T, home string, rels ...string) {
 	}
 }
 
-// A VM mounts its agents' folders that exist on the host, one per entry,
-// names with spaces kept whole; opencode's are its config folder's
-// subfolders but node_modules. A path with a comma is left out, with a
-// warning.
+// A VM mounts its agents' folders that exist in devvm's store, each in
+// its agent's store, one per entry, names with spaces kept whole;
+// opencode's are its config folder's subfolders but node_modules. The
+// home folder's are never mounted. A path with a comma is left out, with
+// a warning.
 func TestAgentMounts(t *testing.T) {
 	home := t.TempDir()
-	e := &Env{Dirs: paths.Dirs{Home: home}}
+	e := &Env{Dirs: paths.Dirs{Home: home, Config: t.TempDir()}}
 	got := printed(t, e, false)
-	mkdirs(t, home, ".config/opencode/my agents", ".config/opencode/node_modules", ".config/opencode/a\nb", ".claude/skills", ".codex/prompts", ".claude/agents")
-	if err := os.WriteFile(filepath.Join(home, ".claude", "commands"), nil, 0o600); err != nil {
+	claude, opencode := agentStore(e.Dirs, "claude"), agentStore(e.Dirs, "opencode")
+	mkdirs(t, opencode, ".config/opencode/my agents", ".config/opencode/node_modules", ".config/opencode/a\nb")
+	mkdirs(t, claude, ".claude/skills", ".claude/agents")
+	mkdirs(t, agentStore(e.Dirs, "codex"), ".codex/prompts")
+	mkdirs(t, home, ".claude/commands", ".config/opencode/yours")
+	if err := os.WriteFile(filepath.Join(claude, ".claude", "commands"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
-		filepath.Join(home, ".claude/skills"), filepath.Join(home, ".claude/agents"), filepath.Join(home, ".config/opencode/my agents"),
+		filepath.Join(claude, ".claude/skills"), filepath.Join(claude, ".claude/agents"), filepath.Join(opencode, ".config/opencode/my agents"),
 	}
 	if ms := (Launch{e}).AgentMounts([]string{"node", "claude", "opencode"}); !slices.Equal(ms, want) {
 		t.Errorf("AgentMounts = %q, want %q", ms, want)
@@ -68,13 +73,12 @@ func TestAgentMounts(t *testing.T) {
 	if ms := (Launch{e}).AgentMounts([]string{"node"}); ms != nil {
 		t.Errorf("AgentMounts without agents = %q", ms)
 	}
-	comma := filepath.Join(t.TempDir(), "a,b")
-	mkdirs(t, comma, ".codex/prompts")
-	e.Dirs.Home = comma
+	e.Dirs.Config = filepath.Join(t.TempDir(), "a,b")
+	mkdirs(t, agentStore(e.Dirs, "codex"), ".codex/prompts")
 	if ms := (Launch{e}).AgentMounts([]string{"codex"}); ms != nil {
 		t.Errorf("AgentMounts with a comma = %q", ms)
 	}
-	if !slices.Equal(*got, []string{"agent_dir_comma path=" + filepath.Join(comma, ".codex/prompts")}) {
+	if !slices.Equal(*got, []string{"agent_dir_comma path=" + filepath.Join(agentStore(e.Dirs, "codex"), ".codex/prompts")}) {
 		t.Errorf("printed %q", *got)
 	}
 }
@@ -92,7 +96,8 @@ func agentVM(t *testing.T, tools string, status backend.Status, dirs ...string) 
 }
 
 func TestUpdateAgentDirs(t *testing.T) {
-	home := t.TempDir()
+	d := paths.Dirs{Config: t.TempDir()}
+	home := agentStore(d, "claude")
 	skills, mine, commands := filepath.Join(home, ".claude/skills"), filepath.Join(home, ".claude/agents"), filepath.Join(home, ".claude/commands")
 	mkdirs(t, home, ".claude/skills")
 	vm := "devvm-p-00000000000000"
@@ -127,7 +132,7 @@ func TestUpdateAgentDirs(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			e := &Env{Dirs: paths.Dirs{Home: home}}
+			e := &Env{Dirs: d}
 			got := printed(t, e, true)
 			if tc.name != "nothing changed, nothing edited" {
 				mkdirs(t, home, ".claude/agents")

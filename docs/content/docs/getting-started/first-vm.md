@@ -76,7 +76,7 @@ claude setup-token        # approve in the browser, then copy the sk-ant-oat01-â
 devvm secret set claude   # paste it
 ```
 
-With network policy, the VM gets a placeholder, and the proxy on your machine puts the real token into Claude's requests. Every agent gets your settings, skills and MCP servers, but never your history ([coding agents](../using/coding-agents.md)).
+With network policy, the VM gets a placeholder, and the proxy on your machine puts the real token into Claude's requests. Every agent gets its settings, skills, MCP servers and logins from devvm's agent store, but never your history. When you already use an agent on this machine, `devvm agent import` copies its settings and logins into the store once ([devvm's agent store](../using/coding-agents.md#devvms-agent-store)).
 
 ## Starting the agent
 
@@ -87,7 +87,7 @@ devvm opens a shell in the VM at the same path, `~/some-project`, with `(devvm)`
 (devvm) ~/some-project $ claude
 ```
 
-Run `claude`, `codex` or `opencode`, whichever you checked. In the VM the agent sees only your project folder, and your agents' config read-only, so whatever it runs stays in the VM.
+Run `claude`, `codex` or `opencode`, whichever you checked. devvm installs the agent in the VM, so you never install it on this machine. In the VM the agent sees only your project folder, and your agents' settings from devvm's agent store read-only, so whatever it runs stays in the VM.
 
 ## What's in the VM
 
