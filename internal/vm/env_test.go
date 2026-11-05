@@ -184,7 +184,7 @@ func testForwarders(t *testing.T, e *Env, f *backendtest.Fake) *[][]string {
 	var mu sync.Mutex
 	starts := &[][]string{}
 	args := map[int][]string{}
-	fw := vmssh.NewForwards(e.Dirs, "/devvm")
+	fw := vmssh.NewForwards(e.Dirs, e.Registry.Review, "/devvm")
 	fw.Run, fw.Tick = short, time.Millisecond
 	fw.Detach = func(c daemon.Cmd) (int, error) {
 		cmd := exec.CommandContext(t.Context(), "sleep", "30")

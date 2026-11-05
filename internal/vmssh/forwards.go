@@ -35,6 +35,8 @@ const Cmd = "_ports"
 // checks are the VM's one record for its start (PinHostKeys).
 type Forwards struct {
 	Dirs paths.Dirs
+	// Review is what a VM's ssh is checked against (Checked).
+	Review backend.Review
 	// Run is where the control sockets go instead, when set: tests' run
 	// folders can be too long for a socket.
 	Run string
@@ -55,10 +57,10 @@ type Forwards struct {
 }
 
 // NewForwards returns the forwarders of devvm's folders, run by self
-// (devvm's binary), as processes of their own. Its caller sets InUse and
-// Reporter.
-func NewForwards(d paths.Dirs, self string) Forwards {
-	return Forwards{Dirs: d, Self: self, Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond}
+// (devvm's binary), as processes of their own, each VM's ssh checked
+// against r. Its caller sets InUse and Reporter.
+func NewForwards(d paths.Dirs, r backend.Review, self string) Forwards {
+	return Forwards{Dirs: d, Review: r, Self: self, Detach: daemon.Detach, Args: platform.ProcessArgs, Tick: 500 * time.Millisecond}
 }
 
 // spec is what a VM's forwarder runs with: how it reaches the VM's sshd
@@ -130,17 +132,11 @@ func (f Forwards) start(ctx context.Context, b backend.Backend, st *state.VM) er
 			return nil
 		}
 	}
-	t, err := b.SSH(ctx, vm)
+	reach, err := Checked(ctx, f.Dirs, f.Review, b, vm, PinKeys)
 	if err != nil {
 		return err
 	}
-	s, err := FromTarget(vm, t)
-	if err != nil {
-		return err
-	}
-	if s.KnownHosts, err = PinHostKeys(ctx, f.Dirs, b, vm); err != nil {
-		return err
-	}
+	s := reach.SSH
 	run, err := b.Running(ctx, vm)
 	if err != nil {
 		return err

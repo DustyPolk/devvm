@@ -53,10 +53,11 @@ func TestParseHostKeys(t *testing.T) {
 	}
 }
 
-// hostKeysFake is a fake whose running VMs show key as their host key.
+// hostKeysFake is a fake with ssh whose running VMs show key as their
+// host key.
 func hostKeysFake(t *testing.T, vm string, key *string) (*backendtest.Fake, paths.Dirs) {
 	t.Helper()
-	f := backendtest.New("fake", nil)
+	f := backendtest.New("fake", backend.Caps{backend.FeatureSSH: backend.Native})
 	f.Instances[vm] = backend.Instance{Name: vm, Status: backend.StatusRunning}
 	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
 		if !slices.Equal(argv, []string{"sh", "-c", hostKeyScript}) {

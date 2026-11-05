@@ -156,7 +156,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
 		SSHAdd:    func(ctx context.Context, args ...string) int { return sshAdd(ctx, r.Stderr(), args...) },
 		Reporter:  r,
-		PortInUse: platform.PortInUse, Forwarders: vmssh.NewForwards(d, self), PublicImage: from.NewLookup(d, r, tl.Proxy).Public, FreeSpace: reg.Host.FreeSpace,
+		PortInUse: platform.PortInUse, Forwarders: vmssh.NewForwards(d, reg.Review, self), PublicImage: from.NewLookup(d, r, tl.Proxy).Public, FreeSpace: reg.Host.FreeSpace,
 	}
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, e.Reporter) }
 	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }

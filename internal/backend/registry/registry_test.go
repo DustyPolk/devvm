@@ -129,7 +129,7 @@ func TestSocketsFit(t *testing.T) {
 	}
 	vm := "devvm-" + strings.Repeat("a", 20) + "-0123456789abcd" // the longest folder part
 	target := "devvm-" + strings.Repeat("b", 20) + "-0123456789abce"
-	fw := vmssh.NewForwards(d, "")
+	fw := vmssh.NewForwards(d, backend.Review{}, "")
 	links := vmssh.Links{VM: vm, Dir: d.Run()}
 	ctls := []string{
 		fw.Control(vm),

@@ -93,11 +93,12 @@ type Running struct {
 // Write rewrites the ssh config with the running project VMs up, each by
 // its alias (Host) and its full name, neither of which ever changes,
 // checked against the host keys devvm pins for its current start
-// (vmssh.PinHostKeys), read from it once. A VM whose host keys can't be
-// pinned gets no entry: a stopped VM's port is free for anything on the host to
-// take, so ssh must check it reaches the VM. Nor does one whose backend's
-// ssh isn't usable (an emulation not yet reviewed), or isn't a user and a
-// key on a host loopback port (vmssh.FromTarget). An alias an earlier
+// (vmssh.Checked, vmssh.PinKeys), read from it once. A VM whose host keys
+// can't be pinned (vmssh.ErrNoHostKeys) gets no entry: a stopped VM's port
+// is free for anything on the host to take, so ssh must check it reaches
+// the VM. Nor does one whose backend's ssh isn't usable
+// (vmssh.UnusableError): an emulation not yet reviewed, or not a user and
+// a key on a host loopback port. An alias an earlier
 // entry has (two VMs made at once) is left out: ssh would take the first.
 func (c *Config) Write(ctx context.Context, up []Running) error {
 	up = slices.Clone(up)
@@ -107,34 +108,22 @@ func (c *Config) Write(ctx context.Context, up []Running) error {
 	taken := map[string]bool{}
 	for _, r := range up {
 		b, in := r.Backend, r.Instance
-		if !vmname.IsVM(in.Name) || in.Status != backend.StatusRunning || !c.Review.Allowed(b, backend.FeatureSSH) {
+		if !vmname.IsVM(in.Name) || in.Status != backend.StatusRunning {
 			continue
 		}
-		t, err := b.SSH(ctx, in.Name)
-		if err != nil {
-			continue
-		}
-		login, err := vmssh.FromTarget(in.Name, t)
-		if err != nil {
-			continue
-		}
-		run, err := b.Running(ctx, in.Name)
-		if err != nil {
-			continue
-		}
-		kh, err := vmssh.PinHostKeys(ctx, c.Dirs, b, in.Name)
-		if errors.Is(err, vmssh.ErrNoHostKeys) {
+		reach, err := vmssh.Checked(ctx, c.Dirs, c.Review, b, in.Name, vmssh.PinKeys)
+		var unusable *vmssh.UnusableError
+		if errors.As(err, &unusable) || errors.Is(err, vmssh.ErrNoHostKeys) {
 			continue
 		} else if err != nil {
 			return err
 		}
-		login.KnownHosts = kh
 		alias := c.Host(in.Name)
 		if taken[alias] {
 			alias = in.Name
 		}
 		taken[alias] = true
-		if err := c.entry(&buf, alias, in, login, t.Options, run.ID); err != nil {
+		if err := c.entry(&buf, alias, in, reach.SSH, reach.Options, reach.Start); err != nil {
 			return err
 		}
 	}
