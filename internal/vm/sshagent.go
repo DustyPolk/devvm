@@ -21,7 +21,7 @@ var defaultKeys = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
 // SSHAgent returns the folder's VM's SSH agent forwarding: off, on (the
 // user's agent) or devvm (devvm's own).
 func (e Settings) SSHAgent(ctx context.Context) (string, error) {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMSSHAgent})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMSSHAgent})
 	if err != nil {
 		return "", err
 	}
@@ -33,7 +33,7 @@ func (e Settings) SSHAgent(ctx context.Context) (string, error) {
 // with its keys loaded now). A running VM restarts now once the user
 // agrees (restartOr).
 func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMSSHAgent})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMSSHAgent})
 	if err != nil {
 		return err
 	}
@@ -42,10 +42,7 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 		e.Info(msg.AgentAlready(mode, vm))
 		return nil
 	}
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
+	in := t.in
 	// Forwarding, and turning it on or off on a machine that has it the
 	// other way, before anything is asked.
 	forwards := sshagent.Forwards(mode)
@@ -53,7 +50,7 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 		return err
 	}
 	if forwards {
-		if ok, err := t.widen(e.Env, "devvm ssh-agent "+mode); !ok {
+		if ok, err := t.widen("devvm ssh-agent " + mode); !ok {
 			return err
 		}
 	}

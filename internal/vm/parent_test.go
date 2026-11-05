@@ -49,8 +49,8 @@ func lookupVM(t *testing.T, e *Env) (dir, sub string) {
 
 // fakeParent is a parent folder's VM for resolveFolder: web's, below a
 // repo of its own when repo isn't "".
-func fakeParent(repo string) *found {
-	return &found{f: project.Folder{Dir: "/w/web"}, sub: "/w/web/src", repo: repo}
+func fakeParent(repo string) *target {
+	return &target{f: project.Folder{Dir: "/w/web"}, sub: "/w/web/src", repo: repo}
 }
 
 // resolveFolder decides own, parent or none: the folder's own wins by
@@ -61,7 +61,7 @@ func TestResolveFolder(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		own    bool
-		parent *found // nil: no parent folder has a VM
+		parent *target // nil: no parent folder has a VM
 		rule   FolderRule
 		want   folderUse
 		looked bool   // parent was asked for
@@ -80,7 +80,7 @@ func TestResolveFolder(t *testing.T) {
 		{name: "--parent without one", own: true, rule: FolderParent, want: useNone, looked: true, err: "no_parent_vm dir=/w/web/src"},
 	} {
 		looked := false
-		use, p, err := resolveFolder("/w/web/src", tc.own, tc.rule, func() (*found, error) { looked = true; return tc.parent, nil })
+		use, p, err := resolveFolder("/w/web/src", tc.own, tc.rule, func() (*target, error) { looked = true; return tc.parent, nil })
 		if use != tc.want || looked != tc.looked || msg.NamesOf(err) != tc.err {
 			t.Errorf("%s: %v, looked up %v, %v; want %v, %v, %q", tc.name, use, looked, msg.NamesOf(err), tc.want, tc.looked, tc.err)
 		}
@@ -89,7 +89,7 @@ func TestResolveFolder(t *testing.T) {
 		}
 	}
 	boom := errors.New("boom")
-	if _, _, err := resolveFolder("/w/web/src", false, FolderAuto, func() (*found, error) { return nil, boom }); !errors.Is(err, boom) {
+	if _, _, err := resolveFolder("/w/web/src", false, FolderAuto, func() (*target, error) { return nil, boom }); !errors.Is(err, boom) {
 		t.Errorf("a failed lookup: %v", err)
 	}
 }

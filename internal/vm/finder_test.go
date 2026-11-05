@@ -152,7 +152,7 @@ func pending(t *testing.T, st *state.VM) {
 // foundAs is what a finder found, for TestFinder: its error's names, or
 // the VM's folder (VM: its backend has it; lost: only its state; new:
 // neither) and the folder it's found from, when that's below it.
-func foundAs(t *found, err error) string {
+func foundAs(t *target, err error) string {
 	if err != nil {
 		return msg.NamesOf(err)
 	}

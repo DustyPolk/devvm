@@ -104,7 +104,7 @@ func TestAgentPerVM(t *testing.T) {
 	if err := (Launch{e}).Up(ctx, Options{NoNetworkPolicy: true, SSHAgent: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	targets := map[string]*found{}
+	targets := map[string]*target{}
 	for _, dir := range []string{web, api} {
 		e.Dir = dir
 		tg, err := finder{e}.target(ctx, need{has: hasMade})
@@ -114,7 +114,7 @@ func TestAgentPerVM(t *testing.T) {
 		targets[dir] = tg
 	}
 	for _, dir := range []string{web, api} {
-		if err := e.ensureRunning(ctx, targets[dir]); err != nil {
+		if err := targets[dir].ensureRunning(ctx); err != nil {
 			t.Fatal(msg.NamesOf(err))
 		}
 	}

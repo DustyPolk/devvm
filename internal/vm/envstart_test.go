@@ -9,6 +9,7 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/project"
 )
 
 // A start of a VM with network policy registers a cleanup that, when the
@@ -49,7 +50,7 @@ func TestStartInterrupted(t *testing.T) {
 			if tc.net {
 				conf.Net = backend.NetProxy
 			}
-			if _, err := (starter{e}).start(t.Context(), f, st, conf); !errors.Is(err, context.Canceled) {
+			if _, err := e.starter.start(t.Context(), e.newTarget(project.Folder{Dir: st.Dir, Name: vm}, st, f), conf); !errors.Is(err, context.Canceled) {
 				t.Fatalf("start: %v", err)
 			}
 			if len(cleanups) != tc.cleanups {

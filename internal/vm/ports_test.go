@@ -178,7 +178,7 @@ func TestStartBadPorts(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := len(f.Calls())
-	if err := e.ensureRunning(t.Context(), &found{f: project.Folder{Dir: st.Dir, Name: st.Name()}, st: st, b: f, exists: true}); msg.NamesOf(err) != `port_invalid value="5173,x"` {
+	if err := e.newTarget(project.Folder{Dir: st.Dir, Name: st.Name()}, st, f).ensureRunning(t.Context()); msg.NamesOf(err) != `port_invalid value="5173,x"` {
 		t.Errorf("start = %v", msg.NamesOf(err))
 	}
 	if slices.Contains(f.Methods()[before:], "Start") {

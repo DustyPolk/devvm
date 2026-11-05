@@ -211,15 +211,11 @@ func (e Settings) ShowSize(ctx context.Context, global bool) (SizeShown, error) 
 		}
 		return s, nil
 	}
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMSize})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMSize})
 	if err != nil {
 		return SizeShown{}, err
 	}
-	in, err := t.b.Inspect(ctx, t.f.Name)
-	if err != nil {
-		return SizeShown{}, err
-	}
-	s := SizeShown{Size: in.Size, Pending: pendingSize(t.st, in.Size)}
+	s := SizeShown{Size: t.in.Size, Pending: pendingSize(t.st, t.in.Size)}
 	if s.Pending != (backend.Size{}) {
 		e.Note(msg.SizePending(SizeText(s.Pending), t.f.Name))
 	}
@@ -242,7 +238,7 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	if global {
 		return SizeChoice{Dirs: e.Dirs, Host: host, Info: e.Info}.Set(s)
 	}
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMSize})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMSize})
 	if err != nil {
 		return err
 	}
@@ -250,10 +246,7 @@ func (e Settings) SetSize(ctx context.Context, s Size, global bool) error {
 	if err := e.Registry.Require(b, vm, s.Backend().Features()...); err != nil {
 		return err
 	}
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
+	in := t.in
 	if err := s.Check(host, in.Size.DiskGiB, vm); err != nil {
 		return err
 	}

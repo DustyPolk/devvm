@@ -192,7 +192,7 @@ func lockGroups(ctx context.Context, d paths.Dirs, info func(msg.M)) (unlock fun
 
 // lock holds the groups lock (lockGroups) and reads t's state again, as
 // another devvm may have changed it while this one waited.
-func (e Groups) lock(ctx context.Context, t *found) (unlock func(), err error) {
+func (e Groups) lock(ctx context.Context, t *target) (unlock func(), err error) {
 	unlock, err = lockGroups(ctx, e.Dirs, e.Info)
 	if err != nil {
 		return nil, err
@@ -212,7 +212,7 @@ func (e Groups) lock(ctx context.Context, t *found) (unlock func(), err error) {
 // syncOthers gives the other members of t's group their links as the
 // group makes them now (sync), holding the groups lock: devvm link
 // publish and unpublish, once t's state has its ports.
-func (e Groups) syncOthers(ctx context.Context, t *found) error {
+func (e Groups) syncOthers(ctx context.Context, t *target) error {
 	unlock, err := e.lock(ctx, t)
 	if err != nil {
 		return err
@@ -267,7 +267,7 @@ func (e Groups) syncVM(ctx context.Context, st *state.VM, group string, warn boo
 // warned of, and gets them at its next start.
 func (e Groups) change(ctx context.Context, st *state.VM, group string, before, after []Link) error {
 	vm := st.Name()
-	runs := linkRuns(e)
+	runs := e.linkRuns
 	from := runs.logSize(vm)
 	if err := writeLinks(ctx, st, after); err != nil {
 		return err
@@ -284,7 +284,7 @@ func (e Groups) change(ctx context.Context, st *state.VM, group string, before, 
 		if err != nil {
 			return err
 		}
-		e.warnUnenforced(ctx, st, tst)
+		e.links.warnUnenforced(ctx, st, tst)
 	}
 	c, err := e.Registry.For(st)
 	if err != nil {
@@ -323,11 +323,6 @@ func (e Groups) sayChangedIn(group, vm string, before, after, also []Link) []Lin
 		e.Info(msg.GroupLinksRemoved(group, shownLinks(removed), vm))
 	}
 	return added
-}
-
-// warnUnenforced is Links.warnUnenforced, for the group's links.
-func (e Groups) warnUnenforced(ctx context.Context, client, target *state.VM) {
-	Links(e).warnUnenforced(ctx, client, target)
 }
 
 // groupChanged returns the links a group made that after has and before
@@ -396,7 +391,7 @@ type GroupShown struct {
 // Show returns the folder's VM's group, with each member's name, folder
 // and published ports, sorted by name.
 func (e Groups) Show(ctx context.Context) (GroupShown, error) {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGroup})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMGroup})
 	if err != nil {
 		return GroupShown{}, err
 	}
@@ -424,7 +419,7 @@ func (e Groups) Show(ctx context.Context) (GroupShown, error) {
 // again once it holds the groups lock (lock), so a VM that joined
 // meanwhile counts.
 func (e Groups) Join(ctx context.Context, group, as string) error {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGroup})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMGroup})
 	if err != nil {
 		return err
 	}
@@ -433,7 +428,7 @@ func (e Groups) Join(ctx context.Context, group, as string) error {
 		if _, err := e.checkJoin(t, group, as); err != nil {
 			return err
 		}
-		if ok, err := t.widen(e.Env, "devvm group join"); !ok {
+		if ok, err := t.widen("devvm group join"); !ok {
 			return err
 		}
 		asked = true
@@ -451,7 +446,7 @@ func (e Groups) Join(ctx context.Context, group, as string) error {
 		return err
 	}
 	if !asked {
-		if ok, err := t.widen(e.Env, "devvm group join"); !ok {
+		if ok, err := t.widen("devvm group join"); !ok {
 			return err
 		}
 	}
@@ -461,7 +456,7 @@ func (e Groups) Join(ctx context.Context, group, as string) error {
 // rejoin is Join for t, in the group cur already: joining it again gives
 // each member its links as the group makes them, as a join cut short
 // didn't, and joining another, or the same with another name, is refused.
-func (e Groups) rejoin(ctx context.Context, t *found, cur, group, as string) error {
+func (e Groups) rejoin(ctx context.Context, t *target, cur, group, as string) error {
 	vm := t.f.Name
 	switch {
 	case cur != group:
@@ -478,7 +473,7 @@ func (e Groups) rejoin(ctx context.Context, t *found, cur, group, as string) err
 
 // join puts t in group, whose members were members, as as, once checked,
 // and gives each its links.
-func (e Groups) join(ctx context.Context, t *found, group, as string, members []*state.VM) error {
+func (e Groups) join(ctx context.Context, t *target, group, as string, members []*state.VM) error {
 	vm := t.f.Name
 	if err := update(ctx, t.st, linksSection, func(l *linksInVM) error { l.Group, l.GroupAs = group, as; return nil }); err != nil {
 		return err
@@ -504,7 +499,7 @@ func (e Groups) join(ctx context.Context, t *found, group, as string, members []
 // part), and returns the group's members: every member has network
 // policy or none does, the names are as checkJoinName wants them, and
 // every backend has links.
-func (e Groups) checkJoin(t *found, group, as string) ([]*state.VM, error) {
+func (e Groups) checkJoin(t *target, group, as string) ([]*state.VM, error) {
 	vm := t.f.Name
 	members, err := groupMembers(e.Dirs, group)
 	if err != nil {
@@ -573,7 +568,7 @@ func checkJoinName(group, vm, as string, members []*state.VM) error {
 // user made stay. The group goes with its last member. It holds the
 // groups lock throughout (lock).
 func (e Groups) Leave(ctx context.Context) error {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGroup})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMGroup})
 	if err != nil {
 		return err
 	}
@@ -626,7 +621,7 @@ func (e Groups) forget(ctx context.Context, vm string) error {
 	if err := st.Remove(ctx); err != nil {
 		return err
 	}
-	if err := linkRuns(e).unlinkTarget(ctx, vm); err != nil {
+	if err := e.linkRuns.unlinkTarget(ctx, vm); err != nil {
 		return err
 	}
 	if group == "" {

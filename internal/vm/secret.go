@@ -95,7 +95,7 @@ func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 	if sec.HostOnly {
 		return msg.SecretHostOnly(name)
 	}
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 		return msg.SecretWithClaude(vm)
 	}
 	if use {
-		if ok, err := t.widen(e.Env, "devvm secret use"); !ok {
+		if ok, err := t.widen("devvm secret use"); !ok {
 			return err
 		}
 	}

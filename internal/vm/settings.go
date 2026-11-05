@@ -19,7 +19,7 @@ type Settings struct{ *Env }
 // or clone for a --clone VM, which mounts no .git (gitprotect.Mode, as
 // devvm ls shows it).
 func (e Settings) GitProtect(ctx context.Context) (string, error) {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGitProtect})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMGitProtect})
 	if err != nil {
 		return "", err
 	}
@@ -29,7 +29,7 @@ func (e Settings) GitProtect(ctx context.Context) (string, error) {
 // Clone returns whether the folder's VM has its own clone of the repo,
 // CloneOn, or mounts the folder, CloneOff (devvm clone).
 func (e Settings) Clone(ctx context.Context) (string, error) {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +45,7 @@ func (e Settings) Clone(ctx context.Context) (string, error) {
 // finds it stopped (starter.hostChecks), which a restart the user agrees to does
 // now (restartOr). On and strict lock .git as it is then.
 func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGitProtect})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMGitProtect})
 	if err != nil {
 		return err
 	}
@@ -55,17 +55,17 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 	}
 	p := e.Protector(t.f.Dir)
 	if mode == gitprotect.Off && gitprotect.Mode(t.st) != gitprotect.Off {
-		if ok, err := t.widen(e.Env, "devvm git-protect off"); !ok {
+		if ok, err := t.widen("devvm git-protect off"); !ok {
 			return err
 		}
 	}
-	// Elsewhere there are no locks to race.
+	// Elsewhere there are no locks to race. It's read again, as it may
+	// have started while widen asked.
 	if p.CanLock {
-		in, err := t.b.Inspect(ctx, vm)
-		if err != nil {
+		if err := t.refresh(ctx); err != nil {
 			return err
 		}
-		if in.Status == backend.StatusRunning {
+		if t.in.Status == backend.StatusRunning {
 			if err := gitprotect.SetNext(ctx, t.st, mode); err != nil {
 				return err
 			}
@@ -77,7 +77,7 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 
 // setGitProtect sets a stopped VM's .git protection, and says what it
 // did.
-func setGitProtect(ctx context.Context, e *Env, p *gitprotect.Protector, t *found, mode string) error {
+func setGitProtect(ctx context.Context, e *Env, p *gitprotect.Protector, t *target, mode string) error {
 	vm := t.f.Name
 	if err := p.Set(ctx, t.st, mode); err != nil {
 		return err

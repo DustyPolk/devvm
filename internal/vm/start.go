@@ -50,22 +50,23 @@ type upOpts struct {
 // what its next start changes said (nextStart); last, the self-check,
 // which stops a VM whose network policy doesn't hold. It returns the
 // confinement the VM runs with.
-func (s starter) bringUp(ctx context.Context, t *found, o upOpts) (backend.Confinement, error) {
+func (s starter) bringUp(ctx context.Context, t *target, o upOpts) (backend.Confinement, error) {
 	vm, st, b := t.f.Name, t.st, t.b
 	if err := refuseUnfinished(vm, st); err != nil {
 		return backend.Confinement{}, err
 	}
-	in, err := s.instance(ctx, t, o)
-	if err != nil {
+	if err := s.instance(ctx, t, o); err != nil {
 		return backend.Confinement{}, err
 	}
 	mountsLater := false
 	if o.agentDirs {
-		mountsLater = Launch(s).updateAgentDirs(st, in)
-		if in, mountsLater, err = s.restartForNextStart(ctx, b, st, in, mountsLater); err != nil {
+		var err error
+		mountsLater = s.launcher.updateAgentDirs(st, t.in)
+		if mountsLater, err = s.restartForNextStart(ctx, t, mountsLater); err != nil {
 			return backend.Confinement{}, err
 		}
 	}
+	in := t.in
 	running := in.Status == backend.StatusRunning
 	if err := s.hostChecks(ctx, t, running, o.made); err != nil {
 		return backend.Confinement{}, err
@@ -78,12 +79,12 @@ func (s starter) bringUp(ctx context.Context, t *found, o upOpts) (backend.Confi
 		return backend.Confinement{}, err
 	}
 	if sshagent.Mode(st) == sshagent.On {
-		Launch(s).checkAgent(ctx)
+		s.launcher.checkAgent(ctx)
 	}
 	conf := confinementFor(st)
 	start := func(ctx context.Context) error {
 		var err error
-		conf, err = s.start(ctx, b, st, confinementFor(st))
+		conf, err = s.start(ctx, t, confinementFor(st))
 		return err
 	}
 	if running {
@@ -112,14 +113,21 @@ func (s starter) bringUp(ctx context.Context, t *found, o upOpts) (backend.Confi
 	return conf, nil
 }
 
-// instance is t's VM as bringUp starts from it: its backend's answer,
-// asked once, or for a VM just made (o.made), stopped, made as its state
-// asks for its agent forwarding (creation.plan's spec).
-func (s starter) instance(ctx context.Context, t *found, o upOpts) (backend.Instance, error) {
-	if o.made {
-		return backend.Instance{Name: t.f.Name, Status: backend.StatusStopped, AgentForwarding: sshagent.Forwards(sshagent.Mode(t.st))}, nil
+// instance sets t's VM as bringUp starts from it (t.in): its backend's
+// answer, read again, as a remake or another devvm may have changed it
+// since the finder read it, a VM its backend lacks refused; or for a VM
+// just made (o.made), stopped, made as its state asks for its agent
+// forwarding (creation.plan's spec).
+func (s starter) instance(ctx context.Context, t *target, o upOpts) error {
+	in := backend.Instance{Name: t.f.Name, Status: backend.StatusStopped, AgentForwarding: sshagent.Forwards(sshagent.Mode(t.st))}
+	if !o.made {
+		var err error
+		if in, err = t.b.Inspect(ctx, t.f.Name); err != nil {
+			return err
+		}
 	}
-	return t.b.Inspect(ctx, t.f.Name)
+	t.in, t.exists = in, true
+	return nil
 }
 
 // confinementFor is the confinement a VM starts with, as its state says:
@@ -212,35 +220,36 @@ func nextStartContext(cs []nextChange) []msg.M {
 // yes by default ([Y/n]) when its agent folder mounts wait, as an agent
 // just added needs them, and no ([y/N]) otherwise. A yes stops it, so
 // that bringUp starts it with them; a no, or no question, leaves it
-// running, and nextStart warns of each. It returns the instance as it is
-// then, and whether its agent folder mounts still wait (mountsLater).
-func (s starter) restartForNextStart(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance, mountsLater bool) (backend.Instance, bool, error) {
+// running, and nextStart warns of each. t.in is the VM as it is then (a
+// stop reads it again); it returns whether its agent folder mounts still
+// wait (mountsLater).
+func (s starter) restartForNextStart(ctx context.Context, t *target, mountsLater bool) (bool, error) {
+	st, in := t.st, t.in
 	if in.Status != backend.StatusRunning {
-		return in, mountsLater, nil
+		return mountsLater, nil
 	}
 	vm := st.Name()
 	confined := false
 	if !netpolicy.On(st) {
 		// An error here is runningConfinement's to return.
-		run, err := b.Running(ctx, vm)
+		run, err := t.running(ctx)
 		confined = err == nil && run.Confined
 	}
 	cs := nextStartChanges(st, in, mountsLater, confined)
 	if len(cs) == 0 {
-		return in, mountsLater, nil
+		return mountsLater, nil
 	}
 	ask := s.Ask
 	if mountsLater {
 		ask = s.Confirm
 	}
 	if !s.restartNow(vm, ask, len(cs), nextStartContext(cs)...) {
-		return in, mountsLater, nil
+		return mountsLater, nil
 	}
-	if err := b.Stop(ctx, vm); err != nil {
-		return in, mountsLater, err
+	if err := t.stop(ctx); err != nil {
+		return mountsLater, err
 	}
-	in.Status = backend.StatusStopped
-	return in, false, nil
+	return false, nil
 }
 
 // needs is what a VM asks of its backend, which requirements lists: each
@@ -333,7 +342,7 @@ func (s starter) refuse(b backend.Backend, vm string, fs []backend.Feature) erro
 // it's stopped, the protection chosen while it ran is set, and its set-id
 // files are named (not while it runs: the walk is slow). devvm stop does
 // the latter too.
-func (s starter) hostChecks(ctx context.Context, t *found, running, made bool) error {
+func (s starter) hostChecks(ctx context.Context, t *target, running, made bool) error {
 	if isClone(t.st) {
 		return nil
 	}
@@ -403,15 +412,16 @@ func (s starter) reloadAgent(ctx context.Context, mode string) error {
 // the backend gets the proxy's confinement; a start that fails stops the
 // proxy again. Without it, a proxy left from when it had it stops. Its
 // host keys are read again once it runs: a VM whose backend config
-// changed can get new ones when it boots.
-func (s starter) start(ctx context.Context, b backend.Backend, st *state.VM, conf backend.Confinement) (backend.Confinement, error) {
-	vm := st.Name()
+// changed can get new ones when it boots. t is what the start made it
+// once it runs (target.started).
+func (s starter) start(ctx context.Context, t *target, conf backend.Confinement) (backend.Confinement, error) {
+	vm, st, b := t.f.Name, t.st, t.b
 	if err := vmssh.ForgetHostKeys(s.Dirs, vm); err != nil {
 		return conf, err
 	}
 	// A link session of its last start's, which would end on its own: the
 	// launch starts one for this start.
-	linkRuns(s).stop(ctx, vm)
+	s.linkRuns.stop(ctx, vm)
 	// The VM's backend forwards the agent it gets when it starts, and its
 	// connections to the VM carry it: devvm's own, with the keys it lacks
 	// loaded, for a VM that uses it; the user's; none for one that uses
@@ -451,6 +461,7 @@ func (s starter) start(ctx context.Context, b backend.Backend, st *state.VM, con
 		}
 		return conf, err
 	}
+	t.started(want)
 	// Its ports, once it runs: its state's, through devvm's forwarder.
 	s.forwards().Start(ctx, b, st)
 	// The agent it started with, until its next start: its ssh config
@@ -491,7 +502,7 @@ func (s starter) confine(ctx context.Context, b backend.Backend, st *state.VM, c
 		return conf, err
 	}
 	p.AgentSocket, p.NoAgent = conf.AgentSocket, conf.NoAgent
-	if err := syncer(s).checkStartLinks(st); err != nil {
+	if err := s.syncer.checkStartLinks(st); err != nil {
 		s.Proxy.Stop(vm)
 		return conf, err
 	}

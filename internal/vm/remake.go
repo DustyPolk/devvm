@@ -77,7 +77,7 @@ func remakePending(st *state.VM) bool {
 // has them all, nothing changes. command is the command as typed. A
 // remake of it that didn't finish is finished first.
 func (e Lifecycle) AddLayers(ctx context.Context, command string, layers []string, o RemakeOptions) error {
-	return e.remakeLayers(ctx, command, o, func(t *found) (string, error) {
+	return e.remakeLayers(ctx, command, o, func(t *target) (string, error) {
 		img, had := addedImage(image.Name(t.st.Image), layers)
 		if len(had) > 0 {
 			e.Info(msg.HasLayers(strings.Join(had, " "), t.f.Name))
@@ -94,7 +94,7 @@ func (e Lifecycle) AddLayers(ctx context.Context, command string, layers []strin
 // nothing changes. command is the command as typed. A remake of it that
 // didn't finish is finished first.
 func (e Lifecycle) RemoveLayers(ctx context.Context, command string, layers []string, o RemakeOptions) error {
-	return e.remakeLayers(ctx, command, o, func(t *found) (string, error) {
+	return e.remakeLayers(ctx, command, o, func(t *target) (string, error) {
 		img, lacks := removedImage(image.Name(t.st.Image), layers)
 		if err := CheckLayers(lacks, e.Builder(t.b, t.st.From).Layers()[1:]); err != nil {
 			return "", err
@@ -110,7 +110,7 @@ func (e Lifecycle) RemoveLayers(ctx context.Context, command string, layers []st
 // works out from it (devvm layer add's, devvm layer rm's), after the user
 // agrees (remakeTo). When that's the image it has, nothing changes, but
 // a VM whose remake was just finished gets its shell.
-func (e Lifecycle) remakeLayers(ctx context.Context, command string, o RemakeOptions, layers func(*found) (string, error)) error {
+func (e Lifecycle) remakeLayers(ctx context.Context, command string, o RemakeOptions, layers func(*target) (string, error)) error {
 	t, resumed, release, err := e.toRemake(ctx, command, false)
 	if err != nil || t == nil {
 		return err
@@ -122,7 +122,7 @@ func (e Lifecycle) remakeLayers(ctx context.Context, command string, o RemakeOpt
 	}
 	if img == t.st.Image {
 		if resumed {
-			return Launch(e).open(ctx, Options{}, t)
+			return e.launcher.open(ctx, Options{}, t)
 		}
 		return nil
 	}
@@ -163,7 +163,7 @@ func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) 
 			return err
 		}
 	}
-	newer, err := Tools(e).update(ctx, t)
+	newer, err := e.vmTools.update(ctx, t)
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) 
 		return e.remakeNow(ctx, t, p)
 	case newer || resumed:
 		// Its newer tools take effect as its shell opens, kept or not.
-		return Launch(e).open(ctx, Options{}, t)
+		return e.launcher.open(ctx, Options{}, t)
 	case len(changed) == 0:
 		e.Info(msg.VMCurrent(st.Image, vm))
 	}
@@ -213,8 +213,8 @@ func removedImage(img image.Name, layers []string) (image.Name, []string) {
 // unless cloneOK (devvm clone's), a --clone VM, whose clone is on its
 // disk. Once it has the VM, it holds the VM's remake lock (hold) until
 // release.
-func (e Lifecycle) toRemake(ctx context.Context, command string, cloneOK bool) (t *found, resumed bool, release func(), err error) {
-	if t, err = finder(e).target(ctx, need{folder: true}); err != nil {
+func (e Lifecycle) toRemake(ctx context.Context, command string, cloneOK bool) (t *target, resumed bool, release func(), err error) {
+	if t, err = e.finder.target(ctx, need{folder: true}); err != nil {
 		return nil, false, nil, err
 	}
 	vm := t.f.Name
@@ -226,7 +226,7 @@ func (e Lifecycle) toRemake(ctx context.Context, command string, cloneOK bool) (
 			return nil, false, nil, nil
 		}
 	}
-	if release, err = remaking(e).hold(ctx, t); err != nil {
+	if release, err = e.remaking.hold(ctx, t); err != nil {
 		return nil, false, nil, err
 	}
 	if resumed, err = e.refuseRemake(ctx, t, cloneOK); err != nil {
@@ -239,10 +239,10 @@ func (e Lifecycle) toRemake(ctx context.Context, command string, cloneOK bool) (
 // refuseRemake finishes a remake of t's VM that didn't (resumed), then
 // refuses a VM that's missing, unfinished, or, unless cloneOK, a --clone
 // VM.
-func (e Lifecycle) refuseRemake(ctx context.Context, t *found, cloneOK bool) (resumed bool, err error) {
+func (e Lifecycle) refuseRemake(ctx context.Context, t *target, cloneOK bool) (resumed bool, err error) {
 	vm := t.f.Name
 	if remakePending(t.st) {
-		if err := remaking(e).finishPending(ctx, t); err != nil {
+		if err := e.remaking.finishPending(ctx, t); err != nil {
 			return false, err
 		}
 		resumed = true
@@ -266,7 +266,7 @@ func (e Lifecycle) refuseRemake(ctx context.Context, t *found, cloneOK bool) (re
 // another devvm may have made the VM again since t was found, and asks
 // the backend again whether it has the VM when the remake recorded
 // changed meanwhile.
-func (e remaking) hold(ctx context.Context, t *found) (release func(), err error) {
+func (e remaking) hold(ctx context.Context, t *target) (release func(), err error) {
 	if !t.st.Exists() {
 		return func() {}, nil
 	}
@@ -289,12 +289,10 @@ func (e remaking) hold(ctx context.Context, t *found) (release func(), err error
 	}
 	t.st = st
 	if sectionOf[remakeInVM](st, remakeSection) != was {
-		_, err := t.b.Inspect(ctx, vm)
-		if err != nil && !errors.Is(err, backend.ErrNotFound) {
+		if err := t.refresh(ctx); err != nil {
 			unlock()
 			return nil, err
 		}
-		t.exists = err == nil
 	}
 	return unlock, nil
 }
@@ -303,7 +301,7 @@ func (e remaking) hold(ctx context.Context, t *found) (release func(), err error
 // checked that it can, and the user agrees: asked in a terminal ([y/N]),
 // which --force skips, and refused without either. Then it opens a shell
 // in it.
-func (e Lifecycle) remakeTo(ctx context.Context, t *found, p remakeInVM, o RemakeOptions) error {
+func (e Lifecycle) remakeTo(ctx context.Context, t *target, p remakeInVM, o RemakeOptions) error {
 	if err := e.canRemake(t, p, o); err != nil {
 		return err
 	}
@@ -316,7 +314,7 @@ func (e Lifecycle) remakeTo(ctx context.Context, t *found, p remakeInVM, o Remak
 // agreed reports whether the user agrees to make t's VM again from p's
 // image, once canRemake has checked that it can: asked in a terminal
 // ([y/N]), which --force skips. A no is said (kept).
-func (e Lifecycle) agreed(t *found, p remakeInVM, o RemakeOptions) bool {
+func (e Lifecycle) agreed(t *target, p remakeInVM, o RemakeOptions) bool {
 	vm := t.f.Name
 	if o.Force {
 		return true
@@ -334,8 +332,8 @@ func (e Lifecycle) agreed(t *found, p remakeInVM, o RemakeOptions) bool {
 
 // canRemake refuses to make t's VM again as p says when remaking.check
 // does, or when there's neither --force nor a terminal to ask in.
-func (e Lifecycle) canRemake(t *found, p remakeInVM, o RemakeOptions) error {
-	if err := remaking(e).check(t, p); err != nil {
+func (e Lifecycle) canRemake(t *target, p remakeInVM, o RemakeOptions) error {
+	if err := e.remaking.check(t, p); err != nil {
 		return err
 	}
 	if !o.Force && !e.Terminal() {
@@ -346,11 +344,11 @@ func (e Lifecycle) canRemake(t *found, p remakeInVM, o RemakeOptions) error {
 
 // remakeNow makes t's VM again as p says (remaking.remake), then opens a
 // shell in it.
-func (e Lifecycle) remakeNow(ctx context.Context, t *found, p remakeInVM) error {
-	if err := remaking(e).remake(ctx, t, p); err != nil {
+func (e Lifecycle) remakeNow(ctx context.Context, t *target, p remakeInVM) error {
+	if err := e.remaking.remake(ctx, t, p); err != nil {
 		return err
 	}
-	return Launch(e).open(ctx, Options{}, t)
+	return e.launcher.open(ctx, Options{}, t)
 }
 
 // remaking makes a VM again from an image, keeping devvm's settings for
@@ -362,7 +360,7 @@ type remaking struct{ *Env }
 // when one of its image's layers is gone, or its backend can't run what
 // the VM needs with it (requirements: its ports, and a --clone VM's ssh
 // too), or the disk lacks room for a VM.
-func (e remaking) check(t *found, p remakeInVM) error {
+func (e remaking) check(t *target, p remakeInVM) error {
 	vm, b, img := t.f.Name, t.b, image.Name(p.Image)
 	if err := (build.Names{Env: e.Builder(b, t.st.From)}).Check(img); err != nil {
 		return err
@@ -387,9 +385,9 @@ func (e remaking) check(t *found, p remakeInVM) error {
 // spec is the new machine of t's VM as its state asks for it
 // (creation.machineSpec, as up makes a new VM's): its shared tools, SSH
 // agent and size, in the clone mode p makes it in (wantsClone).
-func (e remaking) spec(t *found, p remakeInVM) backend.VMSpec {
+func (e remaking) spec(t *target, p remakeInVM) backend.VMSpec {
 	st := t.st
-	return creation{Launch(e)}.machineSpec(t.b, t.f, tools.Names(st), sshagent.Forwards(sshagent.Mode(st)),
+	return e.creation.machineSpec(t.b, t.f, tools.Names(st), sshagent.Forwards(sshagent.Mode(st)),
 		sectionOf[Size](st, sizeSection), wantsClone(st, p))
 }
 
@@ -414,19 +412,19 @@ func wantsClone(st *state.VM, p remakeInVM) bool {
 // Until the new one has started with its home folder, a failure or an
 // interrupt deletes it and puts the old one back as it was (undo); once
 // it has, the old one is deleted.
-func (e remaking) remake(ctx context.Context, t *found, p remakeInVM) error {
+func (e remaking) remake(ctx context.Context, t *target, p remakeInVM) error {
 	vm := t.f.Name
 	chain, err := e.build(ctx, t, p.Image)
 	if err != nil {
 		return err
 	}
 	if !p.NoExport && len(image.AgentsOf(tools.Names(t.st))) > 0 {
-		if err := Lifecycle(e).export(ctx, t, "", msg.RemakeExportFailed(p.Command, vm)); err != nil {
+		if err := e.lifecycle.export(ctx, t, "", msg.RemakeExportFailed(p.Command, vm)); err != nil {
 			return err
 		}
 	}
 	if p.Home {
-		if err := e.ensureRunning(ctx, t); err != nil {
+		if err := t.ensureRunning(ctx); err != nil {
 			return err
 		}
 		if err := e.saveHome(ctx, t, msg.RemakeHomeFailed(p.Command, vm)); err != nil {
@@ -451,7 +449,7 @@ func (e remaking) remake(ctx context.Context, t *found, p remakeInVM) error {
 
 // build builds img (a remake's, as its record has it) for t's VM, as a
 // new VM's is built, and returns its build chain.
-func (e remaking) build(ctx context.Context, t *found, recorded string) (chainOf, error) {
+func (e remaking) build(ctx context.Context, t *target, recorded string) (chainOf, error) {
 	b, img := e.Builder(t.b, t.st.From), image.Name(recorded)
 	if err := (build.Builds{Env: b}).Build(ctx, img); err != nil {
 		return chainOf{}, err
@@ -469,14 +467,14 @@ type chainOf struct{ key, chain string }
 
 // setAside stops t's VM, what runs for it with it, and gives its machine
 // its aside name (vmname.Aside), so a new one can have its name.
-func (e remaking) setAside(ctx context.Context, t *found) error {
+func (e remaking) setAside(ctx context.Context, t *target) error {
 	vm := t.f.Name
-	if err := t.b.Stop(ctx, vm); err != nil {
+	if err := t.stop(ctx); err != nil {
 		return err
 	}
 	e.Proxy.Stop(vm)
 	e.Forwarders.Stop(vm)
-	linkRuns(e).stop(ctx, vm)
+	e.linkRuns.stop(ctx, vm)
 	aside, _ := vmname.Aside(vm)
 	return t.b.Rename(ctx, vm, aside)
 }
@@ -485,11 +483,11 @@ func (e remaking) setAside(ctx context.Context, t *found) error {
 // what its state records, in p's clone mode, starts it as a launch does,
 // puts its saved home folder in (then committed is set), records its new
 // image and deletes its old machine, which ends its remake (dropOld).
-func (e remaking) finish(ctx context.Context, t *found, p remakeInVM, c chainOf, committed *atomic.Bool) error {
+func (e remaking) finish(ctx context.Context, t *target, p remakeInVM, c chainOf, committed *atomic.Bool) error {
 	vm, st, b := t.f.Name, t.st, t.b
 	e.Info(msg.CreatingFrom(p.Image, vm))
 	e.LogNote()
-	if err := (creation{Launch(e)}).makeMachine(ctx, b, st, c.key, e.spec(t, p)); err != nil {
+	if err := e.creation.makeMachine(ctx, b, st, c.key, e.spec(t, p)); err != nil {
 		return err
 	}
 	t.exists = true
@@ -516,7 +514,7 @@ func (e remaking) finish(ctx context.Context, t *found, p remakeInVM, c chainOf,
 			return err
 		}
 	}
-	if _, err := starter(e).bringUp(ctx, t, upOpts{}); err != nil {
+	if _, err := e.starter.bringUp(ctx, t, upOpts{}); err != nil {
 		return err
 	}
 	if p.Home {
@@ -543,7 +541,7 @@ func (e remaking) finish(ctx context.Context, t *found, p remakeInVM, c chainOf,
 // dropOld ends a remake of t's VM whose new machine is done (p.Done):
 // it deletes the old machine, set aside, then what the old one's clone
 // mode left on the host (leftBehind), then ends the remake (clear).
-func (e remaking) dropOld(ctx context.Context, t *found, p remakeInVM) error {
+func (e remaking) dropOld(ctx context.Context, t *target, p remakeInVM) error {
 	vm := t.f.Name
 	aside, _ := vmname.Aside(vm)
 	if err := t.b.Delete(ctx, aside); err != nil && !errors.Is(err, backend.ErrNotFound) {
@@ -563,7 +561,7 @@ func (e remaking) dropOld(ctx context.Context, t *found, p remakeInVM) error {
 // committed: it deletes the new machine and puts the old one back, as it
 // was (putBack), and ends the remake. When it can't, the remake stays
 // recorded, for the next devvm to finish.
-func (e remaking) undo(t *found, committed *atomic.Bool) func(context.Context) {
+func (e remaking) undo(t *target, committed *atomic.Bool) func(context.Context) {
 	return func(ctx context.Context) {
 		if committed.Load() {
 			return
@@ -583,7 +581,7 @@ func (e remaking) undo(t *found, committed *atomic.Bool) func(context.Context) {
 // putBack deletes t's VM's new machine, if it was made, and gives its old
 // one, set aside, its name again: its next start makes it what its state
 // asks for, as for any VM.
-func (e remaking) putBack(ctx context.Context, t *found) error {
+func (e remaking) putBack(ctx context.Context, t *target) error {
 	vm, b := t.f.Name, t.b
 	aside, _ := vmname.Aside(vm)
 	if _, err := b.Inspect(ctx, aside); err != nil {
@@ -591,7 +589,7 @@ func (e remaking) putBack(ctx context.Context, t *found) error {
 	}
 	e.Proxy.Stop(vm)
 	e.Forwarders.Stop(vm)
-	linkRuns(e).stop(ctx, vm)
+	e.linkRuns.stop(ctx, vm)
 	if err := b.Delete(ctx, vm); err != nil && !errors.Is(err, backend.ErrNotFound) {
 		return err
 	}
@@ -617,7 +615,7 @@ func (e remaking) putBack(ctx context.Context, t *found) error {
 
 // clear ends t's VM's remake: its section goes, then its saved home
 // folder, which stays while the section does.
-func (e remaking) clear(ctx context.Context, t *found) error {
+func (e remaking) clear(ctx context.Context, t *target) error {
 	if err := update(ctx, t.st, remakeSection, func(r *remakeInVM) error { *r = remakeInVM{}; return nil }); err != nil {
 		return err
 	}
@@ -634,7 +632,7 @@ func (e remaking) clear(ctx context.Context, t *found) error {
 // made or not, never ran a shell: it's made again, with the home folder
 // saved for it. Once the new one is done, only the old one is deleted
 // (dropOld).
-func (e remaking) finishPending(ctx context.Context, t *found) error {
+func (e remaking) finishPending(ctx context.Context, t *target) error {
 	vm, b := t.f.Name, t.b
 	p := sectionOf[remakeInVM](t.st, remakeSection)
 	e.Info(msg.RemakeResuming(p.Image, vm))
@@ -668,7 +666,7 @@ func (e remaking) finishPending(ctx context.Context, t *found) error {
 // makeNew finishes a remake of t's VM whose old machine is gone, for
 // finishPending: checked as any remake is, it deletes the new machine,
 // if it was made, and makes it again with the home folder saved for it.
-func (e remaking) makeNew(ctx context.Context, t *found, p remakeInVM) error {
+func (e remaking) makeNew(ctx context.Context, t *target, p remakeInVM) error {
 	vm, b := t.f.Name, t.b
 	if err := e.check(t, p); err != nil {
 		return err

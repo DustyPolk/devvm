@@ -123,10 +123,11 @@ func seedRefs(ctx context.Context, dir, branch string, worktree bool) []string {
 	return refs
 }
 
-// gitSSH is host git (hostgit) run in dir with its ssh (gitSSHCommand)
-// reaching the running vm alone (ownSSH), on b.
-func (e clones) gitSSH(ctx context.Context, b backend.Backend, vm, dir string, args ...string) (*exec.Cmd, error) {
-	s, err := e.ownSSH(ctx, b, vm)
+// gitSSH is host git (hostgit) run in t's project folder with its ssh
+// (gitSSHCommand) reaching t's running VM alone (target.ownSSH).
+func (e clones) gitSSH(ctx context.Context, t *target, args ...string) (*exec.Cmd, error) {
+	dir := t.f.Dir
+	s, err := t.ownSSH(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -158,10 +159,10 @@ func gitSSHCommand(s vmssh.SSH, dir string) string {
 // host's pushed into it, the host's checked out, and a remote for it in
 // the host's repo. Then it offers the ~/.ssh/config line that remote
 // needs, and warns about uncommitted changes, which aren't copied. It
-// needs the VM's ssh config entry. Its command in the VM carries agent,
-// the VM's.
-func (e clones) seedClone(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, agent string) error {
-	vm, dir := st.Name(), f.Dir
+// needs the VM's ssh config entry. Its command in the VM carries the
+// VM's agent (target.exec).
+func (e clones) seedClone(ctx context.Context, t *target) error {
+	vm, st, f, dir := t.f.Name, t.st, t.f, t.f.Dir
 	branch, err := hostGit(ctx, dir, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
 		return msg.CloneDetached()
@@ -178,7 +179,7 @@ func (e clones) seedClone(ctx context.Context, b backend.Backend, st *state.VM, 
 	const initRepo = `sudo mkdir -p -- "$1" && sudo chown -- "$(id -u):$(id -g)" "$1" && cd -- "$1" &&
 git init -q && git config receive.denyCurrentBranch updateInstead && git symbolic-ref HEAD "refs/heads/$2"`
 	log := e.LogWriter()
-	if err := b.Exec(ctx, vm, []string{"sh", "-c", initRepo, "sh", dir, branch}, backend.ExecOpts{Stdout: log, Stderr: log, Agent: agent}); err != nil {
+	if err := t.exec(ctx, []string{"sh", "-c", initRepo, "sh", dir, branch}, backend.ExecOpts{Stdout: log, Stderr: log}); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -186,7 +187,7 @@ git init -q && git config receive.denyCurrentBranch updateInstead && git symboli
 	}
 	e.Info(msg.CopyingBranches())
 	push := append([]string{"push", "-q", "--no-verify", "--no-recurse-submodules", "--no-signed", cloneURL(vm, dir)}, seedRefs(ctx, dir, branch, worktree)...)
-	cmd, err := e.gitSSH(ctx, b, vm, dir, push...)
+	cmd, err := e.gitSSH(ctx, t, push...)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -256,14 +257,14 @@ type cloneCheck struct {
 // (changes) are lost, starting the VM if it's stopped. Without a
 // terminal, either refuses. It reports whether to keep the VM as it is.
 // A VM never seeded has nothing of its own.
-func (e cloneCheck) run(ctx context.Context, t *found) (bool, error) {
+func (e cloneCheck) run(ctx context.Context, t *target) (bool, error) {
 	vm, st, b, dir := t.f.Name, t.st, t.b, t.f.Dir
 	c := sectionOf[cloneInVM](st, cloneSection)
 	if !c.Made.Seeded {
 		return false, nil
 	}
 	remote := c.Made.Remote
-	if err := e.ensureRunning(ctx, t); err != nil {
+	if err := t.ensureRunning(ctx); err != nil {
 		return false, e.notStarted(ctx, vm, err)
 	}
 	refs, err := e.git(ctx, b, vm, dir, "for-each-ref", "--format=%(objectname) %(refname)", "refs/heads")
@@ -275,7 +276,7 @@ func (e cloneCheck) run(ctx context.Context, t *found) (bool, error) {
 		if !e.Terminal() {
 			return false, msg.NoTerminalFetch(e.command, remote)
 		}
-		if err := e.fetchUnfetched(ctx, b, vm, dir, remote, unfetched); err != nil {
+		if err := e.fetchUnfetched(ctx, t, remote, unfetched); err != nil {
 			return false, err
 		}
 	}
@@ -453,7 +454,8 @@ func unfetchedRefs(ctx context.Context, dir string, refs []byte) []string {
 // fetchUnfetched offers to fetch the VM's unfetched branches into new
 // local branches, saved/<remote>/<branch> (savedPrefix), never over one
 // that exists. Branches whose names git refuses are skipped.
-func (e cloneCheck) fetchUnfetched(ctx context.Context, b backend.Backend, vm, dir, remote string, unfetched []string) error {
+func (e cloneCheck) fetchUnfetched(ctx context.Context, t *target, remote string, unfetched []string) error {
+	vm, dir := t.f.Name, t.f.Dir
 	var good, bad []string
 	for _, br := range unfetched {
 		if validBranch(ctx, dir, br) {
@@ -486,7 +488,7 @@ func (e cloneCheck) fetchUnfetched(ctx context.Context, b backend.Backend, vm, d
 		saved[i] = prefix + "/" + br
 		args = append(args, "refs/heads/"+br+":refs/heads/"+saved[i])
 	}
-	cmd, err := e.gitSSH(ctx, b, vm, dir, args...)
+	cmd, err := e.gitSSH(ctx, t, args...)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -643,7 +645,7 @@ func (e Lifecycle) SetClone(ctx context.Context, command, mode string, o RemakeO
 			e.Info(msg.CloneOffAlready(vm))
 		}
 		if resumed {
-			return Launch(e).open(ctx, Options{}, t)
+			return e.launcher.open(ctx, Options{}, t)
 		}
 		return nil
 	}
@@ -656,7 +658,7 @@ func (e Lifecycle) SetClone(ctx context.Context, command, mode string, o RemakeO
 		return nil
 	}
 	if !on && !o.NoCloneCheck {
-		keep, err := cloneCheck{clones: clones(e), command: command, remakes: true}.run(ctx, t)
+		keep, err := cloneCheck{clones: e.clones, command: command, remakes: true}.run(ctx, t)
 		if err != nil || keep {
 			return err
 		}
@@ -668,7 +670,7 @@ func (e Lifecycle) SetClone(ctx context.Context, command, mode string, o RemakeO
 // canRemake does, or, for its own clone, when the folder isn't a repo it
 // can clone (checkCloneRepo). Then it says what changes, and for the
 // folder mounted with --no-clone-check, what's lost.
-func (e Lifecycle) canSwitch(ctx context.Context, t *found, p remakeInVM, o RemakeOptions) error {
+func (e Lifecycle) canSwitch(ctx context.Context, t *target, p remakeInVM, o RemakeOptions) error {
 	vm := t.f.Name
 	if p.Clone == CloneOn {
 		if err := checkCloneRepo(ctx, t.f.Dir); err != nil {
@@ -731,7 +733,7 @@ func switchedBack(st *state.VM, clone string) error {
 // machine did to .git is named as a launch names it (Check), or, for the
 // folder mounted, the repo's remote for the clone, its fetched work kept
 // (removeRemote). Run again, it finds nothing left.
-func (e remaking) leftBehind(ctx context.Context, t *found, clone string) error {
+func (e remaking) leftBehind(ctx context.Context, t *target, clone string) error {
 	st := t.st
 	switch clone {
 	case CloneOn:
@@ -757,8 +759,8 @@ func (e remaking) leftBehind(ctx context.Context, t *found, clone string) error 
 // first, its fetched work kept (removeRemote), as .git/config is about to
 // be locked; then .git is protected as a new VM's is (NewVM). The clone
 // section keeps the remote's name, for putBack (unmountFolder).
-func (e remaking) mountFolder(ctx context.Context, t *found) error {
-	clones(e).removeRemote(ctx, t.f.Dir, t.f.Name, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
+func (e remaking) mountFolder(ctx context.Context, t *target) error {
+	e.clones.removeRemote(ctx, t.f.Dir, t.f.Name, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
 	return e.Protector(t.f.Dir).NewVM(ctx, t.st)
 }
 
@@ -767,7 +769,7 @@ func (e remaking) mountFolder(ctx context.Context, t *found) error {
 // machine did to .git is named as a launch names it (Check), as a clone
 // VM's .git is never checked, and the repo's remote for the clone, which
 // the old machine still has, is added again when it's gone.
-func (e remaking) unmountFolder(ctx context.Context, t *found) {
+func (e remaking) unmountFolder(ctx context.Context, t *target) {
 	dir, vm := t.f.Dir, t.f.Name
 	if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
 		p := e.Protector(dir)

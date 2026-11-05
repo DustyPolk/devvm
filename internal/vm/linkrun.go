@@ -272,12 +272,12 @@ func (e linkRuns) apply(ctx context.Context, b backend.Backend, st *state.VM, ad
 	if err != nil {
 		return true, err
 	}
-	conf, err := starter(e).runningConfinement(ctx, b, st, mode)
+	conf, err := e.starter.runningConfinement(ctx, b, st, mode)
 	if err != nil {
 		return true, err
 	}
 	slug := project.Folder{Name: vm}.Slug()
-	if err := syncer(e).sync(ctx, b, st, slug, tools.Files(st), conf); err != nil {
+	if err := e.syncer.sync(ctx, b, st, slug, tools.Files(st), conf); err != nil {
 		return true, err
 	}
 	links, err := ReadLinks(st)

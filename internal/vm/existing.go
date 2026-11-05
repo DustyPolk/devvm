@@ -3,7 +3,6 @@ package vm
 import (
 	"context"
 	"errors"
-	"io"
 	"io/fs"
 	"slices"
 
@@ -19,11 +18,11 @@ import (
 // Restart stops the folder's VM, then opens it as Up does: what changes
 // only when it starts (its mounts, size, ports) applies.
 func (e Launch) Restart(ctx context.Context, o Options) error {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
-	if err := t.b.Stop(ctx, t.f.Name); err != nil {
+	if err := t.stop(ctx); err != nil {
 		return err
 	}
 	return e.open(ctx, o, t)
@@ -55,7 +54,7 @@ func (e *Env) restartOr(ctx context.Context, vm string, say func(msg.M), later m
 		say(later)
 		return nil
 	}
-	return Launch{e}.Restart(ctx, Options{})
+	return e.launcher.Restart(ctx, Options{})
 }
 
 // open opens a shell in a VM that exists, made for this folder. Flags for
@@ -63,7 +62,7 @@ func (e *Env) restartOr(ctx context.Context, vm string, say func(msg.M), later m
 // and tools newer than the VM's (--clone on a VM that mounts the folder is
 // refused); then it launches the VM (launch) with its agent folder mounts
 // matched to the host's, sets it up and opens the shell, as for a new VM.
-func (e Launch) open(ctx context.Context, o Options, t *found) error {
+func (e Launch) open(ctx context.Context, o Options, t *target) error {
 	vm, st, b := t.f.Name, t.st, t.b
 	if o.Clone && !isClone(st) {
 		return msg.CloneNeedsNewVM(vm)
@@ -90,41 +89,23 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	if err != nil {
 		return err
 	}
-	if err := e.setUpVM(ctx, b, st, t.f, conf); err != nil {
+	if err := e.setUpVM(ctx, t, conf); err != nil {
 		return err
 	}
-	cmd, err := b.Shell(ctx, vm, backend.ShellOpts{Dir: t.shellDir(ctx, e.LogWriter()), Agent: t.agent})
+	cmd, err := t.shell(ctx)
 	if err != nil {
 		return err
 	}
 	return e.Exec(cmd)
 }
 
-// shellDir is the folder in a running VM that its shell and editors open
-// in: its project folder, else, for a parent folder's VM, the folder devvm
-// runs in (t.sub), at the same path in the VM. A --clone VM's clone is at
-// the parent's path: it's the subfolder when the clone has it, else the
-// clone's top. The check's errors go to log.
-func (t *found) shellDir(ctx context.Context, log io.Writer) string {
-	if t.sub == "" {
-		return t.f.Dir
-	}
-	if isClone(t.st) {
-		err := t.exec(ctx, []string{"test", "-d", t.sub}, backend.ExecOpts{Stderr: log})
-		if err != nil {
-			return t.f.Dir
-		}
-	}
-	return t.sub
-}
-
 // launch takes a VM that exists, made for this folder, through what each
 // launch of it does before its setup: the folder's devcontainer.json
 // compared with the one it was made from, then what every start of it
 // does (starter.bringUp). It returns the confinement the VM runs with.
-func (e Launch) launch(ctx context.Context, t *found, o upOpts) (backend.Confinement, error) {
-	devcontainers(e).check(t.st, t.f.Dir)
-	return starter(e).bringUp(ctx, t, o)
+func (e Launch) launch(ctx context.Context, t *target, o upOpts) (backend.Confinement, error) {
+	e.devcontainers.check(t.st, t.f.Dir)
+	return e.starter.bringUp(ctx, t, o)
 }
 
 // warnIgnored warns about the flags only new VMs take, on the VM vm.

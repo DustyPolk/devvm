@@ -73,7 +73,7 @@ func dropCreateLock(e *Env, vm string) {
 // machine the backend lost may be being made again. Under the lock it
 // reads t's state again: one that changed since t was found was made
 // meanwhile, and is refused (create_running) as one still being made is.
-func holdForRm(e *Env, t *found) (release func(), err error) {
+func holdForRm(e *Env, t *target) (release func(), err error) {
 	if release, err = holdCreate(e, t.f.Name); err != nil {
 		return nil, err
 	}

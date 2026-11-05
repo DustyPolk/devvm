@@ -35,15 +35,11 @@ type NetworkShown struct {
 // Network returns the folder's VM's network policy and its allowlist.
 func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 	var s NetworkShown
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return s, err
 	}
-	in, err := t.b.Inspect(ctx, t.f.Name)
-	if err != nil {
-		return s, err
-	}
-	if s.Policy, err = netpolicy.Listed(ctx, t.b, t.st, in.Status == backend.StatusRunning); err != nil {
+	if s.Policy, err = netpolicy.Listed(ctx, t.b, t.st, t.in.Status == backend.StatusRunning); err != nil {
 		return s, err
 	}
 	builtin, files := netpolicy.Policies(e.Dirs, t.f.Name, image.Name(t.st.Image), tools.Names(t.st))
@@ -90,7 +86,7 @@ func (c NetworkChoice) Set(mode string) error {
 // while the VM is in a group, whose VMs all have network policy or none
 // do.
 func (e Net) SetNetwork(ctx context.Context, on bool) error {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
@@ -113,15 +109,11 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 		return err
 	}
 	if !on {
-		if ok, err := t.widen(e.Env, "devvm network off"); !ok {
+		if ok, err := t.widen("devvm network off"); !ok {
 			return err
 		}
 	}
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
-	running := in.Status == backend.StatusRunning
+	running := t.in.Status == backend.StatusRunning
 	if on {
 		if err := e.Registry.Require(b, vm, backend.Confinement{Net: backend.NetProxy}.Features()...); err != nil {
 			return err
@@ -137,7 +129,7 @@ func (e Net) SetNetwork(ctx context.Context, on bool) error {
 		if on {
 			e.Note(msg.NetOnOldTokens(vm))
 		}
-		return Launch(e).Restart(ctx, Options{})
+		return e.launcher.Restart(ctx, Options{})
 	default:
 		e.Info(msg.NetSetRunning(to, vm))
 	}
@@ -196,7 +188,7 @@ func (e Net) LogBlocks(ctx context.Context) ([]netpolicy.Block, error) {
 // without network policy logs only its links' connections, and devvm says
 // so.
 func (e Net) netLog(ctx context.Context, follow bool) (*netpolicy.Log, string, error) {
-	t, err := finder(e).target(ctx, need{has: hasVM})
+	t, err := e.finder.target(ctx, need{has: hasVM})
 	if err != nil {
 		return nil, "", err
 	}
@@ -236,7 +228,7 @@ func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, glo
 	file, vm := e.Dirs.Policy(), ""
 	if !global {
 		// The folder's VM, which its backend has, made for this folder.
-		t, err := finder(e).target(ctx, need{has: hasMachine, folder: true, noVM: msg.NoVMPolicy})
+		t, err := e.finder.target(ctx, need{has: hasMachine, folder: true, noVM: msg.NoVMPolicy})
 		if err != nil {
 			return err
 		}
@@ -244,7 +236,7 @@ func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, glo
 			e.Note(msg.NetOffPolicy(t.f.Name))
 		}
 		if cmd := widensPolicy(rules, deny, remove); cmd != "" {
-			if ok, err := t.widen(e.Env, cmd); !ok {
+			if ok, err := t.widen(cmd); !ok {
 				return err
 			}
 		}

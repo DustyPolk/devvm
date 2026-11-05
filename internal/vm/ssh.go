@@ -68,24 +68,22 @@ func (e Launch) Code(ctx context.Context) error {
 // (launch), sets it up, checks its backend says how ssh reaches it, and
 // makes sure ~/.ssh/config includes devvm's ssh config, asking first. It
 // returns the name ssh reaches it by.
-func (e Launch) reach(ctx context.Context) (string, *found, error) {
+func (e Launch) reach(ctx context.Context) (string, *target, error) {
 	t, err := ready(ctx, e)
 	if err != nil {
 		return "", nil, err
 	}
-	c := e.sshConfig()
-	host := c.Host(t.f.Name)
-	if _, err := c.EnsureInclude(e.Dirs.Home); err != nil {
+	if _, err := e.sshConfig().EnsureInclude(e.Dirs.Home); err != nil {
 		return "", nil, err
 	}
-	return host, t, nil
+	return t.sshHost(), t, nil
 }
 
 // ready launches the folder's VM as devvm does without its shell (launch),
 // sets it up, which puts it in devvm's ssh config, and checks its backend
 // says how ssh reaches it.
-func ready(ctx context.Context, e Launch) (*found, error) {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+func ready(ctx context.Context, e Launch) (*target, error) {
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +94,7 @@ func ready(ctx context.Context, e Launch) (*found, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := e.setUpVM(ctx, t.b, t.st, t.f, conf); err != nil {
+	if err := e.setUpVM(ctx, t, conf); err != nil {
 		return nil, err
 	}
 	// A VM running since a start without its ssh (an emulation not yet

@@ -239,7 +239,7 @@ func (h Housekeeping) LockGC(ctx context.Context, b *build.Env, withTools bool) 
 // PlanGC gathers what gc deletes, by one inventory: the VMs' states,
 // and with --orphans the lists of the backends they name.
 func (h Housekeeping) PlanGC(ctx context.Context, b *build.Env, o GCOpts) (GCPlan, error) {
-	p := GCPlan{share: tools.Share{Env: b.Tools}, exports: Exports{Dirs: b.Dirs}, leftovers: Leftovers(h), cache: build.Images{Env: b}}
+	p := GCPlan{share: tools.Share{Env: b.Tools}, exports: Exports{Dirs: b.Dirs}, leftovers: h.leftovers, cache: build.Images{Env: b}}
 	inv, err := h.gcInventory(ctx, o.Orphans)
 	if err != nil {
 		return p, err
@@ -565,7 +565,7 @@ func (h Housekeeping) retainTools(ctx context.Context, b *build.Env, age time.Du
 // retainOrphans forgets the VMs their backend no longer has whose state
 // hasn't changed for age.
 func (h Housekeeping) retainOrphans(ctx context.Context, age time.Duration, now time.Time) (int, error) {
-	l := Leftovers(h)
+	l := h.leftovers
 	rep, err := l.Find(ctx)
 	if err != nil {
 		return 0, err

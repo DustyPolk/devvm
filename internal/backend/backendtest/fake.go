@@ -320,7 +320,7 @@ func (f *machines) CreateVM(_ context.Context, image string, spec backend.VMSpec
 		f.Instances = map[string]backend.Instance{}
 	}
 	in := backend.Instance{Name: spec.Name, Status: backend.StatusStopped, Size: f.ImageVMSize}
-	apply(&in, spec.Want)
+	backend.Apply(&in, spec.Want)
 	f.Instances[spec.Name] = in
 	f.setNet(spec.Name, backend.NetDirect) // never started confined
 	return nil
@@ -345,7 +345,7 @@ func (f *machines) Start(_ context.Context, vm string, w backend.Want, c backend
 	if err := backend.Validate(w, in); err != nil {
 		return err
 	}
-	apply(&in, w)
+	backend.Apply(&in, w)
 	in.Status = backend.StatusRunning
 	f.Instances[vm] = in
 	f.setNet(vm, c.Net)
@@ -524,20 +524,4 @@ func (f *machines) SSH(_ context.Context, vm string) (backend.SSHTarget, error) 
 		return backend.SSHTarget{}, msg.VMNotRunning(vm)
 	}
 	return f.Target, nil
-}
-
-// apply makes an instance what w wants: its size where w sets it, its
-// agent folders and forwarding.
-func apply(in *backend.Instance, w backend.Want) {
-	if w.Size.CPUs > 0 {
-		in.Size.CPUs = w.Size.CPUs
-	}
-	if w.Size.MemoryGiB > 0 {
-		in.Size.MemoryGiB = w.Size.MemoryGiB
-	}
-	if w.Size.DiskGiB > 0 {
-		in.Size.DiskGiB = w.Size.DiskGiB
-	}
-	in.AgentDirs = slices.Clone(w.AgentDirs)
-	in.AgentForwarding = w.AgentForwarding
 }

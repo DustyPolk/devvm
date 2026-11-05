@@ -218,7 +218,7 @@ func TestCheckLinkUnreadPolicy(t *testing.T) {
 // part; one name per target, one target per name, never localhost or
 // the client's hostname.
 func TestLinkNameFor(t *testing.T) {
-	client := &found{f: project.Folder{Name: "devvm-app-0123456789abc1"}}
+	client := &target{f: project.Folder{Name: "devvm-app-0123456789abc1"}}
 	db, api := "devvm-db-0123456789abc2", "devvm-api-0123456789abc3"
 	links := []Link{{Name: "pg", Port: 5432, Target: db, TargetID: "i1"}}
 	for _, tc := range []struct {

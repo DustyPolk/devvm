@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strconv"
 
 	"github.com/w3cj/devvm/internal/image"
@@ -367,6 +368,22 @@ func Validate(w Want, in Instance) error {
 		return msg.DiskShrink(gibText(in.Size.DiskGiB), in.Name, gibText(w.Size.DiskGiB))
 	}
 	return nil
+}
+
+// Apply makes in what w asks where it differs, as a Start does: a size's
+// zero fields are left as they are.
+func Apply(in *Instance, w Want) {
+	if w.Size.CPUs > 0 {
+		in.Size.CPUs = w.Size.CPUs
+	}
+	if w.Size.MemoryGiB > 0 {
+		in.Size.MemoryGiB = w.Size.MemoryGiB
+	}
+	if w.Size.DiskGiB > 0 {
+		in.Size.DiskGiB = w.Size.DiskGiB
+	}
+	in.AgentDirs = slices.Clone(w.AgentDirs)
+	in.AgentForwarding = w.AgentForwarding
 }
 
 // gibText is a size in GiB as messages show it: 100, 6.5.

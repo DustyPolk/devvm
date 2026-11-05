@@ -37,7 +37,8 @@ import (
 // Lifecycle, Settings and Net; its methods are what they share: starting
 // the folder's VM, which the finder finds (finder.go), its size and ports,
 // the image builder and the ssh config. NewEnv sets every field but Dir,
-// which the finder reads when it's needed; tests change them.
+// which the finder reads when it's needed; tests change them. Its parts
+// (wire) are made over its address, so a copy of an Env is wired again.
 type Env struct {
 	Dirs     paths.Dirs
 	Assets   fs.FS // devvm's own files (assets.FS)
@@ -118,6 +119,37 @@ type Env struct {
 	// whether the run was interrupted.
 	AddCleanup  func(f func(context.Context)) (remove func())
 	Interrupted func() bool
+
+	// Its parts, each made once over it (wire): the commands and each
+	// other reach them here. The finder finds the VM a command acts on;
+	// the starter is its one start; the rest each do one part of a
+	// command's work.
+	finder        finder
+	starter       starter
+	linkRuns      linkRuns
+	syncer        syncer
+	remaking      remaking
+	clones        clones
+	vmFolders     vmFolders
+	devcontainers devcontainers
+	creation      creation
+	launcher      Launch
+	lifecycle     Lifecycle
+	vmTools       Tools
+	groups        Groups
+	links         Links
+	leftovers     Leftovers
+}
+
+// wire makes e's parts (Env's unexported fields), each over e itself,
+// and returns e: NewEnv's, and every Env a test makes.
+func wire(e *Env) *Env {
+	e.finder, e.starter, e.linkRuns, e.syncer = finder{e}, starter{e}, linkRuns{e}, syncer{e}
+	e.remaking, e.clones, e.vmFolders, e.devcontainers = remaking{e}, clones{e}, vmFolders{e}, devcontainers{e}
+	e.launcher, e.lifecycle, e.vmTools = Launch{e}, Lifecycle{e}, Tools{e}
+	e.groups, e.links, e.leftovers = Groups{e}, Links{e}, Leftovers{e}
+	e.creation = creation{e.launcher}
+	return e
 }
 
 // UI is what up and the commands on a VM need of devvm's UI: where they
@@ -160,7 +192,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, e.Warn) }
 	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }
 	e.Agent = sshagent.New(d, e.mounts, u)
-	return e
+	return wire(e)
 }
 
 // Builder returns what builds images on b whose base starts from
@@ -187,20 +219,6 @@ func execShell(cmd backend.Command) error {
 // openURL opens url with macOS's open.
 func openURL(ctx context.Context, url string) error {
 	return exec.CommandContext(ctx, "open", url).Run() //nolint:gosec // devvm's own vnc://127.0.0.1:PORT
-}
-
-// widen is asked, with e's prompts, before a command that gives the VM more
-// access (cmd, as devvm network off) changes it: true for the folder's own
-// VM. A parent folder's VM, found from a subfolder, changes only after
-// asking, [y/N], and never without a terminal.
-func (t *found) widen(e *Env, cmd string) (bool, error) {
-	if t.sub == "" {
-		return true, nil
-	}
-	if !e.Terminal() {
-		return false, msg.WidenParentVMRefused(cmd, t.f.Dir, t.f.Name)
-	}
-	return e.Ask(msg.WidenParentVM(cmd, t.f.Dir, t.f.Name)), nil
 }
 
 // FolderState is what's at the path of the project folder a VM's state
@@ -282,19 +300,10 @@ func runningAgent(ctx context.Context, b backend.Backend, st *state.VM) (string,
 	return sshagent.Running(st, run.ID), nil
 }
 
-// ensureRunning makes sure the VM runs, for a command that runs in it
-// without a shell (an export, rm's check of a --clone VM, a remake's home
-// folder): it goes through what every start does (starter.bringUp), .git
-// checked, network policy's self-check and the refusals included.
-func (e *Env) ensureRunning(ctx context.Context, t *found) error {
-	_, err := starter{e}.bringUp(ctx, t, upOpts{})
-	return err
-}
-
 // agentSocket is the SSH agent socket a VM whose choice is mode gets:
 // devvm's, the user's (the one devvm started with), or none (""). Its
 // start forwards it, and devvm's own connections to that VM carry it
-// (found.agent), each VM's its own, as devvm's environment never changes.
+// (target.agent), each VM's its own, as devvm's environment never changes.
 func (e *Env) agentSocket(mode string) string {
 	switch mode {
 	case sshagent.Devvm:

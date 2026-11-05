@@ -38,6 +38,7 @@ func countOf(ms []string, method string) int {
 func TestUpCreateLock(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
 	second := *e
+	wire(&second)
 	asking, answered := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	host := e.Host
@@ -171,7 +172,7 @@ func TestCreateLockRefuses(t *testing.T) {
 	if err := lc.Rm(t.Context(), RmOptions{Force: true}); msg.NamesOf(err) != "create_running vm="+vm {
 		t.Errorf("rm: %v", msg.NamesOf(err))
 	}
-	gone := &found{f: project.Folder{Dir: st.Dir, Name: vm}, st: st, b: f, exists: true}
+	gone := &target{f: project.Folder{Dir: st.Dir, Name: vm}, st: st, b: f, exists: true}
 	if err := lc.rmGone(t.Context(), gone, FolderGone, RmOptions{Force: true}); msg.NamesOf(err) != "create_running vm="+vm {
 		t.Errorf("rm VM: %v", msg.NamesOf(err))
 	}
@@ -200,7 +201,7 @@ func TestRmChangedMeanwhile(t *testing.T) {
 		t.Fatal(err)
 	}
 	change(t, st, func(st *state.VM) error { st.Created = created; return nil })
-	t1 := &found{f: project.Folder{Dir: st.Dir, Name: vm}, st: unfinished, b: f, exists: true}
+	t1 := &target{f: project.Folder{Dir: st.Dir, Name: vm}, st: unfinished, b: f, exists: true}
 	if _, err := holdForRm(e, t1); msg.NamesOf(err) != "create_running vm="+vm {
 		t.Errorf("finished since: %v", msg.NamesOf(err))
 	}
@@ -211,7 +212,7 @@ func TestRmChangedMeanwhile(t *testing.T) {
 	if err := os.Remove(e.Dirs.VM(vm).State()); err != nil {
 		t.Fatal(err)
 	}
-	t2 := &found{f: t1.f, st: finished, b: f, exists: true}
+	t2 := &target{f: t1.f, st: finished, b: f, exists: true}
 	if _, err := holdForRm(e, t2); msg.NamesOf(err) != "create_running vm="+vm {
 		t.Errorf("deleted since: %v", msg.NamesOf(err))
 	}

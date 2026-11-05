@@ -45,7 +45,7 @@ func startPaths() []startPath {
 			if err != nil {
 				return err
 			}
-			return e.ensureRunning(ctx, t)
+			return t.ensureRunning(ctx)
 		}},
 	}
 }

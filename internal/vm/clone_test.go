@@ -443,7 +443,8 @@ func TestFetchUnfetchedInvalid(t *testing.T) {
 	e, f, _ := cloneEnv(t)
 	got := printed(t, e, true)
 	check := cloneCheck{clones: clones{e}, command: "devvm clone off", remakes: true}
-	if err := check.fetchUnfetched(t.Context(), f, "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
+	tg := e.newTarget(project.Folder{Dir: e.Dir, Name: "devvm-web-0123456789abcd"}, nil, f)
+	if err := check.fetchUnfetched(t.Context(), tg, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	want := []string{`branch_names_invalid refs="a..b" "x y" "-x:refs/heads/main"`}
@@ -452,7 +453,7 @@ func TestFetchUnfetchedInvalid(t *testing.T) {
 	}
 	gitIn(t, e.Dir, "branch", "saved")
 	*got = nil
-	err := check.fetchUnfetched(t.Context(), f, "devvm-web-0123456789abcd", e.Dir, "devvm", []string{"main"})
+	err := check.fetchUnfetched(t.Context(), tg, "devvm", []string{"main"})
 	if msg.NamesOf(err) != "saved_names_taken command=devvm clone off remote=devvm vm=devvm-web-0123456789abcd" || len(*got) > 0 {
 		t.Errorf("no free names: %s, printed %q", msg.NamesOf(err), *got)
 	}

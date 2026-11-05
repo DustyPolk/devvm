@@ -26,27 +26,23 @@ type Lifecycle struct{ *Env }
 // is locked again and checked (on Linux, set-id files too) as on a
 // launch that finds it stopped (starter.hostChecks), and its ssh config entry goes.
 func (e Lifecycle) Stop(ctx context.Context) error {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
 	vm := t.f.Name
-	in, err := t.b.Inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
-	if in.Status == backend.StatusStopped {
+	if t.in.Status == backend.StatusStopped {
 		e.Info(msg.AlreadyStopped(vm))
 	} else {
-		if err := t.b.Stop(ctx, vm); err != nil {
+		if err := t.stop(ctx); err != nil {
 			return err
 		}
 		e.Info(msg.Stopped(vm))
 	}
 	e.Proxy.Stop(vm)
 	e.Forwarders.Stop(vm)
-	linkRuns(e).stop(ctx, vm)
-	if err := starter(e).hostChecks(ctx, t, false, false); err != nil {
+	e.linkRuns.stop(ctx, vm)
+	if err := e.starter.hostChecks(ctx, t, false, false); err != nil {
 		return err
 	}
 	return e.writeSSHConfig(ctx)
@@ -57,7 +53,7 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 // and allowlist. Its .git is locked as new at its next launch. Only the
 // VM named for this path is adopted, never a parent folder's.
 func (e Lifecycle) Adopt(ctx context.Context, force bool) error {
-	t, err := finder(e).target(ctx, need{own: true, has: hasMachine})
+	t, err := e.finder.target(ctx, need{own: true, has: hasMachine})
 	if err != nil {
 		return err
 	}
@@ -118,7 +114,7 @@ type RmOptions struct {
 // exported, as its folder is gone. While another devvm makes the folder's
 // VM it refuses (holdForRm).
 func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
-	t, err := finder(e).target(ctx, need{has: hasVM})
+	t, err := e.finder.target(ctx, need{has: hasVM})
 	if err != nil {
 		return err
 	}
@@ -164,7 +160,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 		return nil
 	}
 	if checkClone {
-		keep, err := cloneCheck{clones: clones(e), command: "devvm rm"}.run(ctx, t)
+		keep, err := cloneCheck{clones: e.clones, command: "devvm rm"}.run(ctx, t)
 		if err != nil || keep {
 			return err
 		}
@@ -192,12 +188,12 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 // gone, so it's deleted only with --no-clone-check. A VM whose state
 // records a folder its name wasn't made for is refused.
 func (e Lifecycle) RmVM(ctx context.Context, name string, o RmOptions) error {
-	t, err := finder(e).target(ctx, need{name: name})
+	t, err := e.finder.target(ctx, need{name: name})
 	if err != nil {
 		return err
 	}
 	vm, st := t.f.Name, t.st
-	if here, err := finder(e).dir(); err == nil && st.Dir == here {
+	if here, err := e.finder.dir(); err == nil && st.Dir == here {
 		return e.Rm(ctx, o)
 	}
 	folder := FolderOf(st)
@@ -213,7 +209,7 @@ func (e Lifecycle) RmVM(ctx context.Context, name string, o RmOptions) error {
 // rmGone deletes t, a VM whose folder is gone or not connected, for RmVM.
 // One whose folder is on a disk that isn't connected is deleted only
 // after asking in a terminal, which --force never answers.
-func (e Lifecycle) rmGone(ctx context.Context, t *found, folder FolderState, o RmOptions) error {
+func (e Lifecycle) rmGone(ctx context.Context, t *target, folder FolderState, o RmOptions) error {
 	release, err := holdForRm(e.Env, t)
 	if err != nil {
 		return err
@@ -259,7 +255,7 @@ func (e Lifecycle) rmGone(ctx context.Context, t *found, folder FolderState, o R
 // askRmGone asks, for rmGone, whether to delete t: with force, only when
 // its folder is on a disk that isn't connected (unconnected), which
 // --force never answers.
-func (e Lifecycle) askRmGone(t *found, unconnected, force bool) bool {
+func (e Lifecycle) askRmGone(t *target, unconnected, force bool) bool {
 	if unconnected {
 		return e.Ask(msg.DeleteNotConnectedFolderVM(t.st.Dir, t.f.Name))
 	}
@@ -269,7 +265,7 @@ func (e Lifecycle) askRmGone(t *found, unconnected, force bool) bool {
 // stillGone checks, for rmGone, that t's state is still the one it read
 // (its ID) and its folder still in the state it found (folder), and with
 // running that the VM still runs, so its export doesn't start it.
-func (e Lifecycle) stillGone(ctx context.Context, t *found, folder FolderState, running bool) error {
+func (e Lifecycle) stillGone(ctx context.Context, t *target, folder FolderState, running bool) error {
 	vm := t.f.Name
 	st, err := state.ReadVM(e.Dirs, vm)
 	if err != nil {
@@ -294,7 +290,7 @@ func (e Lifecycle) stillGone(ctx context.Context, t *found, folder FolderState, 
 // Export saves the folder's VM's agents' history to file (absolute), or
 // to the exports folder when it's empty, starting the VM if it's stopped.
 func (e Lifecycle) Export(ctx context.Context, file string) error {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
@@ -310,14 +306,14 @@ func (e Lifecycle) Export(ctx context.Context, file string) error {
 // nothing and replaces nothing. The file is the user's alone (600), and
 // so is the exports folder, whatever mode it had; a folder of the user's
 // keeps its own.
-func (e Lifecycle) export(ctx context.Context, t *found, file string, failed error) error {
+func (e Lifecycle) export(ctx context.Context, t *target, file string, failed error) error {
 	vm := t.f.Name
 	x := Exports{Dirs: e.Dirs}
 	own := file == ""
 	if own {
 		file = x.newFile(vm, time.Now())
 	}
-	if err := e.ensureRunning(ctx, t); err != nil {
+	if err := t.ensureRunning(ctx); err != nil {
 		return err
 	}
 	// devvm's exports folder is the user's alone; a folder the user named
@@ -370,7 +366,7 @@ func (e Lifecycle) export(ctx context.Context, t *found, file string, failed err
 // (absolute), or the newest export devvm saved for the VM's folder when
 // it's "", never another folder's. devvm starts a stopped VM for it.
 func (e Lifecycle) Import(ctx context.Context, file string) error {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
@@ -386,7 +382,7 @@ func (e Lifecycle) Import(ctx context.Context, file string) error {
 	} else if _, err := os.Stat(file); err != nil {
 		return err
 	}
-	if err := e.ensureRunning(ctx, t); err != nil {
+	if err := t.ensureRunning(ctx); err != nil {
 		return err
 	}
 	return importHistory(ctx, e.Env, t, file)
@@ -396,7 +392,7 @@ func (e Lifecycle) Import(ctx context.Context, file string) error {
 // which is running. The file is streamed in as it is, and the VM's tar
 // reads it (historyImport): it comes from a VM, so the host never reads
 // what's in it, and only a VM's own home gets it.
-func importHistory(ctx context.Context, e *Env, t *found, file string) error {
+func importHistory(ctx context.Context, e *Env, t *target, file string) error {
 	vm := t.f.Name
 	f, err := os.Open(file) //nolint:gosec // the export the user named, or the one devvm saved for this folder
 	if err != nil {
@@ -446,7 +442,7 @@ func (e creation) offerHistory(vm, dir string, names []string) string {
 // into t's new VM, started and not yet set up; none when file is "". The VM is
 // made either way, so a failed import only warns, and devvm history
 // import can try again.
-func (e creation) importOffered(ctx context.Context, t *found, file string) error {
+func (e creation) importOffered(ctx context.Context, t *target, file string) error {
 	if file == "" {
 		return nil
 	}
@@ -468,7 +464,7 @@ func (e creation) importOffered(ctx context.Context, t *found, file string) erro
 // for its clone, other VMs' links to it, its host keys and its ssh config
 // entry. A delete that failed but left no VM (it was half gone already)
 // goes on like one that worked.
-func (e Lifecycle) delete(ctx context.Context, t *found) error {
+func (e Lifecycle) delete(ctx context.Context, t *target) error {
 	vm := t.f.Name
 	if err := t.b.Delete(ctx, vm); err != nil {
 		if _, ierr := t.b.Inspect(ctx, vm); !errors.Is(ierr, backend.ErrNotFound) {
@@ -476,5 +472,5 @@ func (e Lifecycle) delete(ctx context.Context, t *found) error {
 		}
 	}
 	e.Info(msg.Deleted(vm))
-	return vmFolders(e).teardown(ctx, t, false)
+	return e.vmFolders.teardown(ctx, t, false)
 }

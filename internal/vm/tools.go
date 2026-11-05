@@ -22,7 +22,7 @@ type Tools struct{ *Env }
 // version when it's another and whether the share has that one built.
 // The lock is read as it is: List never goes online.
 func (e Tools) List(ctx context.Context) ([]tools.VMTool, error) {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return nil, err
 	}
@@ -53,20 +53,20 @@ func (e Tools) Remove(ctx context.Context, o Options, names []string) error {
 // taken out aren't mounted from its next launch (an agent's folders
 // neither), and what the VM installed itself stays.
 func (e Tools) Change(ctx context.Context, o Options, add, gone []string) error {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
 	if err := e.change(ctx, t, add, gone); err != nil {
 		return err
 	}
-	return Launch(e).open(ctx, o, t)
+	return e.launcher.open(ctx, o, t)
 }
 
 // change records Change's changes in the VM's state, at once, building
 // what it adds first. It holds the lock VMs being made hold until the
 // state lists what it adds, so gc keeps their images.
-func (e Tools) change(ctx context.Context, t *found, add, gone []string) error {
+func (e Tools) change(ctx context.Context, t *target, add, gone []string) error {
 	vm, st := t.f.Name, t.st
 	have := tools.Names(st)
 	if len(gone) > 0 {
@@ -128,12 +128,12 @@ func (e Tools) change(ctx context.Context, t *found, add, gone []string) error {
 
 // build builds what the share lacks of the tools named, and returns their
 // tool images' files.
-func (e Tools) build(ctx context.Context, t *found, names []string) ([]string, error) {
+func (e Tools) build(ctx context.Context, t *target, names []string) ([]string, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
 	builder := e.Builder(t.b, t.st.From)
-	tg, err := Launch(e).buildTarget(ctx, builder, t.b, t.st)
+	tg, err := e.launcher.buildTarget(ctx, builder, t.b, t.st)
 	if err != nil {
 		return nil, err
 	}
@@ -141,14 +141,14 @@ func (e Tools) build(ctx context.Context, t *found, names []string) ([]string, e
 	if err != nil {
 		return nil, err
 	}
-	return files, Launch(e).buildTools(ctx, builder, tg, files)
+	return files, e.launcher.buildTools(ctx, builder, tg, files)
 }
 
 // Pick shows the picker for the folder's VM, its toolchains and agents
 // checked and its layers shown as they are, then makes what changed
 // (Change). When nothing changed it says so and opens nothing.
 func (e Tools) Pick(ctx context.Context, o Options) error {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func (e Tools) Pick(ctx context.Context, o Options) error {
 	if err := e.change(ctx, t, add, gone); err != nil {
 		return err
 	}
-	return Launch(e).open(ctx, o, t)
+	return e.launcher.open(ctx, o, t)
 }
 
 // layerRows are the layers the picker shows for a VM made from img: every
@@ -206,28 +206,28 @@ func layerRows(b *build.Env, img image.Name) []string {
 // Update checks for newer shared tools and moves the folder's VM to them,
 // built first, then opens it.
 func (e Tools) Update(ctx context.Context, o Options) error {
-	t, err := finder(e).target(ctx, need{has: hasMade})
+	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return err
 	}
 	if _, err := e.update(ctx, t); err != nil {
 		return err
 	}
-	return Launch(e).open(ctx, o, t)
+	return e.launcher.open(ctx, o, t)
 }
 
 // update checks for newer shared tools and records them in t's VM's
 // state, built first (tools.VMs.Update), which they take effect from as
 // devvm opens a shell in it: devvm tools update's, and devvm update's
 // first step. changed is false when it has the newest already.
-func (e Tools) update(ctx context.Context, t *found) (changed bool, err error) {
+func (e Tools) update(ctx context.Context, t *target) (changed bool, err error) {
 	vm, st := t.f.Name, t.st
 	builder := e.Builder(t.b, st.From)
-	tg, err := Launch(e).buildTarget(ctx, builder, t.b, st)
+	tg, err := e.launcher.buildTarget(ctx, builder, t.b, st)
 	if err != nil {
 		return false, err
 	}
-	buildFn := func(ctx context.Context, files []string) error { return Launch(e).buildTools(ctx, builder, tg, files) }
+	buildFn := func(ctx context.Context, files []string) error { return e.launcher.buildTools(ctx, builder, tg, files) }
 	// Held until its state lists the new tools, as a new VM's.
 	unmaking, err := tools.Making{Dirs: e.Dirs, Info: e.Info}.Hold(ctx)
 	if err != nil {

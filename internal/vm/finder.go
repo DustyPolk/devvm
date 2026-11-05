@@ -24,12 +24,16 @@ import (
 // no VM's folder run from one that's gone.
 type finder struct{ *Env }
 
-// found is the VM the finder finds.
-type found struct {
+// target is the VM the finder finds, and what a command does with that
+// VM (target.go): it's read from its backend once, by the finder, and
+// again after each start and stop.
+type target struct {
+	e      *Env // what it runs with
 	f      project.Folder
 	st     *state.VM       // its state; one that doesn't exist for a new VM
 	b      backend.Backend // its backend: the one its state records, else a new VM's
-	exists bool            // the backend has it
+	in     backend.Instance
+	exists bool // the backend has it: in is its answer
 	// other: it was made for an earlier folder at f.Dir, deleted and made
 	// again since (sameFolder).
 	other bool
@@ -44,13 +48,6 @@ type found struct {
 	// (Env.agentSocket): the one it runs with, which a start sets
 	// (starter.bringUp); "" for none.
 	agent string
-}
-
-// exec runs argv in the running VM, its connection carrying the VM's
-// agent.
-func (t *found) exec(ctx context.Context, argv []string, o backend.ExecOpts) error {
-	o.Agent = t.agent
-	return t.b.Exec(ctx, t.f.Name, argv, o)
 }
 
 // need is what a command needs of the VM it acts on. The zero need is
@@ -112,8 +109,8 @@ const (
 
 // target finds the VM a command acts on, as n says, and refuses one that
 // hasn't what n asks.
-func (e finder) target(ctx context.Context, n need) (*found, error) {
-	var t *found
+func (e finder) target(ctx context.Context, n need) (*target, error) {
+	var t *target
 	var err error
 	switch {
 	case n.name != "":
@@ -131,7 +128,7 @@ func (e finder) target(ctx context.Context, n need) (*found, error) {
 
 // check refuses t when it hasn't what n asks, in this order: there (else
 // noVM), made for this folder, no remake pending, its creation finished.
-func (n need) check(t *found) error {
+func (n need) check(t *target) error {
 	noVM := n.noVM
 	if noVM == nil {
 		noVM = msg.NoVM
@@ -182,14 +179,14 @@ func (e finder) dir() (string, error) {
 // that has it or would make it: the folder's own (own) or the nearest
 // parent folder's, as resolveFolder decides under e.Folder, a parent's
 // said in an info line first.
-func (e finder) folders(ctx context.Context) (*found, error) {
+func (e finder) folders(ctx context.Context) (*target, error) {
 	t, err := e.own(ctx)
 	if err != nil {
 		return nil, err
 	}
 	// A folder with state of its own has a VM, even one its backend has
 	// lost: never a parent's in its place, unless --parent.
-	use, p, err := resolveFolder(t.f.Dir, t.exists || t.st.Exists(), e.Folder, func() (*found, error) { return e.parentVM(ctx) })
+	use, p, err := resolveFolder(t.f.Dir, t.exists || t.st.Exists(), e.Folder, func() (*target, error) { return e.parentVM(ctx) })
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +206,7 @@ func (e finder) folders(ctx context.Context) (*found, error) {
 // for a parent's; FolderParent takes the parent's whatever the folder
 // has, and refuses a folder that's inside none with a VM
 // (no_parent_vm).
-func resolveFolder(dir string, own bool, rule FolderRule, parent func() (*found, error)) (folderUse, *found, error) {
+func resolveFolder(dir string, own bool, rule FolderRule, parent func() (*target, error)) (folderUse, *target, error) {
 	ownUse := useNone
 	if own {
 		ownUse = useOwn
@@ -234,7 +231,7 @@ func resolveFolder(dir string, own bool, rule FolderRule, parent func() (*found,
 // which names its folder in devvm's data folder: one that exists has the
 // name and the backend its state records, whichever backend is asked now.
 // Only a new VM gets a name, fitting its backend's.
-func (e finder) own(ctx context.Context) (*found, error) {
+func (e finder) own(ctx context.Context) (*target, error) {
 	dir, err := e.dir()
 	if err != nil {
 		return nil, err
@@ -258,7 +255,7 @@ func (e finder) own(ctx context.Context) (*found, error) {
 // state changed since: another devvm made it, finished making it or
 // deleted it meanwhile. One whose state is as it was is t, as it was;
 // one found again is refused as up's target is (vm_other_folder).
-func (e finder) again(ctx context.Context, t *found) (*found, error) {
+func (e finder) again(ctx context.Context, t *target) (*target, error) {
 	st, err := state.ReadHash(e.Dirs, project.Hash(t.f.Dir))
 	if err != nil {
 		return nil, err
@@ -315,7 +312,7 @@ func (e finder) newName(dir string) (project.Folder, error) {
 // gives nil unless its backend has its VM and it was made for that folder.
 // A VM in an outer folder can replace a nested folder through its mount,
 // and devvm then never skips the nested folder's VM for the outer one's.
-func (e finder) parentVM(ctx context.Context) (*found, error) {
+func (e finder) parentVM(ctx context.Context) (*target, error) {
 	here, err := e.dir()
 	if err != nil {
 		return nil, err
@@ -355,7 +352,7 @@ func (e finder) parentVM(ctx context.Context) (*found, error) {
 // in the folder its state records. It refuses a state whose folder isn't
 // the one its name was made for (its path's hash): a changed vm.json
 // never sends devvm rm VM to another folder's VM.
-func (e finder) named(ctx context.Context, name string) (*found, error) {
+func (e finder) named(ctx context.Context, name string) (*target, error) {
 	inv, err := ReadStates(e.Dirs)
 	if err != nil {
 		return nil, err
@@ -382,9 +379,10 @@ func hasGit(dir string) bool {
 }
 
 // inspect finds the VM for folder f, whose state is st, on the backend
-// its state records, else a new VM's. One that exists gets its SSH agent
-// (found.agent): the one it runs with, else its choice.
-func (e finder) inspect(ctx context.Context, f project.Folder, st *state.VM) (*found, error) {
+// its state records, else a new VM's, and reads it from its backend
+// (target.refresh). One that exists gets its SSH agent (target.agent):
+// the one it runs with, else its choice.
+func (e finder) inspect(ctx context.Context, f project.Folder, st *state.VM) (*target, error) {
 	choice, err := e.Registry.For(st)
 	if err != nil {
 		return nil, err
@@ -393,20 +391,21 @@ func (e finder) inspect(ctx context.Context, f project.Folder, st *state.VM) (*f
 	if err := backend.Check(ctx, b); err != nil {
 		return nil, err
 	}
-	t := &found{f: f, st: st, b: b, other: !sameFolder(f, st)}
-	switch in, err := b.Inspect(ctx, f.Name); {
-	case err == nil:
-		t.exists = true
-		mode := sshagent.Mode(st)
-		if in.Status == backend.StatusRunning {
-			if mode, err = runningAgent(ctx, b, st); err != nil {
-				return nil, err
-			}
-		}
-		t.agent = e.agentSocket(mode)
-	case !errors.Is(err, backend.ErrNotFound):
+	t := e.newTarget(f, st, b)
+	t.other = !sameFolder(f, st)
+	if err := t.refresh(ctx); err != nil {
 		return nil, err
 	}
+	if !t.exists {
+		return t, nil
+	}
+	mode := sshagent.Mode(st)
+	if t.in.Status == backend.StatusRunning {
+		if mode, err = runningAgent(ctx, b, st); err != nil {
+			return nil, err
+		}
+	}
+	t.agent = e.agentSocket(mode)
 	return t, nil
 }
 

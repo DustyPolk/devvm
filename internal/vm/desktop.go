@@ -47,7 +47,7 @@ type Desktop struct{ *Env }
 // ctx ends (Ctrl+C) or the VM stops. On macOS it opens the address in
 // Screen Sharing, unless NoOpen.
 func (e Desktop) Open(ctx context.Context, o DesktopOptions) error {
-	t, err := ready(ctx, Launch(e))
+	t, err := ready(ctx, e.launcher)
 	if err != nil {
 		return err
 	}

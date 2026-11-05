@@ -227,8 +227,8 @@ type Links struct{ *Env }
 // them while it runs: its setup sent again and its link session running
 // (linkRuns.apply), which is waited for to say what came of added. A
 // stopped client gets them at its next start.
-func (e Links) changeLinks(ctx context.Context, t *found, links, added []Link, said func()) error {
-	runs := linkRuns(e)
+func (e Links) changeLinks(ctx context.Context, t *target, links, added []Link, said func()) error {
+	runs := e.linkRuns
 	from := runs.logSize(t.f.Name)
 	if err := writeLinks(ctx, t.st, links); err != nil {
 		return err
@@ -244,7 +244,7 @@ func (e Links) changeLinks(ctx context.Context, t *found, links, added []Link, s
 // publishChanged names the clients that link to ports of target t that it
 // published before (old, as its links section had it) and doesn't now:
 // their next connections to those ports are refused.
-func (e Links) publishChanged(t *found, old string) error {
+func (e Links) publishChanged(t *target, old string) error {
 	id := t.st.ID
 	clients, err := linkClients(e.Dirs, t.f.Name, id, func(_ *state.VM, l Link) bool {
 		return publishedIn(old, l.Port) && !Published(t.st, l.Port)
@@ -261,7 +261,7 @@ func (e Links) publishChanged(t *found, old string) error {
 // KeyPublish had it), when t runs with its network policy not in force
 // (warnUnenforced): those links' connections are refused until t starts
 // again.
-func (e Links) publishUnenforced(ctx context.Context, t *found, old string) error {
+func (e Links) publishUnenforced(ctx context.Context, t *target, old string) error {
 	clients, err := linkClients(e.Dirs, t.f.Name, t.st.ID, func(c *state.VM, l Link) bool {
 		return netpolicy.On(c) && !publishedIn(old, l.Port) && Published(t.st, l.Port)
 	})
@@ -291,7 +291,7 @@ func (e Links) resolve(target string) (string, error) {
 	if project.IsPath(target) {
 		dir := target
 		if !filepath.IsAbs(dir) {
-			here, err := finder(e).dir()
+			here, err := e.finder.dir()
 			if err != nil {
 				return "", err
 			}
@@ -336,7 +336,7 @@ type LinkListed struct {
 // List returns the folder's VM's links, with each target's folder and
 // status and whether the link applies.
 func (e Links) List(ctx context.Context) ([]LinkListed, error) {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +392,7 @@ type LinkAdd struct {
 // have links, and the name is free. A running target whose network policy
 // isn't in force is warned of (warnUnenforced), and refused nothing.
 func (e Links) Add(ctx context.Context, a LinkAdd) error {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
 	if err != nil {
 		return err
 	}
@@ -425,7 +425,7 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 		e.warnUnenforced(ctx, t.st, tst)
 		return nil
 	}
-	if ok, err := t.widen(e.Env, "devvm link add"); !ok {
+	if ok, err := t.widen("devvm link add"); !ok {
 		return err
 	}
 	addr, err := linkAddr(links, target, id)
@@ -433,7 +433,7 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 		return err
 	}
 	l := Link{Name: name, Port: a.Port, Target: target, TargetID: id, Addr: addr}
-	all, clashes, err := Groups(e).withGroup(t.st, append(own, l), links)
+	all, clashes, err := e.groups.withGroup(t.st, append(own, l), links)
 	if err != nil {
 		return err
 	}
@@ -444,15 +444,15 @@ func (e Links) Add(ctx context.Context, a LinkAdd) error {
 		e.Info(msg.LinkAdded(name, port, target, client))
 		e.Note(msg.LinkTrust(target, client))
 		e.warnUnenforced(ctx, t.st, tst)
-		Groups(e).warnClashes(client, clashes)
-		Groups(e).sayChanged(t.st, links, all, nil)
+		e.groups.warnClashes(client, clashes)
+		e.groups.sayChanged(t.st, links, all, nil)
 	})
 }
 
 // checkTarget checks a new link's target for client t: made and finished,
 // publishing port, with network policy if the client has it, and on a
 // backend with links, as the client's is. It returns the target's state.
-func (e Links) checkTarget(t *found, target string, port int) (*state.VM, error) {
+func (e Links) checkTarget(t *target, target string, port int) (*state.VM, error) {
 	tst, err := state.ReadVM(e.Dirs, target)
 	if err != nil {
 		return nil, err
@@ -483,7 +483,7 @@ func (e Links) checkTarget(t *found, target string, port int) (*state.VM, error)
 // its ID): as, else the name its links to that target have, else the
 // target's folder part. A target has one name in a client, and a name
 // one target; localhost and the client's own hostname are refused.
-func linkNameFor(t *found, links []Link, target, id, as string) (string, error) {
+func linkNameFor(t *target, links []Link, target, id, as string) (string, error) {
 	had := ""
 	for _, l := range links {
 		if l.Target == target && l.TargetID == id {
@@ -511,7 +511,7 @@ func linkNameFor(t *found, links []Link, target, id, as string) (string, error) 
 // Rm removes the folder's VM's link to target's port, where target is the
 // link's name, its target VM's name, or what devvm link add takes.
 func (e Links) Rm(ctx context.Context, target string, port int) error {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
 	if err != nil {
 		return err
 	}
@@ -545,7 +545,7 @@ func (e Links) Rm(ctx context.Context, target string, port int) error {
 	}
 	// The group's links follow: a member's port the user linked gets the
 	// group's link again.
-	all, _, err := Groups(e).withGroup(t.st, ownLinks(slices.Delete(slices.Clone(links), i, i+1)), links)
+	all, _, err := e.groups.withGroup(t.st, ownLinks(slices.Delete(slices.Clone(links), i, i+1)), links)
 	if err != nil {
 		return err
 	}
@@ -554,14 +554,14 @@ func (e Links) Rm(ctx context.Context, target string, port int) error {
 	})
 	return e.changeLinks(ctx, t, all, regained, func() {
 		e.Info(msg.LinkRemoved(gone.Name, strconv.Itoa(port), t.f.Name))
-		Groups(e).sayChanged(t.st, links, all, regained)
+		e.groups.sayChanged(t.st, links, all, regained)
 	})
 }
 
 // Published returns the ports and ranges the folder's VM publishes, or
 // none.
 func (e Links) Published(ctx context.Context) (string, error) {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
 	if err != nil {
 		return "", err
 	}
@@ -576,12 +576,12 @@ func (e Links) Publish(ctx context.Context, list string, publish bool) error {
 	if err != nil {
 		return err
 	}
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMLink})
 	if err != nil {
 		return err
 	}
 	if publish {
-		if ok, err := t.widen(e.Env, "devvm link publish"); !ok {
+		if ok, err := t.widen("devvm link publish"); !ok {
 			return err
 		}
 	}
@@ -612,10 +612,10 @@ func (e Links) Publish(ctx context.Context, list string, publish bool) error {
 		if err := e.publishUnenforced(ctx, t, old); err != nil {
 			return err
 		}
-		return Groups(e).syncOthers(ctx, t)
+		return e.groups.syncOthers(ctx, t)
 	}
 	e.Info(msg.Unpublished(l, t.f.Name))
-	if err := Groups(e).syncOthers(ctx, t); err != nil {
+	if err := e.groups.syncOthers(ctx, t); err != nil {
 		return err
 	}
 	return e.publishChanged(t, old)

@@ -65,7 +65,7 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 	}
 	// --clone asks for a new VM of the folder's own: as --here. One that
 	// has a VM (or a remake of it pending) has one made for this folder.
-	t, err := finder(e).target(ctx, need{own: o.Clone, folder: true})
+	t, err := e.finder.target(ctx, need{own: o.Clone, folder: true})
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 // openMade opens t, a VM that's made. One whose creation didn't finish,
 // kept, is refused before anything is checked or said, as any command
 // that needs it made refuses it.
-func (e Launch) openMade(ctx context.Context, o Options, t *found) error {
+func (e Launch) openMade(ctx context.Context, o Options, t *target) error {
 	if err := (need{has: hasMade}).check(t); err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (e Launch) openMade(ctx context.Context, o Options, t *found) error {
 // creation didn't finish is deleted and made again only when the user
 // says so (remakeUnfinished). After an interrupt the lock is let go of
 // last, once create's cleanup has deleted what it made.
-func (e Launch) makeHeld(ctx context.Context, o Options, t *found) error {
+func (e Launch) makeHeld(ctx context.Context, o Options, t *target) error {
 	release, err := holdCreate(e.Env, t.f.Name)
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func (e Launch) makeHeld(ctx context.Context, o Options, t *found) error {
 			unhold()
 		}
 	}()
-	if t, err = finder(e).again(ctx, t); err != nil {
+	if t, err = e.finder.again(ctx, t); err != nil {
 		return err
 	}
 	switch {
@@ -126,12 +126,12 @@ func (e Launch) makeHeld(ctx context.Context, o Options, t *found) error {
 		if _, err := e.Proxy.Upstream(ctx); err != nil {
 			return err
 		}
-		return creation{e}.create(ctx, o, t.f, t.b, unhold)
+		return e.creation.create(ctx, o, t.f, t.b, unhold)
 	case remakeUnfinished(e.Env, t):
-		if err := Lifecycle(e).delete(ctx, t); err != nil {
+		if err := e.lifecycle.delete(ctx, t); err != nil {
 			return err
 		}
-		return creation{e}.create(ctx, o, t.f, t.b, unhold)
+		return e.creation.create(ctx, o, t.f, t.b, unhold)
 	}
 	unhold()
 	return e.openMade(ctx, o, t)
@@ -140,14 +140,14 @@ func (e Launch) makeHeld(ctx context.Context, o Options, t *found) error {
 // finishRemake finishes t's VM's remake that didn't (remaking.finishPending),
 // holding its remake lock, unless another devvm finished it meanwhile,
 // then opens it.
-func (e Launch) finishRemake(ctx context.Context, o Options, t *found) error {
-	release, err := remaking(e).hold(ctx, t)
+func (e Launch) finishRemake(ctx context.Context, o Options, t *target) error {
+	release, err := e.remaking.hold(ctx, t)
 	if err != nil {
 		return err
 	}
 	defer release()
 	if remakePending(t.st) {
-		if err := remaking(e).finishPending(ctx, t); err != nil {
+		if err := e.remaking.finishPending(ctx, t); err != nil {
 			return err
 		}
 	}
@@ -159,7 +159,7 @@ func (e Launch) finishRemake(ctx context.Context, o Options, t *found) error {
 // --no-input ([y/N]). It never ran a shell, so nothing of the user's is in
 // it. A finished VM is opened; an unfinished one not asked about (a parent
 // folder's, or no question) or kept is refused (vm_unfinished).
-func remakeUnfinished(e *Env, t *found) bool {
+func remakeUnfinished(e *Env, t *target) bool {
 	if t.st.Finished() || t.sub != "" || e.CanAsk == nil || !e.CanAsk() {
 		return false
 	}
@@ -245,7 +245,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	e.LogNote()
 	// What a VM made for this folder before, deleted some other way, left
 	// in its folder: the new one's state replaces it.
-	if err := (vmFolders{e.Env}).clear(ctx, vm); err != nil {
+	if err := e.vmFolders.clear(ctx, vm); err != nil {
 		return err
 	}
 	var locking atomic.Bool
@@ -263,7 +263,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err := n.record(st, tg, files); err != nil {
 		return err
 	}
-	if err := (devcontainers{e.Env}).record(st, o.NoDevcontainer, n.dc); err != nil {
+	if err := e.devcontainers.record(st, o.NoDevcontainer, n.dc); err != nil {
 		return err
 	}
 	// Its alias, chosen now for good, as its name was, under the claims
@@ -287,8 +287,8 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	locking.Store(!o.Clone && !o.NoGitProtect)
 	// Started as every start does, its folder checked as a new VM's,
 	// before the setup and the shell.
-	t := &found{f: f, st: st, b: b, exists: true}
-	started, err := starter(e.Launch).bringUp(ctx, t, upOpts{made: true})
+	t := e.newTarget(f, st, b)
+	started, err := e.starter.bringUp(ctx, t, upOpts{made: true})
 	if err != nil {
 		return err
 	}
@@ -297,7 +297,10 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err := e.importOffered(ctx, t, n.history); err != nil {
 		return err
 	}
-	cmd, err := e.setUp(ctx, b, st, f, started)
+	if err := e.setUpVM(ctx, t, started); err != nil {
+		return err
+	}
+	cmd, err := t.shell(ctx)
 	if err != nil {
 		return err
 	}
@@ -401,7 +404,7 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 		return newVM{}, err
 	}
 	n := newVM{agent: sshagent.Off}
-	if n.from, n.dc, err = (devcontainers{e.Env}).prepare(ctx, o, vm, f.Dir); err != nil {
+	if n.from, n.dc, err = e.devcontainers.prepare(ctx, o, vm, f.Dir); err != nil {
 		return newVM{}, err
 	}
 	def, err := e.firstRun(o, size)
@@ -553,42 +556,33 @@ func (e creation) undoCreate(b backend.Backend, f project.Folder, locking *atomi
 			e.Protector(f.Dir).Unlock(ctx, st)
 		}
 		if deleted {
-			_ = vmFolders{e.Env}.teardown(ctx, &found{f: f, st: st, b: b}, false)
+			_ = e.vmFolders.teardown(ctx, e.newTarget(f, st, b), false)
 		}
 	}
-}
-
-// setUp sets up a running VM, started with conf, for a shell in the
-// folder (setUpVM), and returns the shell's command, which carries the
-// agent it started with.
-func (e Launch) setUp(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) (backend.Command, error) {
-	if err := e.setUpVM(ctx, b, st, f, conf); err != nil {
-		return backend.Command{}, err
-	}
-	return b.Shell(ctx, st.Name(), backend.ShellOpts{Dir: f.Dir, Agent: conf.AgentSocket})
 }
 
 // setUpVM sets up a running VM, started with conf: its setup sent, ssh
 // and editors reaching it by name, its links carried (linkRuns.atLaunch),
 // a --clone VM's clone made if it isn't yet, then its devcontainer.json's
 // commands run (devcontainers.run).
-func (e Launch) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) error {
-	if err := syncer(e).sync(ctx, b, st, f.Slug(), tools.Files(st), conf); err != nil {
+func (e Launch) setUpVM(ctx context.Context, t *target, conf backend.Confinement) error {
+	b, st, f := t.b, t.st, t.f
+	if err := e.syncer.sync(ctx, b, st, f.Slug(), tools.Files(st), conf); err != nil {
 		return err
 	}
 	if err := e.writeSSHConfig(ctx); err != nil {
 		return err
 	}
 	// Its links, once its host key is pinned, which their session checks.
-	if err := linkRuns(e).atLaunch(ctx, b, st); err != nil {
+	if err := e.linkRuns.atLaunch(ctx, b, st); err != nil {
 		return err
 	}
 	if c := sectionOf[cloneInVM](st, cloneSection); c.On && !c.Made.Seeded {
-		if err := clones(e).seedClone(ctx, b, st, f, conf.AgentSocket); err != nil {
+		if err := e.clones.seedClone(ctx, t); err != nil {
 			return err
 		}
 	}
-	return devcontainers(e).run(ctx, b, st, f.Dir, conf.AgentSocket)
+	return e.devcontainers.run(ctx, b, st, f.Dir, conf.AgentSocket)
 }
 
 // checkUnsafe refuses a folder that is or holds the home folder or

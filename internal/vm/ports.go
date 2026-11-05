@@ -108,7 +108,7 @@ func orAll(ports string) string {
 // Ports returns which ports the folder's VM forwards: all, none or a
 // list.
 func (e Settings) Ports(ctx context.Context) (string, error) {
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMPorts})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMPorts})
 	if err != nil {
 		return "", err
 	}
@@ -141,7 +141,7 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 		e.Info(msg.PortsDefault(list))
 		return nil
 	}
-	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMPorts})
+	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMPorts})
 	if err != nil {
 		return err
 	}
@@ -161,17 +161,13 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 	if err := e.Registry.Require(b, vm, requirements(needs{ports: p})...); err != nil {
 		return err
 	}
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
 	// Its state, which its forwarder reads: other VMs' forwarders never
 	// take its listed ports (ports.Used), its new ones included before its
 	// own forwarder starts with them.
 	if err := st.Update(ctx, func(st *state.VM) error { return ports.SetForward(st, list) }); err != nil {
 		return err
 	}
-	if in.Status != backend.StatusRunning {
+	if t.in.Status != backend.StatusRunning {
 		e.Info(msg.PortsNow(list, vm))
 		return nil
 	}

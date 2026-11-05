@@ -153,7 +153,7 @@ func keepType(h *tar.Header, kept map[string]byte) bool {
 // (paths.VM.Home), through copyHome, with what its remake doesn't keep
 // left out. It's written next to it and renamed into place once
 // complete, so a failed save leaves none; failed is the error then.
-func (e remaking) saveHome(ctx context.Context, t *found, failed error) error {
+func (e remaking) saveHome(ctx context.Context, t *target, failed error) error {
 	vm := t.f.Name
 	file := e.Dirs.VM(vm).Home()
 	out, err := os.CreateTemp(filepath.Dir(file), ".home-*")
@@ -199,7 +199,7 @@ func (e remaking) saveHome(ctx context.Context, t *found, failed error) error {
 
 // restoreHome puts the VM's saved home folder into its new disk's
 // (homeIn), once it runs. A VM with none saved has nothing put in.
-func (e remaking) restoreHome(ctx context.Context, t *found) error {
+func (e remaking) restoreHome(ctx context.Context, t *target) error {
 	vm := t.f.Name
 	f, err := os.Open(e.Dirs.VM(vm).Home())
 	if errors.Is(err, fs.ErrNotExist) {

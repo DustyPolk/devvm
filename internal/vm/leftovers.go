@@ -136,7 +136,7 @@ func (e Leftovers) ForgetLinks(ctx context.Context) error {
 		}
 	}
 	for _, t := range targets {
-		if err := linkRuns(e).unlinkTarget(ctx, t); err != nil {
+		if err := e.linkRuns.unlinkTarget(ctx, t); err != nil {
 			return err
 		}
 	}
@@ -213,6 +213,5 @@ func (e Leftovers) Forget(ctx context.Context, o Orphan) error {
 	} else if !isGone {
 		return fmt.Errorf("%s: its backend has it", o.Name)
 	}
-	t := &found{f: project.Folder{Name: o.Name, Dir: st.Dir}, st: st, b: b}
-	return vmFolders(e).teardown(ctx, t, true)
+	return e.vmFolders.teardown(ctx, e.newTarget(project.Folder{Name: o.Name, Dir: st.Dir}, st, b), true)
 }

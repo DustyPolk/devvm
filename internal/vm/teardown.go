@@ -25,18 +25,18 @@ type vmFolders struct{ *Env }
 // among them), its project folder's creation lock if a killed devvm left
 // it (dropCreateLock), and last its ssh config entry. leaves is false after the backend
 // deleted the VM itself, which took its leftovers with it.
-func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
+func (e vmFolders) teardown(ctx context.Context, t *target, leaves bool) error {
 	vm := t.f.Name
 	e.Proxy.Stop(vm)
 	e.Forwarders.Stop(vm)
-	linkRuns(e).stop(ctx, vm)
+	e.linkRuns.stop(ctx, vm)
 	// Both, for a VM devvm clone was switching: its remote, if its clone
 	// made one, and .git's locks, if it locked any.
-	clones(e).removeRemote(ctx, t.f.Dir, vm, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
+	e.clones.removeRemote(ctx, t.f.Dir, vm, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
 	if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
 		e.Protector(t.f.Dir).Unlock(ctx, t.st)
 	}
-	if err := Groups(e).forget(ctx, vm); err != nil {
+	if err := e.groups.forget(ctx, vm); err != nil {
 		return err
 	}
 	if f, ok := backend.As[backend.Forgetter](t.b); ok && leaves {
@@ -64,6 +64,6 @@ func (e vmFolders) teardown(ctx context.Context, t *found, leaves bool) error {
 func (e vmFolders) clear(ctx context.Context, vm string) error {
 	e.Proxy.Stop(vm)
 	e.Forwarders.Stop(vm)
-	linkRuns(e).stop(ctx, vm)
+	e.linkRuns.stop(ctx, vm)
 	return state.RemoveFolder(ctx, e.Dirs, vm)
 }
