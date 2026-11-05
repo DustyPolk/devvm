@@ -241,10 +241,25 @@ apfs_same() { local a b
   a=$(df "$1" 2>/dev/null | awk 'NR == 2 { print $1 }') b=$(df "$2" 2>/dev/null | awk 'NR == 2 { print $1 }')
   [[ -n $a && $a == "$b" ]] && mount | awk -v d="$a" '$1 == d && /\(apfs/ { f = 1 } END { exit !f }'
 }
+# seed_packages SRC DST: base's package cache, each <sha256>.deb SRC has and DST lacks cloned
+# (clone), its sets/ (small files, the packages each base key recorded) copied. It fails at the
+# first .deb that can't be cloned.
+seed_packages() { local f
+  [[ -d $1 ]] || return 0
+  for f in "$2" "$2/sets"; do [[ -d $f ]] || mkdir -m 700 "$f"; done
+  for f in "$1"/*.deb; do
+    [[ -f $f && ! -e $2/${f##*/} ]] || continue
+    clone "$f" "$2/${f##*/}" || return 1
+  done
+  for f in "$1"/sets/*.json; do
+    [[ -f $f && ! -e $2/sets/${f##*/} ]] || continue
+    cp -p "$f" "$2/sets/"
+  done
+}
 # seed K: what slot 0 has and slot K lacks, cloned into slot K's sandbox (clone), never copied whole:
 # each image's Lima instance (then its record, a small file, copied), each tool image (then its
-# record), and devvm's caches (the --from digests, a small file, copied). What can't be cloned is
-# said, and slot K builds its own.
+# record), devvm's caches (the --from digests, a small file, copied) and base's package cache
+# (seed_packages). What can't be cloned is said, and slot K builds its own.
 seed() {
   local k=$1 l0 lk d0 dk r key f n=0 t=0 cold=""
   l0=$(slot_lima 0) lk=$(slot_lima "$k") d0=$(slot_work 0)/data/devvm dk=$(slot_work "$k")/data/devvm
@@ -267,6 +282,7 @@ seed() {
     f=${f%/}; [[ -d $f && ! -e $dk/cache/${f##*/} ]] || continue
     clone "$f" "$dk/cache/${f##*/}" || { cold="$cold caches"; break; }
   done
+  seed_packages "$d0/packages" "$dk/packages" || cold="$cold packages"
   echo "e2e: slot $k: $n images and $t tool images cloned from slot 0"
   [[ -z $cold ]] || echo "e2e: slot $k: these can't be cloned here, so it builds its own:$cold"
 }
