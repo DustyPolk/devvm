@@ -1989,6 +1989,31 @@ func NewerTools(tools string) M {
 	return M{id: "newer_tools", vals: []val{{"tools", tools}}}
 }
 
+// NextStartAgent is [next_start_agent]: "{{.vm}}'s SSH agent forwarding changes only when it starts."
+func NextStartAgent(vm string) M {
+	return M{id: "next_start_agent", vals: []val{{"vm", vm}}}
+}
+
+// NextStartMore is [next_start_more]: "{{.count}} more changes wait for that too."
+func NextStartMore(count int) M {
+	return M{id: "next_start_more", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
+// NextStartMounts is [next_start_mounts]: "{{.vm}}'s agent folder mounts change only when it starts."
+func NextStartMounts(vm string) M {
+	return M{id: "next_start_mounts", vals: []val{{"vm", vm}}}
+}
+
+// NextStartNetOff is [next_start_net_off]: "{{.vm}}'s network policy turns off only when it starts."
+func NextStartNetOff(vm string) M {
+	return M{id: "next_start_net_off", vals: []val{{"vm", vm}}}
+}
+
+// NextStartSize is [next_start_size]: "{{.vm}} gets its new size only when it starts."
+func NextStartSize(vm string) M {
+	return M{id: "next_start_size", vals: []val{{"vm", vm}}}
+}
+
 // NoClaudeToken is [no_claude_token]: "{{.vm}} has no Claude Code token. Run claude setup-token, then devvm secret set claude."
 func NoClaudeToken(vm string) M {
 	return M{id: "no_claude_token", vals: []val{{"vm", vm}}}
@@ -2609,9 +2634,9 @@ func ResolvingTools() M {
 	return M{id: "resolving_tools"}
 }
 
-// RestartNow is [restart_now]: "Restarting {{.vm}} applies the change now, and anything running in it stops. Restart it now?"
-func RestartNow(vm string) M {
-	return M{id: "restart_now", vals: []val{{"vm", vm}}}
+// RestartNow is [restart_now]: "Restarting {{.vm}} applies the changes now, and anything running in it stops. Restart it now?"
+func RestartNow(count int, vm string) M {
+	return M{id: "restart_now", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"vm", vm}}}
 }
 
 // RestoringHome is [restoring_home]: "copying {{.vm}}'s home folder onto its new disk"
@@ -3788,6 +3813,11 @@ var specs = map[string]spec{
 	"network_on_linked":                {fields: []string{"targets", "vm"}},
 	"new_vm_gets":                      {fields: []string{"layers", "tools", "vm"}},
 	"newer_tools":                      {fields: []string{"tools"}},
+	"next_start_agent":                 {fields: []string{"vm"}},
+	"next_start_more":                  {plural: true, fields: []string{"count"}},
+	"next_start_mounts":                {fields: []string{"vm"}},
+	"next_start_net_off":               {fields: []string{"vm"}},
+	"next_start_size":                  {fields: []string{"vm"}},
 	"no_claude_token":                  {fields: []string{"vm"}},
 	"no_code_command":                  {fields: []string{"host"}},
 	"no_command":                       {fields: []string{"word"}},
@@ -3912,7 +3942,7 @@ var specs = map[string]spec{
 	"rename_failed":                    {fields: []string{"to", "vm"}},
 	"renaming":                         {fields: []string{"to", "vm"}},
 	"resolving_tools":                  {},
-	"restart_now":                      {fields: []string{"vm"}},
+	"restart_now":                      {plural: true, fields: []string{"count", "vm"}},
 	"restoring_home":                   {fields: []string{"vm"}},
 	"retention_bad":                    {fields: []string{"reason"}},
 	"retention_busy":                   {},

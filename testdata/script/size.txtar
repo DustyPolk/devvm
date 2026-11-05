@@ -123,6 +123,41 @@ stderr '^devvm: disk_shrink have=120 vm=devvm-web-[0-9a-f]{14} want=100$'
 exec devvm --cpus 3
 stderr '^devvm: size_flags_ignored$'
 
+# Opening it while a new size waits: without a terminal, the warning
+# alone, and it keeps running.
+exec devvm size --cpus 2
+stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stub_reset
+exec devvm
+stderr '^devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+! stderr 'restart_now'
+stub_calls
+! stdout 'limactl (stop|edit)'
+# In a terminal, one question after the line naming what waits, no by
+# default: no keeps the warning and the VM running.
+stub_reset
+ttyin -stdin $WORK/no.txt
+exec devvm
+stderr '^next_start_size vm=devvm-web-[0-9a-f]{14}$'
+stderr '^restart_now count=1 vm=devvm-web-[0-9a-f]{14} \[y/N\] '
+stderr 'devvm: size_next_start vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|edit)'
+# Yes stops it and starts it with its new size, then sets it up (which
+# fails here, so the run ends before its shell).
+stub_reset
+exec sh -c ': > "$STUB_DIR/sync-fails-with"'
+ttyin -stdin $WORK/yes.txt
+! exec devvm
+stderr '^restart_now count=1 vm=devvm-web-[0-9a-f]{14} \[y/N\] '
+! stderr 'size_next_start'
+stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl edit --tty=false devvm-web-[0-9a-f]{14} --cpus 2( |$)'
+rm $STUB_DIR/sync-fails-with
+exec devvm size
+stdout '\Acpus=2 memory=8GiB disk=120GiB\n\z'
+
 -- unset --
 cpus= # devvm: default
 memory= # devvm: default
@@ -131,6 +166,10 @@ disk= # devvm: default
 cpus=2 # devvm: settings.json
 memory=2.5 # devvm: settings.json
 disk= # devvm: default
+-- no.txt --
+n
+-- yes.txt --
+y
 -- features-none.json --
 {"features": []}
 -- memory.toml --

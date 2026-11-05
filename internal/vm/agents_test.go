@@ -89,14 +89,12 @@ func TestUpdateAgentDirs(t *testing.T) {
 		name    string
 		tools   string
 		status  backend.Status
-		tty     bool
-		noInput bool
 		have    []string
 		methods []string
 		printed []string
-		// later: it changes at its next start, which bringUp says;
-		// stopped: it was stopped to change now.
-		later, stopped bool
+		// later: it changes at its next start, which bringUp offers to
+		// make now, and says.
+		later bool
 	}{
 		{
 			name: "nothing changed, nothing edited", tools: "node claude", status: backend.StatusStopped,
@@ -108,17 +106,8 @@ func TestUpdateAgentDirs(t *testing.T) {
 			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "agent_dirs_removed dirs=" + commands + " vm=" + vm, "mounts_updated vm=" + vm},
 		},
 		{
-			name: "a running VM without a terminal changes at its next start", tools: "node claude", status: backend.StatusRunning,
-			methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + skills + ", " + mine + " vm=" + vm}, later: true,
-		},
-		{
-			name: "a running VM with --no-input changes at its next start", tools: "node claude", status: backend.StatusRunning, tty: true, noInput: true,
-			methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + skills + ", " + mine + " vm=" + vm}, later: true,
-		},
-		{
-			name: "a running VM restarts once the user agrees", tools: "node claude", status: backend.StatusRunning, tty: true,
-			have: []string{skills}, methods: []string{"Inspect", "Stop"},
-			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "asked restart_now vm=" + vm, "mounts_updated vm=" + vm}, stopped: true,
+			name: "a running VM changes at its next start, without a question", tools: "node claude", status: backend.StatusRunning,
+			have: []string{skills}, methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm}, later: true,
 		},
 		{
 			name: "a VM without agents drops leftover agent mounts", tools: "node", status: backend.StatusStopped,
@@ -128,10 +117,7 @@ func TestUpdateAgentDirs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := &Env{Dirs: paths.Dirs{Home: home}}
-			got := printed(t, e, tc.tty)
-			if tc.noInput {
-				e.CanAsk = func() bool { return false }
-			}
+			got := printed(t, e, true)
 			if tc.name != "nothing changed, nothing edited" {
 				mkdirs(t, home, ".claude/agents")
 			}
@@ -140,12 +126,8 @@ func TestUpdateAgentDirs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			in, later, err := (Launch{e}).updateAgentDirs(t.Context(), f, st, in)
-			if err != nil {
-				t.Fatal(msg.NamesOf(err))
-			}
-			if later != tc.later || (in.Status == backend.StatusStopped) != (tc.stopped || tc.status == backend.StatusStopped) {
-				t.Errorf("later %v, status %s", later, in.Status)
+			if later := (Launch{e}).updateAgentDirs(st, in); later != tc.later {
+				t.Errorf("later %v", later)
 			}
 			if ms := f.Methods(); !slices.Equal(ms, tc.methods) {
 				t.Errorf("calls = %q, want %q", ms, tc.methods)

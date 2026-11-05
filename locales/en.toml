@@ -2115,8 +2115,27 @@ other = "This machine has new agent folders for {{.vm}}: {{.dirs}}."
 description = "dirs is a comma-separated list of folders"
 other = "These agent folders for {{.vm}} are gone from this machine: {{.dirs}}."
 
+[next_start_size]
+other = "{{.vm}} gets its new size only when it starts."
+
+[next_start_agent]
+other = "{{.vm}}'s SSH agent forwarding changes only when it starts."
+
+[next_start_mounts]
+other = "{{.vm}}'s agent folder mounts change only when it starts."
+
+[next_start_net_off]
+other = "{{.vm}}'s network policy turns off only when it starts."
+
+[next_start_more]
+description = "after the first change a launch names, how many more wait for the VM's next start"
+one = "{{.count}} more change waits for that too."
+other = "{{.count}} more changes wait for that too."
+
 [restart_now]
-other = "Restarting {{.vm}} applies the change now, and anything running in it stops. Restart it now?"
+description = "count is how many changes the restart applies"
+one = "Restarting {{.vm}} applies the change now, and anything running in it stops. Restart it now?"
+other = "Restarting {{.vm}} applies the changes now, and anything running in it stops. Restart it now?"
 
 [mounts_next_start]
 other = "{{.vm}}'s agent folder mounts change when it next starts."

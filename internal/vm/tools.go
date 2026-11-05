@@ -48,8 +48,8 @@ func (e Tools) Remove(ctx context.Context, o Options, names []string) error {
 // Change takes the shared tools gone out of the folder's VM and adds those
 // in add, then opens it. Those it adds that the share lacks are built
 // first, and a new agent's config folders are mounted when the launch
-// finds them missing (updateAgentDirs), which asks before it restarts a
-// running VM. Those it has already are said and left as they are. Those
+// finds them missing (updateAgentDirs): a running VM gets them at its next
+// start, which the launch offers to make now. Those it has already are said and left as they are. Those
 // taken out aren't mounted from its next launch (an agent's folders
 // neither), and what the VM installed itself stays.
 func (e Tools) Change(ctx context.Context, o Options, add, gone []string) error {

@@ -147,7 +147,7 @@ func TestToolsAdd(t *testing.T) {
 		t.Errorf("tool_names = %s", get(st, keyToolNames))
 	}
 	ms = f.Methods()[before:]
-	if !slices.Equal(*asked, []string{"restart_now vm=" + vm}) || !slices.Contains(ms, "Stop") ||
+	if !slices.Equal(*asked, []string{"restart_now count=1 vm=" + vm}) || !slices.Contains(ms, "Stop") ||
 		!slices.Contains(f.Instances[vm].AgentDirs, prompts) {
 		t.Errorf("asked %q, calls %q, agent dirs %q", *asked, ms, f.Instances[vm].AgentDirs)
 	}
@@ -495,7 +495,7 @@ func TestRestartToApply(t *testing.T) {
 				restarted := i >= 0 && j > i && len(*execs) == shells+1
 				later := c.later + " vm=" + vm
 				switch {
-				case a.canAsk && !slices.Equal(*asked, []string{"restart_now vm=" + vm}):
+				case a.canAsk && !slices.Equal(*asked, []string{"restart_now count=1 vm=" + vm}):
 					t.Errorf("asked %q", *asked)
 				case !a.canAsk && len(*asked) != 0:
 					t.Errorf("asked %q without a question that shows", *asked)

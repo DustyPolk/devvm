@@ -32,13 +32,17 @@ type upOpts struct {
 	// VM's checks (hostChecks).
 	made bool
 	// agentDirs: its agent folder mounts are matched to the host's first
-	// (Launch.updateAgentDirs), as a launch does.
+	// (Launch.updateAgentDirs), and a running VM that gets changes at
+	// its next start offers to restart (restartForNextStart), as a launch
+	// does.
 	agentDirs bool
 }
 
 // bringUp takes t's VM, made and finished, to running, confined as its
 // state says, in these steps: its instance read once; for a launch, its
-// agent folder mounts matched to the host's, which can stop it; its
+// agent folder mounts matched to the host's, and a running VM that gets
+// changes at its next start stopped once the user agrees
+// (restartForNextStart); its
 // project folder checked on the host (hostChecks); what it needs of its
 // backend refused where the backend can't (requirements); the user's
 // agent checked for keys when it forwards it; then a stopped VM started
@@ -57,7 +61,8 @@ func (s starter) bringUp(ctx context.Context, t *found, o upOpts) (backend.Confi
 	}
 	mountsLater := false
 	if o.agentDirs {
-		if in, mountsLater, err = Launch(s).updateAgentDirs(ctx, b, st, in); err != nil {
+		mountsLater = Launch(s).updateAgentDirs(st, in)
+		if in, mountsLater, err = s.restartForNextStart(ctx, b, st, in, mountsLater); err != nil {
 			return backend.Confinement{}, err
 		}
 	}
@@ -155,19 +160,87 @@ func (s starter) runningConfinement(ctx context.Context, b backend.Backend, st *
 // restart it), and network policy turned off while it ran confined
 // (conf, as it runs).
 func (s starter) nextStart(st *state.VM, in backend.Instance, conf backend.Confinement, mountsLater bool) {
+	for _, c := range nextStartChanges(st, in, mountsLater, conf.Net == backend.NetProxy) {
+		s.Warn(c.later)
+	}
+}
+
+// nextChange is a change a running VM gets only at its next start: the
+// line that names it before restartForNextStart's question, and the
+// warning that says when it applies.
+type nextChange struct {
+	named, later msg.M
+}
+
+// nextStartChanges lists what a running VM, as in is, gets only at its
+// next start, in nextStart's order; confined: it runs on its proxy.
+func nextStartChanges(st *state.VM, in backend.Instance, mountsLater, confined bool) []nextChange {
 	vm := st.Name()
+	var cs []nextChange
 	if pendingSize(st, in.Size) != (backend.Size{}) {
-		s.Warn(msg.SizeNextStart(vm))
+		cs = append(cs, nextChange{msg.NextStartSize(vm), msg.SizeNextStart(vm)})
 	}
 	if in.AgentForwarding != sshagent.Forwards(sshagent.Mode(st)) {
-		s.Warn(msg.AgentNextStart(vm))
+		cs = append(cs, nextChange{msg.NextStartAgent(vm), msg.AgentNextStart(vm)})
 	}
 	if mountsLater {
-		s.Warn(msg.MountsNextStart(vm))
+		cs = append(cs, nextChange{msg.NextStartMounts(vm), msg.MountsNextStart(vm)})
 	}
-	if conf.Net == backend.NetProxy && !netpolicy.On(st) {
-		s.Warn(msg.NetOffNextStart(vm))
+	if confined && !netpolicy.On(st) {
+		cs = append(cs, nextChange{msg.NextStartNetOff(vm), msg.NetOffNextStart(vm)})
 	}
+	return cs
+}
+
+// nextStartContext is the context of restartForNextStart's question, at
+// most two lines: a line naming each change, or past two, the first one
+// and how many more wait (next_start_more).
+func nextStartContext(cs []nextChange) []msg.M {
+	if len(cs) > 2 {
+		return []msg.M{cs[0].named, msg.NextStartMore(len(cs) - 1)}
+	}
+	ms := make([]msg.M, len(cs))
+	for i, c := range cs {
+		ms[i] = c.named
+	}
+	return ms
+}
+
+// restartForNextStart asks once, for a running VM, as in is, that gets
+// changes only at its next start (nextStartChanges), whether to restart
+// it now (restartNow, the changes named first, nextStartContext). It's
+// yes by default ([Y/n]) when its agent folder mounts wait, as an agent
+// just added needs them, and no ([y/N]) otherwise. A yes stops it, so
+// that bringUp starts it with them; a no, or no question, leaves it
+// running, and nextStart warns of each. It returns the instance as it is
+// then, and whether its agent folder mounts still wait (mountsLater).
+func (s starter) restartForNextStart(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance, mountsLater bool) (backend.Instance, bool, error) {
+	if in.Status != backend.StatusRunning {
+		return in, mountsLater, nil
+	}
+	vm := st.Name()
+	confined := false
+	if !netpolicy.On(st) {
+		// An error here is runningConfinement's to return.
+		run, err := b.Running(ctx, vm)
+		confined = err == nil && run.Confined
+	}
+	cs := nextStartChanges(st, in, mountsLater, confined)
+	if len(cs) == 0 {
+		return in, mountsLater, nil
+	}
+	ask := s.Ask
+	if mountsLater {
+		ask = s.Confirm
+	}
+	if !s.restartNow(vm, ask, len(cs), nextStartContext(cs)...) {
+		return in, mountsLater, nil
+	}
+	if err := b.Stop(ctx, vm); err != nil {
+		return in, mountsLater, err
+	}
+	in.Status = backend.StatusStopped
+	return in, false, nil
 }
 
 // needs is what a VM asks of its backend, which requirements lists: each

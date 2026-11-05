@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -248,6 +249,108 @@ func TestRequirements(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := requirements(tc.n); !slices.Equal(got, tc.want) {
 				t.Errorf("requirements = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Opening a running VM that gets changes only at its next start (its
+// size, agent forwarding, agent folder mounts and network policy turned
+// off) asks one question after at most two lines naming them, past two
+// the first and how many more: yes by default ([Y/n], Confirm) when its
+// agent folder mounts wait, else no ([y/N], Ask). Yes stops it and
+// starts it with them, then opens its shell; no, and no question without
+// a terminal, warn of each and open the shell. A running VM without such
+// changes asks nothing.
+func TestOpenAsksToRestart(t *testing.T) {
+	all := []string{"size", "agent", "mounts", "net"}
+	for _, tc := range []struct {
+		name        string
+		changes     []string
+		canAsk, yes bool
+		// confirm: asked with Confirm ([Y/n]), not Ask ([y/N]); noted:
+		// the context's names, before vm= (none for next_start_more).
+		confirm bool
+		noted   []string
+	}{
+		{"all, yes", all, true, true, true, []string{"next_start_size", "next_start_more count=3"}},
+		{"all, no", all, true, false, true, []string{"next_start_size", "next_start_more count=3"}},
+		{"all, no terminal", all, false, true, true, nil},
+		{"size and agent, yes", []string{"size", "agent"}, true, true, false, []string{"next_start_size", "next_start_agent"}},
+		{"size, no", []string{"size"}, true, false, false, []string{"next_start_size"}},
+		{"mounts, yes", []string{"mounts"}, true, true, true, []string{"next_start_mounts"}},
+		{"nothing waits", nil, true, true, false, nil},
+	} {
+		t.Run(strings.ReplaceAll(tc.name, ",", ""), func(t *testing.T) {
+			e, f := startEnv(t, allNative())
+			e.Dirs.Home = t.TempDir()
+			st := existingVM(t, e, Options{NetworkPolicy: true, Toolchains: &[]string{}, Agents: &[]string{"claude"}})
+			vm := st.Name()
+			skills := filepath.Join(e.Dirs.Home, ".claude", "skills")
+			v := startVM{t, e, f, st}
+			later := map[string]string{
+				"size": "size_next_start", "agent": "agent_next_start", "mounts": "mounts_next_start", "net": "net_off_next_start",
+			}
+			var wantLater []string
+			for _, c := range tc.changes {
+				wantLater = append(wantLater, later[c]+" vm="+vm)
+				switch c {
+				case "size":
+					v.set(keyCPUs, "2")
+				case "agent":
+					v.set(keyAgent, sshagent.On)
+				case "mounts":
+					mkdirs(t, e.Dirs.Home, ".claude/skills")
+				case "net":
+					v.set(keyNet, "off")
+				}
+			}
+			var asked []string
+			e.CanAsk = func() bool { return tc.canAsk }
+			e.Ask = func(m msg.M) bool { asked = append(asked, "ask "+m.Names()); return tc.yes }
+			e.Confirm = func(m msg.M) bool { asked = append(asked, "confirm "+m.Names()); return tc.yes }
+			var noted msg.Recorder
+			e.Note = noted.Add
+			before := len(f.Calls())
+			run := recordStart(t, e, f, func(ctx context.Context, e *Env) error { return Launch{e}.Up(ctx, Options{}) })
+			if run.err != "" {
+				t.Fatal(run.err)
+			}
+			ms := f.Methods()[before:]
+			stop, start := slices.Index(ms, "Stop"), slices.Index(ms, "Start")
+			restarted := stop >= 0 && start > stop
+			asks := tc.canAsk && len(tc.changes) > 0
+			if want := asks && tc.yes; restarted != want {
+				t.Errorf("restarted = %v, want %v: calls %q", restarted, want, ms)
+			}
+			var wantAsked, wantNoted, wantWarned []string
+			if asks {
+				how := "ask "
+				if tc.confirm {
+					how = "confirm "
+				}
+				wantAsked = []string{how + "restart_now count=" + strconv.Itoa(len(tc.changes)) + " vm=" + vm}
+				for _, n := range tc.noted {
+					if !strings.HasPrefix(n, "next_start_more ") {
+						n += " vm=" + vm
+					}
+					wantNoted = append(wantNoted, n)
+				}
+			}
+			if !restarted {
+				wantWarned = wantLater
+			}
+			if restarted && slices.Equal(tc.changes, all) {
+				w, _ := f.Calls()[before+start].Args[1].(backend.Want)
+				if w.Size.CPUs != 2 || !w.AgentForwarding || !slices.Equal(w.AgentDirs, []string{skills}) || run.net != backend.NetDirect {
+					t.Errorf("started wanting %+v on %v", w, run.net)
+				}
+			}
+			// The launch's other warnings, of the agent folder found and
+			// the agent's login, aren't the question's.
+			warned := slices.DeleteFunc(run.warned, func(n string) bool { return !strings.Contains(n, "_next_start ") })
+			if !slices.Equal(asked, wantAsked) || !slices.Equal(noted.Names(), wantNoted) || !slices.Equal(warned, wantWarned) {
+				t.Errorf("asked %q, noted %q, warned %q", asked, noted.Names(), warned)
 			}
 		})
 	}

@@ -1,7 +1,6 @@
 package vm
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -118,16 +117,16 @@ func agentMounts(home string, tools []string) (dirs, comma []string) {
 // match the host's folders, which can appear or go after it's made, from
 // in, its instance. Each start of a stopped VM mounts the host's
 // (starter.start): a stopped VM's change as its launch starts it, a
-// running one's after the user agrees to a restart (restartNow: devvm
-// stops it, and the caller starts it again), else at its next start
-// (later, which bringUp says). It returns the instance as it is then.
-func (e Launch) updateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) (_ backend.Instance, later bool, _ error) {
+// running one's at its next start (later), which bringUp offers to make
+// now, with whatever else waits for it, in its one question
+// (restartForNextStart).
+func (e Launch) updateAgentDirs(st *state.VM, in backend.Instance) (later bool) {
 	vm := st.Name()
 	want := e.AgentMounts(tools.Names(st))
 	added := missing(want, in.AgentDirs)
 	removed := missing(in.AgentDirs, want)
 	if len(added) == 0 && len(removed) == 0 {
-		return in, false, nil
+		return false
 	}
 	if len(added) > 0 {
 		e.Warn(msg.AgentDirsAdded(shownList(added), vm))
@@ -136,16 +135,10 @@ func (e Launch) updateAgentDirs(ctx context.Context, b backend.Backend, st *stat
 		e.Warn(msg.AgentDirsRemoved(shownList(removed), vm))
 	}
 	if in.Status == backend.StatusRunning {
-		if !e.restartNow(vm) {
-			return in, true, nil
-		}
-		if err := b.Stop(ctx, vm); err != nil {
-			return in, false, err
-		}
-		in.Status = backend.StatusStopped
+		return true
 	}
 	e.Info(msg.MountsUpdated(vm))
-	return in, false, nil
+	return false
 }
 
 func shownList(paths []string) string { return strings.Join(paths, ", ") }

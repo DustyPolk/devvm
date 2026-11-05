@@ -33,9 +33,17 @@ func (e Launch) Restart(ctx context.Context, o Options) error {
 // is running, so that a change that applies only when it starts applies
 // at once (restart_now). It asks only where a question with a fallback
 // is asked (CanAsk: a terminal, without --no-input); else it's no, and
-// the caller says when the change applies.
-func (e *Env) restartNow(vm string) bool {
-	return e.CanAsk != nil && e.CanAsk() && e.Confirm(msg.RestartNow(vm))
+// the caller says when the change applies. ask is how it asks, Confirm
+// ([Y/n]) or Ask ([y/N]); count is how many changes the restart applies,
+// and context, said first, what they are.
+func (e *Env) restartNow(vm string, ask func(msg.M) bool, count int, context ...msg.M) bool {
+	if e.CanAsk == nil || !e.CanAsk() {
+		return false
+	}
+	for _, m := range context {
+		e.Note(m)
+	}
+	return ask(msg.RestartNow(count, vm))
 }
 
 // restartOr restarts the folder's VM vm, which is running, as devvm
@@ -43,7 +51,7 @@ func (e *Env) restartNow(vm string) bool {
 // changed applies now; otherwise say(later) tells the user when it
 // applies.
 func (e *Env) restartOr(ctx context.Context, vm string, say func(msg.M), later msg.M) error {
-	if !e.restartNow(vm) {
+	if !e.restartNow(vm, e.Confirm, 1) {
 		say(later)
 		return nil
 	}
