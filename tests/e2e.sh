@@ -1156,9 +1156,18 @@ lk_running() { [[ $(status_of "$1") == Running ]]; }
 # lk_until SECONDS CMD...: CMD, once a second until it passes, for up to SECONDS; lk_not CMD...: CMD fails.
 lk_until() { local n=$1 i; shift; for ((i = 1; i < n; i++)); do "$@" >/dev/null 2>&1 && return 0; sleep 1; done; "$@"; }
 lk_not() { ! "$@"; }
+# lk_prep VM: the helper written to the VM, and the link checks' ports ($P47240-$P47249) reserved in
+# it, at once and at every boot. Linux hands out ports from 32768 to 60999 to a connection's own end,
+# these among them, and a connection the VM's side closed keeps its port for 60 s (TIME_WAIT), which
+# no server can bind on 127.0.0.1 or every address then, SO_REUSEADDR or not: lk_cap's 257
+# connections from the client would leave a later server or ssh -R there without its port.
+lk_prep() {
+  printf '%s\n' "$lk_pl" | lk_put "$1" /var/tmp/e2e-link.pl &&
+    lk_root "$1" "echo 'net.ipv4.ip_local_reserved_ports = $P47240-$P47249' > /etc/sysctl.d/90-e2e-link.conf &&
+      sysctl -q -p /etc/sysctl.d/90-e2e-link.conf && [ \"\$(cat /proc/sys/net/ipv4/ip_local_reserved_ports)\" = $P47240-$P47249 ]"; }
 # lk_start VM serve|hold ADDR PORT [WORD]: the helper's server in the VM, as root, once it listens;
-# lk_end VM ADDR PORT ends it. lk_serve VM WORD PORTS...: the helper written to the VM, and a server
-# on its 127.0.0.1 on each port, answering WORD-PORT.
+# lk_end VM ADDR PORT ends it. lk_serve VM WORD PORTS...: lk_prep, and a server on the VM's
+# 127.0.0.1 on each port, answering WORD-PORT.
 # The wait ends once it listens (its pid file) or has ended (the wrapper's "exited N" in its log).
 # On a failure: what it printed, and every TCP listener in the VM.
 lk_start() { local f=/var/tmp/e2e-link-$3-$4.pid l=/var/tmp/e2e-link-$3-$4.log
@@ -1171,7 +1180,7 @@ lk_start() { local f=/var/tmp/e2e-link-$3-$4.pid l=/var/tmp/e2e-link-$3-$4.log
   fi; }
 lk_end() { lk_root "$1" "f=/var/tmp/e2e-link-$2-$3.pid; [ ! -s \$f ] || kill \$(cat \$f); rm -f \$f"; }
 lk_serve() { local vm=$1 w=$2 p; shift 2
-  printf '%s\n' "$lk_pl" | lk_put "$vm" /var/tmp/e2e-link.pl || return 1
+  lk_prep "$vm" || return 1
   for p in "$@"; do lk_start "$vm" serve 127.0.0.1 "$p" "$w-$p" || return 1; done; }
 # lk_raw VM HOST PORT: what a raw TCP client in the VM (bash's /dev/tcp) gets back for a request: the
 # body's line. lk_gets VM HOST PORT WORD: it's WORD. lk_curls VM URL WORD: curl gets WORD, through the
@@ -1283,7 +1292,7 @@ link_section() {
   check "two targets that forward no port and a client that forwards every port, without network policy" lk_made
   lk_serve "$lk_v1" "$lk_w1" $P47240 $P47242 $P47243 $P47244 $P47249 80 >/dev/null 2>&1
   lk_serve "$lk_v2" "$lk_w2" $P47240 80 >/dev/null 2>&1
-  printf '%s\n' "$lk_pl" | lk_put "$lk_vc" /var/tmp/e2e-link.pl >/dev/null 2>&1
+  lk_prep "$lk_vc" >/dev/null 2>&1
   check "sshd -T in every VM: remote forwards on 127.77.*:* alone, at the address asked, no socket forwards, tunnels or X11" \
     lk_sshd_t "$lk_v1" "$lk_v2" "$lk_vc"
   check "Lima's own rules ignore every port of the client's" bash -c "
@@ -1431,7 +1440,10 @@ lk_port_taken() {
     lk_dv "$lk_pc" link rm db $P47242; }
 lk_cap() { local out s r=0
   # A holding server of its own, started again on a retry: the first run's relays end with the old
-  # one, before the 256 connections are opened.
+  # one, before the 256 connections are opened. Their ends in the client never take a link
+  # check's port (lk_prep).
+  lk_root "$lk_vc" "grep -qx $P47240-$P47249 /proc/sys/net/ipv4/ip_local_reserved_ports" ||
+    { echo "failed: the client's ports $P47240-$P47249 aren't reserved"; return 1; }
   lk_end "$lk_v1" 127.0.0.1 $P47241 && lk_start "$lk_v1" hold 127.0.0.1 $P47241 || return 1
   if ! { s=$(lk_session "$lk_vc") && lk_until 60 lk_few "$s"; }; then echo "the link session's relays didn't end"; return 1; fi
   lk_dv "$lk_pc" link add "${lk_x}db" $P47241 || { cat "$work/last.log"; return 1; }
