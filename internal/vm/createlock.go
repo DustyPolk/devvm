@@ -17,7 +17,8 @@ import (
 // on that devvm's questions. Up holds it from when it finds the folder has
 // no VM, or one whose creation didn't finish, until the new VM's creation
 // is recorded (creation.created); devvm rm holds it while it deletes a VM
-// whose creation didn't finish. release deletes the lock file, then lets
+// (holdForRm), and devvm gc --orphans while it forgets one
+// (Leftovers.Forget). release deletes the lock file, then lets
 // go of it, so no file of the VM's stays outside its folder; it may be
 // called more than once.
 func holdCreate(e *Env, vm string) (release func(), err error) {

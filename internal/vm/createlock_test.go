@@ -223,3 +223,38 @@ func TestRmChangedMeanwhile(t *testing.T) {
 	}
 	release()
 }
+
+// devvm gc --orphans forgets an orphan under its folder's creation lock:
+// one that a devvm is making again, its state written before its backend
+// has it, is refused and kept, however old its state.
+func TestForgetHoldsCreateLock(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	st := existingVM(t, e, newOpts())
+	vm := st.Name()
+	delete(f.Instances, vm)
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(e.Dirs.VM(vm).State(), old, old); err != nil {
+		t.Fatal(err)
+	}
+	r, err := (Leftovers{e}).Find(t.Context())
+	if err != nil || len(r.Orphans) != 1 {
+		t.Fatalf("Find = %+v, %v", r, err)
+	}
+	release, err := holdCreate(e, vm)
+	if err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if err := (Leftovers{e}).Forget(t.Context(), r.Orphans[0]); msg.NamesOf(err) != "create_running vm="+vm {
+		t.Errorf("forget while held: %v", msg.NamesOf(err))
+	}
+	if _, err := os.Stat(e.Dirs.VM(vm).State()); err != nil {
+		t.Fatal("its state went while it was being made")
+	}
+	release()
+	if err := (Leftovers{e}).Forget(t.Context(), r.Orphans[0]); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if left := vmsLeft(t, e); len(left) > 0 {
+		t.Errorf("left %q", left)
+	}
+}

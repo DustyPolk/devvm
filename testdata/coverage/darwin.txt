@@ -44,4 +44,4 @@ internal/ubuntu 97.3
 internal/ui 94.9
 internal/vm 86.8
 internal/vmname 100.0
-internal/vmssh 88.7
+internal/vmssh 88.8

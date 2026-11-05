@@ -227,6 +227,28 @@ func TestMoveFolderChanged(t *testing.T) {
 	}
 }
 
+// A folder moved where devvm makes no new VM, inside devvm's own config
+// folder, gets no VM moved to it, even with devvm adopt --force.
+func TestMoveUnsafe(t *testing.T) {
+	e, _, _ := upEnv(t, allNative())
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	was := e.Dir
+	now := filepath.Join(e.Dirs.Config, "site")
+	if err := os.MkdirAll(e.Dirs.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(was, now); err != nil {
+		t.Fatal(err)
+	}
+	e.Dir = now
+	if err := (Lifecycle{e}).Adopt(t.Context(), "", true); msg.IDOf(err) != "unsafe_folder_inside" {
+		t.Errorf("adopt --force inside the config folder: %v", msg.NamesOf(err))
+	}
+	if got, _ := state.ReadVM(e.Dirs, st.Name()); got.Dir != was {
+		t.Errorf("moved to %s", got.Dir)
+	}
+}
+
 // devvm adopt --force moves a VM whose folder moved here without asking,
 // a terminal or not; adopt alone asks, as any command does.
 func TestAdoptMoved(t *testing.T) {

@@ -198,8 +198,16 @@ func madeHere(st *state.VM, b backend.Backend) bool {
 // Forget deletes what devvm keeps for an orphan, as devvm rm does after
 // deleting a VM (teardown), after asking its backend once more that it
 // has no such VM, its backend's own leftovers (backend.Forgetter) with
-// it.
+// it. It holds the creation lock of the VM's folder (holdCreate)
+// throughout: a VM a devvm is making again has its state before its
+// backend has it, however old the state was, and is refused
+// (create_running).
 func (e Leftovers) Forget(ctx context.Context, o Orphan) error {
+	release, err := holdCreate(e.Env, o.Name)
+	if err != nil {
+		return err
+	}
+	defer release()
 	st, err := state.ReadVM(e.Dirs, o.Name)
 	if err != nil {
 		return err
