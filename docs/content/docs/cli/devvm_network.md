@@ -28,7 +28,9 @@ devvm network [on|off] [flags]
 ```text
   -g, --global   show or change whether new VMs get network policy instead
   -h, --help     help for network
+      --here     use this folder's own VM, never that of a folder it's inside
       --json     print it as one JSON object, for scripts
+      --parent   use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

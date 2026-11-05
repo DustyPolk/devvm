@@ -28,7 +28,9 @@ devvm layer rm LAYER... [flags]
       --clean-home   give the VM the image's home folder instead of keeping its own
   -f, --force        don't ask to confirm, which devvm needs without a terminal
   -h, --help         help for rm
+      --here         use this folder's own VM, never that of a folder it's inside
       --no-export    don't export the agents' history first
+      --parent       use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

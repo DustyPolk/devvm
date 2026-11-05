@@ -59,7 +59,7 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 // and allowlist. Its .git is locked as new at its next launch. Only the
 // VM named for this path is adopted, never a parent folder's.
 func (e Lifecycle) Adopt(ctx context.Context, force bool) error {
-	t, _, err := e.lookup(ctx, false)
+	t, err := e.own(ctx)
 	if err != nil {
 		return err
 	}

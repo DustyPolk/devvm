@@ -29,5 +29,6 @@ func newCodeCmd(a *app) *cobra.Command {
 		},
 	}
 	addSSHConfigFlag(cmd.Flags(), &include)
+	addFolderFlags(cmd, a)
 	return cmd
 }

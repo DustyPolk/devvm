@@ -30,5 +30,6 @@ func newUpdateCmd(a *app) *cobra.Command {
 		},
 	}
 	addRemakeFlags(cmd.Flags(), &o)
+	addFolderFlags(cmd, a)
 	return cmd
 }

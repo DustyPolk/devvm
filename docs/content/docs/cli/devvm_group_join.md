@@ -25,6 +25,8 @@ devvm group join NAME [flags]
 ```text
       --as NAME   the NAME the group's other VMs reach this VM by (default: its folder name)
   -h, --help      help for join
+      --here      use this folder's own VM, never that of a folder it's inside
+      --parent    use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

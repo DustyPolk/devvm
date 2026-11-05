@@ -53,7 +53,7 @@ func newSSHAgentCmd(a *app) *cobra.Command {
 	}
 	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newSSHAgentAddCmd(a), newSSHAgentRmCmd(a))
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 // sshAgentOutput is devvm ssh-agent --json: the VM's forwarding, and the

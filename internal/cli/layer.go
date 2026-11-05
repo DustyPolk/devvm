@@ -88,7 +88,7 @@ func newLayerAddCmd(a *app) *cobra.Command {
 		ValidArgsFunction: completeLayerNames(a),
 	}
 	addRemakeFlags(cmd.Flags(), &o)
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 // newLayerRmCmd is devvm layer rm LAYER... [--force] [--no-export]
@@ -124,5 +124,5 @@ func newLayerRmCmd(a *app) *cobra.Command {
 		ValidArgsFunction: completeLayerNames(a),
 	}
 	addRemakeFlags(cmd.Flags(), &o)
-	return cmd
+	return addFolderFlags(cmd, a)
 }

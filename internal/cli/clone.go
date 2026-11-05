@@ -46,5 +46,5 @@ func newCloneCmd(a *app) *cobra.Command {
 	addRemakeFlags(cmd.Flags(), &o)
 	addNoCloneCheckFlag(cmd.Flags(), &o.NoCloneCheck)
 	jsonFlag(cmd, &asJSON)
-	return cmd
+	return addFolderFlags(cmd, a)
 }

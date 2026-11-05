@@ -50,7 +50,10 @@ type Env struct {
 	Tools    *tools.Env
 	Proxy    *netpolicy.Proxy // VMs' network policy proxies
 	Dir      string           // the folder devvm runs in, a physical path
-	OS       string           // the host's, as Go names it
+	// Folder is which VM the folder uses when a folder it's inside has
+	// one (--here, --parent): resolveFolder's rule.
+	Folder FolderRule
+	OS     string // the host's, as Go names it
 	// Version is devvm's version, which a new VM's state and each image's
 	// record keep.
 	Version string
@@ -213,56 +216,103 @@ type found struct {
 	repo string
 }
 
+// FolderRule is which VM a command on the folder's VM uses when a folder
+// it's inside has one: --here and --parent, else the default.
+type FolderRule int
+
+const (
+	// FolderAuto is the default: the folder's own VM when it has one,
+	// else the nearest parent folder's, unless a repo of its own is in
+	// between.
+	FolderAuto FolderRule = iota
+	// FolderHere is --here: the folder's own, never a parent's.
+	FolderHere
+	// FolderParent is --parent: the nearest parent folder's, across a
+	// repo of its own and past the folder's own VM.
+	FolderParent
+)
+
+// folderUse is what resolveFolder decides a folder uses.
+type folderUse int
+
+const (
+	// useNone: neither its own VM nor a parent's, so up makes its own and
+	// every other command says no_vm.
+	useNone   folderUse = iota
+	useOwn              // the folder's own VM, which it has
+	useParent           // the nearest parent folder's VM
+)
+
+// resolveFolder decides which VM the folder dir uses under rule: own when
+// the folder has its own (its state, or its backend has it), else the VM
+// of the nearest parent folder with one, which parent finds (parentVM:
+// nil for none, with the repo of its own in between, if any), asked only
+// when the rule needs it. With FolderAuto the folder's own wins, and a
+// parent's is passed over below a repo of its own; FolderHere never asks
+// for a parent's; FolderParent takes the parent's whatever the folder
+// has, and refuses a folder that's inside none with a VM
+// (no_parent_vm).
+func resolveFolder(dir string, own bool, rule FolderRule, parent func() (*found, error)) (folderUse, *found, error) {
+	ownUse := useNone
+	if own {
+		ownUse = useOwn
+	}
+	if rule == FolderHere || rule == FolderAuto && own {
+		return ownUse, nil, nil
+	}
+	p, err := parent()
+	switch {
+	case err != nil:
+		return useNone, nil, err
+	case p == nil && rule == FolderParent:
+		return useNone, nil, msg.NoParentVM(dir)
+	case p == nil || rule == FolderAuto && p.repo != "":
+		return ownUse, nil, nil
+	}
+	return useParent, p, nil
+}
+
 // find finds the folder's VM, which needn't exist, with the backend that
-// has it or would make it. When the folder has none, it's the nearest
-// parent folder's VM, if one has one (lookup), said in an info line
-// first. A folder with a repo of its own below the parent's (found.repo)
-// never gets the parent's VM here: only up offers it.
+// has it or would make it: the folder's own (own) or the nearest parent
+// folder's, as resolveFolder decides under e.Folder, a parent's said in
+// an info line first.
 func (e *Env) find(ctx context.Context) (*found, error) {
-	t, parent, err := e.lookup(ctx, true)
+	t, err := e.own(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if parent != nil && parent.repo == "" {
-		e.Info(msg.UsingParentVM(parent.f.Dir, parent.f.Name))
-		return parent, nil
+	// A folder with state of its own has a VM, even one its backend has
+	// lost: never a parent's in its place, unless --parent.
+	use, p, err := resolveFolder(e.Dir, t.exists || t.st.Exists(), e.Folder, func() (*found, error) { return e.parentVM(ctx) })
+	if err != nil {
+		return nil, err
+	}
+	if use == useParent {
+		e.Info(msg.UsingParentVM(p.f.Dir, p.f.Name))
+		return p, nil
 	}
 	return t, nil
 }
 
-// lookup finds the folder's own VM, which needn't exist, as find does;
-// with parents, when it has neither state nor a VM, also the VM of the
-// nearest parent folder with state of its own (project.Parents, stopping
-// before home and the root) when its backend has it and it was made for
-// that folder (sameFolder), else nil.
-// A folder's VM is found by its path's hash (project.Hash), which names
-// its folder in devvm's data folder: one that exists has the name and
-// the backend its state records, whichever backend is asked now. Only a
-// new VM gets a name, fitting its backend's.
-func (e *Env) lookup(ctx context.Context, parents bool) (*found, *found, error) {
+// own finds the folder's own VM, which needn't exist, never a parent
+// folder's. A folder's VM is found by its path's hash (project.Hash),
+// which names its folder in devvm's data folder: one that exists has the
+// name and the backend its state records, whichever backend is asked now.
+// Only a new VM gets a name, fitting its backend's.
+func (e *Env) own(ctx context.Context) (*found, error) {
 	f, st, err := vmFolders{e}.state(e.Dir)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if !st.Exists() {
 		if f, err = (vmFolders{e}).newName(e.Dir); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if st, err = state.ReadVM(e.Dirs, f.Name); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
-	// A folder with state of its own has a VM, even one its backend has
-	// lost: never a parent's in its place.
-	t, err := e.inspect(ctx, f, st)
-	if err != nil || t.exists || st.Exists() || !parents {
-		return t, nil, err
-	}
-	p, err := e.parentVM(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	return t, p, nil
+	return e.inspect(ctx, f, st)
 }
 
 // state reads the state of dir's VM, by its path's hash, and returns the
@@ -300,7 +350,8 @@ func (e vmFolders) newName(dir string) (project.Folder, error) {
 }
 
 // parentVM finds the VM of the nearest parent folder with state of its own
-// for lookup, else nil, with the nearest folder below it with a .git of
+// (project.Parents, stopping before home and the root) for
+// resolveFolder, else nil, with the nearest folder below it with a .git of
 // its own (repo), the folder devvm runs in included. Only folders without
 // state are passed over: the search stops at the first with state, which
 // gives nil unless its backend has its VM and it was made for that folder.

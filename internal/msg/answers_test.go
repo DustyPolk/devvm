@@ -18,7 +18,7 @@ import (
 // question has no answer.
 func TestAnswers(t *testing.T) {
 	questions := []string{
-		"net_ask", "use_parent_vm", "use_parent_vm_repo", "size_cpus_prompt", "size_memory_prompt",
+		"net_ask", "size_cpus_prompt", "size_memory_prompt",
 		"features_help", "agents_help", "pick_new_help", "pick_vm_help", "network_default_help", "load_key", "restart_now", "add_it_now",
 		"token_prompt", "password_prompt", "continue", "gc_confirm", "gc_cache_confirm", "adopt_vm", "rm_confirm",
 		"images_rm_confirm", "secret_rm_confirm", "remake_confirm", "remake_confirm_clean_home",

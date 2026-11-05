@@ -87,7 +87,7 @@ func writeHistory(tab *ui.Table, es []savedExport) error {
 
 // newHistoryExportCmd is devvm history export [FILE].
 func newHistoryExportCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "export [FILE]",
 		Short: "Save this folder's VM's agent history to a .tar.gz",
 		Long: "Save the history of this folder's VM's agents, their transcripts and sessions without their logins, " +
@@ -113,6 +113,8 @@ func newHistoryExportCmd(a *app) *cobra.Command {
 			return nil
 		},
 	}
+	addFolderFlags(cmd, a)
+	return cmd
 }
 
 // exportName is an export's name in the exports folder, as devvm history

@@ -96,7 +96,7 @@ func newNetworkCmd(a *app) *cobra.Command {
 	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newNetworkRuleCmds(a)...)
 	cmd.AddCommand(newNetworkLogCmd(a))
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 // networkOutput is devvm network --json: the VM's network policy and its
@@ -176,7 +176,7 @@ func newNetworkRuleCmds(a *app) []*cobra.Command {
 			},
 		}
 		c.Flags().BoolVarP(&global, "global", "g", false, "change your rules for every VM instead")
-		return c
+		return addFolderFlags(c, a)
 	}
 	rules := " RULE is a host, *.host for its subdomains, ** for any host, or an address or CIDR, " +
 		"and with a port, such as example.com:8443, it matches only that port instead of 443 and 80."
@@ -240,7 +240,7 @@ func newNetworkLogCmd(a *app) *cobra.Command {
 	exclusive(cmd, "blocked", "follow")
 	exclusive(cmd, "blocked", "lines")
 	exclusive(cmd, "json", "follow")
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 // logEventJSON is an event in devvm network log --json: what the VM's

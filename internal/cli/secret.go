@@ -191,5 +191,5 @@ func newSecretUseCmd(a *app, name string, use bool) *cobra.Command {
 		},
 	}
 	oneSecret(cmd)
-	return cmd
+	return addFolderFlags(cmd, a)
 }

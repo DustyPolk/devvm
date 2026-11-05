@@ -1917,7 +1917,7 @@ check "devvm creates the VM from base, and opens a shell in the folder" bash -c 
   [[ -n '$vm' && \$(status_of '$vm') == Running ]] && grep -qx '$p' '$work/last.log' && grep -qx e2e-shell-ran '$work/last.log' &&
   vm_state '$(vmdir "$vm")' | grep -qx image=base && vm_state '$(vmdir "$vm")' | grep -qx net.on=false &&
   vm_state '$(vmdir "$vm")' | grep -qx 'dir=$p'"
-# Without a terminal, devvm in a subfolder opens the folder's VM there, says so, and makes none.
+# devvm in a subfolder opens the folder's VM there, says so, and makes none.
 mkdir -p "$p/src/lib"
 check "devvm in a subfolder opens the folder's VM in the subfolder" bash -c "
   cd '$p/src/lib' && printf 'pwd\n' | '$D' >'$work/last.log' 2>&1 &&

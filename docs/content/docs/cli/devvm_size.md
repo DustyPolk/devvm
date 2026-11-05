@@ -29,8 +29,10 @@ devvm size [flags]
       --disk GiB     the VM's disk in GiB, at least what it has
   -g, --global       show or change the size new VMs get instead
   -h, --help         help for size
+      --here         use this folder's own VM, never that of a folder it's inside
       --json         print it as one JSON object, for scripts
       --memory GiB   the VM's memory in GiB, such as 16 or 16G
+      --parent       use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

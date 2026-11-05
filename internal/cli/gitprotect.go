@@ -42,5 +42,5 @@ func newGitProtectCmd(a *app) *cobra.Command {
 		},
 	}
 	jsonFlag(cmd, &asJSON)
-	return cmd
+	return addFolderFlags(cmd, a)
 }

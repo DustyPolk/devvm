@@ -49,7 +49,7 @@ func newToolsCmd(a *app) *cobra.Command {
 	}
 	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newToolsAddCmd(a), newToolsRmCmd(a), newToolsUpdateCmd(a))
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 // toolsOutput is devvm tools --json: the VM's shared tools, each with the
@@ -95,7 +95,7 @@ func writeTools(tab *ui.Table, ts []tools.VMTool) error {
 }
 
 func newToolsAddCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	return addFolderFlags(&cobra.Command{
 		Use:   "add TOOL...",
 		Short: "Add shared tools to this folder's VM, then open a shell in it",
 		Long: "Add shared tools to this folder's VM, then open a shell in it. " +
@@ -111,11 +111,11 @@ func newToolsAddCmd(a *app) *cobra.Command {
 			return nil
 		},
 		ValidArgsFunction: completeToolNames,
-	}
+	}, a)
 }
 
 func newToolsRmCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	return addFolderFlags(&cobra.Command{
 		Use:   "rm TOOL...",
 		Short: "Take shared tools out of this folder's VM, then open a shell in it",
 		Long: "Take shared tools out of this folder's VM, each TOOL a separate word, then open a shell in it. " +
@@ -130,11 +130,11 @@ func newToolsRmCmd(a *app) *cobra.Command {
 			return nil
 		},
 		ValidArgsFunction: completeToolNames,
-	}
+	}, a)
 }
 
 func newToolsUpdateCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	return addFolderFlags(&cobra.Command{
 		Use:   "update",
 		Short: "Move this folder's VM to the newest shared tools, then open a shell in it",
 		Long: "Check for newer versions of the shared tools, build them, and move this folder's VM to them, " +
@@ -147,7 +147,7 @@ func newToolsUpdateCmd(a *app) *cobra.Command {
 			a.env(func(env *vm.Env) error { return vm.Tools{Env: env}.Update(cmd.Context(), vm.Options{}) }, msg.UpFailed)
 			return nil
 		},
-	}
+	}, a)
 }
 
 // toolNames takes one or more TOOLs, each a word of its own: one joined

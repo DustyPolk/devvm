@@ -26,6 +26,8 @@ devvm link add TARGET PORT [flags]
 ```text
       --as NAME   the NAME the VM reaches the link by (default: the target's folder name)
   -h, --help      help for add
+      --here      use this folder's own VM, never that of a folder it's inside
+      --parent    use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

@@ -25,8 +25,10 @@ devvm ssh-agent [on|devvm|off] [flags]
 ## Options
 
 ```text
-  -h, --help   help for ssh-agent
-      --json   print it as one JSON object, for scripts
+  -h, --help     help for ssh-agent
+      --here     use this folder's own VM, never that of a folder it's inside
+      --json     print it as one JSON object, for scripts
+      --parent   use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

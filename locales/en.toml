@@ -1022,13 +1022,13 @@ other = "{{.vm}} already belongs to this folder."
 [no_vm]
 other = "There's no VM for {{.dir}}. Run devvm to make one."
 
-[use_parent_vm_repo]
-description = "dir is the folder devvm runs in; repo, dir itself or a folder it's inside, has a .git of its own; parent, a folder repo is inside, has the VM vm"
-other = "{{.repo}} is a git repo of its own, inside {{.parent}}, which has a VM, {{.vm}}.\nOpen {{.vm}} in {{.dir}} instead of making a new VM for this folder?"
+[no_parent_vm]
+description = "dir is the folder devvm runs in, given --parent"
+other = "No folder that {{.dir}} is inside has a VM. Leave out --parent to use this folder's own."
 
-[use_parent_vm]
-description = "dir is the folder devvm runs in; parent is a folder it's inside, whose VM is vm"
-other = "{{.parent}} has a VM, {{.vm}}, and {{.dir}} is inside it.\nOpen {{.vm}} here instead of making a new VM for this folder?"
+[rm_vm_folder_flag]
+description = "flag is --here or --parent, given to devvm rm with a VM's name"
+other = "devvm rm VM deletes the VM you name, so it takes no {{.flag}}."
 
 [using_parent_vm]
 description = "dir is the folder vm was made for, which the folder devvm runs in is inside"

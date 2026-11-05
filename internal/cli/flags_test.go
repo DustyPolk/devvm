@@ -5,12 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/vm"
 )
 
 // eachCommand calls do on c and every command under it.
@@ -222,7 +224,7 @@ func TestUpFlagsAreUpsAlone(t *testing.T) {
 	root := NewRoot(u)
 	sizeFlags := []string{"cpus", "memory", "disk"}
 	upOnly := []string{
-		"network-policy", "no-network-policy", "ports", "clone", "here", "unsafe-folder", "no-git-protect", "ssh-agent", "no-devcontainer",
+		"network-policy", "no-network-policy", "ports", "clone", "unsafe-folder", "no-git-protect", "ssh-agent", "no-devcontainer",
 		"tools", "agents", "layers",
 	}
 	eachCommand(root, func(c *cobra.Command) {
@@ -236,4 +238,72 @@ func TestUpFlagsAreUpsAlone(t *testing.T) {
 			}
 		}
 	})
+}
+
+// folderCommands are the commands that act on this folder's VM, each of
+// which takes --here and --parent. devvm adopt isn't one: it takes only
+// the VM of this folder's own path.
+func folderCommands() []string {
+	return []string{
+		"devvm", "devvm restart", "devvm stop", "devvm update", "devvm rm", "devvm code", "devvm desktop", "devvm host",
+		"devvm history export", "devvm tools", "devvm tools add", "devvm tools rm", "devvm tools update", "devvm size",
+		"devvm ports", "devvm ports add", "devvm ports rm", "devvm network", "devvm network allow", "devvm network deny",
+		"devvm network rm", "devvm network log", "devvm ssh-agent", "devvm git-protect", "devvm clone",
+		"devvm secret use", "devvm secret unuse", "devvm layer add", "devvm layer rm", "devvm group", "devvm group join",
+		"devvm group leave", "devvm link", "devvm link add", "devvm link rm", "devvm link publish", "devvm link unpublish",
+	}
+}
+
+// Every command on this folder's VM takes --here and --parent, each run
+// with its arguments, and refuses them together, or with -g where it has
+// it, before anything runs; no other command takes them. devvm rm VM
+// takes neither. Each sets the rule its VM environment finds the VM by.
+func TestFolderFlags(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	eachCommand(stubbed(nil).root, func(c *cobra.Command) {
+		has := c.LocalFlags().Lookup("here") != nil && c.LocalFlags().Lookup("parent") != nil
+		if has != slices.Contains(folderCommands(), c.CommandPath()) {
+			t.Errorf("%s: takes --here and --parent %v, want %v", c.CommandPath(), has, !has)
+		}
+	})
+	for _, path := range folderCommands() {
+		words := strings.Fields(path)[1:]
+		c, _, err := stubbed(nil).root.Find(words)
+		if err != nil {
+			t.Fatal(err)
+		}
+		samples := sampleArgs(t, argsOf(c))
+		line := slices.Concat(words, samples[len(samples)-1]) // none when they're optional, as devvm rm VM takes neither
+		for _, flag := range []string{"--here", "--parent"} {
+			s := stubbed(nil)
+			if code := s.run(t, append(slices.Clone(line), flag)...); code != 0 || len(s.ran) != 1 {
+				t.Errorf("%s %s: exit %d, stderr %q", path, flag, code, s.errOut)
+			}
+		}
+		refused := [][]string{{"--here", "--parent"}}
+		if c.LocalFlags().Lookup("global") != nil {
+			refused = append(refused, []string{"-g", "--here"}, []string{"-g", "--parent"})
+		}
+		for _, flags := range refused {
+			s := stubbed(nil)
+			if code := s.run(t, slices.Concat(line, flags)...); code != usageCode || len(s.ran) > 0 || !strings.Contains(s.errOut.String(), "flags_exclusive") {
+				t.Errorf("%s %q: exit %d, ran %q, stderr %q; want flags_exclusive", path, flags, code, s.ran, s.errOut)
+			}
+		}
+	}
+	s := stubbed(nil)
+	if code := s.run(t, "rm", "devvm-app-0123456789abcd", "--parent"); code != usageCode || !strings.Contains(s.errOut.String(), "rm_vm_folder_flag flag=--parent") {
+		t.Errorf("rm VM --parent: exit %d, stderr %q", code, s.errOut)
+	}
+	if code := s.run(t, "--clone", "--parent"); code != usageCode {
+		t.Errorf("devvm --clone --parent: exit %d", code)
+	}
+	for flags, want := range map[string]vm.FolderRule{"": vm.FolderAuto, "--here": vm.FolderHere, "--parent": vm.FolderParent} {
+		a := newApp(s.u)
+		c := newStopCmd(a)
+		if err := c.ParseFlags(strings.Fields(flags)); err != nil || a.folder.rule() != want {
+			t.Errorf("stop %s: rule %v, %v; want %v", flags, a.folder.rule(), err, want)
+		}
+	}
 }

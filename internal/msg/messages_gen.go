@@ -2059,6 +2059,11 @@ func NoKVM() M {
 	return M{id: "no_kvm"}
 }
 
+// NoParentVM is [no_parent_vm]: "No folder that {{.dir}} is inside has a VM. Leave out --parent to use this folder's own."
+func NoParentVM(dir string) M {
+	return M{id: "no_parent_vm", vals: []val{{"dir", dir}}}
+}
+
 // NoSecret is [no_secret]: "There's no secret {{.secret}}."
 func NoSecret(secret string) M {
 	return M{id: "no_secret", vals: []val{{"secret", secret}}}
@@ -2699,6 +2704,11 @@ func RmVMFailed(reason string, vm string) M {
 	return M{id: "rm_vm_failed", vals: []val{{"reason", reason}, {"vm", vm}}}
 }
 
+// RmVMFolderFlag is [rm_vm_folder_flag]: "devvm rm VM deletes the VM you name, so it takes no {{.flag}}."
+func RmVMFolderFlag(flag string) M {
+	return M{id: "rm_vm_folder_flag", vals: []val{{"flag", flag}}}
+}
+
 // RmVMFolderThere is [rm_vm_folder_there]: "{{.vm}} was made for {{.dir}}, which is still there. To delete it, run devvm rm in {{.dir}}."
 func RmVMFolderThere(dir string, vm string) M {
 	return M{id: "rm_vm_folder_there", vals: []val{{"dir", dir}, {"vm", vm}}}
@@ -3259,16 +3269,6 @@ func UsageHelp(command string) M {
 	return M{id: "usage_help", vals: []val{{"command", command}}}
 }
 
-// UseParentVM is [use_parent_vm]: "{{.parent}} has a VM, {{.vm}}, and {{.dir}} is inside it.\nOpen {{.vm}} here instead of making a new VM for this folder?"
-func UseParentVM(dir string, parent string, vm string) M {
-	return M{id: "use_parent_vm", vals: []val{{"dir", dir}, {"parent", parent}, {"vm", vm}}}
-}
-
-// UseParentVMRepo is [use_parent_vm_repo]: "{{.repo}} is a git repo of its own, inside {{.parent}}, which has a VM, {{.vm}}.\nOpen {{.vm}} in {{.dir}} instead of making a new VM for this folder?"
-func UseParentVMRepo(dir string, parent string, repo string, vm string) M {
-	return M{id: "use_parent_vm_repo", vals: []val{{"dir", dir}, {"parent", parent}, {"repo", repo}, {"vm", vm}}}
-}
-
 // UsingParentVM is [using_parent_vm]: "using {{.vm}}, made for {{.dir}}"
 func UsingParentVM(dir string, vm string) M {
 	return M{id: "using_parent_vm", vals: []val{{"dir", dir}, {"vm", vm}}}
@@ -3792,6 +3792,7 @@ var specs = map[string]spec{
 	"no_input":                         {fields: []string{"answer"}},
 	"no_input_terminal":                {},
 	"no_kvm":                           {},
+	"no_parent_vm":                     {fields: []string{"dir"}},
 	"no_secret":                        {fields: []string{"secret"}},
 	"no_ssh_agent":                     {},
 	"no_subcommand":                    {fields: []string{"command", "commands", "given"}},
@@ -3920,6 +3921,7 @@ var specs = map[string]spec{
 	"rm_unknown_vm":                    {fields: []string{"name"}},
 	"rm_vm_export_failed":              {fields: []string{"vm"}},
 	"rm_vm_failed":                     {fields: []string{"reason", "vm"}},
+	"rm_vm_folder_flag":                {fields: []string{"flag"}},
 	"rm_vm_folder_there":               {fields: []string{"dir", "vm"}},
 	"rm_vm_lost":                       {fields: []string{"vm"}},
 	"rm_vm_not_connected":              {fields: []string{"dir", "vm"}},
@@ -4032,8 +4034,6 @@ var specs = map[string]spec{
 	"upstream_proxy_scheme":            {fields: []string{"scheme", "setting"}},
 	"usage_error":                      {fields: []string{"reason"}},
 	"usage_help":                       {fields: []string{"command"}},
-	"use_parent_vm":                    {fields: []string{"dir", "parent", "vm"}},
-	"use_parent_vm_repo":               {fields: []string{"dir", "parent", "repo", "vm"}},
 	"using_parent_vm":                  {fields: []string{"dir", "vm"}},
 	"vm_adopted":                       {fields: []string{"dir", "vm"}},
 	"vm_already_here":                  {fields: []string{"vm"}},

@@ -58,7 +58,7 @@ func newSizeCmd(a *app) *cobra.Command {
 	f.StringVar(&s.Memory, "memory", "", "the VM's memory in `GiB`, such as 16 or 16G")
 	f.StringVar(&s.Disk, "disk", "", "the VM's disk in `GiB`, at least what it has")
 	jsonFlag(cmd, &asJSON)
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 // sizeShape is a size in devvm size --json: what's unset (the image's,

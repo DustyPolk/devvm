@@ -26,6 +26,9 @@ import (
 // of the run. NewRoot makes one and hands it to every command.
 type app struct {
 	u *ui.UI
+	// folder is the command's --here and --parent, which vmEnv's
+	// environment finds the folder's VM by.
+	folder folderFlags
 
 	folders   made[paths.Dirs]
 	overrides made[Overrides]
@@ -121,7 +124,8 @@ func (a *app) tools() (*tools.Env, error) {
 }
 
 // vmEnv is the environment the commands on this folder's VM run in, on
-// the run's registry, shared tools and secrets, asking in its terminal.
+// the run's registry, shared tools and secrets, asking in its terminal,
+// finding the VM by the command's --here and --parent.
 func (a *app) vmEnv() (*vm.Env, error) {
 	return a.vm.get(func() (*vm.Env, error) {
 		d, err := a.dirs()
@@ -151,6 +155,7 @@ func (a *app) vmEnv() (*vm.Env, error) {
 		e.PickFeatures = pickFeatures(a.u)
 		e.PickParts = pickParts(a.u)
 		e.CanAsk = func() bool { return ui.CanAsk(a.u) }
+		e.Folder = a.folder.rule()
 		return e, nil
 	})
 }

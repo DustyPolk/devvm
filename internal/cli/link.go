@@ -43,7 +43,7 @@ func newLinkCmd(a *app) *cobra.Command {
 	}
 	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newLinkAddCmd(a), newLinkRmCmd(a), newLinkPublishCmd(a), newLinkUnpublishCmd(a))
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 // linkOutput is devvm link --json: the VM's links, each with its target's
@@ -117,11 +117,11 @@ func newLinkAddCmd(a *app) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&as, "as", "", "the `NAME` the VM reaches the link by (default: the target's folder name)")
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 func newLinkRmCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	return addFolderFlags(&cobra.Command{
 		Use:   "rm TARGET PORT",
 		Short: "Remove one of this folder's VM's links",
 		Long: "Remove this folder's VM's link to PORT of TARGET, " +
@@ -136,7 +136,7 @@ func newLinkRmCmd(a *app) *cobra.Command {
 			a.env(func(env *vm.Env) error { return vm.Links{Env: env}.Rm(cmd.Context(), args[0], port) }, msg.LinkFailed)
 			return nil
 		},
-	}
+	}, a)
 }
 
 // publishArg checks the ports devvm link publish and unpublish take.
@@ -180,11 +180,11 @@ func newLinkPublishCmd(a *app) *cobra.Command {
 		},
 	}
 	jsonFlag(cmd, &asJSON)
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 func newLinkUnpublishCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	return addFolderFlags(&cobra.Command{
 		Use:   "unpublish PORTS",
 		Short: "Stop offering ports of this folder's VM to links",
 		Long: "Stop offering PORTS, each as devvm link publish lists it, to links from your other VMs. " +
@@ -197,5 +197,5 @@ func newLinkUnpublishCmd(a *app) *cobra.Command {
 			a.env(func(env *vm.Env) error { return vm.Links{Env: env}.Publish(cmd.Context(), args[0], false) }, msg.LinkFailed)
 			return nil
 		},
-	}
+	}, a)
 }

@@ -52,9 +52,9 @@ Fetching runs nothing from the VM on this machine. git only receives objects and
 
 ## Subfolders
 
-When you run devvm in a subfolder of the repo's folder, devvm uses the `--clone` VM as it uses any parent folder's VM, asking first in a terminal ([a subfolder](../getting-started/commands.md#a-subfolder)). The clone is at the repo folder's path, so the subfolder's path in the VM is the same subfolder in the clone. When the clone has that subfolder, the shell opens there, and `devvm host` and `devvm code` give it as the folder to open. When the clone lacks it, for example because the subfolder is untracked or ignored and so never copied, they use the clone's top folder instead.
+When you run devvm in a subfolder of the repo's folder, devvm uses the `--clone` VM as it uses any parent folder's VM ([a subfolder](../getting-started/commands.md#a-subfolder)). The clone is at the repo folder's path, so the subfolder's path in the VM is the same subfolder in the clone. When the clone has that subfolder, the shell opens there, and `devvm host` and `devvm code` give it as the folder to open. When the clone lacks it, for example because the subfolder is untracked or ignored and so never copied, they use the clone's top folder instead.
 
-`devvm --clone` in a subfolder never uses a parent folder's VM. It makes a new `--clone` VM for the subfolder without asking, as `devvm --here` does, so the subfolder must be the top folder of a repo of its own.
+`devvm --clone` in a subfolder never uses a parent folder's VM. It makes a new `--clone` VM for the subfolder, as `devvm --here` does, and doesn't take `--parent`, so the subfolder must be the top folder of a repo of its own.
 
 ## Several agents in one VM
 

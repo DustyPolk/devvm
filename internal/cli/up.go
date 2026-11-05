@@ -28,14 +28,14 @@ type upFlags struct {
 	clone           bool
 	sshAgent        bool
 	noDevcontainer  bool
-	here            bool
 	sshConfig       bool
 }
 
 // addUpFlags adds devvm's flags to the root command, as its own: no
 // subcommand takes them but devvm setup, whose --agents chooses new VMs'
-// default.
-func addUpFlags(root *cobra.Command, uf *upFlags) {
+// default, and the commands on this folder's VM, which take --here and
+// --parent too (a's).
+func addUpFlags(root *cobra.Command, a *app, uf *upFlags) {
 	f := root.Flags()
 	f.StringVar(&uf.tools, "tools", "", "the `LIST` of toolchains a new VM gets, such as node,python, or none (default: those the folder's files call for)")
 	addAgentsFlag(f, &uf.agents, "the `LIST` of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)")
@@ -53,7 +53,8 @@ func addUpFlags(root *cobra.Command, uf *upFlags) {
 	f.BoolVar(&uf.noGitProtect, "no-git-protect", false, "create the VM without .git protection")
 	f.BoolVar(&uf.sshAgent, "ssh-agent", false, "create the VM with your SSH agent forwarded, so anything in it can use your keys while you're connected")
 	f.BoolVar(&uf.noDevcontainer, "no-devcontainer", false, "create the VM without reading the folder's devcontainer.json")
-	f.BoolVar(&uf.here, "here", false, "create a VM for this folder even when a folder it's inside has one")
+	addFolderFlags(root, a)
+	exclusive(root, "clone", "parent")
 	addSSHConfigFlag(f, &uf.sshConfig)
 }
 
@@ -64,7 +65,7 @@ func (uf *upFlags) options() vm.Options {
 		NetworkPolicy: uf.networkPolicy, NoNetworkPolicy: uf.noNetworkPolicy, Size: uf.size, Ports: uf.ports,
 		From: fromRef(uf.from), FromSet: uf.from != "",
 		UnsafeFolder: uf.unsafeFolder, NoGitProtect: uf.noGitProtect, Clone: uf.clone, SSHAgent: uf.sshAgent,
-		NoDevcontainer: uf.noDevcontainer, Here: uf.here,
+		NoDevcontainer: uf.noDevcontainer,
 	}
 }
 

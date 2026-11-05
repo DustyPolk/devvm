@@ -9,8 +9,6 @@ func AnswerFor(id string) string {
 	switch id {
 	case "net_ask":
 		return "--network-policy or --no-network-policy"
-	case "use_parent_vm", "use_parent_vm_repo":
-		return "--here, or devvm in the parent folder"
 	case "size_cpus_prompt", "size_memory_prompt":
 		return "devvm size -g"
 	case "features_help":

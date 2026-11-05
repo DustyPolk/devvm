@@ -164,9 +164,9 @@ func TestLookupOtherBackend(t *testing.T) {
 		t.Fatalf("made %s on %s", st.Name(), st.Backend)
 	}
 	reg.NewVMs = "fake"
-	own, _, err := e.lookup(t.Context(), true)
+	own, err := e.own(t.Context())
 	if err != nil || own.f.Name != st.Name() || own.b.Name() != "other" || !own.exists {
-		t.Errorf("lookup = %+v, %v", own, err)
+		t.Errorf("own = %+v, %v", own, err)
 	}
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))

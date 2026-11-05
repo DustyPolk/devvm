@@ -9,7 +9,7 @@ import (
 
 // newStopCmd is devvm stop.
 func newStopCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "stop",
 		Short: "Stop this folder's VM",
 		Long: "Stop this folder's VM and its network policy proxy. " +
@@ -23,4 +23,6 @@ func newStopCmd(a *app) *cobra.Command {
 			return nil
 		},
 	}
+	addFolderFlags(cmd, a)
+	return cmd
 }

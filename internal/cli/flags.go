@@ -63,6 +63,37 @@ func addSSHConfigFlag(f *pflag.FlagSet, p *bool) {
 	f.BoolVar(p, "ssh-config", false, "add devvm's Include line to ~/.ssh/config without asking")
 }
 
+// folderFlags are --here and --parent: which VM a command on this
+// folder's VM uses when a folder it's inside has one.
+type folderFlags struct{ here, parent bool }
+
+// rule is the VM environment's rule for them (vm.Env.Folder).
+func (ff folderFlags) rule() vm.FolderRule {
+	switch {
+	case ff.here:
+		return vm.FolderHere
+	case ff.parent:
+		return vm.FolderParent
+	}
+	return vm.FolderAuto
+}
+
+// addFolderFlags adds --here and --parent to cmd, a command that acts on
+// this folder's VM, into the run's (a.folder), which its VM environment
+// finds the VM by. They can't go together, nor with -g on a command that
+// has it, added before them. It returns cmd.
+func addFolderFlags(cmd *cobra.Command, a *app) *cobra.Command {
+	f := cmd.Flags()
+	f.BoolVar(&a.folder.here, "here", false, "use this folder's own VM, never that of a folder it's inside")
+	f.BoolVar(&a.folder.parent, "parent", false, "use the VM of the nearest folder this one is inside, even across a git repo of its own")
+	names := []string{"here", "parent"}
+	if f.Lookup("global") != nil {
+		names = append(names, "global")
+	}
+	exclusive(cmd, names...)
+	return cmd
+}
+
 // confirmed is whether a destructive command (command, as typed) goes
 // ahead: with --force without asking; in a terminal, when ask says yes;
 // without one, never, refused with force_needed.

@@ -27,8 +27,10 @@ devvm network log [flags]
       --blocked   list the blocks by host and port, with the command that allows each
       --follow    keep showing new ones as they happen, until interrupted
   -h, --help      help for log
+      --here      use this folder's own VM, never that of a folder it's inside
       --json      print it as one JSON object, for scripts
   -n, --lines N   show the last N connections and requests (default 50)
+      --parent    use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

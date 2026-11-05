@@ -43,7 +43,7 @@ func newGroupCmd(a *app) *cobra.Command {
 	}
 	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newGroupJoinCmd(a), newGroupLeaveCmd(a))
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 // groupOutput is devvm group --json: the VM's group, "" for none, and its
@@ -100,11 +100,11 @@ func newGroupJoinCmd(a *app) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&as, "as", "", "the `NAME` the group's other VMs reach this VM by (default: its folder name)")
-	return cmd
+	return addFolderFlags(cmd, a)
 }
 
 func newGroupLeaveCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	return addFolderFlags(&cobra.Command{
 		Use:   "leave",
 		Short: "Take this folder's VM out of its group",
 		Long: "Take this folder's VM out of its group, and remove the links the group made, in this VM and in the group's other VMs, naming them. " +
@@ -117,5 +117,5 @@ func newGroupLeaveCmd(a *app) *cobra.Command {
 			a.env(func(env *vm.Env) error { return vm.Groups{Env: env}.Leave(cmd.Context()) }, msg.GroupFailed)
 			return nil
 		},
-	}
+	}, a)
 }

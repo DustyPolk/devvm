@@ -12,6 +12,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
@@ -29,21 +30,68 @@ func subfolder(t *testing.T, e *Env, web, dir string) string {
 	return sub
 }
 
-// lookupVM is the VM lookup finds for the folder e runs in, a parent's
-// (its folder and the subfolder it's for) or the folder's own.
+// lookupVM is the VM find finds for the folder e runs in, a parent's
+// (its folder and the subfolder it's for), else "" for the folder's own.
 func lookupVM(t *testing.T, e *Env) (dir, sub string) {
 	t.Helper()
-	own, parent, err := e.lookup(t.Context(), true)
+	got, err := e.find(t.Context())
 	if err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if parent == nil {
-		if own.f.Dir != e.Dir || own.sub != "" {
-			t.Errorf("own VM = %+v", own.f)
+	if got.sub == "" {
+		if got.f.Dir != e.Dir {
+			t.Errorf("own VM = %+v", got.f)
 		}
 		return "", ""
 	}
-	return parent.f.Dir, parent.sub
+	return got.f.Dir, got.sub
+}
+
+// fakeParent is a parent folder's VM for resolveFolder: web's, below a
+// repo of its own when repo isn't "".
+func fakeParent(repo string) *found {
+	return &found{f: project.Folder{Dir: "/w/web"}, sub: "/w/web/src", repo: repo}
+}
+
+// resolveFolder decides own, parent or none: the folder's own wins by
+// default, then a parent's unless a repo of its own is in between; --here
+// never looks up, and --parent takes the parent's past the folder's own
+// and across a repo, refusing a folder inside none with a VM.
+func TestResolveFolder(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		own    bool
+		parent *found // nil: no parent folder has a VM
+		rule   FolderRule
+		want   folderUse
+		looked bool   // parent was asked for
+		err    string // the error's names
+	}{
+		{name: "own", own: true, parent: fakeParent(""), want: useOwn},
+		{name: "parent", parent: fakeParent(""), want: useParent, looked: true},
+		{name: "none", want: useNone, looked: true},
+		{name: "nested repo", parent: fakeParent("/w/web/src"), want: useNone, looked: true},
+		{name: "nested repo, its own", own: true, parent: fakeParent("/w/web/src"), want: useOwn},
+		{name: "--here with a parent", parent: fakeParent(""), rule: FolderHere, want: useNone},
+		{name: "--here, its own", own: true, parent: fakeParent(""), rule: FolderHere, want: useOwn},
+		{name: "--parent", parent: fakeParent(""), rule: FolderParent, want: useParent, looked: true},
+		{name: "--parent past its own", own: true, parent: fakeParent(""), rule: FolderParent, want: useParent, looked: true},
+		{name: "--parent across a repo", parent: fakeParent("/w/web/src"), rule: FolderParent, want: useParent, looked: true},
+		{name: "--parent without one", own: true, rule: FolderParent, want: useNone, looked: true, err: "no_parent_vm dir=/w/web/src"},
+	} {
+		looked := false
+		use, p, err := resolveFolder("/w/web/src", tc.own, tc.rule, func() (*found, error) { looked = true; return tc.parent, nil })
+		if use != tc.want || looked != tc.looked || msg.NamesOf(err) != tc.err {
+			t.Errorf("%s: %v, looked up %v, %v; want %v, %v, %q", tc.name, use, looked, msg.NamesOf(err), tc.want, tc.looked, tc.err)
+		}
+		if (use == useParent) != (p != nil) || p != nil && p != tc.parent {
+			t.Errorf("%s: parent %+v", tc.name, p)
+		}
+	}
+	boom := errors.New("boom")
+	if _, _, err := resolveFolder("/w/web/src", false, FolderAuto, func() (*found, error) { return nil, boom }); !errors.Is(err, boom) {
+		t.Errorf("a failed lookup: %v", err)
+	}
 }
 
 // A folder without a VM finds the nearest parent folder's that was made
@@ -58,9 +106,11 @@ func TestLookupParents(t *testing.T) {
 	}
 	// The nearest one wins.
 	subfolder(t, e, web, "src")
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Here: true}); err != nil {
+	e.Folder = FolderHere
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
+	e.Folder = FolderAuto
 	src := e.Dir
 	e.Dir = lib
 	if dir, _ := lookupVM(t, e); dir != src {
@@ -72,7 +122,7 @@ func TestLookupParents(t *testing.T) {
 		t.Errorf("from src: %q, want its own", dir)
 	}
 	// So does its state, when its backend has lost the VM.
-	own, _, err := e.lookup(t.Context(), false)
+	own, err := e.own(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,10 +163,11 @@ func TestLookupParents(t *testing.T) {
 	if dir, _ := lookupVM(t, e); dir != "" {
 		t.Errorf("with web as home: %q", dir)
 	}
-	// Without parents, only its own.
+	// --here: only its own.
 	e.Dirs.Home = filepath.Dir(web)
-	if _, p, err := e.lookup(t.Context(), false); err != nil || p != nil {
-		t.Errorf("without parents: %+v, %v", p, err)
+	e.Folder = FolderHere
+	if dir, _ := lookupVM(t, e); dir != "" {
+		t.Errorf("--here: %q, want its own", dir)
 	}
 }
 
@@ -129,9 +180,9 @@ func vmNames(t *testing.T, e *Env) []string {
 	return ns
 }
 
-// up in a subfolder opens the parent's VM there: without a terminal, said
-// in an info line; in one, after asking, a no making a new VM; with
-// --here, a new VM without asking.
+// up in a subfolder opens the parent's VM there, said in an info line,
+// with or without a terminal, asking nothing; --here and --clone make a
+// new VM, and --parent opens the parent's past the subfolder's own.
 func TestUpInSubfolder(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
@@ -149,40 +200,43 @@ func TestUpInSubfolder(t *testing.T) {
 	if !slices.Contains(infos.Names(), "using_parent_vm dir="+web+" vm="+vm) {
 		t.Errorf("infos = %q", infos.Names())
 	}
-	// Asked: yes opens it, no makes a new VM.
+	// In a terminal the same, nothing asked.
 	asked := answers(t, e, true)
+	infos.Reset()
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if want := "use_parent_vm dir=" + src + " parent=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
-		t.Errorf("asked %q, want %q", *asked, want)
-	}
-	if n := len(vmNames(t, e)); n != 1 {
-		t.Errorf("%d VMs after yes", n)
-	}
-	answers(t, e, false)
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
-		t.Fatal(msg.NamesOf(err))
-	}
-	if n := len(vmNames(t, e)); n != 2 {
-		t.Errorf("%d VMs after no", n)
+	if len(*asked) != 0 || len(vmNames(t, e)) != 1 || !slices.Contains(infos.Names(), "using_parent_vm dir="+web+" vm="+vm) {
+		t.Errorf("in a terminal: asked %q, %d VMs, infos %q", *asked, len(vmNames(t, e)), infos.Names())
 	}
 	// --clone: as --here, a new VM's checks (this subfolder isn't a
 	// repo), nothing asked.
 	subfolder(t, e, web, "tests")
-	asked = answers(t, e, true)
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Clone: true}); err == nil ||
 		strings.HasPrefix(msg.NamesOf(err), "clone_needs_new_vm") || len(*asked) != 0 {
 		t.Errorf("--clone: %v, asked %q", msg.NamesOf(err), *asked)
 	}
 	// --here: a new VM, nothing asked.
-	subfolder(t, e, web, "docs")
-	asked = answers(t, e, true)
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Here: true}); err != nil {
+	docs := subfolder(t, e, web, "docs")
+	e.Folder = FolderHere
+	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if len(*asked) != 0 || len(vmNames(t, e)) != 3 {
+	if len(*asked) != 0 || len(vmNames(t, e)) != 2 {
 		t.Errorf("--here: asked %q, %d VMs", *asked, len(vmNames(t, e)))
+	}
+	// --parent: the parent's, past docs' own.
+	e.Folder = FolderParent
+	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if c := call(f, "Shell"); c.Args[0] != vm || c.Args[1] != docs || len(vmNames(t, e)) != 2 {
+		t.Errorf("--parent: Shell = %v, %d VMs", c.Args, len(vmNames(t, e)))
+	}
+	// --parent where no folder above has one: refused, nothing made.
+	e.Dir = web
+	if err := (Launch{e}).Up(t.Context(), Options{}); msg.NamesOf(err) != "no_parent_vm dir="+web {
+		t.Errorf("--parent in web = %v", msg.NamesOf(err))
 	}
 }
 
@@ -193,9 +247,9 @@ func TestShellDir(t *testing.T) {
 	web := e.Dir
 	existingVM(t, e, Options{NoNetworkPolicy: true})
 	src := subfolder(t, e, web, "src")
-	_, p, err := e.lookup(t.Context(), true)
+	p, err := e.parentVM(t.Context())
 	if err != nil || p == nil {
-		t.Fatalf("lookup = %+v, %v", p, msg.NamesOf(err))
+		t.Fatalf("parentVM = %+v, %v", p, msg.NamesOf(err))
 	}
 	if got := p.shellDir(t.Context(), io.Discard); got != src {
 		t.Errorf("shellDir = %q, want %q", got, src)
@@ -407,8 +461,8 @@ func policyHas(t *testing.T, e *Env, vm, rule string) bool {
 }
 
 // A subfolder in a repo of its own below the parent's folder (it, or a
-// folder between): the other commands find no VM; up makes a new VM
-// unless asked, [y/N], to open the parent's.
+// folder between): the other commands find no VM and up makes a new one,
+// asking nothing, unless --parent, which takes the parent's.
 func TestSubfolderRepo(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
@@ -419,15 +473,15 @@ func TestSubfolderRepo(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(pkg, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, p, err := e.lookup(t.Context(), true); err != nil || p == nil || p.repo != pkg || p.f.Dir != web {
-		t.Fatalf("lookup = %+v, %v", p, msg.NamesOf(err))
+	if p, err := e.parentVM(t.Context()); err != nil || p == nil || p.repo != pkg || p.f.Dir != web {
+		t.Fatalf("parentVM = %+v, %v", p, msg.NamesOf(err))
 	}
 	// A .git file (a worktree's) in the folder itself is nearer.
 	if err := os.WriteFile(filepath.Join(src, ".git"), []byte("gitdir: /x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, p, err := e.lookup(t.Context(), true); err != nil || p == nil || p.repo != src {
-		t.Fatalf("lookup = %+v, %v", p, msg.NamesOf(err))
+	if p, err := e.parentVM(t.Context()); err != nil || p == nil || p.repo != src {
+		t.Fatalf("parentVM = %+v, %v", p, msg.NamesOf(err))
 	}
 	if err := (Lifecycle{e}).Stop(t.Context()); msg.NamesOf(err) != "no_vm dir="+src {
 		t.Errorf("Stop = %v", msg.NamesOf(err))
@@ -435,25 +489,29 @@ func TestSubfolderRepo(t *testing.T) {
 	if c := call(f, "Stop"); c.Method != "" {
 		t.Errorf("stopped %v", c.Args)
 	}
-	// Asked: yes opens the parent's, no makes a new VM.
-	asked := answers(t, e, true)
+	// --parent: the parent's, across the repo.
+	e.Folder = FolderParent
+	if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if c := call(f, "Stop"); len(c.Args) == 0 || c.Args[0] != vm {
+		t.Errorf("--parent: Stop = %v", c.Args)
+	}
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if want := "use_parent_vm_repo dir=" + src + " parent=" + web + " repo=" + src + " vm=" + vm; !slices.Equal(*asked, []string{want}) {
-		t.Errorf("asked %q, want %q", *asked, want)
-	}
 	if c := call(f, "Shell"); c.Args[0] != vm || c.Args[1] != src || len(vmNames(t, e)) != 1 {
-		t.Errorf("Shell = %v, %d VMs", c.Args, len(vmNames(t, e)))
+		t.Errorf("--parent: Shell = %v, %d VMs", c.Args, len(vmNames(t, e)))
 	}
-	answers(t, e, false)
+	// Without it, a new VM, nothing asked, in a terminal or not.
+	e.Folder = FolderAuto
+	asked := answers(t, e, true)
 	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if n := len(vmNames(t, e)); n != 2 {
-		t.Errorf("%d VMs after no", n)
+	if n := len(vmNames(t, e)); n != 2 || len(*asked) != 0 {
+		t.Errorf("in a terminal: %d VMs, asked %q", n, *asked)
 	}
-	// Without a terminal: a new VM, nothing asked.
 	subfolder(t, e, web, "pkg/docs")
 	e.Terminal = func() bool { return false }
 	e.Ask, e.Confirm = unasked(t), unasked(t)

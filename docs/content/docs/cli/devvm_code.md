@@ -24,6 +24,8 @@ devvm code [flags]
 
 ```text
   -h, --help         help for code
+      --here         use this folder's own VM, never that of a folder it's inside
+      --parent       use the VM of the nearest folder this one is inside, even across a git repo of its own
       --ssh-config   add devvm's Include line to ~/.ssh/config without asking
 ```
 

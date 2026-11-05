@@ -26,7 +26,9 @@ devvm desktop [flags]
 ```text
       --clipboard   share the clipboard between this machine and the VM, both ways
   -h, --help        help for desktop
+      --here        use this folder's own VM, never that of a folder it's inside
       --no-open     show the address and password without opening Screen Sharing
+      --parent      use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

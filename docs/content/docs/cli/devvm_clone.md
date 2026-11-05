@@ -28,9 +28,11 @@ devvm clone [on|off] [flags]
       --clean-home       give the VM the image's home folder instead of keeping its own
   -f, --force            don't ask to confirm, which devvm needs without a terminal
   -h, --help             help for clone
+      --here             use this folder's own VM, never that of a folder it's inside
       --json             print it as one JSON object, for scripts
       --no-clone-check   don't check a --clone VM's clone for unfetched commits and uncommitted changes first, which are lost
       --no-export        don't export the agents' history first
+      --parent           use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

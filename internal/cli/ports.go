@@ -93,7 +93,7 @@ func newPortsCmd(a *app) *cobra.Command {
 			},
 		}
 		c.Flags().BoolVarP(&global, "global", "g", false, "change what new VMs forward instead")
-		return c
+		return addFolderFlags(c, a)
 	}
 	cmd.AddCommand(
 		sub("add", "Forward more ports from this folder's VM", "Add LIST's ports and ranges, such as 5173,8000-8010, "+
@@ -111,5 +111,5 @@ func newPortsCmd(a *app) *cobra.Command {
 				"devvm ports rm -g 5173", "stop new VMs forwarding it",
 			)),
 	)
-	return cmd
+	return addFolderFlags(cmd, a)
 }

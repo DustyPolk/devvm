@@ -24,8 +24,10 @@ devvm tools [flags]
 ## Options
 
 ```text
-  -h, --help   help for tools
-      --json   print it as one JSON object, for scripts
+  -h, --help     help for tools
+      --here     use this folder's own VM, never that of a folder it's inside
+      --json     print it as one JSON object, for scripts
+      --parent   use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

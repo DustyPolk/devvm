@@ -23,7 +23,7 @@ func newRmCmd(a *app) *cobra.Command {
 			"devvm rm --no-clone-check", "delete a --clone VM without checking its clone, losing its unfetched work",
 			"devvm rm devvm-web-71a99b1076d92c", "delete a VM whose folder is gone, by its name as devvm ls lists it",
 		),
-		Args: maxArgs(1),
+		Args: cobra.MatchAll(maxArgs(1), noFolderFlagsWithVM),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				name := args[0]
@@ -38,5 +38,20 @@ func newRmCmd(a *app) *cobra.Command {
 	addForceFlag(cmd.Flags(), &o.Force)
 	addNoExportFlag(cmd.Flags(), &o.NoExport)
 	addNoCloneCheckFlag(cmd.Flags(), &o.NoCloneCheck)
+	addFolderFlags(cmd, a)
 	return cmd
+}
+
+// noFolderFlagsWithVM refuses --here and --parent with a VM's name: they
+// choose this folder's VM, and devvm rm VM deletes the one it names.
+func noFolderFlagsWithVM(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	for _, name := range []string{"here", "parent"} {
+		if cmd.Flags().Changed(name) {
+			return msg.RmVMFolderFlag("--" + name)
+		}
+	}
+	return nil
 }

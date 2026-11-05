@@ -32,7 +32,7 @@ devvm [flags]
       --disk GiB            the VM's disk in GiB, at least the image's (default: devvm size -g, else the image's)
       --from IMAGE          the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
   -h, --help                help for devvm
-      --here                create a VM for this folder even when a folder it's inside has one
+      --here                use this folder's own VM, never that of a folder it's inside
       --layers LIST         the LIST of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: devvm setup's)
       --memory GiB          the VM's memory in GiB, such as 16 or 16G (default: devvm size -g, else the image's)
       --network-policy      create the VM with network policy (default: devvm network -g, else asked in a terminal, and on without one)
@@ -40,6 +40,7 @@ devvm [flags]
       --no-git-protect      create the VM without .git protection
       --no-input            never ask, and fail where devvm would ask, naming the flag that answers it
       --no-network-policy   create the VM without network policy
+      --parent              use the VM of the nearest folder this one is inside, even across a git repo of its own
       --ports PORTS         the PORTS the VM forwards: all, none or a list like 5173,8000-8010 (default: devvm ports -g, else all)
       --ssh-agent           create the VM with your SSH agent forwarded, so anything in it can use your keys while you're connected
       --ssh-config          add devvm's Include line to ~/.ssh/config without asking

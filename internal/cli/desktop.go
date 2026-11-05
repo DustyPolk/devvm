@@ -30,5 +30,6 @@ func newDesktopCmd(a *app) *cobra.Command {
 	f := c.Flags()
 	f.BoolVar(&o.Clipboard, "clipboard", false, "share the clipboard between this machine and the VM, both ways")
 	f.BoolVar(&o.NoOpen, "no-open", false, "show the address and password without opening Screen Sharing")
+	addFolderFlags(c, a)
 	return c
 }

@@ -28,8 +28,10 @@ devvm rm [VM] [flags]
 ```text
   -f, --force            don't ask to confirm, which devvm needs without a terminal
   -h, --help             help for rm
+      --here             use this folder's own VM, never that of a folder it's inside
       --no-clone-check   don't check a --clone VM's clone for unfetched commits and uncommitted changes first, which are lost
       --no-export        don't export the agents' history first
+      --parent           use the VM of the nearest folder this one is inside, even across a git repo of its own
 ```
 
 ## Options inherited from parent commands

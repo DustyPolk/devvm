@@ -9,7 +9,7 @@ import (
 
 // newRestartCmd is devvm restart.
 func newRestartCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "restart",
 		Short: "Restart this folder's VM and open a shell in it",
 		Long: "Stop this folder's VM, then start it and open a shell in it as devvm does. " +
@@ -23,4 +23,6 @@ func newRestartCmd(a *app) *cobra.Command {
 			return nil
 		},
 	}
+	addFolderFlags(cmd, a)
+	return cmd
 }
