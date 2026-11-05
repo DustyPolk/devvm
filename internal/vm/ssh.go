@@ -92,7 +92,7 @@ func ready(ctx context.Context, e Launch) (*found, error) {
 	if err := e.Registry.Require(t.b, t.f.Name, backend.FeatureSSH); err != nil {
 		return nil, err
 	}
-	conf, err := e.launch(ctx, t)
+	conf, err := e.launch(ctx, t, upOpts{})
 	if err != nil {
 		return nil, err
 	}

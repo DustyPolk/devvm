@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/project"
 )
 
 func TestAddRemovePorts(t *testing.T) {
@@ -174,7 +174,14 @@ func TestStartBadPorts(t *testing.T) {
 	if err := set(t, st, KeyPorts, "5173,x"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.start(t.Context(), f, st, backend.Confinement{}); msg.NamesOf(err) != `port_invalid value="5173,x"` {
+	if err := f.Stop(t.Context(), st.Name()); err != nil {
+		t.Fatal(err)
+	}
+	before := len(f.Calls())
+	if err := e.ensureRunning(t.Context(), &found{f: project.Folder{Dir: st.Dir, Name: st.Name()}, st: st, b: f, exists: true}); msg.NamesOf(err) != `port_invalid value="5173,x"` {
 		t.Errorf("start = %v", msg.NamesOf(err))
+	}
+	if slices.Contains(f.Methods()[before:], "Start") {
+		t.Errorf("started: %q", f.Methods()[before:])
 	}
 }

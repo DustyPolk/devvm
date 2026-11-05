@@ -94,6 +94,9 @@ func TestUpdateAgentDirs(t *testing.T) {
 		have    []string
 		methods []string
 		printed []string
+		// later: it changes at its next start, which bringUp says;
+		// stopped: it was stopped to change now.
+		later, stopped bool
 	}{
 		{
 			name: "nothing changed, nothing edited", tools: "node claude", status: backend.StatusStopped,
@@ -106,16 +109,16 @@ func TestUpdateAgentDirs(t *testing.T) {
 		},
 		{
 			name: "a running VM without a terminal changes at its next start", tools: "node claude", status: backend.StatusRunning,
-			methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + skills + ", " + mine + " vm=" + vm, "mounts_next_start vm=" + vm},
+			methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + skills + ", " + mine + " vm=" + vm}, later: true,
 		},
 		{
 			name: "a running VM with --no-input changes at its next start", tools: "node claude", status: backend.StatusRunning, tty: true, noInput: true,
-			methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + skills + ", " + mine + " vm=" + vm, "mounts_next_start vm=" + vm},
+			methods: []string{"Inspect"}, printed: []string{"agent_dirs_added dirs=" + skills + ", " + mine + " vm=" + vm}, later: true,
 		},
 		{
 			name: "a running VM restarts once the user agrees", tools: "node claude", status: backend.StatusRunning, tty: true,
 			have: []string{skills}, methods: []string{"Inspect", "Stop"},
-			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "asked restart_now vm=" + vm, "mounts_updated vm=" + vm},
+			printed: []string{"agent_dirs_added dirs=" + mine + " vm=" + vm, "asked restart_now vm=" + vm, "mounts_updated vm=" + vm}, stopped: true,
 		},
 		{
 			name: "a VM without agents drops leftover agent mounts", tools: "node", status: backend.StatusStopped,
@@ -133,8 +136,16 @@ func TestUpdateAgentDirs(t *testing.T) {
 				mkdirs(t, home, ".claude/agents")
 			}
 			f, st := agentVM(t, tc.tools, tc.status, tc.have...)
-			if err := (Launch{e}).UpdateAgentDirs(t.Context(), f, st); err != nil {
+			in, err := f.Inspect(t.Context(), st.Name())
+			if err != nil {
+				t.Fatal(err)
+			}
+			in, later, err := (Launch{e}).updateAgentDirs(t.Context(), f, st, in)
+			if err != nil {
 				t.Fatal(msg.NamesOf(err))
+			}
+			if later != tc.later || (in.Status == backend.StatusStopped) != (tc.stopped || tc.status == backend.StatusStopped) {
+				t.Errorf("later %v, status %s", later, in.Status)
 			}
 			if ms := f.Methods(); !slices.Equal(ms, tc.methods) {
 				t.Errorf("calls = %q, want %q", ms, tc.methods)

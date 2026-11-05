@@ -12,8 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
-	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
 )
@@ -54,15 +52,11 @@ func (e *Env) restartOr(ctx context.Context, vm string, say func(msg.M), later m
 
 // open opens a shell in a VM that exists, made for this folder. Flags for
 // new VMs are ignored, with a warning. On the way it warns about images
-// and tools newer than the VM's, matches its agent folder mounts to the
-// host's (--clone on a VM that mounts the folder is refused); then it
-// launches the VM (launch), sets it up and opens the shell, as for a new
-// VM.
+// and tools newer than the VM's (--clone on a VM that mounts the folder is
+// refused); then it launches the VM (launch) with its agent folder mounts
+// matched to the host's, sets it up and opens the shell, as for a new VM.
 func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	vm, st, b := t.f.Name, t.st, t.b
-	if !st.Finished() {
-		return msg.VMUnfinished(vm)
-	}
 	if o.Clone && !isClone(st) {
 		return msg.CloneNeedsNewVM(vm)
 	}
@@ -83,11 +77,8 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	if err := (tools.Versions{Env: e.Tools}).RefreshDaily(); err != nil {
 		return err
 	}
-	if err := e.UpdateAgentDirs(ctx, b, st); err != nil {
-		return err
-	}
 	e.warnIgnored(o, vm)
-	conf, err := e.launch(ctx, t)
+	conf, err := e.launch(ctx, t, upOpts{agentDirs: true})
 	if err != nil {
 		return err
 	}
@@ -122,39 +113,10 @@ func (t *found) shellDir(ctx context.Context, log io.Writer) string {
 // launch takes a VM that exists, made for this folder, through what each
 // launch of it does before its setup: the folder's devcontainer.json
 // compared with the one it was made from, then what every start of it
-// does (startChecked). It returns the confinement the VM runs with.
-func (e Launch) launch(ctx context.Context, t *found) (backend.Confinement, error) {
+// does (starter.bringUp). It returns the confinement the VM runs with.
+func (e Launch) launch(ctx context.Context, t *found, o upOpts) (backend.Confinement, error) {
 	devcontainers(e).check(t.st, t.f.Dir)
-	return e.startChecked(ctx, t)
-}
-
-// startChecked takes a VM that exists, made for this folder, through
-// what every start of it by devvm does, a launch's or a command's that
-// runs in it: .git checked (and on Linux, set-id files) unless it's a
-// --clone VM, which mounts neither; a running VM's size and SSH agent
-// forwarding warned about where they differ from what its state asks for
-// (a stopped VM's start makes them so); the user's agent checked for
-// keys when the VM forwards it; then it's started if it's stopped and
-// its network policy checked (run). It returns the confinement the VM
-// runs with.
-func (e Launch) startChecked(ctx context.Context, t *found) (backend.Confinement, error) {
-	st, b := t.st, t.b
-	in, err := b.Inspect(ctx, t.f.Name)
-	if err != nil {
-		return backend.Confinement{}, err
-	}
-	running := in.Status == backend.StatusRunning
-	if err := checkGit(ctx, e.Env, t, running); err != nil {
-		return backend.Confinement{}, err
-	}
-	e.warnSize(st, in)
-	if err := e.checkAgentForwarding(b, st, in); err != nil {
-		return backend.Confinement{}, err
-	}
-	if sshagent.Mode(st) == sshagent.On {
-		e.checkAgent(ctx)
-	}
-	return e.run(ctx, b, st)
+	return starter(e).bringUp(ctx, t, o)
 }
 
 // warnIgnored warns about the flags only new VMs take, on the VM vm.
@@ -180,104 +142,6 @@ func (e Launch) warnIgnored(o Options, vm string) {
 	if o.NoDevcontainer {
 		e.Warn(msg.NoDevcontainerFlagIgnored())
 	}
-}
-
-// checkAgentForwarding checks that the VM's backend can forward an SSH
-// agent when its mode says it does, and not otherwise, which each start
-// of a stopped VM makes it do (Env.start's Want): turning it on or off
-// needs agent-toggle, and a running VM's waits for its next start.
-func (e Launch) checkAgentForwarding(b backend.Backend, st *state.VM, in backend.Instance) error {
-	want := sshagent.Forwards(sshagent.Mode(st))
-	if want {
-		if err := e.Registry.Require(b, st.Name(), backend.FeatureAgentForwarding); err != nil {
-			return err
-		}
-	}
-	if in.AgentForwarding == want {
-		return nil
-	}
-	if err := e.Registry.Require(b, st.Name(), backend.FeatureAgentToggle); err != nil {
-		return err
-	}
-	if in.Status == backend.StatusRunning {
-		e.Warn(msg.AgentNextStart(st.Name()))
-	}
-	return nil
-}
-
-// run starts the VM if it's stopped, confined as its state says, then
-// checks that its network policy holds (netpolicy.SelfCheck, which stops
-// it if not). It returns the confinement the VM runs with. A running VM's
-// proxy is kept, unless it needs starting again (Prepare); one whose
-// network policy was turned off keeps it until it starts again.
-func (e Launch) run(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
-	vm := st.Name()
-	if !st.Finished() {
-		return backend.Confinement{}, msg.VMUnfinished(vm)
-	}
-	conf := backend.Confinement{Net: backend.NetProxy}
-	if !netpolicy.On(st) {
-		conf.Net = backend.NetDirect
-	}
-	if err := e.Registry.Require(b, vm, conf.Features()...); err != nil {
-		return conf, err
-	}
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
-		return conf, err
-	}
-	started := conf
-	start := func(ctx context.Context) error {
-		var err error
-		started, err = e.start(ctx, b, st, conf)
-		return err
-	}
-	if in.Status == backend.StatusRunning {
-		if err := e.reloadAgent(ctx, b, st); err != nil {
-			return conf, err
-		}
-	}
-	switch {
-	case in.Status != backend.StatusRunning:
-		e.Info(msg.Starting(vm))
-		if err := start(ctx); err != nil {
-			return conf, err
-		}
-	case conf.Net == backend.NetProxy:
-		// A VM with network policy doesn't run on without its proxy.
-		if started, err = e.Proxy.Prepare(ctx, b, st, true); err != nil {
-			return conf, e.Proxy.Unproxied(ctx, b, vm, err)
-		}
-	default:
-		// Network policy turned off while it ran confined: it stays
-		// on its proxy, tokens out of it, until it starts again.
-		run, err := b.Running(ctx, vm)
-		if err != nil {
-			return conf, err
-		}
-		if run.Confined {
-			e.Warn(msg.NetOffNextStart(vm))
-			if started, err = e.Proxy.Prepare(ctx, b, st, true); err != nil {
-				return conf, e.Proxy.Unproxied(ctx, b, vm, err)
-			}
-			return started, nil
-		}
-	}
-	if err := e.Proxy.SelfCheck(ctx, b, st, start); err != nil {
-		return conf, err
-	}
-	return started, nil
-}
-
-// reloadAgent loads the keys whose lifetime ran out into devvm's agent
-// again for a running VM that runs with it (runningAgent); one that
-// starts gets them in start.
-func (e Launch) reloadAgent(ctx context.Context, b backend.Backend, st *state.VM) error {
-	mode, err := runningAgent(ctx, b, st)
-	if err != nil || mode != sshagent.Devvm {
-		return err
-	}
-	return e.Agent.Ensure(ctx)
 }
 
 // toolTarget is what a VM's tool images are built for: its base's C

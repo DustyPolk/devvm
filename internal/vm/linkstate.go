@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -55,7 +54,7 @@ func linkClients(d paths.Dirs, target, id string, picks func(client *state.VM, l
 func policyLinked(d paths.Dirs, st *state.VM, on bool) error {
 	vm := st.Name()
 	if !on {
-		clients, err := linkClients(d, vm, st.ID, func(c *state.VM, _ Link) bool { return netpolicy.On(c) })
+		clients, err := linkClients(d, vm, st.ID, func(c *state.VM, _ Link) bool { return !policyRule(policyOf(c), policySide{ok: true}) })
 		if err != nil || len(clients) == 0 {
 			return err
 		}
@@ -71,7 +70,7 @@ func policyLinked(d paths.Dirs, st *state.VM, on bool) error {
 		if err != nil {
 			return err
 		}
-		if tst.Exists() && tst.ID == l.TargetID && !netpolicy.On(tst) && !slices.Contains(targets, l.Target) {
+		if tst.Exists() && tst.ID == l.TargetID && !policyRule(policySide{on: true, ok: true}, policyOf(tst)) && !slices.Contains(targets, l.Target) {
 			targets = append(targets, l.Target)
 		}
 	}

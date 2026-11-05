@@ -13,8 +13,8 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
@@ -248,12 +248,13 @@ func (e Lifecycle) refuseRemake(ctx context.Context, t *found, cloneOK bool) (re
 		}
 		resumed = true
 	}
-	switch {
-	case !t.exists:
+	if !t.exists {
 		return false, msg.NoVM(t.f.Dir)
-	case !t.st.Finished():
-		return false, msg.VMUnfinished(vm)
-	case isClone(t.st) && !cloneOK:
+	}
+	if err := refuseUnfinished(vm, t.st); err != nil {
+		return false, err
+	}
+	if isClone(t.st) && !cloneOK {
 		return false, msg.RemakeClone(vm)
 	}
 	return resumed, nil
@@ -360,24 +361,25 @@ type remaking struct{ *Env }
 
 // check refuses, before anything runs, to make t's VM again as p says
 // when one of its image's layers is gone, or its backend can't run what
-// the VM needs with it (a --clone VM's ssh too), or the disk lacks room
-// for a VM.
+// the VM needs with it (requirements: its ports, and a --clone VM's ssh
+// too), or the disk lacks room for a VM.
 func (e remaking) check(t *found, p remakeInVM) error {
 	vm, b, img := t.f.Name, t.b, image.Name(p.Image)
 	if err := (build.Names{Env: e.Builder(b, t.st.From)}).Check(img); err != nil {
 		return err
 	}
 	spec := e.spec(t, p)
-	conf := backend.Confinement{Net: backend.NetDirect}
-	if netpolicy.On(t.st) {
-		conf.Net = backend.NetProxy
+	cur, err := ports.Of(t.st)
+	if err != nil {
+		return err
 	}
-	need := slices.Concat(spec.Features(), conf.Features(), backend.ImageFeatures(img))
-	if spec.CloneAt != "" {
-		// Its clone is copied in and fetched over ssh, as up's.
-		need = append(need, backend.FeatureSSH)
+	forward, err := ports.Forwarding(cur.Forward)
+	if err != nil {
+		return err
 	}
-	if err := e.Registry.Require(b, vm, need...); err != nil {
+	// Its clone is copied in and fetched over ssh, as up's.
+	need := needs{spec: &spec, net: confinementFor(t.st).Net, ports: forward, img: img, ssh: spec.CloneAt != ""}
+	if err := e.Registry.Require(b, vm, requirements(need)...); err != nil {
 		return err
 	}
 	return (backend.Space{Free: e.FreeSpace}).Check(b, vm, func(f backend.Floors) uint64 { return f.VM })
@@ -533,7 +535,7 @@ func (e remaking) finish(ctx context.Context, t *found, p remakeInVM, c chainOf,
 			return err
 		}
 	}
-	if _, err := Launch(e).startChecked(ctx, t); err != nil {
+	if _, err := starter(e).bringUp(ctx, t, upOpts{}); err != nil {
 		return err
 	}
 	if p.Home {

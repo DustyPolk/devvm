@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"slices"
 	"sync/atomic"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/hostsafety"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
@@ -103,6 +101,11 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 		}
 		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
 	}
+	// One kept is refused before anything is checked or said, as any
+	// command that needs it made refuses it.
+	if err := (need{has: hasMade}).check(t); err != nil {
+		return err
+	}
 	return e.open(ctx, o, t)
 }
 
@@ -147,7 +150,6 @@ type newVM struct {
 	clone   bool   // --clone
 	git     string // its .git protection (gitprotect.Protector.NewMode), or gitprotect.Clone
 	spec    backend.VMSpec
-	conf    backend.Confinement
 	builder *build.Env
 }
 
@@ -246,34 +248,13 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err := e.created(ctx, b, st, n.spec.AgentToggle); err != nil {
 		return err
 	}
-	// A clone has no .git of the host's to protect, and no origin.
-	if !o.Clone {
-		locking.Store(!o.NoGitProtect)
-		if err := e.Protector(f.Dir).NewVM(ctx, st); err != nil {
-			return err
-		}
-		if !o.SSHAgent && hostsafety.SSHRemote(ctx, f.Dir) {
-			e.Warn(msg.SSHRemoteHint(vm))
-		}
-		// Files an earlier VM of this folder made are named too.
-		e.checkSetID(f.Dir)
-	}
-	if n.spec.AgentForwarding {
-		e.checkAgent(ctx)
-	}
-	e.Info(msg.Starting(vm))
-	// The confinement the VM last started with, its proxy's address in it.
-	var started backend.Confinement
-	start := func(ctx context.Context) error {
-		var err error
-		started, err = e.start(ctx, b, st, n.conf)
-		return err
-	}
-	if err := start(ctx); err != nil {
-		return err
-	}
-	// Before the setup and the shell.
-	if err := e.Proxy.SelfCheck(ctx, b, st, start); err != nil {
+	// A clone has no .git of the host's to protect, and no origin
+	// (hostChecks).
+	locking.Store(!o.Clone && !o.NoGitProtect)
+	// Started as every start does, its folder checked as a new VM's,
+	// before the setup and the shell.
+	started, err := starter(e.Launch).bringUp(ctx, &found{f: f, st: st, b: b, exists: true}, upOpts{made: true})
+	if err != nil {
 		return err
 	}
 	cmd, err := e.setUp(ctx, b, st, f, started)
@@ -342,7 +323,7 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err != nil {
 		return newVM{}, err
 	}
-	n := newVM{size: size.Or(defaultSize(def)), ports: list, agent: sshagent.Off, conf: backend.Confinement{Net: backend.NetDirect}}
+	n := newVM{size: size.Or(defaultSize(def)), ports: list, agent: sshagent.Off}
 	host, err := e.Host()
 	if err != nil {
 		return newVM{}, err
@@ -391,16 +372,13 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	} else {
 		n.git = e.Protector(f.Dir).NewMode(o.NoGitProtect)
 	}
+	// Its ports, which devvm's forwarder forwards from the backend's ssh,
+	// and a clone, copied in and fetched over ssh.
+	need := needs{spec: &n.spec, ports: forward, img: n.img, ssh: o.Clone}
 	if n.net {
-		n.conf.Net = backend.NetProxy
+		need.net = backend.NetProxy
 	}
-	// Its ports, which devvm's forwarder forwards from the backend's ssh.
-	need := slices.Concat(n.spec.Features(), forward.Features(), n.conf.Features(), backend.ImageFeatures(n.img))
-	if o.Clone {
-		// Its clone is copied in and fetched over ssh.
-		need = append(need, backend.FeatureSSH)
-	}
-	if err := e.Registry.Require(b, vm, need...); err != nil {
+	if err := e.Registry.Require(b, vm, requirements(need)...); err != nil {
 		return newVM{}, err
 	}
 	// Ready for devvm ssh-agent to change later, where it may be changed

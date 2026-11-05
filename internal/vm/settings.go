@@ -42,7 +42,7 @@ func (e Settings) Clone(ctx context.Context) (string, error) {
 // SetGitProtect turns the folder's VM's .git protection on, strict or
 // off. Locks change only while the VM is stopped, so nothing in it can
 // race them: a running VM's choice is saved, and set when devvm next
-// finds it stopped (checkGit), which a restart the user agrees to does
+// finds it stopped (starter.hostChecks), which a restart the user agrees to does
 // now (restartOr). On and strict lock .git as it is then.
 func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 	t, err := finder(e).target(ctx, need{has: hasMade, noVM: msg.NoVMGitProtect})
@@ -92,31 +92,5 @@ func setGitProtect(ctx context.Context, e *Env, p *gitprotect.Protector, t *foun
 	default:
 		e.Info(msg.GitLocked(vm))
 	}
-	return nil
-}
-
-// checkGit is what devvm stop and each launch of an existing VM do for
-// its project folder, unless it's a --clone VM, which mounts none of it:
-// .git is checked (gitprotect's Check) under the protection the VM ran
-// with, so what it changed meanwhile is named; then, once the VM is
-// stopped, the protection chosen while it ran is set, and on Linux
-// set-id files are checked (not while it runs: the walk is slow).
-func checkGit(ctx context.Context, e *Env, t *found, running bool) error {
-	if isClone(t.st) {
-		return nil
-	}
-	p := e.Protector(t.f.Dir)
-	if err := p.Check(ctx, t.st, running); err != nil {
-		return err
-	}
-	if running {
-		return nil
-	}
-	if next := gitprotect.Next(t.st); next != "" {
-		if err := setGitProtect(ctx, e, p, t, next); err != nil {
-			return err
-		}
-	}
-	e.checkSetID(t.f.Dir)
 	return nil
 }

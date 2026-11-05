@@ -154,15 +154,6 @@ func SizeText(s backend.Size) string {
 	return strings.Join(f, " ")
 }
 
-// warnSize warns that a running VM gets the size its state asks for, where
-// it differs (disks only grow), at its next start: each start of a
-// stopped VM gives it that size (Env.start's Want).
-func (e *Env) warnSize(st *state.VM, in backend.Instance) {
-	if in.Status == backend.StatusRunning && pendingSize(st, in.Size) != (backend.Size{}) {
-		e.Warn(msg.SizeNextStart(st.Name()))
-	}
-}
-
 // SizeShown is a size as devvm size shows it: the folder's VM's, or with
 // -g the one new VMs get, 0 for what's the image's.
 type SizeShown struct {

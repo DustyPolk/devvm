@@ -21,18 +21,15 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/hostsafety"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/sshconfig"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/vmssh"
 )
 
@@ -275,143 +272,6 @@ func folderOf(st *state.VM, device func(string) (string, error)) FolderState {
 	return FolderGone
 }
 
-// start starts a stopped VM confined as conf says, and returns the
-// confinement it got. With network policy its proxy starts first, and the
-// backend gets the proxy's confinement; a start that fails stops the proxy
-// again. Without it, a proxy left from when it had it stops. Its host keys
-// are read again once it runs: a VM whose backend config changed can get
-// new ones when it boots. A VM whose creation didn't finish never starts.
-func (e *Env) start(ctx context.Context, b backend.Backend, st *state.VM, conf backend.Confinement) (backend.Confinement, error) {
-	vm := st.Name()
-	if !st.Finished() {
-		return conf, msg.VMUnfinished(vm)
-	}
-	// The ports devvm's forwarder forwards from its backend's ssh at each
-	// start (an emulation on some), which it got when they were set:
-	// refused now unless they may still be used.
-	p, err := ports.Of(st)
-	if err != nil {
-		return conf, err
-	}
-	forward, err := ports.Forwarding(p.Forward)
-	if err != nil {
-		return conf, err
-	}
-	for _, f := range forward.Features() {
-		if !e.Registry.Allowed(b, f) {
-			return conf, e.Registry.Require(b, vm, f)
-		}
-	}
-	// So does one whose backend emulates turning its SSH agent forwarding
-	// on or off, made ready for it.
-	if a, err := sshagent.Of(st); err != nil {
-		return conf, err
-	} else if a.Made.Toggle && !e.Registry.Allowed(b, backend.FeatureAgentToggle) {
-		return conf, e.Registry.Require(b, vm, backend.FeatureAgentToggle)
-	}
-	if err := vmssh.ForgetHostKeys(e.Dirs, vm); err != nil {
-		return conf, err
-	}
-	// A link session of its last start's, which would end on its own: the
-	// launch starts one for this start.
-	linkRuns{e}.stop(ctx, vm)
-	// The VM's backend forwards the agent it gets when it starts: devvm's
-	// own, with the keys it lacks loaded, for a VM that uses it; none for
-	// one that uses none.
-	mode := sshagent.Mode(st)
-	conf.NoAgent = !sshagent.Forwards(mode)
-	if mode == sshagent.Devvm {
-		if err := e.Agent.Ensure(ctx); err != nil {
-			return conf, err
-		}
-		conf.AgentSocket = e.Agent.Socket()
-	}
-	// devvm's own connections carry the agent of the start they're on.
-	e.useAgent(mode)
-	if conf.Net != backend.NetProxy {
-		// It gets the shell's proxy settings alone: config.toml's
-		// password never goes into a VM.
-		if conf.Net == backend.NetDirect && e.Proxy.Company().ConfigOnly() {
-			e.Warn(msg.ProxyNeedsPolicy(e.Dirs.ConfigFile(), vm))
-		}
-		if err := e.Proxy.Unconfined(ctx, vm); err != nil {
-			return conf, err
-		}
-		// Its ssh port, as the proxy's confinement has it: recorded, so
-		// other VMs' forwarders never take it before its backend binds it.
-		sp, err := e.Proxy.Ports().SSH(ctx, st, false)
-		if err != nil {
-			return conf, err
-		}
-		conf.SSHPort = sp
-	} else {
-		p, err := e.Proxy.Prepare(ctx, b, st, false)
-		if err != nil {
-			return conf, err
-		}
-		// The proxy's confinement, with the agent chosen above; its links
-		// checked first.
-		p.AgentSocket, p.NoAgent = conf.AgentSocket, conf.NoAgent
-		if err := (syncer{e}).checkStartLinks(st); err != nil {
-			e.Proxy.Stop(vm)
-			return conf, err
-		}
-		conf = p
-	}
-	// Tools pointed at the CAs devvm adds, with network policy or
-	// without, whether there are any or not.
-	conf.Env = trust.GuestEnv(conf.Env)
-	// ssh for editors, where the backend has it (an emulation once it's
-	// reviewed): a VM without it starts all the same.
-	conf.SSH = e.Registry.Require(b, vm, backend.FeatureSSH) == nil
-	if conf.Net == backend.NetProxy {
-		defer e.AddCleanup(undoStart(e, b, vm))()
-	}
-	// What its state asks of it, which the start makes it where it
-	// differs: its size, its agents' folders on the host now, its agent
-	// forwarding.
-	agentDirs, _ := agentMounts(e.Dirs.Home, tools.Names(st))
-	want := backend.Want{
-		Size: sectionOf[Size](st, sizeSection).Backend(), AgentDirs: agentDirs,
-		AgentForwarding: sshagent.Forwards(mode),
-	}
-	if err := b.Start(ctx, vm, want, conf); err != nil {
-		if conf.Net == backend.NetProxy {
-			e.Proxy.Stop(vm)
-		}
-		return conf, err
-	}
-	// Its ports, once it runs: its state's, through devvm's forwarder.
-	e.forwards().Start(ctx, b, st)
-	// The agent it started with, until its next start: its ssh config
-	// entry's and devvm's shell's. One whose start can't be told apart
-	// gets none recorded, and follows its choice.
-	run, err := b.Running(ctx, vm)
-	if err != nil {
-		run.ID = ""
-	}
-	return conf, sshagent.RecordStart(ctx, st, mode, run.ID)
-}
-
-// undoStart is a start's cleanup for a VM with network policy: an
-// interrupt can leave it running with its backend's start still waiting
-// for it, so without the record of its confined start (Run.Confined), and
-// it stops the VM and its proxy. The next launch starts both again,
-// confined.
-func undoStart(e *Env, b backend.Backend, vm string) func(context.Context) {
-	return func(ctx context.Context) {
-		if !e.Interrupted() {
-			return
-		}
-		e.Info(msg.InterruptedStart(vm))
-		if err := b.Stop(ctx, vm); err != nil && !errors.Is(err, backend.ErrNotFound) {
-			e.Warn(msg.StopFailed(vm))
-		}
-		e.Proxy.Stop(vm)
-		e.Forwarders.Stop(vm)
-	}
-}
-
 // runningAgent is the SSH agent choice a running VM runs with: its
 // current start's (sshagent.Running).
 func runningAgent(ctx context.Context, b backend.Backend, st *state.VM) (string, error) {
@@ -423,11 +283,11 @@ func runningAgent(ctx context.Context, b backend.Backend, st *state.VM) (string,
 }
 
 // ensureRunning makes sure the VM runs, for a command that runs in it
-// without a shell (an export, rm's check of a --clone VM): it goes
-// through what a launch's start does (startChecked), .git locked, network
-// policy's self-check and the refusals included.
+// without a shell (an export, rm's check of a --clone VM, a remake's home
+// folder): it goes through what every start does (starter.bringUp), .git
+// checked, network policy's self-check and the refusals included.
 func (e *Env) ensureRunning(ctx context.Context, t *found) error {
-	_, err := Launch{e}.startChecked(ctx, t)
+	_, err := starter{e}.bringUp(ctx, t, upOpts{})
 	return err
 }
 
@@ -482,27 +342,4 @@ func (e *Env) writeSSHConfig(ctx context.Context) error {
 		return err
 	}
 	return e.sshConfig().Write(ctx, inv.Running())
-}
-
-// checkSetID names set-id files in the folder on Linux hosts, where they
-// reach the host (macOS's virtiofs drops the bits): those running as root
-// apart.
-func (e *Env) checkSetID(dir string) {
-	if e.OS != "linux" {
-		return
-	}
-	var root, other []string
-	for _, f := range hostsafety.SetIDFiles(dir) {
-		if f.Root {
-			root = append(root, f.Path)
-		} else {
-			other = append(other, f.Path)
-		}
-	}
-	if len(root) > 0 {
-		e.Warn(msg.SetidRootFiles(strings.Join(root, " ")))
-	}
-	if len(other) > 0 {
-		e.Warn(msg.SetidFiles(strings.Join(other, " ")))
-	}
 }

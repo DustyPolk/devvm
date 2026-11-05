@@ -164,13 +164,36 @@ func CheckLink(d paths.Dirs, client *state.VM, l Link) (string, *state.VM, error
 		return LinkReplaced, tst, nil
 	case !Published(tst, l.Port):
 		return LinkUnpublished, tst, nil
-	case netpolicy.On(client) && !netpolicy.On(tst):
+	case !linkPolicy(client, tst):
 		return LinkPolicy, tst, nil
 	case l.Group && !grouped(client, tst):
 		return LinkUngrouped, tst, nil
 	}
 	return "", tst, nil
 }
+
+// policySide is one VM of a link as links' policy rule reads it: whether
+// it has network policy (on), and whether its section could be read (ok).
+type policySide struct{ on, ok bool }
+
+// policyOf is st's policySide.
+func policyOf(st *state.VM) policySide {
+	n, err := netpolicy.Of(st)
+	return policySide{on: n.On, ok: err == nil}
+}
+
+// policyRule is links' policy rule, the one check of it: a link from a
+// client to a target holds when the client has no network policy or the
+// target has it, so a link never carries a client with network policy
+// past its proxy. A VM whose section can't be read breaks it either way:
+// it's refused, never read as off.
+func policyRule(client, target policySide) bool {
+	return client.ok && target.ok && (!client.on || target.on)
+}
+
+// linkPolicy is policyRule for a link from client to target, as their
+// states have them now.
+func linkPolicy(client, target *state.VM) bool { return policyRule(policyOf(client), policyOf(target)) }
 
 // Published reports whether a VM publishes port.
 func Published(st *state.VM, port int) bool { return publishedIn(linksOf(st).Publish, port) }
@@ -434,13 +457,13 @@ func (e Links) checkTarget(t *found, target string, port int) (*state.VM, error)
 	if err != nil {
 		return nil, err
 	}
-	if !tst.Finished() {
-		return nil, msg.VMUnfinished(target)
+	if err := refuseUnfinished(target, tst); err != nil {
+		return nil, err
 	}
 	if !Published(tst, port) {
 		return nil, msg.LinkNotPublished(strconv.Itoa(port), target)
 	}
-	if netpolicy.On(t.st) && !netpolicy.On(tst) {
+	if !linkPolicy(t.st, tst) {
 		return nil, msg.LinkPolicyMismatch(target, t.f.Name)
 	}
 	c, err := e.Registry.For(tst)

@@ -198,8 +198,8 @@ func (e Groups) lock(ctx context.Context, t *found) (unlock func(), err error) {
 		return nil, err
 	}
 	st, err := state.ReadVM(e.Dirs, t.f.Name)
-	if err == nil && !st.Finished() {
-		err = msg.VMUnfinished(t.f.Name)
+	if err == nil {
+		err = refuseUnfinished(t.f.Name, st)
 	}
 	if err != nil {
 		unlock()
@@ -513,10 +513,13 @@ func (e Groups) checkJoin(t *found, group, as string) ([]*state.VM, error) {
 	if err := CheckLinkName(cmp.Or(as, t.f.Slug())); err != nil {
 		return nil, err
 	}
+	// The group links each member to every other: the policy rule holds
+	// both ways.
 	on := netpolicy.On(t.st)
+	self := policyOf(t.st)
 	for _, m := range members {
-		switch {
-		case netpolicy.On(m) == on:
+		switch other := policyOf(m); {
+		case policyRule(self, other) && policyRule(other, self):
 		case on:
 			return nil, msg.GroupPolicyOff(group, vm)
 		default:

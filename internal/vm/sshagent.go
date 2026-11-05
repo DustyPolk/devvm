@@ -42,25 +42,23 @@ func (e Settings) SetSSHAgent(ctx context.Context, mode string) error {
 		e.Info(msg.AgentAlready(mode, vm))
 		return nil
 	}
-	if sshagent.Forwards(mode) {
-		if err := e.Registry.Require(b, vm, backend.FeatureAgentForwarding); err != nil {
-			return err
-		}
+	in, err := b.Inspect(ctx, vm)
+	if err != nil {
+		return err
+	}
+	// Forwarding, and turning it on or off on a machine that has it the
+	// other way, before anything is asked.
+	forwards := sshagent.Forwards(mode)
+	if err := e.Registry.Require(b, vm, requirements(needs{agent: forwards, toggle: forwards != in.AgentForwarding})...); err != nil {
+		return err
+	}
+	if forwards {
 		if ok, err := t.widen(e.Env, "devvm ssh-agent "+mode); !ok {
 			return err
 		}
 	}
 	if mode == sshagent.Devvm {
 		if err := e.Agent.Ensure(ctx); err != nil {
-			return err
-		}
-	}
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
-	if sshagent.Forwards(mode) != in.AgentForwarding {
-		if err := e.Registry.Require(b, vm, backend.FeatureAgentToggle); err != nil {
 			return err
 		}
 	}

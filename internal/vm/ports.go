@@ -158,7 +158,7 @@ func (e Settings) SetPorts(ctx context.Context, c PortsChange) error {
 	if err != nil {
 		return err
 	}
-	if err := e.Registry.Require(b, vm, p.Features()...); err != nil {
+	if err := e.Registry.Require(b, vm, requirements(needs{ports: p})...); err != nil {
 		return err
 	}
 	in, err := b.Inspect(ctx, vm)

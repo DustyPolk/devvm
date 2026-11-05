@@ -308,7 +308,8 @@ func endedSince(ctx context.Context, b backend.Backend, target, start string) bo
 // start, and one whose self-check failed may reach the internet directly,
 // so either would carry the client out (LinkUnenforced).
 func policyEnforced(ctx context.Context, b backend.Backend, client, target *state.VM) (string, error) {
-	if !netpolicy.On(client) {
+	// A client whose section can't be read is held to it.
+	if c := policyOf(client); c.ok && !c.on {
 		return "", nil
 	}
 	listed, err := netpolicy.Listed(ctx, b, target, true)

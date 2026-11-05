@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 func TestLinkArgs(t *testing.T) {
@@ -162,6 +164,54 @@ func TestCheckLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(LinkGone)
+}
+
+// Links' policy rule: a client with network policy links only to a target
+// with it, and a VM whose network policy section can't be read is
+// refused on either side, never read as off.
+func TestPolicyRule(t *testing.T) {
+	on, off, unread := policySide{on: true, ok: true}, policySide{ok: true}, policySide{}
+	for _, tc := range []struct {
+		name           string
+		client, target policySide
+		holds          bool
+	}{
+		{"both on", on, on, true},
+		{"both off", off, off, true},
+		{"client off", off, on, true},
+		{"target off", on, off, false},
+		{"client unread", unread, on, false},
+		{"client unread, target off", unread, off, false},
+		{"target unread", on, unread, false},
+		{"target unread, client off", off, unread, false},
+	} {
+		if got := policyRule(tc.client, tc.target); got != tc.holds {
+			t.Errorf("%s: %v, want %v", tc.name, got, tc.holds)
+		}
+	}
+}
+
+// A link whose client's or target's network policy section can't be read
+// doesn't apply (LinkPolicy), whatever the other has.
+func TestCheckLinkUnreadPolicy(t *testing.T) {
+	d := paths.Dirs{Data: filepath.Join(t.TempDir(), "data")}
+	client := vmState(t, d, "devvm-app-0123456789abc1")
+	target := vmState(t, d, "devvm-db-0123456789abc2")
+	if err := set(t, target, KeyPublish, "5432"); err != nil {
+		t.Fatal(err)
+	}
+	l := Link{Name: "db", Port: 5432, Target: target.Name(), TargetID: target.ID}
+	for _, bad := range []*state.VM{client, target} {
+		change(t, bad, func(st *state.VM) error { return state.SetSection(st, netpolicy.Section, []int{1}) })
+		cst, err := state.ReadVM(d, client.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _, err := CheckLink(d, cst, l); err != nil || got != LinkPolicy {
+			t.Errorf("%s unread: CheckLink = %q, %v; want %q", bad.Name(), got, err, LinkPolicy)
+		}
+		change(t, bad, func(st *state.VM) error { return netpolicy.Set(st, netpolicy.Net{}) })
+	}
 }
 
 // A new link's name: --as, else the one the target has, else its folder

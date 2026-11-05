@@ -49,7 +49,7 @@ func TestStartInterrupted(t *testing.T) {
 			if tc.net {
 				conf.Net = backend.NetProxy
 			}
-			if _, err := e.start(t.Context(), f, st, conf); !errors.Is(err, context.Canceled) {
+			if _, err := (starter{e}).start(t.Context(), f, st, conf); !errors.Is(err, context.Canceled) {
 				t.Fatalf("start: %v", err)
 			}
 			if len(cleanups) != tc.cleanups {

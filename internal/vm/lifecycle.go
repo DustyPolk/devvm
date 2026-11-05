@@ -24,7 +24,7 @@ type Lifecycle struct{ *Env }
 // Stop stops the folder's VM, its proxy and its link session. Then, the
 // VM being stopped, the .git protection chosen while it ran is set, .git
 // is locked again and checked (on Linux, set-id files too) as on a
-// launch that finds it stopped (checkGit), and its ssh config entry goes.
+// launch that finds it stopped (starter.hostChecks), and its ssh config entry goes.
 func (e Lifecycle) Stop(ctx context.Context) error {
 	t, err := finder(e).target(ctx, need{has: hasMade})
 	if err != nil {
@@ -46,7 +46,7 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 	e.Proxy.Stop(vm)
 	e.Forwarders.Stop(vm)
 	linkRuns(e).stop(ctx, vm)
-	if err := checkGit(ctx, e.Env, t, false); err != nil {
+	if err := starter(e).hostChecks(ctx, t, false, false); err != nil {
 		return err
 	}
 	return e.writeSSHConfig(ctx)

@@ -12,7 +12,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/state"
@@ -207,7 +206,7 @@ func (e linkRuns) warnTargets(ctx context.Context, st *state.VM, links []Link) e
 			return err
 		case why == LinkGone || why == LinkReplaced || why == LinkUngrouped:
 			continue // devvm link says so
-		case policyBroken(st, tst):
+		case !linkPolicy(st, tst):
 			e.Warn(msg.LinkPolicyMismatch(l.Target, st.Name()))
 			continue
 		}
@@ -245,7 +244,7 @@ func guestLinks(d paths.Dirs, st *state.VM) ([]GuestLink, error) {
 		if err != nil {
 			return nil, err
 		}
-		if tst.ID == l.TargetID && policyBroken(st, tst) ||
+		if tst.Exists() && tst.ID == l.TargetID && !linkPolicy(st, tst) ||
 			slices.ContainsFunc(out, func(g GuestLink) bool { return g.Addr == l.Addr }) {
 			continue
 		}
@@ -253,31 +252,6 @@ func guestLinks(d paths.Dirs, st *state.VM) ([]GuestLink, error) {
 	}
 	slices.SortFunc(out, func(a, b GuestLink) int { return a.Addr.Compare(b.Addr) })
 	return out, nil
-}
-
-// policyBroken reports whether a link from client to target, which
-// exists, breaks the policy rule: the client has network policy and the
-// target doesn't.
-func policyBroken(client, target *state.VM) bool {
-	return target.Exists() && netpolicy.On(client) && !netpolicy.On(target)
-}
-
-// runningConf is the confinement a running VM runs with, for its setup
-// sent again: its proxy's, made ready (Prepare), when it runs on one,
-// network policy turned off while it ran included.
-func (e linkRuns) runningConf(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
-	vm := st.Name()
-	if !netpolicy.On(st) {
-		run, err := b.Running(ctx, vm)
-		if err != nil || !run.Confined {
-			return backend.Confinement{Net: backend.NetDirect}, err
-		}
-	}
-	c, err := e.Proxy.Prepare(ctx, b, st, true)
-	if err != nil {
-		return c, e.Proxy.Unproxied(ctx, b, vm, err)
-	}
-	return c, nil
 }
 
 // apply gives a running client its changed links: its setup sent again,
@@ -292,7 +266,8 @@ func (e linkRuns) apply(ctx context.Context, b backend.Backend, st *state.VM, ad
 	if err != nil || in.Status != backend.StatusRunning {
 		return false, err
 	}
-	conf, err := e.runningConf(ctx, b, st)
+	// The confinement it runs with, for its setup sent again.
+	conf, err := starter(e).runningConfinement(ctx, b, st)
 	if err != nil {
 		return true, err
 	}

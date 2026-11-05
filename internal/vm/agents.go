@@ -114,23 +114,20 @@ func agentMounts(home string, tools []string) (dirs, comma []string) {
 	return dirs, comma
 }
 
-// UpdateAgentDirs says how an existing VM's agent folder mounts change to
-// match the host's folders, which can appear or go after it's made. Each
-// start of a stopped VM mounts the host's (Env.start): a stopped VM's
-// change as its launch starts it, a running one's after the user agrees
-// to a restart (restartNow: devvm stops it, and the caller starts it
-// again), else at its next start.
-func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM) error {
+// updateAgentDirs says how an existing VM's agent folder mounts change to
+// match the host's folders, which can appear or go after it's made, from
+// in, its instance. Each start of a stopped VM mounts the host's
+// (starter.start): a stopped VM's change as its launch starts it, a
+// running one's after the user agrees to a restart (restartNow: devvm
+// stops it, and the caller starts it again), else at its next start
+// (later, which bringUp says). It returns the instance as it is then.
+func (e Launch) updateAgentDirs(ctx context.Context, b backend.Backend, st *state.VM, in backend.Instance) (_ backend.Instance, later bool, _ error) {
 	vm := st.Name()
-	in, err := b.Inspect(ctx, vm)
-	if err != nil {
-		return err
-	}
 	want := e.AgentMounts(tools.Names(st))
 	added := missing(want, in.AgentDirs)
 	removed := missing(in.AgentDirs, want)
 	if len(added) == 0 && len(removed) == 0 {
-		return nil
+		return in, false, nil
 	}
 	if len(added) > 0 {
 		e.Warn(msg.AgentDirsAdded(shownList(added), vm))
@@ -140,15 +137,15 @@ func (e Launch) UpdateAgentDirs(ctx context.Context, b backend.Backend, st *stat
 	}
 	if in.Status == backend.StatusRunning {
 		if !e.restartNow(vm) {
-			e.Warn(msg.MountsNextStart(vm))
-			return nil
+			return in, true, nil
 		}
 		if err := b.Stop(ctx, vm); err != nil {
-			return err
+			return in, false, err
 		}
+		in.Status = backend.StatusStopped
 	}
 	e.Info(msg.MountsUpdated(vm))
-	return nil
+	return in, false, nil
 }
 
 func shownList(paths []string) string { return strings.Join(paths, ", ") }

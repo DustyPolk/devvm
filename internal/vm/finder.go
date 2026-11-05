@@ -134,8 +134,20 @@ func (n need) check(t *found) error {
 		return msg.VMOtherFolder(t.f.Name, t.st.Dir)
 	case n.has == hasMade && pending:
 		return msg.RemakePending(t.f.Dir, t.f.Name)
-	case n.has == hasMade && !t.st.Finished():
-		return msg.VMUnfinished(t.f.Name)
+	case n.has == hasMade:
+		return refuseUnfinished(t.f.Name, t.st)
+	}
+	return nil
+}
+
+// refuseUnfinished refuses the VM vm, whose state is st, when its
+// creation didn't finish (vm_unfinished): it would start without its
+// network choice. The finder's refusal for a command that needs the VM
+// made, and every start's (starter.bringUp); a VM found otherwise (a
+// link's target, a remake, a state read again) is refused with it too.
+func refuseUnfinished(vm string, st *state.VM) error {
+	if !st.Finished() {
+		return msg.VMUnfinished(vm)
 	}
 	return nil
 }
