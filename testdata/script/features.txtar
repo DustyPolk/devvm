@@ -1,47 +1,42 @@
-# Base image features: chosen the first time anything is built (without a
-# terminal, every one: devvm's own, then the user's), saved in
-# settings.json unless config.toml chooses them, and run in base after
-# base.sh, in the order chosen.
+# Base image features: devvm's own, chosen the first time anything is
+# built (without a terminal, every one), saved in settings.json unless
+# config.toml chooses them, and run in base after base.sh, in the order
+# chosen. A script in ~/.config/devvm/features isn't a feature: your own
+# extras are layers.
 env CHOSEN=$DATA/settings.json
 rm $CHOSEN
 mkdir $XDG_CONFIG_HOME/devvm/features
 cp mine.sh $XDG_CONFIG_HOME/devvm/features/mine.sh
-cp fzf.sh $XDG_CONFIG_HOME/devvm/features/fzf.sh
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 
-# A user feature named like a built-in one is ignored, with a warning.
 exec devvm build base
-stderr '^devvm: feature_shadowed feature=fzf file=.*/config/devvm/features/fzf\.sh$'
+! stderr .
 ! stdout features_help
-stdout '^==> base_features features=cli-tools fzf omb mine$'
-grep '^  "features": \[\n    "cli-tools",\n    "fzf",\n    "omb",\n    "mine"\n  \]$' $CHOSEN
+stdout '^==> base_features features=cli-tools fzf omb$'
+grep '^  "features": \[\n    "cli-tools",\n    "fzf",\n    "omb"\n  \]$' $CHOSEN
 cmp $STUB_DIR/scripts ran-all
 catg $DATA/logs/runs/*.log
-stdout '^# \[4/11\] running_script script=apt\.sh vm=devvm-img-'
-stdout '^# \[5/11\] running_script script=base\.sh vm=devvm-img-'
-stdout '^# \[6/11\] running_script script=cli-tools\.sh vm=devvm-img-'
-stdout '^# \[9/11\] running_script script=mine\.sh vm=devvm-img-'
-stdout '^# \[10/11\] running_script script=apt\.sh vm=devvm-img-'
-stdout '^# \[11/11\] stopping vm=devvm-img-'
+stdout '^# \[4/10\] running_script script=apt\.sh vm=devvm-img-'
+stdout '^# \[5/10\] running_script script=base\.sh vm=devvm-img-'
+stdout '^# \[6/10\] running_script script=cli-tools\.sh vm=devvm-img-'
+stdout '^# \[9/10\] running_script script=apt\.sh vm=devvm-img-'
+stdout '^# \[10/10\] stopping vm=devvm-img-'
 
-# Chosen once: the next build keeps the choice, and base.
-exec devvm build base
-! stderr feature_shadowed
-! stdout 'base_features|building_image'
-
-# Editing a chosen feature's script rebuilds base on next use.
+# Chosen once: the next build keeps the choice, and base. The script in
+# ~/.config/devvm/features is in no image's key.
 exec sh -c 'echo "# edited" >> "$XDG_CONFIG_HOME/devvm/features/mine.sh"'
 exec devvm build base
-stdout '^==> building_image image=base key='
+! stdout 'base_features|building_image'
 
-# A chosen feature without a script is skipped, with a warning; the steps
-# count only what runs. A layer runs only its own script. config.toml's
-# features win over settings.json's.
+# A chosen feature without a script is skipped, with a warning, mine
+# among them; the steps count only what runs. A layer runs only its own
+# script. config.toml's features win over settings.json's.
 cp some.toml $CFG/config.toml
 exec sh -c ': > "$STUB_DIR/scripts"'
 exec devvm build foo
 stderr '^devvm: unknown_feature feature=nope$'
+stderr '^devvm: unknown_feature feature=mine$'
 ! stdout base_features
 cmp $STUB_DIR/scripts ran-some
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/logs/runs/*.log'
@@ -59,19 +54,16 @@ exec sh -c ': > "$STUB_DIR/scripts"'
 exec devvm build base
 ! stderr .
 cmp $STUB_DIR/scripts ran-none
-grep '"mine"' $CHOSEN
+grep '"omb"' $CHOSEN
 
 -- some.toml --
-features = ["fzf", "omb", "nope"]
+features = ["fzf", "omb", "nope", "mine"]
 -- none.toml --
 features = []
 
 -- mine.sh --
 #!/bin/bash
 # my tools
--- fzf.sh --
-#!/bin/bash
-# my fzf
 -- foo.sh --
 #!/bin/bash
 echo foo
@@ -80,7 +72,6 @@ echo foo
 # CLI tools: bat, fd, eza, zoxide (z), btop, tree, tldr
 # fzf: fuzzy Ctrl-R history and Ctrl-T file search
 # oh-my-bash: themed prompt, completions, aliases
-# my tools
 -- ran-some --
 # Essentials, and mise for the shared tools (shared-tools/).
 # fzf: fuzzy Ctrl-R history and Ctrl-T file search

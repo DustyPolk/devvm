@@ -125,7 +125,6 @@ func TestFiles(t *testing.T) {
 		{d.Settings(), "/d/settings.json"},
 		{d.AgentKeys(), "/d/agent-keys.json"},
 		{d.Layers(), "/c/layers"},
-		{d.Features(), "/c/features"},
 		{d.Secrets(), "/d/secrets"},
 		{d.SSHConfig(), "/d/ssh_config"},
 		{d.QEMUWrapper(), "/d/run/qemu"},

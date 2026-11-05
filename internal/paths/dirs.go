@@ -274,9 +274,6 @@ func (d Dirs) GroupsLock() string { return filepath.Join(d.Data, "groups.lock") 
 // Layers holds the user's own layers.
 func (d Dirs) Layers() string { return filepath.Join(d.Config, "layers") }
 
-// Features holds the user's own base image features.
-func (d Dirs) Features() string { return filepath.Join(d.Config, "features") }
-
 // Policy holds the user's network policy rules for every VM.
 func (d Dirs) Policy() string { return filepath.Join(d.Config, "policy") }
 

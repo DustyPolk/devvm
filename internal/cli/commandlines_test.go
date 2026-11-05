@@ -62,7 +62,7 @@ func TestCommandLines(t *testing.T) {
 	if err := os.MkdirAll(layers, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, l := range []string{"foo", "bar", "mailpit", "myteam", "extra"} {
+	for _, l := range []string{"foo", "bar", "mailpit", "myteam", "extra", "dotfiles"} {
 		if err := os.WriteFile(filepath.Join(layers, l+".sh"), nil, 0o600); err != nil {
 			t.Fatal(err)
 		}

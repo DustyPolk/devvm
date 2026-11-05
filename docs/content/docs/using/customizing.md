@@ -3,7 +3,7 @@ title: Customizing images
 weight: 4
 ---
 
-You customize images with your own layers, which add what a project needs, and with base's features, which are extras that every VM gets. Both live in `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`), not next to devvm's binary, so upgrading devvm keeps them.
+You customize images with your own layers, which add what a project needs, and by choosing base's features, which are devvm's optional extras that every VM gets. Your layers live in `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`), not next to devvm's binary, so upgrading devvm keeps them. To give every new VM something of your own, write it as a layer and make it one of the layers new VMs get ([extras of your own](#extras-of-your-own)).
 
 ## Your own layers
 
@@ -19,7 +19,7 @@ A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, tha
 
 - **Names** are made of lowercase letters, digits and dashes, and start with a letter or digit. A name can't be `base`, a [built-in layer's](images.md#built-in-layers) name (`desktop`, `docker` or `nix`) or a shared tool's name (`node`, `claude` and so on). A command's name, such as `log`, is fine, because devvm takes layers only through `--layers`, the list and image names.
 - Built-in layers go in the same image names as yours, bottom first, as in `devvm --layers docker,mailpit`, which makes the image `docker+mailpit`.
-- Put PATH changes in `~/.profile`.
+- Put interactive shell setup in `~/.bashrc.d/<name>.sh`, which every VM's `~/.bashrc` reads, and PATH changes in `~/.profile`.
 - Download files with `devvm-fetch URL SHA256 OUT`, which `base` installs. It fails when the file's checksum doesn't match.
 - `NAME.policy` lists the hosts that VMs with the layer can reach with [network policy](../safety/network.md#allowlists), one rule per line.
 - Editing the script rebuilds its image, and the ones built on it, the next time they're used ([rebuilding](images.md#rebuilding)).
@@ -82,14 +82,14 @@ In a terminal, `devvm setup` first asks for the features, and then for the [CPUs
 
 A new choice makes `base` and the images built on it rebuild the next time they're used, and `devvm setup` says so. The old images are then stale, and [`devvm gc`](images.md#cleaning-up) deletes them.
 
-### Your own features
+### Extras of your own
 
-A script of yours in `~/.config/devvm/features/<name>.sh` is also a feature, listed after devvm's own. Its name is made of lowercase letters, digits and dashes, and starts with a letter or digit.
+Base's features are the ones in the table above, and devvm ships all of them. To give every new VM an extra of your own, such as your shell setup or a tool you always use, write it as a [layer of your own](#your-own-layers) and choose it as one of the layers new VMs get:
 
-- It runs with bash in `base`'s VM as the VM's user, who has sudo, like a [layer](#your-own-layers).
-- Line 2 is a comment that says what it adds, which the picker shows.
-- Put interactive shell setup in `~/.bashrc.d/<name>.sh`, and PATH changes in `~/.profile`.
-- Download files with `devvm-fetch URL SHA256 OUT`, which `base` installs. It fails when the file's checksum doesn't match.
-- Editing a chosen feature's script rebuilds `base` the next time it's used.
+```sh
+devvm layer new dotfiles           # writes ~/.config/devvm/layers/dotfiles.sh
+$EDITOR ~/.config/devvm/layers/dotfiles.sh
+devvm setup --layers dotfiles      # every new VM gets it
+```
 
-devvm ignores a feature of yours that has the name of one of devvm's, and warns you to rename it.
+In a terminal, a new VM's list then shows `dotfiles` under Layers, checked because devvm setup chose it, and you can uncheck it for that VM ([layers for new VMs](settings.md#layers-for-new-vms)). A layer is an image built on top of base, so the images that have it are named with it, such as `dotfiles` or `docker+dotfiles`, and editing its script rebuilds only those images, never base.

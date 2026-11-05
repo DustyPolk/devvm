@@ -4,43 +4,24 @@ import (
 	"bufio"
 	"bytes"
 	"io/fs"
-	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/settings"
 )
 
-// Features returns the base image features there are: devvm's own
-// (features/<name>.sh in Assets), sorted, then the user's
-// (paths.Dirs.Features), sorted. shadowed holds the user's scripts named
-// like one of devvm's, which are ignored.
-func (b *Env) Features() (features, shadowed []string) {
-	own := scripts(b.Assets, "features")
-	features = slices.Clone(own)
-	for _, n := range scripts(os.DirFS(b.Dirs.Features()), ".") {
-		if slices.Contains(own, n) {
-			shadowed = append(shadowed, filepath.Join(b.Dirs.Features(), n+".sh"))
-		} else {
-			features = append(features, n)
-		}
-	}
-	return features, shadowed
-}
-
-// scripts returns the names of the regular <name>.sh files in dir of fsys
-// that a feature can have, sorted. No folder: none.
-func scripts(fsys fs.FS, dir string) []string {
+// Features returns the base image features there are, sorted: devvm's
+// own, features/<name>.sh in Assets. A user's extras for every VM are
+// layers of theirs, chosen as setup's default layers.
+func (b *Env) Features() []string {
 	var names []string
-	entries, _ := fs.ReadDir(fsys, dir)
+	entries, _ := fs.ReadDir(b.Assets, "features")
 	for _, e := range entries {
 		n, ok := strings.CutSuffix(e.Name(), ".sh")
-		if ok && image.FeatureName(n) && regular(fsys, path.Join(dir, e.Name())) {
+		if ok && image.FeatureName(n) && b.isFeature(n) {
 			names = append(names, n)
 		}
 	}
@@ -48,42 +29,24 @@ func scripts(fsys fs.FS, dir string) []string {
 	return names
 }
 
-// regular reports whether name in fsys is a regular file, links followed.
-func regular(fsys fs.FS, name string) bool {
-	fi, err := fs.Stat(fsys, name)
+// isFeature reports whether devvm has a feature by that name: a regular
+// file, links followed.
+func (b *Env) isFeature(name string) bool {
+	fi, err := fs.Stat(b.Assets, featureFile(name))
 	return err == nil && fi.Mode().IsRegular()
 }
 
-// FeatureScript is a feature's script: devvm's own when it has one by
-// that name, else the user's. No script is an error matching
-// fs.ErrNotExist.
-func (b *Env) FeatureScript(name string) (backend.Script, error) {
-	s := backend.Script{Name: name + ".sh"}
-	own, user := ownFeature(name), os.DirFS(b.Dirs.Features())
-	var err error
-	switch {
-	case regular(b.Assets, own):
-		s.Data, err = fs.ReadFile(b.Assets, own)
-	case regular(user, s.Name):
-		s.Data, err = fs.ReadFile(user, s.Name)
-	default:
-		err = fs.ErrNotExist
-	}
-	return s, err
-}
+// featureFile is the file of devvm's feature by that name, in its files.
+func featureFile(name string) string { return path.Join("features", name+".sh") }
 
-// ownFeature is the file of devvm's own feature by that name, in its
-// files.
-func ownFeature(name string) string { return path.Join("features", name+".sh") }
-
-// featureStep is a feature's step in base's recipe: its script
-// (FeatureScript), devvm's own with the prelude before it.
+// featureStep is a feature's step in base's recipe: its script, with the
+// prelude before it. No such feature is an error matching fs.ErrNotExist.
 func (b *Env) featureStep(name string) (image.Step, error) {
-	s, err := b.FeatureScript(name)
-	if err == nil && regular(b.Assets, ownFeature(name)) {
-		s.Data, err = image.OwnScript(b.Assets, ownFeature(name))
+	if !b.isFeature(name) {
+		return image.Step{}, fs.ErrNotExist
 	}
-	return image.Step{Name: s.Name, Data: s.Data}, err
+	data, err := image.OwnScript(b.Assets, featureFile(name))
+	return image.Step{Name: name + ".sh", Data: data}, err
 }
 
 // chosenFeatures returns the features chosen for base, as config.toml or
@@ -93,8 +56,7 @@ func (b *Env) chosenFeatures() ([]string, error) {
 	if err != nil || def.Features.Chosen {
 		return def.Features.Names, err
 	}
-	all, _ := b.Features()
-	return all, nil
+	return b.Features(), nil
 }
 
 // chooseFeatures asks which features base gets, the first time anything
@@ -115,11 +77,11 @@ func (b Choice) PickFeatures() (changed bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	names := b.features()
+	names := b.Features()
 	features := make([]Feature, len(names))
 	for i, n := range names {
-		s, _ := b.FeatureScript(n)
-		features[i] = Feature{Name: n, Desc: description(s.Data), On: slices.Contains(before, n)}
+		data, _ := fs.ReadFile(b.Assets, featureFile(n))
+		features[i] = Feature{Name: n, Desc: description(data), On: slices.Contains(before, n)}
 	}
 	var chosen []string
 	for _, f := range b.Pick(features) {
@@ -145,7 +107,7 @@ func (b Choice) SetFeatures(want []string) (changed bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	names := b.features()
+	names := b.Features()
 	for _, w := range want {
 		if !slices.Contains(names, w) {
 			return false, msg.NoFeature(w, strings.Join(names, " "))
@@ -158,15 +120,6 @@ func (b Choice) SetFeatures(want []string) (changed bool, err error) {
 		}
 	}
 	return b.saveFeatures(before, chosen)
-}
-
-// features is Features, warning about the user's features it ignores.
-func (b Choice) features() []string {
-	names, shadowed := b.Features()
-	for _, file := range shadowed {
-		b.Warn(msg.FeatureShadowed(strings.TrimSuffix(filepath.Base(file), ".sh"), file))
-	}
-	return names
 }
 
 // saveFeatures saves and prints the chosen features, reporting whether

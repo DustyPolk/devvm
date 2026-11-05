@@ -17,9 +17,9 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// keyEnv is testEnv with devvm's features fzf and omb, the user's mine,
-// devvm's docker layer and base's policy, and the features fzf and mine
-// chosen; with from, base starts from it, its digest recorded. (The
+// keyEnv is testEnv with devvm's features fzf, omb and tools, devvm's
+// docker layer and base's policy, and the features fzf and tools chosen;
+// with from, base starts from it, its digest recorded. (The
 // backend's own files, such as Lima's base.yaml, are its origin's: Lima's
 // tests check them.)
 func keyEnv(t *testing.T, from string) *Env {
@@ -27,13 +27,12 @@ func keyEnv(t *testing.T, from string) *Env {
 	b, _ := testEnv(t)
 	own := assetsDir(b)
 	for name, data := range map[string]string{
-		"features/fzf.sh": "# fzf\n", "features/omb.sh": "# omb\n", "layers/docker.sh": "# docker\n",
-		"layers/base.policy": "example.com\n",
+		"features/fzf.sh": "# fzf\n", "features/omb.sh": "# omb\n", "features/tools.sh": "# tools\n",
+		"layers/docker.sh": "# docker\n", "layers/base.policy": "example.com\n",
 	} {
 		write(t, filepath.Join(own, name), data)
 	}
-	write(t, filepath.Join(b.Dirs.Features(), "mine.sh"), "# mine\n")
-	saveFeatures(t, b.Dirs, []string{"fzf", "mine"})
+	saveFeatures(t, b.Dirs, []string{"fzf", "tools"})
 	if from != "" {
 		b.From = from
 		if err := state.SetFromDigest(b.Dirs, from, "node@sha256:aaaa"); err != nil {
@@ -89,7 +88,6 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 	all, above := keyImages, []string{"foo", "foo+bar"}
 	own := func(b *Env, name string) string { return filepath.Join(assetsDir(b), name) }
 	layer := func(b *Env, name string) string { return filepath.Join(b.Dirs.Layers(), name) }
-	feature := func(b *Env, name string) string { return filepath.Join(b.Dirs.Features(), name) }
 	tests := []struct {
 		name   string
 		from   string
@@ -105,11 +103,13 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		}, all},
 		{"no origin steps is none", "", func(_ *testing.T, b *Env) { b.Backend.(*backendtest.Fake).OriginSteps = []image.Step{} }, nil},
 		{"a chosen built-in feature's script", "", func(t *testing.T, b *Env) { edit(t, own(b, "features/fzf.sh")) }, all},
-		{"a chosen user feature's script", "", func(t *testing.T, b *Env) { edit(t, feature(b, "mine.sh")) }, all},
-		{"a chosen user feature deleted", "", func(t *testing.T, b *Env) { remove(t, feature(b, "mine.sh")) }, all},
-		{"a feature chosen", "", func(t *testing.T, b *Env) { saveFeatures(t, b.Dirs, []string{"fzf", "mine", "omb"}) }, all},
+		{"a chosen feature's script gone", "", func(t *testing.T, b *Env) { remove(t, own(b, "features/tools.sh")) }, all},
+		{"a script in ~/.config/devvm/features", "", func(t *testing.T, b *Env) {
+			write(t, filepath.Join(b.Dirs.Config, "features", "tools.sh"), "# mine\n")
+		}, nil},
+		{"a feature chosen", "", func(t *testing.T, b *Env) { saveFeatures(t, b.Dirs, []string{"fzf", "tools", "omb"}) }, all},
 		{"a feature dropped", "", func(t *testing.T, b *Env) { saveFeatures(t, b.Dirs, []string{"fzf"}) }, all},
-		{"the features' order", "", func(t *testing.T, b *Env) { saveFeatures(t, b.Dirs, []string{"mine", "fzf"}) }, all},
+		{"the features' order", "", func(t *testing.T, b *Env) { saveFeatures(t, b.Dirs, []string{"tools", "fzf"}) }, all},
 		{"--from", "", func(_ *testing.T, b *Env) {
 			b.From = "node:24@sha256:" + strings.Repeat("a", 64)
 		}, all},
@@ -121,7 +121,6 @@ func TestKeyChangesWithEachInput(t *testing.T) {
 		{"the top layer's rebuild counter", "", func(t *testing.T, b *Env) { bump(t, b, "fake", "", "foo+bar") }, []string{"foo+bar"}},
 
 		{"an unchosen feature's script", "", func(t *testing.T, b *Env) { edit(t, own(b, "features/omb.sh")) }, nil},
-		{"a user feature named like a built-in one", "", func(t *testing.T, b *Env) { edit(t, feature(b, "fzf.sh")) }, nil},
 		{"a policy file", "", func(t *testing.T, b *Env) { edit(t, own(b, "layers/base.policy")) }, nil},
 		{"another layer", "", func(t *testing.T, b *Env) { edit(t, layer(b, "baz.sh")) }, nil},
 		{"a rebuild counter for --from", "", func(t *testing.T, b *Env) { bump(t, b, "fake", "node:24", "foo") }, nil},
@@ -352,10 +351,10 @@ func TestKeyHashesWhatABuildSends(t *testing.T) {
 		if from != "" {
 			b, _ = fromEnv(t, &digest, &lookups)
 			write(t, filepath.Join(assetsDir(b), "features", "omb.sh"), "#!/bin/bash\n# oh-my-bash: a prompt\n")
-			write(t, filepath.Join(b.Dirs.Features(), "mine.sh"), "#!/bin/bash\n# my tools\n")
+			write(t, filepath.Join(assetsDir(b), "features", "tools.sh"), "#!/bin/bash\n# my tools\n")
 		}
 		write(t, filepath.Join(assetsDir(b), "layers", "docker.sh"), "#!/bin/bash\necho docker\n")
-		saveFeatures(t, b.Dirs, []string{"mine", "omb", "nope"})
+		saveFeatures(t, b.Dirs, []string{"tools", "omb", "nope"})
 		names := []image.Name{"foo+bar", "docker", "foo+docker"}
 		before, keys := sent(t, b, "fake", names...)
 		if len(before) != 5 {
@@ -380,7 +379,7 @@ func TestKeyHashesWhatABuildSends(t *testing.T) {
 			}
 		}()
 		// Each file of devvm's and the user's, edited, and then put back.
-		for _, p := range files(t, assetsDir(b), b.Dirs.Layers(), b.Dirs.Features()) {
+		for _, p := range files(t, assetsDir(b), b.Dirs.Layers()) {
 			data, err := os.ReadFile(p) //nolint:gosec // the test's own folder
 			if err != nil {
 				t.Fatal(err)
@@ -391,7 +390,7 @@ func TestKeyHashesWhatABuildSends(t *testing.T) {
 			write(t, p, string(data))
 		}
 		// A feature's script that wasn't there.
-		nope := filepath.Join(b.Dirs.Features(), "nope.sh")
+		nope := filepath.Join(assetsDir(b), "features", "nope.sh")
 		write(t, nope, "#!/bin/bash\n")
 		after, changed := sent(t, b, "fake", names...)
 		check("adding nope.sh", after, changed)
@@ -399,10 +398,10 @@ func TestKeyHashesWhatABuildSends(t *testing.T) {
 			t.Fatal(err)
 		}
 		// The features in another order.
-		saveFeatures(t, b.Dirs, []string{"omb", "mine"})
+		saveFeatures(t, b.Dirs, []string{"omb", "tools"})
 		after, changed = sent(t, b, "fake", names...)
 		check("the features' order", after, changed)
-		saveFeatures(t, b.Dirs, []string{"mine", "omb", "nope"})
+		saveFeatures(t, b.Dirs, []string{"tools", "omb", "nope"})
 		// Another backend sends the same, but builds its own images.
 		if _, other := sent(t, b, "other", names...); other["base"] == keys["base"] {
 			t.Errorf("%q: another backend's base has the same key", from)

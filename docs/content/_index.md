@@ -133,7 +133,7 @@ Claude Code, Codex and opencode run in the VM. Check one in the list when devvm 
 {{< feature title="Make it yours" icon="wrench" column="right" art="make-it-yours" >}}
 
 - Your own layers are setup scripts that `devvm` builds into an image: `devvm layer new mailpit` starts one, and `devvm --layers mailpit` makes a VM with it ([your own layers](docs/using/customizing.md#your-own-layers)).
-- Your own features are scripts that run in the base image, so every VM gets your shell setup, aliases or dotfiles ([your own features](docs/using/customizing.md#your-own-features)).
+- `devvm setup --layers` gives every new VM the layers you choose, so your shell setup, aliases or dotfiles can go in a layer of your own that each VM gets unless you uncheck it ([extras of your own](docs/using/customizing.md#extras-of-your-own)).
 - `--from` starts the base image from a container image instead of Ubuntu's, such as `node:24` or your team's own ([starting from a container image](docs/using/from.md)).
 - When the project has a `devcontainer.json`, `devvm` sets up its VM from the file's container image, ports, environment and commands ([devcontainer.json](docs/using/devcontainer.md)).
 

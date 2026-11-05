@@ -166,7 +166,7 @@ These warnings never make doctor fail, and `devvm doctor --json` lists them in `
 
 ## Your settings
 
-`~/.config/devvm` holds what you edit: `config.toml`, your network policy rules, your own layers and features, and your company's CA certificates. devvm also writes the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders) into `version` there when the file is missing or older. [Your settings](settings.md#your-settings) lists each file. devvm never deletes any of them.
+`~/.config/devvm` holds what you edit: `config.toml`, your network policy rules, your own layers, and your company's CA certificates. devvm also writes the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders) into `version` there when the file is missing or older. [Your settings](settings.md#your-settings) lists each file. devvm never deletes any of them.
 
 ## Lima
 

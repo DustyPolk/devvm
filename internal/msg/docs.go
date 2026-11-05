@@ -54,7 +54,6 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"base_features":                    "using/customizing#choosing-features",
 	"base_features_none":               "using/customizing#choosing-features",
 	"unknown_feature":                  "using/customizing#choosing-features",
-	"feature_shadowed":                 "using/customizing#your-own-features",
 	"script_failed":                    "using/troubleshooting#a-build-fails",
 	"build_sources_unreachable":        "using/troubleshooting#no-package-source-answers",
 	"packages_lists_missing":           "using/troubleshooting#a-build-fails",

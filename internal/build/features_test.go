@@ -17,45 +17,39 @@ import (
 	"github.com/w3cj/devvm/internal/settings"
 )
 
-// featureEnv is testEnv with devvm's features fzf and omb, and the
-// user's mine and fzf (which devvm's hides).
+// featureEnv is testEnv with devvm's features fzf, omb and tools, beside
+// files that aren't features, and a script in ~/.config/devvm/features,
+// which isn't one either: a user's extras are layers.
 func featureEnv(t *testing.T) *Env {
 	t.Helper()
 	b, _ := testEnv(t)
-	write(t, filepath.Join(assetsDir(b), "features", "omb.sh"), "#!/bin/bash\n# oh-my-bash: a prompt\n")
-	write(t, filepath.Join(assetsDir(b), "features", "fzf.sh"), "#!/bin/bash\n#fuzzy search  \n")
-	write(t, filepath.Join(b.Dirs.Features(), "mine.sh"), "#!/bin/bash\n# my tools\n")
-	write(t, filepath.Join(b.Dirs.Features(), "fzf.sh"), "#!/bin/bash\n# mine\n")
-	write(t, filepath.Join(b.Dirs.Features(), "Bad_Name.sh"), "")
-	write(t, filepath.Join(b.Dirs.Features(), "notes.txt"), "")
-	if err := os.Mkdir(filepath.Join(b.Dirs.Features(), "dir.sh"), 0o700); err != nil {
+	own := filepath.Join(assetsDir(b), "features")
+	write(t, filepath.Join(own, "omb.sh"), "#!/bin/bash\n# oh-my-bash: a prompt\n")
+	write(t, filepath.Join(own, "fzf.sh"), "#!/bin/bash\n#fuzzy search  \n")
+	write(t, filepath.Join(own, "tools.sh"), "#!/bin/bash\n# my tools\n")
+	write(t, filepath.Join(own, "Bad_Name.sh"), "")
+	write(t, filepath.Join(own, "notes.txt"), "")
+	if err := os.Mkdir(filepath.Join(own, "dir.sh"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	write(t, filepath.Join(b.Dirs.Config, "features", "mine.sh"), "#!/bin/bash\n# mine\n")
 	return b
 }
 
-// devvm's features come first, then the user's; one of the user's named
-// like one of devvm's is ignored, and devvm's script is the one used.
+// The features are devvm's own regular <name>.sh files, sorted; a
+// script in ~/.config/devvm/features isn't one. Each step is its script
+// with the prelude before it.
 func TestFeatures(t *testing.T) {
 	b := featureEnv(t)
-	features, shadowed := b.Features()
-	if want := []string{"fzf", "omb", "mine"}; !slices.Equal(features, want) {
-		t.Errorf("Features() = %q, want %q", features, want)
+	if got, want := b.Features(), []string{"fzf", "omb", "tools"}; !slices.Equal(got, want) {
+		t.Errorf("Features() = %q, want %q", got, want)
 	}
-	if want := []string{filepath.Join(b.Dirs.Features(), "fzf.sh")}; !slices.Equal(shadowed, want) {
-		t.Errorf("shadowed = %q, want %q", shadowed, want)
+	if got, err := b.featureStep("fzf"); err != nil || !sameScripts([]image.Step{got}, []image.Step{ownScript("fzf.sh", "#!/bin/bash\n#fuzzy search  \n")}) {
+		t.Errorf("featureStep(fzf) = %+v, %v", got, err)
 	}
-	for name, want := range map[string]string{
-		"fzf":  "#!/bin/bash\n#fuzzy search  \n",
-		"mine": "#!/bin/bash\n# my tools\n",
-	} {
-		if got, err := b.FeatureScript(name); err != nil || got.Name != name+".sh" || string(got.Data) != want {
-			t.Errorf("FeatureScript(%s) = %+v, %v; want %q", name, got, err, want)
-		}
-	}
-	for _, name := range []string{"gone", "dir"} {
-		if _, err := b.FeatureScript(name); !errors.Is(err, fs.ErrNotExist) {
-			t.Errorf("FeatureScript(%s): %v, want none", name, err)
+	for _, name := range []string{"gone", "dir", "mine"} {
+		if _, err := b.featureStep(name); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("featureStep(%s): %v, want none", name, err)
 		}
 	}
 }
@@ -104,7 +98,7 @@ func TestChooseFeatures(t *testing.T) {
 	b := featureEnv(t)
 	saveFeatures(t, b.Dirs, nil)
 	in, err := b.inputs()
-	if err != nil || !slices.Equal(in.features, []string{"fzf", "omb", "mine"}) {
+	if err != nil || !slices.Equal(in.features, []string{"fzf", "omb", "tools"}) {
 		t.Fatalf("unchosen: %q, %v", in.features, err)
 	}
 	before, err := b.Key("base")
@@ -115,7 +109,7 @@ func TestChooseFeatures(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := savedFeatures(b.Dirs)
-	if err != nil || !slices.Equal(got, []string{"fzf", "omb", "mine"}) {
+	if err != nil || !slices.Equal(got, []string{"fzf", "omb", "tools"}) {
 		t.Errorf("saved %q, %v", got, err)
 	}
 	if after, err := b.Key("base"); err != nil || after != before {
@@ -146,23 +140,22 @@ func TestChooseFeatures(t *testing.T) {
 
 // devvm's own features are cli-tools, fzf and omb: desktop is a layer.
 // Until a choice is made, base gets every one of them, and a choice of
-// desktop is refused.
+// desktop, or of a script in ~/.config/devvm/features, is refused.
 func TestOwnFeatures(t *testing.T) {
 	b := featureEnv(t)
 	b.Assets = assets.FS
-	if err := os.Remove(filepath.Join(b.Dirs.Features(), "fzf.sh")); err != nil {
-		t.Fatal(err)
-	}
 	saveFeatures(t, b.Dirs, nil)
-	want := []string{"cli-tools", "fzf", "omb", "mine"}
-	if features, shadowed := b.Features(); !slices.Equal(features, want) || shadowed != nil {
-		t.Errorf("Features() = %q, %q; want %q", features, shadowed, want)
+	want := []string{"cli-tools", "fzf", "omb"}
+	if got := b.Features(); !slices.Equal(got, want) {
+		t.Errorf("Features() = %q, want %q", got, want)
 	}
 	if in, err := b.inputs(); err != nil || !slices.Equal(in.features, want) {
 		t.Errorf("unchosen: %q, %v; want %q", in.features, err, want)
 	}
-	if _, err := (Choice{b}).SetFeatures([]string{"desktop"}); msg.IDOf(err) != "no_feature" {
-		t.Errorf("SetFeatures(desktop) = %v, want no_feature", err)
+	for _, name := range []string{"desktop", "mine"} {
+		if _, err := (Choice{b}).SetFeatures([]string{name}); msg.IDOf(err) != "no_feature" {
+			t.Errorf("SetFeatures(%s) = %v, want no_feature", name, err)
+		}
 	}
 }
 
@@ -176,11 +169,11 @@ func TestPickFeatures(t *testing.T) {
 		want    []string
 		changed bool
 	}{
-		{"unchosen", nil, []string{"fzf", "omb", "mine"}, false},
+		{"unchosen", nil, []string{"fzf", "omb", "tools"}, false},
 		{"none", []string{}, nil, false},
-		{"kept", []string{"mine", "fzf"}, []string{"fzf", "mine"}, true},
-		{"in order", []string{"fzf", "mine"}, []string{"fzf", "mine"}, false},
-		{"no script", []string{"omb", "nope"}, []string{"omb"}, true},
+		{"kept", []string{"tools", "fzf"}, []string{"fzf", "tools"}, true},
+		{"in order", []string{"fzf", "tools"}, []string{"fzf", "tools"}, false},
+		{"no script", []string{"omb", "nope", "mine"}, []string{"omb"}, true},
 	} {
 		saveFeatures(t, b.Dirs, tc.saved)
 		changed, err := (Choice{b}).PickFeatures()
@@ -204,7 +197,7 @@ func TestSetFeatures(t *testing.T) {
 		refusing string
 	}{
 		{"same", []string{"omb"}, []string{"omb"}, false, ""},
-		{"ordered", []string{"mine", "fzf", "mine"}, []string{"fzf", "mine"}, true, ""},
+		{"ordered", []string{"tools", "fzf", "tools"}, []string{"fzf", "tools"}, true, ""},
 		{"none", nil, nil, true, ""},
 		{"unknown", []string{"fzf", "nope"}, nil, false, "no_feature"},
 	} {
@@ -226,10 +219,11 @@ func TestSetFeatures(t *testing.T) {
 }
 
 // base runs base.sh, then its chosen features' scripts in the order
-// chosen, skipping one without a script; a layer runs only its own.
+// chosen, each with the prelude, skipping one without a script (mine, in
+// ~/.config/devvm/features, among them); a layer runs only its own.
 func TestBuildRunsFeatures(t *testing.T) {
 	b := featureEnv(t)
-	saveFeatures(t, b.Dirs, []string{"mine", "nope", "fzf"})
+	saveFeatures(t, b.Dirs, []string{"tools", "nope", "mine", "fzf"})
 	if err := (Builds{b}).Build(t.Context(), "foo"); err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +236,7 @@ func TestBuildRunsFeatures(t *testing.T) {
 	want := [][]image.Step{
 		aptSteps(
 			ownScript("base.sh", "#!/bin/bash\n"),
-			script("mine.sh", "#!/bin/bash\n# my tools\n"), // the user's: no prelude
+			ownScript("tools.sh", "#!/bin/bash\n# my tools\n"),
 			ownScript("fzf.sh", "#!/bin/bash\n#fuzzy search  \n"),
 		),
 		layerSteps(script("foo.sh", "#!/bin/bash\necho foo\n")),

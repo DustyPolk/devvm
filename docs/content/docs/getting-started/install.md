@@ -103,7 +103,7 @@ Running the install script again installs the newest release.
 {{< /os-tab >}}
 {{< /os-tabs >}}
 
-Your images and VMs stay, because they live in `~/.local/share/devvm`, and your settings, layers and features stay in `~/.config/devvm`, apart from devvm itself.
+Your images and VMs stay, because they live in `~/.local/share/devvm`, and your settings and layers stay in `~/.config/devvm`, apart from devvm itself.
 
 Images whose inputs changed are built again the next time you use them. Existing VMs keep working, and `devvm tools update` moves a VM to the new shared tools. `devvm gc` deletes the copies of devvm's files that older versions wrote out, except those that a VM's proxy was started with.
 
@@ -134,5 +134,5 @@ Images whose inputs changed are built again the next time you use them. Existing
    {{< /os-tab >}}
    {{< /os-tabs >}}
 
-6. Remove its state: `rm -rf ~/.local/share/devvm ~/.config/devvm`. That includes your layers and features, in `~/.config/devvm/layers` and `~/.config/devvm/features`, so copy them somewhere first to keep them. It also includes your exports, the agents' history that `devvm rm` saved. On macOS, the Time Machine exclusion that devvm set on its CA folder goes with the folder.
+6. Remove its state: `rm -rf ~/.local/share/devvm ~/.config/devvm`. That includes your layers, in `~/.config/devvm/layers`, so copy them somewhere first to keep them. It also includes your exports, the agents' history that `devvm rm` saved. On macOS, the Time Machine exclusion that devvm set on its CA folder goes with the folder.
 7. If you let devvm add it, remove the `Include ~/.local/share/devvm/ssh_config` line from `~/.ssh/config`.

@@ -874,11 +874,6 @@ func ExportingDocker(from string) M {
 	return M{id: "exporting_docker", vals: []val{{"from", from}}}
 }
 
-// FeatureShadowed is [feature_shadowed]: "A built-in feature is named {{.feature}}, so devvm ignores {{.file}}. Rename your file to use it."
-func FeatureShadowed(feature string, file string) M {
-	return M{id: "feature_shadowed", vals: []val{{"feature", feature}, {"file", file}}}
-}
-
 // FeaturesHelp is [features_help]: "Pick the base image features. Use up and down to move, space to toggle and enter to confirm."
 func FeaturesHelp() M {
 	return M{id: "features_help"}
@@ -3550,7 +3545,6 @@ var specs = map[string]spec{
 	"export_failed":                    {fields: []string{"reason"}},
 	"exported":                         {fields: []string{"file", "vm"}},
 	"exporting_docker":                 {fields: []string{"from"}},
-	"feature_shadowed":                 {fields: []string{"feature", "file"}},
 	"features_help":                    {},
 	"fetch_before_delete":              {fields: []string{"prefix"}},
 	"fetch_failed":                     {fields: []string{"command", "vm"}},

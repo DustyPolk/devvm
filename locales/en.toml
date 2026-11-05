@@ -488,9 +488,6 @@ other = "new VMs reach anything this machine can"
 description = "mode is ask, on or off"
 other = "new VMs' network policy is {{.mode}}"
 
-[feature_shadowed]
-other = "A built-in feature is named {{.feature}}, so devvm ignores {{.file}}. Rename your file to use it."
-
 [unknown_feature]
 other = "The feature {{.feature}} has no script, so devvm skips it."
 

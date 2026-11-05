@@ -14,8 +14,7 @@ import (
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// setupSandbox points devvm's folders at a temporary HOME, with a feature
-// of the user's, and returns a setup that sees a terminal (or not),
+// setupSandbox points devvm's folders at a temporary HOME and returns a setup that sees a terminal (or not),
 // keeping the size with Enter and picking network policy off, on a host
 // of 8 CPUs and 32 GiB; the folders; and the size prompts and pickers
 // shown.
@@ -28,12 +27,6 @@ func setupSandbox(t *testing.T, terminal bool) (setup, paths.Dirs, *[]string) {
 	t.Setenv("DEVVM_LIMA_HOME", "")
 	d, err := paths.FromEnv()
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(d.Features(), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(d.Features(), "mine.sh"), []byte("#!/bin/bash\n# mine\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var sized []string

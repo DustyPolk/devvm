@@ -7,20 +7,19 @@ devvm writes nothing into your project folders. It keeps the settings you edit i
 
 ## Your settings
 
-`~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds what you edit, and it's the only folder of devvm's that you should change by hand. devvm never rewrites a file of yours there. It reads `config.toml` and your own layers, features and CAs, it creates a new layer's files when you run `devvm layer new`, it changes single lines of `policy` when you add or remove a rule for every VM, and it writes `version` when the folder has none and when it changes its folders to a newer layout.
+`~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`) holds what you edit, and it's the only folder of devvm's that you should change by hand. devvm never rewrites a file of yours there. It reads `config.toml` and your own layers and CAs, it creates a new layer's files when you run `devvm layer new`, it changes single lines of `policy` when you add or remove a rule for every VM, and it writes `version` when the folder has none and when it changes its folders to a newer layout.
 
 | File | What it holds | Written by |
 | --- | --- | --- |
 | `config.toml` | the defaults that new VMs get and the [retention settings](#retention), which win over what devvm's commands save, the [company proxy](../safety/network.md#behind-a-company-proxy) and an [Ubuntu mirror](#an-ubuntu-mirror) ([config.toml](#configtoml)) | you |
 | `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm network allow -g`, `deny -g`, `rm -g`, or you |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new`, then you |
-| `features/` | your own [features](customizing.md#your-own-features) | you |
 | `ca/` | your [company's CA certificates](#a-companys-ca), which VMs and builds trust | you |
 | `version` | the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders), which says how devvm keeps its files here | devvm, when it's missing or older |
 
 Edit the files in `~/.config/devvm`, and never edit the ones in `~/.local/share/devvm`. devvm writes those itself and rewrites them whole, so a change you make there can be lost, or can stop devvm from reading the file. To set a default by hand, put it in `config.toml` instead.
 
-Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles repo, to keep your settings, layers and features.
+Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles repo, to keep your settings and layers.
 
 ## config.toml
 
@@ -131,7 +130,7 @@ devvm asks for them on its first run in a terminal, together with the size and b
 
 ### Layers for new VMs
 
-The layers you choose in `devvm setup` are the ones every new VM gets unless you choose others for it. They can be devvm's [built-in layers](images.md#built-in-layers), `desktop`, `docker` and `nix`, and [your own](customizing.md#your-own-layers). In the list devvm shows for a new VM in a terminal, they're checked under Layers, each row saying it comes from devvm setup, and you can uncheck any of them for that VM. Without a terminal, a new VM gets them, and devvm says so in one line ([what a new VM gets](images.md#what-a-new-vm-gets)).
+The layers you choose in `devvm setup` are the ones every new VM gets unless you choose others for it. They can be devvm's [built-in layers](images.md#built-in-layers), `desktop`, `docker` and `nix`, and [your own](customizing.md#your-own-layers), which is how you give every new VM an extra of your own ([extras of your own](customizing.md#extras-of-your-own)). In the list devvm shows for a new VM in a terminal, they're checked under Layers, each row saying it comes from devvm setup, and you can uncheck any of them for that VM. Without a terminal, a new VM gets them, and devvm says so in one line ([what a new VM gets](images.md#what-a-new-vm-gets)).
 
 ```sh
 devvm setup --layers docker,desktop   # every new VM gets docker, with desktop on top
