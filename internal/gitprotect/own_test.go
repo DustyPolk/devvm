@@ -1,6 +1,7 @@
 package gitprotect
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -99,7 +100,7 @@ func TestOwnRepo(t *testing.T) {
 	replaced(filepath.Join(g, "objects", "pack"), filepath.Join(og, "objects", "pack"), func() {
 		check("a symlinked pack folder", repo, "clone_git_elsewhere path="+g+"/objects/pack")
 	})
-	loose := filepath.Join(g, "objects", "ab")
+	loose := absentFanout(t, filepath.Join(g, "objects"))
 	symlink(t, filepath.Join(og, "objects"), loose)
 	check("a symlinked loose objects' folder", repo, "clone_git_elsewhere path="+loose)
 	if err := os.Remove(loose); err != nil {
@@ -110,4 +111,18 @@ func TestOwnRepo(t *testing.T) {
 	})
 	symlink(t, filepath.Join(og, "packed-refs"), filepath.Join(g, "packed-refs"))
 	check("symlinked packed refs", repo, "clone_git_elsewhere path="+g+"/packed-refs")
+}
+
+// absentFanout returns a loose objects' fan-out folder in objects that
+// none of the repo's own objects use, so the test can make it.
+func absentFanout(t *testing.T, objects string) string {
+	t.Helper()
+	for i := range 256 {
+		p := filepath.Join(objects, fmt.Sprintf("%02x", i))
+		if _, err := os.Lstat(p); os.IsNotExist(err) {
+			return p
+		}
+	}
+	t.Fatal("every fan-out folder exists")
+	return ""
 }
