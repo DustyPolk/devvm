@@ -3,7 +3,7 @@ title: Known limits
 weight: 13
 ---
 
-These are the things devvm can't do, everywhere and then on Linux hosts.
+These are the things devvm can't do, everywhere, on Linux hosts and on Intel Macs.
 
 ## Everywhere
 
@@ -24,3 +24,7 @@ These are the things devvm can't do, everywhere and then on Linux hosts.
 - Set-id bits that root in a VM sets on files in the project folder reach the host, and devvm names such files when it makes a VM and once a VM is stopped ([what to do](troubleshooting.md#devvm-names-set-id-files)).
 - devvm keeps your secrets in files under `~/.local/share/devvm/secrets/`, which only you can read, instead of the Keychain ([details](settings.md#devvms-state)).
 - devvm has no Time Machine to keep VMs' CAs out of, so keep `~/.local/share/devvm/vms` out of your backups ([details](../internals/security.md#secrets-stay-on-the-host)).
+
+## Intel Macs
+
+devvm has a release for Intel Macs, which the install script and Homebrew install, but nobody has tested it on one yet. The tested systems are Apple silicon Macs and Linux on arm64 and x86_64, so on an Intel Mac, VMs, `--from` and network policy may fail in ways that devvm's tests haven't caught.

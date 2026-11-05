@@ -31,7 +31,7 @@ After it installs devvm, the script warns when another devvm comes before `~/.lo
 
 ## Requirements
 
-devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [backend](../backends/_index.md). For your system, the table lists what devvm needs, how to check each requirement and how to get it, and whether the install script offers to install it for you.
+devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [backend](../backends/_index.md). It's tested on Apple silicon Macs and on Linux on both arm64 and x86_64, but not yet on Intel Macs ([Known limits](../using/limits.md#intel-macs)). For your system, the table lists what devvm needs, how to check each requirement and how to get it, and whether the install script offers to install it for you.
 
 {{< os-tabs >}}
 {{< os-tab name="macOS" >}}

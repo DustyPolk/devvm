@@ -6,7 +6,7 @@ Each project folder gets a VM of its own. devvm detects the project's toolchain 
 
 ## Install
 
-devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64, with Lima 2.0 or newer. Run the one command for your system.
+devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64, with Lima 2.0 or newer. It's tested on Apple silicon Macs and on Linux on both arm64 and x86_64, but not yet on Intel Macs. Run the one command for your system.
 
 On macOS, install devvm with Homebrew, which also installs Lima:
 

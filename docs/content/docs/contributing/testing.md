@@ -79,7 +79,13 @@ Gotchas of this setup:
 
 ## x86_64 hosts
 
-These need real x86_64 hardware. An emulated x86_64 VM on a Mac (`--arch=x86_64`, QEMU TCG; Lima needs its `lima-additional-guestagents`) runs the unit tests, but VMs nested in it crash in their firmware.
+These need real x86_64 hardware, or an x86_64 VM on such hardware with nested virtualization. An emulated x86_64 VM on a Mac (`--arch=x86_64`, QEMU TCG; Lima needs its `lima-additional-guestagents`) runs the unit tests, but VMs nested in it crash in their firmware.
+
+A bare-metal x86_64 Linux host, such as Fedora 43 with SELinux enforcing, runs the gate and `tests/e2e.sh --from` as the [Linux host above](#linux-hosts) does, from a clone of the repo, and it can run `--slots 3` ([slots for each host](#slots-for-each-host)). Those runs check the x86_64 side of what devvm builds: the `_amd64` pins of base, every layer and feature, the shared tools' `linux-x64` lock entries and their checksums, `--from`'s conversion, whose VM reads its scripts over 9p, and network policy through `devvm _qemu` and `qemu-system-x86_64`.
+
+The tests don't cover the release itself, so check it by hand on that host. Build the archives with `scripts/release.sh --head`, with `DEVVM_MINISIGN_KEY` and `DEVVM_MINISIGN_PUB` naming a test key so the signature is checked too, and install `devvm-<version>-linux-amd64.tar.gz` from them in a throwaway `HOME`, as [maintaining](maintaining.md) shows, with `main --yes` in place of `main --no-deps`. With only the system's folders on `PATH`, the script finds no Lima, so it installs Lima's latest release into that `HOME`'s `~/.local`. When the host already has QEMU and access to `/dev/kvm`, nothing it runs needs sudo. Then run the installed `devvm --version` and `devvm doctor`, and check with `file` that the binary is statically linked.
+
+devvm hasn't been tested on an Intel Mac. Its release has a `darwin-amd64` archive, and that binary runs under Rosetta on Apple silicon, but nobody has run the tests or a VM on Intel hardware.
 
 GitHub's Linux runners are x86_64 with KVM, and the E2E workflow (`.github/workflows/e2e.yml`) runs `tests/e2e.sh --only project` on one as a trial. Start it from the repo's Actions tab, with Run workflow on the E2E workflow, because it has no other trigger yet. It installs QEMU, gives the runner's user `/dev/kvm` as Lima's own CI does, installs Lima at a pinned version checked against its checksum, and runs the section up to three times. It caches Ubuntu's cloud image under the release that `tests/e2e.sh` pins, and the built images under a hash of `assets/`, `tests/e2e-mise.lock`, that release and Lima's version, because devvm's image keys are only known once it builds. When the run fails, it uploads the e2e logs, devvm's run logs and each Lima instance's serial logs as the `e2e-logs` artifact.
 
