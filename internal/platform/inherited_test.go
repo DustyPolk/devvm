@@ -5,11 +5,13 @@ package platform
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // inheritedChild, set in the environment, makes TestCloseInheritedOnExec
@@ -30,13 +32,16 @@ func TestCloseInheritedOnExec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	extra, err := os.Open(os.DevNull)
+	// A file of the test's own, so the check is for this file: a detached
+	// sleep's loader opens its libraries on the lowest free descriptor,
+	// often 3, just after exec.
+	extra, err := os.Create(filepath.Join(t.TempDir(), "inherited"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = extra.Close() }()
 	cmd := exec.CommandContext(t.Context(), self, "-test.v", "-test.run=^TestCloseInheritedOnExec$") //nolint:gosec // the test binary itself
-	cmd.Env = append(os.Environ(), inheritedChild+"=1")
+	cmd.Env = append(os.Environ(), inheritedChild+"="+extra.Name())
 	cmd.ExtraFiles = []*os.File{extra}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -60,17 +65,40 @@ func inheritedChildRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
-	t.Logf("kept=%t held=%t", kept, holds(t, cmd.Process.Pid, 3))
+	t.Logf("kept=%t held=%t", kept, holds(t, cmd.Process.Pid, 3, os.Getenv(inheritedChild)))
 }
 
-// holds reports whether the process with that pid has descriptor fd open:
-// its /proc entry on Linux, lsof elsewhere.
-func holds(t *testing.T, pid, fd int) bool {
+// holds reports whether the process with that pid has the file at path
+// open on descriptor fd: its /proc entry on Linux, lsof elsewhere. Any
+// other file on fd, such as the loader's, is not it.
+func holds(t *testing.T, pid, fd int, path string) bool {
 	t.Helper()
-	if runtime.GOOS == "linux" {
-		_, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/fd/" + strconv.Itoa(fd))
-		return err == nil
+	want, err := os.Stat(path) //nolint:gosec // the parent test's own temp file
+	if err != nil {
+		t.Fatal(err)
 	}
-	out, _ := exec.CommandContext(t.Context(), "lsof", "-a", "-p", strconv.Itoa(pid), "-d", strconv.Itoa(fd), "-F", "f").Output() //nolint:gosec // the test's own child
-	return strings.Contains(string(out), "\nf"+strconv.Itoa(fd))
+	if runtime.GOOS == "linux" {
+		awaitExec(t, pid)
+		got, err := os.Stat("/proc/" + strconv.Itoa(pid) + "/fd/" + strconv.Itoa(fd))
+		return err == nil && os.SameFile(got, want)
+	}
+	out, _ := exec.CommandContext(t.Context(), "lsof", "-a", "-p", strconv.Itoa(pid), "-d", strconv.Itoa(fd), "-F", "fn").Output() //nolint:gosec // the test's own child
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Contains(string(out), "\nf"+strconv.Itoa(fd)+"\nn"+resolved+"\n")
+}
+
+// awaitExec waits until the process with that pid runs sleep: until its
+// exec, /proc shows the test binary's fork, which still holds descriptor 3.
+func awaitExec(t *testing.T, pid int) {
+	t.Helper()
+	exe := "/proc/" + strconv.Itoa(pid) + "/exe"
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		if target, err := os.Readlink(exe); err == nil && filepath.Base(target) == "sleep" {
+			return
+		}
+	}
+	t.Fatalf("process %d never ran sleep", pid)
 }
