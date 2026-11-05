@@ -660,16 +660,17 @@ func commonOf(g string) (string, bool) {
 
 // hooksPathInside reports whether core.hooksPath leads into the project
 // folder, where the VM can edit the hooks. Relative paths are from the
-// working tree.
+// working tree. A path that isn't an existing folder counts by name and
+// resolved as far as it exists.
 func (p *Protector) hooksPathInside(hp string) bool {
 	hp = p.expandHome(hp)
 	if !filepath.IsAbs(hp) {
 		return true
 	}
 	if r, err := filepath.EvalSymlinks(hp); err == nil && isDir(r) {
-		hp = r
+		return paths.Within(r, p.Dir)
 	}
-	return paths.Within(filepath.Clean(hp), p.Dir)
+	return paths.Within(filepath.Clean(hp), p.Dir) || paths.Within(physicalParent(hp), p.Dir)
 }
 
 // expandHome expands ~ as git does.
@@ -736,9 +737,21 @@ func (p *Protector) delegations(ctx context.Context, emb embeds) []delegation {
 	return out
 }
 
-// into reports whether path, resolved, is in the project folder.
+// into reports whether path, resolved, is in the project folder. A path
+// whose folder is missing counts by name too: the VM can make the folder
+// or change the symlinks it would be under.
 func (p *Protector) into(path string) bool {
-	return paths.Below(paths.PhysicalParent(path), p.Dir)
+	if _, err := os.Stat(filepath.Dir(path)); err == nil {
+		return paths.Below(paths.PhysicalParent(path), p.Dir)
+	}
+	return paths.Below(filepath.Clean(path), p.Dir) || paths.Below(physicalParent(path), p.Dir)
+}
+
+// physicalParent is path with its folder resolved as far as it exists
+// (paths.Physical), so a missing folder under a symlinked prefix still
+// resolves, and its last element as named.
+func physicalParent(path string) string {
+	return filepath.Join(paths.Physical(filepath.Dir(path)), filepath.Base(path))
 }
 
 func delegationsSum(ds []delegation) string {

@@ -16,6 +16,8 @@ func containFixture(t *testing.T) *fixture {
 	for link, target := range map[string]string{
 		f.path("out"): filepath.Join(f.root, "other"),
 		f.path("in"):  f.path("sub"),
+		// alias is a symlinked prefix: the project folder by another name.
+		filepath.Join(f.root, "alias"): f.dir,
 	} {
 		if err := os.Symlink(target, link); err != nil {
 			t.Fatal(err)
@@ -47,6 +49,10 @@ func TestIntoPins(t *testing.T) {
 		{d + "/", true}, // its base is the folder's name: d/p
 		{d + "-sibling/x", false},
 		{f.root + "/other/../p/sub", true},
+		{f.root + "/alias/sub/file", true},
+		{f.root + "/alias/missing/deeper", true}, // a missing parent under a symlinked prefix
+		{d + "/out/missing/x", true},             // a missing parent counts by name too
+		{f.root + "/alias/out/missing/x", false},
 	} {
 		if got := f.p.into(tc.path); got != tc.want {
 			t.Errorf("into(%s) = %v", tc.path, got)
@@ -100,6 +106,10 @@ func TestHooksPathInsidePins(t *testing.T) {
 		{d + "-sibling", false},
 		{d + "/sub/../../p-sibling", false},
 		{"/", false},
+		{f.root + "/alias", true},
+		{f.root + "/alias/missing", true},       // a missing folder under a symlinked prefix
+		{f.root + "/alias/missing/hooks", true}, // and a missing parent
+		{f.root + "/other/missing", false},
 	} {
 		if got := f.p.hooksPathInside(tc.path); got != tc.want {
 			t.Errorf("hooksPathInside(%s) = %v", tc.path, got)
