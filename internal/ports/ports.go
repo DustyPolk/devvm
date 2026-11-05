@@ -8,6 +8,8 @@ package ports
 import (
 	"context"
 	"net"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -124,7 +126,26 @@ func Used(d paths.Dirs, self string) (map[int]bool, error) {
 			used[n] = true
 		}
 	}
+	for n := range building(d) {
+		used[n] = true
+	}
 	return used, nil
+}
+
+// building returns the ports build VMs hold while they start (Build).
+func building(d paths.Dirs) map[int]bool {
+	es, _ := os.ReadDir(d.BuildPorts()) // none: nothing builds
+	out := map[int]bool{}
+	for _, e := range es {
+		data, err := os.ReadFile(filepath.Join(d.BuildPorts(), e.Name()))
+		if err != nil {
+			continue
+		}
+		if n, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && n > 0 {
+			out[n] = true
+		}
+	}
+	return out
 }
 
 // Allocator chooses the host ports devvm chooses for VMs.
@@ -187,6 +208,28 @@ func (a Allocator) SSH(ctx context.Context, st *state.VM, running bool) (int, er
 	return a.Choose(ctx, st, SSH, func(port int, p Ports) bool {
 		return running || !p.Forwarded()[port] && !a.Listening(ctx, port)
 	})
+}
+
+// Build returns the host port a build VM (vm: an image's, the shared
+// tools' or a conversion's), which has no state, starts with its ssh on,
+// and release, which gives it up: chosen as a VM's are (free), under the
+// claims lock, and recorded by the VM's name (paths.Dirs.BuildPorts),
+// where Used reads it, until release, once its backend has bound the port
+// (Listening sees it then) or failed to.
+func (a Allocator) Build(ctx context.Context, vm string) (int, func(), error) {
+	rec := filepath.Join(a.Dirs.BuildPorts(), vm)
+	var n int
+	err := state.Claims(ctx, a.Dirs, func() error {
+		var err error
+		if n, err = a.free(ctx); err != nil {
+			return err
+		}
+		return state.WriteFile(rec, []byte(strconv.Itoa(n)+"\n"))
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+	return n, func() { _ = os.Remove(rec) }, nil
 }
 
 // free returns a loopback port of Range (below the host's ephemeral

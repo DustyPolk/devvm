@@ -384,15 +384,28 @@ func (v *VM) locked(ctx context.Context, claims bool, f func() error) error {
 	}
 	defer unlock()
 	if claims {
-		if err := PrivateDir(filepath.Dir(v.claims)); err != nil {
-			return err
-		}
-		unclaim, err := platform.LockFile(ctx, v.claims)
-		if err != nil {
-			return err
-		}
-		defer unclaim()
+		return claimed(ctx, v.claims, f)
 	}
+	return f()
+}
+
+// Claims runs f holding the claims lock (paths.Dirs.ClaimsLock), for what
+// has no state of its own to claim through (VM.Claim): a build VM's host
+// port. f takes no VM's lock: the claims lock comes after a VM's.
+func Claims(ctx context.Context, d paths.Dirs, f func() error) error {
+	return claimed(ctx, d.ClaimsLock(), f)
+}
+
+// claimed runs f holding the claims lock, the file claims.
+func claimed(ctx context.Context, claims string, f func() error) error {
+	if err := PrivateDir(filepath.Dir(claims)); err != nil {
+		return err
+	}
+	unclaim, err := platform.LockFile(ctx, claims)
+	if err != nil {
+		return err
+	}
+	defer unclaim()
 	return f()
 }
 

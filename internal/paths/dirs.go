@@ -101,6 +101,11 @@ func (d Dirs) VM(vm string) VM {
 	return VM{Dir: filepath.Join(d.Run(), "builds", vm)}
 }
 
+// BuildPorts holds the host port chosen for each build VM's ssh while the
+// VM starts (ports.Allocator.Build), a file named by the VM's name: there
+// only until its backend has bound the port, or failed to.
+func (d Dirs) BuildPorts() string { return filepath.Join(d.Run(), "build-ports") }
+
 // Images is the folder of images' records, one folder per image key.
 func (d Dirs) Images() string { return filepath.Join(d.Data, "images") }
 

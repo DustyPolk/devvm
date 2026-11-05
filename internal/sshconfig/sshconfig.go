@@ -56,8 +56,10 @@ func New(d paths.Dirs, reg *backend.Registry) *Config {
 // never changes when others come and go, inside the claim of the VM's
 // state.VM.Create, so two VMs made at once never choose one alias.
 func ChooseAlias(d paths.Dirs, vm string) (string, error) {
-	slug, _ := vmname.SlugOf(vm)
-	short := vmname.Prefix + slug
+	short, ok := vmname.Short(vm)
+	if !ok {
+		return vm, nil
+	}
 	names, err := state.VMNames(d)
 	if err != nil {
 		return "", err
@@ -70,7 +72,7 @@ func ChooseAlias(d paths.Dirs, vm string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if st.Alias == short {
+		if st.Alias == short && vmname.IsAlias(st.Alias, n) {
 			return vm, nil
 		}
 	}
@@ -78,9 +80,11 @@ func ChooseAlias(d paths.Dirs, vm string) (string, error) {
 }
 
 // Host is the name ssh and editors reach vm by: the alias its state
-// records, else its own name.
+// records, else its own name. An alias ChooseAlias never gives vm (a
+// hand-edited vm.json's: another folder's, a pattern, more lines for the
+// ssh config) is never taken (vmname.IsAlias).
 func (c *Config) Host(vm string) string {
-	if st, err := state.ReadVM(c.Dirs, vm); err == nil && st.Alias != "" {
+	if st, err := state.ReadVM(c.Dirs, vm); err == nil && vmname.IsAlias(st.Alias, vm) {
 		return st.Alias
 	}
 	return vm

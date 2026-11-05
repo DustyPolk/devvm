@@ -16,7 +16,6 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/redact"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -64,10 +63,13 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 	}
 	sshPort := c.SSHPort
 	if sshPort == 0 && l.OS == "darwin" && c.Net != backend.NetDirect {
-		// The profile names the port, so Lima can't pick it.
-		if sshPort, err = freePort(ctx); err != nil {
+		// The profile names the port, so Lima can't pick it: a build VM's,
+		// chosen as a VM's are, held until its hostagent has it.
+		var release func()
+		if sshPort, release, err = l.Ports.Build(ctx, vm); err != nil {
 			return err
 		}
+		defer release()
 	}
 	if err := configure(ctx, l.Lima, in, w, c, sshPort); err != nil {
 		return err
@@ -350,13 +352,6 @@ func (l *machines) proxyURL(c backend.Confinement) string {
 		return backend.ProxyURL(limaHost, c.ProxyPort, c.ProxyPassword)
 	}
 	return backend.ProxyURL(guestFwdHost, guestFwdPort, c.ProxyPassword)
-}
-
-// freePort returns a loopback port below the host's ephemeral range
-// (platform.ChoosablePorts) nothing listens on now, on any address
-// (platform.PortFree).
-func freePort(ctx context.Context) (int, error) {
-	return platform.FreePort(ctx, platform.ChoosablePorts(), platform.PortFree)
 }
 
 // recordStart notes the hostagent Lima started for the VM, which a

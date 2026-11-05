@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -216,5 +217,60 @@ func TestChooseTogether(t *testing.T) {
 	}
 	if p, err := b.Choose(t.Context(), st, Desktop, func(int, Ports) bool { return false }); err != nil || p == 0 || host(t, st).Desktop != p {
 		t.Errorf("desktop: %d, %v", p, err)
+	}
+}
+
+// A build VM's ssh port, which no state records, is chosen under the
+// claims lock too, never a VM's, and held until it's released: two builds
+// starting at once never choose one port, and a VM's port avoids a build's
+// until then.
+func TestBuild(t *testing.T) {
+	d := testDirs(t)
+	st := newVM(t, d, "devvm-a-0123456789abc1")
+	set(t, st, func(p *Ports) { p.Host.SSH = 20000 })
+	a := Allocator{Dirs: d, Range: platform.PortRange{Lo: 20000, Hi: 20002}, Listening: func(context.Context, int) bool {
+		time.Sleep(10 * time.Millisecond) // a window for another to choose it too
+		return false
+	}}
+	builds := []string{"devvm-img-0123456789ab", "devvm-tools-build"}
+	got := make([]int, len(builds))
+	releases := make([]func(), len(builds))
+	var wg sync.WaitGroup
+	for i, vm := range builds {
+		wg.Go(func() {
+			var err error
+			if got[i], releases[i], err = a.Build(t.Context(), vm); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if got[0] == got[1] || slices.Contains(got, 20000) || slices.Contains(got, 0) {
+		t.Fatalf("builds' ports %v (a VM has 20000)", got)
+	}
+	used, err := Used(d, "")
+	if err != nil || !used[got[0]] || !used[got[1]] || !used[20000] {
+		t.Errorf("Used with two builds starting = %v, %v", used, err)
+	}
+	// Full: a VM finds none, until a build's port is released.
+	if _, err := a.Choose(t.Context(), st, Proxy, func(int, Ports) bool { return false }); err == nil {
+		t.Error("a VM chose a port two builds and a VM hold")
+	}
+	releases[0]()
+	if p, err := a.Choose(t.Context(), st, Proxy, func(int, Ports) bool { return false }); err != nil || p != got[0] {
+		t.Errorf("after a release: %d, %v, want %d", p, err, got[0])
+	}
+	// A record that isn't a port reserves nothing.
+	if err := state.WriteFile(filepath.Join(d.BuildPorts(), "x"), []byte("x\n")); err != nil {
+		t.Fatal(err)
+	}
+	if used, err := Used(d, ""); err != nil || len(used) != 3 {
+		t.Errorf("Used with a bad record = %v, %v", used, err)
+	}
+	releases[1]()
+	// Without a claims lock it can take, there's no port.
+	bad := Allocator{Dirs: paths.Dirs{Data: filepath.Join(d.ClaimsLock(), "x")}, Listening: a.Listening}
+	if _, _, err := bad.Build(t.Context(), builds[0]); err == nil {
+		t.Error("a port without the claims lock")
 	}
 }

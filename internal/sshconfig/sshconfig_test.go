@@ -122,6 +122,34 @@ func TestChooseAlias(t *testing.T) {
 	if got := c.Host("devvm-none-eeeeeeeeeeeeee"); got != "devvm-none-eeeeeeeeeeeeee" {
 		t.Errorf("Host without state = %s", got)
 	}
+	if got, err := ChooseAlias(d, "devvm-tools-build"); err != nil || got != "devvm-tools-build" {
+		t.Errorf("ChooseAlias(devvm-tools-build) = %s, %v", got, err)
+	}
+	// So is one whose state records an alias ChooseAlias never gives it:
+	// another folder's, a pattern, or more lines for its ssh config.
+	for _, bad := range []string{"devvm-web-app", "*", "devvm-api x", "devvm-api\n  ProxyCommand x", "api", web2} {
+		setAlias(t, d, api, bad)
+		if got := c.Host(api); got != api {
+			t.Errorf("Host(%s) with alias %q = %q", api, bad, got)
+		}
+	}
+	// Nor does such an alias keep a new VM from its own.
+	setAlias(t, d, api, "devvm-new")
+	if got, err := ChooseAlias(d, "devvm-new-ffffffffffffff"); err != nil || got != "devvm-new" {
+		t.Errorf("ChooseAlias with api's alias devvm-new = %s, %v", got, err)
+	}
+}
+
+// setAlias records alias in vm's state, as a hand-edited vm.json might.
+func setAlias(t *testing.T, d paths.Dirs, vm, alias string) {
+	t.Helper()
+	st, err := state.ReadVM(d, vm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Update(t.Context(), func(st *state.VM) error { st.Alias = alias; return nil }); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // pinned is what every entry turns off, whatever a Host * says.
@@ -376,6 +404,15 @@ Host devvm-web ` + web + `
 	}
 	if got := read(t, c.Dirs.SSHConfig()); strings.Count(got, "Host devvm-web ") != 1 || !strings.Contains(got, "\nHost "+web2+"\n") {
 		t.Errorf("ssh config with one alias twice:\n%s", got)
+	}
+
+	// An alias that isn't the VM's own goes nowhere near the config.
+	setAlias(t, c.Dirs, web2, "devvm-web\n  ProxyCommand touch /tmp/x\nHost *")
+	if err := c.Write(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, c.Dirs.SSHConfig()); strings.Contains(got, "touch") || strings.Contains(got, "Host *") || !strings.Contains(got, "\nHost "+web2+"\n") {
+		t.Errorf("ssh config with an alias of lines:\n%s", got)
 	}
 }
 

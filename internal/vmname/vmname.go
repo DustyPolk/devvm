@@ -19,12 +19,14 @@ const Prefix = "devvm-"
 // (devvm-img-<12>).
 const HashLen = 14
 
-// vm matches a project VM's name.
-var vm = regexp.MustCompile(`^` + regexp.QuoteMeta(Prefix) + `.+-[0-9a-f]{` + strconv.Itoa(HashLen) + `}$`)
+// vm matches a project VM's name. Its folder part is as project.Slug makes
+// it: a-z, 0-9 and dashes, a letter or digit at each end.
+var vm = regexp.MustCompile(`^` + regexp.QuoteMeta(Prefix) + `[a-z0-9]([a-z0-9-]*[a-z0-9])?-[0-9a-f]{` + strconv.Itoa(HashLen) + `}$`)
 
-// IsVM reports whether name is a project VM's: devvm-<folder>-<hash>.
-// Images and build VMs aren't, a folder named img-… included
-// (devvm-img-…-<hash>).
+// IsVM reports whether name is a project VM's: devvm-<folder>-<hash>,
+// its folder part as project.Slug makes it, so a name read from a file is
+// safe in a hostname, an ssh config's Host line or a path. Images and
+// build VMs aren't, a folder named img-… included (devvm-img-…-<hash>).
 func IsVM(name string) bool { return vm.MatchString(name) }
 
 // HashOf returns the hash a project VM's name ends with, which names its
@@ -35,6 +37,24 @@ func HashOf(name string) (string, bool) {
 		return "", false
 	}
 	return name[len(name)-HashLen:], true
+}
+
+// Short returns the shorter name ssh and editors may reach a project VM,
+// name, by: devvm-<folder>, and whether name is a project VM's.
+func Short(name string) (string, bool) {
+	if !IsVM(name) {
+		return "", false
+	}
+	slug, _ := SlugOf(name)
+	return Prefix + slug, true
+}
+
+// IsAlias reports whether alias is one a project VM, name, may have
+// besides its name: its Short name or the name itself, so an alias read
+// from a file is never another folder's, a pattern or more than a word.
+func IsAlias(alias, name string) bool {
+	short, ok := Short(name)
+	return ok && (alias == short || alias == name)
 }
 
 // asideSuffix ends the name a project VM's old machine has while a remake

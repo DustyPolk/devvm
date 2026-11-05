@@ -18,6 +18,17 @@ func TestIsVM(t *testing.T) {
 		"devvm--0123456789abcd":           false,
 		"devvm-0123456789abcd":            false,
 		"devvm-w\neb-0123456789abcd":      false,
+		"devvm-a--b-0123456789abcd":       true, // project.Slug keeps each dash
+		"devvm-Web-0123456789abcd":        false,
+		"devvm-w.b-0123456789abcd":        false,
+		"devvm-w b-0123456789abcd":        false,
+		"devvm-w/b-0123456789abcd":        false,
+		"devvm-w_b-0123456789abcd":        false,
+		"devvm-wé-0123456789abcd":         false,
+		"devvm--web-0123456789abcd":       false,
+		"devvm-web--0123456789abcd":       false,
+		"devvm-w;b-0123456789abcd":        false,
+		"devvm-w*b-0123456789abcd":        false,
 		"xdevvm-web-0123456789abcd":       false,
 		"devvm-web-0123456789abcd\n":      false,
 		"devvm-web-0123456789abcd.tar.gz": false,
@@ -74,6 +85,35 @@ func TestSlugOf(t *testing.T) {
 		if slug, ok := SlugOf(c.name); slug != c.slug || ok != c.ok {
 			t.Errorf("SlugOf(%q) = %q, %v; want %q, %v", c.name, slug, ok, c.slug, c.ok)
 		}
+	}
+}
+
+// A VM's alias is its short name or its name, nothing else.
+func TestIsAlias(t *testing.T) {
+	const vm = "devvm-my-app-0123456789abcd"
+	if s, ok := Short(vm); !ok || s != "devvm-my-app" {
+		t.Errorf("Short(%s) = %q, %v", vm, s, ok)
+	}
+	if _, ok := Short("devvm-tools-build"); ok {
+		t.Error("a short name for a build VM")
+	}
+	for alias, want := range map[string]bool{
+		"devvm-my-app":                true,
+		vm:                            true,
+		"devvm-my":                    false,
+		"devvm-my-app-x":              false,
+		"my-app":                      false,
+		"*":                           false,
+		"":                            false,
+		"devvm-my-app\n  ProxyJump x": false,
+		"devvm-other-0123456789abcd":  false,
+	} {
+		if got := IsAlias(alias, vm); got != want {
+			t.Errorf("IsAlias(%q) = %v, want %v", alias, got, want)
+		}
+	}
+	if IsAlias("devvm-tools", "devvm-tools-build") || IsAlias("devvm-tools-build", "devvm-tools-build") {
+		t.Error("an alias for a build VM")
 	}
 }
 

@@ -1,6 +1,7 @@
 package lima
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -14,6 +15,9 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ports"
+	"github.com/w3cj/devvm/internal/state"
 )
 
 // envOf returns the value the call's environment gives key, and whether
@@ -130,6 +134,50 @@ func TestStartConfined(t *testing.T) {
 				t.Error("Confined with a hostagent that doesn't run")
 			}
 		})
+	}
+}
+
+// A build VM on macOS starts with an ssh port the ports allocator chooses
+// (its sandbox profile names it): never a VM's, and held for it while it
+// starts, then given up.
+func TestStartBuildSSHPort(t *testing.T) {
+	l, f, _ := testLima(t, "darwin")
+	stoppedWithYAML(t, l, f)
+	st, err := state.New(l.Dirs, "devvm-web-0123456789abcd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Image, st.Dir, st.Backend = "base", "/w", Name
+	if err := st.Create(t.Context(), func(st *state.VM) error { return ports.Set(st, ports.Ports{Host: ports.Host{SSH: 20000}}) }); err != nil {
+		t.Fatal(err)
+	}
+	l.Ports = ports.Allocator{Dirs: l.Dirs, Range: platform.PortRange{Lo: 20000, Hi: 20001}, Listening: func(context.Context, int) bool { return false }}
+	rec := filepath.Join(l.Dirs.BuildPorts(), "v")
+	held, edit := "", f.do
+	f.do = func(c call) {
+		edit(c)
+		if slices.Contains(c.argv, "start") {
+			b, _ := os.ReadFile(rec) //nolint:gosec // the test's own file
+			held = string(b)
+		}
+	}
+	if err := l.start(t.Context(), "v", nil, backend.Confinement{Net: backend.NetInternet}); err != nil {
+		t.Fatal(err)
+	}
+	if edits := editSets(f); !slices.Contains(edits, ".ssh.localPort=20001") {
+		t.Errorf("edits %q, want the port no VM has", edits)
+	}
+	if held != "20001\n" {
+		t.Errorf("held %q while it started", held)
+	}
+	if _, err := os.Stat(rec); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the port's still held: %v", err)
+	}
+	// No port free: no start.
+	l.Ports.Range = platform.PortRange{Lo: 20000, Hi: 20000}
+	f.calls = nil
+	if err := l.start(t.Context(), "v", nil, backend.Confinement{Net: backend.NetInternet}); err == nil || slices.Contains(f.lines(), "limactl start --tty=false v") {
+		t.Errorf("started without a port: %v, %q", err, f.lines())
 	}
 }
 

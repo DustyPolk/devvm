@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/w3cj/devvm/internal/msg"
@@ -203,6 +204,44 @@ func TestPrivateDir(t *testing.T) {
 	}
 	if fi, err := os.Stat(target); err != nil || fi.Mode().Perm() != 0o755 {
 		t.Errorf("the link's folder: %v, %v", fi.Mode(), err)
+	}
+}
+
+// A folder a write makes is made as PrivateDir makes it, 700 whatever the
+// umask; one already there is left as it is. Not parallel: the umask is
+// the process's.
+func TestWriteFileMakesPrivateDir(t *testing.T) {
+	tmp := t.TempDir()
+	old := syscall.Umask(0o277) // MkdirAll alone would make it 500
+	t.Cleanup(func() { syscall.Umask(old) })
+	path := filepath.Join(tmp, "made", "f")
+	if err := WriteFile(path, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(filepath.Dir(path)); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("the folder made: %v, %v", fi, err)
+	}
+	open := filepath.Join(tmp, "open")
+	if err := os.Mkdir(open, 0o755); err != nil { //nolint:gosec // a mode left as it is
+		t.Fatal(err)
+	}
+	if err := os.Chmod(open, 0o755); err != nil { //nolint:gosec // a mode left as it is
+		t.Fatal(err)
+	}
+	if err := WriteFile(filepath.Join(open, "f"), []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(open); err != nil || fi.Mode().Perm() != 0o755 {
+		t.Errorf("a folder there: %v, %v", fi, err)
+	}
+	// A folder it can't make fails the write.
+	shut := filepath.Join(tmp, "shut")
+	if err := os.Mkdir(shut, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(shut, 0o700) }) //nolint:gosec // a folder: owner-only with search
+	if err := WriteFile(filepath.Join(shut, "sub", "f"), nil); err == nil {
+		t.Error("wrote below a folder it can't write")
 	}
 }
 

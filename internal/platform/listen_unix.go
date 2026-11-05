@@ -57,14 +57,6 @@ func ListenLoopback(ctx context.Context, addr string) (net.Listener, error) {
 	return lc.Listen(ctx, "tcp", addr)
 }
 
-// PortFree reports whether a listener of devvm's can have a TCP port on
-// the host's loopback, IPv4 and IPv6, sharing it with no program
-// (ListenLoopback). A host without IPv6 counts as free there.
-func PortFree(ctx context.Context, port int) bool {
-	err4, err6 := probeLoopback(ctx, port)
-	return err4 == nil && (err6 == nil || !errors.Is(err6, syscall.EADDRINUSE))
-}
-
 // PortInUse reports whether a program on the host has a TCP port, on any
 // address, so that a listener on the host's loopback with SO_REUSEADDR
 // (Go's, Lima's forwards) would share it, and take that

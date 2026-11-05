@@ -17,6 +17,7 @@ package state
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,11 +104,14 @@ func WriteFileMode(path string, data []byte, mode os.FileMode) error {
 func writeFile(path string, data []byte) error { return writeFileMode(path, data, 0o600) }
 
 // writeFileMode replaces path with data atomically, mode perm, creating
-// its folder (0700) when it's missing.
+// its folder when it's missing as PrivateDir does (0700). A folder there
+// keeps its mode: some, ~/.ssh say, are the user's, or a link to one.
 func writeFileMode(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
+	if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
+		if err := PrivateDir(dir); err != nil {
+			return err
+		}
 	}
 	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
 	if err != nil {

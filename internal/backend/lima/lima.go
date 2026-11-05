@@ -29,6 +29,7 @@ import (
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/ports"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/shell"
 	"github.com/w3cj/devvm/internal/ubuntu"
@@ -83,6 +84,9 @@ type Lima struct {
 	Getenv func(string) string
 	// Company is the company proxy builds go through (buildUpstream).
 	Company *settings.CompanyProxy
+	// Ports chooses a build VM's ssh port on macOS, which its sandbox
+	// profile names (ports.Allocator.Build).
+	Ports ports.Allocator
 	// Ubuntu finds Ubuntu's cloud image for base, which PinOrigin pins,
 	// at UbuntuURL, where Ubuntu's dated releases are listed
 	// (ubuntu.DefaultURL, unless a test build moves it). UbuntuRelease is
@@ -165,7 +169,7 @@ func New(d paths.Dirs, assets fs.FS, u UI, host platform.Host, ubuntuURL string,
 		t.Proxy = cp.Route
 	}
 	l := withRoles(&Lima{
-		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Company: cp,
+		Dirs: d, Runner: logRunner{u.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Company: cp, Ports: ports.Allocator{Dirs: d, Listening: ports.Listening},
 		Self: self, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
 		Ubuntu: finder, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: "/dev/kvm",

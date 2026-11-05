@@ -26,6 +26,10 @@ func TestSlug(t *testing.T) {
 		if got := Slug(tc.base, slugMax); got != tc.want {
 			t.Errorf("Slug(%q) = %q, want %q", tc.base, got, tc.want)
 		}
+		// vmname's grammar takes every name New makes.
+		if f, err := New("/w/"+tc.base, 0); tc.base != "/" && (err != nil || !vmname.IsVM(f.Name)) {
+			t.Errorf("New(%q) = %q, %v: not a VM's name", tc.base, f.Name, err)
+		}
 	}
 }
 
@@ -106,6 +110,13 @@ func TestTargets(t *testing.T) {
 	} {
 		if got := Named(target, vms); got != want {
 			t.Errorf("Named(%q) = %q, want %q", target, got, want)
+		}
+	}
+	// An alias the VM's name can't have (a hand-edited vm.json's) names
+	// nothing: not another folder's, nor a word of its own.
+	for _, alias := range []string{"devvm-my-api", "x"} {
+		if got := Named(alias, []Recorded{{web2.Name, alias, "/b/web"}}); got != "" {
+			t.Errorf("Named(%q) with web's alias %q = %q", alias, alias, got)
 		}
 	}
 	// A VM without a recorded folder is matched by its name's folder part.

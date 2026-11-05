@@ -34,8 +34,8 @@ func TestListenLoopback(t *testing.T) {
 				_ = l.Close()
 				t.Error("took a port the host has on every address")
 			}
-			if !PortInUse(t.Context(), p) || PortFree(t.Context(), p) {
-				t.Errorf("in use %v, free %v; want in use", PortInUse(t.Context(), p), PortFree(t.Context(), p))
+			if !PortInUse(t.Context(), p) {
+				t.Error("not in use")
 			}
 			// A connection the port's side ends first leaves it in
 			// TIME_WAIT.
@@ -56,8 +56,8 @@ func TestListenLoopback(t *testing.T) {
 			_, _ = c.Read(make([]byte, 1))
 			_ = c.Close()
 			_ = wild.Close()
-			if PortInUse(t.Context(), p) || !PortFree(t.Context(), p) {
-				t.Errorf("in use %v, free %v; want free", PortInUse(t.Context(), p), PortFree(t.Context(), p))
+			if PortInUse(t.Context(), p) {
+				t.Error("in use once its connections ended")
 			}
 			l, err := ListenLoopback(t.Context(), addr)
 			if err != nil {

@@ -72,10 +72,11 @@ func ForDir(dir string, all []string) []string {
 type Recorded struct{ Name, Alias, Dir string }
 
 // Named returns the project VM among vms whose name or alias is name, ""
-// when none is.
+// when none is. An alias the VM's name can't have (vmname.IsAlias) names
+// nothing.
 func Named(name string, vms []Recorded) string {
 	for _, v := range vms {
-		if vmname.IsVM(v.Name) && (name == v.Name || name == v.Alias) {
+		if vmname.IsVM(v.Name) && (name == v.Name || name == v.Alias && vmname.IsAlias(v.Alias, v.Name)) {
 			return v.Name
 		}
 	}
