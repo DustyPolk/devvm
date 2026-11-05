@@ -36,16 +36,16 @@ stderr '^devvm: json_shows_only command=devvm link publish$'
 ! stderr no_vm
 
 # The VMs: app, the client; db, a target; two folders called api.
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 project db
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 mkdir $WORK/x/api
 cd $WORK/x/api
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec devvm link publish 5432
 mkdir $WORK/y/api
 cd $WORK/y/api
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec sh -c 'cat "$VMS"/*/vm.json'
 stdout '^  "id": "[0-9a-f]{32}",$'
 vm_name APP app
@@ -141,21 +141,21 @@ stdout '\A{\n  "version": 1,\n  "links": \[\n    {\n      "name": "api",\n      
 # Tiers: a client links only to targets on its tier or a stricter one, so
 # it can't be on allowlist while it links to open ones, and a target keeps
 # its tier while a client on it links to it.
-! exec devvm network on
+! exec devvm network allowlist
 stderr '^devvm: tier_linked_targets targets=devvm-api-[0-9a-f]{14}, devvm-db-[0-9a-f]{14} tier=allowlist vm=devvm-app-[0-9a-f]{14}$'
 cd $WORK/db
-exec devvm network on
+exec devvm network allowlist
 cd $WORK/x/api
-exec devvm network on
+exec devvm network allowlist
 cd $WORK/y/api
 exec devvm link publish 5432
 cd $WORK/app
-exec devvm network on
+exec devvm network allowlist
 ! exec devvm link add ../y/api 5432
 stderr '^devvm: link_tier_mismatch target=devvm-api-[0-9a-f]{14} target_tier=open tier=allowlist vm=devvm-app-[0-9a-f]{14}$'
-# db got network policy while it ran, so it runs outside its proxy until
+# db moved to allowlist while it ran, so it runs outside its proxy until
 # it starts again: add warns, refusing nothing, and so does publishing a
-# port that a client with network policy links to.
+# port that a client on allowlist links to.
 exec devvm link add db 8002
 stdout '^==> link_added name=db port=8002 '
 stderr '^devvm: link_target_unenforced target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
@@ -169,21 +169,21 @@ exec devvm link publish 7000
 exec devvm link publish 8000-8010
 stderr -count=1 '^devvm: link_target_unenforced target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
 exec devvm link unpublish 7000
-# Without network policy, the client isn't warned.
+# On open, the client isn't warned.
 cd $WORK/app
-exec devvm network off
+exec devvm network open
 exec devvm link add db 8002
 ! stderr link_target_unenforced
-exec devvm network on
+exec devvm network allowlist
 cd $WORK/db
-! exec devvm network off
+! exec devvm network open
 stderr '^devvm: tier_linked_clients tier=open vm=devvm-db-[0-9a-f]{14} vms=devvm-app-[0-9a-f]{14}$'
 cd $WORK/app
-exec devvm network off
+exec devvm network open
 cd $WORK/db
-exec devvm network off
+exec devvm network open
 cd $WORK/x/api
-exec devvm network off
+exec devvm network open
 cd $WORK/db
 
 # unpublish: each as listed; a link to a withdrawn port no longer applies.
@@ -234,7 +234,7 @@ stdout '\ANAME +PORT +TARGET +FOLDER +STATUS +APPLIES\n\z'
 vm_state $APP_dir/vm.json
 ! stdout '^links\.links'
 cd $WORK/db
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec devvm link publish 5432
 cd $WORK/app
 exec devvm link

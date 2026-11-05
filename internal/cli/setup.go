@@ -8,6 +8,7 @@ import (
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/state"
@@ -29,8 +30,8 @@ func newSetupCmd(a *app) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Choose base's features, and new VMs' size, network policy, coding agents and layers",
-		Long: "Choose the features base gets, and new VMs' CPUs, memory, network policy, coding agents and layers. " +
+		Short: "Choose base's features, and new VMs' size, network tier, coding agents and layers",
+		Long: "Choose the features base gets, and new VMs' CPUs, memory, network tier, coding agents and layers. " +
 			"In a terminal devvm asks for each, starting from the current choice, and --features, --agents and --layers choose without asking. " +
 			"A new choice of features rebuilds base and the images on it when they're next used, and VMs you already have keep their agents and layers.",
 		Example: examples(
@@ -112,7 +113,7 @@ func newSetup(a *app) setup {
 // run saves what c chooses: base's features, then new VMs' agents and
 // layers. With nothing chosen, it asks for those where its pickers are
 // shown (CanPick: what it saves is what they return), with new VMs' size
-// and network policy before the agents; otherwise it keeps the features
+// and network tier before the agents; otherwise it keeps the features
 // (every one until they're chosen) and saves them. A change
 // to the features says base rebuilds, and that devvm gc deletes the old
 // images. What config.toml sets isn't asked for, said, and a flag
@@ -172,9 +173,9 @@ func (s setup) inConfig(dirs paths.Dirs, def settings.Defaults, key string) bool
 	return true
 }
 
-// saveNetwork asks which network policy new VMs get, starting from the
-// one in effect, and saves it (vm.NetworkChoice), unless config.toml sets
-// it.
+// saveNetwork asks which network tier new VMs get, or ask, starting from
+// the one in effect, and saves it (vm.NetworkChoice), unless config.toml
+// sets it.
 func (s setup) saveNetwork(dirs paths.Dirs) error {
 	def, err := settings.Read(dirs)
 	if err != nil || s.inConfig(dirs, def, settings.KeyNetwork) {
@@ -182,9 +183,11 @@ func (s setup) saveNetwork(dirs paths.Dirs) error {
 	}
 	modes := settings.NetworkChoices()
 	descs := map[string]msg.M{
-		settings.NetworkAsk: msg.NetworkDefaultAsk(),
-		settings.NetworkOn:  msg.NetworkDefaultOn(),
-		settings.NetworkOff: msg.NetworkDefaultOff(),
+		settings.NetworkAsk:             msg.NetworkDefaultAsk(),
+		string(netpolicy.TierOpen):      msg.NetworkDefaultOpen(),
+		string(netpolicy.TierInternet):  msg.NetworkDefaultInternet(),
+		string(netpolicy.TierAllowlist): msg.NetworkDefaultAllowlist(),
+		string(netpolicy.TierNone):      msg.NetworkDefaultNone(),
 	}
 	choices := make([]ui.Choice, len(modes))
 	for i, m := range modes {

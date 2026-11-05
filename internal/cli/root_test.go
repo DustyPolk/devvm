@@ -43,7 +43,7 @@ func TestExecuteExitCodes(t *testing.T) {
 		{[]string{"--nope"}, usageCode},
 		{[]string{"a", "b"}, usageCode},
 		{[]string{"build"}, usageCode},
-		{[]string{"--network-policy", "--no-network-policy"}, usageCode},
+		{[]string{"--network", "on"}, usageCode},
 		{[]string{"version", "x"}, usageCode},
 		{[]string{"completion"}, usageCode},
 		{[]string{"completion", "powershell"}, usageCode},

@@ -89,7 +89,7 @@ func cloneEnv(t *testing.T) (e *Env, f *backendtest.Fake, vmfs string) {
 func TestUpClone(t *testing.T) {
 	e, f, vmfs := cloneEnv(t)
 	gitIn(t, e.Dir, "branch", "other")
-	st := existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	st := existingVM(t, e, Options{Network: "open", Clone: true})
 	vm := st.Name()
 	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); spec.Project != "" || spec.Tools == "" {
 		t.Errorf("spec %+v", spec)
@@ -124,7 +124,7 @@ func TestUpClone(t *testing.T) {
 func TestUpCloneInsteadOf(t *testing.T) {
 	e, _, vmfs := cloneEnv(t)
 	gitIn(t, e.Dir, "config", "url.elsewhere.example:/x.insteadOf", "devvm-web-")
-	existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	existingVM(t, e, Options{Network: "open", Clone: true})
 	if got := gitIn(t, vmfs+e.Dir, "branch", "--format=%(refname:short)"); got != "main" {
 		t.Errorf("clone's branches %q", got)
 	}
@@ -175,7 +175,7 @@ func TestUpCloneWorktree(t *testing.T) {
 	gitIn(t, repo, "branch", "other")
 	gitIn(t, repo, "worktree", "add", "-q", "-b", "feature", e.Dir)
 	gitIn(t, e.Dir, "branch", "-q", "--set-upstream-to=main")
-	existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	existingVM(t, e, Options{Network: "open", Clone: true})
 	clone := vmfs + e.Dir
 	if got := gitIn(t, clone, "branch", "--format=%(refname:short)"); got != "feature\nmain" {
 		t.Errorf("clone's branches %q", got)
@@ -191,7 +191,7 @@ func TestUpCloneWorktree(t *testing.T) {
 // is never looked up.
 func TestCloneRm(t *testing.T) {
 	e, f, vmfs := cloneEnv(t)
-	st := existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	st := existingVM(t, e, Options{Network: "open", Clone: true})
 	vm, clone := st.Name(), vmfs+e.Dir
 	gitIn(t, clone, "commit", "-q", "--allow-empty", "-m", "from-vm")
 
@@ -266,7 +266,7 @@ func TestCloneRmStartsAsLaunch(t *testing.T) {
 		}
 		return inner(vm, argv, o)
 	}
-	st := existingVM(t, e, Options{NetworkPolicy: true, Clone: true})
+	st := existingVM(t, e, Options{Network: "allowlist", Clone: true})
 	vm := st.Name()
 	if err := f.Stop(t.Context(), vm); err != nil {
 		t.Fatal(err)
@@ -308,7 +308,7 @@ func TestCloneRmStartsAsLaunch(t *testing.T) {
 // cloneShown in all.
 func TestCloneRmWorktrees(t *testing.T) {
 	e, f, vmfs := cloneEnv(t)
-	st := existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	st := existingVM(t, e, Options{Network: "open", Clone: true})
 	vm, clone := st.Name(), vmfs+e.Dir
 	gitIn(t, clone, "worktree", "add", "-q", ".worktrees/a")
 	gitIn(t, clone, "worktree", "add", "-q", ".worktrees/gone")
@@ -412,7 +412,7 @@ func TestCloneWorktrees(t *testing.T) {
 // none it checked has changes.
 func TestCloneRmTooManyWorktrees(t *testing.T) {
 	e, f, _ := cloneEnv(t)
-	st := existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	st := existingVM(t, e, Options{Network: "open", Clone: true})
 	vm := st.Name()
 	// The VM lists more worktrees than devvm checks, none of them there.
 	var list strings.Builder

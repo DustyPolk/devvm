@@ -30,7 +30,7 @@ stderr '^devvm: no_vm dir=/\S*/web$'
 exec git init -q -b main
 exec git commit -q --allow-empty -m one
 exec git branch other
-exec devvm --no-network-policy
+exec devvm --network open
 vm_name WEB web
 exec devvm clone
 stdout '\Aoff\n\z'

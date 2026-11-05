@@ -10,14 +10,14 @@
 # A password in config.toml is refused, never shown.
 project corp
 cp $WORK/password.toml $CFG/config.toml
-! exec devvm --network-policy --no-git-protect
+! exec devvm --network allowlist --no-git-protect
 stderr 'proxy_password_in_config key=proxy\.https'
 ! stderr pa55
 
 # The user alone, and no password saved: the VM doesn't start, and
 # builds stop before anything is built.
 cp $WORK/user.toml $CFG/config.toml
-! exec devvm --network-policy --no-git-protect
+! exec devvm --network allowlist --no-git-protect
 stderr '^devvm: proxy_password_missing$'
 stub_reset
 ! exec devvm build base
@@ -30,7 +30,7 @@ stub_calls
 # Saved, the VM's proxy goes through it, the password the secret's.
 stdin $WORK/proxy.password
 exec devvm secret set proxy --stdin
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name CORP corp
 exec cat $CORP_dir/run/proxy.json
 stdout '"https": "http://alice@proxy\.corp\.example:3128"'
@@ -56,7 +56,7 @@ exec devvm secret rm --force proxy
 # passes the shell's on to no VM with devvm's proxy.
 project plain
 cp $WORK/nouser.toml $CFG/config.toml
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name PLAIN plain
 exec cat $PLAIN_dir/run/proxy.json
 stdout '"upstream": \{\n    "https": "http://proxy\.corp\.example:3128"'

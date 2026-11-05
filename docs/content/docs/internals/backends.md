@@ -71,9 +71,9 @@ flowchart TD
   need["a feature the image<br>or the VM needs"] --> how{{"how the backend has it"}}
   how -- "native" --> ok["allowed"]
   how -- "emulated, reviewed" --> ok
-  how -- "emulated, unreviewed,<br>or none" --> np{{"network policy for a<br>new VM, without<br>--network-policy?"}}
+  how -- "emulated, unreviewed,<br>or none" --> np{{"egress-proxy, for<br>a new open VM?"}}
   np -- "no" --> refused["refused: devvm stops<br>and names the VM,<br>the feature and the backend"]
-  np -- "yes" --> warned["the VM is made<br>without network policy,<br>with a warning"]
+  np -- "yes" --> warned["the VM is made open,<br>as asked"]
 ```
 
 Before devvm builds an image, makes or starts a VM, or changes a VM's settings, it checks that the backend has every feature the image or the VM needs. The backend itself is behind the same check: every time devvm asks it to build an image or the shared tools, make a VM or start one, devvm checks the features that request needs before the backend sees it, so a request that skipped the first check is refused too. When the backend lacks one, devvm stops and names the VM, the feature and the backend (`backend_lacks`). It does the same for a feature the backend only emulates when that emulation's review hasn't passed (`backend_unreviewed`). devvm never falls back to something weaker, so a VM that asks for network policy never starts with an open network.

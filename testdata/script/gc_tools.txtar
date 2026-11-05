@@ -14,7 +14,7 @@ stderr '^devvm: unknown_tool tool=nope '
 # that's gone since. A VM deleted outside devvm still lists claude in its
 # state; node's three are old, and codex was built just now.
 project tl
-exec devvm --tools node --agents claude,codex --no-network-policy --no-git-protect
+exec devvm --tools node --agents claude,codex --network open --no-git-protect
 exec devvm rm --force --no-export
 mkdir $VMS/12345612345612
 exec sh -c 'printf "{\"version\": 1, \"id\": \"x\", \"name\": \"devvm-gone-12345612345612\", \"image\": \"base\", \"dir\": \"/p\", \"backend\": \"lima\", \"tools\": {\"names\": [\"claude\"], \"made\": {\"files\": [\"%s\"]}}}\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345612/vm.json"'
@@ -55,7 +55,7 @@ stdout '^==> nothing_to_clean$'
 
 # A VM that gets node later builds it again. Without a terminal, gc deletes
 # nothing unless --force.
-exec devvm --tools node --agents none --no-network-policy --no-git-protect
+exec devvm --tools node --agents none --network open --no-git-protect
 exec devvm rm --force --no-export
 ! exec devvm gc --tool-images node
 stderr '^devvm: no_input answer=--force$'
@@ -67,7 +67,7 @@ stdout '^node-'
 # the lock.
 project making git
 exec sh -c ': > "$STUB_DIR/start-hangs"'
-! exec devvm --no-network-policy &u&
+! exec devvm --network open &u&
 wait_file $STUB_DIR/hanging
 exec devvm gc --force --tool-images
 stdout '^==> gc_tools_making count=3 tools=node \S+, pnpm \S+, bun \S+$'
@@ -94,11 +94,11 @@ stdout '^claude-'
 # runs) and keeps every current one no VM lists, go too while its VM's state
 # doesn't list it yet.
 project cx git
-exec devvm --tools none --agents codex --no-network-policy --no-git-protect
+exec devvm --tools none --agents codex --network open --no-git-protect
 exec devvm rm --force --no-export
 project waits git
 exec sh -c 'printf devvm-tools-build > "$STUB_DIR/shell-waits-on" && printf waits > "$STUB_DIR/start-hangs-running"'
-! exec devvm --tools go --agents none --no-network-policy --no-git-protect &w&
+! exec devvm --tools go --agents none --network open --no-git-protect &w&
 wait_file $STUB_DIR/waiting
 exec devvm gc --force --tool-images &g&
 exec sleep 0.5

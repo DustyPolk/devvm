@@ -196,7 +196,7 @@ func remakeEnv(t *testing.T) (*Env, *backendtest.Fake, *state.VM, *[]byte) {
 		}
 		return noDirect(vm, argv, o)
 	}
-	st := existingVM(t, e, Options{NetworkPolicy: true, Ports: "3000,5173", SSHAgent: true, Size: Size{CPUs: "3", Memory: "6"}})
+	st := existingVM(t, e, Options{Network: "allowlist", Ports: "3000,5173", SSHAgent: true, Size: Size{CPUs: "3", Memory: "6"}})
 	return e, f, st, &restored
 }
 
@@ -363,7 +363,7 @@ func TestAddLayersRefuses(t *testing.T) {
 	if got := add(); got != "no_vm dir="+e.Dir {
 		t.Errorf("no VM: %s", got)
 	}
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	if err := set(t, st, keyClone, "clone"); err != nil {
 		t.Fatal(err)
@@ -930,7 +930,7 @@ func TestUpdateRefuses(t *testing.T) {
 	if got := up(); got != "no_vm dir="+e.Dir {
 		t.Errorf("no VM: %s", got)
 	}
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	change(t, st, func(st *state.VM) error { st.Chain = "base=000000000000"; return nil })
 	if err := set(t, st, keyClone, "clone"); err != nil {

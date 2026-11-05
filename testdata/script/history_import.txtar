@@ -11,7 +11,7 @@ project agent
 stderr '^devvm: no_vm dir=\S*/agent$'
 
 # A VM with an agent, no export yet: nothing offered, nothing to import.
-exec devvm --no-network-policy --no-git-protect --agents claude
+exec devvm --network open --no-git-protect --agents claude
 ! stderr 'history_import_(ask|later)'
 vm_name AGENT agent
 ! exec devvm history import
@@ -67,20 +67,20 @@ exec devvm rm --force
 stdout '^==> exported '
 rm $STUB_DIR/history-in.tgz
 exec sh -c 'echo "tar -xf - " > "$STUB_DIR/shell-fails-on"'
-! exec devvm --no-network-policy --no-git-protect --agents claude
+! exec devvm --network open --no-git-protect --agents claude
 stderr '^history_import_later file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
 ! exists $STUB_DIR/history-in.tgz
 exec devvm rm --force --no-export
 
 # In a terminal it asks: no imports nothing, yes imports the newest.
 ttyin -stdin $WORK/no.txt
-! exec devvm --no-network-policy --no-git-protect --agents claude
+! exec devvm --network open --no-git-protect --agents claude
 stderr '^history_import_ask file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14} \[y/N\] '
 ! stdout imported
 ! exists $STUB_DIR/history-in.tgz
 exec devvm rm --force --no-export
 ttyin -stdin $WORK/yes.txt
-! exec devvm --no-network-policy --no-git-protect --agents claude
+! exec devvm --network open --no-git-protect --agents claude
 stdout '^==> imported file=\S*/data/devvm/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
 exists $STUB_DIR/history-in.tgz
 exec devvm rm --force --no-export
@@ -89,18 +89,18 @@ rm $STUB_DIR/history-in.tgz
 # A refused import still makes the VM, with a warning.
 exec sh -c ': > "$STUB_DIR/history-unsafe"'
 ttyin -stdin $WORK/yes.txt
-! exec devvm --no-network-policy --no-git-protect --agents claude
+! exec devvm --network open --no-git-protect --agents claude
 stderr '\[y/N\] devvm: history_import_unsafe file=\S*/exports/devvm-agent-'
 stderr '^devvm: sync_failed'
 rm $STUB_DIR/history-unsafe
 exec devvm rm --force --no-export
 
 # A VM without an agent, and another folder's VM, are offered nothing.
-! exec devvm --no-network-policy --no-git-protect --agents none
+! exec devvm --network open --no-git-protect --agents none
 ! stderr 'history_import_(ask|later)'
 exec devvm rm --force --no-export
 project other
-! exec devvm --no-network-policy --no-git-protect --agents claude
+! exec devvm --network open --no-git-protect --agents claude
 ! stderr 'history_import_(ask|later)'
 rm $STUB_DIR/shell-fails-on
 

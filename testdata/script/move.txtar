@@ -5,7 +5,7 @@
 # start mounts the folder there. devvm adopt VM moves a VM whose folder
 # is gone to a copy of it, which is never offered on its own.
 project web
-exec devvm --no-network-policy
+exec devvm --network open
 vm_name WEB web
 exec devvm stop
 cd $WORK
@@ -58,7 +58,7 @@ stdout '"folder": "/\S*/site",'
 cd $WORK
 mkdir web
 cd web
-exec devvm --no-network-policy
+exec devvm --network open
 exec devvm ls
 stdout -count=2 '^devvm-web-[0-9a-f]{14} '
 

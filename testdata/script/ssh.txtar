@@ -4,7 +4,7 @@
 # host key checks off, share a connection or run commands left out. The
 # user's ~/.ssh is never touched.
 project web
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name WEB web
 catg $DATA/ssh_config
 stdout '\A# Written by devvm on every launch; edits are overwritten\.\n\nHost devvm-web devvm-web-[0-9a-f]{14}\n'
@@ -47,7 +47,7 @@ exec stub vm $WEB Stopped
 exec stub vm devvm-img-0123456789ab Running
 exec stub vm devvm-tools-build Running
 project img-foo
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 catg $DATA/ssh_config
 stdout '^Host devvm-img-foo devvm-img-foo-[0-9a-f]{14}$'
 ! stdout 'devvm-web|devvm-img-0123456789ab|devvm-tools-build'
@@ -62,7 +62,7 @@ stdout '^devvm-img-foo-[0-9a-f]{14} ssh-ed25519 '
 exec stub vm $WEB Running
 mkdir $WORK/other/web
 cd $WORK/other/web
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 catg $DATA/ssh_config
 stdout -count=1 '^Host devvm-web-[0-9a-f]{14}$'
 stdout '^Host devvm-web '$WEB'$'
@@ -84,7 +84,7 @@ stdout '^devvm-img-foo-[0-9a-f]{14} ssh-ed25519 '
 # A VM that doesn't show its host keys gets no entry: ssh couldn't check it.
 exec sh -c ': > "$STUB_DIR/hostkeys-fails"'
 project nokeys
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name NOKEYS nokeys
 catg $DATA/ssh_config
 ! stdout devvm-nokeys

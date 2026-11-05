@@ -196,6 +196,10 @@ func TestPartFlags(t *testing.T) {
 		{"layers", "node", "part_other_flag flag=--layers given=node other=--tools"},
 		{"layers", "codex", "part_other_flag flag=--layers given=codex other=--agents"},
 		{"layers", "mien", "unknown_part_like flag=--layers given=mien like=mine"},
+		{"network", "internet", ""},
+		{"network", "none", ""},
+		{"network", "on", "arg_not_choice choices=open, internet, allowlist, none command=--network given=on"},
+		{"network", "ask", "arg_not_choice choices=open, internet, allowlist, none command=--network given=ask"},
 	} {
 		if got := msg.NamesOf(checkFlagValue(tc.flag, tc.value)); got != tc.want {
 			t.Errorf("--%s %s: %q, want %q", tc.flag, tc.value, got, tc.want)

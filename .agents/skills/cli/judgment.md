@@ -34,8 +34,8 @@ Don't name a command `delete`, `remove` or `disable`, because rm and unX cover t
 A setting is a value devvm keeps, which a user reads and changes. Each setting is one command that does both:
 
 - **Bare, it shows the value.** devvm size shows the VM's CPUs, memory and disk, devvm ports shows what it forwards, and devvm git-protect shows its `.git` protection.
-- **With a value, it changes it.** devvm ports none, devvm network off, devvm ssh-agent devvm and devvm git-protect strict each set the value. devvm size takes its values as `--cpus`, `--memory` and `--disk`, because it holds three, and devvm retention takes `KEY=VALUE` words, because it holds many.
-- **With `-g`, it shows or changes what new VMs get.** devvm size -g --memory 16, devvm ports -g none and devvm network -g on change the defaults. A setting takes `-g` only when new VMs get a default for it, so devvm git-protect, devvm ssh-agent and devvm clone have none, and devvm retention is about the whole machine.
+- **With a value, it changes it.** devvm ports none, devvm network open, devvm ssh-agent devvm and devvm git-protect strict each set the value. devvm size takes its values as `--cpus`, `--memory` and `--disk`, because it holds three, and devvm retention takes `KEY=VALUE` words, because it holds many.
+- **With `-g`, it shows or changes what new VMs get.** devvm size -g --memory 16, devvm ports -g none and devvm network -g none change the defaults. A setting takes `-g` only when new VMs get a default for it, so devvm git-protect, devvm ssh-agent and devvm clone have none, and devvm retention is about the whole machine.
 - **With `--json`, it only shows.** `showsOnly` refuses a value, so devvm network --json off is a usage error and changes nothing.
 
 The commands that are settings are size, ports, network, ssh-agent, git-protect, clone and retention. devvm clone holds whether the VM has its own clone of the repo, the setting `--clone` gives a new VM, and setting it makes the VM again, as devvm layer add does. tools isn't one, because its value is a list that devvm tools add and devvm tools rm change, and that devvm tools shows in a terminal as a picker whose changes become add and rm. setup isn't one either: it asks the first-run questions, and its flags, `--features` and `--agents`, answer the two that no other command sets.
@@ -53,7 +53,7 @@ A positional argument is a thing the command acts on, and everything else is a f
 - **Each thing is a word of its own.** devvm tools add python claude takes two tools, never joined with a comma or a `+`, and devvm images rm IMAGE|KEY... takes as many images as you give it. A `+` only ever joins an image's layers, as in foo+bar.
 - **One value is one word, even when it's a list.** devvm ports 5173,8000-8010 sets one value, the ports to forward, so its list is one word with commas, as `--features omb,fzf` is.
 - **Fixed positions read in the order a user says them.** devvm link add TARGET PORT names what it links to, then which of its ports.
-- **A free-form argument goes after a verb.** devvm secret set NAME and devvm link add TARGET PORT put the name after a subcommand, so a secret or a VM called `add` can't be read as a command. A bare noun's own argument is only a fixed word or a value no subcommand can look like, such as devvm network on or devvm ports 5173.
+- **A free-form argument goes after a verb.** devvm secret set NAME and devvm link add TARGET PORT put the name after a subcommand, so a secret or a VM called `add` can't be read as a command. A bare noun's own argument is only a fixed word or a value no subcommand can look like, such as devvm network internet or devvm ports 5173.
 
 Write the arguments in the `Use` as a user types them: `PLACEHOLDER`s in capitals, words in lower case, `[]` for an optional one, `|` between choices and `...` for one or more. A `Use` shows arguments only, so `gc [--tool-images [TOOL...]]` shows its flags only because `TOOL...` needs `--tool-images`.
 

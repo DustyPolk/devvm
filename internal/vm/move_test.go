@@ -43,7 +43,7 @@ func TestMovedTo(t *testing.T) {
 // another user's folder never match.
 func TestMovedFrom(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
-	made := existingVM(t, e, Options{NoNetworkPolicy: true})
+	made := existingVM(t, e, Options{Network: "open"})
 	clone, err := state.ReadVM(e.Dirs, made.Name()) // its own sections
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +147,7 @@ func moveFolder(t *testing.T, e *Env, name string) (was, now string) {
 // name.
 func TestMoveHere(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	was, now := moveFolder(t, e, "site")
 	fd := finder{e}
@@ -229,7 +229,7 @@ func TestMoveHere(t *testing.T) {
 	if tg.f.Name != second.Name {
 		t.Errorf("the old path's new VM is %s, want %s", tg.f.Name, second.Name)
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	for dir, want := range map[string]string{was: second.Name, now: vm} {
@@ -244,7 +244,7 @@ func TestMoveHere(t *testing.T) {
 // about: nothing moves.
 func TestMoveFolderChanged(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
-	vm := existingVM(t, e, Options{NoNetworkPolicy: true}).Name()
+	vm := existingVM(t, e, Options{Network: "open"}).Name()
 	was, now := moveFolder(t, e, "site")
 	answers(t, e, true)
 	fake(e).OnAsk = func(msg.M) bool {
@@ -265,7 +265,7 @@ func TestMoveFolderChanged(t *testing.T) {
 // folder, gets no VM moved to it, even with devvm adopt --force.
 func TestMoveUnsafe(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	was := e.Dir
 	now := filepath.Join(e.Dirs.Config, "site")
 	if err := os.MkdirAll(e.Dirs.Config, 0o700); err != nil {
@@ -287,7 +287,7 @@ func TestMoveUnsafe(t *testing.T) {
 // a terminal or not; adopt alone asks, as any command does.
 func TestAdoptMoved(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
-	vm := existingVM(t, e, Options{NoNetworkPolicy: true}).Name()
+	vm := existingVM(t, e, Options{Network: "open"}).Name()
 	_, now := moveFolder(t, e, "site")
 	lc := Lifecycle{e}
 	if err := lc.Adopt(t.Context(), "", false); msg.IDOf(err) != "vm_moved_here" {
@@ -305,12 +305,12 @@ func TestAdoptMoved(t *testing.T) {
 // neither, and warns.
 func TestMoveHereSeveral(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
-	first := existingVM(t, e, Options{NoNetworkPolicy: true})
+	first := existingVM(t, e, Options{Network: "open"})
 	// The first one declined at the folder's second path, which got a
 	// VM of its own; then the folder moved again.
 	moveFolder(t, e, "two")
 	answers(t, e, false)
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	moveFolder(t, e, "three")
@@ -331,7 +331,7 @@ func TestMoveHereSeveral(t *testing.T) {
 // folder with a VM of its own.
 func TestAdoptVM(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm, web := st.Name(), e.Dir
 	change(t, st, func(st *state.VM) error {
 		g, err := gitprotect.Of(st)
@@ -379,7 +379,7 @@ func TestAdoptVM(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Dir = other
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	ovm, _ := (finder{e}).folderVM(other)

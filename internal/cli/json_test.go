@@ -69,7 +69,7 @@ func TestJSONShapes(t *testing.T) {
 		want    []string
 	}{
 		{
-			"ls", lsJSON([]vm.Listed{{Name: "devvm-a", Status: "Running", Image: "base", Tools: []string{"node"}, From: "node:24", Git: "on", Net: "on", Backend: "lima", Folder: "/a"}}),
+			"ls", lsJSON([]vm.Listed{{Name: "devvm-a", Status: "Running", Image: "base", Tools: []string{"node"}, From: "node:24", Git: "on", Net: "allowlist", Backend: "lima", Folder: "/a"}}),
 			[]string{
 				"vms[].backend: string", "vms[].folder: string", "vms[].folder_state: string", "vms[].from: string", "vms[].git: string", "vms[].image: string", "vms[].links: number",
 				"vms[].name: string", "vms[].net: string", "vms[].status: string", "vms[].tools[]: string",
@@ -116,12 +116,12 @@ func TestJSONShapes(t *testing.T) {
 		{
 			"network",
 			// An entry has builtin or file: both set here, for every field.
-			networkOutput{Policy: "on", Allowlist: []policyFileJSON{{
-				Builtin: "layers/base.policy", File: "/p", Rules: []string{"a.test"}, NotRules: []notRuleJSON{{Line: 2, Text: "a b"}},
+			networkOutput{Policy: "allowlist", Allowlist: []policyFileJSON{{
+				Builtin: "layers/base.policy", File: "/p", DeniesOnly: true, Rules: []string{"a.test"}, NotRules: []notRuleJSON{{Line: 2, Text: "a b"}},
 			}}},
 			[]string{
-				"allowlist[].builtin: string", "allowlist[].file: string", "allowlist[].not_rules[].line: number", "allowlist[].not_rules[].text: string",
-				"allowlist[].rules[]: string", "policy: string",
+				"allowlist[].builtin: string", "allowlist[].denies_only: bool", "allowlist[].file: string", "allowlist[].not_rules[].line: number",
+				"allowlist[].not_rules[].text: string", "allowlist[].rules[]: string", "policy: string",
 			},
 		},
 		{"network -g", defaultOutput{"policy": "ask", "source": "config.toml"}, []string{"policy: string", "source: string"}},

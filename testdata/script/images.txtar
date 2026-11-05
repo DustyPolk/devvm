@@ -39,7 +39,7 @@ stderr '^devvm: flag_unknown command=devvm images flag=--backend$'
 # whether it's the lock's; the lock's go, not built, and an older one no
 # VM uses. claude's built for a VM that's gone since.
 project ag
-exec devvm --tools none --agents claude --no-network-policy --no-git-protect
+exec devvm --tools none --agents claude --network open --no-git-protect
 exec devvm rm --force --no-export
 cd $WORK
 exec sh -c 'cd "$SHARE" && : > go-1.20.0-0123456789ab.erofs && : > go-1.9.0-0123456789ab.erofs'

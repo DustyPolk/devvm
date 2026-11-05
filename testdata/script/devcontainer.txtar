@@ -22,25 +22,25 @@ exec devvm ports -g none
 # an image on this machine's registry (never asked).
 project bad
 cp $WORK/localenv.json .devcontainer.json
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: devcontainer_local_env file=\.devcontainer\.json variable=\$\{localEnv:GITHUB_TOKEN\}$'
 cp $WORK/build.json .devcontainer.json
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: devcontainer_build file=\.devcontainer\.json key=build$'
 cp $WORK/outside.json .devcontainer.json
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: devcontainer_docker_outside feature=ghcr\.io/devcontainers/features/docker-outside-of-docker:1 file=\.devcontainer\.json$'
 cp $WORK/java.json .devcontainer.json
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: devcontainer_feature feature=ghcr\.io/devcontainers/features/java:1 file=\.devcontainer\.json$'
 cp $WORK/invalid.json .devcontainer.json
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: devcontainer_invalid column=3 file=\.devcontainer\.json line=4$'
 cp $WORK/unknown-image.json .devcontainer.json
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: from_unreachable from=debian:13 host=registry-1\.docker\.io$'
 cp $WORK/local-image.json .devcontainer.json
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: devcontainer_image_not_public file=\.devcontainer\.json from=localhost:5000/app:1$'
 ! stdout 'creating_from|building'
 stub_calls
@@ -59,7 +59,7 @@ mkdir $WORK/web/.devcontainer
 cd $WORK/web
 exec git init -q
 cp $WORK/web.json .devcontainer/devcontainer.json
-exec devvm --no-network-policy --layers docker,extra
+exec devvm --network open --layers docker,extra
 stdout '^==> devcontainer_using file=\.devcontainer/devcontainer\.json vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: from_cached_unreachable from=node:24 host=registry-1\.docker\.io$'
 stderr '^devvm: devcontainer_initialize file=\.devcontainer/devcontainer\.json$'
@@ -138,7 +138,7 @@ stdout 'echo started >> ~/started'
 project fail
 cp $WORK/web.json .devcontainer.json
 exec sh -c 'echo "''echo a''" > "$STUB_DIR/shell-fails-on"'
-exec devvm --no-network-policy
+exec devvm --network open
 stdout '^==> new_vm_gets layers=docker tools=none vm=devvm-fail-[0-9a-f]{14}$'
 stderr '^devvm: devcontainer_command_failed command=postCreateCommand a vm=devvm-fail-[0-9a-f]{14}$'
 ! stdout 'running_script script=postCreateCommand b'
@@ -151,7 +151,7 @@ rm $STUB_DIR/shell-fails-on
 # later changes aren't warned about.
 project skip
 cp $WORK/build.json .devcontainer.json
-exec devvm --no-network-policy --no-devcontainer
+exec devvm --network open --no-devcontainer
 ! stdout devcontainer_using
 vm_name SKIP skip
 vm_state $SKIP_dir/vm.json
@@ -162,7 +162,7 @@ exec devvm
 
 # A VM made without a file: one that appears is warned about.
 project plain
-exec devvm --no-network-policy
+exec devvm --network open
 vm_name PLAIN plain
 vm_state $PLAIN_dir/vm.json
 ! stdout '^devcontainer\.'
@@ -174,7 +174,7 @@ stderr '^devvm: devcontainer_new file=\.devcontainer\.json vm=devvm-plain-[0-9a-
 # forwardPorts.
 project flags
 cp $WORK/web.json .devcontainer.json
-exec devvm --no-network-policy --from $PIN --ports 8080
+exec devvm --network open --from $PIN --ports 8080
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=from key=image$'
 stderr '^devvm: devcontainer_flag_wins file=\.devcontainer\.json flag=ports key=forwardPorts$'
 vm_name FLAGS flags
@@ -205,7 +205,7 @@ exec devvm
 # the new disk; the home folder is kept.
 project upd
 cp $WORK/web.json .devcontainer.json
-exec devvm --no-network-policy --agents claude
+exec devvm --network open --agents claude
 vm_name UPD upd
 vm_state $UPD_dir/vm.json
 stdout '^image=docker$'

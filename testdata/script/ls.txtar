@@ -12,7 +12,7 @@ stdout '^limactl list --json\n\z'
 # A folder named img-foo gives a VM named like an image: listed, while
 # the image it was made from isn't. No network policy: its tier, open.
 project img-foo
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec devvm ls
 stdout '^NAME +STATUS +IMAGE +TOOLS +GIT +NET +LINKS +FOLDER\n'
 stdout '^devvm-img-foo-[0-9a-f]{14} +Running +base +- +off +open +- +/\S*/img-foo\n\z'
@@ -23,7 +23,7 @@ stdout '^devvm-img-foo-[0-9a-f]{14} +Running +base +- +off +open +- +/\S*/img-fo
 # other way since, or a failed self-check, unenforced. Stopped, it starts
 # confined next time.
 project net
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name NET net
 exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$NET_dir/run/started"'
 exec devvm ls

@@ -1,7 +1,7 @@
 # devvm group: VMs that reach each other's published ports by name,
 # through links the group makes in each of them, kept in their state.
-# A VM is in one group at a time, and a group's VMs all have network
-# policy or none do.
+# A VM is in one group at a time, and a group's VMs all have the same
+# network tier.
 
 exec devvm --help
 stdout '^Links between VMs:\n  group .*\n  link '
@@ -22,21 +22,21 @@ stderr '^devvm: group_name_invalid name="42"$'
 stderr '^devvm: link_name_invalid name="Bad_Name"$'
 ! stderr no_vm_group
 
-# The VMs: app, db and two folders called api; cache with network policy.
-exec devvm --no-network-policy --no-git-protect
+# The VMs: app, db and two folders called api, open; cache on allowlist.
+exec devvm --network open --no-git-protect
 project db
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec devvm link publish 5432,8000-8001
 mkdir $WORK/x/api
 cd $WORK/x/api
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec devvm link publish 80
 mkdir $WORK/y/api
 cd $WORK/y/api
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec devvm link publish 3000
 project cache
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name APP app
 vm_name DB db
 vm_name CACHE cache
@@ -92,12 +92,12 @@ cd $WORK/y/api
 stderr '^devvm: group_tier_mismatch group=safe tier=allowlist vm=devvm-api-[0-9a-f]{14} vm_tier=open$'
 # A member's tier can't change.
 cd $WORK/cache
-! exec devvm network off
+! exec devvm network open
 stderr '^devvm: group_tier_fixed group=safe vm=devvm-cache-[0-9a-f]{14}$'
 vm_state $CACHE_dir/vm.json
 stdout '^net.tier=allowlist$'
 cd $WORK/db
-! exec devvm network on
+! exec devvm network allowlist
 stderr '^devvm: group_tier_fixed group=web vm=devvm-db-[0-9a-f]{14}$'
 cd $WORK/cache
 exec devvm group leave
@@ -138,7 +138,7 @@ stdout '^==> group_links_added group=web links=api1:80, db:5432,8000-8001 vm=dev
 # A folder whose name is the name a member joined with: its own hostname
 # would name that member.
 project api1
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 ! exec devvm group join web --as other
 stderr '^devvm: group_name_hostname group=web member=devvm-api-[0-9a-f]{14} name=api1 vm=devvm-api1-[0-9a-f]{14}$'
 

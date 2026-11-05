@@ -17,7 +17,7 @@ stderr '^devvm: arg_not_choice choices=on, devvm, off command=devvm ssh-agent gi
 # your agent. An SSH origin says so.
 exec git init -q
 exec git remote add origin git@github.com:o/r.git
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 stderr '^devvm: ssh_remote_hint vm=devvm-web-[0-9a-f]{14}$'
 vm_name WEB web
 vm_state $WEB_dir/vm.json
@@ -43,7 +43,7 @@ exec git remote add origin git@github.com:o/r.git
 mkdir $HOME/.ssh
 exec sh -c 'echo k > "$HOME/.ssh/id_ed25519"'
 stub_reset
-exec devvm --no-network-policy --no-git-protect --ssh-agent
+exec devvm --network open --no-git-protect --ssh-agent
 ! stderr ssh_remote_hint
 stderr '^devvm: no_ssh_agent$'
 vm_name FWD fwd

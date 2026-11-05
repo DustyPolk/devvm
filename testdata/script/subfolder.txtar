@@ -7,7 +7,7 @@
 mkdir $WORK/app/src/lib
 cd $WORK/app
 exec git init -q
-exec devvm --no-network-policy
+exec devvm --network open
 
 # The parent's VM, its shell in the subfolder.
 cd $WORK/app/src/lib
@@ -35,7 +35,7 @@ stdout '^limactl stop devvm-app-[0-9a-f]{14}$'
 # --here: a new VM for the subfolder, nothing asked; then it's the
 # subfolder's own.
 cd $WORK/app/src
-exec devvm --here --no-network-policy
+exec devvm --here --network open
 stdout '^==> creating_from image=base vm=devvm-src-[0-9a-f]{14}$'
 ! stdout using_parent_vm
 stub_reset
@@ -66,7 +66,7 @@ stub_calls
 stdout '^limactl shell --workdir /\S*/app/tool/bin devvm-app-[0-9a-f]{14}\n\z'
 exec devvm stop --parent
 stdout '^==> using_parent_vm dir=/\S*/app vm=devvm-app-[0-9a-f]{14}\n==> stopped vm=devvm-app-[0-9a-f]{14}$'
-exec devvm --no-network-policy
+exec devvm --network open
 stdout '^==> creating_from image=base vm=devvm-bin-[0-9a-f]{14}$'
 ! stdout using_parent_vm
 
@@ -97,7 +97,7 @@ cd $WORK/app/repo
 env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 exec git init -q -b main
 exec git commit -q --allow-empty -m one
-exec devvm --clone --no-network-policy
+exec devvm --clone --network open
 stdout '^==> creating_from image=base vm=devvm-repo-[0-9a-f]{14}$'
 ! stdout using_parent_vm
 exec devvm rm --force --no-export

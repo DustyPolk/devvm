@@ -7,7 +7,7 @@
 # runs again. (Its hostagent here: the test's runner, which runs on, in
 # place of the stub's.)
 project net
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name NET net
 exec sh -c 'echo $PPID > "$LIMA_HOME/$NET/ha.pid"; echo "$PPID 1" > "$NET_dir/run/started"'
 stub_reset
@@ -40,7 +40,7 @@ stdout '^net.made.check=ok$'
 # VM's version and the lock's newer one, built or not, without going
 # online.
 project api
-exec devvm --no-network-policy --no-git-protect --tools go
+exec devvm --network open --no-git-protect --tools go
 vm_name API api
 ! exec devvm tools now
 stderr '^devvm: no_subcommand command=devvm tools commands=add, rm, update given=now$'
@@ -79,7 +79,7 @@ stdout '\A{\n  "version": 1,\n  "tools": \[\n    {\n      "tool": "go",\n      "
 # what it lacks is refused. Names are separate words.
 project web
 cp $WORK/package.json package.json
-exec devvm --no-network-policy --no-git-protect --agents claude
+exec devvm --network open --no-git-protect --agents claude
 stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-web-[0-9a-f]{14}$'
 vm_name WEB web
 ! exec devvm tools rm node,claude
@@ -126,7 +126,7 @@ stdout claude
 # started if it's stopped; a failed export keeps the VM, and -f deletes
 # it without one.
 project agent
-exec devvm --no-network-policy --no-git-protect --agents claude
+exec devvm --network open --no-git-protect --agents claude
 vm_name AGENT agent
 exec limactl stop $AGENT
 exec sh -c ': > "$STUB_DIR/shell-fails"'

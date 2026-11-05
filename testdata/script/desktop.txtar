@@ -12,7 +12,7 @@ stderr '^devvm: no_vm dir=\S*/plain$'
 
 # A VM without the desktop layer: refused, nothing served. base has no
 # desktop: its build doesn't run the layer's script.
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name PLAIN plain
 grep '^# Essentials, and mise' $STUB_DIR/scripts
 ! grep '^# desktop: ' $STUB_DIR/scripts
@@ -27,7 +27,7 @@ rm $STUB_DIR/shell-fails-on
 # --layers desktop: the VM's image is desktop, built on base by the
 # layer's script.
 project desk
-exec devvm --no-network-policy --no-git-protect --layers desktop
+exec devvm --network open --no-git-protect --layers desktop
 stdout '^==> building_image image=desktop key=[0-9a-f]{12}$'
 stdout '^==> creating_from image=desktop vm=devvm-desk-[0-9a-f]{14}$'
 grep '^# desktop: a built-in layer' $STUB_DIR/scripts

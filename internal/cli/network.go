@@ -14,23 +14,31 @@ import (
 	"github.com/w3cj/devvm/internal/vm"
 )
 
-// newNetworkCmd is devvm network [on|off], with -g [on|off|ask] for what
-// new VMs get, and allow, deny, rm RULE... [-g] and log.
+// newNetworkCmd is devvm network [open|internet|allowlist|none], with -g
+// [open|internet|allowlist|none|ask] for what new VMs get, and allow,
+// deny, rm RULE... [-g] and log.
 func newNetworkCmd(a *app) *cobra.Command {
 	u := a.u
 	var global, asJSON bool
+	// choices are what the command takes: the tiers, and with -g ask too.
+	choices := func() []string {
+		if global {
+			return settings.NetworkChoices()
+		}
+		return netpolicy.TierNames()
+	}
 	cmd := &cobra.Command{
-		Use:   "network [on|off]",
-		Short: "Show or change the network policy of this folder's VM",
+		Use:   "network [open|internet|allowlist|none]",
+		Short: "Show or change the network tier of this folder's VM",
 		Long: "Show the network tier of this folder's VM, which is open, internet, allowlist, none or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. " +
-			"devvm network on gives it the allowlist tier and off makes it open, from the VM's next start, so in a terminal devvm offers to restart a running VM now. " +
-			"With -g, show or change whether new VMs get network policy instead: ask, on or off.",
+			"With a tier, give the VM that tier: between the confined tiers at once, and into or out of open from the VM's next start, so in a terminal devvm offers to restart a running VM now. " +
+			"With -g, show or change new VMs' tier instead, where ask has devvm ask for each new VM's.",
 		Example: examples(
-			"devvm network", "show the VM's network policy and allowlist",
+			"devvm network", "show the VM's network tier and allowlist",
 			"devvm network allow example.com", "let the VM reach example.com",
-			"devvm network log --blocked", "list what the VM's network policy blocked",
-			"devvm network off", "turn network policy off from the VM's next start",
-			"devvm network -g on", "give every new VM network policy without asking",
+			"devvm network log --blocked", "list what the VM's proxy blocked",
+			"devvm network internet", "let the VM reach any public host",
+			"devvm network -g none", "give every new VM the none tier without asking",
 		),
 		Args: showsOnly(func(cmd *cobra.Command, args []string) error {
 			if err := maxArgs(1)(cmd, args); err != nil || len(args) == 0 {
@@ -39,23 +47,16 @@ func newNetworkCmd(a *app) *cobra.Command {
 			switch {
 			case !global && args[0] == settings.NetworkAsk:
 				return msg.NetAskGlobal()
-			case !slices.Contains(settings.NetworkChoices(), args[0]):
-				choices := []string{settings.NetworkOn, settings.NetworkOff}
-				if global {
-					choices = settings.NetworkChoices()
-				}
-				return msg.ArgNotChoice(strings.Join(choices, ", "), cmd.CommandPath(), args[0])
+			case !slices.Contains(choices(), args[0]):
+				return msg.ArgNotChoice(strings.Join(choices(), ", "), cmd.CommandPath(), args[0])
 			}
 			return nil
 		}),
 		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
-			switch {
-			case len(args) > 0:
+			if len(args) > 0 {
 				return nil, cobra.ShellCompDirectiveNoFileComp
-			case global:
-				return settings.NetworkChoices(), cobra.ShellCompDirectiveNoFileComp
 			}
-			return []cobra.Completion{settings.NetworkOn, settings.NetworkOff}, cobra.ShellCompDirectiveNoFileComp
+			return choices(), cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			what := msg.NetworkFailed
@@ -79,11 +80,7 @@ func newNetworkCmd(a *app) *cobra.Command {
 				case len(args) == 0:
 					shown, err = n.Network(cmd.Context())
 				default:
-					tier := netpolicy.TierOpen
-					if args[0] == settings.NetworkOn {
-						tier = netpolicy.TierAllowlist
-					}
-					err = n.SetTier(cmd.Context(), tier, "devvm network "+args[0])
+					err = n.SetTier(cmd.Context(), netpolicy.Tier(args[0]), "devvm network "+args[0])
 				}
 				return err
 			}, what)
@@ -96,28 +93,32 @@ func newNetworkCmd(a *app) *cobra.Command {
 			return printNetwork(u, asJSON, shown)
 		},
 	}
-	cmd.Flags().BoolVarP(&global, "global", "g", false, "show or change whether new VMs get network policy instead")
+	cmd.Flags().BoolVarP(&global, "global", "g", false, "show or change new VMs' network tier instead")
 	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newNetworkRuleCmds(a)...)
 	cmd.AddCommand(newNetworkLogCmd(a))
 	return addFolderFlags(cmd, a)
 }
 
-// networkOutput is devvm network --json: the VM's network policy and its
-// allowlist, each policy with rules in the order its proxy reads them.
+// networkOutput is devvm network --json: the VM's tier (or unenforced)
+// and its allowlist, each policy with rules in the order its proxy reads
+// them.
 type networkOutput struct {
 	Policy    string           `json:"policy"`
 	Allowlist []policyFileJSON `json:"allowlist"`
 }
 
 // policyFileJSON is a policy: a built-in one, by its name in devvm's
-// files, or one of the user's files, by its path; its rules, and its
-// lines that aren't rules, which its proxy skips.
+// files, or one of the user's files, by its path; whether only its
+// denies apply (on the internet and none tiers), when its rules are its
+// denies alone; its rules, and its lines that aren't rules, which its
+// proxy skips.
 type policyFileJSON struct {
-	Builtin  string        `json:"builtin,omitempty"`
-	File     string        `json:"file,omitempty"`
-	Rules    []string      `json:"rules"`
-	NotRules []notRuleJSON `json:"not_rules"`
+	Builtin    string        `json:"builtin,omitempty"`
+	File       string        `json:"file,omitempty"`
+	DeniesOnly bool          `json:"denies_only,omitempty"`
+	Rules      []string      `json:"rules"`
+	NotRules   []notRuleJSON `json:"not_rules"`
 }
 
 // notRuleJSON is a policy file's line that isn't a rule: its number, from
@@ -138,7 +139,7 @@ func printNetwork(u *ui.UI, asJSON bool, s vm.NetworkShown) error {
 	}
 	out := networkOutput{Policy: s.Policy, Allowlist: []policyFileJSON{}}
 	for _, f := range s.Rules {
-		j := policyFileJSON{Rules: append([]string{}, f.Rules()...), NotRules: []notRuleJSON{}}
+		j := policyFileJSON{DeniesOnly: f.DeniesOnly, Rules: append([]string{}, f.Rules()...), NotRules: []notRuleJSON{}}
 		if f.Builtin {
 			j.Builtin = f.Path
 		} else {

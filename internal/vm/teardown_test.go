@@ -83,7 +83,7 @@ func TestTeardownLeavesNothing(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 	f.ExecFunc = noDirect
-	st := existingVM(t, e, Options{NetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "allowlist"})
 	if _, ok := e.Proxy.PID(st.Name()); !ok {
 		t.Fatal("no proxy runs")
 	}
@@ -102,7 +102,7 @@ func TestTeardownLeavesNothing(t *testing.T) {
 	}
 
 	// An orphan: its backend lost it, and its state is over an hour old.
-	st = existingVM(t, e, Options{NoNetworkPolicy: true})
+	st = existingVM(t, e, Options{Network: "open"})
 	everyFile(t, e, st.Name())
 	delete(f.Instances, st.Name())
 	old := time.Now().Add(-2 * time.Hour)
@@ -125,10 +125,10 @@ func TestTeardownLeavesNothing(t *testing.T) {
 // it) gets a clean folder: none of the earlier VM's files.
 func TestCreateClearsFolder(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	everyFile(t, e, st.Name())
 	delete(f.Instances, st.Name())
-	again := existingVM(t, e, Options{NoNetworkPolicy: true})
+	again := existingVM(t, e, Options{Network: "open"})
 	if again.Name() != st.Name() || again.ID == st.ID {
 		t.Errorf("made again: %s (id %s), was %s (id %s)", again.Name(), again.ID, st.Name(), st.ID)
 	}
@@ -159,7 +159,7 @@ func TestLookupOtherBackend(t *testing.T) {
 	}
 	reg.NewVMs = "other"
 	e.Registry = reg
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	if st.Backend != "other" || len(st.Name()) <= f.NameLimit {
 		t.Fatalf("made %s on %s", st.Name(), st.Backend)
 	}
@@ -168,7 +168,7 @@ func TestLookupOtherBackend(t *testing.T) {
 	if err != nil || own.f.Name != st.Name() || own.b.Name() != "other" || !own.exists {
 		t.Errorf("own = %+v, %v", own, err)
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if names := vmNames(t, e); !slices.Equal(names, []string{st.Name()}) || slices.Contains(f.Methods(), "CreateVM") {

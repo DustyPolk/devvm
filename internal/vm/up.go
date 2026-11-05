@@ -32,17 +32,16 @@ type Options struct {
 	// each the exact list of its part a new VM gets, empty for none; nil
 	// for the part's default.
 	Toolchains, Agents, Layers *[]string
-	NetworkPolicy              bool   // --network-policy
-	NoNetworkPolicy            bool   // --no-network-policy
-	Size                       Size   // --cpus, --memory, --disk as given
-	Ports                      string // --ports as given
-	UnsafeFolder               bool   // --unsafe-folder
-	NoGitProtect               bool   // --no-git-protect
-	Clone                      bool   // --clone
-	SSHAgent                   bool   // --ssh-agent: a new VM forwards the user's SSH agent
-	From                       string // --from, or its default: the container image a new VM's base starts from
-	FromSet                    bool   // --from was given, not its default
-	NoDevcontainer             bool   // --no-devcontainer: a new VM ignores the folder's devcontainer.json
+	Network                    netpolicy.Tier // --network: a new VM's tier, "" for its default
+	Size                       Size           // --cpus, --memory, --disk as given
+	Ports                      string         // --ports as given
+	UnsafeFolder               bool           // --unsafe-folder
+	NoGitProtect               bool           // --no-git-protect
+	Clone                      bool           // --clone
+	SSHAgent                   bool           // --ssh-agent: a new VM forwards the user's SSH agent
+	From                       string         // --from, or its default: the container image a new VM's base starts from
+	FromSet                    bool           // --from was given, not its default
+	NoDevcontainer             bool           // --no-devcontainer: a new VM ignores the folder's devcontainer.json
 }
 
 // Launch opens a shell, ssh or an editor in the folder's VM: a new VM
@@ -479,24 +478,25 @@ func newPorts(given string, def settings.Defaults, dc *devcontainer.Plan) (list 
 	return filePorts(def.Ports.Value, nil, nil, dc.Ports)
 }
 
-// chooseNet returns a new VM's tier: the flags' (--network-policy:
-// allowlist, --no-network-policy: open), else the default's (config.toml's,
-// else devvm network -g's or devvm setup's: on is allowlist, off open),
-// else asked for, allowlist by default. A backend b that may not confine
-// a VM to its proxy (egress-proxy) offers open alone: any other tier is
+// chooseNet returns a new VM's tier: --network's, else the default's
+// (config.toml's, else devvm network -g's or devvm setup's), else asked
+// for (ask), allowlist by default. A backend b that may not confine a VM
+// to its proxy (egress-proxy) offers open alone: any other tier is
 // refused in one line (net_tier_backend), unasked, never dropped.
 func (e creation) chooseNet(o Options, b backend.Backend, vm, saved string) (netpolicy.Tier, error) {
-	if o.NetworkPolicy || o.NoNetworkPolicy {
-		saved = settings.NetworkAsk
+	tier := o.Network
+	if tier == "" && saved != settings.NetworkAsk {
+		tier = netpolicy.Tier(saved)
 	}
-	confines := e.Registry.Allowed(b, backend.FeatureEgressProxy)
 	switch {
-	case o.NoNetworkPolicy, saved == settings.NetworkOff:
-		return netpolicy.TierOpen, nil
-	case !confines:
+	case tier == netpolicy.TierOpen:
+		return tier, nil
+	case !e.Registry.Allowed(b, backend.FeatureEgressProxy):
 		return "", msg.NetTierBackend(b.Name(), vm)
+	case tier == "":
+		return e.Proxy.Choose(vm), nil
 	}
-	return e.Proxy.Choose(o.NetworkPolicy || saved == settings.NetworkOn, false, vm), nil
+	return tier, nil
 }
 
 // record sets a new VM's choices in its state, before it's written, with

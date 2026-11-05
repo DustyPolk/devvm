@@ -7,7 +7,7 @@ cp $WORK/package.json package.json
 
 # An agent chosen in a node project goes with node: the VM's image is
 # base, and its shared tools are a list in its state.
-exec devvm --no-network-policy --no-git-protect --agents claude
+exec devvm --network open --no-git-protect --agents claude
 stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-web-[0-9a-f]{14}$'
 stdout '^==> resolving_tools$'
 stdout '^==> building_tools tools=node 24\.21\.0, pnpm 12\.10\.1, bun 1\.4\.2, claude 2\.1\.295$'
@@ -81,12 +81,12 @@ stub_calls
 # The daily check: a new VM with tools checks first when it's due.
 exec touch -t 202001010000 $DATA/mise.lock.checked
 project api
-exec devvm --no-network-policy --no-git-protect --tools go
+exec devvm --network open --no-git-protect --tools go
 stdout '^==> checking_tools$'
 stdout '^==> building_tools tools=go 1\.27\.2$'
 # Not again today.
 project cli
-exec devvm --no-network-policy --no-git-protect --tools go --agents claude
+exec devvm --network open --no-git-protect --tools go --agents claude
 ! stdout 'checking_tools|building_tools'
 
 # The shared tools aren't images: build and rebuild refuse them.
@@ -108,7 +108,7 @@ exec devvm --help
 rm $DATA/mise.lock
 env MISE_STUB_FAIL=1
 project py
-! exec devvm --no-network-policy --no-git-protect --tools python
+! exec devvm --network open --no-git-protect --tools python
 stdout '^==> resolving_tools$'
 stderr 'failed to fetch versions: offline'
 stderr '^devvm: tools_need_resolve$'
@@ -118,12 +118,12 @@ env MISE_STUB_FAIL=
 # A build that leaves a symlink instead of an image is refused; one that
 # plants FILE.json as a symlink can't make devvm write through it.
 exec sh -c 'echo victim > "$STUB_DIR/tools-symlink"'
-! exec devvm --no-network-policy --no-git-protect --tools python
+! exec devvm --network open --no-git-protect --tools python
 stderr '^devvm: tool_bad_output file=python-\S+\.erofs$'
 exec sh -c 'ls "$SHARE"'
 ! stdout python
 exec sh -c 'rm "$STUB_DIR/tools-symlink" && echo victim > "$STUB_DIR/tools-hash-symlink"'
-exec devvm --no-network-policy --no-git-protect --tools python
+exec devvm --network open --no-git-protect --tools python
 exec cat $STUB_DIR/tools-hash-symlink
 stdout '^victim$'
 exec sh -c 'cd "$SHARE" && for f in python-*.erofs uv-*.erofs; do [ -L "$f.json" ] && echo link; done; true'

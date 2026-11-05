@@ -20,7 +20,7 @@ cp foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 exec devvm build foo
 # claude's tools, built for a VM with Claude Code, deleted since.
 project agentvm
-exec devvm --no-network-policy --no-git-protect --tools none --agents claude
+exec devvm --network open --no-git-protect --tools none --agents claude
 exec devvm rm --force --no-export
 cd $WORK
 exec sh -c 'for i in base foo; do grep -lxF "  \"name\": \"$i\"," "$IMAGES"/*/record.json | xargs dirname | xargs basename > "$i.key"; done'

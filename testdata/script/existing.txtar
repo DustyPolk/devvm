@@ -3,7 +3,7 @@
 # what its state asks of a stopped VM's size and ports is applied.
 # restart stops it first.
 project web git
-exec devvm --no-network-policy
+exec devvm --network open
 vm_name WEB web
 
 # Running: opened without a start, its host keys kept, set up again.
@@ -20,8 +20,8 @@ stdout '^1$'
 
 # Flags for new VMs: ignored, with a warning for each command that
 # changes the same on the VM.
-exec devvm --network-policy --cpus 2 --disk 50 --ports none
-stderr '^devvm: new_vm_flags_ignored_run command=devvm network on flags=--network-policy vm=devvm-web-[0-9a-f]{14}$'
+exec devvm --network allowlist --cpus 2 --disk 50 --ports none
+stderr '^devvm: new_vm_flags_ignored_run command=devvm network allowlist flags=--network vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: new_vm_flags_ignored_run command=devvm size flags=--cpus, --disk vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: new_vm_flags_ignored_run command=devvm ports LIST flags=--ports vm=devvm-web-[0-9a-f]{14}$'
 exec devvm --no-git-protect
@@ -98,7 +98,7 @@ stderr '^devvm: vm_unfinished vm=devvm-web-[0-9a-f]{14}$'
 ! stderr remake_unfinished
 # In a terminal devvm offers to delete it and make it again: no keeps it.
 ttyin -stdin $WORK/no.txt
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^remake_unfinished vm=devvm-web-[0-9a-f]{14} \[y/N\] devvm: vm_unfinished vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl (start|stop|delete|clone|create)'
@@ -106,7 +106,7 @@ exists $WEB_dir/vm.json
 # Yes deletes it, then makes it again, finished this time.
 stub_reset
 ttyin -stdin $WORK/yes.txt
-exec devvm --no-network-policy
+exec devvm --network open
 stdout '^==> deleted vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl delete -f devvm-web-[0-9a-f]{14}\n(.*\n)*limactl clone --tty=false \S+ devvm-web-[0-9a-f]{14} (.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n'
@@ -118,7 +118,7 @@ stdout '^created=.'
 # deleted, with its state, logs (the rotated ones too), host keys and ssh config entry, and .git's
 # locks taken off.
 project api
-exec devvm --no-network-policy
+exec devvm --network open
 vm_name API api
 cd $WORK/web
 exec sh -c 'l="$WEB_dir/logs" && mkdir -p "$l" && touch "$l/network.jsonl" "$l/network.jsonl.1" "$l/proxy.log" "$l/proxy.log.1"'
@@ -160,7 +160,7 @@ rm $STUB_DIR/delete-fails
 # A folder made again at the same path: rm and adopt ask first, so
 # without a terminal neither deletes nor takes the VM over.
 project site
-exec devvm --no-network-policy
+exec devvm --network open
 cd $WORK
 rm site
 mkdir site

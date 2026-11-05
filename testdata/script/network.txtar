@@ -1,12 +1,12 @@
-# Network policy for a new VM: the choice, the VM's proxy (devvm _proxy,
+# The network tier for a new VM: the choice, the VM's proxy (devvm _proxy,
 # started before the VM), the confined start, the self-check, and the
 # VM's secrets as the proxy sees them.
 
-# --no-network-policy: open, unconfined, with its proxy, which applies no
+# --network open: unconfined, with its proxy, which applies no
 # rules and holds no CA and no secret; its self-check asks the proxy
 # through the VM's own settings, and no confined one runs.
 project off
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
 vm_name OFF off
 vm_state $OFF_dir/vm.json
@@ -22,7 +22,7 @@ exec cat $OFF_dir/run/proxy.json
 stdout '"open": true'
 ! stdout '"ca"|"secrets"|"policies"|"builtin_policies"'
 
-# --network-policy: the VM's own CA and its next one, the keys the user's
+# --network allowlist: the VM's own CA and its next one, the keys the user's
 # alone (kept out of Time Machine on macOS), the
 # VM's proxy, then the VM started confined, its environment pointing at
 # the proxy with the VM's key, then the self-check, the setup and the
@@ -32,7 +32,7 @@ stdout '"open": true'
 project net
 stub_reset
 exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 rm $STUB_DIR/hostagent
 stdout '^==> starting vm=devvm-net-[0-9a-f]{14}$'
 vm_name NET net
@@ -85,7 +85,7 @@ stdout 'devvm:<password>@'
 project leak
 stub_reset
 exec sh -c ': > "$STUB_DIR/net-direct"'
-! exec devvm --network-policy --no-git-protect
+! exec devvm --network allowlist --no-git-protect
 stderr '^devvm: net_direct_route vm=devvm-leak-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl stop devvm-leak-[0-9a-f]{14}$'
@@ -113,7 +113,7 @@ exec sh -c 'kill "$(cat "$WORK/squat.pid")"'
 # the VM's own placeholder and never the token, and its host on 443.
 project agent
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
-exec devvm --network-policy --no-git-protect --agents claude
+exec devvm --network allowlist --no-git-protect --agents claude
 vm_name AGENT agent
 exec cat $AGENT_dir/run/secrets.json
 stdout '^\{"version":1,"bindings":\[\{"name":"claude","kind":"secret","hosts":\["api\.anthropic\.com"\],"header":"Authorization","placeholder":"sk-ant-oat01-devvm-proxy-managed-[0-9a-f]{32}"\}\]\}$'
@@ -139,7 +139,7 @@ mkdir $HOME/.codex
 cp $WORK/codex.json $HOME/.codex/auth.json
 exec devvm agent import codex
 project codex
-exec devvm --network-policy --no-git-protect --agents codex
+exec devvm --network allowlist --no-git-protect --agents codex
 vm_name CODEX codex
 exec cat $CODEX_dir/run/secrets.json
 stdout '"name":"codex-key","kind":"login","agent":"codex","hosts":\["api\.openai\.com"\]'
@@ -147,38 +147,40 @@ stdout '"name":"codex-key","kind":"login","agent":"codex","hosts":\["api\.openai
 exec cat $CODEX_dir/run/secrets.policy
 stdout '^api\.openai\.com:443$'
 
-# devvm network: on, off or unenforced, as devvm ls shows it. on and off
-# change the VM's state, applied when it next starts.
+# devvm network: the VM's tier, or unenforced, as devvm ls shows it. A
+# tier changes the VM's state, applied when it next starts.
 project none
 ! exec devvm network
 stderr '^devvm: no_vm dir=\S*/none$'
 ! exec devvm network sideways
-stderr '^devvm: arg_not_choice choices=on, off command=devvm network given=sideways$'
+stderr '^devvm: arg_not_choice choices=open, internet, allowlist, none command=devvm network given=sideways$'
+! exec devvm network on
+stderr '^devvm: arg_not_choice choices=open, internet, allowlist, none command=devvm network given=on$'
 cd $WORK/off
 exec devvm network
 stdout '^open$'
-exec devvm network on
+exec devvm network allowlist
 stdout '^==> next_start count=1 vm=devvm-off-[0-9a-f]{14}$'
 stderr '^net_on_old_tokens vm=devvm-off-[0-9a-f]{14}$'
 vm_state $OFF_dir/vm.json
 stdout '^net\.tier=allowlist$'
-exec devvm network on
-stdout '^==> setting_already command=devvm network on vm=devvm-off-[0-9a-f]{14}$'
+exec devvm network allowlist
+stdout '^==> setting_already command=devvm network allowlist vm=devvm-off-[0-9a-f]{14}$'
 ! stderr .
 # Running, but not started confined: unenforced until devvm restart.
 exec devvm network
 stdout '^unenforced$'
-exec devvm network off
+exec devvm network open
 stdout '^==> next_start count=1 vm=devvm-off-[0-9a-f]{14}$'
 ! stderr .
 # Stopped, it changes at its next start.
 exec limactl stop $OFF
-exec devvm network on
+exec devvm network allowlist
 stdout '^==> setting_set vm=devvm-off-[0-9a-f]{14}$'
 exec devvm network
 stdout '^allowlist$'
 
-# Without a flag, and without a terminal to ask in: on, unasked.
+# Without a flag, and without a terminal to ask in: allowlist, unasked.
 project default
 exec devvm --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-default-[0-9a-f]{14}$'
@@ -187,6 +189,35 @@ vm_name DEFAULT default
 vm_state $DEFAULT_dir/vm.json
 stdout '^net\.tier=allowlist$'
 stdout '^net\.made\.check=ok$'
+
+# In a terminal, devvm asks for the tier: Enter would take allowlist, a
+# word that isn't a tier is warned about and asked again, and a tier is
+# the VM's.
+project asked
+ttyin -stdin $WORK/tiers.txt
+exec devvm --no-git-protect
+stderr '^net_about vm=devvm-asked-[0-9a-f]{14}$'
+stderr 'net_ask tier=allowlist'
+stderr 'devvm: net_tier_unknown choices=open, internet, allowlist, none given=on$'
+vm_name ASKED asked
+vm_state $ASKED_dir/vm.json
+stdout '^net\.tier=internet$'
+# --network: the tier, unasked.
+project flagged
+ttyin -stdin $WORK/tiers.txt
+exec devvm --network none --no-git-protect
+! stderr 'net_about|net_ask'
+vm_name FLAGGED flagged
+vm_state $FLAGGED_dir/vm.json
+stdout '^net\.tier=none$'
+# A value that isn't a tier is a usage error, before anything is made.
+project badflag
+stub_reset
+! exec devvm --network on --no-git-protect
+stderr '^devvm: arg_not_choice choices=open, internet, allowlist, none command=--network given=on$'
+stderr '^usage_help command=devvm$'
+! stub_calls
+cd $WORK
 
 # devvm network -g: what new VMs get, ask until it's saved; ask is only
 # for new VMs.
@@ -198,17 +229,17 @@ stdout '\A{\n  "version": 1,\n  "policy": "ask",\n  "source": "built-in"\n}\n\z'
 ! exec devvm network ask
 stderr '^devvm: net_ask_global$'
 ! exec devvm network -g sideways
-stderr '^devvm: arg_not_choice choices=ask, on, off command=devvm network given=sideways$'
+stderr '^devvm: arg_not_choice choices=ask, open, internet, allowlist, none command=devvm network given=sideways$'
 
-# A saved off: new VMs get none, unasked and unwarned; --network-policy
-# beats it. The VMs that exist keep theirs.
-exec devvm network -g off
-stdout '^==> network_default mode=off$'
-grep '^  "network": "off",?$' $DATA/settings.json
+# A saved open: new VMs are open, unasked and unwarned; --network
+# allowlist beats it. The VMs that exist keep theirs.
+exec devvm network -g open
+stdout '^==> network_default mode=open$'
+grep '^  "network": "open",?$' $DATA/settings.json
 exec devvm network -g
-stdout '\Aoff # devvm: settings\.json\n\z'
+stdout '\Aopen # devvm: settings\.json\n\z'
 exec devvm network -g --json
-stdout '\A{\n  "version": 1,\n  "policy": "off",\n  "source": "settings.json"\n}\n\z'
+stdout '\A{\n  "version": 1,\n  "policy": "open",\n  "source": "settings.json"\n}\n\z'
 project offsaved
 exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
@@ -216,7 +247,7 @@ vm_name OFFSAVED offsaved
 vm_state $OFFSAVED_dir/vm.json
 stdout '^net\.tier=open$'
 project offflag
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name OFFFLAG offflag
 vm_state $OFFFLAG_dir/vm.json
 stdout '^net\.tier=allowlist$'
@@ -226,24 +257,24 @@ exec devvm
 vm_state $DEFAULT_dir/vm.json
 stdout '^net\.tier=allowlist$'
 stdout '^net\.made\.check=ok$'
-# Turned off, its next start starts it open, its proxy too, as open's,
-# and deletes its CAs, keys and all; on again, it gets new ones.
+# Turned open, its next start starts it open, its proxy too, as open's,
+# and deletes its CAs, keys and all; on allowlist again, it gets new ones.
 cp $DEFAULT_dir/run/ca/ca.pem $WORK/default-ca.pem
-exec devvm network off
+exec devvm network open
 exec limactl stop $DEFAULT
 exec devvm
 ! exists $DEFAULT_dir/run/ca
 exec cat $DEFAULT_dir/run/proxy.json
 stdout '"open": true'
-exec devvm network on
+exec devvm network allowlist
 exec limactl stop $DEFAULT
 exec devvm
 exists $DEFAULT_dir/run/ca/ca.key $DEFAULT_dir/run/ca/next.key
 ! cmp $DEFAULT_dir/run/ca/ca.pem $WORK/default-ca.pem
 
-# A saved on: new VMs get it; --no-network-policy beats it.
-exec devvm network -g on
-stdout '^==> network_default mode=on$'
+# A saved allowlist: new VMs get it; --network open beats it.
+exec devvm network -g allowlist
+stdout '^==> network_default mode=allowlist$'
 project onsaved
 exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
@@ -251,7 +282,7 @@ vm_name ONSAVED onsaved
 vm_state $ONSAVED_dir/vm.json
 stdout '^net\.tier=allowlist$'
 project onflag
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name ONFLAG onflag
 vm_state $ONFLAG_dir/vm.json
 stdout '^net\.tier=open$'
@@ -264,10 +295,10 @@ stdout '^==> network_default mode=ask$'
 grep '^  "network": "ask",?$' $DATA/settings.json
 cp $WORK/config-on.toml $CFG/config.toml
 exec devvm network -g
-stdout '\Aon # \S*/config/devvm/config\.toml\n\z'
+stdout '\Aallowlist # \S*/config/devvm/config\.toml\n\z'
 exec devvm network -g --json
 stdout '"source": "config.toml"'
-! exec devvm network -g off
+! exec devvm network -g open
 stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=network$'
 grep '^  "network": "ask",?$' $DATA/settings.json
 project configon
@@ -285,22 +316,25 @@ stderr '^devvm: net_default_failed reason=\S*/config/devvm/config\.toml:2: unkno
 project badsaved
 ! exec devvm --no-git-protect
 stderr '\S*/config/devvm/config\.toml:2: '
-! exec devvm --network-policy --no-git-protect
+! exec devvm --network allowlist --no-git-protect
 stderr '\S*/config/devvm/config\.toml:2: '
 cp $WORK/config-maybe.toml $CFG/config.toml
 ! exec devvm network -g
-stderr '^devvm: net_default_failed reason=\S*/config/devvm/config\.toml:1: "maybe" isn''t one of ask, on, off$'
+stderr '^devvm: net_default_failed reason=\S*/config/devvm/config\.toml:1: "maybe" isn''t one of ask, open, internet, allowlist, none$'
 rm $CFG/config.toml
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 
 -- config-on.toml --
-# new VMs get network policy, whatever devvm network -g says
-network = "on"
+# new VMs get the allowlist, whatever devvm network -g says
+network = "allowlist"
 -- config-typo.toml --
 # a typo
-netwrk = "off"
+netwrk = "open"
 -- config-maybe.toml --
 network = "maybe"
 
+-- tiers.txt --
+on
+internet
 -- codex.json --
 {"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null}

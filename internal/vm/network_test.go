@@ -13,23 +13,24 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// setNetwork is devvm network on (allowlist) or off (open).
+// setNetwork is devvm network allowlist or devvm network open.
 func setNetwork(ctx context.Context, n Net, on bool) error {
 	if on {
-		return n.SetTier(ctx, netpolicy.TierAllowlist, "devvm network on")
+		return n.SetTier(ctx, netpolicy.TierAllowlist, "devvm network allowlist")
 	}
-	return n.SetTier(ctx, netpolicy.TierOpen, "devvm network off")
+	return n.SetTier(ctx, netpolicy.TierOpen, "devvm network open")
 }
 
-// devvm network: shown as devvm ls shows it, then the VM's allowlist; on
-// and off change the state only, applied when the VM next starts. A running VM turned on isn't
-// confined, so its next launch offers the restart; one turned off stays
-// on its proxy until it starts again.
+// devvm network: shown as devvm ls shows it, then the VM's allowlist;
+// allowlist and open change the state only, applied when the VM next
+// starts. A running open VM given allowlist isn't confined, so its next
+// launch offers the restart; one made open stays on its proxy until it
+// starts again.
 func TestNetwork(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 	f.ExecFunc = noDirect
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	n, l := Net{e}, Launch{e}
 	shown := func(want string) {
@@ -97,7 +98,7 @@ func TestSetTierConfined(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 	f.ExecFunc = noDirect
-	st := existingVM(t, e, Options{NetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "allowlist"})
 	vm, n := st.Name(), Net{e}
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -133,7 +134,7 @@ func TestNetworkRequiresEgressProxy(t *testing.T) {
 	caps := allNative()
 	caps[backend.FeatureEgressProxy] = backend.Emulated(false)
 	e, _, _ := upEnv(t, caps)
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	err := setNetwork(t.Context(), Net{e}, true)
 	if got := msg.NamesOf(err); got != "backend_unreviewed backend=fake feature=egress-proxy vm="+st.Name() {
 		t.Errorf("Network on = %v", got)

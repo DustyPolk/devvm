@@ -51,7 +51,7 @@ json_set $VMS/0123456789abcd/vm.json image=docker net.made.check=ok ports.host:=
 vm_state $VMS/0123456789abcd/vm.json
 stdout '^image=docker$'
 stdout '^net.made.check=ok$'
-stdout '^net.on=true$'
+stdout '^net.tier=allowlist$'
 stdout '^ports.host.ssh=2222$'
 stdout '^version=2$'
 stdout '^tools.names=node claude$'
@@ -79,7 +79,7 @@ open y
   "image": "base",
   "dir": "/p",
   "backend": "lima",
-  "net": {"on": true},
+  "net": {"tier": "allowlist"},
   "tools": {"names": ["node", "claude"]},
   "links": {"links": [{"name": "db", "port": 5432}]},
   "secrets": {"names": []}
@@ -92,7 +92,7 @@ image=base
 links.links.0.name=db
 links.links.0.port=5432
 name=devvm-web-0123456789abcd
-net.on=true
+net.tier=allowlist
 secrets.names=
 tools.names=node claude
 version=1

@@ -4,10 +4,10 @@
 # stops with the VM; devvm rm, gc --orphans and devvm ls know of links.
 
 project db
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec devvm link publish 5432,80
 project app
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name APP app
 vm_name DB db
 exec sh -c 'ls "$VMS"/*/run | grep "links.pid" || true'

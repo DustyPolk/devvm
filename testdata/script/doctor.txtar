@@ -67,7 +67,7 @@ stdout '^  "docker": false,$'
 stderr '^devvm: program_missing name=Lima program=limactl$'
 mkdir p
 cd p
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: program_missing name=Lima program=limactl$'
 cd ..
 

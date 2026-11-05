@@ -12,9 +12,18 @@ import (
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 )
+
+// netOf is the tier a test's on/off network choice stands for.
+func netOf(on bool) netpolicy.Tier {
+	if on {
+		return netpolicy.TierAllowlist
+	}
+	return netpolicy.TierOpen
+}
 
 // startRun is what a start path did: the backend's starts and the
 // confinement of the last, the self-checks, the warnings, the error, and
@@ -189,7 +198,7 @@ func TestStartPaths(t *testing.T) {
 					tc.caps(caps)
 				}
 				e, f := startEnv(t, caps)
-				st := existingVM(t, e, Options{NetworkPolicy: tc.net, NoNetworkPolicy: !tc.net})
+				st := existingVM(t, e, Options{Network: netOf(tc.net)})
 				if tc.prep != nil {
 					tc.prep(startVM{t, e, f, st})
 				}
@@ -223,7 +232,7 @@ func TestStartNew(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e, f := startEnv(t, allNative())
 			got := recordStart(t, e, f, func(ctx context.Context, e *Env) error {
-				return Launch{e}.Up(ctx, Options{NetworkPolicy: tc.net, NoNetworkPolicy: !tc.net})
+				return Launch{e}.Up(ctx, Options{Network: netOf(tc.net)})
 			})
 			t.Cleanup(func() { e.Proxy.Stop(vmName(t, e)) })
 			if got.starts != tc.want.starts || got.net != tc.want.net || got.selfChecks != tc.want.selfChecks ||
@@ -296,7 +305,7 @@ func TestOpenAsksToRestart(t *testing.T) {
 	} {
 		t.Run(strings.ReplaceAll(tc.name, ",", ""), func(t *testing.T) {
 			e, f := startEnv(t, allNative())
-			st := existingVM(t, e, Options{NetworkPolicy: true, Toolchains: &[]string{}, Agents: &[]string{"claude"}})
+			st := existingVM(t, e, Options{Network: "allowlist", Toolchains: &[]string{}, Agents: &[]string{"claude"}})
 			vm := st.Name()
 			skills := filepath.Join(agentStore(e.Dirs, "claude"), ".claude", "skills")
 			v := startVM{t, e, f, st}
@@ -373,7 +382,7 @@ func TestOpenAsksToRestart(t *testing.T) {
 func TestOpenInspectsOnce(t *testing.T) {
 	for _, stopped := range []bool{false, true} {
 		e, f := startEnv(t, allNative())
-		st := existingVM(t, e, Options{NetworkPolicy: true})
+		st := existingVM(t, e, Options{Network: "allowlist"})
 		if stopped {
 			stopVM(t, f, st)
 		}

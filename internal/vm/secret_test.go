@@ -14,7 +14,7 @@ import (
 func TestSecrets(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	n := Net{e}
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	ctx := t.Context()
 	list := func() string {

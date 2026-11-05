@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
@@ -243,6 +244,10 @@ func checkFlagValue(name, value string) error {
 		_, err = settings.ParseGiB("--"+name, value)
 	case "ports":
 		_, err = settings.ParsePorts(value)
+	case "network":
+		if !netpolicy.Tier(value).Valid() {
+			err = msg.ArgNotChoice(strings.Join(netpolicy.TierNames(), ", "), "--network", value)
+		}
 	case "lifetime":
 		if value != "" {
 			err = sshagent.CheckLifetime(value)

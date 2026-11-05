@@ -92,7 +92,7 @@ stderr '^retention_deleted exports=1 '
 # A VM made with the two agents builds their tool images; once it's gone
 # no VM has them.
 project agents git
-exec devvm --tools none --agents claude,codex --no-network-policy --no-git-protect
+exec devvm --tools none --agents claude,codex --network open --no-git-protect
 exec devvm rm --force --no-export
 mkdir $VMS/12345612345612
 exec sh -c 'printf "{\"version\": 1, \"id\": \"x\", \"name\": \"devvm-gone-12345612345612\", \"image\": \"base\", \"dir\": \"/p\", \"backend\": \"lima\", \"created\": \"2020-01-01T00:00:00Z\", \"tools\": {\"names\": [\"claude\"], \"made\": {\"files\": [\"%s\"]}}}\n" "$(cd "$SHARE" && ls claude-*.erofs)" > "$VMS/12345612345612/vm.json"'
@@ -108,7 +108,7 @@ json_set $SHARE/codex-*.erofs.json idle_since=2020-01-01T00:00:00Z
 # and runs the rest; once its devvm is killed, nothing holds the lock.
 project making git
 exec sh -c ': > "$STUB_DIR/start-hangs"'
-! exec devvm --no-network-policy &u&
+! exec devvm --network open &u&
 wait_file $STUB_DIR/hanging
 exec devvm gc --force --retention
 stdout '^==> retention_deleted exports=0 nix_files=0 orphans=0 tools=0$'

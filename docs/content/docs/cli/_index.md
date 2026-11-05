@@ -37,7 +37,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm link rm](devvm_link_rm.md): Remove one of this folder's VM's links
 - [devvm link unpublish](devvm_link_unpublish.md): Stop offering ports of this folder's VM to links
 - [devvm ls](devvm_ls.md): List the project VMs
-- [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
+- [devvm network](devvm_network.md): Show or change the network tier of this folder's VM
 - [devvm network allow](devvm_network_allow.md): Allow hosts for this folder's VM
 - [devvm network deny](devvm_network_deny.md): Deny hosts for this folder's VM
 - [devvm network log](devvm_network_log.md): Show what this folder's VM connected to and what its network policy blocked
@@ -54,7 +54,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm secret set](devvm_secret_set.md): Save a secret on this machine
 - [devvm secret unuse](devvm_secret_unuse.md): Stop this folder's VM using a secret
 - [devvm secret use](devvm_secret_use.md): Let this folder's VM use a secret
-- [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network policy, coding agents and layers
+- [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network tier, coding agents and layers
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM

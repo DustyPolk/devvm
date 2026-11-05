@@ -15,7 +15,7 @@ import (
 )
 
 // setupSandbox points devvm's folders at a temporary HOME and returns a setup that sees a terminal (or not),
-// keeping the size with Enter and picking network policy off, on a host
+// keeping the size with Enter and picking the none tier, on a host
 // of 8 CPUs and 32 GiB; the folders; and the size prompts and pickers
 // shown.
 func setupSandbox(t *testing.T, terminal bool) (setup, paths.Dirs, *[]string) {
@@ -40,7 +40,7 @@ func setupSandbox(t *testing.T, terminal bool) (setup, paths.Dirs, *[]string) {
 				t.Errorf("asked %s", help.ID())
 			}
 			sized = append(sized, pickedNetwork(cs))
-			return slices.IndexFunc(cs, func(c ui.Choice) bool { return c.Name == settings.NetworkOff })
+			return slices.IndexFunc(cs, func(c ui.Choice) bool { return c.Name == "none" })
 		},
 		// The agents' question checks Claude Code.
 		pick: func(help msg.M, parts []vm.PickPart) []vm.PickPart {
@@ -155,19 +155,20 @@ func pickedNetwork(cs []ui.Choice) string {
 	return s
 }
 
-// The network picker starts from the network policy saved for new VMs.
+// The network picker starts from the network tier saved for new VMs.
 func TestSetupNetworkStartsFromSaved(t *testing.T) {
 	s, d, picked := setupSandbox(t, true)
-	save(t, d, settings.Values{Network: settings.Of(settings.NetworkOn)})
+	save(t, d, settings.Values{Network: settings.Of("internet")})
 	if err := s.run(setupChoice{}); err != nil {
 		t.Fatal(err)
 	}
-	want := "network ask:network_default_ask *on:network_default_on off:network_default_off"
+	want := "network ask:network_default_ask open:network_default_open *internet:network_default_internet " +
+		"allowlist:network_default_allowlist none:network_default_none"
 	if !slices.Contains(*picked, want) {
 		t.Errorf("pickers %q, want %q", *picked, want)
 	}
-	if mode := defaults(t, d).Network; mode != (settings.Value{Value: settings.NetworkOff, Source: settings.FromSettings}) {
-		t.Errorf("network policy for new VMs %+v", mode)
+	if mode := defaults(t, d).Network; mode != (settings.Value{Value: "none", Source: settings.FromSettings}) {
+		t.Errorf("network tier for new VMs %+v", mode)
 	}
 }
 
@@ -194,7 +195,8 @@ func TestSetupAsks(t *testing.T) {
 			if tc.ask {
 				wantSized = []string{
 					"size_cpus_prompt cpus=4", "size_memory_prompt memory=8",
-					"network *ask:network_default_ask on:network_default_on off:network_default_off",
+					"network *ask:network_default_ask open:network_default_open internet:network_default_internet " +
+						"allowlist:network_default_allowlist none:network_default_none",
 					"agents_help", "layers_help",
 				}
 			}
@@ -202,8 +204,8 @@ func TestSetupAsks(t *testing.T) {
 				t.Errorf("size prompts and network pickers %q, want %q", *sized, wantSized)
 			}
 			def := defaults(t, d)
-			if mode := def.Network.Value; mode != map[bool]string{true: settings.NetworkOff, false: settings.NetworkAsk}[tc.ask] {
-				t.Errorf("network policy for new VMs %q", mode)
+			if mode := def.Network.Value; mode != map[bool]string{true: "none", false: settings.NetworkAsk}[tc.ask] {
+				t.Errorf("network tier for new VMs %q", mode)
 			}
 			if def.CPUs.Source != settings.FromBuiltin || def.Memory.Source != settings.FromBuiltin {
 				t.Errorf("Enter saved a size: %+v %+v", def.CPUs, def.Memory)
@@ -221,7 +223,7 @@ func TestSetupConfigSets(t *testing.T) {
 	s, d, sized := setupSandbox(t, true)
 	u, said, _ := testUI()
 	s.ui = u
-	config := "network = \"on\"\nfeatures = []\nagents = [\"codex\"]\nlayers = [\"docker\"]\n[size]\ncpus = 2\n"
+	config := "network = \"allowlist\"\nfeatures = []\nagents = [\"codex\"]\nlayers = [\"docker\"]\n[size]\ncpus = 2\n"
 	if err := os.MkdirAll(d.Config, 0o700); err != nil {
 		t.Fatal(err)
 	}

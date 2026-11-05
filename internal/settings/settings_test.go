@@ -34,7 +34,7 @@ func write(t *testing.T, path, data string) {
 
 // fullConfig sets every key config.toml has.
 const fullConfig = `# every key
-network = "off"
+network = "internet"
 ports = "5173, 8000-8010"
 features = ["fzf", "omb"]
 agents = ["codex", "claude"]
@@ -85,7 +85,7 @@ func TestReadConfig(t *testing.T) {
 		got Value
 		v   string
 	}{
-		{KeyNetwork, def.Network, "off"},
+		{KeyNetwork, def.Network, "internet"},
 		{KeyPorts, def.Ports, "5173,8000-8010"},
 		{KeyCPUs, def.CPUs, "6"},
 		{KeyMemory, def.Memory, "16"},
@@ -134,12 +134,13 @@ func TestConfigRefused(t *testing.T) {
 		line       int
 		reason     string
 	}{
-		{"unknown key", "network = \"on\"\nbackend = \"lima\"\n", 2, `unknown key "backend"`},
+		{"unknown key", "network = \"none\"\nbackend = \"lima\"\n", 2, `unknown key "backend"`},
 		{"unknown table", "[sizes]\ncpus = 2\n", 1, `unknown key "sizes"`},
 		{"unknown key in a table", "[size]\ncpus = 2\nswap = 1\n", 3, `unknown key "size.swap"`},
 		{"unknown retention key", "[retention]\nlogs.network = 3\n", 2, `unknown key "retention.logs.network"`},
 		{"dotted unknown key", "size.swap = 1\n", 1, `unknown key "size.swap"`},
-		{"bad network", "network = \"maybe\"\n", 1, `"maybe" isn't one of ask, on, off`},
+		{"bad network", "network = \"maybe\"\n", 1, `"maybe" isn't one of ask, open, internet, allowlist, none`},
+		{"network on", "network = \"on\"\n", 1, `"on" isn't one of ask, open, internet, allowlist, none`},
 		{"bad ports", "\nports = \"5173,,80\"\n", 2, "port_invalid"},
 		{"bad cpus", "[size]\ncpus = 1.5\n", 2, "cpus_not_number flag=cpus"},
 		{"bad memory", "[size]\nmemory = \"16M\"\n", 2, "size_not_gib flag=memory"},
@@ -164,7 +165,7 @@ func TestConfigRefused(t *testing.T) {
 		{"a bad no-proxy", "[proxy]\nno-proxy = \"a\\nb\"\n", 2, "upstream_proxy_invalid setting=proxy.no-proxy"},
 		{"an unknown proxy key", "[proxy]\nall = \"proxy.corp:1080\"\n", 2, `unknown key "proxy.all"`},
 		{"bad TOML", "network = on\n", 1, ""},
-		{"a key twice", "network = \"on\"\nnetwork = \"off\"\n", 2, ""},
+		{"a key twice", "network = \"none\"\nnetwork = \"open\"\n", 2, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			write(t, d.ConfigFile(), tc.file)
@@ -186,7 +187,7 @@ func TestConfigRefused(t *testing.T) {
 func TestPrecedence(t *testing.T) {
 	d := testDirs(t)
 	saved := Values{
-		Network: Of("on"), Ports: Of("none"),
+		Network: Of("allowlist"), Ports: Of("none"),
 		Size: SizeValues{CPUs: Of("2"), Memory: Of("4"), Disk: Of("50")}, Features: Of([]string{}), Agents: Of([]string{"codex"}),
 		Layers:    Of([]string{"nix", "docker"}),
 		Retention: map[string]string{RetainHistoryAge: "1d", RetainRunLogs: "3"},
@@ -194,7 +195,7 @@ func TestPrecedence(t *testing.T) {
 	if _, err := Save(d, saved); err != nil {
 		t.Fatal(err)
 	}
-	write(t, d.ConfigFile(), "network = \"off\"\n[size]\nmemory = 8\n[retention]\nhistory.age = \"2d\"\n")
+	write(t, d.ConfigFile(), "network = \"open\"\n[size]\nmemory = 8\n[retention]\nhistory.age = \"2d\"\n")
 	def, err := Read(d)
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +204,7 @@ func TestPrecedence(t *testing.T) {
 		got  Value
 		want Value
 	}{
-		{def.Network, Value{"off", FromConfig}},
+		{def.Network, Value{"open", FromConfig}},
 		{def.Ports, Value{"none", FromSettings}},
 		{def.CPUs, Value{"2", FromSettings}},
 		{def.Memory, Value{"8", FromConfig}},
@@ -247,21 +248,21 @@ func TestSave(t *testing.T) {
 	if _, err := os.Stat(d.Settings()); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("a refused change wrote settings.json: %v", err)
 	}
-	if _, err := Save(d, Values{Network: Of("on"), Retention: map[string]string{RetainRunLogs: "5", RetainOrphansAge: "1d"}}); err != nil {
+	if _, err := Save(d, Values{Network: Of("allowlist"), Retention: map[string]string{RetainRunLogs: "5", RetainOrphansAge: "1d"}}); err != nil {
 		t.Fatal(err)
 	}
 	def, err := Save(d, Values{Size: SizeValues{CPUs: Of("3")}, Retention: map[string]string{RetainRunLogs: ""}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if def.Network.Value != "on" || def.CPUs.Value != "3" || def.Retention.RunLogs != 0 || def.Retention.OrphansAge != 24*time.Hour {
+	if def.Network.Value != "allowlist" || def.CPUs.Value != "3" || def.Retention.RunLogs != 0 || def.Retention.OrphansAge != 24*time.Hour {
 		t.Errorf("after two saves: %+v", def)
 	}
 	data, err := os.ReadFile(d.Settings())
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "{\n  \"network\": \"on\",\n  \"size\": {\n    \"cpus\": \"3\"\n  },\n  \"retention\": {\n    \"orphans.age\": \"1d\"\n  }\n}\n"
+	want := "{\n  \"network\": \"allowlist\",\n  \"size\": {\n    \"cpus\": \"3\"\n  },\n  \"retention\": {\n    \"orphans.age\": \"1d\"\n  }\n}\n"
 	if string(data) != want {
 		t.Errorf("settings.json:\n%s\nwant\n%s", data, want)
 	}
@@ -274,9 +275,9 @@ func TestSave(t *testing.T) {
 // the file and the field, a value devvm can't use.
 func TestReadSaved(t *testing.T) {
 	d := testDirs(t)
-	write(t, d.Settings(), `{"network": "on", "later": {"x": 1}, "retention": {"logs.later": "1", "logs.runs": "4"}}`)
+	write(t, d.Settings(), `{"network": "none", "later": {"x": 1}, "retention": {"logs.later": "1", "logs.runs": "4"}}`)
 	def, err := Read(d)
-	if err != nil || def.Network != (Value{"on", FromSettings}) || def.Retention.RunLogs != 4 {
+	if err != nil || def.Network != (Value{"none", FromSettings}) || def.Retention.RunLogs != 4 {
 		t.Errorf("unknown fields: %+v, %v", def, err)
 	}
 	for data, reason := range map[string]string{

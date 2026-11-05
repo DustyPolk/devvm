@@ -3,11 +3,11 @@ title: devvm setup
 weight: 50
 ---
 
-Choose base's features, and new VMs' size, network policy, coding agents and layers
+Choose base's features, and new VMs' size, network tier, coding agents and layers
 
 ## Synopsis
 
-Choose the features base gets, and new VMs' CPUs, memory, network policy, coding agents and layers. In a terminal devvm asks for each, starting from the current choice, and --features, --agents and --layers choose without asking. A new choice of features rebuilds base and the images on it when they're next used, and VMs you already have keep their agents and layers.
+Choose the features base gets, and new VMs' CPUs, memory, network tier, coding agents and layers. In a terminal devvm asks for each, starting from the current choice, and --features, --agents and --layers choose without asking. A new choice of features rebuilds base and the images on it when they're next used, and VMs you already have keep their agents and layers.
 
 ```text
 devvm setup [flags]

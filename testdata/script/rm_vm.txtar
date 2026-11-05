@@ -7,10 +7,10 @@
 ! exec devvm rm devvm-nope-0123456789abcd
 stderr '^devvm: rm_unknown_vm name=devvm-nope-0123456789abcd$'
 project web
-exec devvm --no-network-policy --no-git-protect --agents claude
+exec devvm --network open --no-git-protect --agents claude
 vm_name WEB web
 project api
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name API api
 ! exec devvm rm api --force
 stderr '^devvm: rm_unknown_vm name=api$'
@@ -117,7 +117,7 @@ stdout '^/\S*/web$'
 
 # A stopped VM with an agent goes with --no-export.
 project agent
-exec devvm --no-network-policy --no-git-protect --agents claude
+exec devvm --network open --no-git-protect --agents claude
 vm_name AGENT agent
 exec limactl stop $AGENT
 cd $WORK
@@ -143,7 +143,7 @@ stdout '^==> deleted vm=devvm-cl-f7999f634f79ad$'
 # ls and space mark it not connected, and rm VM refuses it, --force too,
 # without a terminal; in one it asks, which --force doesn't answer.
 project usb
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name USB usb
 cd $WORK
 rm $WORK/usb
@@ -183,7 +183,7 @@ exists $VMS/be79df76493187/vm.json
 # changed by hand), named in that folder: refused as one whose folder is
 # there, and the folder's own VM stays.
 project mine
-exec devvm --no-network-policy
+exec devvm --network open
 vm_name MINE mine
 mkdir $VMS/0123456789ab03
 cp $WORK/lost.json $VMS/0123456789ab03/vm.json

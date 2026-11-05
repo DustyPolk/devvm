@@ -38,10 +38,10 @@ cmp $CFG/version want/version
 free_port PORT
 exec devvm ports -g $PORT
 project db
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 exec devvm link publish 5432
 project app
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 exec devvm link add db 5432
 stdin $WORK/github.token
 exec devvm secret set github --stdin

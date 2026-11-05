@@ -92,7 +92,7 @@ exec sh -c 'rm "$STUB_DIR/build-libc"'
 # A new VM from it records --from; once it exists, another --from is
 # ignored with a warning, and nothing is built for it.
 project web
-exec devvm --from $PIN --no-network-policy
+exec devvm --from $PIN --network open
 stdout '^==> creating_from image=base vm=devvm-web-[0-9a-f]{14}$'
 ! stdout building_image
 vm_name WEB web
@@ -229,7 +229,7 @@ rm $STUB_DIR/interrupt-on
 env OLD=debian:9@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 exec sh -c 'echo 2.24 > "$STUB_DIR/build-glibc"; echo 2.28 > "$STUB_DIR/tools-glibc-node"; echo 2.17 > "$STUB_DIR/tools-glibc-go"'
 project old
-! exec devvm --from $OLD --no-network-policy --no-git-protect --tools node
+! exec devvm --from $OLD --network open --no-git-protect --tools node
 stderr '^devvm: tool_needs_glibc has=2\.24 needs=2\.28 tool=node version=[0-9.]+$'
 exec stub vms
 ! stdout devvm-old-
@@ -239,7 +239,7 @@ stdout '^  "glibc": "2\.24",$'
 exec sh -c 'cat "$XDG_DATA_HOME"/devvm/tools/node-*.erofs.json'
 stdout '^  "glibc": "2\.28",$'
 stub_reset
-exec devvm --from $OLD --no-network-policy --no-git-protect --tools go
+exec devvm --from $OLD --network open --no-git-protect --tools go
 # Its tools build in a clone of devvm's own Ubuntu base, built above,
 # never in the --from image's, as any VM may mount them; the base being
 # built already, nothing says it's built first.
@@ -269,7 +269,7 @@ json_set $WORK/own-record.json from=evil/debian:12
 exec sh -c 'cp "$WORK/own-record.json" "$IMAGES/$(cat "$WORK/ownbase")/record.json"'
 env DEB9=debian:9@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 project old2
-! exec devvm --from $DEB9 --no-network-policy --no-git-protect --tools python
+! exec devvm --from $DEB9 --network open --no-git-protect --tools python
 stderr '^devvm: tools_wrong_base key=[0-9a-f]{12}$'
 exec stub vms
 ! stdout devvm-old2-
@@ -279,7 +279,7 @@ exec stub vms
 # replace itself with the VM's shell (which would lose this run's
 # coverage).
 exec sh -c 'rm "$IMAGES/$(cat "$WORK/ownbase")/record.json"; echo 2.28 > "$STUB_DIR/tools-glibc-uv"'
-! exec devvm --from $DEB9 --no-network-policy --no-git-protect --tools python
+! exec devvm --from $DEB9 --network open --no-git-protect --tools python
 stdout '^==> tools_need_own_base$'
 stdout '^==> building_image image=base key=[0-9a-f]{12}$'
 stderr '^devvm: tool_needs_glibc has=2\.24 needs=2\.28 tool=uv version=[0-9.]+$'

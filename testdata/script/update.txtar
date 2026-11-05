@@ -14,7 +14,7 @@ stderr '^devvm: no_vm dir=/\S*/web$'
 # A VM of a layer of the user's, with ports, a rule and files in its
 # project folder and its home.
 exec devvm layer new foo
-exec devvm --no-network-policy --no-git-protect --agents claude --layers foo --ports 3000
+exec devvm --network open --no-git-protect --agents claude --layers foo --ports 3000
 vm_name WEB web
 exec devvm network allow example.com
 exec sh -c 'echo kept > notes && mkdir -p "$STUB_DIR/vmhome-$WEB" && echo ls > "$STUB_DIR/vmhome-$WEB/.bash_history"'

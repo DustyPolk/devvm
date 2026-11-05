@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"path/filepath"
+	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
@@ -68,21 +69,22 @@ func TierOf(st *state.VM) Tier {
 	return n.Tier
 }
 
-// Choose returns a new VM's tier: allowlist with on, open with off, else
-// the answer, what it's about said first: allowlist for yes (the
-// default), open for no; where it can't ask, allowlist.
-func (p *Proxy) Choose(on, off bool, vm string) Tier {
-	switch {
-	case on:
-		return TierAllowlist
-	case off:
-		return TierOpen
+// Choose asks for a new VM's tier, what each reaches said first, until
+// the answer is a tier or empty, which is TierDefault; where it can't ask,
+// it's TierDefault too.
+func (p *Proxy) Choose(vm string) Tier {
+	about := []msg.M{msg.NetAbout(vm)}
+	for {
+		v, err := p.Answer(msg.NetAsk(string(TierDefault)).AnsweredBy("--network").About(about...))
+		if err != nil || v == "" {
+			return TierDefault
+		}
+		if t := Tier(v); t.Valid() {
+			return t
+		}
+		about = nil
+		p.Warn(msg.NetTierUnknown(strings.Join(TierNames(), ", "), v))
 	}
-	yes, err := p.Confirm(msg.NetAsk().AnsweredBy("--network-policy or --no-network-policy").About(msg.NetAbout(vm)))
-	if err != nil || yes {
-		return TierAllowlist
-	}
-	return TierOpen
 }
 
 // Key returns the VM's own random key, made the first time it's needed

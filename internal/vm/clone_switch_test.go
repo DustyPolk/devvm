@@ -74,7 +74,7 @@ func TestSetCloneOn(t *testing.T) {
 	e, f, vmfs := cloneEnv(t)
 	flags := chflagsCalls(e)
 	gitIn(t, e.Dir, "branch", "other")
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	aside, _ := vmname.Aside(vm)
 	if get(st, keyGitProtect) != gitprotect.On || !flagged(*flags, "uchg", e.Dir) {
@@ -156,7 +156,7 @@ func TestSetCloneOn(t *testing.T) {
 func TestSetCloneOff(t *testing.T) {
 	e, f, vmfs := cloneEnv(t)
 	flags := chflagsCalls(e)
-	st := existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	st := existingVM(t, e, Options{Network: "open", Clone: true})
 	vm, clone := st.Name(), vmfs+e.Dir
 	gitIn(t, clone, "commit", "-q", "--allow-empty", "-m", "from-vm")
 	lc := Lifecycle{e}
@@ -247,7 +247,7 @@ func TestSetCloneUndo(t *testing.T) {
 		}
 		cleanups = nil
 	}
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	lc := Lifecycle{e}
 	f.Errs = map[string]error{"Start": errors.New("no start")}
@@ -310,7 +310,7 @@ func TestSetCloneUndo(t *testing.T) {
 // devvm clone on. Bare, devvm clone shows off.
 func TestSetCloneRefuses(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	lc := Lifecycle{e}
 	if err := lc.SetClone(t.Context(), "devvm clone on", CloneOn, RemakeOptions{Force: true}); msg.NamesOf(err) != "clone_not_top dir="+e.Dir {

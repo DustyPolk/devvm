@@ -74,8 +74,8 @@ exec devvm setup --features none
 stdout '^==> base_features_none$'
 grep '^  "features": \[\]$' $SAVED
 
-# The network policy saved for new VMs: off makes one without it.
-exec devvm network -g off
+# The network tier saved for new VMs: open makes an open one.
+exec devvm network -g open
 project off git
 exec devvm --no-git-protect
 vm_name OFF off
@@ -100,7 +100,7 @@ grep '^  "agents": \[\]$' $SAVED
 # A new VM made without a terminal gets setup's agents, and says so.
 exec devvm setup --agents codex
 project agents git
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-agents-[0-9a-f]{14}$'
 vm_name AGENTS agents
 vm_state $AGENTS_dir/vm.json
@@ -126,16 +126,16 @@ grep '^  "layers": \[\]$' $SAVED
 # --layers replaces them, and --layers none gives it none.
 exec devvm setup --layers desktop
 project layers git
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 stdout '^==> new_vm_gets layers=desktop tools=codex vm=devvm-layers-[0-9a-f]{14}$'
 vm_name LAYERS layers
 vm_state $LAYERS_dir/vm.json
 stdout '^image=desktop$'
 project layersflag git
-exec devvm --no-network-policy --no-git-protect --layers docker
+exec devvm --network open --no-git-protect --layers docker
 stdout '^==> new_vm_gets layers=docker tools=codex vm=devvm-layersflag-[0-9a-f]{14}$'
 project layersnone git
-exec devvm --no-network-policy --no-git-protect --layers none
+exec devvm --network open --no-git-protect --layers none
 stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-layersnone-[0-9a-f]{14}$'
 cd $WORK
 # A default layer of yours whose script is gone: warned, naming it, and
@@ -146,7 +146,7 @@ exec devvm setup --layers mailpit
 stdout '^==> default_layers layers=mailpit$'
 rm $CFG/layers/mailpit.sh
 project gone git
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 stderr '^devvm: default_layer_gone dir=\S*/config/devvm/layers layer=mailpit vm=devvm-gone-[0-9a-f]{14}$'
 stdout '^==> new_vm_gets layers=none tools=codex vm=devvm-gone-[0-9a-f]{14}$'
 cd $WORK
@@ -170,7 +170,7 @@ stdout '^==> setup_in_config file=\S*/config/devvm/config\.toml key=features$'
 ! stdout base_features
 # A new VM gets config.toml's layers.
 project configlayers git
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 stdout '^==> new_vm_gets layers=nix tools=opencode vm=devvm-configlayers-[0-9a-f]{14}$'
 cd $WORK
 rm $CFG/config.toml

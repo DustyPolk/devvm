@@ -267,7 +267,7 @@ func TestFirstRunSize(t *testing.T) {
 	}
 
 	a.shown, a.answers = nil, []string{"2", "4"}
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	if got := f.Instances[st.Name()].Size; got.CPUs != 2 || got.MemoryGiB != 4 {
 		t.Errorf("the new VM got %+v", got)
 	}

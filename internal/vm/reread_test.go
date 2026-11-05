@@ -134,7 +134,7 @@ func TestFileParts(t *testing.T) {
 // section, and one that finishes gives the VM what the file says now.
 func TestUpdateDevcontainer(t *testing.T) {
 	e, f, _ := devcontainerTestEnv(t, `{"image": "node:24", "features": {"ghcr.io/devcontainers/features/docker-in-docker:2": {}}, "postCreateCommand": "echo one"}`)
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	before := readState(t, e.Dirs, vm)
 	if before.Image != "docker" || !slices.Equal(sectionOf[devcontainerInVM](before, devcontainerSection).Gave, []string{"docker"}) {

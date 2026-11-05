@@ -25,7 +25,7 @@ func TestOpenNetworkPolicy(t *testing.T) {
 	l := Launch{e}
 	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 	f.ExecFunc = noDirect
-	st := existingVM(t, e, Options{NetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "allowlist"})
 	vm := st.Name()
 	pid, ok := e.Proxy.PID(vm)
 	if !ok {
@@ -71,7 +71,7 @@ func TestOpenNetworkPolicy(t *testing.T) {
 func TestPartsFlagsIgnored(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	l := Launch{e}
-	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, Network: "open"})
 	vm := st.Name()
 	for o, want := range map[*Options]string{
 		{Agents: &[]string{"claude"}}: "command=devvm tools flags=--agents",
@@ -112,15 +112,15 @@ func TestIgnoredFlags(t *testing.T) {
 		{
 			"every other",
 			Options{
-				Toolchains: &[]string{}, Layers: &[]string{}, NetworkPolicy: true, NoGitProtect: true,
+				Toolchains: &[]string{}, Layers: &[]string{}, Network: "allowlist", NoGitProtect: true,
 				Size: Size{CPUs: "2"}, Ports: "8000", SSHAgent: true,
 			},
 			[]string{
-				"devvm tools: --tools", "devvm layer add: --layers", "devvm network on: --network-policy",
+				"devvm tools: --tools", "devvm layer add: --layers", "devvm network allowlist: --network",
 				"devvm git-protect off: --no-git-protect", "devvm size: --cpus", "devvm ports LIST: --ports", "devvm ssh-agent on: --ssh-agent",
 			},
 		},
-		{"--no-network-policy", Options{NoNetworkPolicy: true}, []string{"devvm network off: --no-network-policy"}},
+		{"--network open", Options{Network: "open"}, []string{"devvm network open: --network"}},
 	} {
 		var got []string
 		for _, g := range ignoredFlags(c.o, "debian:12") {
@@ -138,7 +138,7 @@ func TestIgnoredFlags(t *testing.T) {
 func TestToolsAdd(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	tl := Tools{e}
-	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, Network: "open"})
 	vm := st.Name()
 	skills := filepath.Join(agentStore(e.Dirs, "claude"), ".claude", "skills")
 	if err := os.MkdirAll(skills, 0o700); err != nil {
@@ -203,7 +203,7 @@ func TestToolsAddFrom(t *testing.T) {
 		t.Run(tc.libc, func(t *testing.T) {
 			e, f, _ := upEnv(t, allNative())
 			f.Built = backend.Built{Libc: tc.libc}
-			existingVM(t, e, Options{From: tc.from, Toolchains: &[]string{}, Agents: &[]string{}, NoNetworkPolicy: true})
+			existingVM(t, e, Options{From: tc.from, Toolchains: &[]string{}, Agents: &[]string{}, Network: "open"})
 			if err := (Tools{e}).Add(t.Context(), Options{}, []string{"go"}); err != nil {
 				t.Fatal(msg.NamesOf(err))
 			}
@@ -230,7 +230,7 @@ func TestToolsAddFrom(t *testing.T) {
 func TestToolsPick(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
 	tl := Tools{e}
-	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, Agents: &[]string{"claude"}, Layers: &[]string{"nix"}, NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, Agents: &[]string{"claude"}, Layers: &[]string{"nix"}, Network: "open"})
 	vm := st.Name()
 	var shown []PickPart
 	pick := func(check, uncheck string) {
@@ -415,7 +415,7 @@ func TestRemoveUpdateRestart(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	l := Launch{e}
 	tl := Tools{e}
-	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, Agents: &[]string{"claude"}, NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Toolchains: &[]string{"go"}, Agents: &[]string{"claude"}, Network: "open"})
 	vm := st.Name()
 	if err := tl.Remove(t.Context(), Options{}, []string{"claude"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -478,13 +478,13 @@ func TestRestartToApply(t *testing.T) {
 			"next_start count=1", nil,
 		},
 		{
-			"devvm network on", func(e *Env) error {
-				return Net{e}.SetTier(t.Context(), netpolicy.TierAllowlist, "devvm network on")
+			"devvm network allowlist", func(e *Env) error {
+				return Net{e}.SetTier(t.Context(), netpolicy.TierAllowlist, "devvm network allowlist")
 			},
 			"next_start count=1", nil,
 		},
 		{
-			"devvm network off", func(e *Env) error { return Net{e}.SetTier(t.Context(), netpolicy.TierOpen, "devvm network off") },
+			"devvm network open", func(e *Env) error { return Net{e}.SetTier(t.Context(), netpolicy.TierOpen, "devvm network open") },
 			"next_start count=1", nil,
 		},
 		{
@@ -512,9 +512,9 @@ func TestRestartToApply(t *testing.T) {
 				e, f, execs := upEnv(t, allNative())
 				f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
 				f.ExecFunc = noDirect
-				o := Options{NoNetworkPolicy: true}
-				if c.cmd == "devvm network off" {
-					o = Options{NetworkPolicy: true}
+				o := Options{Network: "open"}
+				if c.cmd == "devvm network open" {
+					o = Options{Network: "allowlist"}
 				}
 				st := existingVM(t, e, o)
 				vm := st.Name()

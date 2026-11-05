@@ -9,6 +9,7 @@ import (
 	"github.com/w3cj/devvm/internal/build"
 	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/ui"
 	"github.com/w3cj/devvm/internal/vm"
@@ -16,19 +17,18 @@ import (
 
 // upFlags are devvm's flags, all of them for what a new VM gets.
 type upFlags struct {
-	tools, agents   string // --tools and --agents: lists, or none
-	layers          string // --layers: a list, or none
-	from            string
-	networkPolicy   bool
-	noNetworkPolicy bool
-	size            vm.Size
-	ports           string
-	unsafeFolder    bool
-	noGitProtect    bool
-	clone           bool
-	sshAgent        bool
-	noDevcontainer  bool
-	sshConfig       bool
+	tools, agents  string // --tools and --agents: lists, or none
+	layers         string // --layers: a list, or none
+	from           string
+	network        string // --network: a tier
+	size           vm.Size
+	ports          string
+	unsafeFolder   bool
+	noGitProtect   bool
+	clone          bool
+	sshAgent       bool
+	noDevcontainer bool
+	sshConfig      bool
 }
 
 // addUpFlags adds devvm's flags to the root command, as its own: no
@@ -41,9 +41,7 @@ func addUpFlags(root *cobra.Command, a *app, uf *upFlags) {
 	addAgentsFlag(f, &uf.agents, "the `LIST` of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)")
 	addLayersFlag(f, &uf.layers, "the `LIST` of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: devvm setup's)")
 	addFromFlag(f, &uf.from)
-	f.BoolVar(&uf.networkPolicy, "network-policy", false, "create the VM with network policy (default: devvm network -g, else asked in a terminal, and on without one)")
-	f.BoolVar(&uf.noNetworkPolicy, "no-network-policy", false, "create the VM without network policy")
-	exclusive(root, "network-policy", "no-network-policy")
+	f.StringVar(&uf.network, "network", "", "the network `TIER` a new VM gets: open, internet, allowlist or none (default: devvm network -g, else asked in a terminal, and allowlist without one)")
 	f.StringVar(&uf.size.CPUs, "cpus", "", "the `N` CPUs the VM gets (default: devvm size -g, else the image's)")
 	f.StringVar(&uf.size.Memory, "memory", "", "the VM's memory in `GiB`, such as 16 or 16G (default: devvm size -g, else the image's)")
 	f.StringVar(&uf.size.Disk, "disk", "", "the VM's disk in `GiB`, at least the image's (default: devvm size -g, else the image's)")
@@ -62,7 +60,7 @@ func addUpFlags(root *cobra.Command, a *app, uf *upFlags) {
 func (uf *upFlags) options() vm.Options {
 	return vm.Options{
 		Toolchains: partFlag(uf.tools), Agents: partFlag(uf.agents), Layers: partFlag(uf.layers),
-		NetworkPolicy: uf.networkPolicy, NoNetworkPolicy: uf.noNetworkPolicy, Size: uf.size, Ports: uf.ports,
+		Network: netpolicy.Tier(uf.network), Size: uf.size, Ports: uf.ports,
 		From: fromRef(uf.from), FromSet: uf.from != "",
 		UnsafeFolder: uf.unsafeFolder, NoGitProtect: uf.noGitProtect, Clone: uf.clone, SSHAgent: uf.sshAgent,
 		NoDevcontainer: uf.noDevcontainer,

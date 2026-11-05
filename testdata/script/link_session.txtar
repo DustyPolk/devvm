@@ -13,7 +13,7 @@ stderr '^devvm: link_session_failed reason=devvm-nope-0123456789abcd: no such VM
 # A running client without links: the session ends at once, with no ssh
 # of its own and no socket.
 project app
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name APP app
 exec devvm _links $APP
 stderr '^devvm links: devvm-app-[0-9a-f]{14} has no links$'

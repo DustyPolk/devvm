@@ -55,7 +55,7 @@ func TestCloneRunsNoHooks(t *testing.T) {
 	if err := os.Remove(ran); err != nil {
 		t.Fatalf("plain git didn't run reference-transaction: %v", err)
 	}
-	st := existingVM(t, e, Options{NoNetworkPolicy: true, Clone: true})
+	st := existingVM(t, e, Options{Network: "open", Clone: true})
 	if _, err := os.Stat(ran); err == nil {
 		t.Error("seeding the clone ran a hook")
 	}

@@ -12,7 +12,7 @@ stderr '^devvm: no_vm dir=\S*/web$'
 # stopped; the stub's would be gone after devvm.)
 exec git init -q
 exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
-exec devvm --network-policy
+exec devvm --network allowlist
 catg $DATA/ssh_config
 stdout '^Host devvm-web devvm-web-[0-9a-f]{14}$'
 exec sh -c 'cat "$VMS"/*/run/proxy.pid > "$WORK/pid" && kill -0 "$(cat "$WORK/pid")"'

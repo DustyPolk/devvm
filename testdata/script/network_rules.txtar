@@ -18,7 +18,7 @@ cmp $GLOBAL $WORK/global.policy
 
 # allow, deny (a deny gets its !, once) and rm edit the VM's own file;
 # a rule already there isn't added again, in any case.
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name NET net
 exec devvm network allow example.com api.example.com:8443
 stdout '^==> rule_added rule=example\.com vm=devvm-net-[0-9a-f]{14}$'
@@ -51,7 +51,7 @@ stderr '^devvm: not_a_rule rule='
 ! exec devvm network allow
 stderr '^devvm: arg_missing args=RULE\.\.\. command=devvm network allow$'
 ! exec devvm network sideways
-stderr '^devvm: arg_not_choice choices=on, off command=devvm network given=sideways$'
+stderr '^devvm: arg_not_choice choices=open, internet, allowlist, none command=devvm network given=sideways$'
 cmp $NET_dir/policy $WORK/vm.policy
 
 # A rule that isn't there: a warning; the others still go.
@@ -63,12 +63,12 @@ exec devvm network rm -g '*.corp.test'
 stdout '^==> rule_removed_global rule=\*\.corp\.test$'
 exec devvm network allow --global '*.corp.test'
 
-# The VM's network policy (on, or unenforced as the stubs leave it), then
+# The VM's tier (allowlist, or unenforced as the stubs leave it), then
 # the rules in effect, file by file, comments left out: devvm's built-in
 # policies first, by name, then your files, by path.
 exec sh -c 'echo "# mine" >> "$GLOBAL"'
 exec devvm network
-stdout '\A(on|unenforced)\n# devvm: layers/base\.policy\n'
+stdout '\A(allowlist|unenforced)\n# devvm: layers/base\.policy\n'
 stdout '^  github\.com$'
 stdout '^# \S*/config/devvm/policy\n  \*\.corp\.test\n# \S*/vms/[0-9a-f]{14}/policy\n  !bad\.example\.com\n  example\.com\n'
 ! stdout mine
@@ -76,7 +76,7 @@ stdout '^# \S*/config/devvm/policy\n  \*\.corp\.test\n# \S*/vms/[0-9a-f]{14}/pol
 # --json: the same, each policy with its rules, a built-in one by name;
 # it only shows.
 exec devvm network --json
-stdout '\A{\n  "version": 1,\n  "policy": "(on|unenforced)",\n  "allowlist": \[\n    {\n      "builtin": "layers/base\.policy",\n      "rules": \[\n'
+stdout '\A{\n  "version": 1,\n  "policy": "(allowlist|unenforced)",\n  "allowlist": \[\n    {\n      "builtin": "layers/base\.policy",\n      "rules": \[\n'
 ! stdout '"file": "\S*/layers/base\.policy"'
 stdout '^      "file": "\S*/vms/[0-9a-f]{14}/policy",\n      "rules": \[\n        "!bad\.example\.com",\n        "example\.com"\n      \],\n      "not_rules": \[\]\n'
 ! stderr .
@@ -117,7 +117,7 @@ exec devvm network rm -g ok3.test
 # An open VM: devvm network shows its tier and no rules, as none apply,
 # and changing them says so.
 project off
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec devvm network
 stdout '\Aopen\n\z'
 ! stderr .
@@ -128,7 +128,7 @@ stderr '^net_open_policy vm=devvm-off-[0-9a-f]{14}$'
 vm_name OFF off
 exists $OFF_dir/policy
 exec limactl delete $OFF
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
 ! exists $OFF_dir/policy
 
@@ -137,7 +137,7 @@ stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
 # nothing; none: the VM's agents' policies alone (here it has none), with
 # the same denies. Its proxy reads them as devvm network shows them.
 project tiers
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name TIERS tiers
 exec limactl stop $TIERS
 cp $WORK/vm.policy $TIERS_dir/policy

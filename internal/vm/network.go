@@ -47,29 +47,29 @@ func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 	return s, err
 }
 
-// NetworkDefault returns whether new VMs get network policy (ask, on or
-// off), and where that came from.
+// NetworkDefault returns new VMs' network tier, or ask, and where that
+// came from.
 func (e Net) NetworkDefault() (settings.Value, error) {
 	def, err := settings.Read(e.Dirs)
 	return def.Network, err
 }
 
-// SetNetworkDefault saves whether new VMs get network policy, as devvm
-// setup does (NetworkChoice).
+// SetNetworkDefault saves new VMs' network tier, or ask, as devvm setup
+// does (NetworkChoice).
 func (e Net) SetNetworkDefault(mode string) error {
 	return NetworkChoice{Dirs: e.Dirs, Reporter: e.Reporter}.Set(mode)
 }
 
-// NetworkChoice chooses whether new VMs get network policy, which devvm
-// network -g and devvm setup save in settings.json. The flags of devvm
-// still choose for one VM.
+// NetworkChoice chooses new VMs' network tier, or ask, which devvm
+// network -g and devvm setup save in settings.json. devvm's --network
+// still chooses for one VM.
 type NetworkChoice struct {
 	Dirs         paths.Dirs
 	msg.Reporter // says what's saved
 }
 
 // Set saves mode (a settings.NetworkChoices value) as new VMs' network
-// policy; config.toml mustn't set it (set_in_config).
+// tier; config.toml mustn't set it (set_in_config).
 func (c NetworkChoice) Set(mode string) error {
 	if _, err := settings.Save(c.Dirs, settings.Values{Network: &mode}); err != nil {
 		return err
@@ -79,7 +79,7 @@ func (c NetworkChoice) Set(mode string) error {
 }
 
 // SetTier gives the folder's VM the tier to, as command (devvm network
-// on) asks. Between confined tiers it applies at once: a running VM's
+// allowlist) asks. Between confined tiers it applies at once: a running VM's
 // proxy starts again with the new tier's rules. Into or out of open it
 // applies from the VM's next start: a running VM restarts now once the
 // user agrees (restartNow). A confined tier needs a backend that can

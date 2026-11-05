@@ -20,7 +20,7 @@ import (
 func TestRmConfirms(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	lc := Lifecycle{e}
-	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true}).Name()
+	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, Network: "open"}).Name()
 	if err := lc.Rm(t.Context(), RmOptions{}); msg.NamesOf(err) != "no_input answer=--force" {
 		t.Errorf("no terminal: %v", msg.NamesOf(err))
 	}
@@ -50,7 +50,7 @@ func TestRmConfirms(t *testing.T) {
 func TestRm(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	lc := Lifecycle{e}
-	st := existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Agents: &[]string{"claude"}, Network: "open"})
 	vm := st.Name()
 	f.ExecFunc = func(_ string, argv []string, _ backend.ExecOpts) error {
 		if len(argv) == 3 && strings.Contains(argv[2], "tar -czf") {
@@ -102,7 +102,7 @@ func TestRm(t *testing.T) {
 	}
 
 	// Another folder at the same path.
-	st = existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true})
+	st = existingVM(t, e, Options{Agents: &[]string{"claude"}, Network: "open"})
 	if err := set(t, st, keyFolder, "0:0"); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestRm(t *testing.T) {
 func TestRmVMChecksAgain(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	lc := Lifecycle{e}
-	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true}).Name()
+	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, Network: "open"}).Name()
 	dir := e.Dir
 	if err := os.Remove(dir); err != nil {
 		t.Fatal(err)
@@ -166,10 +166,10 @@ func TestRmVMChecksAgain(t *testing.T) {
 func TestRmVMFolderOfAnother(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
-	own := existingVM(t, e, Options{NoNetworkPolicy: true}).Name()
+	own := existingVM(t, e, Options{Network: "open"}).Name()
 	subfolder(t, e, filepath.Dir(web), "api")
 	e.Folder = FolderHere
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	other, err := (finder{e}).target(t.Context(), need{})
@@ -196,7 +196,7 @@ func TestRmVMFolderOfAnother(t *testing.T) {
 func TestExport(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	lc := Lifecycle{e}
-	vm := existingVM(t, e, Options{NoNetworkPolicy: true}).Name()
+	vm := existingVM(t, e, Options{Network: "open"}).Name()
 	tarball := "tarball"
 	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
 		if len(argv) == 3 && strings.Contains(argv[2], "tar -czf") {
@@ -301,7 +301,7 @@ func TestExportStartsAsLaunch(t *testing.T) {
 		}
 		return nil
 	}
-	st := existingVM(t, e, Options{NetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "allowlist"})
 	vm := st.Name()
 	lc := Lifecycle{e}
 	stop := func() {
@@ -339,7 +339,7 @@ func TestExportStartsAsLaunch(t *testing.T) {
 func TestAdopt(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	lc, l := Lifecycle{e}, Launch{e}
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	if err := lc.Adopt(t.Context(), "", false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
@@ -399,7 +399,7 @@ func TestSetIDOnStop(t *testing.T) {
 	want := "setid_files files=" + filepath.Join(e.Dir, "tool")
 	var warned msg.Recorder
 	fake(e).OnWarn = warned.Add
-	existingVM(t, e, Options{NoNetworkPolicy: true})
+	existingVM(t, e, Options{Network: "open"})
 	if !slices.Equal(warned.Names(), []string{want}) {
 		t.Errorf("a new VM: warned %q, want %s", warned.Names(), want)
 	}

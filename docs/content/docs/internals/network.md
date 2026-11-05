@@ -22,7 +22,7 @@ An open VM's start takes the same steps without the first two: its proxy has no 
 
 ## VMs that can't have it
 
-A VM whose backend can't confine it to its proxy (`egress-proxy`) can only be open: devvm refuses to make it on any other tier, unasked, in one line that names the backend and `--no-network-policy` (`net_tier_backend`), and `devvm network on` is refused by the registry's check.
+A VM whose backend can't confine it to its proxy (`egress-proxy`) can only be open: devvm refuses to make it on any other tier, unasked, in one line that names the backend and `--network open` (`net_tier_backend`), and the registry's check refuses `devvm network` with a confined tier.
 
 ## The proxy
 
@@ -265,7 +265,7 @@ Network policy holds only while the VM runs on the process that devvm started co
 
 devvm records the result in the VM's state, as `ok` or `unenforced` in the `net` section's `made.check`. When the check fails, what devvm does depends on why:
 
-- **The VM wasn't started confined,** because it was started outside devvm or has been running since before `devvm network on`. In a terminal, devvm offers to restart the VM confined (`net_unenforced_restart`), and if you decline, it warns you and goes on (`net_unenforced`). Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell (`net_unenforced_stop`). The next `devvm` starts the VM confined.
+- **The VM wasn't started confined,** because it was started outside devvm or has been running since before `devvm network` moved it from open to a confined tier. In a terminal, devvm offers to restart the VM confined (`net_unenforced_restart`), and if you decline, it warns you and goes on (`net_unenforced`). Without a terminal, or if the VM is still unenforced after the restart, devvm stops the VM and ends without opening a shell (`net_unenforced_stop`). The next `devvm` starts the VM confined.
 - **The VM was started confined, yet it gets out,** because it reaches the internet through something devvm didn't set up, such as a second network. A restart wouldn't help, so devvm stops the VM and ends (`net_direct_route`).
 
 This is the check, and what devvm does when it fails:

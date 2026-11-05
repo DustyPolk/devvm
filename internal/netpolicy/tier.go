@@ -36,6 +36,16 @@ const TierDefault = TierAllowlist
 // Tiers are the tiers, lowest to highest.
 func Tiers() []Tier { return []Tier{TierOpen, TierInternet, TierAllowlist, TierNone} }
 
+// TierNames are the tiers' names, lowest to highest, as the command line
+// takes them.
+func TierNames() []string {
+	names := make([]string, 0, len(Tiers()))
+	for _, t := range Tiers() {
+		names = append(names, string(t))
+	}
+	return names
+}
+
 // Valid reports whether t is one of the tiers.
 func (t Tier) Valid() bool { return slices.Contains(Tiers(), t) }
 

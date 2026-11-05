@@ -22,7 +22,7 @@ func newLsCmd(a *app) *cobra.Command {
 		Use:   "ls",
 		Short: "List the project VMs",
 		Long: "List the project VMs, sorted by name. " +
-			"Each row has the VM's status, image, .git protection, network policy, links to your other VMs and folder.",
+			"Each row has the VM's status, image, .git protection, network tier, links to your other VMs and folder.",
 		Example: examples(
 			"devvm ls", "list every project VM",
 			"devvm ls --json", "the same list as JSON, for scripts",
@@ -106,7 +106,7 @@ func listVMs(cmd *cobra.Command, a *app) ([]vm.Listed, error) {
 
 // writeList writes the VMs as a table, a header first; a value a VM lacks
 // is -, and so are TOOLS for a VM without shared tools and LINKS for one
-// without links. A VM's status, .git protection and network policy are
+// without links. A VM's status, .git protection and network tier are
 // colored by what they mean, and a folder that's gone or not connected is
 // yellow, with (gone) or (not connected) after it.
 func writeList(tab *ui.Table, ls []vm.Listed) error {

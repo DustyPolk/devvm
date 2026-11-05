@@ -114,7 +114,7 @@ devvm finds its folders from `HOME`, so it stops when `HOME` is empty or isn't a
 
 ## A VM shows as unenforced
 
-`devvm ls` and `devvm network` show a VM's network policy as `unenforced` when the VM has network policy but devvm didn't start it confined. That happens when it was started outside devvm, such as with `devvm limactl start`, or when it has been running since before `devvm network on`. The VM then reaches the network without its proxy.
+`devvm ls` and `devvm network` show a VM's network policy as `unenforced` when the VM has network policy but devvm didn't start it confined. That happens when it was started outside devvm, such as with `devvm limactl start`, or when it has been running since before `devvm network` moved it from open to a confined tier, such as with `devvm network allowlist`. The VM then reaches the network without its proxy.
 
 On the VM's next launch, devvm offers in a terminal to restart it confined, and if you decline, it warns and goes on. Without a terminal, or with `--no-input`, devvm stops the VM instead, and the next `devvm` starts it confined ([the self-check](../internals/network.md#the-self-check)).
 

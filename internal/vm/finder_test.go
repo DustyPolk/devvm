@@ -114,7 +114,7 @@ func TestFinder(t *testing.T) {
 			e, f, _ := upEnv(t, allNative())
 			web, vm := e.Dir, ""
 			if tc.setup != nil {
-				st := existingVM(t, e, Options{NoNetworkPolicy: true})
+				st := existingVM(t, e, Options{Network: "open"})
 				vm = st.Name()
 				tc.setup(t, e, st)
 			}

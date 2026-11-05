@@ -24,7 +24,7 @@ import (
 // open, its proxy first, and the backend's shell run.
 func TestUp(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Size: Size{CPUs: "2"}, Ports: "none"}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open", Size: Size{CPUs: "2"}, Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	ms := f.Methods()
@@ -73,7 +73,7 @@ func TestUp(t *testing.T) {
 	}
 	// It exists now, and runs: opened as it is, set up again.
 	before := len(f.Calls())
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if ms := f.Methods()[before:]; slices.Contains(ms, "Start") || slices.Contains(ms, "CreateVM") || !slices.Contains(ms, "Exec") {
@@ -106,7 +106,7 @@ func TestUpNetworkPolicy(t *testing.T) {
 		}
 		return hostKeys(vm, argv, o)
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{NetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "allowlist"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if len(*starts) != 1 {
@@ -144,7 +144,7 @@ func TestUpNetworkPolicy(t *testing.T) {
 // stopped: no setup, no shell.
 func TestUpNetworkPolicyFailsClosed(t *testing.T) {
 	e, f, execs := upEnv(t, allNative())
-	err := Launch{e}.Up(t.Context(), Options{NetworkPolicy: true})
+	err := Launch{e}.Up(t.Context(), Options{Network: "allowlist"})
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
 	if msg.NamesOf(err) != "net_direct_route vm="+spec.Name {
 		t.Fatalf("Up = %v", msg.NamesOf(err))
@@ -167,7 +167,7 @@ func TestUpNetworkPolicyFailsClosed(t *testing.T) {
 func TestUpKeepsTheNetworkChoice(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	f.Errs = map[string]error{"CreateVM": errors.New("clone failed")}
-	if err := (Launch{e}).Up(t.Context(), Options{NetworkPolicy: true}); err == nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "allowlist"}); err == nil {
 		t.Fatal("Up succeeded")
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
@@ -183,7 +183,7 @@ func TestUpRequiresEgressProxy(t *testing.T) {
 	caps := allNative()
 	caps[backend.FeatureEgressProxy] = backend.Emulated(false)
 	e, f, _ := upEnv(t, caps)
-	err := Launch{e}.Up(t.Context(), Options{NetworkPolicy: true})
+	err := Launch{e}.Up(t.Context(), Options{Network: "allowlist"})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "net_tier_backend backend=fake vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
@@ -191,26 +191,26 @@ func TestUpRequiresEgressProxy(t *testing.T) {
 		t.Errorf("calls = %q", f.Methods())
 	}
 	// Without network policy it doesn't need it.
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open"}); err != nil {
 		t.Errorf("Up without network policy = %v", msg.NamesOf(err))
 	}
 }
 
 // On a backend without egress-proxy, a VM can only be open: without
-// --no-network-policy it's refused before anything is built, and with it
+// --network open it's refused before anything is built, and with it
 // it's made open, its proxy set in it.
 func TestUpWithoutEgressProxy(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureEgressProxy)
 	e, f, _ := upEnv(t, caps)
-	for _, o := range []Options{{NetworkPolicy: true}, {}} {
+	for _, o := range []Options{{Network: "allowlist"}, {}} {
 		err := Launch{e}.Up(t.Context(), o)
 		if got := msg.NamesOf(err); !strings.HasPrefix(got, "net_tier_backend backend=fake vm=devvm-web-") ||
 			slices.Contains(f.Methods(), "BuildImage") {
 			t.Errorf("Up %+v = %v, calls %q", o, got, f.Methods())
 		}
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open"}); err != nil {
 		t.Fatalf("Up = %v", msg.NamesOf(err))
 	}
 	spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec)
@@ -231,7 +231,7 @@ func TestUpTools(t *testing.T) {
 	}
 	var said msg.Recorder
 	fake(e).OnInfo = said.Add
-	if err := (Launch{e}).Up(t.Context(), Options{Agents: &[]string{"claude"}, NoNetworkPolicy: true}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Agents: &[]string{"claude"}, Network: "open"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if !slices.ContainsFunc(said.Names(), func(s string) bool { return strings.HasPrefix(s, "new_vm_gets layers=none tools=node claude vm=") }) {
@@ -295,7 +295,7 @@ func TestUpFromTools(t *testing.T) {
 			f.Built = backend.Built{Libc: tc.libc}
 			var said msg.Recorder
 			fake(e).OnInfo = said.Add
-			if err := (Launch{e}).Up(t.Context(), Options{From: tc.from, Toolchains: &[]string{"go"}, Agents: &[]string{}, NoNetworkPolicy: true}); err != nil {
+			if err := (Launch{e}).Up(t.Context(), Options{From: tc.from, Toolchains: &[]string{"go"}, Agents: &[]string{}, Network: "open"}); err != nil {
 				t.Fatal(msg.NamesOf(err))
 			}
 			bases := map[bool]string{} // by whether it's from tc.from
@@ -406,7 +406,7 @@ func TestUpParts(t *testing.T) {
 			var said, warned msg.Recorder
 			fake(e).OnInfo, fake(e).OnWarn = said.Add, warned.Add
 			o := tc.o
-			o.NoNetworkPolicy, o.Ports = true, "none"
+			o.Network, o.Ports = "open", "none"
 			if err := (Launch{e}).Up(t.Context(), o); err != nil {
 				t.Fatal(msg.NamesOf(err))
 			}
@@ -441,14 +441,14 @@ func TestUpSetupLayerLacks(t *testing.T) {
 	if _, err := settings.Save(e.Dirs, settings.Values{Layers: &[]string{"docker"}}); err != nil {
 		t.Fatal(err)
 	}
-	err := Launch{e}.Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"})
+	err := Launch{e}.Up(t.Context(), Options{Network: "open", Ports: "none"})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "default_layer_lacks backend=fake feature=docker-layer layer=docker vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
 	if ms := f.Methods(); slices.Contains(ms, "BuildImage") {
 		t.Errorf("calls = %q", ms)
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{Layers: &[]string{}, NoNetworkPolicy: true, Ports: "none"}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Layers: &[]string{}, Network: "open", Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 }
@@ -488,7 +488,7 @@ func TestUpPicker(t *testing.T) {
 	}
 	var said msg.Recorder
 	fake(e).OnInfo = said.Add
-	if err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Network: "open", Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if !slices.Equal(asked, []string{"agents_help", "pick_new_help"}) {
@@ -555,7 +555,7 @@ func TestUpFlagsSkipPicker(t *testing.T) {
 		t.Errorf("asked %s", help.Names())
 		return parts
 	}
-	if err := (Launch{e}).Up(t.Context(), Options{Layers: &[]string{}, NoNetworkPolicy: true, Ports: "none"}); err != nil {
+	if err := (Launch{e}).Up(t.Context(), Options{Layers: &[]string{}, Network: "open", Ports: "none"}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 }
@@ -566,7 +566,7 @@ func TestUpRequires(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureProjectMount)
 	e, f, execs := upEnv(t, caps)
-	err := Launch{e}.Up(t.Context(), Options{NoNetworkPolicy: true})
+	err := Launch{e}.Up(t.Context(), Options{Network: "open"})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=project-mount vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
@@ -594,7 +594,7 @@ func TestUpRefusesLowSpace(t *testing.T) {
 		{12<<30 - 1, "disk_low dir=" + e.Dirs.Lima + " free=11.9 name=base need=12"},
 	} {
 		e.FreeSpace = func(string) (uint64, error) { return tc.free, nil }
-		err := Launch{e}.Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"})
+		err := Launch{e}.Up(t.Context(), Options{Network: "open", Ports: "none"})
 		if got := msg.NamesOf(err); !strings.HasPrefix(got, tc.want) {
 			t.Errorf("with %d free: Up = %v, want %s…", tc.free, got, tc.want)
 		}
@@ -613,7 +613,7 @@ func TestUpRequiresDockerLayer(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureDockerLayer)
 	e, f, _ := upEnv(t, caps)
-	err := Launch{e}.Up(t.Context(), Options{Layers: &[]string{"docker"}, NoNetworkPolicy: true, Ports: "none"})
+	err := Launch{e}.Up(t.Context(), Options{Layers: &[]string{"docker"}, Network: "open", Ports: "none"})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=docker-layer vm=devvm-web-") {
 		t.Errorf("Up = %v", got)
 	}
@@ -629,7 +629,7 @@ func TestUpDiskNeedsDisk(t *testing.T) {
 	delete(caps, backend.FeatureDisk)
 	e, f, _ := upEnv(t, caps)
 	saveSize(t, e.Dirs, Size{CPUs: "2", Disk: "150"})
-	err := (Launch{e}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none"})
+	err := (Launch{e}).Up(t.Context(), Options{Network: "open", Ports: "none"})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=disk ") {
 		t.Errorf("the default's: %v", got)
 	}
@@ -637,7 +637,7 @@ func TestUpDiskNeedsDisk(t *testing.T) {
 		t.Errorf("calls = %q", ms)
 	}
 	e2, _, _ := upEnv(t, caps)
-	err = (Launch{e2}).Up(t.Context(), Options{NoNetworkPolicy: true, Ports: "none", Size: Size{Disk: "150"}})
+	err = (Launch{e2}).Up(t.Context(), Options{Network: "open", Ports: "none", Size: Size{Disk: "150"}})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=disk ") {
 		t.Errorf("--disk: %v", got)
 	}

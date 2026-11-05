@@ -4,7 +4,7 @@
 # What tools add saved stays, and devvm ls shows the policy on.
 
 project net
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name NET net
 exec devvm stop
 exec sh -c ': > "$STUB_LOG" && echo "$NET" > "$STUB_DIR/start-hangs-running"'

@@ -110,7 +110,7 @@ func (t *target) sshHost() string {
 }
 
 // widen is asked before a command that gives the VM more access (cmd, as
-// devvm network off) changes it: true for the folder's own VM. A parent
+// devvm network open) changes it: true for the folder's own VM. A parent
 // folder's VM, found from a subfolder, changes only after asking, [y/N],
 // which no flag answers.
 func (t *target) widen(cmd string) (bool, error) {

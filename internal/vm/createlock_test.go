@@ -17,7 +17,7 @@ import (
 )
 
 // newOpts is a new VM that asks nothing.
-func newOpts() Options { return Options{NoNetworkPolicy: true, Ports: "none"} }
+func newOpts() Options { return Options{Network: "open", Ports: "none"} }
 
 // countOf is how many times ms has method.
 func countOf(ms []string, method string) int {

@@ -26,28 +26,27 @@ devvm [flags]
 ## Options
 
 ```text
-      --agents LIST         the LIST of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)
-      --clone               create the VM with its own clone of this repo instead of mounting the folder
-      --cpus N              the N CPUs the VM gets (default: devvm size -g, else the image's)
-      --disk GiB            the VM's disk in GiB, at least the image's (default: devvm size -g, else the image's)
-      --from IMAGE          the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
-  -h, --help                help for devvm
-      --here                use this folder's own VM, never that of a folder it's inside
-      --layers LIST         the LIST of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: devvm setup's)
-      --memory GiB          the VM's memory in GiB, such as 16 or 16G (default: devvm size -g, else the image's)
-      --network-policy      create the VM with network policy (default: devvm network -g, else asked in a terminal, and on without one)
-      --no-devcontainer     create the VM without reading the folder's devcontainer.json
-      --no-git-protect      create the VM without .git protection
-      --no-input            never ask, and fail where devvm would ask, naming the flag that answers it
-      --no-network-policy   create the VM without network policy
-      --parent              use the VM of the nearest folder this one is inside, even across a git repo of its own
-      --ports PORTS         the PORTS the VM forwards: all, none or a list like 5173,8000-8010 (default: devvm ports -g, else all)
-      --ssh-agent           create the VM with your SSH agent forwarded, so anything in it can use your keys while you're connected
-      --ssh-config          add devvm's Include line to ~/.ssh/config without asking
-      --tools LIST          the LIST of toolchains a new VM gets, such as node,python, or none (default: those the folder's files call for)
-      --unsafe-folder       mount a folder devvm refuses, such as your home folder
-  -v, --verbose             show the output of the commands devvm runs instead of a status line
-      --version             print devvm's version
+      --agents LIST       the LIST of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)
+      --clone             create the VM with its own clone of this repo instead of mounting the folder
+      --cpus N            the N CPUs the VM gets (default: devvm size -g, else the image's)
+      --disk GiB          the VM's disk in GiB, at least the image's (default: devvm size -g, else the image's)
+      --from IMAGE        the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
+  -h, --help              help for devvm
+      --here              use this folder's own VM, never that of a folder it's inside
+      --layers LIST       the LIST of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: devvm setup's)
+      --memory GiB        the VM's memory in GiB, such as 16 or 16G (default: devvm size -g, else the image's)
+      --network TIER      the network TIER a new VM gets: open, internet, allowlist or none (default: devvm network -g, else asked in a terminal, and allowlist without one)
+      --no-devcontainer   create the VM without reading the folder's devcontainer.json
+      --no-git-protect    create the VM without .git protection
+      --no-input          never ask, and fail where devvm would ask, naming the flag that answers it
+      --parent            use the VM of the nearest folder this one is inside, even across a git repo of its own
+      --ports PORTS       the PORTS the VM forwards: all, none or a list like 5173,8000-8010 (default: devvm ports -g, else all)
+      --ssh-agent         create the VM with your SSH agent forwarded, so anything in it can use your keys while you're connected
+      --ssh-config        add devvm's Include line to ~/.ssh/config without asking
+      --tools LIST        the LIST of toolchains a new VM gets, such as node,python, or none (default: those the folder's files call for)
+      --unsafe-folder     mount a folder devvm refuses, such as your home folder
+  -v, --verbose           show the output of the commands devvm runs instead of a status line
+      --version           print devvm's version
 ```
 
 ## Docs
@@ -74,14 +73,14 @@ devvm [flags]
 - [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs without network policy
 - [devvm link](devvm_link.md): List this folder's VM's links to your other VMs
 - [devvm ls](devvm_ls.md): List the project VMs
-- [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
+- [devvm network](devvm_network.md): Show or change the network tier of this folder's VM
 - [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one
 - [devvm restart](devvm_restart.md): Restart this folder's VM and open a shell in it
 - [devvm retention](devvm_retention.md): Show or change what devvm deletes on its own
 - [devvm rm](devvm_rm.md): Delete this folder's VM, or a VM whose folder is gone
 - [devvm secret](devvm_secret.md): List the secrets kept on this machine, for VMs to use
-- [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network policy, coding agents and layers
+- [devvm setup](devvm_setup.md): Choose base's features, and new VMs' size, network tier, coding agents and layers
 - [devvm size](devvm_size.md): Show or change this folder's VM's size
 - [devvm space](devvm_space.md): Show what devvm keeps on this machine and the space it takes
 - [devvm ssh-agent](devvm_ssh-agent.md): Show or change SSH agent forwarding for this folder's VM

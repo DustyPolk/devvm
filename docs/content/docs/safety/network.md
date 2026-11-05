@@ -32,41 +32,39 @@ A VM is on one of four tiers, from the lowest to the highest:
 | `allowlist` | only the hosts its [allowlists](#allowlists) allow, apart from your denies | yes |
 | `none` | only its agents' hosts, the hosts of its secrets and logins, and its [links](#links-between-vms), apart from your denies | yes |
 
-`devvm network on` gives a VM the allowlist tier, and `devvm network off` makes it open. `--network-policy` and `--no-network-policy` choose the same two for a new VM. A higher tier is stricter, and a VM on any tier but open is confined: it reaches nothing but its proxy, and a direct connection from it fails.
+`--network TIER` chooses a new VM's tier, and `devvm network` with a tier changes an existing VM's, such as `devvm network internet` ([choosing a tier](#choosing-a-tier)). A higher tier is stricter, and a VM on any tier but open is confined: it reaches nothing but its proxy, and a direct connection from it fails.
 
 An open VM runs on its backend's own network, so it reaches this machine and your LAN directly, as a VM without a proxy would. Its environment names its proxy all the same (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms), and the proxy reaches every host and address for it, this machine's `localhost` and your LAN included, so a tool behaves the same through the proxy as it does directly. Its `NO_PROXY` names the VM itself and this machine as the VM reaches it, `host.lima.internal`, so requests to those go directly. Every launch checks that an open VM's proxy is set in the VM and answers it, and when it doesn't, devvm warns you and opens the VM all the same. An open VM still gets the real value of each secret it may use, so a secret it got still works wherever the VM kept it.
 
 On the internet and none tiers, devvm reads only the denies of your policy files: the internet tier allows every public host itself, and the none tier allows only what the VM's agents, secrets and links need. `devvm network` marks each such file `(denies only)`, and when you add an allow to a VM on either tier, devvm says that the allow changes nothing until the VM is on the allowlist tier. On the open tier no rule applies at all.
 
-Changing a VM from one confined tier to another applies at once, because the VM's proxy starts again with the new tier's rules and the VM keeps running. A change into or out of the open tier applies from the VM's next start, as [below](#turning-it-on-or-off) describes. `devvm ls` and `devvm network` show a VM's tier, or `unenforced` when a confined tier isn't in force ([when it isn't enforced](#when-it-isnt-enforced)).
+Changing a VM from one confined tier to another applies at once, because the VM's proxy starts again with the new tier's rules and the VM keeps running. A change into or out of the open tier applies from the VM's next start, as [below](#choosing-a-tier) describes. `devvm ls` and `devvm network` show a VM's tier, or `unenforced` when a confined tier isn't in force ([when it isn't enforced](#when-it-isnt-enforced)).
 
-## Turning it on or off
+## Choosing a tier
 
-A new VM gets network policy unless you turn it off. When devvm creates a VM in a terminal, it shows what each choice means and asks whether to turn network policy on, with yes as the default:
+A new VM gets the allowlist tier unless you choose another. When devvm creates a VM in a terminal, it says what each tier reaches and asks for one, and pressing Enter gives the VM allowlist:
 
 ```text
-Network policy for devvm-some-project-71a99b1076d92c:
-  on:  it reaches only the hosts you allow, and your secrets stay on this machine (recommended)
-  off: it reaches anything this machine can
-https://devvm.dev/docs/safety/network/#turning-it-on-or-off
-Turn it on? [Y/n]
+Choose the network tier for devvm-some-project-71a99b1076d92c. With open it reaches anything this machine can, with internet any public host, with allowlist only the hosts you allow (recommended), and with none only its agents' and secrets' hosts and its links.
+https://devvm.dev/docs/safety/network/#choosing-a-tier
+Network tier for the VM (open, internet, allowlist or none) [allowlist]:
 ```
 
-`--network-policy` and `--no-network-policy` answer the question up front, and when there's no terminal to ask in, or you give `--no-input`, network policy is on. A VM keeps its choice. On an existing VM devvm ignores both flags and warns you.
+When you type something that isn't a tier, devvm says so and asks again. `--network TIER` answers the question up front, such as `devvm --network internet`, and when there's no terminal to ask in, or you give `--no-input`, the VM gets allowlist. A VM keeps its tier. On an existing VM devvm ignores `--network` and warns you, naming the `devvm network` command that changes the tier.
 
-To answer the question for every new VM, save `on` or `off` with `devvm network -g on` or `devvm network -g off`, or choose it in [devvm setup](../using/settings.md#devvm-setup), and devvm makes each new VM that way without asking. `devvm network -g ask` brings the question back, and `devvm network -g` shows what new VMs get: `ask`, which is the default, `on` or `off`, followed by where it came from after a `#`. `devvm network -g --json` prints it as `policy`, with `source`. devvm reads the saved answer only when it creates a VM, so the VMs you already have keep their own network policy, and the two flags still choose for one new VM. You can also set it with `network` in [`config.toml`](../using/settings.md#configtoml), which wins over the saved answer, and then `devvm network -g` refuses to change it and names the file ([where a default comes from](../using/settings.md#where-a-default-comes-from)).
+To answer the question for every new VM, save a tier with `devvm network -g`, such as `devvm network -g none`, or choose it in [devvm setup](../using/settings.md#devvm-setup), and devvm gives each new VM that tier without asking. `devvm network -g ask` brings the question back, and `devvm network -g` shows what new VMs get: `ask`, which is the default, or a tier, followed by where it came from after a `#`. `devvm network -g --json` prints it as `policy`, with `source`. devvm reads the saved answer only when it creates a VM, so the VMs you already have keep their own tier, and `--network` still chooses for one new VM. You can also set it with `network` in [`config.toml`](../using/settings.md#configtoml), which wins over the saved answer, and then `devvm network -g` refuses to change it and names the file ([where a default comes from](../using/settings.md#where-a-default-comes-from)).
 
-Lima confines every VM to its proxy, so every VM can have network policy, the docker layer's included. devvm never starts a VM you asked network policy for with an open network, so if a VM's backend couldn't confine it, the VM could only be open: devvm would refuse to make it on any other tier unless you give `--no-network-policy`, and it would refuse `devvm network on` for it ([when a backend lacks something](../backends/_index.md#when-a-backend-lacks-something)).
+Lima confines every VM to its proxy, so every VM can be on any tier, the docker layer's included. devvm never starts a VM on a confined tier with an open network, so if a VM's backend couldn't confine it, the VM could only be open: devvm would refuse to make it on any other tier unless you give `--network open`, and it would refuse to give it any other tier with `devvm network` ([when a backend lacks something](../backends/_index.md#when-a-backend-lacks-something)).
 
 | | |
 | --- | --- |
 | `devvm network` | print this folder's VM's tier as `devvm ls` shows it, `open`, `internet`, `allowlist`, `none` or `unenforced`, and then its [allowlist](#changing-rules) |
-| `devvm network on\|off` | change it from the VM's next start, which `devvm restart` gives you, and for a running VM, ask in a terminal whether to restart it now |
-| `devvm network -g [on\|off\|ask]` | show or change what new VMs get |
+| `devvm network open\|internet\|allowlist\|none` | change it: between confined tiers at once, and into or out of open from the VM's next start, which `devvm restart` gives you, and for a running VM, ask in a terminal whether to restart it now |
+| `devvm network -g [open\|internet\|allowlist\|none\|ask]` | show or change what new VMs get |
 
-When the VM is running, devvm asks in a terminal whether to restart it now, which stops anything running in it, and if you answer yes, it restarts the VM as `devvm restart` does, so the change applies at once. If you answer no, or there's no terminal, or you pass `--no-input`, the change waits until the VM starts again. If you turn network policy on while the VM is running, the VM isn't confined yet, so `devvm ls` shows it as `unenforced`, and its next launch offers to restart it confined, as it does for a VM started outside devvm. If you turn it off while the VM is running confined, its launches keep it confined to its proxy, which now applies an open VM's rules, until it next starts, and they warn you that the VM leaves its proxy's confinement when it next starts. In a terminal, each of those launches first asks whether to restart the VM now, with no as the answer unless you type y or an agent's new folders wait too ([restarting](../getting-started/commands.md#restarting-and-stopping)).
+When a change into or out of open finds the VM running, devvm asks in a terminal whether to restart it now, which stops anything running in it, and if you answer yes, it restarts the VM as `devvm restart` does, so the change applies at once. If you answer no, or there's no terminal, or you pass `--no-input`, the change waits until the VM starts again. If you give a running open VM a confined tier, the VM isn't confined yet, so `devvm ls` shows it as `unenforced`, and its next launch offers to restart it confined, as it does for a VM started outside devvm. If you make a VM open while it runs confined, its launches keep it confined to its proxy, which now applies an open VM's rules, until it next starts, and they warn you that the VM leaves its proxy's confinement when it next starts. In a terminal, each of those launches first asks whether to restart the VM now, with no as the answer unless you type y or an agent's new folders wait too ([restarting](../getting-started/commands.md#restarting-and-stopping)).
 
-Secrets the VM got while network policy was off still work wherever the VM kept them, so rotate them if that matters.
+Secrets the VM got while it was open still work wherever the VM kept them, so rotate them if that matters.
 
 ### When it isn't enforced
 
@@ -135,12 +133,12 @@ If a VM was deleted outside devvm, devvm deletes what it kept for that VM when i
 
 ### devvm network --json
 
-`devvm network --json` prints the VM's tier and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `open`, `internet`, `allowlist`, `none` or `unenforced`, and `allowlist` has each policy that holds more than comments, in the order the proxy reads them. Each has `builtin`, a built-in policy's name, or `file`, the path of one of your files, then its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. With `-g`, the object has only `policy`, which is what new VMs get: `ask`, `on` or `off`, and `source`, which says where it came from: `config.toml`, `settings.json` for what `devvm network -g` or `devvm setup` saved, or `built-in` ([where a default comes from](../using/settings.md#where-a-default-comes-from)). With `--json` the command only shows, so devvm refuses `on`, `off` or `ask` with it.
+`devvm network --json` prints the VM's tier and its allowlist as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `policy` is `open`, `internet`, `allowlist`, `none` or `unenforced`, and `allowlist` has each policy that holds more than comments, in the order the proxy reads them. Each has `builtin`, a built-in policy's name, or `file`, the path of one of your files, then its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. On the internet and none tiers, a file whose denies alone apply also has `denies_only` set to `true`, and its `rules` are its denies, as `devvm network` lists them under `(denies only)`. Without `denies_only`, a file's `rules` are all of its rules. With `-g`, the object has only `policy`, which is what new VMs get: `ask` or a tier, and `source`, which says where it came from: `config.toml`, `settings.json` for what `devvm network -g` or `devvm setup` saved, or `built-in` ([where a default comes from](../using/settings.md#where-a-default-comes-from)). With `--json` the command only shows, so devvm refuses a tier or `ask` with it.
 
 ```json
 {
   "version": 1,
-  "policy": "on",
+  "policy": "allowlist",
   "source": "config.toml"
 }
 ```
@@ -169,6 +167,33 @@ If a VM was deleted outside devvm, devvm deletes what it kept for that VM when i
           "text": "example.com:x"
         }
       ]
+    }
+  ]
+}
+```
+
+On the none tier, a VM with Claude Code gets Claude Code's built-in policy whole, and its own file shows only its denies:
+
+```json
+{
+  "version": 1,
+  "policy": "none",
+  "allowlist": [
+    {
+      "builtin": "shared-tools/claude.policy",
+      "rules": [
+        "api.anthropic.com",
+        "claude.ai"
+      ],
+      "not_rules": []
+    },
+    {
+      "file": "/Users/you/.local/share/devvm/vms/71a99b1076d92c/policy",
+      "denies_only": true,
+      "rules": [
+        "!tracker.example.com"
+      ],
+      "not_rules": []
     }
   ]
 }
@@ -254,7 +279,7 @@ devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devv
 
 Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`. An open VM gets the real value instead.
 
-To put a secret in, the proxy shows the VM a certificate from the VM's own CA, which no other VM trusts, so one VM's proxy can't make certificates that another VM accepts. Each CA lasts 30 days, and its key stays on this machine. Each launch installs the VM's current CA and the next one, which starts a week before the current one ends, and the proxy switches to the next CA then on its own, without a launch. So a VM that you don't open again keeps working for at least 30 days after its last launch with `devvm` in its folder. Connecting with `ssh` alone isn't a launch. When a VM runs past its next CA's end without a launch, its proxy refuses its HTTPS connections to secrets' hosts, and `devvm network log --blocked` gives the reason `devvm's CA has ended`. The VM's other requests keep working. Run `devvm` in the VM's folder to install new CAs, which also starts the VM's proxy again and ends the connections open through it ([how](../internals/network.md#the-vms-ca)). `devvm rm` deletes a VM's CAs with the VM, and the VM's first start after `devvm network off` deletes them too.
+To put a secret in, the proxy shows the VM a certificate from the VM's own CA, which no other VM trusts, so one VM's proxy can't make certificates that another VM accepts. Each CA lasts 30 days, and its key stays on this machine. Each launch installs the VM's current CA and the next one, which starts a week before the current one ends, and the proxy switches to the next CA then on its own, without a launch. So a VM that you don't open again keeps working for at least 30 days after its last launch with `devvm` in its folder. Connecting with `ssh` alone isn't a launch. When a VM runs past its next CA's end without a launch, its proxy refuses its HTTPS connections to secrets' hosts, and `devvm network log --blocked` gives the reason `devvm's CA has ended`. The VM's other requests keep working. Run `devvm` in the VM's folder to install new CAs, which also starts the VM's proxy again and ends the connections open through it ([how](../internals/network.md#the-vms-ca)). `devvm rm` deletes a VM's CAs with the VM, and the VM's first start after `devvm network open` deletes them too.
 
 `devvm secret unuse` and `devvm secret rm` take nothing back from an open VM, because the value it got still works wherever it kept it, and devvm says so on `unuse`. Neither command revokes what a VM made with the secret ([minting credentials with a secret](attack-vectors.md#secrets-and-keys-the-vm-may-use)), so rotate it if that matters. Use a fine-grained GitHub token, scoped to the repos your VMs need.
 
@@ -360,12 +385,12 @@ A [link between VMs](../using/links.md) lets a program in one VM, the client, re
 
 A link joins the two VMs' trust. Code in the client can often run code in the target through the target's service, such as Postgres's `COPY … TO PROGRAM`, and it then has whatever the target has: its network, the secrets it may use and its project folder. So devvm keeps two rules:
 
-- **A client links only to a target on its own tier or a stricter one.** An allowlist client links to allowlist and none targets, but not to internet or open ones, because a link to a target on a lower tier would let the client reach more through the target, around its own proxy. devvm checks this when you add a link, at each launch of the client and on every connection, and for a client on a confined tier, on every connection the target's tier must be in force as it runs, so devvm refuses the connection while the target shows as `unenforced`, and it warns you of such a target when you add the link, when you publish a port in its folder that the client links to, and when the client starts. While such a link exists, devvm refuses to give the target a tier lower than the client's, such as `devvm network off`, and it refuses to give the client a tier higher than a target's, such as `devvm network on` for a client that links to an open target. An open client may link to any target, and it then has the target's secrets and project folder within reach as well as its own network.
+- **A client links only to a target on its own tier or a stricter one.** An allowlist client links to allowlist and none targets, but not to internet or open ones, because a link to a target on a lower tier would let the client reach more through the target, around its own proxy. devvm checks this when you add a link, at each launch of the client and on every connection, and for a client on a confined tier, on every connection the target's tier must be in force as it runs, so devvm refuses the connection while the target shows as `unenforced`, and it warns you of such a target when you add the link, when you publish a port in its folder that the client links to, and when the client starts. While such a link exists, devvm refuses to give the target a tier lower than the client's, such as `devvm network open`, and it refuses to give the client a tier higher than a target's, such as `devvm network allowlist` for a client that links to an open target. An open client may link to any target, and it then has the target's secrets and project folder within reach as well as its own network.
 - **The target publishes.** A link reaches only a port that the target's folder publishes with `devvm link publish`, and only on the target's own loopback. Publishing offers the port to any of your VMs, and each link is still added in the client's folder, so a VM reaches another's service only when you've run a command in both folders.
 
 The first rule keeps a client's tier whole, but it doesn't keep the target's data in the target. A client on a confined tier can read whatever the target's service gives it and send that out through the hosts its own tier reaches. Link two VMs only when you'd trust each with what the other has.
 
-A [group](../using/links.md#groups) links each of its VMs to the ports that the others publish, once you've run `devvm group join` in each VM's folder. Its VMs are all on one tier, so every link it makes keeps the first rule, and devvm refuses to change a VM's tier, `devvm network on` and `devvm network off` included, while it's in a group. A group joins the trust of all its VMs, so put VMs in one only when you'd trust each with what the others have.
+A [group](../using/links.md#groups) links each of its VMs to the ports that the others publish, once you've run `devvm group join` in each VM's folder. Its VMs are all on one tier, so every link it makes keeps the first rule, and devvm refuses to change a VM's tier with `devvm network` while it's in a group. A group joins the trust of all its VMs, so put VMs in one only when you'd trust each with what the others have.
 
 ## Not covered
 

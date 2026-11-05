@@ -63,7 +63,7 @@ cp $WORK/features-none.json $DATA/settings.json
 
 # A new VM. Running: devvm size shows what it has, and a change waits for
 # its next start. It has 2 CPUs, which any host running the tests has.
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name WEB web
 exec stub size $WEB 2 8589934592 107374182400
 exec devvm size

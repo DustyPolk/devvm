@@ -7,7 +7,7 @@ project net
 stderr '^devvm: no_vm dir=\S*/net$'
 
 # A VM with network policy that logged nothing yet.
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name NET net
 env LOG=$NET_dir/logs/network.jsonl
 exec devvm network log
@@ -74,7 +74,7 @@ cmp stdout $WORK/evil.txt
 
 # An open VM logs only what goes through its proxy, and devvm says so.
 project off
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 exec devvm network log
 stdout '^==> log_empty vm=devvm-off-[0-9a-f]{14}$'
 stderr '^net_open_log vm=devvm-off-[0-9a-f]{14}$'

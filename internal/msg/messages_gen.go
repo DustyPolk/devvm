@@ -1874,7 +1874,7 @@ func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
 
-// NetAbout is [net_about]: "Network policy for {{.vm}}:\n  on:  it reaches only the hosts you allow, and your secrets stay on this machine (recommended)\n  off: it reaches anything this machine can"
+// NetAbout is [net_about]: "Choose the network tier for {{.vm}}. With open it reaches anything this machine can, with internet any public host, with allowlist only the hosts you allow (recommended), and with none only its agents' and secrets' hosts and its links."
 func NetAbout(vm string) M {
 	return M{id: "net_about", vals: []val{{"vm", vm}}}
 }
@@ -1884,9 +1884,9 @@ func NetAllowsUnused(tier string, vm string) M {
 	return M{id: "net_allows_unused", vals: []val{{"tier", tier}, {"vm", vm}}}
 }
 
-// NetAsk is [net_ask]: "Turn it on?"
-func NetAsk() M {
-	return M{id: "net_ask"}
+// NetAsk is [net_ask]: "Network tier for the VM (open, internet, allowlist or none) [{{.tier}}]:"
+func NetAsk(tier string) M {
+	return M{id: "net_ask", vals: []val{{"tier", tier}}}
 }
 
 // NetAskGlobal is [net_ask_global]: "Only new VMs can be set to ask. To have devvm ask about each new VM, run devvm network -g ask."
@@ -1894,7 +1894,7 @@ func NetAskGlobal() M {
 	return M{id: "net_ask_global"}
 }
 
-// NetDefaultFailed is [net_default_failed]: "Reading or saving whether new VMs get network policy failed: {{.reason}}."
+// NetDefaultFailed is [net_default_failed]: "Reading or saving new VMs' network tier failed: {{.reason}}."
 func NetDefaultFailed(reason string) M {
 	return M{id: "net_default_failed", vals: []val{{"reason", reason}}}
 }
@@ -1914,7 +1914,7 @@ func NetOpenLog(vm string) M {
 	return M{id: "net_open_log", vals: []val{{"vm", vm}}}
 }
 
-// NetOpenPolicy is [net_open_policy]: "{{.vm}} is open, so no rule applies to it. To have its rules apply, run devvm network on."
+// NetOpenPolicy is [net_open_policy]: "{{.vm}} is open, so no rule applies to it. To have its rules apply, run devvm network allowlist."
 func NetOpenPolicy(vm string) M {
 	return M{id: "net_open_policy", vals: []val{{"vm", vm}}}
 }
@@ -1929,9 +1929,14 @@ func NetProxyUnreachable(vm string) M {
 	return M{id: "net_proxy_unreachable", vals: []val{{"vm", vm}}}
 }
 
-// NetTierBackend is [net_tier_backend]: "The {{.backend}} backend can't confine {{.vm}} to its proxy here, so the VM can only be open. Make it with --no-network-policy."
+// NetTierBackend is [net_tier_backend]: "The {{.backend}} backend can't confine {{.vm}} to its proxy here, so the VM can only be open. Make it with --network open."
 func NetTierBackend(backend string, vm string) M {
 	return M{id: "net_tier_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
+}
+
+// NetTierUnknown is [net_tier_unknown]: "{{.given}} isn't a network tier. Type one of {{.choices}}, or press Enter for allowlist."
+func NetTierUnknown(choices string, given string) M {
+	return M{id: "net_tier_unknown", vals: []val{{"choices", choices}, {"given", given}}}
 }
 
 // NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
@@ -1949,32 +1954,42 @@ func NetUnenforcedStop(vm string) M {
 	return M{id: "net_unenforced_stop", vals: []val{{"vm", vm}}}
 }
 
-// NetworkDefault is [network_default]: "new VMs' network policy is {{.mode}}"
+// NetworkDefault is [network_default]: "new VMs' network tier is {{.mode}}"
 func NetworkDefault(mode string) M {
 	return M{id: "network_default", vals: []val{{"mode", mode}}}
 }
 
-// NetworkDefaultAsk is [network_default_ask]: "devvm asks for each new VM, and turns it on without a terminal"
+// NetworkDefaultAllowlist is [network_default_allowlist]: "new VMs reach only the hosts you allow (recommended)"
+func NetworkDefaultAllowlist() M {
+	return M{id: "network_default_allowlist"}
+}
+
+// NetworkDefaultAsk is [network_default_ask]: "devvm asks for each new VM, and gives it allowlist without a terminal"
 func NetworkDefaultAsk() M {
 	return M{id: "network_default_ask"}
 }
 
-// NetworkDefaultHelp is [network_default_help]: "Network policy for new VMs (up/down to choose, enter to confirm):"
+// NetworkDefaultHelp is [network_default_help]: "Network tier for new VMs (up/down to choose, enter to confirm):"
 func NetworkDefaultHelp() M {
 	return M{id: "network_default_help"}
 }
 
-// NetworkDefaultOff is [network_default_off]: "new VMs reach anything this machine can"
-func NetworkDefaultOff() M {
-	return M{id: "network_default_off"}
+// NetworkDefaultInternet is [network_default_internet]: "new VMs reach any public host"
+func NetworkDefaultInternet() M {
+	return M{id: "network_default_internet"}
 }
 
-// NetworkDefaultOn is [network_default_on]: "new VMs reach only the hosts you allow (recommended)"
-func NetworkDefaultOn() M {
-	return M{id: "network_default_on"}
+// NetworkDefaultNone is [network_default_none]: "new VMs reach only their agents' and secrets' hosts and their links"
+func NetworkDefaultNone() M {
+	return M{id: "network_default_none"}
 }
 
-// NetworkFailed is [network_failed]: "Reading or changing the network policy of this folder's VM failed: {{.reason}}."
+// NetworkDefaultOpen is [network_default_open]: "new VMs reach anything this machine can"
+func NetworkDefaultOpen() M {
+	return M{id: "network_default_open"}
+}
+
+// NetworkFailed is [network_failed]: "Reading or changing the network tier of this folder's VM failed: {{.reason}}."
 func NetworkFailed(reason string) M {
 	return M{id: "network_failed", vals: []val{{"reason", reason}}}
 }
@@ -3802,7 +3817,7 @@ var specs = map[string]spec{
 	"msg_unknown":                    {fields: []string{"name"}},
 	"net_about":                      {fields: []string{"vm"}},
 	"net_allows_unused":              {fields: []string{"tier", "vm"}},
-	"net_ask":                        {},
+	"net_ask":                        {fields: []string{"tier"}},
 	"net_ask_global":                 {},
 	"net_default_failed":             {fields: []string{"reason"}},
 	"net_direct_route":               {fields: []string{"vm"}},
@@ -3812,14 +3827,17 @@ var specs = map[string]spec{
 	"net_proxy_down_stopped":         {fields: []string{"vm"}},
 	"net_proxy_unreachable":          {fields: []string{"vm"}},
 	"net_tier_backend":               {fields: []string{"backend", "vm"}},
+	"net_tier_unknown":               {fields: []string{"choices", "given"}},
 	"net_unenforced":                 {fields: []string{"vm"}},
 	"net_unenforced_restart":         {fields: []string{"vm"}},
 	"net_unenforced_stop":            {fields: []string{"vm"}},
 	"network_default":                {fields: []string{"mode"}},
+	"network_default_allowlist":      {},
 	"network_default_ask":            {},
 	"network_default_help":           {},
-	"network_default_off":            {},
-	"network_default_on":             {},
+	"network_default_internet":       {},
+	"network_default_none":           {},
+	"network_default_open":           {},
 	"network_failed":                 {fields: []string{"reason"}},
 	"new_vm_flags_ignored":           {fields: []string{"flags", "vm"}},
 	"new_vm_flags_ignored_run":       {fields: []string{"command", "flags", "vm"}},

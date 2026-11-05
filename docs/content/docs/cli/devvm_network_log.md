@@ -46,4 +46,4 @@ devvm network log [flags]
 
 ## See also
 
-- [devvm network](devvm_network.md): Show or change the network policy of this folder's VM
+- [devvm network](devvm_network.md): Show or change the network tier of this folder's VM

@@ -15,7 +15,7 @@ stdout '^FILE +VM +FOLDER +DATE +SIZE\n\z'
 exec devvm history --json
 stdout '\A{\n  "version": 1,\n  "exports": \[\]\n}\n\z'
 
-exec devvm --no-network-policy
+exec devvm --network open
 vm_name WEB web
 exec limactl stop $WEB
 stub_reset

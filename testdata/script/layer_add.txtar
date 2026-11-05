@@ -27,7 +27,7 @@ stderr '^devvm: no_vm dir=/\S*/web$'
 # and files in its project folder and its home. (Its hostagent here: the
 # test's runner, which runs on, so the VM stays confined between runs.)
 exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
-exec devvm --network-policy --no-git-protect --agents claude --ports 3000
+exec devvm --network allowlist --no-git-protect --agents claude --ports 3000
 vm_name WEB web
 exec devvm ports 3000,5173
 exec devvm network allow example.com

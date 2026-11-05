@@ -4,33 +4,33 @@
 # A folder that is or holds the home folder or devvm's state is refused,
 # and so is one inside devvm's own folders, unless --unsafe-folder.
 cd $HOME
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: unsafe_folder dir=/\S*/home holds=\S*/home$'
 cd $XDG_DATA_HOME
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: unsafe_folder dir=/\S*/data holds=\S*/data/devvm$'
 cd $XDG_CONFIG_HOME
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: unsafe_folder dir=/\S*/config holds=\S*/config/devvm$'
 mkdir $XDG_CONFIG_HOME/devvm/layers
 cp $WORK/config/foo.sh $XDG_CONFIG_HOME/devvm/layers/foo.sh
 cd $XDG_CONFIG_HOME/devvm/layers
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: unsafe_folder_inside dir=/\S*/config/devvm/layers inside=\S*/config/devvm$'
 mkdir $DEVVM_LIMA_HOME/x
 cd $DEVVM_LIMA_HOME/x
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: unsafe_folder_inside dir=/\S*/lima/x inside=\S*/lima$'
 stub_calls
 ! stdout 'create|clone'
 # A project in the home folder is fine; --unsafe-folder mounts it anyway.
 mkdir $HOME/proj
 cd $HOME/proj
-exec devvm --no-network-policy
+exec devvm --network open
 ! stderr unsafe_folder
 stdout '^==> creating_from image=base vm=devvm-proj-[0-9a-f]{14}$'
 cd $XDG_CONFIG_HOME/devvm/layers
-exec devvm --unsafe-folder --no-network-policy
+exec devvm --unsafe-folder --network open
 stderr '^devvm: unsafe_folder_used dir=/\S*/config/devvm/layers holds=\S*/config/devvm$'
 ! stderr 'unsafe_folder_inside'
 stub_calls
@@ -38,27 +38,27 @@ stdout '^limactl clone .* devvm-layers-[0-9a-f]{14} '
 
 # Lima can't mount paths with a comma or a control character.
 project a,b
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: bad_path dir=/\S*/a,b$'
 cd $WORK
-exec sh -c 'mkdir "$(printf "t\tab")" && cd "$(printf "t\tab")" && ! devvm --no-network-policy'
+exec sh -c 'mkdir "$(printf "t\tab")" && cd "$(printf "t\tab")" && ! devvm --network open'
 stderr '^devvm: bad_path dir=/\S*/tab$'
 
 # The VM's name: the folder's, lowercase, other characters as dashes, at
 # most 20 of them, then the hash of its path.
 project My_App.v2
-exec devvm --no-network-policy
+exec devvm --network open
 stdout '^==> creating_from image=base vm=devvm-my-app-v2-[0-9a-f]{14}$'
 project 'My App'
-exec devvm --no-network-policy
+exec devvm --network open
 stdout '^==> creating_from image=base vm=devvm-my-app-[0-9a-f]{14}$'
 project a-very-long-folder-name-for-a-project
-exec devvm --no-network-policy
+exec devvm --network open
 stdout '^==> creating_from image=base vm=devvm-a-very-long-folder-n-[0-9a-f]{14}$'
 # A Lima home too long for any folder's name is refused for a new VM.
 project roomless
 env DEVVM_LIMA_HOME=/tmp/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-! exec devvm --no-network-policy
+! exec devvm --network open
 stderr '^devvm: vm_name_no_room backend=lima max=[0-9]+$'
 env DEVVM_LIMA_HOME=$LIMA_HOME
 ! vm_name ROOMLESS roomless
@@ -67,7 +67,7 @@ env DEVVM_LIMA_HOME=$LIMA_HOME
 # with no shared tools, said in one line naming the flags. --no-input is
 # the same in a terminal.
 project empty
-exec devvm --no-network-policy --no-input
+exec devvm --network open --no-input
 stdout '^==> new_vm_gets layers=none tools=none vm=devvm-empty-[0-9a-f]{14}$'
 stdout '^==> creating_from image=base vm=devvm-empty-[0-9a-f]{14}$'
 vm_name EMPTY empty
@@ -80,28 +80,28 @@ stdout '^image=base$'
 project node
 cp $WORK/package.json package.json
 stub_reset
-! exec devvm --no-network-policy stray
+! exec devvm --network open stray
 stderr '^devvm: no_command word=stray$'
 stderr '^usage_help command=devvm$'
-! exec devvm --no-network-policy node
+! exec devvm --network open node
 stderr '^devvm: no_command_part flags=--tools node word=node$'
-! exec devvm --no-network-policy --layers stray
+! exec devvm --network open --layers stray
 stderr '^devvm: unknown_part flag=--layers given=stray names=desktop docker foo nix$'
 stderr '^usage_help command=devvm$'
-! exec devvm --no-network-policy --layers fooo
+! exec devvm --network open --layers fooo
 stderr '^devvm: unknown_part_like flag=--layers given=fooo like=foo$'
-! exec devvm --no-network-policy --tools claude
+! exec devvm --network open --tools claude
 stderr '^devvm: part_other_flag flag=--tools given=claude other=--agents$'
-! exec devvm --no-network-policy --agents cladue
+! exec devvm --network open --agents cladue
 stderr '^devvm: unknown_part_like flag=--agents given=cladue like=claude$'
-! exec devvm --no-network-policy --tools node,none
+! exec devvm --network open --tools node,none
 stderr '^devvm: part_none_alone flag=--tools$'
 stub_calls
 ! stdout 'create|clone|start'
 ! vm_name NODE node
 # Each flag is the exact list of its part: --layers alone keeps the
 # toolchains the folder calls for.
-exec devvm --no-network-policy --layers foo
+exec devvm --network open --layers foo
 stdout '^==> new_vm_gets layers=foo tools=node vm=devvm-node-[0-9a-f]{14}$'
 stdout '^==> creating_from image=foo vm=devvm-node-[0-9a-f]{14}$'
 vm_name NODE node
@@ -117,7 +117,7 @@ project flake
 cp $WORK/package.json package.json
 cp $WORK/flake.nix flake.nix
 exec devvm setup --agents claude
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 stdout '^==> new_vm_gets layers=none tools=node claude vm=devvm-flake-[0-9a-f]{14}$'
 stdout '^==> creating_from image=base vm=devvm-flake-[0-9a-f]{14}$'
 vm_name FLAKE flake
@@ -126,7 +126,7 @@ stdout '^tools.names=node claude$'
 stdout '^chain=base=[0-9a-f]{12}$'
 project flake2
 cp $WORK/package.json package.json
-exec devvm --no-network-policy --no-git-protect --tools none --layers nix
+exec devvm --network open --no-git-protect --tools none --layers nix
 stdout '^==> new_vm_gets layers=nix tools=claude vm=devvm-flake2-[0-9a-f]{14}$'
 vm_name FLAKE2 flake2
 vm_state $FLAKE2_dir/vm.json

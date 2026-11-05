@@ -4,7 +4,7 @@
 # (DEVVM_PIPED_ANSWERS=1, which only a test build reads) answer from
 # input that isn't a terminal, a line each.
 project web
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name WEB web
 
 # Without a terminal: refused, and nothing is read.

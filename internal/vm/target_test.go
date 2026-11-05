@@ -14,7 +14,7 @@ import (
 // as it begins, and a stop not at all.
 func TestTargetAfterStartAndStop(t *testing.T) {
 	e, f := startEnv(t, allNative())
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	stopVM(t, f, st)
 	if err := (Settings{e}).SetSize(t.Context(), Size{CPUs: "2"}, false); err != nil {

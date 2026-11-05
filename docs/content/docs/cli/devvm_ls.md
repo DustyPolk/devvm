@@ -7,7 +7,7 @@ List the project VMs
 
 ## Synopsis
 
-List the project VMs, sorted by name. Each row has the VM's status, image, .git protection, network policy, links to your other VMs and folder.
+List the project VMs, sorted by name. Each row has the VM's status, image, .git protection, network tier, links to your other VMs and folder.
 
 ```text
 devvm ls [flags]

@@ -17,7 +17,7 @@ cp $WORK/config.toml $HOME/.codex/config.toml
 cp $WORK/history.jsonl $HOME/.claude/projects/p/history.jsonl
 cp $WORK/history.jsonl $HOME/.codex/history.jsonl
 project before
-exec devvm --no-network-policy --no-git-protect --agents claude,codex
+exec devvm --network open --no-git-protect --agents claude,codex
 ! stderr claude_mcp_secrets_copied
 exec tar -tf $STUB_DIR/sync.tar
 ! stdout '^home/|^claude\.json$'
@@ -32,7 +32,7 @@ exec devvm agent import
 # naming the MCP servers whose secrets go too.
 project plain
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
-exec devvm --no-network-policy --no-git-protect --agents claude,codex
+exec devvm --network open --no-git-protect --agents claude,codex
 stderr '^devvm: claude_mcp_secrets_copied servers=srv vm=devvm-plain-[0-9a-f]{14}$'
 stub_calls
 stdout '^limactl clone --tty=false \S+ devvm-plain-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/plain","writable":true\},\{"location":"\S*/config/devvm/agents/claude/\.claude/skills","writable":false\},\{"location":"\S*/config/devvm/agents/codex/\.codex/prompts","writable":false\},\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
@@ -67,13 +67,13 @@ stdout '^export LANG=''en_US\.UTF-8''\nexport CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-o
 # all is named too.
 project badtoken
 env CLAUDE_CODE_OAUTH_TOKEN=not-a-setup-token
-exec devvm --no-network-policy --no-git-protect --agents claude
+exec devvm --network open --no-git-protect --agents claude
 stderr '^devvm: claude_token_invalid$'
 exec tar -xOf $STUB_DIR/sync.tar env
 ! stdout CLAUDE_CODE_OAUTH_TOKEN
 project notoken
 env CLAUDE_CODE_OAUTH_TOKEN=
-exec devvm --no-network-policy --no-git-protect --agents claude
+exec devvm --network open --no-git-protect --agents claude
 stderr '^devvm: no_claude_token vm=devvm-notoken-[0-9a-f]{14}$'
 
 # With network policy: the VM's own CA and its next, the VM's own placeholders, the logins'
@@ -87,7 +87,7 @@ cp $WORK/opencode-agents $HOME/.config/opencode/AGENTS.md
 exec devvm agent import opencode
 project net
 env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake
-exec devvm --network-policy --no-git-protect --agents claude,codex,opencode
+exec devvm --network allowlist --no-git-protect --agents claude,codex,opencode
 stderr '^config_redacted file=\S*/agents/claude/\.claude/settings\.json keys=env\.ANTHROPIC_API_KEY vm=devvm-net-[0-9a-f]{14}$'
 stderr '^devvm: config_not_copied file=\S*/agents/codex/\.codex/config\.toml vm=devvm-net-[0-9a-f]{14}$'
 stderr '^devvm: config_not_copied file=\S*/agents/opencode/\.config/opencode/\.env vm=devvm-net-[0-9a-f]{14}$'
@@ -119,7 +119,7 @@ cmp $HOME/.claude.json $WORK/claude.json
 cp $DATA/logins/claude/.claude.json $WORK/store-claude.json
 cp $WORK/bad.json $DATA/logins/claude/.claude.json
 project badclaude
-! exec devvm --no-network-policy --no-git-protect --agents claude
+! exec devvm --network open --no-git-protect --agents claude
 stderr '^devvm: login_copy_failed agent=claude reason=.* vm=devvm-badclaude-[0-9a-f]{14}$'
 cp $WORK/store-claude.json $DATA/logins/claude/.claude.json
 
@@ -128,7 +128,7 @@ mkdir $WORK/tmp $WORK/fails
 cd $WORK/fails
 env TMPDIR=$WORK/tmp
 exec sh -c ': > "$STUB_DIR/shell-fails"'
-! exec devvm --no-network-policy --no-git-protect --agents claude
+! exec devvm --network open --no-git-protect --agents claude
 stderr '^devvm: sync_failed vm=devvm-fails-[0-9a-f]{14}$'
 exec sh -c 'ls -A "$TMPDIR"'
 ! stdout .
@@ -139,13 +139,13 @@ rm $STUB_DIR/shell-fails
 # none left it's the setup that failed.
 vm_name FAILS fails
 exec bash $WORK/unmounted.sh '' ../../etc/passwd
-! exec devvm --no-network-policy --no-git-protect
+! exec devvm --network open --no-git-protect
 stderr '^devvm: tools_unmounted tools=claude [0-9][0-9.]* vm=devvm-fails-[0-9a-f]{14}$'
 exec bash $WORK/unmounted.sh claude-9.9.9-000000000000.erofs
-! exec devvm --no-network-policy --no-git-protect
+! exec devvm --network open --no-git-protect
 stderr '^devvm: sync_failed vm=devvm-fails-[0-9a-f]{14}$'
 rm $STUB_DIR/sync-fails-with
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 ! stderr 'tools_unmounted|sync_failed'
 
 -- unmounted.sh --

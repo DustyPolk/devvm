@@ -298,34 +298,51 @@ func TestKeyAndSalt(t *testing.T) {
 	}
 }
 
-// The flag wins; without one and without a terminal, allowlist; in a
-// terminal, the answer, asked yes (allowlist) by default ([Y/n]) after
-// the tradeoff, no for open.
+// Without a terminal, allowlist; in a terminal, the tier typed, after
+// what each reaches, Enter for allowlist, and anything else warned and
+// asked again, without the tiers said again.
 func TestChoose(t *testing.T) {
-	answer, asked := false, 0
-	var said []string
+	var answers, said []string
 	ui := &msg.Fake{
-		OnNote:    func(m msg.M) { said = append(said, m.Names()) },
-		OnConfirm: func(m msg.M) bool { asked++; said = append(said, m.Names()); return answer },
+		OnNote: func(m msg.M) { said = append(said, m.Names()) },
+		OnWarn: func(m msg.M) { said = append(said, m.Names()) },
+		OnAnswer: func(m msg.M) string {
+			said = append(said, m.Names())
+			a := answers[0]
+			answers = answers[1:]
+			return a
+		},
 	}
 	p := &Proxy{Reporter: ui}
-	on, open := TierAllowlist, TierOpen
-	if p.Choose(true, false, "vm") != on || p.Choose(false, true, "vm") != open || p.Choose(false, false, "vm") != on || asked != 0 {
-		t.Error("without a terminal: not the flags, or open")
+	if p.Choose("vm") != TierAllowlist || len(said) != 0 {
+		t.Errorf("without a terminal: said %v, or not allowlist", said)
 	}
 	ui.Terminal = true
-	if p.Choose(false, true, "vm") != open || p.Choose(true, false, "vm") != on || asked != 0 {
-		t.Error("in a terminal: a flag asked, or wasn't followed")
+	for _, tc := range []struct {
+		answers []string
+		want    Tier
+		said    string
+	}{
+		{[]string{""}, TierAllowlist, "net_about vm=vm,net_ask tier=allowlist"},
+		{[]string{"open"}, TierOpen, "net_about vm=vm,net_ask tier=allowlist"},
+		{
+			[]string{"on", "none"},
+			TierNone,
+			"net_about vm=vm,net_ask tier=allowlist,net_tier_unknown choices=open, internet, allowlist, none given=on,net_ask tier=allowlist",
+		},
+	} {
+		answers, said = tc.answers, nil
+		if got := p.Choose("vm"); got != tc.want || strings.Join(said, ",") != tc.said {
+			t.Errorf("%v: %s, said %v; want %s, %s", tc.answers, got, said, tc.want, tc.said)
+		}
 	}
-	if p.Choose(false, false, "vm") != open || asked != 1 {
-		t.Error("no answered yes")
-	}
-	answer = true
-	if p.Choose(false, false, "vm") != on || asked != 2 {
-		t.Error("yes answered no")
-	}
-	if want := "net_about vm=vm,net_ask,net_about vm=vm,net_ask"; strings.Join(said, ",") != want {
-		t.Errorf("said %v, want %s", said, want)
+}
+
+// settings' network defaults are ask and the tiers, in their order: its
+// own list, as settings can't import this package.
+func TestNetworkChoicesAreTheTiers(t *testing.T) {
+	if got, want := settings.NetworkChoices(), append([]string{settings.NetworkAsk}, TierNames()...); !slices.Equal(got, want) {
+		t.Errorf("settings.NetworkChoices() = %v, want %v", got, want)
 	}
 }
 

@@ -100,7 +100,7 @@ func TestSetSize(t *testing.T) {
 	if _, err := shown(false); msg.NamesOf(err) != "no_vm_size dir="+e.Dir {
 		t.Errorf("no VM: %s", msg.NamesOf(err))
 	}
-	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	st := existingVM(t, e, Options{Network: "open"})
 	vm := st.Name()
 	in := f.Instances[vm]
 	in.Size = backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}

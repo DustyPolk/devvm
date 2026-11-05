@@ -13,7 +13,7 @@ stderr '^devvm: no_vm dir=\S*/web$'
 
 # A stopped VM: started and set up, no shell. Without a terminal, the
 # Include line is shown, not added.
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 vm_name WEB web
 exec limactl stop $WEB
 stub_reset
@@ -62,7 +62,7 @@ env SSH_AUTH_SOCK=
 # Two folders named web: the VM by its full name.
 mkdir $WORK/other/web
 cd $WORK/other/web
-exec devvm --no-network-policy --no-git-protect
+exec devvm --network open --no-git-protect
 stub_reset
 exec devvm code
 stub_calls
@@ -84,7 +84,7 @@ env PATH=$SAVED_PATH
 # hostagent here: the test's runner, which runs on, in place of the
 # stub's.)
 project leak
-exec devvm --network-policy --no-git-protect
+exec devvm --network allowlist --no-git-protect
 vm_name LEAK leak
 exec sh -c 'echo $PPID > "$LIMA_HOME/$LEAK/ha.pid"; echo "$PPID 1" > "$LEAK_dir/run/started"'
 stub_reset

@@ -3,30 +3,30 @@ title: devvm network
 weight: 33
 ---
 
-Show or change the network policy of this folder's VM
+Show or change the network tier of this folder's VM
 
 ## Synopsis
 
-Show the network tier of this folder's VM, which is open, internet, allowlist, none or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. devvm network on gives it the allowlist tier and off makes it open, from the VM's next start, so in a terminal devvm offers to restart a running VM now. With -g, show or change whether new VMs get network policy instead: ask, on or off.
+Show the network tier of this folder's VM, which is open, internet, allowlist, none or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. With a tier, give the VM that tier: between the confined tiers at once, and into or out of open from the VM's next start, so in a terminal devvm offers to restart a running VM now. With -g, show or change new VMs' tier instead, where ask has devvm ask for each new VM's.
 
 ```text
-devvm network [on|off] [flags]
+devvm network [open|internet|allowlist|none] [flags]
 ```
 
 ## Examples
 
 ```text
-  devvm network                    # show the VM's network policy and allowlist
+  devvm network                    # show the VM's network tier and allowlist
   devvm network allow example.com  # let the VM reach example.com
-  devvm network log --blocked      # list what the VM's network policy blocked
-  devvm network off                # turn network policy off from the VM's next start
-  devvm network -g on              # give every new VM network policy without asking
+  devvm network log --blocked      # list what the VM's proxy blocked
+  devvm network internet           # let the VM reach any public host
+  devvm network -g none            # give every new VM the none tier without asking
 ```
 
 ## Options
 
 ```text
-  -g, --global   show or change whether new VMs get network policy instead
+  -g, --global   show or change new VMs' network tier instead
   -h, --help     help for network
       --here     use this folder's own VM, never that of a folder it's inside
       --json     print it as one JSON object, for scripts
@@ -42,7 +42,7 @@ devvm network [on|off] [flags]
 
 ## Docs
 
-[The docs page for devvm network](../safety/network.md#turning-it-on-or-off) explains it in full.
+[The docs page for devvm network](../safety/network.md#choosing-a-tier) explains it in full.
 
 ## See also
 

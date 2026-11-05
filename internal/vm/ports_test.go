@@ -69,7 +69,7 @@ func TestStartPorts(t *testing.T) {
 			e.PortInUse = func(_ context.Context, p int) bool { return p == 5174 || p == 8080 }
 			var warned msg.Recorder
 			fake(e).OnWarn = warned.Add
-			st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: tc.ports})
+			st := existingVM(t, e, Options{Network: "open", Ports: tc.ports})
 			ms := f.Methods()
 			if i, j := slices.Index(ms, "Start"), slices.Index(ms, "SSH"); tc.starts > 0 && (i < 0 || j < i) {
 				t.Errorf("calls %q: no forwarder after its start", ms)
@@ -108,7 +108,7 @@ func TestSetPortsRunning(t *testing.T) {
 	var infos, warned msg.Recorder
 	fake(e).OnInfo = infos.Add
 	fake(e).OnWarn = warned.Add
-	st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: "5173"})
+	st := existingVM(t, e, Options{Network: "open", Ports: "5173"})
 	vm := st.Name()
 	if err := set(t, st, "proxy_port", "30001"); err != nil {
 		t.Fatal(err)
@@ -170,7 +170,7 @@ func TestSetPortsRunning(t *testing.T) {
 // A VM whose state lists a port that isn't one doesn't start.
 func TestStartBadPorts(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
-	st := existingVM(t, e, Options{NoNetworkPolicy: true, Ports: "5173"})
+	st := existingVM(t, e, Options{Network: "open", Ports: "5173"})
 	if err := set(t, st, KeyPorts, "5173,x"); err != nil {
 		t.Fatal(err)
 	}
