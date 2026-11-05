@@ -81,6 +81,8 @@ Gotchas of this setup:
 
 These need real x86_64 hardware. An emulated x86_64 VM on a Mac (`--arch=x86_64`, QEMU TCG; Lima needs its `lima-additional-guestagents`) runs the unit tests, but VMs nested in it crash in their firmware.
 
+GitHub's Linux runners are x86_64 with KVM, and the E2E workflow (`.github/workflows/e2e.yml`) runs `tests/e2e.sh --only project` on one as a trial. Start it from the repo's Actions tab, with Run workflow on the E2E workflow, because it has no other trigger yet. It installs QEMU, gives the runner's user `/dev/kvm` as Lima's own CI does, installs Lima at a pinned version checked against its checksum, and runs the section up to three times. It caches Ubuntu's cloud image under the release that `tests/e2e.sh` pins, and the built images under a hash of `assets/`, `tests/e2e-mise.lock`, that release and Lima's version, because devvm's image keys are only known once it builds. When the run fails, it uploads the e2e logs, devvm's run logs and each Lima instance's serial logs as the `e2e-logs` artifact.
+
 ## Slots for each host
 
 `tests/e2e.sh --slots N` runs the end-to-end sections in N sandboxes at once ([slots](_index.md#slots)), and each slot runs its own VMs, up to three at a time in the link section. How many slots a host can run depends on its cores and memory:

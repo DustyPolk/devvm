@@ -1,0 +1,99 @@
+name: E2E
+
+# A trial: tests/e2e.sh --only project on a Linux runner, whose KVM runs
+# Lima's QEMU VMs. Started by hand (Actions > E2E > Run workflow).
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "41 5 * * 2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  LIMA_VERSION: 2.2.1
+  # lima-2.2.1-Linux-x86_64.tar.gz in the release's SHA256SUMS.
+  LIMA_SHA256: b391ac7fcac2b2a5a1628107756463188ded4d18d3104a40a66a8bb6fec01bcb
+
+jobs:
+  project:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # As Lima's own CI does (hack/install-qemu.sh): QEMU, and /dev/kvm
+      # made the runner user's, since a new kvm group needs a new login.
+      - name: Install QEMU and enable KVM
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ovmf qemu-system-x86 qemu-utils ipxe-qemu netcat-openbsd
+          sudo modprobe kvm
+          sudo chown "$USER" /dev/kvm
+          qemu-system-x86_64 --version
+      # As install.sh does, from Lima's release tarball, here at a pinned
+      # version and checksum.
+      - name: Install Lima
+        run: |
+          set -euo pipefail
+          f="lima-$LIMA_VERSION-Linux-x86_64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$f" "https://github.com/lima-vm/lima/releases/download/v$LIMA_VERSION/$f"
+          echo "$LIMA_SHA256  $RUNNER_TEMP/$f" | sha256sum -c -
+          mkdir -p "$HOME/.local"
+          tar -xzf "$RUNNER_TEMP/$f" -C "$HOME/.local"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/limactl" --version
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: 2026.10.18
+      # devvm's image keys are computed while it builds, so the cache key
+      # hashes what goes into them that this checkout fixes: assets/, the
+      # pinned tool lock, e2e's Ubuntu release and Lima's version. A stale
+      # image restored is harmless, as devvm builds again what doesn't match.
+      - id: keys
+        name: Cache keys
+        run: |
+          set -euo pipefail
+          release=$(sed -n 's/^e2e_ubuntu_release=//p' tests/e2e.sh)
+          test -n "$release"
+          echo "ubuntu=$release" >> "$GITHUB_OUTPUT"
+      - name: Cache Ubuntu's cloud image
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/lima/download
+          key: e2e-ubuntu-x86_64-${{ steps.keys.outputs.ubuntu }}
+      - name: Cache images
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.lt-e2e-go
+            /tmp/devvm-go-e2e/data/devvm
+            !/tmp/devvm-go-e2e/data/devvm/logs
+            !/tmp/devvm-go-e2e/data/devvm/run
+            !/tmp/devvm-go-e2e/data/devvm/secrets
+            !/tmp/devvm-go-e2e/data/devvm/vms
+          key: e2e-images-x86_64-lima${{ env.LIMA_VERSION }}-${{ steps.keys.outputs.ubuntu }}-${{ hashFiles('assets/**', 'tests/e2e-mise.lock') }}
+      # Up to three attempts, as Lima's CI gives its VM tests.
+      - name: tests/e2e.sh --only project
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          timeout_minutes: 60
+          retry_on: error
+          max_attempts: 3
+          command: tests/e2e.sh --only project
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-logs
+          path: |
+            /tmp/devvm-go-e2e/*.log
+            /tmp/devvm-go-e2e/data/devvm/logs/
+            ~/.lt-e2e-go/*/serial*.log
+            ~/.lt-e2e-go/*/ha.stderr.log
+          if-no-files-found: ignore
