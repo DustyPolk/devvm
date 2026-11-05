@@ -50,59 +50,60 @@ func (f rootFS) Open(name string) (fs.File, error) {
 }
 
 // prepare reads the folder's devcontainer.json for a new VM, unless
-// --no-devcontainer, and changes o as it says: its image is --from's (one
-// its registry gives anyone, pinned), its features' layers go under
+// --no-devcontainer, and returns what the VM is made from with it
+// (fromRef: --from's, or the file's image, one its registry gives anyone,
+// pinned) and its plan (nil without one): its features' layers go under
 // IMAGE's, its forwardPorts add to the default ports. What's given on the
 // command line wins: --from, --ports. It says what it ignores.
-func (e devcontainers) prepare(ctx context.Context, o *Options, vm, dir string) error {
+func (e devcontainers) prepare(ctx context.Context, o Options, vm, dir string) (fromRef string, dc *devcontainer.Plan, err error) {
 	if o.NoDevcontainer {
-		return nil
+		return o.From, nil, nil
 	}
 	file, data, err := e.find(dir)
 	switch {
 	case err != nil:
-		return msg.DevcontainerUnreadable(file).Because(err)
+		return "", nil, msg.DevcontainerUnreadable(file).Because(err)
 	case file == "":
-		return nil
+		return o.From, nil, nil
 	}
 	p, err := devcontainer.Parse(file, data, dir)
 	if err != nil {
-		return err
+		return "", nil, err
 	}
 	e.Info(msg.DevcontainerUsing(file, vm))
 	for _, m := range p.Notes {
 		e.Warn(m)
 	}
+	fromRef = o.From
 	switch {
 	case p.Image == "":
 	case o.FromSet:
 		e.Warn(msg.DevcontainerFlagWins(file, "from", "image"))
 	default:
 		if err := from.Check(p.Image); err != nil {
-			return err
+			return "", nil, err
 		}
 		pinned, err := e.PublicImage(ctx, p.Image)
 		if errors.Is(err, from.ErrNotFound) {
-			return msg.DevcontainerImageNotPublic(file, p.Image).Because(err)
+			return "", nil, msg.DevcontainerImageNotPublic(file, p.Image).Because(err)
 		} else if err != nil {
-			return err
+			return "", nil, err
 		}
-		o.From = pinned
+		fromRef = pinned
 	}
 	if p.Ports != "" && o.Ports != "" {
 		e.Warn(msg.DevcontainerFlagWins(file, "ports", "forwardPorts"))
 		p.Ports = ""
 	}
-	o.dc = &p
-	return nil
+	return fromRef, &p, nil
 }
 
 // record sets what a new VM is made from in its state, before it's
-// written: the file and what it maps to of the VM's own (its variables,
-// its commands), or none.
-func (e devcontainers) record(st *state.VM, o Options) error {
-	d := devcontainerInVM{Off: o.NoDevcontainer}
-	if p := o.dc; p != nil && !o.NoDevcontainer {
+// written: the file (dc, its plan) and what it maps to of the VM's own
+// (its variables, its commands), or none, off with --no-devcontainer.
+func (e devcontainers) record(st *state.VM, off bool, dc *devcontainer.Plan) error {
+	d := devcontainerInVM{Off: off}
+	if p := dc; p != nil && !off {
 		d.File, d.Sum, d.Env, d.Create, d.Start = p.File, p.Sum, p.Env, p.Create, p.Start
 	}
 	return state.SetSection(st, devcontainerSection, d)

@@ -18,7 +18,6 @@ import (
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
@@ -385,23 +384,13 @@ func (e remaking) check(t *found, p remakeInVM) error {
 	return (backend.Space{Free: e.FreeSpace}).Check(b, vm, func(f backend.Floors) uint64 { return f.VM })
 }
 
-// spec is the new machine of t's VM as its state asks for it, in the
-// clone mode p makes it in (wantsClone): its project folder mounted, or
-// its clone's place, its agents' folders, the tools share, its SSH
-// agent and size, as up makes a new VM's (creation.plan); its ports are
-// forwarded as it starts. Its ssh port is set as it's made.
+// spec is the new machine of t's VM as its state asks for it
+// (creation.machineSpec, as up makes a new VM's): its shared tools, SSH
+// agent and size, in the clone mode p makes it in (wantsClone).
 func (e remaking) spec(t *found, p remakeInVM) backend.VMSpec {
-	vm, st := t.f.Name, t.st
-	spec := backend.VMSpec{
-		Name: vm, Project: t.f.Dir, AgentDirs: Launch(e).AgentMounts(tools.Names(st)), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
-		AgentForwarding: sshagent.Forwards(sshagent.Mode(st)), Size: sectionOf[Size](st, sizeSection).Backend(),
-		Env: trust.GuestEnv(nil),
-	}
-	if wantsClone(st, p) {
-		spec.Project, spec.CloneAt = "", t.f.Dir
-	}
-	spec.AgentToggle = e.Registry.Require(t.b, vm, backend.FeatureAgentToggle) == nil
-	return spec
+	st := t.st
+	return creation{Launch(e)}.machineSpec(t.b, t.f, tools.Names(st), sshagent.Forwards(sshagent.Mode(st)),
+		sectionOf[Size](st, sizeSection), wantsClone(st, p))
 }
 
 // wantsClone reports whether p makes st's VM's new machine with its own
@@ -498,27 +487,19 @@ func (e remaking) setAside(ctx context.Context, t *found) error {
 // image and deletes its old machine, which ends its remake (dropOld).
 func (e remaking) finish(ctx context.Context, t *found, p remakeInVM, c chainOf, committed *atomic.Bool) error {
 	vm, st, b := t.f.Name, t.st, t.b
-	spec := e.spec(t, p)
-	var err error
-	if spec.SSHPort, err = e.Proxy.Ports().SSH(ctx, st, false); err != nil {
-		return err
-	}
 	e.Info(msg.CreatingFrom(p.Image, vm))
 	e.LogNote()
-	if err := b.CreateVM(ctx, c.key, spec); err != nil {
+	if err := (creation{Launch(e)}).makeMachine(ctx, b, st, c.key, e.spec(t, p)); err != nil {
 		return err
 	}
 	t.exists = true
-	if err := (creation{Launch(e)}).created(ctx, b, st, spec.AgentToggle); err != nil {
-		return err
-	}
 	// The new machine is the one by its name now, in its clone mode, and
 	// its devcontainer.json's commands run again on its new disk.
 	mode := ""
 	if p.Clone == CloneOff {
 		mode = e.Protector(t.f.Dir).NewMode(false)
 	}
-	err = st.Update(ctx, func(st *state.VM) error {
+	err := st.Update(ctx, func(st *state.VM) error {
 		if err := edit(st, remakeSection, func(r *remakeInVM) error { r.Made = true; return nil }); err != nil {
 			return err
 		}

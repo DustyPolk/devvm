@@ -12,7 +12,6 @@ import (
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
-	"github.com/w3cj/devvm/internal/devcontainer"
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/settings"
@@ -171,13 +170,46 @@ func TestUpDevcontainerRefused(t *testing.T) {
 	}
 }
 
+// The plan of a new VM whose devcontainer.json pins its image: its From
+// is the file's image, pinned, which its builder builds from; its size
+// and ports are the flags' and the defaults', and the file's ports beyond
+// the user's are said, not added. The new VM keeps the file's From and
+// plan; the options stay as they were asked for.
+func TestPlanDevcontainerFrom(t *testing.T) {
+	e, _, warned := devcontainerTestEnv(t, `{"image": "node:24", "forwardPorts": [3000]}`)
+	if _, err := settings.Save(e.Dirs, settings.Values{Ports: settings.Of("5173")}); err != nil {
+		t.Fatal(err)
+	}
+	tg, err := (finder{e}).target(t.Context(), need{folder: true})
+	if err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	o := Options{NoNetworkPolicy: true, Size: Size{Memory: "4G"}}
+	n, err := creation{Launch{e}}.plan(t.Context(), o, tg.f, tg.b)
+	if err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	pinned := "node@sha256:" + strings.Repeat("a", 64)
+	if n.from != pinned || n.builder.From != pinned {
+		t.Errorf("from = %q, builder's %q, want %q", n.from, n.builder.From, pinned)
+	}
+	if n.dc == nil || n.dc.Ports != "3000" {
+		t.Errorf("devcontainer plan = %+v", n.dc)
+	}
+	if n.size.Memory != "4" || n.spec.Size.MemoryGiB != 4 || n.ports != "5173" {
+		t.Errorf("size %+v (spec %+v), ports %q", n.size, n.spec.Size, n.ports)
+	}
+	if want := "devcontainer_ports_not_forwarded file=.devcontainer.json ports=3000"; !slices.Contains(warned.Names(), want) {
+		t.Errorf("warned %q, want %q", warned.Names(), want)
+	}
+}
+
 // A new VM gets network policy unless it's turned off, asked yes by
 // default in a terminal, the docker layer's VMs as any other. One that
 // can't have it (on a backend without egress-proxy) is made without it,
 // unasked and warned, in a terminal or not; --network-policy on it is
 // refused, never dropped.
 func TestChooseNet(t *testing.T) {
-	dc := &devcontainer.Plan{File: ".devcontainer.json", Layers: []string{"docker"}}
 	noEgress := allNative()
 	delete(noEgress, backend.FeatureEgressProxy)
 	unreviewed := allNative()
@@ -198,7 +230,6 @@ func TestChooseNet(t *testing.T) {
 		{"--network-policy", Options{NetworkPolicy: true}, nil, true, false, "true", false, ""},
 		{"--no-network-policy", Options{NoNetworkPolicy: true}, nil, false, true, "false", false, ""},
 		{"the docker layer", Options{Layers: &[]string{"docker"}}, nil, true, true, "true", true, ""},
-		{"the file's docker-in-docker", Options{dc: dc}, nil, true, false, "false", true, ""},
 		{"no egress-proxy", Options{}, noEgress, true, true, "false", false, "net_off_backend backend=fake vm=v"},
 		{"no egress-proxy, no terminal", Options{}, noEgress, false, true, "false", false, "net_off_backend backend=fake vm=v"},
 		{"unreviewed egress-proxy", Options{}, unreviewed, false, true, "false", false, "net_off_backend backend=fake vm=v"},
@@ -217,8 +248,7 @@ func TestChooseNet(t *testing.T) {
 			e.Proxy.Terminal = func() bool { return tc.terminal }
 			e.Proxy.Note = func(msg.M) {}
 			e.Proxy.Confirm = func(msg.M) bool { asked = true; return tc.answer }
-			o := tc.o
-			got := fmt.Sprint(creation{Launch{e}}.chooseNet(&o, f, "v", settings.NetworkAsk))
+			got := fmt.Sprint(creation{Launch{e}}.chooseNet(tc.o, f, "v", settings.NetworkAsk))
 			if got != tc.want || asked != tc.asked || warned != tc.warned {
 				t.Errorf("chooseNet = %s (asked %v, warned %q), want %s (asked %v, warned %q)", got, asked, warned, tc.want, tc.asked, tc.warned)
 			}
@@ -260,8 +290,7 @@ func TestChooseNetSaved(t *testing.T) {
 			e.Proxy.Terminal = func() bool { return true }
 			e.Proxy.Note = func(msg.M) {}
 			e.Proxy.Confirm = func(msg.M) bool { asked = true; return true }
-			o := tc.o
-			got := fmt.Sprint(creation{Launch{e}}.chooseNet(&o, f, "v", tc.saved))
+			got := fmt.Sprint(creation{Launch{e}}.chooseNet(tc.o, f, "v", tc.saved))
 			if got != tc.want || warned != tc.warned || asked != (tc.saved == settings.NetworkAsk) {
 				t.Errorf("chooseNet = %s (asked %v, warned %q), want %s (warned %q)", got, asked, warned, tc.want, tc.warned)
 			}

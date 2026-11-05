@@ -43,9 +43,6 @@ type Options struct {
 	From                       string // --from, or its default: the container image a new VM's base starts from
 	FromSet                    bool   // --from was given, not its default
 	NoDevcontainer             bool   // --no-devcontainer: a new VM ignores the folder's devcontainer.json
-	// dc is what the folder's devcontainer.json says a new VM gets
-	// (devcontainers.prepare); nil without one.
-	dc *devcontainer.Plan
 }
 
 // Launch opens a shell, ssh or an editor in the folder's VM: a new VM
@@ -66,16 +63,6 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 	if err := from.Check(o.From); err != nil {
 		return err
 	}
-	size, err := o.Size.Parse()
-	if err != nil {
-		return err
-	}
-	ports := ""
-	if o.Ports != "" {
-		if ports, err = settings.ParsePorts(o.Ports); err != nil {
-			return err
-		}
-	}
 	// --clone asks for a new VM of the folder's own: as --here. One that
 	// has a VM (or a remake of it pending) has one made for this folder.
 	t, err := finder(e).target(ctx, need{own: o.Clone, folder: true})
@@ -93,13 +80,13 @@ func (e Launch) Up(ctx context.Context, o Options) error {
 		if _, err := e.Proxy.Upstream(ctx); err != nil {
 			return err
 		}
-		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
+		return creation{e}.create(ctx, o, t.f, t.b)
 	}
 	if remakeUnfinished(e.Env, t) {
 		if err := Lifecycle(e).delete(ctx, t); err != nil {
 			return err
 		}
-		return creation{e}.create(ctx, o, t.f, t.b, size, ports)
+		return creation{e}.create(ctx, o, t.f, t.b)
 	}
 	// One kept is refused before anything is checked or said, as any
 	// command that needs it made refuses it.
@@ -141,14 +128,20 @@ func remakeUnfinished(e *Env, t *found) bool {
 // newVM is what create checked and chose for a new VM before building
 // anything.
 type newVM struct {
-	img     image.Name // its image: base and its layers
-	tools   []string   // its shared tools
-	size    Size
-	ports   string
-	net     bool
-	agent   string // sshagent.On or Off
-	clone   bool   // --clone
-	git     string // its .git protection (gitprotect.Protector.NewMode), or gitprotect.Clone
+	img   image.Name // its image: base and its layers
+	tools []string   // its shared tools
+	size  Size
+	ports string
+	net   bool
+	agent string // sshagent.On or Off
+	clone bool   // --clone
+	git   string // its .git protection (gitprotect.Protector.NewMode), or gitprotect.Clone
+	// from is the container image its base starts from: --from's, or its
+	// devcontainer.json's image, pinned.
+	from string
+	// dc is what the folder's devcontainer.json says it gets
+	// (devcontainers.prepare); nil without one.
+	dc      *devcontainer.Plan
 	spec    backend.VMSpec
 	builder *build.Env
 }
@@ -157,9 +150,9 @@ type newVM struct {
 type creation struct{ Launch }
 
 // create makes the folder's VM and opens a shell in it.
-func (e creation) create(ctx context.Context, o Options, f project.Folder, b backend.Backend, size Size, ports string) error {
+func (e creation) create(ctx context.Context, o Options, f project.Folder, b backend.Backend) error {
 	vm := f.Name
-	n, err := e.plan(ctx, &o, f, b, size, ports)
+	n, err := e.plan(ctx, o, f, b)
 	if err != nil {
 		return err
 	}
@@ -218,13 +211,13 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err != nil {
 		return err
 	}
-	st.Image, st.Dir, st.Folder, st.Chain, st.From, st.Backend = n.img.String(), f.Dir, id, chain.String(), o.From, b.Name()
+	st.Image, st.Dir, st.Folder, st.Chain, st.From, st.Backend = n.img.String(), f.Dir, id, chain.String(), n.from, b.Name()
 	st.MadeBy = e.Version
 	st.BackendAt, _ = backend.LocationOf(b)
 	if err := n.record(st, tg, files); err != nil {
 		return err
 	}
-	if err := (devcontainers{e.Env}).record(st, o); err != nil {
+	if err := (devcontainers{e.Env}).record(st, o.NoDevcontainer, n.dc); err != nil {
 		return err
 	}
 	// Its alias, chosen now for good, as its name was, under the claims
@@ -237,15 +230,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err != nil {
 		return err
 	}
-	// Its ssh port from the start, as its starts have it: none of its
-	// listed ports, recorded above.
-	if n.spec.SSHPort, err = e.Proxy.Ports().SSH(ctx, st, false); err != nil {
-		return err
-	}
-	if err := b.CreateVM(ctx, chain.Key(), n.spec); err != nil {
-		return err
-	}
-	if err := e.created(ctx, b, st, n.spec.AgentToggle); err != nil {
+	if err := e.makeMachine(ctx, b, st, chain.Key(), n.spec); err != nil {
 		return err
 	}
 	// A clone has no .git of the host's to protect, and no origin
@@ -264,6 +249,45 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	done()
 	unmaking()
 	return e.Exec(cmd)
+}
+
+// machineSpec is the machine of f's VM as devvm makes it, new
+// (creation.plan) or again (remaking.spec): the project folder mounted,
+// or with clone its clone's place; its agents' folders on the host
+// (those of names, its shared tools), read-only; the tools share,
+// read-only, from which a tool added later is mounted; its SSH agent
+// forwarded or not, its size; and, where b lets devvm ssh-agent change
+// that later (an emulation once it's reviewed), made ready for it,
+// otherwise fixed as it's made. Its ssh port is set as it's made
+// (makeMachine), and its ports are forwarded as it starts.
+func (e creation) machineSpec(b backend.Backend, f project.Folder, names []string, agent bool, size Size, clone bool) backend.VMSpec {
+	spec := backend.VMSpec{
+		Name: f.Name, Project: f.Dir, AgentDirs: e.AgentMounts(names), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
+		AgentForwarding: agent, Size: size.Backend(),
+		Env: trust.GuestEnv(nil),
+	}
+	if clone {
+		spec.Project, spec.CloneAt = "", f.Dir
+	}
+	// Let through or not as the requirements' check has it, which tells
+	// of an unreviewed emulation once.
+	spec.AgentToggle = e.Registry.Allowed(b, backend.FeatureAgentToggle)
+	return spec
+}
+
+// makeMachine has b make st's VM's machine as spec says, from the image
+// whose build chain's key is key: its ssh port first, as its starts have
+// it (none of its listed ports, recorded), then the machine, then that
+// it was made recorded (created).
+func (e creation) makeMachine(ctx context.Context, b backend.Backend, st *state.VM, key string, spec backend.VMSpec) error {
+	var err error
+	if spec.SSHPort, err = e.Proxy.Ports().SSH(ctx, st, false); err != nil {
+		return err
+	}
+	if err := b.CreateVM(ctx, key, spec); err != nil {
+		return err
+	}
+	return e.created(ctx, b, st, spec.AgentToggle)
 }
 
 // created records that the backend made the VM, with toggle when it was
@@ -306,9 +330,14 @@ func (e creation) firstRun(o Options, size Size) (settings.Defaults, error) {
 // plan checks and chooses what a new VM gets, all before the build,
 // which can take minutes: its image, size, ports, network policy (asked
 // for), SSH agent and the backend features it needs, with what the
-// folder's devcontainer.json says (which changes o).
-func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b backend.Backend, size Size, list string) (newVM, error) {
+// folder's devcontainer.json says (its From and its plan, which the
+// new VM keeps: o stays as it was asked for).
+func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backend.Backend) (newVM, error) {
 	vm := f.Name
+	size, err := o.Size.Parse()
+	if err != nil {
+		return newVM{}, err
+	}
 	if o.Clone {
 		if err := checkCloneRepo(ctx, f.Dir); err != nil {
 			return newVM{}, err
@@ -316,14 +345,15 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	} else if err := e.checkUnsafe(f.Dir, o.UnsafeFolder); err != nil {
 		return newVM{}, err
 	}
-	if err := (devcontainers{e.Env}).prepare(ctx, o, vm, f.Dir); err != nil {
+	n := newVM{agent: sshagent.Off}
+	if n.from, n.dc, err = (devcontainers{e.Env}).prepare(ctx, o, vm, f.Dir); err != nil {
 		return newVM{}, err
 	}
-	def, err := e.firstRun(*o, size)
+	def, err := e.firstRun(o, size)
 	if err != nil {
 		return newVM{}, err
 	}
-	n := newVM{size: size.Or(defaultSize(def)), ports: list, agent: sshagent.Off}
+	n.size = size.Or(defaultSize(def))
 	host, err := e.Host()
 	if err != nil {
 		return newVM{}, err
@@ -331,43 +361,26 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err := n.size.Check(host, backend.BaseDiskGiB, vm); err != nil {
 		return newVM{}, err
 	}
-	if n.ports == "" {
-		n.ports = def.Ports.Value
-	}
-	// The user's ports stay a limit the file can't widen: its ports
-	// beyond them are said, not added.
-	if o.dc != nil && o.dc.Ports != "" {
-		wider, err := AddPorts(n.ports, o.dc.Ports)
-		if err != nil {
-			return newVM{}, err
-		}
-		if wider != n.ports {
-			e.Warn(msg.DevcontainerPortsNotForwarded(o.dc.File, o.dc.Ports))
-		}
+	if n.ports, err = e.newPorts(o.Ports, def, n.dc); err != nil {
+		return newVM{}, err
 	}
 	forward, err := ports.Forwarding(n.ports)
 	if err != nil {
 		return newVM{}, err
 	}
-	n.builder = e.Builder(b, o.From)
-	parts, err := e.chooseParts(*o, vm, f.Dir, o.dc, n.builder, def)
+	n.builder = e.Builder(b, n.from)
+	parts, err := e.chooseParts(o, vm, f.Dir, n.dc, n.builder, def)
 	if err != nil {
 		return newVM{}, err
 	}
 	n.img, n.tools = parts.image(), parts.tools()
-	// Every VM has the share, read-only: a tool added later is mounted
-	// from it. Its agents' folders on the host are mounted read-only.
-	n.spec = backend.VMSpec{
-		Name: vm, Project: f.Dir, AgentDirs: e.AgentMounts(n.tools), Tools: e.Dirs.Tools(), ToolsAt: tools.ShareAt,
-		AgentForwarding: o.SSHAgent, Size: n.size.Backend(),
-		Env: trust.GuestEnv(nil),
-	}
+	n.spec = e.machineSpec(b, f, n.tools, o.SSHAgent, n.size, o.Clone)
 	n.net = e.chooseNet(o, b, vm, def.Network.Value)
 	if o.SSHAgent {
 		n.agent = sshagent.On
 	}
 	if o.Clone {
-		n.spec.Project, n.spec.CloneAt, n.clone, n.git = "", f.Dir, true, gitprotect.Clone
+		n.clone, n.git = true, gitprotect.Clone
 	} else {
 		n.git = e.Protector(f.Dir).NewMode(o.NoGitProtect)
 	}
@@ -380,9 +393,6 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if err := e.Registry.Require(b, vm, requirements(need)...); err != nil {
 		return newVM{}, err
 	}
-	// Ready for devvm ssh-agent to change later, where it may be changed
-	// (an emulation once it's reviewed); otherwise fixed when it's made.
-	n.spec.AgentToggle = e.Registry.Require(b, vm, backend.FeatureAgentToggle) == nil
 	// Room for the VM, before anything is built or made; each build checks
 	// its own.
 	if err := (backend.Space{Free: e.FreeSpace}).Check(b, vm, func(f backend.Floors) uint64 { return f.VM }); err != nil {
@@ -391,13 +401,39 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	return n, nil
 }
 
+// newPorts returns the ports a new VM forwards: given's (--ports, parsed),
+// else def's. The user's ports stay a limit its devcontainer.json (dc)
+// can't widen: the file's ports beyond them are said, not added.
+func (e creation) newPorts(given string, def settings.Defaults, dc *devcontainer.Plan) (string, error) {
+	list := ""
+	if given != "" {
+		var err error
+		if list, err = settings.ParsePorts(given); err != nil {
+			return "", err
+		}
+	}
+	if list == "" {
+		list = def.Ports.Value
+	}
+	if dc != nil && dc.Ports != "" {
+		wider, err := AddPorts(list, dc.Ports)
+		if err != nil {
+			return "", err
+		}
+		if wider != list {
+			e.Warn(msg.DevcontainerPortsNotForwarded(dc.File, dc.Ports))
+		}
+	}
+	return list, nil
+}
+
 // chooseNet returns whether a new VM gets network policy: the flags', else
 // the default's (config.toml's, else devvm network -g's or devvm setup's),
 // else asked for, on by default. A default of off makes the VM without
 // it, unsaid. A VM whose backend b may not confine it to its proxy
 // (egress-proxy) is made without it, unasked and said; --network-policy
 // on such a VM is refused by Require, never dropped.
-func (e creation) chooseNet(o *Options, b backend.Backend, vm, saved string) bool {
+func (e creation) chooseNet(o Options, b backend.Backend, vm, saved string) bool {
 	if o.NetworkPolicy || o.NoNetworkPolicy {
 		saved = settings.NetworkAsk
 	}
