@@ -2178,7 +2178,8 @@ fi
 # Moved back, devvm adopt --force moves it.
 pm=$p-moved
 (cd "$p" && printf 'exit\n' | "$D" >/dev/null 2>&1)
-in_vm "$vm" 'echo e2e-home-kept > ~/e2e-moved' >/dev/null 2>&1
+# The file is written, read back and synced, so a failed write or a stop that loses it says so.
+moved_wrote=$(in_vm "$vm" 'echo e2e-home-kept > ~/e2e-moved && sync && cat ~/e2e-moved' 2>&1)
 claude_slug() { echo "${1//[^a-zA-Z0-9]/-}"; }
 in_vm "$vm" "mkdir -p ~/.claude/projects/$(claude_slug "$p") && echo e2e > ~/.claude/projects/$(claude_slug "$p")/e2e.jsonl &&
   f=~/.claude.json && { [ -s \$f ] || echo '{}' > \$f; } && jq --arg p '$p' '.projects[\$p] = {e2e: true}' \$f > \$f.tmp && mv \$f.tmp \$f" >/dev/null 2>&1
@@ -2200,7 +2201,9 @@ moved_yes() {
 }
 moved_opened() { local ms
   if ! (cd "$pm" && printf 'cat ~/e2e-moved; pwd\n' | "$D" >"$work/last.log" 2>&1) || ! grep -qx e2e-home-kept "$work/last.log" ||
-    ! grep -qxF "$pm" "$work/last.log"; then echo "failed: opened"; cat "$work/last.log"; return 1; fi
+    ! grep -qxF "$pm" "$work/last.log"; then echo "failed: opened"; cat "$work/last.log"
+    echo "before the move, writing it gave: $moved_wrote"
+    in_vm "$vm" 'echo "home: $HOME"; ls -la ~; findmnt -rn -o TARGET,SOURCE,FSTYPE; uptime' 2>&1; return 1; fi
   ms=$(mounts_of "$vm"); echo "mounts: $ms"
   if ! grep -qxF "$pm" <<<"$ms" || grep -qxF "$p" <<<"$ms"; then echo "failed: mounts"; return 1; fi
   [[ ! -e $p ]] || { echo "failed: $p made again"; return 1; }
