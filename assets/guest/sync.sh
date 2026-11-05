@@ -4,15 +4,15 @@
 #   links        agents' settings folders from devvm's store, two lines each: the path relative to
 #                ~, then the folder's path, where it's mounted read-only; linked into ~
 #   claude.json  the store's .claude.json's settings, account state and MCP servers (never its API key
-#                or per-project history), merged in (with network policy, MCP servers' env values
-#                and headers are placeholders)
-#   env          exports (LANG, CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN: placeholders with network policy),
-#                installed as ~/.config/devvm/env
-#   ca/          the CAs the VM trusts besides its system's, one certificate per file: devvm-proxy.crt,
-#                the proxy's, when network policy is on; devvm-extra-N.crt, the user's own; ca.sh
-#                installs them
+#                or per-project history), merged in (MCP servers' env values and headers are
+#                placeholders)
+#   env          exports (LANG, CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN: placeholders), installed as
+#                ~/.config/devvm/env
+#   ca/          the CAs the VM trusts besides its system's, one certificate per file:
+#                devvm-proxy.crt and devvm-proxy-next.crt, the proxy's; devvm-extra-N.crt, the user's
+#                own; ca.sh installs them
 #   vm           DEVVM_* host settings applied to every VM: hostname, timezone, locale, git identity,
-#                DEVVM_PROXY (the proxy URL when network policy is on, else empty), and
+#                DEVVM_PROXY (the proxy URL, empty when the guest has none), and
 #                DEVVM_NO_PROXY (what reaches the VM itself without the proxy; its links go through it)
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
 #   hosts        the VM's links (devvm checked them): a line per target, "ADDRESS NAME
@@ -152,7 +152,7 @@ done < "$s/links"
 
 # merge_claude_json VM HOST COPIED: host settings win, but keep the VM's own per-folder state
 # (trust, allowed tools). MCP servers: each of the host's replaces the VM's by that name whole (no
-# field of an older copy survives, such as a real header from before network policy), the ones
+# field of an older copy survives, such as a header the VM's copy now takes out), the ones
 # devvm copied last time (COPIED, a JSON list) that the host no longer has go, and servers added
 # in the VM stay.
 merge_claude_json() {
@@ -363,13 +363,13 @@ if command -v dockerd >/dev/null; then
   fi
 fi
 
-# The CAs this VM trusts besides its system's, those in ca/ (ca.sh): the proxy's (network policy
-# on), which shows its own certificates for hosts where it puts tokens in, and the user's own from
-# the host's ~/.config/devvm/ca. Trusted only in this VM.
+# The CAs this VM trusts besides its system's, those in ca/ (ca.sh): the proxy's, which shows its
+# own certificates for hosts where it puts tokens in, and the user's own from the host's
+# ~/.config/devvm/ca. Trusted only in this VM.
 mkdir -p "$s/ca"
 sudo sh "$s/ca.sh" "$s/ca"
 
-# GitHub over HTTPS with the token from ~/.config/devvm/env (a placeholder with network policy).
+# GitHub over HTTPS with the token from ~/.config/devvm/env (a placeholder).
 if [[ -n "${DEVVM_GITHUB:-}" ]]; then
   git config --global credential.https://github.com.helper \
     '!f() { test "$1" = get || return 0; . ~/.config/devvm/env; printf "username=x-access-token\npassword=%s\n" "$GH_TOKEN"; }; f'

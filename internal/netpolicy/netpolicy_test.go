@@ -1,6 +1,7 @@
 package netpolicy
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -787,28 +788,16 @@ func TestPrepareStopsTheOldProxy(t *testing.T) {
 	}
 }
 
-// An open VM starts on its backend's own network with its proxy, which
-// carries its requests as they are: open, without policies, a CA or
-// secrets. The CAs a confined tier made go, keys and all, but not while
-// a proxy that won't stop may sign with them.
+// An open VM starts on its backend's own network with its proxy, which is
+// open, without policies, and puts its secrets in as every tier's does:
+// with the VM's own CAs, its salt and its secret files. A VM made open
+// after a confined tier keeps its CAs.
 func TestPrepareOpen(t *testing.T) {
 	d, st := sandbox(t, "base", "node")
 	p, _ := testProxy(t, d)
 	p.Tick = 20 * time.Millisecond
 	vm, ca := st.Name(), d.VM(st.Name()).CA()
-	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
-		t.Fatal(msg.NamesOf(err))
-	}
 	setNet(t, st, func(n *Net) { n.Tier = TierOpen })
-	signal := p.Signal
-	p.Signal = func(int, syscall.Signal) error { return nil } // signals that never arrive
-	if _, err := p.Prepare(t.Context(), lifelined(), st, false); msg.NamesOf(err) != "proxy_stop_failed vm="+vm {
-		t.Errorf("a proxy that won't stop: %v", msg.NamesOf(err))
-	}
-	if _, err := os.Stat(ca.Key()); err != nil {
-		t.Errorf("the CAs went while their proxy runs: %v", err)
-	}
-	p.Signal = signal
 	conf, err := p.Prepare(t.Context(), lifelined(), st, false)
 	if err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -816,12 +805,30 @@ func TestPrepareOpen(t *testing.T) {
 	if conf.Net != backend.NetDirect || conf.ProxyPort == 0 || conf.ProxyPassword == "" || !conf.GuestProxy() {
 		t.Errorf("open's confinement: %+v", conf)
 	}
-	if _, err := os.Lstat(ca.Dir); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("the CAs are still there: %v", err)
+	for _, f := range []string{ca.Cert(), ca.Key(), ca.NextCert(), ca.NextKey(), d.VM(vm).Secrets()} {
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("open's %s: %v", f, err)
+		}
+	}
+	if n, err := Of(st); err != nil || n.Made.ProxySalt == "" {
+		t.Errorf("open's salt: %+v, %v", n.Made, err)
 	}
 	cfg, err := proxy.ReadConfig(d.VM(vm).ProxyConfig())
-	if err != nil || !cfg.Open || cfg.CA != "" || cfg.Secrets != "" || len(cfg.BuiltinPolicies)+len(cfg.Policies)+len(cfg.DenyPolicies) > 0 {
+	if err != nil || !cfg.Open || cfg.CA != ca.Cert() || cfg.CANext != ca.NextCert() || cfg.Secrets != d.VM(vm).Secrets() ||
+		cfg.CASHA256 == "" || len(cfg.BuiltinPolicies)+len(cfg.Policies)+len(cfg.DenyPolicies) > 0 {
 		t.Errorf("open's proxy: %+v, %v", cfg, err)
+	}
+	cert, _ := os.ReadFile(ca.Cert())
+	setNet(t, st, func(n *Net) { n.Tier = TierAllowlist })
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	setNet(t, st, func(n *Net) { n.Tier = TierOpen })
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if again, err := os.ReadFile(ca.Cert()); err != nil || !bytes.Equal(again, cert) {
+		t.Errorf("the CA changed with the tier: %v", err)
 	}
 	if _, ok := p.PID(vm); !ok {
 		t.Error("no proxy runs")

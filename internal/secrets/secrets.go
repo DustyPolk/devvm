@@ -1,5 +1,4 @@
-// Package secrets keeps tokens on the host for VMs with network policy: a
-// VM holds a placeholder of its own, and its proxy puts the real value into
+// Package secrets keeps tokens on the host for VMs: a VM holds a placeholder of its own, and its proxy puts the real value into
 // requests for the token's hosts. Values live in the macOS Keychain, or in
 // files only the user can read elsewhere. Agents' logins (Codex, opencode,
 // Claude Code's MCP servers) stay in devvm's store of them on the host
@@ -170,23 +169,6 @@ func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
 		s.Warn(msg.OpencodeLoginWithheld(strings.Join(c.Withheld, ", ")))
 	}
 	return c.Data, err
-}
-
-// ClaudeCopy returns the copy of the store's .claude.json a VM without
-// network policy gets: its settings, account state and MCP servers,
-// without anything else (agentlogin.ClaudeCopy).
-func (s *Store) ClaudeCopy() ([]byte, error) {
-	return agentlogin.ClaudeCopy(LoginFile(s.Dirs, agentlogin.Claude))
-}
-
-// MCPSecrets returns the MCP servers in the store's .claude.json whose
-// settings hold secrets; none when it can't be read.
-func (s *Store) MCPSecrets() []string {
-	servers, err := agentlogin.MCPSecrets(LoginFile(s.Dirs, agentlogin.Claude))
-	if err != nil {
-		return nil
-	}
-	return servers
 }
 
 var serviceName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)

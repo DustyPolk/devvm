@@ -2,8 +2,8 @@
 # The CAs a VM or a build VM trusts besides its system's, run as root:
 #   ca.sh DIR   trust DIR's devvm-*.crt files (one certificate each) and no other of devvm's
 #   ca.sh       trust none of devvm's: what an image keeps
-# guest/sync.sh runs it at each launch (devvm's proxy's CA, devvm-proxy.crt, with network policy,
-# and the user's, devvm-extra-N.crt); a build VM before anything in it downloads, then without DIR
+# guest/sync.sh runs it at each launch (devvm's proxy's CAs, devvm-proxy.crt and its next, and the
+# user's, devvm-extra-N.crt); a build VM before anything in it downloads, then without DIR
 # once its scripts are done; oci/build.sh in the chroot of an image it converts, around bootify.sh.
 # They go in /usr/local/share/ca-certificates, and with update-ca-certificates into the system's
 # bundle and hashed links, which are made again from scratch. Without it (a container image before

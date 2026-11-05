@@ -34,8 +34,8 @@ const homeIn = "cd ~ && tar -xzf - --skip-old-files"
 
 // homeSkips are the paths in a VM's home, relative to it, that its
 // remake doesn't keep, because the new VM's setup writes them itself:
-// devvm's own files (its environment, with the user's GitHub token
-// without network policy), the ssh key its backend logs in with, the
+// devvm's own files (its environment, with the tokens' placeholders),
+// the ssh key its backend logs in with, the
 // agents' folders linked to their mounts and the files copied from
 // devvm's store, the agents' logins, and caches, which are made again.
 func homeSkips(d paths.Dirs, toolNames []string) []string {

@@ -175,6 +175,24 @@ func TestInterceptRefusesAnotherHost(t *testing.T) {
 	}
 }
 
+// An open VM's proxy (Config.Open) applies no rules but puts secrets in as every tier's does: the
+// bound host gets the real value, and a request in its tunnel that names another host gets 421.
+func TestInterceptOpen(t *testing.T) {
+	t.Parallel()
+	s, port, _, c := interceptSetup(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s|%s", r.Host, r.Header.Get("Authorization")) //nolint:gosec // a test echo server
+	})
+	s.egress.pol = newPolicy(nil, nil, nil, quiet())
+	s.egress.pol.open = true
+	u := fmt.Sprintf("https://localhost:%d/x", port)
+	if code, body := get(t, c, u, ""); code != 200 || body != fmt.Sprintf("localhost:%d|Bearer real", port) {
+		t.Fatalf("open, the bound host: %d %q", code, body)
+	}
+	if code, body := get(t, c, u, "other.example"); code != http.StatusMisdirectedRequest || strings.Contains(body, "real") {
+		t.Errorf("open, another Host: %d %q (want 421 and no secret)", code, body)
+	}
+}
+
 // Unbinding a secret applies to tunnels already open: the next request in a kept-alive tunnel gets
 // no secret.
 func TestUnbindAppliesToOpenTunnels(t *testing.T) {

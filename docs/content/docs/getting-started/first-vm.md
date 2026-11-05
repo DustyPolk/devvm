@@ -76,7 +76,7 @@ claude setup-token        # approve in the browser, then copy the sk-ant-oat01-â
 devvm secret set claude   # paste it
 ```
 
-With network policy, the VM gets a placeholder, and the proxy on your machine puts the real token into Claude's requests. Every agent gets its settings, skills, MCP servers and logins from devvm's agent store, but never your history. When you already use an agent on this machine, `devvm agent import` copies its settings and logins into the store once ([devvm's agent store](../using/coding-agents.md#devvms-agent-store)).
+The VM gets a placeholder, whatever its network tier, and the proxy on your machine puts the real token into Claude's requests. Every agent gets its settings, skills, MCP servers and logins from devvm's agent store, but never your history. When you already use an agent on this machine, `devvm agent import` copies its settings and logins into the store once ([devvm's agent store](../using/coding-agents.md#devvms-agent-store)).
 
 ## Starting the agent
 

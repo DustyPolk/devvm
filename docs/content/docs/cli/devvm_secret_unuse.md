@@ -7,7 +7,7 @@ Stop this folder's VM using a secret
 
 ## Synopsis
 
-Stop this folder's VM using a secret, which its proxy stops putting in at once. A VM without network policy got the secret itself, which still works wherever it kept it. A VM whose image has claude always uses claude.
+Stop this folder's VM using a secret, which its proxy stops putting in at once. A VM whose image has claude always uses claude.
 
 ```text
 devvm secret unuse NAME [flags]

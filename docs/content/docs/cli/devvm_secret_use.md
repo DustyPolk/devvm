@@ -7,7 +7,7 @@ Let this folder's VM use a secret
 
 ## Synopsis
 
-Let this folder's VM use a secret. Its proxy puts the secret in at once, and the VM gets its placeholder from its next launch, or the secret itself without network policy.
+Let this folder's VM use a secret. Its proxy puts the secret in at once, and the VM gets its placeholder from its next launch.
 
 ```text
 devvm secret use NAME [flags]

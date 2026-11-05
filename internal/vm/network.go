@@ -127,20 +127,13 @@ func (e Net) SetTier(ctx context.Context, to netpolicy.Tier, command string) err
 		e.Info(msg.SettingSet(vm))
 		return nil
 	}
-	oldTokens := !from.Confined()
 	switch {
 	case !running:
 		e.Info(msg.SettingSet(vm))
 	case e.restartNow(vm, e.Confirm, 1):
-		if oldTokens {
-			e.Note(msg.NetOnOldTokens(vm))
-		}
 		return e.launcher.Restart(ctx, Options{})
 	default:
 		e.Info(msg.NextStart(1, vm))
-	}
-	if oldTokens {
-		e.Note(msg.NetOnOldTokens(vm))
 	}
 	return nil
 }

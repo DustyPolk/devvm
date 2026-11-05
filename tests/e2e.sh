@@ -22,7 +22,7 @@
 #                VM and checks its shared tools, devvm tools, tools update, rm and add, devvm node an
 #                unknown command and --tools ignored on it; network makes a VM with Claude Code and Codex, with
 #                network policy and checks it reaches only its allowlist, devvm network, its log and rules, its tokens
-#                stay on the host (devvm secret too), and the self-check, on relaunch too; devvm stop
+#                stay on the host (devvm secret too), open too, and the self-check, on relaunch too; devvm stop
 #                stops its proxy; nix builds the nix layer behind a company proxy (no proxy left in its
 #                image), makes a node VM with the nix layer of a flake project with network policy and checks Nix's
 #                pins, store and trust, nix-daemon's proxy, nix run nixpkgs#hello through the shared Nix
@@ -2037,13 +2037,14 @@ e2e_ca; ca_serve $P47195
 mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
 check "a CA in devvm's CA folder is trusted in the VM from its next launch" bash -c "cd '$p' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
   limactl shell --workdir / $vm sh -c 'openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt /usr/local/share/ca-certificates/devvm-extra-1.crt &&
-    cmp -s /etc/ssl/devvm.pem /usr/local/share/ca-certificates/devvm-extra-1.crt && curl -sSf -o /dev/null https://host.lima.internal:$P47195/' </dev/null"
+    grep -qF \"\$(sed -n 2p /usr/local/share/ca-certificates/devvm-extra-1.crt)\" /etc/ssl/devvm.pem && curl -sSf -o /dev/null https://host.lima.internal:$P47195/' </dev/null"
 check "the VM's environment points tools that don't read the system's store at it" in_vm "$vm" \
   '[[ $NODE_EXTRA_CA_CERTS == /etc/ssl/devvm.pem && $SSL_CERT_FILE == /etc/ssl/certs/ca-certificates.crt && $REQUESTS_CA_BUNDLE == $SSL_CERT_FILE && $PIP_CERT == $SSL_CERT_FILE ]]'
 rm -rf "$cafolder"
 check "emptied, the VM trusts it no more from its next launch" bash -c "cd '$p' && printf 'exit\n' | '$D' >'$work/last.log' 2>&1 &&
-  limactl shell --workdir / $vm sh -c '! ls /usr/local/share/ca-certificates/devvm-* >/dev/null 2>&1 && [ ! -s /etc/ssl/devvm.pem ] &&
-    ! curl -sSf -o /dev/null https://host.lima.internal:$P47195/' </dev/null"
+  limactl shell --workdir / $vm sh -c '! ls /usr/local/share/ca-certificates/devvm-extra-* >/dev/null 2>&1 &&
+    ls /usr/local/share/ca-certificates/devvm-proxy.crt >/dev/null && ! grep -qFf /dev/stdin /etc/ssl/devvm.pem &&
+    ! curl -sSf -o /dev/null https://host.lima.internal:$P47195/' < <(sed -n 2p '$cad/ca.pem')"
 ca_stop
 
 section "ssh by name"
@@ -2352,7 +2353,9 @@ check "its settings are copied in, its history never" bash -c "
 check "the VM gets the host's git identity, timezone and its hostname" in_vm "$vm" \
   "[[ \$(git config --global user.name) == 'E2E User' && \$(git config --global user.email) == e2e@example.com &&
      \$(timedatectl show -p Timezone --value) == Europe/Paris && \$(hostname) == agents ]]"
-check "without network policy, the Claude token itself" in_vm "$vm" '[[ $CLAUDE_CODE_OAUTH_TOKEN == sk-ant-oat01-e2efake-plain ]]'
+check "an open VM gets the Claude Code token's placeholder, never the token" bash -c "
+  [[ \$(limactl shell --workdir / $vm bash -lc 'printenv CLAUDE_CODE_OAUTH_TOKEN' </dev/null) == sk-ant-oat01-devvm-proxy-managed-$(st_get "$(vmdir "$vm")" net.made.proxy_salt) ]] &&
+  ! limactl shell --workdir / $vm sudo grep -rqs -e e2efake-plain /etc /home /root </dev/null"
 mkdir -p "$store/.claude/agents"
 check "a new agent folder in the store is noticed on launch, and waits for a restart" bash -c "cd '$a' && printf 'exit\n' | HOME='$ah' '$D' 2>&1 |
   grep -qF \"\$(m next_start_mounts vm=$vm | head -1)\""
@@ -3094,14 +3097,27 @@ echo "  e2e: this machine's LAN address: ${lan:-none}"
 # answering its self-check, reaches this machine's loopback and its LAN address for it.
 check "devvm network open: its next start is open: direct connections work, its proxy is set and answers, and through it the VM reaches this machine's loopback and LAN" bash -c "cd '$n' &&
   [[ \$('$D' network | head -1) == unenforced ]] && '$D' network open </dev/null >/dev/null &&
-  printf 'exit\n' | HOME='$nh' DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == open ]] &&
+  printf 'exit\n' | HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake DEVVM_MESSAGES=names '$D' >'$work/last.log' 2>&1 && [[ \$('$D' network | head -1) == open ]] &&
   ! grep -q net_proxy_unreachable '$work/last.log' && [[ \$(status_of '$vm') == Running ]] &&
-  pgrep -f -- '[_]proxy -config $pxc' >/dev/null && grep -q '\"open\": true' '$pxc' && ! grep -q '\"ca\"' '$pxc' &&
+  pgrep -f -- '[_]proxy -config $pxc' >/dev/null && grep -q '\"open\": true' '$pxc' && grep -q '\"ca\"' '$pxc' &&
   limactl shell --workdir / $vm curl --noproxy '*' -sS -m 10 -o /dev/null https://1.1.1.1 </dev/null &&
   limactl shell --workdir / $vm bash -lc 'printenv HTTPS_PROXY' </dev/null | grep -q '^http://devvm:[0-9a-f]*@192\.168\.5\.2:$pp\$' &&
   [[ \$(limactl shell --workdir / $vm bash -lc 'curl -fsS -m 10 --noproxy \"\" http://127.0.0.1:$P47198/' </dev/null) == host-lan ]] &&
   [[ -n '$lan' && \$(limactl shell --workdir / $vm bash -lc 'curl -fsS -m 10 http://$lan:$P47198/' </dev/null) == host-lan ]] &&
   '$D' network log | grep -q '  allowed  127\.0\.0\.1:$P47198 '"
+# Open, it holds no real secret either: the token is nowhere in it, its environment and Codex's
+# login hold only its own placeholders, and its proxy, whose certificates it verifies with its own
+# CA (no -k), puts the token in. A request that goes around the proxy carries only the placeholder,
+# which the token's host refuses with a 401, and the proxy never sees it.
+check "an open VM holds no real secret: its proxy puts the token in, and a direct request carries only the placeholder and gets a 401" bash -c "
+  ! limactl shell --workdir / $vm sudo grep -rqs -e e2efake /etc /home /root </dev/null &&
+  ! limactl shell --workdir / $vm bash -lc 'env' </dev/null | grep -q e2efake &&
+  [[ \$(limactl shell --workdir / $vm bash -lc 'printenv CLAUDE_CODE_OAUTH_TOKEN' </dev/null) == sk-ant-oat01-devvm-proxy-managed-$salt ]] &&
+  limactl shell --workdir / $vm bash -c 'cat ~/.codex/auth.json' </dev/null | grep -q devvm-proxy-managed &&
+  limactl shell --workdir / $vm bash -lc 'curl -sS -m 20 -o /dev/null https://api.anthropic.com/v1/models/devvm-e2e-open -H \"Authorization: Bearer \$CLAUDE_CODE_OAUTH_TOKEN\"' </dev/null &&
+  grep '\"path\":\"/v1/models/devvm-e2e-open\"' '$events' | grep -q '\"secrets\":\[\"claude\"\]' &&
+  code=\$(limactl shell --workdir / $vm bash -lc 'curl --noproxy \"*\" -sS -m 20 -o /dev/null -w %{http_code} https://api.anthropic.com/v1/models/devvm-e2e-direct -H \"Authorization: Bearer \$CLAUDE_CODE_OAUTH_TOKEN\"' </dev/null) &&
+  echo \"direct: \$code\" && [[ \$code == 401 ]] && ! grep -q devvm-e2e-direct '$events'"
 # Open, behind the run's company proxy on this machine's loopback, its password fake: the shell's
 # settings reach the VM's proxy, which goes through the company proxy, and never the guest or Lima.
 # The check reads the password from its file, so it's in no command's arguments.

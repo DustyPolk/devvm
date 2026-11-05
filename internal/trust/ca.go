@@ -19,7 +19,7 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Each VM with network policy has a CA of its own, which its proxy
+// Each VM has a CA of its own, whatever its tier, which its proxy
 // intercepts with and which only that VM trusts, so a key that leaks
 // reaches one VM. A CA lasts caLife, so a leaked key stops working within
 // weeks, and has a successor, the next CA, which every launch installs in

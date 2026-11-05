@@ -1,6 +1,6 @@
-// Package agentlogin is agents' files on the host as VMs with network policy see them. Codex
+// Package agentlogin is agents' files on the host as VMs see them. Codex
 // (~/.codex/auth.json) and opencode (~/.local/share/opencode/auth.json) keep their logins there, and
-// Claude Code its MCP servers' secrets (~/.claude.json). Such a VM gets its own copy of each file
+// Claude Code its MCP servers' secrets (~/.claude.json). Every VM gets its own copy of each file
 // with placeholders instead of keys and tokens (File.VMCopy), and the proxy puts the real ones
 // into requests for each provider's hosts (File.Bindings), looking each value up in its own process
 // (File.Get).
@@ -554,21 +554,6 @@ func claudeBindings(m map[string]any, salt string) []proxy.Binding {
 	return bs
 }
 
-// claudeSecrets: the servers whose settings hold values the VM's copy replaces.
-func claudeSecrets(m map[string]any) []string {
-	var out []string
-	names, servers := claudeServers(m)
-	for _, n := range names {
-		s := obj(servers, n)
-		if len(obj(s, "env")) > 0 || len(obj(s, "headers")) > 0 || scrubURL(str(s, "url")) != str(s, "url") ||
-			argsHoldSecrets(s["args"]) || scrubCommand(str(s, "command")) != str(s, "command") ||
-			scrubCommand(str(s, "headersHelper")) != str(s, "headersHelper") {
-			out = append(out, n)
-		}
-	}
-	return out
-}
-
 // What of ~/.claude.json the VM's copy keeps: settings, onboarding and account state (not
 // credentials), and MCP servers. Anything else (primaryApiKey, keys a later Claude Code adds) stays
 // on the host; the VM keeps its own value of it.
@@ -717,10 +702,7 @@ func scrubArgs(v any) (any, bool) {
 	return out, changed
 }
 
-func argsHoldSecrets(v any) bool { _, changed := scrubArgs(v); return changed }
-
-// claudeTop drops what of ~/.claude.json no VM gets, with network policy or without: all but
-// claudeTopKeys.
+// claudeTop drops what of ~/.claude.json no copy of devvm's keeps: all but claudeTopKeys.
 func claudeTop(m map[string]any) map[string]any {
 	for k := range m {
 		if !claudeTopKeys[k] {
@@ -730,9 +712,9 @@ func claudeTop(m map[string]any) map[string]any {
 	return m
 }
 
-// ClaudeCopy returns the copy of the ~/.claude.json at path that a VM without network policy gets:
-// only claudeTopKeys, so never primaryApiKey or the projects' history, and its MCP servers as they
-// are.
+// ClaudeCopy returns the copy of the ~/.claude.json at path that devvm's agent store keeps: only
+// claudeTopKeys, so never primaryApiKey or the projects' history, and its MCP servers as they are
+// (a VM's copy takes their secrets out: VMCopy).
 func ClaudeCopy(path string) ([]byte, error) {
 	m, err := readJSON(path)
 	if err != nil {
@@ -807,16 +789,6 @@ func (f File) claudeGet(name string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no MCP server header %s in %s", name, f.Path)
-}
-
-// MCPSecrets returns the MCP servers in a ~/.claude.json at path whose settings hold values the
-// VM's copy replaces (env values, headers, secret-looking URLs and arguments), sorted.
-func MCPSecrets(path string) ([]string, error) {
-	m, err := readJSON(path)
-	if err != nil {
-		return nil, err
-	}
-	return claudeSecrets(m), nil
 }
 
 // errKind is a File of no agent devvm knows.

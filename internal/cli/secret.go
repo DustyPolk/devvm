@@ -35,7 +35,7 @@ func newSecretCmd(a *app) *cobra.Command {
 		Long: "List the secrets devvm keeps on this machine, claude for the Claude Code token, github for a GitHub token " +
 			"and proxy for the password of the company proxy that config.toml names, " +
 			"with whether each is saved and the VMs using it. " +
-			"A VM with network policy gets a placeholder, and its proxy puts the secret into requests for the secret's hosts. " +
+			"A VM gets a placeholder, and its proxy puts the secret into requests for the secret's hosts. " +
 			"No VM gets proxy, which devvm's proxies send only to the company proxy.",
 		Example: examples(
 			"devvm secret", "list the secrets and the VMs using each",
@@ -175,13 +175,11 @@ func listSecrets(cmd *cobra.Command, a *app, asJSON bool) error {
 // newSecretUseCmd is devvm secret use (use) or unuse.
 func newSecretUseCmd(a *app, name string, use bool) *cobra.Command {
 	short, long := "Let this folder's VM use a secret", "Let this folder's VM use a secret. "+
-		"Its proxy puts the secret in at once, and the VM gets its placeholder from its next launch, "+
-		"or the secret itself without network policy."
+		"Its proxy puts the secret in at once, and the VM gets its placeholder from its next launch."
 	example := examples("devvm secret use github", "let the VM use your GitHub token")
 	if !use {
 		short, long = "Stop this folder's VM using a secret", "Stop this folder's VM using a secret, "+
 			"which its proxy stops putting in at once. "+
-			"A VM without network policy got the secret itself, which still works wherever it kept it. "+
 			"A VM whose image has claude always uses claude."
 		example = examples("devvm secret unuse github", "stop the VM using your GitHub token")
 	}

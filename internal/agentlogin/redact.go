@@ -1,6 +1,6 @@
 package agentlogin
 
-// Agents' settings files copied into VMs with network policy (Codex's config.toml, opencode's
+// Agents' settings files copied into VMs (Codex's config.toml, opencode's
 // opencode.json, Claude Code's settings.json) can hold keys: an MCP server's headers or env, a
 // provider's apiKey. The proxy can't put those in (it only knows the logins), so the VM's copy gets
 // "devvm-redacted" for every value whose key looks like a secret's, every value of an env or headers

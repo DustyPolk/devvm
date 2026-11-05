@@ -1508,9 +1508,6 @@ other = "{{.vm}} wasn't started confined to its proxy, so its network policy isn
 [net_unenforced]
 other = "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
 
-[net_on_old_tokens]
-other = "The secrets {{.vm}} got while it was open still work wherever it kept them. Rotate them if that matters."
-
 [net_open_log]
 other = "{{.vm}} is open, so devvm logs only what goes through its proxy, not what it reaches directly."
 
@@ -2195,10 +2192,6 @@ other = "devvm redacted {{.keys}} in {{.vm}}'s copy of {{.file}}, because networ
 [config_not_copied]
 other = "{{.vm}} doesn't get a copy of {{.file}}, because devvm couldn't read it to take its secrets out."
 
-[claude_mcp_secrets_copied]
-description = "servers is a space-separated list of MCP server names"
-other = "{{.vm}} has no network policy, so devvm copies the env values and headers of Claude Code's MCP servers {{.servers}} into it unchanged."
-
 [proxy_failed]
 description = "reason is an error from the system or the flag parser, in English"
 other = "The network policy proxy failed: {{.reason}}."
@@ -2287,9 +2280,6 @@ other = "{{.vm}} doesn't use the {{.secret}} secret any more."
 
 [secret_with_claude]
 other = "{{.vm}} has Claude Code, so the VM always uses the Claude Code token. To stop it, run devvm tools rm claude."
-
-[secret_unuse_copied]
-other = "{{.vm}} is open, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."
 
 [codex_login_kept]
 description = "keys lists auth.json's top-level keys, comma-separated"

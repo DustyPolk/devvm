@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/secrets"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -84,9 +83,8 @@ func (e Net) Secrets(ctx context.Context) ([]SecretListed, error) {
 }
 
 // SecretUse binds a known secret to the folder's VM (use), or unbinds it.
-// Its proxy, if it has one, puts the token in or stops at once; the VM
-// gets its placeholder, or the token without network policy, from its next
-// launch. Without network policy, the token it got before still works.
+// Its proxy puts the token in or stops at once; the VM gets its
+// placeholder from its next launch.
 func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 	sec, ok := secrets.Lookup(name)
 	if !ok {
@@ -116,9 +114,6 @@ func (e Net) SecretUse(ctx context.Context, name string, use bool) error {
 	}
 	if !use {
 		e.Info(msg.SecretUnused(name, vm))
-		if !netpolicy.TierOf(st).Confined() {
-			e.Note(msg.SecretUnuseCopied(name, vm))
-		}
 		return nil
 	}
 	e.Info(msg.SecretUsed(name, vm))

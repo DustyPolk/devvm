@@ -25,8 +25,8 @@ import (
 
 // Paths in a VM, as guest/ca.sh writes them.
 const (
-	// Bundle holds the CAs devvm adds, all in one file: the user's and,
-	// with network policy, the proxy's. Empty when there are none.
+	// Bundle holds the CAs devvm adds, all in one file: the user's and
+	// the proxy's. Empty when there are none.
 	Bundle = "/etc/ssl/devvm.pem"
 	// System is the system's bundle, theirs included (Debian, Ubuntu and
 	// Alpine alike).

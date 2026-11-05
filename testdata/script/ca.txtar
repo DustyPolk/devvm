@@ -4,14 +4,17 @@
 # says where a proxy that inspects TLS needs its CA.
 env CAS=$XDG_CONFIG_HOME/devvm/ca
 
-# No folder: nothing sent but ca.sh, and every VM's environment points
-# tools at the CAs all the same, set when it's made: its start's one edit
-# adds its proxy, an open VM's included, the password's stand-in alone.
+# No folder: nothing sent but ca.sh and the VM's own CAs, an open VM's
+# too, and every VM's environment points tools at the CAs all the same,
+# set when it's made: its start's one edit adds its proxy, an open VM's
+# included, the password's stand-in alone.
 project none
 exec devvm --network open --no-git-protect
 exec tar -tf $STUB_DIR/sync.tar
 stdout '^ca\.sh$'
-! stdout '^ca/'
+stdout '^ca/devvm-proxy\.crt$'
+stdout '^ca/devvm-proxy-next\.crt$'
+! stdout '^ca/devvm-extra'
 stub_calls
 stdout '^limactl clone --tty=false \S+ devvm-none-[0-9a-f]{14} .* --set \.env = \{"NODE_EXTRA_CA_CERTS":"/etc/ssl/devvm\.pem","PIP_CERT":"/etc/ssl/certs/ca-certificates\.crt","REQUESTS_CA_BUNDLE":"/etc/ssl/certs/ca-certificates\.crt","SSL_CERT_FILE":"/etc/ssl/certs/ca-certificates\.crt","UV_SYSTEM_CERTS":"1"\}$'
 stdout '^limactl edit --tty=false devvm-none-[0-9a-f]{14} --set \.env = \{"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192\.168\.5\.2:[0-9]+",.*"NODE_EXTRA_CA_CERTS":"/etc/ssl/devvm\.pem",'

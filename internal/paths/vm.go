@@ -57,7 +57,7 @@ func (v VM) ProxyPID() string { return filepath.Join(v.Run(), "proxy.pid") }
 func (v VM) ProxyStatus() string { return filepath.Join(v.Run(), "proxy.status") }
 
 // CA is the folder of the VM's own CA, which its proxy intercepts with
-// and which only it trusts, with network policy.
+// and which only it trusts.
 func (v VM) CA() CA { return CA{Dir: filepath.Join(v.Run(), "ca")} }
 
 // CA is a VM's CA folder (VM.CA) and its files: the CA its proxy signs

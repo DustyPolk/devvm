@@ -37,12 +37,12 @@ type syncer struct{ *Env }
 
 // sync sets up a running VM on every launch: devvm's guest/sync.sh runs in it,
 // with what it needs sent over as a tar stream, staged in memory (it holds
-// credentials): the host's settings, the agents' config, the VM's tokens
-// or their placeholders, its shared tools, and the user's CAs (trust.Read:
-// a folder of them that holds anything else fails it), and its links'
-// addresses and names (Env.Links, checkLinks). With network policy its
-// proxy's address, devvm's CA, the logins' copies with placeholders, and
-// the agents' settings files with their keys taken out.
+// credentials): the host's settings, the agents' config, its shared tools,
+// the user's CAs (trust.Read: a folder of them that holds anything else
+// fails it), and its links' addresses and names (Env.Links, checkLinks).
+// On every tier its proxy's address, devvm's CA, the tokens' and logins'
+// placeholders, and the agents' settings files with their keys taken out:
+// no VM holds a real secret.
 func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug string, files []string, conf backend.Confinement) error {
 	vm := st.Name()
 	links, err := e.links(st)
@@ -136,7 +136,7 @@ func reported(files []string, report []byte) []string {
 
 // setupInputs is what devvm gives a VM's setup besides its state: its
 // hostname (the folder's slug), its tool files, its proxy's address (empty
-// without network policy), its links, and the path its folder moved
+// when the backend gives the guest none), its links, and the path its folder moved
 // from, "" when it didn't (its moved section).
 type setupInputs struct {
 	slug, proxyURL, moved string
@@ -230,7 +230,7 @@ func (e syncer) checkStartLinks(st *state.VM) error {
 
 // stage returns what sync sends; see devvm's guest/sync.sh for each file.
 func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage, error) {
-	vm, names, net := st.Name(), tools.Names(st), netpolicy.TierOf(st).Confined()
+	vm, names := st.Name(), tools.Names(st)
 	slug, files, proxyURL := in.slug, in.files, in.proxyURL
 	if err := checkLinks(vm, slug, in.links); err != nil {
 		return nil, err
@@ -293,34 +293,16 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 
 	// The agents' settings from devvm's store: folders to link to their
 	// mounts, each its path in the home folder and its mount's, files
-	// copied. Without network policy, Codex's and opencode's logins
-	// copied as they are (stageNet's copies hold placeholders). Never
-	// their history.
-	links, err := e.stageAgents(s, names, net)
+	// copied (the logins' copies are stageSecrets'). Never their history.
+	links, err := e.stageAgents(s, names)
 	if err != nil {
 		return nil, err
 	}
-	// ~/.claude.json's settings, account state and MCP servers, never the
-	// rest of it. With network policy the copy holds placeholders (stageNet).
-	if !net && slices.Contains(store.Logins(names), "claude") {
-		data, err := store.ClaudeCopy()
-		if err != nil {
-			return nil, msg.LoginCopyFailed("claude", err.Error(), vm).Because(err)
-		}
-		s.put("claude.json", 0o600, data)
-		if servers := store.MCPSecrets(); len(servers) > 0 {
-			e.Warn(msg.ClaudeMcpSecretsCopied(strings.Join(servers, " "), vm))
-		}
-	}
 
-	// Tokens: a placeholder when the proxy puts the value in, else the
-	// value itself.
-	var salt string
-	if net {
-		var err error
-		if salt, err = netpolicy.Salt(ctx, st); err != nil {
-			return nil, err
-		}
+	// Tokens: always a placeholder, which the proxy puts the value in for.
+	salt, err := netpolicy.Salt(ctx, st)
+	if err != nil {
+		return nil, err
 	}
 	for _, name := range secrets.Names(st) {
 		sec, ok := secrets.Lookup(name)
@@ -343,19 +325,14 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 			e.Warn(msg.ClaudeTokenInvalid())
 			continue
 		}
-		if net {
-			v = sec.Placeholder(salt)
-		}
-		env.WriteString("export " + sec.Env + "=" + shell.Quote(v) + "\n")
+		env.WriteString("export " + sec.Env + "=" + shell.Quote(sec.Placeholder(salt)) + "\n")
 		if name == "github" {
 			vars = append(vars, [2]string{"DEVVM_GITHUB", "1"})
 		}
 	}
 
-	if net {
-		if err := e.stageNet(s, store, vm, names, salt); err != nil {
-			return nil, err
-		}
+	if err := e.stageSecrets(s, store, vm, names, salt); err != nil {
+		return nil, err
 	}
 	var vmFile bytes.Buffer
 	for _, kv := range vars {
@@ -368,10 +345,9 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 }
 
 // stageAgents adds the agents' settings from devvm's store (agentStore)
-// to s, and without network policy (net) Codex's and opencode's logins
-// from it as they are, and returns the setup's links file: two lines for
-// each folder, its path in the VM's home and its mount's path.
-func (e syncer) stageAgents(s *stage, names []string, net bool) ([]byte, error) {
+// to s, and returns the setup's links file: two lines for each folder, its
+// path in the VM's home and its mount's path.
+func (e syncer) stageAgents(s *stage, names []string) ([]byte, error) {
 	var links bytes.Buffer
 	for _, a := range image.AgentsOf(names) {
 		store := agentStore(e.Dirs, a)
@@ -382,17 +358,6 @@ func (e syncer) stageAgents(s *stage, names []string, net bool) ([]byte, error) 
 			if err := s.copy("home/"+rel, filepath.Join(store, rel)); err != nil {
 				return nil, err
 			}
-		}
-	}
-	if net {
-		return links.Bytes(), nil
-	}
-	for _, kind := range e.Proxy.Secrets.Logins(names) {
-		if kind == agentlogin.Claude {
-			continue // merged by sync.sh from the staged claude.json
-		}
-		if err := s.copy("home/"+secrets.LoginRel(kind), secrets.LoginFile(e.Dirs, kind)); err != nil {
-			return nil, err
 		}
 	}
 	return links.Bytes(), nil
@@ -417,12 +382,13 @@ func claudeMoved(from, dir string) []byte {
 	return b.Bytes()
 }
 
-// stageNet adds what a VM with network policy gets: devvm's CA, its
-// logins' copies with placeholders ending in its salt, and its agents'
-// settings files with the values under secret-looking keys taken out (one
-// that can't be read that way isn't sent, nor are opencode's files that
-// aren't settings or Markdown: withheld).
-func (e syncer) stageNet(s *stage, store *secrets.Store, vm string, tools []string, salt string) error {
+// stageSecrets adds what every VM gets so that it holds no real secret:
+// devvm's CA, which its proxy signs the hosts it puts secrets in for
+// with, its logins' copies with placeholders ending in its salt, and its
+// agents' settings files with the values under secret-looking keys taken
+// out (one that can't be read that way isn't sent, nor are opencode's
+// files that aren't settings or Markdown: withheld).
+func (e syncer) stageSecrets(s *stage, store *secrets.Store, vm string, tools []string, salt string) error {
 	ca := e.Dirs.VM(vm).CA()
 	for _, f := range [][2]string{{"ca/devvm-proxy.crt", ca.Cert()}, {"ca/devvm-proxy-next.crt", ca.NextCert()}} {
 		cert, err := os.ReadFile(f[1])
@@ -489,7 +455,7 @@ func settingsFormat(rel string) (string, bool) {
 	return "json", true
 }
 
-// withheld reports whether a VM with network policy doesn't get an agent's
+// withheld reports whether a VM doesn't get an agent's
 // file, by its path relative to the home folder, because devvm can't take
 // secrets out of it: opencode's config folder's files but its settings
 // (settingsFormat) and its Markdown, such as AGENTS.md. A .env is one.

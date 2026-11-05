@@ -454,19 +454,11 @@ func writeLogin(t *testing.T, s *Store, kind, data string) {
 	}
 }
 
-// The VM's copies: a login's with placeholders ending in its salt, and the
-// MCP servers whose secrets a plain copy would carry.
+// The VM's copies: a login's with placeholders ending in its salt.
 func TestVMCopies(t *testing.T) {
 	s, _ := testStore(t, false, nil)
 	var warned []string
 	s.Reporter = &msg.Fake{OnWarn: func(m msg.M) { warned = append(warned, m.Names()) }}
-	if got := s.MCPSecrets(); got != nil {
-		t.Errorf("MCPSecrets without ~/.claude.json = %q", got)
-	}
-	writeLogin(t, s, "claude", `{"mcpServers":{"plain":{"command":"x"},"a b":{"command":"y","env":{"K":"v"}}}}`)
-	if got := s.MCPSecrets(); !slices.Equal(got, []string{"a b"}) {
-		t.Errorf("MCPSecrets = %q", got)
-	}
 	writeLogin(t, s, "codex", `{"OPENAI_API_KEY":"sk-codex-secret"}`)
 	salt := strings.Repeat("cd", 16)
 	data, err := s.VMLogin("codex", salt)

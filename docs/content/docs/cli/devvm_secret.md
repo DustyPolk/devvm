@@ -7,7 +7,7 @@ List the secrets kept on this machine, for VMs to use
 
 ## Synopsis
 
-List the secrets devvm keeps on this machine, claude for the Claude Code token, github for a GitHub token and proxy for the password of the company proxy that config.toml names, with whether each is saved and the VMs using it. A VM with network policy gets a placeholder, and its proxy puts the secret into requests for the secret's hosts. No VM gets proxy, which devvm's proxies send only to the company proxy.
+List the secrets devvm keeps on this machine, claude for the Claude Code token, github for a GitHub token and proxy for the password of the company proxy that config.toml names, with whether each is saved and the VMs using it. A VM gets a placeholder, and its proxy puts the secret into requests for the secret's hosts. No VM gets proxy, which devvm's proxies send only to the company proxy.
 
 ```text
 devvm secret [flags]

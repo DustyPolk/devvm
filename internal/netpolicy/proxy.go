@@ -2,7 +2,6 @@ package netpolicy
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"os"
 	"runtime"
@@ -95,27 +94,8 @@ func (p *Proxy) PID(vm string) (int, bool) { return p.proc(vm).PID() }
 // proxy of the VM's runs then.
 func (p *Proxy) Stop(vm string) bool { return p.proc(vm).Stop(4 * p.Tick) }
 
-// dropCA deletes an open VM's CAs, keys and all, once no proxy of the
-// VM's that may sign with them runs: its proxy carries no secret, so
-// nothing signs with them any more, and the VM's setup takes their
-// certificates out of the VM. A confined tier makes new ones.
-func (p *Proxy) dropCA(ctx context.Context, vm string) error {
-	ca := p.Dirs.VM(vm).CA()
-	if _, err := os.Lstat(ca.Dir); errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	// Under the CAs' lock, so it never takes them from a launch readying
-	// them (InitCA).
-	unlock, err := platform.LockFile(ctx, ca.Lock())
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	return os.RemoveAll(ca.Dir)
-}
-
 // Prepare readies a VM to start on b, or a running one to go on, on its
-// tier: on a confined tier the VM's own CA and its secret files; its
+// tier: the VM's own CA and its secret files, whatever its tier; its
 // ports, and its proxy running. It returns the confinement its backend
 // starts it with (Tier.Net): a running VM keeps the one it started with
 // until its next start, on its proxy alone when it started so or its tier
@@ -142,10 +122,8 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	if err != nil {
 		return none, err
 	}
-	if tier.Confined() {
-		if err := p.secretsReady(ctx, st); err != nil {
-			return none, err
-		}
+	if err := p.secretsReady(ctx, st); err != nil {
+		return none, err
 	}
 	// A stopped VM's proxy follows the hostagent it started with: a new
 	// start gets a new one. A running VM's proxy starts again, on the same
@@ -159,11 +137,6 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 		// Never the old one kept: it would go on with what it started with.
 		if !p.Stop(vm) {
 			return none, msg.ProxyStopFailed(vm)
-		}
-	}
-	if !tier.Confined() {
-		if err := p.dropCA(ctx, vm); err != nil {
-			return none, err
 		}
 	}
 	sp, err := p.Ports().SSH(ctx, st, running)
@@ -191,7 +164,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 	return conf, p.start(vm, cfg)
 }
 
-// secretsReady readies what a confined VM's proxy puts its secrets in
+// secretsReady readies what a VM's proxy puts its secrets in
 // with: the VM's own CA, and the next one, which it trusts too
 // (trust.InitCA), kept out of backups, as a copy of a key elsewhere could
 // impersonate any site to the VM; and its secret files, with its salt.
@@ -219,8 +192,8 @@ func (p *Proxy) secretsReady(ctx context.Context, st *state.VM) error {
 // (replaced, so it would mint certificates the VM no longer trusts after
 // its next setup), the user's CAs, which it trusts for its own
 // connections, the company proxy it goes through (upstream), and the
-// shared Nix cache's cap. An open VM's proxy has no CA and no secrets: it
-// carries the VM's requests as they are.
+// shared Nix cache's cap. Every tier's proxy has the VM's CAs and its
+// secrets: an open VM's applies no rules, but still puts its secrets in.
 func (p *Proxy) config(ctx context.Context, st *state.VM, t Tier, key, lifeline string) (proxy.Config, error) {
 	vm, files := st.Name(), p.Dirs.VM(st.Name())
 	ca := files.CA()
@@ -248,13 +221,11 @@ func (p *Proxy) config(ctx context.Context, st *state.VM, t Tier, key, lifeline 
 		UpstreamCAs: string(cas.Bundle()), Upstream: upstream,
 		Links: files.LinkList(), LinkSockets: p.Dirs.Run(),
 		DevvmSHA256: bin,
+		CA:          ca.Cert(), CAKey: ca.Key(), CANext: ca.NextCert(), CANextKey: ca.NextKey(),
+		Secrets: files.Secrets(),
 	}
-	if t.Confined() {
-		c.CA, c.CAKey, c.CANext, c.CANextKey = ca.Cert(), ca.Key(), ca.NextCert(), ca.NextKey()
-		c.Secrets = files.Secrets()
-		c.CASHA256, _ = image.SHA256File(ca.Cert())
-		c.CANextSHA256, _ = image.SHA256File(ca.NextCert())
-	}
+	c.CASHA256, _ = image.SHA256File(ca.Cert())
+	c.CANextSHA256, _ = image.SHA256File(ca.NextCert())
 	c.NixCache, c.NixCacheMax = p.nixCache(st)
 	return c, nil
 }

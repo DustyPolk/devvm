@@ -359,11 +359,6 @@ func CheckingTools() M {
 	return M{id: "checking_tools"}
 }
 
-// ClaudeMcpSecretsCopied is [claude_mcp_secrets_copied]: "{{.vm}} has no network policy, so devvm copies the env values and headers of Claude Code's MCP servers {{.servers}} into it unchanged."
-func ClaudeMcpSecretsCopied(servers string, vm string) M {
-	return M{id: "claude_mcp_secrets_copied", vals: []val{{"servers", servers}, {"vm", vm}}}
-}
-
 // ClaudeTokenHowto is [claude_token_howto]: "Run claude setup-token on this machine and approve it in the browser.\nThen paste the Claude Code token it prints, which starts with sk-ant-oat01-, not the code the browser shows."
 func ClaudeTokenHowto() M {
 	return M{id: "claude_token_howto"}
@@ -1904,11 +1899,6 @@ func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
 }
 
-// NetOnOldTokens is [net_on_old_tokens]: "The secrets {{.vm}} got while it was open still work wherever it kept them. Rotate them if that matters."
-func NetOnOldTokens(vm string) M {
-	return M{id: "net_on_old_tokens", vals: []val{{"vm", vm}}}
-}
-
 // NetOpenLog is [net_open_log]: "{{.vm}} is open, so devvm logs only what goes through its proxy, not what it reaches directly."
 func NetOpenLog(vm string) M {
 	return M{id: "net_open_log", vals: []val{{"vm", vm}}}
@@ -2854,11 +2844,6 @@ func SecretSavedKeychain(secret string) M {
 	return M{id: "secret_saved_keychain", vals: []val{{"secret", secret}}}
 }
 
-// SecretUnuseCopied is [secret_unuse_copied]: "{{.vm}} is open, so the VM got the real {{.secret}} secret, and it still works wherever the VM kept it. Rotate the secret if that matters."
-func SecretUnuseCopied(secret string, vm string) M {
-	return M{id: "secret_unuse_copied", vals: []val{{"secret", secret}, {"vm", vm}}}
-}
-
 // SecretUnused is [secret_unused]: "{{.vm}} doesn't use the {{.secret}} secret any more."
 func SecretUnused(secret string, vm string) M {
 	return M{id: "secret_unused", vals: []val{{"secret", secret}, {"vm", vm}}}
@@ -3512,7 +3497,6 @@ var specs = map[string]spec{
 	"ca_not_certificate":             {fields: []string{"file"}},
 	"ca_unreadable":                  {fields: []string{"file"}},
 	"checking_tools":                 {},
-	"claude_mcp_secrets_copied":      {fields: []string{"servers", "vm"}},
 	"claude_token_howto":             {},
 	"claude_token_invalid":           {},
 	"clone_alternates":               {fields: []string{"path"}},
@@ -3821,7 +3805,6 @@ var specs = map[string]spec{
 	"net_ask_global":                 {},
 	"net_default_failed":             {fields: []string{"reason"}},
 	"net_direct_route":               {fields: []string{"vm"}},
-	"net_on_old_tokens":              {fields: []string{"vm"}},
 	"net_open_log":                   {fields: []string{"vm"}},
 	"net_open_policy":                {fields: []string{"vm"}},
 	"net_proxy_down_stopped":         {fields: []string{"vm"}},
@@ -4011,7 +3994,6 @@ var specs = map[string]spec{
 	"secret_rm_confirm":              {fields: []string{"name"}},
 	"secret_saved":                   {fields: []string{"file", "secret"}},
 	"secret_saved_keychain":          {fields: []string{"secret"}},
-	"secret_unuse_copied":            {fields: []string{"secret", "vm"}},
 	"secret_unused":                  {fields: []string{"secret", "vm"}},
 	"secret_used":                    {fields: []string{"secret", "vm"}},
 	"secret_with_claude":             {fields: []string{"vm"}},

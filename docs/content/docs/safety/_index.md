@@ -35,14 +35,14 @@ flowchart TB
     home["the rest of<br>your home<br>folder"]
     git[".git hooks<br>and config,<br>locked on<br>macOS"]
     agent["your SSH<br>agent,<br>unless you<br>turn it on"]
-    secrets["your secrets<br>stay on this<br>machine with<br>network<br>policy"]
+    secrets["your secrets<br>stay on this<br>machine"]
     home ~~~ git ~~~ agent ~~~ secrets
   end
   subgraph copied["Read-only or copied"]
     direction TB
     tools["the shared<br>tools,<br>read-only"]
     folders["devvm's<br>agent store's<br>folders,<br>read-only"]
-    files["copies of<br>its settings<br>files, minus<br>your secrets<br>with network<br>policy"]
+    files["copies of<br>its settings<br>files, minus<br>your secrets"]
     tools ~~~ folders ~~~ files
   end
   subgraph reach["The VM reaches"]
@@ -61,7 +61,7 @@ flowchart TB
 | The rest of your home folder, other projects | The VM doesn't mount them. |
 | Your SSH keys | Only with `devvm ssh-agent on`, and only while you're connected. With `devvm ssh-agent devvm`, the VM can use only the keys you added to devvm's own agent ([details](../using/ssh.md#agent-forwarding)). |
 | The network, with network policy | The VM reaches allowlisted hosts only, through a proxy on this machine ([details](network.md)). |
-| Your secrets, with network policy | Your GitHub token, Claude Code's token, Codex and opencode logins and Claude Code's MCP secrets stay on this machine, and the proxy puts them into requests ([details](network.md#secrets)). |
+| Your secrets | Your GitHub token, Claude Code's token, Codex and opencode logins and Claude Code's MCP secrets stay on this machine on every network tier, and the proxy puts them into requests ([details](network.md#secrets)). |
 | The network, without network policy | The VM reaches everything this machine reaches, including this machine's own services on `localhost`. |
 
 > [!NOTE]

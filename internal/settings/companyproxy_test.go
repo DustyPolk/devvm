@@ -30,9 +30,6 @@ func TestCompanyProxy(t *testing.T) {
 	}
 	env := map[string]string{}
 	c := NewCompanyProxy(d, func(k string) string { return env[k] }, password)
-	if !c.ConfigOnly() {
-		t.Error("config.toml's alone isn't ConfigOnly")
-	}
 	up, err := c.Upstream(t.Context())
 	if err != nil || up == nil || *up != (proxy.Upstream{HTTPS: "http://alice@proxy.corp:3128", NoProxy: ".corp", Secret: proxy.UpstreamSecret}) {
 		t.Fatalf("Upstream: %+v, %v", up, err)
@@ -57,7 +54,7 @@ func TestCompanyProxy(t *testing.T) {
 	// The environment's is its own: nothing added, nothing looked up.
 	env["HTTPS_PROXY"] = "http://env.corp:8080"
 	e := NewCompanyProxy(d, func(k string) string { return env[k] }, password)
-	if vars, err := e.Env(t.Context()); vars != nil || err != nil || e.ConfigOnly() {
+	if vars, err := e.Env(t.Context()); vars != nil || err != nil {
 		t.Errorf("the environment's: %q, %v", vars, err)
 	}
 	if lookups != 2 {
@@ -65,7 +62,7 @@ func TestCompanyProxy(t *testing.T) {
 	}
 	// nil is the environment's alone.
 	var none *CompanyProxy
-	if vars, err := none.Env(t.Context()); vars != nil || err != nil || none.ConfigOnly() {
+	if vars, err := none.Env(t.Context()); vars != nil || err != nil {
 		t.Errorf("nil: %q, %v", vars, err)
 	}
 	if _, err := none.Route(request(t, "https://github.com/x")); err != nil {
@@ -120,10 +117,10 @@ func TestCompanyProxyPasswordMissing(t *testing.T) {
 	if vars, err := c.Env(t.Context()); err != nil || !slices.Contains(vars, "HTTP_PROXY=http://proxy.corp:3128") {
 		t.Errorf("no user: %q, %v", vars, err)
 	}
-	// No [proxy]: none, and not ConfigOnly.
+	// No [proxy]: none.
 	write(t, d.ConfigFile(), "features = []\n")
 	c = NewCompanyProxy(d, getenv, nil)
-	if u, err := c.Route(request(t, "http://example.com/")); u != nil || err != nil || c.ConfigOnly() {
+	if u, err := c.Route(request(t, "http://example.com/")); u != nil || err != nil {
 		t.Errorf("none: %v, %v", u, err)
 	}
 }

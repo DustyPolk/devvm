@@ -3,8 +3,9 @@
 # VM's secrets as the proxy sees them.
 
 # --network open: unconfined, with its proxy, which applies no
-# rules and holds no CA and no secret; its self-check asks the proxy
-# through the VM's own settings, and no confined one runs.
+# rules but puts the VM's secrets in as every tier's does, with the VM's
+# own CA and salt; its self-check asks the proxy through the VM's own
+# settings, and no confined one runs.
 project off
 exec devvm --network open --no-git-protect
 stdout '^==> creating_from image=base vm=devvm-off-[0-9a-f]{14}$'
@@ -12,15 +13,18 @@ vm_name OFF off
 vm_state $OFF_dir/vm.json
 stdout '^net\.tier=open$'
 stdout '^net\.made\.proxy_key=[0-9a-f]{64}$'
-! stdout 'proxy_salt|net_check'
+stdout '^net\.made\.proxy_salt=[0-9a-f]{32}$'
+! stdout 'net_check'
 stub_calls
 stdout 'curl -sSf -m 3 -o /dev/null --proxy "\$HTTPS_PROXY" http://devvm\.proxy/blocked'
 ! stdout 'noproxy'
 ! stdout 'sandbox-exec'
-! exists $OFF_dir/run/ca
+exists $OFF_dir/run/ca/ca.pem $OFF_dir/run/ca/next.key $OFF_dir/run/secrets.json
 exec cat $OFF_dir/run/proxy.json
 stdout '"open": true'
-! stdout '"ca"|"secrets"|"policies"|"builtin_policies"'
+stdout '"ca": "\S+/run/ca/ca\.pem"'
+stdout '"secrets": "\S+/run/secrets\.json"'
+! stdout '"policies"|"builtin_policies"'
 
 # --network allowlist: the VM's own CA and its next one, the keys the user's
 # alone (kept out of Time Machine on macOS), the
@@ -161,7 +165,7 @@ exec devvm network
 stdout '^open$'
 exec devvm network allowlist
 stdout '^==> next_start count=1 vm=devvm-off-[0-9a-f]{14}$'
-stderr '^net_on_old_tokens vm=devvm-off-[0-9a-f]{14}$'
+! stderr .
 vm_state $OFF_dir/vm.json
 stdout '^net\.tier=allowlist$'
 exec devvm network allowlist
@@ -258,19 +262,19 @@ vm_state $DEFAULT_dir/vm.json
 stdout '^net\.tier=allowlist$'
 stdout '^net\.made\.check=ok$'
 # Turned open, its next start starts it open, its proxy too, as open's,
-# and deletes its CAs, keys and all; on allowlist again, it gets new ones.
+# with the same CAs, which it keeps on allowlist again.
 cp $DEFAULT_dir/run/ca/ca.pem $WORK/default-ca.pem
 exec devvm network open
 exec limactl stop $DEFAULT
 exec devvm
-! exists $DEFAULT_dir/run/ca
+cmp $DEFAULT_dir/run/ca/ca.pem $WORK/default-ca.pem
 exec cat $DEFAULT_dir/run/proxy.json
 stdout '"open": true'
+stdout '"ca": "\S+/run/ca/ca\.pem"'
 exec devvm network allowlist
 exec limactl stop $DEFAULT
 exec devvm
-exists $DEFAULT_dir/run/ca/ca.key $DEFAULT_dir/run/ca/next.key
-! cmp $DEFAULT_dir/run/ca/ca.pem $WORK/default-ca.pem
+cmp $DEFAULT_dir/run/ca/ca.pem $WORK/default-ca.pem
 
 # A saved allowlist: new VMs get it; --network open beats it.
 exec devvm network -g allowlist

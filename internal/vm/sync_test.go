@@ -138,7 +138,26 @@ func TestUpLinksNoPolicy(t *testing.T) {
 	}
 }
 
-// With network policy, opencode's config folder's files that are neither
+// Every VM's setup is the same for its secrets, open or confined: the
+// VM's own CA and its next, which its proxy puts the secrets in with.
+func TestStageSecretsEveryTier(t *testing.T) {
+	for _, o := range []Options{{Network: "open"}, {Network: "internet"}, {Network: "allowlist"}, {Network: "none"}} {
+		e, f, _ := upEnv(t, allNative())
+		f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
+		f.ExecFunc = noDirect
+		if err := (Launch{e}).Up(t.Context(), o); err != nil {
+			t.Fatal(msg.NamesOf(err))
+		}
+		got := staged(t, f)
+		for _, name := range []string{"ca/devvm-proxy.crt", "ca/devvm-proxy-next.crt"} {
+			if !strings.Contains(got[name], "BEGIN CERTIFICATE") {
+				t.Errorf("%+v: staged %s = %q", o, name, got[name])
+			}
+		}
+	}
+}
+
+// On every tier, opencode's config folder's files that are neither
 // settings nor Markdown stay on the host; every other agent's file goes.
 func TestWithheld(t *testing.T) {
 	for rel, want := range map[string]bool{

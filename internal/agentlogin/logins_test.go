@@ -273,8 +273,8 @@ func TestLoginFileNotRegular(t *testing.T) {
 	if !errors.Is(err, proxy.ErrNotRegular) {
 		t.Errorf("Bindings of a FIFO = %v", err)
 	}
-	if _, err := MCPSecrets(p); !errors.Is(err, proxy.ErrNotRegular) {
-		t.Errorf("MCPSecrets of a FIFO = %v", err)
+	if _, err := ClaudeCopy(p); !errors.Is(err, proxy.ErrNotRegular) {
+		t.Errorf("ClaudeCopy of a FIFO = %v", err)
 	}
 }
 
@@ -405,12 +405,9 @@ func TestClaudeMCP(t *testing.T) {
 	if v, err := f.Get(t.Context(), bs[0].Name); err != nil || v != "Bearer remote-secret" {
 		t.Errorf("get %s: %q %v", bs[0].Name, v, err)
 	}
-	if s, err := MCPSecrets(f.Path); err != nil || !slices.Equal(s, []string{"local", "plain", "remote"}) {
-		t.Errorf("servers with secrets: %q, %v", s, err)
-	}
 }
 
-// Without network policy, ~/.claude.json's copy keeps only its settings, account state and MCP
+// The agent store's copy of ~/.claude.json keeps only its settings, account state and MCP
 // servers (these as they are), never an API key or the projects' history.
 func TestClaudeCopy(t *testing.T) {
 	p := writeFile(t, map[string]any{ //nolint:gosec // fake values
@@ -522,7 +519,7 @@ func TestGetErrorsSayWhatToDo(t *testing.T) {
 	}
 }
 
-// With network policy, nothing in the VM's ~/.claude.json carries a secret: not URLs, not
+// Nothing in the VM's ~/.claude.json carries a secret: not URLs, not
 // args, not top-level keys; settings and harmless values stay.
 func TestClaudeVMScrubsURLsArgsAndUnknownKeys(t *testing.T) {
 	f := File{Kind: Claude, Path: writeFile(t, map[string]any{ //nolint:gosec // fake values
@@ -560,8 +557,5 @@ func TestClaudeVMScrubsURLsArgsAndUnknownKeys(t *testing.T) {
 		if !strings.Contains(out, s) {
 			t.Errorf("the VM's copy lost %q:\n%s", s, out)
 		}
-	}
-	if s, _ := MCPSecrets(f.Path); !slices.Equal(s, []string{"a", "c", "h", "u", "z"}) {
-		t.Errorf("servers with secrets: %q", s)
 	}
 }

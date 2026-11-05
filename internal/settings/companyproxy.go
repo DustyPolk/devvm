@@ -76,19 +76,6 @@ func (c *CompanyProxy) fromConfig() bool {
 	return c != nil && backend.ReadHostProxy(c.Getenv).None()
 }
 
-// ConfigOnly reports whether the company proxy is config.toml's alone:
-// the environment sets none, and config.toml's [proxy] names one. A VM
-// without network policy gets only the environment's, so it goes
-// through none then. A config.toml devvm can't read names none here, as
-// reading it fails elsewhere.
-func (c *CompanyProxy) ConfigOnly() bool {
-	if !c.fromConfig() {
-		return false
-	}
-	h, err := HostProxy(c.Dirs, c.Getenv)
-	return err == nil && !h.None()
-}
-
 // resolve reads config.toml's company proxy, with its password, once.
 func (c *CompanyProxy) resolve(ctx context.Context) {
 	c.once.Do(func() {
