@@ -50,7 +50,7 @@ func keys(t *testing.T, b *Env) map[string]string {
 	t.Helper()
 	keys := map[string]string{}
 	for _, img := range keyImages {
-		k, err := b.Key(img)
+		k, err := b.Key(image.Name(img))
 		if err != nil {
 			t.Fatalf("%s: %v", img, err)
 		}
@@ -195,7 +195,7 @@ func TestChain(t *testing.T) {
 // devvm's own scripts missing.
 func TestKeyRefuses(t *testing.T) {
 	b := keyEnv(t, "")
-	for _, name := range []string{"", "Foo", "foo+", "+foo", "base+foo", "foo+base", "foo/bar", "../x", "-x"} {
+	for _, name := range []image.Name{"", "Foo", "foo+", "+foo", "base+foo", "foo+base", "foo/bar", "../x", "-x"} {
 		if _, err := b.Key(name); err == nil {
 			t.Errorf("%q: no error", name)
 		}
@@ -255,7 +255,7 @@ func TestKeyOfTheRealFiles(t *testing.T) {
 	b, _ := testEnv(t)
 	b.Assets = assets.FS
 	for _, name := range append([]string{image.Base}, image.Builtins...) {
-		if key, err := b.Key(name); err != nil || !image.IsKey(key) {
+		if key, err := b.Key(image.Name(name)); err != nil || !image.IsKey(key) {
 			t.Errorf("%s: key %q, %v", name, key, err)
 		}
 	}
@@ -286,7 +286,7 @@ func TestOutdated(t *testing.T) {
 // otherwise, and returns, by image name, what each build sent the backend
 // and the image's key. The user's CAs (Trust) aren't what it sent: the
 // image keeps none of them, so its key holds none.
-func sent(t *testing.T, b *Env, backendName string, names ...string) (sends, keys map[string]string) {
+func sent(t *testing.T, b *Env, backendName string, names ...image.Name) (sends, keys map[string]string) {
 	t.Helper()
 	f := backendtest.New(backendName, b.Backend.Caps())
 	f.Built = backend.Built{Libc: "gnu"}
@@ -356,7 +356,7 @@ func TestKeyHashesWhatABuildSends(t *testing.T) {
 		}
 		write(t, filepath.Join(assetsDir(b), "layers", "docker.sh"), "#!/bin/bash\necho docker\n")
 		saveFeatures(t, b.Dirs, []string{"mine", "omb", "nope"})
-		names := []string{"foo+bar", "docker", "foo+docker"}
+		names := []image.Name{"foo+bar", "docker", "foo+docker"}
 		before, keys := sent(t, b, "fake", names...)
 		if len(before) != 5 {
 			t.Fatalf("%q: built %d images, want 5", from, len(before))

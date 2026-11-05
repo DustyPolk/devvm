@@ -93,11 +93,11 @@ func (t VMs) Show(files []string, tg Target) ([]VMTool, error) {
 // tool files without them. What the VM installed itself stays. A layer
 // ran its script into the VM's disk, so it can't be removed, and neither
 // can a shared tool the VM lacks.
-func Remove(vm, img string, names, files, gone []string) ([]string, []string, error) {
+func Remove(vm string, img image.Name, names, files, gone []string) ([]string, []string, error) {
 	var drop []string
 	for _, n := range gone {
 		switch {
-		case image.HasLayer(img, n):
+		case img.Has(n):
 			return nil, nil, msg.CustomLayerRemove(n, vm)
 		case !slices.Contains(names, n):
 			return nil, nil, msg.VMLacks(listOrNone(names), n, vm)

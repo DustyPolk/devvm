@@ -183,40 +183,6 @@ func MiseVersion(assets fs.FS) (string, error) {
 	return string(m[0][1]), nil
 }
 
-// Normalize returns an image name's canonical form, so the same layers
-// always make one image: the layers bottom-up as given, each once, without
-// base, which every image is built on; base alone when there's nothing
-// else. An empty name stays empty, for CheckLayers to refuse.
-func Normalize(name string) string {
-	if name == "" {
-		return ""
-	}
-	return Of(strings.Split(name, "+"))
-}
-
-// Of is the image with these layers, bottom-up: base when there are none.
-// base and repeats are dropped.
-func Of(layers []string) string {
-	var parts []string
-	for _, p := range layers {
-		if p != Base && p != "" && !slices.Contains(parts, p) {
-			parts = append(parts, p)
-		}
-	}
-	if len(parts) == 0 {
-		return Base
-	}
-	return strings.Join(parts, "+")
-}
-
-// LayersOf is an image's layers, bottom-up: none for base.
-func LayersOf(name string) []string {
-	if name == Base || name == "" {
-		return nil
-	}
-	return strings.Split(name, "+")
-}
-
 // Tool is a shared tool at the version the tools lock gives it.
 type Tool struct {
 	// Name is the tool's name in the lock: node, claude.

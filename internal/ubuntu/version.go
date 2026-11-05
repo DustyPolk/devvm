@@ -47,7 +47,7 @@ func parseVersion(s string) (version, error) {
 	rest := s
 	if e, after, ok := strings.Cut(s, ":"); ok {
 		n, err := strconv.ParseInt(e, 10, 32)
-		if err != nil || n < 0 || strings.HasPrefix(e, "+") {
+		if err != nil || n < 0 || e[0] == '+' { // ParseInt takes a sign, an epoch has none
 			return version{}, ErrVersion
 		}
 		v.epoch, rest = n, after

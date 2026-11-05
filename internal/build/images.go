@@ -121,11 +121,12 @@ func (b Images) Delete(ctx context.Context, refs []string) error {
 		if image.IsKey(ref) && slices.Contains(built, ref) {
 			label = b.recordName(ref)
 		} else {
-			label = image.Normalize(ref)
-			if err := b.CheckLayers(label); err != nil {
+			name, err := Names(b).Parse(ref)
+			if err != nil {
 				return err
 			}
-			if key, err = b.Key(label); err != nil {
+			label = name.String()
+			if key, err = b.Key(name); err != nil {
 				return err
 			}
 			if !slices.Contains(built, key) {

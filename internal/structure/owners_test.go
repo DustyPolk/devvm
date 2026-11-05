@@ -333,6 +333,33 @@ func checkLiterals(m *module, r rules) []violation {
 	return vs
 }
 
+// checkSeparators: outside tests, a call to package strings with an
+// argument that separators lists, as a literal or a constant, is in its
+// owner's package: one anywhere else splits or joins what that package
+// owns.
+func checkSeparators(m *module, r rules) []violation {
+	var vs []violation
+	c := stringConsts(m)
+	for _, f := range m.files {
+		pkg := importName(f, "strings")
+		if f.test || pkg == "" {
+			continue
+		}
+		calls(f, func(call *ast.CallExpr) {
+			if !strings.HasPrefix(callName(call), pkg+".") {
+				return
+			}
+			for _, a := range call.Args {
+				v, ok := c.value(m, f, a)
+				if o, owned := r.separators[v]; ok && owned && f.dir != o.dir {
+					vs = append(vs, violation{ruleOwners, m.pos(call), fmt.Sprintf("splits or joins on %q: %s owns that, so use %s", v, o.dir, o.use)})
+				}
+			}
+		})
+	}
+	return vs
+}
+
 // checkPaths: outside tests and pathsOwner, no path is built in devvm's
 // data or config folder: no filepath.Join onto a Data or Config field,
 // and no os.MkdirTemp or os.CreateTemp there with a name of its own (a

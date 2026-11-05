@@ -38,7 +38,7 @@ type Parts struct {
 func (p Parts) tools() []string { return image.SortTools(slices.Concat(p.Toolchains, p.Agents)) }
 
 // image is the image the parts' layers make.
-func (p Parts) image() string { return image.Of(p.Layers) }
+func (p Parts) image() image.Name { return image.NameOf(p.Layers) }
 
 // listOrNone is names as a message shows a list: space-separated, or
 // none.
@@ -114,7 +114,7 @@ func (e creation) requireSetupLayers(vm string, layers []string, d partsDefault,
 		if !slices.Contains(d.setupLayers, l) {
 			continue
 		}
-		for _, f := range backend.ImageFeatures(l) {
+		for _, f := range backend.ImageFeatures(image.NameOf([]string{l})) {
 			if err := e.Registry.Require(b.Backend, vm, f); err != nil {
 				return msg.DefaultLayerLacks(b.Backend.Name(), string(f), l, vm).Because(err)
 			}
@@ -146,8 +146,9 @@ func (e creation) chooseParts(o Options, vm, dir string, dc *devcontainer.Plan, 
 	if !given && e.CanPick() && e.PickParts != nil {
 		p = e.pickNew(vm, d, b)
 	}
-	p.Layers = image.LayersOf(p.image())
-	if err := b.CheckLayers(p.image()); err != nil {
+	img := p.image()
+	p.Layers = img.Layers()
+	if err := (build.Names{Env: b}).Check(img); err != nil {
 		return Parts{}, err
 	}
 	if err := e.requireSetupLayers(vm, p.Layers, d, b); err != nil {
@@ -313,7 +314,7 @@ func (c LayersChoice) Set(layers []string) error {
 	if err := CheckPart("--layers", layers, c.Layers); err != nil {
 		return err
 	}
-	bottomUp := append([]string{}, image.LayersOf(image.Of(layers))...)
+	bottomUp := append([]string{}, image.NameOf(layers).Layers()...)
 	if _, err := settings.Save(c.Dirs, settings.Values{Layers: &bottomUp}); err != nil {
 		return err
 	}

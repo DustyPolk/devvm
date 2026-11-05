@@ -9,7 +9,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"path/filepath"
-	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
@@ -125,7 +124,7 @@ func made(ctx context.Context, st *state.VM, field func(*NetMade) *string, mk fu
 // own layers' policy file, next to its script, the user's own for every
 // VM, the VM's own, and the hosts its secrets imply. A missing file has no
 // rules.
-func Policies(d paths.Dirs, vm, img string, tools []string) (builtin, files []string) {
+func Policies(d paths.Dirs, vm string, img image.Name, tools []string) (builtin, files []string) {
 	builtin = []string{"layers/base.policy"}
 	for _, t := range tools {
 		// Only a shared tool's name names a file of devvm's.
@@ -133,7 +132,7 @@ func Policies(d paths.Dirs, vm, img string, tools []string) (builtin, files []st
 			builtin = append(builtin, "shared-tools/"+t+".policy")
 		}
 	}
-	for p := range strings.SplitSeq(img, "+") {
+	for _, p := range img.Layers() {
 		switch {
 		case p == "" || p == "base" || image.IsTool(p):
 		case image.IsBuiltin(p):

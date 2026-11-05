@@ -67,7 +67,7 @@ func (e Tools) change(ctx context.Context, t *found, add, gone []string) error {
 	have := tools.Names(st)
 	if len(gone) > 0 {
 		// Refused before anything is built.
-		names, _, err := tools.Remove(vm, st.Image, have, tools.Files(st), gone)
+		names, _, err := tools.Remove(vm, image.Name(st.Image), have, tools.Files(st), gone)
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func (e Tools) change(ctx context.Context, t *found, add, gone []string) error {
 			return err
 		}
 		if len(gone) > 0 {
-			if in.Names, in.Made.Files, err = tools.Remove(vm, st.Image, in.Names, in.Made.Files, gone); err != nil {
+			if in.Names, in.Made.Files, err = tools.Remove(vm, image.Name(st.Image), in.Names, in.Made.Files, gone); err != nil {
 				return err
 			}
 		}
@@ -154,9 +154,9 @@ func (e Tools) Pick(ctx context.Context, o Options) error {
 	for _, n := range image.Agents {
 		agents = append(agents, row(n))
 	}
-	b := e.builder(t.b, st.From)
-	for _, l := range layerRows(b, st.Image) {
-		layers = append(layers, PickRow{Name: l, Desc: layerDesc(l), On: image.HasLayer(st.Image, l), Fixed: true})
+	b, img := e.builder(t.b, st.From), image.Name(st.Image)
+	for _, l := range layerRows(b, img) {
+		layers = append(layers, PickRow{Name: l, Desc: layerDesc(l), On: img.Has(l), Fixed: true})
 	}
 	got := e.PickParts(msg.PickVMHelp(vm), []PickPart{
 		{msg.PickToolchains(), toolchains}, {msg.PickAgents(), agents}, {msg.PickLayers(), layers},
@@ -185,9 +185,9 @@ func (e Tools) Pick(ctx context.Context, o Options) error {
 
 // layerRows are the layers the picker shows for a VM made from img: every
 // layer there is, and any of img's that's gone since.
-func layerRows(b *build.Env, img string) []string {
+func layerRows(b *build.Env, img image.Name) []string {
 	rows := b.Layers()[1:]
-	for _, l := range image.LayersOf(img) {
+	for _, l := range img.Layers() {
 		if !slices.Contains(rows, l) {
 			rows = append(rows, l)
 		}

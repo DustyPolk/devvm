@@ -75,21 +75,22 @@ func (f *imageFlags) add(cmd *cobra.Command) {
 }
 
 // imageCmd runs do on the builds of the backend new VMs get, once the
-// name is one and the backend can run.
-func imageCmd(ctx context.Context, u *ui.UI, f imageFlags, name string, do func(build.Builds, context.Context, string) error) error {
+// name is one (read once, here) and the backend can run.
+func imageCmd(ctx context.Context, u *ui.UI, f imageFlags, name string, do func(build.Builds, context.Context, image.Name) error) error {
 	b, err := builder(u)
 	if err == nil {
 		b.From, b.Force = fromRef(f.from), f.force
 		err = from.Check(b.From)
 	}
+	var img image.Name
 	if err == nil {
-		err = b.CheckLayers(image.Normalize(name))
+		img, err = build.Names{Env: b}.Parse(name)
 	}
 	if err == nil {
 		err = backend.Check(ctx, b.Backend)
 	}
 	if err == nil {
-		err = do(build.Builds{Env: b}, ctx, name)
+		err = do(build.Builds{Env: b}, ctx, img)
 	}
 	fail(u, err, func(reason string) msg.M { return msg.BuildFailed(name, reason) })
 	return nil

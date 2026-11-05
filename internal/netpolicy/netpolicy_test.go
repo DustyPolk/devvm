@@ -142,7 +142,7 @@ func TestPolicies(t *testing.T) {
 	d := paths.Dirs{Data: "/d", Config: "/c", Lima: "/l"}
 	user := []string{"/c/policy", "/d/vms/0123456789abc1/policy", "/d/vms/0123456789abc1/run/secrets.policy"}
 	for _, c := range []struct {
-		img           string
+		img           image.Name
 		tools         []string
 		builtin, file []string
 	}{
@@ -152,6 +152,10 @@ func TestPolicies(t *testing.T) {
 		// A built-in layer's is devvm's.
 		{"docker", []string{"node"}, []string{"layers/base.policy", "shared-tools/node.policy", "layers/docker.policy"}, user},
 		{"base", nil, []string{"layers/base.policy"}, user},
+		// No name, and a name with empty parts or base among them, as a
+		// VM's record may hold.
+		{"", nil, []string{"layers/base.policy"}, user},
+		{"base+pg++docker", nil, []string{"layers/base.policy", "layers/docker.policy"}, slices.Concat([]string{"/c/layers/pg.policy"}, user)},
 	} {
 		builtin, files := Policies(d, "devvm-vm1-0123456789abc1", c.img, c.tools)
 		if !slices.Equal(builtin, c.builtin) || !slices.Equal(files, c.file) {
@@ -161,7 +165,7 @@ func TestPolicies(t *testing.T) {
 	// A part that's no layer's name never names a file outside the
 	// user's layers, and a name that's no shared tool's names none of
 	// devvm's.
-	for _, bad := range []string{"../x", "pg+../../etc/x", "a/b", "X", ".x"} {
+	for _, bad := range []image.Name{"../x", "pg+../../etc/x", "a/b", "X", ".x"} {
 		builtin, files := Policies(d, "devvm-vm1-0123456789abc1", bad, []string{"../x", "X"})
 		if got := slices.Concat(builtin, files); slices.ContainsFunc(got, func(f string) bool {
 			return strings.Contains(f, "x.policy") || strings.Contains(f, "b.policy") || strings.Contains(f, "X.policy")
@@ -176,7 +180,7 @@ func TestPolicies(t *testing.T) {
 func TestEveryPartHasAPolicy(t *testing.T) {
 	for _, p := range slices.Concat([]string{"base"}, image.Toolchains, image.Agents, image.Builtins) {
 		d := paths.Dirs{Data: "/d", Config: "/c"}
-		img, tools := p, []string(nil)
+		img, tools := image.Name(p), []string(nil)
 		if image.IsTool(p) {
 			img, tools = "base", []string{p}
 		}

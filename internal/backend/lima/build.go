@@ -123,7 +123,7 @@ func (l *images) BuildImage(ctx context.Context, spec backend.ImageSpec) (backen
 			built = backend.Built{Origin: spec.From.Digest, Libc: conv.libc, Glibc: conv.glibc}
 		}
 		built.Fitted = backend.Fitted(want, size)
-	} else if err := l.Runner.Run(ctx, msg.CloningImage(image.Parent(spec.Image)),
+	} else if err := l.Runner.Run(ctx, msg.CloningImage(image.Name(spec.Image).Parent().String()),
 		l.limactl(ctx, layerArgs(parent, inst)...)); err != nil {
 		return backend.Built{}, backend.Logged(msg.VMCreateFailed(inst))
 	}

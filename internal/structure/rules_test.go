@@ -354,6 +354,36 @@ func reads(p, call, name string) string {
 
 // ownerCases break and keep the owners: devvm's commands, envOwner and
 // envOwners.
+// separatorCases split and join image names outside internal/image, and
+// keep some.
+func separatorCases() []ruleCase {
+	return []ruleCase{
+		{
+			name:  "an image name split outside image",
+			files: map[string]string{"internal/vm/a.go": "package vm\n\nimport \"strings\"\n\nfunc f(s string) []string { return strings.Split(s, \"+\") }\n"},
+			want:  &want{ruleOwners, `splits or joins on "+": internal/image owns that, so use image.Name`},
+		},
+		{
+			name: "an image name joined by a constant, strings imported as another name",
+			files: map[string]string{"internal/build/a.go": "package build\n\nimport s \"strings\"\n\nconst plus = \"+\"\n\n" +
+				"func f(l []string) string { return s.Join(l, plus) }\n"},
+			want: &want{ruleOwners, `splits or joins on "+"`},
+		},
+		{
+			name:  "an image name split in image",
+			files: map[string]string{"internal/image/a.go": "package image\n\nimport \"strings\"\n\nfunc f(s string) []string { return strings.Split(s, \"+\") }\n"},
+		},
+		{
+			name:  "an image name split in a test",
+			files: map[string]string{"internal/vm/a_test.go": "package vm\n\nimport \"strings\"\n\nfunc f(s string) []string { return strings.Split(s, \"+\") }\n"},
+		},
+		{
+			name:  "another separator",
+			files: map[string]string{"internal/vm/a.go": "package vm\n\nimport \"strings\"\n\nfunc f(s string) bool { return strings.ContainsAny(s, \"+,\") }\n"},
+		},
+	}
+}
+
 func ownerCases() []ruleCase {
 	const platform = "package platform\n\nconst TestCPUs = \"DEVVM_TEST_CPUS\"\n"
 	listed := rules{envSettings: map[string]envSetting{"DEVVM_X": {[]string{"internal/tools/a.go"}, "x"}}}
@@ -535,7 +565,7 @@ func pathCases() []ruleCase {
 // what it allows.
 func TestRulesFail(t *testing.T) {
 	var broken []string // the layer violations' texts
-	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases(), ownerCases(), runnerCases(), pathCases()) {
+	for _, tc := range slices.Concat(methodCases(), varCases(), layerCases(), ownerCases(), separatorCases(), runnerCases(), pathCases()) {
 		t.Run(tc.name, func(t *testing.T) {
 			fsys := fstest.MapFS{"go.mod": {Data: []byte("module example.com/m\n\ngo 1.27\n")}}
 			for name, src := range tc.files {
@@ -563,6 +593,9 @@ func TestRulesFail(t *testing.T) {
 			}
 			if r.literals == nil {
 				r.literals = devvm().literals
+			}
+			if r.separators == nil {
+				r.separators = devvm().separators
 			}
 			if r.pathsOwner == "" {
 				r.pathsOwner = devvm().pathsOwner

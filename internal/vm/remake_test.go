@@ -156,9 +156,9 @@ func TestCopyHome(t *testing.T) {
 // the order given, those it has said and left as they are.
 func TestAddedImage(t *testing.T) {
 	for _, c := range []struct {
-		img    string
+		img    image.Name
 		layers []string
-		want   string
+		want   image.Name
 		had    []string
 	}{
 		{"base", []string{"desktop"}, "desktop", nil},
@@ -393,9 +393,9 @@ func TestAddLayersRefuses(t *testing.T) {
 // each.
 func TestRemovedImage(t *testing.T) {
 	for _, c := range []struct {
-		img    string
+		img    image.Name
 		layers []string
-		want   string
+		want   image.Name
 		lacks  []string
 	}{
 		{"docker+nix+desktop", []string{"nix"}, "docker+desktop", nil},

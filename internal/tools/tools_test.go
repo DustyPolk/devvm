@@ -1419,6 +1419,16 @@ func TestRemove(t *testing.T) {
 	if _, _, err := Remove(vm, "foo", []string{"node"}, nil, []string{"foo"}); msg.NamesOf(err) != "custom_layer_remove layer=foo vm="+vm {
 		t.Errorf("Remove a layer = %v", msg.NamesOf(err))
 	}
+	// base is a base VM's one layer, and no other VM's.
+	if _, _, err := Remove(vm, "base", []string{"node"}, nil, []string{"base"}); msg.NamesOf(err) != "custom_layer_remove layer=base vm="+vm {
+		t.Errorf("Remove base from base = %v", msg.NamesOf(err))
+	}
+	if _, _, err := Remove(vm, "foo+bar", []string{"node"}, nil, []string{"base"}); msg.NamesOf(err) != "vm_lacks has=node tool=base vm="+vm {
+		t.Errorf("Remove base from foo+bar = %v", msg.NamesOf(err))
+	}
+	if _, _, err := Remove(vm, "foo+bar", []string{"node"}, nil, []string{"bar"}); msg.NamesOf(err) != "custom_layer_remove layer=bar vm="+vm {
+		t.Errorf("Remove bar from foo+bar = %v", msg.NamesOf(err))
+	}
 }
 
 // devvm tools: each of a VM's tools with its version, and the lock's when

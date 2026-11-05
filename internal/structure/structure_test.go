@@ -40,6 +40,9 @@ func devvm() rules {
 		// finds their other interfaces.
 		guardOwner: "internal/backend/guard.go",
 		literals:   devvmLiterals(),
+		// An image's name is read once, by internal/image: its layers are
+		// split and joined there alone.
+		separators: map[string]literalOwner{"+": {"internal/image", "image.Name"}},
 		// paths names every file and folder devvm keeps, so the layout,
 		// its golden listing and a VM's teardown miss none.
 		pathsOwner: "internal/paths",

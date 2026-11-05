@@ -14,6 +14,7 @@ import (
 	"github.com/w3cj/devvm/internal/from"
 	"github.com/w3cj/devvm/internal/gitprotect"
 	"github.com/w3cj/devvm/internal/hostsafety"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/platform"
@@ -162,8 +163,8 @@ func useParent(e *Env, p *found) bool {
 // newVM is what create checked and chose for a new VM before building
 // anything.
 type newVM struct {
-	img     string   // its image: base and its layers
-	tools   []string // its shared tools
+	img     image.Name // its image: base and its layers
+	tools   []string   // its shared tools
 	size    Size
 	ports   string
 	net     bool
@@ -224,7 +225,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 		return err
 	}
 
-	e.Info(msg.CreatingFrom(n.img, vm))
+	e.Info(msg.CreatingFrom(n.img.String(), vm))
 	e.LogNote()
 	// What a VM made for this folder before, deleted some other way, left
 	// in its folder: the new one's state replaces it.
@@ -240,7 +241,7 @@ func (e creation) create(ctx context.Context, o Options, f project.Folder, b bac
 	if err != nil {
 		return err
 	}
-	st.Image, st.Dir, st.Folder, st.Chain, st.From, st.Backend = n.img, f.Dir, id, chain.String(), o.From, b.Name()
+	st.Image, st.Dir, st.Folder, st.Chain, st.From, st.Backend = n.img.String(), f.Dir, id, chain.String(), o.From, b.Name()
 	st.MadeBy = e.Version
 	st.BackendAt, _ = backend.LocationOf(b)
 	if err := n.record(st, tg, files); err != nil {

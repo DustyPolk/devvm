@@ -168,8 +168,8 @@ func (quietUI) AddCleanup(func(context.Context)) func()                   { retu
 func (quietUI) LoggedCmd(_ context.Context, _ msg.M, cmd *exec.Cmd) error { return cmd.Run() }
 
 // Layers are devvm's built-in ones and the user's scripts with names image
-// names can hold; nothing else gets past CheckLayers.
-func TestLayersAndCheckLayers(t *testing.T) {
+// names can hold; nothing else gets past Names' Check.
+func TestLayersAndCheck(t *testing.T) {
 	b, _ := testEnv(t)
 	write(t, filepath.Join(b.Dirs.Layers(), "Bad_Name.sh"), "")
 	write(t, filepath.Join(b.Dirs.Layers(), "base.sh"), "")
@@ -184,17 +184,54 @@ func TestLayersAndCheckLayers(t *testing.T) {
 	if got, want := b.Layers(), []string{"base", "bar", "desktop", "docker", "foo", "nix"}; !slices.Equal(got, want) {
 		t.Errorf("Layers() = %q, want %q", got, want)
 	}
-	if err := b.CheckLayers("stray"); err == nil || err.Error() != msg.UnknownLayer("stray", "base bar desktop docker foo nix").Error() {
-		t.Errorf("CheckLayers(stray) = %v", err)
+	names := Names{b}
+	if err := names.Check("stray"); err == nil || err.Error() != msg.UnknownLayer("stray", "base bar desktop docker foo nix").Error() {
+		t.Errorf("Check(stray) = %v", err)
 	}
-	for _, ok := range []string{"base", "foo", "foo+bar", "base+foo", "docker", "foo+docker", "nix", "docker+nix", "desktop", "foo+desktop"} {
-		if err := b.CheckLayers(ok); err != nil {
-			t.Errorf("CheckLayers(%q): %v", ok, err)
+	for _, ok := range []image.Name{"base", "foo", "foo+bar", "base+foo", "docker", "foo+docker", "nix", "docker+nix", "desktop", "foo+desktop"} {
+		if err := names.Check(ok); err != nil {
+			t.Errorf("Check(%q): %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"", "stray", "Bad_Name", "dir", "foo+", "../../x", "foo+nope", "-x"} {
-		if err := b.CheckLayers(bad); msg.IDOf(err) != "unknown_layer" {
-			t.Errorf("CheckLayers(%q) = %v, want unknown_layer", bad, err)
+	// A recorded name's parts as they are, an empty one among them.
+	for _, bad := range []image.Name{"", "stray", "Bad_Name", "dir", "foo+", "foo++bar", "../../x", "foo+nope", "-x"} {
+		if err := names.Check(bad); msg.IDOf(err) != "unknown_layer" {
+			t.Errorf("Check(%q) = %v, want unknown_layer", bad, err)
+		}
+	}
+	if err := names.Check("foo+node"); msg.NamesOf(err) != "tool_not_layer tool=node" {
+		t.Errorf("Check(foo+node) = %v", msg.NamesOf(err))
+	}
+}
+
+// A name as the user gives it: base, empty parts and repeats dropped,
+// each layer checked bottom first, the first refusal the name's.
+func TestParseName(t *testing.T) {
+	b, _ := testEnv(t)
+	parse := Names{b}.Parse
+	const layers = " layers=base bar desktop docker foo nix"
+	for in, want := range map[string]image.Name{
+		"base": "base", "+": "base", "base+base": "base", "foo": "foo", "base+foo": "foo", "foo+base+bar": "foo+bar",
+		"foo++bar": "foo+bar", "foo+bar+foo": "foo+bar", "bar+foo": "bar+foo", "foo+": "foo", "docker+nix": "docker+nix",
+	} {
+		if got, err := parse(in); err != nil || got != want {
+			t.Errorf("parse(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for in, want := range map[string]string{
+		"":              "unknown_layer layer=" + layers,
+		"stray":         "unknown_layer layer=stray" + layers,
+		"nosuch+node":   "unknown_layer layer=nosuch" + layers,
+		"node+nosuch":   "tool_not_layer tool=node",
+		"foo+claude":    "tool_not_layer tool=claude",
+		"foo+Bad_Name":  "unknown_layer layer=Bad_Name" + layers,
+		"../../x":       "unknown_layer layer=../../x" + layers,
+		"foo/bar":       "unknown_layer layer=foo/bar" + layers,
+		"-x+foo":        "unknown_layer layer=-x" + layers,
+		"foo+bar+stray": "unknown_layer layer=stray" + layers,
+	} {
+		if _, err := parse(in); msg.NamesOf(err) != want {
+			t.Errorf("parse(%q) = %v, want %s", in, msg.NamesOf(err), want)
 		}
 	}
 }
@@ -205,8 +242,8 @@ func TestBuildRefusesTools(t *testing.T) {
 	b, f := testEnv(t)
 	for _, name := range []string{"node", "foo+claude", "go+foo"} {
 		tool := map[string]string{"node": "node", "foo+claude": "claude", "go+foo": "go"}[name]
-		for verb, do := range map[string]func(context.Context, string) error{"Build": Builds{b}.Build, "Rebuild": Builds{b}.Rebuild} {
-			if err := do(t.Context(), name); err == nil || msg.NamesOf(err) != "tool_not_layer tool="+tool {
+		for verb, do := range map[string]func(context.Context, image.Name) error{"Build": Builds{b}.Build, "Rebuild": Builds{b}.Rebuild} {
+			if err := do(t.Context(), image.Name(name)); err == nil || msg.NamesOf(err) != "tool_not_layer tool="+tool {
 				t.Errorf("%s(%q) = %v", verb, name, err)
 			}
 		}
@@ -239,7 +276,7 @@ func TestToolTargetGlibc(t *testing.T) {
 	if tg, err := b.ToolTarget(); tg != (tools.Target{Libc: "gnu", Glibc: "2.36"}) || err != nil {
 		t.Errorf("ToolTarget = %+v, %v", tg, err)
 	}
-	for _, name := range []string{"base", "foo"} {
+	for _, name := range []image.Name{"base", "foo"} {
 		key, err := b.Key(name)
 		if err != nil {
 			t.Fatal(err)
@@ -296,9 +333,13 @@ func TestBuild(t *testing.T) {
 		t.Errorf("foo+bar's record: %+v", top)
 	}
 
-	// Built: nothing to do.
+	// Built: nothing to do, for the name as the user may give it.
 	n := len(f.Calls())
-	if err := (Builds{b}).Build(ctx, "base+foo+bar"); err != nil {
+	given, err := Names{b}.Parse("base+foo+bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (Builds{b}).Build(ctx, given); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range f.Calls()[n:] {

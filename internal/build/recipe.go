@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/from"
@@ -63,11 +62,11 @@ type planned struct {
 // plan returns name's plan and that of every image it's built on, base
 // first, each keyed on its parent's key: a changed key anywhere in it
 // changes every key above.
-func (b *Env) plan(in inputs, name string) ([]planned, error) {
-	layers, err := image.Layers(name)
-	if err != nil {
+func (b *Env) plan(in inputs, name image.Name) ([]planned, error) {
+	if err := name.Check(); err != nil {
 		return nil, err
 	}
+	layers := name.Layers()
 	if b.Backend.Name() == "" {
 		return nil, errors.New("image keys need a backend")
 	}
@@ -83,8 +82,8 @@ func (b *Env) plan(in inputs, name string) ([]planned, error) {
 	// Each layer's script runs with package lists, which base keeps none
 	// of (packages.go).
 	lists := image.Step{Name: "apt.sh", Data: apt, Args: []string{"lists"}, Root: true}
-	for i, layer := range layers {
-		img := strings.Join(layers[:i+1], "+")
+	for i, img := range name.Under() {
+		layer := layers[i]
 		p := planned{Input: image.Input{Image: img, Parent: plans[i].Key()}}
 		data, err := b.LayerData(layer)
 		switch {
@@ -146,7 +145,7 @@ func (b *Env) keyed(in inputs, p planned) planned {
 	if in.from != nil {
 		ref = in.from.Ref
 	}
-	p.Rebuild = in.rebuilds.Counter(p.Backend, ref, p.Image)
+	p.Rebuild = in.rebuilds.Counter(p.Backend, ref, p.Image.String())
 	return p
 }
 
@@ -154,13 +153,13 @@ func (b *Env) keyed(in inputs, p planned) planned {
 func chainOf(plans []planned) image.Chain {
 	c := make(image.Chain, len(plans))
 	for i, p := range plans {
-		c[i] = image.Link{Name: p.Image, Key: p.Key()}
+		c[i] = image.Link{Name: p.Image.String(), Key: p.Key()}
 	}
 	return c
 }
 
 // chain is name's chain as in has it.
-func (b *Env) chain(in inputs, name string) (image.Chain, error) {
+func (b *Env) chain(in inputs, name image.Name) (image.Chain, error) {
 	plans, err := b.plan(in, name)
 	if err != nil {
 		return nil, err
@@ -173,7 +172,7 @@ func (b *Env) chain(in inputs, name string) (image.Chain, error) {
 func (b *Env) outdated(in inputs, chain image.Chain) ([]string, error) {
 	var changed []string
 	for _, l := range chain {
-		now, err := b.chain(in, l.Name)
+		now, err := b.chain(in, image.Name(l.Name))
 		if err != nil {
 			return nil, err
 		}

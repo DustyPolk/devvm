@@ -48,6 +48,10 @@ type rules struct {
 	// tests: what a copy of what that package owns would hold, then the
 	// package folder and what to use.
 	literals map[string]literalOwner
+	// separators are what only one package's calls to package strings
+	// split or join on, outside tests: the separator, then the package
+	// folder and what to use.
+	separators map[string]literalOwner
 	// pathsOwner is the one package that names what's in devvm's data
 	// and config folders (paths.Dirs's Data and Config).
 	pathsOwner string
@@ -163,7 +167,7 @@ func load(fsys fs.FS) (*module, error) {
 // check runs every rule on m, the violations sorted.
 func check(m *module, r rules) []violation {
 	vs := slices.Concat(checkMethods(m, r), checkInit(m), checkVars(m, r), checkLayers(m, r), checkCommands(m, r),
-		checkExecSites(m, r), checkGuard(m, r), checkEnv(m, r), checkLiterals(m, r), checkPaths(m, r))
+		checkExecSites(m, r), checkGuard(m, r), checkEnv(m, r), checkLiterals(m, r), checkSeparators(m, r), checkPaths(m, r))
 	slices.SortFunc(vs, func(a, b violation) int { return strings.Compare(a.String(), b.String()) })
 	return vs
 }

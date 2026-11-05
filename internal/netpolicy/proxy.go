@@ -213,7 +213,7 @@ func (p *Proxy) Prepare(ctx context.Context, b backend.Backend, st *state.VM, ru
 func (p *Proxy) config(ctx context.Context, st *state.VM, key, lifeline string) (proxy.Config, error) {
 	vm, files := st.Name(), p.Dirs.VM(st.Name())
 	ca := files.CA()
-	builtin, policies := Policies(p.Dirs, vm, st.Image, tools.Names(st))
+	builtin, policies := Policies(p.Dirs, vm, image.Name(st.Image), tools.Names(st))
 	for _, m := range PolicyWarnings(policies) {
 		p.Warn(m)
 	}
@@ -375,7 +375,7 @@ func (p *Proxy) writeConfig(vm string, cfg proxy.Config) error {
 // whose image has the nix layer, with the cap nix-cache.size gives (its
 // default when the retention settings can't be read, with a warning).
 func (p *Proxy) nixCache(st *state.VM) (string, int64) {
-	if !image.HasLayer(st.Image, image.NixLayer) {
+	if !image.Name(st.Image).Has(image.NixLayer) {
 		return "", 0
 	}
 	def, err := settings.Read(p.Dirs)

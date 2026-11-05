@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/image"
 	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
@@ -45,7 +46,7 @@ func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 	if s.Policy, err = netpolicy.Listed(ctx, t.b, t.st, in.Status == backend.StatusRunning); err != nil {
 		return s, err
 	}
-	builtin, files := netpolicy.Policies(e.Dirs, t.f.Name, t.st.Image, tools.Names(t.st))
+	builtin, files := netpolicy.Policies(e.Dirs, t.f.Name, image.Name(t.st.Image), tools.Names(t.st))
 	s.Rules, err = netpolicy.ReadRules(e.Proxy.Assets, builtin, files)
 	return s, err
 }

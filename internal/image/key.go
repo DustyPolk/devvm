@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"hash"
 	"regexp"
 	"slices"
@@ -28,7 +27,7 @@ type Input struct {
 	// Backend is the backend that builds the image: lima.
 	Backend string
 	// Image is its name: base, foo+bar.
-	Image string
+	Image Name
 	// Parent is its parent's key; "" for base.
 	Parent string
 	// From is the container image base starts from, as given, and its
@@ -48,7 +47,7 @@ type Input struct {
 func (in Input) Key() string {
 	k := newKeyHash()
 	k.field("backend", in.Backend)
-	k.field("image", in.Image)
+	k.field("image", in.Image.String())
 	k.field("parent", in.Parent)
 	if in.From != "" {
 		k.field("from", in.From)
@@ -109,7 +108,7 @@ func ParseChain(s string) Chain {
 
 // LayerName reports whether a layer can have that name: lowercase letters,
 // digits and dashes, starting with a letter or digit, and neither base nor
-// a shared tool's name. Image names join layers with +.
+// a shared tool's name. Image names join layers with + (Name).
 func LayerName(name string) bool {
 	return name != Base && !IsTool(name) && layerName.MatchString(name)
 }
@@ -128,9 +127,6 @@ const NixLayer = "nix"
 // sorted: chosen like the user's, whose layers can't take their names.
 var Builtins = []string{DesktopLayer, DockerLayer, NixLayer}
 
-// HasLayer reports whether an image's name has the layer.
-func HasLayer(name, layer string) bool { return slices.Contains(strings.Split(name, "+"), layer) }
-
 // IsBuiltin reports whether a layer is one devvm ships.
 func IsBuiltin(name string) bool { return slices.Contains(Builtins, name) }
 
@@ -139,34 +135,6 @@ var layerName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 // FeatureName reports whether a base image feature can have that name:
 // lowercase letters, digits and dashes, starting with a letter or digit.
 func FeatureName(name string) bool { return layerName.MatchString(name) }
-
-// Parent is the image an image is built on: foo+bar's is foo, foo's is
-// base. Base has none ("").
-func Parent(name string) string {
-	switch i := strings.LastIndex(name, "+"); {
-	case name == Base:
-		return ""
-	case i < 0:
-		return Base
-	default:
-		return name[:i]
-	}
-}
-
-// Layers splits an image name into its layers, checking each: none for
-// base.
-func Layers(name string) ([]string, error) {
-	if name == Base {
-		return nil, nil
-	}
-	parts := strings.Split(name, "+")
-	for _, p := range parts {
-		if !LayerName(p) {
-			return nil, fmt.Errorf("invalid image name %q", name)
-		}
-	}
-	return parts, nil
-}
 
 // keyHash hashes a sequence of fields, each a tag and a value, both
 // length-prefixed, so two different sequences never hash the same bytes.

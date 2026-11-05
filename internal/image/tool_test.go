@@ -234,30 +234,6 @@ func TestSHA256File(t *testing.T) {
 	}
 }
 
-// Layers as given, each once; base dropped, and base alone for nothing
-// else.
-func TestNormalize(t *testing.T) {
-	for in, want := range map[string]string{
-		"base":         "base",
-		"base+foo":     "foo",
-		"foo+base+bar": "foo+bar",
-		"foo+bar":      "foo+bar",
-		"bar+foo":      "bar+foo",
-		"foo+bar+foo":  "foo+bar",
-		"":             "", // CheckLayers refuses it
-	} {
-		if got := Normalize(in); got != want {
-			t.Errorf("Normalize(%q) = %q, want %q", in, got, want)
-		}
-	}
-	if got := Of(nil); got != Base {
-		t.Errorf("Of(nil) = %q", got)
-	}
-	if got := strings.Join(LayersOf("foo+bar"), " "); got != "foo bar" || LayersOf(Base) != nil {
-		t.Errorf("LayersOf = %q, %q", got, LayersOf(Base))
-	}
-}
-
 // A VM's shared tools in their order, the agents among them, and the
 // tools behind each tool name.
 func TestSortToolsAndGroups(t *testing.T) {

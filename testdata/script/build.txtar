@@ -101,6 +101,10 @@ stdout -count=2 '^  "libc": "gnu",$'
 stub_reset
 ! exec devvm build foo+stray
 stderr '^devvm: unknown_layer layer=stray layers=base bar desktop docker foo nix$'
+! exec devvm build stray+node
+stderr '^devvm: unknown_layer layer=stray layers=base bar desktop docker foo nix$'
+! exec devvm build ''
+stderr '^devvm: arg_blank command=devvm build$'
 ! exec devvm rebuild ../../x
 stderr '^devvm: unknown_layer layer=\.\./\.\./x layers=base bar desktop docker foo nix$'
 ! exec devvm build

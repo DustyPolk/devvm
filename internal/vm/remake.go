@@ -79,11 +79,11 @@ func remakePending(st *state.VM) bool {
 // remake of it that didn't finish is finished first.
 func (e Lifecycle) AddLayers(ctx context.Context, command string, layers []string, o RemakeOptions) error {
 	return e.remakeLayers(ctx, command, o, func(t *found) (string, error) {
-		img, had := addedImage(t.st.Image, layers)
+		img, had := addedImage(image.Name(t.st.Image), layers)
 		if len(had) > 0 {
 			e.Info(msg.HasLayers(strings.Join(had, " "), t.f.Name))
 		}
-		return img, nil
+		return img.String(), nil
 	})
 }
 
@@ -96,14 +96,14 @@ func (e Lifecycle) AddLayers(ctx context.Context, command string, layers []strin
 // didn't finish is finished first.
 func (e Lifecycle) RemoveLayers(ctx context.Context, command string, layers []string, o RemakeOptions) error {
 	return e.remakeLayers(ctx, command, o, func(t *found) (string, error) {
-		img, lacks := removedImage(t.st.Image, layers)
+		img, lacks := removedImage(image.Name(t.st.Image), layers)
 		if err := CheckLayers(lacks, e.builder(t.b, t.st.From).Layers()[1:]); err != nil {
 			return "", err
 		}
 		if len(lacks) > 0 {
 			e.Info(msg.LacksLayers(strings.Join(lacks, " "), t.f.Name))
 		}
-		return img, nil
+		return img.String(), nil
 	})
 }
 
@@ -182,28 +182,28 @@ func (e Lifecycle) Update(ctx context.Context, command string, o RemakeOptions) 
 
 // addedImage is the image img makes with layers added on top, in the
 // order given (inOrder), and those of layers img has already.
-func addedImage(img string, layers []string) (string, []string) {
-	was := image.LayersOf(img)
+func addedImage(img image.Name, layers []string) (image.Name, []string) {
+	was := img.Layers()
 	var had []string
 	for _, l := range layers {
 		if slices.Contains(was, l) && !slices.Contains(had, l) {
 			had = append(had, l)
 		}
 	}
-	return image.Of(inOrder(was, slices.Concat(was, layers))), had
+	return image.NameOf(inOrder(was, slices.Concat(was, layers))), had
 }
 
 // removedImage is the image img makes with layers taken out, the rest in
 // their order (base when none is left), and those of layers img lacks.
-func removedImage(img string, layers []string) (string, []string) {
-	was := image.LayersOf(img)
+func removedImage(img image.Name, layers []string) (image.Name, []string) {
+	was := img.Layers()
 	var lacks []string
 	for _, l := range layers {
 		if !slices.Contains(was, l) && !slices.Contains(lacks, l) {
 			lacks = append(lacks, l)
 		}
 	}
-	return image.Of(slices.DeleteFunc(was, func(l string) bool { return slices.Contains(layers, l) })), lacks
+	return image.NameOf(slices.DeleteFunc(was, func(l string) bool { return slices.Contains(layers, l) })), lacks
 }
 
 // toRemake finds the folder's VM for a command that makes it again
@@ -366,8 +366,8 @@ type remaking struct{ *Env }
 // the VM needs with it (a --clone VM's ssh too), or the disk lacks room
 // for a VM.
 func (e remaking) check(t *found, p remakeInVM) error {
-	vm, b := t.f.Name, t.b
-	if err := e.builder(b, t.st.From).CheckLayers(p.Image); err != nil {
+	vm, b, img := t.f.Name, t.b, image.Name(p.Image)
+	if err := (build.Names{Env: e.builder(b, t.st.From)}).Check(img); err != nil {
 		return err
 	}
 	spec := e.spec(t, p)
@@ -375,7 +375,7 @@ func (e remaking) check(t *found, p remakeInVM) error {
 	if netpolicy.On(t.st) {
 		conf.Net = backend.NetProxy
 	}
-	need := slices.Concat(spec.Features(), conf.Features(), backend.ImageFeatures(p.Image))
+	need := slices.Concat(spec.Features(), conf.Features(), backend.ImageFeatures(img))
 	if spec.CloneAt != "" {
 		// Its clone is copied in and fetched over ssh, as up's.
 		need = append(need, backend.FeatureSSH)
@@ -461,10 +461,10 @@ func (e remaking) remake(ctx context.Context, t *found, p remakeInVM) error {
 	return nil
 }
 
-// build builds img for t's VM, as a new VM's is built, and returns its
-// build chain.
-func (e remaking) build(ctx context.Context, t *found, img string) (chainOf, error) {
-	b := e.builder(t.b, t.st.From)
+// build builds img (a remake's, as its record has it) for t's VM, as a
+// new VM's is built, and returns its build chain.
+func (e remaking) build(ctx context.Context, t *found, recorded string) (chainOf, error) {
+	b, img := e.builder(t.b, t.st.From), image.Name(recorded)
 	if err := (build.Builds{Env: b}).Build(ctx, img); err != nil {
 		return chainOf{}, err
 	}

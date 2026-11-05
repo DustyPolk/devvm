@@ -221,21 +221,21 @@ func (s ImageSpec) Features() []Feature {
 	}
 	// A backend without nix-layer can't build the layer either: Nix
 	// couldn't sandbox a build in its VMs.
-	if image.HasLayer(s.Image, image.NixLayer) {
+	if image.Name(s.Image).Has(image.NixLayer) {
 		fs = append(fs, FeatureNixLayer)
 	}
 	return append(fs, s.Net.Features()...)
 }
 
-// ImageFeatures returns what a VM of the image (layers joined with +)
-// needs for its layers: docker-layer when it has the docker layer,
-// nix-layer when it has the nix layer.
-func ImageFeatures(img string) []Feature {
+// ImageFeatures returns what a VM of the image needs for its layers:
+// docker-layer when it has the docker layer, nix-layer when it has the
+// nix layer.
+func ImageFeatures(img image.Name) []Feature {
 	var fs []Feature
-	if image.HasLayer(img, image.DockerLayer) {
+	if img.Has(image.DockerLayer) {
 		fs = append(fs, FeatureDockerLayer)
 	}
-	if image.HasLayer(img, image.NixLayer) {
+	if img.Has(image.NixLayer) {
 		fs = append(fs, FeatureNixLayer)
 	}
 	return fs

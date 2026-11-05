@@ -239,7 +239,7 @@ func (e *LoggedError) Unwrap() error { return e.Msg }
 // its Recipe are what go into it, and its key hashes every one of them;
 // the rest is how its build runs, which the image keeps nothing of.
 type ImageSpec struct {
-	Image  string       // its name: base, or base's layers joined with + (docker+foo)
+	Image  string       // its name: base, or base's layers joined with + (docker+foo; image.Name)
 	Key    string       // its key (image.Input's); the backend stores it under it
 	Parent string       // its parent's key; "" for base
 	From   *From        // base only: the container image it starts from; nil for Ubuntu

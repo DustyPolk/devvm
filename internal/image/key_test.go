@@ -84,28 +84,6 @@ func TestKeyFieldsAreSeparate(t *testing.T) {
 	}
 }
 
-func TestParent(t *testing.T) {
-	for name, want := range map[string]string{"base": "", "foo": "base", "foo+bar": "foo", "a+b+c": "a+b"} {
-		if got := Parent(name); got != want {
-			t.Errorf("Parent(%q) = %q, want %q", name, got, want)
-		}
-	}
-}
-
-// Layers splits an image's name, refusing one that isn't base or layers'.
-func TestLayers(t *testing.T) {
-	for name, want := range map[string][]string{"base": nil, "foo": {"foo"}, "foo+bar": {"foo", "bar"}} {
-		if got, err := Layers(name); err != nil || !slices.Equal(got, want) {
-			t.Errorf("Layers(%q) = %q, %v", name, got, err)
-		}
-	}
-	for _, name := range []string{"", "Foo", "foo+", "+foo", "base+foo", "foo+base", "foo/bar", "../x", "-x", "node"} {
-		if _, err := Layers(name); err == nil {
-			t.Errorf("%q: no error", name)
-		}
-	}
-}
-
 func TestChainString(t *testing.T) {
 	c := Chain{{"base", "0123456789ab"}, {"foo", "ba9876543210"}}
 	if s := c.String(); s != "base=0123456789ab foo=ba9876543210" {

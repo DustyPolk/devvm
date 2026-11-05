@@ -93,14 +93,17 @@ type Images struct{ *Env }
 // Choice is base's features: asking which it gets, or setting them.
 type Choice struct{ *Env }
 
+// Names reads and checks images' names against the layers there are.
+type Names struct{ *Env }
+
 // Key returns an image's key as it is now.
-func (b *Env) Key(name string) (string, error) {
+func (b *Env) Key(name image.Name) (string, error) {
 	c, err := b.Chain(name)
 	return c.Key(), err
 }
 
 // Chain returns an image's chain as it is now.
-func (b *Env) Chain(name string) (image.Chain, error) {
+func (b *Env) Chain(name image.Name) (image.Chain, error) {
 	in, err := b.inputs()
 	if err != nil {
 		return nil, err
@@ -158,7 +161,7 @@ func (b Builds) pin(ctx context.Context, how backend.Pin) error {
 // the backend pin the newest older one (PinOrigin's PinOlder) and builds
 // base on that, once a run. Anything else is err as it is: what was
 // pinned before this run booted then.
-func (b Builds) fallBack(ctx context.Context, name string, err error) error {
+func (b Builds) fallBack(ctx context.Context, name image.Name, err error) error {
 	if !errors.Is(err, backend.ErrBoot) || name != image.Base || b.From != "" {
 		return err
 	}
@@ -214,18 +217,37 @@ func (b *Env) isLayer(layer string) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
-// CheckLayers refuses an image name with a part that isn't base, a
-// built-in layer or one of the user's layers: a shared tool's name says
-// shared tools go in a VM, not an image. Names become file names: nothing
-// else gets past it.
-func (b *Env) CheckLayers(name string) error {
-	for p := range strings.SplitSeq(name, "+") {
-		switch {
-		case image.IsTool(p):
-			return msg.ToolNotLayer(p)
-		case p != image.Base && (!image.LayerName(p) || !b.isLayer(p)):
-			return msg.UnknownLayer(p, strings.Join(b.Layers(), " "))
+// Parse reads an image's name as the user gives it (image.ParseName),
+// refusing a part that isn't a built-in layer or one of the user's, as
+// Check does: the one place a name the user gives is read.
+func (b Names) Parse(s string) (image.Name, error) {
+	return image.ParseName(s, b.checkLayer)
+}
+
+// Check refuses an image name with a part that isn't base, a built-in
+// layer or one of the user's layers, bottom first: a shared tool's name
+// says shared tools go in a VM, not an image. Names become file names:
+// nothing else gets past it. An empty name is one empty part.
+func (b Names) Check(name image.Name) error {
+	if name == "" {
+		return b.checkLayer("")
+	}
+	for _, p := range name.Layers() {
+		if err := b.checkLayer(p); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+// checkLayer refuses a part of an image's name that isn't base, a
+// built-in layer or one of the user's layers.
+func (b Names) checkLayer(p string) error {
+	switch {
+	case image.IsTool(p):
+		return msg.ToolNotLayer(p)
+	case p != image.Base && (!image.LayerName(p) || !b.isLayer(p)):
+		return msg.UnknownLayer(p, strings.Join(b.Layers(), " "))
 	}
 	return nil
 }
@@ -256,9 +278,10 @@ func (b *Env) ToolTarget() (tools.Target, error) {
 }
 
 // Build builds an image, and the images under it, unless they're built.
-func (b Builds) Build(ctx context.Context, name string) error {
-	name = image.Normalize(name)
-	if err := b.CheckLayers(name); err != nil {
+// Its layers are checked again (Names' Check): one may be gone since its
+// name was read.
+func (b Builds) Build(ctx context.Context, name image.Name) error {
+	if err := Names(b).Check(name); err != nil {
 		return err
 	}
 	if err := b.checkProxy(ctx); err != nil {
@@ -294,11 +317,11 @@ func (b *Env) proxy() *settings.CompanyProxy {
 // build builds name and what it's built on, unless they're built, base
 // falling back to an older origin when it doesn't boot (fallBack) once its
 // first build has let go of its lock.
-func (b Builds) build(ctx context.Context, name string) error {
+func (b Builds) build(ctx context.Context, name image.Name) error {
 	return b.fallBack(ctx, name, b.buildOnce(ctx, name))
 }
 
-func (b Builds) buildOnce(ctx context.Context, name string) error {
+func (b Builds) buildOnce(ctx context.Context, name image.Name) error {
 	if err := b.lookUp(ctx); err != nil {
 		return err
 	}
@@ -312,7 +335,7 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 	}
 	chain, p := chainOf(plans), plans[len(plans)-1]
 	if p.Missing != "" {
-		// Deleted since CheckLayers.
+		// Deleted since Names' Check.
 		return msg.UnknownLayer(strings.TrimSuffix(p.Missing, ".sh"), strings.Join(b.Layers(), " "))
 	}
 	digest := ""
@@ -321,7 +344,7 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 	}
 	key := chain.Key()
 	// What its key hashes is what it's given.
-	spec := backend.ImageSpec{Image: name, Key: key, Parent: p.Parent, From: p.from, Recipe: p.Recipe, Net: backend.NetInternet}
+	spec := backend.ImageSpec{Image: name.String(), Key: key, Parent: p.Parent, From: p.from, Recipe: p.Recipe, Net: backend.NetInternet}
 	// One devvm at a time builds it: another waits, then finds it built,
 	// or left over from a build that didn't finish.
 	unlock, err := b.lockBuild(ctx, name, key)
@@ -335,11 +358,11 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 	if err != nil || done {
 		return err
 	}
-	if err := b.Review.Require(b.Backend, name, spec.Features()...); err != nil {
+	if err := b.Review.Require(b.Backend, name.String(), spec.Features()...); err != nil {
 		return err
 	}
 	if leftover {
-		b.Info(msg.ImageLeftover(name, key))
+		b.Info(msg.ImageLeftover(name.String(), key))
 		if err := b.deleteLocked(ctx, key, false); err != nil {
 			return err
 		}
@@ -348,7 +371,7 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 		b.Warn(msg.UnknownFeature(f))
 	}
 	libc, glibc := "", ""
-	if parent := image.Parent(name); parent != "" {
+	if parent := name.Parent(); parent != "" {
 		if err := b.build(ctx, parent); err != nil {
 			return err
 		}
@@ -372,18 +395,18 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 	if name == image.Base {
 		need = func(f backend.Floors) uint64 { return f.Base }
 	}
-	if err := (backend.Space{Free: b.FreeSpace}).Check(b.Backend, name, need); err != nil {
+	if err := (backend.Space{Free: b.FreeSpace}).Check(b.Backend, name.String(), need); err != nil {
 		return err
 	}
 
 	switch {
 	case b.From != "":
-		b.Info(msg.BuildingImageFrom(b.From, name, key))
+		b.Info(msg.BuildingImageFrom(b.From, name.String(), key))
 	case name == image.Base:
-		b.Info(msg.BuildingImage(name, key))
+		b.Info(msg.BuildingImage(name.String(), key))
 		b.Say(msg.BaseBuildTime())
 	default:
-		b.Info(msg.BuildingImage(name, key))
+		b.Info(msg.BuildingImage(name.String(), key))
 	}
 	b.LogNote()
 	out, err := b.buildWith(ctx, spec, name)
@@ -392,7 +415,7 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 	}
 	// The record is written last: an image without one didn't finish.
 	// Every image on a --from base records it and its digest.
-	rec := state.Image{Name: name, Chain: chain.String(), From: b.From, Digest: digest, Libc: libc, Glibc: glibc, Built: time.Now().UTC().Truncate(time.Second), MadeBy: b.Version}
+	rec := state.Image{Name: name.String(), Chain: chain.String(), From: b.From, Digest: digest, Libc: libc, Glibc: glibc, Built: time.Now().UTC().Truncate(time.Second), MadeBy: b.Version}
 	if name == image.Base {
 		rec.Libc, rec.Glibc = out.Libc, out.Glibc
 		if b.From == "" {
@@ -406,14 +429,14 @@ func (b Builds) buildOnce(ctx context.Context, name string) error {
 		return err
 	}
 	b.sayFitted(out.Fitted)
-	b.Info(msg.ImageReady(name))
+	b.Info(msg.ImageReady(name.String()))
 	return nil
 }
 
 // buildWith has the backend build spec, the image named name: base from
 // the backend's own Ubuntu with its packages (basePackages), which a
 // recording stores once the image is built, before its record.
-func (b Builds) buildWith(ctx context.Context, spec backend.ImageSpec, name string) (backend.Built, error) {
+func (b Builds) buildWith(ctx context.Context, spec backend.ImageSpec, name image.Name) (backend.Built, error) {
 	if name != image.Base || b.From != "" {
 		return b.Backend.BuildImage(ctx, spec)
 	}
@@ -448,19 +471,19 @@ const buildWaitNote = 3 * time.Second
 // lockBuild holds the lock of the image with key, named name, while it's
 // built, waiting for another devvm that holds it and saying so. The
 // system lets go of it when its devvm ends, however it ends.
-func (b Builds) lockBuild(ctx context.Context, name, key string) (unlock func(), err error) {
+func (b Builds) lockBuild(ctx context.Context, name image.Name, key string) (unlock func(), err error) {
 	path, err := state.ImageLock(b.Dirs, key)
 	if err != nil {
 		return nil, err
 	}
 	after := cmp.Or(b.WaitNote, buildWaitNote)
-	return platform.LockFileWaiting(ctx, path, after, func() { b.Info(msg.ImageBuildWaiting(name)) })
+	return platform.LockFileWaiting(ctx, path, after, func() { b.Info(msg.ImageBuildWaiting(name.String())) })
 }
 
 // bumpRebuild changes the rebuild counter of the image named name on this
 // backend and base, under the counters' lock: two devvms rebuilding at
 // once each keep their change.
-func (b Builds) bumpRebuild(ctx context.Context, name string) error {
+func (b Builds) bumpRebuild(ctx context.Context, name image.Name) error {
 	if err := os.MkdirAll(b.Dirs.ImageLocks(), 0o700); err != nil {
 		return err
 	}
@@ -469,7 +492,7 @@ func (b Builds) bumpRebuild(ctx context.Context, name string) error {
 		return err
 	}
 	defer unlock()
-	return state.BumpRebuild(b.Dirs, b.Backend.Name(), b.From, name)
+	return state.BumpRebuild(b.Dirs, b.Backend.Name(), b.From, name.String())
 }
 
 // lockFree holds the lock of the image with key, for deleting it, unless
@@ -597,7 +620,7 @@ func (b Images) List(ctx context.Context) ([]Image, error) {
 		if in.from, err = b.fromAsRecorded(rec.From); err != nil {
 			return nil, err
 		}
-		if c, err := b.chain(in, rec.Name); err == nil && c.Key() == key {
+		if c, err := b.chain(in, image.Name(rec.Name)); err == nil && c.Key() == key {
 			img.Current = true
 		}
 		out = append(out, img)
@@ -612,9 +635,8 @@ func (b Images) List(ctx context.Context) ([]Image, error) {
 // (the old one and those built on it among them) that no VM uses. When
 // images are built on it, it asks first in a terminal, and refuses
 // without one (force_needed), unless Force.
-func (b Builds) Rebuild(ctx context.Context, name string) error {
-	name = image.Normalize(name)
-	if err := b.CheckLayers(name); err != nil {
+func (b Builds) Rebuild(ctx context.Context, name image.Name) error {
+	if err := Names(b).Check(name); err != nil {
 		return err
 	}
 	if err := b.checkProxy(ctx); err != nil {
@@ -633,12 +655,12 @@ func (b Builds) Rebuild(ctx context.Context, name string) error {
 	}
 	var above []string
 	for _, img := range imgs {
-		if img.Current && img.Name != name && slices.Contains(img.Chain, image.Link{Name: name, Key: old}) {
+		if img.Current && img.Name != name.String() && slices.Contains(img.Chain, image.Link{Name: name.String(), Key: old}) {
 			above = append(above, img.Name)
 		}
 	}
 	if len(above) > 0 {
-		b.Say(msg.RebuildReplaces(strings.Join(above, " "), name))
+		b.Say(msg.RebuildReplaces(strings.Join(above, " "), name.String()))
 		switch {
 		case b.Force:
 		case !b.Terminal():
