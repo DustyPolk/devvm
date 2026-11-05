@@ -33,7 +33,7 @@ func write(t *testing.T, path, data string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(data), 0o600); err != nil { //nolint:gosec // the test's own folder
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil { //nolint:gosec,nolintlint // the test's own folder; gosec's G703 flags it on some runs only
 		t.Fatal(err)
 	}
 }
