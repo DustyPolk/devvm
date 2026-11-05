@@ -790,9 +790,12 @@ func TestSSH(t *testing.T) {
 	}
 }
 
-// Exec quotes the folder and each argument for the guest's shell.
+// Exec quotes the folder and each argument for the guest's shell. Exec
+// and Shell carry the agent they're given, or none: never devvm's own
+// SSH_AUTH_SOCK, which no other limactl command gets either.
 func TestExecAndShell(t *testing.T) {
 	l, f, _ := testLima(t, "darwin")
+	t.Setenv("SSH_AUTH_SOCK", "/user/agent")
 	if err := l.Exec(t.Context(), "v", []string{"echo", "it's $HOME"}, backend.ExecOpts{Dir: "/my dir"}); err != nil {
 		t.Fatal(err)
 	}
@@ -800,13 +803,37 @@ func TestExecAndShell(t *testing.T) {
 	if got := f.calls[0].argv; !slices.Equal(got, want) {
 		t.Errorf("Exec ran %q, want %q", got, want)
 	}
-	c, err := l.Shell(t.Context(), "v", "/p")
+	if v, ok := envOf(f.calls[0], "SSH_AUTH_SOCK"); ok {
+		t.Errorf("Exec without an agent: SSH_AUTH_SOCK=%q", v)
+	}
+	if err := l.Exec(t.Context(), "v", []string{"true"}, backend.ExecOpts{Agent: "/d/agent.sock"}); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := envOf(f.calls[1], "SSH_AUTH_SOCK"); v != "/d/agent.sock" {
+		t.Errorf("Exec with devvm's agent: SSH_AUTH_SOCK=%q", v)
+	}
+	if _, err := l.Inspect(t.Context(), "v"); err == nil {
+		t.Fatal("Inspect found a VM the fake has none of")
+	}
+	if v, ok := envOf(f.calls[2], "SSH_AUTH_SOCK"); ok {
+		t.Errorf("limactl list: SSH_AUTH_SOCK=%q", v)
+	}
+	c, err := l.Shell(t.Context(), "v", backend.ShellOpts{Dir: "/p", Agent: "/d/agent.sock"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !filepath.IsAbs(c.Path) || !slices.Equal(c.Args[1:], []string{"shell", "--workdir", "/p", "v"}) ||
 		c.Dir != l.Dirs.Data || !slices.Contains(c.Env, "LIMA_HOME="+l.Dirs.Lima) {
 		t.Errorf("Shell: %+v", c)
+	}
+	if v, _ := envOf(call{env: c.Env}, "SSH_AUTH_SOCK"); v != "/d/agent.sock" {
+		t.Errorf("Shell with devvm's agent: SSH_AUTH_SOCK=%q", v)
+	}
+	if c, err = l.Shell(t.Context(), "v", backend.ShellOpts{Dir: "/p"}); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := envOf(call{env: c.Env}, "SSH_AUTH_SOCK"); ok {
+		t.Errorf("Shell without an agent: SSH_AUTH_SOCK=%q", v)
 	}
 }
 

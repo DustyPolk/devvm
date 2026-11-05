@@ -652,7 +652,7 @@ func checkReach(ctx context.Context, s Subject) error {
 	if t, err := s.Backend.SSH(ctx, conformVM); err != nil || t.Host == "" || t.Port <= 0 || t.User == "" || t.Key == "" {
 		return fmt.Errorf("SSH: %+v, %w", t, err)
 	}
-	if c, err := s.Backend.Shell(ctx, conformVM, "/"); err != nil || c.Path == "" || len(c.Args) == 0 {
+	if c, err := s.Backend.Shell(ctx, conformVM, backend.ShellOpts{Dir: "/"}); err != nil || c.Path == "" || len(c.Args) == 0 {
 		return fmt.Errorf("Shell: %+v, %w", c, err)
 	}
 	if err := s.Backend.Exec(ctx, conformVM, []string{"true"}, backend.ExecOpts{}); err != nil {

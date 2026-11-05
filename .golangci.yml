@@ -102,6 +102,8 @@ linters:
           msg: take the home folder from paths.Dirs.Home, the one place devvm reads HOME.
         - pattern: ^os\.(WriteFile|Create|O_TRUNC)$
           msg: write a file whole through state.WriteFile, or state.WriteFileMode for another mode, which replace it atomically; internal/proxy uses its writeAtomic; a log or a download streamed into its file says why in a nolint.
+        - pattern: ^(os|syscall)\.(Setenv|Unsetenv|Clearenv)$
+          msg: devvm's environment never changes, as every command and process it starts inherits it; set a command's own (exec.Cmd's Env), as a VM's SSH agent is (backend.ExecOpts.Agent). Only daemon.Ready takes its status file out.
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -150,6 +152,11 @@ linters:
       - path: ^internal/(state|proxy|msg/gen|stubtest)/|_test\.go$
         linters: [forbidigo]
         text: os\.(WriteFile|Create|O_TRUNC)
+      # A background process takes its status file out of its own
+      # environment (daemon.Ready); tests set theirs with t.Setenv.
+      - path: ^internal/daemon/status\.go$|_test\.go$
+        linters: [forbidigo]
+        text: devvm's environment never changes
     paths:
       - ^\.agents/
 

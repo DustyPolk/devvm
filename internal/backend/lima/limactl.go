@@ -54,10 +54,12 @@ func (logRunner) Attach(cmd *exec.Cmd) error { return cmd.Run() }
 // replaces a loopback proxy's address with the guest's gateway, overrides
 // the system's or lima.yaml's, or can't parse it; limactl start passes
 // those lines on to devvm's run log, which keeps URL passwords out, and
-// Start takes them out of the hostagent's own log (redactLog).
+// Start takes them out of the hostagent's own log (redactLog). It carries
+// no SSH agent: a command that reaches a VM gets the VM's own (withAgent),
+// never whichever devvm started with.
 func (l *Lima) limactl(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "limactl", args...) //nolint:gosec // devvm's own arguments
-	cmd.Env = setEnv(os.Environ(), append(backend.ClientProxyVars(), "LIMA_HOME="+l.Dirs.Lima)...)
+	cmd.Env = setEnv(os.Environ(), append(backend.ClientProxyVars(), "SSH_AUTH_SOCK", "LIMA_HOME="+l.Dirs.Lima)...)
 	cmd.Dir = l.Dirs.Data
 	if err := os.MkdirAll(l.Dirs.Data, 0o700); err != nil && cmd.Err == nil {
 		cmd.Err = err // the command then fails with it
@@ -82,6 +84,15 @@ func Limactl(d paths.Dirs, args []string) error {
 	}
 	argv := append([]string{"limactl"}, args...)
 	return platform.Exec(path, argv, setEnv(os.Environ(), "LIMA_HOME="+d.Lima))
+}
+
+// withAgent gives a limactl command that reaches a VM the VM's SSH agent,
+// sock: Lima's ssh forwards it, and the connection it shares with later
+// ones does too. "" leaves it none.
+func withAgent(cmd *exec.Cmd, sock string) {
+	if sock != "" {
+		cmd.Env = setEnv(cmd.Env, "SSH_AUTH_SOCK="+sock)
+	}
 }
 
 // setEnv returns env with each KEY=value in kvs replacing any value KEY

@@ -15,8 +15,38 @@ import (
 	"github.com/w3cj/devvm/internal/sshagent"
 )
 
+// shellOpts is a recorded Shell call's options.
+func shellOpts(c backendtest.Call) backend.ShellOpts {
+	o, _ := c.Args[1].(backend.ShellOpts)
+	return o
+}
+
+// execAgents returns the agent each Exec call from calls on vm carried,
+// but for the reads of its host keys, which carry none (vmssh.PinHostKeys
+// reads every VM's).
+func execAgents(calls []backendtest.Call, vm string) []string {
+	var out []string
+	for _, c := range calls {
+		if c.Method != "Exec" || c.Args[0] != vm {
+			continue
+		}
+		if argv, _ := c.Args[1].([]string); strings.Contains(strings.Join(argv, " "), "/etc/ssh/ssh_host_") {
+			continue
+		}
+		o, _ := c.Args[2].(backend.ExecOpts)
+		out = append(out, o.Agent)
+	}
+	return out
+}
+
+// sameAgent reports whether every agent in got is want, and there's one.
+func sameAgent(got []string, want string) bool {
+	return len(got) > 0 && !slices.ContainsFunc(got, func(a string) bool { return a != want })
+}
+
 // --ssh-agent: the new VM forwards the user's agent, which is checked
 // first, and devvm's connections to it carry it. Without, they carry none.
+// devvm's own environment stays as it was.
 func TestUpSSHAgent(t *testing.T) {
 	for _, on := range []bool{true, false} {
 		e, f, _ := upEnv(t, allNative())
@@ -31,15 +61,81 @@ func TestUpSSHAgent(t *testing.T) {
 		if spec.AgentForwarding != on || get(st, keyAgent) != mode {
 			t.Errorf("--ssh-agent %v: forwarding %v, state %q", on, spec.AgentForwarding, get(st, keyAgent))
 		}
-		if got := os.Getenv("SSH_AUTH_SOCK"); got != sock {
-			t.Errorf("--ssh-agent %v: SSH_AUTH_SOCK=%q, want %q", on, got, sock)
+		if got := shellOpts(call(f, "Shell")).Agent; got != sock {
+			t.Errorf("--ssh-agent %v: shell's agent %q, want %q", on, got, sock)
+		}
+		if got := execAgents(f.Calls(), st.Name()); !sameAgent(got, sock) {
+			t.Errorf("--ssh-agent %v: Exec agents %q, want %q", on, got, sock)
+		}
+		if got := os.Getenv("SSH_AUTH_SOCK"); got != "/user/agent" {
+			t.Errorf("--ssh-agent %v: devvm's SSH_AUTH_SOCK=%q", on, got)
 		}
 		if want := map[bool][]string{true: {"-l"}, false: nil}[on]; !slices.Equal(adds, want) {
 			t.Errorf("--ssh-agent %v: ssh-add calls %q", on, adds)
 		}
-		if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.AgentSocket != "" {
-			t.Errorf("--ssh-agent %v: started with agent %q", on, c.AgentSocket)
+		if c, _ := call(f, "Start").Args[2].(backend.Confinement); c.AgentSocket != sock {
+			t.Errorf("--ssh-agent %v: started with agent %q, want %q", on, c.AgentSocket, sock)
 		}
+	}
+}
+
+// Two VMs with different agents in one run, as a group's sync or a
+// link's change reaches the others: each start, Exec and shell carries its
+// own VM's agent, whichever was found last, and devvm's environment, which
+// its later commands and background processes inherit, never changes.
+func TestAgentPerVM(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	ctx := t.Context()
+	web := e.Dir
+	api := filepath.Join(filepath.Dir(web), "api")
+	if err := os.MkdirAll(api, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// web: devvm's agent, from its next start.
+	st := existingVM(t, e, Options{NoNetworkPolicy: true})
+	if err := set(t, st, keyAgent, sshagent.Devvm); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Stop(ctx, st.Name()); err != nil {
+		t.Fatal(err)
+	}
+	// api: the user's.
+	e.Dir = api
+	if err := (Launch{e}).Up(ctx, Options{NoNetworkPolicy: true, SSHAgent: true}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	targets := map[string]*found{}
+	for _, dir := range []string{web, api} {
+		e.Dir = dir
+		tg, err := finder{e}.target(ctx, need{has: hasMade})
+		if err != nil {
+			t.Fatal(msg.NamesOf(err))
+		}
+		targets[dir] = tg
+	}
+	for _, dir := range []string{web, api} {
+		if err := e.ensureRunning(ctx, targets[dir]); err != nil {
+			t.Fatal(msg.NamesOf(err))
+		}
+	}
+	before := len(f.Calls())
+	for _, dir := range []string{web, api, web} {
+		if err := targets[dir].exec(ctx, []string{"true"}, backend.ExecOpts{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	calls := f.Calls()[before:]
+	for dir, want := range map[string]string{web: e.Agent.Socket(), api: "/user/agent"} {
+		vm := targets[dir].f.Name
+		if got := execAgents(calls, vm); len(got) != map[string]int{web: 2, api: 1}[dir] || !sameAgent(got, want) {
+			t.Errorf("%s: Exec agents %q, want %q", vm, got, want)
+		}
+	}
+	if c, _ := call(f, "Start").Args[2].(backend.Confinement); call(f, "Start").Args[0] != targets[web].f.Name || c.AgentSocket != e.Agent.Socket() {
+		t.Errorf("web started with %+v", c)
+	}
+	if got := os.Getenv("SSH_AUTH_SOCK"); got != "/user/agent" {
+		t.Errorf("devvm's SSH_AUTH_SOCK=%q, want the user's as it started", got)
 	}
 }
 
@@ -120,8 +216,8 @@ func TestOpenAgent(t *testing.T) {
 	if !slices.Contains(agent.calls, "ssh-add -l") {
 		t.Errorf("devvm's agent wasn't checked: %q", agent.calls)
 	}
-	if got := os.Getenv("SSH_AUTH_SOCK"); got != e.Agent.Socket() {
-		t.Errorf("SSH_AUTH_SOCK=%q", got)
+	if got := shellOpts(call(f, "Shell")).Agent; got != e.Agent.Socket() {
+		t.Errorf("shell's agent %q", got)
 	}
 	// Running: its agent is checked again; a change waits.
 	agent.calls = nil
@@ -143,17 +239,24 @@ func TestOpenAgent(t *testing.T) {
 		t.Errorf("running, turned off: calls %q", f.Methods()[before:])
 	}
 	// devvm's connections keep the agent it started with.
-	if got := os.Getenv("SSH_AUTH_SOCK"); got != e.Agent.Socket() {
-		t.Errorf("running, turned off: SSH_AUTH_SOCK=%q, want %q", got, e.Agent.Socket())
+	if got := execAgents(f.Calls()[before:], vm); !sameAgent(got, e.Agent.Socket()) {
+		t.Errorf("running, turned off: Exec agents %q, want %q", got, e.Agent.Socket())
 	}
+	if got := shellOpts(call(f, "Shell")).Agent; got != e.Agent.Socket() {
+		t.Errorf("running, turned off: shell's agent %q, want %q", got, e.Agent.Socket())
+	}
+	before = len(f.Calls())
 	if err := (Launch{e}).Restart(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if f.Instances[vm].AgentForwarding {
 		t.Error("restart didn't turn forwarding off")
 	}
-	if _, ok := os.LookupEnv("SSH_AUTH_SOCK"); ok {
-		t.Error("restarted: SSH_AUTH_SOCK is set for a VM without forwarding")
+	if got := execAgents(f.Calls()[before:], vm); !sameAgent(got, "") {
+		t.Errorf("restarted: Exec agents %q, want none", got)
+	}
+	if got := os.Getenv("SSH_AUTH_SOCK"); got != "/user/agent" {
+		t.Errorf("devvm's SSH_AUTH_SOCK=%q", got)
 	}
 }
 

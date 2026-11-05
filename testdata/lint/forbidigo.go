@@ -45,3 +45,7 @@ func writesFile() error { return os.WriteFile("f", nil, 0o600) } // want forbidi
 func creates() (*os.File, error) { return os.Create("f") } // want forbidigo
 
 func truncates() (*os.File, error) { return os.OpenFile("f", os.O_WRONLY|os.O_TRUNC, 0o600) } // want forbidigo
+
+func setsEnv() error { return os.Setenv("SSH_AUTH_SOCK", "/s") } // want forbidigo
+
+func unsetsEnv() error { return os.Unsetenv("SSH_AUTH_SOCK") } // want forbidigo

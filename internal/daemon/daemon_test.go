@@ -28,22 +28,25 @@ func output(t *testing.T, path, want string) string {
 
 // A detached process leads a group (and session) of its own, gets no
 // input, writes to the file it's given, and gets its own status file's
-// name in its environment, never one devvm was given.
+// name in its environment, never one devvm was given, and no SSH agent:
+// none of devvm's processes uses one, and a VM's is only its own
+// connections'.
 func TestDetach(t *testing.T) {
 	t.Setenv(StatusEnv, "/devvm's/own")
+	t.Setenv("SSH_AUTH_SOCK", "/user/agent")
 	out, err := os.Create(filepath.Join(t.TempDir(), "out"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = out.Close() }()
-	script := `read x; echo "ran $?"; echo "status=$` + StatusEnv + `"; echo "group=$(ps -o pgid= -p $$ | tr -d ' ')"; exec sleep 30`
+	script := `read x; echo "ran $?"; echo "status=$` + StatusEnv + `"; echo "agent=${SSH_AUTH_SOCK-unset}"; echo "group=$(ps -o pgid= -p $$ | tr -d ' ')"; exec sleep 30`
 	h, err := Spawn(Cmd{Path: "/bin/sh", Args: []string{"-c", script}, Out: out, Status: "/s"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer h.Stop(time.Second)
 	got := output(t, out.Name(), "group=")
-	want := "ran 1\nstatus=/s\ngroup=" + strconv.Itoa(h.PID()) + "\n"
+	want := "ran 1\nstatus=/s\nagent=unset\ngroup=" + strconv.Itoa(h.PID()) + "\n"
 	if got != want {
 		t.Errorf("output %q, want %q", got, want)
 	}

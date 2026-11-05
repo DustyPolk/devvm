@@ -521,7 +521,8 @@ func TestProfile(t *testing.T) {
 }
 
 // A VM using devvm's own agent may reach that agent, not the user's; one
-// without forwarding, neither.
+// using the user's, that one; one without forwarding, or given none,
+// neither: devvm's own SSH_AUTH_SOCK never counts.
 func TestProfileAgent(t *testing.T) {
 	for _, tc := range []struct {
 		forwarding bool
@@ -529,7 +530,8 @@ func TestProfileAgent(t *testing.T) {
 		want       string
 	}{
 		{true, "/d/agent.sock", "/d/agent.sock"},
-		{true, "", "/user/agent"},
+		{true, "/user/agent", "/user/agent"},
+		{true, "", ""},
 		{false, "/d/agent.sock", ""},
 	} {
 		l, f, _ := testLima(t, "darwin")
@@ -565,12 +567,8 @@ func TestProfileAgent(t *testing.T) {
 		if got != tc.want || len(lits) > 1 {
 			t.Errorf("forwarding %v, socket %q: agent %q in\n%s", tc.forwarding, tc.socket, got, b)
 		}
-		wantSock := tc.socket
-		if wantSock == "" {
-			wantSock = "/user/agent" // the user's, as it is
-		}
-		if v, _ := envOf(startCall(t, f), "SSH_AUTH_SOCK"); v != wantSock {
-			t.Errorf("socket %q: SSH_AUTH_SOCK=%q, want %q", tc.socket, v, wantSock)
+		if v, ok := envOf(startCall(t, f), "SSH_AUTH_SOCK"); v != tc.socket || ok != (tc.socket != "") {
+			t.Errorf("socket %q: SSH_AUTH_SOCK=%q (set %v)", tc.socket, v, ok)
 		}
 		if fi, err := os.Stat(l.Dirs.Run()); err != nil || fi.Mode().Perm() != 0o700 {
 			t.Errorf("run folder: %v, %v", fi.Mode(), err)

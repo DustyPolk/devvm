@@ -54,10 +54,13 @@ func Spawn(c Cmd) (*Handle, error) {
 		cmd.Stdout, cmd.Stderr = c.Out, c.Out
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	// Only its own status file: never one devvm itself was given.
+	// Only its own status file: never one devvm itself was given. No SSH
+	// agent: none of devvm's background processes uses one (devvm's own
+	// ssh says IdentityAgent=none), and a VM's agent is only for its own
+	// connections, never a process that outlives the run.
 	env := make([]string, 0, len(os.Environ())+1)
 	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, StatusEnv+"=") {
+		if !strings.HasPrefix(kv, StatusEnv+"=") && !strings.HasPrefix(kv, "SSH_AUTH_SOCK=") {
 			env = append(env, kv)
 		}
 	}

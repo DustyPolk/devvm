@@ -194,7 +194,7 @@ func TestUpInSubfolder(t *testing.T) {
 		t.Fatal(msg.NamesOf(err))
 	}
 	vm := vmName(t, e)
-	if c := call(f, "Shell"); c.Args[0] != vm || c.Args[1] != src {
+	if c := call(f, "Shell"); c.Args[0] != vm || shellOpts(c).Dir != src {
 		t.Errorf("Shell = %v, want %s in %s", c.Args, vm, src)
 	}
 	if !slices.Contains(infos.Names(), "using_parent_vm dir="+web+" vm="+vm) {
@@ -230,7 +230,7 @@ func TestUpInSubfolder(t *testing.T) {
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if c := call(f, "Shell"); c.Args[0] != vm || c.Args[1] != docs || len(vmNames(t, e)) != 2 {
+	if c := call(f, "Shell"); c.Args[0] != vm || shellOpts(c).Dir != docs || len(vmNames(t, e)) != 2 {
 		t.Errorf("--parent: Shell = %v, %d VMs", c.Args, len(vmNames(t, e)))
 	}
 	// --parent where no folder above has one: refused, nothing made.
@@ -500,7 +500,7 @@ func TestSubfolderRepo(t *testing.T) {
 	if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if c := call(f, "Shell"); c.Args[0] != vm || c.Args[1] != src || len(vmNames(t, e)) != 1 {
+	if c := call(f, "Shell"); c.Args[0] != vm || shellOpts(c).Dir != src || len(vmNames(t, e)) != 1 {
 		t.Errorf("--parent: Shell = %v, %d VMs", c.Args, len(vmNames(t, e)))
 	}
 	// Without it, a new VM, nothing asked, in a terminal or not.

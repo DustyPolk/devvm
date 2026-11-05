@@ -153,8 +153,8 @@ type Machines interface {
 	// Exec runs argv in a running VM and waits for it.
 	Exec(ctx context.Context, vm string, argv []string, o ExecOpts) error
 	// Shell returns the command that opens an interactive shell in a
-	// running VM, in dir. The caller runs it in place of devvm.
-	Shell(ctx context.Context, vm, dir string) (Command, error)
+	// running VM, as o says. The caller runs it in place of devvm.
+	Shell(ctx context.Context, vm string, o ShellOpts) (Command, error)
 	// SSH says how ssh, editors, links and devvm's port forwarder reach
 	// a running VM.
 	SSH(ctx context.Context, vm string) (SSHTarget, error)
@@ -449,8 +449,10 @@ type Confinement struct {
 	// (FeatureSSH usable): a backend that emulates it runs it only then,
 	// one with its own always has it.
 	SSH bool
-	// AgentSocket is the ssh-agent the VM's forwarding uses: "" for the
-	// user's own (SSH_AUTH_SOCK), or devvm's.
+	// AgentSocket is the ssh-agent socket the VM's forwarding uses, and
+	// the backend's connections to it carry: the user's own or devvm's,
+	// as the VM's choice says; "" for none. The backend never takes one
+	// from devvm's environment.
 	AgentSocket string
 	// NoAgent is set when the VM's choice is no agent: a backend whose VM
 	// forwards one anyway (made so, for agent-toggle) gives it none.
@@ -482,6 +484,17 @@ type ExecOpts struct {
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
+	// Agent is the ssh-agent socket the command's connection to the VM
+	// carries, the VM's own (Confinement.AgentSocket); "" for none. The
+	// backend never takes one from devvm's environment.
+	Agent string
+}
+
+// ShellOpts is where an interactive shell in a VM opens and the ssh-agent
+// its connection carries, as ExecOpts has them.
+type ShellOpts struct {
+	Dir   string // the folder in the VM
+	Agent string // the ssh-agent socket; "" for none
 }
 
 // Command is a host command to run: Path with Args (Args[0] included), in

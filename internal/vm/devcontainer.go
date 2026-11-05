@@ -137,16 +137,17 @@ func (e devcontainers) check(st *state.VM, dir string) {
 // that run once (onCreateCommand, updateContentCommand,
 // postCreateCommand) at its first, then postStartCommand once each start,
 // at the first launch that finds it started. They run in the VM, as its
-// user, in the project folder; one that fails is said, and those after it
-// in its group don't run.
-func (e devcontainers) run(ctx context.Context, b backend.Backend, st *state.VM, dir string) error {
+// user, in the project folder, carrying agent, the VM's; one that fails
+// is said, and those after it in its group don't run.
+func (e devcontainers) run(ctx context.Context, b backend.Backend, st *state.VM, dir, agent string) error {
+	at := backend.ExecOpts{Dir: dir, Agent: agent}
 	d := sectionOf[devcontainerInVM](st, devcontainerSection)
 	if len(d.Create) > 0 && !d.Made.Created {
 		// Recorded first: a run cut short never runs them again.
 		if err := update(ctx, st, devcontainerSection, func(d *devcontainerInVM) error { d.Made.Created = true; return nil }); err != nil {
 			return err
 		}
-		if err := e.runAll(ctx, b, st.Name(), dir, d.Create); err != nil {
+		if err := e.runAll(ctx, b, st.Name(), at, d.Create); err != nil {
 			return err
 		}
 	}
@@ -166,18 +167,20 @@ func (e devcontainers) run(ctx context.Context, b backend.Backend, st *state.VM,
 	if err := update(ctx, st, devcontainerSection, func(d *devcontainerInVM) error { d.Made.Started = started; return nil }); err != nil {
 		return err
 	}
-	return e.runAll(ctx, b, st.Name(), dir, d.Start)
+	return e.runAll(ctx, b, st.Name(), at, d.Start)
 }
 
-// runAll runs commands in the VM in order, their output in the run log,
-// until one fails.
-func (e devcontainers) runAll(ctx context.Context, b backend.Backend, vm, dir string, cmds []devcontainer.Command) error {
+// runAll runs commands in the VM in order, in at's folder with its agent,
+// their output in the run log, until one fails.
+func (e devcontainers) runAll(ctx context.Context, b backend.Backend, vm string, at backend.ExecOpts, cmds []devcontainer.Command) error {
 	for _, c := range cmds {
 		e.Info(msg.RunningScript(c.Name, vm))
 		e.LogNote()
 		out := e.LogWriter()
 		argv := append([]string{"bash", "-lc", commandScript, "devvm"}, c.Argv...)
-		if err := b.Exec(ctx, vm, argv, backend.ExecOpts{Dir: dir, Stdout: out, Stderr: out}); err != nil {
+		o := at
+		o.Stdout, o.Stderr = out, out
+		if err := b.Exec(ctx, vm, argv, o); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

@@ -299,7 +299,7 @@ func (e Lifecycle) Export(ctx context.Context, file string) error {
 // so is the exports folder, whatever mode it had; a folder of the user's
 // keeps its own.
 func (e Lifecycle) export(ctx context.Context, t *found, file string, failed error) error {
-	vm, b := t.f.Name, t.b
+	vm := t.f.Name
 	x := Exports{Dirs: e.Dirs}
 	own := file == ""
 	if own {
@@ -332,7 +332,7 @@ func (e Lifecycle) export(ctx context.Context, t *found, file string, failed err
 		excludes[i] = "--exclude=" + p
 	}
 	script := "cd ~ && ls -d " + strings.Join(historyPaths, " ") + " 2>/dev/null | tar -czf - " + strings.Join(excludes, " ") + " -T -"
-	err = b.Exec(ctx, vm, []string{"bash", "-c", script}, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()})
+	err = t.exec(ctx, []string{"bash", "-c", script}, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()})
 	if cerr := out.Close(); err == nil {
 		err = cerr
 	}

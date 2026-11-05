@@ -35,7 +35,7 @@ func TestFakeRecordsAndAnswers(t *testing.T) {
 	if in.Status != backend.StatusRunning || in.Size != (backend.Size{CPUs: 2, MemoryGiB: 4, DiskGiB: 100}) || !slices.Equal(in.AgentDirs, []string{"/h/.claude"}) {
 		t.Errorf("instance: %+v", in)
 	}
-	if c, err := f.Shell(ctx, "v", "/p"); err != nil || c.Path != "/bin/true" {
+	if c, err := f.Shell(ctx, "v", backend.ShellOpts{Dir: "/p"}); err != nil || c.Path != "/bin/true" {
 		t.Errorf("Shell: %+v, %v", c, err)
 	}
 	if err := f.Delete(ctx, "v"); err != nil {

@@ -85,7 +85,7 @@ func (e Launch) open(ctx context.Context, o Options, t *found) error {
 	if err := e.setUpVM(ctx, b, st, t.f, conf); err != nil {
 		return err
 	}
-	cmd, err := b.Shell(ctx, vm, t.shellDir(ctx, e.LogWriter()))
+	cmd, err := b.Shell(ctx, vm, backend.ShellOpts{Dir: t.shellDir(ctx, e.LogWriter()), Agent: t.agent})
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (t *found) shellDir(ctx context.Context, log io.Writer) string {
 		return t.f.Dir
 	}
 	if isClone(t.st) {
-		err := t.b.Exec(ctx, t.f.Name, []string{"test", "-d", t.sub}, backend.ExecOpts{Stderr: log})
+		err := t.exec(ctx, []string{"test", "-d", t.sub}, backend.ExecOpts{Stderr: log})
 		if err != nil {
 			return t.f.Dir
 		}

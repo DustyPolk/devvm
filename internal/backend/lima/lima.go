@@ -80,7 +80,7 @@ type Lima struct {
 	// OCINote is how long a --from conversion waits for another devvm's
 	// before it says so.
 	OCINote time.Duration
-	// Getenv reads the environment (SSH_AUTH_SOCK).
+	// Getenv reads the environment (the proxy settings, USER).
 	Getenv func(string) string
 	// Company is the company proxy builds go through (buildUpstream).
 	Company *settings.CompanyProxy
@@ -592,13 +592,16 @@ func (l *machines) Exec(ctx context.Context, vm string, argv []string, o backend
 		dir = "/"
 	}
 	cmd := l.limactl(ctx, "shell", "--workdir", "/", vm, "sh", "-c", "cd "+shell.Quote(dir)+" && exec "+shell.QuoteJoin(argv))
+	withAgent(cmd, o.Agent)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = o.Stdin, o.Stdout, o.Stderr
 	return l.Runner.Attach(cmd)
 }
 
-// Shell returns limactl shell in dir, for the caller to run in its place.
-func (l *machines) Shell(ctx context.Context, vm, dir string) (backend.Command, error) {
-	cmd := l.limactl(ctx, "shell", "--workdir", dir, vm)
+// Shell returns limactl shell in o.Dir, carrying o.Agent, for the caller
+// to run in its place.
+func (l *machines) Shell(ctx context.Context, vm string, o backend.ShellOpts) (backend.Command, error) {
+	cmd := l.limactl(ctx, "shell", "--workdir", o.Dir, vm)
+	withAgent(cmd, o.Agent)
 	if cmd.Err != nil {
 		return backend.Command{}, cmd.Err
 	}

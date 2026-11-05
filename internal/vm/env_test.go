@@ -116,8 +116,8 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		AddCleanup: testUI{t}.AddCleanup, Interrupted: testUI{t}.Interrupted,
 		PortInUse: func(context.Context, int) bool { return false },
 	}
-	// devvm sets SSH_AUTH_SOCK as a VM's agent mode says; the test's own
-	// is put back.
+	// The user's agent, as devvm started with it, which tests check stays
+	// as it is: each VM's agent travels with its own commands.
 	t.Setenv("SSH_AUTH_SOCK", "/user/agent")
 	e.Environ = []string{"SSH_AUTH_SOCK=/user/agent"}
 	e.Agent = sshagent.New(d, e.mounts, testUI{t})

@@ -266,8 +266,13 @@ func (e linkRuns) apply(ctx context.Context, b backend.Backend, st *state.VM, ad
 	if err != nil || in.Status != backend.StatusRunning {
 		return false, err
 	}
-	// The confinement it runs with, for its setup sent again.
-	conf, err := starter(e).runningConfinement(ctx, b, st)
+	// The confinement it runs with, its agent included, for its setup
+	// sent again.
+	mode, err := runningAgent(ctx, b, st)
+	if err != nil {
+		return true, err
+	}
+	conf, err := starter(e).runningConfinement(ctx, b, st, mode)
 	if err != nil {
 		return true, err
 	}

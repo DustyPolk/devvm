@@ -158,8 +158,9 @@ func gitSSHCommand(s vmssh.SSH, dir string) string {
 // host's pushed into it, the host's checked out, and a remote for it in
 // the host's repo. Then it offers the ~/.ssh/config line that remote
 // needs, and warns about uncommitted changes, which aren't copied. It
-// needs the VM's ssh config entry.
-func (e clones) seedClone(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder) error {
+// needs the VM's ssh config entry. Its command in the VM carries agent,
+// the VM's.
+func (e clones) seedClone(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, agent string) error {
 	vm, dir := st.Name(), f.Dir
 	branch, err := hostGit(ctx, dir, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
@@ -177,7 +178,7 @@ func (e clones) seedClone(ctx context.Context, b backend.Backend, st *state.VM, 
 	const initRepo = `sudo mkdir -p -- "$1" && sudo chown -- "$(id -u):$(id -g)" "$1" && cd -- "$1" &&
 git init -q && git config receive.denyCurrentBranch updateInstead && git symbolic-ref HEAD "refs/heads/$2"`
 	log := e.LogWriter()
-	if err := b.Exec(ctx, vm, []string{"sh", "-c", initRepo, "sh", dir, branch}, backend.ExecOpts{Stdout: log, Stderr: log}); err != nil {
+	if err := b.Exec(ctx, vm, []string{"sh", "-c", initRepo, "sh", dir, branch}, backend.ExecOpts{Stdout: log, Stderr: log, Agent: agent}); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

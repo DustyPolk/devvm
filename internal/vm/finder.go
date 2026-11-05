@@ -40,6 +40,17 @@ type found struct {
 	// repo is, for a parent folder's VM, the nearest folder from sub up,
 	// below f.Dir, with a .git of its own; "" when none has one.
 	repo string
+	// agent is the SSH agent socket devvm's connections to the VM carry
+	// (Env.agentSocket): the one it runs with, which a start sets
+	// (starter.bringUp); "" for none.
+	agent string
+}
+
+// exec runs argv in the running VM, its connection carrying the VM's
+// agent.
+func (t *found) exec(ctx context.Context, argv []string, o backend.ExecOpts) error {
+	o.Agent = t.agent
+	return t.b.Exec(ctx, t.f.Name, argv, o)
 }
 
 // need is what a command needs of the VM it acts on. The zero need is
@@ -352,8 +363,8 @@ func hasGit(dir string) bool {
 }
 
 // inspect finds the VM for folder f, whose state is st, on the backend
-// its state records, else a new VM's. One that exists gets devvm's
-// connections carrying its SSH agent.
+// its state records, else a new VM's. One that exists gets its SSH agent
+// (found.agent): the one it runs with, else its choice.
 func (e finder) inspect(ctx context.Context, f project.Folder, st *state.VM) (*found, error) {
 	choice, err := e.Registry.For(st)
 	if err != nil {
@@ -373,7 +384,7 @@ func (e finder) inspect(ctx context.Context, f project.Folder, st *state.VM) (*f
 				return nil, err
 			}
 		}
-		e.useAgent(mode)
+		t.agent = e.agentSocket(mode)
 	case !errors.Is(err, backend.ErrNotFound):
 		return nil, err
 	}

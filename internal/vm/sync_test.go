@@ -211,12 +211,12 @@ func TestReadUnmountedWait(t *testing.T) {
 	node := "node-24.21.0-0123456789ab.erofs"
 	files := []string{node}
 	b := slowExec{Fake: backendtest.New("fake", nil), report: node + "\n"}
-	if got := readUnmounted(t.Context(), b, "vm", files, time.Minute); !slices.Equal(got, files) {
+	if got := readUnmounted(t.Context(), b, "vm", files, "", time.Minute); !slices.Equal(got, files) {
 		t.Errorf("in time: %q, want %q", got, files)
 	}
 	b.hang = true
 	start := time.Now()
-	if got := readUnmounted(t.Context(), b, "vm", files, 50*time.Millisecond); got != nil {
+	if got := readUnmounted(t.Context(), b, "vm", files, "", 50*time.Millisecond); got != nil {
 		t.Errorf("hung: %q, want none", got)
 	}
 	if d := time.Since(start); d > 5*time.Second {

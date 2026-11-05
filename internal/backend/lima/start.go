@@ -103,7 +103,7 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 	cmd.Env = setEnv(cmd.Env, env...)
 	defer l.redactLog(vm)
 	if err := l.Runner.Run(ctx, msg.Starting(vm), cmd); err != nil {
-		if err := l.degraded(ctx, vm); err != nil {
+		if err := l.degraded(ctx, vm, c.AgentSocket); err != nil {
 			return err
 		}
 	}
@@ -127,8 +127,9 @@ func (l *machines) redactLog(vm string) {
 // for a VM that's running but degraded (one of its own boot scripts
 // failed), which is usable: carry on with a warning. Unless it doesn't
 // answer over ssh: then it never booted (QEMU can keep running a guest
-// stuck in its firmware), and it's stopped.
-func (l *machines) degraded(ctx context.Context, vm string) error {
+// stuck in its firmware), and it's stopped. Its check carries agent, the
+// start's.
+func (l *machines) degraded(ctx context.Context, vm, agent string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -138,7 +139,7 @@ func (l *machines) degraded(ctx context.Context, vm string) error {
 	}
 	sctx, cancel := context.WithTimeout(ctx, l.SSHTimeout)
 	defer cancel()
-	if err := l.Exec(sctx, vm, []string{"true"}, backend.ExecOpts{}); err != nil {
+	if err := l.Exec(sctx, vm, []string{"true"}, backend.ExecOpts{Agent: agent}); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -153,13 +154,11 @@ func (l *machines) degraded(ctx context.Context, vm string) error {
 // under (sandbox-exec and its profile; none), and the environment it adds
 // (KEY=value, or a bare KEY to remove).
 func (l *machines) confine(vm string, c backend.Confinement, sshPort int, forwarding bool) (wrap, env []string, err error) {
-	// Lima's processes forward the agent they find at start.
-	if c.AgentSocket != "" {
-		env = append(env, "SSH_AUTH_SOCK="+c.AgentSocket)
-	}
+	// Lima's processes forward the agent they find at start: the VM's
+	// own, or none (limactl gives it none).
 	agent := c.AgentSocket
-	if agent == "" {
-		agent = l.Getenv("SSH_AUTH_SOCK")
+	if agent != "" {
+		env = append(env, "SSH_AUTH_SOCK="+agent)
 	}
 	// A VM on Lima's own network gets the host's proxy settings from Lima
 	// (propagateProxyEnv), which limactl otherwise runs without.

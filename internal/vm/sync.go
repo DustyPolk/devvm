@@ -58,12 +58,12 @@ func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug 
 		return err
 	}
 	out := e.LogWriter()
-	err = b.Exec(ctx, vm, []string{"bash", "-c", syncCmd}, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: out, Stderr: out})
+	err = b.Exec(ctx, vm, []string{"bash", "-c", syncCmd}, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: out, Stderr: out, Agent: conf.AgentSocket})
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if bad := e.unmounted(ctx, b, vm, files); len(bad) > 0 {
+		if bad := e.unmounted(ctx, b, vm, files, conf.AgentSocket); len(bad) > 0 {
 			return backend.Logged(msg.ToolsUnmounted(tools.Label(bad), vm))
 		}
 		return backend.Logged(msg.SyncFailed(vm))
@@ -83,17 +83,18 @@ const unmountedMax = 16 << 10
 const unmountedWait = 10 * time.Second
 
 // unmounted returns the VM's tool files (files, from its state) that its
-// devvm-tools last said it couldn't mount, read after a failed setup.
-func (e syncer) unmounted(ctx context.Context, b backend.Backend, vm string, files []string) []string {
-	return readUnmounted(ctx, b, vm, files, unmountedWait)
+// devvm-tools last said it couldn't mount, read after a failed setup, its
+// connection carrying agent, the VM's.
+func (e syncer) unmounted(ctx context.Context, b backend.Backend, vm string, files []string, agent string) []string {
+	return readUnmounted(ctx, b, vm, files, agent, unmountedWait)
 }
 
 // readUnmounted is unmounted, giving up after wait: then no tool counts.
-func readUnmounted(ctx context.Context, b backend.Backend, vm string, files []string, wait time.Duration) []string {
+func readUnmounted(ctx context.Context, b backend.Backend, vm string, files []string, agent string, wait time.Duration) []string {
 	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	out := &capped{max: unmountedMax}
-	if err := b.Exec(ctx, vm, []string{"cat", unmountedFile}, backend.ExecOpts{Stdout: out, Stderr: io.Discard}); err != nil || ctx.Err() != nil {
+	if err := b.Exec(ctx, vm, []string{"cat", unmountedFile}, backend.ExecOpts{Stdout: out, Stderr: io.Discard, Agent: agent}); err != nil || ctx.Err() != nil {
 		return nil
 	}
 	return reported(files, out.Bytes())

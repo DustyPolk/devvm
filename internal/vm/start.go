@@ -82,10 +82,14 @@ func (s starter) bringUp(ctx context.Context, t *found, o upOpts) (backend.Confi
 		return err
 	}
 	if running {
-		if err := s.reloadAgent(ctx, b, st); err != nil {
+		mode, err := runningAgent(ctx, b, st)
+		if err != nil {
 			return conf, err
 		}
-		if conf, err = s.runningConfinement(ctx, b, st); err != nil {
+		if err := s.reloadAgent(ctx, mode); err != nil {
+			return conf, err
+		}
+		if conf, err = s.runningConfinement(ctx, b, st, mode); err != nil {
 			return conf, err
 		}
 		s.nextStart(st, in, conf, mountsLater)
@@ -98,6 +102,8 @@ func (s starter) bringUp(ctx context.Context, t *found, o upOpts) (backend.Confi
 	if err := s.Proxy.SelfCheck(ctx, b, st, start); err != nil {
 		return conf, err
 	}
+	// devvm's connections to it carry the agent it runs with.
+	t.agent = conf.AgentSocket
 	return conf, nil
 }
 
@@ -125,19 +131,21 @@ func confinementFor(st *state.VM) backend.Confinement {
 // turned off while it ran confined included, as it stays on its proxy,
 // tokens out of it, until it starts again; else direct. A VM with network
 // policy whose proxy can't start is stopped (Unproxied): it never runs on
-// without it.
-func (s starter) runningConfinement(ctx context.Context, b backend.Backend, st *state.VM) (backend.Confinement, error) {
+// without it. Its agent is the one mode, the choice it runs with
+// (runningAgent), says.
+func (s starter) runningConfinement(ctx context.Context, b backend.Backend, st *state.VM, mode string) (backend.Confinement, error) {
 	vm := st.Name()
 	if !netpolicy.On(st) {
 		run, err := b.Running(ctx, vm)
 		if err != nil || !run.Confined {
-			return backend.Confinement{Net: backend.NetDirect}, err
+			return backend.Confinement{Net: backend.NetDirect, AgentSocket: s.agentSocket(mode)}, err
 		}
 	}
 	c, err := s.Proxy.Prepare(ctx, b, st, true)
 	if err != nil {
 		return c, s.Proxy.Unproxied(ctx, b, vm, err)
 	}
+	c.AgentSocket = s.agentSocket(mode)
 	return c, nil
 }
 
@@ -307,12 +315,11 @@ func (s starter) checkSetID(dir string) {
 }
 
 // reloadAgent loads the keys whose lifetime ran out into devvm's agent
-// again for a running VM that runs with it (runningAgent); one that
-// starts gets them in start.
-func (s starter) reloadAgent(ctx context.Context, b backend.Backend, st *state.VM) error {
-	mode, err := runningAgent(ctx, b, st)
-	if err != nil || mode != sshagent.Devvm {
-		return err
+// again for a running VM that runs with it (mode, from runningAgent); one
+// that starts gets them in start.
+func (s starter) reloadAgent(ctx context.Context, mode string) error {
+	if mode != sshagent.Devvm {
+		return nil
 	}
 	return s.Agent.Ensure(ctx)
 }
@@ -332,19 +339,18 @@ func (s starter) start(ctx context.Context, b backend.Backend, st *state.VM, con
 	// A link session of its last start's, which would end on its own: the
 	// launch starts one for this start.
 	linkRuns(s).stop(ctx, vm)
-	// The VM's backend forwards the agent it gets when it starts: devvm's
-	// own, with the keys it lacks loaded, for a VM that uses it; none for
-	// one that uses none.
+	// The VM's backend forwards the agent it gets when it starts, and its
+	// connections to the VM carry it: devvm's own, with the keys it lacks
+	// loaded, for a VM that uses it; the user's; none for one that uses
+	// none.
 	mode := sshagent.Mode(st)
 	conf.NoAgent = !sshagent.Forwards(mode)
 	if mode == sshagent.Devvm {
 		if err := s.Agent.Ensure(ctx); err != nil {
 			return conf, err
 		}
-		conf.AgentSocket = s.Agent.Socket()
 	}
-	// devvm's own connections carry the agent of the start they're on.
-	s.useAgent(mode)
+	conf.AgentSocket = s.agentSocket(mode)
 	conf, err := s.confine(ctx, b, st, conf)
 	if err != nil {
 		return conf, err

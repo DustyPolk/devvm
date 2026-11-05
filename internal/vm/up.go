@@ -366,7 +366,6 @@ func (e creation) plan(ctx context.Context, o *Options, f project.Folder, b back
 	if o.SSHAgent {
 		n.agent = sshagent.On
 	}
-	e.useAgent(n.agent)
 	if o.Clone {
 		n.spec.Project, n.spec.CloneAt, n.clone, n.git = "", f.Dir, true, gitprotect.Clone
 	} else {
@@ -468,12 +467,13 @@ func (e creation) undoCreate(b backend.Backend, f project.Folder, locking *atomi
 }
 
 // setUp sets up a running VM, started with conf, for a shell in the
-// folder (setUpVM), and returns the shell's command.
+// folder (setUpVM), and returns the shell's command, which carries the
+// agent it started with.
 func (e Launch) setUp(ctx context.Context, b backend.Backend, st *state.VM, f project.Folder, conf backend.Confinement) (backend.Command, error) {
 	if err := e.setUpVM(ctx, b, st, f, conf); err != nil {
 		return backend.Command{}, err
 	}
-	return b.Shell(ctx, st.Name(), f.Dir)
+	return b.Shell(ctx, st.Name(), backend.ShellOpts{Dir: f.Dir, Agent: conf.AgentSocket})
 }
 
 // setUpVM sets up a running VM, started with conf: its setup sent, ssh
@@ -492,11 +492,11 @@ func (e Launch) setUpVM(ctx context.Context, b backend.Backend, st *state.VM, f 
 		return err
 	}
 	if c := sectionOf[cloneInVM](st, cloneSection); c.On && !c.Made.Seeded {
-		if err := clones(e).seedClone(ctx, b, st, f); err != nil {
+		if err := clones(e).seedClone(ctx, b, st, f, conf.AgentSocket); err != nil {
 			return err
 		}
 	}
-	return devcontainers(e).run(ctx, b, st, f.Dir)
+	return devcontainers(e).run(ctx, b, st, f.Dir, conf.AgentSocket)
 }
 
 // checkUnsafe refuses a folder that is or holds the home folder or

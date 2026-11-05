@@ -504,10 +504,10 @@ func (f *machines) ProxyURL(c backend.Confinement) string {
 }
 
 // Shell records the call and returns ShellCmd.
-func (f *machines) Shell(_ context.Context, vm, dir string) (backend.Command, error) {
+func (f *machines) Shell(_ context.Context, vm string, o backend.ShellOpts) (backend.Command, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.record("Shell", vm, dir); err != nil {
+	if err := f.record("Shell", vm, o); err != nil {
 		return backend.Command{}, err
 	}
 	return f.ShellCmd, nil

@@ -291,25 +291,24 @@ func (e *Env) ensureRunning(ctx context.Context, t *found) error {
 	return err
 }
 
-// useAgent makes the SSH agent devvm's own connections to the folder's VM
-// carry the one mode says: devvm's, the user's (the one devvm started
-// with), or none. Its backend's connections to it (Lima's share one) and
-// the shell's are among them.
-func (e *Env) useAgent(mode string) {
-	user, ok := "", false
-	for _, kv := range e.Environ {
-		if v, found := strings.CutPrefix(kv, "SSH_AUTH_SOCK="); found {
-			user, ok = v, true
+// agentSocket is the SSH agent socket a VM whose choice is mode gets:
+// devvm's, the user's (the one devvm started with), or none (""). Its
+// start forwards it, and devvm's own connections to that VM carry it
+// (found.agent), each VM's its own, as devvm's environment never changes.
+func (e *Env) agentSocket(mode string) string {
+	switch mode {
+	case sshagent.Devvm:
+		return e.Agent.Socket()
+	case sshagent.On:
+		user := ""
+		for _, kv := range e.Environ {
+			if v, ok := strings.CutPrefix(kv, "SSH_AUTH_SOCK="); ok {
+				user = v
+			}
 		}
+		return user
 	}
-	switch {
-	case mode == sshagent.Devvm:
-		_ = os.Setenv("SSH_AUTH_SOCK", e.Agent.Socket())
-	case mode == sshagent.On && ok:
-		_ = os.Setenv("SSH_AUTH_SOCK", user)
-	default:
-		_ = os.Unsetenv("SSH_AUTH_SOCK")
-	}
+	return ""
 }
 
 // mounts returns the host folders project VMs mount, as their states have
