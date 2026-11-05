@@ -159,7 +159,16 @@ func (m mount) writable() bool { return m.Writable != nil && *m.Writable }
 // agentDir reports whether the mount is an agent folder: read-only, at the
 // same path as on the host (the tools share is elsewhere).
 func (m mount) agentDir() bool {
-	return !m.writable() && (m.MountPoint == nil || *m.MountPoint == "" || *m.MountPoint == m.Location)
+	return !m.writable() && m.atLocation()
+}
+
+// project reports whether the mount is the project folder: the one
+// read-write mount, at the same path as on the host.
+func (m mount) project() bool { return m.writable() && m.atLocation() }
+
+// atLocation reports whether the mount is at its host path in the VM.
+func (m mount) atLocation() bool {
+	return m.MountPoint == nil || *m.MountPoint == "" || *m.MountPoint == m.Location
 }
 
 // list returns every instance in devvm's Lima home: VMs and images.

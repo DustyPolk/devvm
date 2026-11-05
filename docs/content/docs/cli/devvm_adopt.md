@@ -3,21 +3,22 @@ title: devvm adopt
 weight: 2
 ---
 
-Use the VM made for an earlier folder at this path here
+Give this folder the VM made for an earlier folder or path
 
 ## Synopsis
 
-Give this folder the VM made for an earlier folder at the same path, with its files, secrets and allowlist. devvm refuses that VM in a folder made again, until you adopt it or delete it with devvm rm. devvm asks first in a terminal.
+Give this folder the VM made for an earlier folder at this path, or for this folder before you moved or renamed it, with its files, secrets and allowlist. With VM, its name as devvm ls lists it, devvm moves that VM here from a folder that's gone, such as one you copied to another disk. devvm asks first in a terminal.
 
 ```text
-devvm adopt [flags]
+devvm adopt [VM] [flags]
 ```
 
 ## Examples
 
 ```text
-  devvm adopt          # give this folder the VM, after asking
-  devvm adopt --force  # give it without asking, as a script must
+  devvm adopt                           # give this folder the VM, after asking
+  devvm adopt --force                   # give it without asking, as a script must
+  devvm adopt devvm-web-71a99b1076d92c  # move that VM here from a folder that's gone, after asking
 ```
 
 ## Options

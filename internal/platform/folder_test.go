@@ -5,6 +5,7 @@ package platform
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -33,6 +34,32 @@ func TestFolderID(t *testing.T) {
 	}
 	if _, err := FolderID(filepath.Join(dir, "missing")); err == nil {
 		t.Error("FolderID of a missing folder: no error")
+	}
+	// A folder moved keeps its ID.
+	if moved, _ := FolderID(dir + ".old"); moved != a {
+		t.Errorf("a moved folder's ID: %q, was %q", moved, a)
+	}
+}
+
+// UniqueFolderID: an ID with a birth time, on Linux, and on macOS of a
+// folder on APFS or HFS+; never a missing folder on macOS.
+func TestUniqueFolderID(t *testing.T) {
+	dir := t.TempDir()
+	id, err := FolderID(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	switch runtime.GOOS {
+	case "linux":
+		if !UniqueFolderID(dir, "1:2:3.4") || UniqueFolderID(dir, "1:2") {
+			t.Error("UniqueFolderID: by the birth time in the ID")
+		}
+		t.Logf("%s: %s, unique %v", dir, id, UniqueFolderID(dir, id))
+	case "darwin":
+		// The tests' temporary folder is on the system's APFS volume.
+		if !UniqueFolderID(dir, id) || UniqueFolderID(filepath.Join(dir, "missing"), id) || UniqueFolderID(dir, "1:2") {
+			t.Errorf("UniqueFolderID(%s) = %v", dir, UniqueFolderID(dir, id))
+		}
 	}
 }
 

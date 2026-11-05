@@ -614,9 +614,10 @@ func TestCreateVM(t *testing.T) {
 		`{"location":"/my project","mountPoint":"/my project","writable":true},{"location":"/h/.claude","mountPoint":"/h/.claude"},` +
 		`{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}],"ssh":{"forwardAgent":true}}}`
 	err := l.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{
-		Name: "devvm-p-0123456789abcd", Project: "/my project",
+		Name:  "devvm-p-0123456789abcd",
 		Tools: "/d/tools", ToolsAt: "/mnt/devvm-tools", SSHPort: 23456,
 		Want: backend.Want{
+			Project:   "/my project",
 			AgentDirs: []string{"/h/.claude"}, AgentForwarding: true, Size: backend.Size{CPUs: 6, MemoryGiB: 8, DiskGiB: 150},
 		},
 	})
@@ -712,22 +713,29 @@ func TestWantEdits(t *testing.T) {
 		want backend.Want
 		opts string // the edit's options, or the error
 	}{
-		{backend.Want{AgentDirs: claude}, ""},
-		{backend.Want{AgentDirs: claude, Size: backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}}, ""},
-		{backend.Want{AgentDirs: claude, Size: backend.Size{CPUs: 6, MemoryGiB: 8, DiskGiB: 150}}, "--cpus 6 --disk 150"},
-		{backend.Want{AgentDirs: claude, Size: backend.Size{MemoryGiB: 3.5}}, "--memory 3.5"},
-		{backend.Want{AgentDirs: claude, Size: backend.Size{DiskGiB: 50}}, "disk_shrink have=100 vm=v want=50"},
+		{backend.Want{Project: "/p", AgentDirs: claude}, ""},
+		{backend.Want{Project: "/p", AgentDirs: claude, Size: backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}}, ""},
+		{backend.Want{Project: "/p", AgentDirs: claude, Size: backend.Size{CPUs: 6, MemoryGiB: 8, DiskGiB: 150}}, "--cpus 6 --disk 150"},
+		{backend.Want{Project: "/p", AgentDirs: claude, Size: backend.Size{MemoryGiB: 3.5}}, "--memory 3.5"},
+		{backend.Want{Project: "/p", AgentDirs: claude, Size: backend.Size{DiskGiB: 50}}, "disk_shrink have=100 vm=v want=50"},
 		{
-			backend.Want{AgentDirs: []string{"/h/.codex"}},
+			backend.Want{Project: "/p", AgentDirs: []string{"/h/.codex"}},
 			`--set .mounts = [{"location":"/p","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"},{"location":"/h/.codex","writable":false}]`,
 		},
-		{backend.Want{}, `--set .mounts = [{"location":"/p","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}]`},
-		{backend.Want{AgentDirs: []string{"/h/a,b"}}, "mount_comma path=/h/a,b"},
-		{backend.Want{AgentDirs: claude, AgentForwarding: true}, "--set .ssh.forwardAgent=true"},
+		{backend.Want{Project: "/p"}, `--set .mounts = [{"location":"/p","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}]`},
+		{backend.Want{Project: "/p", AgentDirs: []string{"/h/a,b"}}, "mount_comma path=/h/a,b"},
+		{backend.Want{Project: "/p", AgentDirs: claude, AgentForwarding: true}, "--set .ssh.forwardAgent=true"},
 		{
-			backend.Want{AgentForwarding: true, Size: backend.Size{CPUs: 2}},
+			backend.Want{Project: "/p", AgentForwarding: true, Size: backend.Size{CPUs: 2}},
 			`--cpus 2 --set .mounts = [{"location":"/p","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}] --set .ssh.forwardAgent=true`,
 		},
+		// The project folder moved: its mount alone changes, in the
+		// same --set as the rest, the project's first.
+		{
+			backend.Want{Project: "/q", AgentDirs: claude},
+			`--set .mounts = [{"location":"/q","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"},{"location":"/h/.claude","writable":false}]`,
+		},
+		{backend.Want{Project: "/q,r", AgentDirs: claude}, "mount_comma path=/q,r"},
 	} {
 		opts, err := wantEdits(in, tc.want)
 		got := strings.Join(opts, " ")

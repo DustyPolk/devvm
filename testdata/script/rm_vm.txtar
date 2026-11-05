@@ -173,14 +173,20 @@ cp $WORK/lost.json $VMS/be79df76493187/vm.json
 stderr '^devvm: rm_vm_lost vm=devvm-lost-be79df76493187$'
 exists $VMS/be79df76493187/vm.json
 
-# A VM whose state records a folder its name wasn't made for: refused.
+# A VM whose state records a folder with a VM of its own (a vm.json
+# changed by hand), named in that folder: refused as one whose folder is
+# there, and the folder's own VM stays.
+project mine
+exec devvm --no-network-policy
+vm_name MINE mine
 mkdir $VMS/0123456789ab03
 cp $WORK/lost.json $VMS/0123456789ab03/vm.json
-json_set $VMS/0123456789ab03/vm.json name=devvm-odd-0123456789ab03
+json_set $VMS/0123456789ab03/vm.json name=devvm-odd-0123456789ab03 dir=$WORK/mine
 exec stub vm devvm-odd-0123456789ab03 Stopped
 ! exec devvm rm devvm-odd-0123456789ab03 --force
-stderr '^devvm: rm_vm_state_mismatch dir=/p/lost vm=devvm-odd-0123456789ab03$'
+stderr '^devvm: rm_vm_folder_there dir=/\S*/mine vm=devvm-odd-0123456789ab03$'
 exists $VMS/0123456789ab03/vm.json
+exists $MINE_dir/vm.json
 
 -- yes.txt --
 y

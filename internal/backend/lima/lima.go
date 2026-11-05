@@ -575,8 +575,11 @@ func (in instance) size() backend.Size {
 func (in instance) backend() backend.Instance {
 	b := backend.Instance{Name: in.Name, Status: backend.Status(in.Status), Size: in.size()}
 	for _, m := range in.Config.Mounts {
-		if m.agentDir() {
+		switch {
+		case m.agentDir():
 			b.AgentDirs = append(b.AgentDirs, m.Location)
+		case m.project():
+			b.Project = m.Location
 		}
 	}
 	b.AgentForwarding = in.Config.SSH.ForwardAgent != nil && *in.Config.SSH.ForwardAgent
@@ -665,9 +668,10 @@ func (l *machines) SSH(ctx context.Context, vm string) (backend.SSHTarget, error
 // wantEdits returns limactl edit's options that make a stopped VM (in,
 // as limactl list has it) what w wants, none where it already is, after
 // checking w (backend.Validate): its CPUs and memory where w sets them,
-// its disk where w's is larger (Lima can't shrink one), its agent folder
-// mounts, keeping its other mounts (the project folder, the tools
-// share), and its agent forwarding.
+// its disk where w's is larger (Lima can't shrink one), its project
+// folder's mount (a folder that moved) and its agent folder mounts,
+// keeping its other mounts (the tools share), in one --set, and its
+// agent forwarding.
 func wantEdits(in instance, w backend.Want) ([]string, error) {
 	if err := backend.Validate(w, in.backend()); err != nil {
 		return nil, err
@@ -683,16 +687,17 @@ func wantEdits(in instance, w backend.Want) ([]string, error) {
 	if s := w.Size; s.DiskGiB > cur.DiskGiB {
 		opts = append(opts, "--disk", gibString(s.DiskGiB))
 	}
-	var have []string
+	have := in.backend()
 	var ms []mount
+	if w.Project != "" && have.Project != w.Project {
+		ms = append(ms, mount{Location: w.Project, Writable: ptr(true)})
+	}
 	for _, m := range in.Config.Mounts {
-		if m.agentDir() {
-			have = append(have, m.Location)
-		} else {
+		if !m.agentDir() && (!m.project() || m.Location == w.Project) {
 			ms = append(ms, m)
 		}
 	}
-	if !slices.Equal(have, w.AgentDirs) {
+	if have.Project != w.Project || !slices.Equal(have.AgentDirs, w.AgentDirs) {
 		set, err := mountsSet(append(ms, readOnly(w.AgentDirs)...))
 		if err != nil {
 			return nil, err

@@ -298,11 +298,7 @@ func (e Links) resolve(target string) (string, error) {
 			dir = filepath.Join(here, dir)
 		}
 		if dir, err = filepath.EvalSymlinks(dir); err == nil {
-			names := make([]string, len(all))
-			for i, v := range all {
-				names[i] = v.Name
-			}
-			vms = project.ForDir(dir, names)
+			vms = project.ForDir(dir, all)
 		}
 	} else {
 		vms = project.Targets(target, all)

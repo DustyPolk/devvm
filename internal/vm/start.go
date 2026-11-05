@@ -165,8 +165,8 @@ func (s starter) runningConfinement(ctx context.Context, b backend.Backend, st *
 // nextStart says what a running VM gets only at its next start, each
 // where it differs from what its state asks for: its size, its SSH agent
 // forwarding, its agent folder mounts (mountsLater: the user didn't
-// restart it), and network policy turned off while it ran confined
-// (conf, as it runs).
+// restart it), its project folder's mount once the folder moved, and
+// network policy turned off while it ran confined (conf, as it runs).
 func (s starter) nextStart(st *state.VM, in backend.Instance, conf backend.Confinement, mountsLater bool) {
 	for _, c := range nextStartChanges(st, in, mountsLater, conf.Net == backend.NetProxy) {
 		s.Warn(c.later)
@@ -178,6 +178,15 @@ func (s starter) nextStart(st *state.VM, in backend.Instance, conf backend.Confi
 // warning that says when it applies.
 type nextChange struct {
 	named, later msg.M
+}
+
+// projectMount is the project folder the VM's start mounts: its state's
+// folder, where a move put it; none for a --clone VM.
+func projectMount(st *state.VM) string {
+	if isClone(st) {
+		return ""
+	}
+	return st.Dir
 }
 
 // nextStartChanges lists what a running VM, as in is, gets only at its
@@ -193,6 +202,9 @@ func nextStartChanges(st *state.VM, in backend.Instance, mountsLater, confined b
 	}
 	if mountsLater {
 		cs = append(cs, nextChange{msg.NextStartMounts(vm), msg.MountsNextStart(vm)})
+	}
+	if in.Project != projectMount(st) {
+		cs = append(cs, nextChange{msg.NextStartFolder(st.Dir, vm), msg.FolderNextStart(st.Dir, vm)})
 	}
 	if confined && !netpolicy.On(st) {
 		cs = append(cs, nextChange{msg.NextStartNetOff(vm), msg.NetOffNextStart(vm)})
@@ -218,7 +230,8 @@ func nextStartContext(cs []nextChange) []msg.M {
 // changes only at its next start (nextStartChanges), whether to restart
 // it now (restartNow, the changes named first, nextStartContext). It's
 // yes by default ([Y/n]) when its agent folder mounts wait, as an agent
-// just added needs them, and no ([y/N]) otherwise. A yes stops it, so
+// just added needs them, or its project folder moved, which it mounts
+// where it was, and no ([y/N]) otherwise. A yes stops it, so
 // that bringUp starts it with them; a no, or no question, leaves it
 // running, and nextStart warns of each. t.in is the VM as it is then (a
 // stop reads it again); it returns whether its agent folder mounts still
@@ -240,7 +253,7 @@ func (s starter) restartForNextStart(ctx context.Context, t *target, mountsLater
 		return mountsLater, nil
 	}
 	ask := s.Ask
-	if mountsLater {
+	if mountsLater || in.Project != projectMount(st) {
 		ask = s.Confirm
 	}
 	if !s.restartNow(vm, ask, len(cs), nextStartContext(cs)...) {
@@ -448,11 +461,11 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 		defer s.AddCleanup(undoStart(s.Env, b, vm))()
 	}
 	// What its state asks of it, which the start makes it where it
-	// differs: its size, its agents' folders on the host now, its agent
-	// forwarding.
+	// differs: its size, its project folder where it is now (moved),
+	// its agents' folders on the host now, its agent forwarding.
 	agentDirs, _ := agentMounts(s.Dirs.Home, tools.Names(st))
 	want := backend.Want{
-		Size: sectionOf[Size](st, sizeSection).Backend(), AgentDirs: agentDirs,
+		Size: sectionOf[Size](st, sizeSection).Backend(), Project: projectMount(st), AgentDirs: agentDirs,
 		AgentForwarding: sshagent.Forwards(mode),
 	}
 	if err := b.Start(ctx, vm, want, conf); err != nil {

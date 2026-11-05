@@ -104,7 +104,7 @@ func guardedFake(t *testing.T, caps backend.Caps) (*backend.Registry, *backendte
 // checked first.
 func TestGuardRefuses(t *testing.T) {
 	ctx := t.Context()
-	vmSpec := backend.VMSpec{Name: "devvm-x", Project: "/p", Want: backend.Want{Size: backend.Size{CPUs: 2}}}
+	vmSpec := backend.VMSpec{Name: "devvm-x", Want: backend.Want{Project: "/p", Size: backend.Size{CPUs: 2}}}
 	image := backend.ImageSpec{Image: "base+nix", Key: layerKey, Parent: baseKey, Net: backend.NetInternet}
 	for _, tc := range []struct {
 		name string

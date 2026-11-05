@@ -22,7 +22,7 @@ devvm refuses a project folder that would hand the VM more than the project:
 
 ### One VM per folder
 
-A VM belongs to the folder it was made for, which devvm knows by its path and by the folder itself: its device and inode, and on Linux its birth time. When you delete a folder and make it again at the same path, or clone another repo where an old one was, devvm refuses to give the new folder the old folder's VM, so the new folder never quietly gets what's in the old VM's disk. `devvm rm` deletes the old VM and `devvm adopt` gives it to the new folder, and each does so only after you confirm ([a folder made again](../getting-started/commands.md#a-folder-made-again)).
+A VM belongs to the folder it was made for, which devvm knows by its path and by the folder itself: its device and inode, and its birth time where the file system keeps one. When you delete a folder and make it again at the same path, or clone another repo where an old one was, devvm refuses to give the new folder the old folder's VM, so the new folder never quietly gets what's in the old VM's disk. `devvm rm` deletes the old VM and `devvm adopt` gives it to the new folder, and each does so only after you confirm ([a folder made again](../getting-started/commands.md#a-folder-made-again)). When you move or rename the folder, the folder at its new path is the same folder, so devvm offers it the VM, and moves the VM only after you confirm ([a moved or renamed folder](../getting-started/commands.md#a-moved-or-renamed-folder)). It never offers a VM to a copy, to a folder another user owns, or on a file system that may give a new folder the inode number of a deleted one, so a VM never moves to a folder that only looks like its own.
 
 ### A project's devcontainer.json
 

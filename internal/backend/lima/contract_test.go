@@ -50,6 +50,7 @@ func views(t *testing.T, l *Lima) []view {
 	var vs []view
 	for _, in := range ins {
 		v := view{Instance: in.backend(), SSHPort: in.Config.SSH.LocalPort, Networks: len(in.Config.Networks), Starts: map[string][]string{}}
+		v.Instance.Project = home(v.Instance.Project)
 		for i, d := range v.Instance.AgentDirs {
 			v.Instance.AgentDirs[i] = home(d)
 		}

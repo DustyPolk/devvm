@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -23,6 +24,11 @@ func FolderID(path string) (string, error) {
 	}
 	return id, nil
 }
+
+// UniqueFolderID reports whether id, the FolderID of the folder at path,
+// is that folder's alone, never a deleted one's: it has the folder's
+// birth time, as an inode number alone is used again.
+func UniqueFolderID(_, id string) bool { return strings.Count(id, ":") == 2 }
 
 // HasImmutableFlag reports whether this system has a user-immutable flag:
 // Linux's immutable attribute needs root.

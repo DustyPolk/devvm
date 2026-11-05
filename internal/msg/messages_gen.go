@@ -9,9 +9,34 @@ func AddItNow() M {
 	return M{id: "add_it_now"}
 }
 
+// AdoptClone is [adopt_clone]: "{{.vm}} keeps its own clone of its repo at {{.dir}}, so devvm can't move it to another folder."
+func AdoptClone(dir string, vm string) M {
+	return M{id: "adopt_clone", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // AdoptFailed is [adopt_failed]: "Adopting this folder's VM failed: {{.reason}}."
 func AdoptFailed(reason string) M {
 	return M{id: "adopt_failed", vals: []val{{"reason", reason}}}
+}
+
+// AdoptFolderThere is [adopt_folder_there]: "{{.vm}} belongs to {{.dir}}, which is still there, so devvm won't move it here."
+func AdoptFolderThere(dir string, vm string) M {
+	return M{id: "adopt_folder_there", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// AdoptHasVM is [adopt_has_vm]: "This folder has a VM of its own, {{.vm}}, so devvm won't move another one here. To delete it first, run devvm rm."
+func AdoptHasVM(vm string) M {
+	return M{id: "adopt_has_vm", vals: []val{{"vm", vm}}}
+}
+
+// AdoptMoveRefused is [adopt_move_refused]: "To move {{.vm}} to this folder, run devvm adopt {{.vm}} in a terminal to confirm, or devvm adopt {{.vm}} --force."
+func AdoptMoveRefused(vm string) M {
+	return M{id: "adopt_move_refused", vals: []val{{"vm", vm}}}
+}
+
+// AdoptMoveVM is [adopt_move_vm]: "{{.vm}} was made for {{.was}}.\nMove the VM to this folder, with its files, secrets and allowlist? If it's running, it stops first."
+func AdoptMoveVM(vm string, was string) M {
+	return M{id: "adopt_move_vm", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
 // AdoptVM is [adopt_vm]: "This folder's VM, {{.vm}}, was made for an earlier folder at {{.was}}, which was deleted or replaced.\nUse that VM here, with its files, secrets and allowlist?"
@@ -932,6 +957,11 @@ func FlagUnknown(command string, flag string) M {
 // FlagsExclusive is [flags_exclusive]: "{{.flag}} and {{.other}} can't be given together."
 func FlagsExclusive(flag string, other string) M {
 	return M{id: "flags_exclusive", vals: []val{{"flag", flag}, {"other", other}}}
+}
+
+// FolderNextStart is [folder_next_start]: "{{.vm}} mounts its project folder at {{.dir}} when it next starts. Run devvm restart to apply it now."
+func FolderNextStart(dir string, vm string) M {
+	return M{id: "folder_next_start", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
 // FoldersNotPrivate is [folders_not_private]: "The folders {{.data}} and {{.config}} can't be made yours alone, so others may be able to read devvm's files in them. Check that you own both folders."
@@ -1859,6 +1889,16 @@ func MountsUpdated(vm string) M {
 	return M{id: "mounts_updated", vals: []val{{"vm", vm}}}
 }
 
+// MoveFolderChanged is [move_folder_changed]: "The folder at {{.dir}} changed while devvm asked, so devvm didn't move {{.vm}} here. Run the command again."
+func MoveFolderChanged(dir string, vm string) M {
+	return M{id: "move_folder_changed", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// MoveVM is [move_vm]: "{{.vm}} was made for {{.was}}, and that folder moved here.\nMove the VM here, with its files, secrets and allowlist? If it's running, it stops first."
+func MoveVM(vm string, was string) M {
+	return M{id: "move_vm", vals: []val{{"vm", vm}, {"was", was}}}
+}
+
 // MsgBadCount is [msg_bad_count]: "The count must be a whole number, not {{.value}}."
 func MsgBadCount(value string) M {
 	return M{id: "msg_bad_count", vals: []val{{"value", value}}}
@@ -2032,6 +2072,11 @@ func NewerTools(tools string) M {
 // NextStartAgent is [next_start_agent]: "{{.vm}}'s SSH agent forwarding changes only when it starts."
 func NextStartAgent(vm string) M {
 	return M{id: "next_start_agent", vals: []val{{"vm", vm}}}
+}
+
+// NextStartFolder is [next_start_folder]: "{{.vm}} mounts its project folder at {{.dir}} only when it starts."
+func NextStartFolder(dir string, vm string) M {
+	return M{id: "next_start_folder", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
 // NextStartMore is [next_start_more]: "{{.count}} more changes wait for that too."
@@ -2789,11 +2834,6 @@ func RmVMNotConnected(dir string, vm string) M {
 	return M{id: "rm_vm_not_connected", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
-// RmVMStateMismatch is [rm_vm_state_mismatch]: "{{.vm}}'s state says it was made for {{.dir}}, but its name is another folder's, so devvm won't delete it. Check its vm.json, which may have been changed by hand."
-func RmVMStateMismatch(dir string, vm string) M {
-	return M{id: "rm_vm_state_mismatch", vals: []val{{"dir", dir}, {"vm", vm}}}
-}
-
 // RuleAdded is [rule_added]: "devvm added {{.rule}} to {{.vm}}'s rules."
 func RuleAdded(rule string, vm string) M {
 	return M{id: "rule_added", vals: []val{{"rule", rule}, {"vm", vm}}}
@@ -3384,6 +3424,11 @@ func VMLacks(has string, tool string, vm string) M {
 	return M{id: "vm_lacks", vals: []val{{"has", has}, {"tool", tool}, {"vm", vm}}}
 }
 
+// VMMovedHere is [vm_moved_here]: "{{.vm}} was made for {{.was}}, and that folder moved here. To move the VM here, run devvm adopt in a terminal to confirm, or devvm adopt --force."
+func VMMovedHere(vm string, was string) M {
+	return M{id: "vm_moved_here", vals: []val{{"vm", vm}, {"was", was}}}
+}
+
 // VMNameNoRoom is [vm_name_no_room]: "The {{.backend}} backend's VM names have at most {{.max}} characters, which leaves no room for the folder's name."
 func VMNameNoRoom(backend string, max string) M {
 	return M{id: "vm_name_no_room", vals: []val{{"backend", backend}, {"max", max}}}
@@ -3434,6 +3479,11 @@ func VMUnfinished(vm string) M {
 	return M{id: "vm_unfinished", vals: []val{{"vm", vm}}}
 }
 
+// VMsMovedHere is [vms_moved_here]: "These VMs were each made for this folder at another path, so devvm moves none of them here: {{.vms}}. To move one here, run devvm adopt VM."
+func VMsMovedHere(vms string) M {
+	return M{id: "vms_moved_here", vals: []val{{"vms", vms}}}
+}
+
 // VMsStray is [vms_stray]: "{{.path}} isn't a VM's folder, so devvm doesn't use it. Move it out of {{.vms}}, or delete it."
 func VMsStray(path string, vms string) M {
 	return M{id: "vms_stray", vals: []val{{"path", path}, {"vms", vms}}}
@@ -3457,7 +3507,12 @@ func WidenParentVMRefused(cmd string, dir string, vm string) M {
 // specs describes every message, by ID.
 var specs = map[string]spec{
 	"add_it_now":                       {},
+	"adopt_clone":                      {fields: []string{"dir", "vm"}},
 	"adopt_failed":                     {fields: []string{"reason"}},
+	"adopt_folder_there":               {fields: []string{"dir", "vm"}},
+	"adopt_has_vm":                     {fields: []string{"vm"}},
+	"adopt_move_refused":               {fields: []string{"vm"}},
+	"adopt_move_vm":                    {fields: []string{"vm", "was"}},
 	"adopt_vm":                         {fields: []string{"vm", "was"}},
 	"agent_already":                    {fields: []string{"mode", "vm"}},
 	"agent_confirm_needs_askpass":      {},
@@ -3642,6 +3697,7 @@ var specs = map[string]spec{
 	"flag_needs_value":                 {fields: []string{"flag", "form"}},
 	"flag_unknown":                     {fields: []string{"command", "flag"}},
 	"flags_exclusive":                  {fields: []string{"flag", "other"}},
+	"folder_next_start":                {fields: []string{"dir", "vm"}},
 	"folders_not_private":              {fields: []string{"config", "data"}},
 	"force_needed":                     {fields: []string{"command"}},
 	"forgot_orphan":                    {fields: []string{"vm"}},
@@ -3827,6 +3883,8 @@ var specs = map[string]spec{
 	"mount_comma":                      {fields: []string{"path"}},
 	"mounts_next_start":                {fields: []string{"vm"}},
 	"mounts_updated":                   {fields: []string{"vm"}},
+	"move_folder_changed":              {fields: []string{"dir", "vm"}},
+	"move_vm":                          {fields: []string{"vm", "was"}},
 	"msg_bad_count":                    {fields: []string{"value"}},
 	"msg_missing_value":                {fields: []string{"key", "name"}},
 	"msg_not_pair":                     {fields: []string{"arg"}},
@@ -3862,6 +3920,7 @@ var specs = map[string]spec{
 	"new_vm_gets":                      {fields: []string{"layers", "tools", "vm"}},
 	"newer_tools":                      {fields: []string{"tools"}},
 	"next_start_agent":                 {fields: []string{"vm"}},
+	"next_start_folder":                {fields: []string{"dir", "vm"}},
 	"next_start_more":                  {plural: true, fields: []string{"count"}},
 	"next_start_mounts":                {fields: []string{"vm"}},
 	"next_start_net_off":               {fields: []string{"vm"}},
@@ -4013,7 +4072,6 @@ var specs = map[string]spec{
 	"rm_vm_folder_there":               {fields: []string{"dir", "vm"}},
 	"rm_vm_lost":                       {fields: []string{"vm"}},
 	"rm_vm_not_connected":              {fields: []string{"dir", "vm"}},
-	"rm_vm_state_mismatch":             {fields: []string{"dir", "vm"}},
 	"rule_added":                       {fields: []string{"rule", "vm"}},
 	"rule_added_global":                {fields: []string{"rule"}},
 	"rule_missing":                     {fields: []string{"file", "rule"}},
@@ -4132,6 +4190,7 @@ var specs = map[string]spec{
 	"vm_folder_stateless":              {fields: []string{"path"}},
 	"vm_has_networks":                  {fields: []string{"file", "vm"}},
 	"vm_lacks":                         {fields: []string{"has", "tool", "vm"}},
+	"vm_moved_here":                    {fields: []string{"vm", "was"}},
 	"vm_name_no_room":                  {fields: []string{"backend", "max"}},
 	"vm_not_running":                   {fields: []string{"vm"}},
 	"vm_other_folder":                  {fields: []string{"vm", "was"}},
@@ -4142,6 +4201,7 @@ var specs = map[string]spec{
 	"vm_state_unreadable":              {fields: []string{"path"}},
 	"vm_tools_now":                     {fields: []string{"tools", "vm"}},
 	"vm_unfinished":                    {fields: []string{"vm"}},
+	"vms_moved_here":                   {fields: []string{"vms"}},
 	"vms_stray":                        {fields: []string{"path", "vms"}},
 	"vms_unreadable":                   {fields: []string{"path"}},
 	"widen_parent_vm":                  {fields: []string{"cmd", "dir", "vm"}},

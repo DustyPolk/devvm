@@ -991,10 +991,6 @@ other = "There's no VM named {{.name}}. Give a VM's name, as devvm ls lists them
 description = "dir is the folder vm was made for, which is still there"
 other = "{{.vm}} was made for {{.dir}}, which is still there. To delete it, run devvm rm in {{.dir}}."
 
-[rm_vm_state_mismatch]
-description = "dir is the folder vm's state records, which isn't the folder vm's name was made for"
-other = "{{.vm}}'s state says it was made for {{.dir}}, but its name is another folder's, so devvm won't delete it. Check its vm.json, which may have been changed by hand."
-
 [rm_vm_lost]
 other = "{{.vm}}'s backend no longer has it. Run devvm gc --orphans to delete what devvm keeps for it."
 
@@ -1026,6 +1022,40 @@ other = "This folder's VM, {{.vm}}, was made for an earlier folder at {{.was}}, 
 
 [vm_adopted]
 other = "{{.vm}} belongs to {{.dir}} now."
+
+[move_vm]
+description = "was is the path vm's project folder had, which is gone; the folder devvm runs in is that folder, moved"
+other = "{{.vm}} was made for {{.was}}, and that folder moved here.\nMove the VM here, with its files, secrets and allowlist? If it's running, it stops first."
+
+[vm_moved_here]
+description = "was is the path vm's project folder had; the folder devvm runs in is that folder, moved"
+other = "{{.vm}} was made for {{.was}}, and that folder moved here. To move the VM here, run devvm adopt in a terminal to confirm, or devvm adopt --force."
+
+[vms_moved_here]
+description = "vms is a comma-separated list of VM names, each made for the folder devvm runs in at a path it had before"
+other = "These VMs were each made for this folder at another path, so devvm moves none of them here: {{.vms}}. To move one here, run devvm adopt VM."
+
+[adopt_move_vm]
+description = "was is the path vm's project folder had, which is gone or on a disk that isn't connected"
+other = "{{.vm}} was made for {{.was}}.\nMove the VM to this folder, with its files, secrets and allowlist? If it's running, it stops first."
+
+[move_folder_changed]
+description = "dir is the folder devvm runs in, which another folder replaced while devvm asked"
+other = "The folder at {{.dir}} changed while devvm asked, so devvm didn't move {{.vm}} here. Run the command again."
+
+[adopt_move_refused]
+other = "To move {{.vm}} to this folder, run devvm adopt {{.vm}} in a terminal to confirm, or devvm adopt {{.vm}} --force."
+
+[adopt_folder_there]
+description = "dir is the folder vm was made for, which is still there"
+other = "{{.vm}} belongs to {{.dir}}, which is still there, so devvm won't move it here."
+
+[adopt_has_vm]
+other = "This folder has a VM of its own, {{.vm}}, so devvm won't move another one here. To delete it first, run devvm rm."
+
+[adopt_clone]
+description = "dir is where vm keeps its own clone of the repo, in the VM"
+other = "{{.vm}} keeps its own clone of its repo at {{.dir}}, so devvm can't move it to another folder."
 
 [vm_already_here]
 other = "{{.vm}} already belongs to this folder."
@@ -2154,6 +2184,10 @@ other = "{{.vm}}'s agent folder mounts change only when it starts."
 [next_start_net_off]
 other = "{{.vm}}'s network policy turns off only when it starts."
 
+[next_start_folder]
+description = "dir is vm's project folder, which moved there"
+other = "{{.vm}} mounts its project folder at {{.dir}} only when it starts."
+
 [next_start_more]
 description = "after the first change a launch names, how many more wait for the VM's next start"
 one = "{{.count}} more change waits for that too."
@@ -2166,6 +2200,10 @@ other = "Restarting {{.vm}} applies the changes now, and anything running in it 
 
 [mounts_next_start]
 other = "{{.vm}}'s agent folder mounts change when it next starts."
+
+[folder_next_start]
+description = "dir is vm's project folder, which moved there"
+other = "{{.vm}} mounts its project folder at {{.dir}} when it next starts. Run devvm restart to apply it now."
 
 [mounts_updated]
 other = "updated {{.vm}}'s agent folder mounts"

@@ -1,0 +1,78 @@
+# A moved or renamed project folder keeps its VM, only after a yes in a
+# terminal or devvm adopt --force: without either every command on the
+# folder's VM refuses, naming devvm adopt. Once moved, the VM is found by
+# the folder its state records, from the new path alone, and its next
+# start mounts the folder there. devvm adopt VM moves a VM whose folder
+# is gone to a copy of it, which is never offered on its own.
+project web
+exec devvm --no-network-policy
+vm_name WEB web
+exec devvm stop
+cd $WORK
+mv web site
+cd site
+
+# Without a terminal: refused, nothing changed.
+stub_reset
+! exec devvm
+stderr '^devvm: vm_moved_here vm=devvm-web-[0-9a-f]{14} was=/\S*/web$'
+! exec devvm stop
+stderr '^devvm: vm_moved_here vm=devvm-web-[0-9a-f]{14} was=/\S*/web$'
+stub_calls
+! stdout 'limactl (start|stop|edit|clone|delete)'
+vm_state $WEB_dir/vm.json
+stdout '^dir=/\S*/web$'
+
+# A no in a terminal: the folder has no VM.
+ttyin -stdin $WORK/no.txt
+! exec devvm stop
+stderr '^move_vm vm=devvm-web-[0-9a-f]{14} was=/\S*/web \[y/N\] devvm: no_vm dir=/\S*/site$'
+vm_state $WEB_dir/vm.json
+stdout '^dir=/\S*/web$'
+
+# A yes: the VM's state records this folder.
+ttyin -stdin $WORK/yes.txt
+exec devvm stop
+stdout '==> vm_adopted dir=/\S*/site vm=devvm-web-[0-9a-f]{14}$'
+stdout '==> already_stopped vm=devvm-web-[0-9a-f]{14}$'
+vm_state $WEB_dir/vm.json
+stdout '^dir=/\S*/site$'
+
+# Found by that folder from then on, asking nothing; its start mounts the
+# folder where it is now, in the one edit.
+stub_reset
+exec devvm
+! stderr 'vm_moved_here|move_vm'
+stub_calls
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.mounts = \[\{"location":"/\S*/site","writable":true\}'
+stdout '^limactl shell --workdir /\S*/site devvm-web-[0-9a-f]{14}\n\z'
+exec devvm ls --json
+stdout '"folder": "/\S*/site",'
+
+# A new folder at the old path gets a VM of its own, by another name.
+cd $WORK
+mkdir web
+cd web
+exec devvm --no-network-policy
+exec devvm ls
+stdout -count=2 '^devvm-web-[0-9a-f]{14} '
+
+# devvm adopt VM: a copy of the folder, as on another disk, is another
+# folder, never offered; adopt moves the VM there once its folder is gone.
+cd $WORK
+exec cp -R site copy
+cd copy
+! exec devvm stop
+stderr '^devvm: no_vm dir=/\S*/copy$'
+! exec devvm adopt $WEB --force
+stderr '^devvm: adopt_folder_there dir=/\S*/site vm=devvm-web-[0-9a-f]{14}$'
+rm $WORK/site
+exec devvm adopt $WEB --force
+stdout '==> vm_adopted dir=/\S*/copy vm=devvm-web-[0-9a-f]{14}$'
+vm_state $WEB_dir/vm.json
+stdout '^dir=/\S*/copy$'
+
+-- yes.txt --
+y
+-- no.txt --
+n

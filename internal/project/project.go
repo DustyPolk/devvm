@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -41,8 +42,9 @@ func (f Folder) Slug() string {
 
 // Hash is the hash of dir, a physical path, that its VM's name ends with
 // (vmname.HashOf): 56 bits of its SHA-1, in hex. It names the VM's folder
-// in devvm's data folder, so a folder's VM is found by its path alone,
-// whatever name its backend gave it.
+// in devvm's data folder, so a folder's VM is found by its path,
+// whatever name its backend gave it, unless the VM's folder moved there
+// or away (Nth): its state, which records its folder, says then.
 func Hash(dir string) string {
 	sum := sha1.Sum([]byte(dir)) //nolint:gosec // see the import
 	return hex.EncodeToString(sum[:])[:vmname.HashLen]
@@ -54,14 +56,23 @@ func IsPath(target string) bool {
 	return strings.Contains(target, "/") || strings.HasPrefix(target, ".")
 }
 
-// ForDir returns the project VMs among all (VM names) made for dir, a
-// physical path: those whose name ends with its path's hash, whatever
-// length of its folder's name their backend gave them.
-func ForDir(dir string, all []string) []string {
+// hashNth is the hash of dir that the nth VM name made for it ends with
+// (Nth): Hash for the first, then the hash of dir and n.
+func hashNth(dir string, n int) string {
+	if n == 0 {
+		return Hash(dir)
+	}
+	return Hash(dir + "\x00" + strconv.Itoa(n))
+}
+
+// ForDir returns the project VMs among vms whose state records dir, a
+// physical path, as their folder: the VM made for it, or one whose folder
+// moved there, whatever its name.
+func ForDir(dir string, vms []Recorded) []string {
 	var out []string
-	for _, vm := range all {
-		if h, ok := vmname.HashOf(vm); ok && h == Hash(dir) {
-			out = append(out, vm)
+	for _, v := range vms {
+		if vmname.IsVM(v.Name) && v.Dir == dir {
+			out = append(out, v.Name)
 		}
 	}
 	return out
@@ -116,7 +127,13 @@ func (e *BadPathError) Error() string { return "can't mount " + e.Dir }
 
 // New returns the project folder at dir, a physical path, and its VM's
 // name, fitting nameMax characters (0 for no limit).
-func New(dir string, nameMax int) (Folder, error) {
+func New(dir string, nameMax int) (Folder, error) { return Nth(dir, nameMax, 0) }
+
+// Nth is New with the nth name a VM for dir can have, from 0, each
+// ending with a hash of its own (hashNth): a VM whose folder moved away
+// from dir keeps its name, and so its folder in devvm's data folder, so
+// a new VM for dir takes the next name.
+func Nth(dir string, nameMax, n int) (Folder, error) {
 	if strings.Contains(dir, ",") || strings.IndexFunc(dir, unicode.IsControl) >= 0 {
 		return Folder{}, &BadPathError{Dir: dir}
 	}
@@ -127,7 +144,7 @@ func New(dir string, nameMax int) (Folder, error) {
 	if room < slugMin {
 		return Folder{}, ErrNoRoom
 	}
-	return Folder{Dir: dir, Name: vmname.Prefix + Slug(filepath.Base(dir), room) + "-" + Hash(dir)}, nil
+	return Folder{Dir: dir, Name: vmname.Prefix + Slug(filepath.Base(dir), room) + "-" + hashNth(dir, n)}, nil
 }
 
 // Slug is a folder's name as it goes into its VM's name: lowercase, each

@@ -348,12 +348,16 @@ type Built struct {
 
 // Want is what of a VM can change after it's made: CreateVM makes it so,
 // and each Start of the stopped VM makes it so again where it differs.
-// Agent folders are mounted at the same path in the VM as on the host.
+// The project folder and agent folders are mounted at the same path in
+// the VM as on the host.
 type Want struct {
 	// Size is its CPUs, memory and disk: zero fields are left as they
 	// are (the image's, when it's made). A disk only grows: a smaller
 	// one is refused (Validate).
-	Size      Size
+	Size Size
+	// Project is the project folder, read-write; "" for none (--clone).
+	// It changes when the folder moved (vm's finder moves the VM with it).
+	Project   string
 	AgentDirs []string // agents' host folders, read-only
 	// AgentForwarding is whether the VM forwards an ssh-agent; changing
 	// it once the VM is made needs FeatureAgentToggle.
@@ -382,6 +386,7 @@ func Apply(in *Instance, w Want) {
 	if w.Size.DiskGiB > 0 {
 		in.Size.DiskGiB = w.Size.DiskGiB
 	}
+	in.Project = w.Project
 	in.AgentDirs = slices.Clone(w.AgentDirs)
 	in.AgentForwarding = w.AgentForwarding
 }
@@ -393,8 +398,7 @@ func gibText(g float64) string { return strconv.FormatFloat(g, 'g', -1, 64) }
 // at the same path in the VM as on the host, except the tools share.
 type VMSpec struct {
 	Want
-	Name    string
-	Project string // the project folder, read-write; "" for none (--clone)
+	Name string
 	// CloneAt is where a --clone VM keeps its own clone of the project (the
 	// folder's path); "" for a VM that mounts the folder. A backend may keep
 	// it on a disk of its own.
@@ -490,6 +494,7 @@ type Instance struct {
 	Name            string
 	Status          Status
 	Size            Size     // what it has, all set
+	Project         string   // its project folder's mount; "" for none
 	AgentDirs       []string // its agent folder mounts
 	AgentForwarding bool
 }

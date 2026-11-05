@@ -123,20 +123,34 @@ func TestTargets(t *testing.T) {
 	if got := Targets("web", []Recorded{{Name: web.Name}}); !slices.Equal(got, []string{web.Name}) {
 		t.Errorf("Targets(web) without a folder = %q", got)
 	}
-	all := []string{web.Name, web2.Name, api.Name, longVM.Name, "devvm-img-0123456789ab", "devvm-tools-build"}
 	for _, p := range []string{"./web", "../web", "/a/web", "a/b", ".hidden"} {
 		if !IsPath(p) {
 			t.Errorf("IsPath(%q) = false", p)
 		}
 	}
-	if got := ForDir("/a/web", all); !slices.Equal(got, []string{web.Name}) {
-		t.Errorf("ForDir(/a/web) = %q", got)
+	// A path matches the VM whose state records it, whatever its name: a
+	// VM whose folder moved there from /m/old is found at its new path,
+	// and never at the one its name was made for.
+	moved, _ := New("/m/old", 0)
+	all := append(slices.Clone(vms), Recorded{moved.Name, moved.Name, "/m/new"})
+	for dir, want := range map[string][]string{
+		"/a/web": {web.Name}, "/c/web": nil, "/m/new": {moved.Name}, "/m/old": nil, "": nil,
+	} {
+		if got := ForDir(dir, all); !slices.Equal(got, want) {
+			t.Errorf("ForDir(%q) = %q, want %q", dir, got, want)
+		}
 	}
-	if got := ForDir(long, []string{cut.Name, web.Name}); !slices.Equal(got, []string{cut.Name}) {
+	if got := ForDir(long, []Recorded{{cut.Name, "", long}, {web.Name, "", "/a/web"}}); !slices.Equal(got, []string{cut.Name}) {
 		t.Errorf("ForDir(%s) = %q, want the VM with its name cut, %s", long, got, cut.Name)
 	}
-	if got := ForDir("/c/web", all); got != nil {
-		t.Errorf("ForDir(/c/web) = %q, want none", got)
+	// A VM's later names for one folder each end with a hash of their own.
+	second, err := Nth("/a/web", 0, 1)
+	third, _ := Nth("/a/web", 0, 2)
+	if err != nil || second.Dir != "/a/web" || second.Name == web.Name || second.Name == third.Name || second.Slug() != "web" {
+		t.Errorf("Nth(/a/web, 1) = %+v, %v; 2: %+v; New: %+v", second, err, third, web)
+	}
+	if h, _ := vmname.HashOf(second.Name); !vmname.IsHash(h) || h == Hash("/a/web") {
+		t.Errorf("Nth(/a/web, 1)'s hash = %q", h)
 	}
 	// The hash a folder's VM is found by ends its name, whatever its
 	// backend cut of the folder's name.

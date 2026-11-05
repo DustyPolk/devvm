@@ -137,9 +137,9 @@ func scenario(fx fixture) []step {
 		}
 	}
 	made := backend.Want{
-		AgentDirs: fx.agents, AgentForwarding: true, Size: backend.Size{CPUs: 3, MemoryGiB: 5, DiskGiB: 120},
+		Project: fx.project, AgentDirs: fx.agents, AgentForwarding: true, Size: backend.Size{CPUs: 3, MemoryGiB: 5, DiskGiB: 120},
 	}
-	changed := backend.Want{AgentDirs: fx.agents[:min(1, len(fx.agents))], Size: backend.Size{CPUs: 4, MemoryGiB: 6.5, DiskGiB: 130}}
+	changed := backend.Want{Project: fx.project, AgentDirs: fx.agents[:min(1, len(fx.agents))], Size: backend.Size{CPUs: 4, MemoryGiB: 6.5, DiskGiB: 130}}
 	proxy := backend.Confinement{
 		Net: backend.NetProxy, ProxyPort: 3128, ProxyPassword: "pAss-0123_word",
 		Env: map[string]string{"NODE_EXTRA_CA_CERTS": "/etc/ssl/devvm.pem", "NO_PROXY": "localhost,127.0.0.1,::1"},
@@ -187,7 +187,7 @@ func scenario(fx fixture) []step {
 		}},
 		{"a project VM", func(ctx context.Context, l *Lima) error {
 			return l.CreateVM(ctx, strings.TrimPrefix(dummyLayer, ImagePrefix), backend.VMSpec{
-				Name: dummyVM, Project: fx.project, Tools: fx.tools, ToolsAt: "/mnt/devvm-tools",
+				Name: dummyVM, Tools: fx.tools, ToolsAt: "/mnt/devvm-tools",
 				Want: made, SSHPort: sshPort, Env: env,
 			})
 		}},

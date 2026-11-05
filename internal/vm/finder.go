@@ -3,6 +3,7 @@ package vm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,6 +38,9 @@ type target struct {
 	// other: it was made for an earlier folder at f.Dir, deleted and made
 	// again since (sameFolder).
 	other bool
+	// moved: the finder moved it here, from the path its folder had
+	// (finder.moveHere).
+	moved bool
 	// sub is the folder devvm runs in when the VM is a parent folder's
 	// (f.Dir), and so mounts it at the same path; "" when it's this
 	// folder's own.
@@ -66,7 +70,20 @@ type need struct {
 	// noVM is the refusal of a VM that hasn't what has asks, by the
 	// folder: msg.NoVM when nil.
 	noVM func(dir string) msg.M
+	// move is whether a VM whose folder moved here, found for a folder
+	// without one, is moved here (moveHere): after asking, by default.
+	move moves
 }
+
+// moves is how the finder moves a VM whose folder moved to the folder
+// devvm runs in (moveHere).
+type moves int
+
+const (
+	moveAsk   moves = iota // after asking in a terminal, [y/N]; without one it refuses
+	moveForce              // without asking (devvm adopt --force)
+	moveNone               // never: the folder has no VM then
+)
 
 // has is how much of the VM a need asks to be there.
 type has int
@@ -116,9 +133,9 @@ func (e finder) target(ctx context.Context, n need) (*target, error) {
 	case n.name != "":
 		t, err = e.named(ctx, n.name)
 	case n.own:
-		t, err = e.own(ctx)
+		t, err = e.own(ctx, n.move)
 	default:
-		t, err = e.folders(ctx)
+		t, err = e.folders(ctx, n.move)
 	}
 	if err != nil {
 		return nil, err
@@ -178,9 +195,10 @@ func (e finder) dir() (string, error) {
 // folders finds the folder's VM, which needn't exist, with the backend
 // that has it or would make it: the folder's own (own) or the nearest
 // parent folder's, as resolveFolder decides under e.Folder, a parent's
-// said in an info line first.
-func (e finder) folders(ctx context.Context) (*target, error) {
-	t, err := e.own(ctx)
+// said in an info line first. A VM whose folder moved here is its own,
+// once moved as mv says.
+func (e finder) folders(ctx context.Context, mv moves) (*target, error) {
+	t, err := e.own(ctx, mv)
 	if err != nil {
 		return nil, err
 	}
@@ -227,52 +245,72 @@ func resolveFolder(dir string, own bool, rule FolderRule, parent func() (*target
 }
 
 // own finds the folder's own VM, which needn't exist, never a parent
-// folder's. A folder's VM is found by its path's hash (project.Hash),
-// which names its folder in devvm's data folder: one that exists has the
-// name and the backend its state records, whichever backend is asked now.
-// Only a new VM gets a name, fitting its backend's.
-func (e finder) own(ctx context.Context) (*target, error) {
+// folder's: the VM whose state records the folder (state), else one
+// whose folder moved here, moved here as mv says (moveHere). One that
+// exists has the name and the backend its state records, whichever
+// backend is asked now. Only a new VM gets a name, fitting its backend's.
+func (e finder) own(ctx context.Context, mv moves) (*target, error) {
 	dir, err := e.dir()
 	if err != nil {
 		return nil, err
 	}
-	f, st, err := e.state(dir)
+	var rec recorded
+	f, st, err := e.state(dir, &rec)
+	if err != nil {
+		return nil, err
+	}
+	moved := false
+	if !st.Exists() && mv != moveNone {
+		if f, st, err = e.moveHere(ctx, dir, mv, &rec); err != nil {
+			return nil, err
+		}
+		moved = st.Exists()
+	}
+	if !st.Exists() {
+		if f, st, err = e.newName(dir); err != nil {
+			return nil, err
+		}
+	}
+	t, err := e.inspect(ctx, f, st)
+	if t != nil {
+		t.moved = moved
+	}
+	return t, err
+}
+
+// again finds t, the folder's own VM, found before (own), again when its
+// state changed since: another devvm made it, finished making it, moved
+// it here or deleted it meanwhile. One whose state is as it was is t, as
+// it was; one found again is refused as up's target is
+// (vm_other_folder). It never moves a VM here itself.
+func (e finder) again(ctx context.Context, t *target) (*target, error) {
+	_, st, err := e.state(t.f.Dir, new(recorded))
 	if err != nil {
 		return nil, err
 	}
 	if !st.Exists() {
-		if f, err = e.newName(dir); err != nil {
+		// A new VM's state, as own found it.
+		if st, err = state.ReadVM(e.Dirs, t.f.Name); err != nil {
 			return nil, err
 		}
-		if st, err = state.ReadVM(e.Dirs, f.Name); err != nil {
-			return nil, err
-		}
-	}
-	return e.inspect(ctx, f, st)
-}
-
-// again finds t, the folder's own VM, found before (own), again when its
-// state changed since: another devvm made it, finished making it or
-// deleted it meanwhile. One whose state is as it was is t, as it was;
-// one found again is refused as up's target is (vm_other_folder).
-func (e finder) again(ctx context.Context, t *target) (*target, error) {
-	st, err := state.ReadHash(e.Dirs, project.Hash(t.f.Dir))
-	if err != nil {
-		return nil, err
 	}
 	if sameCreation(st, t.st) {
 		return t, nil
 	}
-	n, err := e.own(ctx)
+	n, err := e.own(ctx, moveNone)
 	if err != nil {
 		return nil, err
 	}
 	return n, need{folder: true}.check(n)
 }
 
-// state reads the state of dir's VM, by its path's hash, and returns the
-// folder with the name it records ("" for none).
-func (e finder) state(dir string) (project.Folder, *state.VM, error) {
+// state reads the state of dir's VM and returns the folder with the name
+// it records ("" for none): the state in the VM folder its path's hash
+// names (project.Hash), when it records dir, else the state that records
+// dir (rec: a VM whose folder moved here, or a new VM's whose first name
+// another VM's folder moved away with). A VM whose folder moved away from
+// dir is no VM of dir's.
+func (e finder) state(dir string, rec *recorded) (project.Folder, *state.VM, error) {
 	if _, err := project.New(dir, 0); err != nil {
 		if bad, ok := errors.AsType[*project.BadPathError](err); ok {
 			return project.Folder{}, nil, msg.BadPath(bad.Dir)
@@ -280,6 +318,14 @@ func (e finder) state(dir string) (project.Folder, *state.VM, error) {
 		return project.Folder{}, nil, err
 	}
 	st, err := state.ReadHash(e.Dirs, project.Hash(dir))
+	if err == nil && (!st.Exists() || st.Dir != dir) {
+		var at *state.VM
+		if at, err = rec.at(e.Dirs, dir); at != nil {
+			st = at
+		} else if err == nil && st.Exists() {
+			st = new(state.VM)
+		}
+	}
 	if err == nil {
 		err = checkState(st)
 	}
@@ -289,19 +335,34 @@ func (e finder) state(dir string) (project.Folder, *state.VM, error) {
 	return project.Folder{Dir: dir, Name: st.Name()}, st, nil
 }
 
-// newName is the name a new VM for dir gets: fitting the names of the
-// backend it would be made on.
-func (e finder) newName(dir string) (project.Folder, error) {
+// maxNames is how many names (project.Nth) newName tries for a folder.
+const maxNames = 100
+
+// newName is the name a new VM for dir gets, with its state, which
+// doesn't exist: fitting the names of the backend it would be made on,
+// and the first whose VM folder holds no state (project.Nth), as a VM
+// whose folder moved away from dir keeps its own.
+func (e finder) newName(dir string) (project.Folder, *state.VM, error) {
 	first, err := e.Registry.For(new(state.VM))
 	if err != nil {
-		return project.Folder{}, err
+		return project.Folder{}, nil, err
 	}
 	nameMax := first.Backend.NameMax()
-	f, err := project.New(dir, nameMax)
-	if errors.Is(err, project.ErrNoRoom) {
-		return project.Folder{}, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(nameMax))
+	for n := range maxNames {
+		f, err := project.Nth(dir, nameMax, n)
+		if errors.Is(err, project.ErrNoRoom) {
+			return project.Folder{}, nil, msg.VMNameNoRoom(first.Backend.Name(), strconv.Itoa(nameMax))
+		} else if err != nil {
+			return project.Folder{}, nil, err
+		}
+		h, _ := vmname.HashOf(f.Name)
+		if held, err := state.ReadHash(e.Dirs, h); err != nil || held.Exists() {
+			continue // another folder's VM, or a state that can't be read
+		}
+		st, err := state.ReadVM(e.Dirs, f.Name)
+		return f, st, err
 	}
-	return f, err
+	return project.Folder{}, nil, fmt.Errorf("no free VM name for %s", dir)
 }
 
 // parentVM finds the VM of the nearest parent folder with state of its own
@@ -321,11 +382,12 @@ func (e finder) parentVM(ctx context.Context) (*target, error) {
 	if hasGit(here) {
 		repo = here
 	}
+	var rec recorded
 	for _, dir := range project.Parents(here, e.Dirs.Home) {
 		if _, err := project.New(dir, 0); err != nil {
 			continue // a folder no VM can be made for
 		}
-		pf, pst, err := e.state(dir)
+		pf, pst, err := e.state(dir, &rec)
 		if err != nil {
 			return nil, err
 		}
@@ -349,9 +411,9 @@ func (e finder) parentVM(ctx context.Context) (*target, error) {
 }
 
 // named finds the project VM name names, by its name or its ssh alias,
-// in the folder its state records. It refuses a state whose folder isn't
-// the one its name was made for (its path's hash): a changed vm.json
-// never sends devvm rm VM to another folder's VM.
+// in the folder its state records, which may be another path than the
+// one its name was made for, once its folder moved. Whether it is that
+// folder's VM is sameFolder's: its path and the folder itself.
 func (e finder) named(ctx context.Context, name string) (*target, error) {
 	inv, err := ReadStates(e.Dirs)
 	if err != nil {
@@ -365,10 +427,18 @@ func (e finder) named(ctx context.Context, name string) (*target, error) {
 	if err != nil {
 		return nil, err
 	}
-	if h, _ := vmname.HashOf(vm); st.Dir != "" && project.Hash(st.Dir) != h {
-		return nil, msg.RmVMStateMismatch(st.Dir, vm)
-	}
 	return e.inspect(ctx, project.Folder{Dir: st.Dir, Name: vm}, st)
+}
+
+// folderVM is the name of the VM the folder dir has of its own (state),
+// "" for none: devvm rm VM checks it's the VM it names before it acts
+// on the folder's.
+func (e finder) folderVM(dir string) (string, error) {
+	_, st, err := e.state(dir, new(recorded))
+	if err != nil {
+		return "", err
+	}
+	return st.Name(), nil
 }
 
 // hasGit reports whether dir has a .git of its own: a repo, or a

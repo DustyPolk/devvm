@@ -94,7 +94,7 @@ A project VM's name is `devvm-<folder>-<hash>`. The folder part is up to 20 char
 
 A backend may need shorter names, and then devvm cuts the folder's part to fit. When fewer than 4 characters of it would fit, devvm refuses (`vm_name_no_room`). On Lima the room for a name depends on the Lima home's path, because Lima keeps each VM's ssh socket under it, so there the fix is a shorter Lima home (`lima_home_too_long`, [limits](../backends/lima.md#limits)).
 
-Only a new VM gets a name, which fits the limit of the backend that makes it. devvm finds a folder's VM by the hash of the folder's path, which also names the VM's folder in devvm's data folder (`vms/<hash>/`), so an existing VM keeps the name and the backend its state records, whichever backend new VMs get.
+Only a new VM gets a name, which fits the limit of the backend that makes it. devvm finds a folder's VM by the state that records the folder's path, in the VM's folder in devvm's data folder (`vms/<hash>/`, named by the hash that ends the VM's name), so an existing VM keeps the name and the backend its state records, whichever backend new VMs get, and keeps them when its folder moves ([a moved folder](overview.md#a-moved-folder)).
 
 ## Which backends a launch asks
 

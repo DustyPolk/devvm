@@ -56,7 +56,7 @@ devvm [flags]
 
 ## See also
 
-- [devvm adopt](devvm_adopt.md): Use the VM made for an earlier folder at this path here
+- [devvm adopt](devvm_adopt.md): Give this folder the VM made for an earlier folder or path
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm clone](devvm_clone.md): Show or change whether this folder's VM has its own clone of the repo
 - [devvm code](devvm_code.md): Open this folder's VM in VS Code over Remote-SSH

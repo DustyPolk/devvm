@@ -51,10 +51,19 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 // Adopt gives the folder the VM made for an earlier folder at its path,
 // after asking in a terminal, or with force (--force): its files, tokens
 // and allowlist. Its .git is locked as new at its next launch. Only the
-// VM named for this path is adopted, never a parent folder's.
-func (e Lifecycle) Adopt(ctx context.Context, force bool) error {
-	t, err := e.finder.target(ctx, need{own: true, has: hasMachine})
-	if err != nil {
+// VM of this path is adopted, never a parent folder's. A VM whose folder
+// moved here is moved here (finder.moveHere), --force answering its
+// question too. With name, it's that VM (finder.adoptVM).
+func (e Lifecycle) Adopt(ctx context.Context, name string, force bool) error {
+	if name != "" {
+		return e.finder.adoptVM(ctx, name, force)
+	}
+	mv := moveAsk
+	if force {
+		mv = moveForce
+	}
+	t, err := e.finder.target(ctx, need{own: true, has: hasMachine, move: mv})
+	if err != nil || t.moved {
 		return err
 	}
 	vm, st := t.f.Name, t.st
@@ -185,16 +194,25 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 // make its folder again as it starts (its backend makes a missing mount's
 // folder), so it's refused instead, unless it's a --clone VM, which
 // mounts none. A --clone VM's work can't be fetched into a repo that's
-// gone, so it's deleted only with --no-clone-check. A VM whose state
-// records a folder its name wasn't made for is refused.
+// gone, so it's deleted only with --no-clone-check. A VM that records
+// this folder but isn't this folder's own (a vm.json changed by hand) is
+// one whose folder is there, refused.
 func (e Lifecycle) RmVM(ctx context.Context, name string, o RmOptions) error {
 	t, err := e.finder.target(ctx, need{name: name})
 	if err != nil {
 		return err
 	}
 	vm, st := t.f.Name, t.st
+	// This folder's own VM, when it's the VM named: never another VM
+	// that records this folder.
 	if here, err := e.finder.dir(); err == nil && st.Dir == here {
-		return e.Rm(ctx, o)
+		own, err := e.finder.folderVM(here)
+		if err != nil {
+			return err
+		}
+		if own == vm {
+			return e.Rm(ctx, o)
+		}
 	}
 	folder := FolderOf(st)
 	if folder == FolderThere {

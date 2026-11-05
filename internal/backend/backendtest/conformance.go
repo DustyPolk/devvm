@@ -160,8 +160,8 @@ func spec(s Subject, name string) (backend.VMSpec, error) {
 			return backend.VMSpec{}, err
 		}
 	}
-	return backend.VMSpec{Name: name, Project: project, Want: backend.Want{
-		Size: backend.Size{CPUs: 3, MemoryGiB: 5}, AgentDirs: []string{agent}, AgentForwarding: true,
+	return backend.VMSpec{Name: name, Want: backend.Want{
+		Size: backend.Size{CPUs: 3, MemoryGiB: 5}, Project: project, AgentDirs: []string{agent}, AgentForwarding: true,
 	}}, nil
 }
 
@@ -340,6 +340,8 @@ func wantProblem(in backend.Instance, w backend.Want) error {
 	case w.Size.CPUs > 0 && sz.CPUs != w.Size.CPUs, w.Size.MemoryGiB > 0 && sz.MemoryGiB != w.Size.MemoryGiB,
 		w.Size.DiskGiB > 0 && sz.DiskGiB != w.Size.DiskGiB:
 		return fmt.Errorf("%s's size is %+v, want %+v", in.Name, sz, w.Size)
+	case in.Project != w.Project:
+		return fmt.Errorf("%s mounts the project folder %q, want %q", in.Name, in.Project, w.Project)
 	case !slices.Equal(in.AgentDirs, w.AgentDirs) || in.AgentForwarding != w.AgentForwarding:
 		return fmt.Errorf("%s has agent folders %q and forwarding %v, want %q and %v",
 			in.Name, in.AgentDirs, in.AgentForwarding, w.AgentDirs, w.AgentForwarding)
@@ -444,7 +446,7 @@ func checkStartShrink(ctx context.Context, s Subject) error {
 	if err != nil {
 		return fmt.Errorf("Inspect: %w", err)
 	}
-	w := backend.Want{Size: backend.Size{DiskGiB: in.Size.DiskGiB / 2}, AgentDirs: in.AgentDirs, AgentForwarding: in.AgentForwarding}
+	w := backend.Want{Size: backend.Size{DiskGiB: in.Size.DiskGiB / 2}, Project: in.Project, AgentDirs: in.AgentDirs, AgentForwarding: in.AgentForwarding}
 	if err := s.Backend.Start(ctx, conformVM, w, backend.Confinement{}); msg.IDOf(err) != "disk_shrink" {
 		return fmt.Errorf("Start with a smaller disk: %w, want disk_shrink", err)
 	}
@@ -555,14 +557,19 @@ func started(ctx context.Context, b backend.Backend, w backend.Want, c backend.C
 	return r, nil
 }
 
-// A start makes a stopped VM what its Want says; a start of a running one
-// leaves it as it is, on the same start, and Stop stops it.
+// A start makes a stopped VM what its Want says, its project folder moved
+// too; a start of a running one leaves it as it is, on the same start,
+// and Stop stops it.
 func checkStart(ctx context.Context, s Subject) error {
 	sp, err := create(ctx, s, conformVM)
 	if err != nil {
 		return err
 	}
-	w := backend.Want{Size: backend.Size{CPUs: 2, MemoryGiB: 4}, AgentForwarding: !sp.AgentForwarding}
+	moved := filepath.Join(s.Dir, "work", "moved")
+	if err := os.MkdirAll(moved, 0o700); err != nil {
+		return err
+	}
+	w := backend.Want{Size: backend.Size{CPUs: 2, MemoryGiB: 4}, Project: moved, AgentForwarding: !sp.AgentForwarding}
 	first, err := started(ctx, s.Backend, w, backend.Confinement{})
 	if err != nil {
 		return err
@@ -782,7 +789,7 @@ func checkGuard(ctx context.Context, s Subject) error {
 	if _, err := create(ctx, s, conformVM); err != nil {
 		return err
 	}
-	w := backend.Want{Size: backend.Size{DiskGiB: 4096}, AgentDirs: sp.AgentDirs, AgentForwarding: sp.AgentForwarding}
+	w := backend.Want{Size: backend.Size{DiskGiB: 4096}, Project: sp.Project, AgentDirs: sp.AgentDirs, AgentForwarding: sp.AgentForwarding}
 	if err := ms.Start(ctx, conformVM, w, backend.Confinement{}); msg.IDOf(err) != "backend_lacks" {
 		return fmt.Errorf("Machines.Start with a disk, without disk: %w, want backend_lacks", err)
 	}

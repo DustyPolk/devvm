@@ -1,0 +1,301 @@
+package vm
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/gitprotect"
+	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/platform"
+	"github.com/w3cj/devvm/internal/project"
+	"github.com/w3cj/devvm/internal/state"
+)
+
+// recorded is the VMs' states, read (ReadStates) the first time a lookup
+// needs them, and then kept for the rest of that lookup: the finder's
+// states by the folder they record (at), and moveHere's candidates.
+type recorded struct{ inv *Inventory }
+
+// states are the VMs' states that can be read (Inventory.States).
+func (r *recorded) states(d paths.Dirs) ([]*state.VM, error) {
+	if r.inv == nil {
+		inv, err := ReadStates(d)
+		if err != nil {
+			return nil, err
+		}
+		r.inv = inv
+	}
+	return r.inv.States(), nil
+}
+
+// at is the state that records dir as its project folder, the first by
+// name; nil for none.
+func (r *recorded) at(d paths.Dirs, dir string) (*state.VM, error) {
+	sts, err := r.states(d)
+	if err != nil {
+		return nil, err
+	}
+	for _, st := range sts {
+		if st.Dir == dir {
+			return st, nil
+		}
+	}
+	return nil, nil
+}
+
+// here is the folder devvm runs in as moveHere matches a VM's against it:
+// its path and identity (platform.FolderID), and the two things a match
+// needs of it.
+type here struct {
+	dir, id string
+	// unique: its identity is never a deleted folder's
+	// (platform.UniqueFolderID), so a match is this folder, not one that
+	// got a deleted folder's inode number.
+	unique bool
+	mine   bool // this user owns it
+}
+
+// hereOf is the folder at dir, a physical path, as moveHere matches it;
+// false when its identity can't be read.
+func hereOf(dir string) (here, bool) {
+	id, err := platform.FolderID(dir)
+	if err != nil {
+		return here{}, false
+	}
+	h := here{dir: dir, id: id, unique: platform.UniqueFolderID(dir, id)}
+	if fi, err := os.Stat(dir); err == nil {
+		uid, _, ok := platform.Owner(fi)
+		h.mine = ok && int(uid) == os.Getuid()
+	}
+	return h, true
+}
+
+// movedFrom reports whether st is the VM of h's folder, which moved from
+// the path st records: the folder itself (its identity, the device
+// included), unique and this user's, at another path, and nothing left at
+// the old one (away). The VM's creation finished, and it mounts its
+// folder: a --clone VM keeps its clone at the old path, in the VM, so it
+// never moves. A copy of the folder is another folder, so it never
+// matches.
+func (h here) movedFrom(st *state.VM, away func(st *state.VM, to string) bool) bool {
+	return h.unique && h.mine && h.id != "" && st.Folder == h.id &&
+		st.Dir != "" && st.Dir != h.dir && st.Finished() && !isClone(st) && away(st, h.dir)
+}
+
+// movedAway reports whether st's folder is no longer at the path st
+// records, as to has it: nothing is there and its folder's disk is
+// (FolderGone), or a symlink there leads to to.
+func movedAway(st *state.VM, to string) bool {
+	if fi, err := os.Lstat(st.Dir); err == nil {
+		if fi.Mode()&os.ModeSymlink == 0 {
+			return false
+		}
+		resolved, err := filepath.EvalSymlinks(st.Dir)
+		return err == nil && resolved == to
+	}
+	return FolderOf(st) == FolderGone
+}
+
+// moveHere finds, for dir, a folder without a VM, the VM made for it at
+// the path it had before it moved here (here.movedFrom), and moves it
+// here as mv says: after asking in a terminal, [y/N], refusing without
+// one (vm_moved_here); without asking with moveForce. It returns the VM's
+// folder and state, or a state that doesn't exist for none, or when the
+// user says no, or when more than one VM was made for this folder, which
+// it warns of (vms_moved_here). Never on its own: a VM moves only after a
+// yes or devvm adopt --force.
+func (e finder) moveHere(ctx context.Context, dir string, mv moves, rec *recorded) (project.Folder, *state.VM, error) {
+	none := new(state.VM)
+	h, ok := hereOf(dir)
+	if !ok {
+		return project.Folder{}, none, nil
+	}
+	sts, err := rec.states(e.Dirs)
+	if err != nil {
+		return project.Folder{}, nil, err
+	}
+	var found []*state.VM
+	for _, st := range sts {
+		if h.movedFrom(st, movedAway) {
+			found = append(found, st)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return project.Folder{}, none, nil
+	case 1:
+	default:
+		names := make([]string, len(found))
+		for i, st := range found {
+			names[i] = st.Name()
+		}
+		e.Warn(msg.VMsMovedHere(strings.Join(names, ", ")))
+		return project.Folder{}, none, nil
+	}
+	st := found[0]
+	vm, was := st.Name(), st.Dir
+	if mv == moveAsk {
+		if !e.Terminal() {
+			return project.Folder{}, nil, msg.VMMovedHere(vm, was)
+		}
+		if !e.Ask(msg.MoveVM(vm, was)) {
+			return project.Folder{}, none, nil
+		}
+	}
+	if err := e.move(ctx, st, dir, h.id, false); err != nil {
+		return project.Folder{}, nil, err
+	}
+	e.Info(msg.VMAdopted(dir, vm))
+	return project.Folder{Dir: dir, Name: vm}, st, nil
+}
+
+// adoptVM moves the VM that name names (its name or alias, as devvm rm VM
+// finds it) to the folder devvm runs in: devvm adopt VM, for a folder
+// copied to another disk, which is another folder (its identity is new),
+// so moveHere never matches it. It asks first in a terminal, [y/N]
+// (adopt_move_vm), which force answers, and without either it refuses
+// (adopt_move_refused). It refuses a --clone VM (adopt_clone), one its
+// backend lost (rm_vm_lost) or whose creation didn't finish, one whose
+// folder is still there (adopt_folder_there), and a folder with a VM of
+// its own (adopt_has_vm). A VM of this path is devvm adopt's. The VM's
+// .git protection starts again (move, fresh), as its .git is another.
+func (e finder) adoptVM(ctx context.Context, name string, force bool) error {
+	t, err := e.target(ctx, need{name: name})
+	if err != nil {
+		return err
+	}
+	dir, err := e.dir()
+	if err != nil {
+		return err
+	}
+	vm, st := t.f.Name, t.st
+	switch {
+	case st.Dir == dir:
+		return e.lifecycle.Adopt(ctx, "", force)
+	case isClone(st):
+		return msg.AdoptClone(st.Dir, vm)
+	case !t.exists:
+		return msg.RmVMLost(vm)
+	}
+	if err := refuseUnfinished(vm, st); err != nil {
+		return err
+	}
+	if FolderOf(st) == FolderThere {
+		return msg.AdoptFolderThere(st.Dir, vm)
+	}
+	if own, err := e.folderVM(dir); err != nil {
+		return err
+	} else if own != "" {
+		return msg.AdoptHasVM(own)
+	}
+	id, err := platform.FolderID(dir)
+	if err != nil {
+		return err
+	}
+	switch {
+	case force:
+	case !e.Terminal():
+		return msg.AdoptMoveRefused(vm)
+	case !e.Ask(msg.AdoptMoveVM(vm, st.Dir)):
+		return nil
+	}
+	if err := e.move(ctx, st, dir, id, true); err != nil {
+		return err
+	}
+	e.Info(msg.VMAdopted(dir, vm))
+	return nil
+}
+
+// move makes dir st's project folder: its path and identity, recorded in
+// its state (VM.Update), from which its next start mounts it (the
+// backend's Start, projectMount). It holds the creation locks of st's VM
+// and of the VM dir would get new (newName), so no devvm deletes st's VM
+// or makes one for dir meanwhile (create_running), and refuses when
+// another VM records dir by then, or st's folder changed since it was
+// read. A folder no new VM may have (checkUnsafe: the home folder, one
+// inside devvm's own) is refused, and so is a folder at dir that isn't
+// want, the one asked about (move_folder_changed). fresh starts .git's
+// protection again, as a new VM's (devvm adopt VM: a copy of the folder,
+// whose .git is another); a folder that moved keeps its .git, its locks
+// and what they were checked against.
+func (e finder) move(ctx context.Context, st *state.VM, dir, want string, fresh bool) error {
+	// Where no new VM may be made, as the VM gets the folder read-write.
+	if err := e.launcher.checkUnsafe(dir, false); err != nil {
+		return err
+	}
+	f, _, err := e.newName(dir)
+	if err != nil {
+		return err
+	}
+	release, err := holdCreate(e.Env, st.Name())
+	if err != nil {
+		return err
+	}
+	defer release()
+	if f.Name != st.Name() {
+		releaseNew, err := holdCreate(e.Env, f.Name)
+		if err != nil {
+			return err
+		}
+		defer releaseNew()
+	}
+	if at, err := new(recorded).at(e.Dirs, dir); err != nil {
+		return err
+	} else if at != nil {
+		return msg.CreateRunning(at.Name())
+	}
+	if id, err := platform.FolderID(dir); err != nil {
+		return err
+	} else if id != want {
+		return msg.MoveFolderChanged(dir, st.Name())
+	}
+	if err := e.stopForMove(ctx, st); err != nil {
+		return err
+	}
+	return recordMove(ctx, st, dir, want, fresh)
+}
+
+// stopForMove stops st's VM when it runs, as devvm stop does, with its
+// proxy, port forwarder and link session: a running VM mounts its folder
+// where it was, and its next start mounts it where it is now.
+func (e finder) stopForMove(ctx context.Context, st *state.VM) error {
+	t, err := e.inspect(ctx, project.Folder{Dir: st.Dir, Name: st.Name()}, st)
+	if err != nil || !t.exists || t.in.Status != backend.StatusRunning {
+		return err
+	}
+	vm := st.Name()
+	if err := t.stop(ctx); err != nil {
+		return err
+	}
+	e.Info(msg.Stopped(vm))
+	e.Proxy.Stop(vm)
+	e.Forwarders.Stop(vm)
+	e.linkRuns.stop(ctx, vm)
+	return e.writeSSHConfig(ctx)
+}
+
+// recordMove records dir, whose identity is id, as st's project folder,
+// under its lock, refusing a state whose folder changed since it was read
+// (create_running); fresh clears .git's protection record.
+func recordMove(ctx context.Context, st *state.VM, dir, id string, fresh bool) error {
+	was, wasID := st.Dir, st.Folder
+	return st.Update(ctx, func(st *state.VM) error {
+		if st.Dir != was || st.Folder != wasID {
+			return msg.CreateRunning(st.Name())
+		}
+		st.Dir, st.Folder = dir, id
+		if !fresh {
+			return nil
+		}
+		g, err := gitprotect.Of(st)
+		if err != nil {
+			return err
+		}
+		g.Made = gitprotect.Made{}
+		return gitprotect.Set(st, g)
+	})
+}

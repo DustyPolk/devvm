@@ -17,7 +17,7 @@ devvm has 31 commands at the top, plus help. Each one is in a group of the root'
 
 | Group | Commands |
 | --- | --- |
-| Your VM | devvm, with --tools, --agents and --layers; restart, stop, update, rm [VM], adopt, ls, code, desktop, host, history, history export [FILE], history import [FILE] |
+| Your VM | devvm, with --tools, --agents and --layers; restart, stop, update, rm [VM], adopt [VM], ls, code, desktop, host, history, history export [FILE], history import [FILE] |
 | Change your VM | tools (a picker in a terminal), tools add\|rm TOOL..., tools update; size, with --cpus, --memory and --disk; ports [all\|none\|LIST], ports add\|rm LIST; network [on\|off], network allow\|deny\|rm RULE..., network log; ssh-agent [on\|devvm\|off], ssh-agent add\|rm KEY_FILE; git-protect [on\|strict\|off]; clone [on\|off]; secret, secret set\|rm\|use\|unuse NAME; layer add\|rm LAYER... |
 | Links between VMs | group, group join NAME, with --as NAME, group leave; link, link add\|rm TARGET PORT, with --as NAME on add; link publish [PORTS], link unpublish PORTS |
 | Images | images, images rm IMAGE\|KEY..., build IMAGE, rebuild IMAGE, layer new NAME |

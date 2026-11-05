@@ -299,7 +299,7 @@ func TestCommandsInSubfolder(t *testing.T) {
 	if c := call(f, "Stop"); c.Args[0] != vm {
 		t.Errorf("Stop = %v", c.Args)
 	}
-	if err := (Lifecycle{e}).Adopt(t.Context(), false); msg.NamesOf(err) != "no_vm dir="+e.Dir {
+	if err := (Lifecycle{e}).Adopt(t.Context(), "", false); msg.NamesOf(err) != "no_vm dir="+e.Dir {
 		t.Errorf("Adopt = %v", msg.NamesOf(err))
 	}
 	// rm: refused without a terminal, -f or not; asked in one, a no

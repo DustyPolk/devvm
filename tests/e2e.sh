@@ -174,6 +174,8 @@ if want project || want clone || want link; then need ssh openssh openssh-client
 if want project; then
   for c in ssh-agent ssh-add ssh-keygen; do need "$c" openssh openssh-client openssh-clients; done
   need tar gnu-tar tar tar
+  # A question answered in a terminal of its own (tty_run).
+  if [[ $host_os == Darwin ]]; then need script - - -; else need python3 - python3 python3; fi
 fi
 # The sandbox check binds ports with python3 (macOS only).
 if want network && [[ $host_os == Darwin ]]; then need python3 python - -; fi
@@ -845,6 +847,26 @@ launch() {
 }
 in_vm() { limactl shell --workdir / "$1" bash -lc "$2" </dev/null; }
 export -f in_vm
+# tty_run DIR INPUT CMD...: CMD in DIR on a terminal of its own (macOS's script, Python's pty on
+# Linux, where script isn't always installed), INPUT typed into it, as a question in a terminal
+# needs; its output, the terminal's, in $work/last.log, and its exit status. INPUT is typed once the
+# question ([y/N] or [Y/n]) shows, within 30 s, and the input stays open a moment after, as the end
+# of input in a terminal is an answer of its own.
+tty_run() { local d=$1 in=$2; shift 2
+  : >"$work/last.log"
+  if [[ $(uname -s) == Darwin ]]; then
+    (cd "$d" && tty_type "$in" | script -q /dev/null "$@" >"$work/last.log" 2>&1)
+  else
+    (cd "$d" && tty_type "$in" | python3 -c 'import os, pty, sys; sys.exit(os.waitstatus_to_exitcode(pty.spawn(sys.argv[1:])))' "$@" \
+      >"$work/last.log" 2>&1)
+  fi
+}
+tty_type() { local i
+  for i in $(seq 150); do grep -qE '\[(y/N|Y/n)\]' "$work/last.log" && break; sleep 0.2; done
+  printf '%s\n' "$1"; sleep 3
+}
+# mounts_of VM: the host folders the VM's Lima config mounts, one a line.
+mounts_of() { limactl list --json "$1" 2>/dev/null | perl -MJSON::PP -ne 'print "$_->{location}\n" for @{decode_json($_)->{config}{mounts} || []}'; }
 # proxy_config FILE VM LISTEN PASSWORD [POLICY [LOG]]: a config of this run's own for devvm _proxy
 # -config, the run's alone (mode 600): VM's proxy on LISTEN with PASSWORD, POLICY's rules (none
 # without one) and its events in LOG (none: its standard output).
@@ -2149,6 +2171,41 @@ else
   check "git-protect on is refused off macOS" bash -c "cd '$p' && '$D' git-protect on </dev/null 2>&1 |
     grep -qF \"\$(m git_protect_on_needs_macos | head -1)\""
 fi
+# A folder moved keeps its VM once you say so: without a terminal devvm refuses, naming devvm
+# adopt; in one, a yes moves it, its home folder as it was, and its next start mounts the folder at
+# its new path, never the old one, which isn't made again. Moved back, devvm adopt --force moves it.
+pm=$p-moved
+(cd "$p" && printf 'exit\n' | "$D" >/dev/null 2>&1)
+in_vm "$vm" 'echo e2e-home-kept > ~/e2e-moved' >/dev/null 2>&1
+(cd "$p" && "$D" stop </dev/null >/dev/null 2>&1)
+mv "$p" "$pm"
+moved_refused() {
+  (cd "$pm" && ! "$D" stop </dev/null >"$work/last.log" 2>&1) && grep -qF "$(m vm_moved_here vm="$vm" was="$p")" "$work/last.log" &&
+    [[ $(st_get "$(vmdir "$vm")/vm.json" dir) == "$p" ]] || { echo "failed: refused"; cat "$work/last.log"; return 1; }
+}
+moved_yes() {
+  tty_run "$pm" y env NO_COLOR=1 "$D" stop && grep -qF "$(m vm_adopted dir="$pm" vm="$vm")" "$work/last.log" &&
+    [[ $(st_get "$(vmdir "$vm")/vm.json" dir) == "$pm" ]] || { echo "failed: moved"; cat "$work/last.log"; return 1; }
+}
+moved_opened() { local ms
+  if ! (cd "$pm" && printf 'cat ~/e2e-moved; pwd\n' | "$D" >"$work/last.log" 2>&1) || ! grep -qx e2e-home-kept "$work/last.log" ||
+    ! grep -qxF "$pm" "$work/last.log"; then echo "failed: opened"; cat "$work/last.log"; return 1; fi
+  ms=$(mounts_of "$vm"); echo "mounts: $ms"
+  if ! grep -qxF "$pm" <<<"$ms" || grep -qxF "$p" <<<"$ms"; then echo "failed: mounts"; return 1; fi
+  [[ ! -e $p ]] || { echo "failed: $p made again"; return 1; }
+  # In the VM, the new path is mounted and the old one isn't (an empty folder may stay there).
+  in_vm "$vm" "mountpoint -q '$pm' && ! mountpoint -q '$p'" || { echo "failed: the VM's mounts"; in_vm "$vm" "grep devvm-go-e2e /proc/mounts"; return 1; }
+}
+moved_back() {
+  (cd "$pm" && "$D" stop </dev/null >/dev/null 2>&1) && mv "$pm" "$p" &&
+    (cd "$p" && "$D" adopt --force </dev/null >"$work/last.log" 2>&1) && grep -qF "$(m vm_adopted dir="$p" vm="$vm")" "$work/last.log" &&
+    (cd "$p" && printf 'pwd\n' | "$D" >"$work/last.log" 2>&1) && grep -qxF "$p" "$work/last.log" && grep -qxF "$p" <<<"$(mounts_of "$vm")"
+}
+check "a moved folder's VM is refused without a terminal, naming devvm adopt" moved_refused
+check "in a terminal, a yes moves the VM to the folder's new path" moved_yes
+check "opened there, its home is as it was and it mounts the new path alone" moved_opened
+check "moved back, devvm adopt --force moves it back" moved_back
+[[ -e $p ]] || mv "$pm" "$p"
 check "rm deletes only this VM, with its state and ssh config entry, and unlocks" bash -c "cd '$p' && '$D' rm --force </dev/null >'$work/last.log' 2>&1 &&
   ! limactl list -q | grep -qx $vm && [[ ! -e '$(vmdir "$vm")' ]] && ! grep -q '^Host devvm-web ' '$XDG_DATA_HOME/devvm/ssh_config' &&
   ! grep -q '^$vm ' '$kh' && { [[ \$(uname -s) != Darwin ]] || ! ls -lOd '$p/.git/config' | grep -q uchg; } &&

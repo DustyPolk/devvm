@@ -160,9 +160,9 @@ func TestRmVMChecksAgain(t *testing.T) {
 	}
 }
 
-// rm VM refuses a VM whose state records a folder whose VM it isn't: its
-// path doesn't hash to the VM's name, so the state was changed by hand,
-// and the folder it names, this one, keeps its own VM.
+// rm VM refuses a VM whose state records a folder whose VM it isn't (a
+// state changed by hand) as one whose folder is there: the folder it
+// names, this one, keeps its own VM, which rm VM never deletes for it.
 func TestRmVMFolderOfAnother(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	web := e.Dir
@@ -181,7 +181,7 @@ func TestRmVMFolderOfAnother(t *testing.T) {
 	}
 	e.Dir, e.Folder = web, FolderAuto
 	err = (Lifecycle{e}).RmVM(t.Context(), other.f.Name, RmOptions{Force: true, NoExport: true})
-	if msg.NamesOf(err) != "rm_vm_state_mismatch dir="+web+" vm="+other.f.Name {
+	if msg.NamesOf(err) != "rm_vm_folder_there dir="+web+" vm="+other.f.Name {
 		t.Errorf("rm VM of another folder's state: %v", msg.NamesOf(err))
 	}
 	for _, vm := range []string{own, other.f.Name} {
@@ -340,7 +340,7 @@ func TestAdopt(t *testing.T) {
 	e, _, _ := upEnv(t, allNative())
 	lc, l := Lifecycle{e}, Launch{e}
 	st := existingVM(t, e, Options{NoNetworkPolicy: true})
-	if err := lc.Adopt(t.Context(), false); err != nil {
+	if err := lc.Adopt(t.Context(), "", false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if err := set(t, st, keyFolder, "0:0"); err != nil {
@@ -350,11 +350,11 @@ func TestAdopt(t *testing.T) {
 		t.Errorf("Up = %v", msg.NamesOf(err))
 	}
 	asked := answers(t, e, false)
-	if err := lc.Adopt(t.Context(), false); err != nil || len(*asked) != 1 {
+	if err := lc.Adopt(t.Context(), "", false); err != nil || len(*asked) != 1 {
 		t.Fatalf("declined: %v, asked %q", msg.NamesOf(err), *asked)
 	}
 	answers(t, e, true)
-	if err := lc.Adopt(t.Context(), false); err != nil {
+	if err := lc.Adopt(t.Context(), "", false); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if err := l.Up(t.Context(), Options{}); err != nil {
@@ -365,12 +365,12 @@ func TestAdopt(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Terminal = func() bool { return false }
-	if err := lc.Adopt(t.Context(), false); msg.NamesOf(err) != "vm_other_folder_adopt vm="+st.Name()+" was="+e.Dir {
+	if err := lc.Adopt(t.Context(), "", false); msg.NamesOf(err) != "vm_other_folder_adopt vm="+st.Name()+" was="+e.Dir {
 		t.Errorf("no terminal: %v", msg.NamesOf(err))
 	}
 	asked = answers(t, e, false)
 	e.Terminal = func() bool { return false }
-	if err := lc.Adopt(t.Context(), true); err != nil || len(*asked) != 0 {
+	if err := lc.Adopt(t.Context(), "", true); err != nil || len(*asked) != 0 {
 		t.Fatalf("--force: %v, asked %q", msg.NamesOf(err), *asked)
 	}
 	if err := l.Up(t.Context(), Options{}); err != nil {

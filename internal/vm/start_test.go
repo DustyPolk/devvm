@@ -225,7 +225,7 @@ func TestStartNew(t *testing.T) {
 // order: a new machine's, its ports', its network's, its layers', its
 // agent forwarding and its toggle, and ssh for a clone.
 func TestRequirements(t *testing.T) {
-	spec := backend.VMSpec{Project: "/p", Tools: "/t", Want: backend.Want{AgentForwarding: true}}
+	spec := backend.VMSpec{Tools: "/t", Want: backend.Want{Project: "/p", AgentForwarding: true}}
 	for _, tc := range []struct {
 		name string
 		n    needs
