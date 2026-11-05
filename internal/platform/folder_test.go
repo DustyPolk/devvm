@@ -41,8 +41,9 @@ func TestFolderID(t *testing.T) {
 	}
 }
 
-// UniqueFolderID: an ID with a birth time, on Linux, and on macOS of a
-// folder on APFS or HFS+; never a missing folder on macOS.
+// UniqueFolderID: an ID with a birth time of a folder on APFS or HFS+ on
+// macOS, or on one of uniqueFS's file systems on Linux; never a missing
+// folder.
 func TestUniqueFolderID(t *testing.T) {
 	dir := t.TempDir()
 	id, err := FolderID(dir)
@@ -51,8 +52,9 @@ func TestUniqueFolderID(t *testing.T) {
 	}
 	switch runtime.GOOS {
 	case "linux":
-		if !UniqueFolderID(dir, "1:2:3.4") || UniqueFolderID(dir, "1:2") {
-			t.Error("UniqueFolderID: by the birth time in the ID")
+		// The temporary folder's file system may be any (TestUniqueFS).
+		if UniqueFolderID(dir, "1:2") || UniqueFolderID(filepath.Join(dir, "missing"), "1:2:3.4") {
+			t.Error("UniqueFolderID: an ID without a birth time, or a missing folder")
 		}
 		t.Logf("%s: %s, unique %v", dir, id, UniqueFolderID(dir, id))
 	case "darwin":
