@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -187,6 +188,21 @@ func TestCheckConverted(t *testing.T) {
 		}},
 		{"an empty command line", "cmdline", func(d string) { writeTestFile(t, filepath.Join(d, "cmdline"), "") }},
 		{"a qcow2 disk", "disk.raw", func(d string) { writeTestFile(t, filepath.Join(d, "disk.raw"), "QFI\xfb") }},
+		{"a qcow2 header before an ext4 superblock", "disk.raw", func(d string) {
+			disk := make([]byte, 2048)
+			copy(disk, "QFI\xfb")
+			disk[1080], disk[1081] = 0x53, 0xef
+			writeTestFile(t, filepath.Join(d, "disk.raw"), string(disk))
+		}},
+		{"a disk too short for a superblock", "disk.raw", func(d string) { writeTestFile(t, filepath.Join(d, "disk.raw"), string(make([]byte, 1081))) }},
+		{"gnu with its glibc version a link to a FIFO", "glibc", func(d string) {
+			writeTestFile(t, filepath.Join(d, "libc"), "gnu\n")
+			fifo := filepath.Join(t.TempDir(), "fifo")
+			if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_ = os.Symlink(fifo, filepath.Join(d, "glibc"))
+		}},
 	} {
 		d := t.TempDir()
 		writeConverted(t, d)

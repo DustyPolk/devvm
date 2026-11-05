@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/msg"
@@ -65,8 +66,9 @@ func (l *images) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 		return err
 	}
 	cmd := l.limactl(ctx, append([]string{"shell", "--workdir", "/", ToolsVM, "bash", "-s", "--"}, spec.Args...)...)
-	// The build's proxy for its commands, never written into the VM.
-	cmd.Stdin = bytes.NewReader(withProxy(hp, spec.Script).Data)
+	// The CAs' variables and the build's proxy for its commands, as each
+	// image build's step has them, never written into the VM.
+	cmd.Stdin = bytes.NewReader(slices.Concat(spec.Trust.Env, withProxy(hp, spec.Script).Data))
 	if err := l.Runner.Run(ctx, msg.BuildingToolsIn(ToolsVM), cmd); err != nil {
 		return backend.Logged(msg.ToolsBuildFailed())
 	}

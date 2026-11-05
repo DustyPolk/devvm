@@ -2,6 +2,7 @@ package lima
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -37,6 +38,26 @@ func TestBuildTools(t *testing.T) {
 		"limactl shell --workdir / " + ToolsVM + " bash -s -- node 24.21.0 node-24.21.0-0123456789ab.erofs",
 		"limactl delete -f " + ToolsVM,
 	})
+}
+
+// With CAs, their script runs first and the build script starts with
+// their variables, as an image build's steps do.
+func TestBuildToolsTrust(t *testing.T) {
+	l, f := buildLima(t, "linux", "Stopped")
+	spec := toolsSpec(t, t.TempDir())
+	spec.Trust = backend.Trust{Add: backend.Script{Name: "ca.sh", Data: []byte("add\n")}, Env: []byte("export CA=1\n")}
+	if err := l.BuildTools(t.Context(), spec); err != nil {
+		t.Fatal(err)
+	}
+	var inputs []string
+	for _, c := range f.calls {
+		if slices.Contains(c.argv, "-s") {
+			inputs = append(inputs, c.stdin)
+		}
+	}
+	if want := []string{"add\n", "export CA=1\n#!/bin/bash\n"}; !slices.Equal(inputs, want) {
+		t.Errorf("inputs %q, want %q", inputs, want)
+	}
 }
 
 // A failed script is a logged tools_build_failed; the VM is left to the

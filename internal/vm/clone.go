@@ -110,13 +110,14 @@ func resolved(p string) string {
 
 // seedRefs are what the seed push sends: every branch of a repo; of a
 // linked worktree, whose repo is elsewhere, only its branch and that
-// branch's upstream, if it has one.
+// branch's upstream, if it has one and it's one ref (the repo's config
+// can make it a pattern, which would push every branch).
 func seedRefs(ctx context.Context, dir, branch string, worktree bool) []string {
 	if !worktree {
 		return []string{"--all"}
 	}
 	refs := []string{"refs/heads/" + branch + ":refs/heads/" + branch}
-	if up, err := hostGit(ctx, dir, "for-each-ref", "--format=%(upstream)", "refs/heads/"+branch); err == nil && strings.HasPrefix(up, "refs/") && up != "refs/heads/"+branch {
+	if up, err := hostGit(ctx, dir, "for-each-ref", "--format=%(upstream)", "refs/heads/"+branch); err == nil && strings.HasPrefix(up, "refs/") && up != "refs/heads/"+branch && validRef(ctx, dir, up) {
 		refs = append(refs, up+":"+up)
 	}
 	return refs
@@ -476,7 +477,9 @@ func (e cloneCheck) fetchUnfetched(ctx context.Context, b backend.Backend, vm, d
 	if err := e.sshConfig().Write(ctx); err != nil {
 		return err
 	}
-	args := []string{"fetch", "--no-tags", "--no-recurse-submodules", cloneURL(vm, dir)}
+	// --refmap= : only the refspecs given, never a remote's of the same
+	// URL, whose own could update other branches.
+	args := []string{"fetch", "--no-tags", "--no-recurse-submodules", "--refmap=", cloneURL(vm, dir)}
 	saved := make([]string, len(good))
 	for i, br := range good {
 		saved[i] = prefix + "/" + br
@@ -501,7 +504,13 @@ func (e cloneCheck) fetchUnfetched(ctx context.Context, b backend.Backend, vm, d
 
 // validBranch reports whether git takes name as a branch name.
 func validBranch(ctx context.Context, dir, name string) bool {
-	_, err := hostGit(ctx, dir, "check-ref-format", "refs/heads/"+name)
+	return validRef(ctx, dir, "refs/heads/"+name)
+}
+
+// validRef reports whether git takes ref as one ref's full name: no
+// pattern (*) among them.
+func validRef(ctx context.Context, dir, ref string) bool {
+	_, err := hostGit(ctx, dir, "check-ref-format", ref)
 	return err == nil
 }
 
@@ -753,13 +762,17 @@ func (e remaking) mountFolder(ctx context.Context, t *found) error {
 }
 
 // unmountFolder undoes mountFolder, once putBack has deleted the new
-// machine that mounted the folder: .git's locks come off, and the repo's
-// remote for the clone, which the old machine still has, is added again
-// when it's gone.
+// machine that mounted the folder: .git's locks come off, once what that
+// machine did to .git is named as a launch names it (Check), as a clone
+// VM's .git is never checked, and the repo's remote for the clone, which
+// the old machine still has, is added again when it's gone.
 func (e remaking) unmountFolder(ctx context.Context, t *found) {
 	dir, vm := t.f.Dir, t.f.Name
 	if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
-		e.Protector(dir).Unlock(ctx, t.st)
+		p := e.Protector(dir)
+		// An undo goes on whatever Check finds: it has named it.
+		_ = p.Check(ctx, t.st, false)
+		p.Unlock(ctx, t.st)
 	}
 	remote := sectionOf[cloneInVM](t.st, cloneSection).Made.Remote
 	if remote == "" {

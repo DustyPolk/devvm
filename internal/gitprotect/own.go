@@ -84,8 +84,9 @@ func linkedWorktree(dir string) (gitDir, commonDir string) {
 }
 
 // ownObjects refuses a git dir d that reads objects or refs from
-// elsewhere: alternates, or objects, packed refs, a reftable or any of
-// refs that's a symlink.
+// elsewhere: alternates, or objects, packed refs, a reftable or anything
+// in objects or refs that's a symlink (a pack folder, a loose object's
+// folder or a ref).
 func ownObjects(d string) error {
 	alt := filepath.Join(d, "objects", "info", "alternates")
 	if _, err := os.Lstat(alt); !errors.Is(err, fs.ErrNotExist) {
@@ -96,16 +97,18 @@ func ownObjects(d string) error {
 			return msg.CloneGitElsewhere(p)
 		}
 	}
-	var link string
-	_ = filepath.WalkDir(filepath.Join(d, "refs"), func(path string, e fs.DirEntry, err error) error {
-		if err == nil && e.Type()&fs.ModeSymlink != 0 {
-			link = path
-			return filepath.SkipAll
+	for _, name := range []string{"objects", "refs"} {
+		var link string
+		_ = filepath.WalkDir(filepath.Join(d, name), func(path string, e fs.DirEntry, err error) error {
+			if err == nil && e.Type()&fs.ModeSymlink != 0 {
+				link = path
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		if link != "" {
+			return msg.CloneGitElsewhere(link)
 		}
-		return nil
-	})
-	if link != "" {
-		return msg.CloneGitElsewhere(link)
 	}
 	return nil
 }

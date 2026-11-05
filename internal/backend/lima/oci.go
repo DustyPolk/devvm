@@ -332,7 +332,12 @@ func checkConverted(dir, ref string) (*converted, error) {
 		return nil, bad("libc")
 	}
 	if c.libc == "gnu" {
-		if c.glibc = text("glibc"); !regular("glibc") || !image.ValidGlibc(c.glibc) {
+		// Checked a plain file before it's read: a link could name a host
+		// FIFO, whose read would wait.
+		if !regular("glibc") {
+			return nil, bad("glibc")
+		}
+		if c.glibc = text("glibc"); !image.ValidGlibc(c.glibc) {
 			return nil, bad("glibc")
 		}
 	}
@@ -345,19 +350,21 @@ func checkConverted(dir, ref string) (*converted, error) {
 	return c, nil
 }
 
-// ext4 reports whether a file starts with an ext4 superblock: its magic,
-// 0xEF53, at byte 1080.
+// ext4 reports whether a file is an ext4 filesystem as mke2fs writes one
+// into a new file: its first 1024 bytes zero, then a superblock with its
+// magic, 0xEF53, at byte 1080. Another format's header (qcow2's, VMDK's)
+// is in those first bytes, and could otherwise sit before a superblock.
 func ext4(path string) bool {
 	fh, err := os.Open(path) //nolint:gosec // devvm's own temporary folder
 	if err != nil {
 		return false
 	}
 	defer func() { _ = fh.Close() }()
-	magic := make([]byte, 2)
-	if _, err := fh.ReadAt(magic, 1080); err != nil {
+	head := make([]byte, 1082)
+	if _, err := io.ReadFull(fh, head); err != nil {
 		return false
 	}
-	return bytes.Equal(magic, []byte{0x53, 0xef})
+	return !slices.ContainsFunc(head[:1024], func(b byte) bool { return b != 0 }) && bytes.Equal(head[1080:], []byte{0x53, 0xef})
 }
 
 // lockOCI takes the conversion lock, an OS lock on a file in devvm's data

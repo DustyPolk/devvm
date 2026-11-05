@@ -216,15 +216,11 @@ func TestGuestEnv(t *testing.T) {
 	}
 }
 
-func TestBuildAndScript(t *testing.T) {
+func TestBuild(t *testing.T) {
 	assets := fstest.MapFS{"guest/ca.sh": {Data: []byte("echo ca.sh\n")}}
 	none, err := CAs(nil).Build(assets)
 	if err != nil || !none.None() || len(none.Remove.Data) != 0 || none.Env != nil {
 		t.Fatalf("no CAs: %+v, %v", none, err)
-	}
-	s := backend.Script{Name: "base.sh", Data: []byte("#!/bin/bash\n")}
-	if got := CAs(nil).Script(s); !bytes.Equal(got.Data, s.Data) {
-		t.Errorf("no CAs changed the script: %q", got.Data)
 	}
 	a := cert(t, "a", true)
 	cas := CAs{a, cert(t, "b", true)}
@@ -241,12 +237,9 @@ func TestBuildAndScript(t *testing.T) {
 	if string(tr.Remove.Data) != "set --\necho ca.sh\n" {
 		t.Errorf("Remove = %q", tr.Remove.Data)
 	}
-	got := string(cas.Script(s).Data)
-	if !strings.HasPrefix(got, "export ") || !strings.HasSuffix(got, "#!/bin/bash\n") || !strings.Contains(got, "export NODE_EXTRA_CA_CERTS="+Bundle+"\n") {
-		t.Errorf("Script = %q", got)
-	}
-	if env := string(tr.Env) + "#!/bin/bash\n"; env != got {
-		t.Errorf("Env = %q, want what Script starts with", tr.Env)
+	env := string(tr.Env)
+	if !strings.HasPrefix(env, "export ") || !strings.HasSuffix(env, "\n") || !strings.Contains(env, "export NODE_EXTRA_CA_CERTS="+Bundle+"\n") {
+		t.Errorf("Env = %q", env)
 	}
 }
 

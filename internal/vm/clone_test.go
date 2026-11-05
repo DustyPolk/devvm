@@ -218,10 +218,18 @@ func TestCloneRm(t *testing.T) {
 	if err := os.Remove(filepath.Join(clone, "new")); err != nil {
 		t.Fatal(err)
 	}
+	// A remote named as the fetch's URL, whose own refspec would update
+	// other branches, adds none.
+	gitIn(t, e.Dir, "config", "remote."+cloneURL(vm, e.Dir)+".url", cloneURL(vm, e.Dir))
+	gitIn(t, e.Dir, "config", "remote."+cloneURL(vm, e.Dir)+".fetch", "+refs/heads/*:refs/heads/planted/*")
 	asked = answers(t, e, true)
 	if err := (Lifecycle{e}).Rm(t.Context(), RmOptions{Force: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
+	if out := gitIn(t, e.Dir, "for-each-ref", "--format=%(refname)", "refs/heads/planted"); out != "" {
+		t.Errorf("the remote's refspec fetched %q", out)
+	}
+	gitIn(t, e.Dir, "remote", "remove", cloneURL(vm, e.Dir))
 	if _, ok := f.Instances[vm]; ok || !slices.Equal(*asked, want[:1]) {
 		t.Errorf("confirmed: deleted %v, asked %q", !ok, *asked)
 	}
@@ -596,6 +604,11 @@ func TestSeedRefs(t *testing.T) {
 	gitIn(t, wt, "config", "branch.wt.merge", "refs/heads/wt")
 	if refs := seedRefs(t.Context(), wt, "wt", true); !slices.Equal(refs, []string{"refs/heads/wt:refs/heads/wt"}) {
 		t.Errorf("its own upstream: %q", refs)
+	}
+	// An upstream that's a pattern would push every branch: not one.
+	gitIn(t, wt, "config", "branch.wt.merge", "refs/heads/*")
+	if refs := seedRefs(t.Context(), wt, "wt", true); !slices.Equal(refs, []string{"refs/heads/wt:refs/heads/wt"}) {
+		t.Errorf("a pattern as its upstream: %q", refs)
 	}
 }
 

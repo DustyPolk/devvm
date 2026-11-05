@@ -109,8 +109,8 @@ func IsTool(name string) bool {
 	return ok
 }
 
-// IsAgent reports whether a name is an agent's.
-func IsAgent(name string) bool {
+// isAgent reports whether a name is an agent's.
+func isAgent(name string) bool {
 	d, ok := Def(name)
 	return ok && d.Kind == Agent
 }
@@ -132,7 +132,7 @@ func SortTools(names []string) []string {
 func AgentsOf(names []string) []string {
 	var out []string
 	for _, n := range names {
-		if IsAgent(n) {
+		if isAgent(n) {
 			out = append(out, n)
 		}
 	}

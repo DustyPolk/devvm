@@ -96,6 +96,15 @@ func TestOwnRepo(t *testing.T) {
 	replaced(filepath.Join(g, "objects"), filepath.Join(og, "objects"), func() {
 		check("symlinked objects", repo, "clone_git_elsewhere path="+g+"/objects")
 	})
+	replaced(filepath.Join(g, "objects", "pack"), filepath.Join(og, "objects", "pack"), func() {
+		check("a symlinked pack folder", repo, "clone_git_elsewhere path="+g+"/objects/pack")
+	})
+	loose := filepath.Join(g, "objects", "ab")
+	symlink(t, filepath.Join(og, "objects"), loose)
+	check("a symlinked loose objects' folder", repo, "clone_git_elsewhere path="+loose)
+	if err := os.Remove(loose); err != nil {
+		t.Fatal(err)
+	}
 	replaced(filepath.Join(g, "refs", "heads"), filepath.Join(og, "refs", "heads"), func() {
 		check("symlinked heads", repo, "clone_git_elsewhere path="+g+"/refs/heads")
 	})

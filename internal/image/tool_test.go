@@ -255,7 +255,7 @@ func TestSortToolsAndGroups(t *testing.T) {
 			t.Errorf("GroupTools(%q) = %q, want %q", name, got, want)
 		}
 	}
-	if !IsTool("rust") || !IsTool("codex") || IsTool("pnpm") || IsTool("base") || !IsAgent("opencode") || IsAgent("node") {
+	if !IsTool("rust") || !IsTool("codex") || IsTool("pnpm") || IsTool("base") || !isAgent("opencode") || isAgent("node") {
 		t.Error("IsTool or IsAgent is wrong")
 	}
 	if got := GroupTools("nix"); !slices.Equal(got, []string{"nix"}) {

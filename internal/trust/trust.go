@@ -190,18 +190,10 @@ func (c CAs) Build(assets fs.FS) (backend.Trust, error) {
 	}, nil
 }
 
-// Script returns s with Env exported at its start when there are CAs: a
-// build script's tools then find them while it runs, and the image keeps
-// none of it. s as it is for none.
-func (c CAs) Script(s backend.Script) backend.Script {
-	if len(c) == 0 {
-		return s
-	}
-	return backend.Script{Name: s.Name, Data: append(c.exports(), s.Data...)}
-}
-
-// exports are the shell lines that export Env, for the start of a build's
-// scripts (Script, Trust's Env): none for no CAs.
+// exports are the shell lines that export Env, Trust's Env, which the
+// backend puts at the start of each of a build's scripts: a build
+// script's tools then find the CAs while it runs, and the image keeps
+// none of it. None for no CAs.
 func (c CAs) exports() []byte {
 	if len(c) == 0 {
 		return nil

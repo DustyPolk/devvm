@@ -27,7 +27,7 @@ sequenceDiagram
 ## Requirements
 
 - The folder is the top folder of a git repo that has at least one commit and a branch checked out, not a detached HEAD.
-- The repo is the folder's own, or the folder is a worktree that `git worktree add` made. devvm refuses a `.git` that points into another repo, because the push would copy that repo's branches into the VM. That includes a `.git` file that isn't a worktree's, a worktree whose link back to this folder doesn't match, a `commondir` that leads to another repo, and objects or refs that are symlinks. devvm also refuses a repo that borrows objects from another repo through `objects/info/alternates`. To use such a repo, run `git repack -a -d` in it, then delete that file.
+- The repo is the folder's own, or the folder is a worktree that `git worktree add` made. devvm refuses a `.git` that points into another repo, because the push would copy that repo's branches into the VM. That includes a `.git` file that isn't a worktree's, a worktree whose link back to this folder doesn't match, a `commondir` that leads to another repo, and objects or refs that are symlinks, or that sit in a folder that is one. devvm also refuses a repo that borrows objects from another repo through `objects/info/alternates`. To use such a repo, run `git repack -a -d` in it, then delete that file.
 - git is installed on this machine. The VM's images already have it.
 - You choose `--clone` when the VM is created, and once a VM is a `--clone` VM you don't need to pass `--clone` again. devvm refuses `--clone` for an existing VM that mounts its folder, and `devvm clone on` switches that VM instead ([switching a VM that exists](#switching-a-vm-that-exists)).
 

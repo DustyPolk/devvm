@@ -270,7 +270,29 @@ func TestSetCloneUndo(t *testing.T) {
 	if err := lc.SetClone(t.Context(), "devvm clone off", CloneOff, RemakeOptions{Force: true, CleanHome: true, NoCloneCheck: true}); err == nil {
 		t.Fatal("off: no error")
 	}
+	// What the new machine did to .git meanwhile is named before its
+	// locks come off, as a clone VM's .git is never checked.
+	git := filepath.Join(e.Dir, ".git")
+	if err := os.CopyFS(git+".new", os.DirFS(git)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(git, filepath.Join(t.TempDir(), "old")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(git+".new", git); err != nil {
+		t.Fatal(err)
+	}
+	var warned msg.Recorder
+	protector := e.Protector
+	e.Protector = func(dir string) *gitprotect.Protector {
+		p := protector(dir)
+		p.Warn = warned.Add
+		return p
+	}
 	undo()
+	if want := "git_replaced git=" + git; !slices.Contains(warned.Names(), want) {
+		t.Errorf("off, undone: warned %q, want %s", warned.Names(), want)
+	}
 	after = readState(t, e.Dirs, vm)
 	if !isClone(after) || get(after, keyGitProtect) != gitprotect.Clone || get(after, KeyCloneRemote) != "devvm" || remakePending(after) {
 		t.Errorf("off, undone: clone %v, git %q, remote %q", isClone(after), get(after, keyGitProtect), get(after, KeyCloneRemote))
