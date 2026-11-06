@@ -3559,6 +3559,166 @@ func UpFailed(reason string) M {
 	return M{id: "up_failed", vals: []val{{"reason", reason}}}
 }
 
+// UpgradeAlready is [upgrade_already]: "This is devvm {{.version}} already, so nothing was installed."
+func UpgradeAlready(version string) M {
+	return M{id: "upgrade_already", vals: []val{{"version", version}}}
+}
+
+// UpgradeAlreadyLatest is [upgrade_already_latest]: "This is devvm {{.version}}, the newest release."
+func UpgradeAlreadyLatest(version string) M {
+	return M{id: "upgrade_already_latest", vals: []val{{"version", version}}}
+}
+
+// UpgradeAvailable is [upgrade_available]: "devvm {{.latest}} is out, and this is devvm {{.current}}. Run devvm upgrade to install it."
+func UpgradeAvailable(current string, latest string) M {
+	return M{id: "upgrade_available", vals: []val{{"current", current}, {"latest", latest}}}
+}
+
+// UpgradeBadArchive is [upgrade_bad_archive]: "The archive of devvm {{.version}} holds something other than devvm's files, so nothing was installed."
+func UpgradeBadArchive(version string) M {
+	return M{id: "upgrade_bad_archive", vals: []val{{"version", version}}}
+}
+
+// UpgradeBadChecksum is [upgrade_bad_checksum]: "{{.archive}} doesn't match its checksum in devvm {{.version}}'s SHA256SUMS, so nothing was installed."
+func UpgradeBadChecksum(archive string, version string) M {
+	return M{id: "upgrade_bad_checksum", vals: []val{{"archive", archive}, {"version", version}}}
+}
+
+// UpgradeBadSignature is [upgrade_bad_signature]: "The SHA256SUMS of devvm {{.version}} isn't signed with devvm's release key, so nothing was installed."
+func UpgradeBadSignature(version string) M {
+	return M{id: "upgrade_bad_signature", vals: []val{{"version", version}}}
+}
+
+// UpgradeBrewDone is [upgrade_brew_done]: "Homebrew upgraded devvm."
+func UpgradeBrewDone() M {
+	return M{id: "upgrade_brew_done"}
+}
+
+// UpgradeBrewFailed is [upgrade_brew_failed]: "Homebrew's brew upgrade devvm failed, so its devvm stays as it was."
+func UpgradeBrewFailed() M {
+	return M{id: "upgrade_brew_failed"}
+}
+
+// UpgradeBrewStep is [upgrade_brew_step]: "running brew upgrade devvm"
+func UpgradeBrewStep() M {
+	return M{id: "upgrade_brew_step"}
+}
+
+// UpgradeBrewVersion is [upgrade_brew_version]: "Homebrew installed this devvm and installs only its newest version, so devvm upgrade can't take --to. Run devvm upgrade without it."
+func UpgradeBrewVersion() M {
+	return M{id: "upgrade_brew_version"}
+}
+
+// UpgradeChecking is [upgrade_checking]: "checking for a new release"
+func UpgradeChecking() M {
+	return M{id: "upgrade_checking"}
+}
+
+// UpgradeCheckoutBuild is [upgrade_checkout_build]: "This devvm, {{.version}}, was built from devvm's source, so devvm upgrade can't upgrade it. Build it again from the newest source instead."
+func UpgradeCheckoutBuild(version string) M {
+	return M{id: "upgrade_checkout_build", vals: []val{{"version", version}}}
+}
+
+// UpgradeConfirm is [upgrade_confirm]: "Install devvm {{.version}} in place of devvm {{.current}}?"
+func UpgradeConfirm(current string, version string) M {
+	return M{id: "upgrade_confirm", vals: []val{{"current", current}, {"version", version}}}
+}
+
+// UpgradeConfirmBrew is [upgrade_confirm_brew]: "Run brew upgrade devvm to install devvm {{.version}} in place of devvm {{.current}}?"
+func UpgradeConfirmBrew(current string, version string) M {
+	return M{id: "upgrade_confirm_brew", vals: []val{{"current", current}, {"version", version}}}
+}
+
+// UpgradeConfirmOlder is [upgrade_confirm_older]: "This is devvm {{.current}}, and devvm {{.version}} is older. Install it anyway?"
+func UpgradeConfirmOlder(current string, version string) M {
+	return M{id: "upgrade_confirm_older", vals: []val{{"current", current}, {"version", version}}}
+}
+
+// UpgradeDone is [upgrade_done]: "Installed devvm {{.version}} at {{.link}}."
+func UpgradeDone(link string, version string) M {
+	return M{id: "upgrade_done", vals: []val{{"link", link}, {"version", version}}}
+}
+
+// UpgradeDownloadFailed is [upgrade_download_failed]: "{{.file}} of devvm {{.version}} couldn't be downloaded, so nothing was installed. Check your connection, then run devvm upgrade again."
+func UpgradeDownloadFailed(file string, version string) M {
+	return M{id: "upgrade_download_failed", vals: []val{{"file", file}, {"version", version}}}
+}
+
+// UpgradeDownloading is [upgrade_downloading]: "downloading devvm {{.version}}"
+func UpgradeDownloading(version string) M {
+	return M{id: "upgrade_downloading", vals: []val{{"version", version}}}
+}
+
+// UpgradeFailed is [upgrade_failed]: "Installing devvm {{.version}} failed, so the devvm you have stays the one that runs."
+func UpgradeFailed(version string) M {
+	return M{id: "upgrade_failed", vals: []val{{"version", version}}}
+}
+
+// UpgradeFailedReason is [upgrade_failed_reason]: "Upgrading devvm failed: {{.reason}}."
+func UpgradeFailedReason(reason string) M {
+	return M{id: "upgrade_failed_reason", vals: []val{{"reason", reason}}}
+}
+
+// UpgradeGoInstall is [upgrade_go_install]: "This devvm {{.version}} was installed with go install, so devvm upgrade can't upgrade it. Run go install github.com/w3cj/devvm/cmd/devvm@latest instead."
+func UpgradeGoInstall(version string) M {
+	return M{id: "upgrade_go_install", vals: []val{{"version", version}}}
+}
+
+// UpgradeKeptInUse is [upgrade_kept_in_use]: "devvm {{.version}} stays installed, because a running VM uses it."
+func UpgradeKeptInUse(version string) M {
+	return M{id: "upgrade_kept_in_use", vals: []val{{"version", version}}}
+}
+
+// UpgradeLatestIs is [upgrade_latest_is]: "The newest release is devvm {{.latest}}."
+func UpgradeLatestIs(latest string) M {
+	return M{id: "upgrade_latest_is", vals: []val{{"latest", latest}}}
+}
+
+// UpgradeLatestOlder is [upgrade_latest_older]: "The newest release, devvm {{.latest}}, is older than this devvm {{.current}}, so devvm upgrade installs nothing. To install it anyway, run devvm upgrade --to {{.latest}}."
+func UpgradeLatestOlder(current string, latest string) M {
+	return M{id: "upgrade_latest_older", vals: []val{{"current", current}, {"latest", latest}}}
+}
+
+// UpgradeNewFailed is [upgrade_new_failed]: "The new devvm {{.version}} didn't run here, so the devvm you have stays the one that runs."
+func UpgradeNewFailed(version string) M {
+	return M{id: "upgrade_new_failed", vals: []val{{"version", version}}}
+}
+
+// UpgradeNoArchive is [upgrade_no_archive]: "The SHA256SUMS of devvm {{.version}} has no {{.archive}}, so nothing was installed."
+func UpgradeNoArchive(archive string, version string) M {
+	return M{id: "upgrade_no_archive", vals: []val{{"archive", archive}, {"version", version}}}
+}
+
+// UpgradeNoKey is [upgrade_no_key]: "This devvm has no release key to check a download's signature with, so devvm upgrade can't install a release. Run the install script again to upgrade devvm."
+func UpgradeNoKey() M {
+	return M{id: "upgrade_no_key"}
+}
+
+// UpgradeNoLatest is [upgrade_no_latest]: "The newest release at {{.url}}/releases couldn't be found. Check your connection, then run devvm upgrade again."
+func UpgradeNoLatest(url string) M {
+	return M{id: "upgrade_no_latest", vals: []val{{"url", url}}}
+}
+
+// UpgradeNotVersion is [upgrade_not_version]: "--to takes a release's version, such as 0.2.0, not {{.value}}."
+func UpgradeNotVersion(value string) M {
+	return M{id: "upgrade_not_version", vals: []val{{"value", value}}}
+}
+
+// UpgradeNothingInstalled is [upgrade_nothing_installed]: "Nothing was installed."
+func UpgradeNothingInstalled() M {
+	return M{id: "upgrade_nothing_installed"}
+}
+
+// UpgradeOtherInstall is [upgrade_other_install]: "This devvm, {{.path}}, wasn't installed by Homebrew or the install script, so devvm upgrade can't upgrade it. Upgrade it the way you installed it."
+func UpgradeOtherInstall(path string) M {
+	return M{id: "upgrade_other_install", vals: []val{{"path", path}}}
+}
+
+// UpgradeRollbackFailed is [upgrade_rollback_failed]: "The new devvm didn't run, and {{.link}} couldn't be put back, so it points at the new one. Run ln -sfn {{.old}} {{.link}} to put it back."
+func UpgradeRollbackFailed(link string, old string) M {
+	return M{id: "upgrade_rollback_failed", vals: []val{{"link", link}, {"old", old}}}
+}
+
 // UpstreamProxyGone is [upstream_proxy_gone]: "{{.vm_name}}'s proxy went through a company proxy before, and this shell sets none, so it goes directly now. Set HTTPS_PROXY in this shell, or the [proxy] table in {{.file}}."
 func UpstreamProxyGone(file string, vmName string) M {
 	return M{id: "upstream_proxy_gone", vals: []val{{"file", file}, {"vm_name", vmName}}}
@@ -4422,6 +4582,38 @@ var specs = map[string]spec{
 	"unsafe_folder_inside":           {fields: []string{"dir", "inside"}},
 	"unsafe_folder_used":             {fields: []string{"dir", "holds"}},
 	"up_failed":                      {fields: []string{"reason"}},
+	"upgrade_already":                {fields: []string{"version"}},
+	"upgrade_already_latest":         {fields: []string{"version"}},
+	"upgrade_available":              {fields: []string{"current", "latest"}},
+	"upgrade_bad_archive":            {fields: []string{"version"}},
+	"upgrade_bad_checksum":           {fields: []string{"archive", "version"}},
+	"upgrade_bad_signature":          {fields: []string{"version"}},
+	"upgrade_brew_done":              {},
+	"upgrade_brew_failed":            {},
+	"upgrade_brew_step":              {},
+	"upgrade_brew_version":           {},
+	"upgrade_checking":               {},
+	"upgrade_checkout_build":         {fields: []string{"version"}},
+	"upgrade_confirm":                {fields: []string{"current", "version"}},
+	"upgrade_confirm_brew":           {fields: []string{"current", "version"}},
+	"upgrade_confirm_older":          {fields: []string{"current", "version"}},
+	"upgrade_done":                   {fields: []string{"link", "version"}},
+	"upgrade_download_failed":        {fields: []string{"file", "version"}},
+	"upgrade_downloading":            {fields: []string{"version"}},
+	"upgrade_failed":                 {fields: []string{"version"}},
+	"upgrade_failed_reason":          {fields: []string{"reason"}},
+	"upgrade_go_install":             {fields: []string{"version"}},
+	"upgrade_kept_in_use":            {fields: []string{"version"}},
+	"upgrade_latest_is":              {fields: []string{"latest"}},
+	"upgrade_latest_older":           {fields: []string{"current", "latest"}},
+	"upgrade_new_failed":             {fields: []string{"version"}},
+	"upgrade_no_archive":             {fields: []string{"archive", "version"}},
+	"upgrade_no_key":                 {},
+	"upgrade_no_latest":              {fields: []string{"url"}},
+	"upgrade_not_version":            {fields: []string{"value"}},
+	"upgrade_nothing_installed":      {},
+	"upgrade_other_install":          {fields: []string{"path"}},
+	"upgrade_rollback_failed":        {fields: []string{"link", "old"}},
 	"upstream_proxy_gone":            {fields: []string{"file", "vm_name"}},
 	"upstream_proxy_invalid":         {fields: []string{"setting"}},
 	"upstream_proxy_scheme":          {fields: []string{"scheme", "setting"}},

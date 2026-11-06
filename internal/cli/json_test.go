@@ -56,18 +56,43 @@ func shape(t *testing.T, data []byte) []string {
 	return out
 }
 
+// A shapeCase is a command's --json sample and its shape.
+type shapeCase struct {
+	command string
+	v       any
+	want    []string
+}
+
+// machineShapes are the shapes of This machine's commands.
+func machineShapes() []shapeCase {
+	yes, fix := true, "brew install lima"
+	return []shapeCase{
+		{
+			"doctor",
+			doctorOutput{
+				Backend: "lima", Problems: []problemJSON{{Key: "lima", Fix: &fix, Message: "m"}, {Key: "kvm", Message: "m"}},
+				Warnings: []string{"w"}, Docker: yes, Features: map[string]map[string]string{"lima": {"ssh": "native"}},
+			},
+			[]string{
+				"backend: string", "docker: bool", "features.lima.ssh: string", "problems[].fix: string", "problems[].key: string",
+				"problems[].message: string", "warnings[]: string",
+			},
+		},
+		{
+			"upgrade",
+			upgradeJSON{Current: "0.1.0", Latest: "0.2.0", Newer: true, Install: "install.sh", Path: "/l/devvm"},
+			[]string{"current: string", "install: string", "latest: string", "newer: bool", "path: string"},
+		},
+	}
+}
+
 // Each command's --json shape: its field names and types, from a sample
 // with every field set. A field is only ever added: a change to one that
 // fails here is a new jsonVersion. Every command that takes --json has
 // one.
 func TestJSONShapes(t *testing.T) {
-	yes, fix := true, "brew install lima"
 	at := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
-	cases := []struct {
-		command string
-		v       any
-		want    []string
-	}{
+	cases := []shapeCase{
 		{
 			"ls", lsJSON([]vm.Listed{{Name: "devvm-a", Status: "Running", Image: "base", Tools: []string{"node"}, From: "node:24", Git: "on", Net: "allowlist", Backend: "lima", Folder: "/a"}}),
 			[]string{
@@ -187,18 +212,8 @@ func TestJSONShapes(t *testing.T) {
 			"gc: number", "strays[].backend: string", "strays[].data: string", "strays[].name: string", "total: number", "unknown[]: string",
 		}},
 		{"retention", retentionJSON(settings.Retention{}), retentionShape()},
-		{
-			"doctor",
-			doctorOutput{
-				Backend: "lima", Problems: []problemJSON{{Key: "lima", Fix: &fix, Message: "m"}, {Key: "kvm", Message: "m"}},
-				Warnings: []string{"w"}, Docker: yes, Features: map[string]map[string]string{"lima": {"ssh": "native"}},
-			},
-			[]string{
-				"backend: string", "docker: bool", "features.lima.ssh: string", "problems[].fix: string", "problems[].key: string",
-				"problems[].message: string", "warnings[]: string",
-			},
-		},
 	}
+	cases = append(cases, machineShapes()...)
 	shaped := map[string]bool{}
 	for _, tc := range cases {
 		path, _, _ := strings.Cut(tc.command, " -")

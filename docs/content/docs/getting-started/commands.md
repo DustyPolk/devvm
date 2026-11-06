@@ -289,6 +289,7 @@ A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the 
 | `devvm agent login AGENT [--setup-token] [--device-code] [--api-key]` | log Claude Code in to your Claude subscription inside this folder's VM, or get a Claude Code token with `--setup-token` ([details](../using/coding-agents.md#claude-code-login)), or log Codex or opencode in to ChatGPT there, in a browser on this machine or with a code, or save an API key, and keep the login in devvm's agent store for every VM ([details](../using/coding-agents.md#logging-in-with-devvm-agent-login)) |
 | `devvm agent save [AGENT...]` | copy the agents' settings from this folder's VM into devvm's agent store, never their logins or history, after showing what changed and asking ([details](../using/coding-agents.md#saving-a-vms-settings)) |
 | `devvm doctor` | check what devvm needs on this machine and say how to get what's missing ([details](install.md#checking-what-devvm-needs)) |
+| `devvm upgrade [--check] [--to VERSION]` | install devvm's newest release the way you installed devvm, after asking, or with `--check` only say whether a newer one is out ([details](#upgrading-devvm)) |
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
 | `devvm limactl ARGS...` | run Lima's `limactl` on the VMs and images in devvm's own Lima home, not `~/.lima`, for debugging, which starts VMs unconfined, whatever their tier ([details](../backends/lima.md#running-limactl)) |
 
@@ -301,6 +302,19 @@ The completion script completes commands, flags and the image names that `devvm 
 | bash | `source <(devvm completion bash)` | `~/.bashrc`, with the bash-completion package installed |
 | zsh | `source <(devvm completion zsh)` | `~/.zshrc`, after `compinit` |
 | fish | `devvm completion fish \| source` | `~/.config/fish/config.fish` |
+
+### Upgrading devvm
+
+`devvm upgrade` installs devvm's newest release the way you installed devvm, and it asks before it installs anything. When the install script installed devvm, it downloads the release, checks its signature and checksum, and switches `~/.local/bin/devvm` to it. When Homebrew installed devvm, it runs `brew upgrade devvm`. It can't upgrade a devvm that you installed another way, such as with `go install` or a build from the source, and it says how that devvm was installed instead.
+
+| | |
+| --- | --- |
+| `devvm upgrade` | install the newest release, asking first |
+| `devvm upgrade --force` | install it without asking, as a script must |
+| `devvm upgrade --check` | say whether a newer release is out, and install nothing |
+| `devvm upgrade --to 0.1.0` | install that release, even one older than the devvm you have |
+
+[Upgrading](install.md#upgrading) explains each way devvm can be installed, what devvm upgrade checks, and why it refuses a newest release that's older than the devvm you have.
 
 ## Flags and values
 
@@ -334,6 +348,7 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 | whether to delete, in `devvm rm`, `devvm gc`, `devvm gc --caches`, `devvm images rm` and `devvm secret rm` | `--force` |
 | whether to replace the images built on one, in `devvm rebuild` | `--force` |
 | whether to replace what devvm's agent store has, in `devvm agent import` | `--force` |
+| whether to install a release, in `devvm upgrade` | `--force` |
 | whether to use the VM made for an earlier folder here, in `devvm adopt`, or to move a VM to this folder, in `devvm adopt VM` | `--force` |
 | whether to move the VM made for this folder at the path it had before, in any command on this folder's VM | `devvm adopt --force` |
 
@@ -381,3 +396,4 @@ A command that shows a setting when you run it bare and changes the setting when
 | `devvm space --json` | [what devvm keeps on this machine](../using/space.md#devvm-space---json) |
 | `devvm retention --json` | [the retention settings](../using/settings.md#devvm-retention---json) |
 | `devvm doctor --json` | [what devvm needs on this machine and what's missing](../internals/install.md#devvm-doctor---json), and it prints nothing else |
+| `devvm upgrade --json` | [the newest release and how this devvm was installed](install.md#devvm-upgrade---json), and it installs nothing |

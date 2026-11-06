@@ -87,3 +87,4 @@ devvm [flags]
 - [devvm stop](devvm_stop.md): Stop this folder's VM
 - [devvm tools](devvm_tools.md): Show or choose this folder's VM's shared tools
 - [devvm update](devvm_update.md): Bring this folder's VM up to date, then open a shell in it
+- [devvm upgrade](devvm_upgrade.md): Install devvm's newest release

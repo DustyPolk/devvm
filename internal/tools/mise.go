@@ -39,6 +39,9 @@ const downloadTimeout = 10 * time.Minute
 // a failure that may pass.
 const downloadRetries = 3
 
+// miseCap caps mise's download: its binary is far less.
+const miseCap = 256 << 20
+
 // newClient is the client mise is downloaded with: redirects to https
 // only.
 func newClient() *fetch.Client { return fetch.NewClient(downloadTimeout, fetch.HTTPSOnly) }
@@ -77,7 +80,7 @@ func (t Versions) HostMise(ctx context.Context) (string, error) {
 	defer func() { _ = os.Remove(tmp) }()
 	url := fmt.Sprintf(t.miseURL, miseVersion, platform)
 	err := fetch.Retry(ctx, downloadRetries, t.RetryDelay, func() (bool, error) {
-		err := fetch.Download(ctx, t.Client, url, tmp, t.miseSums[platform])
+		err := fetch.Download(ctx, t.Client, url, tmp, t.miseSums[platform], miseCap)
 		return fetch.Transient(err), err
 	})
 	m, isMsg := errors.AsType[msg.M](err)

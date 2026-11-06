@@ -108,6 +108,11 @@ func devvm() rules {
 				to: []string{"internal/backend/backendtest"},
 			},
 			{
+				name: "upgradetest is for tests",
+				from: []string{"..."}, exceptFrom: []string{"internal/upgrade/upgradetest"},
+				to: []string{"internal/upgrade/upgradetest"},
+			},
+			{
 				name: "stubtest is for tests",
 				from: []string{"..."}, exceptFrom: []string{"internal/stubtest/..."},
 				to: []string{"internal/stubtest/..."},
@@ -132,7 +137,7 @@ func devvm() rules {
 			{
 				name: "leaves import nothing of devvm's",
 				from: []string{
-					"assets", "locales", "internal/platform", "internal/msg/gen", "internal/testbuild", "internal/hostgit",
+					"assets", "locales", "packaging", "internal/platform", "internal/msg/gen", "internal/testbuild", "internal/hostgit",
 					"internal/shell", "internal/vmname", "internal/daemon", "internal/fetch", "internal/jsonc",
 					"internal/redact",
 				},
@@ -262,6 +267,7 @@ func devvmExecSites() map[string]string {
 		"internal/platform/keychain_darwin.go": "security and tmutil: secrets on stdin and stdout, never in a log",
 		"internal/platform/folder_darwin.go":   "chflags, for .git protection",
 		"internal/daemon/daemon.go":            "devvm's background processes, which outlive the run and its context",
+		"internal/upgrade/upgrade.go":          "devvm upgrade: brew upgrade devvm through the UI's LoggedCmd, a new devvm's --version and ps's list, their output read",
 		"internal/stubtest/build.go":           "go build of the test stubs, once for a test process, and their names from the binary",
 		"internal/stubtest/stub/process.go":    "the stubs' stand-in VM's own commands (git on its files, tar) and the real uname and sw_vers, run in the stub's place",
 	}

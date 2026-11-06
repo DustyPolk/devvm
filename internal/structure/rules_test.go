@@ -198,6 +198,11 @@ func layerCases() []ruleCase {
 			want:  &want{ruleLayers, "backendtest is for tests"},
 		},
 		{
+			name:  "upgradetest outside tests",
+			files: map[string]string{"internal/upgrade/a.go": imports("upgrade", "internal/upgrade/upgradetest")},
+			want:  &want{ruleLayers, "upgradetest is for tests"},
+		},
+		{
 			name:  "stubtest outside tests",
 			files: map[string]string{"internal/vm/a.go": imports("vm", "internal/stubtest")},
 			want:  &want{ruleLayers, "stubtest is for tests"},

@@ -13,7 +13,7 @@ The reasoning behind most rules is in the [Command Line Interface Guidelines](ht
 
 ## The tree
 
-devvm has 32 commands at the top, plus help. Each one is in a group of the root's help, in this order. The table shows each command with its subcommands and the values a setting takes, and each command's help lists its flags.
+devvm has 33 commands at the top, plus help. Each one is in a group of the root's help, in this order. The table shows each command with its subcommands and the values a setting takes, and each command's help lists its flags.
 
 | Group | Commands |
 | --- | --- |
@@ -22,7 +22,7 @@ devvm has 32 commands at the top, plus help. Each one is in a group of the root'
 | Links between VMs | group, group join NAME, with --as NAME, group leave; link, link add\|rm TARGET PORT, with --as NAME on add; link publish [PORTS], link unpublish PORTS |
 | Images | images, images rm IMAGE\|KEY..., build IMAGE, rebuild IMAGE, layer new NAME |
 | Disk space | space, gc, retention [KEY=VALUE...] |
-| This machine | setup, agent, agent import [AGENT...], agent login AGENT, agent save [AGENT...], doctor, completion SHELL, limactl [ARGS...] |
+| This machine | setup, agent, agent import [AGENT...], agent login AGENT, agent save [AGENT...], doctor, upgrade, completion SHELL, limactl [ARGS...] |
 
 size, ports and network take `-g` for what new VMs get. Every command takes `-h`/`--help`, `--no-input` and `-v`/`--verbose`, and the root takes `--version`. `devvm --help` prints the tree as it is, and `commandGroups` in `internal/cli/help.go` holds the groups. A subcommand can sit in a group other than its parent's, as layer add and layer rm do, and `devvm --help` then lists it by both names in that group.
 
@@ -30,7 +30,7 @@ size, ports and network take `-g` for what new VMs get. Every command takes `-h`
 
 Each rule says what it looks like in devvm, and what checks it. A test's name means `mise run test` fails when the rule breaks, and "by hand" means a reviewer checks it, with [judgment.md](judgment.md) as the guide.
 
-1. **A bare verb acts on this folder's VM, and anything else goes under its noun.** devvm stop stops the VM, and devvm secret set acts on a secret. A bare noun shows or lists, so no command is named `ls`, `list`, `show` or `get`, and devvm ls is the one list at the top. Only ls, build, rebuild, gc, setup, doctor, completion and limactl stay at the top as exceptions. `TestCommandNames` checks the names, and the placement is by hand ([where a command goes](judgment.md#where-a-command-goes)).
+1. **A bare verb acts on this folder's VM, and anything else goes under its noun.** devvm stop stops the VM, and devvm secret set acts on a secret. A bare noun shows or lists, so no command is named `ls`, `list`, `show` or `get`, and devvm ls is the one list at the top. Only ls, build, rebuild, gc, setup, doctor, upgrade, completion and limactl stay at the top as exceptions. `TestCommandNames` checks the names, and the placement is by hand ([where a command goes](judgment.md#where-a-command-goes)).
 2. **rm deletes or takes out a thing, and unX undoes the relation X made.** devvm secret rm deletes the saved secret, and devvm secret unuse stops the VM using it while the secret stays saved. `TestCommandNames` checks that an unX has a sibling X, and the choice between them is by hand ([rm or unX](judgment.md#rm-or-unx)).
 3. **A setting shows bare, sets with a value, and takes `-g` for what new VMs get.** devvm ports shows, devvm ports none sets, and devvm ports -g none sets what new VMs forward. With `--json` a setting only shows, because `showsOnly` refuses a value. Each setting's CLI test checks that refusal, and which commands are settings is by hand ([settings](judgment.md#settings)).
 4. **Positional arguments are only the things a command acts on, each a word of its own.** devvm tools add python claude takes two tools, and a `+` appears only in an image's name, which joins its layers, such as foo+bar. devvm itself takes no argument: a new VM's parts are flags, `--tools`, `--agents` and `--layers`, each a comma-separated list or none. Everything that changes how a command acts is a flag. `TestCommandNames` checks a `Use`'s grammar, `TestUseMatchesArgs` checks that `Args` takes what the `Use` shows, and what counts as the thing acted on is by hand ([arguments](judgment.md#arguments)).

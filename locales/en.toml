@@ -2564,3 +2564,112 @@ other = "{{.file}} is gone, so devvm makes {{.vm}} again without it."
 [devcontainer_command_failed]
 description = "command is a devcontainer.json property, with a named command's name after it"
 other = "{{.command}} failed in {{.vm}}."
+
+[upgrade_checking]
+description = "a status step: devvm upgrade asks the release server for its newest release"
+other = "checking for a new release"
+
+[upgrade_downloading]
+description = "a status step: devvm upgrade downloads and checks a release"
+other = "downloading devvm {{.version}}"
+
+[upgrade_brew_step]
+description = "a status step: devvm upgrade runs Homebrew"
+other = "running brew upgrade devvm"
+
+[upgrade_no_latest]
+description = "url is the repository whose releases devvm upgrade reads, such as https://github.com/w3cj/devvm"
+other = "The newest release at {{.url}}/releases couldn't be found. Check your connection, then run devvm upgrade again."
+
+[upgrade_latest_is]
+other = "The newest release is devvm {{.latest}}."
+
+[upgrade_available]
+other = "devvm {{.latest}} is out, and this is devvm {{.current}}. Run devvm upgrade to install it."
+
+[upgrade_already_latest]
+other = "This is devvm {{.version}}, the newest release."
+
+[upgrade_already]
+other = "This is devvm {{.version}} already, so nothing was installed."
+
+[upgrade_latest_older]
+description = "current is this devvm's version, latest the release server's newest, which is older"
+other = "The newest release, devvm {{.latest}}, is older than this devvm {{.current}}, so devvm upgrade installs nothing. To install it anyway, run devvm upgrade --to {{.latest}}."
+
+[upgrade_confirm]
+other = "Install devvm {{.version}} in place of devvm {{.current}}?"
+
+[upgrade_confirm_older]
+other = "This is devvm {{.current}}, and devvm {{.version}} is older. Install it anyway?"
+
+[upgrade_confirm_brew]
+other = "Run brew upgrade devvm to install devvm {{.version}} in place of devvm {{.current}}?"
+
+[upgrade_nothing_installed]
+other = "Nothing was installed."
+
+[upgrade_brew_version]
+other = "Homebrew installed this devvm and installs only its newest version, so devvm upgrade can't take --to. Run devvm upgrade without it."
+
+[upgrade_checkout_build]
+description = "version is the version Go recorded for the build, such as a pseudo-version or (devel)"
+other = "This devvm, {{.version}}, was built from devvm's source, so devvm upgrade can't upgrade it. Build it again from the newest source instead."
+
+[upgrade_go_install]
+other = "This devvm {{.version}} was installed with go install, so devvm upgrade can't upgrade it. Run go install github.com/w3cj/devvm/cmd/devvm@latest instead."
+
+[upgrade_other_install]
+description = "path is the running devvm binary's path, its links resolved"
+other = "This devvm, {{.path}}, wasn't installed by Homebrew or the install script, so devvm upgrade can't upgrade it. Upgrade it the way you installed it."
+
+[upgrade_no_key]
+other = "This devvm has no release key to check a download's signature with, so devvm upgrade can't install a release. Run the install script again to upgrade devvm."
+
+[upgrade_download_failed]
+description = "file is the release's file that couldn't be downloaded, such as SHA256SUMS or an archive"
+other = "{{.file}} of devvm {{.version}} couldn't be downloaded, so nothing was installed. Check your connection, then run devvm upgrade again."
+
+[upgrade_bad_signature]
+other = "The SHA256SUMS of devvm {{.version}} isn't signed with devvm's release key, so nothing was installed."
+
+[upgrade_no_archive]
+description = "archive is the archive for this machine, such as devvm-0.2.0-darwin-arm64.tar.gz"
+other = "The SHA256SUMS of devvm {{.version}} has no {{.archive}}, so nothing was installed."
+
+[upgrade_bad_checksum]
+description = "archive is the archive for this machine, such as devvm-0.2.0-darwin-arm64.tar.gz"
+other = "{{.archive}} doesn't match its checksum in devvm {{.version}}'s SHA256SUMS, so nothing was installed."
+
+[upgrade_bad_archive]
+other = "The archive of devvm {{.version}} holds something other than devvm's files, so nothing was installed."
+
+[upgrade_new_failed]
+other = "The new devvm {{.version}} didn't run here, so the devvm you have stays the one that runs."
+
+[upgrade_rollback_failed]
+description = "link is install.sh's link to devvm, old the devvm it pointed at before, each a full path"
+other = "The new devvm didn't run, and {{.link}} couldn't be put back, so it points at the new one. Run ln -sfn {{.old}} {{.link}} to put it back."
+
+[upgrade_failed]
+other = "Installing devvm {{.version}} failed, so the devvm you have stays the one that runs."
+
+[upgrade_done]
+description = "link is install.sh's link to devvm, such as ~/.local/bin/devvm, written out in full"
+other = "Installed devvm {{.version}} at {{.link}}."
+
+[upgrade_kept_in_use]
+other = "devvm {{.version}} stays installed, because a running VM uses it."
+
+[upgrade_brew_failed]
+other = "Homebrew's brew upgrade devvm failed, so its devvm stays as it was."
+
+[upgrade_brew_done]
+other = "Homebrew upgraded devvm."
+
+[upgrade_not_version]
+other = "--to takes a release's version, such as 0.2.0, not {{.value}}."
+
+[upgrade_failed_reason]
+description = "reason is an error from the system, in English"
+other = "Upgrading devvm failed: {{.reason}}."

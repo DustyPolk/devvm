@@ -7,6 +7,8 @@ import (
 	"github.com/w3cj/devvm/internal/backend/lima"
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/testbuild"
+	"github.com/w3cj/devvm/internal/upgrade"
+	"github.com/w3cj/devvm/packaging"
 )
 
 // A release, as this test binary is (built without the test build's
@@ -23,6 +25,7 @@ func TestReleaseReadsNoOverrides(t *testing.T) {
 	}
 	for _, k := range []string{
 		"DEVVM_HOST_MISE", "DEVVM_KVM", "DEVVM_UBUNTU_URL", "DEVVM_UNREVIEWED",
+		"DEVVM_REPO_URL", "DEVVM_RELEASE_KEY", "DEVVM_RELEASE_CA", "DEVVM_TEST_VERSION",
 		platform.TestCPUs, platform.TestMemoryGiB, platform.TestFreeGiB, platform.TestListWait,
 	} {
 		t.Setenv(k, "1")
@@ -49,5 +52,13 @@ func TestReleaseReadsNoOverrides(t *testing.T) {
 	}
 	if got, want := a.host().CPUs(), (platform.Host{}).CPUs(); got != want {
 		t.Errorf("the host's CPUs = %d, want %d", got, want)
+	}
+	// devvm upgrade's releases are GitHub's, checked with the key built in.
+	up, err := a.upgrader()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.Source.URL != upgrade.Repo || up.Source.Key != packaging.MinisignKey() || up.Current != devvmVersion() {
+		t.Errorf("upgrade's source %q, key %q, version %q", up.Source.URL, up.Source.Key, up.Current)
 	}
 }

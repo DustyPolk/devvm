@@ -3,7 +3,7 @@ title: Installing and updating
 weight: 2
 ---
 
-This page explains what devvm's install script downloads and checks, what `devvm doctor --json` reports, where devvm keeps its own files, and what happens to older versions when you upgrade. [Installing](../getting-started/install.md) covers the commands you run.
+This page explains what devvm's install script downloads and checks, what `devvm doctor --json` reports, where devvm keeps its own files, what happens to older versions when you upgrade, and how `devvm upgrade` checks and installs a release. [Installing](../getting-started/install.md) covers the commands you run.
 
 ## The install script
 
@@ -94,3 +94,38 @@ devvm is one binary. Its own files are built into it, so a copy of it runs anywh
 ## Upgrading
 
 When the script installs a new version, it removes the older versions in `~/.local/lib/devvm`, except a version that a running VM's proxy, or QEMU on Linux, still runs. A later install removes that version once nothing runs it. A VM's proxy moves to the new version at the VM's next launch (`devvm` in its folder), and QEMU moves when the VM next starts.
+
+## devvm upgrade
+
+`devvm upgrade` installs a release in Go, with the same files and checks as the install script, and it never runs the script. It reads the newest release's version from where GitHub's `releases/latest` redirects, `releases/tag/v<version>`, as the script does, so it needs no API and has no rate limit. Every request goes over HTTPS, and a redirect to anything else is refused.
+
+### How it tells how devvm was installed
+
+It follows the links of the running binary's path, and it reads only that path, never running anything:
+
+- It's the install script's when the binary is `devvm` in `<prefix>/lib/devvm/<version>`, with a release's version as the folder's name, and `<prefix>/bin/devvm` is a link that resolves to that same binary. The prefix comes from the binary's own path, so `DEVVM_PREFIX` needs no setting.
+- It's Homebrew's when the path has `Cellar/devvm/` in it, a keg of Homebrew's.
+- Anything else is another way. A devvm whose version isn't a release's, such as a checkout's pseudo-version or `(devel)`, was built from the source. One with a release's version that wasn't set when it was built, as `go install` gives, was installed with `go install`. One that has a release's version is a copy of a release somewhere else.
+
+### The release key and the signature
+
+The release key's public half is built into devvm from `packaging/minisign.pub`, the same file the script gets its key from, so devvm upgrade trusts the key in the devvm you have, never one that comes with the release. A build without that file has no key, and devvm upgrade refuses to install a release with it.
+
+devvm checks minisign's signature itself. `SHA256SUMS.minisig` holds a signature and a trusted comment, each signed with the key. devvm accepts only minisign's default, prehashed signature, marked `ED`, which is Ed25519 over the BLAKE2b-512 hash of `SHA256SUMS`, and refuses the legacy one, marked `Ed`, over the file itself. The signature's key ID must be the release key's, and the global signature, Ed25519 over the signature followed by the trusted comment, must verify too. The trusted comment must be `devvm <version>`, as the release script writes it, so a `SHA256SUMS` signed for one release can't stand in for another's. Then the archive for this machine, `devvm-<version>-<os>-<arch>.tar.gz` for the binary's own OS and processor, must match its line in `SHA256SUMS`.
+
+The archive is unpacked into `<prefix>/lib/devvm/.<version>.new.<pid>`, beside the version that runs. Only its one top-level folder and the regular files in it are unpacked, at most 512 MiB in all, and an archive with a link, a folder inside that one, or a path out of it is refused. devvm is unpacked with mode 755 and the other files with mode 644.
+
+### Rollbacks
+
+A server, or someone in the way of one, can offer an older release that's still properly signed. devvm upgrade refuses a newest release older than the running devvm, whatever the flags, and installs an older one only when `--to` names it, after a question that says it's older. It can't tell a server that keeps offering the release you already have from one with nothing newer, which is a limit of reading the newest release from the server.
+
+### Switching the link
+
+1. The unpacked folder's devvm runs with `--version`, which must print the release's version.
+2. The folder is renamed to `<prefix>/lib/devvm/<version>`. A folder of that version from before is set aside first, and it's put back if a later step fails.
+3. The link switches in one step: a new link to the new devvm is made beside `<prefix>/bin/devvm` and renamed over it, so the link is never missing or half made.
+4. The new devvm runs again, through the link. When it fails, the link is switched back to the devvm that ran devvm upgrade, and the new folder goes.
+
+Then devvm upgrade removes the other versions in `<prefix>/lib/devvm`, as the script does: it keeps the new version, the one that ran devvm upgrade, and any version that a running process's command line names, such as a VM's proxy, which it lists with `ps`. When `ps` fails, it keeps them all. An interrupted upgrade leaves a `.<version>.new.<pid>` folder at most. The next upgrade removes it once no process has that pid, so it never takes the folder of an upgrade that's still running, and the script's next install removes it too.
+
+With Homebrew, devvm upgrade runs `brew upgrade devvm` into the run log, after asking, and checks nothing of its own, because Homebrew checks the source against the formula's checksum.

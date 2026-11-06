@@ -119,6 +119,7 @@ func TestSkipsLayout(t *testing.T) {
 		{[]string{"version"}, true, true},
 		{[]string{"completion", "bash"}, true, true},
 		{[]string{"help"}, true, true},
+		{[]string{"upgrade"}, true, true},
 		{[]string{"_proxy"}, true, true},
 		{[]string{"_msg"}, true, true},
 	} {

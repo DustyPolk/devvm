@@ -239,6 +239,43 @@ func TestTrust(t *testing.T) {
 	(*Client)(nil).Trust(roots)
 }
 
+// Resolve follows a HEAD's redirects to where they end, HTTPS only, and
+// fails on an answer there that isn't 200 OK or an address that isn't
+// one.
+func TestResolve(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method != http.MethodHead:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		case r.URL.Path == "/latest":
+			http.Redirect(w, r, "/tag/v1.0.0", http.StatusFound)
+		case r.URL.Path == "/plain":
+			http.Redirect(w, r, "http://example.invalid/", http.StatusFound)
+		case r.URL.Path == "/tag/v1.0.0":
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	c := NewClient(time.Minute, HTTPSOnly)
+	c.Trust(roots)
+	if got, err := Resolve(t.Context(), c, srv.URL+"/latest"); err != nil || got != srv.URL+"/tag/v1.0.0" {
+		t.Errorf("Resolve = %q, %v", got, err)
+	}
+	if _, err := Resolve(t.Context(), c, srv.URL+"/gone"); err == nil || Transient(err) {
+		t.Errorf("a 404: %v", err)
+	}
+	if _, err := Resolve(t.Context(), c, srv.URL+"/plain"); !errors.Is(err, ErrRedirect) {
+		t.Errorf("a redirect to http: %v", err)
+	}
+	if _, err := Resolve(t.Context(), c, "%"); !errors.Is(err, errRequest) {
+		t.Errorf("no address: %v", err)
+	}
+}
+
 func TestClientMadeByNewClient(t *testing.T) {
 	t.Parallel()
 	srv, count := failing(t, 0, 0, "ok")
@@ -318,23 +355,27 @@ func TestDownload(t *testing.T) {
 		}
 	}
 	for _, sum := range []string{strings.Repeat("0", 64), ""} {
-		if err := Download(t.Context(), c, srv.URL+"/file", path, sum); !errors.Is(err, ErrChecksum) || Transient(err) {
+		if err := Download(t.Context(), c, srv.URL+"/file", path, sum, 100); !errors.Is(err, ErrChecksum) || Transient(err) {
 			t.Errorf("sum %q: %v, want ErrChecksum", sum, err)
 		}
 		gone("a mismatch")
 	}
+	if err := Download(t.Context(), c, srv.URL+"/file", path, sumOf("the file"), 7); !errors.Is(err, ErrTooLarge) || Transient(err) {
+		t.Errorf("over its cap: %v, want ErrTooLarge", err)
+	}
+	gone("over its cap")
 	var se *StatusError
-	if err := Download(t.Context(), c, srv.URL+"/missing", path, sumOf("the file")); !errors.As(err, &se) || se.Code != 404 {
+	if err := Download(t.Context(), c, srv.URL+"/missing", path, sumOf("the file"), 100); !errors.As(err, &se) || se.Code != 404 {
 		t.Errorf("missing: %v", err)
 	}
 	gone("missing")
-	if err := Download(t.Context(), c, srv.URL+"/file", filepath.Join(dir, "no", "f"), sumOf("the file")); err == nil {
+	if err := Download(t.Context(), c, srv.URL+"/file", filepath.Join(dir, "no", "f"), sumOf("the file"), 100); err == nil {
 		t.Error("into a missing folder: no error")
 	}
-	if err := Download(t.Context(), c, "http://[::1", path, sumOf("the file")); !errors.Is(err, errRequest) || Transient(err) {
+	if err := Download(t.Context(), c, "http://[::1", path, sumOf("the file"), 100); !errors.Is(err, errRequest) || Transient(err) {
 		t.Errorf("a bad address: %v", err)
 	}
-	if err := Download(t.Context(), c, srv.URL+"/file", path, strings.ToUpper(sumOf("the file"))); err != nil {
+	if err := Download(t.Context(), c, srv.URL+"/file", path, strings.ToUpper(sumOf("the file")), 8); err != nil {
 		t.Fatalf("a match: %v", err)
 	}
 	fi, err := os.Stat(path)

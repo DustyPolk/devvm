@@ -58,6 +58,9 @@ linters:
             - golang.org/x/text
             - golang.org/x/term
             - golang.org/x/sys
+            # BLAKE2b, for minisign's prehashed signatures, which devvm
+            # upgrade checks (approved; nothing else of x/crypto).
+            - golang.org/x/crypto/blake2b
         tests:
           list-mode: strict
           files:
@@ -74,6 +77,7 @@ linters:
             - golang.org/x/text
             - golang.org/x/term
             - golang.org/x/sys
+            - golang.org/x/crypto/blake2b
             - github.com/rogpeppe/go-internal
     forbidigo:
       analyze-types: true

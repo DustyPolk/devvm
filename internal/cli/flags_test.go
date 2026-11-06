@@ -200,6 +200,12 @@ func TestPartFlags(t *testing.T) {
 		{"network", "none", ""},
 		{"network", "on", "arg_not_choice choices=open, internet, allowlist, none command=--network given=on"},
 		{"network", "ask", "arg_not_choice choices=open, internet, allowlist, none command=--network given=ask"},
+		{"to", "0.2.0", ""},
+		{"to", "v0.2.0", ""},
+		{"to", "1.0.0-rc.1", ""},
+		{"to", "latest", "upgrade_not_version value=latest"},
+		{"to", "0.2", "upgrade_not_version value=0.2"},
+		{"to", "0.2.0/../x", "upgrade_not_version value=0.2.0/../x"},
 	} {
 		if got := msg.NamesOf(checkFlagValue(tc.flag, tc.value)); got != tc.want {
 			t.Errorf("--%s %s: %q, want %q", tc.flag, tc.value, got, tc.want)

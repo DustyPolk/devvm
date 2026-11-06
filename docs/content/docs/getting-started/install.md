@@ -80,7 +80,15 @@ When `devvm doctor` finds nothing missing, you're ready for [your first VM](firs
 
 ## Upgrading
 
-To upgrade devvm, run the command for the way you installed it:
+To upgrade devvm, run `devvm upgrade`, which installs the newest release the way you installed devvm:
+
+```sh
+devvm upgrade
+```
+
+It says which release it will install in place of the devvm you have, and asks first. `devvm upgrade --force` installs it without asking, which devvm needs without a terminal or with `--no-input`, and `devvm upgrade --check` says whether a newer release is out and installs nothing.
+
+You can also upgrade devvm without devvm upgrade, with the command for the way you installed it:
 
 {{< os-tabs >}}
 {{< os-tab name="macOS" >}}
@@ -106,6 +114,54 @@ Running the install script again installs the newest release.
 Your images and VMs stay, because they live in `~/.local/share/devvm`, and your settings and layers stay in `~/.config/devvm`, apart from devvm itself.
 
 Images whose inputs changed are built again the next time you use them. Existing VMs keep working, and `devvm tools update` moves a VM to the new shared tools. `devvm gc` deletes the copies of devvm's files that older versions wrote out, except those that a VM's proxy was started with.
+
+### How devvm upgrade upgrades
+
+devvm upgrade tells how devvm was installed from where the devvm you ran is, and it never runs anything to find out:
+
+- **With the install script**, devvm is `~/.local/lib/devvm/<version>/devvm`, and `~/.local/bin/devvm` links to it, or the same folders under `DEVVM_PREFIX`. devvm upgrade downloads the new release and checks it, as [What devvm upgrade checks](#what-devvm-upgrade-checks) describes. It unpacks the release into a folder of its own beside the devvm you have, runs the new devvm to see that it works, and then switches `~/.local/bin/devvm` to it. When anything fails before the new devvm runs through `~/.local/bin/devvm`, the link goes back, so the devvm you had stays the one that runs. The version you upgraded from stays in `~/.local/lib/devvm`, and so does any older version that a running VM still uses, until a later upgrade finds nothing using it.
+- **With Homebrew**, devvm is in Homebrew's Cellar, and devvm upgrade runs `brew upgrade devvm` after asking. Homebrew may upgrade Lima at the same time, because the formula needs it. Homebrew installs the release its formula names, which can come out a little after the release itself, so until then `brew upgrade devvm` finds nothing to upgrade.
+- **Any other way**, such as `go install`, a build from devvm's source, or a copy of devvm somewhere else, devvm upgrade can't upgrade. It says how that devvm was installed and how to upgrade it, such as with `go install github.com/w3cj/devvm/cmd/devvm@latest`, and fails.
+
+A devvm built without devvm's release key can't check a release's signature, so devvm upgrade refuses to install a release with it and says to run the install script again.
+
+### What devvm upgrade checks
+
+devvm upgrade downloads over HTTPS only, and checks each file before it uses the next:
+
+1. It downloads the release's `SHA256SUMS` and its signature, `SHA256SUMS.minisig`, and checks that devvm's release key signed it for that release's version. The key is built into the devvm you have, so a replaced release can't bring its own.
+2. It downloads the archive for this machine and checks it against its checksum in `SHA256SUMS`.
+3. It unpacks the archive, which must hold only devvm's files in one folder.
+4. It runs the new devvm with `--version`, which must say the release's version.
+
+When a check fails, devvm upgrade installs nothing, and the devvm you have stays the one that runs. It checks the signature itself, so it doesn't need minisign on this machine, as the install script does. It never runs a script that it downloaded, only the new devvm's `--version`.
+
+### An older release
+
+When the newest release is older than the devvm you have, devvm upgrade refuses to install it, even with `--force`. A server that offers an old release in place of the newest could bring back problems that a newer release fixed, so devvm upgrade never goes back a version unless you name it. `devvm upgrade --to VERSION` installs the release you name, newer or older, and it asks first, saying when the release is older than the devvm you have.
+
+Homebrew installs only its formula's release, so with Homebrew devvm upgrade doesn't take `--to`.
+
+### devvm upgrade --json
+
+`devvm upgrade --json` prints what `devvm upgrade --check` says as one JSON object, for scripts, as [output for scripts](commands.md#output-for-scripts) describes, and installs nothing:
+
+- `current` is the version of the devvm you ran.
+- `latest` is the newest release's version.
+- `newer` says whether that's newer than `current`.
+- `install` is how devvm was installed, `install.sh`, `homebrew` or `other`.
+- `path` is where the devvm you ran is, its links followed.
+
+```json
+{
+  "version": 1,
+  "current": "0.1.0",
+  "latest": "0.2.0",
+  "newer": true,
+  "install": "install.sh",
+  "path": "/Users/you/.local/lib/devvm/0.1.0/devvm"
+}
+```
 
 ## Uninstalling
 

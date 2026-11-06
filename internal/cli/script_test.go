@@ -22,6 +22,7 @@ import (
 	"github.com/w3cj/devvm/internal/platform"
 	"github.com/w3cj/devvm/internal/stubtest"
 	"github.com/w3cj/devvm/internal/ubuntu"
+	"github.com/w3cj/devvm/internal/upgrade/upgradetest"
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
@@ -48,16 +49,17 @@ func TestScript(t *testing.T) {
 // TestCommandLines leaves their lines out, as they aren't devvm's.
 func scriptCmds() map[string]func(ts *testscript.TestScript, neg bool, args []string) {
 	return map[string]func(ts *testscript.TestScript, neg bool, args []string){
-		"catg":       catGlob,
-		"free_port":  freePort,
-		"json_set":   jsonSet,
-		"listen_any": listenAny,
-		"project":    project,
-		"stub_calls": stubCalls,
-		"stub_reset": stubReset,
-		"vm_name":    vmName,
-		"vm_state":   vmState,
-		"wait_file":  waitFile,
+		"catg":           catGlob,
+		"free_port":      freePort,
+		"json_set":       jsonSet,
+		"listen_any":     listenAny,
+		"project":        project,
+		"release_server": releaseServer,
+		"stub_calls":     stubCalls,
+		"stub_reset":     stubReset,
+		"vm_name":        vmName,
+		"vm_state":       vmState,
+		"wait_file":      waitFile,
 	}
 }
 
@@ -294,6 +296,34 @@ func waitFile(ts *testscript.TestScript, neg bool, args []string) {
 // own goroutine writes when it waits.
 func running(cmd *exec.Cmd) bool {
 	return cmd.Process != nil && !errors.Is(cmd.Process.Signal(syscall.Signal(0)), os.ErrProcessDone)
+}
+
+// releaseServer serves devvm's releases until the script ends, as GitHub
+// does (upgradetest): a release of each VERSION for this machine, the
+// first the newest, each devvm in it a script that says its version, and
+// SHA256SUMS signed with a release key of its own, or with -badsig with
+// another key. It points devvm upgrade at it: DEVVM_REPO_URL, the key's
+// public half in DEVVM_RELEASE_KEY, and its certificate in
+// $WORK/release-ca.pem, DEVVM_RELEASE_CA.
+func releaseServer(ts *testscript.TestScript, neg bool, args []string) {
+	signer := upgradetest.NewKey()
+	key := signer
+	if len(args) > 0 && args[0] == "-badsig" {
+		signer, args = upgradetest.NewKey(), args[1:]
+	}
+	if neg || len(args) == 0 {
+		ts.Fatalf("usage: release_server [-badsig] LATEST [VERSION...]")
+	}
+	s := upgradetest.Start()
+	ts.Defer(s.Close)
+	for i, v := range args {
+		s.Add(v, upgradetest.NewRelease(signer, v, nil), i == 0)
+	}
+	ca := ts.MkAbs("release-ca.pem")
+	ts.Check(os.WriteFile(ca, s.CA(), 0o600))
+	ts.Setenv("DEVVM_REPO_URL", s.URL)
+	ts.Setenv("DEVVM_RELEASE_KEY", key.Public())
+	ts.Setenv("DEVVM_RELEASE_CA", ca)
 }
 
 // listenAny listens on a free port on every address, as a program on the

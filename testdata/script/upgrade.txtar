@@ -1,0 +1,133 @@
+# devvm upgrade installs the newest release the way this devvm was
+# installed: install.sh's over its link, checked against the release key,
+# Homebrew's with brew upgrade devvm, asking first; any other it can't.
+# The release server is a fake one (release_server), and this devvm says
+# it's 0.1.0.
+env DEVVM_TEST_VERSION=0.1.0
+chmod 0755 brews/brew
+
+# Its flags are checked before anything runs.
+! exec devvm upgrade --to latest
+stderr '^devvm: upgrade_not_version value=latest\n'
+! exec devvm upgrade --check --force
+stderr 'usage_help command=devvm upgrade'
+! exec devvm upgrade nope
+stderr 'usage_help command=devvm upgrade'
+
+# A copy that neither install.sh nor Homebrew made: --check says what's
+# out, and devvm upgrade can't upgrade it.
+release_server 0.2.0 0.1.0
+exec devvm upgrade --check
+stdout '^==> upgrade_latest_is latest=0.2.0\n==> upgrade_other_install path=\S+/devvm\n\z'
+! exec devvm upgrade --force
+stderr '^devvm: upgrade_other_install path=\S+/devvm$'
+
+# A build from the source, which says no release's version.
+env DEVVM_TEST_VERSION=
+! exec devvm upgrade --force
+stderr '^devvm: upgrade_checkout_build version=\S+$'
+env DEVVM_TEST_VERSION=0.1.0
+
+# install.sh's: ~/.local/lib/devvm/0.1.0/devvm, which bin/devvm links to.
+mkdir pfx/lib/devvm/0.1.0 pfx/bin
+cp $DEVVM_BIN/devvm pfx/lib/devvm/0.1.0/devvm
+chmod 0755 pfx/lib/devvm/0.1.0/devvm
+symlink pfx/bin/devvm -> $WORK/pfx/lib/devvm/0.1.0/devvm
+
+# No newest release where it looks, and no release key: nothing installed.
+env REPO=$DEVVM_REPO_URL
+env DEVVM_REPO_URL=$REPO/nope
+! exec pfx/bin/devvm upgrade --check
+stderr '^devvm: upgrade_no_latest url=\S+/nope$'
+env DEVVM_REPO_URL=$REPO
+env KEY=$DEVVM_RELEASE_KEY
+env DEVVM_RELEASE_KEY=
+! exec pfx/bin/devvm upgrade --force
+stderr '^devvm: upgrade_no_key$'
+env DEVVM_RELEASE_KEY=$KEY
+! exists pfx/lib/devvm/0.2.0
+
+# Answered no: nothing installed.
+env DEVVM_PIPED_ANSWERS=1
+stdin no.txt
+exec pfx/bin/devvm upgrade
+env DEVVM_PIPED_ANSWERS=
+stdout '^==> upgrade_nothing_installed\n\z'
+! exists pfx/lib/devvm/0.2.0
+exec pfx/bin/devvm upgrade --check
+stdout '^==> upgrade_available current=0.1.0 latest=0.2.0\n\z'
+exec pfx/bin/devvm upgrade --json
+stdout '^{\n  "version": 1,\n  "current": "0.1.0",\n  "latest": "0.2.0",\n  "newer": true,\n  "install": "install.sh",\n  "path": "\S+/pfx/lib/devvm/0.1.0/devvm"\n}\n\z'
+! stderr .
+
+# Without a terminal it asks, and refuses naming --force: nothing changes.
+! exec pfx/bin/devvm upgrade
+stderr '^upgrade_confirm current=0.1.0 version=0.2.0\ndevvm: no_input answer=--force$'
+exists pfx/lib/devvm/0.1.0/devvm
+! exists pfx/lib/devvm/0.2.0
+
+# A release whose SHA256SUMS another key signed is refused.
+release_server -badsig 0.2.0
+! exec pfx/bin/devvm upgrade --force
+stderr '^devvm: upgrade_bad_signature version=0.2.0$'
+! exists pfx/lib/devvm/0.2.0
+exec pfx/bin/devvm upgrade --check
+stdout upgrade_available
+
+# Answered yes: 0.2.0 beside 0.1.0, the link switched to it.
+release_server 0.2.0 0.1.0
+env DEVVM_PIPED_ANSWERS=1
+stdin yes.txt
+exec pfx/bin/devvm upgrade
+env DEVVM_PIPED_ANSWERS=
+stdout '^==> upgrade_done link=\S+/pfx/bin/devvm version=0.2.0\n\z'
+exec pfx/bin/devvm --version
+stdout '^0.2.0$'
+exists pfx/lib/devvm/0.1.0/devvm pfx/lib/devvm/0.2.0/README.md
+
+# From 0.2.0, which the release server's newest is: nothing to do; an
+# older newest release is refused, and --to installs it.
+env DEVVM_TEST_VERSION=0.2.0
+exec pfx/lib/devvm/0.1.0/devvm upgrade --check
+stdout '^==> upgrade_latest_is latest=0.2.0\n==> upgrade_other_install path=\S+/0.1.0/devvm\n\z'
+cp $DEVVM_BIN/devvm pfx/lib/devvm/0.2.0/devvm
+exec pfx/bin/devvm upgrade --force
+stdout '^==> upgrade_already_latest version=0.2.0\n\z'
+release_server 0.1.0
+! exec pfx/bin/devvm upgrade --force
+stderr '^devvm: upgrade_latest_older current=0.2.0 latest=0.1.0$'
+exec pfx/bin/devvm upgrade --to 0.2.0
+stdout '^==> upgrade_already version=0.2.0\n\z'
+env DEVVM_PIPED_ANSWERS=1
+stdin yes.txt
+exec pfx/bin/devvm upgrade --to v0.1.0
+env DEVVM_PIPED_ANSWERS=
+stdout '^==> upgrade_done link=\S+/pfx/bin/devvm version=0.1.0\n'
+exec pfx/bin/devvm --version
+stdout '^0.1.0$'
+
+# Homebrew's: brew upgrade devvm, asked first, and never --to.
+env DEVVM_TEST_VERSION=0.1.0
+release_server 0.2.0
+mkdir Cellar/devvm/0.1.0/bin
+cp $DEVVM_BIN/devvm Cellar/devvm/0.1.0/bin/devvm
+chmod 0755 Cellar/devvm/0.1.0/bin/devvm
+env PATH=$WORK/brews${:}$PATH
+! exec Cellar/devvm/0.1.0/bin/devvm upgrade
+stderr '^upgrade_confirm_brew current=0.1.0 version=0.2.0\ndevvm: no_input answer=--force$'
+! exec Cellar/devvm/0.1.0/bin/devvm upgrade --to 0.2.0 --force
+stderr '^devvm: upgrade_brew_version$'
+! exists brew-calls
+exec Cellar/devvm/0.1.0/bin/devvm upgrade --force
+stdout '^==> upgrade_brew_done\n\z'
+grep '^upgrade devvm$' brew-calls
+exec Cellar/devvm/0.1.0/bin/devvm upgrade --json
+stdout '"install": "homebrew"'
+
+-- yes.txt --
+y
+-- no.txt --
+n
+-- brews/brew --
+#!/bin/sh
+echo "$@" >> "$WORK/brew-calls"

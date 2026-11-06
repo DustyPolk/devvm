@@ -13,6 +13,7 @@ import (
 	"github.com/w3cj/devvm/internal/settings"
 	"github.com/w3cj/devvm/internal/sshagent"
 	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/upgrade"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
@@ -258,6 +259,10 @@ func checkFlagValue(name, value string) error {
 		_, err = state.ParseDuration(value)
 	case "tools", "agents", "layers":
 		err = checkPartFlag("--"+name, value)
+	case "to":
+		if !upgrade.Valid(strings.TrimPrefix(value, "v")) {
+			err = msg.UpgradeNotVersion(value)
+		}
 	}
 	return err
 }

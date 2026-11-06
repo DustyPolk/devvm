@@ -222,6 +222,26 @@ func Open(ctx context.Context, c *Client, url string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
+// Resolve returns the address a HEAD of url ends at once the client has
+// followed its redirects, as GitHub's releases/latest goes to its newest
+// release's page, when the answer there is 200 OK; any other answer is a
+// *StatusError.
+func Resolve(ctx context.Context, c *Client, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errRequest, err)
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return "", err
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", &StatusError{URL: url, Code: resp.StatusCode, Status: resp.Status}
+	}
+	return resp.Request.URL.String(), nil
+}
+
 // Get returns the body of a 200 OK answer to a GET of url, failing with
 // ErrTooLarge when it's more than limit bytes.
 func Get(ctx context.Context, c *Client, url string, limit int64) ([]byte, error) {
@@ -239,9 +259,10 @@ func Get(ctx context.Context, c *Client, url string, limit int64) ([]byte, error
 
 // Download writes the body of a GET of url to path, mode 600, and keeps
 // it only when its SHA-256 is sum (hex): one that isn't fails with
-// ErrChecksum, before anything can use it. On any failure nothing is left
+// ErrChecksum, before anything can use it, and one over limit bytes with
+// ErrTooLarge, before it fills the disk. On any failure nothing is left
 // at path.
-func Download(ctx context.Context, c *Client, url, path, sum string) (err error) {
+func Download(ctx context.Context, c *Client, url, path, sum string, limit int64) (err error) {
 	body, err := Open(ctx, c, url)
 	if err != nil {
 		return err
@@ -257,12 +278,15 @@ func Download(ctx context.Context, c *Client, url, path, sum string) (err error)
 		}
 	}()
 	h := sha256.New()
-	_, err = io.Copy(io.MultiWriter(f, h), body)
+	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(body, limit+1))
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
 		return err
+	}
+	if n > limit {
+		return fmt.Errorf("%s: %w: more than %d bytes", url, ErrTooLarge, limit)
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); sum == "" || !strings.EqualFold(got, sum) {
 		return fmt.Errorf("%s: %w: %s", url, ErrChecksum, got)

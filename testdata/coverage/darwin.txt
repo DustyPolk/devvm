@@ -26,7 +26,7 @@ internal/paths 98.1
 internal/platform 87.6
 internal/ports 91.2
 internal/project 98.5
-internal/proxy 91.4
+internal/proxy 91.5
 internal/redact 97.7
 internal/secrets 92.6
 internal/settings 96.2
@@ -34,7 +34,7 @@ internal/shell 100.0
 internal/sshagent 84.2
 internal/sshconfig 95.0
 internal/state 94.3
-internal/stubtest 81.4
+internal/stubtest 81.8
 internal/stubtest/stub 92.9
 internal/stubtest/stubstate 91.2
 internal/testbuild 100.0
@@ -42,6 +42,9 @@ internal/tools 90.0
 internal/trust 94.1
 internal/ubuntu 97.3
 internal/ui 95.2
+internal/upgrade 91.9
+internal/upgrade/upgradetest 97.1
 internal/vm 88.1
 internal/vmname 100.0
 internal/vmssh 90.7
+packaging 42.9

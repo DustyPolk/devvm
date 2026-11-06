@@ -42,6 +42,9 @@ internal/tools 89.7
 internal/trust 94.1
 internal/ubuntu 97.3
 internal/ui 94.6
+internal/upgrade 90.0
+internal/upgrade/upgradetest 95.0
 internal/vm 85.9
 internal/vmname 100.0
 internal/vmssh 88.7
+packaging 40.0

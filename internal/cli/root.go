@@ -68,7 +68,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	addVersion(root)
 	root.AddCommand(newBuildCmd(a), newRebuildCmd(a), newImagesCmd(a), newGCCmd(a), newSpaceCmd(a), newLayerCmd(a), newSetupCmd(a), newAgentCmd(a), newMsgCmd(u),
 		newRestartCmd(a), newStopCmd(a), newUpdateCmd(a), newToolsCmd(a), newAdoptCmd(a), newHistoryCmd(a), newRmCmd(a), newLsCmd(a), newNetworkCmd(a), newHostCmd(a), newCodeCmd(a), newDesktopCmd(a), newSSHAgentCmd(a), newGitProtectCmd(a), newCloneCmd(a), newPortsCmd(a), newSizeCmd(a), newDoctorCmd(a), newLimactlCmd(a), newQEMUCmd(u), newProxyCmd(a), newForwarderCmd(a), newRefreshToolsCmd(a), newSecretCmd(a),
-		newLinkCmd(a), newGroupCmd(a), newLinksCmd(a), newRetentionCmd(a), newVersionCmd(u), newCompletionCmd(u))
+		newLinkCmd(a), newGroupCmd(a), newLinksCmd(a), newRetentionCmd(a), newVersionCmd(u), newCompletionCmd(u), newUpgradeCmd(a))
 	addCompletions(root, a)
 	checkCommands(root)
 	addHelp(root)
@@ -156,14 +156,15 @@ func showFailure(u *ui.UI, err error) {
 
 // skipsLayout reports whether cmd runs without checking the layout
 // version: what reads none of devvm's folders (help, completion, the
-// version, the messages), and devvm's own hidden commands, which a devvm
-// that checked it runs.
+// version, the messages, devvm upgrade, which a layout a newer devvm
+// wrote is a reason to run), and devvm's own hidden commands, which a
+// devvm that checked it runs.
 func skipsLayout(cmd *cobra.Command) bool {
 	path := strings.Fields(cmd.CommandPath())
 	if len(path) < 2 {
 		return false
 	}
-	return strings.HasPrefix(path[1], "_") || slices.Contains([]string{"completion", "version", "help", "__complete", "__completeNoDesc"}, path[1])
+	return strings.HasPrefix(path[1], "_") || slices.Contains([]string{"completion", "version", "upgrade", "help", "__complete", "__completeNoDesc"}, path[1])
 }
 
 // Execute runs devvm with args on u and returns its exit code: 0, 1 for a

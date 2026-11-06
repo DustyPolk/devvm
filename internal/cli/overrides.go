@@ -24,6 +24,26 @@ type Overrides struct {
 	// PickOnPipe (DEVVM_PICK_ON_PIPE=1) shows the picker with a terminal
 	// on stdin alone (ui.Flags), as testscript's ttyin gives.
 	PickOnPipe bool
+	// Release is devvm upgrade's release source and this devvm's version.
+	Release ReleaseOverrides
+}
+
+// ReleaseOverrides are devvm upgrade's stand-ins: a fake release server
+// in place of GitHub's, which a CA of the test's own signs, a test key in
+// place of the release key, and a release's version in place of a test
+// build's own.
+type ReleaseOverrides struct {
+	// URL (DEVVM_REPO_URL) is the repository whose releases are read, as
+	// install.sh takes it.
+	URL string
+	// Key (DEVVM_RELEASE_KEY) is the minisign public key releases are
+	// checked against.
+	Key string
+	// CA (DEVVM_RELEASE_CA) is a PEM file of the CA the release server's
+	// certificate is signed by.
+	CA string
+	// Version (DEVVM_TEST_VERSION) is the version this devvm says it is.
+	Version string
 }
 
 // readOverrides reads a test build's overrides with getenv; a release's
@@ -46,5 +66,9 @@ func readOverrides(getenv func(string) string) Overrides {
 		HostMise:     getenv("DEVVM_HOST_MISE"),
 		PipedAnswers: getenv("DEVVM_PIPED_ANSWERS") == "1",
 		PickOnPipe:   getenv("DEVVM_PICK_ON_PIPE") == "1",
+		Release: ReleaseOverrides{
+			URL: getenv("DEVVM_REPO_URL"), Key: getenv("DEVVM_RELEASE_KEY"),
+			CA: getenv("DEVVM_RELEASE_CA"), Version: getenv("DEVVM_TEST_VERSION"),
+		},
 	}
 }
