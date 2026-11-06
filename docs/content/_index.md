@@ -136,7 +136,7 @@ devvm ships the `docker`, `nix` and `desktop` layers, which you check in the lis
 
 ### What does it run on?
 
-`devvm` runs on macOS 13 or newer and on Linux, on arm64 or x86_64. It needs [Lima](https://lima-vm.io/) 2.0 or newer, which runs the VMs with Apple's Virtualization framework on macOS and QEMU on Linux ([backends](docs/backends/_index.md)). Homebrew installs Lima along with devvm, and on Linux, Lima also needs QEMU and access to `/dev/kvm`. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
+`devvm` runs on macOS and on Linux, on arm64 or x86_64. It needs [Lima](https://lima-vm.io/), which runs the VMs with Apple's Virtualization framework on macOS and QEMU on Linux ([backends](docs/backends/_index.md)). Homebrew installs Lima along with devvm, and on Linux, Lima also needs QEMU and access to `/dev/kvm`. [Installing](docs/getting-started/install.md) lists every requirement, and [known limits](docs/using/limits.md#linux-hosts) lists what Linux hosts lack, such as `.git` protection.
 
 ### Does the agent run on my machine?
 

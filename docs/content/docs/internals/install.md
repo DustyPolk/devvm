@@ -73,8 +73,8 @@ These are the keys:
 | Key | Missing | Fix |
 | --- | --- | --- |
 | `os`, `arch` | a host the backend runs on | none |
-| `macos` | macOS 13 or newer | none |
-| `lima` | Lima 2.0 or newer, working | `brew install lima` (`upgrade`, `reinstall`) with Homebrew, otherwise none |
+| `macos` | macOS at the backend's [minimum](../backends/lima.md#requirements) | none |
+| `lima` | Lima at its [minimum](../backends/lima.md#requirements), working | `brew install lima` (`upgrade`, `reinstall`) with Homebrew, otherwise none |
 | `qemu` | QEMU, on Linux | your package manager's install (apt, dnf, pacman or zypper), otherwise none |
 | `kvm` | `/dev/kvm`, on Linux | none: turn on virtualization |
 | `kvm-access` | access to `/dev/kvm` | `sudo usermod -aG kvm USER`, then log in again |

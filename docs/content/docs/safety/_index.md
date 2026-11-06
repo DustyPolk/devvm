@@ -60,7 +60,7 @@ flowchart TB
 | Your agents' settings and logins (skills, settings, logins) | The VM mounts the folders of devvm's agent store read-only and gets copies of its files, but never your agents' history, and never the agents' own files in your home folder ([details](../using/coding-agents.md#devvms-agent-store)). |
 | The rest of your home folder, other projects | The VM doesn't mount them. |
 | Your SSH keys | Only with `devvm ssh-agent on`, and only while you're connected. With `devvm ssh-agent devvm`, the VM can use only the keys you added to devvm's own agent ([details](../using/ssh.md#agent-forwarding)). |
-| The network | On every tier but open, the VM reaches only its proxy on this machine, which lets it reach what its tier allows: every public host on the internet tier, the allowlisted hosts on the allowlist tier, and only its agents' and secrets' hosts and its links on the none tier. On the open tier it reaches everything this machine reaches, including this machine's own services on `localhost` ([details](network.md#network-tiers)). |
+| The network | On every tier but open, the VM reaches only its proxy on this machine, which lets it reach what [its tier](network.md#network-tiers) allows. On the open tier it reaches everything this machine reaches, including this machine's own services on `localhost` ([details](network.md#network-tiers)). |
 | Your secrets | Your GitHub token, Claude Code's token, Codex and opencode logins and Claude Code's MCP secrets stay on this machine on every network tier, and the proxy puts them into requests ([details](network.md#secrets)). |
 
 > [!NOTE]

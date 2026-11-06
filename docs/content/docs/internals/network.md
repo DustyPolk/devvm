@@ -119,15 +119,15 @@ On the allowlist tier, a VM's proxy reads these policies, in this order, as one 
 - **none:** the built-in policies of the VM's agents (`shared-tools/claude.policy`, `codex.policy`, `opencode.policy`) and no other built-in one, then `secrets.policy`, then your files as denies alone. The VM's links come before every rule, as on every tier.
 - **open:** no policy at all. The proxy's config has `"open": true`, which allows every host and address on every port, internal ones and this machine's included, and a config with `open` and any policy is refused. The floor doesn't apply, and a name that the host can't resolve goes to the company proxy unjudged, as it does for a build.
 
-| Policy | Rules for |
+| Policy | Read for |
 | --- | --- |
-| `layers/base.policy` (built in) | every VM: OS packages, mise's version lists, GitHub |
-| `shared-tools/<name>.policy` (built in) | each shared tool in the VM's image (`node`, `claude`, …): its registries, downloads and APIs |
-| `layers/<name>.policy` (built in) | each built-in layer in the VM's image: `docker`'s has Docker's packages and the container registries Docker Hub and ghcr.io, and `nix`'s has Nix's binary cache, channels and flake registry |
+| `layers/base.policy` (built in) | every VM |
+| `shared-tools/<name>.policy` (built in) | each shared tool in the VM's image |
+| `layers/<name>.policy` (built in) | each built-in layer in the VM's image |
 | `~/.config/devvm/layers/<name>.policy` | each of your layers in the VM's image |
-| `~/.config/devvm/policy` | every VM: your own rules (`devvm network allow`, `deny` and `rm` with `-g`) |
-| `~/.local/share/devvm/vms/<hash>/policy` | that VM only (`devvm network allow`, `deny` and `rm`) |
-| `~/.local/share/devvm/vms/<hash>/run/secrets.policy` | the hosts of the VM's secrets and logins, and of its agents' [token endpoints](#logins-made-in-a-vm), on port 443 (devvm writes it) |
+| `~/.config/devvm/policy` | every VM |
+| `~/.local/share/devvm/vms/<hash>/policy` | that VM only |
+| `~/.local/share/devvm/vms/<hash>/run/secrets.policy` | every VM, which devvm writes with the hosts of the VM's secrets and logins and of its agents' [token endpoints](#logins-made-in-a-vm) |
 
 The built-in policies are paths in devvm's own files, `assets/` in the repo, which are [built into the binary](install.md#devvms-own-files), and no copy of them is ever on disk. `netpolicy.Policies` lists both kinds for a VM: the built-in ones go in the proxy's config as names in `builtin_policies`, and your files as paths in `policies`. The proxy reads the built-in ones from the binary once, as it starts, ahead of your files in the list, and never again, so only an upgrade of devvm changes them, and an upgrade starts every VM's proxy again because the binary changed. A built-in policy that's missing, or that holds a line that isn't a rule, is a bug in devvm, so the proxy refuses to start rather than run with fewer rules than devvm meant, and devvm stops the VM as for any proxy that doesn't start. A missing file of yours, on the other hand, has no rules. `devvm network` reads the built-in policies from the binary too, and it labels each with its name (`# devvm: layers/base.policy`, and `"builtin"` with `--json`) where it shows your files' paths. Both lists are in the config that a proxy started with, so a change to either starts the proxy again.
 

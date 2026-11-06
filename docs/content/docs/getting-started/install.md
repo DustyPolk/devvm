@@ -38,9 +38,9 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 
 | You need | To check | To get it | The install script |
 | --- | --- | --- | --- |
-| macOS 13 or newer, on arm64 or x86_64 | `sw_vers` and `uname -m` | | {{< no >}} doesn't |
+| macOS at [Lima's minimum](../backends/lima.md#requirements), on arm64 or x86_64 | `sw_vers` and `uname -m` | | {{< no >}} doesn't |
 | 8 GiB of memory and 4 CPUs, recommended | `sysctl hw.memsize hw.ncpu` | | {{< no >}} doesn't |
-| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | {{< yes >}} offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
+| Lima at [its minimum](../backends/lima.md#requirements) | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | {{< yes >}} offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
 | OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | macOS 13's has it | {{< no >}} doesn't |
 | Docker Desktop, only for `--from` with an image only Docker has | `docker version` | Docker Desktop | {{< no >}} doesn't |
 
@@ -51,7 +51,7 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 | --- | --- | --- | --- |
 | Linux on arm64 or x86_64 | `uname -m` | | {{< no >}} doesn't |
 | 8 GiB of memory and 4 CPUs, recommended | `free -g` and `nproc` | | {{< no >}} doesn't |
-| Lima 2.0 or newer | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | {{< yes >}} offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
+| Lima at [its minimum](../backends/lima.md#requirements) | `limactl --version` | `brew install lima`, or [Lima's install guide](https://lima-vm.io/docs/installation/) | {{< yes >}} offers it: Homebrew's when you have Homebrew, otherwise Lima's latest release into `~/.local` |
 | QEMU | `qemu-img --version` | your package manager: apt, dnf, pacman or zypper | {{< yes >}} offers it, with sudo |
 | Access to `/dev/kvm` | `ls -l /dev/kvm` | `sudo usermod -aG kvm $USER`, then log out and back in | {{< yes >}} offers it, with sudo |
 | OpenSSH 8.7 or newer, for ssh and editors by name | `ssh -V` | Ubuntu 22.04's has it | {{< no >}} doesn't |
@@ -62,7 +62,7 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 
 The Homebrew formula installs Lima along with devvm. ssh and editors reach VMs through devvm's ssh config, and OpenSSH versions older than 8.7 refuse its `PermitRemoteOpen` ([SSH access by name](../using/ssh.md#ssh-access-by-name)). Docker on this machine is optional, because only `--from` with an [image only Docker has](../using/from.md#images-only-docker-has) needs it.
 
-devvm also runs on a smaller machine, because it fits base to the machine. Base asks for 4 CPUs and 8 GiB of memory. On a machine with fewer than 4 CPUs, base gets as many CPUs as the machine has, and when 8 GiB would leave the machine less than 2 GiB of its own, base gets half of the machine's memory, which is 4 GiB on an 8 GiB machine. The VMs made from base get the same unless you give them a size, as [size and ports](../using/ports-size.md#size-and-ports) explains. When devvm builds base on such a machine, it says how many CPUs and how much memory base gets. `devvm size -g` sets the size that new VMs get instead, and `devvm doctor` warns when this machine has less than 8 GiB of memory or fewer than 4 CPUs.
+devvm also runs on a smaller machine, because it gives base fewer CPUs and less memory there, and the VMs made from base get the same unless you give them a size, as [size and ports](../using/ports-size.md#size-and-ports) explains. `devvm doctor` warns when this machine has less than 8 GiB of memory or fewer than 4 CPUs.
 
 Your first VM needs at least 8 GiB of free disk space, because devvm builds the base image first and then the VM's own image and shared tools. Each VM then grows its own disk as you work in it, and the disk never shrinks. devvm checks the free space before each build and each new VM, and refuses when it's low ([free space](../using/ports-size.md#free-space)).
 

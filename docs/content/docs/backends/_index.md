@@ -10,8 +10,8 @@ A backend is the program that runs devvm's VMs and builds their images. devvm de
 | | Lima |
 | --- | --- |
 | Each project gets | a full VM with a kernel of its own |
-| Hosts | macOS 13 or newer, or Linux, on arm64 or x86_64 |
-| You need | Lima 2.0 or newer, and on Linux QEMU and access to `/dev/kvm` ([requirements](lima.md#requirements)) |
+| Hosts | macOS or Linux, on arm64 or x86_64 |
+| You need | Lima, and on Linux QEMU and access to `/dev/kvm` ([requirements](lima.md#requirements), with the versions) |
 | Confined network tiers | {{< yes >}} yes |
 | The docker layer | {{< yes >}} yes |
 | The nix layer | {{< yes >}} yes |
