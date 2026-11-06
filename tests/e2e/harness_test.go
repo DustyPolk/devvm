@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
 )
 
 // The harness's own tests, which need no VM: mise run test runs them
@@ -174,6 +176,45 @@ func TestHarnessTimeLimit(t *testing.T) {
 	}
 	if _, ok := timedOut(r.open(time.Hour, "setup")); ok {
 		t.Error("a new window: want it in time")
+	}
+}
+
+// A check that needs a feature the backend lacks (none, or emulated but
+// unreviewed) is skipped, titled and counted, its function never run; one
+// whose features the backend has runs. The fake doctor answers once a run.
+func TestHarnessNeeds(t *testing.T) {
+	sb := &sandbox{work: t.TempDir(), env: os.Environ()}
+	var b strings.Builder
+	r := &runner{ctx: t.Context(), out: newOutput(&b), sb: sb, mark: time.Now(), total: "?"}
+	asked := 0
+	doctor := func() (Res, error) {
+		asked++
+		return Res{Stdout: `{"backend": "fake", "features": {"fake": {"ports": "native", "ports-all": "emulated", "link": "none", "nix-layer": "unreviewed"}}}`}, nil
+	}
+	if _, ok := r.lacks([]backend.Feature{backend.FeaturePorts}, doctor); ok {
+		t.Fatal("ports: want it there")
+	}
+	r.open(time.Hour, "setup")
+	s := &S{r: r, sb: sb}
+	ran := 0
+	run := func() error { ran++; return nil }
+	s.Needing(backend.FeatureLink).Check("a link reaches its target", run)
+	s.Check("nix runs", run, Needs(backend.FeatureNixLayer))
+	s.Needing(backend.FeaturePorts).Check("a port reaches this machine", run, Needs(backend.FeaturePortsAll))
+	if _, ok := r.lacks([]backend.Feature{backend.FeatureLink}, doctor); !ok || asked != 1 {
+		t.Errorf("link: want it lacking, doctor asked once (%d)", asked)
+	}
+	for _, want := range []string{
+		"SKIP  [1/?] a link reaches its target (the fake backend has no link)",
+		"SKIP  [2/?] nix runs (the fake backend has no nix-layer)",
+		"PASS  [3/?] a port reaches this machine",
+	} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("output: want %q in\n%s", want, b.String())
+		}
+	}
+	if ran != 1 || r.skipped != 2 || r.pass != 1 {
+		t.Errorf("ran %d, skipped %d, passed %d: want 1, 2, 1", ran, r.skipped, r.pass)
 	}
 }
 

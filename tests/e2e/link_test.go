@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
 )
 
 // linkSection: links between VMs, each check the end-to-end proof of a
@@ -31,7 +33,7 @@ func linkSection(s *S) {
 		_ = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &low)
 		defer func() { _ = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &old) }()
 	}
-	l := &link{s: s, x: "lk"}
+	l := &link{s: s.Needing(backend.FeatureLink), x: "lk"}
 	l.w1, l.w2, l.n2, l.g = l.x+"db", l.x+"api", l.x+"api", l.x+"g"
 	linkMake(l)
 	linkChecks(l)

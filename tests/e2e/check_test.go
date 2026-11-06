@@ -5,6 +5,7 @@ package e2e
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,15 @@ type S struct {
 	r     *runner
 	sb    *sandbox
 	Paths Paths
+	needs []backend.Feature // what every check of this S proves (Needing)
+}
+
+// Needing is s for checks that each prove fs too, as Needs says: a
+// section whose every check proves a feature takes it once.
+func (s *S) Needing(fs ...backend.Feature) *S {
+	c := *s
+	c.needs = append(slices.Clip(s.needs), fs...)
+	return &c
 }
 
 // CheckOpt changes how a check runs.
@@ -55,7 +65,7 @@ func Needs(fs ...backend.Feature) CheckOpt {
 // starts its times again. A check that fails prints fn's error, then
 // the last lines its commands printed.
 func (s *S) Check(title string, fn func() error, opts ...CheckOpt) {
-	var c checkOpts
+	c := checkOpts{needs: slices.Clip(s.needs)}
 	for _, o := range opts {
 		o(&c)
 	}

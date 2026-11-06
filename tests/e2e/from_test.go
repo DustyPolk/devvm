@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/w3cj/devvm/internal/backend"
 )
 
 // The container images the --from checks start from, by digest, so the
@@ -37,6 +39,7 @@ const (
 // conversion behind a company proxy.
 func fromSection(s *S) {
 	s.Section("--from")
+	s = s.Needing(backend.FeatureFrom)
 	nd, _ := NoDocker(s)
 	fromDebian(s, nd)
 	fromAlpineVM(s, nd)
@@ -242,10 +245,10 @@ func fromDebianRuns(s *S, vm string) {
 	})
 	s.Check("its commands run GNU tar, which devvm history import needs", func() error { return gnuTar(s, vm) })
 	inVMCheck(s, "the docker layer's Docker runs in it (Docker's Debian repository), for the VM's user too", vm,
-		`sudo docker run --rm hello-world | grep -q Hello && id -nG | grep -qw docker`)
+		`sudo docker run --rm hello-world | grep -q Hello && id -nG | grep -qw docker`, Needs(backend.FeatureDockerLayer))
 	inVMCheck(s, "the nix layer's Nix runs in it (systemd): nix run nixpkgs#hello, and a build in Nix's sandbox", vm,
 		`systemctl is-active --quiet nix-daemon.socket && nix run nixpkgs#hello | grep -qx 'Hello, world!' &&
-  nix build --no-link --impure --expr '`+nixBuilt+`'`)
+  nix build --no-link --impure --expr '`+nixBuilt+`'`, Needs(backend.FeatureNixLayer))
 }
 
 // fromAlpineVM: Alpine: apk, OpenRC and musl, so its own (musl) tool
@@ -283,7 +286,7 @@ func fromAlpineVM(s *S, nd []string) {
 	})
 	inVMCheck(s, "and node, pnpm work there", vm,
 		"grep -q '^ID=alpine' /etc/os-release && [[ $(node -v) == v"+s.Paths.ToolVersion("node")+` ]] && node -e 'require("os")' && pnpm -v`)
-	inVMCheck(s, "the docker layer's Docker runs in it (OpenRC)", vm, `sudo docker run --rm hello-world | grep -q Hello`)
+	inVMCheck(s, "the docker layer's Docker runs in it (OpenRC)", vm, `sudo docker run --rm hello-world | grep -q Hello`, Needs(backend.FeatureDockerLayer))
 	inVMCheck(s, "the desktop layer's programs are in it (Alpine's packages)", vm,
 		`command -v Xvnc && command -v startxfce4 && command -v vncconfig && [[ -x /usr/local/bin/devvm-desktop ]]`)
 	inVMCheck(s, "ports below 1024 are open to the VM's user after the setup (Alpine's kernel starts at 1024)", vm,
@@ -294,7 +297,7 @@ func fromAlpineVM(s *S, nd []string) {
 	inVMCheck(s, "no crashed services", vm, `[[ -z "$(sudo rc-status --crashed 2>/dev/null)" ]]`)
 	inVMCheck(s, "the nix layer's Nix runs in it (OpenRC, musl): nix run nixpkgs#hello, and a build in Nix's sandbox", vm,
 		`sudo rc-service nix-daemon status >/dev/null && nix run nixpkgs#hello | grep -qx 'Hello, world!' &&
-  nix build --no-link --impure --expr '`+nixBuilt+`'`)
+  nix build --no-link --impure --expr '`+nixBuilt+`'`, Needs(backend.FeatureNixLayer))
 	fromAlpineMore(s, nd, al, vm)
 	_, _ = s.Devvm(al, "rm", "--force", "--no-export")
 }
@@ -307,7 +310,7 @@ func fromAlpineVM(s *S, nd []string) {
 // and /tmp runs past the check's limit there, so the refusal's check
 // looks for the file by name, on the root's disk alone.
 func fromAlpineMore(s *S, nd []string, al, vm string) {
-	s.Check("devvm network allowlist: after devvm restart, its nix-daemon goes through the proxy", func() error {
+	s.Needing(backend.FeatureNixLayer).Check("devvm network allowlist: after devvm restart, its nix-daemon goes through the proxy", func() error {
 		if _, err := s.Run(Cmd{Args: []string{s.sb.devvm, "network", "allowlist"}, Dir: al, Env: nd}); err != nil {
 			return err
 		}

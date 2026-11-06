@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/w3cj/devvm/internal/backend"
 )
 
 // projectSection: a base project VM (its launch, mounts, ports, a
@@ -239,13 +241,14 @@ func projectBasePorts(s *S, w *webVM) {
 	hostprog, _ := HostProgram(s, ":"+Itoa(p61), true)
 	LimaServe(s, vm, p60, p61)
 	_, _ = s.InVM(vm, fmt.Sprintf(`setsid -f python3 -c 'import socket,time; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.bind(("0.0.0.0",%d)); time.sleep(600)' devvm-e2e-udp </dev/null >/dev/null 2>&1`, p62))
-	s.Check("a VM server on a port reaches this machine", func() error {
+	ps := s.Needing(backend.FeaturePortsAll) // the forward checks; a VM of base forwards every port
+	ps.Check("a VM server on a port reaches this machine", func() error {
 		if !ReachesWithin(s, 20*time.Second, Local(p60)) {
 			return fmt.Errorf("%d isn't forwarded", p60)
 		}
 		return nil
 	})
-	s.Check("through devvm's forwarder alone: Lima's hostagent has none of its ports, TCP or UDP", func() error {
+	ps.Check("through devvm's forwarder alone: Lima's hostagent has none of its ports, TCP or UDP", func() error {
 		time.Sleep(Settle)
 		switch {
 		case !Reaches(s, Local(p60)):
@@ -257,8 +260,8 @@ func projectBasePorts(s *S, w *webVM) {
 		}
 		return nil
 	})
-	s.Check("the forward listens on this machine's loopback alone", func() error { return loopbackOnly(s, p60) })
-	s.Check("a port a program here has on every address keeps its localhost connections while the VM listens on it", func() error {
+	ps.Check("the forward listens on this machine's loopback alone", func() error { return loopbackOnly(s, p60) })
+	ps.Check("a port a program here has on every address keeps its localhost connections while the VM listens on it", func() error {
 		time.Sleep(Settle)
 		out := Answer(s, Local(p61))
 		if out != "host-program" {
@@ -275,7 +278,7 @@ func projectBasePorts(s *S, w *webVM) {
 	VMSay(s, vm, "127.77.0.1", p63, "link")
 	VMSay(s, vm, "127.77.0.1", p64, "link")
 	VMSay(s, vm, "127.0.0.1", p64, "own")
-	s.Check("a server on a link's address isn't forwarded, the VM's own on 127.0.0.1 with its port is", func() error {
+	ps.Check("a server on a link's address isn't forwarded, the VM's own on 127.0.0.1 with its port is", func() error {
 		r, _ := s.Limactl("shell", "--workdir", "/", vm, "ss", "-Hltn", "sport = :"+Itoa(p63))
 		if !strings.Contains(r.Stdout, "127.77.0.1:"+Itoa(p63)) {
 			return errors.New("the link's server doesn't listen")
@@ -678,7 +681,8 @@ func projectPorts(s *S, w *webVM) {
 	p, vm := w.p, w.vm
 	p70, p73 := s.Port(47170), s.Port(47173)
 	rng := Itoa(p70) + "-" + Itoa(p73)
-	s.Check("a running VM's new ports apply at once", func() error {
+	ps := s.Needing(backend.FeaturePorts) // the checks of listed ports
+	ps.Check("a running VM's new ports apply at once", func() error {
 		r, _ := s.Devvm(p, "ports", rng)
 		if !grepF(r.Out, s.Msg("ports_forwarding", "ports="+rng, "vm="+vm)) {
 			return errors.New("devvm ports didn't say it forwards them:\n" + r.Out)
@@ -711,7 +715,7 @@ func projectPorts(s *S, w *webVM) {
 		return nil
 	})
 	p78 := s.Port(47178)
-	s.Check("a port added to a running VM reaches this machine at once, and once removed doesn't, the VM never restarted", func() error {
+	ps.Check("a port added to a running VM reaches this machine at once, and once removed doesn't, the VM never restarted", func() error {
 		return PortsLive(s, p, vm, p78, LimaServe, LimaBoot)
 	})
 	_, _ = s.InVM(vm, fmt.Sprintf("pkill -f '[h]ttp.server -b 0.0.0.0 %d'", p78))
@@ -749,7 +753,7 @@ func projectPorts(s *S, w *webVM) {
 	// the SSH session waits for them.
 	_, _ = s.InVM(vm, "p="+Itoa(p70)+`; for r in 1 2; do for a in 127.0.0.1 ::1 0.0.0.0 ::; do
   setsid -f python3 -m http.server -b $a $p </dev/null >/dev/null 2>&1; p=$((p + 1)); done; done`)
-	s.Check("only the listed ports reach this machine, whatever the address", func() error {
+	ps.Check("only the listed ports reach this machine, whatever the address", func() error {
 		ReachesWithin(s, 20*time.Second, Local(p73))
 		time.Sleep(Settle)
 		for i := range 8 {
@@ -760,7 +764,7 @@ func projectPorts(s *S, w *webVM) {
 		}
 		return nil
 	})
-	s.Check("a listed port a program on this machine has, on every address, stays its own until it's freed", func() error {
+	ps.Check("a listed port a program on this machine has, on every address, stays its own until it's freed", func() error {
 		return HostPortKept(s, p, vm, p70, s.Port(47171), LimaServe)
 	})
 }

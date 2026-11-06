@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/w3cj/devvm/internal/backend"
 )
 
 // nixpkgsRev is the nixpkgs a flake's dev shell takes its node from:
@@ -23,6 +25,7 @@ const nixpkgsRev = "6f06d204d8f2d8761d9da78778745974a3216381"
 // through direnv, and the policy over the daemon's downloads, open too.
 func nixSection(s *S) {
 	s.Section("the nix layer")
+	s = s.Needing(backend.FeatureNixLayer)
 	nixImage(s)
 	x, vm := nixProject(s)
 	nixLaunchChecks(s, vm)
