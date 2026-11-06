@@ -2,7 +2,7 @@
 
 ## 0.1.0
 
-Released 2026-11-0X.
+Released 2026-11-06.
 
 The first release of devvm, which gives each project folder an isolated VM of its own, ready for you or a coding agent to work in. It runs on macOS 13 or newer and on Linux, on arm64 and x86_64, with Lima 2.0 or newer. It's tested on Apple silicon Macs and on Linux on both arm64 and x86_64, but not yet on Intel Macs.
 
