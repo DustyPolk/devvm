@@ -13,6 +13,7 @@ import (
 	"github.com/devvmhq/devvm/internal/backend"
 	"github.com/devvmhq/devvm/internal/gitprotect"
 	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/netpolicy"
 	"github.com/devvmhq/devvm/internal/paths"
 )
 
@@ -91,8 +92,9 @@ func TestRm(t *testing.T) {
 	if data, _ := os.ReadFile(export); string(data) != "tarball" { //nolint:gosec // the test's own export
 		t.Errorf("export = %q", data)
 	}
-	// The file beside it names its folder, for devvm history.
-	if data, _ := os.ReadFile(paths.ExportFolder(export)); string(data) != e.Dir+"\n" {
+	// The file beside it names its folder, for devvm history, and its
+	// tier, for an import.
+	if data, _ := os.ReadFile(paths.ExportFolder(export)); string(data) != e.Dir+"\nopen\n" {
 		t.Errorf("folder = %q, want %q", data, e.Dir)
 	}
 	if _, ok := f.Instances[vm]; ok {
@@ -175,6 +177,66 @@ func TestExportTooLarge(t *testing.T) {
 	}
 	if es, _ := os.ReadDir(e.Dirs.Exports()); len(es) != 0 {
 		t.Errorf("exports %v", es)
+	}
+}
+
+// devvm history import warns of an export from a VM on a less strict
+// tier, then imports it: by the tier the file beside an export in the
+// exports folder records, and as open for one without, or elsewhere,
+// where the file beside it isn't devvm's. An open VM gets no warning.
+func TestImportWarnsOfTier(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	f.ExecFunc = noDirect
+	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, Network: "allowlist"}).Name()
+	x := Exports{Dirs: e.Dirs}
+	write := func(dir, name string, tier netpolicy.Tier) string {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if tier != "" {
+			if err := x.writeFolder(p, e.Dir, tier); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return p
+	}
+	exports := e.Dirs.Exports()
+	open := write(exports, vm+"-20260101-000000.tar.gz", netpolicy.TierOpen)
+	internet := write(exports, vm+"-20260102-000000.tar.gz", netpolicy.TierInternet)
+	none := write(exports, vm+"-20260103-000000.tar.gz", netpolicy.TierNone)
+	same := write(exports, vm+"-20260104-000000.tar.gz", netpolicy.TierAllowlist)
+	unknown := write(exports, vm+"-20260105-000000.tar.gz", "")
+	mine := write(t.TempDir(), "mine.tar.gz", netpolicy.TierNone)
+	var warned []string
+	fake(e).OnWarn = func(m msg.M) { warned = append(warned, m.Names()) }
+	lc := Lifecycle{e}
+	for file, want := range map[string]string{
+		open:     "history_import_less_strict file=" + open + " from=open tier=allowlist vm=" + vm,
+		internet: "history_import_less_strict file=" + internet + " from=internet tier=allowlist vm=" + vm,
+		none:     "",
+		same:     "",
+		unknown:  "history_import_tier_unknown file=" + unknown + " tier=allowlist vm=" + vm,
+		mine:     "history_import_tier_unknown file=" + mine + " tier=allowlist vm=" + vm,
+	} {
+		warned = nil
+		if err := lc.Import(t.Context(), file); err != nil {
+			t.Fatal(msg.NamesOf(err))
+		}
+		if got := strings.Join(warned, "; "); got != want {
+			t.Errorf("%s: warned %q, want %q", filepath.Base(file), got, want)
+		}
+	}
+
+	e2, f2, _ := upEnv(t, allNative())
+	f2.ExecFunc = noDirect
+	existingVM(t, e2, Options{Agents: &[]string{"claude"}, Network: "open"})
+	fake(e2).OnWarn = func(m msg.M) { t.Errorf("open VM: warned %s", m.Names()) }
+	if err := (Lifecycle{e2}).Import(t.Context(), mine); err != nil {
+		t.Fatal(msg.NamesOf(err))
 	}
 }
 

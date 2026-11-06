@@ -1614,6 +1614,16 @@ func HistoryImportLater(file string, vm string) M {
 	return M{id: "history_import_later", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
+// HistoryImportLessStrict is [history_import_less_strict]: "{{.file}} comes from a VM on the {{.from}} tier, less strict than {{.vm}}'s {{.tier}}, so credentials and data its agents read there may come along."
+func HistoryImportLessStrict(file string, from string, tier string, vm string) M {
+	return M{id: "history_import_less_strict", vals: []val{{"file", file}, {"from", from}, {"tier", tier}, {"vm", vm}}}
+}
+
+// HistoryImportTierUnknown is [history_import_tier_unknown]: "{{.file}} has no record of the network tier it comes from, so credentials and data its agents read on a less strict tier than {{.vm}}'s {{.tier}} may come along."
+func HistoryImportTierUnknown(file string, tier string, vm string) M {
+	return M{id: "history_import_tier_unknown", vals: []val{{"file", file}, {"tier", tier}, {"vm", vm}}}
+}
+
 // HistoryImportUnsafe is [history_import_unsafe]: "{{.file}} holds paths outside the agents' history folders, so devvm imported nothing from it."
 func HistoryImportUnsafe(file string) M {
 	return M{id: "history_import_unsafe", vals: []val{{"file", file}}}
@@ -4283,6 +4293,8 @@ var specs = map[string]spec{
 	"history_failed":                 {fields: []string{"reason"}},
 	"history_import_ask":             {fields: []string{"file", "vm"}},
 	"history_import_later":           {fields: []string{"file", "vm"}},
+	"history_import_less_strict":     {fields: []string{"file", "from", "tier", "vm"}},
+	"history_import_tier_unknown":    {fields: []string{"file", "tier", "vm"}},
 	"history_import_unsafe":          {fields: []string{"file"}},
 	"history_no_export":              {fields: []string{"dir"}},
 	"history_not_exported":           {fields: []string{"vm"}},

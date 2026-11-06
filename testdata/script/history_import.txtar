@@ -44,6 +44,7 @@ stdout '--exclude=\.claude/skills'
 cp $WORK/mine.tar.gz mine.tar.gz
 exec devvm history import mine.tar.gz
 stdout '^==> imported file=\S*/agent/mine\.tar\.gz vm=devvm-agent-[0-9a-f]{14}$'
+! stderr 'history_import_(less_strict|tier_unknown)'
 cmp $STUB_DIR/history-in.tgz mine.tar.gz
 stub_reset
 ! exec devvm history import nope.tar.gz
@@ -94,6 +95,23 @@ stderr '\[y/N\] devvm: history_import_unsafe file=\S*/exports/devvm-agent-'
 stderr '^devvm: sync_failed'
 rm $STUB_DIR/history-unsafe
 exec devvm rm --force --no-export
+
+# An open VM's export into a new VM on a stricter tier warns, then
+# imports, and so does a file of your own, whose tier devvm has no
+# record of. (Its hostagent here: the test's runner, so devvm finds it
+# running confined. More cases: TestImportWarnsOfTier.)
+ttyin -stdin $WORK/yes.txt
+! exec devvm --network allowlist --no-git-protect --agents claude
+stderr '\[y/N\] devvm: history_import_less_strict file=\S*/exports/devvm-agent-[0-9a-f]{14}-[0-9]{8}-[0-9]{6}\.tar\.gz from=open tier=allowlist vm=devvm-agent-[0-9a-f]{14}$'
+stdout '^==> imported '
+exists $STUB_DIR/history-in.tgz
+vm_name AGENT agent
+exec sh -c 'echo $PPID > "$LIMA_HOME/$AGENT/ha.pid"; echo "$PPID 1" > "$AGENT_dir/run/started"'
+exec devvm history import mine.tar.gz
+stderr '^devvm: history_import_tier_unknown file=\S*/agent/mine\.tar\.gz tier=allowlist vm=devvm-agent-[0-9a-f]{14}$'
+stdout '^==> imported '
+exec devvm rm --force --no-export
+rm $STUB_DIR/history-in.tgz
 
 # A VM without an agent, and another folder's VM, are offered nothing.
 ! exec devvm --network open --no-git-protect --agents none

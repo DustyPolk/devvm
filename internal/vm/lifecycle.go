@@ -13,6 +13,7 @@ import (
 	"github.com/devvmhq/devvm/internal/gitprotect"
 	"github.com/devvmhq/devvm/internal/image"
 	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/netpolicy"
 	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/state"
 	"github.com/devvmhq/devvm/internal/tools"
@@ -395,7 +396,7 @@ func (e Lifecycle) export(ctx context.Context, t *target, file string, failed er
 		return err
 	}
 	if own {
-		if err := x.writeFolder(file, t.f.Dir); err != nil {
+		if err := x.writeFolder(file, t.f.Dir, netpolicy.TierOf(t.st)); err != nil {
 			return err
 		}
 	}
@@ -432,9 +433,11 @@ func (e Lifecycle) Import(ctx context.Context, file string) error {
 // importHistory puts the export of agents' history at file into t's VM,
 // which is running. The file is streamed in as it is, and the VM's tar
 // reads it (historyImport): it comes from a VM, so the host never reads
-// what's in it, and only a VM's own home gets it.
+// what's in it, and only a VM's own home gets it. An export from a VM on
+// a less strict tier is warned of first (warnTier).
 func importHistory(ctx context.Context, e *Env, t *target, file string) error {
 	vm := t.f.Name
+	warnTier(e, t, file)
 	f, err := os.Open(file) //nolint:gosec // the export the user named, or the one devvm saved for this folder
 	if err != nil {
 		return err
@@ -453,6 +456,27 @@ func importHistory(ctx context.Context, e *Env, t *target, file string) error {
 	}
 	e.Info(msg.Imported(file, vm))
 	return nil
+}
+
+// warnTier warns, before the export at file goes into t's VM, when it
+// comes from a VM on a less strict network tier than t's
+// (netpolicy.Tier.AtLeast), whose agents may have read what the VM's
+// can't reach. Only an export in devvm's exports folder has its tier
+// read, from the file beside it, which devvm wrote: one elsewhere, such
+// as in a project folder, which its VM can write, or one without a
+// tier, is warned of as if from an open VM.
+func warnTier(e *Env, t *target, file string) {
+	to := netpolicy.TierOf(t.st)
+	var from netpolicy.Tier
+	if filepath.Dir(file) == e.Dirs.Exports() {
+		_, from = Exports{Dirs: e.Dirs}.record(file)
+	}
+	switch {
+	case from == "" && !netpolicy.TierOpen.AtLeast(to):
+		e.Warn(msg.HistoryImportTierUnknown(file, string(to), t.f.Name))
+	case from != "" && !from.AtLeast(to):
+		e.Warn(msg.HistoryImportLessStrict(file, string(from), string(to), t.f.Name))
+	}
 }
 
 // offerHistory returns the export of agents' history the new VM vm, of

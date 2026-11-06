@@ -139,6 +139,8 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"history_too_large":              "using/coding-agents#history",
 	"history_not_imported":           "using/coding-agents#importing-history",
 	"history_import_unsafe":          "using/coding-agents#importing-history",
+	"history_import_less_strict":     "using/coding-agents#importing-history",
+	"history_import_tier_unknown":    "using/coding-agents#importing-history",
 	"history_no_export":              "using/coding-agents#importing-history",
 	"history_import_later":           "using/coding-agents#importing-history",
 	"git_replaced":                   "safety/git-protection#not-covered",

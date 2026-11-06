@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devvmhq/devvm/internal/netpolicy"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/settings"
@@ -25,10 +26,13 @@ type Exports struct{ Dirs paths.Dirs }
 // Export is one of the exports in devvm's exports folder.
 type Export struct {
 	Path   string
-	VM     string    // the VM it's of
-	Folder string    // its project folder, from the file beside it; "" without one
-	At     time.Time // when it was written, from its name
-	Size   int64
+	VM     string // the VM it's of
+	Folder string // its project folder, from the file beside it; "" without one
+	// Tier is its VM's network tier when it was written, from the file
+	// beside it; "" without one.
+	Tier netpolicy.Tier
+	At   time.Time // when it was written, from its name
+	Size int64
 }
 
 // exportStamp is the date and time in an export's name, the host's wall
@@ -68,19 +72,30 @@ func parseExportName(name string) (vm, stamp string, ok bool) {
 }
 
 // writeFolder writes the file beside an export that names its VM's
-// project folder, for devvm history to list once the VM is gone.
-func (Exports) writeFolder(export, dir string) error {
-	return state.WriteFile(paths.ExportFolder(export), []byte(dir+"\n"))
+// project folder, for devvm history to list once the VM is gone, and on
+// its last line the VM's network tier as it was exported, for an import
+// to compare (Lifecycle's warnTier).
+func (Exports) writeFolder(export, dir string, tier netpolicy.Tier) error {
+	return state.WriteFile(paths.ExportFolder(export), []byte(dir+"\n"+string(tier)+"\n"))
 }
 
-// folder reads the project folder the file beside an export names; ""
-// without one.
-func (Exports) folder(export string) string {
+// record reads the file beside an export: the project folder it names,
+// "" without one, and the network tier its VM had, "" without one.
+func (Exports) record(export string) (string, netpolicy.Tier) {
 	data, err := os.ReadFile(paths.ExportFolder(export))
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	return strings.TrimSpace(string(data))
+	s := strings.TrimSuffix(string(data), "\n")
+	i := strings.LastIndexByte(s, '\n')
+	if i < 0 {
+		return strings.TrimSpace(s), ""
+	}
+	tier := netpolicy.Tier(s[i+1:])
+	if !tier.Valid() {
+		tier = ""
+	}
+	return strings.TrimSpace(s[:i]), tier
 }
 
 // List lists the exports in the exports folder, oldest first: only plain
@@ -114,7 +129,8 @@ func (x Exports) List() ([]Export, error) {
 		if err != nil {
 			size = 0
 		}
-		out = append(out, Export{Path: p, VM: vm, Folder: x.folder(p), At: at, Size: size})
+		folder, tier := x.record(p)
+		out = append(out, Export{Path: p, VM: vm, Folder: folder, Tier: tier, At: at, Size: size})
 	}
 	slices.SortFunc(out, func(a, b Export) int { return a.At.Compare(b.At) })
 	return out, nil

@@ -1122,6 +1122,14 @@ other = "Importing the agent history in {{.file}} into {{.vm}} failed."
 [history_import_unsafe]
 other = "{{.file}} holds paths outside the agents' history folders, so devvm imported nothing from it."
 
+[history_import_less_strict]
+description = "from and tier are network tiers: open, internet, allowlist or none; tier is vm's"
+other = "{{.file}} comes from a VM on the {{.from}} tier, less strict than {{.vm}}'s {{.tier}}, so credentials and data its agents read there may come along."
+
+[history_import_tier_unknown]
+description = "tier is vm's network tier: internet, allowlist or none"
+other = "{{.file}} has no record of the network tier it comes from, so credentials and data its agents read on a less strict tier than {{.vm}}'s {{.tier}} may come along."
+
 [history_no_export]
 other = "There's no export of agents' history for {{.dir}}. Give devvm history import the FILE to import."
 

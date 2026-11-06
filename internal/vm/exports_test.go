@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devvmhq/devvm/internal/netpolicy"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/settings"
 )
@@ -59,10 +60,36 @@ func writeExports(t *testing.T, d paths.Dirs, folders map[string]string) {
 			t.Fatal(err)
 		}
 		if dir != "" {
-			if err := x.writeFolder(p, dir); err != nil {
+			if err := x.writeFolder(p, dir, netpolicy.TierAllowlist); err != nil {
 				t.Fatal(err)
 			}
 		}
+	}
+}
+
+// The file beside an export: its folder, then its VM's tier, which it
+// reads back; one without a tier, or with one that isn't a tier, has the
+// folder alone, and none has neither.
+func TestExportRecord(t *testing.T) {
+	d := paths.Dirs{Data: t.TempDir()}
+	x := Exports{Dirs: d}
+	p := filepath.Join(t.TempDir(), "devvm-a-12345612345612-20260101-120000.tar.gz")
+	if err := x.writeFolder(p, "/p", netpolicy.TierNone); err != nil {
+		t.Fatal(err)
+	}
+	if dir, tier := x.record(p); dir != "/p" || tier != netpolicy.TierNone {
+		t.Errorf("record = %q, %q", dir, tier)
+	}
+	for data, want := range map[string]string{"/p\n": "/p", "/p\nwide\n": "/p", "/p": "/p", "": ""} {
+		if err := os.WriteFile(paths.ExportFolder(p), []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if dir, tier := x.record(p); dir != want || tier != "" {
+			t.Errorf("record of %q = %q, %q", data, dir, tier)
+		}
+	}
+	if dir, tier := x.record(filepath.Join(t.TempDir(), "none.tar.gz")); dir != "" || tier != "" {
+		t.Errorf("record of none = %q, %q", dir, tier)
 	}
 }
 
