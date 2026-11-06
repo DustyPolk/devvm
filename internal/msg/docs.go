@@ -291,6 +291,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"agent_login_exited":            "using/coding-agents#logging-in-with-devvm-agent-login",
 	"agent_login_not_saved":         "using/coding-agents#logging-in-with-devvm-agent-login",
 	"agent_key_copy_failed":         "using/coding-agents#logging-in-with-devvm-agent-login",
+	"opencode_import_failed":        "using/coding-agents#logging-in-with-devvm-agent-login",
 	"agent_login_failed":            "using/coding-agents#logging-in-with-devvm-agent-login",
 	"agent_login_provider_needed":   "using/coding-agents#logging-in-with-devvm-agent-login",
 	"agent_login_provider_alone":    "using/coding-agents#logging-in-with-devvm-agent-login",

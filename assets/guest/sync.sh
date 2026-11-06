@@ -17,6 +17,8 @@
 #                and DEVVM_LOCAL_PROXY (ADDRESS:PORT on the VM's loopback, where devvm-local-proxy
 #                listens; empty without a proxy)
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
+#   opencode-import.json  the store's opencode logins as opencode auth import reads them, with
+#                placeholders (none: no opencode login in the store); opencode.sh imports them
 #   hosts        the VM's links (devvm checked them): a line per target, "ADDRESS NAME
 #                NAME.devvm.internal...", for /etc/hosts
 #   guide.md     devvm's guide for the agents in the VM, installed as /usr/share/doc/devvm/README.md
@@ -209,6 +211,13 @@ if command -v codex >/dev/null; then
   { echo 'cli_auth_credentials_store = "file"'; grep -v '^cli_auth_credentials_store[[:space:]]*=' ~/.codex/config.toml || true; } > ~/.codex/config.toml.devvm &&
     mv ~/.codex/config.toml.devvm ~/.codex/config.toml
 fi
+
+# opencode 2's database gets the store's opencode logins that changed (opencode.sh); none in the store
+# is an empty list, so devvm's entries go. A failed import is tried again at the next launch.
+oc_import=$s/opencode-import.json
+[[ -f $oc_import ]] || echo '[]' > "$oc_import"
+bash -l "$s/opencode.sh" < "$oc_import" >/dev/null ||
+  echo "devvm: opencode in this VM didn't get the logins devvm keeps for it; the next launch tries again" >&2
 
 # The VM's proxy (DEVVM_PROXY set): Lima's env: already puts the proxy variables in /etc/environment;
 # point the tools that ignore them at the proxy too. When the guest has none, undo all of it.

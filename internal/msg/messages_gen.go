@@ -2544,6 +2544,11 @@ func OCIWaiting() M {
 	return M{id: "oci_waiting"}
 }
 
+// OpencodeImportFailed is [opencode_import_failed]: "opencode in {{.vm}} refused devvm's login for {{.providers}}, though devvm saved the API key. Run devvm in the VM's folder to try again."
+func OpencodeImportFailed(providers string, vm string) M {
+	return M{id: "opencode_import_failed", vals: []val{{"providers", providers}, {"vm", vm}}}
+}
+
 // OpencodeLoginKept is [opencode_login_kept]: "The VM gets opencode's {{.providers}} login unchanged."
 func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
@@ -4444,6 +4449,7 @@ var specs = map[string]spec{
 	"nothing_saved":                  {},
 	"nothing_to_clean":               {},
 	"oci_waiting":                    {},
+	"opencode_import_failed":         {fields: []string{"providers", "vm"}},
 	"opencode_login_kept":            {fields: []string{"providers"}},
 	"opencode_login_withheld":        {fields: []string{"providers"}},
 	"opencode_refresh_failed":        {fields: []string{"provider", "reason"}},

@@ -1,6 +1,7 @@
 package agentlogin
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
@@ -23,19 +24,46 @@ func KeyProviders(kind string) []string {
 // errKeyProvider: an API key for a provider devvm doesn't put in.
 var errKeyProvider = errors.New("no API key devvm puts in for that provider")
 
-// OpencodeKeyImport is what opencode's auth import reads to add provider's API key, of
-// KeyProviders, to a VM whose opencode has made its database: opencode 2 keeps its logins there
-// and reads auth.json only as it makes it. It's the key's credential as opencode's auth export
-// prints it, the key's placeholder ending in salt, under an ID of devvm's, which opencode skips
-// when it has it, so a second import adds nothing.
-func OpencodeKeyImport(provider, salt string) ([]byte, error) {
-	if !slices.Contains(KeyProviders(Opencode), provider) {
-		return nil, errKeyProvider
+// OpencodeImport is what opencode's auth import reads to give a VM whose opencode has made its
+// database the logins of vmCopy, the VM's copy of the store's opencode login (File.VMCopy, which
+// holds placeholders alone): opencode 2 keeps its logins there and reads auth.json only as it
+// makes it. It's each API key devvm puts in (KeyProviders) and OpenAI's Codex login as opencode's
+// auth export prints them, sorted by provider, under IDs of devvm's (cred_devvm_<provider>), which
+// the VM's setup logs out of before it imports a new set, so the user's own credentials stay.
+func OpencodeImport(vmCopy []byte) ([]byte, error) {
+	d := json.NewDecoder(bytes.NewReader(vmCopy))
+	d.UseNumber()
+	var m map[string]any
+	if err := d.Decode(&m); err != nil {
+		return nil, err
 	}
-	return json.Marshal([]map[string]any{{
-		"id": "cred_devvm_" + provider, "integrationID": provider, "label": "devvm", "active": true,
-		"value": map[string]any{"type": "key", "key": opencodePlaceholder(provider, salt)},
-	}})
+	out := []map[string]any{}
+	for _, id := range slices.Sorted(maps.Keys(m)) {
+		e := obj(m, id)
+		var v map[string]any
+		switch {
+		case str(e, "type") == "api" && slices.Contains(KeyProviders(Opencode), id) && str(e, "key") != "":
+			v = map[string]any{"type": "key", "key": str(e, "key")}
+		case str(e, "type") == "oauth" && id == "openai" && str(e, "access") != "":
+			// opencode 2 (checked at v2.2.5) needs a method, Codex's in a browser, whose tokens
+			// come from the endpoint the store refreshes at, and a whole number for expires.
+			expires, _ := e["expires"].(json.Number)
+			if _, err := expires.Int64(); err != nil {
+				expires = "0"
+			}
+			v = map[string]any{
+				"type": "oauth", "methodID": "chatgpt-browser", "access": str(e, "access"),
+				"refresh": str(e, "refresh"), "expires": expires,
+			}
+			if a := str(e, "accountId"); a != "" {
+				v["metadata"] = map[string]any{"accountID": a}
+			}
+		default:
+			continue
+		}
+		out = append(out, map[string]any{"id": "cred_devvm_" + id, "integrationID": id, "label": "devvm", "active": true, "value": v})
+	}
+	return json.Marshal(out)
 }
 
 // SetKey saves key as the agent's API key in f, the store's login file,

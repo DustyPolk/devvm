@@ -13,6 +13,25 @@ import (
 	"github.com/w3cj/devvm/internal/secrets"
 )
 
+// The providers opencode's import refused are the script's
+// devvm-opencode-failed lines alone, in order, made printable.
+func TestOpencodeRefused(t *testing.T) {
+	for _, c := range []struct {
+		out  string
+		want []string
+	}{
+		{"", nil},
+		{"Imported 1 credential\n", nil},
+		{"devvm-opencode-failed openai\nnoise\ndevvm-opencode-failed openrouter\r\n", []string{"openai", "openrouter"}},
+		{"devvm-opencode-failed \n", nil},
+		{"devvm-opencode-failed a\x1bb\n", []string{msg.Printable("a\x1bb")}},
+	} {
+		if got := opencodeRefused(c.out); !slices.Equal(got, c.want) {
+			t.Errorf("opencodeRefused(%q) = %q, want %q", c.out, got, c.want)
+		}
+	}
+}
+
 // What devvm agent login says the store saved: a new ChatGPT login, with
 // the account's email when its tokens name one; an API key, the same
 // login as before, or none at all, fails.

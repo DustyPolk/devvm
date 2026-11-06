@@ -33,6 +33,7 @@ import (
 //	                    an empty one
 //	net-direct          a direct connection (curl --noproxy, past the VM's proxy) works,
 //	                    which fails as a confined VM's does without it
+//	opencode-refuses    devvm's opencode.sh says opencode refused the provider this file names
 //	hostkeys-fails      the VM doesn't show its ssh host keys, which are otherwise one
 //	                    made-up ed25519 key per VM, its name the key
 //	guest-ports         what listens in the VM, as /proc/net/tcp has it, for a port
@@ -211,6 +212,9 @@ func (g *guest) answer() int {
 		return 0
 	case strings.Contains(all, "'curl' '--noproxy'") && !g.on("net-direct"):
 		return 7
+	case strings.HasSuffix(all, "'opencode.sh'") && g.on("opencode-refuses"):
+		g.print("devvm-opencode-failed " + strings.TrimSpace(string(g.raw("opencode-refuses", ""))) + "\n")
+		return 1
 	case strings.Contains(all, "/etc/ssh/ssh_host_"):
 		if g.on("hostkeys-fails") {
 			return 1

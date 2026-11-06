@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -70,6 +71,7 @@ func networkSection(s *S) {
 	netCodexLogin(n)
 	netOpencodeLogin(n)
 	netOpencodeHistory(n)
+	netOpencodeKeys(n)
 	netClaudeLogins(n)
 	netSave(n)
 	netGithub(n)
@@ -909,6 +911,108 @@ func netOpencodeLogin(n *netRun) {
 		}
 		return nil
 	}, Tail(60))
+}
+
+// devvm agent login opencode --api-key saves a key from the network VM;
+// a second opencode 2 VM, whose database was made before, gets the key's
+// placeholder at its next launch, beside a credential of its own that
+// stays.
+func netOpencodeKeys(n *netRun) {
+	s := n.s
+	oc, _ := s.NewProject("net-oc")
+	vm, _, _ := launchWith(s, oc, n.home(), "--network", "allowlist", "--no-git-protect", "--agents", "opencode", "--cpus", "2", "--memory", "2", "--ports", "none")
+	s.Check("opencode's self-update is off in an opencode VM's login shell", func() error {
+		if got := vmOut(s, vm, "printenv OPENCODE_DISABLE_AUTOUPDATE"); vm == "" || got != "1" {
+			return fmt.Errorf("OPENCODE_DISABLE_AUTOUPDATE is %q", got)
+		}
+		return nil
+	})
+	own := `[{"id":"cred_e2e_own","integrationID":"anthropic","label":"mine","active":true,"value":{"type":"key","key":"sk-ant-e2e-own"}}]`
+	s.Check("an opencode 2 VM whose database exists gets a key saved from another VM at its next launch", func() error {
+		switch {
+		case vm == "":
+			return errors.New("no second VM")
+		case inVM(s, vm, "opencode auth list >/dev/null && ls ~/.local/share/opencode/opencode*.db >/dev/null") != nil:
+			return errors.New("the second VM's opencode made no database")
+		case inVM(s, vm, "echo "+shell.Quote(own)+" | opencode auth import") != nil:
+			return errors.New("the second VM's opencode didn't import a credential of its own")
+		}
+		// The company proxy's environment, as the logins before: the save brings the VM up as it was.
+		if r, err := n.dv("sk-or-e2efake-saved\n", n.tokenEnv("DEVVM_MESSAGES=names"), "agent", "login", "opencode", "--api-key", "--provider", "openrouter", "--stdin"); err != nil {
+			// The run log's end holds opencode.sh's stderr: the import's own, or the command that failed.
+			return failed("devvm agent login opencode --api-key failed:\n"+r.Out+"\n"+n.runLogEnd(r.Out), err)
+		}
+		if has, err := vmHas(s, vm, true, "opencode auth export", "devvm-proxy-managed-opencode-openrouter"); err != nil || has {
+			return errors.New("the second VM had the key before its launch")
+		}
+		if _, _, err := launchWith(s, oc, n.home()); err != nil {
+			return err
+		}
+		export := "opencode auth export openrouter"
+		if has, err := vmHas(s, vm, true, export, `"id": "cred_devvm_openrouter"`); err != nil || !has {
+			return errors.New("the second VM's opencode has no devvm entry for the key\n" + n.opencodeWhy(vm))
+		}
+		if has, err := vmHas(s, vm, true, export, "devvm-proxy-managed-opencode-openrouter"); err != nil || !has {
+			return errors.New("the second VM's opencode has no placeholder of the key")
+		}
+		if has, err := vmHas(s, vm, true, "opencode auth export", "e2efake"); err != nil || has {
+			return errors.New("the second VM's opencode holds the key itself")
+		}
+		if has, err := vmHas(s, vm, true, "opencode auth export anthropic", "sk-ant-e2e-own"); err != nil || !has {
+			return errors.New("the second VM's own credential is gone")
+		}
+		return nil
+	}, Tail(40))
+	s.Check("... and gets it again at its next launch once its database is made again", func() error {
+		// opencode's service keeps the old database open: it goes first.
+		remake := "pkill -x opencode; sleep 1; rm -f ~/.local/share/opencode/opencode.db* && opencode auth list >/dev/null"
+		if vm == "" || inVM(s, vm, remake) != nil {
+			return errors.New("the second VM's opencode didn't make its database again")
+		}
+		if has, err := vmHas(s, vm, true, "opencode auth export", "cred_devvm_openrouter"); err != nil || has {
+			return errors.New("the new database already holds devvm's entry")
+		}
+		if _, _, err := launchWith(s, oc, n.home()); err != nil {
+			return err
+		}
+		if has, err := vmHas(s, vm, true, "opencode auth export openrouter", "devvm-proxy-managed-opencode-openrouter"); err != nil || !has {
+			return errors.New("the new database has no placeholder of the key after the launch\n" + n.opencodeWhy(vm))
+		}
+		return nil
+	}, Tail(40))
+	if vm != "" {
+		_, _ = s.Run(devvmCmd(s, oc, "", n.home(), "rm", "--force", "--no-export"))
+	}
+}
+
+// opencodeWhy is what the VM's opencode got: the IDs of opencode.sh's
+// record and of opencode's credentials (never their values), and the
+// lines of the newest run log that name opencode.
+func (n *netRun) opencodeWhy(vm string) string {
+	s := n.s
+	ids := vmOut(s, vm, `jq -c '[.[].id]' ~/.local/state/devvm/opencode-import.json; ls ~/.local/share/opencode; opencode auth export 2>&1 | jq -c '[.[] | [.id, .integrationID, .active]]'`)
+	runs, _ := filepath.Glob(filepath.Join(s.Paths.Devvm, "logs", "runs", "*.log"))
+	slices.Sort(runs)
+	var lines []string
+	for _, f := range runs[max(0, len(runs)-4):] {
+		lines = append(lines, "== "+filepath.Base(f))
+		for l := range strings.Lines(readText(f)) {
+			if strings.Contains(l, "opencode") || strings.Contains(l, "Imported") || strings.Contains(l, "sync") {
+				lines = append(lines, strings.TrimRight(l, "\n"))
+			}
+		}
+	}
+	return "in the VM: " + ids + "\nthe last run logs' opencode lines:\n" + tailLines(strings.Join(lines, "\n"), 60)
+}
+
+// runLogEnd is the last lines of the run log that out's log_end line
+// names, nothing when it names none.
+func (n *netRun) runLogEnd(out string) string {
+	m := regexp.MustCompile(`log_end file=(\S+)`).FindStringSubmatch(out)
+	if m == nil {
+		return ""
+	}
+	return "the run log ends:\n" + tailLines(readText(m[1]), 40)
 }
 
 // opencodeLoggedIn is the opencode login's first step that failed,

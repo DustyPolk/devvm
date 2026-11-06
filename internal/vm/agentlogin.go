@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"io/fs"
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/w3cj/devvm/internal/agentlogin"
@@ -269,7 +272,7 @@ func (e AgentLogin) saveKey(ctx context.Context, t *target, store *secrets.Store
 		return backend.Logged(msg.AgentKeyCopyFailed(o.Agent, vm))
 	}
 	if o.Agent == agentlogin.Opencode {
-		if err := e.importKey(ctx, t, o.Provider, salt); err != nil {
+		if err := e.importLogins(ctx, t, data); err != nil {
 			return err
 		}
 	}
@@ -277,26 +280,48 @@ func (e AgentLogin) saveKey(ctx context.Context, t *target, store *secrets.Store
 	return nil
 }
 
-// opencodeImportScript gives opencode in the VM the credential on its
-// input with opencode auth import, in a login shell (opencode on PATH),
-// once opencode has made its database: until then, opencode reads the
-// login file as it makes it.
-const opencodeImportScript = `set -- "$HOME"/.local/share/opencode/opencode*.db; [ -e "$1" ] || exit 0; exec opencode auth import`
+// opencodeScript is devvm's guest script that gives opencode 2 in the VM
+// the store's opencode logins that changed, run by every launch's setup
+// too (guest/sync.sh).
+const opencodeScript = "opencode.sh"
 
-// importKey adds provider's API key, as its placeholder ending in salt,
-// to the VM's opencode, which keeps its logins in its database
-// (agentlogin.OpencodeKeyImport).
-func (e AgentLogin) importKey(ctx context.Context, t *target, provider, salt string) error {
-	data, err := agentlogin.OpencodeKeyImport(provider, salt)
+// importLogins gives the VM's opencode, which keeps its logins in its
+// database, the logins of vmCopy, the VM's copy of the store's
+// (agentlogin.OpencodeImport), with opencodeScript in a login shell
+// (opencode on PATH), the logins on its input.
+func (e AgentLogin) importLogins(ctx context.Context, t *target, vmCopy []byte) error {
+	data, err := agentlogin.OpencodeImport(vmCopy)
 	if err != nil {
 		return msg.LoginCopyFailed(agentlogin.Opencode, err.Error(), t.f.Name).Because(err)
 	}
-	log := e.LogWriter()
-	if err := t.exec(ctx, []string{"bash", "-lc", opencodeImportScript}, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: log, Stderr: log}); err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return backend.Logged(msg.AgentKeyCopyFailed(agentlogin.Opencode, t.f.Name))
+	script, err := fs.ReadFile(e.Assets, "guest/"+opencodeScript)
+	if err != nil {
+		return err
 	}
-	return nil
+	log := e.LogWriter()
+	var out bytes.Buffer
+	argv := []string{"bash", "-lc", string(script), opencodeScript}
+	err = t.exec(ctx, argv, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: io.MultiWriter(&out, log), Stderr: log})
+	switch {
+	case err == nil:
+		return nil
+	case ctx.Err() != nil:
+		return ctx.Err()
+	}
+	if failed := opencodeRefused(out.String()); len(failed) > 0 {
+		return backend.Logged(msg.OpencodeImportFailed(strings.Join(failed, ", "), t.f.Name))
+	}
+	return backend.Logged(msg.AgentKeyCopyFailed(agentlogin.Opencode, t.f.Name))
+}
+
+// opencodeRefused is the providers opencodeScript's output names as
+// refused by opencode's import, its "devvm-opencode-failed PROVIDER" lines.
+func opencodeRefused(out string) []string {
+	var failed []string
+	for line := range strings.Lines(out) {
+		if p, ok := strings.CutPrefix(strings.TrimSpace(line), "devvm-opencode-failed "); ok && p != "" {
+			failed = append(failed, msg.Printable(p))
+		}
+	}
+	return failed
 }

@@ -54,41 +54,67 @@ func TestSetKey(t *testing.T) {
 	}
 }
 
-// opencode's import of a key is opencode 2's auth export entry: devvm's
-// ID, the key's placeholder, which is the one the VM's copy of auth.json
-// holds and the proxy binds, never the key; a provider devvm doesn't put
-// keys in for is refused.
-func TestOpencodeKeyImport(t *testing.T) {
+// opencode's import is opencode 2's auth export entries for the VM's copy
+// of the store's login: devvm's IDs, sorted, each API key devvm puts in and
+// OpenAI's Codex login with the placeholders the copy holds and the proxy
+// binds, never a key or token; a key devvm doesn't put in is left out, and
+// an empty login is an empty list.
+func TestOpencodeImport(t *testing.T) {
 	o := storeFile(t, Opencode, "auth.json")
-	must(t, o.lockStoreWrite(map[string]any{}))
+	access := jwtWith(time.Now().Add(time.Hour), map[string]any{"email": "a@example.com"})
+	must(t, o.lockStoreWrite(map[string]any{
+		"groq":   map[string]any{"type": "api", "key": "gsk-kept"},
+		"openai": map[string]any{"type": "oauth", "access": access, "refresh": "rt-secret", "expires": 1, "accountId": "acct-1"},
+	}))
 	must(t, o.SetKey("anthropic", "sk-ant-secret"))
 	o.Salt = "s4lt"
+	c, err := o.VMCopy()
+	must(t, err)
 	bs, err := o.Bindings()
-	if err != nil || len(bs) != 1 {
-		t.Fatalf("bindings: %v %v", bs, err)
+	must(t, err)
+	ph := map[string]string{}
+	for _, b := range bs {
+		ph[b.Name] = b.Placeholder
 	}
-	data, err := OpencodeKeyImport("anthropic", "s4lt")
-	if err != nil {
-		t.Fatal(err)
+	data, err := OpencodeImport(c.Data)
+	must(t, err)
+	type value struct {
+		Type, MethodID, Key, Access, Refresh string
+		Metadata                             struct{ AccountID string }
 	}
 	var got []struct {
 		ID, IntegrationID, Label string
 		Active                   bool
-		Value                    struct{ Type, Key string }
+		Value                    value
 	}
-	if err := json.Unmarshal(data, &got); err != nil {
-		t.Fatal(err)
+	must(t, json.Unmarshal(data, &got))
+	if len(got) != 2 {
+		t.Fatalf("OpencodeImport = %s", data)
 	}
-	want := []struct {
-		ID, IntegrationID, Label string
-		Active                   bool
-		Value                    struct{ Type, Key string }
-	}{{"cred_devvm_anthropic", "anthropic", "devvm", true, struct{ Type, Key string }{"key", bs[0].Placeholder}}}
-	if !slices.Equal(got, want) || strings.Contains(string(data), "sk-ant-secret") {
-		t.Errorf("OpencodeKeyImport = %s, want the placeholder %s", data, bs[0].Placeholder)
+	a, oa := got[0], got[1]
+	if a.ID != "cred_devvm_anthropic" || a.IntegrationID != "anthropic" || a.Label != "devvm" || !a.Active ||
+		a.Value != (value{Type: "key", Key: ph["opencode-anthropic"]}) {
+		t.Errorf("anthropic: %+v", a)
 	}
-	if _, err := OpencodeKeyImport("groq", "s4lt"); err == nil {
-		t.Error("OpencodeKeyImport(groq) took it")
+	want := value{Type: "oauth", MethodID: "chatgpt-browser", Access: ph["opencode-openai"], Refresh: ph["opencode-openai"]}
+	want.Metadata.AccountID = "acct-1"
+	if oa.ID != "cred_devvm_openai" || oa.IntegrationID != "openai" || oa.Value != want {
+		t.Errorf("openai: %+v", oa)
+	}
+	for _, secret := range []string{"sk-ant-secret", "rt-secret", access, "gsk-kept"} {
+		if strings.Contains(string(data), secret) {
+			t.Errorf("OpencodeImport holds %q: %s", secret, data)
+		}
+	}
+	// opencode 2 needs a whole number for expires.
+	if data, err := OpencodeImport([]byte(`{"openai":{"type":"oauth","access":"a","refresh":"r"}}`)); err != nil || !strings.Contains(string(data), `"expires":0,`) {
+		t.Errorf("OpencodeImport without expires = %s, %v", data, err)
+	}
+	if data, err := OpencodeImport([]byte(`{}`)); err != nil || string(data) != "[]" {
+		t.Errorf("OpencodeImport({}) = %s, %v", data, err)
+	}
+	if _, err := OpencodeImport([]byte(`[`)); err == nil {
+		t.Error("OpencodeImport took a broken copy")
 	}
 }
 

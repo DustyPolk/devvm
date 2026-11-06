@@ -252,7 +252,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	if m := claudeMoved(in.moved, st.Dir); m != nil {
 		s.put("moved", 0o644, m)
 	}
-	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh", "claude.sh", "guide.md"} {
+	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh", "claude.sh", "guide.md", opencodeScript} {
 		data, err := fs.ReadFile(e.Assets, "guest/"+name)
 		if err != nil {
 			return nil, err
@@ -421,6 +421,13 @@ func (e syncer) stageSecrets(ctx context.Context, s *stage, store *secrets.Store
 			name = "home/" + secrets.LoginRel(kind)
 		}
 		s.put(name, 0o600, data)
+		if kind == agentlogin.Opencode {
+			imp, err := agentlogin.OpencodeImport(data)
+			if err != nil {
+				return msg.LoginCopyFailed(kind, err.Error(), vm).Because(err)
+			}
+			s.put("opencode-import.json", 0o600, imp)
+		}
 	}
 	for _, f := range slices.Clone(s.files) {
 		rel, ok := strings.CutPrefix(f.name, "home/")

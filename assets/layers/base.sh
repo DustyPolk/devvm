@@ -82,13 +82,15 @@ rm /tmp/mise
 # Every shell finds the tools: login shells through profile.d, interactive ones through mise activate
 # (it follows `cd` into projects with other versions), and the rest (`bash -c` from agents, editors
 # over SSH) through BASH_ENV and mise's shims. Read-only installs can't take global packages or update
-# themselves: npm installs globals into ~/.npm-global, and Claude Code's auto-update is off.
+# themselves: npm installs globals into ~/.npm-global, and Claude Code's and opencode's auto-updates
+# are off.
 sudo tee /etc/profile.d/devvm-tools.sh >/dev/null <<'SH'
 case ":$PATH:" in *":$HOME/.local/share/mise/shims:"*) ;; *)
   export PATH="$HOME/.npm-global/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH" ;;
 esac
 export NPM_CONFIG_PREFIX="$HOME/.npm-global"
 export DISABLE_AUTOUPDATER=1
+export OPENCODE_DISABLE_AUTOUPDATE=1
 SH
 grep -qs devvm-tools /etc/environment || echo 'BASH_ENV=/etc/profile.d/devvm-tools.sh' | sudo tee -a /etc/environment >/dev/null
 echo 'eval "$(mise activate bash)"' > ~/.bashrc.d/mise.sh

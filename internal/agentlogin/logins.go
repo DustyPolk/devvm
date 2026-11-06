@@ -18,7 +18,8 @@
 // entry per provider: {"type":"api","key"} or {"type":"oauth","access","refresh","expires" (ms)}.
 // opencode 2 (checked at v2.2.5) keeps its logins in its SQLite database instead, and imports
 // auth.json, in that format, once, as it makes its credential table; devvm's store keeps the
-// file, which a VM's opencode reads as it first runs (OpencodeKeyImport for a key saved later).
+// file, which a VM's opencode reads as it first runs, and each setup after that imports what changed
+// (OpencodeImport).
 package agentlogin
 
 import (

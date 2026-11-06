@@ -2339,6 +2339,10 @@ other = "devvm saved {{.agent}}'s {{.provider}} API key in its agent store, and 
 [agent_key_copy_failed]
 other = "Giving {{.vm}} its copy of {{.agent}}'s login failed, though devvm saved the API key. Run devvm in the VM's folder to give it the copy."
 
+[opencode_import_failed]
+description = "providers is a comma-separated list of opencode's provider names"
+other = "opencode in {{.vm}} refused devvm's login for {{.providers}}, though devvm saved the API key. Run devvm in the VM's folder to try again."
+
 [agent_key_howto]
 description = "provider is the API key's provider, as opencode names it: openai, anthropic or openrouter"
 other = "Paste the {{.provider}} API key for {{.agent}}. devvm keeps it on this machine, and VMs get a placeholder."

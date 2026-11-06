@@ -92,8 +92,9 @@ stdout '''sh'' ''-c'' ''f="\$HOME/\$1".*'' ''sh'' ''.codex/auth.json''$'
 ! stdout 'sk-testfake'
 
 # opencode's key for a provider: the store keeps it beside the others,
-# and the VM's opencode, once it has its database, imports the key's
-# placeholder.
+# and the VM's opencode, once it has its database, imports the store's
+# opencode logins with devvm's guest script (opencode.sh), their
+# placeholders on its input.
 stub_reset
 stdin $WORK/key2
 exec devvm agent login opencode --api-key --provider anthropic --stdin
@@ -102,8 +103,27 @@ grep '"key": "sk-ant-testfake"' $DATA/logins/opencode/.local/share/opencode/auth
 grep '"name":"opencode-anthropic"' $AG_dir/run/secrets.json
 stub_calls
 stdout '''sh'' ''-c'' ''f="\$HOME/\$1".*'' ''sh'' ''.local/share/opencode/auth.json''$'
-stdout '''bash'' ''-lc'' ''[^'']*opencode\*\.db; [^'']*exec opencode auth import''$'
+stdout '''bash'' ''-lc'' ''#!/bin/bash$'
+stdout 'if ! opencode auth import <<<"\[\$entry\]" >&2; then$'
+stdout '^'' ''opencode\.sh''$'
 ! stdout 'sk-ant-testfake'
+
+# Every launch sends the store's opencode logins as opencode 2's import
+# reads them, devvm's IDs and placeholders alone, beside the script.
+stub_reset
+exec devvm host
+exec tar -tf $STUB_DIR/sync.tar
+stdout '^opencode\.sh$'
+exec tar -xOf $STUB_DIR/sync.tar opencode-import.json
+stdout '\{"active":true,"id":"cred_devvm_anthropic","integrationID":"anthropic","label":"devvm","value":\{"key":"devvm-proxy-managed-opencode-anthropic[^"]*","type":"key"\}'
+! stdout 'sk-ant-testfake'
+
+# opencode refuses a provider's entry: devvm names the provider.
+exec sh -c 'echo openrouter > "$STUB_DIR/opencode-refuses"'
+stdin $WORK/key2
+! exec devvm agent login opencode --api-key --provider anthropic --stdin
+stderr '^devvm: opencode_import_failed providers=openrouter vm=devvm-agents-[0-9a-f]{14}$'
+rm $STUB_DIR/opencode-refuses
 
 # The import fails: the key is saved, and devvm says the VM's copy failed.
 exec sh -c 'echo "opencode auth import" > "$STUB_DIR/shell-fails-on"'
