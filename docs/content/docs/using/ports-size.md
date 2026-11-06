@@ -1,6 +1,6 @@
 ---
 title: Ports and size
-weight: 5
+weight: 4
 ---
 
 This page covers the ports a VM forwards to this machine and the CPUs, memory and disk it gets. You choose both when devvm makes a VM, and you can change both later with `devvm ports` and `devvm size`. [Port forwarding](../internals/ports.md) explains how devvm's forwarder works.

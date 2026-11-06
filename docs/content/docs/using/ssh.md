@@ -1,6 +1,6 @@
 ---
 title: SSH and editors
-weight: 7
+weight: 3
 ---
 
 You can reach each running VM by name from ssh and from editors such as VS Code, and you choose for each VM whether it can use your SSH keys. [ssh into VMs](../internals/security.md#ssh-into-vms) explains how devvm's ssh entries keep a VM away from the rest of this machine.

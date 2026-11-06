@@ -1,6 +1,6 @@
 ---
 title: What devvm keeps on this machine
-weight: 11
+weight: 13
 ---
 
 devvm, the tools it runs and Lima keep files on this machine outside your project folders. This page lists each of them: what it is, who makes it, where it is, whether devvm can make it again, and how it's cleaned up. Most of it is in devvm's data folder, `~/.local/share/devvm`, and devvm can make all of that again except your exports and what your commands saved, such as your agents' logins and your secrets. Lima's own caches hold more, and they can also hold your own downloads.

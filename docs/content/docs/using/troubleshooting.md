@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-weight: 12
+weight: 14
 ---
 
 Each section below starts with what you see, then says what to do, with a link to the details.

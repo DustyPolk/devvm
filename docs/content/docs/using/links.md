@@ -1,6 +1,6 @@
 ---
 title: Links between VMs
-weight: 5
+weight: 10
 ---
 
 A link lets a program in one of your VMs reach a TCP service in another by name, as in `postgres://db:5432/app` or `fetch("http://api:3000")`. The VM with the service is the target, and you publish its port in its folder. The VM that reaches it is the client, and you add the link in the client's folder. Links work on every backend, whatever the two VMs' network tiers, as long as the target's tier is the client's or a stricter one. devvm carries each connection over ssh through this machine, so neither VM's network changes, and [How it works › Links between VMs](../internals/ports.md#links-between-vms) explains how.
