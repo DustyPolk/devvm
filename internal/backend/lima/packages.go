@@ -5,9 +5,9 @@ import (
 	"errors"
 	"io"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/shell"
 )
 
 // sendPackages unpacks what p.Send writes into the build VM's

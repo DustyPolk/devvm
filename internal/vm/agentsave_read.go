@@ -12,9 +12,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/w3cj/devvm/internal/agentlogin"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/agentlogin"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/shell"
 )
 
 // What devvm agent save reads from a VM at most: the whole stream, one

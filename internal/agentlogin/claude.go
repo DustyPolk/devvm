@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 const (

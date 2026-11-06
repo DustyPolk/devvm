@@ -5,9 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/sshagent"
-	"github.com/w3cj/devvm/internal/vm"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/sshagent"
+	"github.com/devvmhq/devvm/internal/vm"
 )
 
 // newSSHAgentCmd is devvm ssh-agent [on|devvm|off], and devvm's own

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/shell"
 )
 
 const ws = "/Users/me/web app"

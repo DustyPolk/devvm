@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/settings"
 )
 
 // partLines are the names of a summary's lines for its toolchains, agents

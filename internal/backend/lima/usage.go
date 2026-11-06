@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/platform"
 )
 
 // downloadCache is Lima's own download cache, in the user's cache folder,

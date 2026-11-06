@@ -12,13 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/ubuntu"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/ubuntu"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // These tests run the real limactl on dummy instances, as Lima's own

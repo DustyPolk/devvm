@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // devvm's git on the host never runs a repo's fsmonitor, which a repo's

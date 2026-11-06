@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/agentlogin"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/agentlogin"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // The Claude Code OAuth login in the store, its access token fresh.

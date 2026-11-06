@@ -22,16 +22,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/from"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/trust"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/from"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/tools"
+	"github.com/devvmhq/devvm/internal/trust"
 )
 
 // Env is what images on one backend are built with, shared by Builds,

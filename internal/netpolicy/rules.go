@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Rule is the rule for devvm network allow (deny false) or deny: rule as

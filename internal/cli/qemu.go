@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/backend/lima"
-	"github.com/w3cj/devvm/internal/ui"
+	"github.com/devvmhq/devvm/internal/backend/lima"
+	"github.com/devvmhq/devvm/internal/ui"
 )
 
 // newQEMUCmd is devvm _qemu, which the Lima backend's QEMU wrapper runs on

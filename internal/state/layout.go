@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // Layout is the layout version this devvm keeps its folders in: which

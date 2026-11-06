@@ -3,7 +3,7 @@ package settings
 import (
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 func TestParseSizes(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // The ports picker's rows are every port, none and a list, the summary's

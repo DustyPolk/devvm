@@ -17,8 +17,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/stubtest/stubstate"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/stubtest/stubstate"
 )
 
 // Stubs is one test's stubs: Dir is their folder, STUB_DIR.

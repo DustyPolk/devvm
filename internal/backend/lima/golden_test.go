@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/stubtest"
+	"github.com/devvmhq/devvm/internal/stubtest"
 )
 
 // goldenFixtures returns the golden fixtures named like pattern, from

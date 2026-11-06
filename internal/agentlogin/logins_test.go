@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/fetch"
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/fetch"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 func must(t *testing.T, err error) {

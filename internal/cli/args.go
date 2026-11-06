@@ -8,13 +8,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/sshagent"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/upgrade"
-	"github.com/w3cj/devvm/internal/vm"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/netpolicy"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/sshagent"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/upgrade"
+	"github.com/devvmhq/devvm/internal/vm"
 )
 
 // usageCode is the exit code of a usage error: a bad argument or flag, or

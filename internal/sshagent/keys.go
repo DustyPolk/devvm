@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // AddedKey is a key added to devvm's own agent, as agent-keys.json in

@@ -9,7 +9,7 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/w3cj/devvm/assets"
+	"github.com/devvmhq/devvm/assets"
 )
 
 // realInRelease is an InRelease Ubuntu signed, kept in testdata as

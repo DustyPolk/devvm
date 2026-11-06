@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // ParseDuration reads a duration as every devvm flag and setting takes

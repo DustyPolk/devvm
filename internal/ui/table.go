@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // A Role is what a table cell says, which colors it in a terminal.

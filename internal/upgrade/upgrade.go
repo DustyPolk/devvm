@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/platform"
 )
 
 // runsTimeout is how long a new devvm gets to say its version.

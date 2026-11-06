@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/assets"
+	"github.com/devvmhq/devvm/assets"
 )
 
 // realRelease is a release Ubuntu signed, kept in testdata as it was

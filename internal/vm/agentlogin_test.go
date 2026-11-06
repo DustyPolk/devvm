@@ -8,9 +8,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/secrets"
 )
 
 // The providers opencode's import refused are the script's

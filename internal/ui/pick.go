@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // Choice is one of the items Pick shows: a name, what it is, and whether

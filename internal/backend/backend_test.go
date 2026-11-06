@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // A start refuses only a disk smaller than the VM's: zero is the VM's

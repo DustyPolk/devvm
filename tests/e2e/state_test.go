@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // Paths are the sandbox's folders and files that checks look at.

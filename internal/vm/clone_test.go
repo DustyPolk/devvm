@@ -12,13 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/backendtest"
-	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/project"
-	"github.com/w3cj/devvm/internal/stubtest"
-	"github.com/w3cj/devvm/internal/vmssh"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend/backendtest"
+	"github.com/devvmhq/devvm/internal/gitprotect"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/project"
+	"github.com/devvmhq/devvm/internal/stubtest"
+	"github.com/devvmhq/devvm/internal/vmssh"
 )
 
 // gitEnv gives git in the test a config and identity of its own.

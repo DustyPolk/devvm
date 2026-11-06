@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/sshagent"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/sshagent"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // defaultKeys are the keys in ~/.ssh offered for loading, in order.

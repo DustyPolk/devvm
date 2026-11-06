@@ -8,10 +8,10 @@ import (
 	"regexp"
 	"slices"
 
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ubuntu"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/ubuntu"
 )
 
 // The states of an image, as devvm images lists them.

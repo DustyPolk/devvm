@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Section is the name of the shared tools section in a VM's state.

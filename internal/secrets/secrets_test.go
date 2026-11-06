@@ -11,13 +11,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/agentlogin"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/tools"
+	"github.com/devvmhq/devvm/internal/agentlogin"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/tools"
 )
 
 // testStore is a store in a temporary sandbox, its Keychain a map and its

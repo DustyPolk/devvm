@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // vmP is a project VM's name, for tests of a VM's state.

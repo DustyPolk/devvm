@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/upgrade"
-	"github.com/w3cj/devvm/internal/upgrade/upgradetest"
+	"github.com/devvmhq/devvm/internal/upgrade"
+	"github.com/devvmhq/devvm/internal/upgrade/upgradetest"
 )
 
 // A test key and signatures that minisign 0.12 made (minisign -G -W, then

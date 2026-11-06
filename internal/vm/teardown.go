@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/gitprotect"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // vmFolders deletes VMs' folders in devvm's data folder: every file a VM

@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // A VM's host keys are pinned once for each of its starts, in one record

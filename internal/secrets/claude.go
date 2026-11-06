@@ -7,8 +7,8 @@ import (
 	"errors"
 	"path/filepath"
 
-	"github.com/w3cj/devvm/internal/agentlogin"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/agentlogin"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Claude is the Claude Code login devvm keeps, one of two: a Claude Code

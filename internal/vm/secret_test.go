@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // devvm secret: saved and removed tokens, listed with the VMs using them;

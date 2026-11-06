@@ -24,11 +24,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/hostgit"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/hostgit"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Section is the name of the .git protection section in a VM's state.

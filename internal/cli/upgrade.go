@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/upgrade"
-	"github.com/w3cj/devvm/packaging"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/upgrade"
+	"github.com/devvmhq/devvm/packaging"
 )
 
 // upgradeOpts are devvm upgrade's flags.

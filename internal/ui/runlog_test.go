@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // logged runs argv through LoggedCmd.

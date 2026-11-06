@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // Retention runs at most once a day, again at once after the clock went

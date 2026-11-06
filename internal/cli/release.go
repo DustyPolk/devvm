@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/upgrade"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/upgrade"
 )
 
 // releaseWait is how long a launch waits, once it's done, for the daily

@@ -3,8 +3,8 @@ package vm
 import (
 	"errors"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/settings"
 )
 
 // portsChoiceList is the ports picker's row that asks for a list.

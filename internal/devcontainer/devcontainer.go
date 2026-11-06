@@ -19,10 +19,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/jsonc"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/jsonc"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/shell"
 )
 
 // Where a project's devcontainer.json is looked for, relative to its

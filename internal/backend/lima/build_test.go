@@ -13,13 +13,13 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/daemon"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/settings"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/daemon"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/settings"
 )
 
 const (

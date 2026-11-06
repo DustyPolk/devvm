@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // Dirs holds the folders devvm keeps its state in. Every file devvm writes

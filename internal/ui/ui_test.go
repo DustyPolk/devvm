@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // env is an environment for a UI's getenv.

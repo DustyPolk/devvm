@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend"
 )
 
 func toolsSpec(t *testing.T, out string) backend.ToolsSpec {

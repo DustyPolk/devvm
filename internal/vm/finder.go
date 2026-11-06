@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/project"
-	"github.com/w3cj/devvm/internal/sshagent"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/project"
+	"github.com/devvmhq/devvm/internal/sshagent"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // finder finds the VM a command acts on (target): the folder's own, the

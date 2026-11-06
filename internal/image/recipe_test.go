@@ -10,7 +10,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/w3cj/devvm/assets"
+	"github.com/devvmhq/devvm/assets"
 )
 
 // OwnScript is the prelude, then the script; without either, an error,

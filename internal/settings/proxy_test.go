@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // The company proxy: the environment's, all of it, when it sets

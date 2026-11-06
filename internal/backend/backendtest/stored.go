@@ -1,6 +1,6 @@
 package backendtest
 
-import "github.com/w3cj/devvm/internal/backend"
+import "github.com/devvmhq/devvm/internal/backend"
 
 // Stored is a fake whose disks are on the host, in Dirs
 // (backend.Host's DiskDirs), with Floor its floors: DefaultFloors when

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/gitprotect"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // chflagsCalls makes e's .git protection record what it locks and

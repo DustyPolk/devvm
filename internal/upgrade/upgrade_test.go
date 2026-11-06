@@ -14,10 +14,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/upgrade"
-	"github.com/w3cj/devvm/internal/upgrade/upgradetest"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/upgrade"
+	"github.com/devvmhq/devvm/internal/upgrade/upgradetest"
 )
 
 // fixture is an install.sh install of devvm current (a script that says

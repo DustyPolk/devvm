@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/w3cj/devvm/internal/daemon"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/daemon"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // A build that reaches the internet through a company proxy goes through

@@ -12,16 +12,16 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/hostgit"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/project"
-	"github.com/w3cj/devvm/internal/shell"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/vmname"
-	"github.com/w3cj/devvm/internal/vmssh"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/gitprotect"
+	"github.com/devvmhq/devvm/internal/hostgit"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/project"
+	"github.com/devvmhq/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/vmssh"
 )
 
 // --clone: the VM works on its own clone of the repo instead of mounting

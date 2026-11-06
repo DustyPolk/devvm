@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/upgrade"
+	"github.com/devvmhq/devvm/internal/upgrade"
 )
 
 // The release key is minisign.pub's, a minisign public key, once the

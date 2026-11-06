@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/project"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/project"
 )
 
 func TestAddRemovePorts(t *testing.T) {

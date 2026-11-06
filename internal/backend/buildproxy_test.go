@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/daemon"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/daemon"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 // A build's proxy starts with its own password, its policy and the

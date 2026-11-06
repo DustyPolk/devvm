@@ -23,7 +23,7 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
 
-	"github.com/w3cj/devvm/locales"
+	"github.com/devvmhq/devvm/locales"
 )
 
 // DocsBase is the docs site's address; doc links are under it.

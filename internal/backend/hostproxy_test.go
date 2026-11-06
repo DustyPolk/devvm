@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 // corpProxy is a fake company proxy, with a fake password.

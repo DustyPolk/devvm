@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // localProxyScript is the guest setup's devvm-local-proxy as sync.sh writes it, sending to

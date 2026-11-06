@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // Image is an image's record, images/<key>/record.json. It's written

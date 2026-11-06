@@ -7,8 +7,8 @@ import (
 	"os"
 	"slices"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // readSaved reads settings.json at path. A missing file sets nothing; a

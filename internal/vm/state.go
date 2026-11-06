@@ -3,14 +3,14 @@ package vm
 import (
 	"context"
 
-	"github.com/w3cj/devvm/internal/devcontainer"
-	"github.com/w3cj/devvm/internal/gitprotect"
-	"github.com/w3cj/devvm/internal/netpolicy"
-	"github.com/w3cj/devvm/internal/ports"
-	"github.com/w3cj/devvm/internal/secrets"
-	"github.com/w3cj/devvm/internal/sshagent"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/tools"
+	"github.com/devvmhq/devvm/internal/devcontainer"
+	"github.com/devvmhq/devvm/internal/gitprotect"
+	"github.com/devvmhq/devvm/internal/netpolicy"
+	"github.com/devvmhq/devvm/internal/ports"
+	"github.com/devvmhq/devvm/internal/secrets"
+	"github.com/devvmhq/devvm/internal/sshagent"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/tools"
 )
 
 // The sections of a VM's state (state.VM) this package keeps: its size,

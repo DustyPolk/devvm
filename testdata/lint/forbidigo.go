@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/w3cj/devvm/internal/testbuild"
+	"github.com/devvmhq/devvm/internal/testbuild"
 )
 
 func exits() { os.Exit(1) } // want forbidigo

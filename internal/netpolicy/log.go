@@ -17,9 +17,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 // Log is a VM's event log, as devvm network log shows it. NewLog sets every

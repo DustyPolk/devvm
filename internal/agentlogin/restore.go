@@ -18,7 +18,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/w3cj/devvm/internal/jsonc"
+	"github.com/devvmhq/devvm/internal/jsonc"
 )
 
 // managedMark starts every placeholder the proxy fills in (salted), such as an MCP server's

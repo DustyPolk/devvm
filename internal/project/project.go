@@ -12,8 +12,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // slugMax is the most of the folder's name a VM's name has.

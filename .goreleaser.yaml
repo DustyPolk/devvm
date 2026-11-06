@@ -15,7 +15,7 @@ builds:
     flags: [-trimpath]
     # devvm reads its version from internal/cli, not main.
     ldflags:
-      - -s -w -X github.com/w3cj/devvm/internal/cli.version={{ .Version }}
+      - -s -w -X github.com/devvmhq/devvm/internal/cli.version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 # One archive per platform: the binary (its own files embedded), the README, changelog and license.

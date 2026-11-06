@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // The oldest versions the lima backend runs with, as messages name them;

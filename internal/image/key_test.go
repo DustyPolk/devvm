@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/w3cj/devvm/assets"
+	"github.com/devvmhq/devvm/assets"
 )
 
 // input is an image's key input with every field set.

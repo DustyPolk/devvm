@@ -12,7 +12,7 @@ class Devvm < Formula
 
   def install
     ENV["CGO_ENABLED"] = "0"
-    ldflags = "-s -w -X github.com/w3cj/devvm/internal/cli.version=#{version}"
+    ldflags = "-s -w -X github.com/devvmhq/devvm/internal/cli.version=#{version}"
     system "go", "build", *std_go_args(ldflags:), "./cmd/devvm"
   end
 

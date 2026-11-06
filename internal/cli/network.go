@@ -7,11 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/ui"
-	"github.com/w3cj/devvm/internal/vm"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/netpolicy"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/ui"
+	"github.com/devvmhq/devvm/internal/vm"
 )
 
 // newNetworkCmd is devvm network [open|internet|allowlist|none], with -g

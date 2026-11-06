@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // plantedLogins are the planted logins of opencodeSchema's database,

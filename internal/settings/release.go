@@ -1,7 +1,7 @@
 package settings
 
 import (
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // KeyReleaseCheck is config.toml's switch for the daily check for a newer

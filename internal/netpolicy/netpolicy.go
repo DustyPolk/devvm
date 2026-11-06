@@ -10,10 +10,10 @@ import (
 	"encoding/hex"
 	"path/filepath"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Section is the name of the network policy section in a VM's state.

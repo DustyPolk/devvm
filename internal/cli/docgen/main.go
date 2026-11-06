@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/cli"
-	"github.com/w3cj/devvm/internal/ui"
+	"github.com/devvmhq/devvm/internal/cli"
+	"github.com/devvmhq/devvm/internal/ui"
 )
 
 func main() {

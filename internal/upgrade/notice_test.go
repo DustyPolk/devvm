@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/upgrade"
-	"github.com/w3cj/devvm/internal/upgrade/upgradetest"
+	"github.com/devvmhq/devvm/internal/upgrade"
+	"github.com/devvmhq/devvm/internal/upgrade/upgradetest"
 )
 
 // The daily check's record: due once a day (or never tried, or tried in

@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"regexp"
 
-	"github.com/w3cj/devvm/internal/stubtest/stubstate"
+	"github.com/devvmhq/devvm/internal/stubtest/stubstate"
 )
 
 // notFound is security's exit status for an item that isn't there

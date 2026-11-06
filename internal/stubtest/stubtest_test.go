@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // The stubs come first on PATH, log their calls to the sandbox's own

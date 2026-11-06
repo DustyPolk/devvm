@@ -18,17 +18,17 @@ import (
 
 	"github.com/rogpeppe/go-internal/testscript"
 
-	"github.com/w3cj/devvm/internal/daemon"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/stubtest"
-	"github.com/w3cj/devvm/internal/ubuntu"
-	"github.com/w3cj/devvm/internal/upgrade/upgradetest"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/daemon"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/stubtest"
+	"github.com/devvmhq/devvm/internal/ubuntu"
+	"github.com/devvmhq/devvm/internal/upgrade/upgradetest"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // testBuildFlag makes a test build (internal/testbuild), as tests/e2e
 // does.
-const testBuildFlag = "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes"
+const testBuildFlag = "-X github.com/devvmhq/devvm/internal/testbuild.testBuild=yes"
 
 // TestScript runs testdata/script/*.txtar against a built devvm, in a sandbox.
 func TestScript(t *testing.T) {
@@ -76,7 +76,7 @@ func buildDevvm(t *testing.T) string {
 	if os.Getenv(coverDirVar) != "" {
 		args = append(args, coverFlags()...)
 	}
-	cmd := exec.CommandContext(t.Context(), "go", append(args, "github.com/w3cj/devvm/cmd/devvm")...) //nolint:gosec // go install, with the test's own flags
+	cmd := exec.CommandContext(t.Context(), "go", append(args, "github.com/devvmhq/devvm/cmd/devvm")...) //nolint:gosec // go install, with the test's own flags
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOBIN="+dir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building devvm: %v\n%s", err, out)
@@ -119,7 +119,7 @@ func coverFlags() []string {
 	if mode == "" {
 		mode = "atomic"
 	}
-	return []string{"-cover", "-covermode=" + mode, "-coverpkg=github.com/w3cj/devvm/..."}
+	return []string{"-cover", "-covermode=" + mode, "-coverpkg=github.com/devvmhq/devvm/..."}
 }
 
 // stopLinkSessions stops the link sessions (devvm _links) of the sandbox

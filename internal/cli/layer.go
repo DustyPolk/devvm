@@ -5,9 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/build"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/vm"
+	"github.com/devvmhq/devvm/internal/build"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/vm"
 )
 
 // newLayerCmd is devvm layer: new NAME, add LAYER... and rm LAYER....

@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/shell"
 )
 
 // cloneSection: --clone, a VM with its own clone of a throwaway repo; rm's

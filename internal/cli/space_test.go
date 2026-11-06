@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/backendtest"
-	"github.com/w3cj/devvm/internal/build"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ui"
-	"github.com/w3cj/devvm/internal/vm"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend/backendtest"
+	"github.com/devvmhq/devvm/internal/build"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/ui"
+	"github.com/devvmhq/devvm/internal/vm"
 )
 
 // Counting a folder: only what's picked, and a folder that isn't there is

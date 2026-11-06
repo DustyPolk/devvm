@@ -5,10 +5,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ports"
-	"github.com/w3cj/devvm/internal/vmssh"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/ports"
+	"github.com/devvmhq/devvm/internal/vmssh"
 )
 
 // newForwarderCmd is devvm _ports: a VM's port forwarder (vmssh.Main),

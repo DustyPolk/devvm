@@ -13,11 +13,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/agentlogin"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/netpolicy"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/devvmhq/devvm/internal/agentlogin"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/netpolicy"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/secrets"
 )
 
 // te is an entry of a test's tar stream: a file with its data, a folder

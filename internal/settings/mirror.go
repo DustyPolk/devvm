@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // KeyUbuntuMirror is config.toml's Ubuntu mirror, which base's first build

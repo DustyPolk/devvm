@@ -5,13 +5,13 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/w3cj/devvm/internal/agentlogin"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/secrets"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/tools"
+	"github.com/devvmhq/devvm/internal/agentlogin"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/secrets"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/tools"
 )
 
 // Capturer is a VM's proxy's capture of its agents' logins

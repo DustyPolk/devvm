@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/ui"
-	"github.com/w3cj/devvm/internal/vm"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/ui"
+	"github.com/devvmhq/devvm/internal/vm"
 )
 
 // setupSandbox points devvm's folders at a temporary HOME and returns a setup that sees a terminal (or not),

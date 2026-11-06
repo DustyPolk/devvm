@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Default is the backend new VMs get.

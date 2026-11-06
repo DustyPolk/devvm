@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/stubtest/stubstate"
+	"github.com/devvmhq/devvm/internal/stubtest/stubstate"
 )
 
 // limactl stands in for Lima's limactl. It logs every call to $STUB_LOG,

@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 func testDirs(t *testing.T) paths.Dirs {

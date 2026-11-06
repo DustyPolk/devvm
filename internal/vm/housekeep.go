@@ -7,14 +7,14 @@ import (
 	"slices"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/build"
-	"github.com/w3cj/devvm/internal/from"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/tools"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/build"
+	"github.com/devvmhq/devvm/internal/from"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/tools"
 )
 
 // Housekeeping is what devvm keeps besides its VMs, as devvm images,

@@ -21,17 +21,17 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/daemon"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/stubtest"
-	"github.com/w3cj/devvm/internal/ubuntu"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/daemon"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/stubtest"
+	"github.com/devvmhq/devvm/internal/ubuntu"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // call is a command the fake runner was given.

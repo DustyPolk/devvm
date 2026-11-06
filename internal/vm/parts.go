@@ -4,13 +4,13 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/build"
-	"github.com/w3cj/devvm/internal/devcontainer"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/build"
+	"github.com/devvmhq/devvm/internal/devcontainer"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/settings"
 )
 
 // PickRow is one row of the tools picker: a toolchain, an agent or a

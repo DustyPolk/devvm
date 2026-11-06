@@ -3,19 +3,19 @@ package cli
 import (
 	"os"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/registry"
-	"github.com/w3cj/devvm/internal/build"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/secrets"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/ui"
-	"github.com/w3cj/devvm/internal/vm"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend/registry"
+	"github.com/devvmhq/devvm/internal/build"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/secrets"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/tools"
+	"github.com/devvmhq/devvm/internal/ui"
+	"github.com/devvmhq/devvm/internal/vm"
 )
 
 // app is one run's services, on its UI: devvm's folders, a test build's

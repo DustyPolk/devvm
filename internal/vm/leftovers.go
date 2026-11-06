@@ -8,9 +8,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/project"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/project"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Leftovers are what devvm keeps for VMs their backend no longer has, a

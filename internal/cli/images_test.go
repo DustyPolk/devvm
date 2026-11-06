@@ -3,8 +3,8 @@ package cli
 import (
 	"testing"
 
-	"github.com/w3cj/devvm/internal/tools"
-	"github.com/w3cj/devvm/internal/ui"
+	"github.com/devvmhq/devvm/internal/tools"
+	"github.com/devvmhq/devvm/internal/ui"
 )
 
 // The tool table: each build's C library, as its record says, and - for

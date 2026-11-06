@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // The daily release check: on unless config.toml's release-check is false

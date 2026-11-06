@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // HostKeys is how Checked gets a VM's host keys for its current start.

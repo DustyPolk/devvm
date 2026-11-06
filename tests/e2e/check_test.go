@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend"
 )
 
 // S is a running section: its checks (Check, Skip) and what they run

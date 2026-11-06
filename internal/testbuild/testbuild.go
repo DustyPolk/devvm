@@ -1,7 +1,7 @@
 // Package testbuild says whether this devvm is a test build: one the tests
 // make (tests/e2e, the CLI tests) with
 //
-//	-ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes"
+//	-ldflags "-X github.com/devvmhq/devvm/internal/testbuild.testBuild=yes"
 //
 // Only a test build reads the stand-ins tests put in its environment
 // (internal/cli's Overrides). Releases never set it, so they read none.

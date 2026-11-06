@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend"
 )
 
 // linkSection: links between VMs, each check the end-to-end proof of a

@@ -5,10 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/shell"
 )
 
 // A build behind a company proxy (the host's HTTPS_PROXY or HTTP_PROXY)

@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 // HostProxy is the proxy the host goes through: a company's, as the

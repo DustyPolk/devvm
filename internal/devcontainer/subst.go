@@ -4,8 +4,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/shell"
 )
 
 // What a property is to devvm.

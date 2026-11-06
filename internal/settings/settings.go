@@ -13,8 +13,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // Source is where a default in effect came from.

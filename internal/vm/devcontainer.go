@@ -10,17 +10,17 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/devcontainer"
-	"github.com/w3cj/devvm/internal/from"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/ports"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/shell"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/tools"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/devcontainer"
+	"github.com/devvmhq/devvm/internal/from"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/ports"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/tools"
 )
 
 // devcontainerUnreadable is the sum of a file that can't be read now.

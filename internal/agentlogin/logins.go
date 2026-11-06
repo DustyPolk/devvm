@@ -42,9 +42,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/w3cj/devvm/internal/fetch"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/fetch"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 const (

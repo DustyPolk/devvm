@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/stubtest/stubstate"
+	"github.com/devvmhq/devvm/internal/stubtest/stubstate"
 )
 
 // A sandbox runs stubs in this process, in a folder of its own: their

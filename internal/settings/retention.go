@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // The retention settings' keys, as devvm retention takes them and under

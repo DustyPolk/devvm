@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // CheckEvery is how often a launch checks for a newer release.

@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 // The shared helpers' own tests, which need no VM.

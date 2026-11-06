@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 // ProxyUser is the user in the address of every proxy of devvm's, a VM's

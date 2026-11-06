@@ -4,9 +4,9 @@ import (
 	"context"
 	"os/exec"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/vmssh"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/vmssh"
 )
 
 // ownSSH is how devvm's own ssh reaches a running VM, for links and a

@@ -3,8 +3,8 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/backend/lima"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/backend/lima"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // newLimactlCmd is devvm limactl: Lima's own command on the lima

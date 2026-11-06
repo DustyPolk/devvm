@@ -2666,7 +2666,7 @@ description = "version is the version Go recorded for the build, such as a pseud
 other = "This devvm, {{.version}}, was built from devvm's source, so devvm upgrade can't upgrade it. Build it again from the newest source instead."
 
 [upgrade_go_install]
-other = "This devvm {{.version}} was installed with go install, so devvm upgrade can't upgrade it. Run go install github.com/w3cj/devvm/cmd/devvm@latest instead."
+other = "This devvm {{.version}} was installed with go install, so devvm upgrade can't upgrade it. Run go install github.com/devvmhq/devvm/cmd/devvm@latest instead."
 
 [upgrade_other_install]
 description = "path is the running devvm binary's path, its links resolved"

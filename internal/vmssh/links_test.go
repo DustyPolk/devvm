@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // shortDir is a folder whose paths are short enough for sockets: a test's

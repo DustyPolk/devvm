@@ -17,7 +17,7 @@ import (
 )
 
 // stubPackage is the stubs' binary.
-const stubPackage = "github.com/w3cj/devvm/internal/stubtest/stub"
+const stubPackage = "github.com/devvmhq/devvm/internal/stubtest/stub"
 
 // sources are the folders the stub binary is built from, from the
 // module's root.

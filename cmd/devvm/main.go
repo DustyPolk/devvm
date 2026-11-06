@@ -5,9 +5,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/w3cj/devvm/internal/cli"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/ui"
+	"github.com/devvmhq/devvm/internal/cli"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/ui"
 )
 
 // main runs devvm through ui.Main, which makes the run's UI, runs the

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // config.toml's ubuntu-mirror: an http:// or https:// address, else

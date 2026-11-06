@@ -18,8 +18,8 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // The UI is the Reporter devvm's packages report through.

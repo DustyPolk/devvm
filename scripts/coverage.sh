@@ -10,7 +10,7 @@
 # little less from run to run (timing, the tools installed), and a baseline never goes down.
 # COVERAGE_TOLERANCE sets that margin, in points (1 by default).
 # PERCENTS is `go tool covdata percent`'s output, one line per package, such as
-#   github.com/w3cj/devvm/internal/msg	coverage: 85.3% of statements
+#   github.com/devvmhq/devvm/internal/msg	coverage: 85.3% of statements
 # scripts/test.sh makes it from the unit tests and the CLI tests together. The baseline has one
 # line per package, its folder and its percentage; a baseline never goes down. A system with no
 # baseline yet is said so and not checked. COVERAGE_BASELINE names another baseline (for tests).
@@ -18,7 +18,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 baseline="${COVERAGE_BASELINE:-$root/testdata/coverage/$os.txt}"
-module="github.com/w3cj/devvm"
+module="github.com/devvmhq/devvm"
 tolerance="${COVERAGE_TOLERANCE:-1}"
 
 usage() { echo "usage: scripts/coverage.sh check|raise PERCENTS" >&2; exit 2; }

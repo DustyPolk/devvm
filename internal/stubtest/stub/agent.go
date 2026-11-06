@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/stubtest/stubstate"
+	"github.com/devvmhq/devvm/internal/stubtest/stubstate"
 )
 
 // sshAgent stands in for ssh-agent. It logs every call to $STUB_LOG, and

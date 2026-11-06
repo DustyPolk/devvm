@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/shell"
 )
 
 // The network and nix sections' helpers: devvm with an environment of

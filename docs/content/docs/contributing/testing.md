@@ -200,7 +200,7 @@ A secret that a check looks for is never in a process's arguments, where other u
 
 ## Test builds
 
-The tests run a test build of devvm, which is one made with `-ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes"`, as the end-to-end tests and the CLI tests make theirs. Only a test build reads the environment variables that stand in for what devvm would find on this machine. Releases (GoReleaser, the Homebrew formula) don't set the flag, so a release ignores every one of these variables, whatever its environment says. devvm reads them in one place, `readOverrides` in `internal/cli/overrides.go`, into an `Overrides` struct, and passes each one to the package that uses it:
+The tests run a test build of devvm, which is one made with `-ldflags "-X github.com/devvmhq/devvm/internal/testbuild.testBuild=yes"`, as the end-to-end tests and the CLI tests make theirs. Only a test build reads the environment variables that stand in for what devvm would find on this machine. Releases (GoReleaser, the Homebrew formula) don't set the flag, so a release ignores every one of these variables, whatever its environment says. devvm reads them in one place, `readOverrides` in `internal/cli/overrides.go`, into an `Overrides` struct, and passes each one to the package that uses it:
 
 | Variable | Stands in for |
 | --- | --- |

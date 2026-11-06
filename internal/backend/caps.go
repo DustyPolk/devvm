@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // Feature is something a backend may have. Its name is the one the backends

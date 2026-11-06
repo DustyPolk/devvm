@@ -13,10 +13,10 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/ubuntu"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/ubuntu"
 )
 
 // BuildImage builds the image's instance, devvm-img-<key>, which is then

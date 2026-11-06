@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/devcontainer"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/settings"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/tools"
+	"github.com/devvmhq/devvm/internal/devcontainer"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/tools"
 )
 
 // A reread devcontainer.json's parts replace what the file gave the VM,

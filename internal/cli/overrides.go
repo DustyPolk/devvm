@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"github.com/w3cj/devvm/internal/backend/registry"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/testbuild"
+	"github.com/devvmhq/devvm/internal/backend/registry"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/testbuild"
 )
 
 // Overrides are the stand-ins the tests put in a test build's

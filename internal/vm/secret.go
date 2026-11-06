@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/secrets"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/secrets"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // SecretSave saves a token for a known secret, given as pasted or on

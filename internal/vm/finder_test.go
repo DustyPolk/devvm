@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // finderNeeds are what the commands on the folder's VM need of it, by

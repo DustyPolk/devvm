@@ -15,9 +15,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 // VMNames returns the names of the VMs that have state, sorted: the name

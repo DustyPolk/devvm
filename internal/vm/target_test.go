@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // A target holds its VM as the backend answered the finder, and each

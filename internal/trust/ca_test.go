@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
 )
 
 const day = 24 * time.Hour

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // TestMain makes the test binary a stand-in for devvm when UI_TEST_HELPER is

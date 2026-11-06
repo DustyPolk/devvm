@@ -12,10 +12,10 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/build"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/build"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // ownFiles is a copy of devvm's files, for a test to edit.

@@ -5,7 +5,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // Floors is the free space, in bytes, a backend wants on its disks before

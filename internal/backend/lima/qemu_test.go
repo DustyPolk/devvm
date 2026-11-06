@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 const fwd = "/x/devvm _qemu connect 127.0.0.1:5"

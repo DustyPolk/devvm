@@ -13,10 +13,10 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/fetch"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/fetch"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 func sumOf(c byte) string { return strings.Repeat(string(c), 64) }

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend"
 )
 
 // The harness's own tests, which need no VM: mise run test runs them

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/stubtest"
+	"github.com/devvmhq/devvm/internal/stubtest"
 )
 
 // golden reads a golden fixture of macOS's, as mise run e2e -- --golden

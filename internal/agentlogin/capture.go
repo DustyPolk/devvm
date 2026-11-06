@@ -36,8 +36,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // The OAuth grants whose replies are captured, and what Codex's exchange asks for.

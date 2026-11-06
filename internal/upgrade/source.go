@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/fetch"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/fetch"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // Repo is devvm's repository, whose GitHub releases devvm upgrade

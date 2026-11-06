@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/redact"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/redact"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // keepLogs is how many run logs are kept, the newest.

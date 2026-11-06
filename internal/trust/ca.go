@@ -14,9 +14,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Each VM has a CA of its own, whatever its tier, which its proxy

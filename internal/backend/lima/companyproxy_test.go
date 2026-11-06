@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/settings"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/settings"
 )
 
 // Ubuntu's listing is asked for through config.toml's company proxy when

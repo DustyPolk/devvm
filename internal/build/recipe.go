@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/from"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/from"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // inputs is what images' recipes and keys are made of, read once: what

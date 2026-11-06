@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // UbuntuPin is the Ubuntu cloud image base starts from on this machine,

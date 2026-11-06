@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend"
 )
 
 // Checked refuses a VM whose ssh isn't usable as an *UnusableError: the

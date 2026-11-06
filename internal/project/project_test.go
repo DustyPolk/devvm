@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/vmname"
+	"github.com/devvmhq/devvm/internal/vmname"
 )
 
 func TestSlug(t *testing.T) {

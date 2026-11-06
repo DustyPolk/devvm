@@ -13,8 +13,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 const nodeEntry = `[[tools.node]]

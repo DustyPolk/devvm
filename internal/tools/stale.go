@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // NoVM returns the tool images of a List that are current but that no

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend"
 )
 
 // projectSection: a base project VM (its launch, mounts, ports, a

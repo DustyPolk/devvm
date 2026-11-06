@@ -19,8 +19,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/shell"
 )
 
 // netRun is the network section's: its project folder and the home of its

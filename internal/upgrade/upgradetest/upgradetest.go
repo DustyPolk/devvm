@@ -22,7 +22,7 @@ import (
 
 	"golang.org/x/crypto/blake2b"
 
-	"github.com/w3cj/devvm/internal/upgrade"
+	"github.com/devvmhq/devvm/internal/upgrade"
 )
 
 // A Key is a minisign key pair of the test's own.

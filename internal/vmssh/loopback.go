@@ -9,7 +9,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/w3cj/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/platform"
 )
 
 // LoopbackForward forwards ports on this machine's loopback to the same

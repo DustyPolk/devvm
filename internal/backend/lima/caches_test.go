@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
-	"github.com/w3cj/devvm/internal/ubuntu"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/ubuntu"
 )
 
 // devvm's share of Lima's download cache: Ubuntu's cloud images from

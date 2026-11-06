@@ -11,7 +11,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/w3cj/devvm/locales"
+	"github.com/devvmhq/devvm/locales"
 )
 
 // sample makes message id with a value for each field: the field's name,

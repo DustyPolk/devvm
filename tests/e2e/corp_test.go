@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 // WriteProxyConfig writes c as devvm _proxy -config's file f, the run's

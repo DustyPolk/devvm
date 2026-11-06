@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // PackageSet is the packages a base recorded at its first build,

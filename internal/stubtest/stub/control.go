@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/stubtest/stubstate"
+	"github.com/devvmhq/devvm/internal/stubtest/stubstate"
 )
 
 // controlUsage is the stub command's usage.

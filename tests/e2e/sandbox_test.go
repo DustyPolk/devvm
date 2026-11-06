@@ -143,7 +143,7 @@ func repoRoot() (string, error) {
 	}
 	for {
 		b, err := os.ReadFile(filepath.Join(dir, "go.mod"))
-		if err == nil && bytes.HasPrefix(b, []byte("module github.com/w3cj/devvm\n")) {
+		if err == nil && bytes.HasPrefix(b, []byte("module github.com/devvmhq/devvm\n")) {
 			return dir, nil
 		}
 		up := filepath.Dir(dir)
@@ -236,7 +236,7 @@ func (sb *sandbox) build(ctx context.Context) error {
 	if err := os.RemoveAll(filepath.Dir(sb.devvm)); err != nil {
 		return err
 	}
-	args := []string{"build", "-ldflags", "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes", "-o", sb.devvm, "./cmd/devvm"}
+	args := []string{"build", "-ldflags", "-X github.com/devvmhq/devvm/internal/testbuild.testBuild=yes", "-o", sb.devvm, "./cmd/devvm"}
 	name := "go"
 	if _, err := exec.LookPath("go"); err != nil {
 		name, args = "mise", append([]string{"exec", "--", "go"}, args...)

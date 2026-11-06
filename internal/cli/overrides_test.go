@@ -3,12 +3,12 @@ package cli
 import (
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/backend/lima"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/testbuild"
-	"github.com/w3cj/devvm/internal/upgrade"
-	"github.com/w3cj/devvm/packaging"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend/lima"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/testbuild"
+	"github.com/devvmhq/devvm/internal/upgrade"
+	"github.com/devvmhq/devvm/packaging"
 )
 
 // A release, as this test binary is (built without the test build's

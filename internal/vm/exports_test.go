@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/settings"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/settings"
 )
 
 func TestParseExportName(t *testing.T) {

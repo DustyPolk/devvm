@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend"
 )
 
 // fakeSubject is a fake as Conformance checks it: holding an image, with

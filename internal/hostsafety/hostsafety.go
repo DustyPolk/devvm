@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/hostgit"
-	"github.com/w3cj/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/hostgit"
+	"github.com/devvmhq/devvm/internal/platform"
 )
 
 // setIDMax is how many set-id files SetIDFiles returns at most.

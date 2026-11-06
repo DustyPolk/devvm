@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/w3cj/devvm/internal/fetch"
+	"github.com/devvmhq/devvm/internal/fetch"
 )
 
 // DockerHub is the registry of references that name none.

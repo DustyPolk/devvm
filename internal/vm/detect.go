@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/image"
 )
 
 // nixMarkers are a Nix project's own files, which call for the nix layer.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/image"
 )
 
 // TestMisePins checks the host's mise pins, one per host devvm runs on,

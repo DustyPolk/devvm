@@ -69,27 +69,27 @@ stderr '^usage: '
 stderr '^coverage: no missing$'
 
 -- first --
-	github.com/w3cj/devvm/assets			github.com/w3cj/devvm		coverage: 0.0% of statements
-github.com/w3cj/devvm/internal/msg	coverage: 85.3% of statements
-github.com/w3cj/devvm/internal/vm	coverage: 66.4% of statements
-github.com/w3cj/devvm/internal/structure	coverage: [no statements]
+	github.com/devvmhq/devvm/assets			github.com/devvmhq/devvm		coverage: 0.0% of statements
+github.com/devvmhq/devvm/internal/msg	coverage: 85.3% of statements
+github.com/devvmhq/devvm/internal/vm	coverage: 66.4% of statements
+github.com/devvmhq/devvm/internal/structure	coverage: [no statements]
 example.com/other	coverage: 50.0% of statements
 -- more --
-github.com/w3cj/devvm	coverage: 0.0% of statements
-github.com/w3cj/devvm/internal/msg	coverage: 85.4% of statements
-github.com/w3cj/devvm/internal/vm	coverage: 66.4% of statements
+github.com/devvmhq/devvm	coverage: 0.0% of statements
+github.com/devvmhq/devvm/internal/msg	coverage: 85.4% of statements
+github.com/devvmhq/devvm/internal/vm	coverage: 66.4% of statements
 -- within --
-github.com/w3cj/devvm	coverage: 0.0% of statements
-github.com/w3cj/devvm/internal/msg	coverage: 84.4% of statements
-github.com/w3cj/devvm/internal/vm	coverage: 66.4% of statements
+github.com/devvmhq/devvm	coverage: 0.0% of statements
+github.com/devvmhq/devvm/internal/msg	coverage: 84.4% of statements
+github.com/devvmhq/devvm/internal/vm	coverage: 66.4% of statements
 -- less --
-github.com/w3cj/devvm	coverage: 0.0% of statements
-github.com/w3cj/devvm/internal/msg	coverage: 84.2% of statements
-github.com/w3cj/devvm/internal/vm	coverage: 70.0% of statements
+github.com/devvmhq/devvm	coverage: 0.0% of statements
+github.com/devvmhq/devvm/internal/msg	coverage: 84.2% of statements
+github.com/devvmhq/devvm/internal/vm	coverage: 70.0% of statements
 -- grown --
-github.com/w3cj/devvm	coverage: 0.0% of statements
-github.com/w3cj/devvm/internal/msg	coverage: 90.0% of statements
-github.com/w3cj/devvm/internal/new	coverage: 10.0% of statements
+github.com/devvmhq/devvm	coverage: 0.0% of statements
+github.com/devvmhq/devvm/internal/msg	coverage: 90.0% of statements
+github.com/devvmhq/devvm/internal/new	coverage: 10.0% of statements
 -- first.want --
 # Each package's test coverage, in percent: the unit tests and the CLI tests together.
 # mise run test fails when a package drops below its line; mise run coverage raises them.

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // Tier is a VM's network tier: what its proxy lets it reach, and whether

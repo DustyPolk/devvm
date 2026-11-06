@@ -6,11 +6,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/internal/ui"
+	"github.com/devvmhq/devvm/internal/ui"
 )
 
 // version is devvm's version. Release builds set it:
-// -ldflags "-X github.com/w3cj/devvm/internal/cli.version=0.1.0".
+// -ldflags "-X github.com/devvmhq/devvm/internal/cli.version=0.1.0".
 var version string
 
 // devvmVersion is devvm's version: versionOf the release's.

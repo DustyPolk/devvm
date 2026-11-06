@@ -19,9 +19,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/proxy"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Links carries a client VM's links to other VMs' ports (the design

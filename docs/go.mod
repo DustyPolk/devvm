@@ -1,4 +1,4 @@
-module github.com/w3cj/devvm/docs
+module github.com/devvmhq/devvm/docs
 
 go 1.27.3
 

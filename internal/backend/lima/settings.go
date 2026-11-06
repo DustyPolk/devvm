@@ -3,7 +3,7 @@ package lima
 import (
 	"strings"
 
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // portForward is a rule in Lima's portForwards.

@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend"
 )
 
 // nixpkgsRev is the nixpkgs a flake's dev shell takes its node from:

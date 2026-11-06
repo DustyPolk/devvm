@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/w3cj/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/paths"
 )
 
 // ToolImage is a tool image's record, <file>.json beside it in the share:

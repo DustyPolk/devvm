@@ -3729,7 +3729,7 @@ func UpgradeFailedReason(reason string) M {
 	return M{id: "upgrade_failed_reason", vals: []val{{"reason", reason}}}
 }
 
-// UpgradeGoInstall is [upgrade_go_install]: "This devvm {{.version}} was installed with go install, so devvm upgrade can't upgrade it. Run go install github.com/w3cj/devvm/cmd/devvm@latest instead."
+// UpgradeGoInstall is [upgrade_go_install]: "This devvm {{.version}} was installed with go install, so devvm upgrade can't upgrade it. Run go install github.com/devvmhq/devvm/cmd/devvm@latest instead."
 func UpgradeGoInstall(version string) M {
 	return M{id: "upgrade_go_install", vals: []val{{"version", version}}}
 }

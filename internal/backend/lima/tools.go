@@ -6,8 +6,8 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // ToolsVM is the throwaway VM shared tools are built in.

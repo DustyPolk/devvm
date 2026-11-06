@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/w3cj/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/image"
 )
 
 // guarded is a registered backend, as the registry hands it out: CreateVM,

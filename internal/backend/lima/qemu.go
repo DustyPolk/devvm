@@ -10,11 +10,11 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/platform"
-	"github.com/w3cj/devvm/internal/shell"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/shell"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // On Linux hosts Lima runs QEMU, with a user-mode network. A VM that must

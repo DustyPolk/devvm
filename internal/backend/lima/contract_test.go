@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/backend"
-	"github.com/w3cj/devvm/internal/stubtest"
+	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/stubtest"
 )
 
 // view is an instance as devvm reads it from limactl list --json: what

@@ -16,7 +16,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/w3cj/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend"
 )
 
 // Cmd is a host command a section runs, in the sandbox's environment.

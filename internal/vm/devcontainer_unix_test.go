@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/devcontainer"
+	"github.com/devvmhq/devvm/internal/devcontainer"
 )
 
 // A FIFO in place of the file is refused at once, not waited on.

@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/w3cj/devvm/assets"
-	"github.com/w3cj/devvm/internal/build"
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/ui"
+	"github.com/devvmhq/devvm/assets"
+	"github.com/devvmhq/devvm/internal/build"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/ui"
 )
 
 // shells are the shells devvm completion writes a script for.

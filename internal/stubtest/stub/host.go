@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/w3cj/devvm/internal/stubtest/stubstate"
+	"github.com/devvmhq/devvm/internal/stubtest/stubstate"
 )
 
 // mise stands in for the host's mise (DEVVM_HOST_MISE). It logs every

@@ -9,9 +9,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/w3cj/devvm/internal/fetch"
-	"github.com/w3cj/devvm/internal/msg"
-	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/fetch"
+	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 // config.toml's company proxy for devvm's own requests and programs on

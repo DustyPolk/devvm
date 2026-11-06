@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w3cj/devvm/internal/stubtest/stubstate"
+	"github.com/devvmhq/devvm/internal/stubtest/stubstate"
 )
 
 // A call is one run of a stub: the command it's run as, its arguments

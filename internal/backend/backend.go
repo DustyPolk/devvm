@@ -16,8 +16,8 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // Backend runs VMs and builds their images: its name and Caps, then its

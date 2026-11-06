@@ -5,8 +5,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/w3cj/devvm/internal/paths"
-	"github.com/w3cj/devvm/internal/state"
+	"github.com/devvmhq/devvm/internal/paths"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // sandboxExec is macOS's sandbox-exec, by its full path: never one found
