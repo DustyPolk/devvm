@@ -33,7 +33,7 @@ mkdir pfx/lib/devvm/0.1.0 pfx/bin
 cp_exe $DEVVM_BIN/devvm pfx/lib/devvm/0.1.0/devvm
 symlink pfx/bin/devvm -> $WORK/pfx/lib/devvm/0.1.0/devvm
 
-# No newest release where it looks, and no release key: nothing installed.
+# No newest release where it looks, and a release not signed by devvm's own key: nothing installed.
 env REPO=$DEVVM_REPO_URL
 env DEVVM_REPO_URL=$REPO/nope
 ! exec pfx/bin/devvm upgrade --check
@@ -42,7 +42,10 @@ env DEVVM_REPO_URL=$REPO
 env KEY=$DEVVM_RELEASE_KEY
 env DEVVM_RELEASE_KEY=
 ! exec pfx/bin/devvm upgrade --force
-stderr '^devvm: upgrade_no_key$'
+stderr '^devvm: upgrade_bad_signature version=0\.2\.0'
+env DEVVM_RELEASE_KEY=not-a-minisign-key
+! exec pfx/bin/devvm upgrade --force
+stderr '^devvm: upgrade_no_key'
 env DEVVM_RELEASE_KEY=$KEY
 ! exists pfx/lib/devvm/0.2.0
 
