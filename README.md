@@ -39,13 +39,19 @@ devvm
 ```
 
 1. **Go to your project.** Open a terminal and `cd` into any project folder.
-2. **Run devvm.** It shows what this folder's new VM gets, with the toolchains your project's files call for, and asks `Customize it? [y/N]`. Press Enter to make the VM, or type y to choose its toolchains, coding agents, layers, network tier and size.
+2. **Run devvm.** It shows what this folder's new VM gets, with the toolchains your project's files call for. Press Enter to make the VM, or type y to choose its toolchains, coding agents, layers, network tier and size.
 3. **Start your agent.** devvm opens a shell in the VM, at the same path as on your machine, and its prompt starts with `(devvm)`, so run `claude` there.
 
-- The first run starts with a few questions that set devvm's defaults for every new VM and its base image: the size and coding agents new VMs get, and the base image's optional extras. It builds the base image once, in a few minutes. Later VMs start in seconds.
-- Claude Code needs your Claude login before its first start, which `devvm agent login claude` makes from the VM and keeps on your machine ([Claude Code's login](https://devvm.dev/docs/getting-started/first-vm/#claude-codes-login)).
-- Running `devvm` in the folder again opens the same VM, and `devvm tools` adds an agent to it.
+- Running `devvm` in the folder again opens the same VM.
 - [Your first VM](https://devvm.dev/docs/getting-started/first-vm/) has the rest.
+
+> [!NOTE]
+> The first run starts with a few questions that set devvm's defaults for every new VM and its base image: the size and coding agents new VMs get, and the base image's optional extras. It builds the base image once, in a few minutes. Later VMs start in seconds.
+
+<!-- two separate notices -->
+
+> [!TIP]
+> Claude Code needs your Claude login before its first start, which `devvm agent login claude` makes from the VM and keeps on your machine ([Claude Code's login](https://devvm.dev/docs/getting-started/first-vm/#claude-codes-login)).
 
 ## What's supported
 
