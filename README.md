@@ -27,6 +27,8 @@ curl -fsSL https://github.com/devvmhq/devvm/releases/latest/download/install.sh 
 
 Then run `devvm doctor`, which checks what devvm needs on your machine and says how to get anything that's missing.
 
+Each release is signed with devvm's minisign key, `RWSjzFsn7ETaijKJ2y7F4DtZobXmyv+LmdclJwZP/KmAkLUwOCzWF/2b`, and [Checking the install script](https://devvm.dev/docs/internals/install/#checking-the-install-script) shows how to check the script with it before you run it.
+
 - **Requirements:** macOS 13 or newer, or Linux, on arm64 or x86_64, with Lima 2.0 or newer ([Lima's requirements](https://devvm.dev/docs/backends/lima/#requirements)).
 - **Tested on** Apple silicon Macs and on Linux on arm64 and x86_64, but not yet on Intel Macs.
 - [Installing](https://devvm.dev/docs/getting-started/install/) has the full list of requirements and the install script's options, and [Upgrading and uninstalling](https://devvm.dev/docs/using/upgrading/) covers what comes later.

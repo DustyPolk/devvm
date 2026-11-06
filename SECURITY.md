@@ -8,14 +8,22 @@ Report a vulnerability privately through [GitHub's vulnerability reporting](http
 
 ## Verifying a release
 
-Each release's `SHA256SUMS` is signed with minisign, and the public key is `packaging/minisign.pub`. The install script checks the signature when minisign is installed. The script and the key in it come from the same release, though, so that check can't catch a release that someone replaced whole. Homebrew's checksum can, because it's kept in a separate repository. [The signature and what it trusts](https://devvm.dev/docs/internals/install/#the-signature-and-what-it-trusts) has the details.
+Each release's `SHA256SUMS` lists the checksums of its archives and of its `install.sh`, and it's signed with minisign. The release key's public half, which is also in `packaging/minisign.pub`, is:
+
+```text
+RWSjzFsn7ETaijKJ2y7F4DtZobXmyv+LmdclJwZP/KmAkLUwOCzWF/2b
+```
+
+The install script checks the signature when minisign is installed. The script and the key in it come from the same release, though, so that check can't catch a release that someone replaced whole. Homebrew's checksum can, because it's kept in a separate repository, and so can your own check with the key above, because it doesn't come from the release. [The signature and what it trusts](https://devvm.dev/docs/internals/install/#the-signature-and-what-it-trusts) has the details.
 
 To check a release by hand, run these in the folder with its files:
 
 ```sh
-minisign -Vm SHA256SUMS -p packaging/minisign.pub
+minisign -Vm SHA256SUMS -P RWSjzFsn7ETaijKJ2y7F4DtZobXmyv+LmdclJwZP/KmAkLUwOCzWF/2b
 shasum -a 256 -c --ignore-missing SHA256SUMS
 ```
+
+[Checking the install script](https://devvm.dev/docs/internals/install/#checking-the-install-script) shows how to download the script, `SHA256SUMS` and its signature, check them, then run the script.
 
 ## What counts
 

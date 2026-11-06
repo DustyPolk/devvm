@@ -32,9 +32,34 @@ flowchart TD
   formula["Homebrew's formula,<br>in a repository of its own"] -- "checks its checksum" --> source
 ```
 
-The release's `SHA256SUMS` is signed in `SHA256SUMS.minisig`, made with the maintainer's minisign key. The key's public half is in the script and in `packaging/minisign.pub`. Without [minisign](https://jedisct1.github.io/minisign/) (`brew install minisign`), the script says so, prints the command to check the signature by hand, and checks only the checksum. A script that isn't from a release has no key, and it also checks only the checksum.
+The release's `SHA256SUMS` lists the checksums of its archives and of its `install.sh`, and it's signed in `SHA256SUMS.minisig`, made with the maintainer's minisign key. The key's public half is in the script and in `packaging/minisign.pub`. Without [minisign](https://jedisct1.github.io/minisign/) (`brew install minisign`), the script says so, prints the command to check the signature by hand, and checks only the checksum. A script that isn't from a release has no key, and it also checks only the checksum.
 
-The signature catches an archive or a `SHA256SUMS` that someone replaced, which the checksum alone can't. It can't catch a release that was replaced whole, because `curl … | bash` runs the `install.sh` from that same release, key included, so the one-liner trusts GitHub's release files. Homebrew doesn't trust them, because the formula's checksum lives in a repository of its own, and a replaced GitHub release wouldn't match it. You can also download `install.sh` and read it before you run it.
+The signature catches an archive or a `SHA256SUMS` that someone replaced, which the checksum alone can't. It can't catch a release that was replaced whole, because `curl … | bash` runs the `install.sh` from that same release, key included, so the one-liner trusts GitHub's release files. Homebrew doesn't trust them, because the formula's checksum lives in a repository of its own, and a replaced GitHub release wouldn't match it. You can also download `install.sh`, read it and [check it](#checking-the-install-script) with the key from these docs before you run it, which catches a replaced release too, because that key doesn't come from the release.
+
+### Checking the install script
+
+The release key's public half is:
+
+```text
+RWSjzFsn7ETaijKJ2y7F4DtZobXmyv+LmdclJwZP/KmAkLUwOCzWF/2b
+```
+
+devvm's README and security policy show the same key. To check the install script with it, you need [minisign](https://jedisct1.github.io/minisign/) (`brew install minisign`). Download the script, `SHA256SUMS` and its signature from the release:
+
+```sh
+base=https://github.com/devvmhq/devvm/releases/latest/download
+curl -fsSL -O "$base/install.sh" -O "$base/SHA256SUMS" -O "$base/SHA256SUMS.minisig"
+```
+
+Then check that the release key signed `SHA256SUMS`, check the script against it, and run the script once both checks pass:
+
+```sh
+minisign -Vm SHA256SUMS -P RWSjzFsn7ETaijKJ2y7F4DtZobXmyv+LmdclJwZP/KmAkLUwOCzWF/2b
+shasum -a 256 -c --ignore-missing SHA256SUMS
+bash install.sh
+```
+
+minisign prints `Signature and comment signature verified` and a trusted comment that names the release, as in `Trusted comment: devvm 0.1.0`, and `shasum` prints `install.sh: OK`. On Linux without `shasum`, `sha256sum -c --ignore-missing SHA256SUMS` does the same. When either check fails, don't run the script. The script takes the same options as `curl … | bash -s --`, as in `bash install.sh --yes`, and it still checks the signature and the archive's checksum itself, as [the install script](#the-install-script) describes.
 
 ## What devvm doctor checks
 
