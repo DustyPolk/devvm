@@ -1,0 +1,311 @@
+# scripts/publish.sh: the checks, --dry-run, the question, and each step,
+# against a throwaway repo whose origin is a local bare repo, a local bare
+# tap, a gh that keeps its release in $WORK/gh, SSH-signed tags, a
+# minisign key without a password and a goreleaser that writes a small
+# dist/. Pushes and gh's calls go in $WORK/calls, in order.
+# The system's commands, not the stubs (ssh-keygen's): git signs with
+# ssh-keygen. minisign is linked in from PATH first.
+[!exec:git] skip
+[!exec:minisign] skip
+exec bash -c 'ln -s "$(command -v minisign)" bin/minisign'
+env GIT_CONFIG_NOSYSTEM=1
+env PATH=$WORK/bin:/usr/bin:/bin
+chmod 755 bin/goreleaser
+chmod 755 bin/gh
+exec bash repo.sh
+env DEVVM_TAP_DIR=$WORK/tap
+env DEVVM_MINISIGN_KEY=$WORK/keys/release.key
+
+# --help: the script's header.
+exec repo/scripts/publish.sh --help
+stdout '^  scripts/publish.sh --dry-run '
+! exec repo/scripts/publish.sh --publish
+stderr '^publish: unknown argument ''--publish''$'
+
+# No tag yet: refused, by release.sh's check.
+! exec repo/scripts/publish.sh --dry-run
+stderr '^release: no tag v1.2.3: tag the release first'
+
+# A tag by a key git trusts but packaging/release-signer doesn't pin:
+# refused.
+exec bash tag.sh other
+! exec repo/scripts/publish.sh --dry-run
+stderr '^release: tag v1.2.3 is signed by SHA256:\S+, not a key in packaging/release-signer$'
+exec bash tag.sh good
+
+# A working tree that isn't clean: refused.
+exec touch repo/stray
+! exec repo/scripts/publish.sh --dry-run
+stderr '^publish: the working tree isn''t clean'
+rm repo/stray
+
+# A release that's already on GitHub, without this release's files:
+# refused.
+mkdir gh/release
+exec touch gh/release/notes.txt
+! exec repo/scripts/publish.sh --dry-run
+stderr '^publish: devvm v1.2.3 already has a GitHub release, without devvm-1.2.3-darwin-arm64.tar.gz'
+rm gh/release
+
+# gh not logged in: refused.
+exec touch gh/no-auth
+! exec repo/scripts/publish.sh --dry-run
+stderr '^publish: gh isn''t logged in to GitHub: run gh auth login$'
+rm gh/no-auth
+
+# No tap checkout: refused.
+env DEVVM_TAP_DIR=$WORK/nowhere
+! exec repo/scripts/publish.sh --dry-run
+stderr '^publish: no tap checkout at '
+env DEVVM_TAP_DIR=$WORK/tap
+
+# None of those built anything.
+! exists log
+
+# --dry-run: everything it would publish, then nothing published: no
+# push, no release, no tap commit.
+rm calls
+exec repo/scripts/publish.sh --dry-run
+stdout '^Version: 1\.2\.3$'
+stdout '^Tag:     v1\.2\.3, signed, at commit [0-9a-f]{40}$'
+stdout '^  devvm-1\.2\.3-linux-amd64\.tar\.gz +[0-9]+ bytes  [0-9a-f]{64}$'
+stdout '^  SHA256SUMS\.minisig +[0-9]+ bytes  [0-9a-f]{64}$'
+stdout '^  - \*\*New:\*\* a thing\.$'
+! stdout 'Older'
+stdout '^\+  url "https://github.com/devvmhq/devvm/releases/download/v1\.2\.3/devvm-1\.2\.3\.tar\.gz"$'
+stdout '^  1\. git push origin main: to do$'
+stdout '^  4\. the tap''s commit, devvm 1\.2\.3, and git push: to do$'
+stdout '^--dry-run: nothing published\.$'
+cmp calls calls.view
+exec bash refs.sh
+cmp stdout refs.before
+exists repo/dist/SHA256SUMS.minisig
+
+# Answering n: nothing published.
+rm calls
+ttyin -stdin no.txt
+! exec repo/scripts/publish.sh
+ttyout 'Publish devvm 1\.2\.3\? \[y/N\] '
+stderr '^publish: nothing published$'
+cmp calls calls.view
+exec bash refs.sh
+cmp stdout refs.before
+
+# Answering y, with gh failing to make the release: main and the tag are
+# pushed, in that order, and the rest is said to be left.
+rm calls
+exec touch gh/fail-create
+ttyin -stdin yes.txt
+! exec repo/scripts/publish.sh
+stderr '^publish: the GitHub release v1\.2\.3 failed\.$'
+stderr '^  published: main on origin$'
+stderr '^  published: the tag v1\.2\.3 on origin$'
+stderr '^  not published: the GitHub release v1\.2\.3$'
+stderr '^  not published: the tap''s Formula/devvm\.rb$'
+! exists gh/release
+
+# Run again, with gh failing to publish the draft: it skips the pushes and
+# leaves a draft with every file, never published.
+rm gh/fail-create
+exec touch gh/fail-edit
+ttyin -stdin yes.txt
+! exec repo/scripts/publish.sh
+stdout '^origin''s main is already at [0-9a-f]{12}$'
+stdout '^origin already has v1\.2\.3$'
+stderr '^  not published: the GitHub release v1\.2\.3$'
+exists gh/draft
+exists gh/release/SHA256SUMS.minisig
+
+# And again: it uploads the draft's files again, publishes it, then commits
+# the formula to the tap and pushes it.
+rm gh/fail-edit
+ttyin -stdin yes.txt
+exec repo/scripts/publish.sh
+stdout '^  3\. the GitHub release v1\.2\.3: to do, the draft''s files replaced$'
+stdout '^==> devvm 1\.2\.3 is published$'
+stdout '^  curl -fsSL https://github.com/devvmhq/devvm/releases/download/v1\.2\.3/install\.sh \| bash$'
+cmp calls calls.want
+exec bash refs.sh
+cmp stdout refs.after
+exec bash -c 'cd gh/release && LC_ALL=C ls'
+cmp stdout assets.want
+! exists gh/draft
+cmp gh/notes notes.want
+cmp tap/Formula/devvm.rb repo/dist/devvm.rb
+exec git -C tap.git log -1 --format=%s main
+stdout '^devvm 1\.2\.3$'
+
+# And once more: everything's done, so it asks nothing.
+rm calls
+exec repo/scripts/publish.sh
+stdout '^devvm 1\.2\.3 is already published: nothing to do\.$'
+grep '^gh release download v1\.2\.3 ' calls
+! grep 'push|create|edit' calls
+
+-- no.txt --
+n
+-- yes.txt --
+y
+-- repo.sh --
+# The repo (VERSION 1.2.3, a changelog, release.sh and publish.sh), its
+# origin one commit behind, two SSH keys git trusts (good, which
+# packaging/release-signer pins, and other), the release key, and the tap.
+set -eu
+mkdir -p repo/scripts repo/packaging/homebrew keys gh
+cp "$DEVVM_REPO/scripts/release.sh" "$DEVVM_REPO/scripts/publish.sh" repo/scripts/
+cp "$DEVVM_REPO/packaging/homebrew/devvm.rb" repo/packaging/homebrew/
+echo 1.2.3 > repo/VERSION
+echo dist/ > repo/.gitignore
+printf '#!/bin/sh\nrelease_version=""\nminisign_key=""\n' > repo/install.sh
+printf '# Changelog\n\n## 1.2.3\n\nReleased today.\n\n- **New:** a thing.\n\n## 1.2.2\n\nOlder.\n' > repo/CHANGELOG.md
+for n in good other; do ssh-keygen -q -t ed25519 -N '' -C "$n" -f "keys/$n"; done
+{ printf 'e@e %s\n' "$(cat keys/good.pub)"; printf 'e@e %s\n' "$(cat keys/other.pub)"; } > keys/allowed
+printf '# the release signer\n%s\n' "$(ssh-keygen -lf keys/good.pub | awk '{ print $2 }')" > repo/packaging/release-signer
+minisign -G -W -p repo/packaging/minisign.pub -s keys/release.key >/dev/null
+git config --global user.email e@e
+git config --global user.name e
+git config --global gpg.format ssh
+git config --global gpg.ssh.allowedSignersFile "$PWD/keys/allowed"
+git config --global init.defaultBranch main
+for r in origin tap; do
+  git init -q --bare "$r.git"
+  printf '#!/bin/sh\nwhile read -r o n r; do echo "push %s $r" >> "$WORK/calls"; done\n' "$r.git" > "$r.git/hooks/post-receive"
+  chmod 755 "$r.git/hooks/post-receive"
+done
+git init -q repo
+git -C repo add -A
+git -C repo commit -qm r
+git -C repo remote add origin "$PWD/origin.git"
+git -C repo push -q origin main
+echo more > repo/more
+git -C repo add more
+git -C repo commit -qm 'release 1.2.3'
+git init -q tap
+echo tap > tap/README
+git -C tap add -A
+git -C tap commit -qm tap
+git -C tap remote add origin "$PWD/tap.git"
+git -C tap push -q origin main
+rm -f calls
+-- tag.sh --
+# Tag v1.2.3 (again), signed with key $1.
+set -eu
+git -C repo tag -d v1.2.3 >/dev/null 2>&1 || true
+git -C repo -c user.signingkey="$PWD/keys/$1" tag -s v1.2.3 -m v1.2.3
+-- refs.sh --
+# What origin and the tap hold: main's commit message, the tag, the tap's
+# last commit, and whether it has the formula.
+git -C origin.git log -1 --format=%s main
+git -C origin.git tag -l
+git -C tap.git log -1 --format=%s main
+git -C tap.git cat-file -e main:Formula/devvm.rb 2>/dev/null && echo formula || echo no formula
+-- refs.before --
+r
+tap
+no formula
+-- refs.after --
+release 1.2.3
+v1.2.3
+devvm 1.2.3
+formula
+-- calls.view --
+gh auth status
+gh release view v1.2.3 --repo devvmhq/devvm --json isDraft,assets --jq (.isDraft | tostring), .assets[].name
+-- calls.want --
+gh auth status
+gh release view v1.2.3 --repo devvmhq/devvm --json isDraft,assets --jq (.isDraft | tostring), .assets[].name
+push origin.git refs/heads/main
+push origin.git refs/tags/v1.2.3
+gh release create v1.2.3 --repo devvmhq/devvm --title devvm 1.2.3 --notes-file notes.md --verify-tag --draft devvm-1.2.3-darwin-arm64.tar.gz devvm-1.2.3-darwin-amd64.tar.gz devvm-1.2.3-linux-arm64.tar.gz devvm-1.2.3-linux-amd64.tar.gz devvm-1.2.3.tar.gz SHA256SUMS SHA256SUMS.minisig install.sh
+gh auth status
+gh release view v1.2.3 --repo devvmhq/devvm --json isDraft,assets --jq (.isDraft | tostring), .assets[].name
+gh release create v1.2.3 --repo devvmhq/devvm --title devvm 1.2.3 --notes-file notes.md --verify-tag --draft devvm-1.2.3-darwin-arm64.tar.gz devvm-1.2.3-darwin-amd64.tar.gz devvm-1.2.3-linux-arm64.tar.gz devvm-1.2.3-linux-amd64.tar.gz devvm-1.2.3.tar.gz SHA256SUMS SHA256SUMS.minisig install.sh
+gh release edit v1.2.3 --repo devvmhq/devvm --title devvm 1.2.3 --notes-file notes.md --draft=false
+gh auth status
+gh release view v1.2.3 --repo devvmhq/devvm --json isDraft,assets --jq (.isDraft | tostring), .assets[].name
+gh release upload v1.2.3 --repo devvmhq/devvm --clobber devvm-1.2.3-darwin-arm64.tar.gz devvm-1.2.3-darwin-amd64.tar.gz devvm-1.2.3-linux-arm64.tar.gz devvm-1.2.3-linux-amd64.tar.gz devvm-1.2.3.tar.gz SHA256SUMS SHA256SUMS.minisig install.sh
+gh release edit v1.2.3 --repo devvmhq/devvm --title devvm 1.2.3 --notes-file notes.md --draft=false
+push tap.git refs/heads/main
+-- assets.want --
+SHA256SUMS
+SHA256SUMS.minisig
+devvm-1.2.3-darwin-amd64.tar.gz
+devvm-1.2.3-darwin-arm64.tar.gz
+devvm-1.2.3-linux-amd64.tar.gz
+devvm-1.2.3-linux-arm64.tar.gz
+devvm-1.2.3.tar.gz
+install.sh
+-- notes.want --
+Released today.
+
+- **New:** a thing.
+-- bin/gh --
+#!/bin/bash
+# A gh that logs each call to $WORK/calls (paths as their base names) and
+# keeps one release in $WORK/gh: release/ its files, draft while it's a
+# draft, notes its notes. Switches: gh/no-auth fails gh auth status,
+# gh/fail-create gh release create, gh/fail-edit gh release edit.
+set -eu
+s=$WORK/gh
+line=gh
+for a in "$@"; do
+  [[ $a != /* && $a != dist/* ]] || a=${a##*/}
+  line+=" $a"
+done
+echo "$line" >> "$WORK/calls"
+# files ARG…: what's left after the subcommand's options, copied into the
+# release; the notes and the draft as they say.
+files() {
+  while (($#)); do
+    case $1 in
+      --notes-file) cp "$2" "$s/notes"; shift 2 ;;
+      --repo | --title | --pattern | --dir | --json | --jq) shift 2 ;;
+      --draft) touch "$s/draft"; shift ;;
+      --draft=false) rm -f "$s/draft"; shift ;;
+      --*) shift ;;
+      *) cp "$1" "$s/release/"; shift ;;
+    esac
+  done
+}
+case "$1 $2" in
+  "auth status") [[ ! -e $s/no-auth ]] ;;
+  "release view")
+    [[ -d $s/release ]] || { echo "release not found" >&2; exit 1; }
+    if [[ -e $s/draft ]]; then echo true; else echo false; fi
+    ls "$s/release" ;;
+  "release create")
+    [[ ! -e $s/fail-create ]] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+    git --git-dir="$WORK/origin.git" rev-parse -q --verify "refs/tags/$3" >/dev/null || { echo "tag $3 doesn't exist in the repo" >&2; exit 1; }
+    [[ ! -d $s/release ]] || { echo "a release with the same tag name already exists: $3" >&2; exit 1; }
+    mkdir "$s/release"
+    shift 3; files "$@" ;;
+  "release upload" | "release edit")
+    [[ -d $s/release ]] || { echo "release not found" >&2; exit 1; }
+    [[ $2 != edit || ! -e $s/fail-edit ]] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+    shift 3; files "$@" ;;
+  "release download")
+    dir=
+    while (($#)); do [[ $1 == --dir ]] && dir=$2; shift; done
+    mkdir -p "$dir"
+    cp "$s/release/SHA256SUMS" "$dir/" ;;
+  *) echo "gh: no fake for $*" >&2; exit 1 ;;
+esac
+-- bin/goreleaser --
+#!/bin/bash
+# Logs its call and writes a dist/ like GoReleaser's, the same each time:
+# each system's and processor's build, a script printing $DEVVM_VERSION, an
+# archive for each (a line of text), the source tarball and SHA256SUMS.
+set -eu
+echo "$*" >> "$WORK/log"
+rm -rf dist
+mkdir dist
+for os in darwin linux; do
+  for a in arm64 amd64; do
+    mkdir -p "dist/devvm_${os}_$a"
+    printf '#!/bin/sh\necho %s\n' "$DEVVM_VERSION" > "dist/devvm_${os}_$a/devvm"
+    chmod 755 "dist/devvm_${os}_$a/devvm"
+    echo "devvm $DEVVM_VERSION $os $a" > "dist/devvm-$DEVVM_VERSION-$os-$a.tar.gz"
+  done
+done
+git archive --prefix="devvm-$DEVVM_VERSION/" HEAD | gzip -n > "dist/devvm-$DEVVM_VERSION.tar.gz"
+(cd dist && { sha256sum devvm-*.tar.gz 2>/dev/null || shasum -a 256 devvm-*.tar.gz; } > SHA256SUMS)

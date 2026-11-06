@@ -12,6 +12,8 @@
 #   scripts/release.sh --head   from HEAD, for testing (DEVVM_RELEASE_URL: where the source tarball will be;
 #                               DEVVM_MINISIGN_KEY: a test key, else nothing is signed;
 #                               DEVVM_MINISIGN_PUB: its public key, else packaging/minisign.pub)
+#   scripts/release.sh --check  only the tag's checks and what the build needs, then prints the tag's commit
+#                               (scripts/publish.sh runs it first); nothing is built
 # Needs goreleaser and minisign, pinned in mise.toml: mise exec -- scripts/release.sh.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,7 +23,13 @@ die() { echo "release: $*" >&2; exit 1; }
 v=$(tr -d '[:space:]' < VERSION)
 [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "VERSION isn't x.y.z: '$v'"
 ref=v$v
-[[ ${1:-} != --head ]] || ref=HEAD
+check=false
+case ${1:-} in
+  --head) ref=HEAD ;;
+  --check) check=true ;;
+  "") ;;
+  *) die "unknown argument '$1' (--head, --check)" ;;
+esac
 if [[ $ref == HEAD ]]; then obj=HEAD; else obj=$(git rev-parse -q --verify "refs/tags/$ref") || die "no tag $ref: tag the release first (git tag -s $ref)"; fi
 # A release comes from a tag the maintainer signed, not just any tag with the right name. The tag
 # object checked is the one built from: its commit is resolved once, and used for everything below.
@@ -60,6 +68,7 @@ else
 fi
 git cat-file -e "$commit:install.sh" 2>/dev/null || die "no install.sh in $ref"
 command -v goreleaser >/dev/null || die "needs goreleaser (mise exec -- scripts/release.sh)"
+if $check; then echo "$commit"; exit 0; fi
 url=${DEVVM_RELEASE_URL:-https://github.com/devvmhq/devvm/releases/download/v$v}
 
 # GoReleaser builds a clone of the commit, so only what's committed goes in, whatever this checkout
@@ -99,7 +108,7 @@ git show "$commit:install.sh" |
   > "$out/install.sh" || die "install.sh needs one release_version=\"\" and one minisign_key=\"\" line"
 chmod 755 "$out/install.sh"
 git show "$commit:packaging/homebrew/devvm.rb" |
-  awk -v u="$url/$tarball" -v s="$sha" '{ gsub("@URL@", u); gsub("@SHA256@", s); print }' \
+  awk -v u="$url/$tarball" -v s="$sha" '!/^#/ { gsub("@URL@", u); gsub("@SHA256@", s) } { print }' \
   > "$out/devvm.rb"
 
 # install.sh's checksum goes in SHA256SUMS before it's signed, so you can check the script against the
@@ -114,4 +123,4 @@ fi
 echo "==> dist/ for devvm $v (from $ref):"
 (cd "$out" && ls -l devvm-*.tar.gz SHA256SUMS* install.sh devvm.rb 2>/dev/null) || true
 $sign || echo "(not signed: a test build without DEVVM_MINISIGN_KEY)"
-echo "Attach the archives, SHA256SUMS, SHA256SUMS.minisig and install.sh to the GitHub release v$v; devvm.rb goes in devvmhq/homebrew-tap/Formula/."
+echo "scripts/publish.sh publishes them: the archives, SHA256SUMS, SHA256SUMS.minisig and install.sh to the GitHub release v$v, devvm.rb to devvmhq/homebrew-tap's Formula/."

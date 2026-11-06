@@ -98,10 +98,13 @@ install.sh: OK
 sha=$({ sha256sum 2>/dev/null || shasum -a 256; } < repo/dist/devvm-1.2.3.tar.gz | cut -c1-64)
 grep -q "^  sha256 \"$sha\"$" repo/dist/devvm.rb && echo checksum
 grep '^  url ' repo/dist/devvm.rb
-! grep '@' repo/dist/devvm.rb
+# Nothing left to fill in, but in the comment that says what's filled in.
+grep -v '^#' repo/dist/devvm.rb | grep '@' || true
+grep -c '^# .*@URL@ and @SHA256@' repo/dist/devvm.rb
 -- formula.want --
 checksum
   url "https://github.com/devvmhq/devvm/releases/download/v1.2.3/devvm-1.2.3.tar.gz"
+1
 -- log.want --
 release --clean --skip=publish --snapshot DEVVM_VERSION=1.2.3 GORELEASER_CURRENT_TAG=
 -- bin/goreleaser --
