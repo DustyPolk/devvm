@@ -1891,7 +1891,7 @@ other = "Removing {{.key}} from devvm's SSH agent failed, so devvm kept it on th
 other = "devvm removed {{.key}} from its SSH agent and won't load it again."
 
 [agent_confirm_needs_askpass]
-other = "The --confirm flag needs an ssh-askpass program to ask with, and macOS doesn't have one. Run brew install theseal/ssh-askpass/ssh-askpass to get it."
+other = "The --confirm flag needs an ssh-askpass program to ask with, and macOS doesn't include one. Put one on your PATH, or set SSH_ASKPASS to it."
 
 [agent_holds]
 description = "keys is a space-separated list of the keys' comments"

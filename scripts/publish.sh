@@ -144,7 +144,7 @@ echo "  4. the tap's commit, devvm $v, and git push: $(state $done_tap "to do")"
 echo
 
 check() {
-  echo "Check it with Homebrew, brew update && brew upgrade devvm (or brew install devvmhq/tap/devvm), or the install script:"
+  echo "Check it with Homebrew, brew update && brew upgrade devvm (or brew trust --formula devvmhq/tap/devvm, then brew install devvmhq/tap/devvm), or the install script:"
   echo "  curl -fsSL https://github.com/devvmhq/devvm/releases/download/$tag/install.sh | bash"
 }
 if $done_main && $done_tag && $done_release && $done_tap; then

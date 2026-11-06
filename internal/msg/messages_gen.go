@@ -44,7 +44,7 @@ func AdoptVM(vm string, was string) M {
 	return M{id: "adopt_vm", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
-// AgentConfirmNeedsAskpass is [agent_confirm_needs_askpass]: "The --confirm flag needs an ssh-askpass program to ask with, and macOS doesn't have one. Run brew install theseal/ssh-askpass/ssh-askpass to get it."
+// AgentConfirmNeedsAskpass is [agent_confirm_needs_askpass]: "The --confirm flag needs an ssh-askpass program to ask with, and macOS doesn't include one. Put one on your PATH, or set SSH_ASKPASS to it."
 func AgentConfirmNeedsAskpass() M {
 	return M{id: "agent_confirm_needs_askpass"}
 }

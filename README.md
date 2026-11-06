@@ -16,6 +16,7 @@ An isolated sandbox with your project's toolchain, ready for you or a coding age
 On macOS, install devvm with Homebrew, which also installs Lima:
 
 ```sh
+brew trust --formula devvmhq/tap/devvm
 brew install devvmhq/tap/devvm
 ```
 

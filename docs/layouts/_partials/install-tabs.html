@@ -9,6 +9,6 @@
 {{- else -}}
   {{- errorf "install: no Installing page (%s)" .position -}}
 {{- end -}}
-{{- $mac := printf "```sh\n# Install devvm, and Lima with it\nbrew install devvmhq/tap/devvm\n```\n\n%s" $macNote -}}
+{{- $mac := printf "```sh\n# Install devvm, and Lima with it\nbrew trust --formula devvmhq/tap/devvm\nbrew install devvmhq/tap/devvm\n```\n\n%s" $macNote -}}
 {{- $linux := printf "```sh\n# Install devvm and what it needs\n%s\n```\n\nThe script asks before it installs Lima, QEMU or access to `/dev/kvm`." $script -}}
 {{- return (slice (dict "name" "macOS" "content" $mac) (dict "name" "Linux" "content" $linux)) -}}
