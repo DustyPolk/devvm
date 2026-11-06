@@ -1,4 +1,4 @@
-# Weekly updates for devvm's Go modules and the actions its workflows pin by SHA. Their titles follow
+# Monthly updates, each ecosystem in one grouped pull request, for devvm's Go modules and the actions its workflows pin by SHA. Their titles follow
 # Conventional Commits, as the PR title check asks. Pinned downloads in assets/, the shared tools' lock
 # and the e2e pins are bumped with scripts/bump.sh, which Dependabot doesn't know.
 version: 2
@@ -6,7 +6,7 @@ updates:
   - package-ecosystem: gomod
     directories: ["/", "/docs"]
     schedule:
-      interval: weekly
+      interval: monthly
     # A release has a week to be found bad before an update proposes it.
     cooldown:
       default-days: 7
@@ -19,7 +19,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
     commit-message:
