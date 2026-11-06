@@ -176,7 +176,20 @@ Each section is a file of its own in `tests/e2e`, such as `gc_test.go`, so secti
 3. Run it with `mise run e2e:go -- -e2e.only=<section>` on a Mac and on a Linux host, and check that each check passes and that the counts and titles match the section's last run of `tests/e2e.sh`.
 4. Delete its block from `tests/e2e.sh` and add its name to `go_sections` there, then run `tests/e2e.sh --only <section>` to check that the hand-over runs it.
 
-A helper that more than one section needs goes in the harness's files, beside those above, so that every section shares one copy, and a fixture that two sections share, such as an image, stays in the sandbox's cache, as it does for `tests/e2e.sh`.
+A helper that more than one section needs goes in the harness's files, beside those above, so that every section shares one copy, and a fixture that two sections share, such as an image, stays in the sandbox's cache, as it does for `tests/e2e.sh`. These are the ones the sections share so far:
+
+| Helper | What it does | `tests/e2e.sh`'s |
+| --- | --- | --- |
+| `s.Start(Cmd{…})`, `Proc` | runs a command in the background, past the check that starts it, in a process group of its own, until `Stop` or the run's end, with its output in `Out` and never in the check's log | `cmd &` |
+| `StartCorp(s)`, `Corp` | starts a company proxy, a `devvm _proxy` on `127.0.0.1` at slot 0's port 18766 as the slot has it, with a password of its own, allowing any host, and waits for it to listen; `Env` gives a command `HTTPS_PROXY` and `HTTP_PROXY` with its password, `Saw` looks for one of its events, and `Addr` is its address without the password | `corp_start`, `corp_stop` |
+| `WriteProxyConfig(s, file, proxy.Config{…})` | writes a config for `devvm _proxy -config`, mode 600, with the proxy's own `Config` type | `proxy_config` |
+| `NewCA(s)`, `CA` | makes the run's throwaway CA once, with a server certificate for `host.lima.internal`, `localhost` and `127.0.0.1`; `Trust` and `Untrust` put it in devvm's CA folder and take the folder away, `Serve(port)` serves HTTPS with it on every address until `StopServing`, `Sign` makes another server certificate, and `GoneFrom(s, vm)` checks that a VM keeps none of devvm's CA files | `e2e_ca`, `ca_serve`, `ca_stop`, `ca_gone` |
+| `NoLeak(secrets, paths…)` | fails when a regular file under the paths holds one of the secrets, reading only where each file has data, as `SEEK_DATA` and `SEEK_HOLE` find it, so a VM's sparse disk takes seconds, and naming the file but never the secret | `no_leak` |
+| `GuestHasNone(s, vm, secrets, dirs…)` | fails when a file under the folders in the VM holds one of the secrets, searched as root, the secrets on `grep`'s input | `sudo grep -rqsFf /dev/stdin` |
+| `WatchProcs(s)`, `ProcWatch`, `ProcsHave(s, secret)` | samples every host process's command line every 0.1 s until `Stop`, into a file of the sandbox's, and `Saw` looks for a secret in the samples, while `ProcsHave` looks in one sample taken now; a check that reads either is `ProcsFlaky()`, as a listing can catch a short-lived process mid-start | `ps_watch`, `ps_unwatch` |
+| `s.Paths.ToolVersion(tool)` | the tool's version in the shared tools' lock | `lockv` |
+
+A secret that a check looks for is never in a process's arguments, where other users can see it. The company proxy's password is in its config file and in the environment of the commands that `Env` is given to, and each helper above takes a secret as a Go value, so it reaches `grep` on its input and is never on a command line.
 
 ## Test builds
 

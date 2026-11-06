@@ -26,12 +26,13 @@ type Paths struct {
 	Layers   string // the user's layers ($XDG_CONFIG_HOME/devvm/layers)
 	ToolLock string // the shared tools' versions (mise.lock)
 	Projects string // the run's project folders
+	CAs      string // devvm's CA folder, the user's CAs ($XDG_CONFIG_HOME/devvm/ca)
 }
 
 func (sb *sandbox) paths() Paths {
 	return Paths{
 		Devvm: sb.devvmDir(), Images: sb.images(), Share: sb.share(), Layers: sb.layers(),
-		ToolLock: sb.toolLock(), Projects: filepath.Join(sb.work, "p"),
+		ToolLock: sb.toolLock(), Projects: filepath.Join(sb.work, "p"), CAs: filepath.Join(sb.config(), "devvm", "ca"),
 	}
 }
 
@@ -169,6 +170,31 @@ func (p Paths) Record(key, field string) string {
 	}
 	v, _ := rec[field].(string)
 	return v
+}
+
+// ToolVersion is the tool's version in the shared tools' lock, its
+// [[tools.TOOL]] entry's version (tests/e2e.sh's lockv): nothing without
+// one.
+func (p Paths) ToolVersion(tool string) string {
+	b, err := os.ReadFile(p.ToolLock)
+	if err != nil {
+		return ""
+	}
+	in := false
+	for line := range strings.Lines(string(b)) {
+		line = strings.TrimSpace(line)
+		switch {
+		case line == "[[tools."+tool+"]]":
+			in = true
+		case strings.HasPrefix(line, "["):
+			in = false
+		case in:
+			if v, ok := strings.CutPrefix(line, "version = "); ok {
+				return strings.Trim(v, `"`)
+			}
+		}
+	}
+	return ""
 }
 
 // Own makes the images by that name this run's: deleted at its end.

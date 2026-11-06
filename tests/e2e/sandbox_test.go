@@ -42,6 +42,7 @@ type sandbox struct {
 	made     []string // files and folders this run made: deleted at its end
 	projects []string // project folders this run made, unlocked and deleted at its end
 	deferred []func(context.Context)
+	ca       *CA // the run's CA, made the first time a section asks (NewCA)
 }
 
 // The sandbox's names, and the dated release of Ubuntu's cloud image
