@@ -590,7 +590,8 @@ func TestRefresh(t *testing.T) {
 	}
 }
 
-// A download for every platform, not a build from source; rust needs none.
+// A download with its checksum for every platform, not a build from
+// source; rust needs none.
 func TestHasDownload(t *testing.T) {
 	e := newEnv(t)
 	lock := parsed(t, fixture(t))
@@ -620,6 +621,16 @@ func TestHasDownload(t *testing.T) {
 	}
 	if parsed(t, bare.Bytes()).HasDownload("opencode", e.platforms()) {
 		t.Error("a tag with no release (no platforms) counts")
+	}
+	// A URL without its checksum, which only TLS would check.
+	var unsummed bytes.Buffer
+	for _, line := range lines(fixture(t)) {
+		if !strings.HasPrefix(line, "checksum = ") {
+			unsummed.WriteString(line + "\n")
+		}
+	}
+	if parsed(t, unsummed.Bytes()).HasDownload("node", e.platforms()) {
+		t.Error("a download without its checksum counts")
 	}
 	// Only the VM's own platform counts.
 	if e.noDownload(newer, "node", "gnu") || !e.noDownload(newer, "node", "musl") || e.noDownload(newer, "bun", "musl") {

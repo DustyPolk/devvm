@@ -109,8 +109,9 @@ func (l Lock) Entry(tool string) ([]byte, error) {
 	return json.Marshal(e)
 }
 
-// HasDownload reports whether a tool's first entry has a download (a URL,
-// not a build from source) for every one of the platforms. A tool whose
+// HasDownload reports whether a tool's first entry has a download (a URL
+// and its checksum, which mise checks it against, not a build from
+// source) for every one of the platforms. A tool whose
 // installer isn't mise needs none (image.NoDownload): rustup installs rust.
 func (l Lock) HasDownload(tool string, platforms []string) bool {
 	if image.NoDownload(tool) {
@@ -125,7 +126,7 @@ func hasDownload(e lockEntry, platforms []string) bool {
 	}
 	for _, p := range platforms {
 		table, _ := e["platforms."+p].(map[string]any)
-		if str(table, "url") == "" || str(table, "install") == "source" {
+		if str(table, "url") == "" || str(table, "checksum") == "" || str(table, "install") == "source" {
 			return false
 		}
 	}
