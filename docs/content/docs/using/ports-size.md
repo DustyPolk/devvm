@@ -76,7 +76,7 @@ devvm size -g                      # cpus=, memory= and disk= lines, empty for t
 devvm asks for the CPUs and memory that new VMs get on your first run, before it asks which features base gets, and again whenever you run `devvm setup`:
 
 ```sh
-devvm setup                         # asks for the backend, base's features, the CPUs and memory, then the network tier
+devvm setup                         # asks its questions, the size among them
 devvm size -g --cpus 6 --memory 16  # only the size, without asking
 ```
 
