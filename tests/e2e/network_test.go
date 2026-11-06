@@ -861,7 +861,7 @@ func netCodexLogin(n *netRun) {
 		}
 		ctx := s.r.window().ctx
 		what := func() string {
-			if loginState(p) == "" {
+			if loginState(s, p) == "" {
 				return "Codex shows its address"
 			}
 			if forwardGone(ctx) {
@@ -956,8 +956,9 @@ func netOpencodeKeys(n *netRun) {
 		return nil
 	}, Tail(40))
 	s.Check("... and gets it again at its next launch once its database is made again", func() error {
-		// opencode's service keeps the old database open: it goes first.
-		remake := "pkill -x opencode; sleep 1; rm -f ~/.local/share/opencode/opencode.db* && opencode auth list >/dev/null"
+		// opencode's service keeps the old database open: it goes first, within 10 s.
+		remake := "pkill -x opencode; i=0; while pgrep -x opencode >/dev/null && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done; " +
+			"! pgrep -x opencode >/dev/null && rm -f ~/.local/share/opencode/opencode.db* && opencode auth list >/dev/null"
 		if vm == "" || inVM(s, vm, remake) != nil {
 			return errors.New("the second VM's opencode didn't make its database again")
 		}
@@ -1038,7 +1039,7 @@ func (n *netRun) opencodeLoggedIn(p *Proc) string {
 func (n *netRun) codexLoggedIn(p *Proc) string {
 	s := n.s
 	ctx := s.r.window().ctx
-	state := loginState(p)
+	state := loginState(s, p)
 	if state == "" {
 		return "Codex shows its address"
 	}
@@ -1066,24 +1067,26 @@ func (n *netRun) codexLoggedIn(p *Proc) string {
 }
 
 // loginState is the state in the address a login shows, once it shows one
-// (60 s at most), nothing when it ends first.
-func loginState(p *Proc) string {
+// (60 s at most, within the check's window), nothing when it ends first.
+func loginState(s *S, p *Proc) string {
 	re := regexp.MustCompile(`[?&]state=([A-Za-z0-9_-]*)`)
-	for end := time.Now().Add(time.Minute); time.Now().Before(end); time.Sleep(500 * time.Millisecond) {
+	st := ""
+	_ = s.Until(time.Minute, func() error {
 		// The first line that names one, its last (sed's greedy .*).
 		for l := range strings.Lines(p.Out()) {
 			if m := re.FindAllStringSubmatch(l, -1); m != nil {
-				if st := m[len(m)-1][1]; st != "" {
-					return st
+				if st = m[len(m)-1][1]; st != "" {
+					return nil
 				}
 				break
 			}
 		}
 		if !p.Running() {
-			return ""
+			return nil
 		}
-	}
-	return ""
+		return errors.New("no address yet")
+	})
+	return st
 }
 
 // waitProc is p's exit status once it ends, within d: false when it
@@ -1231,9 +1234,17 @@ func (n *netRun) claudeLogin() error {
 		return err
 	}
 	var w *os.File
-	for end := time.Now().Add(30 * time.Second); w == nil && p.Running() && time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
-		w, _ = os.OpenFile(fifo, os.O_WRONLY|syscall.O_NONBLOCK, 0)
-	}
+	_ = s.Until(30*time.Second, func() error {
+		if !p.Running() {
+			return nil
+		}
+		// Open for writing fails until devvm's shell opens it to read.
+		var err error
+		if w, err = os.OpenFile(fifo, os.O_WRONLY|syscall.O_NONBLOCK, 0); err != nil {
+			w = nil
+		}
+		return err
+	})
 	what := "devvm agent login claude never read its input"
 	if w != nil {
 		what = n.claudeLoggedIn(p, w)
@@ -1250,7 +1261,7 @@ func (n *netRun) claudeLogin() error {
 // nothing when none.
 func (n *netRun) claudeLoggedIn(p *Proc, w *os.File) string {
 	s := n.s
-	state := loginState(p)
+	state := loginState(s, p)
 	if state == "" {
 		return "Claude Code shows its address"
 	}

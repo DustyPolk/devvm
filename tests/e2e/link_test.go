@@ -478,13 +478,11 @@ func lkOwnServer(l *link) error {
 		return err
 	}
 	var h string
-	for range 20 {
+	_ = s.Until(20*time.Second, func() error {
 		r, _ := s.Run(Cmd{Args: []string{"curl", "-s", "--max-time", "5", "http://127.0.0.1:" + l.p(0) + "/"}})
-		if h = out(r); h == "own" {
-			break
-		}
-		time.Sleep(time.Second)
-	}
+		h = out(r)
+		return not(h != "own", "not the client's own server")
+	})
 	Note(s, "this machine's 127.0.0.1:%s answered: %s", l.p(0), orNothing(h))
 	if h != "own" {
 		return errors.New("the client's own server doesn't reach this machine")
@@ -714,13 +712,17 @@ func lkStopped(l *link) error {
 	if err := said(r, "devvm: link_target_stopped target="+l.v2+" vm="+l.vc); err != nil {
 		return err
 	}
-	time.Sleep(5 * time.Second) // the client's launch mustn't start its target
+	// The client's launch mustn't start its target: once its link session
+	// has refused the stopped target, the target still doesn't run.
 	q := regexp.QuoteMeta
-	switch {
-	case !lkShows(s, l.pc, `^`+q(l.n2)+` +`+l.p(0)+` +`+q(l.v2)+` +`+q(l.p2)+` +Stopped +yes$`, "link"):
+	if err := s.Until(30*time.Second, func() error {
+		return not(!lkShows(s, l.pc, `  REFUSED  `+q(l.n2)+`:`+l.p(0)+`  to `+q(l.v2)+`: it isn't running$`, "network", "log", "-n", "100000"),
+			"devvm network log doesn't show the refusal")
+	}); err != nil {
+		return err
+	}
+	if !lkShows(s, l.pc, `^`+q(l.n2)+` +`+l.p(0)+` +`+q(l.v2)+` +`+q(l.p2)+` +Stopped +yes$`, "link") {
 		return errors.New("devvm link doesn't show the target stopped")
-	case !lkShows(s, l.pc, `  REFUSED  `+q(l.n2)+`:`+l.p(0)+`  to `+q(l.v2)+`: it isn't running$`, "network", "log", "-n", "100000"):
-		return errors.New("devvm network log doesn't show the refusal")
 	}
 	return not(lkRunning(s, l.v2), l.v2+" runs")
 }

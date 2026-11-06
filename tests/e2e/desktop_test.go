@@ -204,11 +204,13 @@ func desktopFake(s *S, p, vm string, d *Desktop) {
 		return d.View(s, "DEVVM_E2E_CLIPBOARD=devvm-e2e-clip")
 	})
 	s.Check("... the refused viewer never reached the VM, nor the viewer's clipboard: only its key event did", func() error {
-		time.Sleep(time.Second)
-		_, err := s.Limactl("shell", "--workdir", "/", vm, "sh", "-c", `[ "$(cat /tmp/devvm-e2e-rfb.count)" = 1 ] &&
+		// Once the server has written the key event down.
+		return s.Until(10*time.Second, func() error {
+			_, err := s.Limactl("shell", "--workdir", "/", vm, "sh", "-c", `[ "$(cat /tmp/devvm-e2e-rfb.count)" = 1 ] &&
     od -An -tx1 /tmp/devvm-e2e-rfb.bin | tr -d " \n" | grep -q 040100000000006b &&
     ! grep -q devvm-e2e-clip /tmp/devvm-e2e-rfb.bin`)
-		return err
+			return err
+		})
 	})
 	d.End()
 	s.Check("Ctrl+C ends devvm desktop, its port closed", func() error {
