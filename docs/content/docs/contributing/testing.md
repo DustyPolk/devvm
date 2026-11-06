@@ -103,7 +103,7 @@ A Mac clones the images it gives each slot, because `/tmp` and your home folder 
 
 ## End-to-end tests in Go
 
-The end-to-end tests are moving from `tests/e2e.sh` to Go, one section at a time, into `tests/e2e`. That package builds only with the `e2e` build tag, and its `TestE2E` is the run. The `gc` section is in Go so far, and `tests/e2e.sh` runs every other section. After its own sections, `tests/e2e.sh` hands the chosen sections that are Go's, the ones its `go_sections` lists, to `TestE2E`, in the same sandbox and under the same lock. It passes the Go run its own pid, which holds the lock, how many checks it has run and expects in all, and when it started, so the Go run's results count on from its own. The Go run writes its results to `summary.go` in the sandbox's state folder, and `tests/e2e.sh` adds them to its own. So `tests/e2e.sh`, `mise run e2e` and `tests/e2e.sh --only gc` still run every section they choose, and `--slots` places the Go sections as it places the others.
+The end-to-end tests are moving from `tests/e2e.sh` to Go, one section at a time, into `tests/e2e`. That package builds only with the `e2e` build tag, and its `TestE2E` is the run. The `images`, `clone`, `gc` and `tools` sections are in Go so far, and `tests/e2e.sh` runs every other section. After its own sections, `tests/e2e.sh` hands the chosen sections that are Go's, the ones its `go_sections` lists, to `TestE2E`, in the same sandbox and under the same lock. It passes the Go run its own pid, which holds the lock, how many checks it has run and expects in all, and when it started, so the Go run's results count on from its own. The Go run writes its results to `summary.go` in the sandbox's state folder, and `tests/e2e.sh` adds them to its own. So `tests/e2e.sh`, `mise run e2e` and `tests/e2e.sh --only gc` still run every section they choose, and `--slots` places the Go sections as it places the others.
 
 ### Running the Go runner
 
@@ -188,6 +188,9 @@ A helper that more than one section needs goes in the harness's files, beside th
 | `GuestHasNone(s, vm, secrets, dirs…)` | fails when a file under the folders in the VM holds one of the secrets, searched as root, the secrets on `grep`'s input | `sudo grep -rqsFf /dev/stdin` |
 | `WatchProcs(s)`, `ProcWatch`, `ProcsHave(s, secret)` | samples every host process's command line every 0.1 s until `Stop`, into a file of the sandbox's, and `Saw` looks for a secret in the samples, while `ProcsHave` looks in one sample taken now; a check that reads either is `ProcsFlaky()`, as a listing can catch a short-lived process mid-start | `ps_watch`, `ps_unwatch` |
 | `s.Paths.ToolVersion(tool)` | the tool's version in the shared tools' lock | `lockv` |
+| `s.Paths.RunLogHas(line)` | whether one of devvm's run logs has the line, whole: what a build's script printed | `grep -qx … logs/runs/*.log` |
+| `MountLine(s, vm)` | the host folders a VM's Lima config mounts, each with a space after it | `limactl list --format '{{range .Config.Mounts}}…'` |
+| `HasLine`, `CaptureLine`, `ExitStatus` | whether text has a line, whole; the first group of the first line a regular expression matches; the exit status a command's error says | `grep -qx`, `sed -n 's/…/\1/p'`, `$?` |
 
 A secret that a check looks for is never in a process's arguments, where other users can see it. The company proxy's password is in its config file and in the environment of the commands that `Env` is given to, and each helper above takes a secret as a Go value, so it reaches `grep` on its input and is never on a command line.
 

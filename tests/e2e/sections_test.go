@@ -17,11 +17,11 @@ type section struct {
 // sections is every section, in the order a run runs them: tests/e2e.sh's.
 func sections() []section {
 	return []section{
-		{name: "images", guess: 600},
+		{name: "images", guess: 600, run: imagesSection},
 		{name: "project", guess: 900},
-		{name: "clone", guess: 120},
+		{name: "clone", guess: 120, tools: []tool{gitTool(), sshTool()}, run: cloneSection},
 		{name: "gc", guess: 120, run: gcSection},
-		{name: "tools", guess: 600},
+		{name: "tools", guess: 600, tools: []tool{sshTool()}, run: toolsSection},
 		{name: "network", guess: 600},
 		{name: "desktop", guess: 300},
 		{name: "nix", guess: 900},
