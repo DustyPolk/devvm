@@ -3025,6 +3025,9 @@ def claude(q):
     if g == "authorization_code":
         return dict(CLAUDE_ACCOUNT, access_token="sk-ant-oat01-e2efake-oauth", refresh_token="sk-ant-ort01-e2efake-oauth",
                     expires_in=28800, scope="user:inference user:profile", token_type="Bearer")
+    if g == "refresh_token" and q.get("refresh_token") == "sk-ant-ort01-e2efake-oauth":
+        return dict(access_token="sk-ant-oat01-e2efake-refreshed", refresh_token="sk-ant-ort01-e2efake-refreshed",
+                    expires_in=28800, scope="user:inference user:profile", token_type="Bearer")
     return None
 # Anthropic's API: the profile Claude Code reads as it logs in, and the Authorization of each request
 # logged, so a check sees which token the VM's proxy put in.
@@ -3249,9 +3252,9 @@ claude_vm_login() {
 check_lines=60 check "devvm agent login claude logs the VM's Claude Code in, and the store keeps the login, the VM placeholders" claude_vm_login
 # The host refreshes the login, through the company proxy: the store's access token made due, the
 # VM's next request (past the proxy's 30 s cache of a login's value) makes the host refresh it at
-# Claude's endpoint, through the run's company proxy. That's as far as e2e goes: the host's own
-# TLS trusts only this machine's CAs, not the run's, so the refresh fails there, the store keeps
-# its login, and the proxy's log says so without a value (the refresh's success is unit-tested).
+# Claude's endpoint, through the run's company proxy. The refresh trusts the VM's proxy's CAs, the
+# run's among them, so it succeeds: the store gets the new tokens, the VM's request goes on with the
+# refreshed access token, and no log holds a value.
 claude_refresh() {
   local before
   if ! { step "the store's access token is due" python3 -I -c 'import json, sys
@@ -3262,9 +3265,11 @@ open(p, "w").write(json.dumps(m))' "$logins/claude/.claude/.credentials.json" &&
       "curl -sS -m 30 -o /dev/null https://api.anthropic.com/v1/e2e-oauth -H \"Authorization: Bearer \$(jq -r .claudeAiOauth.accessToken ~/.claude/.credentials.json)\"" &&
     step "the host's refresh went to Claude's endpoint through the company proxy" \
       bash -c "[[ \$(grep -c '^CONNECT platform.claude.com\$' '$work/token.log') -gt $before ]]" &&
-    step "the proxy's log names the refresh that failed" grep -q 'secret claude-oauth: .*platform\.claude\.com/v1/oauth/token' "$(vmdir "$vm")/logs/proxy.log" &&
-    step "the store keeps its login" bash -c "[[ \$(jget '$logins/claude/.claude/.credentials.json' claudeAiOauth.refreshToken) == sk-ant-ort01-e2efake-oauth ]]" &&
-    step "no log holds a value" bash -c "! grep -rqs -e e2efake-oauth -e e2efake-setup '$(vmdir "$vm")/logs' '$XDG_DATA_HOME/devvm/logs'"; }; then
+    step "the refresh asked with the store's refresh token" grep -qx 'POST /v1/oauth/token HTTP/1.1 refresh_token' "$work/token.log" &&
+    step "the store holds the refreshed login" bash -c "[[ \$(jget '$logins/claude/.claude/.credentials.json' claudeAiOauth.refreshToken) == sk-ant-ort01-e2efake-refreshed &&
+      \$(jget '$logins/claude/.claude/.credentials.json' claudeAiOauth.accessToken) == sk-ant-oat01-e2efake-refreshed ]]" &&
+    step "the VM's request went on with the refreshed access token" api_got /v1/e2e-oauth sk-ant-oat01-e2efake-refreshed &&
+    step "no log holds a value" bash -c "! grep -rqs -e e2efake-oauth -e e2efake-setup -e e2efake-refreshed '$(vmdir "$vm")/logs' '$XDG_DATA_HOME/devvm/logs'"; }; then
     token_why; return 1
   fi; }
 check_lines=40 check "the host refreshes Claude Code's login at Claude's endpoint, through the company proxy, when it's due" claude_refresh

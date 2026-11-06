@@ -3,6 +3,7 @@ package fetch
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -216,6 +217,28 @@ func TestRedirects(t *testing.T) {
 // A read is capped: at the cap it's whole, past it ErrTooLarge.
 // A Client NewClient didn't make sends nothing, and isn't tried again;
 // one NewClient made has its own transport, not net/http's default.
+// Trust: a server signed by a CA the system doesn't trust is refused, then accepted once the
+// client trusts it; nil keeps the system's roots, and a client NewClient didn't make is left alone.
+func TestTrust(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok") }))
+	t.Cleanup(srv.Close)
+	c := NewClient(time.Minute, HTTPSOnly)
+	c.Trust(nil)
+	if _, err := Get(t.Context(), c, srv.URL, 10); err == nil {
+		t.Fatal("a server signed by an untrusted CA was accepted")
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	c = NewClient(time.Minute, HTTPSOnly)
+	c.Trust(roots)
+	if body, err := Get(t.Context(), c, srv.URL, 10); err != nil || string(body) != "ok" {
+		t.Errorf("Get = %q, %v", body, err)
+	}
+	(&Client{}).Trust(roots)
+	(*Client)(nil).Trust(roots)
+}
+
 func TestClientMadeByNewClient(t *testing.T) {
 	t.Parallel()
 	srv, count := failing(t, 0, 0, "ok")

@@ -13,6 +13,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -248,6 +249,24 @@ func WithRoute(ctx context.Context, route func(*http.Request) (*url.URL, error))
 // for a lookup outside a VM's proxy, which then takes net/http's own, the environment's.
 func RouteOf(ctx context.Context) func(*http.Request) (*url.URL, error) {
 	r, _ := ctx.Value(routeKey{}).(func(*http.Request) (*url.URL, error))
+	return r
+}
+
+// rootsKey is the context key of WithRoots' roots.
+type rootsKey struct{}
+
+// WithRoots is ctx carrying roots, what the TLS connections a lookup makes on the host trust: a
+// VM's proxy gives each lookup its own, the system roots and the user's CAs (Config.UpstreamCAs),
+// so an agent's OAuth refresh through a company proxy that inspects TLS is trusted as the VM's own
+// requests are.
+func WithRoots(ctx context.Context, roots *x509.CertPool) context.Context {
+	return context.WithValue(ctx, rootsKey{}, roots)
+}
+
+// RootsOf is the roots WithRoots put in ctx, as tls.Config's RootCAs: nil when it has none, the
+// system roots.
+func RootsOf(ctx context.Context) *x509.CertPool {
+	r, _ := ctx.Value(rootsKey{}).(*x509.CertPool)
 	return r
 }
 

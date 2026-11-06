@@ -139,6 +139,9 @@ type secrets struct {
 	// route is the company proxy each lookup's own requests go through (WithRoute), the one the
 	// VM's requests go through: set as the proxy starts. nil: net/http's own.
 	route func(*http.Request) (*url.URL, error)
+	// roots is what each lookup's own TLS connections trust (WithRoots), the proxy's own: the
+	// system roots and the user's CAs. nil: the system roots.
+	roots *x509.CertPool
 	log   *log.Logger
 	// valueMu holds the values, by binding name, and is held through a lookup, so lookups go one
 	// at a time.
@@ -233,6 +236,9 @@ func (s *secrets) value(b Binding) (string, error) {
 	defer cancel()
 	if s.route != nil {
 		ctx = WithRoute(ctx, s.route)
+	}
+	if s.roots != nil {
+		ctx = WithRoots(ctx, s.roots)
 	}
 	v, err := s.lookup(ctx, b)
 	if err != nil {

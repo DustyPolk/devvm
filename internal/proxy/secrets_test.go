@@ -111,6 +111,35 @@ func TestInject(t *testing.T) {
 	}
 }
 
+// TestLookupRoots: each lookup's context carries the proxy's own roots (WithRoots), the user's CAs
+// (Config.UpstreamCAs) among them, so a login's refresh trusts what the VM's requests do; a proxy
+// without them gives none, the system's.
+func TestLookupRoots(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeCA(t, dir)
+	data, err := os.ReadFile(filepath.Join(dir, "ca.pem")) //nolint:gosec // G304: the test's own temp folder
+	must(t, err)
+	block, _ := pem.Decode(data)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	must(t, err)
+	rootsOf := func(c Config) *x509.CertPool {
+		var roots *x509.CertPool
+		lookup := func(ctx context.Context, _ Binding) (string, error) { roots = RootsOf(ctx); return "v", nil }
+		s, err := newServer(c, IO{Secret: lookup}, quiet(), io.Discard)
+		must(t, err)
+		_, err = s.secrets.value(Binding{Name: "codex", Kind: KindLogin, Agent: "codex"})
+		must(t, err)
+		return roots
+	}
+	if _, err := cert.Verify(x509.VerifyOptions{Roots: rootsOf(Config{VM: "vm", UpstreamCAs: string(data)})}); err != nil {
+		t.Errorf("the lookup's roots don't trust the user's CA: %v", err)
+	}
+	if r := rootsOf(Config{VM: "vm"}); r != nil {
+		t.Errorf("no CAs: roots %v", r)
+	}
+}
+
 // interceptSetup: a proxy with devvm's CA, which a temp dir holds, an upstream HTTPS server for
 // "localhost" (handler h) with a certificate from it, a policy allowing it, a secret bound to it
 // (placeholder PH, value "real"). It returns the proxy, the upstream's port, the bindings file, and

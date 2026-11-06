@@ -488,6 +488,8 @@ func (f File) refresh(ctx context.Context, form bool, fields map[string]string) 
 		// The VM's proxy's company proxy, password included (proxy.WithRoute).
 		client.Transport().Proxy = route
 	}
+	// The VM's proxy's roots: the system's and the user's CAs (proxy.WithRoots).
+	client.Trust(proxy.RootsOf(ctx))
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

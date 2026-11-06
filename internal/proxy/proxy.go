@@ -125,6 +125,7 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 		if s.upstreamCAs, err = upstreamPool([]byte(c.UpstreamCAs)); err != nil {
 			return nil, err
 		}
+		s.secrets.roots = s.upstreamCAs
 	}
 	var up upstreams
 	if c.Upstream != nil {

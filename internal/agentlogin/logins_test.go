@@ -2,6 +2,7 @@ package agentlogin
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -171,6 +172,29 @@ func TestRefreshGoesThroughTheProxysRoute(t *testing.T) {
 	}
 	if target != "http://auth.example/oauth/token" || auth != "Basic YWxpY2U6ZTJlLW5vdC1hLXNlY3JldA==" {
 		t.Errorf("the company proxy got %q, Proxy-Authorization %q", target, auth)
+	}
+}
+
+// A refresh trusts the roots its lookup's context carries (proxy.WithRoots): the VM's proxy's, the
+// user's CAs among them, so a company proxy that inspects TLS is trusted. Without them, a server
+// signed by a CA the system doesn't trust is refused.
+func TestRefreshTrustsTheProxysRoots(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "at-new", "refresh_token": "rt-new"})
+	}))
+	t.Cleanup(srv.Close)
+	file := func() File {
+		return File{Kind: Codex, TokenURL: srv.URL, Path: writeFile(t, map[string]any{"tokens": map[string]any{
+			"access_token": jwtWith(time.Now(), nil), "refresh_token": "rt-old",
+		}})}
+	}
+	if _, err := file().Get(t.Context(), "codex"); err == nil {
+		t.Fatal("refreshed against a server the system's roots don't trust")
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	if v, err := file().Get(proxy.WithRoots(t.Context(), roots), "codex"); err != nil || v != "at-new" {
+		t.Fatalf("value = %q, %v", v, err)
 	}
 }
 

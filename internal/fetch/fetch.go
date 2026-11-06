@@ -7,6 +7,8 @@ package fetch
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -93,6 +95,18 @@ func (c *Client) Transport() *http.Transport {
 		return nil
 	}
 	return c.t
+}
+
+// Trust makes the client's TLS connections trust roots instead of the
+// system's roots, before its first request: nil keeps the system's.
+func (c *Client) Trust(roots *x509.CertPool) {
+	if c == nil || c.t == nil || roots == nil {
+		return
+	}
+	if c.t.TLSClientConfig == nil {
+		c.t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	c.t.TLSClientConfig.RootCAs = roots
 }
 
 func httpsOnly(req *http.Request, via []*http.Request) error {
