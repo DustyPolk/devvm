@@ -32,7 +32,7 @@ In the VM, you run the agent as `claude`, `codex` or `opencode`.
 | --- | --- | --- | --- |
 | `claude` | Claude Code | the newest release, with its auto-update off, since the shared copy is read-only, and its telemetry off | Anthropic's API, Claude's login and Claude Code's downloads: `api.anthropic.com`, `claude.ai`, `downloads.claude.ai`, `platform.claude.com` and `mcp-proxy.anthropic.com` |
 | `codex` | Codex | the newest release, with its analytics and metrics off unless your config sets them | the OpenAI API and the ChatGPT login: `api.openai.com`, `chatgpt.com` and `auth.openai.com` |
-| `opencode` | opencode | the newest 2.x release, because opencode marks its 1.x releases as its latest on GitHub | opencode's own service and its model catalog: `opencode.ai` and `models.dev` |
+| `opencode` | opencode | the newest 2.x release, because opencode marks its 1.x releases as its latest on GitHub | opencode's own service and its model catalog: `opencode.ai` and `models.opencode.ai` |
 
 Claude Code's telemetry hosts aren't on its allowlist, because blocking them costs nothing. opencode talks to the model provider you choose, so on the allowlist tier you allow that provider's API host yourself, such as `devvm network allow api.anthropic.com` ([changing rules](../safety/network.md#changing-rules)).
 

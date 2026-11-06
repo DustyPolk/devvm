@@ -246,6 +246,16 @@ func netBlocks(n *netRun) {
 	s.Check("an allowed host works, through the proxy", func() error {
 		return inVM(s, vm, "curl -fsS -m 20 -o /dev/null https://github.com")
 	})
+	// opencode 2 reads its model catalog from models.opencode.ai and its
+	// own service (Zen, the console, MCP's OAuth client) from opencode.ai.
+	s.Check("opencode's policy allows the hosts opencode 2 reaches at start", func() error {
+		for _, u := range []string{"https://models.opencode.ai/experimental/v2.0/api.json", "https://opencode.ai/v2/cli.json"} {
+			if err := inVM(s, vm, "curl -fsS -m 20 -o /dev/null "+u); err != nil {
+				return errors.New(u + " wasn't reached through the proxy")
+			}
+		}
+		return nil
+	})
 	s.Check("another host is blocked by the proxy, and so is another port of an allowed one", func() error {
 		r, _ := s.InVM(vm, "curl -sS -m 20 -o /dev/null https://example.com")
 		switch {
