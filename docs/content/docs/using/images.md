@@ -16,7 +16,7 @@ flowchart TD
 
 ## Base
 
-`base` is the image that every other image is built on. It is Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, sqlite3 and mise added, followed by the optional [features](customizing.md#base-image-features) you chose, such as oh-my-bash and fzf. Docker comes as a [layer of devvm's](#built-in-layers), so you check it in the list devvm shows when you customize a new VM, or give `devvm --layers docker`. With `--from`, base starts from a container image instead of Ubuntu's ([details](from.md)).
+`base` is the image that every other image is built on. It is Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, sqlite3 and mise added, followed by the optional [features](customizing.md#base-image-features) you chose, such as oh-my-bash and fzf. Docker comes as a [layer of devvm's](#built-in-layers), so you choose it when you customize a new VM, or give `devvm --layers docker`. With `--from`, base starts from a container image instead of Ubuntu's ([details](from.md)).
 
 A VM made from base gets 4 CPUs, 8 GiB of memory and a 100 GiB disk unless you give it another size, and on a small machine it gets fewer CPUs and less memory ([size and ports](ports-size.md#size-and-ports)).
 
@@ -114,7 +114,7 @@ devvm builds each tool version once and mounts it read-only into every VM that h
 
 devvm doesn't pin the tools' versions, because agents like Claude Code release several times a week. It follows the newest release of each tool, with Node 24 for node and opencode 2 for opencode. The first time a tool is needed, devvm looks up its newest release, which needs this machine to be online once. When it makes a new VM, devvm also checks for newer releases if its last check was more than a day ago, and `DEVVM_NO_TOOL_CHECK=1` turns that check off.
 
-A new VM gets the tools chosen for it when devvm makes it, and keeps those versions. `devvm tools` shows them, and in a terminal lets you check and uncheck them. `devvm tools add`, `devvm tools rm` and `devvm tools update` change them too, as does the first step of `devvm update`, and changing them never changes the VM's disk ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
+A new VM gets the tools chosen for it when devvm makes it, and keeps those versions. `devvm tools` shows them, and in a terminal lets you choose them. `devvm tools add`, `devvm tools rm` and `devvm tools update` change them too, as does the first step of `devvm update`, and changing them never changes the VM's disk ([adding and removing tools](toolchains.md#adding-and-removing-tools)).
 
 ## What a new VM gets
 
@@ -145,13 +145,32 @@ Before devvm makes a new VM, it shows a summary of what the VM gets. The summary
 Customize it? [y/N]
 ```
 
-In a terminal, devvm then asks whether to customize the VM. Pressing Enter makes it as shown. When you type y, devvm shows the three parts in one list under three headings, Toolchains, Coding agents and Layers, with what the summary showed checked. Up and down move, space checks or unchecks, and enter confirms what's checked. The Layers heading says that a layer is extra software built into the VM's image. Then devvm lists the four network tiers, each with what it reaches, unless you gave `--network`, and up and down choose one, starting from the tier the summary showed: allowlist, or the tier you saved for new VMs with `devvm network -g` ([choosing a tier](../safety/network.md#choosing-a-tier)). Next, unless you gave `--ports`, devvm lists the ports the VM can forward: every port, none, which you add later with `devvm ports add`, or the ports you type, which devvm checks as `--ports` checks them and asks for again when they aren't a list. The list starts on what the summary showed, every port unless `config.toml` or `devvm ports -g` set another ([size and ports](ports-size.md#size-and-ports)), and the ports you choose are this VM's alone. Last, it asks for the VM's CPUs, memory and disk, starting from the summary's, and Enter keeps each one. Each question is skipped when you gave its flag, `--cpus`, `--memory` or `--disk`. Before the disk's question, devvm says that the disk can grow later with `devvm size --disk` but never shrinks, and that it takes up only the space the VM writes. A disk smaller than the image's, 100 GiB for base, is refused as `--disk` refuses it, and devvm asks again, as it does for a value that isn't a size. The size you type is this VM's alone, and devvm saves it for no other VM.
+In a terminal, devvm then asks whether to customize the VM, with no as the default, so confirming makes it as shown. When you customize it, devvm shows the three parts in one list under three headings, Toolchains, Coding agents and Layers, with what the summary showed already chosen ([choosing in a list](#choosing-in-a-list)). The Layers heading says that a layer is extra software built into the VM's image:
+
+```text
+Choose what devvm-some-project-71a99b1076d92c gets. Use up and down to move, space to toggle and enter to confirm.
+Toolchains
+> [x] node       for package.json
+  [ ] python
+  [ ] rust
+  [ ] go
+Coding agents, which you start in the VM's shell
+  [x] claude     from devvm setup
+  [ ] codex
+  [ ] opencode
+Layers: extra software built into the VM's image, such as docker, nix or desktop
+  [ ] desktop    an Xfce desktop, which devvm desktop opens
+  [ ] docker     Docker's engine, CLI, BuildKit and Compose
+  [ ] nix        Nix, direnv and nix-direnv
+```
+
+Then devvm lists the four network tiers, each with what it reaches, unless you gave `--network`, and you choose one, starting from the tier the summary showed: allowlist, or the tier you saved for new VMs with `devvm network -g` ([choosing a tier](../safety/network.md#choosing-a-tier)). Next, unless you gave `--ports`, devvm lists the ports the VM can forward: every port, none, which you add later with `devvm ports add`, or the ports you type, which devvm checks as `--ports` checks them and asks for again when they aren't a list. The list starts on what the summary showed, every port unless `config.toml` or `devvm ports -g` set another ([size and ports](ports-size.md#size-and-ports)), and the ports you choose are this VM's alone. Last, it asks for the VM's CPUs, memory and disk, starting from the summary's, and confirming keeps each one. Each question is skipped when you gave its flag, `--cpus`, `--memory` or `--disk`. Before the disk's question, devvm says that the disk can grow later with `devvm size --disk` but never shrinks, and that it takes up only the space the VM writes. A disk smaller than the image's, 100 GiB for base, is refused as `--disk` refuses it, and devvm asks again, as it does for a value that isn't a size. The size you type is this VM's alone, and devvm saves it for no other VM.
 
 Each part has a default:
 
 - **Toolchains:** the ones the folder's files call for, each naming its file in the summary and the list, such as `package.json`.
 - **Coding agents:** the ones you chose with [devvm setup](settings.md#coding-agents-for-new-vms), which the summary and the list say. The summary says `from config.toml` for the ones that `config.toml` sets. Until you choose some, there are none.
-- **Layers:** the ones you chose with [devvm setup](settings.md#layers-for-new-vms), bottom first, which the summary and the list say in the same way. Until you choose some, there are none. A layer that a project file calls for, such as `nix` for a `flake.nix`, names the file in its row of the list but isn't checked unless devvm setup chose it, so you check it when you want it.
+- **Layers:** the ones you chose with [devvm setup](settings.md#layers-for-new-vms), bottom first, which the summary and the list say in the same way. Until you choose some, there are none. A layer that a project file calls for, such as `nix` for a `flake.nix`, names the file in its row of the list but isn't chosen unless devvm setup chose it, so you choose it when you want it.
 
 Three flags choose the parts on the command line. `--tools` takes the toolchains, as in `--tools node,python`, `--agents` takes the coding agents, as in `--agents claude,codex`, and `--layers` takes the layers bottom first, as in `--layers docker,mine`. Each is the exact list for its part and replaces that part's default, and `none` chooses none of it, as in `--agents none`. A part whose flag you leave out takes its default. devvm checks each name before it does anything. For a name that belongs to another part, such as `--tools claude`, it names the flag that takes it, and for a name it doesn't know, it suggests the closest one.
 
@@ -174,7 +193,11 @@ A folder's `devcontainer.json` adds what its features map to, such as toolchains
 
 The VM's image is base with its layers, in the order you give them, bottom first, so `--layers docker,mine` makes the image `docker+mine`. When you check layers in the list, devvm setup's stay in their order at the bottom, and the ones you add go on top in the list's order. Its shared tools are a list of their own, the toolchains first, then the agents.
 
-If the image isn't built yet, devvm builds it first, then the shared tools the share lacks, and the VM is a copy of the image with its shared tools mounted. A VM keeps the image and tools it was made from, and the three flags change nothing on a VM that exists. devvm warns and names `devvm tools`, which [changes its shared tools](toolchains.md#adding-and-removing-tools), and `devvm layer add`, which [adds layers](#adding-layers-to-a-vm).
+If the image isn't built yet, devvm builds it first, then the shared tools the share lacks, and the VM is a copy of the image with its shared tools mounted. A VM keeps the image and tools it was made from, and the options for a new VM change nothing on a VM that exists, which ignores them with a warning. The warning names the command that changes the same on that VM, such as `devvm tools`, which [changes its shared tools](toolchains.md#adding-and-removing-tools), for `--tools`, `devvm layer add`, which [adds layers](#adding-layers-to-a-vm), for `--layers`, and `devvm size` for `--cpus`, and for `--from` and `--no-devcontainer` it names none. Only `devvm` takes these options, and another command given one fails as it does for any flag it doesn't know ([flags and values](command-line.md#flags-and-values)).
+
+### Choosing in a list
+
+devvm's lists work the same way everywhere: the new VM's list, its network tiers and ports, `devvm tools`, and base's features in `devvm setup`. Up and down, or `k` and `j`, move. In a list where you choose several, such as the toolchains, coding agents and layers, space chooses or unchooses the row under the cursor. In a list where you choose one, such as the network tiers, moving chooses it. Enter confirms. A row that's greyed out, such as a part a flag gave or a VM's layers in `devvm tools`, can't change, and the cursor skips it. At a question with a value in brackets, such as a size, Enter keeps that value.
 
 ## Rebuilding
 
@@ -232,7 +255,7 @@ After the tables, devvm says on stderr how many images are stale or unfinished a
 
 ### devvm images --json
 
-`devvm images --json` prints the same as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes, and devvm still says the same on stderr. `images` and `tools` have the tables' columns as fields, with sizes in bytes, and each also names the [backend](../backends/_index.md) that has it or built it, `lima`. An image's `digest` is the full SHA-256 of what its base started from, and `sized` says whether devvm knows its size. A tool image's `built` says whether devvm has built it, and only a built one has `backend` and `libc`. A value an image lacks, such as an unfinished build's name, is `""`. `total` is the disk the images and shared tools take together, `unused_tools` is the part the unused tool images take, and `nix_cache` has the shared Nix cache's files, the disk they take and its cap.
+`devvm images --json` prints the same as one JSON object, as [output for scripts](command-line.md#output-for-scripts) describes, and devvm still says the same on stderr. `images` and `tools` have the tables' columns as fields, with sizes in bytes, and each also names the [backend](../backends/_index.md) that has it or built it, `lima`. An image's `digest` is the full SHA-256 of what its base started from, and `sized` says whether devvm knows its size. A tool image's `built` says whether devvm has built it, and only a built one has `backend` and `libc`. A value an image lacks, such as an unfinished build's name, is `""`. `total` is the disk the images and shared tools take together, `unused_tools` is the part the unused tool images take, and `nix_cache` has the shared Nix cache's files, the disk they take and its cap.
 
 ```json
 {
@@ -288,7 +311,7 @@ After the tables, devvm says on stderr how many images are stale or unfinished a
 - `devvm gc --tool-images` also deletes the current shared tools that no VM has, such as a toolchain you tried once, for every C library. `devvm gc --tool-images node claude` deletes only those tools' builds, by the names you choose them by, so `node` also covers pnpm and bun. A tool that a VM's state lists stays, including a stopped VM's, and a tool that no VM has goes however recently it was built. While devvm is making a VM, or giving one new shared tools through `devvm tools add` or `devvm tools update`, that VM may not list the tools it picked yet, so gc keeps every current shared tool that no VM has, names them, and deletes the rest of what it would. Run it again once that's done. A tool that devvm is still building never reaches gc, because gc waits for the build to finish before it lists anything. A VM that has a deleted tool builds it again when it needs it.
 - The devvm making a VM holds a lock from before it picks the VM's tools until the VM's state lists them, and the system lets go of that lock as soon as that devvm ends, so one that crashed or that you killed never leaves gc keeping tools. A devvm that starts to make a VM while `devvm gc --tool-images` runs, or while retention deletes shared tools, waits for it to finish and says it's waiting. In a terminal, gc holds that lock while it asks you, so answer it first.
 - When a shared tool that a new VM's state lists is gone before the VM's first shell, for example because you deleted it by hand, the VM's setup can't mount it. devvm then names the tools it couldn't mount and stops, and the VM stays. Run `devvm tools update` in the folder, which builds the missing tools again and opens the VM.
-- `devvm gc --history` also deletes the [exports](coding-agents.md#history) of agents' history that `devvm history export` and `devvm rm` saved, which are the only copy of a deleted VM's history, and `--older-than DURATION` keeps those newer than that [duration](../getting-started/commands.md#flags-and-values), such as `12h`, `30d` or `2w`. gc never deletes exports without `--history`.
+- `devvm gc --history` also deletes the [exports](coding-agents.md#history) of agents' history that `devvm history export` and `devvm rm` saved, which are the only copy of a deleted VM's history, and `--older-than DURATION` keeps those newer than that [duration](command-line.md#flags-and-values), such as `12h`, `30d` or `2w`. gc never deletes exports without `--history`.
 - `devvm gc --nix-cache` also deletes the rest of the shared Nix cache. VMs download its packages again when they need them.
 - `devvm gc --orphans` also deletes what devvm keeps for VMs that their backend no longer has, such as one you deleted with `limactl delete` instead of `devvm rm`, and with it the hold their state has on their shared tools ([leftovers](space.md#leftovers-of-a-vm-deleted-outside-devvm)).
 - `devvm gc --caches` then frees devvm's share of Lima's own caches, such as its downloads of Ubuntu's cloud image, after asking, or without asking with `--force`, which it needs without a terminal ([Lima's caches](space.md#limas-caches)).

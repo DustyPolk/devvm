@@ -29,7 +29,7 @@ Then run `devvm doctor`, which checks what devvm needs on your machine and says 
 
 - **Requirements:** macOS 13 or newer, or Linux, on arm64 or x86_64, with Lima 2.0 or newer ([Lima's requirements](https://devvm.dev/docs/backends/lima/#requirements)).
 - **Tested on** Apple silicon Macs and on Linux on arm64 and x86_64, but not yet on Intel Macs.
-- [Installing](https://devvm.dev/docs/getting-started/install/) has the full list of requirements, the install script's options, and how to upgrade and uninstall devvm.
+- [Installing](https://devvm.dev/docs/getting-started/install/) has the full list of requirements and the install script's options, and [Upgrading and uninstalling](https://devvm.dev/docs/using/upgrading/) covers what comes later.
 
 ## Quick start
 
@@ -39,7 +39,7 @@ devvm
 ```
 
 1. **Go to your project.** Open a terminal and `cd` into any project folder.
-2. **Run devvm.** It shows what this folder's new VM gets, with the toolchains your project's files call for. Press Enter to make the VM, or type y to choose its toolchains, coding agents, layers, network tier and size.
+2. **Run devvm.** It shows what this folder's new VM gets, with the toolchains your project's files call for. Confirm to make the VM, or customize it to choose its toolchains, coding agents, layers, network tier and size.
 3. **Start your agent.** devvm opens a shell in the VM, at the same path as on your machine, and its prompt starts with `(devvm)`, so run `claude` there.
 
 - Running `devvm` in the folder again opens the same VM.

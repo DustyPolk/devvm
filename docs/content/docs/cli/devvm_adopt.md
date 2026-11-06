@@ -37,7 +37,7 @@ devvm adopt [VM] [flags]
 
 ## Docs
 
-[The docs page for devvm adopt](../getting-started/commands.md#a-folder-made-again) explains it in full.
+[The docs page for devvm adopt](../using/vms.md#a-folder-made-again) explains it in full.
 
 ## See also
 

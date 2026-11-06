@@ -32,7 +32,7 @@ On an existing VM, devvm ignores `--no-git-protect` and warns you. A `--clone` V
 
 ### devvm git-protect --json
 
-`devvm git-protect --json` prints the VM's protection as one JSON object with `mode`, which is `on`, `strict`, `off` or `clone`, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. With `--json` the command only shows, so devvm refuses `on`, `strict` or `off` with it.
+`devvm git-protect --json` prints the VM's protection as one JSON object with `mode`, which is `on`, `strict`, `off` or `clone`, as [output for scripts](../using/command-line.md#output-for-scripts) describes. With `--json` the command only shows, so devvm refuses `on`, `strict` or `off` with it.
 
 ```json
 {

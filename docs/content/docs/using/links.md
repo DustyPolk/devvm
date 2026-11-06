@@ -109,7 +109,7 @@ db    8000  devvm-db-71a99b1076d92c  /Users/you/code/db  Running  unpublished
 
 ### devvm link --json
 
-`devvm link --json` prints the same list as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. Each of the `links` has its `name`, its `port`, the `target` VM, the target's folder as `target_folder` and its status as `target_status`, both `""` when devvm doesn't know them, `applies`, which is `true` or `false`, and `reason`, which is why the link doesn't apply, as `APPLIES` shows it, or `""` when it does.
+`devvm link --json` prints the same list as one JSON object, as [output for scripts](command-line.md#output-for-scripts) describes. Each of the `links` has its `name`, its `port`, the `target` VM, the target's folder as `target_folder` and its status as `target_status`, both `""` when devvm doesn't know them, `applies`, which is `true` or `false`, and `reason`, which is why the link doesn't apply, as `APPLIES` shows it, or `""` when it does.
 
 ```json
 {
@@ -230,7 +230,7 @@ Because every VM in a group is on one tier, the group's links keep [the rule](#l
 
 ### devvm group --json
 
-`devvm group --json` prints the group as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. `group` is the group's name, or `""` when the VM is in none, and `members` is `[]` then. Each of the `members` has its `name` in the group, its `vm`, its `folder`, and the ports it publishes as `published`, written as `devvm link publish` lists them, or `none`.
+`devvm group --json` prints the group as one JSON object, as [output for scripts](command-line.md#output-for-scripts) describes. `group` is the group's name, or `""` when the VM is in none, and `members` is `[]` then. Each of the `members` has its `name` in the group, its `vm`, its `folder`, and the ports it publishes as `published`, written as `devvm link publish` lists them, or `none`.
 
 ```json
 {

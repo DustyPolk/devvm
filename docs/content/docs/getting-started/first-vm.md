@@ -7,112 +7,66 @@ This page assumes you've [installed devvm](install.md) and that `devvm doctor` f
 
 ## Making the VM
 
-In a project folder, run devvm:
+1. **Run devvm in a project folder.**
 
-```sh
-cd ~/some-project
-devvm
-```
+   ```sh
+   cd ~/some-project
+   devvm
+   ```
 
-The first time, devvm shows its logo, then a few questions that set its defaults for every new VM and for its base image, and it says so before the first one:
+2. **Answer the first-run questions.** The first time, devvm asks for the CPUs and memory new VMs get, the coding agents they get, and the optional extras the base image gets, such as oh-my-bash and fzf. These set devvm's defaults for every new VM, and `devvm setup` changes them later ([devvm setup](../using/settings.md#devvm-setup)).
 
-```text
-╭──────────╮
-│ ❯ devvm ╭┤
-╰─────────██
-==> These first questions set devvm's defaults for every new VM and its base image.
-```
+3. **Check the summary.** devvm shows what this folder's new VM gets: the toolchains your folder's files call for, the agents and layers you chose for new VMs, its size, its network tier and its ports.
 
-devvm asks for the CPUs and memory that new VMs get first. It shows how many CPUs and how much memory this machine has, and offers the base image's 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them. Press Enter to keep each value, or type another, and devvm asks again when this machine can't give what you typed. devvm saves what you type as the size new VMs get, which you can change later with `devvm setup` or `devvm size -g`, and when you keep both values it saves nothing ([choosing new VMs' size](../using/ports-size.md#choosing-new-vms-size)). Then it asks which coding agents new VMs get, which you can change later with `devvm setup --agents`. Last, it asks which optional extras the base image gets, such as oh-my-bash and fzf, which every VM has and which you can change later with `devvm setup --features`.
+   ```text
+   ==> This folder's new VM, devvm-some-project-71a99b1076d92c, gets:
+     toolchain node, for package.json
+     agent claude, from devvm setup
+     layers: none
+     size: 4 CPUs, 8 GiB of memory and a 100 GiB disk
+     network tier: allowlist
+     ports: all
+   Customize it? [y/N]
+   ```
 
-Then devvm shows what this folder's new VM gets and asks whether you want to change it. Your answers here are for this VM alone. Every later folder's new VM starts here, with the logo above its summary, which devvm shows only when its output goes to a terminal:
+4. **Confirm, or customize it.** Confirm to make the VM as shown, or customize it to choose its toolchains, coding agents, layers, network tier, ports and size first ([what a new VM gets](../using/images.md#what-a-new-vm-gets)). Flags such as `--agents claude` choose a part beforehand, and devvm asks nothing when the flags choose everything.
 
-```text
-==> This folder's new VM, devvm-some-project-71a99b1076d92c, gets:
-  toolchain node, for package.json
-  agent claude, from devvm setup
-  layers: none
-  size: 4 CPUs, 8 GiB of memory and a 100 GiB disk
-  network tier: allowlist
-  ports: all
-Customize it? [y/N]
-```
+   > [!TIP]
+   > Keep allowlist, the default, unless the VM needs more. The allowlist [network tier](../safety/network.md) limits the VM to the hosts you allow, and every tier keeps your secrets on your machine.
 
-The toolchains are the ones your folder's files call for, each with the file that calls for it, such as node for `package.json` or python for `pyproject.toml`. The agents and layers are the ones you chose for new VMs, and the network tier is allowlist, which reaches only the hosts you allow. Press Enter to make the VM as shown.
+5. **Wait for the base image.** The first time, devvm builds it with the extras you chose, which takes a few minutes once, and later VMs start in seconds ([images](../using/images.md)).
 
-If you type y, devvm lists what the new VM can get, under three headings: its toolchains, its coding agents and its layers, with what the summary showed already checked. Move with the arrow keys, press space to check or uncheck a row, and press enter when the list is what you want:
+   ```console
+   ==> building image base (e9f517dddef1)
+       a few minutes, and Ubuntu's cloud image to download the first time
+       (details: ~/.local/share/devvm/logs/runs/20261024-090616-83541.log)
+   ==> image base ready
+   ==> creating devvm-some-project-71a99b1076d92c from base
+   ==> starting devvm-some-project-71a99b1076d92c
+   ```
 
-```text
-Choose what devvm-some-project-71a99b1076d92c gets. Use up and down to move, space to toggle and enter to confirm.
-Toolchains
-> [x] node       for package.json
-  [ ] python
-  [ ] rust
-  [ ] go
-Coding agents, which you start in the VM's shell
-  [x] claude     from devvm setup
-  [ ] codex
-  [ ] opencode
-Layers: extra software built into the VM's image, such as docker, nix or desktop
-  [ ] desktop    an Xfce desktop, which devvm desktop opens
-  [ ] docker     Docker's engine, CLI, BuildKit and Compose
-  [ ] nix        Nix, direnv and nix-direnv
-```
-
-Check Claude Code, Codex or opencode to give the VM a coding agent. You can add toolchains and agents later with `devvm tools`. Layers come with the VM's image, and `devvm layer add` adds one later by making the VM again, keeping its home folder and settings ([adding layers to a VM](../using/images.md#adding-layers-to-a-vm)). To have a layer checked for every new VM, such as `desktop`, choose it with [`devvm setup --layers`](../using/settings.md#layers-for-new-vms).
-
-After the list, devvm lists the four network tiers, each with what it reaches, and up and down choose the VM's. The list starts on the tier the summary showed, so pressing Enter keeps it, and that tier is allowlist unless you saved another for new VMs with `devvm network -g`, such as `devvm network -g internet`. Next it asks which ports the VM forwards: every port, which the list starts on and Enter keeps, none, which you add later with `devvm ports add`, or the ports you type, such as `5173,8000-8010`. Then it asks for the VM's CPUs, memory and disk, and pressing Enter keeps each value the summary showed. The disk can't be smaller than the image's, 100 GiB for base, and it takes up only the space the VM writes. You can grow it later with `devvm size --disk`, but it never shrinks. What you type here is for this VM alone, and devvm saves none of it for new VMs. Flags such as `--tools`, `--agents`, `--layers`, `--network`, `--ports`, `--cpus`, `--memory` and `--disk` choose a part beforehand, as in `devvm --agents claude`, and each part you leave out keeps what the summary would have shown. devvm asks nothing when the flags choose everything ([what a new VM gets](../using/images.md#what-a-new-vm-gets)).
-
-> [!TIP]
-> Keep allowlist, the default, unless the VM needs more. The allowlist [network tier](../safety/network.md) limits the VM to the hosts you allow, and every tier keeps your secrets on your machine.
-
-The first time, devvm then builds the base image with the extras you chose, which takes a few minutes once:
-
-```console
-==> building image base (e9f517dddef1)
-    a few minutes, and Ubuntu's cloud image to download the first time
-    (details: ~/.local/share/devvm/logs/runs/20261024-090616-83541.log)
-==> image base ready
-==> creating devvm-some-project-71a99b1076d92c from base
-==> starting devvm-some-project-71a99b1076d92c
-```
-
-Later VMs start in seconds.
-
-```mermaid
-flowchart TD
-  run["devvm in a project folder"] --> first{{"the first time?"}}
-  first -- "yes" --> size["devvm's defaults for every new VM and base:<br>how many CPUs and how much memory, which agents, which extras?"] --> summary
-  first -- "no" --> summary["shows what this folder's VM gets"]
-  summary --> custom{{"Customize it?"}}
-  custom -- "y" --> pick["lists the toolchains, agents and layers to check,<br>then lists the network tiers to choose one,<br>then which ports it forwards,<br>then asks: CPUs, memory and disk?"] --> built
-  custom -- "Enter" --> built{{"base built?"}}
-  built -- "no, the first time" --> build["builds base, a few minutes"] --> copy
-  built -- "yes" --> copy["copies the image into a new VM"]
-  copy --> start["starts it"] --> shell["opens a shell in ~/some-project"]
-```
+Then devvm opens a shell in the VM at the same path, `~/some-project`, with `(devvm)` at the start of the prompt.
 
 ## Claude Code's login
 
-Claude Code in a VM needs your Claude login, which you make once, from a terminal on this machine rather than the VM's shell, in the project folder whose VM has Claude Code:
+If the VM has Claude Code, log it in to your Claude account once. Run this in a terminal on this machine, not the VM's shell, in the project folder:
 
 ```sh
-cd ~/some-project
-devvm agent login claude   # open the address it shows in a browser, approve, then paste the code the browser shows
+devvm agent login claude
 ```
 
-devvm keeps the login on this machine, so every VM with Claude Code gets it and this machine never needs Claude Code. With `--setup-token`, devvm gets a long-lived Claude Code token instead ([Claude Code login](../using/coding-agents.md#claude-code-login)). The VM gets a placeholder, whatever its network tier, and the proxy on your machine puts the real login into Claude's requests. Every agent gets its settings, skills, MCP servers and logins from devvm's agent store, but never your history. When you already use an agent on this machine, `devvm agent import` copies its settings and logins into the store once ([devvm's agent store](../using/coding-agents.md#devvms-agent-store)).
+Open the address it shows in a browser, approve the login, and paste the code the browser shows. devvm keeps the login on this machine for every VM with Claude Code, and the VMs get only a placeholder ([Claude Code login](../using/coding-agents.md#claude-code-login)). If you already use an agent on this machine, `devvm agent import` copies its settings and logins into devvm's agent store instead ([devvm's agent store](../using/coding-agents.md#devvms-agent-store)).
 
 ## Starting the agent
 
-devvm opens a shell in the VM at the same path, `~/some-project`, with `(devvm)` at the start of the prompt, so you can tell it from your machine's shells. The agent runs where you start it, so start it in this shell:
+Start the agent in the VM's shell, so it runs in the VM:
 
 ```console
 ~/some-project $ devvm
 (devvm) ~/some-project $ claude
 ```
 
-Run `claude`, `codex` or `opencode`, whichever you checked. devvm installs the agent in the VM, so you never install it on this machine. In the VM the agent sees only your project folder, and your agents' settings from devvm's agent store read-only, so whatever it runs stays in the VM.
+Run `claude`, `codex` or `opencode`, whichever the VM has ([running an agent](../using/coding-agents.md#running-an-agent)).
 
 ## What's in the VM
 
@@ -124,7 +78,7 @@ Run `claude`, `codex` or `opencode`, whichever you checked. devvm installs the a
 
 ## Working on a clone instead
 
-To keep the VM out of your working tree and `.git` entirely, give it its own clone of the repo. You choose this when the VM is made:
+To keep the VM out of your working tree and `.git` entirely, make it with its own clone of the repo:
 
 ```sh
 devvm --clone                 # a VM with its own clone of your branches
@@ -136,22 +90,16 @@ Use it for an agent working unattended, a repo you don't trust, or on Linux host
 
 ## Coming back to it
 
-The VM belongs to its folder:
+The VM belongs to its folder, and its subfolders use it too ([a subfolder](../using/vms.md#a-subfolder)):
 
 ```sh
 devvm                   # a shell in this folder's VM, started if it's stopped
-devvm tools             # check or uncheck its toolchains and agents in the same list
-devvm tools add claude  # add Claude Code to this folder's VM without the list
+devvm tools             # choose its toolchains and agents
+devvm tools add claude  # add Claude Code to this folder's VM
 devvm code              # open it in VS Code
 devvm stop              # stop it
 devvm ls                # list every VM
 devvm rm                # delete it after asking, saving its agents' history first
 ```
 
-`devvm tools` shows the VM's layers too, greyed out, because a VM keeps the layers it was made with, and `devvm layer add` and `devvm layer rm` make the VM again to add or take out one ([adding layers to a VM](../using/images.md#adding-layers-to-a-vm)). When you add an agent to a running VM, devvm asks before it restarts the VM to mount the agent's config.
-
-Each question devvm asks here has a flag that answers it beforehand, such as `--network allowlist` or `devvm rm --force`, and `--no-input` makes devvm ask nothing at all ([questions devvm asks](commands.md#questions-devvm-asks)).
-
-The VM also covers the folders inside the project folder, because it mounts the whole folder. When you run `devvm` in a subfolder such as `~/some-project/src`, which has no VM of its own, devvm opens the project's VM there, with the shell in `~/some-project/src`, and says which VM it opened. `devvm --here` makes the subfolder's own VM instead, and once the subfolder has one, devvm always opens that VM there. A subfolder that is a git repo of its own counts as a separate project, so there devvm makes a new VM for it, and `devvm --parent` opens the project's VM there instead ([a subfolder](commands.md#a-subfolder)).
-
-[Everyday commands](commands.md) lists the rest. Before you let an agent loose in the VM, read [staying safe](../safety/_index.md#the-habits).
+[Everyday commands](commands.md) lists the rest, and [managing VMs](../using/vms.md) covers restarting, deleting and moving VMs. Before you let an agent loose in the VM, read [staying safe](../safety/_index.md#the-habits).

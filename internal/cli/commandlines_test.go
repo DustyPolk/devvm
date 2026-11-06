@@ -68,13 +68,13 @@ func TestCommandLines(t *testing.T) {
 	// command lines written to show what devvm refuses, each with why
 	refused := map[string]string{
 		"--nope":             "Contributing's testscript example of an unknown flag",
-		"ls --cpus 4":        "the Commands page's example of a new VM's flag on another command",
-		"stpo":               "the Commands page's did-you-mean example", //nolint:misspell // the typo devvm corrects
-		"stpo --help":        "the Commands page's did-you-mean example", //nolint:misspell // the typo devvm corrects
-		"help stpo":          "the Commands page's did-you-mean example", //nolint:misspell // the typo devvm corrects
-		"node":               "the Commands page's example of a toolchain's name pointing to --tools",
-		"node+claude":        "the Commands page's example of joined names pointing to their flags",
-		"network --json off": "the Commands page's example of a value refused with --json",
+		"ls --cpus 4":        "the command line page'sexample of a new VM's flag on another command",
+		"stpo":               "the command line page'sdid-you-mean example", //nolint:misspell // the typo devvm corrects
+		"stpo --help":        "the command line page'sdid-you-mean example", //nolint:misspell // the typo devvm corrects
+		"help stpo":          "the command line page'sdid-you-mean example", //nolint:misspell // the typo devvm corrects
+		"node":               "the command line page'sexample of a toolchain's name pointing to --tools",
+		"node+claude":        "the command line page'sexample of joined names pointing to their flags",
+		"network --json off": "the command line page'sexample of a value refused with --json",
 		"layer new docker":   "Images' example of a built-in layer's name refused",
 		"ports 5173 8080":    "Troubleshooting's example of a usage error",
 		"allow":              "the cli skill's example of a command in the wrong place",

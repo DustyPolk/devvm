@@ -43,7 +43,7 @@ devvm rm [VM] [flags]
 
 ## Docs
 
-[The docs page for devvm rm](../getting-started/commands.md#deleting-a-vm) explains it in full.
+[The docs page for devvm rm](../using/vms.md#deleting-a-vm) explains it in full.
 
 ## See also
 

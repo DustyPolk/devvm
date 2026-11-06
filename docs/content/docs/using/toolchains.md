@@ -43,7 +43,7 @@ go brings the newest Go release, and devvm turns Go's telemetry off in the VM.
 
 ## Nix projects
 
-A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), which brings Nix, direnv and nix-direnv into its VM. For a folder with `flake.nix`, `shell.nix` or `devenv.nix` at its top level, or with a `default.nix` that makes a shell with `mkShell`, the list devvm shows when you customize a new VM names that file in the `nix` row, and you check it there. A layer isn't checked by default, so a VM made as its summary shows, or without a terminal, gets it only with `--layers nix`, as in `devvm --layers nix` in a folder with `package.json` and `flake.nix`, which gives node on the `nix` layer.
+A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), which brings Nix, direnv and nix-direnv into its VM. For a folder with `flake.nix`, `shell.nix` or `devenv.nix` at its top level, or with a `default.nix` that makes a shell with `mkShell`, the list devvm shows when you customize a new VM names that file in the `nix` row, and you choose it there. A layer isn't chosen by default, so a VM made as its summary shows, or without a terminal, gets it only with `--layers nix`, as in `devvm --layers nix` in a folder with `package.json` and `flake.nix`, which gives node on the `nix` layer.
 
 - **Dev shells.** Put `use flake` (or `use nix` for a `shell.nix`) in the project's `.envrc` and run `direnv allow` in the VM once. From then on, each shell that changes into the folder loads the dev shell, and leaving the folder unloads it. This works in your terminal and in the terminals of editors connected over SSH.
 - **The flake's tools come first.** While the dev shell is loaded, its tools are ahead of the shared tools on the `PATH`, so a flake's `node` wins over the shared node, and the shared tools come back when you leave the folder.
@@ -112,7 +112,7 @@ Every toolchain runs on `base` from Ubuntu's own image, and on an Alpine-based i
 
 A new VM gets the shared tools chosen when devvm makes it, the toolchains and the [coding agents](coding-agents.md#supported-agents), and keeps those versions. On each launch, devvm warns when there are newer ones and names `devvm update`, which moves the VM to them, and also makes the VM again when its image has changed, after asking ([outdated VMs](images.md#outdated-vms)).
 
-In a terminal, `devvm tools` shows the same list as for a new VM, with this folder's VM's toolchains and agents checked and its layers greyed out, because they're built into the VM's image. The Layers heading names `devvm layer add` and `devvm layer rm`, which change a VM's layers by making it again ([adding layers to a VM](images.md#adding-layers-to-a-vm)). Check and uncheck the tools, and press enter: devvm adds and takes out what changed, as `devvm tools add` and `devvm tools rm` do, then opens a shell in the VM. When a new agent's config folders need the running VM to start again, devvm asks first. When nothing changed, devvm says so and opens nothing.
+In a terminal, `devvm tools` shows the same list as for a new VM, with this folder's VM's toolchains and agents already chosen and its layers greyed out, because they're built into the VM's image, which keeps them until `devvm layer add` or `devvm layer rm` makes it again. The Layers heading names `devvm layer add` and `devvm layer rm`, which change a VM's layers by making it again ([adding layers to a VM](images.md#adding-layers-to-a-vm)). Choose the tools and confirm, and devvm adds and takes out what changed, as `devvm tools add` and `devvm tools rm` do, then opens a shell in the VM. When a new agent's config folders need the running VM to start again, devvm asks first. When nothing changed, devvm says so and opens nothing.
 
 Without a terminal, or with `--no-input` or `--json`, `devvm tools` shows the tools of this folder's VM in a table, one row per tool, with node's pnpm and bun and python's uv in rows of their own:
 
@@ -127,7 +127,7 @@ The table changes nothing and starts no VM. devvm reads the tools lock as it is,
 
 ### devvm tools --json
 
-`devvm tools --json` prints the same table as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. Each of the `tools` has the tool's name and the VM's version. A tool that the lock has another build of also has `newer`, which is the lock's version, and `newer_built`, which says whether that version is built.
+`devvm tools --json` prints the same table as one JSON object, as [output for scripts](command-line.md#output-for-scripts) describes. Each of the `tools` has the tool's name and the VM's version. A tool that the lock has another build of also has `newer`, which is the lock's version, and `newer_built`, which says whether that version is built.
 
 ```json
 {
@@ -149,7 +149,7 @@ The table changes nothing and starts no VM. devvm reads the tools lock as it is,
 
 The commands below change the VM's tools from a script or the command line. They don't change the VM's disk, because its tools are mounted, so a change takes effect when devvm then opens a shell in the VM. Each takes the tools' names as separate words, as in `devvm tools add python claude`, and devvm refuses names joined with `+` or a comma.
 
-- `devvm tools add TOOL...` builds the tools that the share lacks and adds them to the VM. A new agent's config folders are mounted too, which needs the VM to start again, so for a running VM devvm asks before restarting it ([adding to a VM](../getting-started/commands.md#adding-to-a-vm)).
+- `devvm tools add TOOL...` builds the tools that the share lacks, and they join the VM's list at once. It says which of the tools the VM has already and leaves those as they are. A new agent's config folders are mounted too, which needs the VM to start again. A stopped VM gets them as it starts, and for a running VM devvm asks before restarting it, because anything running in it stops ([restarting](vms.md#restarting-and-stopping)). If you answer no, there's no terminal or you pass `--no-input`, the VM gets them at its next start.
 - `devvm tools rm TOOL...` takes tools out. What the VM installed itself, such as other versions or global packages, stays.
 - `devvm tools update` checks upstream for newer versions, builds what's missing, and moves the VM to them. When the VM already has the newest versions, it builds any of them that are missing. It changes only the shared tools, and never makes the VM again.
 - `devvm update` does the same first, without asking, and then asks to make the VM again only when the VM's image has changed ([outdated VMs](images.md#outdated-vms)), or its `devcontainer.json` has ([updating a VM from the file](devcontainer.md#updating-a-vm-from-the-file)).

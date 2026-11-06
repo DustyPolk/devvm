@@ -36,7 +36,7 @@ devvm completion SHELL [flags]
 
 ## Docs
 
-[The docs page for devvm completion](../getting-started/commands.md#shell-completion) explains it in full.
+[The docs page for devvm completion](../using/command-line.md#shell-completion) explains it in full.
 
 ## See also
 

@@ -1,6 +1,6 @@
 ---
 title: Known limits
-weight: 15
+weight: 18
 ---
 
 These are the things devvm can't do, everywhere, on Linux hosts and on Intel Macs.

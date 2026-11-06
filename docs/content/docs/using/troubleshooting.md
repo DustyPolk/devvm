@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-weight: 14
+weight: 17
 ---
 
 Each section below starts with what you see, then says what to do, with a link to the details.
@@ -173,21 +173,21 @@ A Lima VM that doesn't answer over ssh within a minute of starting is stopped. R
 
 ## A VM whose creation didn't finish
 
-When devvm stops after it made a VM but before the VM was ready, such as when you press Ctrl+C at the wrong moment, devvm never starts that VM. The VM never opened a shell, so nothing of yours is in it. In a terminal, devvm asks whether to delete the VM and make it again, and the answer is no unless you type y. Without a terminal, with `--no-input` or when you answer no, devvm keeps the VM and says so, and you run `devvm rm` to delete it, then `devvm` to make it again.
+When devvm stops after it made a VM but before the VM was ready, such as when you press Ctrl+C at the wrong moment, devvm never starts that VM. The VM never opened a shell, so nothing of yours is in it. In a terminal, devvm asks whether to delete the VM and make it again, with no as the default. Without a terminal, with `--no-input` or when you answer no, devvm keeps the VM and says so, and you run `devvm rm` to delete it, then `devvm` to make it again.
 
 While another devvm is still making the folder's VM, such as one waiting for your answers in another terminal, `devvm` and `devvm rm` in that folder refuse at once and say so. Finish or stop the other devvm, then run the command again: once the VM is made, `devvm` opens it.
 
 ## The folder is gone
 
-When you delete or move a project folder, its VM stays and keeps its disk, and `devvm ls` writes `(gone)` after its folder. To keep the VM, move the folder back to its path. To delete it, run `devvm rm VM` with the name that `devvm ls` lists, in any folder. devvm asks first, and when the VM is stopped and has an agent, it needs `--no-export`, because starting the VM to export the history would make the folder again ([a VM whose folder is gone](../getting-started/commands.md#a-vm-whose-folder-is-gone)).
+When you delete or move a project folder, its VM stays and keeps its disk, and `devvm ls` writes `(gone)` after its folder. To keep the VM, move the folder back to its path. To delete it, run `devvm rm VM` with the name that `devvm ls` lists, in any folder. devvm asks first, and when the VM is stopped and has an agent, it needs `--no-export`, because starting the VM to export the history would make the folder again ([a VM whose folder is gone](vms.md#a-vm-whose-folder-is-gone)).
 
 ## The folder is on a disk that isn't connected
 
-When a project folder is on an external disk, a USB stick or a network share that isn't connected, `devvm ls` writes `(not connected)` after its folder, and `devvm space` names the VM. Connect the disk and the VM works as before. If you mean to delete the VM, run `devvm rm VM` in a terminal and answer yes, because devvm refuses without one, even with `--force`, as the disk may still hold the project's work ([a folder on a disk that isn't connected](../getting-started/commands.md#a-folder-on-a-disk-that-isnt-connected)).
+When a project folder is on an external disk, a USB stick or a network share that isn't connected, `devvm ls` writes `(not connected)` after its folder, and `devvm space` names the VM. Connect the disk and the VM works as before. If you mean to delete the VM, run `devvm rm VM` in a terminal and answer yes, because devvm refuses without one, even with `--force`, as the disk may still hold the project's work ([a folder on a disk that isn't connected](vms.md#a-folder-on-a-disk-that-isnt-connected)).
 
 ## The folder was made again
 
-When you delete a project folder and make a new one at the same path, such as by cloning another repo there, devvm refuses the old folder's VM. Run `devvm rm` to delete the old VM, or `devvm adopt` to give it to the new folder ([a folder made again](../getting-started/commands.md#a-folder-made-again)).
+When you delete a project folder and make a new one at the same path, such as by cloning another repo there, devvm refuses the old folder's VM. Run `devvm rm` to delete the old VM, or `devvm adopt` to give it to the new folder ([a folder made again](vms.md#a-folder-made-again)).
 
 ## An outdated VM, or newer shared tools
 

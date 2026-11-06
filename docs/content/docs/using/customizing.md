@@ -13,7 +13,7 @@ $EDITOR ~/.config/devvm/layers/mailpit.sh
 devvm --layers mailpit     # a new VM with your layer; or devvm build mailpit
 ```
 
-When you customize a new VM, its list also shows your layers under Layers, so you can check `mailpit` there instead of giving `--layers` ([what a new VM gets](images.md#what-a-new-vm-gets)). To give every new VM your layer, choose it with `devvm setup --layers mailpit`, or add it to the `layers` key in `config.toml` ([layers for new VMs](settings.md#layers-for-new-vms)). When you delete a layer's script that you chose there, new VMs are made without it, and devvm warns you.
+When you customize a new VM, its list also shows your layers under Layers, so you can choose `mailpit` there instead of giving `--layers` ([what a new VM gets](images.md#what-a-new-vm-gets)). To give every new VM your layer, choose it with `devvm setup --layers mailpit`, or add it to the `layers` key in `config.toml` ([layers for new VMs](settings.md#layers-for-new-vms)). When you delete a layer's script that you chose there, new VMs are made without it, and devvm warns you.
 
 A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, that bash runs once as the VM's user, who has sudo, in an image on top of its parent. `devvm layer new NAME` writes a starter script, and also `NAME.policy` next to it unless that file exists. It refuses to overwrite a script that exists.
 
@@ -68,7 +68,7 @@ The desktop that [`devvm desktop`](desktop.md) opens isn't a feature but a [buil
 
 ### Choosing features
 
-On its first run, devvm asks which features `base` gets, after the size and coding agents that new VMs get and before it shows what the folder's new VM gets. devvm build and devvm rebuild ask too, until the features are chosen. The list starts with every feature chosen. Up and down (or `k` and `j`) move, space toggles, and Enter confirms. Without a terminal, devvm chooses every feature. devvm prints the choice and saves it, in the order the features run. When `features` in [`config.toml`](settings.md#configtoml) chooses them, devvm doesn't ask.
+On its first run, devvm asks which features `base` gets, after the size and coding agents that new VMs get and before it shows what the folder's new VM gets. devvm build and devvm rebuild ask too, until the features are chosen. The list starts with every feature chosen, and you choose in it as in [any of devvm's lists](images.md#choosing-in-a-list). Without a terminal, devvm chooses every feature. devvm prints the choice and saves it, in the order the features run. When `features` in [`config.toml`](settings.md#configtoml) chooses them, devvm doesn't ask.
 
 To change the choice:
 
@@ -92,4 +92,4 @@ $EDITOR ~/.config/devvm/layers/dotfiles.sh
 devvm setup --layers dotfiles      # every new VM gets it
 ```
 
-A new VM's summary then shows `dotfiles`, and when you customize the VM, its list shows `dotfiles` under Layers, checked because devvm setup chose it, so you can uncheck it for that VM ([layers for new VMs](settings.md#layers-for-new-vms)). A layer is an image built on top of base, so the images that have it are named with it, such as `dotfiles` or `docker+dotfiles`, and editing its script rebuilds only those images, never base.
+A new VM's summary then shows `dotfiles`, and when you customize the VM, its list shows `dotfiles` under Layers, already chosen because devvm setup chose it, so you can leave it out of that VM ([layers for new VMs](settings.md#layers-for-new-vms)). A layer is an image built on top of base, so the images that have it are named with it, such as `dotfiles` or `docker+dotfiles`, and editing its script rebuilds only those images, never base.

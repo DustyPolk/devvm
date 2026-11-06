@@ -28,7 +28,7 @@ devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's sh
 
 ### devvm space --json
 
-`devvm space --json` prints both tables as one JSON object, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes, and devvm still says on stderr what it says without `--json`. `devvm` has a row of the first table each, with sizes in bytes:
+`devvm space --json` prints both tables as one JSON object, as [output for scripts](command-line.md#output-for-scripts) describes, and devvm still says on stderr what it says without `--json`. `devvm` has a row of the first table each, with sizes in bytes:
 
 | Field | |
 | --- | --- |
@@ -153,9 +153,9 @@ A VM can also be the other way around: the backend has it, with devvm's label, b
 
 ### VMs whose folder is gone
 
-A VM whose project folder you deleted or moved still takes its disk, and it isn't leftover state, because its backend still has it and it may hold that project's work. `devvm space` names each VM whose backend has it and whose folder is gone, with that folder, and counts it among the `VMs`. Neither `devvm gc` nor retention ever deletes one. `devvm rm VM` deletes it after asking, exporting its agents' history first ([a VM whose folder is gone](../getting-started/commands.md#a-vm-whose-folder-is-gone)).
+A VM whose project folder you deleted or moved still takes its disk, and it isn't leftover state, because its backend still has it and it may hold that project's work. `devvm space` names each VM whose backend has it and whose folder is gone, with that folder, and counts it among the `VMs`. Neither `devvm gc` nor retention ever deletes one. `devvm rm VM` deletes it after asking, exporting its agents' history first ([a VM whose folder is gone](vms.md#a-vm-whose-folder-is-gone)).
 
-`devvm space` also names each VM whose folder is on a disk that isn't connected, with that folder, and counts it among the `VMs` too. Connect the disk to use the VM again. `devvm rm VM` deletes one only after you confirm in a terminal, and `--force` never answers that question ([a folder on a disk that isn't connected](../getting-started/commands.md#a-folder-on-a-disk-that-isnt-connected)).
+`devvm space` also names each VM whose folder is on a disk that isn't connected, with that folder, and counts it among the `VMs` too. Connect the disk to use the VM again. `devvm rm VM` deletes one only after you confirm in a terminal, and `--force` never answers that question ([a folder on a disk that isn't connected](vms.md#a-folder-on-a-disk-that-isnt-connected)).
 
 ### What devvm doctor finds in `vms/`
 
@@ -184,6 +184,6 @@ devvm also changes a few things outside its own folders:
 - **The Keychain:** on macOS, the [secrets](../safety/network.md#saving-and-binding-secrets) you save are Keychain items under the service `devvm`. `devvm secret rm` deletes one.
 - **`~/.ssh/config`:** when you let it, devvm adds the line `Include ~/.local/share/devvm/ssh_config` so that ssh reaches VMs by name ([SSH and editors](ssh.md#ssh-access-by-name)).
 - **Time Machine:** on macOS, devvm keeps each VM's `run/ca/` out of Time Machine's backups, because a copy of a key elsewhere could impersonate any site to that VM.
-- **devvm itself:** the install script puts each version in `~/.local/lib/devvm/<version>` and links `~/.local/bin/devvm` to it. A newer install removes older versions that nothing runs ([upgrading](../getting-started/install.md#upgrading)). Homebrew keeps devvm in its own folders.
+- **devvm itself:** the install script puts each version in `~/.local/lib/devvm/<version>` and links `~/.local/bin/devvm` to it. A newer install removes older versions that nothing runs ([upgrading](upgrading.md#upgrading)). Homebrew keeps devvm in its own folders.
 
-[Uninstalling](../getting-started/install.md#uninstalling) removes all of it.
+[Uninstalling](upgrading.md#uninstalling) removes all of it.

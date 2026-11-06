@@ -521,7 +521,7 @@ Every command that shows or lists something takes `--json`, which `jsonFlag` in 
 
 The root command's `PersistentPreRun` calls `u.DataOnly()` for any command given `--json`, so `Say`, `Info` and `LogNote` print to stderr from then on, and stdout gets only the JSON. A settings command that also changes its setting with a value wraps its `Args` in `showsOnly`, which refuses the value with `--json` (`json_shows_only`) before anything else runs.
 
-`TestJSONShapes` in `internal/cli/json_test.go` holds each command's shape, a `path: type` line for each field of a sample with every field set. A field renamed, removed or given another type fails it. Shapes only gain fields, so a new field goes into the sample and the test, and any other change raises `jsonVersion`. A new command that shows or lists something gets `--json`, a row in that test, a CLI test and a section on its page with an example, which [output for scripts](../getting-started/commands.md#output-for-scripts) links to.
+`TestJSONShapes` in `internal/cli/json_test.go` holds each command's shape, a `path: type` line for each field of a sample with every field set. A field renamed, removed or given another type fails it. Shapes only gain fields, so a new field goes into the sample and the test, and any other change raises `jsonVersion`. A new command that shows or lists something gets `--json`, a row in that test, a CLI test and a section on its page with an example, which [output for scripts](../using/command-line.md#output-for-scripts) links to.
 
 ## Writing docs
 

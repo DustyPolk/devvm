@@ -3,7 +3,7 @@ title: Installing and updating
 weight: 2
 ---
 
-This page explains what devvm's install script downloads and checks, what `devvm doctor --json` reports, where devvm keeps its own files, what happens to older versions when you upgrade, and how `devvm upgrade` checks and installs a release. [Installing](../getting-started/install.md) covers the commands you run.
+This page explains what devvm's install script downloads and checks, what `devvm doctor` checks and what `devvm doctor --json` reports, where devvm keeps its own files, what happens to older versions when you upgrade, and how `devvm upgrade` checks and installs a release. [Installing](../getting-started/install.md) and [Upgrading and uninstalling](../using/upgrading.md) cover the commands you run.
 
 ## The install script
 
@@ -36,9 +36,22 @@ The release's `SHA256SUMS` is signed in `SHA256SUMS.minisig`, made with the main
 
 The signature catches an archive or a `SHA256SUMS` that someone replaced, which the checksum alone can't. It can't catch a release that was replaced whole, because `curl … | bash` runs the `install.sh` from that same release, key included, so the one-liner trusts GitHub's release files. Homebrew doesn't trust them, because the formula's checksum lives in a repository of its own, and a replaced GitHub release wouldn't match it. You can also download `install.sh` and read it before you run it.
 
+## What devvm doctor checks
+
+`devvm doctor` checks what [Lima](../backends/lima.md#requirements), devvm's backend, needs. It lists everything that's missing, each with what to do, which is the command that installs it when there's one to run. It then lists what Lima can do, which it calls Lima's [features](backends.md#features), each as `native`, `emulated`, `unreviewed` for an emulation that devvm refuses until it's reviewed, or `none`. It also says whether Docker is installed, which only `--from` with [an image only Docker has](../using/from.md#images-only-docker-has) needs. When `HTTPS_PROXY` is set and `~/.config/devvm/ca` has no CA certificates, it says that a proxy that inspects TLS needs its CA there ([a company's CA](../using/settings.md#a-companys-ca)).
+
+It warns in these cases:
+
+- another devvm comes first on your `PATH` ([one devvm](../using/upgrading.md#one-devvm)),
+- the disk that devvm's images and VMs go on has less free space than building base needs ([free space](../using/ports-size.md#free-space)),
+- this machine has less than the 8 GiB of memory or the 4 CPUs that devvm recommends ([requirements](../getting-started/install.md#requirements)),
+- a line of your policy files isn't a rule, which VMs' proxies skip ([rules](../safety/network.md#rules)).
+
+Then it says devvm has everything it needs, or it fails. The warnings never make it fail, so a small machine with everything installed passes.
+
 ## devvm doctor --json
 
-`devvm doctor --json` prints what doctor finds as one JSON object, for scripts such as the install script, as [output for scripts](../getting-started/commands.md#output-for-scripts) describes. It prints nothing else, because its problems and warnings are in the JSON, and it succeeds whatever is missing. A failure that stops the check, such as a data folder devvm can't read, still goes to standard error and makes it fail.
+`devvm doctor --json` prints what doctor finds as one JSON object, for scripts such as the install script, as [output for scripts](../using/command-line.md#output-for-scripts) describes. It prints nothing else, because its problems and warnings are in the JSON, and it succeeds whatever is missing. A failure that stops the check, such as a data folder devvm can't read, still goes to standard error and makes it fail.
 
 - `backend` is the backend that doctor checked, `lima`, which every new VM gets.
 - `problems` has what that backend is missing, each with its `key`, the `fix` command, and the `message` that `devvm doctor` prints for it. The `fix` is a command whose words are separated by spaces, without shell syntax, or `null` when there's none to run, for example when virtualization is turned off in the firmware.

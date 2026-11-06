@@ -41,7 +41,7 @@ devvm upgrade [flags]
 
 ## Docs
 
-[The docs page for devvm upgrade](../getting-started/install.md#upgrading) explains it in full.
+[The docs page for devvm upgrade](../using/upgrading.md#upgrading) explains it in full.
 
 ## See also
 

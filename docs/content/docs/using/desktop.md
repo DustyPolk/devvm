@@ -16,7 +16,7 @@ devvm --layers docker,desktop   # the desktop on top of the docker layer
 
 devvm builds the `desktop` image the first time a VM needs it, and VMs that choose it share that image. `--layers` is the exact list of the VM's layers, so name every layer you want the VM to have.
 
-To give every new VM the desktop, choose it with `devvm setup --layers desktop`, or add it to the layers you already chose, such as `devvm setup --layers docker,desktop`. New VMs then get it unless you uncheck it in the list or give `--layers` without it ([layers for new VMs](settings.md#layers-for-new-vms)). VMs that exist keep the layers they were made with.
+To give every new VM the desktop, choose it with `devvm setup --layers desktop`, or add it to the layers you already chose, such as `devvm setup --layers docker,desktop`. New VMs then get it unless you leave it out when you customize them or give `--layers` without it ([layers for new VMs](settings.md#layers-for-new-vms)). VMs that exist keep the layers they were made with.
 
 A VM made without the desktop has none, and `devvm desktop` says so. To give it one, run `devvm layer add desktop`, which makes the VM again from an image with the desktop on top of its own layers, such as `docker+desktop`. The VM keeps its home folder, the project folder and its settings, and loses the rest of its disk, such as the packages you installed, so devvm asks first ([adding layers to a VM](images.md#adding-layers-to-a-vm)). `devvm layer rm desktop` takes the desktop out again in the same way ([taking layers out of a VM](images.md#taking-layers-out-of-a-vm)).
 

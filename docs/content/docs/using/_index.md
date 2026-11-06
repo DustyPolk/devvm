@@ -18,5 +18,8 @@ These pages cover what you change as you work, such as the images VMs are made f
 - [A VM's desktop](desktop.md): the `desktop` layer, and opening a VM's desktop in Screen Sharing with `devvm desktop`.
 - [Starting from a container image](from.md): `--from`, which starts base from `node:24`, `alpine:3` or your own image.
 - [What devvm keeps on this machine](space.md): everything devvm, its tools and its backends keep outside your project folders, and how each is cleaned up.
+- [Managing VMs](vms.md): restarting, stopping, deleting and listing VMs, and what devvm does in a subfolder or when a project folder is made again, moved, deleted or on a disk that isn't connected.
+- [The command line](command-line.md): the help, flags and their values, the questions devvm asks and what answers them, `--json` for scripts, and shell completion.
+- [Upgrading and uninstalling](upgrading.md): `devvm upgrade`, switching between Homebrew and the install script, and removing devvm with everything it keeps.
 - [Troubleshooting](troubleshooting.md): what to do when a command or a build fails, a request is blocked, or a VM won't start.
 - [Known limits](limits.md): what devvm can't do, in one list.

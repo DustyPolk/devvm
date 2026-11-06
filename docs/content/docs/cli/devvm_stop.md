@@ -36,7 +36,7 @@ devvm stop [flags]
 
 ## Docs
 
-[The docs page for devvm stop](../getting-started/commands.md#restarting-and-stopping) explains it in full.
+[The docs page for devvm stop](../using/vms.md#restarting-and-stopping) explains it in full.
 
 ## See also
 

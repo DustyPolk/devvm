@@ -36,7 +36,7 @@ devvm ls [flags]
 
 ## Docs
 
-[The docs page for devvm ls](../getting-started/commands.md#listing-vms) explains it in full.
+[The docs page for devvm ls](../using/vms.md#listing-vms) explains it in full.
 
 ## See also
 
