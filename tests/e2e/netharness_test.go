@@ -29,8 +29,8 @@ import (
 )
 
 // The network and nix sections' helpers: devvm with an environment of
-// its own, a VM's output searched in the VM, JSON and files read as
-// tests/e2e.sh's grep and jget did, and this machine's HTTP requests.
+// its own, a VM's output searched in the VM, JSON and files read, and
+// this machine's HTTP requests.
 
 // python3Tool is a host command the network section uses beyond
 // baseTools: python3, for the fake token endpoints and the LAN server.
@@ -180,7 +180,7 @@ func modeOf(f string) string {
 }
 
 // jsonAt is the value at key (dotted: tokens.account_id) of the JSON
-// text b, as tests/e2e.sh's jget printed it: a string as it is, None for
+// text b: a string as it is, None for
 // null, anything else as JSON; nothing when there's no such key.
 func jsonAt(b []byte, key string) string {
 	var v any
@@ -213,7 +213,7 @@ func jsonFileAt(f, key string) string {
 }
 
 // pemLine is line n of the file f, from 1: a certificate's or key's base64,
-// which a check looks for elsewhere (tests/e2e.sh's sed -n 2p).
+// which a check looks for elsewhere.
 func pemLine(f string, n int) string {
 	lines := strings.Split(readText(f), "\n")
 	if n < 1 || n > len(lines) {
@@ -388,8 +388,7 @@ func loopbackOnly(s *S, port int) error {
 	return nil
 }
 
-// The network and nix sections' readers, as tests/e2e.sh's grep and jget
-// read the same text.
+// The network and nix sections' readers.
 func TestHarnessNetReaders(t *testing.T) {
 	b := []byte(`{"tokens": {"account_id": "acct", "n": 3}, "none": null, "s": "x"}`)
 	for key, want := range map[string]string{"tokens.account_id": "acct", "tokens.n": "3", "none": "None", "s": "x", "tokens.no": "", "s.x": ""} {

@@ -17,8 +17,7 @@ import (
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
-// Paths are the sandbox's folders and files that checks look at, as
-// tests/e2e.sh names them.
+// Paths are the sandbox's folders and files that checks look at.
 type Paths struct {
 	Devvm    string // devvm's data folder ($XDG_DATA_HOME/devvm)
 	Images   string // the image records, one folder per key
@@ -77,7 +76,7 @@ func (p Paths) VMDir(vm string) string {
 	return filepath.Join(p.Devvm, "run", "builds", vm)
 }
 
-// State is a VM's vm.json as tests/e2e.sh's vm_state shows it: each
+// State is a VM's vm.json as the CLI tests' vm_state shows it: each
 // field dotted (net.tier), a list of strings space-separated, a list of
 // objects by index (links.links.0.name), strings as they are and anything
 // else as JSON. Empty for a VM without one.
@@ -173,7 +172,7 @@ func (p Paths) Record(key, field string) string {
 }
 
 // ToolVersion is the tool's version in the shared tools' lock, its
-// [[tools.TOOL]] entry's version (tests/e2e.sh's lockv): nothing without
+// [[tools.TOOL]] entry's version: nothing without
 // one.
 func (p Paths) ToolVersion(tool string) string {
 	b, err := os.ReadFile(p.ToolLock)
@@ -234,7 +233,7 @@ func (s *S) Launch(dir, input string, args ...string) (string, Res, error) {
 }
 
 // Reuse is Launch in the run's project folder name, which it makes, for a
-// VM whose configuration its folder's name fixes. With -e2e.reuse, the
+// VM whose configuration its folder's name fixes. With --reuse, the
 // folder and its VM stay for the next run, which takes the VM as it
 // finds it when it's running: iterating on one check doesn't launch it
 // again. Without it, it's NewProject and Launch.

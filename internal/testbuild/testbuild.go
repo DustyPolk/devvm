@@ -1,5 +1,5 @@
 // Package testbuild says whether this devvm is a test build: one the tests
-// make (tests/e2e.sh, the CLI tests) with
+// make (tests/e2e, the CLI tests) with
 //
 //	-ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes"
 //

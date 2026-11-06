@@ -18,12 +18,12 @@ import (
 // backend's Exec runs reaches the guest as given: arguments with spaces,
 // quotes, $, newlines and globs, a folder with a space, and input. The
 // backend is the one the VM's state records, so one test covers every
-// backend. tests/e2e.sh runs it on a project VM it made, named by
+// backend. tests/e2e runs it on a project VM it made, named by
 // DEVVM_E2E_VM, in its sandbox; otherwise it's skipped.
 func TestE2EExecQuoting(t *testing.T) {
 	name := os.Getenv("DEVVM_E2E_VM")
 	if name == "" {
-		t.Skip("tests/e2e.sh runs it, on a VM of its own")
+		t.Skip("tests/e2e runs it, on a VM of its own")
 	}
 	d, err := paths.FromEnv()
 	if err != nil {

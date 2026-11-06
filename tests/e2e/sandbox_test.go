@@ -22,8 +22,7 @@ import (
 )
 
 // sandbox is a slot's: its Lima home, state folder, Keychain service and
-// lock, tests/e2e.sh's for the same slot, so the two runners share their
-// cached images. Slot 0's are ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME),
+// lock. Slot 0's are ~/.lt-e2e-go (or $DEVVM_E2E_LIMA_HOME),
 // /tmp/devvm-go-e2e and devvm-go-e2e; slot K's add -K to each, and
 // --newest-base's -newest to slot 0's.
 type sandbox struct {
@@ -38,22 +37,25 @@ type sandbox struct {
 	tdir    string // the timings, slot 0's for every slot
 
 	created  []string // VMs this run made: the only ones it deletes
-	kept     []string // VMs -e2e.reuse keeps for the next run
+	kept     []string // VMs --reuse keeps for the next run
 	made     []string // files and folders this run made: deleted at its end
 	projects []string // project folders this run made, unlocked and deleted at its end
 	deferred []func(context.Context)
 	ca       *CA // the run's CA, made the first time a section asks (NewCA)
 }
 
-// The sandbox's names, and the dated release of Ubuntu's cloud image
-// base starts from, which tests/e2e.sh pins (scripts/bump.sh e2e-ubuntu
-// moves it there).
+// The sandbox's names.
 const (
 	workBase    = "/tmp/devvm-go-e2e"
 	limaBase    = ".lt-e2e-go"
 	serviceBase = "devvm-go-e2e"
-	releaseVar  = "e2e_ubuntu_release="
 )
+
+// e2eUbuntuRelease is the dated release of Ubuntu's cloud image that base
+// starts from here, in place of the newest a user's devvm pins, so base
+// stays cached between runs (scripts/bump.sh e2e-ubuntu moves it). devvm
+// still checks its signed checksums.
+const e2eUbuntuRelease = "release-20261016"
 
 // slotWork, slotLima and slotService are slot k's state folder, Lima home
 // and Keychain service.
@@ -91,10 +93,6 @@ func newSandbox(o options) (*sandbox, error) {
 		sb.work, sb.lima, sb.service, sb.ports = sb.work+"-newest", sb.lima+"-newest", sb.service+"-newest", 1000
 	}
 	sb.devvm = filepath.Join(sb.work, "src-go", "devvm")
-	release, err := sb.ubuntuRelease()
-	if err != nil {
-		return nil, err
-	}
 	set := map[string]string{
 		"DEVVM_LIMA_HOME": sb.lima, "LIMA_HOME": sb.lima, "DEVVM_SECRET_SERVICE": sb.service,
 		"XDG_DATA_HOME": sb.data(), "XDG_CONFIG_HOME": sb.config(),
@@ -102,7 +100,7 @@ func newSandbox(o options) (*sandbox, error) {
 		"DEVVM_NO_TOOL_CHECK": "1",
 	}
 	if !o.newest {
-		set["DEVVM_UBUNTU_RELEASE"] = release
+		set["DEVVM_UBUNTU_RELEASE"] = e2eUbuntuRelease
 	}
 	sb.env = environ(os.Environ(), set)
 	return sb, nil
@@ -156,21 +154,7 @@ func repoRoot() (string, error) {
 	}
 }
 
-// ubuntuRelease is tests/e2e.sh's e2e_ubuntu_release, its one copy.
-func (sb *sandbox) ubuntuRelease() (string, error) {
-	b, err := os.ReadFile(filepath.Join(sb.root, "tests", "e2e.sh"))
-	if err != nil {
-		return "", err
-	}
-	for line := range strings.Lines(string(b)) {
-		if v, ok := strings.CutPrefix(strings.TrimSpace(line), releaseVar); ok {
-			return v, nil
-		}
-	}
-	return "", errors.New("tests/e2e.sh has no " + releaseVar + " line")
-}
-
-// The sandbox's folders and files, as tests/e2e.sh names them.
+// The sandbox's folders and files.
 func (sb *sandbox) data() string     { return filepath.Join(sb.work, "data") }
 func (sb *sandbox) config() string   { return filepath.Join(sb.work, "config") }
 func (sb *sandbox) devvmDir() string { return filepath.Join(sb.data(), "devvm") }
@@ -181,31 +165,23 @@ func (sb *sandbox) toolLock() string { return filepath.Join(sb.devvmDir(), "mise
 func (sb *sandbox) logFile() string  { return filepath.Join(sb.work, "check.log") }
 func (sb *sandbox) lockFile() string { return sb.work + ".lock" }
 
-// lock takes the slot's lock, a symlink to the pid of the run holding it,
-// as tests/e2e.sh does: one run at a time in a slot, taking over a lock
-// whose process has ended. Handed over, tests/e2e.sh holds it already.
+// lock takes the slot's lock, a symlink to the pid of the run holding it:
+// one run at a time in a slot, taking over a lock whose process has
+// ended.
 func (sb *sandbox) lock() error {
-	f := sb.lockFile()
 	if err := os.MkdirAll(sb.work, 0o700); err != nil {
 		return err
 	}
-	if sb.o.handedOver() {
-		if h, _ := os.Readlink(f); h != strconv.Itoa(sb.o.handoff.holder) {
-			return fmt.Errorf("%s isn't held by tests/e2e.sh's run (%d)", f, sb.o.handoff.holder)
-		}
-		return nil
-	}
-	return takeLock(f)
+	return takeLock(sb.lockFile())
 }
 
 // unlock lets the slot's lock go, when it's this run's.
 func (sb *sandbox) unlock() { dropLock(sb.lockFile()) }
 
-// setup gets the sandbox ready, as tests/e2e.sh does before its first
-// section: never your real Lima home, devvm built from the checkout with
+// setup gets the sandbox ready before the first section: never your real Lima home, devvm built from the checkout with
 // its files embedded (so editing the repo mid-run is harmless), base's
 // features chosen in config.toml so nothing asks, and the pinned tool
-// lock in place. With -e2e.clean, the cached images go first.
+// lock in place. With --clean, the cached images go first.
 func (sb *sandbox) setup(ctx context.Context, out *output) error {
 	if err := sb.refuseRealLima(); err != nil {
 		return err
@@ -227,7 +203,7 @@ func (sb *sandbox) setup(ctx context.Context, out *output) error {
 	if err := sb.pinLock(); err != nil {
 		return err
 	}
-	if sb.o.clean && !sb.o.handedOver() {
+	if sb.o.clean {
 		sb.clean(ctx, out)
 	}
 	return nil
@@ -345,7 +321,7 @@ func (sb *sandbox) command(ctx context.Context, name string, args ...string) *ex
 // cleanup deletes what the run made: its VMs (an image's record too) and
 // their folders, its files, its project folders (unlocked first on
 // macOS), the sandbox's forwarders and devvm's own SSH agent, and what
-// each section deferred. A VM -e2e.reuse keeps stays.
+// each section deferred. A VM --reuse keeps stays.
 func (sb *sandbox) cleanup(ctx context.Context, out *output) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -372,7 +348,7 @@ func (sb *sandbox) cleanup(ctx context.Context, out *output) {
 	_ = sb.command(ctx, "pkill", "-f", "[s]sh-agent -a "+filepath.Join(sb.devvmDir(), "agent.sock")).Run()
 	_ = sb.command(ctx, "pkill", "-f", "[_]ports -vm .* -lifeline "+sb.lima+"/").Run()
 	if len(sb.kept) > 0 {
-		out.line("e2e: kept for -e2e.reuse: %s", strings.Join(sb.kept, " "))
+		out.line("e2e: kept for --reuse: %s", strings.Join(sb.kept, " "))
 	}
 }
 
@@ -398,9 +374,9 @@ func baseTools() []tool {
 
 // checkTools names every host command the chosen sections use that this
 // machine lacks, each with what installs it, before anything is built.
-func (sb *sandbox) checkTools(sel []string) error {
+func (sb *sandbox) checkTools(ctx context.Context, sel []string) error {
 	if len(sel) == 0 {
-		return errors.New("none of the chosen sections is here yet: tests/e2e.sh runs them")
+		return errors.New("no section chosen")
 	}
 	need := baseTools()
 	for _, s := range sections() {
@@ -412,12 +388,30 @@ func (sb *sandbox) checkTools(sel []string) error {
 	for _, t := range need {
 		if _, err := exec.LookPath(t.cmd); err != nil {
 			missing = append(missing, "  "+t.cmd+": "+installs(t))
+		} else if t.cmd == "openssl" {
+			missing = append(missing, libreSSL(ctx, t)...)
 		}
 	}
 	if len(missing) == 0 {
 		return nil
 	}
 	return errors.New("the chosen sections need these, which this machine lacks:\n" + strings.Join(slices.Compact(missing), "\n"))
+}
+
+// libreSSL is what to do when the openssl first on PATH isn't OpenSSL's:
+// the CA checks' HTTPS server is openssl s_server, and LibreSSL's (macOS's
+// /usr/bin/openssl) cuts the VM's OpenSSL client off mid-request.
+func libreSSL(ctx context.Context, t tool) []string {
+	b, _ := exec.CommandContext(ctx, "openssl", "version").Output()
+	v := strings.TrimSpace(string(b))
+	if strings.HasPrefix(v, "OpenSSL") {
+		return nil
+	}
+	fix := installs(t)
+	if runtime.GOOS == "darwin" {
+		fix = "brew install openssl@3, then put $(brew --prefix openssl@3)/bin first on PATH"
+	}
+	return []string{"  openssl (OpenSSL, not " + v + "): " + fix}
 }
 
 // installs is the command that installs t with this system's package

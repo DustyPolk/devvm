@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-// The link section's helpers (tests/e2e.sh's lk_*): its VMs, their
+// The link section's helpers: its VMs, their
 // servers, the links' files and processes on this machine.
 
 // link is the link section's VMs: the targets' and the client's folders

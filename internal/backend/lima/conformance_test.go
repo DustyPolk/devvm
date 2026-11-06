@@ -31,7 +31,7 @@ func conformanceSubject(t *testing.T, l *Lima) backendtest.Subject {
 
 // Lima keeps backend.Backend's contract, on the limactl stub, whose VMs
 // start, and on real Lima's dummy instances, which can't: there the
-// checks that need a running VM are skipped, and tests/e2e.sh's run
+// checks that need a running VM are skipped, and tests/e2e runs
 // them on real VMs, through devvm.
 func TestConformance(t *testing.T) {
 	t.Run("stub", func(t *testing.T) {

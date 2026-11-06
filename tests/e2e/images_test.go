@@ -113,13 +113,18 @@ func features(s *S) []string {
 }
 
 // baseRelease is the release of Ubuntu's cloud image base is to pin:
-// tests/e2e.sh's pinned one, or with -e2e.newest-base the newest Ubuntu
-// lists now, read as scripts/bump.sh e2e-ubuntu reads it.
+// e2eUbuntuRelease, or with --newest-base the newest Ubuntu lists now.
 func baseRelease(s *S) (string, error) {
 	if !s.sb.o.newest {
-		return s.sb.ubuntuRelease()
+		return e2eUbuntuRelease, nil
 	}
-	ctx, cancel := context.WithTimeout(s.r.window().ctx, time.Minute)
+	return listedRelease(s.r.window().ctx)
+}
+
+// listedRelease is the newest release Ubuntu lists of its cloud images,
+// read as scripts/bump.sh e2e-ubuntu reads it.
+func listedRelease(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://cloud-images.ubuntu.com/releases/resolute/", nil)
 	if err != nil {
@@ -707,7 +712,7 @@ func fileSHA256(f string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// imagesGolden captures the golden fixtures (-e2e.golden): real Lima's
+// imagesGolden captures the golden fixtures (--golden): real Lima's
 // dummy instances and its version, base's disk, and the Keychain's and
 // Time Machine's answers.
 func imagesGolden(s *S, kb string) {

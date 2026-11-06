@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,13 +34,13 @@ func (o *output) line(format string, a ...any) {
 	fmt.Fprintf(o.w, format+"\n", a...)
 }
 
-// mins is d as tests/e2e.sh shows a time: 3m07s.
+// mins is d as the run shows a time: 3m07s.
 func mins(d time.Duration) string {
 	s := int(d.Round(time.Second) / time.Second)
 	return fmt.Sprintf("%dm%02ds", s/60, s%60)
 }
 
-// The time limits, tests/e2e.sh's: a check gets 3 times its longest time
+// The time limits: a check gets 3 times its longest time
 // in its section's last complete run, at least limitFloor, or
 // limitDefault with none; one that builds an image, and the steps between
 // two checks, limitBuild. Past a limit, its processes get TERM, as Ctrl+C
@@ -66,17 +67,17 @@ type window struct {
 // runner runs the sections' checks: each result with [n/N], its time and
 // the time left, a heartbeat every minute, each check's time limit, the
 // flaky checks' one retry, each section's timings and the check-count
-// guard, as tests/e2e.sh does.
+// guard.
 type runner struct {
 	ctx context.Context
 	out *output
 	sb  *sandbox
 	o   options
 
-	started time.Time // the run's, tests/e2e.sh's when it handed over
+	started time.Time // the run's
 	mark    time.Time // the previous check's end: a check's time counts from it
 	total   string    // the checks expected in all, or ?
-	n       int       // the checks run so far, tests/e2e.sh's included
+	n       int       // the checks run so far
 
 	mu  sync.Mutex
 	win *window
@@ -100,12 +101,6 @@ func newRunner(ctx context.Context, out *output, sb *sandbox, o options) *runner
 	now := time.Now()
 	r := &runner{ctx: ctx, out: out, sb: sb, o: o, started: now, mark: now, sum: sourceSum(), hbDone: make(chan struct{})}
 	r.total = r.expected()
-	if o.handedOver() {
-		r.n, r.total = o.handoff.count, o.handoff.total
-		if o.handoff.started > 0 {
-			r.started = time.Unix(o.handoff.started, 0)
-		}
-	}
 	_ = os.MkdirAll(sb.tdir, 0o700)
 	r.open(limitBuild, "setup")
 	go r.heartbeat()
@@ -335,9 +330,9 @@ func (r *runner) left(label string) (time.Duration, bool) {
 	return s + r.later, found
 }
 
-// finish ends the run: its results, for tests/e2e.sh or a -e2e.slots run
-// to add up, and unless handed over, its summary line. It's whether every
-// check passed and no section ended early.
+// finish ends the run: its results, for a --slots run to add up, and its
+// summary lines. It's whether every check passed and no section ended
+// early.
 func (r *runner) finish(now time.Time) bool {
 	var b strings.Builder
 	fmt.Fprintf(&b, "pass\t%d\nfail\t%d\nskipped\t%d\nelapsed\t%d\n", r.pass, r.fail, r.skipped, int(now.Sub(r.started).Seconds()))
@@ -350,24 +345,50 @@ func (r *runner) finish(now time.Time) bool {
 	for _, l := range r.short {
 		fmt.Fprintf(&b, "short\t%s\n", l)
 	}
-	f := r.o.handoff.summary
-	if f == "" {
-		f = filepath.Join(r.sb.work, "summary")
-	}
+	f := filepath.Join(r.sb.work, "summary")
 	if os.WriteFile(f+".new", []byte(b.String()), 0o600) == nil {
 		_ = os.Rename(f+".new", f)
 	}
-	if !r.o.handedOver() {
-		r.out.line("")
-		r.out.line("e2e: %s in %s%s", counts(r.pass, r.fail, r.skipped, len(r.retried)), mins(now.Sub(r.started)), failedList(r.failed))
-		for _, l := range r.retried {
-			r.out.line("e2e: retried once: %s", l)
-		}
-		for _, l := range r.short {
-			r.out.line("e2e: FAILED: %s", l)
+	r.out.line("")
+	r.out.line("e2e: %s in %s%s", counts(r.pass, r.fail, r.skipped, len(r.retried)), mins(now.Sub(r.started)), failedList(r.failed))
+	for _, l := range r.retried {
+		r.out.line("e2e: retried once: %s", l)
+	}
+	for _, l := range r.short {
+		r.out.line("e2e: FAILED: %s", l)
+	}
+	ok := r.fail == 0 && len(r.short) == 0
+	if r.o.newest {
+		r.newestSummary(ok)
+	}
+	return ok
+}
+
+// newestSummary is a --newest-base run's last lines: what Ubuntu listed
+// and devvm pinned, and a failure named as upstream drift with its
+// release.
+func (r *runner) newestSummary(ok bool) {
+	listed, err := listedRelease(r.ctx)
+	if err != nil {
+		listed = "nothing"
+	}
+	got := "nothing"
+	if b, err := os.ReadFile(filepath.Join(r.sb.images(), "ubuntu.json")); err == nil {
+		var m map[string]any
+		if json.Unmarshal(b, &m) == nil {
+			if v, _ := m["release"].(string); v != "" {
+				got = v
+			}
 		}
 	}
-	return r.fail == 0 && len(r.short) == 0
+	r.out.line("e2e: newest base: Ubuntu listed %s as its newest; devvm pinned %s", listed, got)
+	if !ok {
+		rel := got
+		if rel == "nothing" {
+			rel = listed
+		}
+		r.out.line("e2e: UPSTREAM DRIFT: base from Ubuntu's newest cloud image, %s, and the mirrors' newest packages, failed the checks above, which e2e's other runs miss as they pin %s; a user's first build of base gets this now (contributing/maintaining.md says what to do)", rel, e2eUbuntuRelease)
+	}
 }
 
 // counts is a summary's "3 passed, 1 failed, 1 skipped, 1 retried".

@@ -28,8 +28,7 @@ func Note(s *S, format string, a ...any) {
 
 // SetState sets key (dotted: net.tier) of the VM's vm.json to the JSON
 // value js, keeping the rest, and writes the file back whole, mode 600:
-// a change by hand, as nothing devvm runs would make it (tests/e2e.sh's
-// vm_set).
+// a change by hand, as nothing devvm runs would make it.
 func SetState(p Paths, vm, key, js string) error {
 	f := filepath.Join(p.VMDir(vm), "vm.json")
 	b, err := os.ReadFile(f)

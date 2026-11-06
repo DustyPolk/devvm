@@ -16,7 +16,7 @@ import (
 )
 
 // NoLeak fails when a regular file under one of paths holds one of
-// secrets, byte for byte (tests/e2e.sh's no_leak): a VM's disk, Lima's
+// secrets, byte for byte: a VM's disk, Lima's
 // files, devvm's logs. It reads only where a file has data: a VM's disk
 // is sparse, 100G of mostly holes, which SEEK_DATA and SEEK_HOLE skip. A
 // file it can't read fails it too; a path that isn't there has none, and

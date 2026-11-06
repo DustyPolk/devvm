@@ -1,13 +1,13 @@
 //go:build e2e
 
-// Package e2e is devvm's end-to-end tests in Go: real VMs, in the sandbox
-// tests/e2e.sh uses, a section at a time. TestE2E is the run; its flags
-// (-e2e.only, -e2e.slots…) are tests/e2e.sh's options. Each section is a
-// file of its own, listed in sections; tests/e2e.sh runs the sections not
-// yet here and hands the rest to TestE2E. Run it from this folder, where
-// go test streams its output:
+// Package e2e is devvm's end-to-end tests: real VMs, in a sandbox, a
+// section at a time. TestE2E is the run, and its flags (--only, --slots…)
+// come after go test's -args. Each section is a file of its own, listed in
+// sections. mise run e2e runs it from this folder, where go test streams
+// its output:
 //
-//	cd tests/e2e && go test -tags e2e -count=1 -timeout 0 -run '^TestE2E$' -args -e2e.only=gc
+//	mise run e2e -- --only gc
+//	cd tests/e2e && go test -tags e2e -count=1 -timeout 0 -run '^TestE2E$' -args --only gc
 package e2e
 
 import (
@@ -28,8 +28,8 @@ func TestMain(m *testing.M) {
 }
 
 // TestE2E is the run: the chosen sections, in a slot's sandbox, or spread
-// over -e2e.slots of them. It fails when a check fails or a section ends
-// early, as tests/e2e.sh does.
+// over --slots of them. It fails when a check fails or a section ends
+// early.
 func TestE2E(t *testing.T) {
 	if d := flag.Lookup("test.timeout").Value.String(); d != "0s" {
 		t.Fatalf("e2e: run it with -timeout 0 (go test's %s would end a long section mid-check)", d)
@@ -67,7 +67,7 @@ func runSlot(ctx context.Context, out *output, o options) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if err := sb.checkTools(o.sel); err != nil {
+	if err := sb.checkTools(ctx, o.sel); err != nil {
 		return false, err
 	}
 	if err := sb.lock(); err != nil {
@@ -79,6 +79,13 @@ func runSlot(ctx context.Context, out *output, o options) (bool, error) {
 	defer sb.cleanup(context.WithoutCancel(ctx), out)
 	if err := sb.setup(ctx, out); err != nil {
 		return false, err
+	}
+	if o.newest {
+		listed, err := listedRelease(ctx)
+		if err != nil {
+			return false, err
+		}
+		out.line("e2e: newest base: Ubuntu's cloud image %s (e2e pins %s) and the mirrors' newest packages, in %s", listed, e2eUbuntuRelease, sb.work)
 	}
 	r := newRunner(ctx, out, sb, o)
 	defer r.stop()

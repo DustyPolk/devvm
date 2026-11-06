@@ -13,13 +13,13 @@ import (
 	"github.com/w3cj/devvm/internal/stubtest"
 )
 
-// golden reads a golden fixture of macOS's, as tests/e2e.sh --golden
+// golden reads a golden fixture of macOS's, as mise run e2e -- --golden
 // captured it from the real command.
 func golden(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "golden", "darwin", name)) //nolint:gosec // the repo's own fixture
 	if err != nil {
-		t.Fatalf("%v: run tests/e2e.sh --golden on macOS", err)
+		t.Fatalf("%v: run mise run e2e -- --golden on macOS", err)
 	}
 	return string(b)
 }

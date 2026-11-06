@@ -51,8 +51,8 @@ func Needs(fs ...backend.Feature) CheckOpt {
 }
 
 // Check runs one check, title its label, fn what it checks: it passes when
-// fn returns nil. Its title is its key in the timings, so it stays
-// tests/e2e.sh's word for word. A check that fails prints fn's error, then
+// fn returns nil. Its title is its key in the timings, so a changed title
+// starts its times again. A check that fails prints fn's error, then
 // the last lines its commands printed.
 func (s *S) Check(title string, fn func() error, opts ...CheckOpt) {
 	var c checkOpts
@@ -64,7 +64,7 @@ func (s *S) Check(title string, fn func() error, opts ...CheckOpt) {
 	}
 	r := s.r
 	if r.ctx.Err() != nil {
-		return // interrupted: the run ends, as tests/e2e.sh's does on a signal
+		return // interrupted: the run ends
 	}
 	if why, ok := r.lacks(c.needs, func() (Res, error) { return s.Devvm("", "doctor", "--json") }); ok {
 		s.Skip(title, why)
@@ -172,7 +172,7 @@ func (s *S) Skip(title, why string) {
 	r.out.line("  SKIP  [%d/%s] %s (%s)", r.n, r.total, title, why)
 }
 
-// Section prints a section's heading, as tests/e2e.sh's section does.
+// Section prints a section's heading.
 func (s *S) Section(name string) {
 	s.r.out.line("")
 	s.r.out.line("== %s", name)

@@ -2,7 +2,7 @@
 # Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, layers/nix.sh, features/*.sh,
 # shared-tools/build.sh, oci/build.sh) and internal/tools/mise.go (devvm's host mise), and the
 # end-to-end tests' own pins (tests/e2e-mise.lock, the --from images' digests in tests/e2e/from_test.go,
-# and Ubuntu's cloud image release in tests/e2e.sh).
+# and Ubuntu's cloud image release in tests/e2e/sandbox_test.go).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
 # Tools: docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu
@@ -98,13 +98,13 @@ pin3() {   # pin3 FILE PREFIX VERSION SHA_ARM64 SHA_AMD64
   set_var "$1" "${2}_sha256_amd64" "$5"
 }
 
-# The dated release of Ubuntu's cloud image that e2e pins base to (tests/e2e.sh's
-# e2e_ubuntu_release), so its images stay cached between runs: the newest that Ubuntu lists. devvm
+# The dated release of Ubuntu's cloud image that e2e pins base to (tests/e2e/sandbox_test.go's
+# e2eUbuntuRelease), so its images stay cached between runs: the newest that Ubuntu lists. devvm
 # checks its signed checksums when e2e pins it, as it does the newest for users.
 bump_e2e-ubuntu() {
-  local f=tests/e2e.sh new
+  local f=tests/e2e/sandbox_test.go new
   new=$(fetch https://cloud-images.ubuntu.com/releases/resolute/ | grep -o 'release-[0-9]\{8\}' | sort -ru | head -1 || true)
-  if report e2e-ubuntu "$(get $f e2e_ubuntu_release)" "$new"; then set_var $f e2e_ubuntu_release "$new"; fi
+  if report e2e-ubuntu "$(get_const $f e2eUbuntuRelease)" "$new"; then set_var $f e2eUbuntuRelease "$new" e2e_ubuntu_release; fi
 }
 
 # Docker's packages: the newest of each in its repository for base's Ubuntu release, and its signing key.

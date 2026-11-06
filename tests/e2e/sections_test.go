@@ -5,10 +5,9 @@ package e2e
 import "runtime"
 
 // section is one of e2e's sections: its name, its time when it has never
-// run (for -e2e.slots to place it), the host commands it uses beyond
-// baseTools, and its checks. One whose run is nil is still in
-// tests/e2e.sh, which runs it; the rest are here, each in a file of its
-// own (gc_test.go), and tests/e2e.sh hands them to TestE2E.
+// run (for --slots to place it), the host commands it uses beyond
+// baseTools, and its checks, each section in a file of its own
+// (gc_test.go).
 type section struct {
 	name  string
 	guess int // seconds
@@ -16,7 +15,7 @@ type section struct {
 	run   func(*S)
 }
 
-// sections is every section, in the order a run runs them: tests/e2e.sh's.
+// sections is every section, in the order a run runs them.
 func sections() []section {
 	return []section{
 		{name: "images", guess: 600, run: imagesSection},

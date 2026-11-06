@@ -18,21 +18,21 @@ import (
 // (go test -tags e2e -run '^TestHarness' ./tests/e2e).
 
 func TestHarnessOptions(t *testing.T) {
-	secs := []section{{name: "images"}, {name: "gc", run: func(*S) {}}, {name: "desktop", run: func(*S) {}}, {name: "from"}}
+	secs := []section{{name: "images"}, {name: "gc"}, {name: "desktop"}, {name: "from"}}
 	for _, tc := range []struct {
 		args    []string
 		sel     []string
 		every   bool
 		wantErr string
 	}{
-		{args: nil, sel: []string{"gc"}},
-		{args: []string{"-e2e.only=desktop,gc"}, sel: []string{"gc", "desktop"}},
-		{args: []string{"-e2e.from"}, sel: []string{"gc", "desktop"}, every: true},
-		{args: []string{"-e2e.only=images"}, wantErr: "tests/e2e.sh --only images"},
-		{args: []string{"-e2e.only=nope"}, wantErr: `no section "nope"`},
-		{args: []string{"-e2e.slots=2", "-e2e.slot=1"}, wantErr: "-e2e.slots runs from slot 0"},
-		{args: []string{"-e2e.slots=10"}, wantErr: "1 to 9"},
-		{args: []string{"-e2e.newest-base", "-e2e.slot=1"}, wantErr: "sandbox of its own"},
+		{args: nil, sel: []string{"images", "gc"}},
+		{args: []string{"--only", "desktop,gc"}, sel: []string{"gc", "desktop"}},
+		{args: []string{"--from"}, sel: []string{"images", "gc", "desktop", "from"}, every: true},
+		{args: []string{"--only=from"}, sel: []string{"from"}, every: true},
+		{args: []string{"--only=nope"}, wantErr: `no section "nope"`},
+		{args: []string{"--slots=2", "--slot=1"}, wantErr: "--slots runs from slot 0"},
+		{args: []string{"--slots", "10"}, wantErr: "1 to 9"},
+		{args: []string{"--newest-base", "--slot=1"}, wantErr: "sandbox of its own"},
 	} {
 		fs := flag.NewFlagSet("e2e", flag.ContinueOnError)
 		registerFlags(fs)

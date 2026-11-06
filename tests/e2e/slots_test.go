@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-// plan is -e2e.slots' placing of the chosen sections: longest first, as
+// plan is --slots' placing of the chosen sections: longest first, as
 // their last complete runs measured them (else their guess), each in the
 // slot with the least time so far, the lowest on a tie; link goes with
 // from when both run, as link's Alpine client in the features tier starts
@@ -70,8 +70,8 @@ func plan(o options, tdir string, all []section) map[int][]string {
 	return out
 }
 
-// runSlots is the -e2e.slots run: every slot's lock taken while each
-// other slot gets what slot 0 has and it lacks (seed; with -e2e.clean,
+// runSlots is the --slots run: every slot's lock taken while each
+// other slot gets what slot 0 has and it lacks (seed; with --clean,
 // each slot deletes its own instead), then each slot a run of this test
 // binary of its own, all at once. Their lines show as they come, each led
 // by its slot ("[1] "), and stay in the slot's e2e.log; their results are
@@ -80,7 +80,7 @@ func runSlots(ctx context.Context, out *output, o options) (bool, error) {
 	started := time.Now()
 	p := plan(o, filepath.Join(slotWork(0), "timings", o.tier()), sections())
 	if len(p) == 0 {
-		return false, fmt.Errorf("none of the chosen sections is here yet: tests/e2e.sh runs them")
+		return false, errors.New("no section chosen")
 	}
 	for k := range o.slots {
 		if err := os.MkdirAll(slotWork(k), 0o700); err != nil {
@@ -375,7 +375,7 @@ func copyTree(ctx context.Context, src, dst string) error {
 }
 
 // takeLock takes the lock f, a symlink to the pid of the run holding it,
-// as tests/e2e.sh does: one run at a time in a slot. A lock whose process
+// one run at a time in a slot. A lock whose process
 // has ended is taken over.
 func takeLock(f string) error {
 	me := strconv.Itoa(os.Getpid())

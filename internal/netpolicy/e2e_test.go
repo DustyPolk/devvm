@@ -16,13 +16,13 @@ import (
 )
 
 // TestE2ESelfCheck runs the self-check on a real VM with network policy,
-// without a terminal: tests/e2e.sh runs it in its sandbox, with the VM in
+// without a terminal: tests/e2e runs it in its sandbox, with the VM in
 // DEVVM_E2E_VM and the result it expects in DEVVM_E2E_WANT (the message's
 // names; empty for enforced). A failed check must leave the VM stopped.
 func TestE2ESelfCheck(t *testing.T) {
 	vm := os.Getenv("DEVVM_E2E_VM")
 	if vm == "" {
-		t.Skip("tests/e2e.sh runs it, on a VM of its own")
+		t.Skip("tests/e2e runs it, on a VM of its own")
 	}
 	d, err := paths.FromEnv()
 	if err != nil {

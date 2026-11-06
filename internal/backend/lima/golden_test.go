@@ -18,7 +18,7 @@ import (
 
 // goldenFixtures returns the golden fixtures named like pattern, from
 // every system's folder (testdata/golden/<os>), by their path: what real
-// Lima and QEMU printed, captured by tests/e2e.sh --golden.
+// Lima and QEMU printed, captured by mise run e2e -- --golden.
 func goldenFixtures(t *testing.T, pattern string) map[string][]byte {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join("..", "..", "..", "testdata", "golden", "*", pattern))
@@ -26,7 +26,7 @@ func goldenFixtures(t *testing.T, pattern string) map[string][]byte {
 		t.Fatal(err)
 	}
 	if len(files) == 0 {
-		t.Fatalf("no golden fixture %s: run tests/e2e.sh --golden", pattern)
+		t.Fatalf("no golden fixture %s: run mise run e2e -- --golden", pattern)
 	}
 	out := map[string][]byte{}
 	for _, f := range files {

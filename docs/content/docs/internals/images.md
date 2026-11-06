@@ -209,7 +209,7 @@ A build's `ImageSpec.Trust` holds two scripts made from `ca.sh`, which run as ro
 
 An image is therefore the same with or without CAs, which is why its key holds none of them, and a tool image's key stays its lock entry, `build.sh`, mise's settings, the C library and the base it builds in. When there are CAs, the build's numbered steps include the two scripts. A layer script that copies the system's bundle elsewhere keeps that copy.
 
-**End-to-end checks** (`tests/e2e.sh`, `images`): a layer built with a test CA in the folder trusts it while its script runs, keeps its key once the folder is emptied, and a copy of its image booted without devvm has none of devvm's CA files.
+**End-to-end checks** (`tests/e2e`, `images`): a layer built with a test CA in the folder trusts it while its script runs, keeps its key once the folder is emptied, and a copy of its image booted without devvm has none of devvm's CA files.
 
 ## The share
 

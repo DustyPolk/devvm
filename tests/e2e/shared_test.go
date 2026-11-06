@@ -13,11 +13,11 @@ import (
 	"strings"
 )
 
-// Golden captures a golden fixture with -e2e.golden: what args printed,
+// Golden captures a golden fixture with --golden: what args printed,
 // output and errors, as testdata/golden/<os>/name in the checkout, this
 // machine's home, user name, full name and timezone replaced and a VM's
-// environment made up, as tests/e2e.sh's golden does. A capture isn't a
-// check, so a run without -e2e.golden runs as many checks; one that fails
+// environment made up. A capture isn't a check, so a run without
+// --golden runs as many checks; one that fails
 // says so and keeps the fixture it had.
 func (s *S) Golden(name string, args ...string) {
 	if !s.sb.o.golden {

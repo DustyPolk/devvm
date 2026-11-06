@@ -45,7 +45,7 @@ func TestMisePins(t *testing.T) {
 
 // TestE2ELockPins checks e2e's pinned lock against what it pins:
 // tests/e2e-mise.lock's first line names the SHA-256 of the
-// shared-tools/mise.toml it was resolved from (tests/e2e.sh stops on
+// shared-tools/mise.toml it was resolved from (tests/e2e stops on
 // another), and it locks each of mise.toml's tools with a download for
 // every platform but rust's (scripts/bump.sh e2e-tools makes it).
 func TestE2ELockPins(t *testing.T) {

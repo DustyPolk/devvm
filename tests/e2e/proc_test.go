@@ -109,7 +109,7 @@ func (p *Proc) listening(ctx context.Context, addr string, timeout time.Duration
 }
 
 // ProcWatch samples every host process's command line, every 0.1 s,
-// from WatchProcs until Stop, as tests/e2e.sh's ps_watch does: for a
+// from WatchProcs until Stop: for a
 // check that a secret was in no process's arguments while devvm ran.
 // Its samples go to the sandbox's ps.log, never the check's log, which a
 // failure prints.
@@ -181,8 +181,7 @@ func (w *ProcWatch) Saw(secret string) (bool, error) {
 	return bytes.Contains(b, []byte(secret)), nil
 }
 
-// ProcsFlaky is the Flaky of a check that reads a ProcWatch or ProcsHave,
-// as tests/e2e.sh's retry list has it.
+// ProcsFlaky is the Flaky of a check that reads a ProcWatch or ProcsHave.
 func ProcsFlaky() CheckOpt {
 	return Flaky("the process listings, sampled while devvm ran and taken again here, can catch a short-lived process mid-start")
 }

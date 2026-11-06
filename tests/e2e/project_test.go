@@ -56,7 +56,7 @@ func projectBase(s *S) *webVM {
 	// The shell devvm opens reads its commands from devvm's input: these, then it ends.
 	vm, res, _ := s.Launch(w.p, "pwd; echo e2e-shell-ran", "--network", "open", "--cpus", "2", "--memory", "3", "--disk", "120")
 	w.vm, w.launch = vm, res.Out
-	// A running VM, as the golden fixtures have it (-e2e.golden), and its overlay disk on Linux.
+	// A running VM, as the golden fixtures have it (--golden), and its overlay disk on Linux.
 	if vm != "" {
 		s.Golden("limactl-list-running.json", "limactl", "list", "--json", vm)
 		if runtime.GOOS == "linux" {

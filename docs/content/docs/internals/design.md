@@ -90,7 +90,7 @@ These settings guard against the host's ssh asking for a forward that devvm's en
 - Another user on the host can take a VM's ssh port while the VM is stopped or booting. Lima's own ssh would then reach that user's program, as it checks no host key, while devvm's forwarder and ssh config pin the VM's.
 - A VM started outside devvm, such as with `devvm limactl start`, or one whose forwarder ended, runs without forwarded ports until its next start through devvm, or until `devvm ports` changes its ports, which starts a forwarder with the host key devvm pinned at its last start.
 
-**End-to-end checks** (`tests/e2e.sh`, `project`, and `network` for the sandbox's binds):
+**End-to-end checks** (`tests/e2e`, `project`, and `network` for the sandbox's binds):
 
 - Lima's rules ignore everything, the forwarder runs with the host key devvm pinned for the VM, and Lima's ssh listens on the port the VM's state records.
 - A stopped VM whose ssh port a host program holds, on `127.0.0.1` alone and accepting no connections, starts on a new port that its state records, and the program keeps its own.
@@ -142,7 +142,7 @@ A new VM gets what the project's `devcontainer.json` says, as far as devvm does 
 - **Commands before confinement:** ruled out: they run after the self-check (which stops a VM whose policy fails), `.git`'s locks, and a clone's seeding.
 - **A digest the registry made up** (`Docker-Content-Digest`): ruled out: `sha256:` and 64 hex digits, and every pull checks content against it.
 
-**End-to-end checks** (`tests/e2e.sh`, `project`): a VM made from a file: its variables in the shell, `postCreateCommand` once and `postStartCommand` at each start, in the VM and folder, its port forwarded and no other, nothing written to the folder, a changed file only warned about; a file whose image is on this machine's registry refused, nothing made.
+**End-to-end checks** (`tests/e2e`, `project`): a VM made from a file: its variables in the shell, `postCreateCommand` once and `postStartCommand` at each start, in the VM and folder, its port forwarded and no other, nothing written to the folder, a changed file only warned about; a file whose image is on this machine's registry refused, nothing made.
 
 ## Network tiers
 
@@ -170,7 +170,7 @@ A VM's network is one of four tiers, `open`, `internet`, `allowlist` and `none`,
 - **`**` matching addresses on the allowlist tier:** listed. A policy with `**` now allows public address literals too, which it refused before.
 - **Old VMs:** listed. A VM made before tiers reads as allowlist, so one that was open starts confined, and a running one shows as `unenforced` until devvm restarts it.
 
-**End-to-end checks** (`tests/e2e.sh`): `network`: open from its next start, a direct connection works, its proxy is set, answers the self-check and carries the VM to this machine's loopback and its LAN address, while the allowlist tier refuses this machine's loopback; the open VM holds no real secret, its proxy puts the token in over TLS the VM verifies with its own CA, and a request around the proxy carries only the placeholder and gets a 401; open behind a company proxy, the guest gets its own proxy and never the shell's settings, which go through the VM's proxy alone; internet reaches a host off the allowlist and another port but not this machine's LAN address, and a direct connection still fails; none refuses github.com, lets Claude Code's API through, and keeps a deny. `link`: an allowlist client's link to a none target goes on, and to an internet one is refused and warned of.
+**End-to-end checks** (`tests/e2e`): `network`: open from its next start, a direct connection works, its proxy is set, answers the self-check and carries the VM to this machine's loopback and its LAN address, while the allowlist tier refuses this machine's loopback; the open VM holds no real secret, its proxy puts the token in over TLS the VM verifies with its own CA, and a request around the proxy carries only the placeholder and gets a 401; open behind a company proxy, the guest gets its own proxy and never the shell's settings, which go through the VM's proxy alone; internet reaches a host off the allowlist and another port but not this machine's LAN address, and a direct connection still fails; none refuses github.com, lets Claude Code's API through, and keeps a deny. `link`: an allowlist client's link to a none target goes on, and to an internet one is refused and warned of.
 
 ## A company proxy
 
@@ -228,7 +228,7 @@ The build's policy is `**` alone, so on its own the build's proxy would refuse e
 
 The tier holds as it is: the VM's proxy decides each request the local proxy sends, and a host the tier doesn't allow gets its `403`.
 
-**End-to-end checks** (`tests/e2e.sh`):
+**End-to-end checks** (`tests/e2e`):
 
 - `desktop` (Lima): a VM of base without the desktop's programs, which `devvm desktop` refuses (`desktop_no_layer`); then a VM with the `desktop` layer on the allowlist tier: the relay on `127.0.0.1` alone, its port and password in the VM's state; a wrong password refused, the password let in, with the VM's ServerInit and a screen update (`TestE2EDesktop`); `Xvnc` on its user's socket (700, 600) and no TCP port, the clipboard off; the password in no file of the VM's, no run log and no host process's arguments while `devvm desktop` started; the self-check passed and no direct connection out, nor to the desktop's port on this machine; the Xfce session's proxy variables set to the local proxy, which listens on `127.0.77.1:3128` alone, takes curl without a password to an allowed host, gives a blocked one the proxy's `403` (`CONNECT` and plain HTTP), refuses an origin-form request with `400`, and isn't forwarded to this machine; root's own server in place of `Xvnc` (no password, its socket anyone's, recording what reaches it): a wrong viewer never reaches it, and the viewer's clipboard never does while its key event does; Ctrl+C closing the port; `--clipboard` on the same port, the clipboard on.
 
@@ -297,7 +297,7 @@ VMs with the nix layer share their downloads from cache.nixos.org through a cach
 - **The VM's own settings:** ruled out: `devvm-cache.conf` and the `!include` line are root's, in that VM; only root is a trusted user, and root in a VM changes only its own Nix, while the cache takes nothing from any VM.
 - **Memory:** ruled out: a narinfo is read up to 1 MiB, and `nixKnown` holds at most 65536 entries per proxy.
 
-**End-to-end checks** (`tests/e2e.sh`, `nix`): the VM's Nix has the cache first and cache.nixos.org's key alone; `nix run nixpkgs#hello` comes through the cache, fetched by the host into the folder (files 600, folders 700); a VM's `PUT` and `POST`, a URL in the path, a query and `..` get `400`, a NAR no checked narinfo names and a path cache.nixos.org doesn't have get `404`, and the host keeps none of them; a second VM gets the first's paths as hits and fetches none; after `devvm network open`, the open VM's nix-daemon still goes through its proxy and keeps the cache first.
+**End-to-end checks** (`tests/e2e`, `nix`): the VM's Nix has the cache first and cache.nixos.org's key alone; `nix run nixpkgs#hello` comes through the cache, fetched by the host into the folder (files 600, folders 700); a VM's `PUT` and `POST`, a URL in the path, a query and `..` get `400`, a NAR no checked narinfo names and a path cache.nixos.org doesn't have get `404`, and the host keeps none of them; a second VM gets the first's paths as hits and fetches none; after `devvm network open`, the open VM's nix-daemon still goes through its proxy and keeps the cache first.
 
 ## A CA per VM
 
@@ -316,7 +316,7 @@ To put a secret in, a VM's proxy shows the VM certificates from a CA that the VM
 - **Issuer confusion:** fixed before it could arise: each CA's name holds its serial, so a VM's two CAs never share a subject, which some verifiers look issuers up by.
 - **Clock skew:** the switch waits an hour past the next CA's start, so a VM whose clock is up to an hour behind still accepts the certificates.
 
-**End-to-end checks** (`tests/e2e.sh`, `network`): two confined VMs have different CAs; each VM trusts its own two and none of the other's, and its `/etc/ssl/devvm.pem` holds the next one; no key is anywhere in the VM, and the keys are mode 600; each proxy serves its own CAs at `/ca.pem`, and a certificate it presents for a bound host verifies with its own VM's CAs and not with the other's; `devvm rm` deletes one VM's CAs and leaves the other's. The switch itself is checked by unit tests (`TestNextCASigns`, `TestInitCASwitch`), because it happens weeks after a launch.
+**End-to-end checks** (`tests/e2e`, `network`): two confined VMs have different CAs; each VM trusts its own two and none of the other's, and its `/etc/ssl/devvm.pem` holds the next one; no key is anywhere in the VM, and the keys are mode 600; each proxy serves its own CAs at `/ca.pem`, and a certificate it presents for a bound host verifies with its own VM's CAs and not with the other's; `devvm rm` deletes one VM's CAs and leaves the other's. The switch itself is checked by unit tests (`TestNextCASigns`, `TestInitCASwitch`), because it happens weeks after a launch.
 
 ## Links between VMs
 

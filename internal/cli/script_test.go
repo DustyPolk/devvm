@@ -26,7 +26,7 @@ import (
 	"github.com/w3cj/devvm/internal/vmname"
 )
 
-// testBuildFlag makes a test build (internal/testbuild), as tests/e2e.sh
+// testBuildFlag makes a test build (internal/testbuild), as tests/e2e
 // does.
 const testBuildFlag = "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes"
 

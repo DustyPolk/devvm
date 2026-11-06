@@ -36,10 +36,10 @@ func madeFile(sb *sandbox, f string) {
 	}
 }
 
-// corpPort is the company proxy's port in slot 0 (tests/e2e.sh's P18766).
+// corpPort is the company proxy's port in slot 0.
 const corpPort = 18766
 
-// Corp is a company proxy of the run's (tests/e2e.sh's corp_start): a
+// Corp is a company proxy of the run's: a
 // devvm _proxy on this machine's 127.0.0.1, its port slot 0's 18766 as
 // this slot has it, with a password of its own, allowing any host, its
 // events in Events. The password is in its config, mode 600, and in the
@@ -102,8 +102,7 @@ func (c *Corp) URL() string { return "http://" + proxy.ProxyUser + ":" + c.pw + 
 // command's environment, not its arguments.
 func (c *Corp) Env() []string { return []string{"HTTPS_PROXY=" + c.URL(), "HTTP_PROXY=" + c.URL()} }
 
-// Saw is whether one of its events matches the regular expression re
-// (grep -qE on tests/e2e.sh's corp.jsonl).
+// Saw is whether one of its events matches the regular expression re.
 func (c *Corp) Saw(re string) bool {
 	b, err := os.ReadFile(c.Events)
 	return err == nil && Matches(string(b), re)
@@ -115,7 +114,7 @@ func (c *Corp) Running() bool { return c.proc.Running() }
 // Log is what the company proxy printed, its errors among it.
 func (c *Corp) Log() string { return c.proc.Out() }
 
-// Stop ends it (tests/e2e.sh's corp_stop); its events stay until the
+// Stop ends it; its events stay until the
 // run's end.
 func (c *Corp) Stop() { c.proc.Stop() }
 

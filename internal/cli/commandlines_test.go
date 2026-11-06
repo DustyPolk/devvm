@@ -36,8 +36,6 @@ var (
 	// devvmAt finds devvm written as a command: a word of its own followed
 	// by a space, not part of a path, a host name or an identifier.
 	devvmAt = regexp.MustCompile(`(?:^|[^\w./~$@:{-])devvm `)
-	// e2eAt finds tests/e2e.sh running its devvm, $D.
-	e2eAt = regexp.MustCompile(`["']?\$D["']? `)
 	// codeSpan is a Markdown code span.
 	codeSpan = regexp.MustCompile("`([^`]+)`")
 	// placeholderWord is a word that stands for what to fill in, such as
@@ -161,8 +159,6 @@ func TestCheckCommandLine(t *testing.T) {
 		{"a.txtar", "! exec devvm secret set nope", false},
 		{"a.txtar", "project devvm gc --nope", false},
 		{"a.txtar", "# devvm gc --nope", true},
-		{"tests/e2e.sh", `"$D" rm --force --no-export </dev/null`, false},
-		{"tests/e2e.sh", `"$D" rm --yes </dev/null`, true},
 	} {
 		var errs []error
 		for _, l := range commandLinesIn(tc.file, []byte(tc.text)) {
@@ -207,8 +203,7 @@ func commandLineFiles(t *testing.T) []string {
 // commandLinesIn finds the devvm command lines in a file's text, by the
 // file's kind: Markdown's code blocks and code spans are code, the rest
 // prose; a testscript's exec lines that must succeed are code, and those
-// meant to fail are left out; e2e's runs of $D are code it doesn't run,
-// as some are meant to fail; anything else is prose.
+// meant to fail are left out; anything else is prose.
 func commandLinesIn(path string, text []byte) []commandLine {
 	if bytes.IndexByte(text, 0) >= 0 {
 		return nil
@@ -269,8 +264,6 @@ func commandLinesIn(path string, text []byte) []commandLine {
 		case txtar && strings.HasPrefix(trimmed, "!"):
 		case txtar && isScriptCmd(trimmed):
 			// one of the scripts' own commands (catg, project…), not devvm's
-		case path == "tests/e2e.sh" && e2eAt.MatchString(line):
-			add(n, line, e2eAt, true, false)
 		default:
 			add(n, line, devvmAt, false, false)
 		}

@@ -12,12 +12,12 @@ import (
 // TestE2EDesktop checks, on a real VM's desktop as devvm desktop serves
 // it (DEVVM_E2E_DESKTOP, 127.0.0.1:PORT, with DEVVM_E2E_PASSWORD), that a
 // viewer with a wrong password is refused, and one with the password gets
-// the VM's desktop: its ServerInit and a screen update. tests/e2e.sh runs
+// the VM's desktop: its ServerInit and a screen update. tests/e2e runs
 // it; otherwise it's skipped.
 func TestE2EDesktop(t *testing.T) {
 	addr, password := os.Getenv("DEVVM_E2E_DESKTOP"), os.Getenv("DEVVM_E2E_PASSWORD")
 	if addr == "" {
-		t.Skip("tests/e2e.sh runs it, on a VM of its own")
+		t.Skip("tests/e2e runs it, on a VM of its own")
 	}
 	if _, res, _ := viewer(t, addr, "RFB 003.008\n", wrong(password)); res == resultOK {
 		t.Fatal("a wrong password got in")

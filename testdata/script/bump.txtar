@@ -23,14 +23,14 @@ cmp stdout mise-go.want
 # lists; with none listed, nothing is edited.
 exec repo/scripts/bump.sh e2e-ubuntu
 stdout '^  e2e-ubuntu +release-[0-9]{8} +-> release-29990101$'
-exec grep '^e2e_ubuntu_release=' repo/tests/e2e.sh
-stdout '^e2e_ubuntu_release=release-29990101$'
+exec grep '^const e2eUbuntuRelease = ' repo/tests/e2e/sandbox_test.go
+stdout '^const e2eUbuntuRelease = "release-29990101"$'
 exec bash repo.sh
-cp repo/tests/e2e.sh e2e.before
+cp repo/tests/e2e/sandbox_test.go e2e.before
 cp cloud-listing-none up/cloud-listing
 ! exec repo/scripts/bump.sh e2e-ubuntu
 stderr '^bump: upstream gave e2e_ubuntu_release an unexpected value: '''''
-cmp repo/tests/e2e.sh e2e.before
+cmp repo/tests/e2e/sandbox_test.go e2e.before
 
 # Upstream values that aren't a version or a checksum are refused, and
 # nothing is edited: a command for a checksum, one in a version, and a
@@ -76,12 +76,12 @@ stderr '^bump: unknown tool ''nope'''
 # A copy of the files bump.sh edits, and upstream's good answers.
 set -eu
 rm -rf repo up
-mkdir -p repo/scripts repo/assets/oci repo/assets/layers repo/internal/tools repo/tests up
+mkdir -p repo/scripts repo/assets/oci repo/assets/layers repo/internal/tools repo/tests/e2e up
 cp "$DEVVM_REPO/scripts/bump.sh" repo/scripts/
 cp "$DEVVM_REPO/assets/oci/build.sh" repo/assets/oci/
 cp "$DEVVM_REPO/assets/layers/base.sh" repo/assets/layers/
 cp "$DEVVM_REPO/internal/tools/mise.go" repo/internal/tools/
-cp "$DEVVM_REPO/tests/e2e.sh" repo/tests/
+cp "$DEVVM_REPO/tests/e2e/sandbox_test.go" repo/tests/e2e/
 cp latest-good up/crane-latest
 cp sums-good up/crane-sums
 cp mise-latest up/mise-latest

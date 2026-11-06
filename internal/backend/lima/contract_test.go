@@ -91,7 +91,7 @@ func play(t *testing.T, l *Lima, fx fixture) ([][]view, []byte) {
 }
 
 // goldenVar names the folder that TestLimactlStubContract writes real
-// Lima's golden fixtures to, when it's set (tests/e2e.sh --golden sets it
+// Lima's golden fixtures to, when it's set (e2e's --golden sets it
 // to testdata/golden/<os>): limactl --version's output, and limactl list
 // --json's with the scenario's stopped dummy instances, the sandbox's
 // folders and this user's name replaced.
@@ -109,10 +109,10 @@ func writeGolden(t *testing.T, l *Lima, dir string, list []byte) {
 		t.Fatal(err)
 	}
 	for name, data := range map[string][]byte{"limactl-version.txt": version, "limactl-list-stopped.json": list} {
-		if err := os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec // the folder tests/e2e.sh --golden names
+		if err := os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec // the folder e2e's --golden names
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(anonymous(string(data), filepath.Dir(l.Dirs.Home), me.Username)), 0o600); err != nil { //nolint:gosec // the folder tests/e2e.sh --golden names
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(anonymous(string(data), filepath.Dir(l.Dirs.Home), me.Username)), 0o600); err != nil { //nolint:gosec // the folder e2e's --golden names
 			t.Fatal(err)
 		}
 	}
@@ -120,7 +120,7 @@ func writeGolden(t *testing.T, l *Lima, dir string, list []byte) {
 
 // anonymous is a fixture without this machine's own: home is /home/me,
 // the user's name me, its full name, the timezone and a VM's environment
-// made up. tests/e2e.sh's golden does the same to what it captures.
+// made up. e2e's Golden does the same to what it captures.
 func anonymous(s, home, name string) string {
 	s = strings.ReplaceAll(s, home, "/home/me")
 	s = regexp.MustCompile(`\b`+regexp.QuoteMeta(name)+`\b`).ReplaceAllString(s, "me")

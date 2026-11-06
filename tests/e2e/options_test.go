@@ -11,49 +11,30 @@ import (
 	"strings"
 )
 
-// options are the run's flags, tests/e2e.sh's options by the same names,
-// and those tests/e2e.sh passes when it hands its sections over.
+// options are the run's flags.
 type options struct {
-	sel     []string // the chosen sections, in sections' order
-	chosen  bool     // -e2e.only or -e2e.from chose them
-	clean   bool     // delete the sandbox's cached images and tool images first
-	every   bool     // base with every feature (the features tier)
-	newest  bool     // base from Ubuntu's newest cloud image, in a sandbox of its own
-	golden  bool     // also capture the golden fixtures
-	reuse   bool     // keep the VMs Reuse launches between runs
-	slots   int      // the sections spread over this many slots
-	slot    int      // this run's slot
-	handoff handoff  // tests/e2e.sh's run, when it handed these sections over
+	sel    []string // the chosen sections, in sections' order
+	chosen bool     // --only or --from chose them
+	clean  bool     // delete the sandbox's cached images and tool images first
+	every  bool     // base with every feature (the features tier)
+	newest bool     // base from Ubuntu's newest cloud image, in a sandbox of its own
+	golden bool     // also capture the golden fixtures
+	reuse  bool     // keep the VMs Reuse launches between runs
+	slots  int      // the sections spread over this many slots
+	slot   int      // this run's slot
 }
 
-// handoff is what tests/e2e.sh passes when it runs these sections after
-// its own: its pid, which holds the slot's lock, how many checks it ran
-// and expects in all, when it started, and the file for the results it
-// adds to its own.
-type handoff struct {
-	holder  int
-	count   int
-	total   string
-	started int64
-	summary string
-}
-
-// The flags' names: tests/e2e.sh's options with e2e. before them.
+// The flags' names, given after go test's -args as --only images and so on.
 const (
-	flagOnly    = "e2e.only"
-	flagFrom    = "e2e.from"
-	flagClean   = "e2e.clean"
-	flagEvery   = "e2e.every-feature"
-	flagNewest  = "e2e.newest-base"
-	flagGolden  = "e2e.golden"
-	flagReuse   = "e2e.reuse"
-	flagSlots   = "e2e.slots"
-	flagSlot    = "e2e.slot"
-	flagHolder  = "e2e.lock-holder"
-	flagCount   = "e2e.count"
-	flagTotal   = "e2e.total"
-	flagStarted = "e2e.started"
-	flagSummary = "e2e.summary"
+	flagOnly   = "only"
+	flagFrom   = "from"
+	flagClean  = "clean"
+	flagEvery  = "every-feature"
+	flagNewest = "newest-base"
+	flagGolden = "golden"
+	flagReuse  = "reuse"
+	flagSlots  = "slots"
+	flagSlot   = "slot"
 )
 
 // registerFlags puts the run's flags on fs; readOptions reads them back.
@@ -67,16 +48,10 @@ func registerFlags(fs *flag.FlagSet) {
 	fs.Bool(flagReuse, false, "keep the VMs a section reuses between runs, and reuse them")
 	fs.Int(flagSlots, 1, "the chosen sections spread over this many slots (1-9), run at once")
 	fs.Int(flagSlot, 0, "run in this slot's sandbox (0-9)")
-	fs.Int(flagHolder, 0, "tests/e2e.sh's pid, which holds the slot's lock (tests/e2e.sh passes it)")
-	fs.Int(flagCount, 0, "the checks tests/e2e.sh ran before these (tests/e2e.sh passes it)")
-	fs.String(flagTotal, "", "the checks tests/e2e.sh expects in all (tests/e2e.sh passes it)")
-	fs.Int64(flagStarted, 0, "when tests/e2e.sh's run started, in Unix seconds (tests/e2e.sh passes it)")
-	fs.String(flagSummary, "", "where to write the results for tests/e2e.sh (tests/e2e.sh passes it)")
 }
 
-// readOptions reads the flags registerFlags put on fs and checks them as
-// tests/e2e.sh checks its options. secs are every section, ported or not:
-// one still in tests/e2e.sh can't be chosen here.
+// readOptions reads the flags registerFlags put on fs and checks them.
+// secs are every section.
 func readOptions(fs *flag.FlagSet, secs []section) (options, error) {
 	get := func(name string) string { return fs.Lookup(name).Value.String() }
 	on := func(name string) bool { return get(name) == "true" }
@@ -84,11 +59,9 @@ func readOptions(fs *flag.FlagSet, secs []section) (options, error) {
 	o := options{
 		clean: on(flagClean), every: on(flagEvery), newest: on(flagNewest), golden: on(flagGolden),
 		reuse: on(flagReuse), slots: num(flagSlots), slot: num(flagSlot),
-		handoff: handoff{holder: num(flagHolder), count: num(flagCount), total: get(flagTotal), summary: get(flagSummary)},
 	}
-	o.handoff.started, _ = strconv.ParseInt(get(flagStarted), 10, 64)
 	if o.slots < 1 || o.slots > 9 || o.slot < 0 || o.slot > 9 || (o.slots > 1 && o.slot != 0) {
-		return o, errors.New("-e2e.slots is 1 to 9, -e2e.slot 0 to 9, and -e2e.slots runs from slot 0")
+		return o, errors.New("--slots is 1 to 9, --slot 0 to 9, and --slots runs from slot 0")
 	}
 	var err error
 	o.sel, o.chosen, err = choose(get(flagOnly), on(flagFrom), o.newest, secs)
@@ -97,7 +70,7 @@ func readOptions(fs *flag.FlagSet, secs []section) (options, error) {
 	}
 	if o.newest {
 		if o.slots != 1 || o.slot != 0 {
-			return o, errors.New("-e2e.newest-base runs in a sandbox of its own, never a slot's")
+			return o, errors.New("--newest-base runs in a sandbox of its own, never a slot's")
 		}
 		o.clean = true
 	}
@@ -109,18 +82,13 @@ func readOptions(fs *flag.FlagSet, secs []section) (options, error) {
 	return o, nil
 }
 
-// choose is the sections a run's flags choose, in secs' order: -e2e.only's,
-// every one with -e2e.from, images, project and tools with
-// -e2e.newest-base, else every one but desktop and from. Of those, only
-// the ones ported here run: one chosen by name that's still in
-// tests/e2e.sh is refused.
+// choose is the sections a run's flags choose, in secs' order: --only's,
+// every one with --from, images, project and tools with --newest-base,
+// else every one but desktop and from.
 func choose(only string, from, newest bool, secs []section) ([]string, bool, error) {
-	var names, ported []string
+	var names []string
 	for _, s := range secs {
 		names = append(names, s.name)
-		if s.run != nil {
-			ported = append(ported, s.name)
-		}
 	}
 	var want []string
 	chosen := true
@@ -129,10 +97,7 @@ func choose(only string, from, newest bool, secs []section) ([]string, bool, err
 		want = strings.Split(only, ",")
 		for _, w := range want {
 			if !slices.Contains(names, w) {
-				return nil, false, fmt.Errorf("-e2e.only: no section %q (sections: %s)", w, strings.Join(names, " "))
-			}
-			if !slices.Contains(ported, w) {
-				return nil, false, fmt.Errorf("-e2e.only: %s is still tests/e2e.sh's (tests/e2e.sh --only %s), and these are here: %s", w, w, strings.Join(ported, " "))
+				return nil, false, fmt.Errorf("--only: no section %q (sections: %s)", w, strings.Join(names, " "))
 			}
 		}
 	case from:
@@ -145,7 +110,7 @@ func choose(only string, from, newest bool, secs []section) ([]string, bool, err
 		chosen = false
 	}
 	var sel []string
-	for _, n := range ported {
+	for _, n := range names {
 		if slices.Contains(want, n) {
 			sel = append(sel, n)
 		}
@@ -168,6 +133,3 @@ func (o options) tier() string {
 	}
 	return t
 }
-
-// handedOver is whether tests/e2e.sh runs these sections after its own.
-func (o options) handedOver() bool { return o.handoff.holder != 0 }

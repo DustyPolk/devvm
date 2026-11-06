@@ -1,6 +1,6 @@
 name: E2E
 
-# A trial: tests/e2e.sh --only project on a Linux runner, whose KVM runs
+# A trial: mise run e2e -- --only project on a Linux runner, whose KVM runs
 # Lima's QEMU VMs. Started by hand (Actions > E2E > Run workflow).
 on:
   workflow_dispatch:
@@ -60,7 +60,7 @@ jobs:
         name: Cache keys
         run: |
           set -euo pipefail
-          release=$(sed -n 's/^e2e_ubuntu_release=//p' tests/e2e.sh)
+          release=$(sed -n 's/^const e2eUbuntuRelease = "\(.*\)"$/\1/p' tests/e2e/sandbox_test.go)
           test -n "$release"
           echo "ubuntu=$release" >> "$GITHUB_OUTPUT"
       - name: Cache Ubuntu's cloud image
@@ -80,13 +80,13 @@ jobs:
             !/tmp/devvm-go-e2e/data/devvm/vms
           key: e2e-images-x86_64-lima${{ env.LIMA_VERSION }}-${{ steps.keys.outputs.ubuntu }}-${{ hashFiles('assets/**', 'tests/e2e-mise.lock') }}
       # Up to three attempts, as Lima's CI gives its VM tests.
-      - name: tests/e2e.sh --only project
+      - name: mise run e2e -- --only project
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
         with:
           timeout_minutes: 60
           retry_on: error
           max_attempts: 3
-          command: tests/e2e.sh --only project
+          command: mise run e2e -- --only project
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

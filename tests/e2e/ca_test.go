@@ -22,8 +22,8 @@ import (
 	"time"
 )
 
-// CA is the run's throwaway certificate authority, never one of yours
-// (tests/e2e.sh's e2e_ca): its certificate, PEM, and a server certificate
+// CA is the run's throwaway certificate authority, never one of yours:
+// its certificate, PEM, and a server certificate
 // it signed for host.lima.internal, localhost and 127.0.0.1, which Serve
 // serves, in Dir. A run makes it once, the first time a section asks, and
 // deletes it at its end, with devvm's CA folder (Trust).
@@ -135,7 +135,7 @@ func writePEM(f, kind string, der []byte) error {
 }
 
 // Line is line n of the CA's PEM, from 1: a line of its base64, which a
-// check looks for in a VM's bundle (tests/e2e.sh's sed -n 2p ca.pem).
+// check looks for in a VM's bundle.
 func (c *CA) Line(n int) string {
 	b, _ := os.ReadFile(c.PEM)
 	lines := strings.Split(string(b), "\n")
@@ -158,12 +158,11 @@ func (c *CA) Trust() error {
 	return os.WriteFile(filepath.Join(c.paths.CAs, "e2e.pem"), b, 0o600)
 }
 
-// Untrust deletes devvm's CA folder, as tests/e2e.sh's rm -rf $cafolder.
+// Untrust deletes devvm's CA folder.
 func (c *CA) Untrust() error { return os.RemoveAll(c.paths.CAs) }
 
 // Serve serves HTTPS with srv's certificate on port, on every address,
-// answering 200 to anything, until StopServing or the run's end
-// (tests/e2e.sh's ca_serve). One serves at a time: Serve again does
+// answering 200 to anything, until StopServing or the run's end. One serves at a time: Serve again does
 // nothing.
 func (c *CA) Serve(port int) error {
 	if c.srv != nil {
@@ -192,7 +191,7 @@ func (c *CA) Serve(port int) error {
 }
 
 // StopServing ends Serve's server, so its port is free for later
-// sections (tests/e2e.sh's ca_stop).
+// sections.
 func (c *CA) StopServing() {
 	if c.srv != nil {
 		_ = c.srv.Close()
@@ -201,8 +200,7 @@ func (c *CA) StopServing() {
 }
 
 // GoneFrom fails unless the running VM has none of devvm's CA files and
-// the CA isn't in its system's bundle: what an image keeps
-// (tests/e2e.sh's ca_gone).
+// the CA isn't in its system's bundle: what an image keeps.
 func (c *CA) GoneFrom(s *S, vm string) error {
 	_, err := s.Run(Cmd{Args: []string{
 		"limactl", "shell", "--workdir", "/", vm, "sh", "-c",

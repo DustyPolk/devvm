@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// The link section's group checks (tests/e2e.sh's gp_*), on links: the
+// The link section's group checks, on links: the
 // client publishes a port of its own first, so each of the three has one
 // the others reach. The client's own link to the first target, db, names
 // its group links too.
