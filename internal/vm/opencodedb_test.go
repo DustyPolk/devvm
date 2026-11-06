@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,11 +31,12 @@ const (
 	keptSession = "devvm-kept-session"
 )
 
-// opencodeSchema is opencode 2.2's database in small: its migration
-// records, its credential, account, control_account and session_share
-// tables, a table of a later opencode's with an api_key column, a
-// session, and a trigger that puts a credential back when one is
-// deleted.
+// opencodeSchema is opencode's database in small: its migration
+// records, opencode 2.2's credential, account and control_account
+// tables, an earlier opencode's session_share, a table of a later
+// opencode's with an api_key column, a session, and a trigger that puts
+// a credential back when one is deleted. TestOpencodeCleanSchema checks
+// opencode's own schema.
 const opencodeSchema = `PRAGMA journal_mode = WAL;
 CREATE TABLE migration (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL);
 INSERT INTO migration VALUES ('` + opencodeAuthImport + `', 1), ('20261030054400_job', 1);
@@ -166,27 +168,30 @@ func checkCleanDB(t *testing.T, db string) {
 	}
 }
 
+// runOpencodeClean runs devvm_opencode_clean on db, in db's folder, so
+// the copy is clean.db beside it, and fails t when it prints anything.
+func runOpencodeClean(t *testing.T, db string) error {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "bash", "-c", opencodeClean()+"\n"+`devvm_opencode_clean "$1"`, "bash", db) //nolint:gosec // devvm's own script
+	cmd.Dir = filepath.Dir(db)
+	// Its output is an export's tar stream: it prints nothing there.
+	out, err := cmd.Output()
+	if len(out) != 0 {
+		t.Errorf("it printed %q", out)
+	}
+	return err
+}
+
 // opencodeClean's copy of a running opencode's database has its session
 // and none of its logins, those its WAL file holds included, in no page
 // of the file; a database it can't read gives no copy.
 func TestOpencodeClean(t *testing.T) {
 	needSqlite(t)
-	clean := func(t *testing.T, db string) error {
-		t.Helper()
-		cmd := exec.CommandContext(t.Context(), "bash", "-c", opencodeClean()+"\n"+`devvm_opencode_clean "$1"`, "bash", db) //nolint:gosec // devvm's own script
-		cmd.Dir = filepath.Dir(db)
-		// Its output is an export's tar stream: it prints nothing there.
-		out, err := cmd.Output()
-		if len(out) != 0 {
-			t.Errorf("it printed %q", out)
-		}
-		return err
-	}
 	t.Run("logins", func(t *testing.T) {
 		dir := t.TempDir()
 		db := filepath.Join(dir, "opencode.db")
 		opencodeDB(t, db)
-		if err := clean(t, db); err != nil {
+		if err := runOpencodeClean(t, db); err != nil {
 			t.Fatal(err)
 		}
 		checkCleanDB(t, filepath.Join(dir, "clean.db"))
@@ -197,10 +202,113 @@ func TestOpencodeClean(t *testing.T) {
 		if err := state.WriteFile(db, []byte("sk-ant-devvm-planted-key, and no database")); err != nil {
 			t.Fatal(err)
 		}
-		if err := clean(t, db); err == nil {
+		if err := runOpencodeClean(t, db); err == nil {
 			t.Error("it made a copy")
 		}
 	})
+}
+
+// opencodeFixture is opencode 2.2.5's own schema, which sqlite3 printed
+// in a VM; Maintaining says when to refresh it.
+const opencodeFixture = "testdata/opencode-2.2.5.sql"
+
+// The secrets of the kv rows plantSchemaRows adds: an organization's
+// remote config, which opencode fetched with its well-known login.
+const plantedWellknown = "devvm-planted-wellknown-config"
+
+// plantSchemaRows fills db, made from opencodeFixture, with a row in
+// every table: each text column of a table in emptied holds
+// devvm-planted-TABLE-COLUMN, of any other table devvm-kept-TABLE-COLUMN,
+// and kv holds well-known rows, one of them plantedWellknown's. It
+// returns the kept values, and fails t on a table that is in neither
+// emptied nor kept, so a refreshed fixture's new table gets looked at.
+func plantSchemaRows(t *testing.T, db string, emptied, kept []string) []string {
+	t.Helper()
+	cols := map[string][][2]string{}
+	for line := range strings.Lines(sqlite(t, db, "SELECT m.name, c.name, lower(c.type) FROM sqlite_master m "+
+		"JOIN pragma_table_info(m.name) c WHERE m.type = 'table' ORDER BY m.name, c.cid;\n")) {
+		f := strings.Split(strings.TrimSuffix(line, "\n"), "|")
+		cols[f[0]] = append(cols[f[0]], [2]string{f[1], f[2]})
+	}
+	var sql strings.Builder
+	var keptValues []string
+	for table, cs := range cols {
+		switch {
+		case table == "kv" || table == "migration":
+			continue
+		case slices.Contains(emptied, table):
+		case slices.Contains(kept, table):
+		default:
+			t.Errorf("%s's table %s is neither emptied nor kept: add it to one", opencodeFixture, table)
+			continue
+		}
+		names, values := make([]string, 0, len(cs)), make([]string, 0, len(cs))
+		for _, c := range cs {
+			names = append(names, `"`+c[0]+`"`)
+			if c[1] == "integer" || c[1] == "real" {
+				values = append(values, "1")
+				continue
+			}
+			v := "devvm-planted-" + table + "-" + c[0]
+			if slices.Contains(kept, table) {
+				v = "devvm-kept-" + table + "-" + c[0]
+				keptValues = append(keptValues, v)
+			}
+			values = append(values, "'"+v+"'")
+		}
+		sql.WriteString(`INSERT INTO "` + table + `" (` + strings.Join(names, ", ") + ") VALUES (" + strings.Join(values, ", ") + ");\n")
+	}
+	sql.WriteString("INSERT INTO kv VALUES ('wellknown:sources', '[\"https://devvm-kept-org.example\"]', 1, 1), " +
+		"('wellknown:manifest:https://devvm-kept-org.example', '{\"auth\":{\"command\":[\"devvm-kept-manifest\"]}}', 1, 1), " +
+		"('wellknown:config:https://devvm-kept-org.example', '[{\"provider\":{\"org\":{\"options\":{\"apiKey\":\"" + plantedWellknown + "\"}}}}]', 1, 1);\n" +
+		"INSERT INTO migration VALUES ('" + opencodeAuthImport + "', 1), ('20261030054400_job', 1);\n")
+	sqlite(t, db, sql.String())
+	return append(keptValues, "devvm-kept-org.example", "devvm-kept-manifest")
+}
+
+// opencodeClean's copy of a database made from opencode 2.2.5's own
+// schema, a row planted in each table: no byte of it holds a value of a
+// table that holds logins or the remote config a well-known login
+// fetched, and every other table's row, the session's among them, is
+// kept.
+func TestOpencodeCleanSchema(t *testing.T) {
+	needSqlite(t)
+	schema, err := os.ReadFile(opencodeFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptied := []string{"account", "account_state", "control_account", "credential"}
+	kept := []string{
+		"blob", "blob_ref", "event", "event_sequence", "instruction_blob", "instruction_entry", "instruction_state",
+		"job", "permission", "project", "project_directory", "schedule", "session_inbox", "session_message",
+		"session_part", "session_v2", "workspace", "worktree",
+	}
+	dir := t.TempDir()
+	db := filepath.Join(dir, "opencode.db")
+	sqlite(t, db, "PRAGMA journal_mode = WAL;\n"+string(schema))
+	keptValues := plantSchemaRows(t, db, emptied, kept)
+	if err := runOpencodeClean(t, db); err != nil {
+		t.Fatal(err)
+	}
+	copied := filepath.Join(dir, "clean.db")
+	data, err := os.ReadFile(copied) //nolint:gosec // the test's own file
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"devvm-planted-", plantedWellknown} {
+		if bytes.Contains(data, []byte(s)) {
+			t.Errorf("the copy holds %s", s)
+		}
+	}
+	for _, v := range keptValues {
+		if !bytes.Contains(data, []byte(v)) {
+			t.Errorf("the copy lost %s", v)
+		}
+	}
+	if got := sqlite(t, copied, "SELECT group_concat(id) FROM migration;\nSELECT group_concat(key, ' ') FROM (SELECT key FROM kv ORDER BY key);\n"); got !=
+		"20261030054400_job\nwellknown:manifest:https://devvm-kept-org.example wellknown:sources\n" {
+		t.Errorf("migrations and kv keys: %q", got)
+	}
 }
 
 // exportNames reads a gzipped tar stream: each member's name and, for a

@@ -19,17 +19,25 @@ import (
 // keep it once its row is deleted.
 const opencodePlanted = "sk-ant-devvm-planted-opencode-key"
 
+// The fake key planted in an organization's remote config, as opencode
+// keeps one it fetched with a well-known login, in its kv table.
+const opencodeWellknownPlanted = "sk-devvm-planted-wellknown-config"
+
 // netOpencodeHistory: devvm history export of a VM whose opencode
-// database holds its login's placeholders and a key typed into opencode
-// (planted with the VM's sqlite3, as opencode's credential row) gives
-// opencode's database as its copy without either, never its WAL file,
-// and leaves the VM's own database as it was.
+// database holds its login's placeholders, a key typed into opencode
+// and an organization's remote config (planted with the VM's sqlite3,
+// as opencode's credential and kv rows) gives opencode's database as its
+// copy without any, never its WAL file, and leaves the VM's own database
+// as it was.
 func netOpencodeHistory(n *netRun) {
 	s := n.s
 	db := "~/.local/share/opencode/opencode.db"
+	wellknown := "wellknown:config:https://e2e-org.example"
 	s.Check("devvm history export leaves opencode's logins out of its database, the key typed into opencode in the VM too", func() error {
 		plant := "sqlite3 " + db + ` "INSERT OR REPLACE INTO credential (id, integration_id, label, value, active, time_created, time_updated) ` +
-			`VALUES ('cred_e2e_planted', 'e2e-provider', 'API key', '{\"type\":\"key\",\"key\":\"` + opencodePlanted + `\"}', 1, 1, 1)"`
+			`VALUES ('cred_e2e_planted', 'e2e-provider', 'API key', '{\"type\":\"key\",\"key\":\"` + opencodePlanted + `\"}', 1, 1, 1); ` +
+			`INSERT OR REPLACE INTO kv (key, value, time_created, time_updated) ` +
+			`VALUES ('` + wellknown + `', '[{\"provider\":{\"org\":{\"options\":{\"apiKey\":\"` + opencodeWellknownPlanted + `\"}}}}]', 1, 1)"`
 		if err := inVM(s, n.vm, plant); err != nil {
 			return failed("planting a credential with the VM's sqlite3", err)
 		}
@@ -48,7 +56,8 @@ func netOpencodeHistory(n *netRun) {
 		switch {
 		case !ok:
 			return errors.New("the export has no opencode.db")
-		case bytes.Contains(got, []byte(opencodePlanted)), bytes.Contains(got, []byte("devvm-placeholder")):
+		case bytes.Contains(got, []byte(opencodePlanted)), bytes.Contains(got, []byte(opencodeWellknownPlanted)),
+			bytes.Contains(got, []byte("devvm-placeholder")):
 			return errors.New("the export's opencode.db holds a login")
 		}
 		for name := range files {
@@ -59,7 +68,7 @@ func netOpencodeHistory(n *netRun) {
 		if has, err := vmHas(s, n.vm, true, "sqlite3 "+db+" 'SELECT value FROM credential'", opencodePlanted); err != nil || !has {
 			return failed("the VM's own database keeps its credential", err)
 		}
-		return inVM(s, n.vm, "sqlite3 "+db+` "DELETE FROM credential WHERE id = 'cred_e2e_planted'"`)
+		return inVM(s, n.vm, "sqlite3 "+db+` "DELETE FROM credential WHERE id = 'cred_e2e_planted'; DELETE FROM kv WHERE key = '`+wellknown+`'"`)
 	})
 }
 

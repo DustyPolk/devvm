@@ -73,10 +73,11 @@ var opencodeDBs = []string{"opencode*.db", "opencode*.db-wal", "opencode*.db-shm
 // opencodeLogins is the SQL condition that picks the tables of
 // opencode's database that hold logins: opencode 2.2's credential
 // (logins and API keys), account and control_account (its console's
-// access and refresh tokens), account_state, and session_share (each
-// share's secret), and any other table whose name or a column's says it
-// holds one, so a table a later opencode adds for its logins is picked
-// too.
+// access and refresh tokens) and account_state, an earlier opencode's
+// session_share (each share's secret), and any other table whose name or
+// a column's says it holds one, so a table a later opencode adds for its
+// logins is picked too. testdata/opencode-2.2.5.sql is opencode's own
+// schema, which TestOpencodeCleanSchema checks it against.
 const opencodeLogins = `type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\' AND (` +
 	`name LIKE '%credential%' OR name LIKE '%account%' OR name LIKE '%auth%' OR name LIKE '%secret%' ` +
 	`OR name LIKE '%token%' OR name LIKE '%share%' OR name IN (SELECT m.name FROM sqlite_master m ` +
@@ -90,24 +91,35 @@ const opencodeLogins = `type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\' 
 // database.
 const opencodeAuthImport = "20260805200742_import_legacy_credentials"
 
+// opencodeWellknown is the SQL condition that picks the rows of
+// opencode's kv table that hold an organization's remote config, which
+// opencode fetched with its well-known login's headers, one row for each
+// organization; opencode fetches it again after that login.
+const opencodeWellknown = `key LIKE 'wellknown:config:%'`
+
 // opencodeClean is the shell function devvm_opencode_clean DB, which
 // makes clean.db in the current folder: a copy of opencode's database
 // DB without its logins. sqlite3 copies it with VACUUM INTO, which reads
 // the database with what its -wal file holds, as one snapshot; in the
-// copy it drops every trigger, empties the tables opencodeLogins picks
-// and takes opencodeAuthImport's record out, then turns WAL off and
-// rebuilds the file (secure_delete and VACUUM), so no page of it keeps
-// a deleted row. It fails when the VM has no sqlite3, when any step
-// fails or when a table it emptied has a row, and the caller then
+// copy it drops every trigger, empties the tables opencodeLogins picks,
+// deletes the kv rows opencodeWellknown picks and takes
+// opencodeAuthImport's record out, then turns WAL off and rebuilds the
+// file (secure_delete and VACUUM), so no page of it keeps a deleted row.
+// It fails when the VM has no sqlite3, when any step fails or when a
+// table it emptied or kv has a row it should have deleted, and the caller then
 // leaves the database out. The schema's own functions stay off
 // (trusted_schema), as an imported database is the export's.
 func opencodeClean() string {
+	// opencodeWellknown in an SQL string literal, its quotes doubled.
+	wellknown := strings.ReplaceAll(opencodeWellknown, "'", "''")
 	gen := `SELECT printf('DROP TRIGGER IF EXISTS "%w";', name) FROM sqlite_master WHERE type = 'trigger';` + "\n" +
 		`SELECT printf('DELETE FROM "%w";', name) FROM sqlite_master WHERE ` + opencodeLogins + ";\n" +
 		`SELECT 'DELETE FROM migration WHERE id = ''` + opencodeAuthImport + `'';' FROM sqlite_master ` +
-		`WHERE type = 'table' AND name = 'migration';`
+		`WHERE type = 'table' AND name = 'migration';` + "\n" +
+		`SELECT 'DELETE FROM kv WHERE ` + wellknown + `;' FROM sqlite_master WHERE type = 'table' AND name = 'kv';`
 	check := `SELECT 'SELECT count(*) FROM sqlite_master WHERE type = ''trigger'';';` + "\n" +
-		`SELECT printf('SELECT count(*) FROM "%w";', name) FROM sqlite_master WHERE ` + opencodeLogins + ";"
+		`SELECT printf('SELECT count(*) FROM "%w";', name) FROM sqlite_master WHERE ` + opencodeLogins + ";\n" +
+		`SELECT 'SELECT count(*) FROM kv WHERE ` + wellknown + `;' FROM sqlite_master WHERE type = 'table' AND name = 'kv';`
 	sql := "sqlite3 -bail -cmd 'PRAGMA trusted_schema = OFF'"
 	return strings.Join([]string{
 		"devvm_opencode_clean() {",
