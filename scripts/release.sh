@@ -2,7 +2,7 @@
 # Build a release's files in dist/ with GoReleaser (.goreleaser.yaml), from git (only what's committed):
 #   devvm-<version>-<os>-<arch>.tar.gz  the binary and the files it reads, for darwin and linux, arm64 and amd64
 #   devvm-<version>.tar.gz              the source, which the Homebrew formula builds from
-#   SHA256SUMS                          their checksums, which install.sh checks
+#   SHA256SUMS                          their checksums and install.sh's, which install.sh checks
 #   SHA256SUMS.minisig                  SHA256SUMS signed with the release key (minisign), which install.sh checks
 #   install.sh                          the install script, set to install this release and to trust the key
 #   devvm.rb                            the Homebrew formula for devvmhq/homebrew-tap
@@ -89,12 +89,7 @@ done
 tarball=devvm-$v.tar.gz
 sha=$(awk -v f="$tarball" '$2 == f { print $1 }' "$out/SHA256SUMS")
 [[ $sha =~ ^[0-9a-f]{64}$ ]] || die "SHA256SUMS has no $tarball"
-if $sign; then
-  minisign -Sm "$out/SHA256SUMS" -s "$key" -t "devvm $v" || die "couldn't sign SHA256SUMS"
-  minisign -Vm "$out/SHA256SUMS" -P "$pubkey" >/dev/null || die "SHA256SUMS.minisig doesn't verify with packaging/minisign.pub"
-else
-  pubkey=""   # an unsigned test build: its install.sh doesn't expect a signature
-fi
+$sign || pubkey=""   # an unsigned test build: its install.sh doesn't expect a signature
 
 git show "$commit:install.sh" |
   awk -v v="$v" -v k="$pubkey" '
@@ -106,6 +101,15 @@ chmod 755 "$out/install.sh"
 git show "$commit:packaging/homebrew/devvm.rb" |
   awk -v u="$url/$tarball" -v s="$sha" '{ gsub("@URL@", u); gsub("@SHA256@", s); print }' \
   > "$out/devvm.rb"
+
+# install.sh's checksum goes in SHA256SUMS before it's signed, so you can check the script against the
+# release key before you run it.
+(cd "$out" && { sha256sum install.sh 2>/dev/null || shasum -a 256 install.sh; } >> SHA256SUMS) ||
+  die "couldn't add install.sh to SHA256SUMS"
+if $sign; then
+  minisign -Sm "$out/SHA256SUMS" -s "$key" -t "devvm $v" || die "couldn't sign SHA256SUMS"
+  minisign -Vm "$out/SHA256SUMS" -P "$pubkey" >/dev/null || die "SHA256SUMS.minisig doesn't verify with packaging/minisign.pub"
+fi
 
 echo "==> dist/ for devvm $v (from $ref):"
 (cd "$out" && ls -l devvm-*.tar.gz SHA256SUMS* install.sh devvm.rb 2>/dev/null) || true

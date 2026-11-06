@@ -36,14 +36,14 @@ Until a fix ships, users can still build base, because devvm's fallback to the r
 
 - **Once, the keys:** a minisign key for releases, `minisign -G -p packaging/minisign.pub -s ~/.minisign/devvm.key` (commit `packaging/minisign.pub`; the secret key and its password never go in the repo), and a key git signs tags with (`git config user.signingkey`, GPG, or SSH with `gpg.format ssh`) that `git tag -v` verifies on this machine. Commit its fingerprint in `packaging/release-signer`, one per line (`#` comments): the GPG fingerprint (`gpg --fingerprint`, no spaces), or the SSH key's `SHA256:…` (`ssh-keygen -lf KEY.pub`). `release.sh` refuses a tag signed by any other key, even one git trusts. To rotate, add the new key's line, tag with it, then remove the old one.
 - Bump `VERSION`, add the `CHANGELOG.md` entry, commit, then `git tag -s v<version>`.
-- `scripts/release.sh` checks the tag with `git tag -v` and its signer against this checkout's `packaging/release-signer`, then builds `dist/` from the tagged commit with GoReleaser (`.goreleaser.yaml`), in a clone of its own, so only what's committed goes in, with one `goreleaser release --skip=publish`. It checks that the binary built for this host prints the version, then signs `SHA256SUMS` with `~/.minisign/devvm.key` (or `DEVVM_MINISIGN_KEY`) and verifies it with `packaging/minisign.pub`. Nothing is published.
+- `scripts/release.sh` checks the tag with `git tag -v` and its signer against this checkout's `packaging/release-signer`, then builds `dist/` from the tagged commit with GoReleaser (`.goreleaser.yaml`), in a clone of its own, so only what's committed goes in, with one `goreleaser release --skip=publish`. It checks that the binary built for this host prints the version, writes `install.sh` and adds its checksum to `SHA256SUMS`, then signs `SHA256SUMS` with `~/.minisign/devvm.key` (or `DEVVM_MINISIGN_KEY`) and verifies it with `packaging/minisign.pub`. Nothing is published.
 - `dist/` then holds:
 
   | File | What |
   | --- | --- |
   | `devvm-<version>-<os>-<arch>.tar.gz` | the binary, its files (`assets/`) embedded, with `README.md`, `CHANGELOG.md` and `LICENSE`, for `darwin` and `linux`, `arm64` and `amd64` |
   | `devvm-<version>.tar.gz` | the source, which the Homebrew formula builds from |
-  | `SHA256SUMS`, `SHA256SUMS.minisig` | their checksums, and the signature |
+  | `SHA256SUMS`, `SHA256SUMS.minisig` | their checksums and `install.sh`'s, and the signature |
   | `install.sh` | the install script, set to this release and to `packaging/minisign.pub`'s key |
   | `devvm.rb` | the Homebrew formula, set to the source tarball's URL and checksum |
 
