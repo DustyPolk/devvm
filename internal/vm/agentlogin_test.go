@@ -72,6 +72,8 @@ func TestLoginArgv(t *testing.T) {
 		{AgentLoginOptions{Agent: "codex", Device: true}, []string{"codex", "-c", `cli_auth_credentials_store="file"`, "login", "--device-auth"}},
 		{AgentLoginOptions{Agent: "opencode"}, []string{"opencode", "auth", "login", "--provider", "openai", "--method", "ChatGPT Pro/Plus (browser)"}},
 		{AgentLoginOptions{Agent: "opencode", Device: true}, []string{"opencode", "auth", "login", "--provider", "openai", "--method", "ChatGPT Pro/Plus (headless)"}},
+		{AgentLoginOptions{Agent: "claude"}, []string{"env", "-u", "CLAUDE_CODE_OAUTH_TOKEN", "claude", "auth", "login", "--claudeai"}},
+		{AgentLoginOptions{Agent: "claude", SetupToken: true}, []string{"env", "-u", "CLAUDE_CODE_OAUTH_TOKEN", "claude", "setup-token"}},
 	} {
 		if got := loginArgv(c.o); !slices.Equal(got, c.want) {
 			t.Errorf("loginArgv(%+v) = %q, want %q", c.o, got, c.want)

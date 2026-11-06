@@ -37,7 +37,7 @@ func newAgentSaveCmd(a *app) *cobra.Command {
 		Short: "Copy the agents' settings from this folder's VM into devvm's store",
 		Long: "Copy the settings of AGENT, claude, codex or opencode, or of every agent this folder's VM has, from the VM into devvm's store, " +
 			"so every VM with the agent gets them, never its logins or history. " +
-			"It shows what changed and asks first, so it runs only in a terminal, and devvm starts a stopped VM for it.",
+			"It shows what changed and asks first, so it runs only in a terminal without --no-input, and devvm starts a stopped VM for it.",
 		Example: examples(
 			"devvm agent save", "show what changed in every agent's settings, then save them",
 			"devvm agent save claude", "save only Claude Code's",

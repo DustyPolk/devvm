@@ -49,7 +49,7 @@ devvm keeps the agents' settings and logins on this machine in a store of its ow
 The store has two folders for each agent, and each one holds the agent's files at the same paths below it as the agent keeps them in a home folder:
 
 - **Settings** go in `~/.config/devvm/agents/<agent>/`, such as `~/.config/devvm/agents/claude/.claude/settings.json` and `~/.config/devvm/agents/claude/.claude/skills`. You can edit these files and make or delete these folders yourself, and a VM gets the change on its next launch, as [mounts](#mounts) and [copies](#copies) describe.
-- **Logins** go in `~/.local/share/devvm/logins/<agent>/`, such as `~/.local/share/devvm/logins/codex/.codex/auth.json` and `~/.local/share/devvm/logins/claude/.claude.json`, and so does a Codex or opencode login that you [make inside a VM](#codex-and-opencode-logins). Only you can read them, because devvm makes each agent's logins folder yours alone (mode 700) and each login file mode 600. On macOS, devvm keeps each agent's logins folder out of Time Machine's backups.
+- **Logins** go in `~/.local/share/devvm/logins/<agent>/`, such as `~/.local/share/devvm/logins/codex/.codex/auth.json` and `~/.local/share/devvm/logins/claude/.claude.json`, and so does a login that you make inside a VM, such as Codex's ([Codex and opencode logins](#codex-and-opencode-logins)) or Claude Code's in `~/.local/share/devvm/logins/claude/.claude/.credentials.json` ([Claude Code login](#claude-code-login)). Only you can read them, because devvm makes each agent's logins folder yours alone (mode 700) and each login file mode 600. On macOS, devvm keeps each agent's logins folder out of Time Machine's backups.
 
 Each VM gets its agents' settings and logins from the store, but never your history. Transcripts, sessions and databases aren't in the store, and each VM's own stay in that VM. Before you leave an agent running unattended, read [staying safe](../safety/_index.md#the-habits) and [rogue agents](../safety/attack-vectors.md#rogue-agents).
 
@@ -97,7 +97,7 @@ devvm reads each agent's settings inside the agent's own folder, such as `~/.cla
 
 When the store already has settings or a login of an agent you import, devvm asks in a terminal whether to replace them, and the answer is no unless you type `y`. Without a terminal, or with `--no-input`, devvm refuses and names `--force`, which replaces them without asking. A replacement writes each file again and takes out what your home folder no longer has, but it keeps the store's folders, so a running VM's mounts still show them. An agent whose settings aren't in your home folder keeps the store's settings, and one without a login there keeps the store's login.
 
-On macOS, Claude Code keeps its own login in the Keychain, and devvm neither reads it nor copies it. A VM's Claude Code logs in with a Claude Code token that devvm keeps with its secrets instead ([Claude Code login](#claude-code-login)).
+On macOS, Claude Code keeps its own login in the Keychain, and devvm neither reads it nor copies it. You log Claude Code in from a VM instead, with `devvm agent login claude`, and every VM with Claude Code gets that login ([Claude Code login](#claude-code-login)).
 
 ### Saving a VM's settings
 
@@ -130,12 +130,23 @@ devvm merges the settings and MCP servers from the store's `.claude.json` into t
 
 ### Claude Code login
 
-Claude Code's login on macOS is in the Keychain and can't be shared, so VMs use a long-lived Claude Code token instead. To set it up:
+You log Claude Code in once, from inside any VM that has it, and devvm keeps the login on this machine for every VM with Claude Code, so this machine never needs Claude Code:
 
-1. Run `claude setup-token` on this machine and approve in the browser.
-2. Run `devvm secret set claude` and paste the Claude Code token that `claude setup-token` printed (`sk-ant-oat01-…`), not the code the browser shows.
+```sh
+devvm agent login claude                # log Claude Code in to your Claude subscription
+devvm agent login claude --setup-token  # get a long-lived Claude Code token with claude setup-token instead
+```
 
-devvm saves the Claude Code token with the other [secrets](../safety/network.md#saving-and-binding-secrets), and it puts it in the environment of every VM that has `claude`, as `CLAUDE_CODE_OAUTH_TOKEN`, from the VM's next launch. A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's own environment wins over the saved one. devvm neither saves nor sends a Claude Code token that isn't a setup token. The VM gets a placeholder of its own, whatever its network tier, and its proxy puts the Claude Code token into requests. devvm never copies a `~/.claude/.credentials.json`.
+devvm starts the folder's VM first if it's stopped, as `devvm host` does, and then runs Claude Code's own login in the VM, on your terminal: `claude auth login --claudeai`, or `claude setup-token` with `--setup-token`. Claude Code shows an address, which you open in a browser on any machine. When you approve the login there, the browser shows a code, which you paste back at Claude Code's prompt, so devvm forwards no port. The VM's proxy saves the login as it reaches Claude's token endpoint, and Claude Code in the VM gets only placeholders. devvm then sets the VM up again, so it uses the login at once, and every other VM with Claude Code gets it from its next launch. When the login ends without a new login in the store, devvm says so and fails.
+
+devvm keeps one Claude Code login, either your subscription's login or a Claude Code token, and the newest replaces the other, so every VM uses the account you logged in to last:
+
+- **Your subscription's login**, from `devvm agent login claude` or a `claude /login` that you run in a VM yourself, goes in devvm's agent store, in `~/.local/share/devvm/logins/claude/.claude/.credentials.json`, only yours to read. The VM's `~/.claude/.credentials.json` holds placeholders, with no refresh token and an expiry in 2099, so Claude Code in the VM never refreshes the login itself. The VM's proxy puts the login into the VM's requests to `api.anthropic.com`, and refreshes it on this machine when it's due, through the company proxy when `config.toml` names one. devvm keeps only a login that can use Claude's models and can't make API keys, so a login to an Anthropic Console account, which Claude Code uses to make an API key, fails in a VM, and no API key reaches it. Only a VM that has Claude Code can log it in.
+- **A Claude Code token**, from `devvm agent login claude --setup-token` or a `claude setup-token` that you run in a VM yourself, goes with the other [secrets](../safety/network.md#saving-and-binding-secrets). You can also save one with `devvm secret set claude` and paste the token that `claude setup-token` printed on another machine (`sk-ant-oat01-…`), not the code the browser shows. devvm neither saves nor sends a Claude Code token that isn't a setup token. Every VM with Claude Code gets the token in its environment as `CLAUDE_CODE_OAUTH_TOKEN`, holding a placeholder of its own, and its proxy puts the token into its requests. When you set up a token in a VM, `claude setup-token` prints that VM's placeholder, not the token, because devvm already saved it.
+
+A VM gets either `~/.claude/.credentials.json` or `CLAUDE_CODE_OAUTH_TOKEN` from devvm, never both, because Claude Code would use the token in its environment over the login in its file. A VM that started with the login devvm replaced keeps working, because its proxy puts the login devvm keeps now in place of either placeholder. A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's own environment on this machine wins over both, as it does in Claude Code, so VMs get that token, and `devvm agent login claude` warns you when it's set. The VM gets placeholders whatever its network tier.
+
+Anthropic doesn't document the requests that Claude Code's login sends, so devvm follows the ones Claude Code sends today, and a new Claude Code release can change them. When a login in a VM stops working, run `devvm agent login claude` again, or save a Claude Code token instead.
 
 ### Codex and opencode logins
 
@@ -143,7 +154,7 @@ On every network tier, the VM's `auth.json` holds placeholders, and its proxy ho
 
 #### Logging in with devvm agent login
 
-`devvm agent login` logs Codex or opencode in from inside this folder's VM, so this machine never needs either agent, and devvm's agent store keeps the login for every VM with that agent:
+`devvm agent login` logs Codex or opencode in from inside this folder's VM, so this machine never needs either agent, and devvm's agent store keeps the login for every VM with that agent. Claude Code's login is `devvm agent login claude` ([Claude Code login](#claude-code-login)):
 
 ```sh
 devvm agent login codex                                    # log Codex in to ChatGPT in a browser on this machine
@@ -164,7 +175,7 @@ opencode's Anthropic login is an API key, because opencode itself has no other w
 
 #### Logins made in a VM
 
-When Codex or opencode in a VM logs in to OpenAI, whether `devvm agent login` runs it or you run it yourself, the VM's proxy saves the login in devvm's store, in the agent's own `auth.json`, and the agent in the VM gets only placeholders, so the VM never holds the login's tokens. The VM you logged in from uses the login at once, and every VM with that agent gets it from its next launch. A login that shows a code to type into a browser on any machine works in a VM as it is, such as `codex login --device-auth` and opencode's headless ChatGPT login. A new login replaces the one in the store, together with Codex's API key, so every VM with the agent uses the account you logged in to last. In a VM with both Codex and opencode, devvm tells their logins apart by the program that sends them. `devvm network log` shows a `login` line for each login it saved. On the open tier, a program that goes around the VM's proxy gets the login's tokens itself, and devvm saves nothing ([logins made in a VM](../internals/network.md#logins-made-in-a-vm)).
+When Codex or opencode in a VM logs in to OpenAI, whether `devvm agent login` runs it or you run it yourself, the VM's proxy saves the login in devvm's store, in the agent's own `auth.json`, and the agent in the VM gets only placeholders, so the VM never holds the login's tokens. The VM you logged in from uses the login at once, and every VM with that agent gets it from its next launch. A login that shows a code to type into a browser on any machine works in a VM as it is, such as `codex login --device-auth` and opencode's headless ChatGPT login. A new login replaces the one in the store, together with Codex's API key, so every VM with the agent uses the account you logged in to last. In a VM with both Codex and opencode, devvm tells their logins apart by the program that sends them. `devvm network log` shows a `login` line for each login it saved. On the open tier, a program that goes around the VM's proxy gets the login's tokens itself, and devvm saves nothing ([logins made in a VM](../internals/network.md#logins-made-in-a-vm)). Claude Code's logins in a VM are saved in the same way ([Claude Code login](#claude-code-login)).
 
 ## History
 

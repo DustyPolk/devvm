@@ -44,7 +44,13 @@ func (c Capturer) vm(x proxy.Exchange) (*state.VM, string, string, error) {
 	if mine := slices.DeleteFunc(slices.Clone(agents), func(a string) bool { return !slices.Contains(own, a) }); len(mine) > 0 {
 		agents = mine
 	}
-	return st, n.Made.ProxySalt, agentlogin.Pick(agents, x.UserAgent), nil
+	agent := agentlogin.Pick(agents, x.UserAgent)
+	// Claude Code's capture replaces the login every VM with Claude Code uses, or deletes its
+	// token, so only a VM whose image has Claude Code makes one; another's gets nothing.
+	if agent == agentlogin.Claude && !slices.Contains(own, agentlogin.Claude) {
+		return nil, "", "", errors.New("the VM's image has no Claude Code")
+	}
+	return st, n.Made.ProxySalt, agent, nil
 }
 
 // Request is the token request's body as it goes on, or the reply the VM

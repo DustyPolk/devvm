@@ -290,8 +290,12 @@ func TestGet(t *testing.T) {
 	if _, err := s.Get(ctx, loginOf("codex", "codex")); msg.NamesOf(err) != "codex_no_chatgpt" {
 		t.Errorf("Get(codex) = %v", msg.NamesOf(err))
 	}
+	// No Claude Code login of either kind.
+	if _, err := s.Get(ctx, secretOf("claude")); msg.NamesOf(err) != "claude_no_login" {
+		t.Errorf("Get(claude) = %v", msg.NamesOf(err))
+	}
 	for _, b := range []proxy.Binding{
-		secretOf("claude"), secretOf("../../etc/passwd"), secretOf("nope"),
+		secretOf("../../etc/passwd"), secretOf("nope"),
 		// A secret's name as a login, or a login's as a secret: neither is looked up.
 		loginOf("github", "github"), loginOf("../../etc", "codex-key"), secretOf("codex-key"),
 		{Name: "github", Kind: "env"},
@@ -313,6 +317,7 @@ func TestLoginFailed(t *testing.T) {
 		{agentlogin.ErrCodexNoChatGPT, "codex_no_chatgpt"},
 		{&agentlogin.RefreshError{Agent: agentlogin.Codex, Err: cause}, "codex_refresh_failed reason=401 Unauthorized"},
 		{&agentlogin.RefreshError{Agent: agentlogin.Opencode, Provider: "openai", Err: cause}, "opencode_refresh_failed provider=openai reason=401 Unauthorized"},
+		{&agentlogin.RefreshError{Agent: agentlogin.Claude, Err: cause}, "claude_refresh_failed reason=401 Unauthorized"},
 		{cause, "login_read_failed file=/h/auth.json reason=401 Unauthorized"},
 	} {
 		m := loginFailed("/h/auth.json", tc.err)
@@ -340,7 +345,7 @@ func TestNamesAndLogins(t *testing.T) {
 	if got := Names(st); !slices.Equal(got, []string{"github", "claude"}) {
 		t.Errorf("Names with proxy bound = %q", got)
 	}
-	if got := s.Logins([]string{"node", "codex", "claude"}); got != nil {
+	if got := s.Logins(t.Context(), []string{"node", "codex", "claude"}); got != nil {
 		t.Errorf("Logins without files = %q", got)
 	}
 	for _, k := range loginKinds {
@@ -352,10 +357,11 @@ func TestNamesAndLogins(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := s.Logins([]string{"node", "codex", "claude"}); !slices.Equal(got, []string{"codex", "claude"}) {
+	// Claude Code's OAuth login file holds no login.
+	if got := s.Logins(t.Context(), []string{"node", "codex", "claude"}); !slices.Equal(got, []string{"codex", "claude"}) {
 		t.Errorf("Logins = %q", got)
 	}
-	if got := s.Logins([]string{"node"}); got != nil {
+	if got := s.Logins(t.Context(), []string{"node"}); got != nil {
 		t.Errorf("Logins without agents = %q", got)
 	}
 }
@@ -413,7 +419,7 @@ func TestCapture(t *testing.T) {
 		t.Errorf("the store's Codex login: %s, %v", b, err)
 	}
 	claude := []byte(`{"grant_type":"authorization_code","code":"c"}`)
-	if _, err := s.Capture(t.Context(), "claude", "salt", "application/json", claude, []byte(`{"access_token":"at-real","refresh_token":"rt-real"}`)); err != nil {
+	if _, err := s.Capture(t.Context(), "claude", "salt", "application/json", claude, []byte(`{"access_token":"sk-ant-oat01-real","refresh_token":"rt-real","scope":"user:inference"}`)); err != nil {
 		t.Fatal(err)
 	}
 	if b, err := os.ReadFile(filepath.Join(s.Dirs.AgentLogins("claude"), ".claude", ".credentials.json")); err != nil || !strings.Contains(string(b), "claudeAiOauth") {
@@ -430,7 +436,7 @@ func TestCapture(t *testing.T) {
 			t.Errorf("another agent: %v", msg.NamesOf(err))
 		}
 	}
-	if got := loginHosts(newVM(t, s.Dirs, vm1, "node", "codex", "claude")); !slices.Equal(got, []string{"auth.openai.com"}) {
+	if got := loginHosts(newVM(t, s.Dirs, vm1, "node", "codex", "claude")); !slices.Equal(got, []string{"auth.openai.com", "platform.claude.com", "console.anthropic.com"}) {
 		t.Errorf("loginHosts = %q", got)
 	}
 	if got := loginHosts(newVM(t, s.Dirs, vm2, "node")); got != nil {
@@ -484,7 +490,8 @@ func TestWriteFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Codex's token endpoint, which its proxy captures logins at, is allowed too.
-	wantPol := "api.github.com:443\ngithub.com:443\ncodeload.github.com:443\nraw.githubusercontent.com:443\napi.anthropic.com:443\napi.openai.com:443\nauth.openai.com:443\n"
+	wantPol := "api.github.com:443\ngithub.com:443\ncodeload.github.com:443\nraw.githubusercontent.com:443\napi.anthropic.com:443\napi.openai.com:443\n" +
+		"auth.openai.com:443\nplatform.claude.com:443\nconsole.anthropic.com:443\n"
 	if string(pol) != wantPol {
 		t.Errorf("policy = %q, want %q", pol, wantPol)
 	}
@@ -508,7 +515,7 @@ func TestWriteFiles(t *testing.T) {
 	if strings.Contains(string(data), `"github"`) || !strings.Contains(string(data), `"codex-key"`) {
 		t.Errorf("refreshed bindings = %s", data)
 	}
-	if pol, _ := os.ReadFile(d.VM(vm1).SecretsPolicy()); string(pol) != "api.anthropic.com:443\napi.openai.com:443\nauth.openai.com:443\n" {
+	if pol, _ := os.ReadFile(d.VM(vm1).SecretsPolicy()); string(pol) != "api.anthropic.com:443\napi.openai.com:443\nauth.openai.com:443\nplatform.claude.com:443\nconsole.anthropic.com:443\n" {
 		t.Errorf("refreshed policy = %q", pol)
 	}
 	// No secrets at all: an empty list.

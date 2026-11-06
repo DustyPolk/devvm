@@ -13,8 +13,8 @@ import (
 
 // agentLoginOpts are devvm agent login's flags.
 type agentLoginOpts struct {
-	device, apiKey, stdin bool
-	provider              string
+	device, apiKey, stdin, setupToken bool
+	provider                          string
 }
 
 // newAgentLoginCmd is devvm agent login AGENT.
@@ -23,10 +23,14 @@ func newAgentLoginCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login AGENT",
 		Short: "Log an agent in, in this folder's VM, and save the login in devvm's store",
-		Long: "Log AGENT, codex or opencode, in to ChatGPT inside this folder's VM, in a browser on this machine, or with a code with --device-code, " +
-			"or save an API key with --api-key. " +
-			"devvm's store keeps the login, so every VM with the agent gets it, and the VMs get only placeholders.",
+		Long: "Log AGENT in inside this folder's VM, and keep the login in devvm's store for every VM with the agent, which gets only placeholders. " +
+			"claude logs in to your Claude subscription in a browser on any machine, whose code you paste back, " +
+			"or gets a long-lived Claude Code token with --setup-token. " +
+			"codex and opencode log in to ChatGPT in a browser on this machine, or with a code with --device-code, " +
+			"or save an API key with --api-key.",
 		Example: examples(
+			"devvm agent login claude", "log Claude Code in to your Claude subscription",
+			"devvm agent login claude --setup-token", "get a Claude Code token with claude setup-token instead",
 			"devvm agent login codex", "log Codex in to ChatGPT in a browser on this machine",
 			"devvm agent login codex --device-code", "log in with a code, in a browser on any machine",
 			"devvm agent login opencode --api-key --provider anthropic", "save opencode's Anthropic API key, asking for it",
@@ -34,7 +38,7 @@ func newAgentLoginCmd(a *app) *cobra.Command {
 		Args:      cobra.MatchAll(exactArgs(1), func(_ *cobra.Command, args []string) error { return o.check(args[0]) }),
 		ValidArgs: vm.LoginAgents(),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			lo := vm.AgentLoginOptions{Agent: args[0], Device: o.device, Provider: o.provider}
+			lo := vm.AgentLoginOptions{Agent: args[0], Device: o.device, SetupToken: o.setupToken, Provider: o.provider}
 			if o.apiKey {
 				key, err := o.askKey(a, lo)
 				if err != nil {
@@ -53,17 +57,27 @@ func newAgentLoginCmd(a *app) *cobra.Command {
 	f.BoolVar(&o.apiKey, "api-key", false, "save an API key instead, asking for it")
 	f.StringVar(&o.provider, "provider", "", "with opencode's --api-key, the `PROVIDER` it's for: anthropic, openai or openrouter")
 	f.BoolVar(&o.stdin, "stdin", false, "read the secret from a line of input, without asking")
+	f.BoolVar(&o.setupToken, "setup-token", false, "with claude, get a long-lived Claude Code token with claude setup-token instead")
 	exclusive(cmd, "device-code", "api-key")
 	addFolderFlags(cmd, a)
 	return cmd
 }
 
-// check refuses flags that don't go with agent's login: --provider only
-// with opencode's --api-key, which needs it, and --stdin only with
-// --api-key.
+// check refuses flags that don't go with agent's login: --setup-token
+// only with claude, which takes neither --device-code nor --api-key,
+// --provider only with opencode's --api-key, which needs it, and --stdin
+// only with --api-key.
 func (o agentLoginOpts) check(agent string) error {
 	providers := agentlogin.KeyProviders(agentlogin.Opencode)
 	switch {
+	case o.setupToken && agent != agentlogin.Claude:
+		return msg.AgentLoginSetupTokenAlone()
+	case agent == agentlogin.Claude && o.device:
+		return msg.AgentLoginClaudeFlag("--device-code")
+	case agent == agentlogin.Claude && o.apiKey:
+		return msg.AgentLoginClaudeFlag("--api-key")
+	case agent == agentlogin.Claude && o.stdin:
+		return msg.AgentLoginClaudeFlag("--stdin")
 	case o.stdin && !o.apiKey:
 		return msg.AgentLoginStdinAlone(agent)
 	case o.provider != "" && (!o.apiKey || agent != agentlogin.Opencode):

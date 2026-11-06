@@ -69,24 +69,32 @@ func (e Launch) reach(ctx context.Context) (string, *target, error) {
 // sets it up, which puts it in devvm's ssh config, and checks its backend
 // says how ssh reaches it.
 func ready(ctx context.Context, e Launch) (*target, error) {
+	t, _, err := readyConf(ctx, e)
+	return t, err
+}
+
+// readyConf is ready, with the VM's confinement as its launch gave it,
+// which setting it up again needs (syncer.sync).
+func readyConf(ctx context.Context, e Launch) (*target, backend.Confinement, error) {
+	var none backend.Confinement
 	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	if err := e.Registry.Require(t.b, t.f.Name, backend.FeatureSSH); err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	conf, err := e.launch(ctx, t, upOpts{})
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	if err := e.setUpVM(ctx, t, conf); err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	// A VM running since a start without its ssh (an emulation not yet
 	// let through then) has none to reach.
 	if _, err := t.b.SSH(ctx, t.f.Name); err != nil {
-		return nil, err
+		return nil, none, err
 	}
-	return t, nil
+	return t, conf, nil
 }

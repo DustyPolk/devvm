@@ -20,7 +20,9 @@ import (
 )
 
 // LoginAgents are the agents devvm agent login logs in.
-func LoginAgents() []string { return []string{agentlogin.Codex, agentlogin.Opencode} }
+func LoginAgents() []string {
+	return []string{agentlogin.Claude, agentlogin.Codex, agentlogin.Opencode}
+}
 
 // The ports the agents' ChatGPT logins in a browser come back to: Codex
 // and opencode listen on the first, and Codex on the second when the
@@ -36,6 +38,10 @@ type AgentLoginOptions struct {
 	// Device logs in to ChatGPT with a code to type into a browser on any
 	// machine, so nothing is forwarded.
 	Device bool
+	// SetupToken gets Claude Code a long-lived token with claude
+	// setup-token, which devvm saves as the claude secret, instead of its
+	// subscription's login.
+	SetupToken bool
 	// Key is an API key to save in devvm's store instead, for opencode
 	// Provider's (agentlogin.KeyProviders), which the VM gets as
 	// placeholders: the agent's own login never runs.
@@ -54,10 +60,12 @@ type AgentLogin struct{ *Env }
 // loginFallbackPort when it can) that lasts only while the login runs,
 // interrupted too; or with a code (Device), nothing forwarded. An API
 // key goes into the store from here, and the VM gets its copy of the
-// login and its proxy the bindings at once. Run says what the store
-// saved, and fails when the login saved nothing.
+// login and its proxy the bindings at once. Claude Code's login, or its
+// claude setup-token, shows an address to open in a browser on any
+// machine, whose code you paste back, so nothing is forwarded (claude).
+// Run says what the store saved, and fails when the login saved nothing.
 func (e AgentLogin) Run(ctx context.Context, o AgentLoginOptions) error {
-	t, err := ready(ctx, e.launcher)
+	t, conf, err := readyConf(ctx, e.launcher)
 	if err != nil {
 		return err
 	}
@@ -66,6 +74,9 @@ func (e AgentLogin) Run(ctx context.Context, o AgentLoginOptions) error {
 		return msg.AgentLoginNoAgent(o.Agent, vm)
 	}
 	store := e.Proxy.Secrets
+	if o.Agent == agentlogin.Claude {
+		return e.claude(ctx, t, conf, o)
+	}
 	if o.Key != "" {
 		return e.saveKey(ctx, t, store, o)
 	}
@@ -95,11 +106,48 @@ func (e AgentLogin) saved(store *secrets.Store, agent, vm, before string) error 
 	return nil
 }
 
-// login runs the agent's ChatGPT login in the VM, on this terminal, with
-// the forward a browser login needs while it runs.
+// claude logs Claude Code in in the VM, its login's code pasted on this
+// terminal: the VM's proxy saves its subscription's login in the store,
+// or claude setup-token's token as the claude secret, and takes the other
+// away. Then the VM is set up again, so it gets the login devvm keeps now,
+// its token in the environment or its OAuth login's file, never both, and
+// Run says which it saved.
+func (e AgentLogin) claude(ctx context.Context, t *target, conf backend.Confinement, o AgentLoginOptions) error {
+	vm, store := t.f.Name, e.Proxy.Secrets
+	oauth, token, err := secrets.ClaudeOf(store).Sums(ctx)
+	if err != nil {
+		return err
+	}
+	e.Info(msg.AgentLoginClaudePaste())
+	if err := e.login(ctx, t, o); err != nil {
+		return err
+	}
+	oauth2, token2, err := secrets.ClaudeOf(store).Sums(ctx)
+	if err != nil {
+		return err
+	}
+	if o.SetupToken && (token2 == "" || token2 == token) || !o.SetupToken && (oauth2 == "" || oauth2 == oauth) {
+		return msg.AgentLoginNotSaved(o.Agent, vm)
+	}
+	if err := e.launcher.syncer.sync(ctx, t.b, t.st, t.f.Slug(), tools.Files(t.st), conf); err != nil {
+		return err
+	}
+	if o.SetupToken {
+		e.Info(msg.ClaudeSetupTokenSaved(vm))
+	} else {
+		e.Info(msg.ClaudeLoginSaved(vm))
+	}
+	if secrets.ClaudeOf(store).Env() != "" {
+		e.Warn(msg.ClaudeEnvTokenWins())
+	}
+	return nil
+}
+
+// login runs the agent's own login in the VM, on this terminal, with the
+// forward a ChatGPT login in a browser needs while it runs.
 func (e AgentLogin) login(ctx context.Context, t *target, o AgentLoginOptions) error {
 	vm := t.f.Name
-	if !o.Device {
+	if !o.Device && o.Agent != agentlogin.Claude {
 		reach, err := vmssh.Checked(ctx, e.Dirs, e.Registry.Review, t.b, vm, vmssh.PinKeys)
 		if err != nil {
 			return err
@@ -155,10 +203,20 @@ func (e AgentLogin) endLogin(ctx context.Context, t *target) {
 	_ = t.exec(ctx, []string{"sh", "-c", endScript}, backend.ExecOpts{Stdout: log, Stderr: log})
 }
 
-// loginArgv is the agent's own ChatGPT login: Codex's, its login kept in
-// its auth.json, which the VM's proxy fills with placeholders, never a
-// keyring; opencode's, for OpenAI, in a browser or headless.
+// loginArgv is the agent's own login: Claude Code's subscription login, or
+// its claude setup-token, without a CLAUDE_CODE_OAUTH_TOKEN of the VM's
+// environment, which Claude Code would use instead; Codex's ChatGPT
+// login, kept in its auth.json, which the VM's proxy fills with
+// placeholders, never a keyring; opencode's, for OpenAI, in a browser or
+// headless.
 func loginArgv(o AgentLoginOptions) []string {
+	if o.Agent == agentlogin.Claude {
+		argv := []string{"env", "-u", "CLAUDE_CODE_OAUTH_TOKEN", "claude"}
+		if o.SetupToken {
+			return append(argv, "setup-token")
+		}
+		return append(argv, "auth", "login", "--claudeai")
+	}
 	if o.Agent == agentlogin.Codex {
 		argv := []string{"codex", "-c", `cli_auth_credentials_store="file"`, "login"}
 		if o.Device {

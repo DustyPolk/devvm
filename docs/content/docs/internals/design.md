@@ -512,7 +512,7 @@ devvm keeps its state in plain files in two folders, which [State files](overvie
 
 ## Failed attempts
 
-- **Claude's host login in VMs:** on macOS it's in the Keychain, which can't be shared. VMs use a `claude setup-token` token instead. The first token saved was the code the browser shows, so `devvm secret set claude` refuses one without the `sk-ant-oat01-` prefix.
+- **Claude's host login in VMs:** on macOS it's in the Keychain, which can't be shared. VMs get a login made in a VM instead, which the VM's proxy captures. The first token saved by hand was the code the browser shows, so `devvm secret set claude` refuses one without the `sk-ant-oat01-` prefix.
 - **krunkit (Lima on libkrun) to return freed memory:** it didn't visibly return any.
 - **Debian's cloud kernel for `--from`:** on arm64 it has no `gpio_keys`, so it ignored Lima's stop request; Lima hard-killed the VM after 30 s, and node, bun and dockerd in the image came out corrupted. On x86_64 it has no 9p, so on a Linux host every mount of the VM's was an empty folder: Lima mounts them with `nofail`, and the shared tools' build failed at its first `cd`. `--from` uses the generic kernel on both. With it, a Debian VM on QEMU first booted with its network card named `enp0s4`, which cloud-init couldn't rename to Lima's `eth0` once the card was up, so the VM got no ssh host keys. Debian's kernel command line has `net.ifnames=0`, which keeps the name `eth0` from the start.
 - **Every layer as a Docker build stage, flattened:** it worked, but each image became its own full disk (3.7 GB for `node`).
@@ -544,8 +544,8 @@ User-facing limits are in [Known limits](../using/limits.md), and what devvm lea
 - **Network tiers, not built:**
   - tokens for services devvm doesn't know: a host, a header, a format and an environment variable;
   - method and path rules on decrypted hosts, such as read-only GitHub, or no `git-receive-pack` unless approved;
-  - approving blocked hosts as they're hit;
-  - Claude's `/login` OAuth, refreshed in the proxy (`setup-token` works, so maybe never).
+  - approving blocked hosts as they're hit.
+- **Claude Code's login is captured on a path Anthropic doesn't document.** devvm reads Claude Code's token endpoint, its client ID, its requests and replies and the `.credentials.json` format from Claude Code 2.1's bundle, and refreshes the login on the host as Claude Code would ([logins made in a VM](network.md#logins-made-in-a-vm)). A release that changes any of them can break the login in VMs, or the host's refresh, without warning. The `network` end-to-end section drives the real Claude Code's `claude auth login` against a fake endpoint, so a change to its requests fails that section, and a Claude Code token from `claude setup-token`, which Anthropic documents, stays the fallback.
 - **Network tiers, risks of the mechanism:**
   - `sandbox-exec` is deprecated. If Apple removes it, macOS needs another way to confine the hostagent: an egress filter upstream (gvisor-tap-vsock#609 and #631; Lima's `hostLoopback: false`, lima#5581), a user-v2 daemon of devvm's own (lima#5464), or QEMU with the Linux mechanism on macOS too (it works there, slower than `vz`). The self-check catches it breaking silently.
   - VMs started outside devvm (`limactl start`, `limactl shell` starting a stopped VM, Lima's start at login) aren't confined: devvm reports them `unenforced`. An `override.yaml` setting a dead `HTTPS_PROXY` might harden this (untested).

@@ -15,14 +15,19 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 )
 
-// Every VM's proxy captures logins at OpenAI's token endpoint, on every tier, whatever its image
-// holds: its config names the endpoint for Codex and opencode. In a Codex VM, the capture is
+// Every VM's proxy captures logins at OpenAI's and Claude's token endpoints, on every tier,
+// whatever its image holds: its config names them for Codex, opencode and Claude Code. In a Codex VM, the capture is
 // Codex's, whatever sends it, and it saves the login in devvm's store, gives the VM its
 // placeholders, and writes the VM's bindings again, so the proxy puts the login in at once.
 func TestCapturer(t *testing.T) {
 	d, st := sandbox(t, "base", "codex")
 	p, _ := testProxy(t, d)
-	both := []proxy.Capture{{Agent: "codex", Host: "auth.openai.com", Path: "/oauth/token"}, {Agent: "opencode", Host: "auth.openai.com", Path: "/oauth/token"}}
+	both := []proxy.Capture{
+		{Agent: "codex", Host: "auth.openai.com", Path: "/oauth/token"},
+		{Agent: "opencode", Host: "auth.openai.com", Path: "/oauth/token"},
+		{Agent: "claude", Host: "platform.claude.com", Path: "/v1/oauth/token"},
+		{Agent: "claude", Host: "console.anthropic.com", Path: "/v1/oauth/token"},
+	}
 	for _, vm := range []*state.VM{st, newVM(t, d, "devvm-plain-0123456789abc4", "base")} {
 		for _, tier := range []Tier{TierAllowlist, TierInternet, TierNone, TierOpen} {
 			cfg, err := p.config(t.Context(), vm, tier, "k3y", "")
@@ -73,6 +78,23 @@ func TestCapturer(t *testing.T) {
 		if _, _, err := c.Response(t.Context(), x, reply); err == nil {
 			t.Errorf("%s: Response saved", vm)
 		}
+	}
+	// Claude Code's login, from a VM whose image hasn't Claude Code: nothing is captured, so it
+	// can't replace the login every VM with Claude Code uses.
+	x.VM, x.Agents, x.ContentType, x.Body = st.Name(), []string{"claude"}, "application/json", []byte(`{"grant_type":"authorization_code","code":"c"}`)
+	if _, _, err := c.Request(t.Context(), x); err == nil {
+		t.Error("Claude Code's login from a VM without it went on")
+	}
+	claudeReply := []byte(`{"access_token":"sk-ant-oat01-x","refresh_token":"r","scope":"user:inference"}`)
+	if _, _, err := c.Response(t.Context(), x, claudeReply); err == nil {
+		t.Error("Claude Code's login from a VM without it was saved")
+	}
+	cl := newVM(t, d, "devvm-claude-0123456789abc6", "base", "claude")
+	_, err = Salt(t.Context(), cl)
+	must(t, err)
+	x.VM = cl.Name()
+	if _, agent, err := c.Response(t.Context(), x, claudeReply); err != nil || agent != "claude" {
+		t.Errorf("Claude Code's login from its VM: %q, %v", agent, err)
 	}
 	// An agent devvm keeps no logins of.
 	x.VM, x.Agents = st.Name(), []string{"aider"}

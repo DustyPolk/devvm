@@ -2271,6 +2271,25 @@ other = "devvm saved {{.agent}}'s ChatGPT login in its agent store, and {{.vm}} 
 description = "email is the ChatGPT account's email, as its tokens name it"
 other = "devvm saved {{.agent}}'s ChatGPT login for {{.email}} in its agent store, and {{.vm}} uses it now. Every VM with {{.agent}} gets it from its next launch."
 
+[agent_login_claude_paste]
+other = "Open the address Claude Code shows in a browser on any machine and approve the login, then paste the code the browser shows here."
+
+[claude_login_saved]
+other = "devvm saved Claude Code's login in its agent store, and {{.vm}} uses it now. Every VM with Claude Code gets it from its next launch."
+
+[claude_setup_token_saved]
+other = "devvm saved the Claude Code token from claude setup-token with its secrets, and {{.vm}} uses it now. Every VM with Claude Code gets it from its next launch."
+
+[claude_env_token_wins]
+other = "CLAUDE_CODE_OAUTH_TOKEN is set in devvm's environment, so VMs get that token, not the login devvm saved. Unset it to use the saved login."
+
+[agent_login_claude_flag]
+description = "flag is the flag given, as typed: --device-code, --api-key or --stdin"
+other = "{{.flag}} doesn't go with devvm agent login claude, which logs in in a browser on any machine. Run devvm agent login claude, or devvm agent login claude --setup-token."
+
+[agent_login_setup_token_alone]
+other = "--setup-token goes with devvm agent login claude. Run devvm agent login claude --setup-token."
+
 [agent_key_saved]
 description = "provider is the API key's provider, as opencode names it: openai, anthropic or openrouter"
 other = "devvm saved {{.agent}}'s {{.provider}} API key in its agent store, and {{.vm}} uses it now. Every VM with {{.agent}} gets it from its next launch."
@@ -2344,10 +2363,10 @@ other = "{{.vm}} is that way already, so {{.command}} changes nothing."
 other = "updated {{.vm}}'s agent folder mounts"
 
 [no_claude_token]
-other = "{{.vm}} has no Claude Code token. Run claude setup-token, then devvm secret set claude."
+other = "{{.vm}} has no Claude Code login. Run devvm agent login claude in its folder."
 
 [claude_token_invalid]
-other = "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-. Run claude setup-token, then devvm secret set claude."
+other = "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-, so VMs don't get it. Run devvm agent login claude to log in again."
 
 [no_github_token]
 other = "{{.vm}} uses github, but no GitHub token is saved. Run devvm secret set github."
@@ -2392,6 +2411,13 @@ other = "The Codex login in devvm's agent store isn't a ChatGPT login any more, 
 description = "reason is an error from the system or OpenAI's token endpoint, in English"
 other = "Refreshing the Codex login in devvm's agent store failed: {{.reason}}. Run devvm agent login codex in a VM's folder to log in again."
 
+[claude_refresh_failed]
+description = "reason is an error from the system or Claude's token endpoint, in English"
+other = "Refreshing the Claude Code login in devvm's agent store failed: {{.reason}}. Run devvm agent login claude in a VM's folder to log in again."
+
+[claude_no_login]
+other = "devvm has no Claude Code login any more, so the VM's proxy has none to put in. Run devvm agent login claude in the VM's folder."
+
 [opencode_refresh_failed]
 description = "provider is opencode's provider ID, such as openai; reason is an error from the system or the token endpoint, in English"
 other = "Refreshing opencode's {{.provider}} login in devvm's agent store failed: {{.reason}}. Run devvm agent login opencode in a VM's folder to log in again."
@@ -2405,7 +2431,7 @@ description = "reason is an error from the system, in English"
 other = "Reading or changing the saved secrets failed: {{.reason}}."
 
 [claude_token_howto]
-other = "Run claude setup-token on this machine and approve it in the browser.\nThen paste the Claude Code token it prints, which starts with sk-ant-oat01-, not the code the browser shows."
+other = "Paste the Claude Code token that claude setup-token printed, which starts with sk-ant-oat01-, not the code the browser shows.\ndevvm agent login claude --setup-token runs it in a VM and saves the token without this step."
 
 [github_token_howto]
 other = "Paste a fine-grained GitHub token that can reach only the repos your VMs need."
@@ -2429,7 +2455,7 @@ other = "You didn't give a secret, so devvm saved nothing."
 other = "The secret you gave has a quote, a backslash or a control character, so devvm didn't save it."
 
 [not_setup_token]
-other = "That isn't a Claude Code token, which starts with sk-ant-oat01-, so devvm saved nothing. Run claude setup-token to get one."
+other = "That isn't a Claude Code token, which starts with sk-ant-oat01-, so devvm saved nothing. Run devvm agent login claude --setup-token to get one."
 
 [keychain_save_failed]
 other = "Saving the {{.secret}} secret in the Keychain failed."

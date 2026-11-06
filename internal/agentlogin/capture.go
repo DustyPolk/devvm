@@ -16,7 +16,9 @@ package agentlogin
 // access_token that's the key; the VM's request carries its placeholder of the id_token, and the
 // store's id_token goes in its place. Claude Code posts to platform.claude.com/v1/oauth/token
 // (console.anthropic.com's for older versions), as JSON, answered with access_token,
-// refresh_token, expires_in and scope, and its account and organization.
+// refresh_token, expires_in and scope, and its account and organization (claude.go): its
+// subscription's login goes in the store's .credentials.json (a File of kind ClaudeOAuth), and
+// claude setup-token's token, which secrets.Store tells apart (SetupToken), with devvm's secrets.
 
 import (
 	"bytes"
@@ -56,18 +58,9 @@ var endpoints = []proxy.Capture{
 }
 
 // Endpoints returns the token endpoints whose replies every VM's proxy captures, whatever its
-// image holds, as a VM can run an agent it installed itself, in order: Codex's and opencode's. A
-// VM's Claude Code keeps the OAuth login it makes: no binding puts a captured one in its requests
-// (claudeCapture saves one as Claude Code does).
-func Endpoints() []proxy.Capture {
-	var out []proxy.Capture
-	for _, e := range endpoints {
-		if e.Agent != Claude {
-			out = append(out, e)
-		}
-	}
-	return out
-}
+// image holds, as a VM can run an agent it installed itself, in order: Codex's, opencode's and
+// Claude Code's two.
+func Endpoints() []proxy.Capture { return slices.Clone(endpoints) }
 
 // Pick returns which of agents, the VM's whose token endpoint a request went to, it's for: the one
 // there is, or for OpenAI's, which Codex and opencode share, opencode when the request's
@@ -125,16 +118,22 @@ func parseTokenRequest(ctype string, body []byte) (tokenRequest, error) {
 		return tokenRequest{fields: v, form: true}, nil
 	case "application/json":
 		var m map[string]any
-		if json.Unmarshal(body, &m) != nil || m == nil {
+		d := json.NewDecoder(bytes.NewReader(body))
+		d.UseNumber()
+		if d.Decode(&m) != nil || m == nil {
 			return tokenRequest{}, errors.New("the token request isn't a JSON object")
 		}
 		if n, err := topKeys(body); err != nil || n != len(m) {
 			return tokenRequest{}, errRepeated
 		}
+		// Its strings, and its numbers as they're written (claude setup-token's expires_in).
 		v := url.Values{}
 		for k, x := range m {
-			if s, ok := x.(string); ok {
-				v.Set(k, s)
+			switch x := x.(type) {
+			case string:
+				v.Set(k, x)
+			case json.Number:
+				v.Set(k, x.String())
 			}
 		}
 		return tokenRequest{fields: v}, nil
@@ -207,7 +206,7 @@ func (f File) CaptureRequest(ctype string, body []byte) (out, answer []byte, err
 	if err := f.grantOK(t); err != nil {
 		return nil, nil, err
 	}
-	refresh := t.grant() == grantRefresh && f.Kind != Claude
+	refresh := t.grant() == grantRefresh
 	if t.grant() != grantExchange && !refresh {
 		return body, nil, nil
 	}
@@ -222,7 +221,8 @@ func (f File) CaptureRequest(ctype string, body []byte) (out, answer []byte, err
 	}
 	if refresh {
 		// opencode's VM copy holds its access token's placeholder as its refresh token too.
-		if rt := t.fields.Get("refresh_token"); rt == managed || rt == openaiPlaceholder(str(obj(m, "openai"), "access"), f.Salt) {
+		rt := t.fields.Get("refresh_token")
+		if rt == managed || f.Kind == Opencode && rt == openaiPlaceholder(str(obj(m, "openai"), "access"), f.Salt) {
 			answer, err = f.managedReply(m)
 			return nil, answer, err
 		}
@@ -239,6 +239,9 @@ func (f File) CaptureRequest(ctype string, body []byte) (out, answer []byte, err
 // managedReply is the reply to a VM's refresh of its own login, m the store's: its placeholders,
 // as the code's reply gave them.
 func (f File) managedReply(m map[string]any) ([]byte, error) {
+	if f.Kind == ClaudeOAuth {
+		return claudeManagedReply(m, f.Salt)
+	}
 	vm := vmReply(map[string]any{"token_type": "Bearer"})
 	var at, id string
 	if f.Kind == Codex {
@@ -275,7 +278,7 @@ func (f File) Capture(ctype string, req, reply []byte) ([]byte, error) {
 		return nil, errors.New("the reply isn't a JSON object")
 	}
 	capture := map[string]func(map[string]any, tokenRequest, map[string]any, string) (map[string]any, map[string]any, error){
-		Codex: codexCapture, Opencode: opencodeCapture, Claude: claudeCapture,
+		Codex: codexCapture, Opencode: opencodeCapture, ClaudeOAuth: claudeCapture,
 	}[f.Kind]
 	if capture == nil {
 		return nil, f.errKind()
@@ -396,34 +399,6 @@ func opencodeCapture(m map[string]any, t tokenRequest, r map[string]any, salt st
 		vm["id_token"] = openaiPlaceholder(id, salt)
 	}
 	vm["access_token"] = openaiPlaceholder(at, salt)
-	if rt != "" {
-		vm["refresh_token"] = managed
-	}
-	return m, vm, nil
-}
-
-// claudeCapture saves a Claude Code reply in m, its .credentials.json: its OAuth login
-// (claudeAiOauth), as Claude Code keeps it. It returns m and the VM's reply, with its account
-// and organization.
-func claudeCapture(m map[string]any, t tokenRequest, r map[string]any, salt string) (map[string]any, map[string]any, error) {
-	at, rt := str(r, "access_token"), str(r, "refresh_token")
-	if at == "" || t.grant() == grantCode && rt == "" {
-		return nil, nil, errNoLogin
-	}
-	o := obj(m, "claudeAiOauth")
-	if t.grant() == grantCode || o == nil {
-		o = map[string]any{}
-		m["claudeAiOauth"] = o
-	}
-	o["accessToken"], o["expiresAt"] = at, expiresAt(r)
-	if rt != "" {
-		o["refreshToken"] = rt
-	}
-	if sc := str(r, "scope"); sc != "" {
-		o["scopes"] = strings.Fields(sc)
-	}
-	vm := vmReply(r, "account", "organization")
-	vm["access_token"] = salted("sk-ant-oat01-devvm-proxy-managed-oauth", salt)
 	if rt != "" {
 		vm["refresh_token"] = managed
 	}

@@ -78,7 +78,7 @@ The VM's proxy reads devvm's built-in policies first and then your policy files,
 - `~/.config/devvm/layers/<name>.policy`, for each of your own layers in the VM's image;
 - `~/.config/devvm/policy`, your own rules for every VM, which `devvm network allow`, `deny` and `rm` change with `-g`;
 - `~/.local/share/devvm/vms/<hash>/policy`, the rules for that VM only, in the VM's own folder, which is named by the hash that the VM's name ends with, which [`devvm network allow`, `deny` and `rm`](#changing-rules) change;
-- the hosts of the VM's secrets and logins, and the host its agents log in at, such as Codex's and opencode's `auth.openai.com`, on port 443, which devvm adds.
+- the hosts of the VM's secrets and logins, and the host its agents log in at, such as Codex's and opencode's `auth.openai.com` and Claude Code's `platform.claude.com` and `console.anthropic.com`, on port 443, which devvm adds.
 
 The first three are built in: they come with devvm, inside its binary, so you can't edit them, and an upgrade of devvm is what changes them. To change what a VM reaches, add your own rules, and to keep a VM from a host that devvm's rules allow, add a deny, which beats any allow. devvm leaves storage and paste sites out of its defaults on purpose, because they're easy ways to send data out. Rules never come from the project folder, because the VM can write it. The proxy reads each of your files again when it changes, so an edit applies at once, from the next connection. [How it works](../internals/network.md#policy-files) lists where each policy comes from.
 
@@ -270,7 +270,7 @@ Secrets stay on this machine, whatever the VM's tier. A VM gets a placeholder of
 | `claude` | `api.anthropic.com` | `Authorization` | every VM whose image has `claude` |
 | `github` | `api.github.com`, `github.com`, `codeload.github.com`, `raw.githubusercontent.com` | `Authorization` | VMs it's bound to |
 
-Agents' logins work the same way. When a VM's image has Codex or opencode and devvm's agent store has a login for it, the VM gets placeholders for the login, and so do Claude Code's MCP servers' secrets ([agents' logins and settings](../internals/network.md#agents-logins-and-settings)). A Codex or opencode login that you make inside a VM goes to the store, and the VM gets placeholders for it too. Because the store keeps one login for each agent, any VM with the agent can replace it, so a VM you don't trust can log your other VMs in to an account of its choosing ([logins made in a VM](../internals/network.md#logins-made-in-a-vm)).
+Agents' logins work the same way. When a VM's image has Codex or opencode and devvm's agent store has a login for it, the VM gets placeholders for the login, and so do Claude Code's MCP servers' secrets ([agents' logins and settings](../internals/network.md#agents-logins-and-settings)). A Claude Code, Codex or opencode login that you make inside a VM goes to the store, and the VM gets placeholders for it too ([Claude Code login](../using/coding-agents.md#claude-code-login)). Because the store keeps one login for each agent, any VM with the agent can replace it, so a VM you don't trust can log your other VMs in to an account of its choosing ([logins made in a VM](../internals/network.md#logins-made-in-a-vm)).
 
 ### Saving and binding secrets
 

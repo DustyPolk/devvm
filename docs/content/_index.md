@@ -49,7 +49,7 @@ devvm opens a shell in the VM, whose prompt starts with `(devvm)`, so start your
 
 {{< /features >}}
 
-Claude Code needs a Claude Code token before its first start, which [your first VM](docs/getting-started/first-vm.md#claude-codes-token) shows how to make on your machine and give to devvm. The agent runs in the VM, and it sees only your project folder. The next time you run devvm in the folder, it opens the same VM, and `devvm tools` adds an agent to a VM you already have.
+Claude Code needs your Claude login before its first start, which `devvm agent login claude` makes from the VM and keeps on your machine ([your first VM](docs/getting-started/first-vm.md#claude-codes-login)). The agent runs in the VM, and it sees only your project folder. The next time you run devvm in the folder, it opens the same VM, and `devvm tools` adds an agent to a VM you already have.
 
 ## What's supported {icon="view-grid"}
 

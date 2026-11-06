@@ -83,16 +83,16 @@ flowchart TD
   copy --> start["starts it"] --> shell["opens a shell in ~/some-project"]
 ```
 
-## Claude Code's token
+## Claude Code's login
 
-Claude Code in a VM needs a Claude Code token, which you make once on this machine, in a terminal of its own rather than the VM's shell:
+Claude Code in a VM needs your Claude login, which you make once, from a terminal on this machine rather than the VM's shell, in the project folder whose VM has Claude Code:
 
 ```sh
-claude setup-token        # approve in the browser, then copy the sk-ant-oat01-… token it prints
-devvm secret set claude   # paste it
+cd ~/some-project
+devvm agent login claude   # open the address it shows in a browser, approve, then paste the code the browser shows
 ```
 
-The VM gets a placeholder, whatever its network tier, and the proxy on your machine puts the real token into Claude's requests. Every agent gets its settings, skills, MCP servers and logins from devvm's agent store, but never your history. When you already use an agent on this machine, `devvm agent import` copies its settings and logins into the store once ([devvm's agent store](../using/coding-agents.md#devvms-agent-store)).
+devvm keeps the login on this machine, so every VM with Claude Code gets it and this machine never needs Claude Code. With `--setup-token`, devvm gets a long-lived Claude Code token instead ([Claude Code login](../using/coding-agents.md#claude-code-login)). The VM gets a placeholder, whatever its network tier, and the proxy on your machine puts the real login into Claude's requests. Every agent gets its settings, skills, MCP servers and logins from devvm's agent store, but never your history. When you already use an agent on this machine, `devvm agent import` copies its settings and logins into the store once ([devvm's agent store](../using/coding-agents.md#devvms-agent-store)).
 
 ## Starting the agent
 

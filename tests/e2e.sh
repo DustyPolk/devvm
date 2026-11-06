@@ -562,7 +562,8 @@ cleanup() {
   done
   rm -f "$layers"/e2e*.sh "$layers"/e2e*.policy
   [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a github >/dev/null 2>&1
-  rm -f "$XDG_DATA_HOME/devvm/secrets/github" "$work/net-home/Library/Keychains"   # the link, never the folder
+  [[ "$(uname -s)" != Darwin ]] || security delete-generic-password -s "$DEVVM_SECRET_SERVICE" -a claude >/dev/null 2>&1
+  rm -f "$XDG_DATA_HOME/devvm/secrets/github" "$XDG_DATA_HOME/devvm/secrets/claude" "$work/net-home/Library/Keychains"   # the link, never the folder
   [[ -z ${listener:-} ]] || kill "$listener" 2>/dev/null
   [[ -z ${corp:-} ]] || kill "$corp" 2>/dev/null   # the company proxy's stand-in
   [[ -z ${hostprog:-} ]] || kill "$hostprog" 2>/dev/null
@@ -3014,13 +3015,39 @@ def answer(q):
     if g.endswith("token-exchange") and q.get("subject_token", [""])[0] == ID:
         return {"access_token": "sk-e2efake-captured-key"}
     return None
+# Claude's token endpoint, as Claude Code 2.1's bundle has it: JSON, claude setup-token's code with
+# expires_in, and a subscription login's code, each answered with tokens holding e2efake.
+CLAUDE_ACCOUNT = {"account": {"uuid": "acct-e2e", "email_address": "e2e@devvm.test"}, "organization": {"uuid": "org-e2e"}}
+def claude(q):
+    g = q.get("grant_type", "")
+    if g == "authorization_code" and "expires_in" in q:
+        return dict(CLAUDE_ACCOUNT, access_token="sk-ant-oat01-e2efake-setup", expires_in=31536000, scope="user:inference", token_type="Bearer")
+    if g == "authorization_code":
+        return dict(CLAUDE_ACCOUNT, access_token="sk-ant-oat01-e2efake-oauth", refresh_token="sk-ant-ort01-e2efake-oauth",
+                    expires_in=28800, scope="user:inference user:profile", token_type="Bearer")
+    return None
+# Anthropic's API: the profile Claude Code reads as it logs in, and the Authorization of each request
+# logged, so a check sees which token the VM's proxy put in.
+def api(path, h):
+    a = [x.split(":", 1)[1].strip() for x in h[1:] if x.lower().startswith("authorization:")]
+    with open(log, "a") as o:
+        o.write("api " + path + " " + (a[0] if a else "-") + "\n")
+    if path.startswith("/api/oauth/profile"):
+        return 200, {"account": {"uuid": "acct-e2e", "email": "e2e@devvm.test", "display_name": "e2e"},
+                     "organization": {"uuid": "org-e2e", "organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x"}}
+    return 404, {"type": "error", "error": {"type": "not_found_error", "message": "e2e"}}
+HOSTS = ("auth.openai.com", "platform.claude.com", "api.anthropic.com")
 def serve(c):
     try:
         req = head(c.makefile("rb"))
-        if not req or not req[0].startswith("CONNECT auth.openai.com:443 "):
+        host = req[0].split(" ")[1].rsplit(":", 1)[0] if req and req[0].startswith("CONNECT ") else ""
+        if host not in HOSTS or not req[0].startswith("CONNECT " + host + ":443 "):
             c.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
             return
         c.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
+        if host == "platform.claude.com":
+            with open(log, "a") as o:
+                o.write("CONNECT " + host + "\n")
         t = ctx.wrap_socket(c, server_side=True)
         f = t.makefile("rb")
         while True:
@@ -3029,12 +3056,23 @@ def serve(c):
                 return
             n = sum(int(x.split(":", 1)[1]) for x in h[1:] if x.lower().startswith("content-length:"))
             body = f.read(n).decode()
-            with open(log, "a") as o:
-                o.write(h[0] + " " + urllib.parse.parse_qs(body).get("grant_type", [""])[0] + "\n")
-            r = answer(urllib.parse.parse_qs(body))
-            out = json.dumps(r or {"error": "invalid_grant"}).encode()
+            code = 200
+            if host == "api.anthropic.com":
+                code, r = api(h[0].split(" ")[1], h)
+            elif host == "platform.claude.com":
+                q = json.loads(body) if body.startswith("{") else {}
+                with open(log, "a") as o:
+                    o.write(h[0] + " " + str(q.get("grant_type", "")) + (" expires_in" if "expires_in" in q else "") + "\n")
+                r = claude(q)
+            else:
+                with open(log, "a") as o:
+                    o.write(h[0] + " " + urllib.parse.parse_qs(body).get("grant_type", [""])[0] + "\n")
+                r = answer(urllib.parse.parse_qs(body))
+            if r is None:
+                code, r = 400, {"error": "invalid_grant"}
+            out = json.dumps(r).encode()
             t.sendall(b"HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n" %
-                      (200 if r else 400, b"OK" if r else b"Bad Request", len(out)) + out)
+                      (code, b"OK" if code == 200 else b"Error", len(out)) + out)
     except Exception as e:
         print(e, file=sys.stderr)
     finally:
@@ -3051,7 +3089,7 @@ EOF
 e2e_ca
 openssl req -new -newkey rsa:2048 -nodes -subj /CN=auth.openai.com -keyout "$cad/auth.key" -out "$cad/auth.csr" >/dev/null 2>&1 &&
   openssl x509 -req -days 2 -in "$cad/auth.csr" -CA "$cad/ca.pem" -CAkey "$cad/ca.key" -CAcreateserial \
-    -extfile <(printf 'subjectAltName = DNS:auth.openai.com\nextendedKeyUsage = serverAuth\n') -out "$cad/auth.pem" >/dev/null 2>&1
+    -extfile <(printf 'subjectAltName = DNS:auth.openai.com,DNS:platform.claude.com,DNS:api.anthropic.com\nextendedKeyUsage = serverAuth\n') -out "$cad/auth.pem" >/dev/null 2>&1
 mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
 : > "$work/token.log"
 python3 -I -c "$fake_token" "$P47199" "$cad/auth.pem" "$cad/auth.key" "$work/token.log" 2>"$work/token.err" &
@@ -3065,7 +3103,9 @@ for k in sys.argv[2].split("."):
     v = v[k]
 print(v)' "$1" "$2"; }
 export -f jget
-token_launch() { (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$@" "$D" >"$work/last.log" 2>&1); }
+# Without a Claude Code token in devvm's environment, which the VM's proxy inherits and which would
+# win over the Claude Code logins it captures.
+token_launch() { (cd "$n" && printf 'exit\n' | env -u CLAUDE_CODE_OAUTH_TOKEN HOME="$nh" "$@" "$D" >"$work/last.log" 2>&1); }
 token_post() { in_vm "$vm" "curl -fsS -m 30 https://auth.openai.com/oauth/token -d '$1'"; }
 codex_code='grant_type=authorization_code&code=e2e-code&client_id=app_EMoamEEZ73f0CkXaXp7hrann&code_verifier=e2e&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback'
 # token_why: what the capture's checks look at, when one fails.
@@ -3100,7 +3140,7 @@ check_lines=60 check "a login made in the VM is captured: the store gets the rea
 # state Codex's address names; the fake endpoint answers its code and its API-key exchange. The
 # forward lasts only while the login runs, interrupted too.
 agent_login() {
-  (cd "$n" && exec env HOME="$nh" CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake HTTPS_PROXY="$tokurl" HTTP_PROXY="$tokurl" DEVVM_MESSAGES=names \
+  (cd "$n" && exec env -u CLAUDE_CODE_OAUTH_TOKEN HOME="$nh" HTTPS_PROXY="$tokurl" HTTP_PROXY="$tokurl" DEVVM_MESSAGES=names \
     "$D" agent login codex </dev/null >"$work/login.log" 2>&1) &
   login_pid=$!; }
 # login_state: the state in the address Codex shows, once it shows one (60 s at most).
@@ -3145,6 +3185,89 @@ login_interrupted() {
     kill "$login_pid" 2>/dev/null; login_why; return 1
   fi; }
 check "an interrupted devvm agent login takes its forward away" login_interrupted
+# Claude Code's logins, captured at Claude's token endpoint, which the fake answers too, with
+# Anthropic's API behind it logging the Authorization each request brings. This login path is
+# unofficial: the requests are Claude Code 2.1's, read from its bundle. First claude setup-token's,
+# as curl: the store keeps its token as the claude secret, and the VM gets the secret's placeholder.
+# The proxy saves the token in the Keychain under the run's service, which macOS finds through HOME,
+# so the VM's home links the Keychains folder (the link alone goes at the end).
+if [[ "$(uname -s)" == Darwin ]]; then mkdir -p "$nh/Library" && ln -sfn "$HOME/Library/Keychains" "$nh/Library/Keychains"; fi
+claude_post() { in_vm "$vm" "curl -fsS -m 30 https://platform.claude.com/v1/oauth/token -H 'Content-Type: application/json' -d '$1'"; }
+claude_setup='{"grant_type":"authorization_code","code":"e2e-code","redirect_uri":"https://platform.claude.com/oauth/code/callback","client_id":"9d1c250a-e61b-44d9-88ed-5944d1962f5e","code_verifier":"e2e","state":"e2e","expires_in":31536000}'
+# claude_secret: the saved claude secret, from the run's Keychain service on macOS, else its file.
+claude_secret() {
+  if [[ "$(uname -s)" == Darwin ]]; then security find-generic-password -s "$DEVVM_SECRET_SERVICE" -a claude -w 2>/dev/null
+  else cat "$XDG_DATA_HOME/devvm/secrets/claude" 2>/dev/null; fi; }
+export -f claude_secret
+export DEVVM_SECRET_SERVICE
+# api_got PATH TOKEN: the fake API got a request for PATH that the VM's proxy put TOKEN in.
+api_got() { grep -qx "api $1 Bearer $2" "$work/token.log"; }
+export -f api_got
+claude_setup_token() {
+  if ! { step "setup-token's code" claude_post "$claude_setup" >"$work/cap-claude1.json" &&
+    step "the VM gets the claude secret's placeholder, and no token" bash -c "! grep -q e2efake '$work/cap-claude1.json' &&
+      [[ \$(jget '$work/cap-claude1.json' access_token) == sk-ant-oat01-devvm-proxy-managed-$salt ]]" &&
+    step "the claude secret is the token" bash -c "[[ \$(claude_secret) == sk-ant-oat01-e2efake-setup ]]" &&
+    step "and devvm keeps no OAuth login beside it" test ! -e "$logins/claude/.claude/.credentials.json" &&
+    step "the proxy puts the token in for the placeholder" in_vm "$vm" \
+      "curl -sS -m 20 -o /dev/null https://api.anthropic.com/v1/e2e-setup -H 'Authorization: Bearer sk-ant-oat01-devvm-proxy-managed-$salt'" &&
+    step "... which the API got" api_got /v1/e2e-setup sk-ant-oat01-e2efake-setup &&
+    step "the event names the login" grep -q '"event":"login","host":"platform.claude.com","port":443,"method":"POST","path":"/v1/oauth/token","login":"claude"' "$events"; }; then
+    token_why; return 1
+  fi; }
+check_lines=60 check "claude setup-token's token in the VM is captured: the store keeps it as the claude secret, the VM a placeholder" claude_setup_token
+# devvm agent login claude: the real Claude Code's claude auth login in the VM, its code pasted on
+# devvm's input as code#state, the state from the address it shows. The proxy saves the
+# subscription's login in the store, which takes the claude secret away, and the VM is set up
+# again: its ~/.claude/.credentials.json holds placeholders, and its environment no token.
+claude_login() {
+  rm -f "$work/claude.in"; mkfifo "$work/claude.in"
+  (cd "$n" && exec env -u CLAUDE_CODE_OAUTH_TOKEN HOME="$nh" HTTPS_PROXY="$tokurl" HTTP_PROXY="$tokurl" DEVVM_MESSAGES=names \
+    "$D" agent login claude <"$work/claude.in" >"$work/login.log" 2>&1) &
+  login_pid=$!
+  exec 7>"$work/claude.in"; }
+claude_login_end() { exec 7>&-; rm -f "$work/claude.in"; }
+claude_vm_login() {
+  local state
+  if ! { claude_login && step "Claude Code shows its address" login_state >"$work/login.state" && state=$(cat "$work/login.state") &&
+    printf 'e2e-code#%s\n' "$state" >&7 &&
+    step "devvm agent login ends, saying what the store saved" login_wait &&
+    step "it says the login is saved" grep -q '^==> claude_login_saved vm=' "$work/login.log" &&
+    step "the store has the real tokens, only yours to read" bash -c "c='$logins/claude/.claude/.credentials.json' &&
+      [[ \$(jget \"\$c\" claudeAiOauth.refreshToken) == sk-ant-ort01-e2efake-oauth && \$(jget \"\$c\" claudeAiOauth.accessToken) == sk-ant-oat01-e2efake-oauth ]] &&
+      [[ \$(stat -c %a \"\$c\" 2>/dev/null || stat -f %Lp \"\$c\") == 600 ]]" &&
+    step "the claude secret is gone" bash -c "[[ -z \$(claude_secret) ]]" &&
+    step "the code went to the endpoint as a login's, not setup-token's" grep -qx 'POST /v1/oauth/token HTTP/1.1 authorization_code' "$work/token.log" &&
+    step "Claude Code read the profile with the login the proxy put in" api_got /api/oauth/profile sk-ant-oat01-e2efake-oauth &&
+    step "the VM's Claude Code holds placeholders alone" bash -c "limactl shell --workdir / $vm bash -c 'cat ~/.claude/.credentials.json' </dev/null >'$work/vm-claude.json' &&
+      ! grep -q e2efake '$work/vm-claude.json' && [[ \$(jget '$work/vm-claude.json' claudeAiOauth.refreshToken) == devvm-proxy-managed ]] &&
+      [[ \$(jget '$work/vm-claude.json' claudeAiOauth.accessToken) == sk-ant-oat01-devvm-proxy-managed-oauth-$salt ]]" &&
+    step "and no Claude Code token in its environment" bash -c "[[ -z \$(limactl shell --workdir / $vm bash -lc 'printenv CLAUDE_CODE_OAUTH_TOKEN' </dev/null) ]]"; }; then
+    kill "$login_pid" 2>/dev/null; claude_login_end; login_why; return 1
+  fi
+  claude_login_end; }
+check_lines=60 check "devvm agent login claude logs the VM's Claude Code in, and the store keeps the login, the VM placeholders" claude_vm_login
+# The host refreshes the login, through the company proxy: the store's access token made due, the
+# VM's next request (past the proxy's 30 s cache of a login's value) makes the host refresh it at
+# Claude's endpoint, through the run's company proxy. That's as far as e2e goes: the host's own
+# TLS trusts only this machine's CAs, not the run's, so the refresh fails there, the store keeps
+# its login, and the proxy's log says so without a value (the refresh's success is unit-tested).
+claude_refresh() {
+  local before
+  if ! { step "the store's access token is due" python3 -I -c 'import json, sys
+p = sys.argv[1]; m = json.load(open(p)); m["claudeAiOauth"]["expiresAt"] = 0
+open(p, "w").write(json.dumps(m))' "$logins/claude/.claude/.credentials.json" && sleep 31 &&
+    before=$(grep -c '^CONNECT platform.claude.com$' "$work/token.log") &&
+    step "the VM's request with its placeholder" in_vm "$vm" \
+      "curl -sS -m 30 -o /dev/null https://api.anthropic.com/v1/e2e-oauth -H \"Authorization: Bearer \$(jq -r .claudeAiOauth.accessToken ~/.claude/.credentials.json)\"" &&
+    step "the host's refresh went to Claude's endpoint through the company proxy" \
+      bash -c "[[ \$(grep -c '^CONNECT platform.claude.com\$' '$work/token.log') -gt $before ]]" &&
+    step "the proxy's log names the refresh that failed" grep -q 'secret claude-oauth: .*platform\.claude\.com/v1/oauth/token' "$(vmdir "$vm")/logs/proxy.log" &&
+    step "the store keeps its login" bash -c "[[ \$(jget '$logins/claude/.claude/.credentials.json' claudeAiOauth.refreshToken) == sk-ant-ort01-e2efake-oauth ]]" &&
+    step "no log holds a value" bash -c "! grep -rqs -e e2efake-oauth -e e2efake-setup '$(vmdir "$vm")/logs' '$XDG_DATA_HOME/devvm/logs'"; }; then
+    token_why; return 1
+  fi; }
+check_lines=40 check "the host refreshes Claude Code's login at Claude's endpoint, through the company proxy, when it's due" claude_refresh
 kill "$token_srv" 2>/dev/null; wait "$token_srv" 2>/dev/null
 rm -rf "$cafolder"
 check "the next launch, going directly, gives the VM the captured login as placeholders" bash -c "cd '$n' &&
@@ -3167,9 +3290,8 @@ check "... and refuses it when the server's URL changed, so the header never goe
   grep -qF \"\$(m agent_save_placeholder path=.claude.json vm=$vm)\" '$work/last.log' &&
   grep -q 'api.github.com/devvm-e2e-mcp' '$logins/claude/.claude.json' && ! grep -q example.com '$logins/claude/.claude.json'"
 # devvm secret with a fake GitHub token: in the Keychain under this run's service on macOS, else in
-# the sandbox's config folder; deleted at the end. macOS finds the Keychain through HOME, so the
-# VM's home links the Keychains folder (the link alone goes at the end).
-if [[ "$(uname -s)" == Darwin ]]; then mkdir -p "$nh/Library" && ln -s "$HOME/Library/Keychains" "$nh/Library/Keychains"; fi
+# the sandbox's config folder; deleted at the end. The VM's home links the Keychains folder already
+# (Claude Code's logins, above).
 # The fake token goes in a file, written by the shell's own printf, so it's in no process's arguments.
 printf 'ghp_E2EFAKE\n' >"$work/github.token"
 check "devvm secret set saves a token, and devvm secret lists it saved" bash -c "

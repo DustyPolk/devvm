@@ -256,4 +256,4 @@ devvm decides for standard output and standard error apart, and colors one only 
 | `DEVVM_FROM` | the container image that the base of new VMs and builds starts from when there's no `--from` ([details](from.md)) |
 | `DEVVM_NO_TOOL_CHECK=1` | don't check for newer shared tools once a day ([details](images.md#shared-tools)) |
 | `DEVVM_SECRET_SERVICE` | the Keychain service devvm saves and reads secrets in, instead of `devvm` ([details](../safety/network.md#saving-and-binding-secrets)) |
-| `CLAUDE_CODE_OAUTH_TOKEN` | the Claude Code token that VMs get, over a saved one ([details](coding-agents.md#claude-code-login)) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | the Claude Code token that VMs get, over the saved Claude Code login, whichever it is ([details](coding-agents.md#claude-code-login)) |

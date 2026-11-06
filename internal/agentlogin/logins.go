@@ -1,6 +1,7 @@
 // Package agentlogin is agents' files on the host as VMs see them. Codex
 // (~/.codex/auth.json) and opencode (~/.local/share/opencode/auth.json) keep their logins there, and
-// Claude Code its MCP servers' secrets (~/.claude.json). Every VM gets its own copy of each file
+// Claude Code its MCP servers' secrets (~/.claude.json) and its OAuth login
+// (~/.claude/.credentials.json, claude.go). Every VM gets its own copy of each file
 // with placeholders instead of keys and tokens (File.VMCopy), and the proxy puts the real ones
 // into requests for each provider's hosts (File.Bindings), looking each value up in its own process
 // (File.Get).
@@ -72,8 +73,8 @@ var (
 	ErrCodexNoChatGPT = errors.New("codex isn't logged in with ChatGPT")
 )
 
-// RefreshError is Get's error for an OAuth login whose refresh on the host failed: Agent's (Codex
-// or Opencode), and for opencode its Provider's. Logging in again with the agent fixes it.
+// RefreshError is Get's error for an OAuth login whose refresh on the host failed: Agent's (Codex,
+// Opencode or Claude), and for opencode its Provider's. Logging in again with the agent fixes it.
 type RefreshError struct {
 	Agent, Provider string
 	Err             error
@@ -84,12 +85,13 @@ func (e *RefreshError) Unwrap() error { return e.Err }
 
 // File is one agent's file on the host.
 type File struct {
-	Kind string // Codex, Opencode or Claude
+	Kind string // Codex, Opencode, Claude (its .claude.json) or ClaudeOAuth (its .credentials.json)
 	Path string
 	// Salt is the VM's key, which ends every placeholder, so each VM's are its own: a proxy puts a
 	// value in only for the placeholders bound for its VM. Empty: none.
 	Salt string
-	// TokenURL is where OAuth tokens are refreshed: OpenAITokenURL when empty.
+	// TokenURL is where OAuth tokens are refreshed: when empty, ClaudeTokenURL for ClaudeOAuth,
+	// else OpenAITokenURL.
 	TokenURL string
 }
 
@@ -449,14 +451,22 @@ func (f File) opencodeGet(ctx context.Context, name string) (string, error) {
 	return "", fmt.Errorf("no opencode login %q", id)
 }
 
-// refresh posts an OAuth refresh request to f.TokenURL, as JSON (Codex) or a form (opencode),
+// tokenURL is where f's OAuth tokens are refreshed (File.TokenURL).
+func (f File) tokenURL() string {
+	switch {
+	case f.TokenURL != "":
+		return f.TokenURL
+	case f.Kind == ClaudeOAuth:
+		return ClaudeTokenURL
+	}
+	return OpenAITokenURL
+}
+
+// refresh posts an OAuth refresh request to f.tokenURL(), as JSON (Codex) or a form (opencode),
 // within refreshTimeout. Its caller's end doesn't cancel it: the server may already have rotated
 // the refresh token, and only the reply, written back to the login file, holds the new one.
 func (f File) refresh(ctx context.Context, form bool, fields map[string]string) (map[string]any, error) {
-	u := f.TokenURL
-	if u == "" {
-		u = OpenAITokenURL
-	}
+	u := f.tokenURL()
 	var body []byte
 	ctype := "application/json"
 	if form {
@@ -817,6 +827,8 @@ func (f File) Bindings() ([]proxy.Binding, error) {
 		return opencodeBindings(m, f.Salt), nil
 	case Claude:
 		return claudeBindings(m, f.Salt), nil
+	case ClaudeOAuth:
+		return claudeOAuthBindings(m, f.Salt), nil
 	}
 	return nil, f.errKind()
 }
@@ -849,6 +861,8 @@ func (f File) VMCopy() (VMFile, error) {
 		m = opencodeVM(m, f.Salt)
 	case Claude:
 		m = claudeVM(m, f.Salt)
+	case ClaudeOAuth:
+		m = claudeOAuthVM(m, f.Salt)
 	default:
 		return VMFile{}, f.errKind()
 	}
@@ -871,6 +885,8 @@ func (f File) Get(ctx context.Context, name string) (string, error) {
 		return f.opencodeGet(ctx, name)
 	case Claude:
 		return f.claudeGet(name)
+	case ClaudeOAuth:
+		return f.claudeOAuthGet(ctx, name)
 	}
 	return "", f.errKind()
 }

@@ -157,7 +157,9 @@ func TestCodexCapture(t *testing.T) {
 
 // What doesn't parse as a login is refused, and nothing is saved: a request devvm doesn't read (a
 // grant it doesn't capture, a JSON exchange, another type), a reply that isn't JSON, or one
-// without the tokens a login needs.
+// without the tokens a login needs, or a Claude login devvm doesn't keep.
+//
+//nolint:gosec // a test's fake tokens
 func TestCaptureRefuses(t *testing.T) {
 	code := form("grant_type", grantCode, "code", "c")
 	for _, tc := range []struct {
@@ -169,15 +171,22 @@ func TestCaptureRefuses(t *testing.T) {
 		{"a JSON exchange", Codex, jsonType, []byte(`{"grant_type":"` + grantExchange + `","requested_token":"openai-api-key","subject_token_type":"` + idTokenType + `"}`), reply(map[string]any{"access_token": "a"})},
 		{"opencode's exchange", Opencode, formType, form("grant_type", grantExchange, "requested_token", apiKeyToken, "subject_token_type", idTokenType), reply(map[string]any{"access_token": "a"})},
 		{"another type", Codex, "text/plain", code, reply(map[string]any{"access_token": "a"})},
-		{"a request that isn't JSON", Claude, jsonType, []byte("grant_type=authorization_code"), reply(map[string]any{"access_token": "a", "refresh_token": "r"})},
+		{"a request that isn't JSON", ClaudeOAuth, jsonType, []byte("grant_type=authorization_code"), reply(map[string]any{"access_token": "a", "refresh_token": "r"})},
 		{"a reply that isn't JSON", Codex, formType, code, []byte("<html>")},
 		{"a reply of null", Codex, formType, code, []byte("null")},
 		{"no id_token", Codex, formType, code, reply(map[string]any{"access_token": "a", "refresh_token": "r"})},
 		{"no refresh token", Opencode, formType, code, reply(map[string]any{"access_token": "a"})},
-		{"no access token", Claude, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"refresh_token": "r"})},
+		{"no access token", ClaudeOAuth, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"refresh_token": "r"})},
 		{"a field twice in a form", Codex, formType, append(form("grant_type", grantCode), "&grant_type=refresh_token"...), reply(map[string]any{"access_token": "a"})},
-		{"a field twice in JSON", Claude, jsonType, []byte(`{"grant_type":"authorization_code","grant_type":"refresh_token"}`), reply(map[string]any{"access_token": "a", "refresh_token": "r"})},
-		{"tokens that aren't strings", Claude, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"access_token": 1, "refresh_token": 2})},
+		{"a field twice in JSON", ClaudeOAuth, jsonType, []byte(`{"grant_type":"authorization_code","grant_type":"refresh_token"}`), reply(map[string]any{"access_token": "a", "refresh_token": "r"})},
+		{"a Console login", ClaudeOAuth, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"access_token": "a", "refresh_token": "r", "scope": "org:create_api_key user:profile"})},
+		{"a login that makes API keys", ClaudeOAuth, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"access_token": "sk-ant-oat01-a", "refresh_token": "r", "scope": "user:inference org:create_api_key"})},
+		{"a refresh to a login that makes API keys", ClaudeOAuth, jsonType, []byte(`{"grant_type":"refresh_token","refresh_token":"r"}`), reply(map[string]any{"access_token": "sk-ant-oat01-a", "scope": "user:inference org:create_api_key"})},
+		{"a refresh to a Console login, with none in the store", ClaudeOAuth, jsonType, []byte(`{"grant_type":"refresh_token","refresh_token":"r"}`), reply(map[string]any{"access_token": "sk-ant-oat01-a", "scope": "user:profile"})},
+		{"an access token that isn't Claude Code's", ClaudeOAuth, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"access_token": "a", "refresh_token": "r", "scope": "user:inference"})},
+		{"an access token with a quote", ClaudeOAuth, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"access_token": `sk-ant-oat01-a"b`, "refresh_token": "r", "scope": "user:inference"})},
+		{"a login without a scope", ClaudeOAuth, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"access_token": "a", "refresh_token": "r"})},
+		{"tokens that aren't strings", ClaudeOAuth, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"access_token": 1, "refresh_token": 2})},
 	} {
 		f := storeFile(t, tc.kind, "auth.json")
 		if out, err := f.Capture(tc.ctype, tc.req, tc.reply); err == nil {
@@ -237,39 +246,15 @@ func TestOpencodeCapture(t *testing.T) {
 	}
 }
 
-// Claude Code's OAuth login: saved as Claude Code keeps it (.credentials.json's claudeAiOauth), the
-// VM given its account and organization, a placeholder of its own and no refresh token.
-func TestClaudeCapture(t *testing.T) {
-	f := storeFile(t, Claude, ".credentials.json")
-	req := []byte(`{"grant_type":"authorization_code","code":"c","client_id":"x","code_verifier":"v","state":"s"}`)
-	vm := capture(t, f, jsonType+"; charset=utf-8", req, reply(map[string]any{ //nolint:gosec // a test's fake login
-		"access_token": "sk-ant-oat01-real", "refresh_token": "sk-ant-ort01-real", "expires_in": 28800, "scope": "user:inference user:profile",
-		"token_type": "Bearer", "account": map[string]any{"uuid": "u-1", "email_address": "a@b"}, "organization": map[string]any{"uuid": "o-1"},
-	}), "sk-ant-oat01-real", "sk-ant-ort01-real")
-	o := obj(readStore(t, f), "claudeAiOauth")
-	exp, _ := o["expiresAt"].(json.Number).Int64()
-	if str(o, "accessToken") != "sk-ant-oat01-real" || str(o, "refreshToken") != "sk-ant-ort01-real" ||
-		time.Until(time.UnixMilli(exp)) < 7*time.Hour || !slices.Equal(strs(o["scopes"]), []string{"user:inference", "user:profile"}) {
-		t.Errorf("the store's login = %v", o)
-	}
-	if vm["access_token"] != "sk-ant-oat01-devvm-proxy-managed-oauth-"+salt || vm["refresh_token"] != managed ||
-		obj(vm, "account")["email_address"] != "a@b" || obj(vm, "organization")["uuid"] != "o-1" || vm["scope"] != "user:inference user:profile" {
-		t.Errorf("the VM's reply = %v", vm)
-	}
-}
-
-func strs(v any) []string {
-	var out []string
-	for _, x := range v.([]any) {
-		out = append(out, x.(string))
-	}
-	return out
-}
-
-// VMs capture Codex's and opencode's logins, at OpenAI's token endpoint, and not Claude Code's; a
-// request there is opencode's when Bun or opencode sends it.
+// VMs capture Codex's and opencode's logins, at OpenAI's token endpoint, and Claude Code's at
+// both of Claude's; a request at OpenAI's is opencode's when Bun or opencode sends it.
 func TestEndpointsAndPick(t *testing.T) {
-	want := []proxy.Capture{{Agent: Codex, Host: "auth.openai.com", Path: "/oauth/token"}, {Agent: Opencode, Host: "auth.openai.com", Path: "/oauth/token"}}
+	want := []proxy.Capture{
+		{Agent: Codex, Host: "auth.openai.com", Path: "/oauth/token"},
+		{Agent: Opencode, Host: "auth.openai.com", Path: "/oauth/token"},
+		{Agent: Claude, Host: "platform.claude.com", Path: "/v1/oauth/token"},
+		{Agent: Claude, Host: "console.anthropic.com", Path: "/v1/oauth/token"},
+	}
 	if got := Endpoints(); !slices.Equal(got, want) {
 		t.Errorf("Endpoints() = %+v", got)
 	}

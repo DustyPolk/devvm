@@ -8,8 +8,16 @@
 # Usage errors, before anything runs.
 ! exec devvm agent login
 stderr '^devvm: arg_missing args=AGENT command=devvm agent login$'
-! exec devvm agent login claude
-stderr '^devvm: arg_not_choice choices=codex, opencode command=devvm agent login given=claude$'
+! exec devvm agent login aider
+stderr '^devvm: arg_not_choice choices=claude, codex, opencode command=devvm agent login given=aider$'
+! exec devvm agent login codex --setup-token
+stderr '^devvm: agent_login_setup_token_alone$'
+! exec devvm agent login claude --device-code
+stderr '^devvm: agent_login_claude_flag flag=--device-code$'
+! exec devvm agent login claude --api-key
+stderr '^devvm: agent_login_claude_flag flag=--api-key$'
+! exec devvm agent login claude --stdin
+stderr '^devvm: agent_login_claude_flag flag=--stdin$'
 ! exec devvm agent login codex --stdin
 stderr '^devvm: agent_login_stdin_alone agent=codex$'
 ! exec devvm agent login codex --api-key --provider anthropic
@@ -131,6 +139,78 @@ stdout 'devvm-login\.pid"; p=\$\(cat "\$f" 2>/dev/null\) && kill "\$p"'
 stdin $WORK/empty
 ! exec devvm agent login codex --api-key --stdin
 stderr '^devvm: agent_key_empty$'
+
+# Claude Code: its login runs in the VM without the VM's token, nothing
+# forwarded; the stub saves nothing, so devvm says so.
+project claude
+exec devvm --network open --no-git-protect --agents claude
+vm_name CL claude
+stub_reset
+! exec devvm agent login claude
+stdout '^==> agent_login_claude_paste$'
+! stdout agent_login_forward
+stderr '^devvm: agent_login_not_saved agent=claude vm=devvm-claude-[0-9a-f]{14}$'
+stub_calls
+stdout '''devvm'' ''env'' ''-u'' ''CLAUDE_CODE_OAUTH_TOKEN'' ''claude'' ''auth'' ''login'' ''--claudeai''$'
+! stdout ssh
+
+# A login the VM's proxy saves while it runs: the VM is set up again, and
+# gets the OAuth login's copy with placeholders, and no token.
+exec sh -c 'printf claudeai > "$STUB_DIR/shell-waits-on"'
+rm $STUB_DIR/waiting
+exec devvm agent login claude &c&
+wait_file $STUB_DIR/waiting
+mkdir $DATA/logins/claude/.claude
+cp $WORK/credentials.json $DATA/logins/claude/.claude/.credentials.json
+rm $STUB_DIR/shell-waits-on
+wait c
+stdout '^==> claude_login_saved vm=devvm-claude-[0-9a-f]{14}$'
+# Only the launch, before the login, found none.
+stderr -count=1 no_claude_token
+exec tar -xOf $STUB_DIR/sync.tar home/.claude/.credentials.json
+stdout '"accessToken": "sk-ant-oat01-devvm-proxy-managed-oauth-[0-9a-f]{32}"'
+stdout '"refreshToken": "devvm-proxy-managed"'
+! stdout testfake
+exec tar -xOf $STUB_DIR/sync.tar env
+! stdout CLAUDE_CODE_OAUTH_TOKEN
+
+# claude setup-token: its token, saved while it runs, replaces the OAuth
+# login, and the VM gets it as a placeholder in its environment instead.
+exec sh -c 'printf setup-token > "$STUB_DIR/shell-waits-on"'
+rm $STUB_DIR/waiting
+exec devvm agent login claude --setup-token &s&
+wait_file $STUB_DIR/waiting
+stdin $WORK/claude.token
+exec devvm secret set claude --stdin
+! exists $DATA/logins/claude/.claude/.credentials.json
+rm $STUB_DIR/shell-waits-on
+wait s
+stdout '^==> claude_setup_token_saved vm=devvm-claude-[0-9a-f]{14}$'
+exec tar -tf $STUB_DIR/sync.tar
+! stdout credentials
+exec tar -xOf $STUB_DIR/sync.tar env
+stdout '^export CLAUDE_CODE_OAUTH_TOKEN=''sk-ant-oat01-devvm-proxy-managed-[0-9a-f]{32}''$'
+
+# A token in devvm's environment wins over the login, and devvm says so.
+exec sh -c 'printf setup-token > "$STUB_DIR/shell-waits-on"'
+rm $STUB_DIR/waiting
+env CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-testfake-env
+exec devvm agent login claude --setup-token &e&
+wait_file $STUB_DIR/waiting
+stdin $WORK/claude2.token
+exec devvm secret set claude --stdin
+rm $STUB_DIR/shell-waits-on
+wait e
+stdout '^==> claude_setup_token_saved'
+stderr 'claude_env_token_wins'
+env CLAUDE_CODE_OAUTH_TOKEN=
+
+-- claude.token --
+sk-ant-oat01-testfake-setup
+-- claude2.token --
+sk-ant-oat01-testfake-setup2
+-- credentials.json --
+{"claudeAiOauth": {"accessToken": "sk-ant-oat01-testfake", "refreshToken": "sk-ant-ort01-testfake", "expiresAt": 4070908800000, "scopes": ["user:inference"]}}
 
 -- key --
 sk-testfake-codex

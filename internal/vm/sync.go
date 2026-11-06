@@ -311,10 +311,12 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		}
 		v, err := store.Value(ctx, name)
 		if errors.Is(err, secrets.ErrNone) {
-			switch name {
-			case "claude":
+			switch {
+			case name == "claude" && store.HasLogin(agentlogin.ClaudeOAuth):
+				// The VM gets the OAuth login instead (stageSecrets), never both.
+			case name == "claude":
 				e.Warn(msg.NoClaudeToken(vm))
-			case "github":
+			case name == "github":
 				e.Warn(msg.NoGithubToken(vm))
 			}
 			continue
@@ -331,7 +333,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		}
 	}
 
-	if err := e.stageSecrets(s, store, vm, names, salt); err != nil {
+	if err := e.stageSecrets(ctx, s, store, vm, names, salt); err != nil {
 		return nil, err
 	}
 	var vmFile bytes.Buffer
@@ -388,7 +390,7 @@ func claudeMoved(from, dir string) []byte {
 // agents' settings files with the values under secret-looking keys taken
 // out (one that can't be read that way isn't sent, nor are opencode's
 // files that aren't settings or Markdown: withheld).
-func (e syncer) stageSecrets(s *stage, store *secrets.Store, vm string, tools []string, salt string) error {
+func (e syncer) stageSecrets(ctx context.Context, s *stage, store *secrets.Store, vm string, tools []string, salt string) error {
 	ca := e.Dirs.VM(vm).CA()
 	for _, f := range [][2]string{{"ca/devvm-proxy.crt", ca.Cert()}, {"ca/devvm-proxy-next.crt", ca.NextCert()}} {
 		cert, err := os.ReadFile(f[1])
@@ -397,7 +399,7 @@ func (e syncer) stageSecrets(s *stage, store *secrets.Store, vm string, tools []
 		}
 		s.put(f[0], 0o644, cert)
 	}
-	for _, kind := range store.Logins(tools) {
+	for _, kind := range store.Logins(ctx, tools) {
 		data, err := store.VMLogin(kind, salt)
 		if err != nil {
 			return msg.LoginCopyFailed(kind, err.Error(), vm).Because(err)

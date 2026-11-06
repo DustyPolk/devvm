@@ -174,6 +174,16 @@ func AgentLoadFailed(key string) M {
 	return M{id: "agent_load_failed", vals: []val{{"key", key}}}
 }
 
+// AgentLoginClaudeFlag is [agent_login_claude_flag]: "{{.flag}} doesn't go with devvm agent login claude, which logs in in a browser on any machine. Run devvm agent login claude, or devvm agent login claude --setup-token."
+func AgentLoginClaudeFlag(flag string) M {
+	return M{id: "agent_login_claude_flag", vals: []val{{"flag", flag}}}
+}
+
+// AgentLoginClaudePaste is [agent_login_claude_paste]: "Open the address Claude Code shows in a browser on any machine and approve the login, then paste the code the browser shows here."
+func AgentLoginClaudePaste() M {
+	return M{id: "agent_login_claude_paste"}
+}
+
 // AgentLoginExited is [agent_login_exited]: "{{.agent}}'s login in {{.vm}} failed, and its output above says why."
 func AgentLoginExited(agent string, vm string) M {
 	return M{id: "agent_login_exited", vals: []val{{"agent", agent}, {"vm", vm}}}
@@ -232,6 +242,11 @@ func AgentLoginSaved(agent string, vm string) M {
 // AgentLoginSavedFor is [agent_login_saved_for]: "devvm saved {{.agent}}'s ChatGPT login for {{.email}} in its agent store, and {{.vm}} uses it now. Every VM with {{.agent}} gets it from its next launch."
 func AgentLoginSavedFor(agent string, email string, vm string) M {
 	return M{id: "agent_login_saved_for", vals: []val{{"agent", agent}, {"email", email}, {"vm", vm}}}
+}
+
+// AgentLoginSetupTokenAlone is [agent_login_setup_token_alone]: "--setup-token goes with devvm agent login claude. Run devvm agent login claude --setup-token."
+func AgentLoginSetupTokenAlone() M {
+	return M{id: "agent_login_setup_token_alone"}
 }
 
 // AgentLoginStdinAlone is [agent_login_stdin_alone]: "--stdin goes with --api-key. Run devvm agent login {{.agent}} --api-key --stdin."
@@ -519,12 +534,37 @@ func CheckingTools() M {
 	return M{id: "checking_tools"}
 }
 
-// ClaudeTokenHowto is [claude_token_howto]: "Run claude setup-token on this machine and approve it in the browser.\nThen paste the Claude Code token it prints, which starts with sk-ant-oat01-, not the code the browser shows."
+// ClaudeEnvTokenWins is [claude_env_token_wins]: "CLAUDE_CODE_OAUTH_TOKEN is set in devvm's environment, so VMs get that token, not the login devvm saved. Unset it to use the saved login."
+func ClaudeEnvTokenWins() M {
+	return M{id: "claude_env_token_wins"}
+}
+
+// ClaudeLoginSaved is [claude_login_saved]: "devvm saved Claude Code's login in its agent store, and {{.vm}} uses it now. Every VM with Claude Code gets it from its next launch."
+func ClaudeLoginSaved(vm string) M {
+	return M{id: "claude_login_saved", vals: []val{{"vm", vm}}}
+}
+
+// ClaudeNoLogin is [claude_no_login]: "devvm has no Claude Code login any more, so the VM's proxy has none to put in. Run devvm agent login claude in the VM's folder."
+func ClaudeNoLogin() M {
+	return M{id: "claude_no_login"}
+}
+
+// ClaudeRefreshFailed is [claude_refresh_failed]: "Refreshing the Claude Code login in devvm's agent store failed: {{.reason}}. Run devvm agent login claude in a VM's folder to log in again."
+func ClaudeRefreshFailed(reason string) M {
+	return M{id: "claude_refresh_failed", vals: []val{{"reason", reason}}}
+}
+
+// ClaudeSetupTokenSaved is [claude_setup_token_saved]: "devvm saved the Claude Code token from claude setup-token with its secrets, and {{.vm}} uses it now. Every VM with Claude Code gets it from its next launch."
+func ClaudeSetupTokenSaved(vm string) M {
+	return M{id: "claude_setup_token_saved", vals: []val{{"vm", vm}}}
+}
+
+// ClaudeTokenHowto is [claude_token_howto]: "Paste the Claude Code token that claude setup-token printed, which starts with sk-ant-oat01-, not the code the browser shows.\ndevvm agent login claude --setup-token runs it in a VM and saves the token without this step."
 func ClaudeTokenHowto() M {
 	return M{id: "claude_token_howto"}
 }
 
-// ClaudeTokenInvalid is [claude_token_invalid]: "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-. Run claude setup-token, then devvm secret set claude."
+// ClaudeTokenInvalid is [claude_token_invalid]: "The Claude Code token isn't one from claude setup-token, which starts with sk-ant-oat01-, so VMs don't get it. Run devvm agent login claude to log in again."
 func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
@@ -2269,7 +2309,7 @@ func NextStartSize(vm string) M {
 	return M{id: "next_start_size", vals: []val{{"vm", vm}}}
 }
 
-// NoClaudeToken is [no_claude_token]: "{{.vm}} has no Claude Code token. Run claude setup-token, then devvm secret set claude."
+// NoClaudeToken is [no_claude_token]: "{{.vm}} has no Claude Code login. Run devvm agent login claude in its folder."
 func NoClaudeToken(vm string) M {
 	return M{id: "no_claude_token", vals: []val{{"vm", vm}}}
 }
@@ -2419,7 +2459,7 @@ func NotAnImage(name string) M {
 	return M{id: "not_an_image", vals: []val{{"name", name}}}
 }
 
-// NotSetupToken is [not_setup_token]: "That isn't a Claude Code token, which starts with sk-ant-oat01-, so devvm saved nothing. Run claude setup-token to get one."
+// NotSetupToken is [not_setup_token]: "That isn't a Claude Code token, which starts with sk-ant-oat01-, so devvm saved nothing. Run devvm agent login claude --setup-token to get one."
 func NotSetupToken() M {
 	return M{id: "not_setup_token"}
 }
@@ -3705,6 +3745,8 @@ var specs = map[string]spec{
 	"agent_key_unpinned":             {fields: []string{"key"}},
 	"agent_keys_failed":              {fields: []string{"reason"}},
 	"agent_load_failed":              {fields: []string{"key"}},
+	"agent_login_claude_flag":        {fields: []string{"flag"}},
+	"agent_login_claude_paste":       {},
 	"agent_login_exited":             {fields: []string{"agent", "vm"}},
 	"agent_login_failed":             {fields: []string{"reason"}},
 	"agent_login_forward":            {fields: []string{"agent", "port", "vm"}},
@@ -3717,6 +3759,7 @@ var specs = map[string]spec{
 	"agent_login_read_failed":        {fields: []string{"file", "reason"}},
 	"agent_login_saved":              {fields: []string{"agent", "vm"}},
 	"agent_login_saved_for":          {fields: []string{"agent", "email", "vm"}},
+	"agent_login_setup_token_alone":  {},
 	"agent_login_stdin_alone":        {fields: []string{"agent"}},
 	"agent_no_keys":                  {},
 	"agent_on_risk":                  {fields: []string{"vm"}},
@@ -3774,6 +3817,11 @@ var specs = map[string]spec{
 	"ca_not_certificate":             {fields: []string{"file"}},
 	"ca_unreadable":                  {fields: []string{"file"}},
 	"checking_tools":                 {},
+	"claude_env_token_wins":          {},
+	"claude_login_saved":             {fields: []string{"vm"}},
+	"claude_no_login":                {},
+	"claude_refresh_failed":          {fields: []string{"reason"}},
+	"claude_setup_token_saved":       {fields: []string{"vm"}},
 	"claude_token_howto":             {},
 	"claude_token_invalid":           {},
 	"clone_alternates":               {fields: []string{"path"}},
