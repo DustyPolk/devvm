@@ -22,9 +22,9 @@ func sections() []section {
 		{name: "clone", guess: 120, tools: []tool{gitTool(), sshTool()}, run: cloneSection},
 		{name: "gc", guess: 120, run: gcSection},
 		{name: "tools", guess: 600, tools: []tool{sshTool()}, run: toolsSection},
-		{name: "network", guess: 600},
+		{name: "network", guess: 600, tools: []tool{python3Tool(), sshTool()}, run: networkSection},
 		{name: "desktop", guess: 300},
-		{name: "nix", guess: 900},
+		{name: "nix", guess: 900, tools: []tool{sshTool()}, run: nixSection},
 		{name: "from", guess: 1800},
 		{name: "link", guess: 900},
 	}
