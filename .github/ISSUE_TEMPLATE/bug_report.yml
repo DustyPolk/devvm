@@ -1,0 +1,125 @@
+name: Bug report
+description: devvm did something wrong, failed or crashed.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A security problem, such as a VM reaching your files, a secret reaching a VM or a host the network tier should block, goes to [private vulnerability reporting](https://github.com/devvmhq/devvm/security/advisories/new), not here.
+
+        [Troubleshooting](https://devvm.dev/docs/using/troubleshooting/) covers the common problems and their fixes.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you report
+      options:
+        - label: I searched the existing issues and found none for this.
+          required: true
+        - label: I'm on the newest release, or `devvm upgrade --check` says there's no newer one.
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The command you ran, exactly as you typed it, and what devvm printed. Add `-v` to show the output of the commands devvm runs.
+      placeholder: |
+        $ devvm --tools node
+        ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: From a new project folder if you can, with the files the folder needs, such as a `devcontainer.json`.
+      placeholder: |
+        1. mkdir /tmp/repro && cd /tmp/repro
+        2. devvm
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: devvm version
+      description: What `devvm --version` prints.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: devvm doctor
+      description: What `devvm doctor` prints. It names your OS, the backend and the tools devvm needs.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      options:
+        - macOS, Apple silicon
+        - macOS, Intel
+        - Linux, x86_64
+        - Linux, arm64
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: macOS 15.4, Ubuntu 24.04
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How devvm was installed
+      options:
+        - install.sh
+        - Homebrew
+        - Built from source or go install
+  - type: input
+    id: backend
+    attributes:
+      label: Backend version
+      description: For Lima, what `limactl --version` prints.
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: The VM's network tier
+      description: What `devvm network` prints in the project folder.
+      options:
+        - allowlist
+        - none
+        - internet
+        - open
+        - unenforced
+        - No VM involved
+  - type: checkboxes
+    id: involved
+    attributes:
+      label: What the VM uses
+      options:
+        - label: an image from `--from`
+        - label: a `devcontainer.json`
+        - label: a layer of my own
+        - label: links between VMs
+  - type: input
+    id: agents
+    attributes:
+      label: Coding agents
+      description: The agents in the VM, if any, such as claude, codex or opencode.
+  - type: textarea
+    id: log
+    attributes:
+      label: Run log
+      description: |
+        The run's log, in `~/.local/share/devvm/logs/runs/`, the newest first. devvm hides a VM's proxy key and the passwords in URLs and proxy addresses, as `<key>` and `<password>`, but a log can still hold other private things, such as host names, folder names and a command's output, so read it before you paste it.
+      render: text

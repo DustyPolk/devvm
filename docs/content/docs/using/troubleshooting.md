@@ -204,3 +204,7 @@ When a VM can't mount one of its shared tools, devvm stops the launch with an er
 Run `devvm tools update` in the project folder. It builds the tools that are missing and then opens the shell. When the VM has the newest versions, devvm builds those, and otherwise it builds the newest versions and moves the VM to them. If the launch still stops, the run log says why the VM couldn't mount the image ([a command fails](#a-command-fails)).
 
 A tool that doesn't mount never keeps the VM from booting. The VM mounts the tools it can and boots as usual, and only devvm's launch stops ([the share](../internals/images.md#the-share)).
+
+## Reporting a bug
+
+When none of this fixes it, open an issue on [devvm's issue tracker](https://github.com/devvmhq/devvm/issues/new/choose) and choose its form for bugs, features or docs. The bug report asks for what `devvm --version`, `devvm doctor` and `limactl --version` print, your OS and its version, the command you ran with what it printed, and the run log ([a command fails](#a-command-fails)). devvm hides a VM's proxy key and passwords in the log, but it can still hold folder names, host names and a command's output, so read it before you paste it. A security problem goes to [private vulnerability reporting](https://github.com/devvmhq/devvm/security/advisories/new) instead, never to a public issue.

@@ -1,0 +1,24 @@
+name: Docs
+description: A page on devvm.dev is wrong, unclear or missing something.
+labels: ["docs", "triage"]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: The page's address, with its heading's link if it's one section.
+      placeholder: https://devvm.dev/docs/using/troubleshooting/#a-command-fails
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's wrong or missing
+      description: What the page says, what devvm does instead, or what you looked for and didn't find.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: devvm version
+      description: What `devvm --version` prints, when the page and devvm disagree.

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/devvmhq/devvm/security/advisories/new
+    about: Report anything that breaks devvm's security model privately, never in a public issue. SECURITY.md says what counts.
+  - name: Ask a question
+    url: https://github.com/devvmhq/devvm/discussions
+    about: Ask how to do something with devvm, or share a setup, in Discussions.
+  - name: Read the docs
+    url: https://devvm.dev/docs/
+    about: The guides, the troubleshooting page and the reference for every command.

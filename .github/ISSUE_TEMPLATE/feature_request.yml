@@ -1,0 +1,69 @@
+name: Feature request
+description: Something devvm doesn't do yet, such as a new toolchain, agent or layer.
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A question about how to do something goes in [Discussions](https://github.com/devvmhq/devvm/discussions). A layer of your own can add most software to a VM today ([your own layers](https://devvm.dev/docs/using/customizing/#your-own-layers)).
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you ask
+      options:
+        - label: I searched the existing issues and found none for this.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you're trying to do, and what stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What you'd like
+      description: How devvm could solve it, such as the command or flag you'd type.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: Workarounds and other tools, and why they fall short.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Part of devvm
+      options:
+        - VMs and images
+        - Network tiers and the proxy
+        - Secrets and agent logins
+        - Agents' settings and history
+        - Shared tools (toolchains and agents)
+        - Layers
+        - Links and ports
+        - Desktop
+        - devcontainer.json and --from
+        - The command line
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: devvm version
+      description: What `devvm --version` prints.
+  - type: input
+    id: os
+    attributes:
+      label: OS, its version and the CPU
+      description: When the request depends on your machine, such as a toolchain or a layer.
+      placeholder: macOS 15.4 on Apple silicon, Ubuntu 24.04 x86_64
+  - type: input
+    id: backend
+    attributes:
+      label: Backend version
+      description: For Lima, what `limactl --version` prints.
