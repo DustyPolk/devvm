@@ -25,6 +25,9 @@ type Cmd struct {
 	Dir   string   // its folder: the sandbox's state folder when empty
 	Stdin string   // its input: none (/dev/null) when empty
 	Env   []string // VAR=VALUE, on top of the sandbox's
+	// Input is its input as it reads it, in place of Stdin: for input
+	// that waits for what the command prints (ttyRun's answers).
+	Input io.Reader
 }
 
 // Res is what a command printed: Out its output and errors as they came,
@@ -48,6 +51,9 @@ func (s *S) Run(c Cmd) (Res, error) {
 	}
 	if c.Stdin != "" {
 		cmd.Stdin = strings.NewReader(c.Stdin)
+	}
+	if c.Input != nil {
+		cmd.Stdin = c.Input
 	}
 	log, err := os.OpenFile(s.sb.logFile(), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
 	if err != nil {
