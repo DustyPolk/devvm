@@ -15,39 +15,29 @@ import (
 )
 
 // newNetworkCmd is devvm network [open|internet|allowlist|none], with -g
-// [open|internet|allowlist|none|ask] for what new VMs get, and allow,
-// deny, rm RULE... [-g] and log.
+// for what new VMs get, and allow, deny, rm RULE... [-g] and log.
 func newNetworkCmd(a *app) *cobra.Command {
 	u := a.u
 	var global, asJSON bool
-	// choices are what the command takes: the tiers, and with -g ask too.
-	choices := func() []string {
-		if global {
-			return settings.NetworkChoices()
-		}
-		return netpolicy.TierNames()
-	}
+	choices := netpolicy.TierNames
 	cmd := &cobra.Command{
 		Use:   "network [open|internet|allowlist|none]",
 		Short: "Show or change the network tier of this folder's VM",
 		Long: "Show the network tier of this folder's VM, which is open, internet, allowlist, none or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. " +
 			"With a tier, give the VM that tier: between the confined tiers at once, and into or out of open from the VM's next start, so in a terminal devvm offers to restart a running VM now. " +
-			"With -g, show or change new VMs' tier instead, where ask has devvm ask for each new VM's.",
+			"With -g, show or change the tier new VMs get, allowlist unless you change it.",
 		Example: examples(
 			"devvm network", "show the VM's network tier and allowlist",
 			"devvm network allow example.com", "let the VM reach example.com",
 			"devvm network log --blocked", "list what the VM's proxy blocked",
 			"devvm network internet", "let the VM reach any public host",
-			"devvm network -g none", "give every new VM the none tier without asking",
+			"devvm network -g none", "give every new VM the none tier",
 		),
 		Args: showsOnly(func(cmd *cobra.Command, args []string) error {
 			if err := maxArgs(1)(cmd, args); err != nil || len(args) == 0 {
 				return err
 			}
-			switch {
-			case !global && args[0] == settings.NetworkAsk:
-				return msg.NetAskGlobal()
-			case !slices.Contains(choices(), args[0]):
+			if !slices.Contains(choices(), args[0]) {
 				return msg.ArgNotChoice(strings.Join(choices(), ", "), cmd.CommandPath(), args[0])
 			}
 			return nil

@@ -215,7 +215,7 @@ ttyin -stdin $WORK/tiers.txt
 exec devvm --no-git-protect
 stderr 'new_vm_customize \[y/N\] net_about vm=devvm-asked-[0-9a-f]{14}$'
 stderr 'net_ask tier=allowlist'
-stderr 'devvm: net_tier_unknown choices=open, internet, allowlist, none given=on$'
+stderr 'devvm: net_tier_unknown choices=open, internet, allowlist, none given=on tier=allowlist$'
 vm_name ASKED asked
 vm_state $ASKED_dir/vm.json
 stdout '^net\.tier=internet$'
@@ -238,17 +238,17 @@ stderr '^usage_help command=devvm$'
 ! stub_calls
 cd $WORK
 
-# devvm network -g: what new VMs get, ask until it's saved; ask is only
-# for new VMs.
+# devvm network -g: what new VMs get, allowlist until it's saved, and
+# only ever a tier.
 exec devvm network -g
-stdout '\Aask # devvm: default\n\z'
+stdout '\Aallowlist # devvm: default\n\z'
 ! grep network $DATA/settings.json
 exec devvm network -g --json
-stdout '\A{\n  "version": 1,\n  "policy": "ask",\n  "source": "built-in"\n}\n\z'
-! exec devvm network ask
-stderr '^devvm: net_ask_global$'
+stdout '\A{\n  "version": 1,\n  "policy": "allowlist",\n  "source": "built-in"\n}\n\z'
+! exec devvm network -g ask
+stderr '^devvm: arg_not_choice choices=open, internet, allowlist, none command=devvm network given=ask$'
 ! exec devvm network -g sideways
-stderr '^devvm: arg_not_choice choices=ask, open, internet, allowlist, none command=devvm network given=sideways$'
+stderr '^devvm: arg_not_choice choices=open, internet, allowlist, none command=devvm network given=sideways$'
 
 # A saved open: new VMs are open, unasked and unwarned; --network
 # allowlist beats it. The VMs that exist keep theirs.
@@ -306,12 +306,12 @@ vm_name ONFLAG onflag
 vm_state $ONFLAG_dir/vm.json
 stdout '^net\.tier=open$'
 
-# ask again. config.toml's network wins over what devvm saved, devvm
+# A saved none. config.toml's network wins over what devvm saved, devvm
 # network -g shows it came from there, and devvm network -g refuses to
 # change it, naming the file and the key.
-exec devvm network -g ask
-stdout '^==> network_default mode=ask$'
-grep '^  "network": "ask",?$' $DATA/settings.json
+exec devvm network -g none
+stdout '^==> network_default mode=none$'
+grep '^  "network": "none",?$' $DATA/settings.json
 cp $WORK/config-on.toml $CFG/config.toml
 exec devvm network -g
 stdout '\Aallowlist # \S*/config/devvm/config\.toml\n\z'
@@ -319,7 +319,7 @@ exec devvm network -g --json
 stdout '"source": "config.toml"'
 ! exec devvm network -g open
 stderr '^devvm: set_in_config file=\S*/config/devvm/config\.toml key=network$'
-grep '^  "network": "ask",?$' $DATA/settings.json
+grep '^  "network": "none",?$' $DATA/settings.json
 project configon
 exec devvm --no-git-protect
 ! stderr 'net_about|net_ask|net_off_'
@@ -339,7 +339,7 @@ stderr '\S*/config/devvm/config\.toml:2: '
 stderr '\S*/config/devvm/config\.toml:2: '
 cp $WORK/config-maybe.toml $CFG/config.toml
 ! exec devvm network -g
-stderr '^devvm: net_default_failed reason=\S*/config/devvm/config\.toml:1: "maybe" isn''t one of ask, open, internet, allowlist, none$'
+stderr '^devvm: net_default_failed reason=\S*/config/devvm/config\.toml:1: "maybe" isn''t one of open, internet, allowlist, none$'
 rm $CFG/config.toml
 exec devvm --network allowlist --no-git-protect
 

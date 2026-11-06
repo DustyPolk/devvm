@@ -57,19 +57,19 @@ func ParsePorts(v string) (string, error) {
 	return backend.FormatPortRanges(rs), nil
 }
 
-// NetworkAsk is the network default that asks for each new VM's tier in
-// a terminal (allowlist without one).
-const NetworkAsk = "ask"
+// NetworkDefault is new VMs' network tier unless one is set:
+// netpolicy.TierDefault, which netpolicy's tests check it matches.
+const NetworkDefault = "allowlist"
 
-// NetworkChoices are the network defaults, in the order devvm shows them:
-// ask, then the tiers, lowest to highest. The tiers are netpolicy's
-// (netpolicy.Tiers, which imports this package), and netpolicy's tests
-// check the two lists match.
+// NetworkChoices are the network defaults, the tiers, in the order devvm
+// shows them, lowest to highest. They are netpolicy's (netpolicy.Tiers,
+// which imports this package), and netpolicy's tests check the two lists
+// match.
 func NetworkChoices() []string {
-	return []string{NetworkAsk, "open", "internet", "allowlist", "none"}
+	return []string{"open", "internet", NetworkDefault, "none"}
 }
 
-// checkNetwork refuses a network default that isn't ask or a tier.
+// checkNetwork refuses a network default that isn't a tier.
 func checkNetwork(v string) error {
 	if !slices.Contains(NetworkChoices(), v) {
 		return errNotChoice(v, NetworkChoices())

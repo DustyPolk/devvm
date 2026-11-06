@@ -173,7 +173,7 @@ func (s setup) inConfig(dirs paths.Dirs, def settings.Defaults, key string) bool
 	return true
 }
 
-// saveNetwork asks which network tier new VMs get, or ask, starting from
+// saveNetwork asks which network tier new VMs get, starting from
 // the one in effect, and saves it (vm.NetworkChoice), unless config.toml
 // sets it.
 func (s setup) saveNetwork(dirs paths.Dirs) error {
@@ -183,7 +183,6 @@ func (s setup) saveNetwork(dirs paths.Dirs) error {
 	}
 	modes := settings.NetworkChoices()
 	descs := map[string]msg.M{
-		settings.NetworkAsk:             msg.NetworkDefaultAsk(),
 		string(netpolicy.TierOpen):      msg.NetworkDefaultOpen(),
 		string(netpolicy.TierInternet):  msg.NetworkDefaultInternet(),
 		string(netpolicy.TierAllowlist): msg.NetworkDefaultAllowlist(),

@@ -68,7 +68,7 @@ func TestReadConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Defaults{
-		Network: Value{"ask", FromBuiltin}, Ports: Value{"all", FromBuiltin},
+		Network: Value{"allowlist", FromBuiltin}, Ports: Value{"all", FromBuiltin},
 		CPUs: Value{"", FromBuiltin}, Memory: Value{"", FromBuiltin}, Disk: Value{"", FromBuiltin},
 		Features: List{Source: FromBuiltin}, Agents: List{Source: FromBuiltin}, Layers: List{Source: FromBuiltin},
 		Retention: Retention{Raw: map[string]string{}, Sources: map[string]Source{}},
@@ -139,8 +139,9 @@ func TestConfigRefused(t *testing.T) {
 		{"unknown key in a table", "[size]\ncpus = 2\nswap = 1\n", 3, `unknown key "size.swap"`},
 		{"unknown retention key", "[retention]\nlogs.network = 3\n", 2, `unknown key "retention.logs.network"`},
 		{"dotted unknown key", "size.swap = 1\n", 1, `unknown key "size.swap"`},
-		{"bad network", "network = \"maybe\"\n", 1, `"maybe" isn't one of ask, open, internet, allowlist, none`},
-		{"network on", "network = \"on\"\n", 1, `"on" isn't one of ask, open, internet, allowlist, none`},
+		{"bad network", "network = \"maybe\"\n", 1, `"maybe" isn't one of open, internet, allowlist, none`},
+		{"network on", "network = \"on\"\n", 1, `"on" isn't one of open, internet, allowlist, none`},
+		{"network ask", "network = \"ask\"\n", 1, `"ask" isn't one of open, internet, allowlist, none`},
 		{"bad ports", "\nports = \"5173,,80\"\n", 2, "port_invalid"},
 		{"bad cpus", "[size]\ncpus = 1.5\n", 2, "cpus_not_number flag=cpus"},
 		{"bad memory", "[size]\nmemory = \"16M\"\n", 2, "size_not_gib flag=memory"},
@@ -282,6 +283,7 @@ func TestReadSaved(t *testing.T) {
 	}
 	for data, reason := range map[string]string{
 		`{"network": "maybe"}`:              "network: ",
+		`{"network": "ask"}`:                "network: ",
 		`{"agents": ["claude", "claude"]}`:  "agents: ",
 		`{"layers": ["base"]}`:              "layers: ",
 		`{"retention": {"logs.runs": "0"}}`: "retention.logs.runs: ",

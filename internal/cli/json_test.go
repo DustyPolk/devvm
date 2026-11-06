@@ -124,7 +124,7 @@ func TestJSONShapes(t *testing.T) {
 				"allowlist[].not_rules[].text: string", "allowlist[].rules[]: string", "policy: string",
 			},
 		},
-		{"network -g", defaultOutput{"policy": "ask", "source": "config.toml"}, []string{"policy: string", "source: string"}},
+		{"network -g", defaultOutput{"policy": "allowlist", "source": "config.toml"}, []string{"policy: string", "source: string"}},
 		{
 			"network log",
 			logOutput{Events: []logEventJSON{{

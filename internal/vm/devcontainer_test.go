@@ -246,7 +246,7 @@ func TestChooseNet(t *testing.T) {
 			}
 			e, f, _ := upEnv(t, caps)
 			e.Proxy.Reporter = &msg.Fake{Terminal: true, OnAnswer: func(m msg.M) string { t.Errorf("asked %s", m.Names()); return "" }}
-			if got := chosen(creation{Launch{e}}.chooseNet(tc.o, f, "v", settings.NetworkAsk)); got != tc.want {
+			if got := chosen(creation{Launch{e}}.chooseNet(tc.o, f, "v", settings.NetworkDefault)); got != tc.want {
 				t.Errorf("chooseNet = %s, want %s", got, tc.want)
 			}
 		})
@@ -256,7 +256,7 @@ func TestChooseNet(t *testing.T) {
 // The default (config.toml's, devvm network -g's or devvm setup's): a
 // tier gives a new VM's summary that tier, open even where it couldn't
 // be anything else, and a confined one that can't have it is refused;
-// --network beats it, and ask shows allowlist.
+// --network beats it.
 func TestChooseNetSaved(t *testing.T) {
 	noEgress := allNative()
 	delete(noEgress, backend.FeatureEgressProxy)
@@ -274,7 +274,6 @@ func TestChooseNetSaved(t *testing.T) {
 		{"none", "none", Options{}, nil, "none"},
 		{"allowlist, --network open", "allowlist", Options{Network: "open"}, nil, "open"},
 		{"allowlist, no egress-proxy", "allowlist", Options{}, noEgress, "net_tier_backend backend=fake vm=v"},
-		{"ask", "ask", Options{}, nil, "allowlist"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			caps := tc.caps

@@ -58,7 +58,7 @@ type List struct {
 
 // Defaults are the defaults in effect, each with where it came from.
 type Defaults struct {
-	// Network is new VMs' network tier: NetworkAsk unless set.
+	// Network is new VMs' network tier: NetworkDefault unless set.
 	Network Value
 	// Ports is what new VMs forward (ParsePorts): PortsAll unless set.
 	Ports Value
@@ -235,7 +235,7 @@ func resolve(config, saved Values) Defaults {
 		return List{Source: FromBuiltin}
 	}
 	d := Defaults{
-		Network:  pick(config.Network, saved.Network, NetworkAsk),
+		Network:  pick(config.Network, saved.Network, NetworkDefault),
 		Ports:    pick(config.Ports, saved.Ports, PortsAll),
 		CPUs:     pick(config.Size.CPUs, saved.Size.CPUs, ""),
 		Memory:   pick(config.Size.Memory, saved.Size.Memory, ""),

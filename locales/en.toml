@@ -464,9 +464,6 @@ other = "Saving the settings failed: {{.reason}}."
 [network_default_help]
 other = "Network tier for new VMs (up/down to choose, enter to confirm):"
 
-[network_default_ask]
-other = "devvm asks for each new VM, and gives it allowlist without a terminal"
-
 [network_default_open]
 other = "new VMs reach anything this machine can"
 
@@ -1555,12 +1552,12 @@ other = "{{.flag}} takes none alone, or a list of names without it."
 other = "Choose the network tier for {{.vm}}. With open it reaches anything this machine can, with internet any public host, with allowlist only the hosts you allow (recommended), and with none only its agents' and secrets' hosts and its links."
 
 [net_ask]
-description = "tier is the tier the VM gets when you press Enter: allowlist"
+description = "tier is the tier the VM gets when you press Enter, the one its summary showed: open, internet, allowlist or none"
 other = "Network tier for the VM (open, internet, allowlist or none) [{{.tier}}]:"
 
 [net_tier_unknown]
-description = "given is the answer as typed; choices are the tiers: open, internet, allowlist, none"
-other = "{{.given}} isn't a network tier. Type one of {{.choices}}, or press Enter for allowlist."
+description = "given is the answer as typed; choices are the tiers: open, internet, allowlist, none; tier is the one Enter gives"
+other = "{{.given}} isn't a network tier. Type one of {{.choices}}, or press Enter for {{.tier}}."
 
 [net_direct_route]
 other = "{{.vm}} reached the internet without going through its proxy, so devvm stopped it. Something outside devvm may have given it another network."
@@ -1593,9 +1590,6 @@ other = "{{.vm}}'s proxy doesn't answer it, so its tools that use the proxy fail
 [net_default_failed]
 description = "reason is an error from the system, in English"
 other = "Reading or saving new VMs' network tier failed: {{.reason}}."
-
-[net_ask_global]
-other = "Only new VMs can be set to ask. To have devvm ask about each new VM, run devvm network -g ask."
 
 [no_vm_policy]
 other = "There's no VM for {{.dir}}. Run devvm to make one, or add -g to change every VM's rules."

@@ -300,8 +300,8 @@ func TestKeyAndSalt(t *testing.T) {
 	}
 }
 
-// Without a terminal, allowlist; in a terminal, the tier typed, after
-// what each reaches, Enter for allowlist, and anything else warned and
+// Without a terminal, the tier shown; in a terminal, the tier typed, after
+// what each reaches, Enter for the one shown, and anything else warned and
 // asked again, without the tiers said again.
 func TestChoose(t *testing.T) {
 	var answers, said []string
@@ -316,8 +316,8 @@ func TestChoose(t *testing.T) {
 		},
 	}
 	p := &Proxy{Reporter: ui}
-	if p.Choose("vm") != TierAllowlist || len(said) != 0 {
-		t.Errorf("without a terminal: said %v, or not allowlist", said)
+	if p.Choose("vm", TierInternet) != TierInternet || len(said) != 0 {
+		t.Errorf("without a terminal: said %v, or not internet", said)
 	}
 	ui.Terminal = true
 	for _, tc := range []struct {
@@ -325,26 +325,30 @@ func TestChoose(t *testing.T) {
 		want    Tier
 		said    string
 	}{
-		{[]string{""}, TierAllowlist, "net_about vm=vm,net_ask tier=allowlist"},
-		{[]string{"open"}, TierOpen, "net_about vm=vm,net_ask tier=allowlist"},
+		{[]string{""}, TierInternet, "net_about vm=vm,net_ask tier=internet"},
+		{[]string{"open"}, TierOpen, "net_about vm=vm,net_ask tier=internet"},
 		{
 			[]string{"on", "none"},
 			TierNone,
-			"net_about vm=vm,net_ask tier=allowlist,net_tier_unknown choices=open, internet, allowlist, none given=on,net_ask tier=allowlist",
+			"net_about vm=vm,net_ask tier=internet,net_tier_unknown choices=open, internet, allowlist, none given=on tier=internet,net_ask tier=internet",
 		},
 	} {
 		answers, said = tc.answers, nil
-		if got := p.Choose("vm"); got != tc.want || strings.Join(said, ",") != tc.said {
+		if got := p.Choose("vm", TierInternet); got != tc.want || strings.Join(said, ",") != tc.said {
 			t.Errorf("%v: %s, said %v; want %s, %s", tc.answers, got, said, tc.want, tc.said)
 		}
 	}
 }
 
-// settings' network defaults are ask and the tiers, in their order: its
-// own list, as settings can't import this package.
+// settings' network defaults are the tiers, in their order, and its
+// default is TierDefault: its own list, as settings can't import this
+// package.
 func TestNetworkChoicesAreTheTiers(t *testing.T) {
-	if got, want := settings.NetworkChoices(), append([]string{settings.NetworkAsk}, TierNames()...); !slices.Equal(got, want) {
+	if got, want := settings.NetworkChoices(), TierNames(); !slices.Equal(got, want) {
 		t.Errorf("settings.NetworkChoices() = %v, want %v", got, want)
+	}
+	if settings.NetworkDefault != string(TierDefault) {
+		t.Errorf("settings.NetworkDefault = %s, want %s", settings.NetworkDefault, TierDefault)
 	}
 }
 

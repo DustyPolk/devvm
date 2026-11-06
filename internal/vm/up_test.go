@@ -576,8 +576,8 @@ func TestUpPicker(t *testing.T) {
 // A new VM's summary is followed by the question whether to customize
 // it, where the picker shows and anything is left to choose: no makes it
 // as shown, yes shows the picker, a part a flag gave greyed out, then
-// asks its tier, where neither a flag nor devvm network -g chose it, and
-// its CPUs and memory, each only where no flag gave it.
+// asks its tier, where no flag gave it, and its CPUs and memory, each
+// only where no flag gave it.
 // Without the picker, or with nothing left, there's no question, and
 // only the first ends with the flags that choose others.
 func TestUpCustomize(t *testing.T) {
@@ -587,7 +587,7 @@ func TestUpCustomize(t *testing.T) {
 		o         Options
 		picks     bool
 		yes       bool
-		saved     string // the tier devvm network -g saved, "" for ask
+		saved     string // the tier devvm network -g saved, "" for none saved
 		asked     string // what's asked, in order
 		net, cpus string // what the VM gets
 		choose    bool   // the summary ends with new_vm_choose
@@ -609,8 +609,14 @@ func TestUpCustomize(t *testing.T) {
 			asked: "new_vm_customize,pick_new_help,net_ask,new_vm_memory_prompt",
 		},
 		{
-			name: "yes with a saved tier", picks: true, yes: true, saved: "none", net: "none", cpus: "2",
-			asked: "new_vm_customize,pick_new_help,new_vm_cpus_prompt,new_vm_memory_prompt",
+			name: "yes with a saved tier", picks: true, yes: true, saved: "none", net: "internet", cpus: "2",
+			asked: "new_vm_customize,pick_new_help,net_ask,new_vm_cpus_prompt,new_vm_memory_prompt",
+		},
+		{name: "Enter with a saved tier", picks: true, saved: "none", asked: "new_vm_customize", net: "none"},
+		{
+			name: "every part and the size given", picks: true, net: "allowlist", cpus: "2",
+			o:     Options{Toolchains: none, Agents: none, Layers: none, Size: Size{CPUs: "2", Memory: "4"}},
+			asked: "new_vm_customize",
 		},
 		{
 			name: "yes with every part and the tier given", picks: true, yes: true, net: "none", cpus: "2",

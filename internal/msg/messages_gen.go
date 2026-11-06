@@ -2039,11 +2039,6 @@ func NetAsk(tier string) M {
 	return M{id: "net_ask", vals: []val{{"tier", tier}}}
 }
 
-// NetAskGlobal is [net_ask_global]: "Only new VMs can be set to ask. To have devvm ask about each new VM, run devvm network -g ask."
-func NetAskGlobal() M {
-	return M{id: "net_ask_global"}
-}
-
 // NetDefaultFailed is [net_default_failed]: "Reading or saving new VMs' network tier failed: {{.reason}}."
 func NetDefaultFailed(reason string) M {
 	return M{id: "net_default_failed", vals: []val{{"reason", reason}}}
@@ -2079,9 +2074,9 @@ func NetTierBackend(backend string, vm string) M {
 	return M{id: "net_tier_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// NetTierUnknown is [net_tier_unknown]: "{{.given}} isn't a network tier. Type one of {{.choices}}, or press Enter for allowlist."
-func NetTierUnknown(choices string, given string) M {
-	return M{id: "net_tier_unknown", vals: []val{{"choices", choices}, {"given", given}}}
+// NetTierUnknown is [net_tier_unknown]: "{{.given}} isn't a network tier. Type one of {{.choices}}, or press Enter for {{.tier}}."
+func NetTierUnknown(choices string, given string, tier string) M {
+	return M{id: "net_tier_unknown", vals: []val{{"choices", choices}, {"given", given}, {"tier", tier}}}
 }
 
 // NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly, so its network tier isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
@@ -2107,11 +2102,6 @@ func NetworkDefault(mode string) M {
 // NetworkDefaultAllowlist is [network_default_allowlist]: "new VMs reach only the hosts you allow (recommended)"
 func NetworkDefaultAllowlist() M {
 	return M{id: "network_default_allowlist"}
-}
-
-// NetworkDefaultAsk is [network_default_ask]: "devvm asks for each new VM, and gives it allowlist without a terminal"
-func NetworkDefaultAsk() M {
-	return M{id: "network_default_ask"}
 }
 
 // NetworkDefaultHelp is [network_default_help]: "Network tier for new VMs (up/down to choose, enter to confirm):"
@@ -4083,7 +4073,6 @@ var specs = map[string]spec{
 	"net_about":                      {fields: []string{"vm"}},
 	"net_allows_unused":              {fields: []string{"tier", "vm"}},
 	"net_ask":                        {fields: []string{"tier"}},
-	"net_ask_global":                 {},
 	"net_default_failed":             {fields: []string{"reason"}},
 	"net_direct_route":               {fields: []string{"vm"}},
 	"net_open_log":                   {fields: []string{"vm"}},
@@ -4091,13 +4080,12 @@ var specs = map[string]spec{
 	"net_proxy_down_stopped":         {fields: []string{"vm"}},
 	"net_proxy_unreachable":          {fields: []string{"vm"}},
 	"net_tier_backend":               {fields: []string{"backend", "vm"}},
-	"net_tier_unknown":               {fields: []string{"choices", "given"}},
+	"net_tier_unknown":               {fields: []string{"choices", "given", "tier"}},
 	"net_unenforced":                 {fields: []string{"vm"}},
 	"net_unenforced_restart":         {fields: []string{"vm"}},
 	"net_unenforced_stop":            {fields: []string{"vm"}},
 	"network_default":                {fields: []string{"mode"}},
 	"network_default_allowlist":      {},
-	"network_default_ask":            {},
 	"network_default_help":           {},
 	"network_default_internet":       {},
 	"network_default_none":           {},

@@ -162,7 +162,7 @@ func TestSetupNetworkStartsFromSaved(t *testing.T) {
 	if err := s.run(setupChoice{}); err != nil {
 		t.Fatal(err)
 	}
-	want := "network ask:network_default_ask open:network_default_open *internet:network_default_internet " +
+	want := "network open:network_default_open *internet:network_default_internet " +
 		"allowlist:network_default_allowlist none:network_default_none"
 	if !slices.Contains(*picked, want) {
 		t.Errorf("pickers %q, want %q", *picked, want)
@@ -195,8 +195,8 @@ func TestSetupAsks(t *testing.T) {
 			if tc.ask {
 				wantSized = []string{
 					"size_cpus_prompt cpus=4", "size_memory_prompt memory=8",
-					"network *ask:network_default_ask open:network_default_open internet:network_default_internet " +
-						"allowlist:network_default_allowlist none:network_default_none",
+					"network open:network_default_open internet:network_default_internet " +
+						"*allowlist:network_default_allowlist none:network_default_none",
 					"agents_help", "layers_help",
 				}
 			}
@@ -204,7 +204,7 @@ func TestSetupAsks(t *testing.T) {
 				t.Errorf("size prompts and network pickers %q, want %q", *sized, wantSized)
 			}
 			def := defaults(t, d)
-			if mode := def.Network.Value; mode != map[bool]string{true: "none", false: settings.NetworkAsk}[tc.ask] {
+			if mode := def.Network.Value; mode != map[bool]string{true: "none", false: settings.NetworkDefault}[tc.ask] {
 				t.Errorf("network tier for new VMs %q", mode)
 			}
 			if def.CPUs.Source != settings.FromBuiltin || def.Memory.Source != settings.FromBuiltin {

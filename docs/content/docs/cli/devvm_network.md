@@ -7,7 +7,7 @@ Show or change the network tier of this folder's VM
 
 ## Synopsis
 
-Show the network tier of this folder's VM, which is open, internet, allowlist, none or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. With a tier, give the VM that tier: between the confined tiers at once, and into or out of open from the VM's next start, so in a terminal devvm offers to restart a running VM now. With -g, show or change new VMs' tier instead, where ask has devvm ask for each new VM's.
+Show the network tier of this folder's VM, which is open, internet, allowlist, none or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. With a tier, give the VM that tier: between the confined tiers at once, and into or out of open from the VM's next start, so in a terminal devvm offers to restart a running VM now. With -g, show or change the tier new VMs get, allowlist unless you change it.
 
 ```text
 devvm network [open|internet|allowlist|none] [flags]
@@ -20,7 +20,7 @@ devvm network [open|internet|allowlist|none] [flags]
   devvm network allow example.com  # let the VM reach example.com
   devvm network log --blocked      # list what the VM's proxy blocked
   devvm network internet           # let the VM reach any public host
-  devvm network -g none            # give every new VM the none tier without asking
+  devvm network -g none            # give every new VM the none tier
 ```
 
 ## Options

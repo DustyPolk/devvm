@@ -24,7 +24,7 @@ devvm has 32 commands at the top, plus help. Each one is in a group of the root'
 | Disk space | space, gc, retention [KEY=VALUE...] |
 | This machine | setup, agent, agent import [AGENT...], agent login AGENT, agent save [AGENT...], doctor, completion SHELL, limactl [ARGS...] |
 
-size, ports and network take `-g` for what new VMs get, and network -g takes ask too. Every command takes `-h`/`--help`, `--no-input` and `-v`/`--verbose`, and the root takes `--version`. `devvm --help` prints the tree as it is, and `commandGroups` in `internal/cli/help.go` holds the groups. A subcommand can sit in a group other than its parent's, as layer add and layer rm do, and `devvm --help` then lists it by both names in that group.
+size, ports and network take `-g` for what new VMs get. Every command takes `-h`/`--help`, `--no-input` and `-v`/`--verbose`, and the root takes `--version`. `devvm --help` prints the tree as it is, and `commandGroups` in `internal/cli/help.go` holds the groups. A subcommand can sit in a group other than its parent's, as layer add and layer rm do, and `devvm --help` then lists it by both names in that group.
 
 ## The rules
 

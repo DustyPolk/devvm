@@ -479,22 +479,17 @@ func newPorts(given string, def settings.Defaults, dc *devcontainer.Plan) (list 
 
 // chooseNet returns the tier a new VM's summary shows: --network's, else
 // the default's (config.toml's, else devvm network -g's or devvm
-// setup's), else allowlist (TierDefault), which customizing it may change.
+// setup's, else allowlist), which customizing it may change.
 // A backend b that may not confine a VM to its proxy (egress-proxy)
 // offers open alone: any other tier is refused in one line
 // (net_tier_backend), unasked, never dropped.
 func (e creation) chooseNet(o Options, b backend.Backend, vm, saved string) (netpolicy.Tier, error) {
 	tier := o.Network
-	if tier == "" && saved != settings.NetworkAsk {
+	if tier == "" {
 		tier = netpolicy.Tier(saved)
 	}
-	switch {
-	case tier == netpolicy.TierOpen:
-		return tier, nil
-	case !e.Registry.Allowed(b, backend.FeatureEgressProxy):
+	if tier != netpolicy.TierOpen && !e.Registry.Allowed(b, backend.FeatureEgressProxy) {
 		return "", msg.NetTierBackend(b.Name(), vm)
-	case tier == "":
-		return netpolicy.TierDefault, nil
 	}
 	return tier, nil
 }
@@ -527,9 +522,9 @@ func (e creation) choose(o Options, f project.Folder, b backend.Backend, def set
 	for _, m := range lines[1:] {
 		e.Say(m)
 	}
-	// The tier is asked as before the summary was: only without --network
-	// or a saved tier, where the backend may confine the VM.
-	tierOpen := o.Network == "" && def.Network.Value == settings.NetworkAsk && e.Registry.Allowed(b, backend.FeatureEgressProxy)
+	// Customizing asks for the tier only without --network, where the
+	// backend may confine the VM.
+	tierOpen := o.Network == "" && e.Registry.Allowed(b, backend.FeatureEgressProxy)
 	switch {
 	case !leftToChoose(o, tierOpen):
 		return p, nil
@@ -547,7 +542,7 @@ func (e creation) choose(o Options, f project.Folder, b backend.Backend, def set
 // customize asks for what of a new VM no flag gave, starting from its
 // summary s: the picker, a part a flag gave greyed out (skipped when the
 // flags give every part), then its tier when tierOpen (Choose, Enter for
-// allowlist, which the summary showed), then its
+// the one the summary showed), then its
 // CPUs and memory (AskVM), each into n. It returns the parts chosen,
 // checked as the defaults are.
 func (e creation) customize(s summary, host Host, tierOpen bool, n *newVM) (Parts, error) {
@@ -559,7 +554,7 @@ func (e creation) customize(s summary, host Host, tierOpen bool, n *newVM) (Part
 		}
 	}
 	if tierOpen {
-		n.net = e.Proxy.Choose(s.vm)
+		n.net = e.Proxy.Choose(s.vm, n.net)
 	}
 	n.size = SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.AskVM(n.size, s.size, s.o.Size)
 	return p, n.size.Check(host, backend.BaseDiskGiB, s.vm)

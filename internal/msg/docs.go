@@ -157,7 +157,6 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"net_open_policy":               "safety/network#network-tiers",
 	"net_allows_unused":             "safety/network#network-tiers",
 	"net_proxy_unreachable":         "using/troubleshooting#the-proxy-doesnt-start",
-	"net_ask_global":                "safety/network#choosing-a-tier",
 	"net_tier_unknown":              "safety/network#choosing-a-tier",
 	"json_shows_only":               "getting-started/commands#output-for-scripts",
 	"not_a_rule":                    "safety/network#rules",
