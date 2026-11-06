@@ -340,6 +340,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"link_setup_invalid":            "using/troubleshooting#a-command-fails",
 	"tools_unmounted":               "using/troubleshooting#a-shared-tool-doesnt-mount",
 	"size_pending":                  "using/ports-size#size",
+	"size_pending_running":          "using/ports-size#size",
 	"new_vm_flags_ignored":          "getting-started/commands#your-vm",
 	"new_vm_flags_ignored_run":      "getting-started/commands#your-vm",
 	"port_not_listed":               "using/ports-size#ports",

@@ -42,7 +42,7 @@ func newRebuildCmd(a *app) *cobra.Command {
 		Short: "Build an image again, and delete the old one",
 		Long: "Build an image again from its parent as it is, then delete the stale images " +
 			"no VM uses, the old one and those built on it among them. " +
-			"When images are built on it, devvm asks first in a terminal.",
+			"When images are built on it, devvm asks first in a terminal without --no-input.",
 		Example: examples(
 			"devvm rebuild foo", "build foo again with the newest packages",
 			"devvm rebuild base --force", "rebuild base without asking, as a script must",

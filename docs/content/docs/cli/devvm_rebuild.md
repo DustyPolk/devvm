@@ -7,7 +7,7 @@ Build an image again, and delete the old one
 
 ## Synopsis
 
-Build an image again from its parent as it is, then delete the stale images no VM uses, the old one and those built on it among them. When images are built on it, devvm asks first in a terminal.
+Build an image again from its parent as it is, then delete the stale images no VM uses, the old one and those built on it among them. When images are built on it, devvm asks first in a terminal without --no-input.
 
 ```text
 devvm rebuild IMAGE [flags]

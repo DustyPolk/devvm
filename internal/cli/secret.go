@@ -103,7 +103,7 @@ func newSecretRmCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rm NAME",
 		Short: "Delete a saved secret",
-		Long: "Delete a saved secret, after asking in a terminal. " +
+		Long: "Delete a saved secret, after asking in a terminal without --no-input." +
 			"Proxies that are running stop putting it in at once, but what a VM did with it stays done.",
 		Example: examples(
 			"devvm secret rm github", "delete the GitHub token, after asking",

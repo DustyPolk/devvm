@@ -64,7 +64,7 @@ func newLayerAddCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add LAYER...",
 		Short: "Make this folder's VM again with more layers, then open a shell in it",
-		Long: "Make this folder's VM again from an image with each LAYER added on top, in the order given, then open a shell in it, after asking in a terminal. " +
+		Long: "Make this folder's VM again from an image with each LAYER added on top, in the order given, then open a shell in it, after asking in a terminal without --no-input." +
 			"devvm keeps its home folder, the project folder and its settings, and everything else on its disk is lost. " +
 			"When its image has an agent, devvm first exports the agents' history, unless you give --no-export.",
 		Example: examples(
@@ -99,7 +99,7 @@ func newLayerRmCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rm LAYER...",
 		Short: "Make this folder's VM again without some of its layers, then open a shell in it",
-		Long: "Make this folder's VM again from an image without each LAYER, its other layers kept in their order, then open a shell in it, after asking in a terminal. " +
+		Long: "Make this folder's VM again from an image without each LAYER, its other layers kept in their order, then open a shell in it, after asking in a terminal without --no-input." +
 			"devvm keeps its home folder, the project folder and its settings, and everything else on its disk is lost. " +
 			"When its image has an agent, devvm first exports the agents' history, unless you give --no-export.",
 		Example: examples(

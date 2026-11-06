@@ -16,7 +16,7 @@ func newCloneCmd(a *app) *cobra.Command {
 		Use:   "clone [on|off]",
 		Short: "Show or change whether this folder's VM has its own clone of the repo",
 		Long: "Show whether this folder's VM has its own clone of the repo, on, or mounts this folder, off. " +
-			"devvm clone on and devvm clone off make the VM again from its image, after asking in a terminal, then open a shell in it, and devvm keeps its home folder and its settings, while everything else on its disk is lost. " +
+			"devvm clone on and devvm clone off make the VM again from its image, after asking in a terminal without --no-input, then open a shell in it, and devvm keeps its home folder and its settings, while everything else on its disk is lost. " +
 			"On copies the repo's branches into the new clone, and off first offers to fetch the clone's work into this repo, unless you give --no-clone-check.",
 		Example: examples(
 			"devvm clone", "show whether the VM has its own clone of the repo",

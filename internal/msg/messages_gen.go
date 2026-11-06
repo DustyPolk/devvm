@@ -29,7 +29,7 @@ func AdoptHasVM(vm string) M {
 	return M{id: "adopt_has_vm", vals: []val{{"vm", vm}}}
 }
 
-// AdoptMoveRefused is [adopt_move_refused]: "To move {{.vm}} to this folder, run devvm adopt {{.vm}} in a terminal to confirm, or devvm adopt {{.vm}} --force."
+// AdoptMoveRefused is [adopt_move_refused]: "To move {{.vm}} to this folder, run devvm adopt {{.vm}} in a terminal without --no-input to confirm, or devvm adopt {{.vm}} --force."
 func AdoptMoveRefused(vm string) M {
 	return M{id: "adopt_move_refused", vals: []val{{"vm", vm}}}
 }
@@ -294,7 +294,7 @@ func AgentSavePlaceholder(path string, vm string) M {
 	return M{id: "agent_save_placeholder", vals: []val{{"path", path}, {"vm", vm}}}
 }
 
-// AgentSaveRefused is [agent_save_refused]: "devvm agent save shows what changed and asks before it saves. Run it in a terminal."
+// AgentSaveRefused is [agent_save_refused]: "devvm agent save shows what changed and asks before it saves. Run it in a terminal without --no-input."
 func AgentSaveRefused() M {
 	return M{id: "agent_save_refused"}
 }
@@ -2809,7 +2809,7 @@ func RemakeHomeLost(vm string) M {
 	return M{id: "remake_home_lost", vals: []val{{"vm", vm}}}
 }
 
-// RemakeParentVM is [remake_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To make it again, run {{.command}} in {{.dir}}, or here in a terminal to confirm."
+// RemakeParentVM is [remake_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To make it again, run {{.command}} in {{.dir}}, or here in a terminal without --no-input to confirm."
 func RemakeParentVM(command string, dir string, vm string) M {
 	return M{id: "remake_parent_vm", vals: []val{{"command", command}, {"dir", dir}, {"vm", vm}}}
 }
@@ -2959,7 +2959,7 @@ func RmGoneStopped(dir string, vm string) M {
 	return M{id: "rm_gone_stopped", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
-// RmParentVM is [rm_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To delete it, run devvm rm in {{.dir}}, or here in a terminal to confirm."
+// RmParentVM is [rm_parent_vm]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To delete it, run devvm rm in {{.dir}}, or here in a terminal without --no-input to confirm."
 func RmParentVM(dir string, vm string) M {
 	return M{id: "rm_parent_vm", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
@@ -2989,7 +2989,7 @@ func RmVMLost(vm string) M {
 	return M{id: "rm_vm_lost", vals: []val{{"vm", vm}}}
 }
 
-// RmVMNotConnected is [rm_vm_not_connected]: "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. Connect the disk, or to delete the VM anyway, run devvm rm {{.vm}} in a terminal."
+// RmVMNotConnected is [rm_vm_not_connected]: "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. Connect the disk, or to delete the VM anyway, run devvm rm {{.vm}} in a terminal without --no-input."
 func RmVMNotConnected(dir string, vm string) M {
 	return M{id: "rm_vm_not_connected", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
@@ -3164,9 +3164,14 @@ func SizeNotGib(flag string, value string) M {
 	return M{id: "size_not_gib", vals: []val{{"flag", flag}, {"value", value}}}
 }
 
-// SizePending is [size_pending]: "{{.vm}} gets {{.size}} when it next starts. Run devvm restart to apply it now."
+// SizePending is [size_pending]: "{{.vm}} gets {{.size}} when it next starts."
 func SizePending(size string, vm string) M {
 	return M{id: "size_pending", vals: []val{{"size", size}, {"vm", vm}}}
+}
+
+// SizePendingRunning is [size_pending_running]: "{{.vm}} gets {{.size}} when it next starts. Run devvm restart to apply it now."
+func SizePendingRunning(size string, vm string) M {
+	return M{id: "size_pending_running", vals: []val{{"size", size}, {"vm", vm}}}
 }
 
 // SizeQuestion is [size_question]: "This machine has {{.have_cpus}} CPUs and {{.have_memory}} GiB of memory. Type the CPUs and memory new VMs get, or press Enter to keep the size in brackets."
@@ -3234,7 +3239,7 @@ func SSHIncludeNeeded(line string) M {
 	return M{id: "ssh_include_needed", vals: []val{{"line", line}}}
 }
 
-// SSHIncludeYourself is [ssh_include_yourself]: "There's no terminal to ask in, so devvm didn't add the line. Add it yourself, or run the command again with --ssh-config."
+// SSHIncludeYourself is [ssh_include_yourself]: "devvm couldn't ask here, so it didn't add the line. Add it yourself, or run the command again with --ssh-config."
 func SSHIncludeYourself() M {
 	return M{id: "ssh_include_yourself"}
 }
@@ -3584,7 +3589,7 @@ func VMLacks(has string, tool string, vm string) M {
 	return M{id: "vm_lacks", vals: []val{{"has", has}, {"tool", tool}, {"vm", vm}}}
 }
 
-// VMMovedHere is [vm_moved_here]: "{{.vm}} was made for {{.was}}, and that folder moved here. To move the VM here, run devvm adopt in a terminal to confirm, or devvm adopt --force."
+// VMMovedHere is [vm_moved_here]: "{{.vm}} was made for {{.was}}, and that folder moved here. To move the VM here, run devvm adopt in a terminal without --no-input to confirm, or devvm adopt --force."
 func VMMovedHere(vm string, was string) M {
 	return M{id: "vm_moved_here", vals: []val{{"vm", vm}, {"was", was}}}
 }
@@ -3604,12 +3609,12 @@ func VMOtherFolder(vm string, was string) M {
 	return M{id: "vm_other_folder", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
-// VMOtherFolderAdopt is [vm_other_folder_adopt]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To use it here, run devvm adopt in a terminal to confirm, or devvm adopt --force."
+// VMOtherFolderAdopt is [vm_other_folder_adopt]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To use it here, run devvm adopt in a terminal without --no-input to confirm, or devvm adopt --force."
 func VMOtherFolderAdopt(vm string, was string) M {
 	return M{id: "vm_other_folder_adopt", vals: []val{{"vm", vm}, {"was", was}}}
 }
 
-// VMOtherFolderRm is [vm_other_folder_rm]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to delete it, run devvm rm in a terminal."
+// VMOtherFolderRm is [vm_other_folder_rm]: "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to delete it, run devvm rm in a terminal without --no-input."
 func VMOtherFolderRm(vm string, was string) M {
 	return M{id: "vm_other_folder_rm", vals: []val{{"vm", vm}, {"was", was}}}
 }
@@ -3659,7 +3664,7 @@ func WidenParentVM(cmd string, dir string, vm string) M {
 	return M{id: "widen_parent_vm", vals: []val{{"cmd", cmd}, {"dir", dir}, {"vm", vm}}}
 }
 
-// WidenParentVMRefused is [widen_parent_vm_refused]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To give it more access, run {{.cmd}} in {{.dir}}, or here in a terminal to confirm."
+// WidenParentVMRefused is [widen_parent_vm_refused]: "{{.vm}} was made for {{.dir}}, which this folder is inside. To give it more access, run {{.cmd}} in {{.dir}}, or here in a terminal without --no-input to confirm."
 func WidenParentVMRefused(cmd string, dir string, vm string) M {
 	return M{id: "widen_parent_vm_refused", vals: []val{{"cmd", cmd}, {"dir", dir}, {"vm", vm}}}
 }
@@ -4299,6 +4304,7 @@ var specs = map[string]spec{
 	"size_memory_prompt":             {fields: []string{"memory"}},
 	"size_not_gib":                   {fields: []string{"flag", "value"}},
 	"size_pending":                   {fields: []string{"size", "vm"}},
+	"size_pending_running":           {fields: []string{"size", "vm"}},
 	"size_question":                  {fields: []string{"have_cpus", "have_memory"}},
 	"space_backend_unknown":          {fields: []string{"backend"}},
 	"space_caches_note":              {},

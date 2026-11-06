@@ -13,7 +13,7 @@ func newRmCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rm [VM]",
 		Short: "Delete this folder's VM, or a VM whose folder is gone",
-		Long: "Delete this folder's VM and what devvm keeps for it, or the VM you name when its folder is gone, after asking in a terminal, which --force never answers when its folder is on a disk that isn't connected. " +
+		Long: "Delete this folder's VM and what devvm keeps for it, or the VM you name when its folder is gone, after asking in a terminal without --no-input, which --force never answers when its folder is on a disk that isn't connected. " +
 			"When its image has an agent, devvm first exports the agents' history, unless you give --no-export. " +
 			"A --clone VM's work that this repo hasn't fetched is offered for fetching first, unless you give --no-clone-check.",
 		Example: examples(

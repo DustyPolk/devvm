@@ -74,7 +74,8 @@ func (c setupChoice) none() bool {
 }
 
 // setup is devvm setup's run: the UI it prints through, devvm's folders,
-// whether its pickers are shown, how it asks for the size, the network
+// whether its pickers are shown, the Reporter it asks for the size through
+// (the run's UI; tests make their own), how it asks for the network
 // policy and the agents, and the host the size is checked against.
 type setup struct {
 	ui      *ui.UI
@@ -82,18 +83,9 @@ type setup struct {
 	canPick func() bool
 	pickOne func(msg.M, []ui.Choice) int
 	pick    func(msg.M, []vm.PickPart) []vm.PickPart
-	answer  func(msg.Question) (string, error)
+	sizer   msg.Reporter
 	host    func() (vm.Host, error)
 }
-
-// answering is the run's UI, asking for values through answer: setup's,
-// which tests answer.
-type answering struct {
-	*ui.UI
-	answer func(msg.Question) (string, error)
-}
-
-func (a answering) Answer(q msg.Question) (string, error) { return a.answer(q) }
 
 // newSetup returns a setup on the run's folders, its UI's pickers and
 // prompts, on this machine.
@@ -105,7 +97,7 @@ func newSetup(a *app) setup {
 		canPick: u.CanPick,
 		pickOne: u.PickOne,
 		pick:    pickParts(u),
-		answer:  u.Answer,
+		sizer:   u,
 		host:    func() (vm.Host, error) { return vm.ThisHost(a.host()) },
 	}
 }
@@ -150,7 +142,7 @@ func (s setup) run(c setupChoice) error {
 	if err != nil {
 		return err
 	}
-	sc := vm.SizeChoice{Dirs: dirs, Host: host, Reporter: answering{s.ui, s.answer}}
+	sc := vm.SizeChoice{Dirs: dirs, Host: host, Reporter: s.sizer}
 	if err := sc.Ask(); err != nil {
 		return err
 	}

@@ -7,7 +7,7 @@ Give this folder the VM made for an earlier folder or path
 
 ## Synopsis
 
-Give this folder the VM made for an earlier folder at this path, or for this folder before you moved or renamed it, with its files, secrets and allowlist. With VM, its name as devvm ls lists it, devvm moves that VM here from a folder that's gone, such as one you copied to another disk. devvm asks first in a terminal.
+Give this folder the VM made for an earlier folder at this path, or for this folder before you moved or renamed it, with its files, secrets and allowlist. With VM, its name as devvm ls lists it, devvm moves that VM here from a folder that's gone, such as one you copied to another disk. devvm asks first in a terminal without --no-input.
 
 ```text
 devvm adopt [VM] [flags]

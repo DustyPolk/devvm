@@ -83,10 +83,10 @@ stdout '^size.cpus=1$'
 stdout '^size.memory=3$'
 exec devvm size
 stdout '\Acpus=2 memory=8GiB disk=100GiB\n\z'
-stderr '^size_pending size=cpus=1 memory=3GiB vm=devvm-web-[0-9a-f]{14}$'
+stderr '^size_pending_running size=cpus=1 memory=3GiB vm=devvm-web-[0-9a-f]{14}$'
 exec devvm size --json
 stdout '^  "disk_gib": 100,\n  "pending": {\n    "cpus": 1,\n    "memory_gib": 3\n  }\n}\n\z'
-stderr '^size_pending '
+stderr '^size_pending_running '
 # Back to what it has: nothing waits.
 exec devvm size --cpus 2 --memory 8
 stdout '^==> vm_size size=cpus=2 memory=8GiB disk=100GiB vm=devvm-web-[0-9a-f]{14}$'
@@ -106,6 +106,8 @@ exec limactl stop $WEB
 stub_reset
 exec devvm size --cpus 1 --memory 8 --disk 120GiB
 stdout '^==> size_pending size=cpus=1 disk=120GiB vm=devvm-web-[0-9a-f]{14}$'
+exec devvm size
+stderr '^size_pending size=cpus=1 disk=120GiB vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl edit'
 stub_reset

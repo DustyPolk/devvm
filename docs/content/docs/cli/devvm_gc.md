@@ -7,7 +7,7 @@ Delete stale images, unused tools, old files and the Nix cache over its cap
 
 ## Synopsis
 
-Delete the stale and unfinished images, the shared tools devvm images lists as unused, the files devvm itself no longer needs, and the shared Nix cache's least recently used files while it's over its cap, after listing them and asking in a terminal. Its flags delete more, such as --tool-images for the current shared tool images no VM has. gc never deletes a VM.
+Delete the stale and unfinished images, the shared tools devvm images lists as unused, the files devvm itself no longer needs, and the shared Nix cache's least recently used files while it's over its cap, after listing them and asking in a terminal without --no-input. Its flags delete more, such as --tool-images for the current shared tool images no VM has. gc never deletes a VM.
 
 ```text
 devvm gc [--tool-images [TOOL...]] [flags]

@@ -216,7 +216,11 @@ func (e Settings) ShowSize(ctx context.Context, global bool) (SizeShown, error) 
 		return SizeShown{}, err
 	}
 	s := SizeShown{Size: t.in.Size, Pending: pendingSize(t.st, t.in.Size)}
-	if s.Pending != (backend.Size{}) {
+	switch {
+	case s.Pending == (backend.Size{}):
+	case t.in.Status == backend.StatusRunning:
+		e.Note(msg.SizePendingRunning(SizeText(s.Pending), t.f.Name))
+	default:
 		e.Note(msg.SizePending(SizeText(s.Pending), t.f.Name))
 	}
 	return s, nil

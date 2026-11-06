@@ -7,7 +7,7 @@ Delete images, by name or by key
 
 ## Synopsis
 
-Delete images, each by its name or by the key devvm images shows, after asking in a terminal. Every one must be built, or devvm deletes nothing. VMs made from an image keep working, except on Linux hosts, where devvm refuses an image whose disk VMs use.
+Delete images, each by its name or by the key devvm images shows, after asking in a terminal without --no-input.Every one must be built, or devvm deletes nothing. VMs made from an image keep working, except on Linux hosts, where devvm refuses an image whose disk VMs use.
 
 ```text
 devvm images rm IMAGE|KEY... [flags]

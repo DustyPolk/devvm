@@ -48,8 +48,8 @@ func setupSandbox(t *testing.T, terminal bool) (setup, paths.Dirs, *[]string) {
 			parts[0].Rows[0].On = true
 			return parts
 		},
-		answer: func(q msg.Question) (string, error) { sized = append(sized, q.M().Names()); return "", nil },
-		host:   func() (vm.Host, error) { return vm.Host{CPUs: 8, MemoryGiB: 32}, nil },
+		sizer: &msg.Fake{Terminal: true, OnInfo: u.Info, OnAnswer: func(m msg.M) string { sized = append(sized, m.Names()); return "" }},
+		host:  func() (vm.Host, error) { return vm.Host{CPUs: 8, MemoryGiB: 32}, nil },
 	}
 	return s, d, &sized
 }
@@ -223,6 +223,7 @@ func TestSetupConfigSets(t *testing.T) {
 	s, d, sized := setupSandbox(t, true)
 	u, said, _ := testUI()
 	s.ui = u
+	s.sizer.(*msg.Fake).OnInfo = u.Info
 	config := "network = \"allowlist\"\nfeatures = []\nagents = [\"codex\"]\nlayers = [\"docker\"]\n[size]\ncpus = 2\n"
 	if err := os.MkdirAll(d.Config, 0o700); err != nil {
 		t.Fatal(err)

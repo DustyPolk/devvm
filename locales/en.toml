@@ -380,7 +380,7 @@ other = "devvm makes {{.vm}} again from {{.image}}, keeping the project folder a
 
 [remake_parent_vm]
 description = "dir is the folder vm was made for, which the folder devvm runs in is inside; command is the command as typed, such as devvm layer add"
-other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To make it again, run {{.command}} in {{.dir}}, or here in a terminal to confirm."
+other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To make it again, run {{.command}} in {{.dir}}, or here in a terminal without --no-input to confirm."
 
 [remake_parent_vm_ask]
 description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
@@ -945,14 +945,14 @@ other = "The {{.backend}} backend's VM names have at most {{.max}} characters, w
 other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. Run devvm rm to delete the VM, or devvm adopt to use it here."
 
 [vm_other_folder_rm]
-other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to delete it, run devvm rm in a terminal."
+other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To confirm that you want to delete it, run devvm rm in a terminal without --no-input."
 
 [vm_other_folder_adopt]
-other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To use it here, run devvm adopt in a terminal to confirm, or devvm adopt --force."
+other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. To use it here, run devvm adopt in a terminal without --no-input to confirm, or devvm adopt --force."
 
 [rm_parent_vm]
 description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
-other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To delete it, run devvm rm in {{.dir}}, or here in a terminal to confirm."
+other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To delete it, run devvm rm in {{.dir}}, or here in a terminal without --no-input to confirm."
 
 [delete_parent_vm]
 description = "dir is the folder vm was made for, which the folder devvm runs in is inside"
@@ -964,7 +964,7 @@ other = "{{.vm}} was made for {{.dir}}, which this folder is inside, and {{.cmd}
 
 [widen_parent_vm_refused]
 description = "dir is the folder vm was made for, which the folder devvm runs in is inside; cmd is the command that gives vm more access, such as devvm network open"
-other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To give it more access, run {{.cmd}} in {{.dir}}, or here in a terminal to confirm."
+other = "{{.vm}} was made for {{.dir}}, which this folder is inside. To give it more access, run {{.cmd}} in {{.dir}}, or here in a terminal without --no-input to confirm."
 
 [delete_other_folder_vm]
 other = "{{.vm}} was made for an earlier folder at {{.was}}, which was deleted or replaced. It may hold that project's work. Delete it?"
@@ -994,7 +994,7 @@ other = "{{.vm}} was made for {{.dir}}, which is gone. It may hold that project'
 
 [rm_vm_not_connected]
 description = "dir is the folder vm was made for, on a disk that isn't connected"
-other = "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. Connect the disk, or to delete the VM anyway, run devvm rm {{.vm}} in a terminal."
+other = "{{.vm}} was made for {{.dir}}, which is on a disk that isn't connected. Connect the disk, or to delete the VM anyway, run devvm rm {{.vm}} in a terminal without --no-input."
 
 [delete_not_connected_folder_vm]
 description = "dir is the folder vm was made for, on a disk that isn't connected"
@@ -1012,7 +1012,7 @@ other = "{{.vm}} was made for {{.was}}, and that folder moved here.\nMove the VM
 
 [vm_moved_here]
 description = "was is the path vm's project folder had; the folder devvm runs in is that folder, moved"
-other = "{{.vm}} was made for {{.was}}, and that folder moved here. To move the VM here, run devvm adopt in a terminal to confirm, or devvm adopt --force."
+other = "{{.vm}} was made for {{.was}}, and that folder moved here. To move the VM here, run devvm adopt in a terminal without --no-input to confirm, or devvm adopt --force."
 
 [vms_moved_here]
 description = "vms is a comma-separated list of VM names, each made for the folder devvm runs in at a path it had before"
@@ -1027,7 +1027,7 @@ description = "dir is the folder devvm runs in, which another folder replaced wh
 other = "The folder at {{.dir}} changed while devvm asked, so devvm didn't move {{.vm}} here. Run the command again."
 
 [adopt_move_refused]
-other = "To move {{.vm}} to this folder, run devvm adopt {{.vm}} in a terminal to confirm, or devvm adopt {{.vm}} --force."
+other = "To move {{.vm}} to this folder, run devvm adopt {{.vm}} in a terminal without --no-input to confirm, or devvm adopt {{.vm}} --force."
 
 [adopt_folder_there]
 description = "dir is the folder vm was made for, which is still there"
@@ -1164,6 +1164,10 @@ description = "size is what the VM has: cpus=4 memory=8GiB disk=100GiB"
 other = "{{.vm}} has {{.size}}"
 
 [size_pending]
+description = "size is what changes: cpus=6 memory=16GiB"
+other = "{{.vm}} gets {{.size}} when it next starts."
+
+[size_pending_running]
 description = "size is what changes: cpus=6 memory=16GiB"
 other = "{{.vm}} gets {{.size}} when it next starts. Run devvm restart to apply it now."
 
@@ -1721,7 +1725,7 @@ description = "line is the Include line for ~/.ssh/config"
 other = "To reach VMs by name with ssh or VS Code's Remote-SSH, ~/.ssh/config needs this line at the top:\n  {{.line}}"
 
 [ssh_include_yourself]
-other = "There's no terminal to ask in, so devvm didn't add the line. Add it yourself, or run the command again with --ssh-config."
+other = "devvm couldn't ask here, so it didn't add the line. Add it yourself, or run the command again with --ssh-config."
 
 [add_it_now]
 other = "Add it now?"
@@ -2207,7 +2211,7 @@ other = "Save these settings from {{.vm}} into devvm's agent store, for every VM
 other = "Every VM with these agents runs the hooks, the MCP servers' commands and the plugins you save."
 
 [agent_save_refused]
-other = "devvm agent save shows what changed and asks before it saves. Run it in a terminal."
+other = "devvm agent save shows what changed and asks before it saves. Run it in a terminal without --no-input."
 
 [nothing_saved]
 other = "nothing saved"
