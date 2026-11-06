@@ -37,7 +37,7 @@ Open a terminal and `cd` into any project folder.
 
 {{< feature title=`2\. Run devvm` icon="prompt" level="3" art="step-pick" >}}
 
-devvm shows what the new VM gets. Confirm to make it, or customize it to add a coding agent first.
+devvm shows what the new VM gets. Confirm to make it, or customize it.
 
 {{< /feature >}}
 
