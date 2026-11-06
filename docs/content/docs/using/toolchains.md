@@ -3,7 +3,7 @@ title: Toolchains
 weight: 2
 ---
 
-devvm has four toolchains: node, python, rust and go. A new VM gets the ones you check in the list devvm shows for it, where those its folder's files call for are checked already, or the ones you give with `--tools`, as in `devvm --tools node,python` ([what a new VM gets](images.md#what-a-new-vm-gets)). Each section below says what the toolchain brings and which files make devvm choose it. A project that gets its toolchain from Nix uses the `nix` layer, which [Nix projects](#nix-projects) covers.
+devvm has four toolchains: node, python, rust and go. A new VM gets the ones its folder's files call for, which the summary of the new VM shows, unless you customize the VM and check others in the list or give others with `--tools`, as in `devvm --tools node,python` ([what a new VM gets](images.md#what-a-new-vm-gets)). Each section below says what the toolchain brings and which files make devvm choose it. A project that gets its toolchain from Nix uses the `nix` layer, which [Nix projects](#nix-projects) covers.
 
 ## node
 
@@ -43,7 +43,7 @@ go brings the newest Go release, and devvm turns Go's telemetry off in the VM.
 
 ## Nix projects
 
-A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), which brings Nix, direnv and nix-direnv into its VM. For a folder with `flake.nix`, `shell.nix` or `devenv.nix` at its top level, or with a `default.nix` that makes a shell with `mkShell`, the list devvm shows for a new VM names that file in the `nix` row, and you check it there. A layer isn't checked by default, so a VM made without a terminal gets it only with `--layers nix`, as in `devvm --layers nix` in a folder with `package.json` and `flake.nix`, which gives node on the `nix` layer.
+A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), which brings Nix, direnv and nix-direnv into its VM. For a folder with `flake.nix`, `shell.nix` or `devenv.nix` at its top level, or with a `default.nix` that makes a shell with `mkShell`, the list devvm shows when you customize a new VM names that file in the `nix` row, and you check it there. A layer isn't checked by default, so a VM made as its summary shows, or without a terminal, gets it only with `--layers nix`, as in `devvm --layers nix` in a folder with `package.json` and `flake.nix`, which gives node on the `nix` layer.
 
 - **Dev shells.** Put `use flake` (or `use nix` for a `shell.nix`) in the project's `.envrc` and run `direnv allow` in the VM once. From then on, each shell that changes into the folder loads the dev shell, and leaving the folder unloads it. This works in your terminal and in the terminals of editors connected over SSH.
 - **The flake's tools come first.** While the dev shell is loaded, its tools are ahead of the shared tools on the `PATH`, so a flake's `node` wins over the shared node, and the shared tools come back when you leave the folder.

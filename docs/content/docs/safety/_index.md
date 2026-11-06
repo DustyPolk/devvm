@@ -48,7 +48,7 @@ flowchart TB
   subgraph reach["The VM reaches"]
     direction TB
     folder["the project<br>folder,<br>read-write,<br>or its own<br>clone with<br>--clone"]
-    hosts["with network<br>policy, the<br>hosts you<br>allow,<br>through the<br>proxy"]
+    hosts["what its<br>network tier<br>allows,<br>through the<br>proxy"]
     folder ~~~ hosts
   end
 ```

@@ -3,7 +3,7 @@ title: What devvm keeps on this machine
 weight: 11
 ---
 
-devvm, the tools it runs and Lima keep files on this machine outside your project folders. This page lists each of them: what it is, who makes it, where it is, whether devvm can make it again, and how it's cleaned up. Most of it is in devvm's data folder, `~/.local/share/devvm`, and devvm can make all of that again except your exports. Lima's own caches hold more, and they can also hold your own downloads.
+devvm, the tools it runs and Lima keep files on this machine outside your project folders. This page lists each of them: what it is, who makes it, where it is, whether devvm can make it again, and how it's cleaned up. Most of it is in devvm's data folder, `~/.local/share/devvm`, and devvm can make all of that again except your exports and what your commands saved, such as your agents' logins and your secrets. Lima's own caches hold more, and they can also hold your own downloads.
 
 ## devvm space
 
@@ -85,7 +85,7 @@ devvm never prunes these caches on its own. `devvm gc --caches` frees devvm's sh
 
 ## devvm's data folder
 
-devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` when `XDG_DATA_HOME` is set. Only you can read it, because each time devvm runs, it makes this folder and the settings folder, `~/.config/devvm`, yours alone (mode 700), whatever mode they had, so nothing inside either one is open to others. If devvm can't, for example because someone else owns a folder, it warns and goes on. Whenever devvm writes into the folders that hold history, logs, keys and secrets, which are `exports/`, `logs/`, `logs/runs/`, `run/`, `secrets/`, and the `run/`, `run/ca/` and `logs/` folders in each VM's folder, it makes them only yours again as well, whatever mode they had. Everything in it is devvm's own, and devvm makes most of it again when it's needed. The exceptions are the exports, which are the only copy of a deleted VM's agent history, and the defaults, keys and secrets that your commands saved.
+devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` when `XDG_DATA_HOME` is set. Only you can read it, because each time devvm runs, it makes this folder and the settings folder, `~/.config/devvm`, yours alone (mode 700), whatever mode they had, so nothing inside either one is open to others. If devvm can't, for example because someone else owns a folder, it warns and goes on. Whenever devvm writes into the folders that hold history, logs, keys and secrets, which are `exports/`, `logs/`, `logs/runs/`, `run/`, `secrets/`, and the `run/`, `run/ca/` and `logs/` folders in each VM's folder, it makes them only yours again as well, whatever mode they had. Everything in it is devvm's own, and devvm makes most of it again when it's needed. The exceptions are the exports, which are the only copy of a deleted VM's agent history, and the defaults, agents' logins, keys and secrets that your commands saved.
 
 | Path | What it is | How it's cleaned up |
 | --- | --- | --- |
@@ -93,6 +93,7 @@ devvm keeps its state in `~/.local/share/devvm`, or in `$XDG_DATA_HOME/devvm` wh
 | `settings.json` | the defaults that `devvm setup`, `devvm size -g`, `devvm ports -g`, `devvm network -g` and `devvm retention` save, below [`config.toml`](settings.md#configtoml)'s | it stays, and takes almost no space |
 | `ssh_config` | the [ssh config](ssh.md#ssh-access-by-name) for running VMs | devvm takes a VM out when it stops or deletes the VM |
 | `agent-keys.json` | the keys in [devvm's own SSH agent](ssh.md#devvms-own-agent) and their options | `devvm ssh-agent rm` takes a key out |
+| `logins/` | your agents' logins in [devvm's agent store](coding-agents.md#devvms-agent-store), one folder for each agent, which `devvm agent import` and `devvm agent login` save and only you can read | they stay until you delete them |
 | `secrets/` | on Linux hosts, your [secrets](../safety/network.md#saving-and-binding-secrets), one file each | `devvm secret rm` deletes one |
 | `vms/<hash>/` | one folder for each VM, which holds everything devvm keeps for it in its data folder. `<hash>` is the hash of the project folder's path that the VM's name ends with. The folder holds the VM's [state](../internals/overview.md#a-vms-state) in `vm.json`, which records the VM's name, its ssh alias, its image, folder, backend and settings and the version of the devvm that made it, and the VM's own network rules in `policy`. The files of its proxy, port forwarder, link session and sandbox are in `run/`, with the VM's host keys for its current start in `run/known_hosts`, which devvm reads again each time the VM starts, and its logs are in `logs/` | `devvm rm` deletes the whole folder with the VM |
 | `images/` | a folder for each image, named by its key, which holds the image's record, `record.json`; the [rebuild counters](images.md#rebuilding) in `rebuilds.json`, one for each backend, each image that base starts from and each image; the Ubuntu cloud image that base starts from on this machine, in `ubuntu.json`; and in `locks/` an empty file for each image that the devvm building it locks, one, `rebuilds`, that a devvm changing a rebuild counter locks, one, `ubuntu`, that a devvm pinning the cloud image locks, and one, `packages`, that a devvm changing `packages/` locks | `devvm gc` and `devvm images rm` delete an image's folder and its lock file with the image |
@@ -168,7 +169,7 @@ These warnings never make doctor fail, and `devvm doctor --json` lists them in `
 
 ## Your settings
 
-`~/.config/devvm` holds what you edit: `config.toml`, your network rules, your own layers, and your company's CA certificates. devvm also writes the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders) into `version` there when the file is missing or older. [Your settings](settings.md#your-settings) lists each file. devvm never deletes any of them.
+`~/.config/devvm` holds what you edit: `config.toml`, your network rules, your agents' settings, your own layers, and your company's CA certificates. devvm also writes the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders) into `version` there when the file is missing or older. [Your settings](settings.md#your-settings) lists each file. devvm never deletes any of them.
 
 ## Lima
 

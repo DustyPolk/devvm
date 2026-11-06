@@ -14,6 +14,7 @@ devvm writes nothing into your project folders. It keeps the settings you edit i
 | `config.toml` | the defaults that new VMs get and the [retention settings](#retention), which win over what devvm's commands save, the [company proxy](../safety/network.md#behind-a-company-proxy) and an [Ubuntu mirror](#an-ubuntu-mirror) ([config.toml](#configtoml)) | you |
 | `policy` | your [network rules](../safety/network.md#changing-rules) for every VM | `devvm network allow -g`, `deny -g`, `rm -g`, or you |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new`, then you |
+| `agents/` | your agents' settings in [devvm's agent store](coding-agents.md#devvms-agent-store), one folder for each agent | `devvm agent import`, `devvm agent save`, or you |
 | `ca/` | your [company's CA certificates](#a-companys-ca), which VMs and builds trust | you |
 | `version` | the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders), which says how devvm keeps its files here | devvm, when it's missing or older |
 
@@ -26,7 +27,7 @@ Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles re
 `~/.config/devvm/config.toml` sets the defaults that new VMs get, the retention settings, the company proxy and an Ubuntu mirror, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
 
 ```toml
-# The network tier new VMs get: ask, open, internet, allowlist or none.
+# The network tier new VMs get: open, internet, allowlist or none.
 network = "allowlist"
 
 # The ports new VMs forward: all, none, or ports and ranges.

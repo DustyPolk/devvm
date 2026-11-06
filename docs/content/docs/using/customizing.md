@@ -13,7 +13,7 @@ $EDITOR ~/.config/devvm/layers/mailpit.sh
 devvm --layers mailpit     # a new VM with your layer; or devvm build mailpit
 ```
 
-In a terminal, a new VM's list also shows your layers under Layers, so you can check `mailpit` there instead of giving `--layers` ([what a new VM gets](images.md#what-a-new-vm-gets)). To give every new VM your layer, choose it with `devvm setup --layers mailpit`, or add it to the `layers` key in `config.toml` ([layers for new VMs](settings.md#layers-for-new-vms)). When you delete a layer's script that you chose there, new VMs are made without it, and devvm warns you.
+When you customize a new VM, its list also shows your layers under Layers, so you can check `mailpit` there instead of giving `--layers` ([what a new VM gets](images.md#what-a-new-vm-gets)). To give every new VM your layer, choose it with `devvm setup --layers mailpit`, or add it to the `layers` key in `config.toml` ([layers for new VMs](settings.md#layers-for-new-vms)). When you delete a layer's script that you chose there, new VMs are made without it, and devvm warns you.
 
 A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, that bash runs once as the VM's user, who has sudo, in an image on top of its parent. `devvm layer new NAME` writes a starter script, and also `NAME.policy` next to it unless that file exists. It refuses to overwrite a script that exists.
 
@@ -92,4 +92,4 @@ $EDITOR ~/.config/devvm/layers/dotfiles.sh
 devvm setup --layers dotfiles      # every new VM gets it
 ```
 
-In a terminal, a new VM's list then shows `dotfiles` under Layers, checked because devvm setup chose it, and you can uncheck it for that VM ([layers for new VMs](settings.md#layers-for-new-vms)). A layer is an image built on top of base, so the images that have it are named with it, such as `dotfiles` or `docker+dotfiles`, and editing its script rebuilds only those images, never base.
+A new VM's summary then shows `dotfiles`, and when you customize the VM, its list shows `dotfiles` under Layers, checked because devvm setup chose it, so you can uncheck it for that VM ([layers for new VMs](settings.md#layers-for-new-vms)). A layer is an image built on top of base, so the images that have it are named with it, such as `dotfiles` or `docker+dotfiles`, and editing its script rebuilds only those images, never base.
