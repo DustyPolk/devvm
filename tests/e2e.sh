@@ -16,7 +16,8 @@
 #                once and at each start, a changed file, devvm update reading it again, an image on this machine's registry refused), an agent VM's folders and history (devvm history export, rm's export, a new VM's offer, devvm history import and its refusal), and SSH agent forwarding
 #                (a throwaway agent's, and devvm's own with a throwaway key); clone makes a --clone
 #                VM of a throwaway repo and checks its clone (pushed past an insteadOf), the remote, fetching, and rm's checks
-#                for unfetched commits and uncommitted changes and the work it keeps, then a git worktree's clone; gc deletes a stale
+#                for unfetched commits and uncommitted changes and the work it keeps, then a git worktree's clone; gc (Go's,
+#                tests/e2e/gc_test.go, which this script hands over to after its own sections) deletes a stale
 #                image and an unused tool image, keeping base and a VM named like an image; tools resolves
 #                the shared tools' newest versions (every other section has tests/e2e-mise.lock's), makes a node
 #                VM and checks its shared tools, devvm tools, tools update, rm and add, devvm node an
@@ -82,6 +83,9 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sections_all="images project clone gc tools network desktop nix from link"
+# The sections ported to Go, in tests/e2e (its gc_test.go and the rest): this script runs the
+# others, then hands these to the Go runner (go test -tags e2e), in its sandbox and under its lock.
+go_sections="gc"
 usage() { echo "usage: tests/e2e.sh [--clean] [--from | --only SECTION[,SECTION...]] [--every-feature] [--slots N | --slot N | --newest-base] [--golden]  (sections: $sections_all)" >&2; exit 2; }
 clean=false sel="images project clone gc tools network nix link" every=false slot=0 slots=1 newest=false chosen=false golden=false
 while (( $# )); do
@@ -107,6 +111,9 @@ if $newest; then
   $chosen || sel="images project tools"
 fi
 want() { [[ " $sel " == *" $1 "* ]]; }
+# go_sel: the chosen sections that are Go's, comma-separated, for its -e2e.only.
+go_sel=""
+for s in $go_sections; do ! want "$s" || go_sel="$go_sel${go_sel:+,}$s"; done
 # A run with from builds base with every feature, which from checks, so its other sections run on that
 # base too: their checks of base differ, and so do their timings ($tier).
 features_on=false tier=plain
@@ -605,13 +612,14 @@ done
 script_sum=$(cksum < "$root/tests/e2e.sh" | tr -s ' \t' ' ')
 cur="" later=0 short=()
 # begin SECTION: SECTION is chosen, and it begins, the one before it ending (section_end): its checks'
-# times go to $work/timings.new/SECTION, and $later is what the chosen sections after it took.
+# times go to $work/timings.new/SECTION, and $later is what the chosen sections after it took, Go's
+# among them, as they run last.
 begin() { local s after=false t
   want "$1" || return 1
   section_end
   cur=$1 later=0; : > "$work/timings.new/$cur"
   for s in $sections_all; do
-    if $after && want "$s"; then t=$(awk -F'\t' '{ s += $2 } END { print s + 0 }' "$tdir/$s" 2>/dev/null); later=$((later + ${t:-0})); fi
+    if want "$s" && { $after || [[ " $go_sections " == *" $s "* ]]; }; then t=$(awk -F'\t' '{ s += $2 } END { print s + 0 }' "$tdir/$s" 2>/dev/null); later=$((later + ${t:-0})); fi
     [[ $s != "$cur" ]] || after=true
   done
 }
@@ -627,8 +635,8 @@ section_end() { local n m
   fi
   cur=""
 }
-started=$SECONDS ncheck=0
-date +%s > "$work/mark"
+started=$SECONDS ncheck=0 started_at=$(date +%s)
+echo "$started_at" > "$work/mark"
 # hb_line: the heartbeat's line: how long since the last check, and the newest output, a check's or
 # devvm's own run log.
 hb_line() {
@@ -2609,43 +2617,6 @@ check "once fetched, clone off --force mounts the folder again, .git protected, 
 unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 fi
 
-if begin gc; then
-section "gc"
-# A folder named img-*: its VM is named like an image (devvm-img-keep-<hash>), and isn't one.
-g=$(newproj img-keep)
-launch "$g" exit --network open
-kg=$(st_get "$(vmdir "$vm")" chain | sed -n 's/^base=\([0-9a-f]*\)$/\1/p')
-gfix=$layers/e2egc.sh
-printf '#!/bin/bash\necho gc\n' > "$gfix"
-check "a fixture layer, edited after its build, is stale" bash -c "'$D' build e2egc </dev/null >'$work/last.log' 2>&1 &&
-  echo '# edited' >> '$gfix' && '$D' images </dev/null 2>/dev/null | grep -qE '^e2egc .* stale '"
-owned e2egc
-ko=$(keys_of e2egc | head -1)
-# An old tool image no VM lists: unused only once there's a tools lock.
-old=node-0.0.1-000000000000.erofs
-[[ ! -f $lock ]] || { : > "$share/$old"; printf '{"sha256": "x", "libc": "gnu", "backend": "lima"}\n' > "$share/$old.json"; }
-check "gc deletes the stale image and its record; base and the img-* project VM stay" bash -c "
-  [[ -n '$vm' && -n '$kg' && -n '$ko' ]] && '$D' gc --force </dev/null >'$work/last.log' 2>&1 &&
-  [[ -z \$(status_of devvm-img-$ko) && ! -e '$images/$ko' ]] &&
-  [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg/record.json' ]] && [[ \$(status_of $vm) == Running ]]"
-if [[ -f $lock ]]; then
-  check "gc deletes a tool image no VM uses, with its record" bash -c "[[ ! -e '$share/$old' && ! -e '$share/$old.json' ]]"
-else
-  skip "gc deletes a tool image no VM uses, with its record" "no tools lock yet"
-fi
-check "space lists the Lima VM and images, and changes nothing" bash -c "'$D' space </dev/null 2>/dev/null >'$work/last.log' &&
-  grep -qE '^VMs +[0-9]+ ' '$work/last.log' && grep -qE '^images +[0-9]+ ' '$work/last.log' &&
-  [[ \$(status_of $vm) == Running && -f '$(vmdir "$vm")/vm.json' ]]"
-# The img-* VM deleted outside devvm, its state an hour old: gc --orphans forgets what devvm kept.
-quiet limactl delete -f "$vm"
-touch -t 202001010000 "$(vmdir "$vm")/vm.json"
-check "gc --orphans forgets a VM limactl deleted, and nothing of base's" bash -c "'$D' gc --orphans --force </dev/null >'$work/last.log' 2>&1 &&
-  grep -qF \"\$(m forgot_orphan vm=$vm)\" '$work/last.log' && [[ ! -e '$(vmdir "$vm")' ]] &&
-  [[ \$(status_of devvm-img-$kg) == Stopped && -f '$images/$kg/record.json' ]]"
-rm -f "$gfix" "$share/$old" "$share/$old.json"
-(cd "$g" && quiet "$D" rm --force --no-export)
-fi
-
 if begin tools; then
 # What a user gets: upstream's newest versions, each download with its checksum (rust: rustup checks),
 # resolved by devvm's pinned mise, downloaded and checked on the first run. This section alone uses
@@ -3860,6 +3831,31 @@ fi
 # last complete run of this same e2e.sh (section_end). Fewer checks than it fails the run, and that
 # section's times aren't kept.
 section_end
+# The chosen sections that are Go's, last, in this run's sandbox and under its lock: the Go runner
+# gets this run's pid (the lock's), how many checks it ran and expects in all and when it started,
+# so its results count on from these, and writes them to summary.go, which this run adds to its own.
+# Its own heartbeat and time limits take over from this run's.
+if [[ -n $go_sel ]]; then
+  kill "$hb" 2>/dev/null; wait "$hb" 2>/dev/null; rm -f "$work/deadline"
+  goargs=(-e2e.only="$go_sel" -e2e.slot="$slot" -e2e.lock-holder=$$ -e2e.count="$ncheck" -e2e.total="$total"
+    -e2e.started="$started_at" -e2e.summary="$work/summary.go")
+  ! $features_on || goargs+=(-e2e.every-feature)
+  ! $newest || goargs+=(-e2e.newest-base)
+  ! $golden || goargs+=(-e2e.golden)
+  rm -f "$work/summary.go"
+  (cd "$root/tests/e2e" && CGO_ENABLED=0 "${gocmd[@]}" test -tags e2e -count=1 -timeout 0 -run '^TestE2E$' -args "${goargs[@]}")
+  if [[ -f $work/summary.go ]]; then
+    while IFS=$'\t' read -r key val; do
+      case $key in
+        pass) pass=$((pass + val)) ;; fail) fail=$((fail + val)) ;; skipped) skipped=$((skipped + val)) ;;
+        failed) failed+=("$val") ;; retried) retried+=("$val") ;; short) short+=("$val") ;;
+      esac
+    done < "$work/summary.go"
+    rm -f "$work/summary.go"
+  else
+    short+=("the Go runner ($go_sel) ended without its results: look for its errors above")
+  fi
+fi
 # The results, for a --slots run to add up: "KEY<TAB>VALUE" lines.
 { printf 'pass\t%s\nfail\t%s\nskipped\t%s\nelapsed\t%s\n' "$pass" "$fail" "$skipped" $((SECONDS - started))
   for l in ${failed[@]+"${failed[@]}"}; do printf 'failed\t%s\n' "$l"; done

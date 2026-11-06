@@ -370,6 +370,8 @@ tests/e2e.sh --newest-base  # base from Ubuntu's newest image and packages, in a
 tests/e2e.sh --golden       # also capture the stubs' golden fixtures from the real tools
 ```
 
+The sections are moving to Go, one at a time, into `tests/e2e`, and `tests/e2e.sh` runs the ones already there after its own, in the same sandbox, so every command above still runs every section it chooses. [End-to-end tests in Go](testing.md#end-to-end-tests-in-go) says how to run the Go runner on its own, write a check and port a section.
+
 `--newest-base` builds base as a user's first build does, in place of the pinned release that the other runs use, and [Maintaining](maintaining.md#checking-base-against-ubuntus-newest) says when to run it and what to do when it fails. `--golden` writes the [golden fixtures](testing.md#golden-fixtures) of this system into the checkout, for you to commit.
 
 The sections so far:

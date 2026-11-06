@@ -105,3 +105,8 @@ run = "hugo server -s docs"
 [tasks.e2e]
 description = "Run the end-to-end tests against real VMs"
 run = "tests/e2e.sh"
+
+[tasks."e2e:go"]
+description = "Run the end-to-end sections ported to Go (tests/e2e), its flags after --"
+dir = "{{config_root}}/tests/e2e"
+run = "go test -tags e2e -count=1 -timeout 0 -run '^TestE2E$' -args"

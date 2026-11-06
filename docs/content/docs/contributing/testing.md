@@ -101,6 +101,83 @@ GitHub's Linux runners are x86_64 with KVM, and the E2E workflow (`.github/workf
 
 A Mac clones the images it gives each slot, because `/tmp` and your home folder are on the same APFS volume. A Linux host reflinks the Lima instances in your home folder when its file system can, as XFS made with `reflink=1` and Btrfs can, but a `/tmp` on tmpfs can't reflink, so there each slot other than slot 0 builds its own tool images. Every slot keeps its images between runs, so only its first run builds them.
 
+## End-to-end tests in Go
+
+The end-to-end tests are moving from `tests/e2e.sh` to Go, one section at a time, into `tests/e2e`. That package builds only with the `e2e` build tag, and its `TestE2E` is the run. The `gc` section is in Go so far, and `tests/e2e.sh` runs every other section. After its own sections, `tests/e2e.sh` hands the chosen sections that are Go's, the ones its `go_sections` lists, to `TestE2E`, in the same sandbox and under the same lock. It passes the Go run its own pid, which holds the lock, how many checks it has run and expects in all, and when it started, so the Go run's results count on from its own. The Go run writes its results to `summary.go` in the sandbox's state folder, and `tests/e2e.sh` adds them to its own. So `tests/e2e.sh`, `mise run e2e` and `tests/e2e.sh --only gc` still run every section they choose, and `--slots` places the Go sections as it places the others.
+
+### Running the Go runner
+
+To run the Go sections without `tests/e2e.sh`, run `mise run e2e:go` with the runner's flags after `--`, or run `go test` yourself from `tests/e2e`:
+
+```sh
+mise run e2e:go -- -e2e.only=gc
+cd tests/e2e && go test -tags e2e -count=1 -timeout 0 -run '^TestE2E$' -args -e2e.only=gc
+```
+
+Run `go test` from `tests/e2e` without naming a package, because only then does `go test` show the run's lines as they come, and in a package list it holds them until the package ends. `TestE2E` refuses any `-timeout` but `0`, because `go test`'s default of 10 minutes would end a long section in the middle of a check, and `-count=1` keeps `go test` from showing a cached result. Its flags are `tests/e2e.sh`'s options with `e2e.` before them:
+
+| Flag | `tests/e2e.sh`'s option |
+| --- | --- |
+| `-e2e.only=gc,…` | `--only gc,…` |
+| `-e2e.from` | `--from` |
+| `-e2e.clean` | `--clean` |
+| `-e2e.every-feature` | `--every-feature` |
+| `-e2e.slots=N` | `--slots N` |
+| `-e2e.slot=N` | `--slot N` |
+| `-e2e.newest-base` | `--newest-base` |
+| `-e2e.golden` | `--golden` |
+
+Without `-e2e.only`, the runner chooses the sections `tests/e2e.sh` would, but only the Go ones among them, and `-e2e.only` refuses a section that's still `tests/e2e.sh`'s, naming the `tests/e2e.sh --only` command that runs it. `-e2e.reuse` is the Go runner's own: it keeps the VMs that a section makes with `Reuse` for the next run, which takes each one as it finds it when it's still running, so iterating on one check doesn't launch its VM again. The flags that `tests/e2e.sh` passes when it hands its sections over, `-e2e.lock-holder`, `-e2e.count`, `-e2e.total`, `-e2e.started` and `-e2e.summary`, are only for it.
+
+The Go runner keeps everything that `tests/e2e.sh` does around its checks. It uses the same sandbox for each slot, with the same fixed ports, it refuses your real Lima home, and it builds devvm from the checkout into `src-go` in the sandbox's state folder, as a test build with its files embedded. It writes the same `config.toml` and puts the pinned tool lock in place, after the same check of the lock's first line, and it reads the pinned Ubuntu release from `e2e_ubuntu_release` in `tests/e2e.sh`, its one copy. It takes the slot's lock, a symlink to its pid, and it deletes only the VMs, files and project folders that it made. Before anything else, it names each host command that the chosen sections need and this machine lacks, with what installs it. Its lines are `tests/e2e.sh`'s: each section's `== name` heading, then `PASS`, `FAIL`, `SKIP` or `RETRY` with `[n/N]`, the check's title, its time, the run's time and the time left. A heartbeat every minute shows the newest line of the check's output or devvm's run log, and the run ends with the same summary line. It keeps each section's times in the same timings file as `tests/e2e.sh`, under the same tier, so either runner estimates from and compares with the other's times. Beside them it keeps a checksum of `tests/e2e`'s Go files, in place of the script's, so a section's check count is compared only with a run of the same Go files. With `-e2e.slots`, it plans, seeds and runs the slots as `tests/e2e.sh` does, each slot a run of the same test binary, and it adds up their results. On macOS it seeds each slot with APFS clones (`clonefile`), and on Linux with reflinks.
+
+Each check's time limit is the one `tests/e2e.sh` gives it, and so is the limit of the steps between two checks. Each command a check runs is in a process group of its own, and when the check's time runs out, the group gets TERM, then KILL 30 seconds later. The check then fails with the heartbeat's last line, and the run goes on to the next check. The runner's own tests, the `TestHarness` tests, need no VM, and `mise run test` runs them with the `e2e` tag.
+
+### Writing a check
+
+A section is a function that takes the running section, `*S`, and calls `s.Check` once for each check:
+
+```go
+s.Check("gc deletes a tool image no VM uses, with its record", func() error {
+    if Exists(old) || Exists(old+".json") {
+        return errors.New("the old tool image or its record is still there")
+    }
+    return nil
+})
+```
+
+The check passes when its function returns nil. Its title is its key in the timings, so keep it word for word when you port a check, and give a new check a title that says what it proves. When a check fails, the runner prints its error, each line led by `failed:`, and then the last 5 lines that its commands printed, or as many as `Tail(n)` asks for. A check that the run has nothing for is `s.Skip(title, why)`, which counts it, so that runs compare their counts.
+
+The commands a check runs go through the section, so that they run in the sandbox's environment and within the check's time limit, and their output goes into the check's log:
+
+| Helper | What it runs or reads |
+| --- | --- |
+| `s.Devvm(dir, args…)`, `s.DevvmNames(dir, args…)` | the run's devvm in `dir`, with no input; `DevvmNames` in names mode (`DEVVM_MESSAGES=names`) |
+| `s.Msg(name, "k=v"…)` | a message's text, from `devvm _msg`, so a check never repeats its wording |
+| `s.Limactl(args…)`, `s.InVM(vm, script)`, `s.Status(vm)` | `limactl` in the sandbox's Lima home, a script in the VM's login shell with no input, and a VM's status |
+| `s.Run(Cmd{…})` | any command, with its own folder, input or variables |
+| `s.NewProject(name)`, `s.Launch(dir, input, args…)`, `s.Reuse(name, input, args…)` | a new project folder, deleted at the end, and devvm launched in a folder, its VM recorded for the cleanup |
+| `s.Paths.State(vm)`, `s.Paths.VMOf(dir)`, `s.Paths.VMDir(vm)` | a VM's `vm.json`, flattened as `tests/e2e.sh`'s `vm_state` does, the VM a folder has, and its folder |
+| `s.Paths.KeysOf(image)`, `s.Paths.Record(key, field)`, `s.Own(image)` | an image's keys and records, and its images made the run's to delete |
+| `s.Layer(name, script)`, `s.Paths` | a layer of the run's (`e2e*`), deleted at the end, and the sandbox's folders |
+| `s.Golden(name, args…)` | with `-e2e.golden`, a [golden fixture](#golden-fixtures) captured from what `args` printed |
+| `s.GoE2E(test, pkg, "VAR=value"…)` | a Go test in `internal/pkg` that needs a real VM, such as `TestE2EExecQuoting`, with its variables in its environment and never in a process's arguments |
+| `s.Until(timeout, fn)`, `Settle` | a wait for what the check looks for, trying each second, and the one fixed wait, before looking for something that must not have happened |
+| `s.Port(p)`, `s.Defer(fn)` | one of slot 0's fixed ports as this slot has it, and a cleanup of the section's own |
+
+Three options change how a check runs. `Flaky(reason)` marks a check that's known to flake: when it fails, the runner shows its output and runs it once more, and only a second failure fails it. Its result says `retried once`, and its timings line and the summary say so too, and every other check fails on its first failure. `Builds()` marks a check whose own command can build base or a `--from` base, so it gets at least an hour. `Needs(backend.FeatureLink)` names the backend features that a check proves: on a backend that has one of them neither natively nor emulated and reviewed, as `devvm doctor --json` shows its features, the check is skipped and counted, so a check is written once for every backend that has its features.
+
+### Porting a section
+
+Each section is a file of its own in `tests/e2e`, such as `gc_test.go`, so sections can be ported at the same time without touching each other's files. To port one:
+
+1. Write `<section>Section(s *S)` in `tests/e2e/<section>_test.go`, with the same checks in the same order as its block in `tests/e2e.sh`, each one's title word for word, and the same skips. Keep its setup steps between the checks, as the block has them, because a check's time counts from the end of the one before it.
+2. Set its `run` in `sections` (`tests/e2e/sections_test.go`), and list there the host commands it needs beyond `limactl` and `pkill`, each with what installs it.
+3. Run it with `mise run e2e:go -- -e2e.only=<section>` on a Mac and on a Linux host, and check that each check passes and that the counts and titles match the section's last run of `tests/e2e.sh`.
+4. Delete its block from `tests/e2e.sh` and add its name to `go_sections` there, then run `tests/e2e.sh --only <section>` to check that the hand-over runs it.
+
+A helper that more than one section needs goes in the harness's files, beside those above, so that every section shares one copy, and a fixture that two sections share, such as an image, stays in the sandbox's cache, as it does for `tests/e2e.sh`.
+
 ## Test builds
 
 The tests run a test build of devvm, which is one made with `-ldflags "-X github.com/w3cj/devvm/internal/testbuild.testBuild=yes"`, as `tests/e2e.sh` and the CLI tests make theirs. Only a test build reads the environment variables that stand in for what devvm would find on this machine. Releases (GoReleaser, the Homebrew formula) don't set the flag, so a release ignores every one of these variables, whatever its environment says. devvm reads them in one place, `readOverrides` in `internal/cli/overrides.go`, into an `Overrides` struct, and passes each one to the package that uses it:

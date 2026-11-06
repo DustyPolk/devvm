@@ -28,6 +28,10 @@ cd "$root"
 HOME="$home" XDG_DATA_HOME="$home/.local/share" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
   CLI_GOCOVERDIR="$cov/cli" \
   gotestsum -- -race -cover -timeout 30m ./... -args -test.gocoverdir="$cov/unit"
+# The end-to-end runner's own tests, which need no VM: tests/e2e builds only with the e2e tag, and
+# its TestE2E, the run itself, is left out.
+HOME="$home" XDG_DATA_HOME="$home/.local/share" XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
+  gotestsum -- -race -tags e2e -run '^TestHarness' ./tests/e2e
 # Each CLI test script writes its devvm's coverage to a folder of its own under $cov/cli, so
 # devvm runs in parallel scripts don't race on one meta-data file. A script that never ran
 # devvm leaves its folder empty, and it's left out.

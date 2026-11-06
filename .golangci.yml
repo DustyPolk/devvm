@@ -1,5 +1,10 @@
 version: "2"
 
+# The end-to-end tests in Go (tests/e2e) build only with this tag.
+run:
+  build-tags:
+    - e2e
+
 linters:
   default: standard
   enable:
@@ -116,6 +121,17 @@ linters:
       - path: ^cmd/devvm/
         linters: [forbidigo]
         text: os\.Exit|context\.(Background|TODO)
+      # The end-to-end runner is a test, not devvm: it prints its results,
+      # TestMain exits with m.Run's code, and it stops its own checks'
+      # process groups and reads whether a lock's process is alive.
+      - path: ^tests/e2e/
+        linters: [forbidigo]
+        text: fmt\.Print|os\.(Stdout|Stderr|Exit)|signal processes through internal/daemon
+      # Running the sections' commands and reading the sandbox's files by
+      # their paths is what it's for.
+      - path: ^tests/e2e/
+        linters: [gosec]
+        text: G204|G304|G702|G703
       - path: ^internal/ui/
         linters: [forbidigo]
         text: fmt\.Print|os\.(Stdout|Stderr)|context\.(Background|TODO)
