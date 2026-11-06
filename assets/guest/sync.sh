@@ -19,6 +19,7 @@
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
 #   hosts        the VM's links (devvm checked them): a line per target, "ADDRESS NAME
 #                NAME.devvm.internal...", for /etc/hosts
+#   guide.md     devvm's guide for the agents in the VM, installed as /usr/share/doc/devvm/README.md
 #   moved        only after the project folder moved: moved_from and moved_to, its old path and
 #                its new, and claude_from and claude_to, their Claude Code slugs; claude.sh moves
 #                Claude Code's sessions and settings from the old to the new
@@ -463,6 +464,15 @@ if [[ -n "${DEVVM_GITHUB:-}" ]]; then
     '!f() { test "$1" = get || return 0; . ~/.config/devvm/env; printf "username=x-access-token\npassword=%s\n" "$GH_TOKEN"; }; f'
 else
   git config --global --unset-all credential.https://github.com.helper 2>/dev/null || true
+fi
+
+# devvm's guide for the agents in the VM, and devvm-help, which prints it. Root's and read-only, so
+# nothing the VM's user runs changes what other agents read, and installed again when it differs.
+guide=/usr/share/doc/devvm/README.md
+cmp -s "$s/guide.md" "$guide" 2>/dev/null || sudo install -D -m 644 -o root -g root "$s/guide.md" "$guide"
+if [[ "$(cat /usr/local/bin/devvm-help 2>/dev/null)" != "$(printf '#!/bin/sh\nexec cat %s\n' "$guide")" ]]; then
+  printf '#!/bin/sh\nexec cat %s\n' "$guide" | sudo tee /usr/local/bin/devvm-help >/dev/null
+  sudo chmod 755 /usr/local/bin/devvm-help
 fi
 
 # Tell agents why the network may fail, and what to do about it.

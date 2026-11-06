@@ -15,6 +15,10 @@ An agent runs where you start it, so you start it in the VM's shell, not on this
 
 In the VM the agent sees only your project folder, and your agents' settings from [devvm's agent store](#devvms-agent-store), which it gets read-only. Whatever it runs, such as a script a package installs, runs in the VM too. You don't install any agent on this machine, because devvm installs each one in the VMs that have it.
 
+### The guide in every VM
+
+Every VM has a guide to devvm for the agents in it, at `/usr/share/doc/devvm/README.md`, and `devvm-help` in the VM prints it. It tells an agent what a devvm VM is, how its network tiers and secrets work, where its installs go, and which commands to ask you to run on this machine, such as `devvm network allow` for a blocked host or `devvm agent login` for a login. The guide is the same in every VM, so it says nothing about the VM's own tier, ports or layers. Each launch installs it again whenever it differs from devvm's, and it belongs to root and is read-only, so nothing that the VM's user runs without `sudo` can change what the agents read, and a change made with `sudo` lasts only until the next launch. Ask your agent to read it, or to run `devvm-help`, when it doesn't know where it's running. devvm adds nothing about it to the agents' instruction files.
+
 ## Supported agents
 
 A new VM gets an agent when you check it in the list that devvm shows when you customize the VM, or when you name it with `--agents`. A VM that exists gets one from `devvm tools`, which shows the same list with the VM's agents checked, or from `devvm tools add`:

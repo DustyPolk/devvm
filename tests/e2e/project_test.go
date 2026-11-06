@@ -140,7 +140,28 @@ func projectBase(s *S) *webVM {
 	})
 	projectBaseVM(s, w)
 	projectBasePorts(s, w)
+	projectGuide(s, w)
 	return w
+}
+
+// projectGuide: devvm's guide for the agents in the VM, devvm-help, and
+// that the VM's user can't change it.
+func projectGuide(s *S, w *webVM) {
+	guide := readText(filepath.Join(s.sb.root, "assets", "guest", "guide.md"))
+	s.Check("the VM has devvm's guide, root's and read-only, and devvm-help prints it", func() error {
+		r, err := s.InVM(w.vm, `stat -c '%U %a' /usr/share/doc/devvm/README.md`)
+		if err != nil || strings.TrimSpace(r.Stdout) != "root 644" {
+			return fmt.Errorf("its owner and mode: %q, %w", r.Stdout, err)
+		}
+		r, err = s.InVM(w.vm, `devvm-help`)
+		if err != nil || r.Stdout != guide {
+			return fmt.Errorf("devvm-help printed %d bytes, not the guide's %d: %w", len(r.Stdout), len(guide), err)
+		}
+		if _, err := s.InVM(w.vm, `echo x >> /usr/share/doc/devvm/README.md`); err == nil {
+			return errors.New("the VM's user wrote the guide")
+		}
+		return nil
+	})
 }
 
 // projectBaseVM: what the base project's VM has and hasn't from the host.

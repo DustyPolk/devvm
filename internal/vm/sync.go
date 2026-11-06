@@ -252,7 +252,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	if m := claudeMoved(in.moved, st.Dir); m != nil {
 		s.put("moved", 0o644, m)
 	}
-	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh", "claude.sh"} {
+	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh", "claude.sh", "guide.md"} {
 		data, err := fs.ReadFile(e.Assets, "guest/"+name)
 		if err != nil {
 			return nil, err

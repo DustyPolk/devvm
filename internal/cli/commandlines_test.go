@@ -108,6 +108,31 @@ func TestCommandLines(t *testing.T) {
 	t.Logf("%d command lines in %d files", checked, len(files))
 }
 
+// The guide in every VM (assets/guest/guide.md) is among the files
+// TestCommandLines checks, and each devvm command and flag it names for
+// the user to run is one of devvm's, so the guide can't drift from the CLI.
+func TestGuideCommandLines(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	guide := filepath.Join(repoRoot, "assets", "guest", "guide.md")
+	if !slices.Contains(commandLineFiles(t), guide) {
+		t.Fatalf("%s isn't among the files TestCommandLines checks", guide)
+	}
+	text, err := os.ReadFile(guide) //nolint:gosec // G304 the repo's own file
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := commandLinesIn("assets/guest/guide.md", text)
+	if len(lines) < 15 {
+		t.Fatalf("only %d command lines in the guide", len(lines))
+	}
+	for _, l := range lines {
+		if err := checkCommandLine(t, l); err != nil {
+			t.Errorf("%s: devvm %s: %v", l.where, strings.Join(l.words, " "), err)
+		}
+	}
+}
+
 // The check finds each kind of stale command line, and passes the
 // current ones, in prose and in code.
 func TestCheckCommandLine(t *testing.T) {
