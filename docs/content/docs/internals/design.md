@@ -494,6 +494,34 @@ devvm puts the file into the new VM once it has started confined, as the VM's us
 | Links reaching a different VM | The VM keeps its ID only when its state is kept, by the user's own remake in its folder, and a link session reads the new host keys once the target starts again | Unit tests (`TestAddLayers`) check every state key but the image survives, the ID included, and e2e's `project` section checks that a VM made again keeps its settings |
 | A parent folder's VM made again from a subfolder | Asked only in a terminal (`remake_parent_vm_ask`), which `--force` never answers, and refused without one | The CLI tests refuse it without a terminal and keep it when the answer is no |
 
+## opencode's database in history exports
+
+opencode 2 keeps its sessions and its logins in one SQLite database, `~/.local/share/opencode/opencode.db` (`opencode-<channel>.db` for another channel's build), in WAL mode. An export of agents' history goes to this machine and can go into another VM of the folder, so it must carry the sessions without the logins. Leaving the database out would lose opencode's history, and opencode's own `opencode session export` runs opencode and its server once per session, which an export before `devvm rm` can't count on. devvm copies the database in the VM with the `sqlite3` that base installs (`sqlite3` on Debian and Ubuntu, `sqlite` on Alpine), as the VM's user, in a temporary folder in `~/.cache` (`opencodeClean`):
+
+1. `VACUUM INTO` copies the database as one snapshot, with what its `-wal` file holds, so a login that opencode saved last, which is still only in the WAL, is in the copy and taken out with the rest.
+2. In the copy, devvm drops every trigger, so none can put a row back, and empties the tables that hold logins: opencode 2.2's `credential` (its logins and API keys), `account` and `control_account` (its console's access and refresh tokens), `account_state` and `session_share` (each share's secret), and any other table whose name has `credential`, `account`, `auth`, `secret`, `token` or `share` in it, or that has a column such as `secret`, `api_key`, `access_token` or `password`, so a table that a later opencode adds for its logins is emptied too.
+3. It takes out the record of opencode's migration that imports `auth.json` (`20260805200742_import_legacy_credentials`), so the opencode that next opens the copy imports the logins that devvm's setup wrote in its own VM's `auth.json`, as it does when it first makes its database.
+4. It turns WAL off, with `secure_delete` on, and runs `VACUUM`, which writes the file again, so no free page keeps a deleted row and no `-wal` or `-journal` file is left.
+5. It counts the rows of each table it emptied and the triggers, and when any is left, or any step failed, the database is left out of the export and the run log says why.
+
+The export's `tar` leaves out the database and its `-wal`, `-shm` and `-journal` files as they are, matched within opencode's folder, and adds the copy at the database's path (`--transform`, which leaves symlinks' targets alone). The import does the same to an export it unpacks, in the VM, before anything reaches the home folder: it deletes the `-wal`, `-shm` and `-journal` files and any database that isn't a regular file, and puts in each database's copy, or deletes the database when the VM has no `sqlite3` or the copy fails. Each `sqlite3` runs with `trusted_schema` off, so an imported database's schema can't call the CLI's functions that write files.
+
+**Not covered:**
+
+- **A secret that's in a session itself,** such as a key you pasted into a prompt, stays in the session, as it does in Claude Code's and Codex's transcripts.
+- **A VM without `sqlite3`,** made from an image built without it, exports and imports no opencode database, and opencode's sessions are lost from that export.
+- **A remake's home folder copy** keeps opencode's database with its logins, because it's the same VM's data going into the same folder's new VM ([the home folder's copy](#the-home-folders-copy)).
+
+**Threat check** (the security-audit skill, guidance mode, with its data isolation companion):
+
+| Lead | What holds it | Check |
+| --- | --- | --- |
+| A key typed into opencode in the VM reaching this machine's export | The export holds only the copy, whose login tables are empty and whose file is written again by `VACUUM` | Unit tests (`TestOpencodeClean`, `TestHistoryExportRuns`) plant a credential, an account's tokens, a share's secret and a later table's key, the credential only in the WAL of an open connection, and find none of them in any byte of the copy or the export; e2e's `network` section plants a key with the VM's `sqlite3` and finds neither it nor the login's placeholders in the export |
+| The WAL or journal file carrying the rows | They never go into an export, and an import deletes them | `TestHistoryExportRuns` and `TestHistoryImportCleansOpencode` |
+| An export with the logins in it reaching another VM | The import makes the same copy in the VM before anything reaches its home folder, or leaves the database out | `TestHistoryImportCleansOpencode`, with and without `sqlite3` |
+| A trigger putting a row back as it's deleted | Every trigger is dropped first, and the rows are counted after | `TestOpencodeClean` plants one |
+| A hostile database's schema running code in the VM | `trusted_schema` is off, and it runs as the VM's user on the VM's own files, which the export's code could reach anyway | Reviewed |
+
 ## Linux hosts: overlays instead of copies
 
 Lima on QEMU keeps one qcow2 disk per VM, and a clone copies it (2.0 GB for `base`). A project VM's disk is a qcow2 overlay of its image's instead ([details](lima.md#clones-and-overlays)): 196 KB new, 12 MB after booting, the same speed except fsync writes (1.8–2.5 s vs 1.2–2.1 s per GiB). Flattening one (`qemu-img rebase -b ""`) took 8 s, if it's ever needed.

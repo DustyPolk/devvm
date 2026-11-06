@@ -52,9 +52,130 @@ var (
 	historyPaths    = []string{".claude", ".claude.json", ".codex", ".local/share/opencode", ".local/state/opencode"}
 	historyExcludes = []string{
 		".claude/.credentials.json", ".codex/auth.json",
-		".local/share/opencode/auth.json", ".local/share/opencode/account.json", ".local/share/opencode/bin",
+		".local/share/opencode/auth.json", ".local/share/opencode/account.json", ".local/share/opencode/mcp-auth.json",
+		".local/share/opencode/bin",
 	}
 )
+
+// opencodeData is opencode's data folder. opencode 2 keeps its sessions
+// and its logins in one SQLite database there, opencode.db (or
+// opencode-<channel>.db for another channel's build), in WAL mode, so
+// the database's -wal file holds the pages it changed last, its logins'
+// among them, until opencode checkpoints it.
+const opencodeData = ".local/share/opencode"
+
+// opencodeDBs are the names of opencode's databases and their WAL,
+// shared-memory and rollback journal files in opencodeData, as globs.
+// An export and an import never take them as they are: only the
+// database's copy that opencodeClean makes.
+var opencodeDBs = []string{"opencode*.db", "opencode*.db-wal", "opencode*.db-shm", "opencode*.db-journal"}
+
+// opencodeLogins is the SQL condition that picks the tables of
+// opencode's database that hold logins: opencode 2.2's credential
+// (logins and API keys), account and control_account (its console's
+// access and refresh tokens), account_state, and session_share (each
+// share's secret), and any other table whose name or a column's says it
+// holds one, so a table a later opencode adds for its logins is picked
+// too.
+const opencodeLogins = `type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\' AND (` +
+	`name LIKE '%credential%' OR name LIKE '%account%' OR name LIKE '%auth%' OR name LIKE '%secret%' ` +
+	`OR name LIKE '%token%' OR name LIKE '%share%' OR name IN (SELECT m.name FROM sqlite_master m ` +
+	`JOIN pragma_table_info(m.name) c WHERE m.type = 'table' AND lower(c.name) IN ('secret', 'access_token', ` +
+	`'refresh_token', 'id_token', 'api_key', 'apikey', 'password', 'token', 'credential', 'credentials')))`
+
+// opencodeAuthImport is opencode 2's migration that imports auth.json
+// into its credential table, once. opencodeClean takes its record out,
+// so the opencode that next opens the copy imports the logins devvm's
+// setup wrote in that VM's auth.json, as it does when it makes its
+// database.
+const opencodeAuthImport = "20260805200742_import_legacy_credentials"
+
+// opencodeClean is the shell function devvm_opencode_clean DB, which
+// makes clean.db in the current folder: a copy of opencode's database
+// DB without its logins. sqlite3 copies it with VACUUM INTO, which reads
+// the database with what its -wal file holds, as one snapshot; in the
+// copy it drops every trigger, empties the tables opencodeLogins picks
+// and takes opencodeAuthImport's record out, then turns WAL off and
+// rebuilds the file (secure_delete and VACUUM), so no page of it keeps
+// a deleted row. It fails when the VM has no sqlite3, when any step
+// fails or when a table it emptied has a row, and the caller then
+// leaves the database out. The schema's own functions stay off
+// (trusted_schema), as an imported database is the export's.
+func opencodeClean() string {
+	gen := `SELECT printf('DROP TRIGGER IF EXISTS "%w";', name) FROM sqlite_master WHERE type = 'trigger';` + "\n" +
+		`SELECT printf('DELETE FROM "%w";', name) FROM sqlite_master WHERE ` + opencodeLogins + ";\n" +
+		`SELECT 'DELETE FROM migration WHERE id = ''` + opencodeAuthImport + `'';' FROM sqlite_master ` +
+		`WHERE type = 'table' AND name = 'migration';`
+	check := `SELECT 'SELECT count(*) FROM sqlite_master WHERE type = ''trigger'';';` + "\n" +
+		`SELECT printf('SELECT count(*) FROM "%w";', name) FROM sqlite_master WHERE ` + opencodeLogins + ";"
+	sql := "sqlite3 -bail -cmd 'PRAGMA trusted_schema = OFF'"
+	return strings.Join([]string{
+		"devvm_opencode_clean() {",
+		"  local s c left",
+		"  rm -f clean.db clean.db-journal clean.db-wal clean.db-shm &&",
+		`  ` + sql + ` -cmd '.timeout 10000' "$1" "VACUUM INTO 'clean.db'" >/dev/null &&`,
+		"  s=$(" + sql + " clean.db " + shell.Quote(gen) + ") &&",
+		`  printf 'PRAGMA journal_mode = DELETE;\nPRAGMA secure_delete = ON;\n%s\nVACUUM;\n' "$s" | ` + sql + " clean.db >/dev/null &&",
+		"  c=$(" + sql + " clean.db " + shell.Quote(check) + ") &&",
+		`  left=$(printf '%s\n' "$c" | ` + sql + " clean.db) || return 1",
+		`  case $left in *[!0[:space:]]*) return 1 ;; esac`,
+		"  [ ! -e clean.db-wal ] && [ ! -e clean.db-journal ]",
+		"}",
+	}, "\n")
+}
+
+// opencodeCleanAll is the shell loop that runs devvm_opencode_clean on
+// each of opencode's databases in the folder dir (shell-quoted), from the
+// current folder, then runs then with $db, the database, and $n, its
+// name, for the copy it made. When there's no copy, or then fails, it
+// says so and runs otherwise. A database that's a symbolic link is never
+// read.
+func opencodeCleanAll(dir, then, otherwise string) string {
+	return strings.Join([]string{
+		"for db in " + dir + "/" + opencodeDBs[0] + "; do",
+		`  [ -f "$db" ] && [ ! -L "$db" ] || continue`,
+		`  n=${db##*/}`,
+		`  if ! command -v sqlite3 >/dev/null; then echo "devvm: left out $db: the VM has no sqlite3" >&2`,
+		`  elif devvm_opencode_clean "$db" && ` + then + "; then continue",
+		`  else echo "devvm: left out $db: its copy without opencode's logins failed" >&2`,
+		"  fi",
+		"  " + otherwise,
+		"done",
+	}, "\n")
+}
+
+// historyExport is the script that writes an export of the VM's agents'
+// history to its stdout, a gzipped tar of what there is of historyPaths,
+// run in the VM as its user: without historyExcludes, and with each of
+// opencode's databases as its copy without its logins (opencodeClean),
+// made in a folder of its own and put at the database's path
+// (--transform, which leaves links' targets as they are), never the
+// database or its WAL and journal files as they are (opencodeDBs, each
+// matched within its folder).
+func historyExport() string {
+	excludes := make([]string, 0, len(historyExcludes)+len(opencodeDBs)+1)
+	for _, p := range historyExcludes {
+		excludes = append(excludes, "--exclude="+p)
+	}
+	excludes = append(excludes, "--no-wildcards-match-slash")
+	for _, p := range opencodeDBs {
+		excludes = append(excludes, "--exclude="+opencodeData+"/"+p)
+	}
+	// No pipefail: ls fails on the paths there aren't, and only tar's
+	// status counts.
+	return strings.Join([]string{
+		opencodeClean(),
+		`mkdir -p ~/.cache && t=$(mktemp -d ~/.cache/devvm-export.XXXXXX) || exit 1`,
+		`trap 'rm -rf "$t"' EXIT`,
+		`mkdir "$t/devvm-clean" && cd "$t" || exit 1`,
+		"add=()",
+		opencodeCleanAll(`"$HOME"/`+shell.Quote(opencodeData),
+			`mv clean.db "devvm-clean/$n" && add=(${add[@]+"${add[@]}"} "devvm-clean/$n")`, ":"),
+		`[ "${#add[@]}" -eq 0 ] || add=(-C "$t" "${add[@]}")`,
+		"cd ~ && ls -d " + strings.Join(historyPaths, " ") + " 2>/dev/null | tar -czf - " + shell.QuoteJoin(excludes) +
+			" " + shell.Quote("--transform=flags=r;s,^devvm-clean/,"+opencodeData+"/,") + ` -T - ${add[@]+"${add[@]}"}`,
+	}, "\n")
+}
 
 // historyUnsafe is what historyImport prints when it imports nothing
 // because a path in the export is outside the agents' history.
@@ -90,7 +211,11 @@ func importSkips() []string {
 // applies) and without importSkips (anchored, each with what's below
 // it); the symlinks there that point outside it (absolute, or with a ..
 // part) are taken out, so an agent's write never follows one out of its
-// history; then what's left of historyPaths goes into the home folder,
+// history. opencode's databases' WAL and journal files, and any of its
+// databases that isn't a regular file, are taken out, and each database
+// becomes its copy without its logins (opencodeClean), or is taken out
+// when there's none, so an export made without it, which holds them,
+// never gives them to a VM; then what's left of historyPaths goes into the home folder,
 // without replacing a file or folder the VM has (--skip-old-files,
 // which implies --no-overwrite-dir).
 func historyImport() string {
@@ -114,6 +239,12 @@ func historyImport() string {
 		`find "$t/x" -type l -print0 | while IFS= read -r -d '' l; do`,
 		`  case $(readlink "$l") in /* | .. | ../* | */.. | */../*) echo "devvm: left out the link $l" >&2; rm -f "$l" ;; esac`,
 		"done",
+		opencodeClean(),
+		`o="$t/x/"` + shell.Quote(opencodeData),
+		`for f in "$o"/` + strings.Join(opencodeDBs[1:], ` "$o"/`) + `; do rm -rf "$f"; done`,
+		`for f in "$o"/` + opencodeDBs[0] + `; do if [ -L "$f" ] || { [ -e "$f" ] && [ ! -f "$f" ]; }; then rm -rf "$f"; fi; done`,
+		`cd "$t" || exit 1`,
+		opencodeCleanAll(`"$o"`, `mv clean.db "$db"`, `rm -f "$db"`),
 		`cd "$t/x" && set -- && for p in ` + shell.QuoteJoin(historyPaths) + `; do if [ -e "$p" ] || [ -L "$p" ]; then set -- "$@" "$p"; fi; done`,
 		`[ "$#" -eq 0 ] || tar -cf - "$@" | tar --extract --file=- --directory ~ --skip-old-files ` + shell.QuoteJoin(own),
 	}, "\n")

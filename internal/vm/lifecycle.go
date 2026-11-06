@@ -349,12 +349,7 @@ func (e Lifecycle) export(ctx context.Context, t *target, file string, failed er
 		_ = os.Remove(tmp)
 		done()
 	}()
-	excludes := make([]string, len(historyExcludes))
-	for i, p := range historyExcludes {
-		excludes[i] = "--exclude=" + p
-	}
-	script := "cd ~ && ls -d " + strings.Join(historyPaths, " ") + " 2>/dev/null | tar -czf - " + strings.Join(excludes, " ") + " -T -"
-	err = t.exec(ctx, []string{"bash", "-c", script}, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()})
+	err = t.exec(ctx, []string{"bash", "-c", historyExport()}, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()})
 	if cerr := out.Close(); err == nil {
 		err = cerr
 	}

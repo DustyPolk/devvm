@@ -14,15 +14,17 @@ export DEBIAN_FRONTEND=noninteractive
 # Alpine (--from alpine): apk, OpenRC and musl. Its packages come from the release's repositories,
 # which have no snapshots: they aren't pinned.
 if [[ $devvm_libc == musl ]]; then
-  # GNU tar: devvm's launch sends files with it (busybox's lacks options it uses).
+  # GNU tar: devvm's launch sends files with it (busybox's lacks options it uses). sqlite: an export
+  # of agents' history copies opencode's database without its logins with it.
   sudo apk add --no-cache git curl wget ca-certificates build-base unzip jq ripgrep bash coreutils tar \
-    util-linux util-linux-misc losetup findmnt erofs-utils
+    util-linux util-linux-misc losetup findmnt erofs-utils sqlite
   echo "devvm: Alpine's packages aren't pinned" >&2
 else
 # The package lists are apt.sh begin's: base's packages are recorded at its first build and replayed
 # from devvm's cache after (layers/apt.sh), and a --from image's come from its own sources, unpinned.
-# erofs-utils: the shared tools' builds make their images with it, in a VM cloned from base.
-sudo apt-get install -y git curl wget ca-certificates build-essential unzip jq ripgrep erofs-utils
+# erofs-utils: the shared tools' builds make their images with it, in a VM cloned from base. sqlite3:
+# an export of agents' history copies opencode's database without its logins with it.
+sudo apt-get install -y git curl wget ca-certificates build-essential unzip jq ripgrep erofs-utils sqlite3
 fi
 
 # devvm-fetch URL SHA256 OUT: every layer downloads through this, so an image only ever contains

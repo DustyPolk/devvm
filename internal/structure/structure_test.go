@@ -224,6 +224,7 @@ func devvmVars() map[string]string {
 		"internal/vm.agentFolderOf":               table,
 		"internal/vm.historyPaths":                table,
 		"internal/vm.historyExcludes":             table,
+		"internal/vm.opencodeDBs":                 table,
 		"internal/vm.defaultKeys":                 table,
 		"internal/shell.nasty":                    fixture,
 		"internal/build.keyImages":                fixture,

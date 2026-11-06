@@ -69,6 +69,7 @@ func networkSection(s *S) {
 	netCapture(n)
 	netCodexLogin(n)
 	netOpencodeLogin(n)
+	netOpencodeHistory(n)
 	netClaudeLogins(n)
 	netSave(n)
 	netGithub(n)

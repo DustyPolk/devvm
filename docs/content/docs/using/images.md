@@ -16,7 +16,7 @@ flowchart TD
 
 ## Base
 
-`base` is the image that every other image is built on. It is Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq and mise added, followed by the optional [features](customizing.md#base-image-features) you chose, such as oh-my-bash and fzf. Docker comes as a [layer of devvm's](#built-in-layers), so you check it in the list devvm shows when you customize a new VM, or give `devvm --layers docker`. With `--from`, base starts from a container image instead of Ubuntu's ([details](from.md)).
+`base` is the image that every other image is built on. It is Ubuntu 26.04's cloud image with git, build-essential, ripgrep, jq, sqlite3 and mise added, followed by the optional [features](customizing.md#base-image-features) you chose, such as oh-my-bash and fzf. Docker comes as a [layer of devvm's](#built-in-layers), so you check it in the list devvm shows when you customize a new VM, or give `devvm --layers docker`. With `--from`, base starts from a container image instead of Ubuntu's ([details](from.md)).
 
 A VM made from base gets 4 CPUs, 8 GiB of memory and a 100 GiB disk unless you give it another size, and on a small machine it gets fewer CPUs and less memory ([size and ports](ports-size.md#size-and-ports)).
 
