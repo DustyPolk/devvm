@@ -1,4 +1,4 @@
-// Package daemon runs devvm's background processes: the network policy
+// Package daemon runs devvm's background processes: the VMs'
 // proxies, the port forwarders, the link sessions and the build proxies.
 // It starts each one detached (Detach, Spawn), finds it again by its pid
 // file and its arguments (Proc), stops it (SIGTERM, a wait, then SIGKILL),

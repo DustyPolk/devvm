@@ -39,7 +39,7 @@ printf '%s\n' 'experimental-features = nix-command flakes' 'trusted-users = root
   'sandbox-fallback = false' > /tmp/nix-extra.conf
 # Without proxy variables (a build behind a company proxy has its build proxy's): the installer writes
 # any it finds into nix-daemon's settings, and so into the image. guest/sync.sh gives the daemon the
-# VM's own proxy when network policy is on. The system's CAs, devvm's and the user's among them, rather
+# VM's own proxy. The system's CAs, devvm's and the user's among them, rather
 # than a bundle of Nix's own.
 env -u http_proxy -u https_proxy -u ftp_proxy -u all_proxy -u no_proxy \
   -u HTTP_PROXY -u HTTPS_PROXY -u FTP_PROXY -u ALL_PROXY -u NO_PROXY \
@@ -53,7 +53,7 @@ if [[ -n $(sudo find /nix/store -mindepth 1 -maxdepth 1 ! -user root -print -qui
 fi
 # Running now too, for the rest of the build: systemd started it, and OpenRC (Alpine) gets a
 # service of devvm's, started at each boot and now. Under OpenRC, its settings are
-# /etc/conf.d/nix-daemon (guest/sync.sh's: the proxy under network policy), which OpenRC reads
+# /etc/conf.d/nix-daemon (guest/sync.sh's: the VM's proxy), which OpenRC reads
 # for its service.
 if [[ -d /run/systemd/system ]]; then
   sudo systemctl is-active --quiet nix-daemon.socket

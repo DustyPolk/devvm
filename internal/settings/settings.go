@@ -58,7 +58,7 @@ type List struct {
 
 // Defaults are the defaults in effect, each with where it came from.
 type Defaults struct {
-	// Network is new VMs' network policy: NetworkAsk unless set.
+	// Network is new VMs' network tier: NetworkAsk unless set.
 	Network Value
 	// Ports is what new VMs forward (ParsePorts): PortsAll unless set.
 	Ports Value

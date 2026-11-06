@@ -256,9 +256,9 @@ func (e Links) publishChanged(t *target, old string) error {
 	return nil
 }
 
-// publishUnenforced warns, for each client with network policy that links
+// publishUnenforced warns, for each client on a confined tier that links
 // to ports of target t that it publishes now and didn't before (old, as
-// KeyPublish had it), when t runs with its network policy not in force
+// KeyPublish had it), when t runs with its network tier not in force
 // (warnUnenforced): those links' connections are refused until t starts
 // again.
 func (e Links) publishUnenforced(ctx context.Context, t *target, old string) error {
@@ -383,9 +383,9 @@ type LinkAdd struct {
 }
 
 // Add makes a link from the folder's VM to a's target, once it's checked:
-// the target is another project VM that publishes the port, network
-// policy on the client means network policy on the target, both backends
-// have links, and the name is free. A running target whose network policy
+// the target is another project VM that publishes the port, the
+// target's tier is the client's or a stricter one, both backends
+// have links, and the name is free. A running target whose network tier
 // isn't in force is warned of (warnUnenforced), and refused nothing.
 func (e Links) Add(ctx context.Context, a LinkAdd) error {
 	t, err := e.finder.target(ctx, need{has: hasMade})

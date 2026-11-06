@@ -1,4 +1,4 @@
-// Package proxy is the network policy point for one devvm VM, run as devvm _proxy.
+// Package proxy is the network tier's enforcement point for one devvm VM, run as devvm _proxy.
 //
 // devvm starts one per VM, listening on a loopback port. The VM's Lima hostagent runs under a
 // Seatbelt profile, or a restricted QEMU network, that lets the VM reach nothing else, so every

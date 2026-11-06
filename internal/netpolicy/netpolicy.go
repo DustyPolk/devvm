@@ -1,4 +1,4 @@
-// Package netpolicy runs network policy for VMs: the choice for a new VM,
+// Package netpolicy runs VMs' network tiers: the choice for a new VM,
 // the VM's allowlist files, its proxy on the host (devvm _proxy), the
 // confinement its backend starts it with, and the self-check after each
 // start that it can't reach around the proxy.
@@ -28,7 +28,7 @@ type Net struct {
 	Made NetMade `json:"made,omitzero"`
 }
 
-// NetMade is what devvm made for a VM's network policy.
+// NetMade is what devvm made for a VM's network tier.
 type NetMade struct {
 	Check     string `json:"check,omitempty"`      // the last self-check's result: CheckOK or CheckUnenforced
 	ProxyKey  string `json:"proxy_key,omitempty"`  // the VM's proxy password (Key)
@@ -191,7 +191,7 @@ func toolPolicies(tools []string) []string {
 	return out
 }
 
-// Env is the guest environment a VM with network policy gets besides the
+// Env is the guest environment a VM gets besides its
 // proxy's address: no proxy for the VM itself, and Node told to use the
 // proxy variables. Tools find the proxy's CA as every VM finds the user's
 // (trust.Env).
@@ -201,7 +201,7 @@ var Env = map[string]string{
 	"NODE_USE_ENV_PROXY": "1",
 }
 
-// NoProxy is what a VM with network policy reaches without its proxy: the
+// NoProxy is what a VM reaches without its proxy: the
 // VM itself. Its links aren't in it: an HTTP client that sends one to the
 // proxy reaches it there (proxy.Config's Links), so links change no VM's
 // environment.

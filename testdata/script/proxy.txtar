@@ -1,4 +1,4 @@
-# devvm _proxy: the network policy proxy, hidden. --help lists its one
+# devvm _proxy: each VM's proxy, hidden. --help lists its one
 # flag, -config.
 exec devvm _proxy --help
 stdout '-config'

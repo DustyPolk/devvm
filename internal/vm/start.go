@@ -48,7 +48,7 @@ type upOpts struct {
 // agent checked for keys when it forwards it; then a stopped VM started
 // (start), or a running one gone on with as it runs (runningConfinement),
 // what its next start changes said (nextStart); last, the self-check,
-// which stops a VM whose network policy doesn't hold. It returns the
+// which stops a VM whose network tier doesn't hold. It returns the
 // confinement the VM runs with.
 func (s starter) bringUp(ctx context.Context, t *target, o upOpts) (backend.Confinement, error) {
 	vm, st, b := t.f.Name, t.st, t.b
@@ -300,7 +300,7 @@ func requirements(n needs) []backend.Feature {
 }
 
 // startNeeds is what a made VM needs of its backend to start, or go on,
-// as in, its instance, is: its state's network policy and ports, its SSH
+// as in, its instance, is: its state's network tier and ports, its SSH
 // agent forwarding, and agent-toggle when its forwarding is to change, or
 // a stopped one was made ready for it.
 func startNeeds(st *state.VM, in backend.Instance) (needs, error) {
@@ -504,7 +504,7 @@ func interruptCleanup(e *Env, f func(context.Context)) (remove func()) {
 	}
 }
 
-// undoStart is a start's cleanup for a VM with network policy: an
+// undoStart is a start's cleanup for a VM on a confined tier: an
 // interrupt can leave it running with its backend's start still waiting
 // for it, so without the record of its confined start (Run.Confined), and
 // it stops the VM and its proxy. The next launch starts both again,

@@ -38,7 +38,7 @@ type Ports struct {
 // Host is the host ports devvm chose for a VM: 0 for none yet.
 type Host struct {
 	SSH     int `json:"ssh,omitempty"`     // its ssh's, which devvm chooses so no forwarder takes it first
-	Proxy   int `json:"proxy,omitempty"`   // its network policy proxy's, on the host's loopback
+	Proxy   int `json:"proxy,omitempty"`   // its proxy's, on the host's loopback
 	Desktop int `json:"desktop,omitempty"` // devvm desktop's, on the host's loopback
 }
 
@@ -195,8 +195,8 @@ func (a Allocator) Choose(ctx context.Context, st *state.VM, which Which, keep f
 	return n, err
 }
 
-// SSH returns the host port the VM's ssh is forwarded from, with or
-// without network policy, as its state records it: devvm chooses it,
+// SSH returns the host port the VM's ssh is forwarded from, on any
+// tier, as its state records it: devvm chooses it,
 // rather than the backend at its start, so every VM's port forwarder
 // avoids it (Used) before the VM's backend binds it. A stopped VM gets
 // a new one when its port is now another program's, on any address, or

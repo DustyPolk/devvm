@@ -18,12 +18,12 @@ import (
 	"github.com/w3cj/devvm/internal/tools"
 )
 
-// Net shows and changes the folder's VM's network policy, its network log
+// Net shows and changes the folder's VM's network tier, its network log
 // and its allowlist (here), and the secrets its proxy puts in
 // (secret.go).
 type Net struct{ *Env }
 
-// NetworkShown is the folder's VM's network policy, as devvm network
+// NetworkShown is the folder's VM's network tier, as devvm network
 // shows it.
 type NetworkShown struct {
 	Policy string // its tier or unenforced, as devvm ls shows it
@@ -32,7 +32,7 @@ type NetworkShown struct {
 	Rules []netpolicy.RuleFile
 }
 
-// Network returns the folder's VM's network policy and its allowlist.
+// Network returns the folder's VM's network tier and its allowlist.
 func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 	var s NetworkShown
 	t, err := e.finder.target(ctx, need{has: hasMade})
@@ -146,7 +146,7 @@ type LogOptions struct {
 }
 
 // Log writes the folder's VM's network log to w: what its proxy allowed
-// and blocked, and its links' connections. A VM without network policy
+// and blocked, and its links' connections. An open VM
 // logs only its links' connections, and devvm says so.
 func (e Net) Log(ctx context.Context, w io.Writer, o LogOptions) error {
 	l, vm, err := e.netLog(ctx, o.Follow)

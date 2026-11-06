@@ -28,7 +28,7 @@ import (
 
 // Proxy starts and stops VMs' proxies: devvm _proxy, one per VM, in the
 // background, following the host process that runs the VM. It also
-// chooses a new VM's network policy (Choose) and checks it holds
+// chooses a new VM's network tier (Choose) and checks it holds
 // (SelfCheck). NewProxy sets every field; tests change them.
 type Proxy struct {
 	Dirs    paths.Dirs

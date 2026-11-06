@@ -262,7 +262,7 @@ func (e Groups) syncVM(ctx context.Context, st *state.VM, group string, warn boo
 
 // change records a VM's links, before and after the group changed them,
 // says which of group's it gained and lost, warns of a new link's target
-// whose network policy isn't in force (warnUnenforced), and applies them
+// whose network tier isn't in force (warnUnenforced), and applies them
 // while it runs, as devvm link add does. One it can't apply them to is
 // warned of, and gets them at its next start.
 func (e Groups) change(ctx context.Context, st *state.VM, group string, before, after []Link) error {

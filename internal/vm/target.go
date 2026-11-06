@@ -61,7 +61,7 @@ func (t *target) started(w backend.Want) {
 // ensureRunning makes sure the VM runs, for a command that runs in it
 // without a shell (an export, rm's check of a --clone VM, a remake's home
 // folder): it goes through what every start does (starter.bringUp), .git
-// checked, network policy's self-check and the refusals included.
+// checked, the network tier's self-check and the refusals included.
 func (t *target) ensureRunning(ctx context.Context) error {
 	_, err := t.e.starter.bringUp(ctx, t, upOpts{})
 	return err

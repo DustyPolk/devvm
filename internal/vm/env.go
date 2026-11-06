@@ -1,7 +1,7 @@
 // Package vm runs project VMs. Env is what they run with; Launch opens a
 // shell in a folder's VM, making it first if need be; Lifecycle stops,
 // adopts, deletes and exports it; Settings shows and changes its size,
-// ports, SSH agent forwarding and .git protection; Net its network policy,
+// ports, SSH agent forwarding and .git protection; Net its network tier,
 // network log, allowlist and secrets.
 package vm
 
@@ -43,7 +43,7 @@ type Env struct {
 	Assets   fs.FS // devvm's own files (assets.FS)
 	Registry *backend.Registry
 	Tools    *tools.Env
-	Proxy    *netpolicy.Proxy // VMs' network policy proxies
+	Proxy    *netpolicy.Proxy // VMs' proxies
 	Dir      string           // the folder devvm runs in, a physical path: "" until the finder needs it (finder.dir)
 	// Folder is which VM the folder uses when a folder it's inside has
 	// one (--here, --parent): resolveFolder's rule.
@@ -87,8 +87,7 @@ type Env struct {
 	// checks none.
 	FreeSpace func(path string) (uint64, error)
 	// Links returns the links a VM's start and setup give it: its targets'
-	// addresses and names, for its /etc/hosts and, with network policy,
-	// its NO_PROXY (checkLinks checks them first); nil gives none.
+	// addresses and names, for its /etc/hosts and its NO_PROXY (checkLinks checks them first); nil gives none.
 	Links func(st *state.VM) ([]GuestLink, error)
 	// Reporter is where it prints and asks, data output, the run log
 	// (where the output of a backend's Exec goes too), and the run's

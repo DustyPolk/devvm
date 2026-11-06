@@ -44,7 +44,7 @@ sudo chmod 755 /usr/local/bin/devvm-fetch
 if [[ $devvm_libc == gnu ]]; then
 # Ubuntu's cloud image is a server's: drop what a dev VM doesn't use (snapd, multipath, modem and disk
 # managers, firmware updates, crash reporting, tracing tools, kernel headers), and apt's background
-# updates, which hold apt's lock and, under network policy, show up as blocks. Measured: 0.9 GB less
+# updates, which hold apt's lock and, on a confined tier, show up as blocks. Measured: 0.9 GB less
 # disk, 100 MB less memory, 7 fewer services and 9 fewer timers. The everyday tools the server
 # metapackages brought stay. Only what's installed is touched (--from images have none of it).
 keep="bc file htop lsof nano rsync screen strace tcpdump time tmux mtr-tiny pciutils usbutils

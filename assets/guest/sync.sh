@@ -203,8 +203,8 @@ if command -v codex >/dev/null; then
   grep -q '^\[otel\]' ~/.codex/config.toml || printf '\n[otel]\nmetrics_exporter = "none"\n' >> ~/.codex/config.toml
 fi
 
-# Network policy (DEVVM_PROXY set): Lima's env: already puts the proxy variables in /etc/environment;
-# point the tools that ignore them at the proxy too. When it's off, undo all of it.
+# The VM's proxy (DEVVM_PROXY set): Lima's env: already puts the proxy variables in /etc/environment;
+# point the tools that ignore them at the proxy too. When the guest has none, undo all of it.
 proxy_block() {   # proxy_block FILE [CONTENT]: replace (or remove) devvm's block in FILE
   local f=$1
   [[ -f "$f" ]] || touch "$f"
@@ -231,11 +231,11 @@ docker_proxies() {   # docker_proxies CONFIG [sudo]: set (or remove) the proxy f
 }
 # nix-daemon (the nix layer) does Nix's downloads, and gets nothing of /etc/environment: under systemd
 # a drop-in with the proxy, else its settings file, devvm's alone (OpenRC reads it), both removed
-# when network policy is off.
+# when the guest has no proxy.
 nixd=/nix/var/nix/profiles/default/bin/nix-daemon
 nix_conf=/etc/systemd/system/nix-daemon.service.d/devvm-proxy.conf
 $systemd || nix_conf=/etc/conf.d/nix-daemon
-# The shared Nix cache, also only under network policy: the proxy's /nix/ first, then cache.nixos.org
+# The shared Nix cache, also only with a proxy: the proxy's /nix/ first, then cache.nixos.org
 # itself, which Nix goes to when the cache doesn't answer. The keys stay Nix's own (cache.nixos.org-1),
 # so each path is checked here as well. nix.conf includes devvm's file when it's there.
 nix_cache=/etc/nix/devvm-cache.conf
@@ -301,7 +301,7 @@ if [[ -n "${DEVVM_PROXY:-}" ]]; then
   if [[ $hp == *@* ]]; then auth=$(printf %s "${hp%%@*}" | base64 | tr -d '\n'); hp=${hp#*@}; fi
   { printf '#!/bin/bash\nexec 3<>/dev/tcp/%s/%s || exit 1\nauth=%q\n' "${hp%:*}" "${hp##*:}" "$auth"
     cat <<'SH'
-# ssh's ProxyCommand with network policy: CONNECT HOST PORT through devvm's proxy. When the proxy
+# ssh's ProxyCommand: CONNECT HOST PORT through devvm's proxy. When the proxy
 # refuses, its reason (with the host command that allows it) goes to stderr, where ssh shows it.
 printf 'CONNECT %s:%s HTTP/1.1\r\nHost: %s:%s\r\nProxy-Authorization: Basic %s\r\n\r\n' "$1" "$2" "$1" "$2" "$auth" >&3
 read -r _ code _ <&3
@@ -323,7 +323,7 @@ SH
   # devvm-why: what the proxy blocked lately, and how to allow it.
   sudo tee /usr/local/bin/devvm-why >/dev/null <<'SH'
 #!/bin/sh
-# What this VM's network policy blocked recently, and the host command that allows it.
+# What this VM's proxy blocked recently, and the host command that allows it.
 exec curl -sS --proxy "$HTTP_PROXY" http://devvm.proxy/blocked
 SH
   sudo chmod 755 /usr/local/bin/devvm-why
@@ -378,7 +378,7 @@ else
 fi
 
 # Tell agents why the network may fail, and what to do about it.
-note="Network access in this VM goes through an allowlist (devvm's network policy). If a download or request fails with a connection error or a 403 from the proxy, run \`devvm-why\` to see what was blocked; the user can allow it on the host with \`devvm network allow <host>\`."
+note="Network access in this VM goes through devvm's proxy, which allows what the VM's network tier allows. If a download or request fails with a connection error or a 403 from the proxy, run \`devvm-why\` to see what was blocked; the user can allow it on the host with \`devvm network allow <host>\`."
 for f in ~/.claude/CLAUDE.md ~/.codex/AGENTS.md; do
   [[ -d "$(dirname "$f")" ]] || continue
   [[ -f "$f" ]] && sed -i '/^<!-- devvm-proxy -->/,/^<!-- \/devvm-proxy -->/d' "$f"

@@ -242,7 +242,7 @@ func (d Dirs) Exports() string { return filepath.Join(d.Data, "exports") }
 // .tar.gz.
 func ExportFolder(export string) string { return strings.TrimSuffix(export, ".tar.gz") + ".folder" }
 
-// NixCache is the Nix cache VMs with network policy share, which their
+// NixCache is the Nix cache VMs share, which their
 // proxies fill from cache.nixos.org.
 func (d Dirs) NixCache() string { return filepath.Join(d.Cache(), "nix-cache") }
 
@@ -288,7 +288,7 @@ func (d Dirs) GroupsLock() string { return filepath.Join(d.Data, "groups.lock") 
 // Layers holds the user's own layers.
 func (d Dirs) Layers() string { return filepath.Join(d.Config, "layers") }
 
-// Policy holds the user's network policy rules for every VM.
+// Policy holds the user's network rules for every VM.
 func (d Dirs) Policy() string { return filepath.Join(d.Config, "policy") }
 
 // TrustedCAs holds the user's own CA certificates (a company's), which

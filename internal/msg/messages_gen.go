@@ -494,7 +494,7 @@ func ConfigNotCopied(file string, vm string) M {
 	return M{id: "config_not_copied", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
-// ConfigRedacted is [config_redacted]: "devvm redacted {{.keys}} in {{.vm}}'s copy of {{.file}}, because network policy keeps secrets on this machine."
+// ConfigRedacted is [config_redacted]: "devvm redacted {{.keys}} in {{.vm}}'s copy of {{.file}}, because devvm keeps secrets on this machine, whatever the VM's network tier."
 func ConfigRedacted(file string, keys string, vm string) M {
 	return M{id: "config_redacted", vals: []val{{"file", file}, {"keys", keys}, {"vm", vm}}}
 }
@@ -1509,7 +1509,7 @@ func InterruptedImage(vm string) M {
 	return M{id: "interrupted_image", vals: []val{{"vm", vm}}}
 }
 
-// InterruptedStart is [interrupted_start]: "interrupted: stopping {{.vm}}, which hadn't finished starting with its network policy"
+// InterruptedStart is [interrupted_start]: "interrupted: stopping {{.vm}}, which hadn't finished starting confined to its proxy"
 func InterruptedStart(vm string) M {
 	return M{id: "interrupted_start", vals: []val{{"vm", vm}}}
 }
@@ -1719,7 +1719,7 @@ func LinkTargetStopped(target string, vm string) M {
 	return M{id: "link_target_stopped", vals: []val{{"target", target}, {"vm", vm}}}
 }
 
-// LinkTargetUnenforced is [link_target_unenforced]: "{{.vm}}'s links to {{.target}} don't work until {{.target}} starts again, because its network policy isn't in force as it runs. To start it again, run devvm restart in its folder."
+// LinkTargetUnenforced is [link_target_unenforced]: "{{.vm}}'s links to {{.target}} don't work until {{.target}} starts again, because its network tier isn't in force as it runs. To start it again, run devvm restart in its folder."
 func LinkTargetUnenforced(target string, vm string) M {
 	return M{id: "link_target_unenforced", vals: []val{{"target", target}, {"vm", vm}}}
 }
@@ -1904,7 +1904,7 @@ func NetOpenPolicy(vm string) M {
 	return M{id: "net_open_policy", vals: []val{{"vm", vm}}}
 }
 
-// NetProxyDownStopped is [net_proxy_down_stopped]: "{{.vm}}'s network policy proxy couldn't start, so devvm stopped the VM, which doesn't run without it. devvm starts both again at the VM's next launch."
+// NetProxyDownStopped is [net_proxy_down_stopped]: "{{.vm}}'s proxy couldn't start, so devvm stopped the VM, which doesn't run without it. devvm starts both again at the VM's next launch."
 func NetProxyDownStopped(vm string) M {
 	return M{id: "net_proxy_down_stopped", vals: []val{{"vm", vm}}}
 }
@@ -1924,17 +1924,17 @@ func NetTierUnknown(choices string, given string) M {
 	return M{id: "net_tier_unknown", vals: []val{{"choices", choices}, {"given", given}}}
 }
 
-// NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
+// NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly, so its network tier isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
 func NetUnenforced(vm string) M {
 	return M{id: "net_unenforced", vals: []val{{"vm", vm}}}
 }
 
-// NetUnenforcedRestart is [net_unenforced_restart]: "{{.vm}} wasn't started confined to its proxy, so its network policy isn't enforced. Restart it confined?"
+// NetUnenforcedRestart is [net_unenforced_restart]: "{{.vm}} wasn't started confined to its proxy, so its network tier isn't enforced. Restart it confined?"
 func NetUnenforcedRestart(vm string) M {
 	return M{id: "net_unenforced_restart", vals: []val{{"vm", vm}}}
 }
 
-// NetUnenforcedStop is [net_unenforced_stop]: "{{.vm}} wasn't started confined to its proxy, so its network policy wasn't enforced and devvm stopped it. devvm starts it confined at its next launch."
+// NetUnenforcedStop is [net_unenforced_stop]: "{{.vm}} wasn't started confined to its proxy, so its network tier wasn't enforced and devvm stopped it. devvm starts it confined at its next launch."
 func NetUnenforcedStop(vm string) M {
 	return M{id: "net_unenforced_stop", vals: []val{{"vm", vm}}}
 }
@@ -2304,7 +2304,7 @@ func OpencodeLoginKept(providers string) M {
 	return M{id: "opencode_login_kept", vals: []val{{"providers", providers}}}
 }
 
-// OpencodeLoginWithheld is [opencode_login_withheld]: "The VM gets opencode's {{.providers}} login without its OAuth tokens, because network policy keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine and run devvm agent import --force opencode."
+// OpencodeLoginWithheld is [opencode_login_withheld]: "The VM gets opencode's {{.providers}} login without its OAuth tokens, because devvm keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine and run devvm agent import --force opencode."
 func OpencodeLoginWithheld(providers string) M {
 	return M{id: "opencode_login_withheld", vals: []val{{"providers", providers}}}
 }
@@ -2449,7 +2449,7 @@ func PolicyBrokenDeny(file string, line string, rule string) M {
 	return M{id: "policy_broken_deny", vals: []val{{"file", file}, {"line", line}, {"rule", rule}}}
 }
 
-// PolicyFailed is [policy_failed]: "Reading or changing the network policy rules failed: {{.reason}}."
+// PolicyFailed is [policy_failed]: "Reading or changing the network rules failed: {{.reason}}."
 func PolicyFailed(reason string) M {
 	return M{id: "policy_failed", vals: []val{{"reason", reason}}}
 }
@@ -2549,12 +2549,12 @@ func ProgramOldFix(fix string, name string, version string) M {
 	return M{id: "program_old_fix", vals: []val{{"fix", fix}, {"name", name}, {"version", version}}}
 }
 
-// ProxyCAFailed is [proxy_ca_failed]: "Creating the network policy proxy's CA in {{.dir}} failed."
+// ProxyCAFailed is [proxy_ca_failed]: "Creating the proxy's CA in {{.dir}} failed."
 func ProxyCAFailed(dir string) M {
 	return M{id: "proxy_ca_failed", vals: []val{{"dir", dir}}}
 }
 
-// ProxyFailed is [proxy_failed]: "The network policy proxy failed: {{.reason}}."
+// ProxyFailed is [proxy_failed]: "The VM's proxy failed: {{.reason}}."
 func ProxyFailed(reason string) M {
 	return M{id: "proxy_failed", vals: []val{{"reason", reason}}}
 }
@@ -2579,12 +2579,12 @@ func ProxyPortTaken(port string, vm string) M {
 	return M{id: "proxy_port_taken", vals: []val{{"port", port}, {"vm", vm}}}
 }
 
-// ProxyStartFailed is [proxy_start_failed]: "{{.vm}}'s network policy proxy didn't start. Check {{.log}} for why."
+// ProxyStartFailed is [proxy_start_failed]: "{{.vm}}'s proxy didn't start. Check {{.log}} for why."
 func ProxyStartFailed(log string, vm string) M {
 	return M{id: "proxy_start_failed", vals: []val{{"log", log}, {"vm", vm}}}
 }
 
-// ProxyStopFailed is [proxy_stop_failed]: "{{.vm}}'s network policy proxy didn't stop, so devvm couldn't start it again with new settings. Run devvm stop, then devvm."
+// ProxyStopFailed is [proxy_stop_failed]: "{{.vm}}'s proxy didn't stop, so devvm couldn't start it again with new settings. Run devvm stop, then devvm."
 func ProxyStopFailed(vm string) M {
 	return M{id: "proxy_stop_failed", vals: []val{{"vm", vm}}}
 }
@@ -3369,7 +3369,7 @@ func UpstreamProxyInvalid(setting string) M {
 	return M{id: "upstream_proxy_invalid", vals: []val{{"setting", setting}}}
 }
 
-// UpstreamProxyScheme is [upstream_proxy_scheme]: "{{.setting}} names a {{.scheme}} proxy, and network policy and image builds go only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
+// UpstreamProxyScheme is [upstream_proxy_scheme]: "{{.setting}} names a {{.scheme}} proxy, and VMs' proxies and image builds go only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
 func UpstreamProxyScheme(scheme string, setting string) M {
 	return M{id: "upstream_proxy_scheme", vals: []val{{"scheme", scheme}, {"setting", setting}}}
 }

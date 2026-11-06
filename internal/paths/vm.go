@@ -7,7 +7,7 @@ import "path/filepath"
 //	vm.json   its state: what it was made from and asked for, and what
 //	          devvm made for it (state.VM)
 //	lock      held by each change to vm.json
-//	policy    its own network policy rules
+//	policy    its own network rules
 //	run/      what its runs leave: pids, its proxy's files and CA, its
 //	          port forwarder's, its pinned host keys, its sandbox
 //	          profile, its secrets' bindings, its links' list
@@ -26,7 +26,7 @@ func (v VM) State() string { return filepath.Join(v.Dir, "vm.json") }
 // two devvms changing one VM at once lose neither's change.
 func (v VM) Lock() string { return filepath.Join(v.Dir, "lock") }
 
-// Policy holds the VM's own network policy rules.
+// Policy holds the VM's own network rules.
 func (v VM) Policy() string { return filepath.Join(v.Dir, "policy") }
 
 // Run is the folder of what the VM's runs leave: pids, its proxy's files
@@ -46,7 +46,7 @@ func (v VM) Home() string { return filepath.Join(v.Dir, "home.tar.gz") }
 // that's still running.
 func (v VM) RemakeLock() string { return filepath.Join(v.Run(), "remake.lock") }
 
-// ProxyConfig is the config the VM's network policy proxy runs with
+// ProxyConfig is the config the VM's proxy runs with
 // (proxy.Config): everything it started with, its password among it.
 func (v VM) ProxyConfig() string { return filepath.Join(v.Run(), "proxy.json") }
 
@@ -97,7 +97,7 @@ func (v VM) Started() string { return filepath.Join(v.Run(), "started") }
 // Secrets is the bindings of the VM's secrets that its proxy reads.
 func (v VM) Secrets() string { return filepath.Join(v.Run(), "secrets.json") }
 
-// SecretsPolicy is the network policy rules its secrets' hosts add.
+// SecretsPolicy is the network rules its secrets' hosts add.
 func (v VM) SecretsPolicy() string { return filepath.Join(v.Run(), "secrets.policy") }
 
 // LinksPID is the pid file of the VM's link session.

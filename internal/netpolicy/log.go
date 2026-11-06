@@ -303,7 +303,7 @@ func linkEvent(e proxy.Event) (what, d string) {
 // AppendEvent adds an event to a VM's event log (EventLog), the user's
 // alone, with the time and the VM's name: devvm _links's, beside its
 // proxy's. It's written through the proxy's own writer, which rotates
-// the log by the proxy's rule, so a VM without network policy keeps two
+// the log by the proxy's rule, so an open VM keeps two
 // at most too, and the proxy goes on writing to the new log.
 func AppendEvent(path, vm string, e Event) error {
 	e.Time, e.VM = time.Now().UTC().Format(time.RFC3339), vm

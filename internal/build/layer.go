@@ -20,14 +20,14 @@ const layerScript = `#!/bin/bash
 # and the ones built on it, on next use.
 # - Put PATH changes in ~/.profile.
 # - Download with devvm-fetch URL SHA256 OUT: it fails when the checksum doesn't match.
-# - With network policy, NAME.policy next to this file lists the hosts VMs with this layer reach.
+# - On the allowlist tier, NAME.policy next to this file lists the hosts VMs with this layer reach.
 set -euo pipefail
 
 # sudo apt-get install -y postgresql-client
 `
 
 // layerPolicy is the allowlist a new layer starts with.
-const layerPolicy = `# Hosts a VM with the NAME layer can reach with network policy, one rule per line: example.com,
+const layerPolicy = `# Hosts a VM with the NAME layer can reach on the allowlist tier, one rule per line: example.com,
 # *.example.com (any subdomain), host:port, an address or CIDR, !rule (deny).
 `
 

@@ -189,8 +189,8 @@ func (e linkRuns) atLaunch(ctx context.Context, b backend.Backend, st *state.VM)
 // warnTargets warns once for each target of a client's links that its
 // links can't reach now: one whose policy rule no longer holds, which the
 // client starts without (guestLinks), one whose backend lacks links, one
-// that's stopped, which devvm doesn't start, and, for a client with
-// network policy, one that runs with its network policy not in force
+// that's stopped, which devvm doesn't start, and, for a client on a
+// confined tier, one that runs with its network tier not in force
 // (policyUnenforced), until it starts again.
 func (e linkRuns) warnTargets(ctx context.Context, st *state.VM, links []Link) error {
 	seen := map[string]bool{}

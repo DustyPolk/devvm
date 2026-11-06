@@ -1304,7 +1304,7 @@ other = "{{.vms}} link to those ports of {{.vm}}, so their next connections ther
 other = "{{.vm}}'s links to {{.target}} don't work until {{.target}} runs, because devvm never starts a VM for a link. To start it, run devvm in its folder."
 
 [link_target_unenforced]
-other = "{{.vm}}'s links to {{.target}} don't work until {{.target}} starts again, because its network policy isn't in force as it runs. To start it again, run devvm restart in its folder."
+other = "{{.vm}}'s links to {{.target}} don't work until {{.target}} starts again, because its network tier isn't in force as it runs. To start it again, run devvm restart in its folder."
 
 [link_target_unusable]
 description = "the reason follows, from the backend's check"
@@ -1566,13 +1566,13 @@ other = "{{.given}} isn't a network tier. Type one of {{.choices}}, or press Ent
 other = "{{.vm}} reached the internet without going through its proxy, so devvm stopped it. Something outside devvm may have given it another network."
 
 [net_unenforced_stop]
-other = "{{.vm}} wasn't started confined to its proxy, so its network policy wasn't enforced and devvm stopped it. devvm starts it confined at its next launch."
+other = "{{.vm}} wasn't started confined to its proxy, so its network tier wasn't enforced and devvm stopped it. devvm starts it confined at its next launch."
 
 [net_unenforced_restart]
-other = "{{.vm}} wasn't started confined to its proxy, so its network policy isn't enforced. Restart it confined?"
+other = "{{.vm}} wasn't started confined to its proxy, so its network tier isn't enforced. Restart it confined?"
 
 [net_unenforced]
-other = "WARNING: {{.vm}} reaches the network directly, so its network policy isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
+other = "WARNING: {{.vm}} reaches the network directly, so its network tier isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
 
 [net_open_log]
 other = "{{.vm}} is open, so devvm logs only what goes through its proxy, not what it reaches directly."
@@ -1633,7 +1633,7 @@ other = "Line {{.line}} of {{.file}}, {{.rule}}, reads as a deny but isn't a rul
 
 [policy_failed]
 description = "reason is an error from the system, in English"
-other = "Reading or changing the network policy rules failed: {{.reason}}."
+other = "Reading or changing the network rules failed: {{.reason}}."
 
 [network_failed]
 description = "reason is an error from the system, in English"
@@ -1644,7 +1644,7 @@ description = "reason is an error from the system, in English"
 other = "Reading this folder's VM's network log failed: {{.reason}}."
 
 [proxy_ca_failed]
-other = "Creating the network policy proxy's CA in {{.dir}} failed."
+other = "Creating the proxy's CA in {{.dir}} failed."
 
 [ca_not_certificate]
 other = "{{.file}} holds something other than certificates, such as a private key, and devvm sends only CA certificates to VMs. Take the file out of devvm's CA folder."
@@ -1678,17 +1678,17 @@ other = "HTTPS_PROXY is set, and {{.dir}} has no CA certificates. If the proxy i
 other = "Another program took port {{.port}}, which {{.vm}}'s network goes through. devvm picks another port when it next starts {{.vm}}."
 
 [net_proxy_down_stopped]
-other = "{{.vm}}'s network policy proxy couldn't start, so devvm stopped the VM, which doesn't run without it. devvm starts both again at the VM's next launch."
+other = "{{.vm}}'s proxy couldn't start, so devvm stopped the VM, which doesn't run without it. devvm starts both again at the VM's next launch."
 
 [proxy_start_failed]
-other = "{{.vm}}'s network policy proxy didn't start. Check {{.log}} for why."
+other = "{{.vm}}'s proxy didn't start. Check {{.log}} for why."
 
 [proxy_stop_failed]
-other = "{{.vm}}'s network policy proxy didn't stop, so devvm couldn't start it again with new settings. Run devvm stop, then devvm."
+other = "{{.vm}}'s proxy didn't stop, so devvm couldn't start it again with new settings. Run devvm stop, then devvm."
 
 [upstream_proxy_scheme]
 description = "setting is HTTPS_PROXY or HTTP_PROXY; scheme is the URL's, such as https:// or socks5://"
-other = "{{.setting}} names a {{.scheme}} proxy, and network policy and image builds go only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
+other = "{{.setting}} names a {{.scheme}} proxy, and VMs' proxies and image builds go only through http:// proxies. Set {{.setting}} to the company proxy's http:// address, or unset it."
 
 [ubuntu_mirror_invalid]
 description = "setting is config.toml's ubuntu-mirror"
@@ -1717,7 +1717,7 @@ other = "creating {{.vm}} from {{.image}}"
 other = "interrupted: deleting {{.vm}}, which wasn't ready yet"
 
 [interrupted_start]
-other = "interrupted: stopping {{.vm}}, which hadn't finished starting with its network policy"
+other = "interrupted: stopping {{.vm}}, which hadn't finished starting confined to its proxy"
 
 [ssh_remote_hint]
 other = "The origin remote uses SSH, but {{.vm}} has no SSH agent, so git over SSH won't work in it. Run devvm ssh-agent on to forward yours."
@@ -2253,14 +2253,14 @@ other = "Making {{.vm}}'s copy of {{.agent}}'s login failed: {{.reason}}."
 
 [config_redacted]
 description = "keys is a space-separated list of key paths"
-other = "devvm redacted {{.keys}} in {{.vm}}'s copy of {{.file}}, because network policy keeps secrets on this machine."
+other = "devvm redacted {{.keys}} in {{.vm}}'s copy of {{.file}}, because devvm keeps secrets on this machine, whatever the VM's network tier."
 
 [config_not_copied]
 other = "{{.vm}} doesn't get a copy of {{.file}}, because devvm couldn't read it to take its secrets out."
 
 [proxy_failed]
 description = "reason is an error from the system or the flag parser, in English"
-other = "The network policy proxy failed: {{.reason}}."
+other = "The VM's proxy failed: {{.reason}}."
 
 [forwarder_failed]
 description = "reason is an error from the system or the flag parser, in English"
@@ -2357,7 +2357,7 @@ other = "The VM gets opencode's {{.providers}} login unchanged."
 
 [opencode_login_withheld]
 description = "providers lists opencode's OAuth login providers, comma-separated"
-other = "The VM gets opencode's {{.providers}} login without its OAuth tokens, because network policy keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine and run devvm agent import --force opencode."
+other = "The VM gets opencode's {{.providers}} login without its OAuth tokens, because devvm keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine and run devvm agent import --force opencode."
 
 [devcontainer_flag_wins]
 description = "key is a devcontainer.json property (image, forwardPorts), flag the devvm flag given instead (from, ports)"

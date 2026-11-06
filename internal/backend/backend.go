@@ -3,8 +3,8 @@
 // registry of backends and the choice of backend for a VM.
 //
 // A backend only runs what it's told. What a VM is made of (its image, its
-// mounts, its size, its network policy) is decided outside, and anything
-// that doesn't depend on the backend (.git protection, the network policy
+// mounts, its size, its network tier) is decided outside, and anything
+// that doesn't depend on the backend (.git protection, the VM's
 // proxy) stays outside too. Before asking a backend for something, callers
 // check it has the features that needs with Require.
 package backend

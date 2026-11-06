@@ -11,7 +11,7 @@ import (
 
 // HostProxy is the proxy the host goes through: a company's, as the
 // environment devvm runs in sets it, or else config.toml
-// (settings.HostProxy). A VM's network policy proxy reaches allowed hosts
+// (settings.HostProxy). A VM's proxy reaches allowed hosts
 // through it (Upstream), and builds' commands get it (Env); neither ever
 // writes it into an image.
 type HostProxy struct {

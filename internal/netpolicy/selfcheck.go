@@ -36,7 +36,7 @@ var proxyArgv = []string{"sh", "-c", `set -a; . /etc/environment 2>/dev/null; se
 //
 // A VM devvm started confined that still gets out has another way out (a
 // network devvm didn't set up), which a restart wouldn't change. One
-// started some other way, or before its network policy was turned on, is
+// started some other way, or before it left the open tier, is
 // offered a restart, confined (restart starts
 // it again); where devvm can't ask, or if it's still unenforced after the
 // restart, devvm stops. Either way the VM is stopped first, so it isn't
@@ -154,8 +154,8 @@ func Direct(ctx context.Context, b backend.Backend, vm string) bool {
 	return b.Exec(ctx, vm, directArgv, backend.ExecOpts{}) == nil
 }
 
-// Unproxied stops a running VM whose proxy couldn't start (err): a VM with
-// network policy never runs on without its proxy. It warns that it stopped
+// Unproxied stops a running VM whose proxy couldn't start (err): a VM never
+// runs on without its proxy. It warns that it stopped
 // it and returns err; if the stop fails, the stop's failure, after warning
 // err. The stop isn't cancelled with ctx: an interrupt never leaves the VM
 // running.
@@ -171,7 +171,7 @@ func (p *Proxy) Unproxied(ctx context.Context, b backend.Backend, vm string, err
 	return err
 }
 
-// stop stops the VM, which network policy doesn't hold, and returns why:
+// stop stops the VM, whose network tier doesn't hold, and returns why:
 // m, or the stop's failure after warning m.
 func (p *Proxy) stop(ctx context.Context, b backend.Backend, vm string, m msg.M) error {
 	if err := b.Stop(ctx, vm); err != nil {

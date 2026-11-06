@@ -23,8 +23,8 @@ const (
 	LinkRemoved = "removed" // the client no longer has the link
 	LinkNoSSH   = "ssh"     // the target's ssh can't be reached as devvm pins it
 	linkUnread  = "unread"  // the states can't be read
-	// LinkUnenforced: the client has network policy, and the target's,
-	// though on, isn't enforced (netpolicy.Listed): it runs outside its
+	// LinkUnenforced: the client is on a confined tier, and the target's
+	// confined tier isn't enforced (netpolicy.Listed): it runs outside its
 	// proxy, until its next start, or its self-check failed.
 	LinkUnenforced = "unenforced"
 )
@@ -235,7 +235,7 @@ func (e Links) targetRun(ctx context.Context, b backend.Backend, target string) 
 // as they are now: the client still has the link, it applies (CheckLink:
 // the target's ID, its published port, the policy rule), the target's
 // backend has links, and the target runs, as its backend said within
-// runs' time, its network policy enforced when the client has it
+// runs' time, its tier enforced when the client's is confined
 // (policyEnforced), and is reached as devvm pins it. It returns how to
 // reach the target, or the event and why not. It never starts the
 // target.
@@ -323,7 +323,7 @@ func policyEnforced(ctx context.Context, b backend.Backend, client, target *stat
 	return "", nil
 }
 
-// policyUnenforced reports whether a running target's network policy
+// policyUnenforced reports whether a running target's network tier
 // isn't in force for a link from client (policyEnforced), so the link's
 // connections are refused until the target starts again. It only decides
 // a warning: a target whose policy can't be read isn't warned of, as each
@@ -335,8 +335,8 @@ func policyUnenforced(ctx context.Context, b backend.Backend, client, target *st
 
 // warnUnenforced warns when client's links to target, found as devvm
 // link add and publish check them, are refused for now because the target
-// runs with its network policy not in force (policyUnenforced). A stopped
-// target isn't warned of, as its policy applies when it next starts.
+// runs with its network tier not in force (policyUnenforced). A stopped
+// target isn't warned of, as its tier applies when it next starts.
 func (e Links) warnUnenforced(ctx context.Context, client, target *state.VM) {
 	if !netpolicy.TierOf(client).Confined() {
 		return

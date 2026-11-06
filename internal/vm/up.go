@@ -390,7 +390,7 @@ func (e creation) firstRun(o Options, size Size) (settings.Defaults, error) {
 
 // plan checks and chooses what a new VM gets, all before the build,
 // which can take minutes: devvm's first run's questions (firstRun), then
-// its image, size, ports and network policy, shown in its summary and
+// its image, size, ports and network tier, shown in its summary and
 // customized when the user says so (choose), its SSH agent and the
 // backend features it needs, with what the folder's devcontainer.json
 // says (its From and its plan, which the new VM keeps: o stays as it
