@@ -1,4 +1,4 @@
-# The formula for the w3cj/homebrew-tap repo. scripts/release.sh fills in @URL@ and @SHA256@ and writes
+# The formula for the devvmhq/homebrew-tap repo. scripts/release.sh fills in @URL@ and @SHA256@ and writes
 # the result to dist/devvm.rb. Homebrew reads the version from the URL (devvm-<version>.tar.gz).
 class Devvm < Formula
   desc "Isolated Lima VM per project folder, with shared read-only toolchains"

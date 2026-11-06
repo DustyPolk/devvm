@@ -11,7 +11,7 @@ devvm runs on macOS 13 or newer and on Linux, on arm64 or x86_64, with Lima 2.0 
 On macOS, install devvm with Homebrew, which also installs Lima:
 
 ```sh
-brew install w3cj/tap/devvm
+brew install devvmhq/tap/devvm
 ```
 
 On Linux, install it with the install script, which also works on macOS and asks before it installs Lima, QEMU or access to `/dev/kvm`:

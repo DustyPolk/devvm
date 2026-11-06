@@ -5,7 +5,7 @@
 #   SHA256SUMS                          their checksums, which install.sh checks
 #   SHA256SUMS.minisig                  SHA256SUMS signed with the release key (minisign), which install.sh checks
 #   install.sh                          the install script, set to install this release and to trust the key
-#   devvm.rb                            the Homebrew formula for w3cj/homebrew-tap
+#   devvm.rb                            the Homebrew formula for devvmhq/homebrew-tap
 # Nothing is published. The version is VERSION's. The public key is packaging/minisign.pub (committed); the
 # secret key is the maintainer's, at DEVVM_MINISIGN_KEY (default ~/.minisign/devvm.key), never in the repo.
 #   scripts/release.sh          from the tag v<version>, which must exist and be signed (git tag -s)
@@ -110,4 +110,4 @@ git show "$commit:packaging/homebrew/devvm.rb" |
 echo "==> dist/ for devvm $v (from $ref):"
 (cd "$out" && ls -l devvm-*.tar.gz SHA256SUMS* install.sh devvm.rb 2>/dev/null) || true
 $sign || echo "(not signed: a test build without DEVVM_MINISIGN_KEY)"
-echo "Attach the archives, SHA256SUMS, SHA256SUMS.minisig and install.sh to the GitHub release v$v; devvm.rb goes in w3cj/homebrew-tap/Formula/."
+echo "Attach the archives, SHA256SUMS, SHA256SUMS.minisig and install.sh to the GitHub release v$v; devvm.rb goes in devvmhq/homebrew-tap/Formula/."
