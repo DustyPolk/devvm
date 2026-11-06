@@ -2834,6 +2834,11 @@ func ProjectFolderChangedStopped(dir string, vm string) M {
 	return M{id: "project_folder_changed_stopped", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
+// ProjectInVMFolder is [project_in_vm_folder]: "{{.dir}} is inside the folder that {{.vm}} mounts, so code in that VM can change this project's files and replace its folder. To keep the two projects apart, move this one out of that folder."
+func ProjectInVMFolder(dir string, vm string) M {
+	return M{id: "project_in_vm_folder", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // ProxyCAFailed is [proxy_ca_failed]: "Creating the proxy's CA in {{.dir}} failed."
 func ProxyCAFailed(dir string) M {
 	return M{id: "proxy_ca_failed", vals: []val{{"dir", dir}}}
@@ -4537,6 +4542,7 @@ var specs = map[string]spec{
 	"program_old_fix":                {fields: []string{"fix", "name", "version"}},
 	"project_folder_changed":         {fields: []string{"dir", "vm"}},
 	"project_folder_changed_stopped": {fields: []string{"dir", "vm"}},
+	"project_in_vm_folder":           {fields: []string{"dir", "vm"}},
 	"proxy_ca_failed":                {fields: []string{"dir"}},
 	"proxy_failed":                   {fields: []string{"reason"}},
 	"proxy_password_howto":           {},

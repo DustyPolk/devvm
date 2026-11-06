@@ -1030,6 +1030,10 @@ other = "{{.vm}} was made for {{.was}}.\nMove the VM to this folder, with its fi
 description = "dir is vm's project folder, which became a link or another folder after devvm found the VM, before it started it"
 other = "{{.dir}} became a link or another folder after devvm found {{.vm}}, so devvm didn't start the VM, which would have mounted it. Find what replaced it and put the project folder back, then run the command again."
 
+[project_in_vm_folder]
+description = "dir is the project folder of the VM devvm launches, inside the folder another project VM, vm, mounts read-write"
+other = "{{.dir}} is inside the folder that {{.vm}} mounts, so code in that VM can change this project's files and replace its folder. To keep the two projects apart, move this one out of that folder."
+
 [project_folder_changed_stopped]
 description = "dir is vm's project folder, which became a link or another folder while vm started"
 other = "{{.dir}} became a link or another folder while {{.vm}} started, so devvm stopped the VM, which may have mounted it. Find what replaced it and put the project folder back, then run the command again."

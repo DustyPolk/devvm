@@ -4,21 +4,38 @@
 # link. Replaced once devvm restart's stop ends, devvm refuses before the
 # start, its .git checks never run on the link's folder; replaced as Lima
 # starts the VM, devvm stops it again and refuses. Put back, it starts.
+# Each launch of the nested VM, its creation included, warns once that
+# the parent folder's VM mounts it, running or not; the parent's own
+# launch, a --clone VM's and devvm restart don't.
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 mkdir $WORK/app/inner
+mkdir $WORK/app/cloned
 mkdir $WORK/decoy
 cd $WORK/app
 exec git init -q
 exec devvm --network open
+! stderr project_in_vm_folder
+exec devvm stop
 cd $WORK/app/inner
 exec git init -q
 exec devvm --network open
 stdout '^==> creating_from image=base vm=devvm-inner-[0-9a-f]{14}$'
+stderr -count=1 '^devvm: project_in_vm_folder dir=/\S*/app/inner vm=devvm-app-[0-9a-f]{14}$'
+exec devvm
+stderr -count=1 '^devvm: project_in_vm_folder dir=/\S*/app/inner vm=devvm-app-[0-9a-f]{14}$'
+cd $WORK/app/cloned
+exec git init -q
+exec git commit -q --allow-empty -m init
+exec devvm --clone --network open
+! stderr project_in_vm_folder
+cd $WORK/app/inner
 
 # Replaced once its stop ends: refused before the start.
 exec sh -c 'echo "$WORK/app/inner $WORK/decoy" > "$STUB_DIR/stop-links"'
 stub_reset
 ! exec devvm restart
 stderr '^devvm: project_folder_changed dir=/\S*/app/inner vm=devvm-inner-[0-9a-f]{14}$'
+! stderr project_in_vm_folder
 stub_calls
 stdout '^limactl stop devvm-inner-[0-9a-f]{14}$'
 ! stdout 'limactl start'

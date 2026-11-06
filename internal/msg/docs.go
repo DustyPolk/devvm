@@ -119,6 +119,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"move_folder_changed":            "using/vms#a-moved-or-renamed-folder",
 	"project_folder_changed":         "using/vms#a-nested-project-replaced",
 	"project_folder_changed_stopped": "using/vms#a-nested-project-replaced",
+	"project_in_vm_folder":           "using/vms#a-nested-project-replaced",
 	"adopt_folder_there":             "using/vms#a-moved-or-renamed-folder",
 	"adopt_has_vm":                   "using/vms#a-moved-or-renamed-folder",
 	"adopt_clone":                    "using/vms#a-moved-or-renamed-folder",

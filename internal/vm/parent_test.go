@@ -228,6 +228,59 @@ func TestLookupParents(t *testing.T) {
 	}
 }
 
+// A launch warns once when a folder it's inside has a project VM that
+// mounts it (project_in_vm_folder), running or not, at the VM's creation
+// and at each launch after it; never for that VM itself, opened in a
+// subfolder or not, for a new --clone VM, or when the parent's VM is a
+// --clone VM, which mounts nothing.
+func TestWarnMounted(t *testing.T) {
+	e, _, _ := upEnv(t, allNative())
+	web := e.Dir
+	webSt := existingVM(t, e, Options{Network: "open"})
+	webVM := webSt.Name()
+	var warns msg.Recorder
+	fake(e).OnWarn = warns.Add
+	up := func(what string, o Options, want string) {
+		t.Helper()
+		warns.Reset()
+		err := (Launch{e}).Up(t.Context(), o)
+		if !o.Clone && err != nil {
+			t.Fatalf("%s: %v", what, msg.NamesOf(err))
+		}
+		n := 0
+		for _, w := range warns.Names() {
+			if strings.HasPrefix(w, "project_in_vm_folder ") {
+				n++
+				if w != want {
+					t.Errorf("%s: warned %q, want %q", what, w, want)
+				}
+			}
+		}
+		if want != "" && n != 1 || want == "" && n != 0 {
+			t.Errorf("%s: warned %d times: %q", what, n, warns.Names())
+		}
+	}
+	up("web's own", Options{}, "")
+	if err := (Lifecycle{e}).Stop(t.Context()); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	lib := subfolder(t, e, web, "src/lib")
+	e.Folder = FolderHere
+	nested := "project_in_vm_folder dir=" + lib + " vm=" + webVM
+	up("src/lib's new VM", Options{Network: "open"}, nested)
+	up("src/lib's VM again", Options{}, nested)
+	e.Folder = FolderAuto
+	subfolder(t, e, web, "docs")
+	up("web's VM in docs", Options{}, "")
+	subfolder(t, e, web, "tests")
+	up("a new --clone VM", Options{Network: "open", Clone: true}, "")
+	if err := set(t, webSt, KeyMode, ModeClone); err != nil {
+		t.Fatal(err)
+	}
+	e.Dir, e.Folder = lib, FolderHere
+	up("below a --clone VM", Options{}, "")
+}
+
 func vmNames(t *testing.T, e *Env) []string {
 	t.Helper()
 	ns, err := state.VMNames(e.Dirs)

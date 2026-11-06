@@ -382,32 +382,78 @@ func (e finder) parentVM(ctx context.Context) (*target, error) {
 	if hasGit(here) {
 		repo = here
 	}
+	var found *project.Folder
+	var fst *state.VM
+	err = e.parents(here, func(pf project.Folder, pst *state.VM) (bool, error) {
+		if !pst.Exists() {
+			if repo == "" && hasGit(pf.Dir) {
+				repo = pf.Dir
+			}
+			return true, nil
+		}
+		found, fst = &pf, pst
+		return false, nil
+	})
+	if err != nil || found == nil || !sameFolder(*found, fst) {
+		return nil, err
+	}
+	p, err := e.inspect(ctx, *found, fst)
+	if err != nil || !p.exists {
+		return nil, err
+	}
+	p.sub, p.repo = here, repo
+	return p, nil
+}
+
+// parents calls each with the folders dir is inside whose VM a command
+// in dir may use (project.Parents), nearest first, but those no VM can be
+// made for, and with each one's state, which needn't exist, until each
+// returns false or an error, which it returns.
+func (e finder) parents(dir string, each func(project.Folder, *state.VM) (bool, error)) error {
 	var rec recorded
-	for _, dir := range project.Parents(here, e.Dirs.Home) {
-		if _, err := project.New(dir, 0); err != nil {
+	for _, p := range project.Parents(dir, e.Dirs.Home) {
+		if _, err := project.New(p, 0); err != nil {
 			continue // a folder no VM can be made for
 		}
-		pf, pst, err := e.state(dir, &rec)
+		pf, pst, err := e.state(p, &rec)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if !pst.Exists() {
-			if repo == "" && hasGit(dir) {
-				repo = dir
-			}
-			continue
+		if more, err := each(pf, pst); err != nil || !more {
+			return err
 		}
-		if !sameFolder(pf, pst) {
-			return nil, nil
-		}
-		p, err := e.inspect(ctx, pf, pst)
-		if err != nil || !p.exists {
-			return nil, err
-		}
-		p.sub, p.repo = here, repo
-		return p, nil
 	}
-	return nil, nil
+	return nil
+}
+
+// mountedBy is the VM of the nearest folder dir is inside that mounts
+// that folder, and so dir, read-write: one whose state records the
+// folder and that was made for it, running or not, as it can write there
+// whenever it runs. A --clone VM mounts nothing, so it's passed over, and
+// so is a state that can't be read. "" for none.
+func (e finder) mountedBy(dir string) string {
+	vm := ""
+	_ = e.parents(dir, func(pf project.Folder, pst *state.VM) (bool, error) {
+		if pst.Exists() && !isClone(pst) && sameFolder(pf, pst) {
+			vm = pf.Name
+			return false, nil
+		}
+		return true, nil
+	})
+	return vm
+}
+
+// warnMounted warns, once a launch has found t, when another VM mounts
+// the folder t's VM mounts (mountedBy): code in that VM can change the
+// project's files and replace its folder (folderChanged). A --clone VM
+// (clone: a new one) mounts nothing, so it gets no warning.
+func (e finder) warnMounted(t *target, clone bool) {
+	if clone || t.st.Exists() && isClone(t.st) {
+		return
+	}
+	if vm := e.mountedBy(t.f.Dir); vm != "" {
+		e.Warn(msg.ProjectInVMFolder(t.f.Dir, vm))
+	}
 }
 
 // named finds the project VM name names, by its name or its ssh alias,
