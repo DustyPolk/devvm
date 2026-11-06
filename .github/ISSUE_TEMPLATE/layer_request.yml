@@ -1,0 +1,64 @@
+name: Built-in layer request
+description: Software many developers need that devvm could ship as a layer, like docker, desktop and nix, such as Postgres, a browser or Playwright.
+labels: ["enhancement", "layer", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A layer of your own works today: `devvm layer new NAME` writes a starter script that devvm runs in your VM's image ([your own layers](https://devvm.dev/docs/using/customizing/#your-own-layers)). A built-in layer is one devvm ships, with pinned, checksummed downloads for arm64 and x86_64 and its own network policy, so it suits software that many projects need. Only the first two questions need an answer: tell us what you know for the rest.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you ask
+      options:
+        - label: I searched the existing issues and found none for this layer.
+          required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What it is and what it's for
+      description: The software, and what you'd do with it in a VM.
+      placeholder: PostgreSQL, so a project's tests can run against a real database
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why built in
+      description: Why it should ship with devvm rather than be a layer of your own, such as how many projects or developers need it.
+    validations:
+      required: true
+  - type: textarea
+    id: install
+    attributes:
+      label: How it's installed today
+      description: An apt package, an upstream script or a tarball, and whether its releases are pinned and checksummed for arm64 and x86_64.
+      placeholder: Upstream's apt repository, or tarballs with SHA-256 sums on each release page
+  - type: textarea
+    id: runtime
+    attributes:
+      label: What it needs at run time
+      description: Services to start, ports, extra disk, and the hosts it downloads from, which the layer's network policy lets through.
+  - type: textarea
+    id: layers
+    attributes:
+      label: Other layers
+      description: Whether it needs another layer, such as desktop for a GUI app, or conflicts with one.
+  - type: dropdown
+    id: bases
+    attributes:
+      label: Bases it supports
+      description: devvm's own base is Ubuntu, and --from can start from Debian or Alpine.
+      multiple: true
+      options:
+        - Ubuntu
+        - Debian
+        - Alpine
+        - I don't know
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Helping
+      options:
+        - label: I'd help test it.
+        - label: I'd open a pull request for it.

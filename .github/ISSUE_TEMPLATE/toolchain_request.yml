@@ -1,0 +1,80 @@
+name: Toolchain request
+description: A language or runtime you'd like devvm to build in, such as .NET, Java, PHP, Ruby or Elixir.
+labels: ["enhancement", "toolchain", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        devvm builds each toolchain with mise into a shared tool image that VMs mount read-only, and picks it from a project's files. Until a toolchain is built in, a layer of your own can install it in your VMs ([your own layers](https://devvm.dev/docs/using/customizing/#your-own-layers)). Only the first three questions need an answer: tell us what you know for the rest.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you ask
+      options:
+        - label: I searched the existing issues and found none for this toolchain.
+          required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: The toolchain
+      description: Its usual name, and its mise tool name if you know it (what `mise registry NAME` prints).
+      placeholder: .NET (mise's dotnet)
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Files that should pick it
+      description: The project files that tell devvm a folder needs this toolchain.
+      placeholder: "*.csproj, *.sln, global.json"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why you need it
+      description: What you'd use it for, and how many of your projects need it.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: Whether the latest is enough or you need several major versions, and which.
+      placeholder: The latest LTS, and 8 for older projects
+  - type: input
+    id: source
+    attributes:
+      label: Official install source
+      description: Where the toolchain's own builds come from.
+      placeholder: https://dotnet.microsoft.com/download
+  - type: textarea
+    id: registries
+    attributes:
+      label: Package managers and their hosts
+      description: The package managers people use with it and the hosts they download from, which the toolchain's network policy lets through.
+      placeholder: "NuGet: api.nuget.org, globalcdn.nuget.org"
+  - type: textarea
+    id: writes
+    attributes:
+      label: What it writes into its own folder
+      description: Global installs, plugins or self-updates that write into the toolchain's install folder, which devvm has to send somewhere else because shared tools are read-only in VMs.
+      placeholder: "`dotnet tool install -g` writes to ~/.dotnet/tools"
+  - type: dropdown
+    id: builds
+    attributes:
+      label: Linux builds
+      description: devvm needs Linux arm64 and x86_64 builds, and musl ones for Alpine bases.
+      multiple: true
+      options:
+        - Linux arm64
+        - Linux x86_64
+        - musl (Alpine)
+        - I don't know
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Helping
+      options:
+        - label: I'd help test it.
+        - label: I'd open a pull request for it.
