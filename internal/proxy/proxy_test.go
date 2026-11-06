@@ -902,6 +902,11 @@ func TestMainRefuses(t *testing.T) {
 			t.Errorf("%q: no error", args)
 		}
 	}
+	// Token endpoints without IO.Capture: no login could be saved, nor the VM given placeholders.
+	if err := Main([]string{"-config", writeConfig(t, withCA(Capture{"codex", "auth.openai.com", "/oauth/token"}))}, std); err == nil ||
+		!strings.Contains(err.Error(), "captures without a capturer") {
+		t.Errorf("captures without IO.Capture: %v", err)
+	}
 	// A built-in policy devvm's files lack: a devvm bug, so the proxy never listens.
 	std.FS = fstest.MapFS{"layers/base.policy": {Data: []byte("base.test\n")}}
 	c := Config{Listen: "127.0.0.1:0", Password: "k3y", BuiltinPolicies: []string{"layers/base.policy", "layers/gone.policy"}}

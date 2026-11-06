@@ -1,0 +1,73 @@
+package netpolicy
+
+import (
+	"context"
+	"errors"
+	"slices"
+
+	"github.com/w3cj/devvm/internal/agentlogin"
+	"github.com/w3cj/devvm/internal/image"
+	"github.com/w3cj/devvm/internal/paths"
+	"github.com/w3cj/devvm/internal/proxy"
+	"github.com/w3cj/devvm/internal/secrets"
+	"github.com/w3cj/devvm/internal/state"
+	"github.com/w3cj/devvm/internal/tools"
+)
+
+// Capturer is a VM's proxy's capture of its agents' logins
+// (proxy.IO.Capture), in devvm _proxy's own process: a token request and
+// its reply go to devvm's store of the agent's logins (secrets.Store's
+// Capture), with the VM's placeholders, and once a login is saved, the
+// VM's bindings are written again, so its proxy puts the login in at once.
+type Capturer struct {
+	Dirs    paths.Dirs
+	Secrets *secrets.Store
+}
+
+// vm is the VM a capture is for, by its proxy's name for it, its
+// placeholders' salt, and the agent the exchange is for: of its agents
+// whose endpoint it went to, the VM's image's, when it has any of them
+// (agentlogin.Pick).
+func (c Capturer) vm(x proxy.Exchange) (*state.VM, string, string, error) {
+	st, err := state.ReadVM(c.Dirs, x.VM)
+	if err != nil {
+		return nil, "", "", err
+	}
+	n, err := Of(st)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if !st.Exists() || n.Made.ProxySalt == "" {
+		return nil, "", "", errors.New("the VM has no placeholders")
+	}
+	agents, own := x.Agents, image.AgentsOf(tools.Names(st))
+	if mine := slices.DeleteFunc(slices.Clone(agents), func(a string) bool { return !slices.Contains(own, a) }); len(mine) > 0 {
+		agents = mine
+	}
+	return st, n.Made.ProxySalt, agentlogin.Pick(agents, x.UserAgent), nil
+}
+
+// Request is the token request's body as it goes on, or the reply the VM
+// gets instead.
+func (c Capturer) Request(_ context.Context, x proxy.Exchange) (out, answer []byte, err error) {
+	_, salt, agent, err := c.vm(x)
+	if err != nil {
+		return nil, nil, err
+	}
+	return c.Secrets.CaptureRequest(agent, salt, x.ContentType, x.Body)
+}
+
+// Response saves the login in reply and returns what the VM gets, then
+// writes the VM's bindings again with it: when that fails, the login is
+// saved still, and the error comes with the VM's reply.
+func (c Capturer) Response(ctx context.Context, x proxy.Exchange, reply []byte) ([]byte, string, error) {
+	st, salt, agent, err := c.vm(x)
+	if err != nil {
+		return nil, "", err
+	}
+	out, err := c.Secrets.Capture(ctx, agent, salt, x.ContentType, x.Body, reply)
+	if err != nil {
+		return nil, "", err
+	}
+	return out, agent, c.Secrets.WriteFiles(ctx, st, salt)
+}

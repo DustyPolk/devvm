@@ -184,6 +184,7 @@ func devvmVars() map[string]string {
 		"internal/agentlogin.claudeTopKeys":       table,
 		"internal/agentlogin.claudeServerKeys":    table,
 		"internal/agentlogin.openaiAuth":          fixture,
+		"internal/agentlogin.endpoints":           table,
 		"internal/cli.version":                    ldflags,
 		"internal/testbuild.testBuild":            ldflags + ", by test builds only",
 		"internal/backend.Features":               table,

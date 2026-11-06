@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/w3cj/devvm/internal/agentlogin"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/daemon"
 	"github.com/w3cj/devvm/internal/image"
@@ -222,7 +223,7 @@ func (p *Proxy) config(ctx context.Context, st *state.VM, t Tier, key, lifeline 
 		Links: files.LinkList(), LinkSockets: p.Dirs.Run(),
 		DevvmSHA256: bin,
 		CA:          ca.Cert(), CAKey: ca.Key(), CANext: ca.NextCert(), CANextKey: ca.NextKey(),
-		Secrets: files.Secrets(),
+		Secrets: files.Secrets(), Captures: agentlogin.Endpoints(),
 	}
 	c.CASHA256, _ = image.SHA256File(ca.Cert())
 	c.CANextSHA256, _ = image.SHA256File(ca.NextCert())

@@ -113,6 +113,63 @@ func (s *Store) SaveLogin(ctx context.Context, kind string, data []byte) error {
 	return state.WriteFile(LoginFile(s.Dirs, kind), data)
 }
 
+// claudeOAuthRel is Claude Code's OAuth login, relative to a home folder,
+// where Claude Code keeps it on Linux and devvm's store keeps it too.
+const claudeOAuthRel = ".claude/.credentials.json"
+
+// loginHosts are the hosts of the token endpoints a VM's agents log in at
+// (agentlogin.Endpoints), which its allowlist has: its proxy captures
+// logins at every VM's, but only these are allowed.
+func loginHosts(st *state.VM) []string {
+	agents := image.AgentsOf(tools.Names(st))
+	var hosts []string
+	for _, c := range agentlogin.Endpoints() {
+		if slices.Contains(agents, c.Agent) {
+			hosts = append(hosts, c.Host)
+		}
+	}
+	return hosts
+}
+
+// captureFile is the file in devvm's store a login the proxy captured for
+// the agent goes in, its placeholders ending in salt: its login file, and
+// for claude its OAuth login's.
+func (s *Store) captureFile(kind, salt string) agentlogin.File {
+	f := s.login(kind, salt)
+	if kind == agentlogin.Claude {
+		f.Path = filepath.Join(s.Dirs.AgentLogins(kind), filepath.FromSlash(claudeOAuthRel))
+	}
+	return f
+}
+
+// CaptureRequest returns a token request a VM's proxy captures the reply
+// to, for the agent's login (proxy.Capturer's Request): its body as it
+// goes on, or the reply the VM gets instead (agentlogin.File.CaptureRequest).
+func (s *Store) CaptureRequest(kind, salt, ctype string, body []byte) (out, answer []byte, err error) {
+	if !slices.Contains(loginKinds, kind) {
+		return nil, nil, msg.NoSecret(kind)
+	}
+	return s.captureFile(kind, salt).CaptureRequest(ctype, body)
+}
+
+// Capture saves the agent's login in reply, its token endpoint's answer to
+// req, in devvm's store (agentlogin.File.Capture), the agent's logins
+// folder kept out of backups, and returns the reply the VM gets, with
+// placeholders ending in salt.
+func (s *Store) Capture(ctx context.Context, kind, salt, ctype string, req, reply []byte) ([]byte, error) {
+	if !slices.Contains(loginKinds, kind) {
+		return nil, msg.NoSecret(kind)
+	}
+	dir := s.Dirs.AgentLogins(kind)
+	if err := state.PrivateDir(dir); err != nil {
+		return nil, err
+	}
+	if err := s.ExcludeFromBackup(ctx, dir); err != nil {
+		return nil, err
+	}
+	return s.captureFile(kind, salt).Capture(ctype, req, reply)
+}
+
 // HasLogin reports whether devvm's store has a login file for the agent.
 func (s *Store) HasLogin(kind string) bool {
 	fi, err := os.Lstat(LoginFile(s.Dirs, kind))
@@ -444,7 +501,8 @@ func (s *Store) RefreshFiles(ctx context.Context, st *state.VM, salt string) err
 
 // writeFiles writes the VM's secret files: the bindings of its secrets
 // with a value saved, then its logins', and the allowlist they imply,
-// every bound secret's hosts (saved or not) and its logins', on 443.
+// every bound secret's hosts (saved or not), its logins' and its agents'
+// token endpoints' (loginHosts), on 443.
 func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, logins []proxy.Binding) error {
 	var list []proxy.Binding
 	var hosts []string
@@ -466,6 +524,8 @@ func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, login
 	for _, b := range logins {
 		hosts = append(hosts, b.Hosts...)
 	}
+	// Its agents log in through its proxy, on every tier.
+	hosts = append(hosts, loginHosts(st)...)
 	list = append(list, logins...)
 	// The VM's secret bindings, for its proxy (Config.Secrets): names,
 	// kinds, hosts, headers and placeholders, never values; and the

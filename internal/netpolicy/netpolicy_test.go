@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/w3cj/devvm/assets"
+	"github.com/w3cj/devvm/internal/agentlogin"
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/daemon"
@@ -508,7 +509,7 @@ func TestPrepare(t *testing.T) {
 		Policies:        []string{d.Policy(), files.Policy(), files.SecretsPolicy()},
 		Log:             files.EventLog(), ProxyLog: files.ProxyLog(), Lifeline: "/lima/vm/ha.pid",
 		CA: ca.Cert(), CAKey: ca.Key(), CANext: ca.NextCert(), CANextKey: ca.NextKey(),
-		Secrets: files.Secrets(),
+		Secrets: files.Secrets(), Captures: agentlogin.Endpoints(),
 		// Its links' list: in its run folder, devvm's alone.
 		Links: files.LinkList(), LinkSockets: d.Run(),
 		DevvmSHA256: bin, CASHA256: caSum, CANextSHA256: nextSum,

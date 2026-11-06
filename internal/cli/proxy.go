@@ -5,6 +5,8 @@ import (
 
 	"github.com/w3cj/devvm/assets"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
+	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/proxy"
 )
 
@@ -12,8 +14,9 @@ import (
 // its config (-config FILE). Hidden: it's not for users. Its flag is the
 // proxy's own (one dash or two), parsed by proxy.Main; its event log and
 // log lines are data, written to devvm's stdout and stderr. Its built-in
-// policies (its config's) come from devvm's own files in the binary, and
-// its secrets' values from devvm's store, looked up in this process.
+// policies (its config's) come from devvm's own files in the binary, its
+// secrets' values from devvm's store, looked up in this process, and the
+// logins it captures go there too.
 func newProxyCmd(a *app) *cobra.Command {
 	u := a.u
 	return &cobra.Command{
@@ -23,12 +26,17 @@ func newProxyCmd(a *app) *cobra.Command {
 		DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
 			store, err := a.secrets()
+			var d paths.Dirs
+			if err == nil {
+				d, err = a.dirs()
+			}
 			if err == nil {
 				err = proxy.Main(args, proxy.IO{
-					Stdout: u.Stdout(),
-					Stderr: u.Stderr(),
-					FS:     assets.FS, // the built-in policies, read from the binary
-					Secret: store.Get,
+					Stdout:  u.Stdout(),
+					Stderr:  u.Stderr(),
+					FS:      assets.FS, // the built-in policies, read from the binary
+					Secret:  store.Get,
+					Capture: netpolicy.Capturer{Dirs: d, Secrets: store},
 				})
 			}
 			if err != nil {

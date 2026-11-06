@@ -7,6 +7,8 @@
 // OAuth access tokens are refreshed here, on the host, and written back to the host's file, so the
 // host's login keeps working: a VM never holds a refresh token, so it can't rotate one away. A
 // refresh goes through the company proxy the VM's proxy goes through (proxy.RouteOf).
+// A login made inside a VM is captured from its token endpoint's reply (File.Capture, capture.go)
+// and saved in the store, the VM given placeholders.
 // Agents' settings files get their secret-looking values taken out (Redact).
 //
 // Formats (checked against upstream, 2026-10): Codex keeps OPENAI_API_KEY or tokens{id_token,
@@ -225,7 +227,14 @@ func accountClaims(tok, salt string) map[string]any {
 	return out
 }
 
+// openaiPlaceholder is the VM's in place of an OpenAI token (Codex's and opencode's): a JWT with
+// tok's account claims, ending in salt.
+func openaiPlaceholder(tok, salt string) string { return fakeJWT(accountClaims(tok, salt)) }
+
 // --- Codex ---
+
+// codexKeyPlaceholder is the VM's in place of Codex's API key.
+func codexKeyPlaceholder(salt string) string { return salted("sk-devvm-proxy-managed-codex", salt) }
 
 // login is one of agent's logins as a binding, of proxy.KindLogin: its value is File.Get's for name.
 func login(agent, name string, hosts []string, header, placeholder string) proxy.Binding {
@@ -235,11 +244,11 @@ func login(agent, name string, hosts []string, header, placeholder string) proxy
 func codexBindings(m map[string]any, salt string) []proxy.Binding {
 	var bs []proxy.Binding
 	if str(m, "OPENAI_API_KEY") != "" {
-		bs = append(bs, login(Codex, "codex-key", []string{"api.openai.com"}, "Authorization", salted("sk-devvm-proxy-managed-codex", salt)))
+		bs = append(bs, login(Codex, "codex-key", []string{"api.openai.com"}, "Authorization", codexKeyPlaceholder(salt)))
 	}
 	if t := obj(m, "tokens"); str(t, "access_token") != "" {
 		bs = append(bs, login(Codex, "codex", []string{"chatgpt.com", "api.openai.com"}, "Authorization",
-			fakeJWT(accountClaims(str(t, "access_token"), salt))))
+			openaiPlaceholder(str(t, "access_token"), salt)))
 	}
 	return bs
 }
@@ -261,11 +270,12 @@ func codexOthers(m map[string]any) []string {
 func codexVM(m map[string]any, salt string) map[string]any {
 	bs := codexBindings(m, salt)
 	t := obj(m, "tokens")
-	idClaims := accountClaims(str(t, "id_token"), salt)
+	// The placeholder Codex's API-key exchange sends back (CaptureRequest).
+	id := openaiPlaceholder(str(t, "id_token"), salt)
 	// Every token goes, bound or not (a login without an access token still has the others).
 	for _, k := range []string{"id_token", "refresh_token", "access_token"} {
 		if str(t, k) != "" {
-			t[k] = "devvm-proxy-managed"
+			t[k] = managed
 		}
 	}
 	for _, b := range bs {
@@ -273,7 +283,7 @@ func codexVM(m map[string]any, salt string) map[string]any {
 		case "codex-key":
 			m["OPENAI_API_KEY"] = b.Placeholder
 		case "codex":
-			t["id_token"] = fakeJWT(idClaims)
+			t["id_token"] = id
 			t["access_token"] = b.Placeholder
 			// Just refreshed, as far as the VM's Codex can tell: it never tries.
 			m["last_refresh"] = time.Now().UTC().Format(time.RFC3339)
@@ -343,7 +353,7 @@ func opencodeBindings(m map[string]any, salt string) []proxy.Binding {
 		}
 		ph := salted("devvm-proxy-managed-opencode-"+id, salt)
 		if id == "openai" && str(e, "type") == "oauth" {
-			ph = fakeJWT(accountClaims(str(e, "access"), salt)) // opencode reads the account from it
+			ph = openaiPlaceholder(str(e, "access"), salt) // opencode reads the account from it
 		}
 		bs = append(bs, login(Opencode, "opencode-"+id, p.hosts, p.header, ph))
 	}

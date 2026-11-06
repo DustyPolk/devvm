@@ -24,6 +24,7 @@ func TestFormatEvent(t *testing.T) {
 		{`{"time":"T","event":"blocked","host":"::1","port":80,"reason":"no"}`, "T  BLOCKED  [::1]:80  no"},
 		{`{"time":"T\u001b[2J","event":"forward","host":"a.test","port":443,"method":"GET","path":"/\n\u009bx\t"}`, "T[2J  allowed  a.test:443  GET /x"},
 		{`{"time":"T","event":"nix-cache","host":"cache.nixos.org","port":443,"method":"GET","path":"/nix/x.narinfo","reason":"hit"}`, "T  cache    cache.nixos.org:443  GET /nix/x.narinfo: hit"},
+		{`{"time":"T","event":"login","host":"auth.openai.com","port":443,"method":"POST","path":"/oauth/token","login":"codex"}`, "T  login    auth.openai.com:443  codex's login saved: POST /oauth/token"},
 		{`{"time":"T","event":"link","host":"db","port":5432,"target":"devvm-db-x"}`, "T  link     db:5432  to devvm-db-x"},
 		{`{"time":"T","event":"link_refused","host":"db","port":5432,"target":"devvm-db-x","reason":"unpublished"}`, "T  REFUSED  db:5432  to devvm-db-x: unpublished"},
 		{`{"time":"T","event":"link_target_stopped","host":"db","port":80,"target":"devvm-db-x"}`, "T  REFUSED  db:80  to devvm-db-x: it isn't running"},

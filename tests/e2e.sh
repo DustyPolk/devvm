@@ -394,9 +394,9 @@ P47180=$((47180 + po)) P47181=$((47181 + po)) P47182=$((47182 + po))
 P47195=$((47195 + po)) P47196=$((47196 + po)) P47197=$((47197 + po)) P47198=$((47198 + po))
 P47240=$((47240 + po)) P47241=$((47241 + po)) P47242=$((47242 + po)) P47243=$((47243 + po)) P47244=$((47244 + po))
 P47245=$((47245 + po)) P47246=$((47246 + po)) P47248=$((47248 + po)) P47249=$((47249 + po))
-P47613=$((47613 + po)) P18765=$((18765 + po)) P18766=$((18766 + po))
+P47199=$((47199 + po)) P47613=$((47613 + po)) P18765=$((18765 + po)) P18766=$((18766 + po))
 export P47160 P47161 P47162 P47163 P47164 P47170 P47171 P47172 P47173 P47174 P47175 P47176 P47177 P47178 \
-  P47180 P47181 P47182 P47195 P47196 P47197 P47198 P47240 P47241 P47242 P47243 P47244 P47245 P47246 P47248 P47249 \
+  P47180 P47181 P47182 P47195 P47196 P47197 P47198 P47199 P47240 P47241 P47242 P47243 P47244 P47245 P47246 P47248 P47249 \
   P47613 P18765 P18766
 unset DEVVM_MESSAGES DEVVM_UBUNTU_URL DEVVM_HOST_MISE CLAUDE_CODE_OAUTH_TOKEN DEVVM_FROM
 unset SSH_AUTH_SOCK   # your SSH agent is never reached: checks that need one start their own
@@ -2968,6 +2968,125 @@ check "and Codex's API key, from the VM's copy of its login" bash -c "
   grep '\"path\":\"/v1/models\"' '$events' | grep -q '\"secrets\":\[\"codex-key\"\]'"
 check "the home folder's and the store's login files are unchanged" bash -c "cmp -s '$nh/.codex/auth.json' '$work/codex-before.json' &&
   cmp -s '$nh/.claude.json' '$work/claude-before.json' && cmp -s '$logins/codex/.codex/auth.json' '$work/codex-before.json'"
+# A login made in the VM, captured by its proxy. OpenAI's token endpoint is faked by a company proxy
+# of this run's ($P47199) that answers a CONNECT to auth.openai.com itself, with a certificate from
+# the run's CA, which the launch puts among your CAs, so the VM's proxy trusts it: fake tokens for a
+# code (each holding e2efake, which no file in the VM may), and a fake API key for an exchange of
+# its fake id_token alone. The VM's requests are curl's, as Codex sends them.
+fake_token=$(cat <<'EOF'
+import base64, json, socket, ssl, sys, threading, urllib.parse
+port, cert, key, log = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ctx.load_cert_chain(cert, key)
+ctx.set_alpn_protocols(["http/1.1"])
+def b64(d): return base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()
+def jwt(c): return b64({"alg": "none"}) + "." + b64(c) + ".e2efake-sig"
+auth = {"chatgpt_account_id": "acct-e2e", "chatgpt_plan_type": "plus"}
+ID = jwt({"email": "e2e@devvm.test", "exp": 4070908800, "https://api.openai.com/auth": auth})
+AT = jwt({"exp": 4070908800, "https://api.openai.com/auth": auth, "e2efake": "access"})
+def head(f):
+    lines = []
+    while True:
+        l = f.readline()
+        if l in (b"\r\n", b"\n", b""):
+            return lines
+        lines.append(l.decode().strip())
+def answer(q):
+    g = q.get("grant_type", [""])[0]
+    if g == "authorization_code":
+        return {"id_token": ID, "access_token": AT, "refresh_token": "rt-e2efake-capture", "expires_in": 3600, "token_type": "Bearer"}
+    if g.endswith("token-exchange") and q.get("subject_token", [""])[0] == ID:
+        return {"access_token": "sk-e2efake-captured-key"}
+    return None
+def serve(c):
+    try:
+        req = head(c.makefile("rb"))
+        if not req or not req[0].startswith("CONNECT auth.openai.com:443 "):
+            c.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+            return
+        c.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
+        t = ctx.wrap_socket(c, server_side=True)
+        f = t.makefile("rb")
+        while True:
+            h = head(f)
+            if not h:
+                return
+            n = sum(int(x.split(":", 1)[1]) for x in h[1:] if x.lower().startswith("content-length:"))
+            body = f.read(n).decode()
+            with open(log, "a") as o:
+                o.write(h[0] + " " + urllib.parse.parse_qs(body).get("grant_type", [""])[0] + "\n")
+            r = answer(urllib.parse.parse_qs(body))
+            out = json.dumps(r or {"error": "invalid_grant"}).encode()
+            t.sendall(b"HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n" %
+                      (200 if r else 400, b"OK" if r else b"Bad Request", len(out)) + out)
+    except Exception as e:
+        print(e, file=sys.stderr)
+    finally:
+        c.close()
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", port))
+s.listen(16)
+while True:
+    c, _ = s.accept()
+    threading.Thread(target=serve, args=(c,), daemon=True).start()
+EOF
+)
+e2e_ca
+openssl req -new -newkey rsa:2048 -nodes -subj /CN=auth.openai.com -keyout "$cad/auth.key" -out "$cad/auth.csr" >/dev/null 2>&1 &&
+  openssl x509 -req -days 2 -in "$cad/auth.csr" -CA "$cad/ca.pem" -CAkey "$cad/ca.key" -CAcreateserial \
+    -extfile <(printf 'subjectAltName = DNS:auth.openai.com\nextendedKeyUsage = serverAuth\n') -out "$cad/auth.pem" >/dev/null 2>&1
+mkdir -p "$cafolder"; cp "$cad/ca.pem" "$cafolder/e2e.pem"
+: > "$work/token.log"
+python3 -I -c "$fake_token" "$P47199" "$cad/auth.pem" "$cad/auth.key" "$work/token.log" 2>"$work/token.err" &
+token_srv=$!
+sleep 1
+tokurl=http://127.0.0.1:$P47199
+# jget FILE KEY: the JSON file's value at KEY (dotted: tokens.account_id), None for null.
+jget() { python3 -I -c 'import json, sys
+v = json.load(open(sys.argv[1]))
+for k in sys.argv[2].split("."):
+    v = v[k]
+print(v)' "$1" "$2"; }
+export -f jget
+token_launch() { (cd "$n" && printf 'exit\n' | HOME=$nh CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake "$@" "$D" >"$work/last.log" 2>&1); }
+token_post() { in_vm "$vm" "curl -fsS -m 30 https://auth.openai.com/oauth/token -d '$1'"; }
+codex_code='grant_type=authorization_code&code=e2e-code&client_id=app_EMoamEEZ73f0CkXaXp7hrann&code_verifier=e2e&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback'
+# token_why: what the capture's checks look at, when one fails.
+token_why() {
+  echo "the fake endpoint got:"; cat "$work/token.log"; tail -n 5 "$work/token.err"
+  echo "the proxy log:"; tail -n 10 "$(vmdir "$vm")/logs/proxy.log"
+  echo "its events:"; grep -F auth.openai.com "$events" | tail -n 5; }
+token_capture() {
+  if ! { step "the launch through the fake endpoint" token_launch env HTTPS_PROXY="$tokurl" HTTP_PROXY="$tokurl" &&
+    step "the code's reply" token_post "$codex_code" >"$work/cap1.json" &&
+    step "the reply holds placeholders, and no refresh token" bash -c "! grep -q e2efake '$work/cap1.json' &&
+      [[ \$(jget '$work/cap1.json' refresh_token) == devvm-proxy-managed ]] &&
+      jget '$work/cap1.json' access_token | grep -q '\.devvm-placeholder\$' && jget '$work/cap1.json' id_token | grep -q '\.devvm-placeholder\$'" &&
+    step "the store has the real tokens, only yours to read" bash -c "a='$logins/codex/.codex/auth.json' &&
+      [[ \$(jget \"\$a\" tokens.refresh_token) == rt-e2efake-capture && \$(jget \"\$a\" tokens.account_id) == acct-e2e ]] &&
+      jget \"\$a\" tokens.access_token | grep -q e2efake &&
+      [[ \$(stat -c %a \"\$a\" 2>/dev/null || stat -f %Lp \"\$a\") == 600 ]]" &&
+    step "the API-key exchange of the VM's id_token" token_post "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&client_id=app_EMoamEEZ73f0CkXaXp7hrann&requested_token=openai-api-key&subject_token=$(jget "$work/cap1.json" id_token)&subject_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aid_token" >"$work/cap2.json" &&
+    step "the key is the VM's placeholder, the store's the real one" bash -c "
+      [[ \$(jget '$work/cap2.json' access_token) == sk-devvm-proxy-managed-codex-$salt ]] &&
+      [[ \$(jget '$logins/codex/.codex/auth.json' OPENAI_API_KEY) == sk-e2efake-captured-key ]]" &&
+    step "the proxy binds the captured login at once" bash -c "grep -q '\"name\":\"codex\"' '$(vmdir "$vm")/run/secrets.json' &&
+      grep -q '\"name\":\"codex-key\"' '$(vmdir "$vm")/run/secrets.json'" &&
+    step "the events name the logins, and no log holds a value" bash -c "
+      [[ \$(grep -c '\"event\":\"login\",\"host\":\"auth.openai.com\",\"port\":443,\"method\":\"POST\",\"path\":\"/oauth/token\",\"login\":\"codex\"' '$events') -ge 2 ]] &&
+      ! grep -rqs -e rt-e2efake-capture -e sk-e2efake-captured-key -e e2efake-sig '$(vmdir "$vm")/logs' '$XDG_DATA_HOME/devvm/logs'"; }; then
+    token_why; return 1
+  fi; }
+check_lines=60 check "a login made in the VM is captured: the store gets the real tokens, the VM placeholders and no refresh token, and nothing is logged" token_capture
+kill "$token_srv" 2>/dev/null; wait "$token_srv" 2>/dev/null
+rm -rf "$cafolder"
+check "the next launch, going directly, gives the VM the captured login as placeholders" bash -c "cd '$n' &&
+  printf 'exit\n' | env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy HOME='$nh' CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake '$D' >'$work/last.log' 2>&1 &&
+  ! grep -q '^  \"upstream\": {' '$pxc' && limactl shell --workdir / $vm bash -c 'cat ~/.codex/auth.json' </dev/null >'$work/vm-codex.json' &&
+  ! grep -q e2efake '$work/vm-codex.json' && [[ \$(jget '$work/vm-codex.json' tokens.refresh_token) == devvm-proxy-managed ]] &&
+  [[ \$(jget '$work/vm-codex.json' tokens.access_token) == \$(jget '$work/cap1.json' access_token) ]] &&
+  [[ \$(jget '$work/vm-codex.json' OPENAI_API_KEY) == sk-devvm-proxy-managed-codex-$salt ]]"
 # devvm secret with a fake GitHub token: in the Keychain under this run's service on macOS, else in
 # the sandbox's config folder; deleted at the end. macOS finds the Keychain through HOME, so the
 # VM's home links the Keychains folder (the link alone goes at the end).

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/netip"
 	"os"
+	"path"
 	"strings"
 	"syscall"
 )
@@ -68,6 +69,10 @@ type Config struct {
 	// Secrets is the VM's bindings file (BindingList, no values), read again when it changes; each
 	// binding's value comes from IO.Secret.
 	Secrets string `json:"secrets,omitempty"`
+	// Captures are agents' OAuth token endpoints, intercepted on :443 with the CA:
+	// their replies' logins are saved on the host through IO.Capture, and the VM gets
+	// placeholders (capture.go).
+	Captures []Capture `json:"captures,omitempty"`
 	// UpstreamCAs are CA certificates (PEM) that the proxy's own TLS connections trust besides the
 	// system's: the user's.
 	UpstreamCAs string `json:"upstream_cas,omitempty"`
@@ -184,6 +189,20 @@ func (c Config) check() error {
 	}
 	if c.CANext != "" && c.CA == "" {
 		return errors.New("ca_next needs ca")
+	}
+	return checkCaptures(c.Captures, c.CA != "")
+}
+
+// checkCaptures refuses token endpoints the proxy can't capture at: without a CA, which it
+// intercepts them with, or without an agent, a host name or a clean path.
+func checkCaptures(cs []Capture, withCA bool) error {
+	for _, x := range cs {
+		switch {
+		case !withCA:
+			return errors.New("captures need ca")
+		case x.Agent == "" || !HostOK(x.Host) || !strings.HasPrefix(x.Path, "/") || path.Clean(x.Path) != x.Path:
+			return fmt.Errorf("capture %q at %q, %q isn't one", x.Agent, x.Host, x.Path)
+		}
 	}
 	return nil
 }

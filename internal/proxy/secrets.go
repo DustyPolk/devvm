@@ -676,10 +676,26 @@ func (s *server) forwarder(scheme, target, host string, port int) (fwd http.Hand
 					e.Secrets = s.secrets.inject(pr.Out.Header, bs)
 				}
 			}
+			// A token endpoint's host's replies come as they are, or as gzip that Go's transport
+			// undoes, so the proxy reads them (capture.go).
+			if s.captures.has(host) {
+				pr.Out.Header.Del("Accept-Encoding")
+			}
+			// A captured request goes to the endpoint's own path, never the VM's spelling of it,
+			// which another handler there could read apart.
+			if c := captured(pr.In.Context()); c != nil {
+				pr.Out.URL.Path, pr.Out.URL.RawPath, pr.Out.URL.RawQuery = c.path, "", ""
+			}
 			s.events.record(e)
 		},
+		ModifyResponse: s.captureResponse(host, port), //nolint:bodyclose // ReverseProxy closes the reply's body; captureResponse closes the ones it replaces
+
 		// The error stays in the proxy's own log: it can name addresses the VM shouldn't learn.
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			if errors.Is(err, errCaptureRefused) {
+				s.refuseCapture(w, r, host, port, err)
+				return
+			}
 			s.log.Printf("%s:%d: %v", host, port, err)
 			http.Error(w, "devvm proxy: couldn't reach "+host, http.StatusBadGateway)
 		},
@@ -688,9 +704,21 @@ func (s *server) forwarder(scheme, target, host string, port int) (fwd http.Hand
 		return rp, tr.CloseIdleConnections
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.refuseMinting(w, r, host, port) {
-			rp.ServeHTTP(w, r)
+		if s.refuseMinting(w, r, host, port) {
+			return
 		}
+		// An agent's token endpoint's host: no informational reply reaches the VM unread, and a
+		// login at the endpoint is captured (capture.go).
+		if s.captures.has(host) {
+			w = no1xx{w}
+		}
+		if agents, at := s.captures.agents(host, r); len(agents) > 0 && s.interceptPorts[port] {
+			var ok bool
+			if r, ok = s.captureRequest(w, r, host, port, agents, at); !ok {
+				return
+			}
+		}
+		rp.ServeHTTP(w, r)
 	}), tr.CloseIdleConnections
 }
 

@@ -1,0 +1,292 @@
+package agentlogin
+
+import (
+	"encoding/json"
+	"errors"
+	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/w3cj/devvm/internal/proxy"
+)
+
+const (
+	formType = "application/x-www-form-urlencoded"
+	jsonType = "application/json"
+	salt     = "s417"
+)
+
+func form(kv ...string) []byte {
+	v := url.Values{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		v.Set(kv[i], kv[i+1])
+	}
+	return []byte(v.Encode())
+}
+
+func reply(m map[string]any) []byte { b, _ := json.Marshal(m); return b }
+
+// storeFile is a login file in a store of the test's own, not there yet.
+func storeFile(t *testing.T, kind, name string) File {
+	t.Helper()
+	return File{Kind: kind, Path: filepath.Join(t.TempDir(), "logins", kind, name), Salt: salt}
+}
+
+func readStore(t *testing.T, f File) map[string]any {
+	t.Helper()
+	m, err := readJSON(f.Path)
+	must(t, err)
+	if fi, err := os.Stat(f.Path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("%s: %v, %v", f.Path, fi.Mode(), err)
+	}
+	return m
+}
+
+// capture is f.Capture, its reply to the VM decoded, checked to hold none of secrets.
+func capture(t *testing.T, f File, ctype string, req, rep []byte, secrets ...string) map[string]any {
+	t.Helper()
+	out, err := f.Capture(ctype, req, rep)
+	must(t, err)
+	for _, s := range secrets {
+		if strings.Contains(string(out), s) {
+			t.Errorf("the VM's reply holds %q: %s", s, out)
+		}
+	}
+	var vm map[string]any
+	must(t, json.Unmarshal(out, &vm))
+	if n, _ := vm["expires_in"].(float64); time.Duration(n)*time.Second < 50*365*24*time.Hour {
+		t.Errorf("the VM's token expires in %vs", vm["expires_in"])
+	}
+	return vm
+}
+
+// openaiTokens are an OpenAI login's id_token and access token, with its account's claims.
+func openaiTokens() (string, string) {
+	return jwtWith(time.Now().Add(time.Hour), map[string]any{"email": "a@b", "https://api.openai.com/auth": openaiAuth}),
+		jwtWith(time.Now().Add(time.Hour), map[string]any{"https://api.openai.com/auth": openaiAuth, "scp": "x"})
+}
+
+// Codex's ChatGPT login, as codex login makes it: the code's reply saved in the store as Codex
+// keeps it, the VM given the placeholders its bindings name; then the API-key exchange, whose
+// id_token placeholder becomes the real one on its way out, and whose key is saved and replaced.
+func TestCodexCapture(t *testing.T) {
+	idToken, accessToken := openaiTokens()
+	f := storeFile(t, Codex, "auth.json")
+	code := form("grant_type", grantCode, "code", "c", "client_id", openaiClientID, "code_verifier", "v")
+	if b, answer, err := f.CaptureRequest(formType, code); err != nil || string(b) != string(code) || answer != nil {
+		t.Fatalf("the code's request = %q, %v; want it as it is", b, err)
+	}
+	vm := capture(t, f, formType, code, reply(map[string]any{
+		"id_token": idToken, "access_token": accessToken, "refresh_token": "rt-real", "expires_in": 3600, "token_type": "Bearer", "extra": "x",
+	}), idToken, accessToken, "rt-real")
+	m := readStore(t, f)
+	tk := obj(m, "tokens")
+	if str(tk, "id_token") != idToken || str(tk, "access_token") != accessToken || str(tk, "refresh_token") != "rt-real" ||
+		str(tk, "account_id") != "acct-1" || m["auth_mode"] != "chatgpt" || m["last_refresh"] == nil {
+		t.Errorf("the store's login = %v", m)
+	}
+	if v, ok := m["OPENAI_API_KEY"]; !ok || v != nil {
+		t.Errorf("OPENAI_API_KEY = %v, %v; want null", v, ok)
+	}
+	bs := bindings(t, f)
+	if len(bs) != 1 || bs[0].Name != "codex" || vm["access_token"] != bs[0].Placeholder {
+		t.Errorf("the VM's access token %v, bindings %+v", vm["access_token"], bs)
+	}
+	if vm["refresh_token"] != managed || vm["token_type"] != "Bearer" || vm["extra"] != nil {
+		t.Errorf("the VM's reply = %v", vm)
+	}
+	if c := jwtClaims(vm["id_token"].(string)); c["email"] != "a@b" || chatgptAccount(vm["id_token"].(string)) != "acct-1" {
+		t.Errorf("the VM's id_token claims = %v", c)
+	}
+
+	vm0 := vm
+	exchange := func(subject string) []byte {
+		return form("grant_type", grantExchange, "client_id", openaiClientID, "requested_token", apiKeyToken,
+			"subject_token", subject, "subject_token_type", idTokenType)
+	}
+	out, _, err := f.CaptureRequest(formType, exchange(vm["id_token"].(string)))
+	if q, _ := url.ParseQuery(string(out)); err != nil || q.Get("subject_token") != idToken || q.Get("requested_token") != apiKeyToken {
+		t.Fatalf("the exchange goes out as %q, %v", out, err)
+	}
+	for _, other := range []string{"", "x", openaiPlaceholder(idToken, "another-vm")} {
+		if _, _, err := f.CaptureRequest(formType, exchange(other)); err == nil {
+			t.Errorf("an exchange for %q went out", other)
+		}
+	}
+	key := "sk-real-key"
+	vm = capture(t, f, formType, exchange(vm["id_token"].(string)), reply(map[string]any{"access_token": key}), key)
+	if vm["access_token"] != codexKeyPlaceholder(salt) || str(readStore(t, f), "OPENAI_API_KEY") != "sk-real-key" {
+		t.Errorf("the exchange: VM %v, store %v", vm, readStore(t, f))
+	}
+	bs = bindings(t, f)
+	if len(bs) != 2 || bs[0].Name != "codex-key" || bs[0].Placeholder != codexKeyPlaceholder(salt) {
+		t.Fatalf("bindings = %+v", bs)
+	}
+
+	// The VM's own refresh (Codex's is JSON) carries managed: it goes nowhere, and the VM gets the
+	// store's login as placeholders again.
+	refresh, _ := json.Marshal(map[string]string{"grant_type": grantRefresh, "client_id": openaiClientID, "refresh_token": managed})
+	out, answer, err := f.CaptureRequest(jsonType, refresh)
+	var again map[string]any
+	if err != nil || out != nil || json.Unmarshal(answer, &again) != nil || again["access_token"] != bs[1].Placeholder ||
+		again["refresh_token"] != managed || again["id_token"] != vm0["id_token"] || strings.Contains(string(answer), "rt-real") {
+		t.Errorf("the VM's refresh: %q, %s, %v", out, answer, err)
+	}
+	// A refresh of another refresh token goes out, and its reply is captured: the store keeps only
+	// the newest refresh token, and the rest.
+	refresh, _ = json.Marshal(map[string]string{"grant_type": grantRefresh, "client_id": openaiClientID, "refresh_token": "rt-elsewhere"})
+	if b, answer, err := f.CaptureRequest(jsonType, refresh); err != nil || string(b) != string(refresh) || answer != nil {
+		t.Errorf("another refresh: %q, %q, %v", b, answer, err)
+	}
+	capture(t, f, jsonType, refresh, reply(map[string]any{"access_token": "at-2", "refresh_token": "rt-2"}), "at-2", "rt-2")
+	m = readStore(t, f)
+	if tk := obj(m, "tokens"); str(tk, "refresh_token") != "rt-2" || str(tk, "access_token") != "at-2" || str(tk, "id_token") != idToken ||
+		str(m, "OPENAI_API_KEY") != "sk-real-key" {
+		t.Errorf("after the refresh: %v", m)
+	}
+	// A new login replaces the old one, its key included.
+	capture(t, f, formType, code, reply(map[string]any{"id_token": idToken, "access_token": "at-3", "refresh_token": "rt-3"}))
+	if m := readStore(t, f); m["OPENAI_API_KEY"] != nil || str(obj(m, "tokens"), "refresh_token") != "rt-3" {
+		t.Errorf("after a new login: %v", m)
+	}
+}
+
+// What doesn't parse as a login is refused, and nothing is saved: a request devvm doesn't read (a
+// grant it doesn't capture, a JSON exchange, another type), a reply that isn't JSON, or one
+// without the tokens a login needs.
+func TestCaptureRefuses(t *testing.T) {
+	code := form("grant_type", grantCode, "code", "c")
+	for _, tc := range []struct {
+		name, kind, ctype string
+		req, reply        []byte
+	}{
+		{"client credentials", Codex, formType, form("grant_type", "client_credentials"), reply(map[string]any{"access_token": "a"})},
+		{"no grant", Codex, formType, form("code", "c"), reply(map[string]any{"access_token": "a"})},
+		{"a JSON exchange", Codex, jsonType, []byte(`{"grant_type":"` + grantExchange + `","requested_token":"openai-api-key","subject_token_type":"` + idTokenType + `"}`), reply(map[string]any{"access_token": "a"})},
+		{"opencode's exchange", Opencode, formType, form("grant_type", grantExchange, "requested_token", apiKeyToken, "subject_token_type", idTokenType), reply(map[string]any{"access_token": "a"})},
+		{"another type", Codex, "text/plain", code, reply(map[string]any{"access_token": "a"})},
+		{"a request that isn't JSON", Claude, jsonType, []byte("grant_type=authorization_code"), reply(map[string]any{"access_token": "a", "refresh_token": "r"})},
+		{"a reply that isn't JSON", Codex, formType, code, []byte("<html>")},
+		{"a reply of null", Codex, formType, code, []byte("null")},
+		{"no id_token", Codex, formType, code, reply(map[string]any{"access_token": "a", "refresh_token": "r"})},
+		{"no refresh token", Opencode, formType, code, reply(map[string]any{"access_token": "a"})},
+		{"no access token", Claude, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"refresh_token": "r"})},
+		{"a field twice in a form", Codex, formType, append(form("grant_type", grantCode), "&grant_type=refresh_token"...), reply(map[string]any{"access_token": "a"})},
+		{"a field twice in JSON", Claude, jsonType, []byte(`{"grant_type":"authorization_code","grant_type":"refresh_token"}`), reply(map[string]any{"access_token": "a", "refresh_token": "r"})},
+		{"tokens that aren't strings", Claude, jsonType, []byte(`{"grant_type":"authorization_code"}`), reply(map[string]any{"access_token": 1, "refresh_token": 2})},
+	} {
+		f := storeFile(t, tc.kind, "auth.json")
+		if out, err := f.Capture(tc.ctype, tc.req, tc.reply); err == nil {
+			t.Errorf("%s: captured, the VM given %s", tc.name, out)
+		}
+		if _, err := os.Stat(f.Path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s: the store's file is there: %v", tc.name, err)
+		}
+	}
+	if _, err := (File{Kind: "other", Path: filepath.Join(t.TempDir(), "x")}).Capture(formType, code, reply(map[string]any{"access_token": "a"})); err == nil {
+		t.Error("a login of no agent's captured")
+	}
+}
+
+// opencode's OpenAI login: saved as opencode keeps it, beside its other providers, the VM given the
+// placeholder its binding names and never the refresh token.
+func TestOpencodeCapture(t *testing.T) {
+	idToken, accessToken := openaiTokens()
+	f := storeFile(t, Opencode, "auth.json")
+	must(t, os.MkdirAll(filepath.Dir(f.Path), 0o700))
+	must(t, os.WriteFile(f.Path, []byte(`{"anthropic":{"type":"api","key":"sk-ant-api"},"openai":{"type":"api","key":"sk-old"}}`), 0o600))
+	code := form("grant_type", grantCode, "code", "c", "redirect_uri", "http://localhost:1455/auth/callback")
+	vm := capture(t, f, formType, code, reply(map[string]any{
+		"id_token": idToken, "access_token": accessToken, "refresh_token": "rt-real", "expires_in": 7200,
+	}), idToken, accessToken, "rt-real")
+	m := readStore(t, f)
+	e := obj(m, "openai")
+	exp, _ := e["expires"].(json.Number).Int64()
+	if str(e, "type") != "oauth" || str(e, "access") != accessToken || str(e, "refresh") != "rt-real" || str(e, "accountId") != "acct-1" ||
+		e["key"] != nil || time.Until(time.UnixMilli(exp)) < 110*time.Minute || time.Until(time.UnixMilli(exp)) > 2*time.Hour {
+		t.Errorf("the store's openai login = %v", e)
+	}
+	if str(obj(m, "anthropic"), "key") != "sk-ant-api" {
+		t.Errorf("another provider's login changed: %v", m)
+	}
+	var ph string
+	for _, b := range bindings(t, f) {
+		if b.Name == "opencode-openai" {
+			ph = b.Placeholder
+		}
+	}
+	if ph == "" || vm["access_token"] != ph || vm["refresh_token"] != managed || chatgptAccount(vm["id_token"].(string)) != "acct-1" {
+		t.Errorf("the VM's reply %v, the binding's placeholder %q", vm, ph)
+	}
+	// The VM's own refresh, with managed or with its copy's refresh token, the access token's
+	// placeholder, is answered with the placeholders.
+	for _, rt := range []string{managed, ph} {
+		if out, answer, err := f.CaptureRequest(formType, form("grant_type", grantRefresh, "refresh_token", rt)); err != nil || out != nil ||
+			!strings.Contains(string(answer), ph) || strings.Contains(string(answer), "rt-real") {
+			t.Errorf("the VM's refresh with %.20s: %q, %s, %v", rt, out, answer, err)
+		}
+	}
+	// A refresh keeps the account and takes the newest refresh token.
+	capture(t, f, formType, form("grant_type", grantRefresh, "refresh_token", "rt-elsewhere"), reply(map[string]any{"access_token": "at-2", "refresh_token": "rt-2"}))
+	if e := obj(readStore(t, f), "openai"); str(e, "refresh") != "rt-2" || str(e, "access") != "at-2" || str(e, "accountId") != "acct-1" {
+		t.Errorf("after the refresh: %v", e)
+	}
+}
+
+// Claude Code's OAuth login: saved as Claude Code keeps it (.credentials.json's claudeAiOauth), the
+// VM given its account and organization, a placeholder of its own and no refresh token.
+func TestClaudeCapture(t *testing.T) {
+	f := storeFile(t, Claude, ".credentials.json")
+	req := []byte(`{"grant_type":"authorization_code","code":"c","client_id":"x","code_verifier":"v","state":"s"}`)
+	vm := capture(t, f, jsonType+"; charset=utf-8", req, reply(map[string]any{ //nolint:gosec // a test's fake login
+		"access_token": "sk-ant-oat01-real", "refresh_token": "sk-ant-ort01-real", "expires_in": 28800, "scope": "user:inference user:profile",
+		"token_type": "Bearer", "account": map[string]any{"uuid": "u-1", "email_address": "a@b"}, "organization": map[string]any{"uuid": "o-1"},
+	}), "sk-ant-oat01-real", "sk-ant-ort01-real")
+	o := obj(readStore(t, f), "claudeAiOauth")
+	exp, _ := o["expiresAt"].(json.Number).Int64()
+	if str(o, "accessToken") != "sk-ant-oat01-real" || str(o, "refreshToken") != "sk-ant-ort01-real" ||
+		time.Until(time.UnixMilli(exp)) < 7*time.Hour || !slices.Equal(strs(o["scopes"]), []string{"user:inference", "user:profile"}) {
+		t.Errorf("the store's login = %v", o)
+	}
+	if vm["access_token"] != "sk-ant-oat01-devvm-proxy-managed-oauth-"+salt || vm["refresh_token"] != managed ||
+		obj(vm, "account")["email_address"] != "a@b" || obj(vm, "organization")["uuid"] != "o-1" || vm["scope"] != "user:inference user:profile" {
+		t.Errorf("the VM's reply = %v", vm)
+	}
+}
+
+func strs(v any) []string {
+	var out []string
+	for _, x := range v.([]any) {
+		out = append(out, x.(string))
+	}
+	return out
+}
+
+// VMs capture Codex's and opencode's logins, at OpenAI's token endpoint, and not Claude Code's; a
+// request there is opencode's when Bun or opencode sends it.
+func TestEndpointsAndPick(t *testing.T) {
+	want := []proxy.Capture{{Agent: Codex, Host: "auth.openai.com", Path: "/oauth/token"}, {Agent: Opencode, Host: "auth.openai.com", Path: "/oauth/token"}}
+	if got := Endpoints(); !slices.Equal(got, want) {
+		t.Errorf("Endpoints() = %+v", got)
+	}
+	for _, tc := range []struct {
+		agents    []string
+		ua, agent string
+	}{
+		{[]string{Codex}, "Bun/1.2", Codex},
+		{[]string{Opencode}, "codex_cli_rs/0.1", Opencode},
+		{[]string{Codex, Opencode}, "codex_cli_rs/0.1", Codex},
+		{[]string{Codex, Opencode}, "", Codex},
+		{[]string{Codex, Opencode}, "Bun/1.2.3", Opencode},
+		{[]string{Opencode, Codex}, "opencode/1.19.5", Opencode},
+		{nil, "", ""},
+	} {
+		if got := Pick(tc.agents, tc.ua); got != tc.agent {
+			t.Errorf("Pick(%v, %q) = %q, want %q", tc.agents, tc.ua, got, tc.agent)
+		}
+	}
+}

@@ -23,6 +23,7 @@ func TestConfigRoundTrip(t *testing.T) {
 		CA: "/ca/ca.pem", CAKey: "/ca/ca.key", CANext: "/ca/next.pem", CANextKey: "/ca/next.key", Secrets: "/r/secrets.json",
 		UpstreamCAs: "PEM", Upstream: &Upstream{HTTPS: "http://u:p@corp:3128", NoProxy: ".corp"}, //nolint:gosec // G101: a fake company proxy's fake password
 		NixCache: "/n", NixCacheMax: 5, Links: "/r/links.json", LinkSockets: "/run",
+		Captures:    []Capture{{Agent: "codex", Host: "auth.openai.com", Path: "/oauth/token"}},
 		DevvmSHA256: "aa", CASHA256: "bb", CANextSHA256: "dd",
 	}
 	got, err := ReadConfig(writeConfig(t, c))
@@ -42,6 +43,7 @@ func TestConfigRoundTrip(t *testing.T) {
 		"cas":      func(c *Config) { c.UpstreamCAs = "PEM2" },
 		"upstream": func(c *Config) { c.Upstream = nil },
 		"listen":   func(c *Config) { c.Listen = "127.0.0.1:4001" },
+		"captures": func(c *Config) { c.Captures = nil },
 	} {
 		o := c
 		change(&o)
@@ -52,6 +54,11 @@ func TestConfigRoundTrip(t *testing.T) {
 	if o := c; func() bool { o.Version = 7; return o.Sum() != sum }() {
 		t.Errorf("Sum depends on the Version a config was given; Encode sets it")
 	}
+}
+
+// withCA is a good config with a CA and the capture c.
+func withCA(c Capture) Config {
+	return Config{Listen: "127.0.0.1:0", Password: "k3y", CA: "/ca.pem", CAKey: "/ca.key", Captures: []Capture{c}}
 }
 
 // ReadConfig refuses a file that isn't devvm's for this proxy alone, of another version, holding a
@@ -99,6 +106,11 @@ func TestReadConfigRefuses(t *testing.T) {
 		{"a CA without its key", write("ca", enc(Config{Listen: "127.0.0.1:0", Password: "k3y", CA: "/ca.pem"}), 0o600), nil, "ca and ca_key go together"},
 		{"a next CA without its key", write("next", enc(Config{Listen: "127.0.0.1:0", Password: "k3y", CA: "/ca.pem", CAKey: "/ca.key", CANext: "/next.pem"}), 0o600), nil, "ca_next and ca_next_key go together"},
 		{"a next CA alone", write("nextonly", enc(Config{Listen: "127.0.0.1:0", Password: "k3y", CANext: "/next.pem", CANextKey: "/next.key"}), 0o600), nil, "ca_next needs ca"},
+		{"captures without a CA", write("capca", enc(Config{Listen: "127.0.0.1:0", Password: "k3y", Captures: []Capture{{"codex", "auth.openai.com", "/oauth/token"}}}), 0o600), nil, "captures need ca"},
+		{"a capture without an agent", write("capagent", enc(withCA(Capture{"", "auth.openai.com", "/oauth/token"})), 0o600), nil, "isn't one"},
+		{"a capture at no host", write("caphost", enc(withCA(Capture{"codex", "auth openai", "/oauth/token"})), 0o600), nil, "isn't one"},
+		{"a capture's unclean path", write("cappath", enc(withCA(Capture{"codex", "auth.openai.com", "/oauth/../token"})), 0o600), nil, "isn't one"},
+		{"a capture's relative path", write("caprel", enc(withCA(Capture{"codex", "auth.openai.com", "oauth/token"})), 0o600), nil, "isn't one"},
 		{"missing", filepath.Join(dir, "missing"), os.ErrNotExist, ""},
 	} {
 		done := make(chan error, 1)

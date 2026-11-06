@@ -75,7 +75,8 @@ type server struct {
 	events   *events
 	egress   *egress  // where a connection may go: the policy, the floor, the company proxy
 	secrets  *secrets // Config.Secrets: the bindings and their values
-	ca       *ca      // Config.CA, and its next (Config.CANext), for interception; nil: none
+	captures *captures
+	ca       *ca // Config.CA, and its next (Config.CANext), for interception; nil: none
 	// upstreamCAs is what the proxy's own TLS connections trust: nil, the system roots;
 	// Config.UpstreamCAs, the user's CAs besides them.
 	upstreamCAs *x509.CertPool
@@ -104,6 +105,7 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 	s := &server{
 		vm: c.VM, password: c.Password, log: l, events: ev,
 		secrets:        newSecrets(c.Secrets, std.Secret, l),
+		captures:       newCaptures(c.Captures, std.Capture),
 		interceptPorts: map[int]bool{443: true},
 		links:          newLinks(c.Links, c.LinkSockets, c.VM, l, ev),
 		connects:       make(chan struct{}, maxConnects),
@@ -189,7 +191,7 @@ func (s *server) authorized(r *http.Request) bool {
 type Event struct {
 	Time    string   `json:"time"`
 	VM      string   `json:"vm"`
-	Event   string   `json:"event"` // tunnel, intercept, forward, blocked
+	Event   string   `json:"event"` // tunnel, intercept, forward, login, blocked
 	Host    string   `json:"host"`
 	Port    int      `json:"port"`
 	Method  string   `json:"method,omitempty"`
@@ -198,7 +200,10 @@ type Event struct {
 	Reason  string   `json:"reason,omitempty"`
 	Agent   string   `json:"agent,omitempty"`
 	Secrets []string `json:"secrets,omitempty"` // names of secrets put in, never values
-	Refused bool     `json:"refused,omitempty"` // blocked whatever the allowlist says: no rule allows it
+	// Login is the agent whose login a token endpoint's reply held (a login event): saved on the
+	// host, the VM given placeholders. Never a value.
+	Login   string `json:"login,omitempty"`
+	Refused bool   `json:"refused,omitempty"` // blocked whatever the allowlist says: no rule allows it
 	// The company proxy it went through (Config.Upstream), as host:port: never its credentials.
 	Upstream string `json:"upstream,omitempty"`
 	// The VM a link's connection went to (devvm _links's events, Host the link's name): never the proxy's.
@@ -569,7 +574,7 @@ func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if up := s.egress.up.route(host, port, false); up != nil {
 		e.Upstream = up.addr
 	}
-	if bs := s.secrets.forHost(host); s.interceptPorts[port] && len(bs) > 0 && s.ca != nil {
+	if s.interceptPorts[port] && s.ca != nil && (s.captures.has(host) || len(s.secrets.forHost(host)) > 0) {
 		if s.caEndedRefusal(w, e) {
 			return
 		}
@@ -790,6 +795,9 @@ type IO struct {
 	// Secret looks a binding's value up, in this process (devvm's secrets' store), for
 	// Config.Secrets' bindings: required with them.
 	Secret Lookup
+	// Capture saves the logins in Config.Captures' replies, in this process (devvm's store of
+	// agents' logins): required with them.
+	Capture Capturer
 }
 
 // Main runs devvm _proxy with args (its flags): the proxy itself, with -config's file, until the
@@ -823,6 +831,9 @@ func run(args []string, std IO, tick time.Duration) error {
 	}
 	if (c.Secrets != "" || c.Upstream != nil && c.Upstream.Secret != "") && std.Secret == nil {
 		return errors.New("secrets without a lookup")
+	}
+	if len(c.Captures) > 0 && std.Capture == nil {
+		return errors.New("captures without a capturer")
 	}
 	return serve(c, std, tick)
 }

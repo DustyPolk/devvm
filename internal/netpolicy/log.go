@@ -270,6 +270,8 @@ func FormatEvent(line string) (string, bool) {
 		d = e.Method + " " + e.Path
 	case "intercept":
 		d += ", decrypted"
+	case "login": // an agent's login, captured at its token endpoint
+		what, d = "login", e.Login+"'s login saved: "+e.Method+" "+e.Path
 	case "nix-cache": // the shared Nix cache: a hit, fetched, or why not
 		what, d = "cache", e.Method+" "+e.Path+": "+e.Reason
 	case "link", "link_refused", "link_target_stopped", "link_limit": // devvm _links's

@@ -360,6 +360,53 @@ func TestNamesAndLogins(t *testing.T) {
 	}
 }
 
+// A login the proxy captured goes in the store: Codex's in its auth.json,
+// Claude Code's in its .credentials.json, the agent's logins folder kept out
+// of backups; an agent devvm keeps no logins of is refused. A VM's
+// allowlist has its agents' token endpoints' hosts.
+func TestCapture(t *testing.T) {
+	s, _ := testStore(t, false, nil)
+	var excluded []string
+	s.ExcludeFromBackup = func(_ context.Context, dir string) error { excluded = append(excluded, dir); return nil }
+	code := []byte("grant_type=authorization_code&code=c")
+	if b, answer, err := s.CaptureRequest("codex", "salt", "", code); err != nil || string(b) != string(code) || answer != nil {
+		t.Errorf("CaptureRequest = %q, %q, %v", b, answer, err)
+	}
+	tok := "eyJhbGciOiJub25lIn0.eyJleHAiOjF9.sig"
+	reply := []byte(`{"id_token":"` + tok + `","access_token":"` + tok + `","refresh_token":"rt-real"}`)
+	out, err := s.Capture(t.Context(), "codex", "salt", "", code, reply)
+	if err != nil || strings.Contains(string(out), "rt-real") {
+		t.Fatalf("Capture = %s, %v", out, err)
+	}
+	if b, err := os.ReadFile(LoginFile(s.Dirs, "codex")); err != nil || !strings.Contains(string(b), "rt-real") || !s.HasLogin("codex") {
+		t.Errorf("the store's Codex login: %s, %v", b, err)
+	}
+	claude := []byte(`{"grant_type":"authorization_code","code":"c"}`)
+	if _, err := s.Capture(t.Context(), "claude", "salt", "application/json", claude, []byte(`{"access_token":"at-real","refresh_token":"rt-real"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(s.Dirs.AgentLogins("claude"), ".claude", ".credentials.json")); err != nil || !strings.Contains(string(b), "claudeAiOauth") {
+		t.Errorf("the store's Claude Code login: %s, %v", b, err)
+	}
+	if !slices.Equal(excluded, []string{s.Dirs.AgentLogins("codex"), s.Dirs.AgentLogins("claude")}) {
+		t.Errorf("kept out of backups: %q", excluded)
+	}
+	for _, f := range []func() error{
+		func() error { _, _, err := s.CaptureRequest("aider", "salt", "", code); return err },
+		func() error { _, err := s.Capture(t.Context(), "aider", "salt", "", code, reply); return err },
+	} {
+		if err := f(); msg.NamesOf(err) != "no_secret secret=aider" {
+			t.Errorf("another agent: %v", msg.NamesOf(err))
+		}
+	}
+	if got := loginHosts(newVM(t, s.Dirs, vm1, "node", "codex", "claude")); !slices.Equal(got, []string{"auth.openai.com"}) {
+		t.Errorf("loginHosts = %q", got)
+	}
+	if got := loginHosts(newVM(t, s.Dirs, vm2, "node")); got != nil {
+		t.Errorf("loginHosts without agents = %q", got)
+	}
+}
+
 // The proxy's view of a VM's secrets: bindings for those with a value and
 // for its logins (no values), and their hosts on 443.
 func TestWriteFiles(t *testing.T) {
@@ -405,7 +452,8 @@ func TestWriteFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantPol := "api.github.com:443\ngithub.com:443\ncodeload.github.com:443\nraw.githubusercontent.com:443\napi.anthropic.com:443\napi.openai.com:443\n"
+	// Codex's token endpoint, which its proxy captures logins at, is allowed too.
+	wantPol := "api.github.com:443\ngithub.com:443\ncodeload.github.com:443\nraw.githubusercontent.com:443\napi.anthropic.com:443\napi.openai.com:443\nauth.openai.com:443\n"
 	if string(pol) != wantPol {
 		t.Errorf("policy = %q, want %q", pol, wantPol)
 	}
@@ -429,7 +477,7 @@ func TestWriteFiles(t *testing.T) {
 	if strings.Contains(string(data), `"github"`) || !strings.Contains(string(data), `"codex-key"`) {
 		t.Errorf("refreshed bindings = %s", data)
 	}
-	if pol, _ := os.ReadFile(d.VM(vm1).SecretsPolicy()); string(pol) != "api.anthropic.com:443\napi.openai.com:443\n" {
+	if pol, _ := os.ReadFile(d.VM(vm1).SecretsPolicy()); string(pol) != "api.anthropic.com:443\napi.openai.com:443\nauth.openai.com:443\n" {
 		t.Errorf("refreshed policy = %q", pol)
 	}
 	// No secrets at all: an empty list.
