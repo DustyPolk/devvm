@@ -1,19 +1,22 @@
 #!/bin/bash
 # Build a release's files in dist/ with GoReleaser (.goreleaser.yaml), from git (only what's committed):
 #   devvm-<version>-<os>-<arch>.tar.gz  the binary and the files it reads, for darwin and linux, arm64 and amd64
-#   devvm-<version>.tar.gz              the source, which the Homebrew formula builds from
+#   devvm-<version>.tar.gz              the source, for whoever builds devvm themselves
 #   SHA256SUMS                          their checksums and install.sh's, which install.sh checks
 #   SHA256SUMS.minisig                  SHA256SUMS signed with the release key (minisign), which install.sh checks
 #   install.sh                          the install script, set to install this release and to trust the key
-#   devvm.rb                            the Homebrew formula for devvmhq/homebrew-tap
+#   devvm.rb                            the Homebrew formula for devvmhq/homebrew-tap: each platform's archive
 # Nothing is published. The version is VERSION's. The public key is packaging/minisign.pub (committed); the
 # secret key is the maintainer's, at DEVVM_MINISIGN_KEY (default ~/.minisign/devvm.key), never in the repo.
 #   scripts/release.sh          from the tag v<version>, which must exist and be signed (git tag -s)
-#   scripts/release.sh --head   from HEAD, for testing (DEVVM_RELEASE_URL: where the source tarball will be;
+#   scripts/release.sh --head   from HEAD, for testing (DEVVM_RELEASE_URL: where the archives will be;
 #                               DEVVM_MINISIGN_KEY: a test key, else nothing is signed;
 #                               DEVVM_MINISIGN_PUB: its public key, else packaging/minisign.pub)
 #   scripts/release.sh --check  only the tag's checks and what the build needs, then prints the tag's commit
 #                               (scripts/publish.sh runs it first); nothing is built
+#   scripts/release.sh --formula-from DIR
+#                               only dist/devvm.rb, for VERSION's published release, from its SHA256SUMS
+#                               and SHA256SUMS.minisig downloaded into DIR, checked against minisign.pub
 # Needs goreleaser and minisign, pinned in mise.toml: mise exec -- scripts/release.sh.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,11 +27,47 @@ v=$(tr -d '[:space:]' < VERSION)
 [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "VERSION isn't x.y.z: '$v'"
 ref=v$v
 check=false
+
+# formula TEMPLATE SUMS URL VERSION: the Homebrew formula, from its template, with each platform's
+# archive's URL and its checksum from SHA256SUMS (on lines that aren't comments).
+formula() {
+  awk -v sums="$2" -v u="$3" -v v="$4" '
+    BEGIN {
+      while ((getline line < sums) > 0) { split(line, f, " "); sha[f[2]] = f[1] }
+      split("darwin linux", oses, " "); split("arm64 amd64", arches, " ")
+    }
+    !/^#/ {
+      for (i in oses) for (j in arches) {
+        p = toupper(oses[i] "_" arches[j]); a = "devvm-" v "-" oses[i] "-" arches[j] ".tar.gz"
+        if (index($0, "@SHA256_" p "@")) {
+          if (sha[a] !~ /^[0-9a-f]+$/ || length(sha[a]) != 64) { print "SHA256SUMS has no " a > "/dev/stderr"; bad = 1 }
+          gsub("@SHA256_" p "@", sha[a])
+        }
+        gsub("@URL_" p "@", u "/" a)
+      }
+      if (/@[A-Z0-9_]+@/) { print "the formula has a placeholder left: " $0 > "/dev/stderr"; bad = 1 }
+    }
+    { print } END { exit bad }' "$1"
+}
+
 case ${1:-} in
   --head) ref=HEAD ;;
   --check) check=true ;;
+  --formula-from)
+    # The formula for a published release, from its downloaded SHA256SUMS and SHA256SUMS.minisig in DIR,
+    # checked against packaging/minisign.pub; nothing is built.
+    dir=${2:-}
+    [[ -n $dir && -f $dir/SHA256SUMS && -f $dir/SHA256SUMS.minisig ]] || die "--formula-from DIR needs DIR/SHA256SUMS and DIR/SHA256SUMS.minisig"
+    command -v minisign >/dev/null || die "needs minisign (mise exec -- scripts/release.sh)"
+    minisign -Vm "$dir/SHA256SUMS" -x "$dir/SHA256SUMS.minisig" -p packaging/minisign.pub >/dev/null ||
+      die "$dir/SHA256SUMS doesn't verify with packaging/minisign.pub"
+    mkdir -p dist
+    formula packaging/homebrew/devvm.rb "$dir/SHA256SUMS" "https://github.com/devvmhq/devvm/releases/download/v$v" "$v" \
+      > dist/devvm.rb || die "couldn't write the formula"
+    echo "==> dist/devvm.rb for devvm $v, from $dir/SHA256SUMS"
+    exit 0 ;;
   "") ;;
-  *) die "unknown argument '$1' (--head, --check)" ;;
+  *) die "unknown argument '$1' (--head, --check, --formula-from DIR)" ;;
 esac
 if [[ $ref == HEAD ]]; then obj=HEAD; else obj=$(git rev-parse -q --verify "refs/tags/$ref") || die "no tag $ref: tag the release first (git tag -s $ref)"; fi
 # A release comes from a tag the maintainer signed, not just any tag with the right name. The tag
@@ -95,9 +134,6 @@ for bin in "$out"/devvm*_"${os}_$arch"*/devvm; do
   [[ $got == "$v" ]] || die "$bin --version says '$got', not $v"
 done
 
-tarball=devvm-$v.tar.gz
-sha=$(awk -v f="$tarball" '$2 == f { print $1 }' "$out/SHA256SUMS")
-[[ $sha =~ ^[0-9a-f]{64}$ ]] || die "SHA256SUMS has no $tarball"
 $sign || pubkey=""   # an unsigned test build: its install.sh doesn't expect a signature
 
 git show "$commit:install.sh" |
@@ -107,9 +143,8 @@ git show "$commit:install.sh" |
     { print } END { exit !(n == 1 && m == 1) }' \
   > "$out/install.sh" || die "install.sh needs one release_version=\"\" and one minisign_key=\"\" line"
 chmod 755 "$out/install.sh"
-git show "$commit:packaging/homebrew/devvm.rb" |
-  awk -v u="$url/$tarball" -v s="$sha" '!/^#/ { gsub("@URL@", u); gsub("@SHA256@", s) } { print }' \
-  > "$out/devvm.rb"
+git show "$commit:packaging/homebrew/devvm.rb" > "$tmp/devvm.rb" || die "no packaging/homebrew/devvm.rb in $ref"
+formula "$tmp/devvm.rb" "$out/SHA256SUMS" "$url" "$v" > "$out/devvm.rb" || die "couldn't write the formula"
 
 # install.sh's checksum goes in SHA256SUMS before it's signed, so you can check the script against the
 # release key before you run it.

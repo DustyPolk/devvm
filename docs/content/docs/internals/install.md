@@ -20,16 +20,15 @@ At the end, when `~/.local/bin` is on `PATH`, the script looks up which devvm `P
 
 ## The signature and what it trusts
 
-`curl … | bash` trusts everything in the release, and Homebrew checks the source against a checksum kept outside it:
+`curl … | bash` trusts everything in the release, and Homebrew checks the same archive against a checksum kept outside it. Both install the release's own binary, the one `SHA256SUMS` lists and its signature covers, and Homebrew installs only the binary from it:
 
 ```mermaid
 flowchart TD
   subgraph release["the GitHub release"]
     script["install.sh, with<br>the public key"] -- "checks the signature" --> sums["SHA256SUMS,<br>signed in .minisig"]
     sums -- "checks the checksum" --> archive["the archive<br>for this machine"]
-    source["the source archive"]
   end
-  formula["Homebrew's formula,<br>in a repository of its own"] -- "checks its checksum" --> source
+  formula["Homebrew's formula,<br>in a repository of its own"] -- "checks its checksum" --> archive
 ```
 
 The release's `SHA256SUMS` lists the checksums of its archives and of its `install.sh`, and it's signed in `SHA256SUMS.minisig`, made with the maintainer's minisign key. The key's public half is in the script and in `packaging/minisign.pub`. Without [minisign](https://jedisct1.github.io/minisign/) (`brew install minisign`), the script says so, prints the command to check the signature by hand, and checks only the checksum. A script that isn't from a release has no key, and it also checks only the checksum.

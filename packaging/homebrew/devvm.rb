@@ -1,19 +1,38 @@
-# The formula for the devvmhq/homebrew-tap repo. scripts/release.sh fills in @URL@ and @SHA256@ and writes
-# the result to dist/devvm.rb. Homebrew reads the version from the URL (devvm-<version>.tar.gz).
+# The formula for the devvmhq/homebrew-tap repo. scripts/release.sh fills in each platform's
+# @URL_<OS>_<ARCH>@ and @SHA256_<OS>_<ARCH>@ from the release's SHA256SUMS, and writes the result to
+# dist/devvm.rb. It installs the release's binary, which SHA256SUMS.minisig signs. Homebrew reads the
+# version from the URLs (devvm-<version>-<os>-<arch>.tar.gz).
 class Devvm < Formula
   desc "Isolated Lima VM per project folder, with shared read-only toolchains"
   homepage "https://github.com/devvmhq/devvm"
-  url "@URL@"
-  sha256 "@SHA256@"
   license "MIT"
 
-  depends_on "go" => :build
   depends_on "lima"
 
+  on_macos do
+    on_arm do
+      url "@URL_DARWIN_ARM64@"
+      sha256 "@SHA256_DARWIN_ARM64@"
+    end
+    on_intel do
+      url "@URL_DARWIN_AMD64@"
+      sha256 "@SHA256_DARWIN_AMD64@"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "@URL_LINUX_ARM64@"
+      sha256 "@SHA256_LINUX_ARM64@"
+    end
+    on_intel do
+      url "@URL_LINUX_AMD64@"
+      sha256 "@SHA256_LINUX_AMD64@"
+    end
+  end
+
   def install
-    ENV["CGO_ENABLED"] = "0"
-    ldflags = "-s -w -X github.com/devvmhq/devvm/internal/cli.version=#{version}"
-    system "go", "build", *std_go_args(ldflags:), "./cmd/devvm"
+    bin.install "devvm"
   end
 
   test do

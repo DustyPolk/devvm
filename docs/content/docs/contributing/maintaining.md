@@ -46,12 +46,13 @@ Until a fix ships, users can still build base, because devvm's fallback to the r
   | File | What |
   | --- | --- |
   | `devvm-<version>-<os>-<arch>.tar.gz` | the binary, its files (`assets/`) embedded, with `README.md`, `CHANGELOG.md` and `LICENSE`, for `darwin` and `linux`, `arm64` and `amd64` |
-  | `devvm-<version>.tar.gz` | the source, which the Homebrew formula builds from |
+  | `devvm-<version>.tar.gz` | the source, attached to the release for whoever wants to build devvm themselves |
   | `SHA256SUMS`, `SHA256SUMS.minisig` | their checksums and `install.sh`'s, and the signature |
   | `install.sh` | the install script, set to this release and to `packaging/minisign.pub`'s key |
-  | `devvm.rb` | the Homebrew formula, set to the source tarball's URL and checksum |
+  | `devvm.rb` | the Homebrew formula, set to each platform's archive, its URL and its checksum from `SHA256SUMS` |
 
 - `scripts/release.sh --head` builds from HEAD's commit instead, for testing, with `VERSION`'s version. It's unsigned unless `DEVVM_MINISIGN_KEY` names a test key; `DEVVM_MINISIGN_PUB` names its public key in place of `packaging/minisign.pub`. `DEVVM_RELEASE_URL` points the formula at a test location. A commit without `install.sh` is refused.
+- `scripts/release.sh --formula-from DIR` writes only `dist/devvm.rb`, for `VERSION`'s release once it's published, and builds nothing. Download the release's `SHA256SUMS` and `SHA256SUMS.minisig` into `DIR` first. The script checks the signature against `packaging/minisign.pub`, then fills in the formula the same way a build does, from that `SHA256SUMS`.
 - To try `dist/install.sh` on such a build, copy `dist/` to `DIR/releases/download/v<version>/`, then in a throwaway `HOME` with `DEVVM_PREFIX` under it: `DEVVM_INSTALL_TEST=1 source dist/install.sh`, set `repo_url=file://DIR` and `protos='=https,file'` (it downloads over HTTPS only), and run `main --no-deps`. Without `--no-deps` it offers to install what the host lacks: answer no, or run it with no terminal.
-- Every build sets the version with `-X github.com/devvmhq/devvm/internal/cli.version=<version>`: devvm doesn't read `VERSION`. The formula (`packaging/homebrew/devvm.rb`) builds with Go the same way, installs the binary alone, and passes `brew audit --strict`.
+- Every build sets the version with `-X github.com/devvmhq/devvm/internal/cli.version=<version>`: devvm doesn't read `VERSION`. The formula (`packaging/homebrew/devvm.rb`) builds nothing. It has an archive for each of macOS and Linux on arm64 and Intel, the same archives the install script installs, and it installs the binary alone from the one for this machine. `release.sh` fills in each archive's URL and its checksum, which it reads from the `SHA256SUMS` it just wrote, on every line that isn't a comment. The generated formula passes `brew audit --strict --online` and `brew style`.
 - Publishing is the maintainer's call, so an agent asks first and never runs `scripts/publish.sh` without `--dry-run` on its own. The script's tests (`testdata/script/publish.txtar`) run it against a local bare repo as `origin`, a local bare tap and a fake `gh`.

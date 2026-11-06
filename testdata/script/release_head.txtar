@@ -16,7 +16,7 @@ grep '^minisign_key=""$' repo/dist/install.sh
 
 # With one: GoReleaser builds a snapshot with VERSION's version, SHA256SUMS
 # is signed and verifies, install.sh is set to the release and the key, and
-# the formula to the source tarball.
+# the formula to each platform's archive.
 rm log
 exec minisign -G -W -p keys/test.pub -s keys/test.key
 env DEVVM_MINISIGN_KEY=$WORK/keys/test.key DEVVM_MINISIGN_PUB=$WORK/keys/test.pub
@@ -32,6 +32,19 @@ exec bash sums.sh
 cmp stdout sums.want
 exec bash formula.sh
 cmp stdout formula.want
+
+# --formula-from: the same formula from a published release's signed
+# SHA256SUMS, checked against packaging/minisign.pub; a changed one refused.
+mkdir pub
+cp repo/dist/SHA256SUMS repo/dist/SHA256SUMS.minisig pub/
+cp repo/dist/devvm.rb devvm.rb.built
+cp keys/test.pub repo/packaging/minisign.pub
+exec repo/scripts/release.sh --formula-from $WORK/pub
+cmp repo/dist/devvm.rb devvm.rb.built
+exec bash -c 'echo x >> pub/SHA256SUMS'
+! exec repo/scripts/release.sh --formula-from $WORK/pub
+stderr 'SHA256SUMS doesn''t verify with packaging/minisign.pub$'
+rm repo/packaging/minisign.pub
 
 # Only what's committed goes in.
 exec tar -tzf repo/dist/devvm-1.2.3.tar.gz
@@ -94,17 +107,23 @@ cd repo/dist
 -- sums.want --
 install.sh: OK
 -- formula.sh --
-# The formula's URL and checksum, against the source tarball's.
-sha=$({ sha256sum 2>/dev/null || shasum -a 256; } < repo/dist/devvm-1.2.3.tar.gz | cut -c1-64)
-grep -q "^  sha256 \"$sha\"$" repo/dist/devvm.rb && echo checksum
-grep '^  url ' repo/dist/devvm.rb
-# Nothing left to fill in, but in the comment that says what's filled in.
-grep -v '^#' repo/dist/devvm.rb | grep '@' || true
-grep -c '^# .*@URL@ and @SHA256@' repo/dist/devvm.rb
+# Each platform's URL, and the checksum after it, against each archive's own
+# and SHA256SUMS's line for it.
+f=repo/dist/devvm.rb
+grep -A1 '^      url ' "$f" | grep -v '^--$' | sed -n 'N;s/\n/ /;p' | while read -r _ u _ s; do
+  u=${u//\"/}; s=${s//\"/}; a=${u##*/}
+  sha=$({ sha256sum 2>/dev/null || shasum -a 256; } < "repo/dist/$a" | cut -c1-64)
+  [ "$s" = "$sha" ] && grep -q "^$sha  $a$" repo/dist/SHA256SUMS && echo "$u checksum"
+done
+# Nothing left to fill in, and the comments as the template has them.
+grep -v '^#' "$f" | grep '@' || true
+diff <(grep '^#' repo/packaging/homebrew/devvm.rb) <(grep '^#' "$f") && echo comments
 -- formula.want --
-checksum
-  url "https://github.com/devvmhq/devvm/releases/download/v1.2.3/devvm-1.2.3.tar.gz"
-1
+https://github.com/devvmhq/devvm/releases/download/v1.2.3/devvm-1.2.3-darwin-arm64.tar.gz checksum
+https://github.com/devvmhq/devvm/releases/download/v1.2.3/devvm-1.2.3-darwin-amd64.tar.gz checksum
+https://github.com/devvmhq/devvm/releases/download/v1.2.3/devvm-1.2.3-linux-arm64.tar.gz checksum
+https://github.com/devvmhq/devvm/releases/download/v1.2.3/devvm-1.2.3-linux-amd64.tar.gz checksum
+comments
 -- log.want --
 release --clean --skip=publish --snapshot DEVVM_VERSION=1.2.3 GORELEASER_CURRENT_TAG=
 -- bin/goreleaser --
@@ -122,11 +141,13 @@ for os in darwin linux; do
     chmod 755 "dist/devvm_${os}_$a/devvm"
   done
 done
-for a in arm64 amd64; do
-  mkdir -p "dist/x/devvm-$DEVVM_VERSION-linux-$a"
-  cp "dist/devvm_linux_$a/devvm" "dist/x/devvm-$DEVVM_VERSION-linux-$a/devvm"
-  tar -czf "dist/devvm-$DEVVM_VERSION-linux-$a.tar.gz" -C dist/x "devvm-$DEVVM_VERSION-linux-$a"
+for os in darwin linux; do
+  for a in arm64 amd64; do
+    mkdir -p "dist/x/devvm-$DEVVM_VERSION-$os-$a"
+    cp "dist/devvm_${os}_$a/devvm" "dist/x/devvm-$DEVVM_VERSION-$os-$a/devvm"
+    tar -czf "dist/devvm-$DEVVM_VERSION-$os-$a.tar.gz" -C dist/x "devvm-$DEVVM_VERSION-$os-$a"
+  done
 done
 rm -rf dist/x
 git archive --prefix="devvm-$DEVVM_VERSION/" HEAD | gzip -n > "dist/devvm-$DEVVM_VERSION.tar.gz"
-(cd dist && { sha256sum "devvm-$DEVVM_VERSION.tar.gz" 2>/dev/null || shasum -a 256 "devvm-$DEVVM_VERSION.tar.gz"; } > SHA256SUMS)
+(cd dist && { sha256sum devvm-*.tar.gz 2>/dev/null || shasum -a 256 devvm-*.tar.gz; } > SHA256SUMS)
