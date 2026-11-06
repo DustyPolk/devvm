@@ -2804,6 +2804,16 @@ func ProgramOldFix(fix string, name string, version string) M {
 	return M{id: "program_old_fix", vals: []val{{"fix", fix}, {"name", name}, {"version", version}}}
 }
 
+// ProjectFolderChanged is [project_folder_changed]: "{{.dir}} became a link or another folder after devvm found {{.vm}}, so devvm didn't start the VM, which would have mounted it. Find what replaced it and put the project folder back, then run the command again."
+func ProjectFolderChanged(dir string, vm string) M {
+	return M{id: "project_folder_changed", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// ProjectFolderChangedStopped is [project_folder_changed_stopped]: "{{.dir}} became a link or another folder while {{.vm}} started, so devvm stopped the VM, which may have mounted it. Find what replaced it and put the project folder back, then run the command again."
+func ProjectFolderChangedStopped(dir string, vm string) M {
+	return M{id: "project_folder_changed_stopped", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
 // ProxyCAFailed is [proxy_ca_failed]: "Creating the proxy's CA in {{.dir}} failed."
 func ProxyCAFailed(dir string) M {
 	return M{id: "proxy_ca_failed", vals: []val{{"dir", dir}}}
@@ -4501,6 +4511,8 @@ var specs = map[string]spec{
 	"program_missing_fix":            {fields: []string{"fix", "name", "program"}},
 	"program_old":                    {fields: []string{"min", "name", "version"}},
 	"program_old_fix":                {fields: []string{"fix", "name", "version"}},
+	"project_folder_changed":         {fields: []string{"dir", "vm"}},
+	"project_folder_changed_stopped": {fields: []string{"dir", "vm"}},
 	"proxy_ca_failed":                {fields: []string{"dir"}},
 	"proxy_failed":                   {fields: []string{"reason"}},
 	"proxy_password_howto":           {},

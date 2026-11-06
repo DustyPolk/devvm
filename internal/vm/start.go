@@ -3,6 +3,7 @@ package vm
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/devvmhq/devvm/internal/image"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/netpolicy"
+	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/ports"
 	"github.com/devvmhq/devvm/internal/sshagent"
 	"github.com/devvmhq/devvm/internal/state"
@@ -68,6 +70,10 @@ func (s starter) bringUp(ctx context.Context, t *target, o upOpts) (backend.Conf
 	}
 	in := t.in
 	running := in.Status == backend.StatusRunning
+	// Its host checks act on the folder, so never on what replaced it.
+	if !running && folderChanged(st) {
+		return backend.Confinement{}, msg.ProjectFolderChanged(st.Dir, vm)
+	}
 	if err := s.hostChecks(ctx, t, running, o.made); err != nil {
 		return backend.Confinement{}, err
 	}
@@ -179,6 +185,26 @@ func projectMount(st *state.VM) string {
 		return ""
 	}
 	return st.Dir
+}
+
+// folderChanged reports whether the project folder the VM's start mounts
+// (projectMount) isn't the folder its state records any more: a link now,
+// or below one, or another folder in its place (platform.FolderID). A
+// parent folder's VM mounts a nested project folder too, so code in it can
+// replace the folder after the finder found the VM, and the backend
+// mounts the path as it is then, following a link to anywhere on this
+// machine. bringUp checks it before its host checks and start before and
+// after the backend's start.
+func folderChanged(st *state.VM) bool {
+	dir := projectMount(st)
+	if dir == "" {
+		return false
+	}
+	if r, err := filepath.EvalSymlinks(dir); err != nil || r != dir {
+		return true
+	}
+	id, err := platform.FolderID(dir)
+	return err != nil || id != st.Folder
 }
 
 // nextStartChanges lists what a running VM, as in is, gets only at its
@@ -456,9 +482,20 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 		Size: sectionOf[Size](st, sizeSection).Backend(), Project: projectMount(st), AgentDirs: agentDirs,
 		AgentForwarding: sshagent.Forwards(mode),
 	}
+	if folderChanged(st) {
+		s.Proxy.Stop(vm)
+		return conf, msg.ProjectFolderChanged(st.Dir, vm)
+	}
 	if err := b.Start(ctx, vm, want, conf); err != nil {
 		s.Proxy.Stop(vm)
 		return conf, err
+	}
+	if folderChanged(st) {
+		if err := b.Stop(ctx, vm); err != nil {
+			s.Warn(msg.StopFailed(vm))
+		}
+		s.Proxy.Stop(vm)
+		return conf, msg.ProjectFolderChangedStopped(st.Dir, vm)
 	}
 	t.started(want)
 	// Its ports, once it runs: its state's, through devvm's forwarder.

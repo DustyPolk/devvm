@@ -21,7 +21,7 @@ import (
 
 // projectSection: a base project VM (its launch, mounts, ports, a
 // company's CA, ssh by name, .git protection, stopping and starting it,
-// moving its folder), then a devcontainer.json's VM, agents' folders and
+// a nested project folder replaced by a link, moving its folder), then a devcontainer.json's VM, agents' folders and
 // history, SSH agents, and devvm layer add, update and layer rm.
 func projectSection(s *S) {
 	w := projectBase(s)
@@ -31,6 +31,7 @@ func projectSection(s *S) {
 	projectExisting(s, w)
 	projectPorts(s, w)
 	projectGitProtect(s, w)
+	projectNested(s, w)
 	projectMoved(s, w)
 	projectDevcontainer(s)
 	projectAgents(s)

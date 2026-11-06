@@ -12,6 +12,7 @@ import (
 	"github.com/devvmhq/devvm/internal/backend"
 	"github.com/devvmhq/devvm/internal/gitprotect"
 	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/project"
 	"github.com/devvmhq/devvm/internal/secrets"
 	"github.com/devvmhq/devvm/internal/sshagent"
@@ -57,6 +58,62 @@ func fakeParent(repo string) *target {
 // default, then a parent's unless a repo of its own is in between; --here
 // never looks up, and --parent takes the parent's past the folder's own
 // and across a repo, refusing a folder inside none with a VM.
+// TestFolderChanged: a nested project folder that a parent folder's VM
+// replaced, as a link, below one, or another folder, is changed; the
+// folder its state records is not.
+func TestFolderChanged(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mk := func(p string) string {
+		t.Helper()
+		if err := os.MkdirAll(p, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	decoy := mk(filepath.Join(root, "decoy", "inner"))
+	stateOf := func(dir string) *state.VM {
+		t.Helper()
+		id, err := platform.FolderID(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &state.VM{Dir: dir, Folder: id}
+	}
+	inner := mk(filepath.Join(root, "app", "inner"))
+	same := stateOf(inner)
+	if folderChanged(same) {
+		t.Error("its own folder: changed")
+	}
+	for _, tc := range []struct {
+		name    string
+		replace func(dir string) error
+	}{
+		{"a link in its place", func(dir string) error {
+			return errors.Join(os.Rename(dir, dir+".real"), os.Symlink(decoy, dir))
+		}},
+		{"a link above it", func(dir string) error {
+			app := filepath.Dir(dir)
+			return errors.Join(os.Rename(app, app+".real"), os.Symlink(filepath.Dir(decoy), app))
+		}},
+		{"another folder in its place", func(dir string) error {
+			return errors.Join(os.Rename(dir, dir+".real"), os.Mkdir(dir, 0o700))
+		}},
+		{"gone", func(dir string) error { return os.Rename(dir, dir+".real") }},
+	} {
+		dir := mk(filepath.Join(root, tc.name, "app", "inner"))
+		st := stateOf(dir)
+		if err := tc.replace(dir); err != nil {
+			t.Fatal(err)
+		}
+		if !folderChanged(st) {
+			t.Errorf("%s: not changed", tc.name)
+		}
+	}
+}
+
 func TestResolveFolder(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

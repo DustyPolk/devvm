@@ -1,0 +1,46 @@
+# A nested project folder, a repo of its own inside a folder with a VM,
+# replaced with a link after devvm found its VM, as the parent folder's
+# VM could do through its mount: devvm never starts the nested VM on the
+# link. Replaced once devvm restart's stop ends, devvm refuses before the
+# start, its .git checks never run on the link's folder; replaced as Lima
+# starts the VM, devvm stops it again and refuses. Put back, it starts.
+mkdir $WORK/app/inner
+mkdir $WORK/decoy
+cd $WORK/app
+exec git init -q
+exec devvm --network open
+cd $WORK/app/inner
+exec git init -q
+exec devvm --network open
+stdout '^==> creating_from image=base vm=devvm-inner-[0-9a-f]{14}$'
+
+# Replaced once its stop ends: refused before the start.
+exec sh -c 'echo "$WORK/app/inner $WORK/decoy" > "$STUB_DIR/stop-links"'
+stub_reset
+! exec devvm restart
+stderr '^devvm: project_folder_changed dir=/\S*/app/inner vm=devvm-inner-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl stop devvm-inner-[0-9a-f]{14}$'
+! stdout 'limactl start'
+! stdout 'limactl shell'
+! exists $WORK/decoy/.git
+
+# Put back, then replaced as Lima starts it: stopped again, refused.
+exec sh -c 'rm "$WORK/app/inner" && mv "$WORK/app/inner.real" "$WORK/app/inner"'
+cd $WORK/app/inner
+exec sh -c 'echo "$WORK/app/inner $WORK/decoy" > "$STUB_DIR/start-links"'
+stub_reset
+! exec devvm
+stderr '^devvm: project_folder_changed_stopped dir=/\S*/app/inner vm=devvm-inner-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl start .*devvm-inner-[0-9a-f]{14}\n(limactl list --json\n)*limactl stop devvm-inner-[0-9a-f]{14}$'
+! stdout 'limactl shell'
+
+# Put back: it starts, and opens its shell.
+exec sh -c 'rm "$WORK/app/inner" && mv "$WORK/app/inner.real" "$WORK/app/inner"'
+cd $WORK/app/inner
+stub_reset
+exec devvm
+stub_calls
+stdout '^limactl start .*devvm-inner-[0-9a-f]{14}$'
+stdout '^limactl shell --workdir /\S*/app/inner devvm-inner-[0-9a-f]{14}$'

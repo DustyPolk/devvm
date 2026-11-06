@@ -1026,6 +1026,14 @@ other = "These VMs were each made for this folder at another path, so devvm move
 description = "was is the path vm's project folder had, which is gone or on a disk that isn't connected"
 other = "{{.vm}} was made for {{.was}}.\nMove the VM to this folder, with its files, secrets and allowlist? If it's running, it stops first."
 
+[project_folder_changed]
+description = "dir is vm's project folder, which became a link or another folder after devvm found the VM, before it started it"
+other = "{{.dir}} became a link or another folder after devvm found {{.vm}}, so devvm didn't start the VM, which would have mounted it. Find what replaced it and put the project folder back, then run the command again."
+
+[project_folder_changed_stopped]
+description = "dir is vm's project folder, which became a link or another folder while vm started"
+other = "{{.dir}} became a link or another folder while {{.vm}} started, so devvm stopped the VM, which may have mounted it. Find what replaced it and put the project folder back, then run the command again."
+
 [move_folder_changed]
 description = "dir is the folder devvm runs in, which another folder replaced while devvm asked"
 other = "The folder at {{.dir}} changed while devvm asked, so devvm didn't move {{.vm}} here. Run the command again."

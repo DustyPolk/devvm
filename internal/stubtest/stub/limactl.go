@@ -53,6 +53,8 @@ import (
 //	rename-fails                  rename fails, changing nothing
 //	interrupt-on                  a call whose arguments hold its text is Ctrl+C: it interrupts
 //	                              devvm, once
+//	start-links, stop-links       its text is DIR TARGET: once, as start begins or once stop ends,
+//	                              DIR moves to DIR.real and a link to TARGET takes its place
 //
 // Everything else succeeds.
 func limactl(c *call) int {
@@ -380,6 +382,9 @@ func (l *lima) start() error {
 		return nil
 	}
 	vm := l.name(0)
+	if err := l.replaceWithLink("start-links"); err != nil {
+		return err
+	}
 	if err := l.update(func(st *stubstate.State) error {
 		// A driver left running holds the VM's disk: Lima's new one
 		// can't open it.
@@ -433,7 +438,24 @@ func (l *lima) stop() error {
 		return err
 	}
 	_ = os.Remove(filepath.Join(l.vmDir(vm), "ha.pid"))
-	return nil
+	return l.replaceWithLink("stop-links")
+}
+
+// replaceWithLink is the switch name's (start-links, stop-links), once:
+// its text, DIR TARGET, has DIR moved aside to DIR.real and a link to
+// TARGET put in its place, as a parent folder's VM could through its
+// mount.
+func (l *lima) replaceWithLink(name string) error {
+	t, ok := l.text(name)
+	if !ok {
+		return nil
+	}
+	_ = os.Remove(l.path(name))
+	dir, target, _ := strings.Cut(strings.TrimSpace(t), " ")
+	if err := os.Rename(dir, dir+".real"); err != nil {
+		return err
+	}
+	return os.Symlink(target, dir)
 }
 
 // resize is edit's --cpus N, --memory GiB and --disk GiB.
