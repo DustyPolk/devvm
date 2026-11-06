@@ -22,6 +22,23 @@ func FolderDevice(id string) string {
 	return dev
 }
 
+// VolPath returns the path of the folder a FolderID names by its device
+// and inode, /.vol/<dev>/<ino>, which macOS's volfs opens whatever path
+// the folder has now; "" when id has neither. Only macOS has /.vol.
+func VolPath(id string) string {
+	dev, rest, ok := strings.Cut(id, ":")
+	ino, _, _ := strings.Cut(rest, ":")
+	if !ok || !digits(dev) || !digits(ino) {
+		return ""
+	}
+	return "/.vol/" + dev + "/" + ino
+}
+
+// digits reports whether s is a decimal number, without a sign.
+func digits(s string) bool {
+	return s != "" && strings.Trim(s, "0123456789") == ""
+}
+
 // DeviceOf returns the device of what's at path, following a symlink, as
 // FolderID writes it.
 func DeviceOf(path string) (string, error) {

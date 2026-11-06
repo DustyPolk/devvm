@@ -36,13 +36,26 @@ func (p Paths) RunLogHas(line string) bool {
 
 // MountLine is the host folders the VM's Lima config mounts, each with a
 // space after it, as limactl list's template prints them: nothing for a
-// VM that mounts none, or none at all.
+// VM that mounts none, or none at all. A folder mounted by its device and
+// inode (macOS's /.vol, the project folder's) is its path in the VM,
+// which is its path here.
 func MountLine(s *S, vm string) string {
-	r, err := s.Limactl("list", "--format", "{{range .Config.Mounts}}{{.Location}} {{end}}", vm)
+	r, err := s.Limactl("list", "--format", "{{range .Config.Mounts}}{{.Location}}|{{.MountPoint}}\n{{end}}", vm)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimRight(r.Stdout, "\n")
+	var line string
+	for _, m := range strings.Split(strings.TrimRight(r.Stdout, "\n"), "\n") {
+		loc, at, ok := strings.Cut(m, "|")
+		if !ok {
+			continue
+		}
+		if strings.HasPrefix(loc, "/.vol/") {
+			loc = at
+		}
+		line += loc + " "
+	}
+	return line
 }
 
 // MountsOf is MountLine's folders, one a line.

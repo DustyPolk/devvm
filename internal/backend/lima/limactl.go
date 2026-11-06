@@ -138,6 +138,9 @@ type instance struct {
 	Disk          int64  `json:"disk"`   // bytes
 	SSHLocalPort  int    `json:"sshLocalPort"`
 	SSHConfigFile string `json:"sshConfigFile"`
+	// VMType is its driver: vz (Virtualization.framework) or qemu. A
+	// clone has its image's.
+	VMType string `json:"vmType"`
 	// HostAgentPID and DriverPID are its hostagent's and its driver's
 	// (QEMU's; on vz, the hostagent's own), 0 for one that doesn't run.
 	HostAgentPID int     `json:"hostAgentPID"`
@@ -178,12 +181,45 @@ func (m mount) agentDir() bool {
 }
 
 // project reports whether the mount is the project folder: the one
-// read-write mount, at the same path as on the host.
-func (m mount) project() bool { return m.writable() && m.atLocation() }
+// read-write mount, at the same path as on the host, or by its device and
+// inode at its path in the VM (projectMount).
+func (m mount) project() bool { return m.writable() && (m.atLocation() || m.byInode()) }
 
 // atLocation reports whether the mount is at its host path in the VM.
 func (m mount) atLocation() bool {
 	return m.MountPoint == nil || *m.MountPoint == "" || *m.MountPoint == m.Location
+}
+
+// byInode reports whether the mount's host folder is named by its device
+// and inode (macOS's /.vol, platform.VolPath).
+func (m mount) byInode() bool { return strings.HasPrefix(m.Location, "/.vol/") }
+
+// at is the mount's path in the VM.
+func (m mount) at() string {
+	if m.atLocation() {
+		return m.Location
+	}
+	return *m.MountPoint
+}
+
+// same reports whether m is o: the same host folder at the same path in
+// the VM, and as writable. limactl list fills in what devvm leaves out
+// (mountPoint, sshfs's and 9p's settings), so only those count.
+func (m mount) same(o mount) bool {
+	return m.Location == o.Location && m.at() == o.at() && m.writable() == o.writable()
+}
+
+// projectMount is the mount of the project folder w asks for, read-write
+// at its path in the VM. On vz it's by the folder's device and inode as
+// devvm recorded them (w.ProjectID, platform.VolPath), which
+// Virtualization.framework opens at the VM's start wherever the folder is
+// then, so a link put at its path, or above it, is never followed. QEMU's
+// 9p has nothing like it, so elsewhere it's by its path.
+func projectMount(vmType string, w backend.Want) mount {
+	if vol := platform.VolPath(w.ProjectID); vmType == "vz" && vol != "" {
+		return mount{Location: vol, MountPoint: ptr(w.Project), Writable: ptr(true)}
+	}
+	return mount{Location: w.Project, Writable: ptr(true)}
 }
 
 // list returns every instance in devvm's Lima home: VMs and images.

@@ -357,7 +357,12 @@ type Want struct {
 	Size Size
 	// Project is the project folder, read-write; "" for none (--clone).
 	// It changes when the folder moved (vm's finder moves the VM with it).
-	Project   string
+	Project string
+	// ProjectID is the project folder's identity as devvm recorded it
+	// (platform.FolderID): a backend that can mount the folder by its
+	// identity does, at Project in the VM, so a link put at Project's
+	// path on the host is never followed. "" for none.
+	ProjectID string
 	AgentDirs []string // agents' host folders, read-only
 	// AgentForwarding is whether the VM forwards an ssh-agent; changing
 	// it once the VM is made needs FeatureAgentToggle.

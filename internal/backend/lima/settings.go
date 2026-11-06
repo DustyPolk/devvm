@@ -54,6 +54,9 @@ func mountsSet(ms []mount) (string, error) {
 		if strings.Contains(m.Location, ",") {
 			return "", msg.MountComma(m.Location)
 		}
+		if strings.Contains(m.at(), ",") {
+			return "", msg.MountComma(m.at())
+		}
 	}
 	if ms == nil {
 		ms = []mount{}

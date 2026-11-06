@@ -735,6 +735,93 @@ func TestWantEdits(t *testing.T) {
 	}
 }
 
+// A vz image's clone mounts the project folder by its device and inode,
+// which its first start keeps: nothing but its size is edited.
+func TestCreateVMByInode(t *testing.T) {
+	l, f, _ := testLima(t, "darwin")
+	f.out["limactl list --json"] = `{"name":"devvm-img-0123456789ab","status":"Stopped","vmType":"vz","cpus":4,"memory":8589934592,"disk":107374182400}
+{"name":"devvm-p-0123456789abcd","status":"Stopped","vmType":"vz","cpus":4,"memory":8589934592,"disk":107374182400,"config":{"mounts":[` +
+		`{"location":"/.vol/16777232/4242","mountPoint":"/my project","writable":true,"9p":{"cache":"mmap"}}]}}`
+	err := l.CreateVM(t.Context(), "0123456789ab", backend.VMSpec{
+		Name: "devvm-p-0123456789abcd", SSHPort: 23456,
+		Want: backend.Want{Project: "/my project", ProjectID: "16777232:4242:1.2", Size: backend.Size{CPUs: 6}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		`limactl clone --tty=false devvm-img-0123456789ab devvm-p-0123456789abcd --mount-none` +
+			` --set .mounts = [{"location":"/.vol/16777232/4242","mountPoint":"/my project","writable":true}]` +
+			` --set .ssh.forwardAgent=false --set .ssh.localPort=23456 --set ` + noForwardsSet() + ` --set .propagateProxyEnv=true`,
+		"limactl edit --tty=false devvm-p-0123456789abcd --cpus 6",
+	}
+	if got := f.lines(); !slices.Equal(got, want) {
+		t.Errorf("ran\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// On vz the project folder is mounted by its device and inode (/.vol),
+// at its path in the VM, and a start edits it only when the folder
+// recorded or its path differs, whatever limactl list fills in; QEMU's
+// is by its path, as is one without a recorded folder.
+func TestProjectMountByInode(t *testing.T) {
+	vol := `{"location":"/.vol/16777232/4242","mountPoint":"/p","writable":true,"sshfs":{"cache":true},"9p":{"cache":"mmap"}}`
+	tools := `{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}`
+	vm := func(vmType, project string) instance {
+		t.Helper()
+		var in instance
+		if err := json.Unmarshal([]byte(`{"name":"v","status":"Stopped","vmType":"`+vmType+`","cpus":4,"memory":8589934592,"disk":107374182400,
+			"config":{"mounts":[`+project+`,`+tools+`]}}`), &in); err != nil {
+			t.Fatal(err)
+		}
+		return in
+	}
+	id := "16777232:4242:1700000000.000000001"
+	for _, tc := range []struct {
+		name string
+		in   instance
+		want backend.Want
+		opts string // the edit's options, or the error
+	}{
+		{"vz, as it is", vm("vz", vol), backend.Want{Project: "/p", ProjectID: id}, ""},
+		{
+			"vz, another folder at its path", vm("vz", vol),
+			backend.Want{Project: "/p", ProjectID: "16777232:99:1.2"},
+			`--set .mounts = [{"location":"/.vol/16777232/99","mountPoint":"/p","writable":true},` + tools + `]`,
+		},
+		{
+			"vz, the folder moved", vm("vz", vol),
+			backend.Want{Project: "/q", ProjectID: id},
+			`--set .mounts = [{"location":"/.vol/16777232/4242","mountPoint":"/q","writable":true},` + tools + `]`,
+		},
+		{"vz, moved to a path with a comma", vm("vz", vol), backend.Want{Project: "/q,r", ProjectID: id}, "mount_comma path=/q,r"},
+		{
+			"vz, by its path before", vm("vz", `{"location":"/p","mountPoint":"/p","writable":true}`),
+			backend.Want{Project: "/p", ProjectID: id},
+			`--set .mounts = [{"location":"/.vol/16777232/4242","mountPoint":"/p","writable":true},` + tools + `]`,
+		},
+		{
+			"vz, no folder recorded", vm("vz", vol),
+			backend.Want{Project: "/p"},
+			`--set .mounts = [{"location":"/p","writable":true},` + tools + `]`,
+		},
+		{"vz, --clone", vm("vz", vol), backend.Want{}, `--set .mounts = [` + tools + `]`},
+		{"qemu, by its path", vm("qemu", `{"location":"/p","mountPoint":"/p","writable":true}`), backend.Want{Project: "/p", ProjectID: id}, ""},
+	} {
+		opts, err := wantEdits(tc.in, tc.want)
+		got := strings.Join(opts, " ")
+		if err != nil {
+			got = msg.NamesOf(err)
+		}
+		if got != tc.opts {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.opts)
+		}
+	}
+	if p := vm("vz", vol).backend().Project; p != "/p" {
+		t.Errorf("a vz VM's project folder: %q, want its path in the VM", p)
+	}
+}
+
 // Lima forwards nothing: every guest port, TCP or UDP, is ignored on
 // 127.0.0.1 (::1 too), 0.0.0.0 and ::, before Lima's own rule.
 func TestNoForwardsSet(t *testing.T) {

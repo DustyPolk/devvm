@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -55,16 +56,27 @@ func projectNested(s *S, w *webVM) {
 	n.whileRunning()
 	n.atRestart()
 	n.atStart()
-	s.Check("put back, devvm opens its VM on its own folder", func() error {
+	n.atStartRestored()
+	s.Check("put back, devvm opens its VM on its own folder, and its start edits nothing of its Lima config", func() error {
 		n.restore()
 		if s.Status(n.vm) == "Running" {
 			if _, err := s.Devvm(n.dir, "stop"); err != nil {
 				return err
 			}
 		}
-		r, err := DevvmIn(s, n.dir, "ls -A\n", nil)
+		if err := n.standIn("none"); err != nil {
+			return err
+		}
+		r, err := DevvmIn(s, n.dir, "ls -A\n", []string{"PATH=" + n.bin + ":" + os.Getenv("PATH")})
 		if err != nil || !HasLine(r.Out, "inner-own") {
 			return fmt.Errorf("opened: %w\n%s", err, r.Out)
+		}
+		calls, _ := os.ReadFile(filepath.Join(n.bin, "calls"))
+		if !strings.Contains(string(calls), "start") || strings.Contains("\n"+string(calls), "\nedit ") {
+			return errors.New("limactl ran:\n" + string(calls))
+		}
+		if err := n.mountedByInode(); err != nil {
+			return err
 		}
 		return n.mountsOwn()
 	})
@@ -122,6 +134,78 @@ func (n *nested) atStart() {
 	})
 }
 
+// atStartRestored: replaced as Lima starts its VM and put back once
+// limactl start returns, before devvm's last check, as code in the
+// parent's VM that times it would. On macOS the VM's mount is by the
+// folder's device and inode, so it never sees the decoy: it opened the
+// folder where it was moved, and refuses to read it once it's put back
+// (Operation not permitted). Linux's 9p has no such mount and follows the
+// link, the gap the docs name, which is only noted.
+func (n *nested) atStartRestored() {
+	n.s.Check("replaced as Lima starts its VM and put back before devvm checks, on macOS the VM never sees the link's folder", func() error {
+		defer n.restore()
+		if n.s.Status(n.vm) == "Running" {
+			if _, err := n.s.Devvm(n.dir, "stop"); err != nil {
+				return err
+			}
+		}
+		r, err := n.devvmSwapping("start-restore")
+		if !Exists(filepath.Join(n.bin, "swapped")) || Exists(n.dir+".real") {
+			return fmt.Errorf("the parent's VM didn't replace the folder and put it back (devvm: %w):\n%s", cmp.Or(err, errors.New("no error")), tailLines(r.Out, 10))
+		}
+		l, lerr := n.s.InVM(n.vm, "ls -A "+shell.Quote(n.dir))
+		seen := strings.ReplaceAll(l.Out, "\n", " ")
+		Note(n.s, "the VM's folder, replaced as Lima started it and put back: %s (%v; devvm: %v; %s)", seen, lerr, err, n.ids())
+		switch {
+		case runtime.GOOS == "linux":
+			if HasLine(l.Stdout, "decoy-secret") {
+				Note(n.s, "on Linux the VM's 9p mount followed the link, as the docs say")
+			}
+			return nil
+		case HasLine(l.Stdout, "decoy-secret"):
+			return errors.New("the VM sees the link's folder: " + seen)
+		case lerr == nil && !HasLine(l.Stdout, "inner-own"):
+			return errors.New("the VM's virtiofs mount neither keeps nor refuses its folder: " + seen)
+		}
+		return n.mountedByInode()
+	})
+}
+
+// mountedByInode checks, on macOS, that the nested VM's Lima config
+// mounts the folder by its device and inode at its path, as this machine
+// has them now.
+func (n *nested) mountedByInode() error {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+	r, err := n.s.Limactl("list", "--json", n.vm)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Config struct {
+			Mounts []struct {
+				Location   string `json:"location"`
+				MountPoint string `json:"mountPoint"`
+				Writable   bool   `json:"writable"`
+			} `json:"mounts"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal([]byte(r.Stdout), &in); err != nil {
+		return err
+	}
+	var got []string
+	for _, m := range in.Config.Mounts {
+		if m.Writable {
+			got = append(got, m.Location+" at "+m.MountPoint)
+		}
+	}
+	if want := "/.vol/" + strings.ReplaceAll(strings.TrimSpace(devIno(n.dir)), ":", "/") + " at " + n.dir; len(got) != 1 || got[0] != want {
+		return fmt.Errorf("its read-write mounts: %q, want %q", got, want)
+	}
+	return nil
+}
+
 // refused checks that devvm, which printed r and returned err, said name
 // and left the VM stopped, saying what the VM mounted otherwise.
 func (n *nested) refused(r Res, err error, name string) error {
@@ -150,9 +234,12 @@ func (n *nested) devvmSwapping(at string, args ...string) (Res, error) {
 	return DevvmIn(n.s, n.dir, "exit\n", env, args...)
 }
 
-// standIn writes n.bin/limactl, which runs the real limactl, replacing
-// the folder through the parent's VM once, when limactl at of the nested
-// VM starts (start) or ends (stop).
+// standIn writes n.bin/limactl, which logs each call's arguments to
+// n.bin/calls and runs the real limactl, replacing the folder through
+// the parent's VM once, when limactl at of the nested VM starts (start)
+// or ends (stop); with start-restore, as it starts, and the folder put
+// back once it ends, before devvm's last check. Any other at replaces
+// nothing.
 func (n *nested) standIn(at string) error {
 	lima, err := exec.LookPath("limactl")
 	if err != nil {
@@ -163,14 +250,27 @@ func (n *nested) standIn(at string) error {
 	}
 	q, done := shell.Quote(lima), shell.Quote(filepath.Join(n.bin, "swapped"))
 	_ = os.Remove(filepath.Join(n.bin, "swapped"))
-	swap := "swap() { [[ -e " + done + " ]] && return; : > " + done + "; " + q + " shell --workdir / " + shell.Quote(n.parent) +
-		" bash -c " + shell.Quote(n.swapScript()) + " </dev/null >/dev/null 2>&1; }\n"
-	is := `[[ $1 == ` + at + ` && ${@: -1} == ` + shell.Quote(n.vm) + ` ]]`
-	body := "if " + is + "; then swap; fi\nexec " + q + " \"$@\"\n"
-	if at == "stop" {
-		body = "if " + is + "; then " + q + " \"$@\"; rc=$?; swap; exit $rc; fi\nexec " + q + " \"$@\"\n"
+	_ = os.Remove(filepath.Join(n.bin, "calls"))
+	inParent := func(script string) string {
+		return q + " shell --workdir / " + shell.Quote(n.parent) + " bash -c " + shell.Quote(script) + " </dev/null >/dev/null 2>&1"
 	}
-	script := "#!/bin/bash\n# e2e: the parent folder's VM replaces the nested folder with a link, as limactl " + at + " of its VM runs.\n" + swap + body
+	fns := "swap() { [[ -e " + done + " ]] && return; : > " + done + "; " + inParent(n.swapScript()) + "; }\n" +
+		"put() { " + inParent(n.restoreScript()) + "; }\n"
+	cmd := strings.TrimSuffix(at, "-restore")
+	is := `[[ $1 == ` + cmd + ` && ${@: -1} == ` + shell.Quote(n.vm) + ` ]]`
+	run := q + " \"$@\"; rc=$?; "
+	var body string
+	switch at {
+	case "stop":
+		body = "if " + is + "; then " + run + "swap; exit $rc; fi\n"
+	case "start-restore":
+		body = "if " + is + "; then swap; " + run + "put; exit $rc; fi\n"
+	default:
+		body = "if " + is + "; then swap; fi\n"
+	}
+	log := "printf '%s\\n' \"$*\" >> " + shell.Quote(filepath.Join(n.bin, "calls")) + "\n"
+	script := "#!/bin/bash\n# e2e: the parent folder's VM replaces the nested folder with a link, as limactl " + at + " of its VM runs.\n" +
+		fns + log + body + "exec " + q + " \"$@\"\n"
 	return os.WriteFile(filepath.Join(n.bin, "limactl"), []byte(script), 0o700) //nolint:gosec // G306: the stand-in runs
 }
 
@@ -178,6 +278,12 @@ func (n *nested) standIn(at string) error {
 // aside, a link to the decoy in its place.
 func (n *nested) swapScript() string {
 	return "mv " + shell.Quote(n.dir) + " " + shell.Quote(n.dir+".real") + " && ln -s " + shell.Quote(n.decoy) + " " + shell.Quote(n.dir)
+}
+
+// restoreScript is what the parent's VM runs to put the folder back: the
+// link gone, the folder at its path again.
+func (n *nested) restoreScript() string {
+	return "rm " + shell.Quote(n.dir) + " && mv " + shell.Quote(n.dir+".real") + " " + shell.Quote(n.dir)
 }
 
 // swap replaces the folder through the parent's VM, and checks that this

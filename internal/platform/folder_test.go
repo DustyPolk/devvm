@@ -65,6 +65,42 @@ func TestUniqueFolderID(t *testing.T) {
 	}
 }
 
+// VolPath names a FolderID's folder by its device and inode, and on macOS
+// opens that folder once it's moved, never what replaced it at its path.
+func TestVolPath(t *testing.T) {
+	for id, want := range map[string]string{
+		"": "", "12": "", "12:": "", ":34": "", "-1:34": "", "12:x": "", "1 2:34": "",
+		"12:34": "/.vol/12/34", "12:34:5.6": "/.vol/12/34",
+	} {
+		if got := VolPath(id); got != want {
+			t.Errorf("VolPath(%q) = %q, want %q", id, got, want)
+		}
+	}
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	dir := filepath.Join(t.TempDir(), "p")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "own"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	id, err := FolderID(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(dir, dir+".real"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(VolPath(id), "own")); err != nil {
+		t.Errorf("%s, once its folder moved: %v", VolPath(id), err)
+	}
+}
+
 // DeviceOf gives the device FolderID records, which FolderDevice reads.
 func TestDeviceOf(t *testing.T) {
 	dir := t.TempDir()

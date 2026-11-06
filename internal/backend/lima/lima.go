@@ -401,9 +401,18 @@ func (l *machines) CreateVM(ctx context.Context, image string, spec backend.VMSp
 	if len(vm) > l.NameMax() {
 		return msg.LimaHomeTooLong(l.Dirs.Lima, vm)
 	}
+	src := ImagePrefix + image
+	img, err := l.inspect(ctx, src)
+	if errors.Is(err, backend.ErrNotFound) {
+		return msg.ImageMissing(image)
+	} else if err != nil {
+		return err
+	}
+	// The clone has its image's driver, so its project mount is the one
+	// its starts want (projectMount).
 	var ms []mount
 	if spec.Project != "" {
-		ms = append(ms, mount{Location: spec.Project, Writable: ptr(true)})
+		ms = append(ms, projectMount(img.VMType, spec.Want))
 	}
 	ms = append(ms, readOnly(spec.AgentDirs)...)
 	if spec.Tools != "" {
@@ -411,13 +420,6 @@ func (l *machines) CreateVM(ctx context.Context, image string, spec backend.VMSp
 	}
 	mounts, err := mountsSet(ms)
 	if err != nil {
-		return err
-	}
-	src := ImagePrefix + image
-	img, err := l.inspect(ctx, src)
-	if errors.Is(err, backend.ErrNotFound) {
-		return msg.ImageMissing(image)
-	} else if err != nil {
 		return err
 	}
 	if backend.Status(img.Status) != backend.StatusStopped {
@@ -599,7 +601,7 @@ func (in instance) backend() backend.Instance {
 		case m.agentDir():
 			b.AgentDirs = append(b.AgentDirs, m.Location)
 		case m.project():
-			b.Project = m.Location
+			b.Project = m.at()
 		}
 	}
 	b.AgentForwarding = in.Config.SSH.ForwardAgent != nil && *in.Config.SSH.ForwardAgent
@@ -708,16 +710,8 @@ func wantEdits(in instance, w backend.Want) ([]string, error) {
 		opts = append(opts, "--disk", gibString(s.DiskGiB))
 	}
 	have := in.backend()
-	var ms []mount
-	if w.Project != "" && have.Project != w.Project {
-		ms = append(ms, mount{Location: w.Project, Writable: ptr(true)})
-	}
-	for _, m := range in.Config.Mounts {
-		if !m.agentDir() && (!m.project() || m.Location == w.Project) {
-			ms = append(ms, m)
-		}
-	}
-	if have.Project != w.Project || !slices.Equal(have.AgentDirs, w.AgentDirs) {
+	ms, same := keptMounts(in, w)
+	if !same || !slices.Equal(have.AgentDirs, w.AgentDirs) {
 		set, err := mountsSet(append(ms, readOnly(w.AgentDirs)...))
 		if err != nil {
 			return nil, err
@@ -728,6 +722,29 @@ func wantEdits(in instance, w backend.Want) ([]string, error) {
 		opts = append(opts, "--set", ".ssh.forwardAgent="+strconv.FormatBool(w.AgentForwarding))
 	}
 	return opts, nil
+}
+
+// keptMounts is the mounts of in but its agent folders' that a VM as w
+// wants keeps: its other mounts (the tools share) as they are, and the
+// project mount w wants (projectMount), first when it's new. same: in's
+// project mount is already that one, or neither has one.
+func keptMounts(in instance, w backend.Want) (ms []mount, same bool) {
+	want := projectMount(in.VMType, w)
+	same = w.Project == "" && in.backend().Project == ""
+	for _, m := range in.Config.Mounts {
+		if m.project() && w.Project != "" && m.same(want) {
+			same = true
+		}
+	}
+	if w.Project != "" && !same {
+		ms = append(ms, want)
+	}
+	for _, m := range in.Config.Mounts {
+		if !m.agentDir() && (!m.project() || w.Project != "" && m.same(want)) {
+			ms = append(ms, m)
+		}
+	}
+	return ms, same
 }
 
 func gibString(g float64) string { return strconv.FormatFloat(g, 'g', -1, 64) }

@@ -91,7 +91,7 @@ func TestUpClone(t *testing.T) {
 	gitIn(t, e.Dir, "branch", "other")
 	st := existingVM(t, e, Options{Network: "open", Clone: true})
 	vm := st.Name()
-	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); spec.Project != "" || spec.Tools == "" {
+	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); spec.Project != "" || spec.ProjectID != "" || spec.Tools == "" {
 		t.Errorf("spec %+v", spec)
 	}
 	for k, want := range map[string]string{KeyMode: ModeClone, KeySeeded: "yes", KeyCloneRemote: "devvm", keyGitProtect: gitprotect.Clone} {

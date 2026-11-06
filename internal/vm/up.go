@@ -346,6 +346,10 @@ func (e creation) makeMachine(ctx context.Context, b backend.Backend, st *state.
 	if spec.SSHPort, err = e.Proxy.Ports().SSH(ctx, st, false); err != nil {
 		return err
 	}
+	// The folder itself, which a backend may mount by it (Want.ProjectID).
+	if spec.Project != "" {
+		spec.ProjectID = st.Folder
+	}
 	if err := b.CreateVM(ctx, key, spec); err != nil {
 		return err
 	}
