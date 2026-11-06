@@ -123,6 +123,8 @@ func (e Net) SetTier(ctx context.Context, to netpolicy.Tier, command string) err
 			if _, err := e.Proxy.Prepare(ctx, b, st, true); err != nil {
 				return err
 			}
+			e.Info(msg.SettingApplied(vm))
+			return nil
 		}
 		e.Info(msg.SettingSet(vm))
 		return nil

@@ -105,8 +105,13 @@ func TestSetTierConfined(t *testing.T) {
 	}
 	pid, _ := e.Proxy.PID(vm)
 	before := len(f.Calls())
+	var said msg.Recorder
+	fake(e).OnInfo = said.Add
 	if err := n.SetTier(t.Context(), netpolicy.TierNone, "devvm network none"); err != nil {
 		t.Fatal(msg.NamesOf(err))
+	}
+	if got, want := said.Names(), []string{"setting_applied vm=" + vm}; !slices.Equal(got, want) {
+		t.Errorf("said %q, want %q", got, want)
 	}
 	again, ok := e.Proxy.PID(vm)
 	if !ok || again == pid || slices.Contains(f.Methods()[before:], "Stop") || slices.Contains(f.Methods()[before:], "Start") {

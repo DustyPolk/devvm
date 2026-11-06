@@ -3164,6 +3164,11 @@ func SettingAlready(command string, vm string) M {
 	return M{id: "setting_already", vals: []val{{"command", command}, {"vm", vm}}}
 }
 
+// SettingApplied is [setting_applied]: "{{.vm}} is running, and it has the change now."
+func SettingApplied(vm string) M {
+	return M{id: "setting_applied", vals: []val{{"vm", vm}}}
+}
+
 // SettingSet is [setting_set]: "{{.vm}} isn't running, so it gets the change when it next starts."
 func SettingSet(vm string) M {
 	return M{id: "setting_set", vals: []val{{"vm", vm}}}
@@ -4508,6 +4513,7 @@ var specs = map[string]spec{
 	"setid_files":                    {fields: []string{"files"}},
 	"setid_root_files":               {fields: []string{"files"}},
 	"setting_already":                {fields: []string{"command", "vm"}},
+	"setting_applied":                {fields: []string{"vm"}},
 	"setting_set":                    {fields: []string{"vm"}},
 	"setup_failed":                   {fields: []string{"reason"}},
 	"setup_in_config":                {fields: []string{"file", "key"}},

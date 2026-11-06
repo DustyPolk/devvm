@@ -2359,6 +2359,9 @@ other = "{{.vm}} is running, so it gets the changes when it next starts. To appl
 [setting_set]
 other = "{{.vm}} isn't running, so it gets the change when it next starts."
 
+[setting_applied]
+other = "{{.vm}} is running, and it has the change now."
+
 [setting_already]
 description = "command is the command that changes the setting, as typed: devvm network allowlist, devvm clone off"
 other = "{{.vm}} is that way already, so {{.command}} changes nothing."
