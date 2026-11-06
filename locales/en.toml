@@ -1764,7 +1764,7 @@ other = "{{.vm}}'s desktop didn't start."
 
 [desktop_ready]
 description = "address is the desktop's on this machine (127.0.0.1:PORT); password is the one a VNC viewer asks for"
-other = "{{.vm}}'s desktop is at vnc://{{.address}}, with the password {{.password}}.\nIt stays there until you press Ctrl+C."
+other = "{{.vm}}'s desktop is at\nvnc://{{.address}}\nPassword: {{.password}}\nIt stays there until you press Ctrl+C."
 
 [desktop_open_failed]
 description = "url is the desktop's address (vnc://127.0.0.1:PORT)"

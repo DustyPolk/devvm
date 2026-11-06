@@ -904,7 +904,7 @@ func DesktopOpenFailed(url string) M {
 	return M{id: "desktop_open_failed", vals: []val{{"url", url}}}
 }
 
-// DesktopReady is [desktop_ready]: "{{.vm}}'s desktop is at vnc://{{.address}}, with the password {{.password}}.\nIt stays there until you press Ctrl+C."
+// DesktopReady is [desktop_ready]: "{{.vm}}'s desktop is at\nvnc://{{.address}}\nPassword: {{.password}}\nIt stays there until you press Ctrl+C."
 func DesktopReady(address string, password string, vm string) M {
 	return M{id: "desktop_ready", vals: []val{{"address", address}, {"password", password}, {"vm", vm}}}
 }
