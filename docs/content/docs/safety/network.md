@@ -201,7 +201,7 @@ On the none tier, a VM with Claude Code gets Claude Code's built-in policy whole
 
 ## Inside the VM
 
-Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at the VM's own CAs. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)), on every tier. On a confined tier, a direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy.
+Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at the VM's own CAs. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)), on every tier. On a confined tier, a direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy. A tool that skips the proxy, even for a host the rules allow, fails with a DNS or connection error rather than the proxy's `403`, and nothing reaches the log ([what to do](../using/troubleshooting.md#a-host-on-the-allowlist-doesnt-resolve)).
 
 A blocked request gets `403`, and the response names the host, the reason and the rule that would allow it. The proxy also answers at `http://devvm.proxy/`:
 

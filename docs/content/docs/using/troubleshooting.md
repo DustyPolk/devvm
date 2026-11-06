@@ -134,6 +134,10 @@ A confined VM runs only with its proxy, so when the proxy doesn't start, devvm s
 
 On the allowlist tier, a VM reaches only the hosts on its allowlist, and on the none tier only its agents' and secrets' hosts. To see what the proxy blocked, run `devvm network log --blocked` on this machine, or `devvm-why` in the VM. `devvm network log --blocked` also shows the `devvm network allow` command that allows each host, and the rule applies at once, to the next connection ([logs](../safety/network.md#logs)).
 
+## A host on the allowlist doesn't resolve
+
+On a confined tier, a tool that doesn't go through the proxy fails with a DNS or connection error, such as `no such host`, `Temporary failure in name resolution`, `ENOTFOUND` or `EAI_AGAIN`, even for a host that the VM's rules allow, and `devvm network log` and `devvm-why` show nothing for it, because the request never reached the proxy. The VM can't resolve names or connect out on its own, so a tool works only through the proxy, and some tools read the proxy variables only when a setting of their own turns them on, or never. Turn on the tool's own proxy setting, so that it uses the environment, or give it the address in `$HTTPS_PROXY`. Hugo's `resources.GetRemote`, for example, uses the proxy only when `security.http.proxyFromEnvironment` is `true` in the site's config ([inside the VM](../safety/network.md#inside-the-vm)).
+
 ## Behind a company proxy
 
 When this machine reaches the internet only through a company proxy and nothing in a VM or a build gets through, check where devvm finds the proxy. devvm reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from the shell you run it in, as `env | grep -i _proxy` shows, and when that shell sets neither `HTTPS_PROXY` nor `HTTP_PROXY`, it reads the `[proxy]` table of `~/.config/devvm/config.toml` instead ([behind a company proxy](../safety/network.md#behind-a-company-proxy)). A shell without the settings, such as an editor's terminal that didn't load your profile, starts the VM's proxy without a company proxy, unless `config.toml` names one. So set the proxy in `config.toml`, and it works from every shell:

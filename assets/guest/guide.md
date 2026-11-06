@@ -23,7 +23,7 @@ Every request goes through a proxy that devvm runs on the host, and the VM's net
 The VM doesn't record its tier, and the user sees it with devvm network on the host. A request that the tier refuses fails with a 403 from the proxy, which names the host and the rule that would allow it, and on every tier but open a direct connection or a DNS lookup that skips the proxy fails at once.
 
 - Run `devvm-why` to see what the proxy blocked lately. A note before each shell prompt says when something new was blocked.
-- The proxy settings are in the environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms). A tool that ignores them, such as Java, needs the proxy's address in its own settings.
+- The proxy settings are in the environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms). A tool that ignores them, such as Java, needs the proxy's address in its own settings. A DNS or connection error for a host the tier allows means the tool skipped the proxy, and devvm-why doesn't show it.
 - No secret is in the VM. `GH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` and the agents' logins hold placeholders, and the proxy puts the real value into each request for that secret's hosts. Use them as they are, and don't copy them anywhere else, because they work nowhere but through this VM's proxy.
 - git over ssh goes through the proxy too, with `devvm-ssh-proxy` as its ProxyCommand, so the host must be one the tier allows.
 - Browsers ask for a proxy's password, so they use `devvm-local-proxy`, which the desktop starts on the VM's loopback.
