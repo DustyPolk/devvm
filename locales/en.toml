@@ -2194,6 +2194,14 @@ other = "devvm imported {{.agent}}'s login into {{.file}}."
 [agent_import_link_left_out]
 other = "devvm left out the link {{.path}}, because it imports only links to files inside the agent's folder."
 
+[agent_import_opencode_skipped]
+description = "label is opencode's own name for the login; provider is opencode's ID for its provider, such as openai"
+other = "devvm left out opencode's {{.label}} login for {{.provider}}, because VMs can't use it. Log in from a VM with devvm agent login opencode instead."
+
+[agent_import_opencode_failed]
+description = "reason is an error from the system, in English"
+other = "Reading opencode's logins with opencode auth export failed: {{.reason}}."
+
 [agent_login_read_failed]
 description = "reason is an error from the system, in English"
 other = "Reading the login in {{.file}} failed: {{.reason}}."

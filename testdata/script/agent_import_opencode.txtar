@@ -1,0 +1,54 @@
+# devvm agent import opencode: opencode 1's login is its auth.json;
+# opencode 2's comes from its auth export, read from its output, mapped
+# to the store's format, with a warning for each login left out.
+
+# opencode 1: the auth.json is copied, and opencode is asked only its
+# version.
+mkdir $HOME/.local/share/opencode
+cp $WORK/auth.json $HOME/.local/share/opencode/auth.json
+cp $WORK/v1 $STUB_DIR/opencode-version
+exec devvm agent import opencode
+stdout '^==> agent_login_imported agent=opencode file=\S*/data/devvm/logins/opencode/\.local/share/opencode/auth\.json$'
+grep 'testfake-v1' $DATA/logins/opencode/.local/share/opencode/auth.json
+stub_calls
+stdout '^opencode --version$'
+! stdout 'auth export'
+
+# opencode 2: its export replaces the store's login, the auth.json
+# left aside; Sign in with ChatGPT is left out with a warning.
+stub_reset
+cp $WORK/v2 $STUB_DIR/opencode-version
+cp $WORK/export.json $STUB_DIR/opencode-export
+exec devvm agent import --force opencode
+stdout '^==> agent_login_imported agent=opencode file=\S*/data/devvm/logins/opencode/\.local/share/opencode/auth\.json$'
+stderr '^devvm: agent_import_opencode_skipped label=ChatGPT provider=openai$'
+grep '"key": "testfake-or"' $DATA/logins/opencode/.local/share/opencode/auth.json
+! grep 'testfake-v1|testfake-sharing' $DATA/logins/opencode/.local/share/opencode/auth.json
+stub_calls
+stdout '^opencode auth export$'
+
+# The export fails: the import fails and the store keeps its login.
+cp $WORK/v2 $STUB_DIR/opencode-export-fails
+! exec devvm agent import --force opencode
+stderr 'agent_import_opencode_failed'
+grep 'testfake-or' $DATA/logins/opencode/.local/share/opencode/auth.json
+rm $STUB_DIR/opencode-export-fails
+
+# Nothing in the export but what's left out: nothing to import.
+rm $HOME/.local/share/opencode/auth.json
+cp $WORK/sharing.json $STUB_DIR/opencode-export
+exec devvm agent import opencode
+stderr '^devvm: agent_import_opencode_skipped label=ChatGPT provider=openai$'
+stderr '^devvm: agent_import_none agent=opencode$'
+
+-- v1 --
+1.19.5
+-- v2 --
+opencode v2.2.5
+-- auth.json --
+{"openrouter":{"type":"api","key":"testfake-v1"}}
+-- export.json --
+[{"id":"cred_1","integrationID":"openrouter","label":"API key","active":true,"value":{"type":"key","key":"testfake-or"}},
+ {"id":"cred_2","integrationID":"openai","label":"ChatGPT","active":true,"value":{"type":"oauth","methodID":"chatgpt-token-sharing","access":"testfake-sharing","refresh":"r","expires":1}}]
+-- sharing.json --
+[{"id":"cred_2","integrationID":"openai","label":"ChatGPT","active":true,"value":{"type":"oauth","methodID":"chatgpt-token-sharing","access":"testfake-sharing","refresh":"r","expires":1}}]

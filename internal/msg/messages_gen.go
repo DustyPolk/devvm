@@ -99,6 +99,16 @@ func AgentImportNothing() M {
 	return M{id: "agent_import_nothing"}
 }
 
+// AgentImportOpencodeFailed is [agent_import_opencode_failed]: "Reading opencode's logins with opencode auth export failed: {{.reason}}."
+func AgentImportOpencodeFailed(reason string) M {
+	return M{id: "agent_import_opencode_failed", vals: []val{{"reason", reason}}}
+}
+
+// AgentImportOpencodeSkipped is [agent_import_opencode_skipped]: "devvm left out opencode's {{.label}} login for {{.provider}}, because VMs can't use it. Log in from a VM with devvm agent login opencode instead."
+func AgentImportOpencodeSkipped(label string, provider string) M {
+	return M{id: "agent_import_opencode_skipped", vals: []val{{"label", label}, {"provider", provider}}}
+}
+
 // AgentImportReplace is [agent_import_replace]: "Replace what devvm's agent store has of {{.agents}} with this machine's settings and logins?"
 func AgentImportReplace(agents string) M {
 	return M{id: "agent_import_replace", vals: []val{{"agents", agents}}}
@@ -3905,6 +3915,8 @@ var specs = map[string]spec{
 	"agent_import_link_left_out":     {fields: []string{"path"}},
 	"agent_import_none":              {fields: []string{"agent"}},
 	"agent_import_nothing":           {},
+	"agent_import_opencode_failed":   {fields: []string{"reason"}},
+	"agent_import_opencode_skipped":  {fields: []string{"label", "provider"}},
 	"agent_import_replace":           {fields: []string{"agents"}},
 	"agent_key_changed":              {fields: []string{"key"}},
 	"agent_key_copy_failed":          {fields: []string{"agent", "vm"}},

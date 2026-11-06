@@ -42,6 +42,7 @@ func stubs() map[string]func(*call) int {
 		"limactl":             limactl,
 		"mise":                mise,
 		"open":                open,
+		"opencode":            opencode,
 		"qemu-img":            qemuImg,
 		"qemu-system-aarch64": logged,
 		"qemu-system-x86_64":  logged,

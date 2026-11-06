@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -37,7 +38,10 @@ func newImporter(t *testing.T) *importer {
 		im.excluded = append(im.excluded, dir)
 		return nil
 	}
-	im.AgentImport = AgentImport{Dirs: d, Secrets: store, Reporter: im.fake}
+	im.AgentImport = AgentImport{
+		Dirs: d, Secrets: store, Reporter: im.fake,
+		Opencode: func(context.Context, ...string) ([]byte, error) { return nil, exec.ErrNotFound },
+	}
 	return im
 }
 

@@ -272,6 +272,8 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"agent_dirs_removed":            "using/coding-agents#mounts",
 	"agent_import_none":             "using/coding-agents#importing-from-this-machine",
 	"agent_import_link_left_out":    "using/coding-agents#importing-from-this-machine",
+	"agent_import_opencode_skipped": "using/coding-agents#importing-from-this-machine",
+	"agent_import_opencode_failed":  "using/coding-agents#importing-from-this-machine",
 	"agent_login_read_failed":       "using/coding-agents#importing-from-this-machine",
 	"agent_import_failed":           "using/coding-agents#importing-from-this-machine",
 	"agent_save_no_agent":           "using/coding-agents#saving-a-vms-settings",

@@ -263,6 +263,7 @@ func devvmExecSites() map[string]string {
 		"internal/vm/sshagent.go":              "ssh-add on the terminal, which may ask for a passphrase",
 		"internal/vm/desktop.go":               "ssh -W to the VM's desktop socket: a stream for the viewer's relay",
 		"internal/vm/env.go":                   "macOS's open, for the desktop's viewer",
+		"internal/vm/agentimport.go":           "this machine's opencode: its version and auth export, whose output holds logins, so it's read, never logged",
 		"internal/vmssh/forward.go":            "the port forwarder's ssh master and -W relays: streams that last as long as the forwarder",
 		"internal/vmssh/links.go":              "links' ssh sessions, which last as long as the link, their output to its log",
 		"internal/platform/keychain_darwin.go": "security and tmutil: secrets on stdin and stdout, never in a log",

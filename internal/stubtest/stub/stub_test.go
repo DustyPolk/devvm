@@ -583,6 +583,48 @@ func TestSecurity(t *testing.T) {
 	}
 }
 
+// A history import's tar: its input kept, and refused as unsafe on its
+// switch.
+func TestShellHistory(t *testing.T) {
+	s := newSandbox(t)
+	sh := []string{"shell", "--workdir", "/", "vm", "sh", "-c", "tar -xzf - --quoting-style=escape -C x"}
+	s.ok("history", "limactl", sh...)
+	if s.read("history-in.tgz") != "history" {
+		t.Errorf("history-in.tgz %q", s.read("history-in.tgz"))
+	}
+	s.touch("history-unsafe")
+	if code, out, _ := s.run("history", "limactl", sh...); code != 1 || out != "devvm-history-unsafe\n" {
+		t.Errorf("unsafe: %d %q", code, out)
+	}
+	// devvm-tools-build's word without its bash -s -- isn't the tools'
+	// build, and a shell without a VM's name runs in no VM's home.
+	if code, _, _ := s.run("", "limactl", "shell", "--workdir", "/", "vm", "echo", "devvm-tools-build"); code != 0 {
+		t.Errorf("echo devvm-tools-build: %d", code)
+	}
+	s.ok("", "limactl", "shell")
+}
+
+// opencode: missing without its version; its version and its auth
+// export, which fails on its switch; anything else fails.
+func TestOpencode(t *testing.T) {
+	s := newSandbox(t)
+	s.fails(127, "opencode", "--version")
+	s.write("opencode-version", "opencode v2.2.5\n")
+	if out := s.ok("", "opencode", "--version"); out != "opencode v2.2.5\n" {
+		t.Errorf("--version %q", out)
+	}
+	if out := s.ok("", "opencode", "auth", "export"); out != "[]" {
+		t.Errorf("an empty export %q", out)
+	}
+	s.write("opencode-export", `[{"id":"x"}]`)
+	if out := s.ok("", "opencode", "auth", "export"); out != `[{"id":"x"}]` {
+		t.Errorf("export %q", out)
+	}
+	s.touch("opencode-export-fails")
+	s.fails(1, "opencode", "auth", "export")
+	s.fails(1, "opencode", "run")
+}
+
 // docker: down, an image or none, and save's tarball.
 func TestDocker(t *testing.T) {
 	s := newSandbox(t)

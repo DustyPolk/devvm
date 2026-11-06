@@ -99,7 +99,7 @@ When the store already has settings or a login of an agent you import, devvm ask
 
 On macOS, Claude Code keeps its own login in the Keychain, and devvm neither reads it nor copies it. You log Claude Code in from a VM instead, with `devvm agent login claude`, and every VM with Claude Code gets that login ([Claude Code login](#claude-code-login)).
 
-opencode 2 keeps its logins in its own database, and it reads `~/.local/share/opencode/auth.json` only once, when it first makes that database, so the file that the import copies holds only the logins you had before opencode 2, and their tokens may be out of date. Log opencode in from a VM instead, with `devvm agent login opencode` ([logging in with devvm agent login](#logging-in-with-devvm-agent-login)).
+opencode 2 keeps its logins in its own database rather than in `~/.local/share/opencode/auth.json`, so when this machine's opencode is version 2 or later, devvm reads its logins with `opencode auth export` and saves them in the store in the format of `auth.json`, the file that devvm copies for opencode 1. It saves the API key of each provider, and your OpenAI login when you made it with one of opencode's Codex logins, the browser or the headless one. Any other login is left out with a warning that names it, such as opencode's Sign in with ChatGPT, whose tokens a VM can't use, or another provider's OAuth login, and you log in from a VM instead, with `devvm agent login opencode` ([logging in with devvm agent login](#logging-in-with-devvm-agent-login)). When `opencode auth export` fails, the import fails too, and the store keeps the login it had.
 
 ### Saving a VM's settings
 

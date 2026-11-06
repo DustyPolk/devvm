@@ -6,9 +6,11 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/w3cj/devvm/internal/agentlogin"
@@ -27,6 +29,9 @@ type AgentImport struct {
 	Dirs    paths.Dirs
 	Secrets *secrets.Store
 	msg.Reporter
+	// Opencode runs this machine's opencode with args and returns its
+	// output; nil runs the one on PATH.
+	Opencode func(ctx context.Context, args ...string) ([]byte, error)
 }
 
 // hostAgent is what the home folder has of an agent: the files and
@@ -66,7 +71,7 @@ func (im AgentImport) Run(ctx context.Context, agents []string, force bool) erro
 		}
 	}()
 	for _, a := range agents {
-		h, err := im.read(a)
+		h, err := im.read(ctx, a)
 		if err != nil {
 			return err
 		}
@@ -129,7 +134,7 @@ func (im AgentImport) inStore(agent string) bool {
 // through its folder there as a root, so a link that leads out of the
 // folder is never followed: such a link, and a link to a folder, is left
 // out with a warning. A login file that's a link is left out too.
-func (im AgentImport) read(agent string) (*hostAgent, error) {
+func (im AgentImport) read(ctx context.Context, agent string) (*hostAgent, error) {
 	h := &hostAgent{agent: agent}
 	home := im.Dirs.Home
 	folder := agentFolderOf[agent]
@@ -141,6 +146,13 @@ func (im AgentImport) read(agent string) (*hostAgent, error) {
 			h.close()
 			return nil, err
 		}
+	}
+	if agent == agentlogin.Opencode && im.opencodeMajor(ctx) >= 2 {
+		if err := im.readOpencode2(ctx, h); err != nil {
+			h.close()
+			return nil, err
+		}
+		return h, nil
 	}
 	login := filepath.Join(home, filepath.FromSlash(secrets.LoginRel(agent)))
 	fi, err := os.Lstat(login)
@@ -167,6 +179,54 @@ func (im AgentImport) read(agent string) (*hostAgent, error) {
 	}
 	h.hasLog = true
 	return h, nil
+}
+
+// opencode runs this machine's opencode in the home folder and returns
+// its output, which is never logged, as auth export's holds logins.
+func (im AgentImport) opencode(ctx context.Context, args ...string) ([]byte, error) {
+	if im.Opencode != nil {
+		return im.Opencode(ctx, args...)
+	}
+	if _, err := exec.LookPath("opencode"); err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, "opencode", args...) //nolint:gosec // devvm's own arguments: --version or auth export
+	cmd.Dir = im.Dirs.Home
+	return cmd.Output()
+}
+
+// opencodeMajor is the major version of this machine's opencode, which
+// opencode --version prints as 2.2.5 or opencode v2.2.5, run in the home
+// folder; 0 without one, or when it prints something else.
+func (im AgentImport) opencodeMajor(ctx context.Context) int {
+	out, err := im.opencode(ctx, "--version")
+	f := strings.Fields(string(out))
+	if err != nil || len(f) == 0 {
+		return 0
+	}
+	major, _, _ := strings.Cut(strings.TrimPrefix(f[len(f)-1], "v"), ".")
+	n, _ := strconv.Atoi(major)
+	return n
+}
+
+// readOpencode2 reads opencode 2's logins, which it keeps in its own
+// database, through opencode auth export, whose output holds them and so
+// is read only from its stdout. It maps them to the store's format and
+// warns of each login the store can't keep.
+func (im AgentImport) readOpencode2(ctx context.Context, h *hostAgent) error {
+	out, err := im.opencode(ctx, "auth", "export")
+	if err != nil {
+		return msg.AgentImportOpencodeFailed(err.Error()).Because(err)
+	}
+	login, skipped, err := agentlogin.OpencodeFromExport(out)
+	if err != nil {
+		return msg.AgentImportOpencodeFailed(err.Error()).Because(err)
+	}
+	for _, s := range skipped {
+		im.Warn(msg.AgentImportOpencodeSkipped(msg.Printable(s.Label), msg.Printable(s.Provider)))
+	}
+	h.login, h.hasLog = login, login != nil
+	return nil
 }
 
 // readSettings lists the agent's settings files and folders in h.root,
