@@ -8,8 +8,7 @@ env DEVVM_TEST_VERSION=0.1.0
 env DEVVM_NO_RELEASE_CHECK=
 env DEVVM_PICK_ON_PIPE=1
 mkdir pfx/lib/devvm/0.1.0 pfx/bin
-cp $DEVVM_BIN/devvm pfx/lib/devvm/0.1.0/devvm
-chmod 0755 pfx/lib/devvm/0.1.0/devvm
+cp_exe $DEVVM_BIN/devvm pfx/lib/devvm/0.1.0/devvm
 symlink pfx/bin/devvm -> $WORK/pfx/lib/devvm/0.1.0/devvm
 env DEVVM=$WORK/pfx/bin/devvm
 release_server 0.2.0 0.1.0

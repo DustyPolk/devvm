@@ -50,6 +50,7 @@ func TestScript(t *testing.T) {
 func scriptCmds() map[string]func(ts *testscript.TestScript, neg bool, args []string) {
 	return map[string]func(ts *testscript.TestScript, neg bool, args []string){
 		"catg":           catGlob,
+		"cp_exe":         cpExe,
 		"free_port":      freePort,
 		"json_set":       jsonSet,
 		"listen_any":     listenAny,
@@ -272,6 +273,28 @@ func fakeHost() map[string]string {
 // second alone, but over 10 under the full suite's load, when each stub
 // call (bash and its own commands) can take a second.
 const waitFileTimeout = 60 * time.Second
+
+// cpExe copies an executable, a new one mode 0755, for the script to run. It writes
+// it under syscall.ForkLock, as testscript's cp doesn't: on Linux a child
+// another script forks while the copy's write descriptor is open holds it
+// until that child execs, and running the copy then fails with "text file
+// busy" (ETXTBSY).
+func cpExe(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 2 {
+		ts.Fatalf("usage: cp_exe SRC DST")
+	}
+	data, err := os.ReadFile(ts.MkAbs(args[0]))
+	ts.Check(err)
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	f, err := os.OpenFile(ts.MkAbs(args[1]), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755) //nolint:gosec // a file in the script's own folder, written in place under the lock
+	ts.Check(err)
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	ts.Check(err)
+}
 
 // waitFile waits for a file to exist, for a background command to get
 // somewhere. It fails at once when every background command has ended
