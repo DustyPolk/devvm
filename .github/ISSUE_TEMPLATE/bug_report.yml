@@ -97,7 +97,7 @@ body:
       description: What `devvm network` prints in the project folder.
       options:
         - allowlist
-        - none
+        - none (its agents' hosts and links only)
         - internet
         - open
         - unenforced
