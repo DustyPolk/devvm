@@ -1490,7 +1490,10 @@ other = "Toolchains"
 other = "Coding agents, which you start in the VM's shell"
 
 [pick_layers]
-other = "Layers, which a VM gets only when devvm makes it"
+other = "Layers: extra software built into the VM's image, such as docker, nix or desktop"
+
+[pick_layers_fixed]
+other = "Layers: extra software built into the VM's image, which devvm layer add and devvm layer rm change"
 
 [pick_called_for]
 description = "file is the project's file that calls for the toolchain or layer, such as package.json"

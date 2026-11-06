@@ -264,6 +264,9 @@ func TestToolsPick(t *testing.T) {
 	if len(*execs) != before || !slices.Equal(said.Names(), []string{"nothing_changed"}) {
 		t.Errorf("unchanged: execs %d, said %q", len(*execs)-before, said.Names())
 	}
+	if shown[2].Heading.ID() != "pick_layers_fixed" {
+		t.Errorf("layers heading %s", shown[2].Heading.ID())
+	}
 	for _, r := range shown[2].Rows {
 		if !r.Fixed || r.On != (r.Name == "nix") {
 			t.Errorf("layer row %+v", r)

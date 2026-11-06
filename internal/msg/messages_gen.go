@@ -2629,9 +2629,14 @@ func PickLayerYours() M {
 	return M{id: "pick_layer_yours"}
 }
 
-// PickLayers is [pick_layers]: "Layers, which a VM gets only when devvm makes it"
+// PickLayers is [pick_layers]: "Layers: extra software built into the VM's image, such as docker, nix or desktop"
 func PickLayers() M {
 	return M{id: "pick_layers"}
+}
+
+// PickLayersFixed is [pick_layers_fixed]: "Layers: extra software built into the VM's image, which devvm layer add and devvm layer rm change"
+func PickLayersFixed() M {
+	return M{id: "pick_layers_fixed"}
 }
 
 // PickNewHelp is [pick_new_help]: "Choose what {{.vm}} gets. Use up and down to move, space to toggle and enter to confirm."
@@ -4412,6 +4417,7 @@ var specs = map[string]spec{
 	"pick_layer_nix":                 {},
 	"pick_layer_yours":               {},
 	"pick_layers":                    {},
+	"pick_layers_fixed":              {},
 	"pick_new_help":                  {fields: []string{"vm"}},
 	"pick_toolchains":                {},
 	"pick_vm_help":                   {fields: []string{"vm"}},

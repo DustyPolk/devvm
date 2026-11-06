@@ -167,7 +167,7 @@ func (e Tools) Pick(ctx context.Context, o Options) error {
 		layers = append(layers, PickRow{Name: l, Desc: layerDesc(l), On: img.Has(l), Fixed: true})
 	}
 	got := e.PickParts(msg.PickVMHelp(vm), []PickPart{
-		{msg.PickToolchains(), toolchains}, {msg.PickAgents(), agents}, {msg.PickLayers(), layers},
+		{msg.PickToolchains(), toolchains}, {msg.PickAgents(), agents}, {msg.PickLayersFixed(), layers},
 	})
 	want := slices.Concat(checked(got[0]), checked(got[1]))
 	var add, gone []string
