@@ -579,7 +579,7 @@ func TestUpPicker(t *testing.T) {
 // A new VM's summary is followed by the question whether to customize
 // it, where the picker shows and anything is left to choose: no makes it
 // as shown, yes shows the picker, a part a flag gave greyed out, then
-// asks its tier, where no flag gave it, and its CPUs and memory, each
+// asks its tier, where no flag gave it, and its CPUs, memory and disk, each
 // only where no flag gave it.
 // Without the picker, or with nothing left, there's no question, and
 // only the first ends with the flags that choose others.
@@ -600,31 +600,36 @@ func TestUpCustomize(t *testing.T) {
 		{name: "no picker", net: "allowlist", choose: true},
 		{
 			name: "everything given", picks: true, net: "open", cpus: "2",
-			o: Options{Toolchains: none, Agents: none, Layers: none, Network: "open", Size: Size{CPUs: "2", Memory: "4"}},
+			o: Options{Toolchains: none, Agents: none, Layers: none, Network: "open", Size: Size{CPUs: "2", Memory: "4", Disk: "100"}},
 		},
 		{
 			name: "yes", picks: true, yes: true, net: "internet", cpus: "2",
-			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt",
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt,new_vm_disk_prompt",
 		},
 		{
 			name: "yes with layers and cpus given", picks: true, yes: true, net: "internet", cpus: "3", fixed: true,
 			o:     Options{Layers: &[]string{"docker"}, Size: Size{CPUs: "3"}},
-			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_memory_prompt",
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_memory_prompt,new_vm_disk_prompt",
+		},
+		{
+			name: "yes with the disk given", picks: true, yes: true, net: "internet", cpus: "2",
+			o:     Options{Size: Size{Disk: "200"}},
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt",
 		},
 		{
 			name: "yes with a saved tier", picks: true, yes: true, saved: "none", net: "internet", cpus: "2",
-			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt",
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt,new_vm_disk_prompt",
 		},
 		{name: "Enter with a saved tier", picks: true, saved: "none", asked: "new_vm_customize", net: "none"},
 		{
 			name: "every part and the size given", picks: true, net: "allowlist", cpus: "2",
-			o:     Options{Toolchains: none, Agents: none, Layers: none, Size: Size{CPUs: "2", Memory: "4"}},
+			o:     Options{Toolchains: none, Agents: none, Layers: none, Size: Size{CPUs: "2", Memory: "4", Disk: "100"}},
 			asked: "new_vm_customize",
 		},
 		{
 			name: "yes with every part and the tier given", picks: true, yes: true, net: "none", cpus: "2",
 			o:     Options{Toolchains: none, Agents: none, Layers: none, Network: "none"},
-			asked: "new_vm_customize,new_vm_cpus_prompt,new_vm_memory_prompt",
+			asked: "new_vm_customize,new_vm_cpus_prompt,new_vm_memory_prompt,new_vm_disk_prompt",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -651,7 +656,7 @@ func TestUpCustomize(t *testing.T) {
 			fk.OnAsk = func(m msg.M) bool { asked = append(asked, m.ID()); return tc.yes }
 			fk.OnAnswer = func(m msg.M) string {
 				asked = append(asked, m.ID())
-				return map[string]string{"new_vm_cpus_prompt": "2"}[m.ID()]
+				return map[string]string{"new_vm_cpus_prompt": "2", "new_vm_disk_prompt": "150"}[m.ID()]
 			}
 			e.PickOne = func(help msg.M, _ []PickRow) int {
 				asked = append(asked, help.ID())
@@ -674,6 +679,14 @@ func TestUpCustomize(t *testing.T) {
 			st, _ := state.ReadVM(e.Dirs, spec.Name)
 			if get(st, KeyNet) != tc.net || get(st, KeyCPUs) != tc.cpus {
 				t.Errorf("net=%q cpus=%q, want %q and %q", get(st, KeyNet), get(st, KeyCPUs), tc.net, tc.cpus)
+			}
+			// The disk typed, else the one given or the summary's.
+			wantDisk := map[bool]float64{true: 150, false: 100}[strings.HasSuffix(tc.asked, "new_vm_disk_prompt")]
+			if tc.o.Size.Disk == "200" {
+				wantDisk = 200
+			}
+			if spec.Size.DiskGiB != wantDisk && (tc.yes || tc.o.Size.Disk != "") {
+				t.Errorf("disk %v, want %v", spec.Size.DiskGiB, wantDisk)
 			}
 			if got := slices.Contains(says.Names(), "new_vm_choose"); got != tc.choose {
 				t.Errorf("said %q", says.Names())

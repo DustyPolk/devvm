@@ -180,6 +180,70 @@ func TestSizeChoiceRefused(t *testing.T) {
 	}
 }
 
+// AskVM asks a new VM's CPUs, memory and disk, each from the summary's,
+// the disk after its own line of context; Enter keeps one, a disk below
+// the image's or not a size is said and asked again, a size given isn't
+// asked, and where it can't ask, the VM keeps its size. Nothing is saved.
+func TestSizeChoiceAskVM(t *testing.T) {
+	shown := Size{CPUs: "4", Memory: "8", Disk: "100"}
+	q := "new_vm_size_question have_cpus=8 have_memory=32"
+	cpus, mem, disk := "new_vm_cpus_prompt cpus=4", "new_vm_memory_prompt memory=8", "new_vm_disk_prompt disk=100"
+	for _, tc := range []struct {
+		name     string
+		given    Size
+		answers  []string
+		terminal bool
+		want     Size
+		shown    []string
+	}{
+		{
+			name: "Enter keeps the summary's", answers: []string{"", "", ""}, terminal: true, want: shown,
+			shown: []string{q, cpus, mem, "new_vm_disk_question", disk},
+		},
+		{
+			name: "a disk typed", answers: []string{"", "", "150G"}, terminal: true,
+			want:  Size{CPUs: "4", Memory: "8", Disk: "150"},
+			shown: []string{q, cpus, mem, "new_vm_disk_question", disk},
+		},
+		{
+			name: "too small, then not a size", answers: []string{"", "", "50", "x", "120"}, terminal: true,
+			want: Size{CPUs: "4", Memory: "8", Disk: "120"},
+			shown: []string{
+				q, cpus, mem, "new_vm_disk_question", disk, "disk_shrink have=100 vm=devvm-x want=50",
+				disk, `size_not_gib flag=--disk value="x"`, disk,
+			},
+		},
+		{
+			name: "--disk given", given: Size{Disk: "200"}, answers: []string{"", ""}, terminal: true,
+			want:  Size{CPUs: "4", Memory: "8", Disk: "200"},
+			shown: []string{q, cpus, mem},
+		},
+		{
+			name: "only the disk left", given: Size{CPUs: "2", Memory: "4"}, answers: []string{""}, terminal: true,
+			want:  Size{CPUs: "2", Memory: "4", Disk: "100"},
+			shown: []string{"new_vm_disk_question", disk},
+		},
+		{name: "can't ask", want: shown},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testDirs(t)
+			a := &sizeAsker{t: t, answers: tc.answers}
+			c := a.choice(d, Host{CPUs: 8, MemoryGiB: 32})
+			c.Reporter.(*msg.Fake).Terminal = tc.terminal
+			got := c.AskVM(tc.given.Or(shown), shown, tc.given, "devvm-x")
+			if got != tc.want {
+				t.Errorf("AskVM = %+v, want %+v", got, tc.want)
+			}
+			if !slices.Equal(a.shown, tc.shown) {
+				t.Errorf("shown\n%q\nwant\n%q", a.shown, tc.shown)
+			}
+			if _, err := os.Stat(d.Settings()); err == nil {
+				t.Error("settings.json written")
+			}
+		})
+	}
+}
+
 // Set saves what the flags give, checked, keeping the rest as saved; a
 // size config.toml sets is refused.
 func TestSizeChoiceSet(t *testing.T) {

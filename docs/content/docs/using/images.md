@@ -127,7 +127,7 @@ flowchart TD
   term -- "no" --> copy
   term -- "yes" --> ask{{"Customize it? [y/N]"}}
   ask -- "Enter" --> copy
-  ask -- "y" --> pick["the list, then the tier,<br>then the CPUs and memory"] --> copy
+  ask -- "y" --> pick["the list, then the tier,<br>then the CPUs, memory and disk"] --> copy
   copy["its image built if it isn't,<br>and the VM is a copy of it,<br>with its shared tools mounted"]
 ```
 
@@ -145,7 +145,7 @@ Before devvm makes a new VM, it shows a summary of what the VM gets. The summary
 Customize it? [y/N]
 ```
 
-In a terminal, devvm then asks whether to customize the VM. Pressing Enter makes it as shown. When you type y, devvm shows the three parts in one list under three headings, Toolchains, Coding agents and Layers, with what the summary showed checked. Up and down move, space checks or unchecks, and enter confirms what's checked. The Layers heading says that a layer is extra software built into the VM's image. Then devvm lists the four network tiers, each with what it reaches, unless you gave `--network`, and up and down choose one, starting from the tier the summary showed: allowlist, or the tier you saved for new VMs with `devvm network -g` ([choosing a tier](../safety/network.md#choosing-a-tier)). Last, it asks for the VM's CPUs and memory, starting from the summary's, and Enter keeps each one. The size you type is this VM's alone, and devvm saves it for no other VM.
+In a terminal, devvm then asks whether to customize the VM. Pressing Enter makes it as shown. When you type y, devvm shows the three parts in one list under three headings, Toolchains, Coding agents and Layers, with what the summary showed checked. Up and down move, space checks or unchecks, and enter confirms what's checked. The Layers heading says that a layer is extra software built into the VM's image. Then devvm lists the four network tiers, each with what it reaches, unless you gave `--network`, and up and down choose one, starting from the tier the summary showed: allowlist, or the tier you saved for new VMs with `devvm network -g` ([choosing a tier](../safety/network.md#choosing-a-tier)). Last, it asks for the VM's CPUs, memory and disk, starting from the summary's, and Enter keeps each one. Each question is skipped when you gave its flag, `--cpus`, `--memory` or `--disk`. Before the disk's question, devvm says that the disk can grow later with `devvm size --disk` but never shrinks, and that it takes up only the space the VM writes. A disk smaller than the image's, 100 GiB for base, is refused as `--disk` refuses it, and devvm asks again, as it does for a value that isn't a size. The size you type is this VM's alone, and devvm saves it for no other VM.
 
 Each part has a default:
 

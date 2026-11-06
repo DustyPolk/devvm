@@ -26,7 +26,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		Use:   "devvm",
 		Short: "Open a shell in this folder's VM, creating it first",
 		Long: "Open a shell in this folder's VM, at the same path, and create the VM first when the folder has none. " +
-			"devvm shows what a new VM gets, and in a terminal you can customize its toolchains, coding agents, layers, tier and size, which --tools, --agents, --layers, --network, --cpus and --memory choose without asking. " +
+			"devvm shows what a new VM gets, and in a terminal you can customize its toolchains, coding agents, layers, tier and size, which --tools, --agents, --layers, --network, --cpus, --memory and --disk choose without asking. " +
 			"The VM mounts only this folder read-write, and with --clone it gets its own clone of the repo instead.",
 		Example: examples(
 			"devvm", "open this folder's VM, choosing what a new one gets",

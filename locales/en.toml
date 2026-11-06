@@ -1460,7 +1460,7 @@ description = "file is the devcontainer.json's path in the project folder"
 other = "  devcontainer.json: {{.file}}, which devvm --no-devcontainer skips"
 
 [new_vm_choose]
-other = "To choose others, give --tools, --agents, --layers, --network, --cpus or --memory."
+other = "To choose others, give --tools, --agents, --layers, --network, --cpus, --memory or --disk."
 
 [new_vm_customize]
 other = "Customize it?"
@@ -1476,6 +1476,13 @@ other = "CPUs for the VM [{{.cpus}}]:"
 [new_vm_memory_prompt]
 description = "memory is in GiB, what the VM gets unless you type another size"
 other = "Memory for the VM in GiB [{{.memory}}]:"
+
+[new_vm_disk_question]
+other = "The disk can grow later with devvm size --disk but never shrink, and it takes only the space the VM writes."
+
+[new_vm_disk_prompt]
+description = "disk is in GiB, what the VM gets unless you type another size"
+other = "Disk for the VM in GiB [{{.disk}}]:"
 
 [pick_new_help]
 other = "Choose what {{.vm}} gets. Use up and down to move, space to toggle and enter to confirm."

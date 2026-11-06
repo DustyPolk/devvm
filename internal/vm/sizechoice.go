@@ -110,26 +110,40 @@ func typedMemory(v string) (Size, error) {
 	return Size{Memory: v}, err
 }
 
-// AskVM asks for a new VM's CPUs and memory, once its summary showed
+// typedDisk is the disk typed at a size question, parsed as --disk takes
+// it.
+func typedDisk(v string) (Size, error) {
+	v, err := settings.ParseGiB("--disk", v)
+	return Size{Disk: v}, err
+}
+
+// AskVM asks for vm's CPUs, memory and disk, once its summary showed
 // shown and the user chose to customize it, each starting from shown's
-// and skipped when given (--cpus, --memory) set it. Enter keeps one; a
-// value the host can't give is said, and asked for again. It returns s
-// with what's typed; where it can't ask, s as it is. Nothing is saved.
-func (c SizeChoice) AskVM(s, shown, given Size) Size {
+// and skipped when given (--cpus, --memory, --disk) set it; the disk's
+// question says first that a disk grows but never shrinks. Enter keeps
+// one; a value the host can't give, or a disk below the image's
+// (backend.BaseDiskGiB), is said, and asked for again. It returns s with
+// what's typed; where it can't ask, s as it is. Nothing is saved.
+func (c SizeChoice) AskVM(s, shown, given Size, vm string) Size {
 	about := []msg.M{msg.NewVMSizeQuestion(strconv.Itoa(c.Host.CPUs), strconv.Itoa(c.Host.MemoryGiB))}
 	for _, q := range []struct {
 		given  string
 		prompt msg.Question
+		about  []msg.M // said before it instead, when set
 		into   *string
 		parse  func(string) (Size, error)
 	}{
-		{given.CPUs, msg.NewVMCpusPrompt(shown.CPUs).AnsweredBy("--cpus"), &s.CPUs, typedCPUs},
-		{given.Memory, msg.NewVMMemoryPrompt(shown.Memory).AnsweredBy("--memory"), &s.Memory, typedMemory},
+		{given.CPUs, msg.NewVMCpusPrompt(shown.CPUs).AnsweredBy("--cpus"), nil, &s.CPUs, typedCPUs},
+		{given.Memory, msg.NewVMMemoryPrompt(shown.Memory).AnsweredBy("--memory"), nil, &s.Memory, typedMemory},
+		{given.Disk, msg.NewVMDiskPrompt(shown.Disk).AnsweredBy("--disk"), []msg.M{msg.NewVMDiskQuestion()}, &s.Disk, typedDisk},
 	} {
 		if q.given != "" {
 			continue
 		}
-		v, err := c.ask(q.prompt, about, q.parse)
+		if q.about != nil {
+			about = q.about
+		}
+		v, err := c.askFor(q.prompt, about, q.parse, backend.BaseDiskGiB, vm)
 		if err != nil {
 			return s
 		}
@@ -145,6 +159,12 @@ func (c SizeChoice) AskVM(s, shown, given Size) Size {
 // empty, or parse takes it and the host can give it; it returns the
 // parsed value, "" for Enter, or the question's refusal.
 func (c SizeChoice) ask(q msg.Question, about []msg.M, parse func(string) (Size, error)) (string, error) {
+	return c.askFor(q, about, parse, 0, "")
+}
+
+// askFor is ask, with a disk typed for vm checked against minDisk too
+// (Size.Check).
+func (c SizeChoice) askFor(q msg.Question, about []msg.M, parse func(string) (Size, error), minDisk float64, vm string) (string, error) {
 	for {
 		v, err := c.Answer(q.About(about...))
 		if err != nil || v == "" {
@@ -153,10 +173,10 @@ func (c SizeChoice) ask(q msg.Question, about []msg.M, parse func(string) (Size,
 		about = nil
 		s, err := parse(v)
 		if err == nil {
-			err = s.Check(c.Host, 0, "")
+			err = s.Check(c.Host, minDisk, vm)
 		}
 		if err == nil {
-			return s.CPUs + s.Memory, nil
+			return s.CPUs + s.Memory + s.Disk, nil
 		}
 		if m, ok := errors.AsType[msg.M](err); ok {
 			c.Warn(m)

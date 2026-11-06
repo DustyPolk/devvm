@@ -2189,7 +2189,7 @@ func NewVMAgentsNone() M {
 	return M{id: "new_vm_agents_none"}
 }
 
-// NewVMChoose is [new_vm_choose]: "To choose others, give --tools, --agents, --layers, --network, --cpus or --memory."
+// NewVMChoose is [new_vm_choose]: "To choose others, give --tools, --agents, --layers, --network, --cpus, --memory or --disk."
 func NewVMChoose() M {
 	return M{id: "new_vm_choose"}
 }
@@ -2207,6 +2207,16 @@ func NewVMCustomize() M {
 // NewVMDevcontainer is [new_vm_devcontainer]: "  devcontainer.json: {{.file}}, which devvm --no-devcontainer skips"
 func NewVMDevcontainer(file string) M {
 	return M{id: "new_vm_devcontainer", vals: []val{{"file", file}}}
+}
+
+// NewVMDiskPrompt is [new_vm_disk_prompt]: "Disk for the VM in GiB [{{.disk}}]:"
+func NewVMDiskPrompt(disk string) M {
+	return M{id: "new_vm_disk_prompt", vals: []val{{"disk", disk}}}
+}
+
+// NewVMDiskQuestion is [new_vm_disk_question]: "The disk can grow later with devvm size --disk but never shrink, and it takes only the space the VM writes."
+func NewVMDiskQuestion() M {
+	return M{id: "new_vm_disk_question"}
 }
 
 // NewVMFlagsIgnored is [new_vm_flags_ignored]: "Only a new VM takes {{.flags}}, so {{.vm}} keeps its own settings."
@@ -4332,6 +4342,8 @@ var specs = map[string]spec{
 	"new_vm_cpus_prompt":             {fields: []string{"cpus"}},
 	"new_vm_customize":               {},
 	"new_vm_devcontainer":            {fields: []string{"file"}},
+	"new_vm_disk_prompt":             {fields: []string{"disk"}},
+	"new_vm_disk_question":           {},
 	"new_vm_flags_ignored":           {fields: []string{"flags", "vm"}},
 	"new_vm_flags_ignored_run":       {fields: []string{"command", "flags", "vm"}},
 	"new_vm_layer_for":               {fields: []string{"file", "layer"}},

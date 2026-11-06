@@ -116,7 +116,7 @@ func (s summary) layers() []msg.M {
 // once o's flags are taken as given: a part of the picker's, its tier
 // when tierOpen (neither --network nor a saved tier, and a backend that
 // may confine it), or its
-// CPUs or memory.
+// CPUs, memory or disk.
 func leftToChoose(o Options, tierOpen bool) bool {
-	return !allGiven(o) || tierOpen || o.Size.CPUs == "" || o.Size.Memory == ""
+	return !allGiven(o) || tierOpen || o.Size.CPUs == "" || o.Size.Memory == "" || o.Size.Disk == ""
 }

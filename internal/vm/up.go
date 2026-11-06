@@ -544,7 +544,7 @@ func (e creation) choose(o Options, f project.Folder, b backend.Backend, def set
 		return p, nil
 	}
 	// Refused, as when the input ends, it's no: the VM made as shown.
-	if yes, _ := e.Ask(msg.NewVMCustomize().AnsweredBy("--tools, --agents, --layers, --network, --cpus and --memory")); !yes {
+	if yes, _ := e.Ask(msg.NewVMCustomize().AnsweredBy("--tools, --agents, --layers, --network, --cpus, --memory and --disk")); !yes {
 		return p, nil
 	}
 	return e.customize(s, host, tierOpen, n)
@@ -554,7 +554,7 @@ func (e creation) choose(o Options, f project.Folder, b backend.Backend, def set
 // summary s: the picker, a part a flag gave greyed out (skipped when the
 // flags give every part), then its tier when tierOpen (chooseTier, from
 // the one the summary showed), then its
-// CPUs and memory (AskVM), each into n. It returns the parts chosen,
+// CPUs, memory and disk (AskVM), each into n. It returns the parts chosen,
 // checked as the defaults are.
 func (e creation) customize(s summary, host Host, tierOpen bool, n *newVM) (Parts, error) {
 	p := s.p
@@ -567,7 +567,7 @@ func (e creation) customize(s summary, host Host, tierOpen bool, n *newVM) (Part
 	if tierOpen {
 		n.net = e.chooseTier(s.vm, n.net)
 	}
-	n.size = SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.AskVM(n.size, s.size, s.o.Size)
+	n.size = SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.AskVM(n.size, s.size, s.o.Size, s.vm)
 	return p, n.size.Check(host, backend.BaseDiskGiB, s.vm)
 }
 

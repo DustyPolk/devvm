@@ -124,10 +124,10 @@ func TestChosenBy(t *testing.T) {
 }
 
 // Something is left to choose unless the flags give every part, the
-// tier can't be chosen, and both the CPUs and the memory are given.
+// tier can't be chosen, and the CPUs, the memory and the disk are given.
 func TestLeftToChoose(t *testing.T) {
 	none := &[]string{}
-	all := Options{Toolchains: none, Agents: none, Layers: none, Size: Size{CPUs: "2", Memory: "4"}}
+	all := Options{Toolchains: none, Agents: none, Layers: none, Size: Size{CPUs: "2", Memory: "4", Disk: "100"}}
 	for _, tc := range []struct {
 		name     string
 		o        Options
@@ -138,6 +138,7 @@ func TestLeftToChoose(t *testing.T) {
 		{"everything given", all, false, false},
 		{"the tier open", all, true, true},
 		{"a part left", Options{Toolchains: none, Agents: none, Size: all.Size}, false, true},
+		{"the disk left", Options{Toolchains: none, Agents: none, Layers: none, Size: Size{CPUs: "2", Memory: "4"}}, false, true},
 		{"the memory left", Options{Toolchains: none, Agents: none, Layers: none, Size: Size{CPUs: "2"}}, false, true},
 	} {
 		if got := leftToChoose(tc.o, tc.tierOpen); got != tc.want {
