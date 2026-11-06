@@ -46,8 +46,6 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 | `.agents/skills/cli/` | the cli skill: devvm's command line rules, the checklist for adding a command, the tests behind each rule, `judgment.md` for the rest |
 | `.agents/skills/docs-voice/` | the docs-voice skill: the voice of the prose and messages, terms, tropes, `scan.sh` and `facts.sh` |
 
-Still to come: the release keys (`packaging/minisign.pub`, `packaging/release-signer`).
-
 ## Tasks
 
 `mise run <task>`: `fmt`; `lint` (`lint:code`: Go, shellcheck, workflows with actionlint and zizmor; `lint:docs`: docs, `TestDocLinks`, `TestCommandLines`); `test` (`scripts/test.sh`: `-race`, in a throwaway `HOME`; needs a C compiler; then each package's coverage, unit and CLI tests merged, against `testdata/coverage/<os>.txt`); `coverage` (the same, then raises the baselines it beat: commit them with the change); `vuln`; `deadcode` (lists only `backendtest`, `stubtest`, `upgradetest`, `msg.IDOf`, `msg.NamesOf`, `msg.Recorder` and `msg.Fake`, which tests use; anything else gets a caller or goes); `cli-docs` (after changing any command's `Use`, `Short`, `Long` or flags; commit the pages); `docs` (serves `http://localhost:1313/`); `e2e`.
