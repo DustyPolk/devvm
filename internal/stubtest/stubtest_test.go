@@ -232,6 +232,24 @@ func TestState(t *testing.T) {
 	if err != nil || !strings.HasPrefix(string(out), `{"name":"a","status":"Running",`) || !strings.Contains(string(out), `"cpus":2,"memory":3,"disk":4,`) {
 		t.Errorf("list: %v\n%s", err, out)
 	}
+	// A broken instance's pids, listed; its driver left running holds
+	// its disk, so start fails until a stop.
+	s.VM(t, "b", "Broken")
+	s.PIDs(t, "b", 0, 7)
+	s.PIDs(t, "none", 1, 2)
+	out, err = exec.CommandContext(t.Context(), "limactl", "list", "--json").Output()
+	if err != nil || !strings.Contains(string(out), `"status":"Broken",`) || !strings.Contains(string(out), `"driverPID":7,`) {
+		t.Errorf("list, broken: %v\n%s", err, out)
+	}
+	if exec.CommandContext(t.Context(), "limactl", "start", "--tty=false", "b").Run() == nil {
+		t.Error("started over a driver left running")
+	}
+	if err := exec.CommandContext(t.Context(), "limactl", "stop", "--force", "b").Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := exec.CommandContext(t.Context(), "limactl", "start", "--tty=false", "b").Run(); err != nil {
+		t.Errorf("start after a stop: %v", err)
+	}
 	if _, ok := s.Keychain(t, "github"); ok {
 		t.Error("an item before any")
 	}

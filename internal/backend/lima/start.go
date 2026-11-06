@@ -64,6 +64,14 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 	if backend.Status(in.Status) == backend.StatusRunning {
 		return nil
 	}
+	// A driver left running without its hostagent (a start cut short
+	// on a slow host) holds the VM's disk, so a new one can't start:
+	// it's stopped with --force first.
+	if backend.Status(in.Status) == statusBroken && in.DriverPID != 0 && in.HostAgentPID == 0 {
+		if err := l.stop(ctx, vm, "--force"); err != nil {
+			return err
+		}
+	}
 	sshPort := c.SSHPort
 	if sshPort == 0 && c.Net != backend.NetDirect {
 		// A build VM's, chosen as a VM's are and held until its hostagent

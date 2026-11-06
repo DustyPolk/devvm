@@ -863,6 +863,56 @@ func TestStubStopBroken(t *testing.T) {
 	}
 }
 
+// stubCalls is the stub's calls but list --json's.
+func stubCalls(t *testing.T, stubs *stubtest.Stubs) []string {
+	t.Helper()
+	var got []string
+	for _, c := range stubs.Calls(t) {
+		if c != "limactl list --json" {
+			got = append(got, c)
+		}
+	}
+	return got
+}
+
+// Against the limactl stub: a VM whose start was cut short while its
+// hostagent starts QEMU (broken: a hostagent, no driver yet) is waited
+// for, and stopped as it then is, running: forced at once, the hostagent
+// would go and leave QEMU running without it.
+func TestStubStopStarting(t *testing.T) {
+	l, _, stubs := stubLima(t)
+	l.DriverWait = 10 * time.Second
+	vm := "devvm-p-0123456789abcd"
+	stubs.VM(t, vm, "Broken")
+	stubs.PIDs(t, vm, 4242, 0)
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		stubs.VM(t, vm, "Running")
+	}()
+	if err := l.Stop(t.Context(), vm); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stubCalls(t, stubs), []string{"limactl stop " + vm}; !slices.Equal(got, want) {
+		t.Errorf("calls %q, want %q", got, want)
+	}
+}
+
+// Against the limactl stub: a VM whose QEMU runs on without its hostagent
+// (broken), which a new start can't start, is stopped with --force first.
+func TestStubStartOrphanedDriver(t *testing.T) {
+	l, _, stubs := stubLima(t)
+	vm := "devvm-p-0123456789abcd"
+	stubs.VM(t, vm, "Broken")
+	stubs.PIDs(t, vm, 0, 4242)
+	if err := l.Start(t.Context(), vm, backend.Want{}, backend.Confinement{}); err != nil {
+		t.Fatal(err)
+	}
+	got := stubCalls(t, stubs)
+	if len(got) < 2 || got[0] != "limactl stop --force "+vm || !slices.Contains(got, "limactl start --tty=false "+vm) {
+		t.Errorf("calls %q, want a forced stop, then the start", got)
+	}
+}
+
 // Against the limactl stub: VMs stop, start and go.
 func TestStubLifecycle(t *testing.T) {
 	l, _, stubs := stubLima(t)

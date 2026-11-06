@@ -131,14 +131,18 @@ func (l *Lima) edit(ctx context.Context, vm string, opts ...string) error {
 
 // instance is a VM as limactl list --json has it: the fields devvm reads.
 type instance struct {
-	Name          string  `json:"name"`
-	Status        string  `json:"status"`
-	CPUs          int     `json:"cpus"`
-	Memory        int64   `json:"memory"` // bytes
-	Disk          int64   `json:"disk"`   // bytes
-	SSHLocalPort  int     `json:"sshLocalPort"`
-	SSHConfigFile string  `json:"sshConfigFile"`
-	Config        *config `json:"config"`
+	Name          string `json:"name"`
+	Status        string `json:"status"`
+	CPUs          int    `json:"cpus"`
+	Memory        int64  `json:"memory"` // bytes
+	Disk          int64  `json:"disk"`   // bytes
+	SSHLocalPort  int    `json:"sshLocalPort"`
+	SSHConfigFile string `json:"sshConfigFile"`
+	// HostAgentPID and DriverPID are its hostagent's and its driver's
+	// (QEMU's; on vz, the hostagent's own), 0 for one that doesn't run.
+	HostAgentPID int     `json:"hostAgentPID"`
+	DriverPID    int     `json:"driverPID"`
+	Config       *config `json:"config"`
 }
 
 // config is the parts of a VM's Lima config devvm reads.

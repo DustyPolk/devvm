@@ -166,6 +166,17 @@ func (s *Stubs) VM(t testing.TB, name, status string) {
 	})
 }
 
+// PIDs gives the instance name the pids Lima lists for its hostagent and
+// its driver (0: none), as a broken one has.
+func (s *Stubs) PIDs(t testing.TB, name string, hostAgent, driver int) {
+	t.Helper()
+	s.update(t, func(st *stubstate.State) {
+		if in := st.Instances[name]; in != nil {
+			in.HostAgentPID, in.DriverPID = hostAgent, driver
+		}
+	})
+}
+
 // Size gives the instance name its size: memory and disk in bytes.
 func (s *Stubs) Size(t testing.TB, name string, cpus int, memory, disk int64) {
 	t.Helper()

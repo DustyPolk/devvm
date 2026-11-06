@@ -31,7 +31,10 @@ import (
 // TestLimactlStubContract test in internal/backend/lima checks all this
 // against real Lima.
 //
-// start writes the VM's ha.pid (devvm's pid, which runs and is soon gone,
+// start fails on a broken instance whose driver runs (its pids, list
+// --json's hostAgentPID and driverPID, are the state's), as Lima's QEMU
+// can't open a disk the one left running holds. Otherwise it writes the
+// VM's ha.pid (devvm's pid, which runs and is soon gone,
 // or $STUB_DIR/hostagent's, a pid that lasts), which stop removes, its ssh
 // config ($LIMA_HOME/<name>/ssh.config, Lima's own options, host keys
 // unchecked) unless it exists, and the SSH agent it was given
@@ -326,10 +329,12 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
-// setStatus lists name in status, keeping its size and config.
+// setStatus lists name in status, keeping its size and config; its pids
+// are a broken instance's alone.
 func setStatus(st *stubstate.State, name, status string) {
 	if in := st.Instances[name]; in != nil {
 		in.Status = status
+		in.HostAgentPID, in.DriverPID = 0, 0
 		return
 	}
 	st.Instances[name] = stubstate.NewInstance(status)
@@ -375,7 +380,15 @@ func (l *lima) start() error {
 		return nil
 	}
 	vm := l.name(0)
-	if err := l.update(func(st *stubstate.State) error { setStatus(st, vm, "Running"); return nil }); err != nil {
+	if err := l.update(func(st *stubstate.State) error {
+		// A driver left running holds the VM's disk: Lima's new one
+		// can't open it.
+		if in := st.Instances[vm]; in != nil && in.Status == "Broken" && in.DriverPID > 0 {
+			return errStatus(1)
+		}
+		setStatus(st, vm, "Running")
+		return nil
+	}); err != nil {
 		return err
 	}
 	ha := strconv.Itoa(l.ppid)
@@ -496,6 +509,8 @@ type listed struct {
 	Disk          int64           `json:"disk"`
 	SSHLocalPort  int             `json:"sshLocalPort"`
 	SSHConfigFile string          `json:"sshConfigFile"`
+	HostAgentPID  int             `json:"hostAgentPID,omitempty"`
+	DriverPID     int             `json:"driverPID,omitempty"`
 	Config        json.RawMessage `json:"config"`
 }
 
@@ -527,6 +542,7 @@ func (l *lima) list() int {
 		err := enc.Encode(listed{
 			Name: n, Status: in.Status, Dir: dir, CPUs: in.CPUs, Memory: in.Memory, Disk: in.Disk,
 			SSHLocalPort: 60022, SSHConfigFile: filepath.Join(dir, "ssh.config"),
+			HostAgentPID: in.HostAgentPID, DriverPID: in.DriverPID,
 			Config: json.RawMessage(l.configJSON(n, in)),
 		})
 		if err != nil {

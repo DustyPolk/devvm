@@ -50,6 +50,10 @@ type Instance struct {
 	CPUs   int    `json:"cpus"`
 	Memory int64  `json:"memory"` // bytes
 	Disk   int64  `json:"disk"`   // bytes
+	// HostAgentPID and DriverPID are the pids list --json shows, 0 for
+	// none: a broken instance's say which of its processes run.
+	HostAgentPID int `json:"hostAgentPID,omitempty"`
+	DriverPID    int `json:"driverPID,omitempty"`
 	// Config is what create's, clone's and edit's --set put in its
 	// config: each key's JSON, as --set gave it, by its dotted path
 	// (ssh.forwardAgent for ssh's forwardAgent).

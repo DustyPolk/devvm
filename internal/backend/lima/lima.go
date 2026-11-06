@@ -46,6 +46,10 @@ const ImagePrefix = "devvm-img-"
 // Lima reports as failed, gets to answer over ssh.
 const sshTimeout = 60 * time.Second
 
+// driverWait is how long a stop waits for a hostagent to start its
+// driver: QEMU, on a slow host (nested virtualization), takes seconds.
+const driverWait = 30 * time.Second
+
 // Lima is the backend. New sets every field; tests change them. Its own
 // methods are Name, Caps and what its roles share (limactl, inspect…);
 // the rest are its roles', host, images, machines and housekeeping, each
@@ -77,6 +81,9 @@ type Lima struct {
 	Assets fs.FS
 	// SSHTimeout is how long a degraded start waits for ssh.
 	SSHTimeout time.Duration
+	// DriverWait is how long Stop waits for a hostagent starting its
+	// driver before it stops the VM with --force.
+	DriverWait time.Duration
 	// OCINote is how long a --from conversion waits for another devvm's
 	// before it says so.
 	OCINote time.Duration
@@ -152,7 +159,7 @@ func New(d paths.Dirs, assets fs.FS, r msg.Reporter, host platform.Host, ubuntuU
 	}
 	l := withRoles(&Lima{
 		Dirs: d, Runner: logRunner{r.LoggedCmd}, OS: runtime.GOOS, Arch: runtime.GOARCH, Company: cp, Ports: ports.Allocator{Dirs: d, Listening: ports.Listening},
-		Self: self, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, OCINote: 3 * time.Second, Getenv: os.Getenv,
+		Self: self, Spawn: daemon.Spawn, Tick: 500 * time.Millisecond, Assets: assets, SSHTimeout: sshTimeout, DriverWait: driverWait, OCINote: 3 * time.Second, Getenv: os.Getenv,
 		Ubuntu: finder, UbuntuURL: ubuntuURL, Memory: host.Memory, CPUs: host.CPUs,
 		MacOS: platform.MacOSVersion, KVM: "/dev/kvm",
 		DockerRunning: from.DockerRunning,
@@ -458,9 +465,10 @@ func (l *machines) CreateVM(ctx context.Context, image string, spec backend.VMSp
 
 // Stop stops a VM; a stopped one is left as it is. One Lima reports as
 // broken, such as a VM whose start was cut short before its hostagent
-// answers, is stopped with --force, as limactl stop refuses it.
+// answers, is stopped with --force, as limactl stop refuses it. One whose
+// hostagent is still starting its driver is waited for first (settled).
 func (l *machines) Stop(ctx context.Context, vm string) error {
-	in, err := l.inspect(ctx, vm)
+	in, err := l.settled(ctx, vm)
 	if err != nil {
 		return err
 	}
@@ -477,6 +485,31 @@ func (l *machines) Stop(ctx context.Context, vm string) error {
 
 // statusBroken is how Lima reports a VM whose hostagent doesn't answer.
 const statusBroken backend.Status = "Broken"
+
+// driverPoll is how often settled looks at a VM whose hostagent is
+// starting its driver.
+const driverPoll = 100 * time.Millisecond
+
+// settled inspects vm, waiting up to DriverWait while its hostagent runs
+// without its driver yet: a start cut short, whose hostagent is still
+// starting QEMU, which writes its pid file only once it runs. Stopped
+// with --force then, the hostagent would go and the QEMU it started would
+// run on without it, a VM the next start can't start.
+func (l *machines) settled(ctx context.Context, vm string) (instance, error) {
+	deadline := time.Now().Add(l.DriverWait)
+	for {
+		in, err := l.inspect(ctx, vm)
+		if err != nil || backend.Status(in.Status) != statusBroken || in.HostAgentPID == 0 || in.DriverPID != 0 ||
+			!time.Now().Before(deadline) {
+			return in, err
+		}
+		select {
+		case <-ctx.Done():
+			return in, ctx.Err()
+		case <-time.After(driverPoll):
+		}
+	}
+}
 
 func (l *Lima) stop(ctx context.Context, vm string, opts ...string) error {
 	args := slices.Concat([]string{"stop"}, opts, []string{vm})
