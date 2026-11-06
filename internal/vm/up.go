@@ -438,11 +438,11 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if n.ports, n.dcPorts, err = newPorts(o.Ports, def, n.dc); err != nil {
 		return newVM{}, err
 	}
-	forward, err := ports.Forwarding(n.ports)
+	parts, err := e.choose(o, f, b, def, host, &n)
 	if err != nil {
 		return newVM{}, err
 	}
-	parts, err := e.choose(o, f, b, def, host, &n)
+	forward, err := ports.Forwarding(n.ports)
 	if err != nil {
 		return newVM{}, err
 	}
@@ -544,7 +544,7 @@ func (e creation) choose(o Options, f project.Folder, b backend.Backend, def set
 		return p, nil
 	}
 	// Refused, as when the input ends, it's no: the VM made as shown.
-	if yes, _ := e.Ask(msg.NewVMCustomize().AnsweredBy("--tools, --agents, --layers, --network, --cpus, --memory and --disk")); !yes {
+	if yes, _ := e.Ask(msg.NewVMCustomize().AnsweredBy("--tools, --agents, --layers, --network, --ports, --cpus, --memory and --disk")); !yes {
 		return p, nil
 	}
 	return e.customize(s, host, tierOpen, n)
@@ -553,8 +553,8 @@ func (e creation) choose(o Options, f project.Folder, b backend.Backend, def set
 // customize asks for what of a new VM no flag gave, starting from its
 // summary s: the picker, a part a flag gave greyed out (skipped when the
 // flags give every part), then its tier when tierOpen (chooseTier, from
-// the one the summary showed), then its
-// CPUs, memory and disk (AskVM), each into n. It returns the parts chosen,
+// the one the summary showed), then its ports without --ports
+// (choosePorts), then its CPUs, memory and disk (AskVM), each into n. It returns the parts chosen,
 // checked as the defaults are.
 func (e creation) customize(s summary, host Host, tierOpen bool, n *newVM) (Parts, error) {
 	p := s.p
@@ -566,6 +566,12 @@ func (e creation) customize(s summary, host Host, tierOpen bool, n *newVM) (Part
 	}
 	if tierOpen {
 		n.net = e.chooseTier(s.vm, n.net)
+	}
+	if s.o.Ports == "" {
+		if chosen := e.choosePorts(s.vm, n.ports); chosen != n.ports {
+			// The devcontainer.json's ports are no longer what it added.
+			n.ports, n.dcPorts = chosen, nil
+		}
 	}
 	n.size = SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.AskVM(n.size, s.size, s.o.Size, s.vm)
 	return p, n.size.Check(host, backend.BaseDiskGiB, s.vm)

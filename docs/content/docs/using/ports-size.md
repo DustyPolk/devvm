@@ -18,6 +18,7 @@ A new VM forwards every TCP port from 1024 up that it listens on, unless `--port
 
 - `--ports` takes `all`, `none`, or ports and ranges such as `5173,8000-8010`.
 - Without `--ports`, the default comes from `ports` in [`config.toml`](settings.md#configtoml) when it sets it, else from what `devvm ports -g` saved, and without either, a new VM forwards every port.
+- When you customize a new VM without `--ports`, devvm asks whether it forwards every port, none or the ports you type, starting from the default, and saves the answer for that VM alone ([what a new VM gets](images.md#what-a-new-vm-gets)).
 
 devvm refuses a default that isn't a valid value, as it refuses a bad flag, and for one in `config.toml` it names the file and the line ([when devvm can't read it](settings.md#when-devvm-cant-read-it)).
 

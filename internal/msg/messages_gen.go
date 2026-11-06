@@ -2189,7 +2189,7 @@ func NewVMAgentsNone() M {
 	return M{id: "new_vm_agents_none"}
 }
 
-// NewVMChoose is [new_vm_choose]: "To choose others, give --tools, --agents, --layers, --network, --cpus, --memory or --disk."
+// NewVMChoose is [new_vm_choose]: "To choose others, give --tools, --agents, --layers, --network, --ports, --cpus, --memory or --disk."
 func NewVMChoose() M {
 	return M{id: "new_vm_choose"}
 }
@@ -2257,6 +2257,31 @@ func NewVMNetwork(tier string) M {
 // NewVMPorts is [new_vm_ports]: "  ports: {{.ports}}"
 func NewVMPorts(ports string) M {
 	return M{id: "new_vm_ports", vals: []val{{"ports", ports}}}
+}
+
+// NewVMPortsAll is [new_vm_ports_all]: "Forward every port (automatic)"
+func NewVMPortsAll() M {
+	return M{id: "new_vm_ports_all"}
+}
+
+// NewVMPortsHelp is [new_vm_ports_help]: "Ports {{.vm}} forwards (up/down to choose, enter to confirm):"
+func NewVMPortsHelp(vm string) M {
+	return M{id: "new_vm_ports_help", vals: []val{{"vm", vm}}}
+}
+
+// NewVMPortsList is [new_vm_ports_list]: "These ports…"
+func NewVMPortsList() M {
+	return M{id: "new_vm_ports_list"}
+}
+
+// NewVMPortsNone is [new_vm_ports_none]: "Forward none (add them later with devvm ports add)"
+func NewVMPortsNone() M {
+	return M{id: "new_vm_ports_none"}
+}
+
+// NewVMPortsPrompt is [new_vm_ports_prompt]: "Ports to forward, such as 5173,8000-8010 [{{.ports}}]:"
+func NewVMPortsPrompt(ports string) M {
+	return M{id: "new_vm_ports_prompt", vals: []val{{"ports", ports}}}
 }
 
 // NewVMSize is [new_vm_size]: "  size: {{.cpus}} CPUs, {{.memory}} GiB of memory and a {{.disk}} GiB disk"
@@ -4352,6 +4377,11 @@ var specs = map[string]spec{
 	"new_vm_memory_prompt":           {fields: []string{"memory"}},
 	"new_vm_network":                 {fields: []string{"tier"}},
 	"new_vm_ports":                   {fields: []string{"ports"}},
+	"new_vm_ports_all":               {},
+	"new_vm_ports_help":              {fields: []string{"vm"}},
+	"new_vm_ports_list":              {},
+	"new_vm_ports_none":              {},
+	"new_vm_ports_prompt":            {fields: []string{"ports"}},
 	"new_vm_size":                    {fields: []string{"cpus", "disk", "memory"}},
 	"new_vm_size_question":           {fields: []string{"have_cpus", "have_memory"}},
 	"new_vm_summary":                 {fields: []string{"vm"}},

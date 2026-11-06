@@ -115,8 +115,7 @@ func (s summary) layers() []msg.M {
 // leftToChoose reports whether customizing a new VM has anything to ask
 // once o's flags are taken as given: a part of the picker's, its tier
 // when tierOpen (neither --network nor a saved tier, and a backend that
-// may confine it), or its
-// CPUs, memory or disk.
+// may confine it), its ports, or its CPUs, memory or disk.
 func leftToChoose(o Options, tierOpen bool) bool {
-	return !allGiven(o) || tierOpen || o.Size.CPUs == "" || o.Size.Memory == "" || o.Size.Disk == ""
+	return !allGiven(o) || tierOpen || o.Ports == "" || o.Size.CPUs == "" || o.Size.Memory == "" || o.Size.Disk == ""
 }

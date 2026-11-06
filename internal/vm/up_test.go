@@ -593,32 +593,33 @@ func TestUpCustomize(t *testing.T) {
 		saved     string // the tier devvm network -g saved, "" for none saved
 		asked     string // what's asked, in order
 		net, cpus string // what the VM gets
+		ports     string // the ports it forwards, "" for every port
 		choose    bool   // the summary ends with new_vm_choose
 		fixed     bool   // the picker's layers are greyed out, docker's from --layers
 	}{
 		{name: "Enter", picks: true, asked: "new_vm_customize", net: "allowlist"},
 		{name: "no picker", net: "allowlist", choose: true},
 		{
-			name: "everything given", picks: true, net: "open", cpus: "2",
-			o: Options{Toolchains: none, Agents: none, Layers: none, Network: "open", Size: Size{CPUs: "2", Memory: "4", Disk: "100"}},
+			name: "everything given", picks: true, net: "open", cpus: "2", ports: "none",
+			o: Options{Toolchains: none, Agents: none, Layers: none, Network: "open", Ports: "none", Size: Size{CPUs: "2", Memory: "4", Disk: "100"}},
 		},
 		{
-			name: "yes", picks: true, yes: true, net: "internet", cpus: "2",
-			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt,new_vm_disk_prompt",
+			name: "yes", picks: true, yes: true, net: "internet", cpus: "2", ports: "none",
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_ports_help,new_vm_cpus_prompt,new_vm_memory_prompt,new_vm_disk_prompt",
 		},
 		{
-			name: "yes with layers and cpus given", picks: true, yes: true, net: "internet", cpus: "3", fixed: true,
+			name: "yes with layers and cpus given", picks: true, yes: true, net: "internet", cpus: "3", fixed: true, ports: "none",
 			o:     Options{Layers: &[]string{"docker"}, Size: Size{CPUs: "3"}},
-			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_memory_prompt,new_vm_disk_prompt",
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_ports_help,new_vm_memory_prompt,new_vm_disk_prompt",
 		},
 		{
-			name: "yes with the disk given", picks: true, yes: true, net: "internet", cpus: "2",
-			o:     Options{Size: Size{Disk: "200"}},
+			name: "yes with the ports and disk given", picks: true, yes: true, net: "internet", cpus: "2", ports: "3000",
+			o:     Options{Ports: "3000", Size: Size{Disk: "200"}},
 			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt",
 		},
 		{
-			name: "yes with a saved tier", picks: true, yes: true, saved: "none", net: "internet", cpus: "2",
-			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt,new_vm_disk_prompt",
+			name: "yes with a saved tier", picks: true, yes: true, saved: "none", net: "internet", cpus: "2", ports: "none",
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_ports_help,new_vm_cpus_prompt,new_vm_memory_prompt,new_vm_disk_prompt",
 		},
 		{name: "Enter with a saved tier", picks: true, saved: "none", asked: "new_vm_customize", net: "none"},
 		{
@@ -627,9 +628,9 @@ func TestUpCustomize(t *testing.T) {
 			asked: "new_vm_customize",
 		},
 		{
-			name: "yes with every part and the tier given", picks: true, yes: true, net: "none", cpus: "2",
+			name: "yes with every part and the tier given", picks: true, yes: true, net: "none", cpus: "2", ports: "none",
 			o:     Options{Toolchains: none, Agents: none, Layers: none, Network: "none"},
-			asked: "new_vm_customize,new_vm_cpus_prompt,new_vm_memory_prompt,new_vm_disk_prompt",
+			asked: "new_vm_customize,new_vm_ports_help,new_vm_cpus_prompt,new_vm_memory_prompt,new_vm_disk_prompt",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -660,7 +661,7 @@ func TestUpCustomize(t *testing.T) {
 			}
 			e.PickOne = func(help msg.M, _ []PickRow) int {
 				asked = append(asked, help.ID())
-				return 1 // internet
+				return 1 // internet, or no ports
 			}
 			e.Proxy.Reporter = fk
 			var layers PickPart
@@ -679,6 +680,9 @@ func TestUpCustomize(t *testing.T) {
 			st, _ := state.ReadVM(e.Dirs, spec.Name)
 			if get(st, KeyNet) != tc.net || get(st, KeyCPUs) != tc.cpus {
 				t.Errorf("net=%q cpus=%q, want %q and %q", get(st, KeyNet), get(st, KeyCPUs), tc.net, tc.cpus)
+			}
+			if got := get(st, KeyPorts); got != tc.ports {
+				t.Errorf("ports %q, want %q", got, tc.ports)
 			}
 			// The disk typed, else the one given or the summary's.
 			wantDisk := map[bool]float64{true: 150, false: 100}[strings.HasSuffix(tc.asked, "new_vm_disk_prompt")]

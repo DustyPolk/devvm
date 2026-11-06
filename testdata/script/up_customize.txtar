@@ -47,9 +47,11 @@ stdout '^size\.cpus=2$'
 
 # y: the picker, whose Enter keeps what it shows checked, then the tier's
 # picker, the tiers in order with what each reaches, the summary's on (k
-# moves up to internet), and the CPUs, memory and disk, each starting
-# from the summary's; Enter keeps the memory, a disk below the image's is
-# refused and asked again, and nothing is saved for new VMs.
+# moves up to internet), then the ports' picker, every port on (j j moves
+# down to a list), whose list, not a list at first, is asked again, and
+# the CPUs, memory and disk, each starting from the summary's; Enter
+# keeps the memory, a disk below the image's is refused and asked again,
+# and nothing is saved for new VMs.
 project custom
 exec sh -c 'echo "{}" > package.json'
 ttyin -stdin $WORK/custom.txt
@@ -57,6 +59,10 @@ exec devvm --no-git-protect
 stdout '^pick_new_help vm=devvm-custom-[0-9a-f]{14}\r$'
 stdout 'net_tier_help vm=devvm-custom-[0-9a-f]{14}\r$'
 stdout '(?s)open +net_tier_open.*internet +net_tier_internet.*allowlist +net_tier_allowlist.*none +net_tier_none'
+stdout 'new_vm_ports_help vm=devvm-custom-[0-9a-f]{14}\r$'
+stdout '(?s)all +new_vm_ports_all.*none +new_vm_ports_none.*list +new_vm_ports_list'
+stderr 'new_vm_ports_prompt ports=all'
+stderr 'port_invalid value="5173-"'
 stderr 'new_vm_size_question have_cpus=8 have_memory=16'
 stderr 'new_vm_cpus_prompt cpus=2'
 stderr 'new_vm_memory_prompt memory=8'
@@ -67,6 +73,7 @@ vm_name CUSTOM custom
 vm_state $CUSTOM_dir/vm.json
 stdout '^tools\.names=node$'
 stdout '^net\.tier=internet$'
+stdout '^ports\.forward=5173,8000-8010$'
 stdout '^size\.cpus=3$'
 stdout '^size\.disk=120$'
 ! stdout '^size\.memory'
@@ -75,25 +82,28 @@ grep '"cpus": "2"' $DATA/settings.json
 
 # Flags given are taken as given and shown so, and the question is still
 # asked while something is left: the picker greys the toolchains out,
-# and neither --network's tier nor --disk's disk is asked.
+# and neither --network's tier, --ports' ports nor --disk's disk is
+# asked.
 project given
 ttyin -stdin $WORK/given.txt
-exec devvm --no-git-protect --tools go --network open --disk 150
+exec devvm --no-git-protect --tools go --network open --ports 3000 --disk 150
 stdout '^new_vm_toolchain_from from=--tools tool=go$'
 stderr 'new_vm_customize \[y/N\]'
 stdout 'go +pick_from_flag flag=--tools'
 ! stdout net_tier_help
+! stdout new_vm_ports_help
 stderr 'new_vm_cpus_prompt cpus=2'
 ! stderr new_vm_disk_prompt
 vm_name GIVEN given
 vm_state $GIVEN_dir/vm.json
 stdout '^tools\.names=go$'
 stdout '^net\.tier=open$'
+stdout '^ports\.forward=3000$'
 
 # Everything given: nothing left to choose, so nothing is asked.
 project all
 ttyin -stdin $WORK/enter.txt
-exec devvm --no-git-protect --tools none --agents none --layers none --network open --cpus 2 --memory 4 --disk 100
+exec devvm --no-git-protect --tools none --agents none --layers none --network open --ports none --cpus 2 --memory 4 --disk 100
 stdout '^==> new_vm_summary vm=devvm-all-[0-9a-f]{14}$'
 ! stderr new_vm_customize
 ! stdout new_vm_choose
@@ -135,6 +145,9 @@ env DEVVM_MESSAGES=names
 y
 
 k
+jj
+5173-
+5173,8000-8010
 3
 
 50

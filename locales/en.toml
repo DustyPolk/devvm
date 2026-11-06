@@ -1460,7 +1460,7 @@ description = "file is the devcontainer.json's path in the project folder"
 other = "  devcontainer.json: {{.file}}, which devvm --no-devcontainer skips"
 
 [new_vm_choose]
-other = "To choose others, give --tools, --agents, --layers, --network, --cpus, --memory or --disk."
+other = "To choose others, give --tools, --agents, --layers, --network, --ports, --cpus, --memory or --disk."
 
 [new_vm_customize]
 other = "Customize it?"
@@ -1476,6 +1476,22 @@ other = "CPUs for the VM [{{.cpus}}]:"
 [new_vm_memory_prompt]
 description = "memory is in GiB, what the VM gets unless you type another size"
 other = "Memory for the VM in GiB [{{.memory}}]:"
+
+[new_vm_ports_help]
+other = "Ports {{.vm}} forwards (up/down to choose, enter to confirm):"
+
+[new_vm_ports_all]
+other = "Forward every port (automatic)"
+
+[new_vm_ports_none]
+other = "Forward none (add them later with devvm ports add)"
+
+[new_vm_ports_list]
+other = "These ports…"
+
+[new_vm_ports_prompt]
+description = "ports is all, none or a list of ports, what the VM forwards unless you type others"
+other = "Ports to forward, such as 5173,8000-8010 [{{.ports}}]:"
 
 [new_vm_disk_question]
 other = "The disk can grow later with devvm size --disk but never shrink, and it takes only the space the VM writes."
