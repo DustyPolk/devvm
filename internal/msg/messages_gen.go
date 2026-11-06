@@ -1634,6 +1634,11 @@ func HistoryNotImported(file string, vm string) M {
 	return M{id: "history_not_imported", vals: []val{{"file", file}, {"vm", vm}}}
 }
 
+// HistoryTooLarge is [history_too_large]: "{{.vm}}'s agent history is over 2 GiB, more than an export holds, so devvm kept no export of it."
+func HistoryTooLarge(vm string) M {
+	return M{id: "history_too_large", vals: []val{{"vm", vm}}}
+}
+
 // HomeNotAbsolute is [home_not_absolute]: "HOME isn't an absolute path. Set it to your home folder."
 func HomeNotAbsolute() M {
 	return M{id: "home_not_absolute"}
@@ -2547,6 +2552,11 @@ func OCIWaiting() M {
 // OpencodeImportFailed is [opencode_import_failed]: "opencode in {{.vm}} refused devvm's login for {{.providers}}, though devvm saved the API key. Run devvm in the VM's folder to try again."
 func OpencodeImportFailed(providers string, vm string) M {
 	return M{id: "opencode_import_failed", vals: []val{{"providers", providers}, {"vm", vm}}}
+}
+
+// OpencodeImportTooMuch is [opencode_import_too_much]: "opencode in {{.vm}} printed more than devvm reads while it imported devvm's logins, so devvm stopped it. Run devvm in the VM's folder to try again."
+func OpencodeImportTooMuch(vm string) M {
+	return M{id: "opencode_import_too_much", vals: []val{{"vm", vm}}}
 }
 
 // OpencodeLoginKept is [opencode_login_kept]: "The VM gets opencode's {{.providers}} login unchanged."
@@ -4277,6 +4287,7 @@ var specs = map[string]spec{
 	"history_no_export":              {fields: []string{"dir"}},
 	"history_not_exported":           {fields: []string{"vm"}},
 	"history_not_imported":           {fields: []string{"file", "vm"}},
+	"history_too_large":              {fields: []string{"vm"}},
 	"home_not_absolute":              {},
 	"host_cpus_few":                  {fields: []string{"have", "want"}},
 	"host_memory_low":                {fields: []string{"have", "want"}},
@@ -4460,6 +4471,7 @@ var specs = map[string]spec{
 	"nothing_to_clean":               {},
 	"oci_waiting":                    {},
 	"opencode_import_failed":         {fields: []string{"providers", "vm"}},
+	"opencode_import_too_much":       {fields: []string{"vm"}},
 	"opencode_login_kept":            {fields: []string{"providers"}},
 	"opencode_login_withheld":        {fields: []string{"providers"}},
 	"opencode_refresh_failed":        {fields: []string{"provider", "reason"}},

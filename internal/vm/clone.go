@@ -178,7 +178,7 @@ func (e clones) seedClone(ctx context.Context, t *target) error {
 	}
 	const initRepo = `sudo mkdir -p -- "$1" && sudo chown -- "$(id -u):$(id -g)" "$1" && cd -- "$1" &&
 git init -q && git config receive.denyCurrentBranch updateInstead && git symbolic-ref HEAD "refs/heads/$2"`
-	log := e.LogWriter()
+	log := e.vmLog()
 	if err := t.exec(ctx, []string{"sh", "-c", initRepo, "sh", dir, branch}, backend.ExecOpts{Stdout: log, Stderr: log}); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -421,8 +421,8 @@ func (e cloneCheck) git(ctx context.Context, b backend.Backend, vm, dir string, 
 // exec runs argv in the VM and returns what it printed, at most
 // cloneOutMax bytes.
 func (e cloneCheck) exec(ctx context.Context, b backend.Backend, vm string, argv []string) ([]byte, error) {
-	out := &capped{max: cloneOutMax}
-	if err := b.Exec(ctx, vm, argv, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()}); err != nil {
+	out := &bounded{max: cloneOutMax}
+	if err := b.Exec(ctx, vm, argv, backend.ExecOpts{Stdout: out, Stderr: e.vmLog()}); err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -786,18 +786,4 @@ func (e remaking) unmountFolder(ctx context.Context, t *target) {
 	if _, err := hostGit(ctx, dir, "remote", "add", remote, cloneURL(vm, dir)); err != nil {
 		e.Warn(msg.RemoteAddFailed(remote))
 	}
-}
-
-// capped keeps the first max bytes written to it, and takes the rest
-// without keeping it.
-type capped struct {
-	bytes.Buffer
-	max int
-}
-
-func (w *capped) Write(p []byte) (int, error) {
-	if room := w.max - w.Len(); room > 0 {
-		w.Buffer.Write(p[:min(len(p), room)])
-	}
-	return len(p), nil
 }

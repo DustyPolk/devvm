@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -120,6 +121,60 @@ func TestRm(t *testing.T) {
 	}
 	if _, ok := f.Instances[vm]; ok || script != "" {
 		t.Errorf("confirmed: deleted %v, export %q", !ok, script)
+	}
+}
+
+// streamForever is a VM's export that never ends: it writes until a
+// write fails, its stderr too, as a VM's root can.
+func streamForever(argv []string, o backend.ExecOpts) error {
+	if len(argv) != 3 || !strings.Contains(argv[2], "tar -czf") {
+		return nil
+	}
+	chunk := []byte(strings.Repeat("x", 64<<10))
+	for {
+		for range 8 {
+			if _, err := o.Stderr.Write(chunk); err != nil {
+				return err
+			}
+		}
+		if _, err := o.Stdout.Write(chunk); err != nil {
+			return err
+		}
+	}
+}
+
+// An export over the most devvm keeps is stopped and kept nowhere: devvm
+// history export fails, and rm and a remake warn and go on, though the
+// VM keeps writing. What its stderr adds to the run log is capped too.
+func TestExportTooLarge(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	var log bytes.Buffer
+	fake(e).Log = &log
+	e.HistoryMax = 1 << 20
+	lc := Lifecycle{e}
+	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, Network: "open"}).Name()
+	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error { return streamForever(argv, o) }
+	file := filepath.Join(t.TempDir(), "h.tar.gz")
+	if err := lc.Export(t.Context(), file); msg.NamesOf(err) != "history_too_large vm="+vm {
+		t.Errorf("Export = %v", msg.NamesOf(err))
+	}
+	if es, _ := os.ReadDir(filepath.Dir(file)); len(es) != 0 {
+		t.Errorf("left %v", es)
+	}
+	if log.Len() > vmLogMax+len(vmLogCut) || !strings.Contains(log.String(), vmLogCut) {
+		t.Errorf("run log of %d bytes", log.Len())
+	}
+
+	var warned []string
+	fake(e).OnWarn = func(m msg.M) { warned = append(warned, m.Names()) }
+	if err := lc.Rm(t.Context(), RmOptions{Force: true}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if _, ok := f.Instances[vm]; ok || !slices.Equal(warned, []string{"history_too_large vm=" + vm}) {
+		t.Errorf("rm: deleted %v, warned %q", !ok, warned)
+	}
+	if es, _ := os.ReadDir(e.Dirs.Exports()); len(es) != 0 {
+		t.Errorf("exports %v", es)
 	}
 }
 

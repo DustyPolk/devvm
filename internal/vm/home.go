@@ -179,7 +179,7 @@ func (e remaking) saveHome(ctx context.Context, t *target, failed error) error {
 		_ = pr.CloseWithError(err)
 		copied <- err
 	}()
-	err = t.exec(ctx, []string{"bash", "-c", homeOut}, backend.ExecOpts{Stdout: pw, Stderr: e.LogWriter()})
+	err = t.exec(ctx, []string{"bash", "-c", homeOut}, backend.ExecOpts{Stdout: pw, Stderr: e.vmLog()})
 	_ = pw.CloseWithError(err)
 	cerr := <-copied
 	if err == nil {
@@ -210,7 +210,8 @@ func (e remaking) restoreHome(ctx context.Context, t *target) error {
 	}
 	defer func() { _ = f.Close() }()
 	e.Info(msg.RestoringHome(vm))
-	err = t.exec(ctx, []string{"bash", "-c", homeIn}, backend.ExecOpts{Stdin: f, Stdout: e.LogWriter(), Stderr: e.LogWriter()})
+	log := e.vmLog()
+	err = t.exec(ctx, []string{"bash", "-c", homeIn}, backend.ExecOpts{Stdin: f, Stdout: log, Stderr: log})
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()

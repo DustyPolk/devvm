@@ -104,6 +104,23 @@ project other
 ! stderr 'history_import_(ask|later)'
 rm $STUB_DIR/shell-fails-on
 
+# An export that never ends: devvm stops it at its cap and keeps nothing
+# of it, so devvm history export fails, and rm warns and goes on.
+project flood
+exec devvm --network open --no-git-protect --agents claude
+vm_name FLOOD flood
+exec sh -c ': > "$STUB_DIR/history-floods"'
+env DEVVM_HISTORY_MAX=1048576
+! exec devvm history export
+stderr '^devvm: history_too_large vm=devvm-flood-[0-9a-f]{14}$'
+exec devvm rm --force
+stderr '^devvm: history_too_large vm=devvm-flood-[0-9a-f]{14}$'
+! stdout exported
+! exists $FLOOD_dir
+! exec sh -c 'ls -a "$EXPORTS" | grep devvm-flood'
+exec sh -c 'grep -l "^devvm: truncated: " "$DATA"/logs/runs/*.log'
+rm $STUB_DIR/history-floods
+
 -- mine.tar.gz --
 not really a tarball: the VM's tar reads it
 -- no.txt --

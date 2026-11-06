@@ -211,6 +211,7 @@ The tests run a test build of devvm, which is one made with `-ldflags "-X github
 | `DEVVM_UNREVIEWED` | the refusal of unreviewed emulations ([unreviewed emulations](#unreviewed-emulations)) |
 | `DEVVM_TEST_CPUS`, `DEVVM_TEST_MEMORY_GIB`, `DEVVM_TEST_FREE_GIB`, `DEVVM_TEST_LIST_TIMEOUT` | this machine's size and how long devvm waits for a backend's listings ([a host of any size](#a-host-of-any-size)) |
 | `DEVVM_PIPED_ANSWERS` | a terminal to answer questions in: with `1`, each question reads its answer as a line of input that isn't a terminal, without its prompt, where devvm would refuse it |
+| `DEVVM_HISTORY_MAX` | the 2 GiB that an export of agents' history holds at most, in bytes, so a script whose VM writes an export without end reaches the cap at once |
 
 The settings that the [environment table](../using/settings.md#environment) lists, such as `DEVVM_LIMA_HOME`, `DEVVM_SECRET_SERVICE` and `DEVVM_NO_TOOL_CHECK`, are yours to set, so every build reads them.
 

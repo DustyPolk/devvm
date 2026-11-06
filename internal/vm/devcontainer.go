@@ -333,7 +333,7 @@ func (e devcontainers) runAll(ctx context.Context, b backend.Backend, vm string,
 	for _, c := range cmds {
 		e.Info(msg.RunningScript(c.Name, vm))
 		e.LogNote()
-		out := e.LogWriter()
+		out := e.vmLog()
 		argv := append([]string{"bash", "-lc", commandScript, "devvm"}, c.Argv...)
 		o := at
 		o.Stdout, o.Stderr = out, out

@@ -52,8 +52,11 @@ func (e Desktop) Open(ctx context.Context, o DesktopOptions) error {
 		return err
 	}
 	vm, b, log := t.f.Name, t.b, e.LogWriter()
-	logs := backend.ExecOpts{Stdout: log, Stderr: log}
-	if err := t.exec(ctx, []string{"test", "-x", desktop.Command}, logs); err != nil {
+	logs := func() backend.ExecOpts {
+		w := e.vmLog()
+		return backend.ExecOpts{Stdout: w, Stderr: w}
+	}
+	if err := t.exec(ctx, []string{"test", "-x", desktop.Command}, logs()); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -67,7 +70,7 @@ func (e Desktop) Open(ctx context.Context, o DesktopOptions) error {
 	if o.Clipboard {
 		clip = "on"
 	}
-	if err := t.exec(ctx, []string{desktop.Command, "start", clip}, logs); err != nil {
+	if err := t.exec(ctx, []string{desktop.Command, "start", clip}, logs()); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

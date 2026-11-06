@@ -588,18 +588,3 @@ func TestShowPlansLimits(t *testing.T) {
 		t.Errorf("%d lines, the last %q", len(lines), lines[len(lines)-1])
 	}
 }
-
-// bounded keeps, or passes on, at most max bytes, then cancels.
-func TestBounded(t *testing.T) {
-	var log bytes.Buffer
-	cancelled := false
-	b := &bounded{to: &log, max: 4, cancel: func() { cancelled = true }}
-	for _, s := range []string{"ab", "cd", "e"} {
-		if n, err := b.Write([]byte(s)); n != len(s) || err != nil {
-			t.Fatal(n, err)
-		}
-	}
-	if log.String() != "abcd" || b.Len() != 0 || !b.over || !cancelled {
-		t.Errorf("log %q, kept %q, over %v, cancelled %v", log.String(), b.String(), b.over, cancelled)
-	}
-}

@@ -60,7 +60,7 @@ func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug 
 	if err != nil {
 		return err
 	}
-	out := e.LogWriter()
+	out := e.vmLog()
 	err = b.Exec(ctx, vm, []string{"bash", "-c", syncCmd}, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: out, Stderr: out, Agent: conf.AgentSocket})
 	if err != nil {
 		if ctx.Err() != nil {
@@ -110,7 +110,7 @@ func (e syncer) unmounted(ctx context.Context, b backend.Backend, vm string, fil
 func readUnmounted(ctx context.Context, b backend.Backend, vm string, files []string, agent string, wait time.Duration) []string {
 	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
-	out := &capped{max: unmountedMax}
+	out := &bounded{max: unmountedMax}
 	if err := b.Exec(ctx, vm, []string{"cat", unmountedFile}, backend.ExecOpts{Stdout: out, Stderr: io.Discard, Agent: agent}); err != nil || ctx.Err() != nil {
 		return nil
 	}

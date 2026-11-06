@@ -6,8 +6,10 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/devvmhq/devvm/internal/backend"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/secrets"
@@ -29,6 +31,41 @@ func TestOpencodeRefused(t *testing.T) {
 		if got := opencodeRefused(c.out); !slices.Equal(got, c.want) {
 			t.Errorf("opencodeRefused(%q) = %q, want %q", c.out, got, c.want)
 		}
+	}
+}
+
+// devvm reads at most importOutMax bytes of opencode's import of its
+// logins: a script that keeps printing is stopped and refused, and one
+// that prints a refusal names its providers.
+func TestImportLoginsTooMuch(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	vm := existingVM(t, e, Options{Network: "open"}).Name()
+	tg, err := (finder{e}).target(t.Context(), need{})
+	if err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	forever := true
+	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {
+		if len(argv) != 4 || argv[3] != opencodeScript {
+			return nil
+		}
+		line := []byte(strings.Repeat("devvm-opencode-failed openai\n", 1<<10))
+		for forever {
+			if _, err := o.Stdout.Write(line); err != nil {
+				return err
+			}
+		}
+		_, _ = o.Stdout.Write([]byte("devvm-opencode-failed openai\n"))
+		return errors.New("exit 1")
+	}
+	login := AgentLogin{e}
+	if err := login.importLogins(t.Context(), tg, []byte(`{}`)); msg.NamesOf(err) != "opencode_import_too_much vm="+vm {
+		t.Errorf("forever: %v", msg.NamesOf(err))
+	}
+	forever = false
+	err = login.importLogins(t.Context(), tg, []byte(`{}`))
+	if le, ok := errors.AsType[*backend.LoggedError](err); !ok || msg.NamesOf(le.Msg) != "opencode_import_failed providers=openai vm="+vm {
+		t.Errorf("refused: %v", msg.NamesOf(err))
 	}
 }
 

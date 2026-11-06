@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strconv"
+
 	"github.com/devvmhq/devvm/internal/backend/registry"
 	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/testbuild"
@@ -26,6 +28,9 @@ type Overrides struct {
 	PickOnPipe bool
 	// Release is devvm upgrade's release source and this devvm's version.
 	Release ReleaseOverrides
+	// HistoryMax (DEVVM_HISTORY_MAX) is the most of an export of agents'
+	// history devvm keeps, in bytes (vm.Env.HistoryMax), in place of 2 GiB.
+	HistoryMax int
 }
 
 // ReleaseOverrides are devvm upgrade's stand-ins: a fake release server
@@ -52,6 +57,7 @@ func readOverrides(getenv func(string) string) Overrides {
 	if !testbuild.On() {
 		return Overrides{}
 	}
+	historyMax, _ := strconv.Atoi(getenv("DEVVM_HISTORY_MAX"))
 	return Overrides{
 		Overrides: registry.Overrides{
 			Host: platform.Overrides{
@@ -70,5 +76,6 @@ func readOverrides(getenv func(string) string) Overrides {
 			URL: getenv("DEVVM_REPO_URL"), Key: getenv("DEVVM_RELEASE_KEY"),
 			CA: getenv("DEVVM_RELEASE_CA"), Version: getenv("DEVVM_TEST_VERSION"),
 		},
+		HistoryMax: historyMax,
 	}
 }

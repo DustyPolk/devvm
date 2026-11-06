@@ -125,6 +125,13 @@ stdin $WORK/key2
 stderr '^devvm: opencode_import_failed providers=openrouter vm=devvm-agents-[0-9a-f]{14}$'
 rm $STUB_DIR/opencode-refuses
 
+# The import prints without end: devvm stops it at its cap and says so.
+exec sh -c ': > "$STUB_DIR/opencode-floods"'
+stdin $WORK/key2
+! exec devvm agent login opencode --api-key --provider anthropic --stdin
+stderr '^devvm: opencode_import_too_much vm=devvm-agents-[0-9a-f]{14}$'
+rm $STUB_DIR/opencode-floods
+
 # The import fails: the key is saved, and devvm says the VM's copy failed.
 exec sh -c 'echo "opencode auth import" > "$STUB_DIR/shell-fails-on"'
 stdin $WORK/key2

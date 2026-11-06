@@ -28,6 +28,9 @@ type sandbox struct {
 	slept    []time.Duration
 	// onSleep runs at each sleep, as another process meanwhile.
 	onSleep func()
+	// stdout and stderr, when set, are where a stub writes in place of
+	// what run returns.
+	stdout, stderr io.Writer
 }
 
 func newSandbox(t *testing.T) *sandbox {
@@ -49,8 +52,12 @@ func newSandbox(t *testing.T) *sandbox {
 func (s *sandbox) run(stdin, name string, args ...string) (int, string, string) {
 	s.t.Helper()
 	var out, errOut bytes.Buffer
+	stdout, stderr := io.Writer(&out), io.Writer(&errOut)
+	if s.stdout != nil {
+		stdout, stderr = s.stdout, s.stderr
+	}
 	c := &call{
-		ctx: s.t.Context(), name: name, args: args, stdin: strings.NewReader(stdin), stdout: &out, stderr: &errOut,
+		ctx: s.t.Context(), name: name, args: args, stdin: strings.NewReader(stdin), stdout: stdout, stderr: stderr,
 		lookup: func(k string) (string, bool) { v, ok := s.env[k]; return v, ok },
 		replace: func(argv, extra []string) int {
 			s.replaced = append(s.replaced, argv)
@@ -580,6 +587,40 @@ func TestSecurity(t *testing.T) {
 	s.fails(1, "security", "list-keychains")
 	if strings.Contains(strings.Join(s.calls(), "\n"), "ghp_x") {
 		t.Errorf("the value logged: %q", s.calls())
+	}
+}
+
+// gone takes left bytes, then fails every write, as a pipe whose reader
+// has stopped.
+type gone struct{ left int }
+
+func (g *gone) Write(p []byte) (int, error) {
+	if len(p) > g.left {
+		return 0, io.ErrClosedPipe
+	}
+	g.left -= len(p)
+	return len(p), nil
+}
+
+// On its switch, opencode.sh and an export of agents' history write
+// stdout and stderr until a write fails, then fail.
+func TestShellFloods(t *testing.T) {
+	s := newSandbox(t)
+	for sw, sh := range map[string]string{
+		"opencode-floods": "cd '/' && exec 'bash' '-lc' 'script' 'opencode.sh'",
+		"history-floods":  "cd ~ && ls -d .claude .codex 2>/dev/null | tar -czf - .",
+	} {
+		s.touch(sw)
+		for _, out := range [][2]*gone{{{left: 1 << 20}, {left: 1 << 30}}, {{left: 1 << 30}, {left: 1 << 20}}} {
+			s.stdout, s.stderr = out[0], out[1]
+			if code, _, _ := s.run("", "limactl", "shell", "--workdir", "/", "vm", "sh", "-c", sh); code != 1 {
+				t.Errorf("%s: %d", sw, code)
+			}
+		}
+		s.stdout, s.stderr = nil, nil
+		if err := os.Remove(filepath.Join(s.dir, sw)); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

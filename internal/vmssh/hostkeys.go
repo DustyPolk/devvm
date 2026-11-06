@@ -186,15 +186,21 @@ func recordedStart(path string) (string, error) {
 }
 
 // capped keeps the first max bytes written to it, and takes the rest
-// without keeping it.
+// without keeping it. Its buffer is a field, not embedded, so it has no
+// ReadFrom, which io.Copy (os/exec's copy of a command's output) would
+// read through without end.
 type capped struct {
-	bytes.Buffer
+	buf bytes.Buffer
 	max int
 }
 
 func (w *capped) Write(p []byte) (int, error) {
-	if room := w.max - w.Len(); room > 0 {
-		w.Buffer.Write(p[:min(len(p), room)])
+	if room := w.max - w.buf.Len(); room > 0 {
+		w.buf.Write(p[:min(len(p), room)])
 	}
 	return len(p), nil
 }
+
+// Bytes and String are what it kept.
+func (w *capped) Bytes() []byte  { return w.buf.Bytes() }
+func (w *capped) String() string { return w.buf.String() }

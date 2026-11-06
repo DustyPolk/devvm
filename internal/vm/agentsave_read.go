@@ -2,7 +2,6 @@ package vm
 
 import (
 	"archive/tar"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -74,35 +73,6 @@ func agentSaveScript(agents []string) string {
 	}
 	lines = append(lines, `tar -cf - "$@" -C "$t" `+saveOwn)
 	return strings.Join(lines, "\n")
-}
-
-// bounded keeps what's written up to max bytes, or passes it on to to.
-// Past max, it keeps and passes on nothing more, says so (over) and
-// cancels the command writing.
-type bounded struct {
-	bytes.Buffer
-	to     io.Writer
-	max    int
-	n      int
-	over   bool
-	cancel func()
-}
-
-func (b *bounded) Write(p []byte) (int, error) {
-	if !b.over && b.n+len(p) > b.max {
-		b.over = true
-		b.cancel()
-	}
-	if b.over {
-		return len(p), nil
-	}
-	b.n += len(p)
-	if b.to != nil {
-		_, _ = b.to.Write(p)
-	} else {
-		b.Buffer.Write(p)
-	}
-	return len(p), nil
 }
 
 // saveMaxStderr is the most of the save script's stderr that goes into

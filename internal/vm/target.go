@@ -77,7 +77,7 @@ func (t *target) exec(ctx context.Context, argv []string, o backend.ExecOpts) er
 // shell is the command that opens a shell in the running VM, in the
 // folder it opens in (shellDir), its connection carrying the VM's agent.
 func (t *target) shell(ctx context.Context) (backend.Command, error) {
-	return t.b.Shell(ctx, t.f.Name, backend.ShellOpts{Dir: t.shellDir(ctx, t.e.LogWriter()), Agent: t.agent})
+	return t.b.Shell(ctx, t.f.Name, backend.ShellOpts{Dir: t.shellDir(ctx, t.e.vmLog()), Agent: t.agent})
 }
 
 // shellDir is the folder in a running VM that its shell and editors open

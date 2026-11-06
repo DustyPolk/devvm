@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"os"
@@ -174,7 +175,7 @@ func (e Lifecycle) Rm(ctx context.Context, o RmOptions) error {
 	// A remake that didn't finish may have left no machine by its name:
 	// its history was exported then, unless --no-export.
 	if !o.NoExport && t.exists && st.Finished() && len(image.AgentsOf(tools.Names(st))) > 0 {
-		if err := e.export(ctx, t, "", msg.ExportFailedKept("devvm rm", vm)); err != nil {
+		if err := e.exportFirst(ctx, t, "devvm rm"); err != nil {
 			return err
 		}
 	}
@@ -255,7 +256,7 @@ func (e Lifecycle) rmGone(ctx context.Context, t *target, folder FolderState, o 
 		return err
 	}
 	if export {
-		if err := e.export(ctx, t, "", msg.ExportFailedKept("devvm rm "+vm, vm)); err != nil {
+		if err := e.exportFirst(ctx, t, "devvm rm "+vm); err != nil {
 			return err
 		}
 	}
@@ -308,8 +309,32 @@ func (e Lifecycle) Export(ctx context.Context, file string) error {
 	if err != nil {
 		return err
 	}
-	return e.export(ctx, t, file, backend.Logged(msg.HistoryNotExported(t.f.Name)))
+	err = e.export(ctx, t, file, backend.Logged(msg.HistoryNotExported(t.f.Name)))
+	if errors.Is(err, errHistoryTooLarge) {
+		return msg.HistoryTooLarge(t.f.Name)
+	}
+	return err
 }
+
+// exportFirst exports t's agents' history to the exports folder before
+// command deletes or remakes the VM. A failed export keeps the VM
+// (export_failed_kept); one over historyMax keeps no export, which it
+// warns of, and command goes on.
+func (e Lifecycle) exportFirst(ctx context.Context, t *target, command string) error {
+	err := e.export(ctx, t, "", msg.ExportFailedKept(command, t.f.Name))
+	if errors.Is(err, errHistoryTooLarge) {
+		e.Warn(msg.HistoryTooLarge(t.f.Name))
+		return nil
+	}
+	return err
+}
+
+// historyMax is the most of an export of agents' history devvm keeps:
+// past it, devvm keeps none (Env.HistoryMax, when set, in its place).
+const historyMax = 2 << 30
+
+// errHistoryTooLarge is export's error for an export over historyMax.
+var errHistoryTooLarge = errors.New("the history is over the most an export keeps")
 
 // export saves the VM's agents' history (transcripts, sessions) to a
 // tarball at file, or a new one in the exports folder when it's "", with
@@ -317,7 +342,8 @@ func (e Lifecycle) Export(ctx context.Context, file string) error {
 // history to list once the VM is gone; starting the VM if it's stopped; failed is the error
 // when its tar fails. Their logins aren't in it. It's written next to
 // file and renamed into place once complete, so a failed export leaves
-// nothing and replaces nothing. The file is the user's alone (600), and
+// nothing and replaces nothing. One over historyMax is stopped and kept
+// nowhere (errHistoryTooLarge), as a VM can write without end. The file is the user's alone (600), and
 // so is the exports folder, whatever mode it had; a folder of the user's
 // keeps its own.
 func (e Lifecycle) export(ctx context.Context, t *target, file string, failed error) error {
@@ -349,9 +375,15 @@ func (e Lifecycle) export(ctx context.Context, t *target, file string, failed er
 		_ = os.Remove(tmp)
 		done()
 	}()
-	err = t.exec(ctx, []string{"bash", "-c", historyExport()}, backend.ExecOpts{Stdout: out, Stderr: e.LogWriter()})
+	run, cancel := context.WithCancel(ctx)
+	defer cancel()
+	w := &bounded{to: out, max: cmp.Or(e.HistoryMax, historyMax), cancel: cancel}
+	err = t.exec(run, []string{"bash", "-c", historyExport()}, backend.ExecOpts{Stdout: w, Stderr: e.vmLog()})
 	if cerr := out.Close(); err == nil {
 		err = cerr
+	}
+	if w.over {
+		return errHistoryTooLarge
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -408,8 +440,8 @@ func importHistory(ctx context.Context, e *Env, t *target, file string) error {
 		return err
 	}
 	defer func() { _ = f.Close() }()
-	out := &capped{max: len(historyUnsafe) + 1}
-	err = t.exec(ctx, []string{"bash", "-c", historyImport()}, backend.ExecOpts{Stdin: f, Stdout: out, Stderr: e.LogWriter()})
+	out := &bounded{max: len(historyUnsafe) + 1}
+	err = t.exec(ctx, []string{"bash", "-c", historyImport()}, backend.ExecOpts{Stdin: f, Stdout: out, Stderr: e.vmLog()})
 	switch {
 	case err == nil:
 	case ctx.Err() != nil:

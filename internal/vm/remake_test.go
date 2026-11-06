@@ -392,6 +392,26 @@ func TestAddLayersRefuses(t *testing.T) {
 // What devvm layer rm makes: the VM's layers without those given, the
 // rest in their order, base when none is left; and those it lacks, once
 // each.
+// A remake whose export is over the most devvm keeps warns, keeps no
+// export and goes on, though the VM keeps writing.
+func TestRemakeHistoryTooLarge(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	e.HistoryMax = 1 << 20
+	vm := existingVM(t, e, Options{Agents: &[]string{"claude"}, Network: "open"}).Name()
+	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error { return streamForever(argv, o) }
+	var warned []string
+	fake(e).OnWarn = func(m msg.M) { warned = append(warned, m.Names()) }
+	if err := (Lifecycle{e}).AddLayers(t.Context(), "devvm layer add docker", []string{"docker"}, RemakeOptions{Force: true, CleanHome: true}); err != nil {
+		t.Fatal(msg.NamesOf(err))
+	}
+	if !slices.Contains(warned, "history_too_large vm="+vm) || !slices.Contains(f.Methods(), "Rename") {
+		t.Errorf("warned %q, ran %q", warned, f.Methods())
+	}
+	if es, _ := os.ReadDir(e.Dirs.Exports()); len(es) != 0 {
+		t.Errorf("exports %v", es)
+	}
+}
+
 func TestRemovedImage(t *testing.T) {
 	for _, c := range []struct {
 		img    image.Name

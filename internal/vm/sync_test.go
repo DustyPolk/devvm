@@ -210,7 +210,7 @@ func TestReported(t *testing.T) {
 			}
 		})
 	}
-	out := &capped{max: unmountedMax}
+	out := &bounded{max: unmountedMax}
 	if _, err := out.Write([]byte(strings.Repeat("x\n", unmountedMax) + node + "\n")); err != nil {
 		t.Fatal(err)
 	}

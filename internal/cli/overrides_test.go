@@ -25,7 +25,7 @@ func TestReleaseReadsNoOverrides(t *testing.T) {
 	}
 	for _, k := range []string{
 		"DEVVM_HOST_MISE", "DEVVM_KVM", "DEVVM_UBUNTU_URL", "DEVVM_UNREVIEWED",
-		"DEVVM_REPO_URL", "DEVVM_RELEASE_KEY", "DEVVM_RELEASE_CA", "DEVVM_TEST_VERSION",
+		"DEVVM_REPO_URL", "DEVVM_RELEASE_KEY", "DEVVM_RELEASE_CA", "DEVVM_TEST_VERSION", "DEVVM_HISTORY_MAX",
 		platform.TestCPUs, platform.TestMemoryGiB, platform.TestFreeGiB, platform.TestListWait,
 	} {
 		t.Setenv(k, "1")

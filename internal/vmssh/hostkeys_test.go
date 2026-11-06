@@ -51,6 +51,11 @@ func TestParseHostKeys(t *testing.T) {
 	if n, err := w.Write([]byte("abcdef")); n != 6 || err != nil || w.String() != "abcd" {
 		t.Errorf("capped: %d, %v, %q", n, err, w.String())
 	}
+	// io.Copy, as os/exec copies a command's output, goes through Write.
+	w = &capped{max: 4}
+	if _, err := io.Copy(w, strings.NewReader(strings.Repeat("x", 1<<20))); err != nil || w.String() != "xxxx" {
+		t.Errorf("copied: %q, %v", w.String(), err)
+	}
 }
 
 // hostKeysFake is a fake with ssh whose running VMs show key as their

@@ -86,6 +86,9 @@ type Env struct {
 	// (the registry's Host), checked before a new VM and each build; nil
 	// checks none.
 	FreeSpace func(path string) (uint64, error)
+	// HistoryMax is the most of an export of agents' history devvm
+	// keeps, in bytes; 0 is historyMax.
+	HistoryMax int
 	// Links returns the links a VM's start and setup give it: its targets'
 	// addresses and names, for its /etc/hosts and its NO_PROXY (checkLinks checks them first); nil gives none.
 	Links func(st *state.VM) ([]GuestLink, error)

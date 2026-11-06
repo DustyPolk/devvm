@@ -202,7 +202,7 @@ const (
 func (e AgentLogin) endLogin(ctx context.Context, t *target) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	log := e.LogWriter()
+	log := e.vmLog()
 	_ = t.exec(ctx, []string{"sh", "-c", endScript}, backend.ExecOpts{Stdout: log, Stderr: log})
 }
 
@@ -263,7 +263,7 @@ func (e AgentLogin) saveKey(ctx context.Context, t *target, store *secrets.Store
 	if err != nil {
 		return msg.LoginCopyFailed(o.Agent, err.Error(), vm).Because(err)
 	}
-	log := e.LogWriter()
+	log := e.vmLog()
 	argv := []string{"sh", "-c", vmLoginScript, "sh", secrets.LoginRel(o.Agent)}
 	if err := t.exec(ctx, argv, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: log, Stderr: log}); err != nil {
 		if ctx.Err() != nil {
@@ -285,10 +285,15 @@ func (e AgentLogin) saveKey(ctx context.Context, t *target, store *secrets.Store
 // too (guest/sync.sh).
 const opencodeScript = "opencode.sh"
 
+// importOutMax is the most of opencodeScript's output devvm agent login
+// reads: a few lines a provider.
+const importOutMax = 1 << 20
+
 // importLogins gives the VM's opencode, which keeps its logins in its
 // database, the logins of vmCopy, the VM's copy of the store's
 // (agentlogin.OpencodeImport), with opencodeScript in a login shell
-// (opencode on PATH), the logins on its input.
+// (opencode on PATH), the logins on its input. devvm reads at most
+// importOutMax bytes of what it prints, and stops it past that.
 func (e AgentLogin) importLogins(ctx context.Context, t *target, vmCopy []byte) error {
 	data, err := agentlogin.OpencodeImport(vmCopy)
 	if err != nil {
@@ -298,11 +303,15 @@ func (e AgentLogin) importLogins(ctx context.Context, t *target, vmCopy []byte) 
 	if err != nil {
 		return err
 	}
-	log := e.LogWriter()
-	var out bytes.Buffer
+	run, cancel := context.WithCancel(ctx)
+	defer cancel()
+	log := e.vmLog()
+	out := &bounded{max: importOutMax, cancel: cancel}
 	argv := []string{"bash", "-lc", string(script), opencodeScript}
-	err = t.exec(ctx, argv, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: io.MultiWriter(&out, log), Stderr: log})
+	err = t.exec(run, argv, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: io.MultiWriter(out, log), Stderr: log})
 	switch {
+	case out.over:
+		return msg.OpencodeImportTooMuch(t.f.Name)
 	case err == nil:
 		return nil
 	case ctx.Err() != nil:

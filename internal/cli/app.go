@@ -153,6 +153,7 @@ func (a *app) vmEnv() (*vm.Env, error) {
 		e.PickParts = pickParts(a.u)
 		e.PickOne = pickOne(a.u)
 		e.Folder = a.folder.rule()
+		e.HistoryMax = a.testOverrides().HistoryMax
 		return e, nil
 	})
 }

@@ -1102,6 +1102,9 @@ other = "exported {{.vm}}'s agent history to {{.file}}"
 [history_not_exported]
 other = "Exporting {{.vm}}'s agent history failed."
 
+[history_too_large]
+other = "{{.vm}}'s agent history is over 2 GiB, more than an export holds, so devvm kept no export of it."
+
 [export_failed]
 description = "reason is an error from the system, in English"
 other = "Exporting the agent history of this folder's VM failed: {{.reason}}."
@@ -2350,6 +2353,9 @@ other = "Giving {{.vm}} its copy of {{.agent}}'s login failed, though devvm save
 [opencode_import_failed]
 description = "providers is a comma-separated list of opencode's provider names"
 other = "opencode in {{.vm}} refused devvm's login for {{.providers}}, though devvm saved the API key. Run devvm in the VM's folder to try again."
+
+[opencode_import_too_much]
+other = "opencode in {{.vm}} printed more than devvm reads while it imported devvm's logins, so devvm stopped it. Run devvm in the VM's folder to try again."
 
 [agent_key_howto]
 description = "provider is the API key's provider, as opencode names it: openai, anthropic or openrouter"

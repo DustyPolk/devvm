@@ -25,7 +25,7 @@ func (e Launch) ShowHost(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	e.Say(msg.SSHHostInfo(t.shellDir(ctx, e.LogWriter()), host))
+	e.Say(msg.SSHHostInfo(t.shellDir(ctx, e.vmLog()), host))
 	return nil
 }
 
@@ -45,7 +45,7 @@ func (e Launch) Code(ctx context.Context) error {
 	}
 	return e.Exec(backend.Command{
 		Path: path,
-		Args: []string{"code", "--remote", "ssh-remote+" + host, t.shellDir(ctx, e.LogWriter())},
+		Args: []string{"code", "--remote", "ssh-remote+" + host, t.shellDir(ctx, e.vmLog())},
 		Env:  e.Environ,
 	})
 }

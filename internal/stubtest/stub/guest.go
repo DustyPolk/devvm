@@ -28,13 +28,14 @@ import (
 //	                    until this file is gone and carries on
 //	sync-fails-with     the setup fails, and this file is the VM's /run/devvm/tools-unmounted
 //	history-unsafe      an import of agents' history finds a path outside them (and fails)
+//	history-floods      an export of agents' history writes, stdout and stderr, until they're gone
 //	packages-out.tar    the packages a base build gives back, else none
 //	agent-save.tar      the stream devvm agent save reads of the VM's agents' settings, else
 //	                    an empty one
 //	net-direct          a direct connection (curl --noproxy, past the VM's proxy) works,
 //	                    which fails as a confined VM's does without it
 //	opencode-refuses    devvm's opencode.sh says opencode refused the provider this file names
-//	hostkeys-fails      the VM doesn't show its ssh host keys, which are otherwise one
+//	opencode-floods     devvm's opencode.sh prints, and writes its stderr, until they're gone//	hostkeys-fails      the VM doesn't show its ssh host keys, which are otherwise one
 //	                    made-up ed25519 key per VM, its name the key
 //	guest-ports         what listens in the VM, as /proc/net/tcp has it, for a port
 //	                    forwarder's master connection
@@ -168,6 +169,8 @@ func (g *guest) files() (code int, done bool) {
 		return g.replace([]string{"tar", "-czf", "-", "-C", home, "."}, []string{"COPYFILE_DISABLE=1"}), true
 	case in:
 		return g.status(g.copyIn("home-in.tgz")), true
+	case strings.Contains(all, "ls -d .claude ") && g.on("history-floods"):
+		return g.flood("history flood\n"), true
 	case strings.Contains(all, "--quoting-style=escape"):
 		if err := g.copyIn("history-in.tgz"); err != nil {
 			return g.status(err), true
@@ -199,6 +202,22 @@ func (g *guest) files() (code int, done bool) {
 	return 0, false
 }
 
+// flood prints line on stdout, and eight times as much on stderr, until
+// a write fails, as a VM that writes without end, and fails.
+func (g *guest) flood(line string) int {
+	text := strings.Repeat(line, 1<<10)
+	for {
+		if _, err := io.WriteString(g.stdout, text); err != nil {
+			return 1
+		}
+		for range 8 {
+			if _, err := io.WriteString(g.stderr, text); err != nil {
+				return 1
+			}
+		}
+	}
+}
+
 // answer is the rest the guest answers: the setup's unmounted tools, a
 // direct connection, the VM's host keys, then the shell switches.
 func (g *guest) answer() int {
@@ -212,6 +231,8 @@ func (g *guest) answer() int {
 		return 0
 	case strings.Contains(all, "'curl' '--noproxy'") && !g.on("net-direct"):
 		return 7
+	case strings.HasSuffix(all, "'opencode.sh'") && g.on("opencode-floods"):
+		return g.flood("devvm-opencode-failed flood\n")
 	case strings.HasSuffix(all, "'opencode.sh'") && g.on("opencode-refuses"):
 		g.print("devvm-opencode-failed " + strings.TrimSpace(string(g.raw("opencode-refuses", ""))) + "\n")
 		return 1
