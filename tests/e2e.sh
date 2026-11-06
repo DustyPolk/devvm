@@ -45,7 +45,8 @@
 #                desktop serves on this machine's loopback alone: a wrong password refused, the
 #                password let in, the VM's server on its user's own socket and no TCP port, the
 #                clipboard off, the password in no file, log or process's arguments, no way out of the
-#                VM; root's own server in its place (no password) still behind devvm's, the viewer's
+#                VM; the local proxy the session uses (no password asked, a blocked host's 403, never
+#                forwarded); root's own server in its place (no password) still behind devvm's, the viewer's
 #                clipboard never reaching it; --clipboard
 #     --from     every section, with from, and every base image feature: the longest. from makes VMs
 #                from node:24 (Debian 12, with node, python, the docker and nix layers and claude) and
@@ -2334,6 +2335,24 @@ check "with network policy, the VM still reaches only its proxy, and not the des
   vm_state '$(vmdir "$vm")' | grep -qx net.made.check=ok &&
   ! limactl shell --workdir / $vm curl --noproxy '*' -sS -m 5 -o /dev/null https://1.1.1.1 </dev/null &&
   ! limactl shell --workdir / $vm timeout 5 bash -c '</dev/tcp/host.lima.internal/$desk_port' </dev/null"
+# The VM's local proxy, which browsers use without a password: the desktop's session points at it,
+# it listens on the VM's loopback alone and adds the VM's password, a host the tier doesn't allow
+# still gets the proxy's 403, and the port forwarder never puts it on this machine.
+desktop_local_proxy='set -e
+lp=http://127.0.77.1:3128
+s=$(pgrep -u "$(id -u)" -x xfce4-session | head -1)
+tr "\0" "\n" <"/proc/$s/environ" | grep -qx "http_proxy=$lp"
+tr "\0" "\n" <"/proc/$s/environ" | grep -qx "HTTPS_PROXY=$lp"
+[ "$(awk "\$4 == \"0A\" && \$2 ~ /:0C38\$/ { print \$2 }" /proc/net/tcp /proc/net/tcp6)" = 014D007F:0C38 ]
+curl -fsS -m 20 --noproxy "" -x "$lp" -o /dev/null https://github.com
+if curl -sS -m 20 --noproxy "" -x "$lp" -o /dev/null https://example.com 2>"$HOME/lp.err"; then exit 1; fi
+grep -q 403 "$HOME/lp.err"
+[ "$(curl -s -m 20 --noproxy "" -x "$lp" -o "$HOME/lp.out" -w "%{http_code}" http://example.com/)" = 403 ]
+grep -q "devvm: example.com:80 is blocked" "$HOME/lp.out"
+[ "$(curl -s -m 20 --noproxy "*" -o /dev/null -w "%{http_code}" "$lp/")" = 400 ]
+rm -f "$HOME/lp.err" "$HOME/lp.out"'
+check "the desktop's browsers use the VM's local proxy without a password, a blocked host still 403" in_vm "$vm" "$desktop_local_proxy"
+check "... and the local proxy isn't forwarded to this machine" bash -c "sleep 3; ! nc -z 127.0.0.1 3128"
 # Root's own server in its place: no password, its socket anyone's, everything that reaches it
 # recorded in /tmp/devvm-e2e-rfb.bin, each connection counted.
 cat > "$p/fake-rfb.py" <<'P'

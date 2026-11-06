@@ -49,7 +49,8 @@ import (
 //   - it listens on the host's loopback alone (127.0.0.1 and ::1), on the
 //     port the VM listens on, for servers on the VM's loopback or all its
 //     addresses, but never a link's listener, in 127.77.0.0/16
-//     (proxy.IsLinkAddr): every port from 1024 up, or the VM's listed ports alone
+//     (proxy.IsLinkAddr), nor the VM's local proxy, which adds the VM's
+//     password (proxy.IsLocalProxyAddr): every port from 1024 up, or the VM's listed ports alone
 //     (Only); never on a port the host has on any address (no SO_REUSEADDR:
 //     platform.ListenExclusive), nor on a port devvm records for any VM
 //     (ssh, proxy, desktop, listed forwards) but the VM's own listed ones;
@@ -443,14 +444,16 @@ func procAddr(h string) (netip.Addr, bool) {
 
 // dialAddr is where in the VM a forwarded connection to a server on a goes:
 // its loopback alone. A link's listener (proxy.IsLinkAddr) is never forwarded,
-// so a link isn't put on the host's loopback.
+// so a link isn't put on the host's loopback, and neither is the VM's local
+// proxy (proxy.IsLocalProxyAddr), which would let the host's programs use the
+// VM's proxy without its password.
 func dialAddr(a netip.Addr) (netip.Addr, bool) {
 	switch {
 	case a == netip.IPv4Unspecified():
 		return netip.MustParseAddr("127.0.0.1"), true
 	case a == netip.IPv6Unspecified():
 		return netip.IPv6Loopback(), true
-	case a.IsLoopback() && !proxy.IsLinkAddr(a):
+	case a.IsLoopback() && !proxy.IsLinkAddr(a) && !proxy.IsLocalProxyAddr(a):
 		return a, true
 	}
 	return netip.Addr{}, false

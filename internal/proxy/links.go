@@ -143,6 +143,21 @@ func IsLinkAddr(a netip.Addr) bool {
 	return a.Is4() && b[12] == linkNetA && b[13] == linkNetB
 }
 
+// LocalProxyAddr and LocalProxyPort are where a VM's local proxy listens in the VM, on its loopback:
+// devvm-local-proxy, which the guest setup writes, adds the VM's password to each request and sends
+// it here, for programs that ask for a proxy's password instead of taking it from HTTP_PROXY, such
+// as the desktop's browsers. The address is devvm's alone, so no port forwarder puts the local
+// proxy on the host (IsLocalProxyAddr).
+const (
+	LocalProxyAddr = "127.0.77.1"
+	LocalProxyPort = 3128
+)
+
+// IsLocalProxyAddr reports whether a is LocalProxyAddr, as itself or mapped into IPv6.
+func IsLocalProxyAddr(a netip.Addr) bool {
+	return a.Unmap() == netip.MustParseAddr(LocalProxyAddr)
+}
+
 // LinkAddr is the address i in 127.77.0.0/16.
 func LinkAddr(i uint16) netip.Addr {
 	b := [4]byte{linkNetA, linkNetB}

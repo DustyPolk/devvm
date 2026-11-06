@@ -12,8 +12,10 @@
 #                devvm-proxy.crt and devvm-proxy-next.crt, the proxy's; devvm-extra-N.crt, the user's
 #                own; ca.sh installs them
 #   vm           DEVVM_* host settings applied to every VM: hostname, timezone, locale, git identity,
-#                DEVVM_PROXY (the proxy URL, empty when the guest has none), and
-#                DEVVM_NO_PROXY (what reaches the VM itself without the proxy; its links go through it)
+#                DEVVM_PROXY (the proxy URL, empty when the guest has none),
+#                DEVVM_NO_PROXY (what reaches the VM itself without the proxy; its links go through it),
+#                and DEVVM_LOCAL_PROXY (ADDRESS:PORT on the VM's loopback, where devvm-local-proxy
+#                listens; empty without a proxy)
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
 #   hosts        the VM's links (devvm checked them): a line per target, "ADDRESS NAME
 #                NAME.devvm.internal...", for /etc/hosts
@@ -321,6 +323,88 @@ exec cat <&3
 SH
   } | sudo tee /usr/local/bin/devvm-ssh-proxy >/dev/null
   sudo chmod 755 /usr/local/bin/devvm-ssh-proxy
+  # devvm-local-proxy: the VM's local proxy, for programs that ask for a proxy's password instead
+  # of taking it from HTTP_PROXY, such as browsers (the desktop starts it). The VM's user's alone,
+  # installed whole, so a connection already running keeps the copy it started with.
+  lp=${DEVVM_LOCAL_PROXY:-}
+  if [[ -n $lp ]]; then
+    { printf '#!/bin/bash\nup_host=%q up_port=%q auth=%q\nlisten=%q port=%q\n' \
+        "${hp%:*}" "${hp##*:}" "$auth" "${lp%:*}" "${lp##*:}"
+      cat <<'SH'
+# The VM's local proxy, for programs that ask for a proxy's password instead of taking it from
+# HTTP_PROXY, such as the desktop's browsers. socat listens on $listen alone, the VM's loopback,
+# takes connections from the loopback alone, and runs this script on each connection. The script
+# reads the request's head and sends it to devvm's proxy, and nowhere else, with the VM's password
+# in Proxy-Authorization in place of any the client sent; then socat carries the rest both ways. It
+# takes only what a proxy gets: CONNECT HOST:PORT, a tunnel, and a request for an absolute http://
+# or https:// URL, whose connection closes after its reply, as the password goes with the head
+# alone. A web page that reaches it as a server gets 400.
+#   devvm-local-proxy start   starts the listener unless it runs, its log ~/.cache/devvm-local-proxy.log
+#   devvm-local-proxy url     prints its URL, for http_proxy and https_proxy
+set -u
+self=/usr/local/bin/devvm-local-proxy
+# refuse STATUS TEXT: answer the client with TEXT, then read what it sent until it closes (or for
+# 2 s), so the answer isn't lost to a reset.
+refuse() {
+  printf 'HTTP/1.1 %s\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s\n' \
+    "$1" $((${#2} + 1)) "$2"
+  exec socat -T 2 -u STDIN /dev/null
+}
+case ${1:-} in
+start)
+  d=/run/devvm-local-proxy
+  sudo install -d -m 700 -o "$(id -u)" -g "$(id -g)" "$d"
+  pid=$(cat "$d/socat.pid" 2>/dev/null || true)
+  [[ -n $pid && "$(cat "/proc/$pid/comm" 2>/dev/null)" == socat ]] && exit 0
+  mkdir -p ~/.cache
+  setsid socat "TCP4-LISTEN:$port,bind=$listen,range=127.0.0.0/8,reuseaddr,fork,max-children=256" \
+    "EXEC:$self,nofork" </dev/null >>~/.cache/devvm-local-proxy.log 2>&1 &
+  echo "$!" > "$d/socat.pid"
+  i=0
+  until (: <"/dev/tcp/$listen/$port") 2>/dev/null; do
+    i=$((i + 1))
+    [[ $i -le 50 ]] || { echo "devvm-local-proxy: socat didn't start: ~/.cache/devvm-local-proxy.log" >&2; exit 1; }
+    sleep 0.1
+  done
+  exit 0 ;;
+url) echo "http://$listen:$port"; exit 0 ;;
+'') ;;
+*) echo "usage: devvm-local-proxy [start|url]" >&2; exit 2 ;;
+esac
+# One connection, on stdin and stdout.
+IFS= read -r -t 30 line || exit 0
+line=${line%$'\r'}
+re='^([A-Z]+) ([^[:space:]]+) HTTP/1\.[01]$'
+[[ $line =~ $re ]] || refuse '400 Bad Request' "devvm-local-proxy: not an HTTP request"
+method=${BASH_REMATCH[1]} target=${BASH_REMATCH[2]}
+re='^https?://[^[:space:]]+$'
+[[ $method != CONNECT ]] || re='^([A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\]):[0-9]+$'
+[[ $target =~ $re ]] || refuse '400 Bad Request' "devvm-local-proxy: a proxy, for http_proxy and https_proxy, not a web server"
+head=$line$'\r\n' n=0
+shopt -s nocasematch
+while :; do
+  IFS= read -r -t 30 h || exit 0
+  h=${h%$'\r'}
+  [[ -n $h ]] || break
+  n=$((n + 1))
+  [[ $n -le 100 ]] || refuse '431 Request Header Fields Too Large' "devvm-local-proxy: too many headers"
+  case ${h%%:*} in
+    proxy-authorization|proxy-connection) continue ;;
+    connection|keep-alive) [[ $method == CONNECT ]] || continue ;;
+  esac
+  head+=$h$'\r\n'
+done
+shopt -u nocasematch
+head+="Proxy-Authorization: Basic $auth"$'\r\n'
+[[ $method == CONNECT ]] || head+=$'Connection: close\r\n'
+exec 3<>"/dev/tcp/$up_host/$up_port" || refuse '502 Bad Gateway' "devvm-local-proxy: devvm's proxy doesn't answer"
+printf '%s\r\n' "$head" >&3
+exec socat - FD:3
+SH
+    } > "$s/local-proxy"
+    cmp -s "$s/local-proxy" /usr/local/bin/devvm-local-proxy 2>/dev/null ||
+      sudo install -m 700 -o "$(id -u)" -g "$(id -g)" "$s/local-proxy" /usr/local/bin/devvm-local-proxy
+  fi
   mkdir -p ~/.ssh
   proxy_block ~/.ssh/config "Host *
   ProxyCommand /usr/local/bin/devvm-ssh-proxy %h %p"
@@ -353,7 +437,7 @@ EOF
 else
   rm -f ~/.bashrc.d/devvm-blocked.sh
   sudo rm -f /etc/sudoers.d/devvm-proxy /etc/apt/apt.conf.d/95devvm-proxy /usr/local/bin/devvm-why \
-    /usr/local/bin/devvm-ssh-proxy /etc/profile.d/devvm-proxy.sh
+    /usr/local/bin/devvm-ssh-proxy /usr/local/bin/devvm-local-proxy /etc/profile.d/devvm-proxy.sh
   if $systemd; then sudo rm -f "$dropin"; else conf_block "$dropin"; fi
   [[ ! -f ~/.ssh/config ]] || proxy_block ~/.ssh/config
 fi

@@ -54,6 +54,14 @@ The desktop is only ever on this machine, and only while `devvm desktop` runs:
 - In the VM, the desktop listens on no port at all, so a VM that [forwards every port](ports-size.md#ports) never forwards it.
 - On a confined [network tier](../safety/network.md#network-tiers), the VM still reaches only its proxy while you use its desktop.
 
+## Browsers
+
+The desktop has no browser of its own, so install the one you want in the VM, such as Google Chrome, Chromium or Firefox. Browsers reach the web through the VM's proxy without asking you for a password, and so do the desktop's other programs. Browsers ask for a proxy's password rather than read it from the VM's proxy settings, so the desktop's programs use the VM's local proxy instead. The local proxy is a small proxy in the VM, at `http://127.0.77.1:3128`, which adds the VM's password to each request and sends it on to the VM's proxy. A browser follows the desktop's proxy settings unless you've given it one of its own.
+
+The local proxy changes nothing about what the VM may reach. A host that the VM's [network tier](../safety/network.md#network-tiers) doesn't allow is still blocked, and a plain `http://` page shows the proxy's reason and the `devvm network allow` command that allows it. An `https://` page shows the browser's own error instead, such as Chrome's `ERR_TUNNEL_CONNECTION_FAILED`, so run `devvm-why` in the desktop's terminal to see what was blocked.
+
+The local proxy listens on the VM's loopback alone, and devvm never forwards it to this machine, even on a VM that [forwards every port](ports-size.md#ports). It starts with the desktop and runs until the VM stops.
+
 ## The password
 
 Each VM has its own password of eight lowercase letters and digits. devvm makes it the first time you run `devvm desktop` and keeps it with the VM's state on this machine, so `devvm rm` deletes it. The password never goes into the VM, and it isn't in devvm's run log. devvm checks it on this machine before a viewer reaches the VM, whatever the VM's own desktop asks for.

@@ -7,10 +7,12 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -228,6 +230,15 @@ func (e syncer) checkStartLinks(st *state.VM) error {
 	return checkLinks(st.Name(), "", links)
 }
 
+// localProxy is where the VM's local proxy listens in the VM, ADDRESS:PORT, which sync.sh's
+// devvm-local-proxy takes, or "" when the VM has no proxy (proxyURL "").
+func localProxy(proxyURL string) string {
+	if proxyURL == "" {
+		return ""
+	}
+	return net.JoinHostPort(proxy.LocalProxyAddr, strconv.Itoa(proxy.LocalProxyPort))
+}
+
 // stage returns what sync sends; see devvm's guest/sync.sh for each file.
 func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage, error) {
 	vm, names := st.Name(), tools.Names(st)
@@ -279,6 +290,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		{"DEVVM_GIT_EMAIL", e.GitConfig(ctx, st.Dir, "user.email")},
 		{"DEVVM_PROXY", proxyURL},
 		{"DEVVM_NO_PROXY", netpolicy.NoProxy},
+		{"DEVVM_LOCAL_PROXY", localProxy(proxyURL)},
 	}
 	// The devcontainer.json's variables first: devvm's own win.
 	dcEnv, err := devcontainerEnv(st)

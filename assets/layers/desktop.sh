@@ -7,12 +7,12 @@ set -euxo pipefail
 # builds, which base's image has no package lists of (layers/apt.sh), so they aren't pinned. Alpine
 # (--from alpine): Alpine's own packages, from the release's repositories.
 if [[ $devvm_libc == musl ]]; then
-  sudo apk add --no-cache xfce4 xfce4-terminal tigervnc dbus-x11 xauth font-dejavu
+  sudo apk add --no-cache xfce4 xfce4-terminal tigervnc dbus-x11 xauth font-dejavu socat
 else
   sudo apt-get update --error-on=any
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-settings xfce4-terminal thunar \
-    tigervnc-standalone-server tigervnc-tools dbus-x11 xauth fonts-dejavu-core
+    tigervnc-standalone-server tigervnc-tools dbus-x11 xauth fonts-dejavu-core socat
 fi
 
 # devvm-desktop start on|off, which devvm desktop runs, as the VM's user: the desktop, started
@@ -22,8 +22,11 @@ fi
 # the socket, and its relay is the VM's only way in. The clipboard is on or off as asked, changed
 # in place (vncconfig) on a desktop that runs; devvm's relay keeps the viewer's clipboard from the
 # VM when it's off whatever the server says. Then an Xfce session on it, in a D-Bus session of
-# its own. A run that started nothing prints
-# nothing; its own log is ~/.cache/devvm-desktop.log.
+# its own. With a proxy, the VM's local proxy (devvm-local-proxy, which the guest setup writes, and
+# socat serves) runs too, and the session's proxy settings, which browsers and the desktop's other
+# programs read, point at it: browsers ask for a proxy's password rather than take it from
+# HTTP_PROXY, and the local proxy adds it. A run that started nothing prints nothing; its own log is
+# ~/.cache/devvm-desktop.log.
 sudo install -m 755 /dev/stdin /usr/local/bin/devvm-desktop <<'S'
 #!/bin/sh
 set -eu
@@ -33,6 +36,8 @@ case ${2:-} in on) clip=1 ;; off) clip=0 ;; *) usage ;; esac
 dir=/run/devvm-desktop
 sock=$dir/vnc.sock pidf=$dir/xvnc.pid log=$HOME/.cache/devvm-desktop.log
 export DISPLAY=:1 XAUTHORITY="$HOME/.Xauthority"
+local_proxy=/usr/local/bin/devvm-local-proxy
+[ ! -x "$local_proxy" ] || "$local_proxy" start
 sudo install -d -m 700 -o "$(id -u)" -g "$(id -g)" "$dir"
 pid=$(cat "$pidf" 2>/dev/null || true)
 if [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = Xvnc ] && [ -S "$sock" ]; then
@@ -56,5 +61,9 @@ until [ -S "$sock" ]; do
   [ "$i" -le 150 ] || { echo "devvm-desktop: Xvnc didn't start: $log" >&2; exit 1; }
   sleep 0.1
 done
+if [ -x "$local_proxy" ]; then
+  u=$("$local_proxy" url)
+  export http_proxy="$u" https_proxy="$u" HTTP_PROXY="$u" HTTPS_PROXY="$u"
+fi
 setsid dbus-launch --exit-with-session startxfce4 </dev/null >>"$log" 2>&1 &
 S

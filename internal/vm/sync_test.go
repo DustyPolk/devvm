@@ -93,8 +93,20 @@ func TestUpLinks(t *testing.T) {
 		t.Errorf("Start's env = %q", c.Env)
 	}
 	got := staged(t, f)
-	if got["hosts"] != "127.77.0.2 db db.devvm.internal pg pg.devvm.internal\n" || !strings.Contains(got["vm"], "\nDEVVM_NO_PROXY='"+want+"'\n") {
+	if got["hosts"] != "127.77.0.2 db db.devvm.internal pg pg.devvm.internal\n" || !strings.Contains(got["vm"], "\nDEVVM_NO_PROXY='"+want+"'\n") ||
+		!strings.Contains(got["vm"], "\nDEVVM_LOCAL_PROXY='127.0.77.1:3128'\n") {
 		t.Errorf("staged hosts = %q, vm = %q", got["hosts"], got["vm"])
+	}
+}
+
+// The local proxy's address goes to a VM with a proxy, and none to one without.
+func TestLocalProxy(t *testing.T) {
+	t.Parallel()
+	if got := localProxy("http://devvm:k@192.168.5.2:41000"); got != "127.0.77.1:3128" {
+		t.Errorf("localProxy(a proxy) = %q", got)
+	}
+	if got := localProxy(""); got != "" {
+		t.Errorf("localProxy(none) = %q", got)
 	}
 }
 

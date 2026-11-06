@@ -318,3 +318,19 @@ func TestIsLinkAddr(t *testing.T) {
 		}
 	}
 }
+
+// The local proxy's address is 127.0.77.1, as itself or mapped into IPv6, and no link's.
+func TestIsLocalProxyAddr(t *testing.T) {
+	t.Parallel()
+	for s, want := range map[string]bool{
+		"127.0.77.1": true, "::ffff:127.0.77.1": true,
+		"127.0.0.1": false, "127.0.77.2": false, "127.77.0.1": false, "::1": false, "0.0.0.0": false,
+	} {
+		if got := IsLocalProxyAddr(netip.MustParseAddr(s)); got != want {
+			t.Errorf("IsLocalProxyAddr(%s) = %v", s, got)
+		}
+	}
+	if IsLinkAddr(netip.MustParseAddr(LocalProxyAddr)) || IsLocalProxyAddr(netip.Addr{}) {
+		t.Error("the local proxy's address is a link's, or the zero Addr is the local proxy's")
+	}
+}
