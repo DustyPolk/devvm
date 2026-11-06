@@ -95,9 +95,12 @@ type Env struct {
 	msg.Reporter
 	// PickFeatures asks which features base gets (build.Env.Pick), and
 	// PickParts shows the tools picker (nil shows none): each set by its
-	// caller.
+	// caller. PickOne shows rows under help for one to be chosen, starting
+	// from the first that's on, and returns the index of the one chosen
+	// (nil, or where the picker can't show: the one it started from).
 	PickFeatures func([]build.Feature) []build.Feature
 	PickParts    func(msg.M, []PickPart) []PickPart
+	PickOne      func(msg.M, []PickRow) int
 	// AddInclude is --ssh-config: devvm's Include line goes in
 	// ~/.ssh/config, when it's missing, without asking.
 	AddInclude bool

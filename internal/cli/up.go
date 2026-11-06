@@ -100,6 +100,17 @@ func pickParts(u *ui.UI) func(msg.M, []vm.PickPart) []vm.PickPart {
 	}
 }
 
+// pickOne is the VM environment's PickOne: the UI's PickOne over rows.
+func pickOne(u *ui.UI) func(msg.M, []vm.PickRow) int {
+	return func(help msg.M, rows []vm.PickRow) int {
+		choices := make([]ui.Choice, len(rows))
+		for i, r := range rows {
+			choices[i] = ui.Choice{Name: r.Name, Desc: u.Text(r.Desc), On: r.On}
+		}
+		return u.PickOne(help, choices)
+	}
+}
+
 // partsNone is the value of --tools, --agents and --layers that chooses
 // none of the part.
 const partsNone = "none"

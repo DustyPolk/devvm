@@ -552,7 +552,7 @@ func (e creation) choose(o Options, f project.Folder, b backend.Backend, def set
 
 // customize asks for what of a new VM no flag gave, starting from its
 // summary s: the picker, a part a flag gave greyed out (skipped when the
-// flags give every part), then its tier when tierOpen (Choose, Enter for
+// flags give every part), then its tier when tierOpen (chooseTier, from
 // the one the summary showed), then its
 // CPUs and memory (AskVM), each into n. It returns the parts chosen,
 // checked as the defaults are.
@@ -565,10 +565,32 @@ func (e creation) customize(s summary, host Host, tierOpen bool, n *newVM) (Part
 		}
 	}
 	if tierOpen {
-		n.net = e.Proxy.Choose(s.vm, n.net)
+		n.net = e.chooseTier(s.vm, n.net)
 	}
 	n.size = SizeChoice{Dirs: e.Dirs, Host: host, Reporter: e.Reporter}.AskVM(n.size, s.size, s.o.Size)
 	return p, n.size.Check(host, backend.BaseDiskGiB, s.vm)
+}
+
+// chooseTier shows the tiers in order, each with what it reaches, for
+// one to be chosen, starting from shown, the one the summary showed;
+// where the picker can't show, it's shown.
+func (e creation) chooseTier(vm string, shown netpolicy.Tier) netpolicy.Tier {
+	if e.PickOne == nil {
+		return shown
+	}
+	rows := tierRows(shown)
+	return netpolicy.Tiers()[e.PickOne(msg.NetTierHelp(vm), rows)]
+}
+
+// tierRows are the tier picker's rows: every tier, lowest to highest,
+// with what it reaches, shown on.
+func tierRows(shown netpolicy.Tier) []PickRow {
+	tiers := netpolicy.Tiers()
+	rows := make([]PickRow, len(tiers))
+	for i, t := range tiers {
+		rows[i] = PickRow{Name: string(t), Desc: t.Desc(), On: t == shown}
+	}
+	return rows
 }
 
 // record sets a new VM's choices in its state, before it's written, with

@@ -174,15 +174,9 @@ func (s setup) saveNetwork(dirs paths.Dirs) error {
 		return err
 	}
 	modes := settings.NetworkChoices()
-	descs := map[string]msg.M{
-		string(netpolicy.TierOpen):      msg.NetworkDefaultOpen(),
-		string(netpolicy.TierInternet):  msg.NetworkDefaultInternet(),
-		string(netpolicy.TierAllowlist): msg.NetworkDefaultAllowlist(),
-		string(netpolicy.TierNone):      msg.NetworkDefaultNone(),
-	}
 	choices := make([]ui.Choice, len(modes))
 	for i, m := range modes {
-		choices[i] = ui.Choice{Name: m, Desc: s.ui.Text(descs[m]), On: m == def.Network.Value}
+		choices[i] = ui.Choice{Name: m, Desc: s.ui.Text(netpolicy.Tier(m).Desc()), On: m == def.Network.Value}
 	}
 	mode := modes[s.pickOne(msg.NetworkDefaultHelp(), choices)]
 	return vm.NetworkChoice{Dirs: dirs, Reporter: s.ui}.Set(mode)

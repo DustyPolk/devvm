@@ -2084,19 +2084,9 @@ func MsgUnknown(name string) M {
 	return M{id: "msg_unknown", vals: []val{{"name", name}}}
 }
 
-// NetAbout is [net_about]: "Choose the network tier for {{.vm}}. With open it reaches anything this machine can, with internet any public host, with allowlist only the hosts you allow (recommended), and with none only its agents' and secrets' hosts and its links."
-func NetAbout(vm string) M {
-	return M{id: "net_about", vals: []val{{"vm", vm}}}
-}
-
 // NetAllowsUnused is [net_allows_unused]: "{{.vm}} is on the {{.tier}} tier, where only your denies apply, so this allow changes nothing until it's on the allowlist tier."
 func NetAllowsUnused(tier string, vm string) M {
 	return M{id: "net_allows_unused", vals: []val{{"tier", tier}, {"vm", vm}}}
-}
-
-// NetAsk is [net_ask]: "Network tier for the VM (open, internet, allowlist or none) [{{.tier}}]:"
-func NetAsk(tier string) M {
-	return M{id: "net_ask", vals: []val{{"tier", tier}}}
 }
 
 // NetDefaultFailed is [net_default_failed]: "Reading or saving new VMs' network tier failed: {{.reason}}."
@@ -2129,14 +2119,34 @@ func NetProxyUnreachable(vm string) M {
 	return M{id: "net_proxy_unreachable", vals: []val{{"vm", vm}}}
 }
 
+// NetTierAllowlist is [net_tier_allowlist]: "reaches only the hosts you allow (recommended)"
+func NetTierAllowlist() M {
+	return M{id: "net_tier_allowlist"}
+}
+
 // NetTierBackend is [net_tier_backend]: "The {{.backend}} backend can't confine {{.vm}} to its proxy here, so the VM can only be open. Make it with --network open."
 func NetTierBackend(backend string, vm string) M {
 	return M{id: "net_tier_backend", vals: []val{{"backend", backend}, {"vm", vm}}}
 }
 
-// NetTierUnknown is [net_tier_unknown]: "{{.given}} isn't a network tier. Type one of {{.choices}}, or press Enter for {{.tier}}."
-func NetTierUnknown(choices string, given string, tier string) M {
-	return M{id: "net_tier_unknown", vals: []val{{"choices", choices}, {"given", given}, {"tier", tier}}}
+// NetTierHelp is [net_tier_help]: "Network tier for {{.vm}} (up/down to choose, enter to confirm):"
+func NetTierHelp(vm string) M {
+	return M{id: "net_tier_help", vals: []val{{"vm", vm}}}
+}
+
+// NetTierInternet is [net_tier_internet]: "reaches any public host"
+func NetTierInternet() M {
+	return M{id: "net_tier_internet"}
+}
+
+// NetTierNone is [net_tier_none]: "reaches only its agents' and secrets' hosts and its links"
+func NetTierNone() M {
+	return M{id: "net_tier_none"}
+}
+
+// NetTierOpen is [net_tier_open]: "reaches anything this machine can"
+func NetTierOpen() M {
+	return M{id: "net_tier_open"}
 }
 
 // NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly, so its network tier isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
@@ -2159,29 +2169,9 @@ func NetworkDefault(mode string) M {
 	return M{id: "network_default", vals: []val{{"mode", mode}}}
 }
 
-// NetworkDefaultAllowlist is [network_default_allowlist]: "new VMs reach only the hosts you allow (recommended)"
-func NetworkDefaultAllowlist() M {
-	return M{id: "network_default_allowlist"}
-}
-
 // NetworkDefaultHelp is [network_default_help]: "Network tier for new VMs (up/down to choose, enter to confirm):"
 func NetworkDefaultHelp() M {
 	return M{id: "network_default_help"}
-}
-
-// NetworkDefaultInternet is [network_default_internet]: "new VMs reach any public host"
-func NetworkDefaultInternet() M {
-	return M{id: "network_default_internet"}
-}
-
-// NetworkDefaultNone is [network_default_none]: "new VMs reach only their agents' and secrets' hosts and their links"
-func NetworkDefaultNone() M {
-	return M{id: "network_default_none"}
-}
-
-// NetworkDefaultOpen is [network_default_open]: "new VMs reach anything this machine can"
-func NetworkDefaultOpen() M {
-	return M{id: "network_default_open"}
 }
 
 // NetworkFailed is [network_failed]: "Reading or changing the network tier of this folder's VM failed: {{.reason}}."
@@ -4312,26 +4302,24 @@ var specs = map[string]spec{
 	"msg_repeated_value":             {fields: []string{"key"}},
 	"msg_unexpected_value":           {fields: []string{"key", "name"}},
 	"msg_unknown":                    {fields: []string{"name"}},
-	"net_about":                      {fields: []string{"vm"}},
 	"net_allows_unused":              {fields: []string{"tier", "vm"}},
-	"net_ask":                        {fields: []string{"tier"}},
 	"net_default_failed":             {fields: []string{"reason"}},
 	"net_direct_route":               {fields: []string{"vm"}},
 	"net_open_log":                   {fields: []string{"vm"}},
 	"net_open_policy":                {fields: []string{"vm"}},
 	"net_proxy_down_stopped":         {fields: []string{"vm"}},
 	"net_proxy_unreachable":          {fields: []string{"vm"}},
+	"net_tier_allowlist":             {},
 	"net_tier_backend":               {fields: []string{"backend", "vm"}},
-	"net_tier_unknown":               {fields: []string{"choices", "given", "tier"}},
+	"net_tier_help":                  {fields: []string{"vm"}},
+	"net_tier_internet":              {},
+	"net_tier_none":                  {},
+	"net_tier_open":                  {},
 	"net_unenforced":                 {fields: []string{"vm"}},
 	"net_unenforced_restart":         {fields: []string{"vm"}},
 	"net_unenforced_stop":            {fields: []string{"vm"}},
 	"network_default":                {fields: []string{"mode"}},
-	"network_default_allowlist":      {},
 	"network_default_help":           {},
-	"network_default_internet":       {},
-	"network_default_none":           {},
-	"network_default_open":           {},
 	"network_failed":                 {fields: []string{"reason"}},
 	"new_vm_agent_from":              {fields: []string{"agent", "from"}},
 	"new_vm_agents_none":             {},

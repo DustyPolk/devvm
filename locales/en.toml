@@ -468,17 +468,17 @@ other = "Saving the settings failed: {{.reason}}."
 [network_default_help]
 other = "Network tier for new VMs (up/down to choose, enter to confirm):"
 
-[network_default_open]
-other = "new VMs reach anything this machine can"
+[net_tier_open]
+other = "reaches anything this machine can"
 
-[network_default_internet]
-other = "new VMs reach any public host"
+[net_tier_internet]
+other = "reaches any public host"
 
-[network_default_allowlist]
-other = "new VMs reach only the hosts you allow (recommended)"
+[net_tier_allowlist]
+other = "reaches only the hosts you allow (recommended)"
 
-[network_default_none]
-other = "new VMs reach only their agents' and secrets' hosts and their links"
+[net_tier_none]
+other = "reaches only its agents' and secrets' hosts and its links"
 
 [network_default]
 description = "mode is ask or a network tier: open, internet, allowlist or none"
@@ -1559,16 +1559,8 @@ other = "There's no {{.given}} for {{.flag}}. It goes in {{.other}}, as in devvm
 description = "flag is --tools, --agents or --layers"
 other = "{{.flag}} takes none alone, or a list of names without it."
 
-[net_about]
-other = "Choose the network tier for {{.vm}}. With open it reaches anything this machine can, with internet any public host, with allowlist only the hosts you allow (recommended), and with none only its agents' and secrets' hosts and its links."
-
-[net_ask]
-description = "tier is the tier the VM gets when you press Enter, the one its summary showed: open, internet, allowlist or none"
-other = "Network tier for the VM (open, internet, allowlist or none) [{{.tier}}]:"
-
-[net_tier_unknown]
-description = "given is the answer as typed; choices are the tiers: open, internet, allowlist, none; tier is the one Enter gives"
-other = "{{.given}} isn't a network tier. Type one of {{.choices}}, or press Enter for {{.tier}}."
+[net_tier_help]
+other = "Network tier for {{.vm}} (up/down to choose, enter to confirm):"
 
 [net_direct_route]
 other = "{{.vm}} reached the internet without going through its proxy, so devvm stopped it. Something outside devvm may have given it another network."

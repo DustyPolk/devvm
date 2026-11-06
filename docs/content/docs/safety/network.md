@@ -42,15 +42,17 @@ Changing a VM from one confined tier to another applies at once, because the VM'
 
 ## Choosing a tier
 
-A new VM gets the allowlist tier unless you choose another, and the summary devvm shows before it makes the VM names its tier. When you customize the VM in a terminal, devvm says what each tier reaches and asks for one, and pressing Enter gives the VM the tier the summary showed ([what a new VM gets](../using/images.md#what-a-new-vm-gets)):
+A new VM gets the allowlist tier unless you choose another, and the summary devvm shows before it makes the VM names its tier. When you customize the VM in a terminal, devvm lists the four tiers, each with what it reaches, and the tier the summary showed is chosen ([what a new VM gets](../using/images.md#what-a-new-vm-gets)):
 
 ```text
-Choose the network tier for devvm-some-project-71a99b1076d92c. With open it reaches anything this machine can, with internet any public host, with allowlist only the hosts you allow (recommended), and with none only its agents' and secrets' hosts and its links.
-https://devvm.dev/docs/safety/network/#choosing-a-tier
-Network tier for the VM (open, internet, allowlist or none) [allowlist]:
+Network tier for devvm-some-project-71a99b1076d92c (up/down to choose, enter to confirm):
+  ( ) open       reaches anything this machine can
+  ( ) internet   reaches any public host
+> (*) allowlist  reaches only the hosts you allow (recommended)
+  ( ) none       reaches only its agents' and secrets' hosts and its links
 ```
 
-When you type something that isn't a tier, devvm says so and asks again. `--network TIER` answers the question up front, such as `devvm --network internet`, and when there's no terminal to ask in, or you give `--no-input`, the VM gets the tier the summary showed. A VM keeps its tier. On an existing VM devvm ignores `--network` and warns you, naming the `devvm network` command that changes the tier.
+Up and down move the choice, and enter gives the VM the chosen tier, so pressing enter at once keeps the tier the summary showed. `--network TIER` answers the question up front, such as `devvm --network internet`, and when there's no terminal to ask in, or you give `--no-input`, the VM gets the tier the summary showed. A VM keeps its tier. On an existing VM devvm ignores `--network` and warns you, naming the `devvm network` command that changes the tier.
 
 To give every new VM another tier, save it with `devvm network -g`, such as `devvm network -g none`, or choose it in [devvm setup](../using/settings.md#devvm-setup). Each new VM's summary then shows that tier, and customizing the VM still asks, with Enter keeping the saved tier. `devvm network -g` shows what new VMs get, `allowlist` until you save another tier, followed by where it came from after a `#`, and `devvm network -g --json` prints it as `policy`, with `source`. devvm reads the saved tier only when it creates a VM, so the VMs you already have keep their own tier, and `--network` still chooses for one new VM. You can also set it with `network` in [`config.toml`](../using/settings.md#configtoml), which wins over the saved tier, and then `devvm network -g` refuses to change it and names the file ([where a default comes from](../using/settings.md#where-a-default-comes-from)).
 

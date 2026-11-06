@@ -300,42 +300,15 @@ func TestKeyAndSalt(t *testing.T) {
 	}
 }
 
-// Without a terminal, the tier shown; in a terminal, the tier typed, after
-// what each reaches, Enter for the one shown, and anything else warned and
-// asked again, without the tiers said again.
-func TestChoose(t *testing.T) {
-	var answers, said []string
-	ui := &msg.Fake{
-		OnNote: func(m msg.M) { said = append(said, m.Names()) },
-		OnWarn: func(m msg.M) { said = append(said, m.Names()) },
-		OnAnswer: func(m msg.M) string {
-			said = append(said, m.Names())
-			a := answers[0]
-			answers = answers[1:]
-			return a
-		},
+// Each tier says what it reaches, its own message; no tier says nothing.
+func TestTierDesc(t *testing.T) {
+	want := map[Tier]string{
+		TierOpen: "net_tier_open", TierInternet: "net_tier_internet",
+		TierAllowlist: "net_tier_allowlist", TierNone: "net_tier_none", "": "",
 	}
-	p := &Proxy{Reporter: ui}
-	if p.Choose("vm", TierInternet) != TierInternet || len(said) != 0 {
-		t.Errorf("without a terminal: said %v, or not internet", said)
-	}
-	ui.Terminal = true
-	for _, tc := range []struct {
-		answers []string
-		want    Tier
-		said    string
-	}{
-		{[]string{""}, TierInternet, "net_about vm=vm,net_ask tier=internet"},
-		{[]string{"open"}, TierOpen, "net_about vm=vm,net_ask tier=internet"},
-		{
-			[]string{"on", "none"},
-			TierNone,
-			"net_about vm=vm,net_ask tier=internet,net_tier_unknown choices=open, internet, allowlist, none given=on tier=internet,net_ask tier=internet",
-		},
-	} {
-		answers, said = tc.answers, nil
-		if got := p.Choose("vm", TierInternet); got != tc.want || strings.Join(said, ",") != tc.said {
-			t.Errorf("%v: %s, said %v; want %s, %s", tc.answers, got, said, tc.want, tc.said)
+	for tier, id := range want {
+		if got := tier.Desc().ID(); got != id {
+			t.Errorf("%q.Desc() = %q, want %q", tier, got, id)
 		}
 	}
 }

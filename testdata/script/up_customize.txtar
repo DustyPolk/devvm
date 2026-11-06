@@ -37,22 +37,25 @@ stdout '^==> new_vm_summary vm=devvm-enter-[0-9a-f]{14}$'
 stdout '^new_vm_network tier=allowlist$'
 stderr 'new_vm_customize \[y/N\]'
 ! stdout 'new_vm_choose|pick_new_help'
-! stderr 'net_ask|new_vm_cpus_prompt'
+! stdout net_tier_help
+! stderr new_vm_cpus_prompt
 vm_name ENTER enter
 vm_state $ENTER_dir/vm.json
 stdout '^net\.tier=allowlist$'
 stdout '^size\.cpus=2$'
 ! stdout '^size\.memory'
 
-# y: the picker, whose Enter keeps what it shows checked, then the tier
-# and the CPUs and memory, each starting from the summary's; Enter keeps
-# the memory, and nothing is saved for new VMs.
+# y: the picker, whose Enter keeps what it shows checked, then the tier's
+# picker, the tiers in order with what each reaches, the summary's on (k
+# moves up to internet), and the CPUs and memory, each starting from the
+# summary's; Enter keeps the memory, and nothing is saved for new VMs.
 project custom
 exec sh -c 'echo "{}" > package.json'
 ttyin -stdin $WORK/custom.txt
 exec devvm --no-git-protect
 stdout '^pick_new_help vm=devvm-custom-[0-9a-f]{14}\r$'
-stderr 'net_ask tier=allowlist'
+stdout 'net_tier_help vm=devvm-custom-[0-9a-f]{14}\r$'
+stdout '(?s)open +net_tier_open.*internet +net_tier_internet.*allowlist +net_tier_allowlist.*none +net_tier_none'
 stderr 'new_vm_size_question have_cpus=8 have_memory=16'
 stderr 'new_vm_cpus_prompt cpus=2'
 stderr 'new_vm_memory_prompt memory=8'
@@ -73,7 +76,7 @@ exec devvm --no-git-protect --tools go --network open
 stdout '^new_vm_toolchain_from from=--tools tool=go$'
 stderr 'new_vm_customize \[y/N\]'
 stdout 'go +pick_from_flag flag=--tools'
-! stderr net_ask
+! stdout net_tier_help
 stderr 'new_vm_cpus_prompt cpus=2'
 vm_name GIVEN given
 vm_state $GIVEN_dir/vm.json
@@ -124,7 +127,7 @@ env DEVVM_MESSAGES=names
 -- custom.txt --
 y
 
-internet
+k
 3
 
 -- given.txt --

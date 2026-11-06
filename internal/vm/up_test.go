@@ -13,6 +13,7 @@ import (
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/backend/backendtest"
 	"github.com/w3cj/devvm/internal/msg"
+	"github.com/w3cj/devvm/internal/netpolicy"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/project"
 	"github.com/w3cj/devvm/internal/settings"
@@ -603,16 +604,16 @@ func TestUpCustomize(t *testing.T) {
 		},
 		{
 			name: "yes", picks: true, yes: true, net: "internet", cpus: "2",
-			asked: "new_vm_customize,pick_new_help,net_ask,new_vm_cpus_prompt,new_vm_memory_prompt",
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt",
 		},
 		{
 			name: "yes with layers and cpus given", picks: true, yes: true, net: "internet", cpus: "3", fixed: true,
 			o:     Options{Layers: &[]string{"docker"}, Size: Size{CPUs: "3"}},
-			asked: "new_vm_customize,pick_new_help,net_ask,new_vm_memory_prompt",
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_memory_prompt",
 		},
 		{
 			name: "yes with a saved tier", picks: true, yes: true, saved: "none", net: "internet", cpus: "2",
-			asked: "new_vm_customize,pick_new_help,net_ask,new_vm_cpus_prompt,new_vm_memory_prompt",
+			asked: "new_vm_customize,pick_new_help,net_tier_help,new_vm_cpus_prompt,new_vm_memory_prompt",
 		},
 		{name: "Enter with a saved tier", picks: true, saved: "none", asked: "new_vm_customize", net: "none"},
 		{
@@ -650,7 +651,11 @@ func TestUpCustomize(t *testing.T) {
 			fk.OnAsk = func(m msg.M) bool { asked = append(asked, m.ID()); return tc.yes }
 			fk.OnAnswer = func(m msg.M) string {
 				asked = append(asked, m.ID())
-				return map[string]string{"net_ask": "internet", "new_vm_cpus_prompt": "2"}[m.ID()]
+				return map[string]string{"new_vm_cpus_prompt": "2"}[m.ID()]
+			}
+			e.PickOne = func(help msg.M, _ []PickRow) int {
+				asked = append(asked, help.ID())
+				return 1 // internet
 			}
 			e.Proxy.Reporter = fk
 			var layers PickPart
@@ -734,6 +739,26 @@ func TestUpRefusesLowSpace(t *testing.T) {
 
 // The docker layer needs docker-layer of the backend, before anything is
 // built.
+// The tier picker's rows are the tiers in order, each with what it
+// reaches, the one shown on; without a picker, the one shown is kept.
+func TestTierRows(t *testing.T) {
+	var got []string
+	for _, r := range tierRows(netpolicy.TierInternet) {
+		s := r.Name + ":" + r.Desc.ID()
+		if r.On {
+			s = "*" + s
+		}
+		got = append(got, s)
+	}
+	want := "open:net_tier_open *internet:net_tier_internet allowlist:net_tier_allowlist none:net_tier_none"
+	if strings.Join(got, " ") != want {
+		t.Errorf("rows %v, want %s", got, want)
+	}
+	if tier := (creation{Launch{&Env{}}}).chooseTier("vm", netpolicy.TierNone); tier != netpolicy.TierNone {
+		t.Errorf("without a picker: %s, want none", tier)
+	}
+}
+
 func TestUpRequiresDockerLayer(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureDockerLayer)

@@ -61,7 +61,7 @@ Layers, which a VM gets only when devvm makes it
 
 Check Claude Code, Codex or opencode to give the VM a coding agent. You can add toolchains and agents later, but a VM gets layers only when devvm makes it. To have a layer checked for every new VM, such as `desktop`, choose it with [`devvm setup --layers`](../using/settings.md#layers-for-new-vms).
 
-After the list, devvm asks for the VM's network tier, and pressing Enter gives it the tier the summary showed, which is allowlist unless you saved another for new VMs with `devvm network -g`, such as `devvm network -g internet`. Then it asks for the VM's CPUs and memory, and pressing Enter keeps each value the summary showed. What you type here is for this VM alone, and devvm saves none of it for new VMs. Flags such as `--tools`, `--agents`, `--layers`, `--network`, `--cpus` and `--memory` choose a part beforehand, as in `devvm --agents claude`, and each part you leave out keeps what the summary would have shown. devvm asks nothing when the flags choose everything ([what a new VM gets](../using/images.md#what-a-new-vm-gets)).
+After the list, devvm lists the four network tiers, each with what it reaches, and up and down choose the VM's. The list starts on the tier the summary showed, so pressing Enter keeps it, and that tier is allowlist unless you saved another for new VMs with `devvm network -g`, such as `devvm network -g internet`. Then it asks for the VM's CPUs and memory, and pressing Enter keeps each value the summary showed. What you type here is for this VM alone, and devvm saves none of it for new VMs. Flags such as `--tools`, `--agents`, `--layers`, `--network`, `--cpus` and `--memory` choose a part beforehand, as in `devvm --agents claude`, and each part you leave out keeps what the summary would have shown. devvm asks nothing when the flags choose everything ([what a new VM gets](../using/images.md#what-a-new-vm-gets)).
 
 > [!TIP]
 > Keep allowlist, the default, unless the VM needs more. The allowlist [network tier](../safety/network.md) limits the VM to the hosts you allow, and every tier keeps your secrets on your machine.
@@ -85,7 +85,7 @@ flowchart TD
   first -- "yes" --> size["devvm's defaults for every new VM and base:<br>how many CPUs and how much memory, which agents, which extras?"] --> summary
   first -- "no" --> summary["shows what this folder's VM gets"]
   summary --> custom{{"Customize it?"}}
-  custom -- "y" --> pick["lists the toolchains, agents and layers to check,<br>then asks: network tier? CPUs and memory?"] --> built
+  custom -- "y" --> pick["lists the toolchains, agents and layers to check,<br>then lists the network tiers to choose one,<br>then asks: CPUs and memory?"] --> built
   custom -- "Enter" --> built{{"base built?"}}
   built -- "no, the first time" --> build["builds base, a few minutes"] --> copy
   built -- "yes" --> copy["copies the image into a new VM"]

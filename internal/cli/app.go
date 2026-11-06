@@ -151,6 +151,7 @@ func (a *app) vmEnv() (*vm.Env, error) {
 		e := vm.NewEnv(d, assets.FS, self, devvmVersion(), reg, tl, store, a.u)
 		e.PickFeatures = pickFeatures(a.u)
 		e.PickParts = pickParts(a.u)
+		e.PickOne = pickOne(a.u)
 		e.Folder = a.folder.rule()
 		return e, nil
 	})

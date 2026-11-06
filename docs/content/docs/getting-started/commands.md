@@ -335,7 +335,7 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 | base's features, on the first run before the new VM's summary, or on the first build | `devvm setup --features LIST` or `devvm setup --features none` |
 | whether to customize a new VM, after its summary | `--tools`, `--agents`, `--layers`, `--network`, `--cpus` and `--memory`, or nothing: where devvm can't ask, the VM gets what the summary shows |
 | a new VM's toolchains, coding agents and layers, when you customize it | `--tools`, `--agents` and `--layers` |
-| a new VM's network tier, when you customize it | `--network TIER`, or `devvm network -g` with a tier for every new VM |
+| a new VM's network tier, chosen from a list when you customize it | `--network TIER`, or `devvm network -g` with a tier for every new VM, or nothing: where devvm can't show the list, the VM gets the tier the summary shows |
 | a new VM's CPUs and memory, when you customize it | `--cpus` and `--memory` |
 | the layers new VMs get, in `devvm setup` | `devvm setup --layers LIST` or `devvm setup --layers none` |
 | a VM's toolchains and agents, in `devvm tools` | `devvm tools add` and `devvm tools rm`, or `--json` to show them |

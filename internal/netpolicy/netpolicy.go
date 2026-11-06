@@ -9,11 +9,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"path/filepath"
-	"strings"
 
 	"github.com/w3cj/devvm/internal/backend"
 	"github.com/w3cj/devvm/internal/image"
-	"github.com/w3cj/devvm/internal/msg"
 	"github.com/w3cj/devvm/internal/paths"
 	"github.com/w3cj/devvm/internal/state"
 )
@@ -67,24 +65,6 @@ func TierOf(st *state.VM) Tier {
 		return TierNone
 	}
 	return n.Tier
-}
-
-// Choose asks for a new VM's tier, what each reaches said first, until
-// the answer is a tier or empty, which is shown, the tier its summary
-// showed; where it can't ask, it's shown too.
-func (p *Proxy) Choose(vm string, shown Tier) Tier {
-	about := []msg.M{msg.NetAbout(vm)}
-	for {
-		v, err := p.Answer(msg.NetAsk(string(shown)).AnsweredBy("--network").About(about...))
-		if err != nil || v == "" {
-			return shown
-		}
-		if t := Tier(v); t.Valid() {
-			return t
-		}
-		about = nil
-		p.Warn(msg.NetTierUnknown(strings.Join(TierNames(), ", "), v, string(shown)))
-	}
 }
 
 // Key returns the VM's own random key, made the first time it's needed

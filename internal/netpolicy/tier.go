@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/w3cj/devvm/internal/backend"
+	"github.com/w3cj/devvm/internal/msg"
 )
 
 // Tier is a VM's network tier: what its proxy lets it reach, and whether
@@ -35,6 +36,22 @@ const TierDefault = TierAllowlist
 
 // Tiers are the tiers, lowest to highest.
 func Tiers() []Tier { return []Tier{TierOpen, TierInternet, TierAllowlist, TierNone} }
+
+// Desc says in a line what a VM with tier t reaches, as the pickers of a
+// new VM's tier and of new VMs' show it: the zero message for no tier.
+func (t Tier) Desc() msg.M {
+	switch t {
+	case TierOpen:
+		return msg.NetTierOpen()
+	case TierInternet:
+		return msg.NetTierInternet()
+	case TierAllowlist:
+		return msg.NetTierAllowlist()
+	case TierNone:
+		return msg.NetTierNone()
+	}
+	return msg.M{}
+}
 
 // TierNames are the tiers' names, lowest to highest, as the command line
 // takes them.
