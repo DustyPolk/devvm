@@ -494,14 +494,14 @@ func BuildingImageFrom(from string, image string, key string) M {
 	return M{id: "building_image_from", vals: []val{{"from", from}, {"image", image}, {"key", key}}}
 }
 
+// BuildingTool is [building_tool]: "building {{.tool}}"
+func BuildingTool(tool string) M {
+	return M{id: "building_tool", vals: []val{{"tool", tool}}}
+}
+
 // BuildingTools is [building_tools]: "building shared tools: {{.tools}}"
 func BuildingTools(tools string) M {
 	return M{id: "building_tools", vals: []val{{"tools", tools}}}
-}
-
-// BuildingToolsIn is [building_tools_in]: "building the shared tools in {{.vm}}"
-func BuildingToolsIn(vm string) M {
-	return M{id: "building_tools_in", vals: []val{{"vm", vm}}}
 }
 
 // CAFolderLink is [ca_folder_link]: "{{.dir}}, devvm's CA folder, is a link, and devvm doesn't follow it. Replace it with a folder that holds copies of the CA certificates."
@@ -667,6 +667,11 @@ func CloneWorktreeDirty(path string) M {
 // CloneWorktreesUnchecked is [clone_worktrees_unchecked]: "The VM's clone has more than {{.max}} worktrees, and devvm checked only the first {{.max}} for uncommitted changes."
 func CloneWorktreesUnchecked(max string) M {
 	return M{id: "clone_worktrees_unchecked", vals: []val{{"max", max}}}
+}
+
+// CloningForTools is [cloning_for_tools]: "cloning base for {{.tool}}"
+func CloningForTools(tool string) M {
+	return M{id: "cloning_for_tools", vals: []val{{"tool", tool}}}
 }
 
 // CloningImage is [cloning_image]: "cloning {{.parent}}'s image"
@@ -3464,6 +3469,11 @@ func ToolsBuildFailed() M {
 	return M{id: "tools_build_failed"}
 }
 
+// ToolsBuildVM is [tools_build_vm]: "the build VM for {{.tool}}"
+func ToolsBuildVM(tool string) M {
+	return M{id: "tools_build_vm", vals: []val{{"tool", tool}}}
+}
+
 // ToolsChanged is [tools_changed]: "The shared tools' versions changed while devvm waited. Run the command again."
 func ToolsChanged() M {
 	return M{id: "tools_changed"}
@@ -4024,8 +4034,8 @@ var specs = map[string]spec{
 	"build_sources_unreachable":      {fields: []string{"script", "vm"}},
 	"building_image":                 {fields: []string{"image", "key"}},
 	"building_image_from":            {fields: []string{"from", "image", "key"}},
+	"building_tool":                  {fields: []string{"tool"}},
 	"building_tools":                 {fields: []string{"tools"}},
-	"building_tools_in":              {fields: []string{"vm"}},
 	"ca_folder_link":                 {fields: []string{"dir"}},
 	"ca_folder_unreadable":           {fields: []string{"dir"}},
 	"ca_invalid":                     {fields: []string{"file"}},
@@ -4059,6 +4069,7 @@ var specs = map[string]spec{
 	"clone_switch_on":                {fields: []string{"vm"}},
 	"clone_worktree_dirty":           {fields: []string{"path"}},
 	"clone_worktrees_unchecked":      {fields: []string{"max"}},
+	"cloning_for_tools":              {fields: []string{"tool"}},
 	"cloning_image":                  {fields: []string{"parent"}},
 	"code_failed":                    {fields: []string{"reason"}},
 	"codex_login_kept":               {fields: []string{"keys"}},
@@ -4618,6 +4629,7 @@ var specs = map[string]spec{
 	"tool_stepped_back":              {fields: []string{"older", "tool", "version"}},
 	"tool_unbuilt":                   {fields: []string{"tool", "version"}},
 	"tools_build_failed":             {},
+	"tools_build_vm":                 {fields: []string{"tool"}},
 	"tools_changed":                  {},
 	"tools_check_failed":             {},
 	"tools_failed":                   {fields: []string{"reason"}},

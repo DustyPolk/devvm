@@ -311,7 +311,7 @@ func (l *images) runScript(ctx context.Context, vm string, s backend.Script, roo
 		cmd = l.limactl(ctx, "shell", "--workdir", "/", vm, "sudo", "sh", "-s")
 	}
 	cmd.Stdin = bytes.NewReader(s.Data)
-	if err := l.Runner.Run(ctx, msg.RunningScript(s.Name, vm), cmd); err != nil {
+	if err := l.Runner.Run(ctx, msg.RunningScript(s.Name, shown(ctx, vm)), cmd); err != nil {
 		return backend.Logged(msg.ScriptFailed(s.Name, vm))
 	}
 	return nil

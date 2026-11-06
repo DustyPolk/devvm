@@ -123,7 +123,7 @@ func setEnv(env []string, kvs ...string) []string {
 // edit changes a stopped VM's Lima config, with limactl edit's options.
 func (l *Lima) edit(ctx context.Context, vm string, opts ...string) error {
 	args := append([]string{"edit", "--tty=false", vm}, opts...)
-	if err := l.Runner.Run(ctx, msg.Configuring(vm), l.limactl(ctx, args...)); err != nil {
+	if err := l.Runner.Run(ctx, msg.Configuring(shown(ctx, vm)), l.limactl(ctx, args...)); err != nil {
 		return backend.Logged(msg.LimaEditFailed(vm))
 	}
 	return nil

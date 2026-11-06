@@ -2135,8 +2135,17 @@ other = "{{.tool}} {{.version}} needs glibc {{.needs}} or newer, but this VM's c
 description = "tools lists tools and versions: node 24.21.0, bun 1.4.2"
 other = "building shared tools: {{.tools}}"
 
-[building_tools_in]
-other = "building the shared tools in {{.vm}}"
+[building_tool]
+description = "tool is a tool and its version: node 24.21.0"
+other = "building {{.tool}}"
+
+[cloning_for_tools]
+description = "tool is a tool and its version: node 24.21.0"
+other = "cloning base for {{.tool}}"
+
+[tools_build_vm]
+description = "a tool's build VM, as its steps name it; tool is a tool and its version: node 24.21.0"
+other = "the build VM for {{.tool}}"
 
 [tools_need_own_base]
 other = "Shared tools for a VM on a Debian or Ubuntu container image build in devvm's own Ubuntu base, so devvm builds that first."

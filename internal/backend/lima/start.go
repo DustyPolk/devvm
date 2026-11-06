@@ -113,7 +113,7 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 	}
 	cmd.Env = setEnv(cmd.Env, env...)
 	defer l.redactLog(vm)
-	if err := l.Runner.Run(ctx, msg.Starting(vm), cmd); err != nil {
+	if err := l.Runner.Run(ctx, msg.Starting(shown(ctx, vm)), cmd); err != nil {
 		if err := l.degraded(ctx, vm, c.AgentSocket); err != nil {
 			return err
 		}

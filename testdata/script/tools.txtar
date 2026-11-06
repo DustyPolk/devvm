@@ -53,10 +53,18 @@ exec tar -tf $STUB_DIR/sync.tar
 stdout '^sync\.sh$'
 stdout '^tools\.sh$'
 # The build's steps are numbered: clone, configure (its new ssh port),
-# start, build.sh, delete.
+# start, build.sh, delete, all five for each tool, in order, and each
+# names the tool it builds, never the build VM's own name, which every
+# tool's build shares.
 catg $DATA/logs/runs/*.log
-stdout '^# \[4/5\] building_tools_in vm=devvm-tools-build$'
-stdout '^# \[5/5\] deleting vm=devvm-tools-build$'
+stdout '^# \[1/5\] cloning_for_tools tool=node 24\.21\.0\n(.*\n)*# \[2/5\] configuring vm=the build VM for node 24\.21\.0\n(.*\n)*# \[3/5\] starting vm=the build VM for node 24\.21\.0\n(.*\n)*# \[4/5\] building_tool tool=node 24\.21\.0\n(.*\n)*# \[5/5\] deleting vm=the build VM for node 24\.21\.0\n(.*\n)*# \[1/5\] cloning_for_tools tool=pnpm '
+stdout -count=4 '^# \[1/5\] cloning_for_tools tool=\S+ \S+$'
+stdout -count=4 '^# \[2/5\] configuring vm=the build VM for \S+ \S+$'
+stdout -count=4 '^# \[3/5\] starting vm=the build VM for \S+ \S+$'
+stdout -count=4 '^# \[4/5\] building_tool tool=\S+ \S+$'
+stdout -count=4 '^# \[5/5\] deleting vm=the build VM for \S+ \S+$'
+stdout '^# \[4/5\] building_tool tool=claude 2\.1\.295$'
+! stdout '^# .*devvm-tools-build'
 
 # Without a terminal, devvm tools lists the VM's tools; add and rm change
 # its list and its tool files, built ones not built again.

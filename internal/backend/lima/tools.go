@@ -47,8 +47,10 @@ func (l *images) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	if !spec.Trust.None() {
 		steps++
 	}
-	ctx = l.WithSteps(ctx, steps)
-	if err := l.Runner.Run(ctx, msg.CloningImage("base"), l.limactl(ctx, toolsArgs(base, mounts)...)); err != nil {
+	// Each step names the tool it builds, not ToolsVM, which every
+	// tool's build shares.
+	ctx = withShown(l.WithSteps(ctx, steps), ToolsVM, msg.ToolsBuildVM(spec.Name).Text())
+	if err := l.Runner.Run(ctx, msg.CloningForTools(spec.Name), l.limactl(ctx, toolsArgs(base, mounts)...)); err != nil {
 		return backend.Logged(msg.VMCreateFailed(ToolsVM))
 	}
 	// Behind a company proxy, through a proxy of devvm's (buildproxy.go).
@@ -66,7 +68,7 @@ func (l *images) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	// The CAs' variables and the build's proxy for its commands, as each
 	// image build's step has them, never written into the VM.
 	cmd.Stdin = bytes.NewReader(slices.Concat(spec.Trust.Env, withProxy(hp, spec.Script).Data))
-	if err := l.Runner.Run(ctx, msg.BuildingToolsIn(ToolsVM), cmd); err != nil {
+	if err := l.Runner.Run(ctx, msg.BuildingTool(spec.Name), cmd); err != nil {
 		return backend.Logged(msg.ToolsBuildFailed())
 	}
 	if err := l.delete(ctx, ToolsVM); err != nil {
@@ -85,6 +87,26 @@ func toolsArgs(base, mounts string) []string {
 
 // ToolFormat is build.sh's own: Lima's guests mount compressed EROFS.
 func (l *images) ToolFormat() string { return "" }
+
+type shownKey struct{}
+
+// shownName is what a phase's steps call one VM.
+type shownName struct{ vm, as string }
+
+// withShown has the steps on vm under ctx name it as as: a tool's build
+// VM by its tool.
+func withShown(ctx context.Context, vm, as string) context.Context {
+	return context.WithValue(ctx, shownKey{}, shownName{vm, as})
+}
+
+// shown is the name the steps on vm under ctx give it: withShown's, else
+// its own.
+func shown(ctx context.Context, vm string) string {
+	if s, ok := ctx.Value(shownKey{}).(shownName); ok && s.vm == vm {
+		return s.as
+	}
+	return vm
+}
 
 // deleteIfThere deletes a VM if devvm's Lima home has it.
 func (l *images) deleteIfThere(ctx context.Context, vm string) error {

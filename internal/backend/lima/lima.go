@@ -532,7 +532,7 @@ func (l *machines) Delete(ctx context.Context, vm string) error {
 // data folder too, its sandbox profile and records; a project VM's is its
 // teardown's.
 func (l *Lima) delete(ctx context.Context, vm string) error {
-	if err := l.Runner.Run(ctx, msg.Deleting(vm), l.limactl(ctx, "delete", "-f", vm)); err != nil {
+	if err := l.Runner.Run(ctx, msg.Deleting(shown(ctx, vm)), l.limactl(ctx, "delete", "-f", vm)); err != nil {
 		return backend.Logged(msg.DeleteFailed(vm))
 	}
 	if vmname.IsVM(vm) {
