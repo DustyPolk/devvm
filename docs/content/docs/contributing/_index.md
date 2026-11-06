@@ -404,18 +404,24 @@ Each slot's output appears as it comes, each line led by its slot's number, such
 
 ## Messages
 
-Every message devvm prints is a table in `locales/en.toml`, and Go code calls it through a function generated from it. `internal/msg` renders messages but never prints them; the run's `ui.UI` does. Only `cmd/devvm` and `internal/cli` hold it. Every other package prints and asks through the one `msg.Reporter` interface, which `ui.UI` implements: a package's type embeds it, its constructor takes it, and cli gives it the run's UI. Where a package's warnings also say where the run log is, as Lima's and the shared tools' do, its type has its own `Warn` method over the Reporter's.
+Every message devvm prints is a table in `locales/en.toml`, and Go code calls it through a function generated from it. `internal/msg` renders messages but never prints them; the run's `ui.UI` does. Only `cmd/devvm` and `internal/cli` hold it. Every other package prints and asks through the one `msg.Reporter` interface, which `ui.UI` implements: a package's type embeds it, its constructor takes it, and cli gives it the run's UI. Where a package's warnings also say where the run log is, as Lima's and the shared tools' do, its type has its own `Warn` method over the Reporter's. A Go test gives a package a `msg.Fake` instead, a Reporter that prints nothing and refuses every question unless the test sets its fields, and records what it says with a `msg.Recorder`.
+
+Prose is never built with `fmt`: every sentence devvm shows the user is a message. Data output, such as a table or `--json`, isn't a message, and neither is text in a script that runs somewhere else.
 
 The locale files are in [go-i18n](https://github.com/nicksnyder/go-i18n)'s TOML format, with only go-i18n's own message fields, so go-i18n's loader reads them as they are and its `goi18n` tools work on them:
 
 ```toml
 [no_vm]
-other = "no VM for {{.dir}}: run devvm there to create one"
+other = "There's no VM for {{.dir}}. Run devvm to make one."
 
-[vm_count]
-description = "how many VMs a folder has"
-one = "{{.count}} VM in {{.dir}}"
-other = "{{.count}} VMs in {{.dir}}"
+[gc_tools]
+one = "{{.count}} shared tool image is unused ({{.size}})."
+other = "{{.count}} shared tool images are unused ({{.size}})."
+
+[gc_tools_no_vm]
+description = "tools lists the tool images, as \"node 24.21.0, claude 2.1.295\""
+one = "{{.count}} current shared tool image no VM has ({{.size}}): {{.tools}}."
+other = "{{.count}} current shared tool images no VM has ({{.size}}): {{.tools}}."
 ```
 
 - **The ID** is the table's name, in snake_case.
@@ -423,7 +429,8 @@ other = "{{.count}} VMs in {{.dir}}"
 - **`one`** is the text for a count of 1, when the wording changes with the count. Both texts then take `{{.count}}`.
 - **`description`** is an optional note for translators.
 - **Nothing else:** the generator refuses keys go-i18n doesn't know, nested tables, plural forms English doesn't use (`zero`, `two`, `few`, `many`) and `leftDelim`/`rightDelim`.
-- **Style:** succinct and direct. Say what is being done, or what failed and what to do; link a page when more is needed. An error is one line.
+- **Voice:** a message's text follows the docs-voice skill's [Messages](https://github.com/w3cj/devvm/blob/main/.agents/skills/docs-voice/SKILL.md#messages) rules, which set its length (an error or a warning has at most two sentences, and a prompt at most two lines of context), and the mechanism goes in its doc link rather than its text.
+- **One line:** a value renders on one line without control or bidi characters, because `msg.OneLine` cleans every value as the message renders. Text from a VM that devvm shows as data goes through `msg.Printable` instead, which keeps its newlines and tabs. [Colors](#colors) says what the two drop.
 
 ### Doc links
 
@@ -452,6 +459,12 @@ The tests fail when:
 - a message doesn't render with sample values, or shows `<no value>`;
 - a generated function is never called outside the generated file and the tests;
 - a doc link names a message that isn't in `en.toml`, or a page or heading that doesn't exist. `mise run lint` runs this check too.
+
+### Questions
+
+A prompt asks a `msg.Question`, never a bare message, so every question declares what answers it where devvm can't ask: without a terminal, with `--no-input`, or once the input ends. A message becomes a question in one of two ways. `msg.X(...).AnsweredBy("--force")` names the flag or command that answers it, and its refusal is `no_input`, which names that answer and shows the question first when the prompt wasn't printed. `RefusedWith(msg.Y(...))` makes a question that no flag answers, and its refusal is the message given, which says what to do instead. `About(...)` adds the messages said before the question, which devvm shows only when it asks.
+
+The Reporter's `Ask`, `Confirm`, `Answer` and `Secret` take the question and, where devvm can't ask it, return its `*msg.Refusal`, an error whose `Msg` is the refusal's message. A command returns it as it would any failure, and a caller with something to fall back on does that instead, so no caller checks for a terminal itself. `TestQuestionsDeclareAnswers` checks every question in the code, as [The CLI rule tests](#the-cli-rule-tests) says, and a CLI test answers one with `ttyin` or `DEVVM_PIPED_ANSWERS=1`, as [CLI tests](#cli-tests) says.
 
 ### Names mode
 
