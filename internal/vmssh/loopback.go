@@ -95,17 +95,6 @@ func (f *LoopbackForward) closeListeners() {
 	}
 }
 
-// Ports are the ports it listens on, each once, in order.
-func (f *LoopbackForward) Ports() []int {
-	var ps []int
-	for _, l := range f.ls {
-		if p := l.Addr().(*net.TCPAddr).Port; !slices.Contains(ps, p) {
-			ps = append(ps, p)
-		}
-	}
-	return ps
-}
-
 // Close stops listening, ends the connections it carries and waits for
 // them. It can be called more than once.
 func (f *LoopbackForward) Close() {

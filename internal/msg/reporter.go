@@ -1,6 +1,7 @@
 package msg
 
 import (
+	"cmp"
 	"context"
 	"io"
 	"os/exec"
@@ -148,7 +149,7 @@ func (f *Fake) Logo() {}
 func (f *Fake) LogNote() {}
 
 // LogWriter is Log, or nowhere.
-func (f *Fake) LogWriter() io.Writer { return orDiscard(f.Log) }
+func (f *Fake) LogWriter() io.Writer { return cmp.Or(f.Log, io.Discard) }
 
 // LoggedCmd runs cmd as it is.
 func (f *Fake) LoggedCmd(_ context.Context, _ M, cmd *exec.Cmd) error { return cmd.Run() }
@@ -157,10 +158,10 @@ func (f *Fake) LoggedCmd(_ context.Context, _ M, cmd *exec.Cmd) error { return c
 func (f *Fake) WithSteps(ctx context.Context, _ int) context.Context { return ctx }
 
 // Stdout is Out, or nowhere.
-func (f *Fake) Stdout() io.Writer { return orDiscard(f.Out) }
+func (f *Fake) Stdout() io.Writer { return cmp.Or(f.Out, io.Discard) }
 
 // Stderr is Err, or nowhere.
-func (f *Fake) Stderr() io.Writer { return orDiscard(f.Err) }
+func (f *Fake) Stderr() io.Writer { return cmp.Or(f.Err, io.Discard) }
 
 // AddCleanup gives c to OnCleanup; without one it keeps nothing.
 func (f *Fake) AddCleanup(c func(context.Context)) func() {
@@ -180,11 +181,4 @@ func (f *Fake) say(on func(M), m M) {
 			g(m)
 		}
 	}
-}
-
-func orDiscard(w io.Writer) io.Writer {
-	if w == nil {
-		return io.Discard
-	}
-	return w
 }

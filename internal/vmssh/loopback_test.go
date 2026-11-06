@@ -34,6 +34,17 @@ func freePort(t *testing.T) int {
 	return p
 }
 
+// listening are the ports f listens on, each once, in order.
+func listening(f *LoopbackForward) []int {
+	var ps []int
+	for _, l := range f.ls {
+		if p := l.Addr().(*net.TCPAddr).Port; !slices.Contains(ps, p) {
+			ps = append(ps, p)
+		}
+	}
+	return ps
+}
+
 // A login's forward: each connection to a port it listens on is carried
 // to the same port, until Close; a port a program has is refused.
 func TestForwardLoopback(t *testing.T) {
@@ -46,8 +57,8 @@ func TestForwardLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := f.Ports(); !slices.Equal(got, []int{need, also}) {
-		t.Errorf("Ports = %v, want %v", got, []int{need, also})
+	if got := listening(f); !slices.Equal(got, []int{need, also}) {
+		t.Errorf("listening on %v, want %v", got, []int{need, also})
 	}
 	for _, p := range []int{need, also} {
 		c, err := dialPort(t, p)
