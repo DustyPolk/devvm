@@ -627,8 +627,13 @@ func TestServersApart(t *testing.T) {
 	if code, _ := roundTrip(t, bAddr, "CONNECT blocked.test:443 HTTP/1.1\r\nHost: blocked.test:443\r\n"+auth("pb")+"\r\n"); code != http.StatusForbidden {
 		t.Errorf("b's block: %d", code)
 	}
-	if _, body := roundTrip(t, aAddr, "GET http://devvm.proxy/blocked HTTP/1.1\r\nHost: devvm.proxy\r\n"+auth("pa")+"\r\n"); !strings.Contains(body, "nothing blocked") {
+	if _, body := roundTrip(t, aAddr, "GET http://devvm.proxy/blocked HTTP/1.1\r\nHost: devvm.proxy\r\n"+auth("pa")+"\r\n"); body != nothingBlocked {
 		t.Errorf("a lists b's block: %q", body)
+	}
+	for _, want := range []string{"skipped the proxy", "proxy setting", "$HTTPS_PROXY", "#a-host-on-the-allowlist-doesnt-resolve"} {
+		if !strings.Contains(nothingBlocked, want) {
+			t.Errorf("the empty answer lacks %q", want)
+		}
 	}
 	if _, body := roundTrip(t, bAddr, "GET http://devvm.proxy/blocked/new?after=0 HTTP/1.1\r\nHost: devvm.proxy\r\n"+auth("pb")+"\r\n"); !strings.Contains(body, "blocked.test") {
 		t.Errorf("b doesn't list its block: %q", body)

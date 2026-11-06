@@ -248,6 +248,26 @@ func netBlocks(n *netRun) {
 	s.Check("an allowed host works, through the proxy", func() error {
 		return inVM(s, vm, "curl -fsS -m 20 -o /dev/null https://github.com")
 	})
+	// Before anything is blocked: a tool that skips the proxy fails for an
+	// allowed host, and devvm-why, with nothing to show, says why; the
+	// agents' note says the same.
+	s.Check("a request that skips the proxy fails for an allowed host, and devvm-why points at the tool's proxy setting", func() error {
+		if _, err := vmRun(s, vm, "curl", "--noproxy", "*", "-sS", "-m", "5", "-o", "/dev/null", "https://github.com"); err == nil {
+			return errors.New("github.com was reached without the proxy")
+		}
+		r, err := s.InVM(vm, "devvm-why")
+		switch {
+		case err != nil:
+			return err
+		case !r.Has("devvm: nothing blocked recently") || !strings.Contains(r.Stdout, "skipped the proxy: turn on its own proxy setting") ||
+			!strings.Contains(r.Stdout, "#a-host-on-the-allowlist-doesnt-resolve"):
+			return errors.New("devvm-why doesn't point at the tool's proxy setting: " + r.Stdout)
+		}
+		if !vmGrep(s, vm, "cat ~/.claude/CLAUDE.md", "while `devvm-why` shows nothing means the tool skipped the proxy") {
+			return errors.New("~/.claude/CLAUDE.md's note doesn't say a tool may skip the proxy")
+		}
+		return nil
+	})
 	// opencode 2 reads its model catalog from models.opencode.ai and its
 	// own service (Zen, the console, MCP's OAuth client) from opencode.ai.
 	s.Check("opencode's policy allows the hosts opencode 2 reaches at start", func() error {

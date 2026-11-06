@@ -210,7 +210,7 @@ A blocked request gets `403`, and the response names the host, the reason and th
 - `/ca.pem` is the VM's own CA certificate and the next one's, never their keys.
 - `/nix/` is the shared Nix cache, in a VM with the `nix` layer ([below](#nix)).
 
-In the VM, `devvm-why` prints what the proxy blocked lately, and a note before each prompt tells you when something new was blocked. devvm also tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`.
+In the VM, `devvm-why` prints what the proxy blocked lately, and a note before each prompt tells you when something new was blocked. When the proxy blocked nothing lately, `devvm-why` says so, and it adds that a DNS or connection error for a host the tier allows means the tool skipped the proxy, so you turn on the tool's own proxy setting or give it the address in `$HTTPS_PROXY` ([a host on the allowlist doesn't resolve](../using/troubleshooting.md#a-host-on-the-allowlist-doesnt-resolve)). devvm also tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`, and that such an error while `devvm-why` shows nothing means the tool skipped the proxy.
 
 ### Nix
 

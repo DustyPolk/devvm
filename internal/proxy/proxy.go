@@ -718,6 +718,12 @@ type noCloseNotify struct{ http.ResponseWriter }
 
 func (w noCloseNotify) Flush() { _ = http.NewResponseController(w.ResponseWriter).Flush() }
 
+// nothingBlocked is devvm-why's answer when the proxy blocked nothing: a
+// DNS or connection error then comes from a tool that skipped the proxy.
+const nothingBlocked = "devvm: nothing blocked recently\n" +
+	"A DNS or connection error for a host the tier allows means the tool skipped the proxy: turn on its own proxy setting, or give it $HTTPS_PROXY.\n" +
+	"https://devvm.dev/docs/using/troubleshooting/#a-host-on-the-allowlist-doesnt-resolve\n"
+
 func (s *server) serveReserved(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/nix/") {
 		s.nix.serve(w, r)
@@ -728,7 +734,7 @@ func (s *server) serveReserved(w http.ResponseWriter, r *http.Request) {
 	case "/blocked":
 		rs, _ := s.events.blocked()
 		if len(rs) == 0 {
-			fmt.Fprintln(w, "devvm: nothing blocked recently")
+			fmt.Fprint(w, nothingBlocked)
 			return
 		}
 		var b bytes.Buffer

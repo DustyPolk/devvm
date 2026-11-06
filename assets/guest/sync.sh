@@ -485,7 +485,7 @@ if [[ "$(cat /usr/local/bin/devvm-help 2>/dev/null)" != "$(printf '#!/bin/sh\nex
 fi
 
 # Tell agents why the network may fail, and what to do about it.
-note="Network access in this VM goes through devvm's proxy, which allows what the VM's network tier allows. If a download or request fails with a connection error or a 403 from the proxy, run \`devvm-why\` to see what was blocked; the user can allow it on the host with \`devvm network allow <host>\`."
+note="Network access in this VM goes through devvm's proxy, which allows what the VM's network tier allows. If a download or request fails with a connection error or a 403 from the proxy, run \`devvm-why\` to see what was blocked; the user can allow it on the host with \`devvm network allow <host>\`. A DNS or connection error for an allowed host while \`devvm-why\` shows nothing means the tool skipped the proxy: turn on its own proxy setting, or give it \`\$HTTPS_PROXY\`."
 for f in ~/.claude/CLAUDE.md ~/.codex/AGENTS.md; do
   [[ -d "$(dirname "$f")" ]] || continue
   [[ -f "$f" ]] && sed -i '/^<!-- devvm-proxy -->/,/^<!-- \/devvm-proxy -->/d' "$f"
