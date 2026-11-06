@@ -55,7 +55,7 @@ Check Claude Code, Codex or opencode to give the VM a coding agent. You can add 
 After the list, devvm asks for the VM's network tier, and pressing Enter gives it the tier the summary showed, which is allowlist unless you saved another for new VMs with `devvm network -g`, such as `devvm network -g internet`. Then it asks for the VM's CPUs and memory, and pressing Enter keeps each value the summary showed. What you type here is for this VM alone, and devvm saves none of it for new VMs. Flags such as `--tools`, `--agents`, `--layers`, `--network`, `--cpus` and `--memory` choose a part beforehand, as in `devvm --agents claude`, and each part you leave out keeps what the summary would have shown. devvm asks nothing when the flags choose everything ([what a new VM gets](../using/images.md#what-a-new-vm-gets)).
 
 > [!TIP]
-> Keep allowlist, the default, unless the VM needs more. [Network policy](../safety/network.md) limits the VM to the hosts you allow and keeps your secrets on your machine.
+> Keep allowlist, the default, unless the VM needs more. The allowlist [network tier](../safety/network.md) limits the VM to the hosts you allow, and every tier keeps your secrets on your machine.
 
 The first time, devvm also asks which optional extras every VM gets, such as oh-my-bash and fzf, then builds the base image, which takes a few minutes once:
 

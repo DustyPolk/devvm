@@ -2,7 +2,7 @@
 
 One VM for every project: an isolated sandbox with your project's toolchain, ready for you or an agent to start coding.
 
-Each project folder gets a VM of its own. devvm detects the project's toolchain from its files, so a folder with `package.json` gets node, and the VM mounts only the project folder, at the same path as on your machine. New VMs get network policy by default, so they reach only the hosts you allow, and your secrets, such as your GitHub token and Claude Code token, stay on your machine. Claude Code, Codex and opencode run in the VM, with your settings, skills and MCP servers, and you start them in the VM's shell. You don't install them on your machine, because devvm keeps their settings and logins in a store of its own, and `devvm agent import` copies them in from an agent you already use there. devvm runs its VMs on [Lima](https://lima-vm.io).
+Each project folder gets a VM of its own. devvm detects the project's toolchain from its files, so a folder with `package.json` gets node, and the VM mounts only the project folder, at the same path as on your machine. New VMs get the allowlist network tier by default, so they reach only the hosts you allow, and on every tier your secrets, such as your GitHub token and Claude Code token, stay on your machine. Claude Code, Codex and opencode run in the VM, with your settings, skills and MCP servers, and you start them in the VM's shell. You don't install them on your machine, because devvm keeps their settings and logins in a store of its own, and `devvm agent import` copies them in from an agent you already use there. devvm runs its VMs on [Lima](https://lima-vm.io).
 
 ## Install
 
@@ -31,7 +31,7 @@ cd ~/some-project
 devvm
 ```
 
-The first time, devvm asks for the size and the coding agents that new VMs get. Then it lists what this VM can get, with the toolchains your project's files call for and those agents already checked. Check or uncheck a coding agent, such as Claude Code, with the arrow keys and space, then press enter. devvm asks whether the VM gets network policy (answer yes, the default). On that first run, it also asks which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds.
+The first time, devvm asks for the size and the coding agents that new VMs get. Then it shows what this VM gets, with the toolchains your project's files call for and those agents, and asks `Customize it? [y/N]`. Press Enter to make the VM as shown, or type y to check or uncheck its toolchains, coding agents, such as Claude Code, and layers, then choose its network tier and size. On that first run, it also asks which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds.
 
 devvm then opens a shell in the VM, at the same path as on your machine, and its prompt starts with `(devvm)`. Start the agent there, so it runs in the VM. Claude Code needs your Claude login before its first start, which `devvm agent login claude`, run in the folder on your machine, makes from the VM and keeps on your machine ([your first VM](https://devvm.dev/docs/getting-started/first-vm/#claude-codes-login)):
 
@@ -63,7 +63,7 @@ The docs are at [devvm.dev](https://devvm.dev/), and their source is in `docs/`:
 
 - [Getting started](https://devvm.dev/docs/getting-started/): installing devvm, your first VM and the commands you use most.
 - [Using devvm](https://devvm.dev/docs/using/): images and tools, clones, links between VMs, ports and size, coding agents, SSH and editors, and troubleshooting.
-- [Staying safe](https://devvm.dev/docs/safety/): the habits that keep you safe, network policy, `.git` protection and attack vectors.
+- [Staying safe](https://devvm.dev/docs/safety/): the habits that keep you safe, network tiers, `.git` protection and attack vectors.
 - [Backends](https://devvm.dev/docs/backends/): Lima, which runs the VMs, and what it gives them.
 - [CLI reference](https://devvm.dev/docs/cli/): every command, with its arguments and flags.
 - [How it works](https://devvm.dev/docs/internals/): how devvm does what it does, for checking a claim or reviewing its security.

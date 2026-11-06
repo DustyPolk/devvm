@@ -37,7 +37,7 @@ Open a terminal and `cd` into any project folder.
 
 {{< feature title=`2\. Run devvm` icon="prompt" level="3" art="step-pick" >}}
 
-devvm checks the toolchains your project's files call for. Check a coding agent, and devvm makes the VM.
+devvm shows what the VM gets, with the toolchains your project's files call for. Press Enter to make it, or type y to check a coding agent first.
 
 {{< /feature >}}
 
@@ -63,13 +63,13 @@ Claude Code needs your Claude login before its first start, which `devvm agent l
 
 {{< feature title="Coding agents" icon="robot" level="3" art="coding-agents" >}}
 
-Claude Code, Codex and opencode run in the VM. Check one in the list when devvm makes the VM, then start it in the VM's shell ([coding agents](docs/using/coding-agents.md)).
+Claude Code, Codex and opencode run in the VM. Check one in the list when you customize a new VM, or choose them for every new VM in `devvm setup`, then start it in the VM's shell ([coding agents](docs/using/coding-agents.md)).
 
 {{< /feature >}}
 
 {{< feature title="Layers" icon="copies" level="3" art="layers" >}}
 
-devvm ships the `docker`, `nix` and `desktop` layers, which you check in the list when devvm makes the VM, and `devvm layer new` creates your own custom layers you can apply to any of your VMs ([layers](docs/using/images.md#layers)).
+devvm ships the `docker`, `nix` and `desktop` layers, which you check in the list when you customize a new VM, and `devvm layer new` creates your own custom layers you can apply to any of your VMs ([layers](docs/using/images.md#layers)).
 
 {{< /feature >}}
 
@@ -116,7 +116,7 @@ devvm ships the `docker`, `nix` and `desktop` layers, which you check in the lis
 
 {{< feature title="Made for coding agents" icon="robot" art="agents" >}}
 
-- The agent runs in the VM, so an attack on it stays in the sandbox. You check Claude Code, Codex or opencode when devvm makes the VM and start it in the VM's shell, and it gets your settings, skills and MCP servers but never your history ([coding agents](docs/using/coding-agents.md)).
+- The agent runs in the VM, so an attack on it stays in the sandbox. You check Claude Code, Codex or opencode when you customize a new VM and start it in the VM's shell, and it gets your settings, skills and MCP servers but never your history ([coding agents](docs/using/coding-agents.md)).
 - On every network tier, their secrets, such as your Claude Code token and your Codex login, stay on your machine, because the VM gets placeholders and devvm's proxy puts the real ones into its requests on the way out.
 
 {{< /feature >}}
