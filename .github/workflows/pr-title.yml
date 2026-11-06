@@ -1,0 +1,38 @@
+name: PR title
+
+# Pull requests are squash-merged with their title as the commit's subject, so the title follows
+# Conventional Commits, with the types AGENTS.md lists. pull_request, not pull_request_target: the
+# check only reads the title through the API with a read-only token and checks out no code.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: Conventional Commits title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            test
+            refactor
+            build
+            ci
+            chore
+          requireScope: false
