@@ -73,6 +73,7 @@ func networkSection(s *S) {
 	netClaudeLogins(n)
 	netSave(n)
 	netGithub(n)
+	netMise(n)
 	netSelfChecks(n)
 	if runtime.GOOS == "darwin" {
 		netSandbox(n)
@@ -1284,6 +1285,23 @@ func netSave(n *netRun) {
 // service on macOS, else in the sandbox's config folder; deleted at the
 // end. The token goes on devvm's input, so it's in no process's
 // arguments.
+// netMise installs a project's own tools with mise on the allowlist tier:
+// pnpm's aqua download is checked against its GitHub attestations, which
+// need Sigstore's trust root.
+func netMise(n *netRun) {
+	s := n.s
+	s.Check("mise installs a project's own pnpm and node, attestations checked, on the allowlist tier", func() error {
+		r, err := s.InVM(n.vm, `d=$(mktemp -d) && cd "$d" && printf '[tools]\npnpm = "12.8.1"\nnode = "22"\n' > mise.toml && mise trust -q && mise install && mise exec -- pnpm --version`)
+		if err != nil {
+			return failed("mise install failed: "+tailLines(r.Out, 8), err)
+		}
+		if !strings.Contains(r.Stdout, "12.8.1") {
+			return errors.New("pnpm isn't 12.8.1: " + tailLines(r.Out, 4))
+		}
+		return nil
+	})
+}
+
 func netGithub(n *netRun) {
 	s := n.s
 	const tok = "ghp_E2EFAKE"

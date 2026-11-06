@@ -74,7 +74,7 @@ On every launch devvm checks on this machine that the VM still runs on the proce
 
 The VM's proxy reads devvm's built-in policies first and then your policy files, in order, as one list:
 
-- devvm's own rules for every VM, which allow OS packages, mise's version lists and GitHub;
+- devvm's own rules for every VM, which allow OS packages, mise's version lists, the Sigstore and GitHub trust roots that mise checks a download's attestations against, Node's downloads for a project's own node, and GitHub;
 - devvm's rules for each shared tool in the VM's image (`node`, `claude` and the others), which allow its registries, downloads and APIs;
 - devvm's rules for each [built-in layer](../using/images.md#built-in-layers) in the VM's image, so the `docker` layer allows Docker's packages and the container registries Docker Hub and ghcr.io, and the `nix` layer allows Nix's binary cache, channels and flake registry;
 - `~/.config/devvm/layers/<name>.policy`, for each of your own layers in the VM's image;

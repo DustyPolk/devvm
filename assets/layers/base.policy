@@ -15,6 +15,15 @@ dl-cdn.alpinelinux.org
 # mise's version lists, for versions a project's version files ask for (the downloads themselves are
 # in each tool's policy)
 mise-versions.jdx.dev
+# The trust roots mise checks GitHub artifact attestations against (aqua tools such as pnpm): Sigstore's,
+# for the attestations a project's release workflow signs, and GitHub's own, for its release
+# attestations when the root built into mise is out of date
+tuf-repo-cdn.sigstore.dev
+tuf-repo.github.com
+# Node's downloads, for the node a project's mise config asks for in a VM without the node toolchain
+# (musl builds, on Alpine, come from unofficial-builds)
+nodejs.org
+unofficial-builds.nodejs.org
 
 # GitHub: code, releases, tarballs, git over SSH
 github.com
