@@ -104,9 +104,8 @@ func DockerCalls(s *S) string { return filepath.Join(s.sb.work, "docker-calls") 
 // NewestLog is devvm's newest run log, the last devvm's: nothing when
 // there's none.
 func NewestLog(p Paths) string {
-	m, _ := filepath.Glob(filepath.Join(p.Devvm, "logs", "runs", "*.log"))
 	newest, at := "", int64(0)
-	for _, f := range m {
+	for _, f := range p.RunLogs() {
 		if fi, err := os.Stat(f); err == nil && fi.ModTime().UnixNano() > at {
 			newest, at = f, fi.ModTime().UnixNano()
 		}

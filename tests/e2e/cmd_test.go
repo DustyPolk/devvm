@@ -35,7 +35,7 @@ type Cmd struct {
 type Res struct{ Out, Stdout string }
 
 // Has is whether line is one of Out's lines (grep -qx).
-func (r Res) Has(line string) bool { return slices.Contains(strings.Split(r.Out, "\n"), line) }
+func (r Res) Has(line string) bool { return HasLine(r.Out, line) }
 
 // Run runs c in the window open now, its output in the check's log too
 // (the heartbeat's and a failure's lines). It runs in a process group of

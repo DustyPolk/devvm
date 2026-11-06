@@ -224,11 +224,15 @@ func (s *S) NewProject(name string) (string, error) {
 // (which then ends), and is the VM devvm made for the folder, recorded
 // for the run's cleanup.
 func (s *S) Launch(dir, input string, args ...string) (string, Res, error) {
-	res, err := s.Run(Cmd{Args: append([]string{s.sb.devvm}, args...), Dir: dir, Stdin: input + "\n"})
-	vm := s.Paths.VMOf(dir)
-	if vm != "" && !slices.Contains(s.sb.created, vm) {
-		s.sb.created = append(s.sb.created, vm)
-	}
+	return s.launch(Cmd{Args: append([]string{s.sb.devvm}, args...), Dir: dir, Stdin: input + "\n"})
+}
+
+// launch runs c, a launch of devvm in c.Dir: the VM devvm made for the
+// folder, recorded for the run's cleanup.
+func (s *S) launch(c Cmd) (string, Res, error) {
+	res, err := s.Run(c)
+	vm := s.Paths.VMOf(c.Dir)
+	OwnVM(s, vm)
 	return vm, res, err
 }
 

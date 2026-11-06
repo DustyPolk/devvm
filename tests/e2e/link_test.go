@@ -227,8 +227,7 @@ func linkPolicy(l *link) {
 // errorsOf is a failed command's last lines, as an error for a check's
 // own to say what it printed: nil when it printed nothing.
 func errorsOf(r Res) error {
-	lines := strings.Split(strings.TrimRight(r.Out, "\n"), "\n")
-	if t := strings.Join(lines[max(0, len(lines)-5):], "\n"); t != "" {
+	if t := tailLines(r.Out, 5); t != "" {
 		return errors.New(t)
 	}
 	return nil

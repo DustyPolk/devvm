@@ -282,7 +282,7 @@ func nixShellChecks(s *S, x, vm string) {
 		if _, err := s.Run(Cmd{Args: []string{s.sb.devvm, "restart"}, Dir: x, Stdin: "exit\n"}); err != nil {
 			return err
 		}
-		if r, _ := s.Devvm(x, "network"); firstLine(r.Stdout) != "open" {
+		if r, _ := s.Devvm(x, "network"); FirstLine(r.Stdout) != "open" {
 			return errors.New("devvm network doesn't say open")
 		}
 		return inVM(s, vm, `systemctl show nix-daemon.service -p Environment --value | grep -q "http_proxy=http://devvm:[0-9a-f]*@192\.168\.5\.2:"`)

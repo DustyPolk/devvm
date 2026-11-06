@@ -451,9 +451,8 @@ func fromCorp(s *S) {
 // the build, its key written <key>, and neither a key of devvm's nor the
 // company proxy's port.
 func corpLog(s *S) error {
-	m, _ := filepath.Glob(filepath.Join(s.Paths.Devvm, "logs", "runs", "*.log"))
 	var log string
-	for _, f := range m {
+	for _, f := range s.Paths.RunLogs() {
 		if b, err := os.ReadFile(f); err == nil && Matches(string(b), `^e2e-env: `) {
 			log = string(b)
 		}

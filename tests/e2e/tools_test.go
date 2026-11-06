@@ -243,7 +243,7 @@ func toolsMissing(s *S, vm, t string) {
 		switch {
 		case err == nil:
 			return errors.New("the launch didn't fail")
-		case !strings.Contains(r.Out, firstLine(s.Msg("tools_unmounted", "tools=node "+nodev, "vm="+vm))):
+		case !strings.Contains(r.Out, FirstLine(s.Msg("tools_unmounted", "tools=node "+nodev, "vm="+vm))):
 			return errors.New("the launch didn't name node as unmounted")
 		case HasLine(r.Out, "v"+nodev):
 			return errors.New("node ran")
@@ -268,12 +268,6 @@ func toolsMissing(s *S, vm, t string) {
 	_, _ = s.Limactl("stop", vm)
 }
 
-// firstLine is a message's first line (m NAME | head -1).
-func firstLine(text string) string {
-	l, _, _ := strings.Cut(text, "\n")
-	return l
-}
-
 // erofsCount is how many tool images the share has.
 func erofsCount(s *S) int {
 	n := 0
@@ -287,10 +281,7 @@ func erofsCount(s *S) int {
 }
 
 // lockSum is the tools lock's bytes, to compare with later.
-func lockSum(s *S) string {
-	b, _ := os.ReadFile(s.Paths.ToolLock)
-	return string(b)
-}
+func lockSum(s *S) string { return readText(s.Paths.ToolLock) }
 
 // toolsCommands: a second node VM shares the tool images; devvm tools,
 // tools update, update, tools rm and add, and devvm node refused.
@@ -340,8 +331,8 @@ func toolsCommands(s *S) {
 	s.Check("devvm tools update: checks upstream; the newest unless the lock changed", func() error {
 		lock := lockSum(s)
 		r, _ := s.Run(Cmd{Args: []string{s.sb.devvm, "tools", "update"}, Dir: t2, Stdin: "exit\n"})
-		if strings.Contains(r.Out, firstLine(s.Msg("tools_newest", "vm="+vm))) ||
-			(lockSum(s) != lock && strings.Contains(r.Out, firstLine(s.Msg("tools_switch", "vm="+vm)))) {
+		if strings.Contains(r.Out, FirstLine(s.Msg("tools_newest", "vm="+vm))) ||
+			(lockSum(s) != lock && strings.Contains(r.Out, FirstLine(s.Msg("tools_switch", "vm="+vm)))) {
 			return nil
 		}
 		return errors.New("devvm tools update said neither newest nor that the VM moves")
@@ -356,7 +347,7 @@ func toolsCommands(s *S) {
 			return errors.New("devvm update left the VM's old one aside")
 		case strings.Contains(r.Out, s.Msg("vm_current", "image=base", "vm="+vm)):
 			return nil
-		case lockSum(s) != lock && strings.Contains(r.Out, firstLine(s.Msg("tools_switch", "vm="+vm))):
+		case lockSum(s) != lock && strings.Contains(r.Out, FirstLine(s.Msg("tools_switch", "vm="+vm))):
 			return nil
 		}
 		return errors.New("devvm update said neither current nor that the VM moves")

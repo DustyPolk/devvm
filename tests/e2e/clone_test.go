@@ -184,7 +184,7 @@ func (g cloneGit) listed(vm string) bool {
 
 // said is whether out has the first line of the message.
 func (g cloneGit) said(out Res, name string, kv ...string) bool {
-	return strings.Contains(out.Out, firstLine(g.s.Msg(name, kv...)))
+	return strings.Contains(out.Out, FirstLine(g.s.Msg(name, kv...)))
 }
 
 // cloneRm: rm refuses a clone's unfetched commits and uncommitted

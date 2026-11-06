@@ -3,9 +3,13 @@
 package e2e
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -366,6 +370,39 @@ func get(t *testing.T, c *http.Client, u string) (int, error) {
 	}
 	defer res.Body.Close()
 	return res.StatusCode, nil
+}
+
+// An export's regular files, by name, and tarList's sorted list of them,
+// its folders left out.
+func TestHarnessExport(t *testing.T) {
+	var b bytes.Buffer
+	zw := gzip.NewWriter(&b)
+	tw := tar.NewWriter(zw)
+	for _, h := range []*tar.Header{
+		{Name: ".claude/", Typeflag: tar.TypeDir, Mode: 0o755},
+		{Name: ".claude/z.jsonl", Typeflag: tar.TypeReg, Mode: 0o600, Size: 1},
+		{Name: ".claude/a.json", Typeflag: tar.TypeReg, Mode: 0o600, Size: 1},
+	} {
+		if err := tw.WriteHeader(h); err != nil {
+			t.Fatal(err)
+		}
+		if h.Size > 0 {
+			_, _ = tw.Write([]byte("x"))
+		}
+	}
+	if err := errors.Join(tw.Close(), zw.Close()); err != nil {
+		t.Fatal(err)
+	}
+	f := filepath.Join(t.TempDir(), "h.tar.gz")
+	if err := os.WriteFile(f, b.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if list, err := tarList(f); err != nil || list != ".claude/a.json\n.claude/z.jsonl" {
+		t.Errorf("tarList: got %q, %v", list, err)
+	}
+	if _, err := tarList(f + "x"); err == nil {
+		t.Error("tarList of no file: no error")
+	}
 }
 
 func pemBytes(t *testing.T, b []byte) []byte {

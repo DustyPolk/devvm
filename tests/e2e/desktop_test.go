@@ -133,13 +133,15 @@ func desktopLayer(s *S) {
 		return err
 	})
 	s.Check("... nor any run log, nor any host process's arguments while devvm desktop started", func() error {
-		switch {
-		case d.Password == "":
+		if d.Password == "" {
 			return errNo
+		}
+		leak := NoLeak([]string{d.Password}, filepath.Join(s.Paths.Devvm, "logs"), filepath.Join(s.Paths.VMDir(vm), "logs"))
+		switch {
 		case psErr != nil:
 			return psErr
-		case FilesHave(d.Password, filepath.Join(s.Paths.Devvm, "logs"), filepath.Join(s.Paths.VMDir(vm), "logs")):
-			return errors.New("a run log has the password")
+		case leak != nil:
+			return leak
 		case psSaw:
 			return errors.New("a host process had the password in its arguments")
 		}

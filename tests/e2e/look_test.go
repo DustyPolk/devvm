@@ -15,11 +15,18 @@ import (
 // What the images, tools and clone sections read of the sandbox and its
 // VMs.
 
+// RunLogs is devvm's run logs by name, which starts with the second each
+// run began (logs/runs/20261103-062206-PID.log): oldest first, but for
+// runs that began in the same second (NewestLog goes by their times).
+func (p Paths) RunLogs() []string {
+	m, _ := filepath.Glob(filepath.Join(p.Devvm, "logs", "runs", "*.log"))
+	return m
+}
+
 // RunLogHas is whether one of devvm's run logs has line, a whole line
 // (grep -qx in logs/runs/*.log): what a build's script printed.
 func (p Paths) RunLogHas(line string) bool {
-	m, _ := filepath.Glob(filepath.Join(p.Devvm, "logs", "runs", "*.log"))
-	for _, f := range m {
+	for _, f := range p.RunLogs() {
 		if b, err := os.ReadFile(f); err == nil && HasLine(string(b), line) {
 			return true
 		}
@@ -37,6 +44,9 @@ func MountLine(s *S, vm string) string {
 	}
 	return strings.TrimRight(r.Stdout, "\n")
 }
+
+// MountsOf is MountLine's folders, one a line.
+func MountsOf(s *S, vm string) string { return strings.Join(strings.Fields(MountLine(s, vm)), "\n") }
 
 // HasLine is whether line is one of text's lines (grep -qx).
 func HasLine(text, line string) bool { return slices.Contains(strings.Split(text, "\n"), line) }

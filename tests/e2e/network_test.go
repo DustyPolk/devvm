@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -100,7 +99,7 @@ func (n *netRun) dv(input string, env []string, args ...string) (Res, error) {
 // tier is devvm network's first line: the VM's tier.
 func (n *netRun) tier() string {
 	r, _ := n.s.Devvm(n.n, "network")
-	return firstLine(r.Stdout)
+	return FirstLine(r.Stdout)
 }
 
 // key is the VM's proxy's password.
@@ -195,9 +194,8 @@ func netLaunch(n *netRun) {
 		if have, err := ProcsHave(s, key); err != nil || have {
 			return failed("a host process's arguments hold the password", err)
 		}
-		logs, _ := filepath.Glob(filepath.Join(s.Paths.Devvm, "logs", "runs", "*.log"))
 		edited := false
-		for _, f := range logs {
+		for _, f := range s.Paths.RunLogs() {
 			edited = edited || Matches(readText(f), `limactl edit .*devvm:<password>@`)
 		}
 		if !edited {
@@ -225,7 +223,7 @@ func netLaunch(n *netRun) {
 			return err
 		case s.Paths.State(n.vm)["net.made.check"] != "ok":
 			return errors.New("the self-check didn't pass")
-		case !grepF(r.Out, firstLine(s.Msg("ssh_host_info", "dir="+n.n, "host=devvm-net"))):
+		case !grepF(r.Out, FirstLine(s.Msg("ssh_host_info", "dir="+n.n, "host=devvm-net"))):
 			return errors.New("devvm host didn't name devvm-net")
 		}
 		return nil
@@ -329,7 +327,7 @@ func (n *netRun) allowAtOnce() error {
 	}
 	r, err := s.Devvm(n.n, "network")
 	switch {
-	case err != nil || firstLine(r.Stdout) != "allowlist" || !r.Has("  example.com"):
+	case err != nil || FirstLine(r.Stdout) != "allowlist" || !r.Has("  example.com"):
 		return errors.New("devvm network doesn't show allowlist and example.com")
 	case inVM(s, n.vm, "curl -fsS -m 20 -o /dev/null https://example.com") != nil:
 		return errors.New("example.com isn't allowed at once")
@@ -568,12 +566,6 @@ func (n *netRun) corpWhy(corp *Corp, launch Res) string {
 	fmt.Fprintf(&b, "the company proxy's log (it runs: %v):\n%s\n", corp.Running(), tailLines(corp.Log(), 5))
 	fmt.Fprintf(&b, "its events:\n%s", tailLines(readText(corp.Events), 5))
 	return b.String()
-}
-
-// tailLines is text's last n lines.
-func tailLines(text string, n int) string {
-	l := strings.Split(strings.TrimRight(text, "\n"), "\n")
-	return strings.Join(l[max(0, len(l)-n):], "\n")
 }
 
 // A second VM with network policy, small and with no agents, in the same
@@ -991,8 +983,7 @@ func netOpencodeKeys(n *netRun) {
 func (n *netRun) opencodeWhy(vm string) string {
 	s := n.s
 	ids := vmOut(s, vm, `jq -c '[.[].id]' ~/.local/state/devvm/opencode-import.json; ls ~/.local/share/opencode; opencode auth export 2>&1 | jq -c '[.[] | [.id, .integrationID, .active]]'`)
-	runs, _ := filepath.Glob(filepath.Join(s.Paths.Devvm, "logs", "runs", "*.log"))
-	slices.Sort(runs)
+	runs := s.Paths.RunLogs()
 	var lines []string
 	for _, f := range runs[max(0, len(runs)-4):] {
 		lines = append(lines, "== "+filepath.Base(f))
@@ -1660,15 +1651,8 @@ func netSandbox(n *netRun) {
 		return nil
 	})
 	s.Check(titles[2], func() error {
-		ctx := s.r.window().ctx
-		_ = s.Until(20*time.Second, func() error {
-			if dialable(ctx, p95) {
-				return nil
-			}
-			return errors.New("not forwarded")
-		})
 		switch {
-		case !dialable(ctx, p95):
+		case !ReachesWithin(s, 20*time.Second, Local(p95)):
 			return fmt.Errorf("nothing forwards %d", p95)
 		case loopbackOnly(s, p95) != nil:
 			return loopbackOnly(s, p95)
@@ -1777,7 +1761,7 @@ func netUnenforced(n *netRun) {
 		_, err := s.Limactl("start", "--tty=false", vm)
 		return err
 	}
-	stopped := firstLine(s.Msg("net_unenforced_stop", "vm="+vm))
+	stopped := FirstLine(s.Msg("net_unenforced_stop", "vm="+vm))
 	s.Check("ls shows its policy on, and unenforced once started outside devvm", func() error {
 		if !Matches(ls(), lsRe("Running", "allowlist")) {
 			return errors.New("devvm ls doesn't show it running, its policy on")
@@ -1811,7 +1795,7 @@ func netUnenforced(n *netRun) {
 		switch {
 		case err == nil || !grepF(r.Out, stopped):
 			return errors.New("devvm host didn't fail, saying it stopped the VM")
-		case grepF(r.Out, firstLine(s.Msg("ssh_host_info", "dir="+n.n, "host=devvm-net"))) || s.Status(vm) != "Stopped":
+		case grepF(r.Out, FirstLine(s.Msg("ssh_host_info", "dir="+n.n, "host=devvm-net"))) || s.Status(vm) != "Stopped":
 			return errors.New("devvm host named the VM, or it runs")
 		}
 		return nil
@@ -1954,7 +1938,7 @@ func netTiers(n *netRun) {
 	code := func(u string) string { return vmOut(s, vm, "curl -s -m 20 -o /dev/null -w %{http_code} "+u) }
 	s.Check("devvm network allowlist while it runs, without a terminal: unenforced until devvm restart starts it confined", func() error {
 		r, err := s.Devvm(n.n, "network", "allowlist")
-		if err != nil || !grepF(r.Out, firstLine(s.Msg("next_start", "count=1", "vm="+vm))) {
+		if err != nil || !grepF(r.Out, FirstLine(s.Msg("next_start", "count=1", "vm="+vm))) {
 			return errors.New("devvm network allowlist didn't say it applies at the next start")
 		}
 		if n.tier() != "unenforced" {
@@ -2028,12 +2012,12 @@ func netTiers(n *netRun) {
 	}
 	s.Check("devvm network open while it runs confined, without a terminal: launched, it keeps its proxy until it next starts", func() error {
 		r, err := s.Devvm(n.n, "network", "open")
-		if err != nil || !grepF(r.Out, firstLine(s.Msg("next_start", "count=1", "vm="+vm))) {
+		if err != nil || !grepF(r.Out, FirstLine(s.Msg("next_start", "count=1", "vm="+vm))) {
 			return errors.New("devvm network open didn't say it applies at the next start")
 		}
 		r, err = n.dv("exit\n", n.home())
 		switch {
-		case err != nil || !grepF(r.Out, firstLine(s.Msg("next_start_net_off", "vm="+vm))):
+		case err != nil || !grepF(r.Out, FirstLine(s.Msg("next_start_net_off", "vm="+vm))):
 			return errors.New("the launch didn't say it keeps its proxy until its next start")
 		case !proxyRuns(s, n.pxc) || direct():
 			return errors.New("its proxy doesn't run, or a direct connection worked")

@@ -19,7 +19,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -43,15 +42,9 @@ func devvmCmd(s *S, dir, input string, env []string, args ...string) Cmd {
 }
 
 // launchWith is Launch with env in devvm's environment (a fake token, a
-// HOME of its own), its shell given exit: the VM devvm made for dir,
-// recorded for the run's cleanup.
+// HOME of its own), its shell given exit.
 func launchWith(s *S, dir string, env []string, args ...string) (string, Res, error) {
-	res, err := s.Run(devvmCmd(s, dir, "exit\n", env, args...))
-	vm := s.Paths.VMOf(dir)
-	if vm != "" && !slices.Contains(s.sb.created, vm) {
-		s.sb.created = append(s.sb.created, vm)
-	}
-	return vm, res, err
+	return s.launch(devvmCmd(s, dir, "exit\n", env, args...))
 }
 
 // vmRun runs args in the VM from /, with no login shell and no input:
@@ -330,17 +323,6 @@ func lanAddr(ctx context.Context) string {
 	return a.IP.String()
 }
 
-// dialable is whether something takes TCP connections on 127.0.0.1:port
-// (nc -z).
-func dialable(ctx context.Context, port int) bool {
-	c, err := (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "tcp", "127.0.0.1:"+strconv.Itoa(port))
-	if err != nil {
-		return false
-	}
-	_ = c.Close()
-	return true
-}
-
 // limaListens is whether Lima's own processes (limactl's hostagent) have
 // the port, tcp or udp, on this machine.
 func limaListens(s *S, proto string, port int) bool {
@@ -404,8 +386,10 @@ func TestHarnessNetReaders(t *testing.T) {
 		t.Error("countWith, lineWith: lines holding every one")
 	case countLine("x\nx\ny", "x") != 2 || countLine(text, "exac") != 0:
 		t.Error("countLine: whole lines")
-	case firstLine("one\ntwo") != "one" || tailLines("1\n2\n3\n", 2) != "2\n3":
-		t.Error("firstLine, tailLines")
+	case FirstLine("one\ntwo") != "one" || tailLines("1\n2\n3\n", 2) != "2\n3" || LastLine("1\n2\n") != "2" || LastLine("") != "":
+		t.Error("FirstLine, tailLines, LastLine")
+	case !(Res{Out: "a\nb c\n"}).Has("b c") || (Res{Out: "a\nb c\n"}).Has("b"):
+		t.Error("Res.Has: whole lines")
 	case !hostResolverOff("a: 1\nhostResolver:\n  enabled: false\n") || hostResolverOff("hostResolver:\n  enabled: true\n"):
 		t.Error("hostResolverOff: on its line or the next")
 	case failed("x", nil).Error() != "x" || !errors.Is(failed("x", os.ErrNotExist), os.ErrNotExist):

@@ -230,8 +230,7 @@ func (r *runner) heartbeatLine() string {
 	since := time.Since(r.mark)
 	r.mu.Unlock()
 	newest, at := "", time.Time{}
-	logs, _ := filepath.Glob(filepath.Join(r.sb.devvmDir(), "logs", "runs", "*.log"))
-	for _, f := range append(logs, r.sb.logFile()) {
+	for _, f := range append(r.sb.paths().RunLogs(), r.sb.logFile()) {
 		if st, err := os.Stat(f); err == nil && st.ModTime().After(at) {
 			newest, at = f, st.ModTime()
 		}

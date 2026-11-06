@@ -18,7 +18,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -136,14 +135,7 @@ func writePEM(f, kind string, der []byte) error {
 
 // Line is line n of the CA's PEM, from 1: a line of its base64, which a
 // check looks for in a VM's bundle.
-func (c *CA) Line(n int) string {
-	b, _ := os.ReadFile(c.PEM)
-	lines := strings.Split(string(b), "\n")
-	if n < 1 || n > len(lines) {
-		return ""
-	}
-	return lines[n-1]
-}
+func (c *CA) Line(n int) string { return pemLine(c.PEM, n) }
 
 // Trust puts the CA in devvm's CA folder, as e2e.pem: VMs trust it from
 // their next launch, and builds while they run.

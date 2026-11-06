@@ -3,8 +3,6 @@
 package e2e
 
 import (
-	"io/fs"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -23,34 +21,16 @@ func SaidLine(out, msg string) bool {
 // FirstLine and LastLine are a message's first and last lines (m … | head -1).
 func FirstLine(msg string) string { l, _, _ := strings.Cut(msg, "\n"); return l }
 
-func LastLine(msg string) string {
-	ls := strings.Split(strings.TrimRight(msg, "\n"), "\n")
-	return ls[len(ls)-1]
+func LastLine(msg string) string { return tailLines(msg, 1) }
+
+// tailLines is text's last n lines (tail -n N).
+func tailLines(text string, n int) string {
+	l := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	return strings.Join(l[max(0, len(l)-n):], "\n")
 }
 
 // Trim is a command's output as $(…) has it: its trailing newlines gone.
 func Trim(out string) string { return strings.TrimRight(out, "\n") }
-
-// FilesHave is whether a regular file under one of paths has text in
-// it (grep -rqsF): a missing path has none.
-func FilesHave(text string, paths ...string) bool {
-	found := false
-	for _, p := range paths {
-		_ = filepath.WalkDir(p, func(f string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil //nolint:nilerr // what it can't read has none, as grep -s skips it
-			}
-			if found || !d.Type().IsRegular() {
-				return nil
-			}
-			if strings.Contains(readText(f), text) {
-				found = true
-			}
-			return nil
-		})
-	}
-	return found
-}
 
 // Listed is whether limactl lists the VM (limactl list -q).
 func Listed(s *S, vm string) bool {
@@ -68,10 +48,11 @@ func Locked(s *S, f string) bool {
 	return err == nil && strings.Contains(r.Stdout, "uchg")
 }
 
-// Procs is every host process's command line, one a line (ps -axww).
+// Procs is every host process's command line, one a line (ps -axww),
+// which stays out of the check's log, as the process watch's.
 func Procs(s *S) []string {
-	r, _ := s.Run(Cmd{Args: []string{"ps", "-axww", "-o", "command="}})
-	return strings.Split(r.Stdout, "\n")
+	b, _ := psAll(s.r.window().ctx)
+	return strings.Split(string(b), "\n")
 }
 
 // Forwarders is the command lines of the VM's port forwarders here

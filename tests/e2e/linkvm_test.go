@@ -130,7 +130,7 @@ func lkRunning(s *S, vm string) bool { return s.Status(vm) == "Running" }
 
 // out is a command's output with its last newlines taken off, as $(…)
 // has it.
-func out(r Res) string { return strings.TrimRight(r.Stdout, "\n") }
+func out(r Res) string { return Trim(r.Stdout) }
 
 // yesNo is yes or no.
 func yesNo(b bool) string {

@@ -4,13 +4,14 @@ package e2e
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -964,27 +965,6 @@ func movedHistory(s *S, vm, from, to string) error {
 	return nil
 }
 
-// MountsOf is the host folders the VM's Lima config mounts, one a line.
-func MountsOf(s *S, vm string) string {
-	r, _ := s.Limactl("list", "--json", vm)
-	var l struct {
-		Config struct {
-			Mounts []struct {
-				Location string `json:"location"`
-			} `json:"mounts"`
-		} `json:"config"`
-	}
-	first, _, _ := strings.Cut(r.Stdout, "\n")
-	if json.Unmarshal([]byte(first), &l) != nil {
-		return ""
-	}
-	var out []string
-	for _, m := range l.Config.Mounts {
-		out = append(out, m.Location)
-	}
-	return strings.Join(out, "\n")
-}
-
 func projectRm(s *S, w *webVM) {
 	p, vm := w.p, w.vm
 	s.Check("rm deletes only this VM, with its state and ssh config entry, and unlocks", func() error {
@@ -1336,6 +1316,7 @@ func projectAgentSave(s *S, a, vm, ah, store string) {
 		if err != nil {
 			return err
 		}
+		login := NoLeak([]string{"e2e-credentials"}, store, filepath.Join(s.Paths.Devvm, "logins"))
 		switch {
 		case !grepF(r.Out, s.Msg("agent_settings_saved", "agent=claude", "dir="+store, "vm="+vm)) ||
 			!grepF(r.Out, s.Msg("agent_save_link_left_out", "path=.claude/commands/escape", "vm="+vm)):
@@ -1344,8 +1325,8 @@ func projectAgentSave(s *S, a, vm, ah, store string) {
 			return errors.New("it didn't save them")
 		case Exists(filepath.Join(commands, "escape")):
 			return errors.New("it saved the link")
-		case FilesHave("e2e-credentials", store, filepath.Join(s.Paths.Devvm, "logins")):
-			return errors.New("it saved the login")
+		case login != nil:
+			return fmt.Errorf("it saved the login: %w", login)
 		}
 		return nil
 	})
@@ -1380,10 +1361,10 @@ func projectAgentSave(s *S, a, vm, ah, store string) {
 	})
 }
 
-// tarList is the paths in a .tar.gz, one a line.
-func tarList(s *S, f string) (string, error) {
-	r, err := s.Run(Cmd{Args: []string{"tar", "-tzf", f}})
-	return r.Stdout, err
+// tarList is the regular files' paths in an export, one a line, sorted.
+func tarList(f string) (string, error) {
+	files, err := exportFiles(f)
+	return strings.Join(slices.Sorted(maps.Keys(files)), "\n"), err
 }
 
 // historyOK checks an export's list: the transcript, and no login.
@@ -1409,7 +1390,7 @@ func projectHistory(s *S, a, vm, ah string) {
 		if s.Status(vm) != "Running" {
 			return errors.New("it isn't running")
 		}
-		list, err := tarList(s, filepath.Join(export, "h.tar.gz"))
+		list, err := tarList(filepath.Join(export, "h.tar.gz"))
 		if err != nil {
 			return err
 		}
@@ -1435,7 +1416,7 @@ func projectHistory(s *S, a, vm, ah string) {
 		if err != nil {
 			return err
 		}
-		list, err := tarList(s, f)
+		list, err := tarList(f)
 		if err != nil {
 			return err
 		}
