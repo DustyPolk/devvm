@@ -292,6 +292,7 @@ A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the 
 | --- | --- |
 | `devvm setup [--features LIST\|none] [--agents LIST\|none] [--layers LIST\|none]` | choose base's features and the coding agents and layers new VMs get, and in a terminal also new VMs' size and network tier ([details](../using/settings.md#devvm-setup)) |
 | `devvm agent import [AGENT...]` | copy the agents' settings and logins from your home folder into devvm's agent store, which every VM gets them from, never their history, asking before it replaces the store's ([details](../using/coding-agents.md#importing-from-this-machine)) |
+| `devvm agent login AGENT [--device-code] [--api-key]` | log Codex or opencode in to ChatGPT inside this folder's VM, in a browser on this machine or with a code, or save an API key, and keep the login in devvm's agent store for every VM ([details](../using/coding-agents.md#logging-in-with-devvm-agent-login)) |
 | `devvm agent save [AGENT...]` | copy the agents' settings from this folder's VM into devvm's agent store, never their logins or history, after showing what changed and asking ([details](../using/coding-agents.md#saving-a-vms-settings)) |
 | `devvm doctor` | check what devvm needs on this machine and say how to get what's missing ([details](install.md#checking-what-devvm-needs)) |
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
@@ -335,6 +336,7 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 | whether to restart a running VM to apply a change from `devvm size`, `devvm network`, `devvm ssh-agent` or `devvm git-protect`, or, as devvm opens it, the changes that wait for its next start, such as an agent's new folders | `devvm restart` afterwards, or nothing: without a terminal or with `--no-input`, the change waits for the VM's next start |
 | whether to add the `Include` line to `~/.ssh/config` | `--ssh-config` on `devvm`, `devvm host` and `devvm code` |
 | a Claude Code token or a GitHub token | `devvm secret set NAME --stdin` |
+| an agent's API key, in `devvm agent login --api-key` | `--stdin` |
 | whether to delete, in `devvm rm`, `devvm gc`, `devvm gc --caches`, `devvm images rm` and `devvm secret rm` | `--force` |
 | whether to replace the images built on one, in `devvm rebuild` | `--force` |
 | whether to replace what devvm's agent store has, in `devvm agent import` | `--force` |

@@ -3095,6 +3095,56 @@ token_capture() {
     token_why; return 1
   fi; }
 check_lines=60 check "a login made in the VM is captured: the store gets the real tokens, the VM placeholders and no refresh token, and nothing is logged" token_capture
+# devvm agent login codex: the real Codex logs in in the VM, and the browser's callback comes back
+# through the forward of this machine's localhost:1455, which curl stands in for here, with the
+# state Codex's address names; the fake endpoint answers its code and its API-key exchange. The
+# forward lasts only while the login runs, interrupted too.
+agent_login() {
+  (cd "$n" && exec env HOME="$nh" CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-e2efake HTTPS_PROXY="$tokurl" HTTP_PROXY="$tokurl" DEVVM_MESSAGES=names \
+    "$D" agent login codex </dev/null >"$work/login.log" 2>&1) &
+  login_pid=$!; }
+# login_state: the state in the address Codex shows, once it shows one (60 s at most).
+login_state() {
+  local i
+  for i in $(seq 1 120); do
+    sed -n 's/.*[?&]state=\([A-Za-z0-9_-]*\).*/\1/p' "$work/login.log" | head -n 1 | grep . && return 0
+    kill -0 "$login_pid" 2>/dev/null || return 1
+    sleep 0.5
+  done
+  return 1; }
+# login_wait: devvm agent login's exit status, once it ends (60 s at most).
+login_wait() {
+  local i
+  for i in $(seq 1 120); do
+    kill -0 "$login_pid" 2>/dev/null || break
+    sleep 0.5
+  done
+  kill -0 "$login_pid" 2>/dev/null && return 1
+  wait "$login_pid"; }
+forward_gone() { ! curl -sS -m 5 -o /dev/null http://127.0.0.1:1455/ 2>/dev/null; }
+login_why() { echo "devvm agent login said:"; tail -n 20 "$work/login.log"; token_why; }
+login_browser() {
+  local state
+  if ! { agent_login && step "Codex shows its address" login_state >"$work/login.state" && state=$(cat "$work/login.state") &&
+    step "the callback reaches Codex in the VM through the forward, and its success page too" curl -sSL -m 60 -o /dev/null \
+      "http://127.0.0.1:1455/auth/callback?code=e2e-code&state=$state" &&
+    step "devvm agent login ends, saying what the store saved" login_wait &&
+    step "it names the account" grep -q '^==> agent_login_saved_for agent=codex email=e2e@devvm.test vm=' "$work/login.log" &&
+    step "the store has the real tokens and key" bash -c "a='$logins/codex/.codex/auth.json' &&
+      [[ \$(jget \"\$a\" tokens.refresh_token) == rt-e2efake-capture && \$(jget \"\$a\" OPENAI_API_KEY) == sk-e2efake-captured-key ]]" &&
+    step "the VM's Codex holds placeholders alone" bash -c "limactl shell --workdir / $vm bash -c 'cat ~/.codex/auth.json' </dev/null >'$work/vm-codex.json' &&
+      ! grep -q e2efake '$work/vm-codex.json' && [[ \$(jget '$work/vm-codex.json' tokens.refresh_token) == devvm-proxy-managed ]]" &&
+    step "the forward is gone" forward_gone; }; then
+    kill "$login_pid" 2>/dev/null; login_why; return 1
+  fi; }
+check_lines=60 check "devvm agent login codex logs the VM's Codex in through the forward of localhost:1455, and the store saves the login" login_browser
+login_interrupted() {
+  if ! { agent_login && step "Codex shows its address" login_state >/dev/null &&
+    step "the forward listens" curl -sS -m 5 -o /dev/null http://127.0.0.1:1455/ && kill -INT "$login_pid" &&
+    { wait "$login_pid"; [[ $? == 130 ]]; } && step "the forward is gone" forward_gone; }; then
+    kill "$login_pid" 2>/dev/null; login_why; return 1
+  fi; }
+check "an interrupted devvm agent login takes its forward away" login_interrupted
 kill "$token_srv" 2>/dev/null; wait "$token_srv" 2>/dev/null
 rm -rf "$cafolder"
 check "the next launch, going directly, gives the VM the captured login as placeholders" bash -c "cd '$n' &&

@@ -231,6 +231,7 @@ func TestShowCommandsTakeJSON(t *testing.T) {
 	withoutJSON := map[string]string{ //nolint:gosec // G101 takes devvm secret's commands for credentials
 		"devvm":                "it opens a shell",
 		"devvm adopt":          "it changes which folder a VM is for",
+		"devvm agent login":    "it runs an agent's login",
 		"devvm build":          "it builds an image",
 		"devvm rebuild":        "it builds an image",
 		"devvm code":           "it opens VS Code",

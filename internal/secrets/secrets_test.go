@@ -364,6 +364,37 @@ func TestNamesAndLogins(t *testing.T) {
 // Claude Code's in its .credentials.json, the agent's logins folder kept out
 // of backups; an agent devvm keeps no logins of is refused. A VM's
 // allowlist has its agents' token endpoints' hosts.
+// An API key saved in the store, its folder kept out of backups, changes
+// the login's sum; the store's ChatGPT login is read as it is; another
+// agent is refused.
+func TestSaveKey(t *testing.T) {
+	s, _ := testStore(t, false, nil)
+	var excluded []string
+	s.ExcludeFromBackup = func(_ context.Context, dir string) error { excluded = append(excluded, dir); return nil }
+	if s.LoginSum("codex") != "" {
+		t.Error("a sum without a login")
+	}
+	if err := s.SaveKey(t.Context(), "codex", "", "sk-real"); err != nil {
+		t.Fatal(err)
+	}
+	sum := s.LoginSum("codex")
+	if b, err := os.ReadFile(LoginFile(s.Dirs, "codex")); err != nil || !strings.Contains(string(b), "sk-real") || sum == "" {
+		t.Errorf("the store's Codex login: %s, %v, sum %q", b, err, sum)
+	}
+	if _, ok, err := s.ChatGPT("codex"); ok || err != nil {
+		t.Errorf("an API key as a ChatGPT login: %v, %v", ok, err)
+	}
+	if err := s.SaveKey(t.Context(), "codex", "", "sk-other"); err != nil || s.LoginSum("codex") == sum {
+		t.Errorf("a new key: %v, the same sum", err)
+	}
+	if !slices.Equal(excluded, []string{s.Dirs.AgentLogins("codex"), s.Dirs.AgentLogins("codex")}) {
+		t.Errorf("kept out of backups: %q", excluded)
+	}
+	if err := s.SaveKey(t.Context(), "aider", "", "k"); msg.NamesOf(err) != "no_secret secret=aider" {
+		t.Errorf("another agent: %v", msg.NamesOf(err))
+	}
+}
+
 func TestCapture(t *testing.T) {
 	s, _ := testStore(t, false, nil)
 	var excluded []string

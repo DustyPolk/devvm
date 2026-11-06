@@ -16,8 +16,9 @@ func newAgentCmd(a *app) *cobra.Command {
 		Short: "Fill devvm's store of the agents' settings and logins that every VM gets",
 		Long: "devvm keeps the coding agents' settings in ~/.config/devvm/agents and their logins in ~/.local/share/devvm/logins, " +
 			"and every VM with an agent gets them from there, never from the agents' own files in your home folder. " +
-			"devvm agent import copies those files into the store once, and devvm agent save copies a VM's settings into it.",
+			"devvm agent login saves a login made in this folder's VM, devvm agent import copies those files into the store once, and devvm agent save copies a VM's settings into it.",
 		Example: examples(
+			"devvm agent login codex", "log Codex in, in this folder's VM, for every VM",
 			"devvm agent import", "copy every agent's settings and logins from this machine",
 			"devvm agent import codex", "copy only Codex's",
 			"devvm agent save", "copy the settings of this folder's VM's agents, after showing what changed",
@@ -25,7 +26,7 @@ func newAgentCmd(a *app) *cobra.Command {
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
-	cmd.AddCommand(newAgentImportCmd(a), newAgentSaveCmd(a))
+	cmd.AddCommand(newAgentImportCmd(a), newAgentLoginCmd(a), newAgentSaveCmd(a))
 	return cmd
 }
 

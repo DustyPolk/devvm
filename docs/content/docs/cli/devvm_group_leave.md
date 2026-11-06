@@ -1,6 +1,6 @@
 ---
 title: devvm group leave
-weight: 16
+weight: 17
 ---
 
 Take this folder's VM out of its group

@@ -2249,6 +2249,61 @@ other = "Reading the agents' settings from {{.vm}} failed."
 description = "reason is an error from the system, in English"
 other = "Saving the agents' settings failed: {{.reason}}."
 
+[agent_login_no_agent]
+other = "{{.vm}} has no {{.agent}} to log in with. Run devvm tools add {{.agent}}, then devvm agent login {{.agent}}."
+
+[agent_login_port_taken]
+description = "port is the port on this machine's localhost that the browser comes back to"
+other = "A program on this machine has port {{.port}}, which the browser comes back to as you log in. Stop that program, or run devvm agent login {{.agent}} --device-code."
+
+[agent_login_forward]
+description = "port is the port on this machine's localhost forwarded to the VM while the login runs"
+other = "Open the address {{.agent}} shows in a browser on this machine: devvm forwards localhost:{{.port}} to {{.vm}} until the login ends."
+
+[agent_login_exited]
+other = "{{.agent}}'s login in {{.vm}} failed, and its output above says why."
+
+[agent_login_not_saved]
+other = "{{.agent}}'s login in {{.vm}} ended, but no new login reached devvm's agent store. devvm network log shows each login the VM's proxy saved."
+
+[agent_login_saved]
+other = "devvm saved {{.agent}}'s ChatGPT login in its agent store, and {{.vm}} uses it now. Every VM with {{.agent}} gets it from its next launch."
+
+[agent_login_saved_for]
+description = "email is the ChatGPT account's email, as its tokens name it"
+other = "devvm saved {{.agent}}'s ChatGPT login for {{.email}} in its agent store, and {{.vm}} uses it now. Every VM with {{.agent}} gets it from its next launch."
+
+[agent_key_saved]
+description = "provider is the API key's provider, as opencode names it: openai, anthropic or openrouter"
+other = "devvm saved {{.agent}}'s {{.provider}} API key in its agent store, and {{.vm}} uses it now. Every VM with {{.agent}} gets it from its next launch."
+
+[agent_key_copy_failed]
+other = "Giving {{.vm}} its copy of {{.agent}}'s login failed, though devvm saved the API key. Run devvm in the VM's folder to give it the copy."
+
+[agent_key_howto]
+description = "provider is the API key's provider, as opencode names it: openai, anthropic or openrouter"
+other = "Paste the {{.provider}} API key for {{.agent}}. devvm keeps it on this machine, and VMs get a placeholder."
+
+[agent_key_prompt]
+other = "API key:"
+
+[agent_key_empty]
+other = "There's no API key to save, because the answer was empty."
+
+[agent_login_provider_needed]
+description = "providers lists the providers devvm saves opencode's API keys for, comma-separated"
+other = "devvm agent login opencode --api-key needs --provider, one of {{.providers}}."
+
+[agent_login_provider_alone]
+other = "--provider goes with devvm agent login opencode --api-key. Run devvm agent login opencode --api-key --provider PROVIDER."
+
+[agent_login_stdin_alone]
+other = "--stdin goes with --api-key. Run devvm agent login {{.agent}} --api-key --stdin."
+
+[agent_login_failed]
+description = "reason is an error from the system, in English"
+other = "Logging the agent in failed: {{.reason}}."
+
 [next_start_size]
 other = "{{.vm}} gets its new size only when it starts."
 
@@ -2330,18 +2385,18 @@ description = "secret is the name asked for, quoted when it holds a control char
 other = "There's no secret {{.secret}}."
 
 [codex_no_key]
-other = "The Codex login in devvm's agent store has no API key any more, so the VM's proxy has none to put in. Log in with codex on this machine and run devvm agent import --force codex, then devvm in the VM's folder."
+other = "The Codex login in devvm's agent store has no API key any more, so the VM's proxy has none to put in. Run devvm agent login codex --api-key in the VM's folder."
 
 [codex_no_chatgpt]
-other = "The Codex login in devvm's agent store isn't a ChatGPT login any more, so the VM's proxy has none to put in. Log in with codex on this machine and run devvm agent import --force codex, then devvm in the VM's folder."
+other = "The Codex login in devvm's agent store isn't a ChatGPT login any more, so the VM's proxy has none to put in. Run devvm agent login codex in the VM's folder."
 
 [codex_refresh_failed]
 description = "reason is an error from the system or OpenAI's token endpoint, in English"
-other = "Refreshing the Codex login in devvm's agent store failed: {{.reason}}. Log in again with codex on this machine and run devvm agent import --force codex."
+other = "Refreshing the Codex login in devvm's agent store failed: {{.reason}}. Run devvm agent login codex in a VM's folder to log in again."
 
 [opencode_refresh_failed]
 description = "provider is opencode's provider ID, such as openai; reason is an error from the system or the token endpoint, in English"
-other = "Refreshing opencode's {{.provider}} login in devvm's agent store failed: {{.reason}}. Log in again with opencode on this machine and run devvm agent import --force opencode."
+other = "Refreshing opencode's {{.provider}} login in devvm's agent store failed: {{.reason}}. Run devvm agent login opencode in a VM's folder to log in again."
 
 [login_read_failed]
 description = "file is an agent's login file in devvm's agent store; reason is an error from the system, in English"

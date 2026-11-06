@@ -109,6 +109,21 @@ func AgentKeyChanged(key string) M {
 	return M{id: "agent_key_changed", vals: []val{{"key", key}}}
 }
 
+// AgentKeyCopyFailed is [agent_key_copy_failed]: "Giving {{.vm}} its copy of {{.agent}}'s login failed, though devvm saved the API key. Run devvm in the VM's folder to give it the copy."
+func AgentKeyCopyFailed(agent string, vm string) M {
+	return M{id: "agent_key_copy_failed", vals: []val{{"agent", agent}, {"vm", vm}}}
+}
+
+// AgentKeyEmpty is [agent_key_empty]: "There's no API key to save, because the answer was empty."
+func AgentKeyEmpty() M {
+	return M{id: "agent_key_empty"}
+}
+
+// AgentKeyHowto is [agent_key_howto]: "Paste the {{.provider}} API key for {{.agent}}. devvm keeps it on this machine, and VMs get a placeholder."
+func AgentKeyHowto(agent string, provider string) M {
+	return M{id: "agent_key_howto", vals: []val{{"agent", agent}, {"provider", provider}}}
+}
+
 // AgentKeyMounted is [agent_key_mounted]: "{{.key}} is in a folder that {{.vm}} mounts, so that VM can read it. Keep keys for devvm's SSH agent outside project folders."
 func AgentKeyMounted(key string, vm string) M {
 	return M{id: "agent_key_mounted", vals: []val{{"key", key}, {"vm", vm}}}
@@ -129,9 +144,19 @@ func AgentKeyNotRecorded(key string) M {
 	return M{id: "agent_key_not_recorded", vals: []val{{"key", key}}}
 }
 
+// AgentKeyPrompt is [agent_key_prompt]: "API key:"
+func AgentKeyPrompt() M {
+	return M{id: "agent_key_prompt"}
+}
+
 // AgentKeyRemoved is [agent_key_removed]: "devvm removed {{.key}} from its SSH agent and won't load it again."
 func AgentKeyRemoved(key string) M {
 	return M{id: "agent_key_removed", vals: []val{{"key", key}}}
+}
+
+// AgentKeySaved is [agent_key_saved]: "devvm saved {{.agent}}'s {{.provider}} API key in its agent store, and {{.vm}} uses it now. Every VM with {{.agent}} gets it from its next launch."
+func AgentKeySaved(agent string, provider string, vm string) M {
+	return M{id: "agent_key_saved", vals: []val{{"agent", agent}, {"provider", provider}, {"vm", vm}}}
 }
 
 // AgentKeyUnpinned is [agent_key_unpinned]: "{{.key}} has no fingerprint that devvm recorded, so devvm didn't load the key. Run devvm ssh-agent add {{.key}} to add it again."
@@ -149,14 +174,69 @@ func AgentLoadFailed(key string) M {
 	return M{id: "agent_load_failed", vals: []val{{"key", key}}}
 }
 
+// AgentLoginExited is [agent_login_exited]: "{{.agent}}'s login in {{.vm}} failed, and its output above says why."
+func AgentLoginExited(agent string, vm string) M {
+	return M{id: "agent_login_exited", vals: []val{{"agent", agent}, {"vm", vm}}}
+}
+
+// AgentLoginFailed is [agent_login_failed]: "Logging the agent in failed: {{.reason}}."
+func AgentLoginFailed(reason string) M {
+	return M{id: "agent_login_failed", vals: []val{{"reason", reason}}}
+}
+
+// AgentLoginForward is [agent_login_forward]: "Open the address {{.agent}} shows in a browser on this machine: devvm forwards localhost:{{.port}} to {{.vm}} until the login ends."
+func AgentLoginForward(agent string, port string, vm string) M {
+	return M{id: "agent_login_forward", vals: []val{{"agent", agent}, {"port", port}, {"vm", vm}}}
+}
+
 // AgentLoginImported is [agent_login_imported]: "devvm imported {{.agent}}'s login into {{.file}}."
 func AgentLoginImported(agent string, file string) M {
 	return M{id: "agent_login_imported", vals: []val{{"agent", agent}, {"file", file}}}
 }
 
+// AgentLoginNoAgent is [agent_login_no_agent]: "{{.vm}} has no {{.agent}} to log in with. Run devvm tools add {{.agent}}, then devvm agent login {{.agent}}."
+func AgentLoginNoAgent(agent string, vm string) M {
+	return M{id: "agent_login_no_agent", vals: []val{{"agent", agent}, {"vm", vm}}}
+}
+
+// AgentLoginNotSaved is [agent_login_not_saved]: "{{.agent}}'s login in {{.vm}} ended, but no new login reached devvm's agent store. devvm network log shows each login the VM's proxy saved."
+func AgentLoginNotSaved(agent string, vm string) M {
+	return M{id: "agent_login_not_saved", vals: []val{{"agent", agent}, {"vm", vm}}}
+}
+
+// AgentLoginPortTaken is [agent_login_port_taken]: "A program on this machine has port {{.port}}, which the browser comes back to as you log in. Stop that program, or run devvm agent login {{.agent}} --device-code."
+func AgentLoginPortTaken(agent string, port string) M {
+	return M{id: "agent_login_port_taken", vals: []val{{"agent", agent}, {"port", port}}}
+}
+
+// AgentLoginProviderAlone is [agent_login_provider_alone]: "--provider goes with devvm agent login opencode --api-key. Run devvm agent login opencode --api-key --provider PROVIDER."
+func AgentLoginProviderAlone() M {
+	return M{id: "agent_login_provider_alone"}
+}
+
+// AgentLoginProviderNeeded is [agent_login_provider_needed]: "devvm agent login opencode --api-key needs --provider, one of {{.providers}}."
+func AgentLoginProviderNeeded(providers string) M {
+	return M{id: "agent_login_provider_needed", vals: []val{{"providers", providers}}}
+}
+
 // AgentLoginReadFailed is [agent_login_read_failed]: "Reading the login in {{.file}} failed: {{.reason}}."
 func AgentLoginReadFailed(file string, reason string) M {
 	return M{id: "agent_login_read_failed", vals: []val{{"file", file}, {"reason", reason}}}
+}
+
+// AgentLoginSaved is [agent_login_saved]: "devvm saved {{.agent}}'s ChatGPT login in its agent store, and {{.vm}} uses it now. Every VM with {{.agent}} gets it from its next launch."
+func AgentLoginSaved(agent string, vm string) M {
+	return M{id: "agent_login_saved", vals: []val{{"agent", agent}, {"vm", vm}}}
+}
+
+// AgentLoginSavedFor is [agent_login_saved_for]: "devvm saved {{.agent}}'s ChatGPT login for {{.email}} in its agent store, and {{.vm}} uses it now. Every VM with {{.agent}} gets it from its next launch."
+func AgentLoginSavedFor(agent string, email string, vm string) M {
+	return M{id: "agent_login_saved_for", vals: []val{{"agent", agent}, {"email", email}, {"vm", vm}}}
+}
+
+// AgentLoginStdinAlone is [agent_login_stdin_alone]: "--stdin goes with --api-key. Run devvm agent login {{.agent}} --api-key --stdin."
+func AgentLoginStdinAlone(agent string) M {
+	return M{id: "agent_login_stdin_alone", vals: []val{{"agent", agent}}}
 }
 
 // AgentNoKeys is [agent_no_keys]: "The SSH agent devvm runs has no keys, so git over SSH won't work in VMs that use it. Run devvm ssh-agent add KEY_FILE to add one."
@@ -554,17 +634,17 @@ func CodexLoginKept(keys string) M {
 	return M{id: "codex_login_kept", vals: []val{{"keys", keys}}}
 }
 
-// CodexNoChatgpt is [codex_no_chatgpt]: "The Codex login in devvm's agent store isn't a ChatGPT login any more, so the VM's proxy has none to put in. Log in with codex on this machine and run devvm agent import --force codex, then devvm in the VM's folder."
+// CodexNoChatgpt is [codex_no_chatgpt]: "The Codex login in devvm's agent store isn't a ChatGPT login any more, so the VM's proxy has none to put in. Run devvm agent login codex in the VM's folder."
 func CodexNoChatgpt() M {
 	return M{id: "codex_no_chatgpt"}
 }
 
-// CodexNoKey is [codex_no_key]: "The Codex login in devvm's agent store has no API key any more, so the VM's proxy has none to put in. Log in with codex on this machine and run devvm agent import --force codex, then devvm in the VM's folder."
+// CodexNoKey is [codex_no_key]: "The Codex login in devvm's agent store has no API key any more, so the VM's proxy has none to put in. Run devvm agent login codex --api-key in the VM's folder."
 func CodexNoKey() M {
 	return M{id: "codex_no_key"}
 }
 
-// CodexRefreshFailed is [codex_refresh_failed]: "Refreshing the Codex login in devvm's agent store failed: {{.reason}}. Log in again with codex on this machine and run devvm agent import --force codex."
+// CodexRefreshFailed is [codex_refresh_failed]: "Refreshing the Codex login in devvm's agent store failed: {{.reason}}. Run devvm agent login codex in a VM's folder to log in again."
 func CodexRefreshFailed(reason string) M {
 	return M{id: "codex_refresh_failed", vals: []val{{"reason", reason}}}
 }
@@ -2394,7 +2474,7 @@ func OpencodeLoginWithheld(providers string) M {
 	return M{id: "opencode_login_withheld", vals: []val{{"providers", providers}}}
 }
 
-// OpencodeRefreshFailed is [opencode_refresh_failed]: "Refreshing opencode's {{.provider}} login in devvm's agent store failed: {{.reason}}. Log in again with opencode on this machine and run devvm agent import --force opencode."
+// OpencodeRefreshFailed is [opencode_refresh_failed]: "Refreshing opencode's {{.provider}} login in devvm's agent store failed: {{.reason}}. Run devvm agent login opencode in a VM's folder to log in again."
 func OpencodeRefreshFailed(provider string, reason string) M {
 	return M{id: "opencode_refresh_failed", vals: []val{{"provider", provider}, {"reason", reason}}}
 }
@@ -3617,16 +3697,32 @@ var specs = map[string]spec{
 	"agent_import_nothing":           {},
 	"agent_import_replace":           {fields: []string{"agents"}},
 	"agent_key_changed":              {fields: []string{"key"}},
+	"agent_key_copy_failed":          {fields: []string{"agent", "vm"}},
+	"agent_key_empty":                {},
+	"agent_key_howto":                {fields: []string{"agent", "provider"}},
 	"agent_key_mounted":              {fields: []string{"key", "vm"}},
 	"agent_key_no_fingerprint":       {fields: []string{"key"}},
 	"agent_key_not_found":            {fields: []string{"key"}},
 	"agent_key_not_recorded":         {fields: []string{"key"}},
+	"agent_key_prompt":               {},
 	"agent_key_removed":              {fields: []string{"key"}},
+	"agent_key_saved":                {fields: []string{"agent", "provider", "vm"}},
 	"agent_key_unpinned":             {fields: []string{"key"}},
 	"agent_keys_failed":              {fields: []string{"reason"}},
 	"agent_load_failed":              {fields: []string{"key"}},
+	"agent_login_exited":             {fields: []string{"agent", "vm"}},
+	"agent_login_failed":             {fields: []string{"reason"}},
+	"agent_login_forward":            {fields: []string{"agent", "port", "vm"}},
 	"agent_login_imported":           {fields: []string{"agent", "file"}},
+	"agent_login_no_agent":           {fields: []string{"agent", "vm"}},
+	"agent_login_not_saved":          {fields: []string{"agent", "vm"}},
+	"agent_login_port_taken":         {fields: []string{"agent", "port"}},
+	"agent_login_provider_alone":     {},
+	"agent_login_provider_needed":    {fields: []string{"providers"}},
 	"agent_login_read_failed":        {fields: []string{"file", "reason"}},
+	"agent_login_saved":              {fields: []string{"agent", "vm"}},
+	"agent_login_saved_for":          {fields: []string{"agent", "email", "vm"}},
+	"agent_login_stdin_alone":        {fields: []string{"agent"}},
 	"agent_no_keys":                  {},
 	"agent_on_risk":                  {fields: []string{"vm"}},
 	"agent_save_ask":                 {fields: []string{"vm"}},

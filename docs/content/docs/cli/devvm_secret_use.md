@@ -1,6 +1,6 @@
 ---
 title: devvm secret use
-weight: 50
+weight: 51
 ---
 
 Let this folder's VM use a secret

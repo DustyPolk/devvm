@@ -1,0 +1,142 @@
+# devvm agent login: an agent's login in the folder's VM, launched as
+# devvm host does, saved in devvm's store by the VM's proxy; or an API key
+# saved in the store from here, the running VM given its copy of the login
+# with placeholders and its proxy the binding at once. A login that saves
+# nothing fails, and so does one whose agent fails. (The browser login's
+# forward of localhost:1455 is tested in internal/vmssh and end to end.)
+
+# Usage errors, before anything runs.
+! exec devvm agent login
+stderr '^devvm: arg_missing args=AGENT command=devvm agent login$'
+! exec devvm agent login claude
+stderr '^devvm: arg_not_choice choices=codex, opencode command=devvm agent login given=claude$'
+! exec devvm agent login codex --stdin
+stderr '^devvm: agent_login_stdin_alone agent=codex$'
+! exec devvm agent login codex --api-key --provider anthropic
+stderr '^devvm: agent_login_provider_alone$'
+! exec devvm agent login opencode --provider anthropic
+stderr '^devvm: agent_login_provider_alone$'
+! exec devvm agent login opencode --api-key
+stderr '^devvm: agent_login_provider_needed providers=anthropic, openai, openrouter$'
+! exec devvm agent login opencode --api-key --provider groq
+stderr '^devvm: arg_not_choice choices=anthropic, openai, openrouter command=--provider given=groq$'
+! exec devvm agent login codex --api-key --device-code
+stderr '^devvm: flags_exclusive'
+
+# No VM.
+project none
+! exec devvm agent login codex --device-code
+stderr '^devvm: no_vm dir=\S*/none$'
+
+# A VM without the agent.
+project plain
+exec devvm --network open --no-git-protect --agents none
+! exec devvm agent login codex --device-code
+stderr '^devvm: agent_login_no_agent agent=codex vm=devvm-plain-[0-9a-f]{14}$'
+
+# A VM with Codex and opencode: Codex's device-code login runs in it, its
+# login kept in its file; the stub saves no login, so devvm says so.
+project agents
+exec devvm --network open --no-git-protect --agents codex,opencode
+vm_name AG agents
+stub_reset
+! exec devvm agent login codex --device-code
+stderr '^devvm: agent_login_not_saved agent=codex vm=devvm-agents-[0-9a-f]{14}$'
+stub_calls
+stdout '''bash'' ''-lc'' ''[^'']*devvm-login\.pid" && exec "\$@"'' ''devvm'' ''codex'' ''-c'' ''cli_auth_credentials_store="file"'' ''login'' ''--device-auth''$'
+! stdout ssh
+stub_reset
+! exec devvm agent login opencode --device-code
+stderr '^devvm: agent_login_not_saved agent=opencode vm=devvm-agents-[0-9a-f]{14}$'
+stub_calls
+stdout '''opencode'' ''auth'' ''login'' ''--provider'' ''openai'' ''--method'' ''ChatGPT Pro/Plus \(headless\)''$'
+
+# In a browser: localhost:1455 is forwarded to the VM while the login
+# runs, and not afterwards.
+stub_reset
+! exec devvm agent login codex
+stdout '^==> agent_login_forward agent=codex port=1455 vm=devvm-agents-[0-9a-f]{14}$'
+stderr '^devvm: agent_login_not_saved agent=codex vm=devvm-agents-[0-9a-f]{14}$'
+stub_calls
+stdout '''codex'' ''-c'' ''cli_auth_credentials_store="file"'' ''login''$'
+! exec nc -z 127.0.0.1 1455
+
+# The agent's login fails: said, nothing more.
+exec sh -c 'echo "''--device-auth''" > "$STUB_DIR/shell-fails-on"'
+! exec devvm agent login codex --device-code
+stderr '^devvm: agent_login_exited agent=codex vm=devvm-agents-[0-9a-f]{14}$'
+rm $STUB_DIR/shell-fails-on
+
+# An API key, read from a line: the store keeps it, only yours to read,
+# the VM gets its copy of the login, and its proxy the binding at once.
+stub_reset
+stdin $WORK/key
+exec devvm agent login codex --api-key --stdin
+stdout '^==> agent_key_saved agent=codex provider=openai vm=devvm-agents-[0-9a-f]{14}$'
+grep '"OPENAI_API_KEY": "sk-testfake-codex"' $DATA/logins/codex/.codex/auth.json
+grep '"auth_mode": "apikey"' $DATA/logins/codex/.codex/auth.json
+[!darwin] exec sh -c 'stat -c %a "$DATA/logins/codex/.codex/auth.json"'
+[darwin] exec sh -c 'stat -f %Lp "$DATA/logins/codex/.codex/auth.json"'
+stdout '^600$'
+grep '"name":"codex-key"' $AG_dir/run/secrets.json
+stub_calls
+stdout '''sh'' ''-c'' ''f="\$HOME/\$1".*'' ''sh'' ''.codex/auth.json''$'
+! stdout 'sk-testfake'
+
+# opencode's key for a provider: the store keeps it beside the others.
+stdin $WORK/key2
+exec devvm agent login opencode --api-key --provider anthropic --stdin
+stdout '^==> agent_key_saved agent=opencode provider=anthropic vm=devvm-agents-[0-9a-f]{14}$'
+grep '"key": "sk-ant-testfake"' $DATA/logins/opencode/.local/share/opencode/auth.json
+grep '"name":"opencode-anthropic"' $AG_dir/run/secrets.json
+
+# The VM's copy can't be written: the key is saved, and devvm says so.
+exec sh -c 'echo "''.codex/auth.json''" > "$STUB_DIR/shell-fails-on"'
+stdin $WORK/key
+! exec devvm agent login codex --api-key --stdin
+stderr '^devvm: agent_key_copy_failed agent=codex vm=devvm-agents-[0-9a-f]{14}$'
+rm $STUB_DIR/shell-fails-on
+
+# Without a terminal, devvm can't ask for the key, and names --stdin.
+! exec devvm agent login codex --api-key
+stderr '^agent_key_prompt\ndevvm: no_input answer=--stdin$'
+
+# A login the VM's proxy saves while it runs: devvm names the account.
+# Meanwhile another login finds localhost:1455 taken, and is refused.
+exec sh -c 'printf cli_auth_credentials_store > "$STUB_DIR/shell-waits-on"'
+exec devvm agent login codex &l&
+wait_file $STUB_DIR/waiting
+! exec devvm agent login codex
+stderr '^devvm: agent_login_port_taken agent=codex port=1455$'
+cp $WORK/chatgpt.json $DATA/logins/codex/.codex/auth.json
+rm $STUB_DIR/shell-waits-on
+wait l
+stdout '^==> agent_login_saved_for agent=codex email=t@devvm\.test vm=devvm-agents-[0-9a-f]{14}$'
+! exec nc -z 127.0.0.1 1455
+
+# Interrupted: the forward goes, and so does the agent's login in the VM.
+exec sh -c 'printf cli_auth_credentials_store > "$STUB_DIR/shell-waits-on"'
+rm $STUB_DIR/waiting
+stub_reset
+! exec devvm agent login codex &i&
+wait_file $STUB_DIR/waiting
+kill -INT i
+wait i
+rm $STUB_DIR/shell-waits-on
+! exec nc -z 127.0.0.1 1455
+stub_calls
+stdout 'devvm-login\.pid"; p=\$\(cat "\$f" 2>/dev/null\) && kill "\$p"'
+
+# An empty key is refused.
+stdin $WORK/empty
+! exec devvm agent login codex --api-key --stdin
+stderr '^devvm: agent_key_empty$'
+
+-- key --
+sk-testfake-codex
+-- key2 --
+sk-ant-testfake
+-- chatgpt.json --
+{"tokens": {"id_token": "e30.eyJlbWFpbCI6InRAZGV2dm0udGVzdCJ9.sig", "access_token": "e30.e30.sig", "refresh_token": "rt"}}
+-- empty --
+

@@ -1,6 +1,6 @@
 ---
 title: devvm gc
-weight: 12
+weight: 13
 ---
 
 Delete stale images, unused tools, old files and the Nix cache over its cap

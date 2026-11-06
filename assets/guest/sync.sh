@@ -201,6 +201,10 @@ if command -v codex >/dev/null; then
   mkdir -p ~/.codex && touch ~/.codex/config.toml
   grep -q '^\[analytics\]' ~/.codex/config.toml || printf '\n[analytics]\nenabled = false\n' >> ~/.codex/config.toml
   grep -q '^\[otel\]' ~/.codex/config.toml || printf '\n[otel]\nmetrics_exporter = "none"\n' >> ~/.codex/config.toml
+  # Its login stays in ~/.codex/auth.json, which holds placeholders, never in a keyring: a top-level
+  # key, so it goes first, in place of any other choice.
+  { echo 'cli_auth_credentials_store = "file"'; grep -v '^cli_auth_credentials_store[[:space:]]*=' ~/.codex/config.toml || true; } > ~/.codex/config.toml.devvm &&
+    mv ~/.codex/config.toml.devvm ~/.codex/config.toml
 fi
 
 # The VM's proxy (DEVVM_PROXY set): Lima's env: already puts the proxy variables in /etc/environment;

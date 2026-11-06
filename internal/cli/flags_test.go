@@ -255,7 +255,7 @@ func folderCommands() []string {
 		"devvm network rm", "devvm network log", "devvm ssh-agent", "devvm git-protect", "devvm clone",
 		"devvm secret use", "devvm secret unuse", "devvm layer add", "devvm layer rm", "devvm group", "devvm group join",
 		"devvm group leave", "devvm link", "devvm link add", "devvm link rm", "devvm link publish", "devvm link unpublish",
-		"devvm agent save",
+		"devvm agent save", "devvm agent login",
 	}
 }
 

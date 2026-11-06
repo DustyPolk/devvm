@@ -7,6 +7,8 @@ package secrets
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -157,17 +159,52 @@ func (s *Store) CaptureRequest(kind, salt, ctype string, body []byte) (out, answ
 // folder kept out of backups, and returns the reply the VM gets, with
 // placeholders ending in salt.
 func (s *Store) Capture(ctx context.Context, kind, salt, ctype string, req, reply []byte) ([]byte, error) {
-	if !slices.Contains(loginKinds, kind) {
-		return nil, msg.NoSecret(kind)
-	}
-	dir := s.Dirs.AgentLogins(kind)
-	if err := state.PrivateDir(dir); err != nil {
-		return nil, err
-	}
-	if err := s.ExcludeFromBackup(ctx, dir); err != nil {
+	if err := s.loginsDir(ctx, kind); err != nil {
 		return nil, err
 	}
 	return s.captureFile(kind, salt).Capture(ctype, req, reply)
+}
+
+// loginsDir readies the agent's logins folder in devvm's store: the
+// user's alone, out of backups.
+func (s *Store) loginsDir(ctx context.Context, kind string) error {
+	if !slices.Contains(loginKinds, kind) {
+		return msg.NoSecret(kind)
+	}
+	dir := s.Dirs.AgentLogins(kind)
+	if err := state.PrivateDir(dir); err != nil {
+		return err
+	}
+	return s.ExcludeFromBackup(ctx, dir)
+}
+
+// SaveKey saves an API key as the agent's login in devvm's store, for
+// opencode as provider's (agentlogin.File.SetKey), the agent's logins
+// folder kept out of backups.
+func (s *Store) SaveKey(ctx context.Context, kind, provider, key string) error {
+	if err := s.loginsDir(ctx, kind); err != nil {
+		return err
+	}
+	return s.login(kind, "").SetKey(provider, key)
+}
+
+// LoginSum is a hash of the agent's login file in devvm's store, "" when
+// it can't be read: what tells a login that changed it from one that
+// didn't.
+func (s *Store) LoginSum(kind string) string {
+	data, err := proxy.ReadRegular(LoginFile(s.Dirs, kind), 64<<20)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// ChatGPT is the ChatGPT login the agent's login file in devvm's store
+// holds, with its account's email when it names one
+// (agentlogin.File.ChatGPT).
+func (s *Store) ChatGPT(kind string) (email string, ok bool, err error) {
+	return s.login(kind, "").ChatGPT()
 }
 
 // HasLogin reports whether devvm's store has a login file for the agent.
