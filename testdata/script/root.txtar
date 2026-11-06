@@ -4,7 +4,15 @@ stdout '^Usage:'
 stdout '^  devvm \[flags\]$'
 ! stdout 'IMAGE\]'
 ! stderr .
+! stdout '❯'
 cp stdout help.txt
+
+# Without names mode, still without a terminal: no logo either.
+env DEVVM_MESSAGES=
+exec devvm --help
+stdout '^Usage:'
+! stdout '❯ devvm'
+env DEVVM_MESSAGES=names
 
 # So do devvm help and -h; devvm help COMMAND prints the command's.
 exec devvm help

@@ -33,6 +33,8 @@ type Reporter interface {
 	// CanPick reports whether the picker is shown, which keeps its
 	// choices as they are when it isn't.
 	CanPick() bool
+	// Logo prints devvm's logo, once a run, where someone watches stdout.
+	Logo()
 
 	// LogNote says where the run log is, once a run; LogWriter is the run
 	// log, for lines that aren't messages; LoggedCmd runs a command into
@@ -138,6 +140,9 @@ func (f *Fake) ask(q Question) error {
 
 // CanPick is Picks.
 func (f *Fake) CanPick() bool { return f.Picks }
+
+// Logo prints nothing.
+func (f *Fake) Logo() {}
 
 // LogNote says nothing.
 func (f *Fake) LogNote() {}

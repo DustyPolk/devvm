@@ -62,6 +62,8 @@ type UI struct {
 	interruptGrace time.Duration
 
 	interrupted atomic.Bool
+	// logoShown is set once Logo printed the logo.
+	logoShown atomic.Bool
 	// dataOnly sends what Say, Info and LogNote print to stderr, so
 	// stdout gets only data (DataOnly).
 	dataOnly atomic.Bool

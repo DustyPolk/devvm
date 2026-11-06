@@ -14,15 +14,18 @@ cd ~/some-project
 devvm
 ```
 
-The first time, devvm starts with a few questions that set its defaults for every new VM and for its base image, and it says so before the first one:
+The first time, devvm shows its logo, then a few questions that set its defaults for every new VM and for its base image, and it says so before the first one:
 
 ```text
+╭──────────╮
+│ ❯ devvm ╭┤
+╰─────────██
 ==> These first questions set devvm's defaults for every new VM and its base image.
 ```
 
 devvm asks for the CPUs and memory that new VMs get first. It shows how many CPUs and how much memory this machine has, and offers the base image's 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them. Press Enter to keep each value, or type another, and devvm asks again when this machine can't give what you typed. devvm saves what you type as the size new VMs get, which you can change later with `devvm setup` or `devvm size -g`, and when you keep both values it saves nothing ([choosing new VMs' size](../using/ports-size.md#choosing-new-vms-size)). Then it asks which coding agents new VMs get, which you can change later with `devvm setup --agents`. Last, it asks which optional extras the base image gets, such as oh-my-bash and fzf, which every VM has and which you can change later with `devvm setup --features`.
 
-Then devvm shows what this folder's new VM gets and asks whether you want to change it. Your answers here are for this VM alone:
+Then devvm shows what this folder's new VM gets and asks whether you want to change it. Your answers here are for this VM alone. Every later folder's new VM starts here, with the logo above its summary, which devvm shows only when its output goes to a terminal:
 
 ```text
 ==> This folder's new VM, devvm-some-project-71a99b1076d92c, gets:

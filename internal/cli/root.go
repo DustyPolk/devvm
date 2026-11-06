@@ -71,7 +71,7 @@ func NewRoot(u *ui.UI) *cobra.Command {
 		newLinkCmd(a), newGroupCmd(a), newLinksCmd(a), newRetentionCmd(a), newVersionCmd(u), newCompletionCmd(u), newUpgradeCmd(a))
 	addCompletions(root, a)
 	checkCommands(root)
-	addHelp(root)
+	addHelp(root, u.Logo)
 	addGroups(root)
 	addDocs(root)
 	return root

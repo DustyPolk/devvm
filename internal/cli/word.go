@@ -62,8 +62,9 @@ type wordPanic struct{ err usageError }
 // addHelp gives root devvm's own help command, devvm help [COMMAND], and
 // a help that refuses a word that isn't a command, as devvm WORD does:
 // devvm help WORD and devvm WORD --help fail the same way instead of
-// printing the root's help.
-func addHelp(root *cobra.Command) {
+// printing the root's help. The root's help starts with logo (the UI's,
+// shown only in a terminal), which the CLI reference's pages never get.
+func addHelp(root *cobra.Command, logo func()) {
 	help := &cobra.Command{
 		Use:   "help [COMMAND]",
 		Short: "Print the help for devvm or a command",
@@ -104,6 +105,7 @@ func addHelp(root *cobra.Command) {
 					panic(wordPanic{usage(err)})
 				}
 			}
+			logo()
 		}
 		shown(c, args)
 	})

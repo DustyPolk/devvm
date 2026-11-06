@@ -383,6 +383,7 @@ func (e creation) firstRun(o Options, size Size, b *build.Env) (settings.Default
 		return def, err
 	}
 	if !def.Features.Chosen || e.asksAgents(o, def) {
+		e.Logo()
 		e.Info(msg.FirstRunDefaults())
 	}
 	if err := e.firstRunSize(size, def); err != nil {
@@ -527,6 +528,7 @@ func (e creation) choose(o Options, f project.Folder, b backend.Backend, def set
 		s.dc = n.dc.File
 	}
 	lines := s.lines()
+	e.Logo() // once a run: after the first run's questions, not again
 	e.Info(lines[0])
 	for _, m := range lines[1:] {
 		e.Say(m)

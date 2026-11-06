@@ -95,6 +95,24 @@ exec devvm --no-git-protect --no-input
 ! stderr new_vm_customize
 stdout '^new_vm_choose$'
 
+# The logo, out of names mode: once, above the first run's line, and
+# above the summary of a later new VM's; not with --no-input.
+env DEVVM_MESSAGES=
+rm $DATA/settings.json
+project logo
+ttyin -stdin $WORK/first.txt
+exec devvm --no-git-protect --network open
+stdout '\A╭──────────╮\n│ ❯ devvm ╭┤\n╰─────────██\n==> These first questions'
+! stdout '(?s)❯ devvm.*❯ devvm'
+project logo2
+ttyin -stdin $WORK/enter.txt
+exec devvm --no-git-protect
+stdout '\A╭──────────╮\n│ ❯ devvm ╭┤\n╰─────────██\n==> This folder''s new VM'
+project logo3
+exec devvm --no-git-protect --no-input
+! stdout '❯ devvm'
+env DEVVM_MESSAGES=names
+
 -- first.txt --
 2
 
