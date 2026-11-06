@@ -1,6 +1,6 @@
 {{- /* The install shortcode's tabs, written here once for its HTML and its Markdown copy: macOS's Homebrew,
    then Linux's install script, each a name and its Markdown. Takes the page and the shortcode's position. */ -}}
-{{- $script := "curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash" -}}
+{{- $script := "curl -fsSL https://github.com/devvmhq/devvm/releases/latest/download/install.sh | bash" -}}
 {{- $macNote := "The install script in the Linux tab also works on macOS." -}}
 {{- with site.GetPage "/docs/getting-started/install" -}}
   {{- if ne $.page . -}}

@@ -445,7 +445,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 }
 
 // IssuesURL is devvm's issue tracker, which the root's help ends with.
-const IssuesURL = "https://github.com/w3cj/devvm/issues"
+const IssuesURL = "https://github.com/devvmhq/devvm/issues"
 
 // commandDocs links each command users can run, by its path, to the user
 // page that covers it, as docs does: "page#anchor". A command's help ends

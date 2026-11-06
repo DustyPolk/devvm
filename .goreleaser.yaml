@@ -54,5 +54,5 @@ changelog:
 
 release:
   github:
-    owner: w3cj
+    owner: devvmhq
     name: devvm

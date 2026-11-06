@@ -4,7 +4,7 @@ devvm's job is to keep what runs in a VM away from your machine. The [security m
 
 ## Report a vulnerability
 
-Report a vulnerability privately through [GitHub's vulnerability reporting](https://github.com/w3cj/devvm/security/advisories/new), not in a public issue. Include the devvm version from `devvm --version`, the host OS, the Lima version and the steps to reproduce it.
+Report a vulnerability privately through [GitHub's vulnerability reporting](https://github.com/devvmhq/devvm/security/advisories/new), not in a public issue. Include the devvm version from `devvm --version`, the host OS, the Lima version and the steps to reproduce it.
 
 ## Verifying a release
 

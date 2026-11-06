@@ -40,7 +40,7 @@ menu:
         type: search
     - name: GitHub
       weight: 3
-      url: https://github.com/w3cj/devvm
+      url: https://github.com/devvmhq/devvm
       params:
         icon: dinkie-github
 
@@ -71,7 +71,7 @@ params:
     type: flexsearch
   editURL:
     enable: true
-    base: https://github.com/w3cj/devvm/edit/main/docs/content
+    base: https://github.com/devvmhq/devvm/edit/main/docs/content
   # Mermaid, for diagrams: a pinned version, fetched when the site is built (layouts/_partials/scripts/mermaid.html).
   mermaid:
     base: https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist

@@ -6,7 +6,7 @@ contextMenu: false
 ---
 
 <!-- markdownlint-disable-next-line MD034 -- a shortcode's parameter, not a bare URL -->
-{{< hextra/hero-badge link="https://github.com/w3cj/devvm" >}}
+{{< hextra/hero-badge link="https://github.com/devvmhq/devvm" >}}
   Free and open source
 {{< /hextra/hero-badge >}}
 
@@ -144,7 +144,7 @@ No. You start the agent in the VM's shell, so it runs in the VM, and you never i
 
 ### Is it free?
 
-Yes. `devvm` is open source under the [MIT license](https://github.com/w3cj/devvm/blob/main/LICENSE).
+Yes. `devvm` is open source under the [MIT license](https://github.com/devvmhq/devvm/blob/main/LICENSE).
 
 ## Start coding in a sandbox {icon="prompt"}
 

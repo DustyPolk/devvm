@@ -60,7 +60,7 @@ else
 fi
 git cat-file -e "$commit:install.sh" 2>/dev/null || die "no install.sh in $ref"
 command -v goreleaser >/dev/null || die "needs goreleaser (mise exec -- scripts/release.sh)"
-url=${DEVVM_RELEASE_URL:-https://github.com/w3cj/devvm/releases/download/v$v}
+url=${DEVVM_RELEASE_URL:-https://github.com/devvmhq/devvm/releases/download/v$v}
 
 # GoReleaser builds a clone of the commit, so only what's committed goes in, whatever this checkout
 # holds. The version is VERSION's, for HEAD too (DEVVM_VERSION, in .goreleaser.yaml's snapshot).

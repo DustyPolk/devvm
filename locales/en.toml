@@ -2585,7 +2585,7 @@ description = "a status step: devvm upgrade runs Homebrew"
 other = "running brew upgrade devvm"
 
 [upgrade_no_latest]
-description = "url is the repository whose releases devvm upgrade reads, such as https://github.com/w3cj/devvm"
+description = "url is the repository whose releases devvm upgrade reads, such as https://github.com/devvmhq/devvm"
 other = "The newest release at {{.url}}/releases couldn't be found. Check your connection, then run devvm upgrade again."
 
 [upgrade_latest_is]

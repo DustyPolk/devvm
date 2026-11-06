@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install or upgrade devvm, then offer to install what it needs (Lima; on Linux, QEMU and KVM access).
-#   curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash
+#   curl -fsSL https://github.com/devvmhq/devvm/releases/latest/download/install.sh | bash
 #   ... | bash -s -- --yes            answer yes to every question
 #   ... | bash -s -- --version 0.1.0  a given release (also DEVVM_VERSION)
 #   ... | bash -s -- --no-deps        devvm only
@@ -15,7 +15,7 @@ set -euo pipefail
 # SHA256SUMS is signed with (packaging/minisign.pub).
 release_version=""
 minisign_key=""
-repo_url=${DEVVM_REPO_URL:-https://github.com/w3cj/devvm}
+repo_url=${DEVVM_REPO_URL:-https://github.com/devvmhq/devvm}
 
 # Lima, when neither it nor Homebrew is there: its latest release, checked against its SHA256SUMS.
 lima_url=${DEVVM_LIMA_URL:-https://github.com/lima-vm/lima}

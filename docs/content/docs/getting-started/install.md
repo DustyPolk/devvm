@@ -105,7 +105,7 @@ If you installed devvm with the install script instead, run the script again, as
 {{< os-tab name="Linux" >}}
 
 ```sh
-curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/devvmhq/devvm/releases/latest/download/install.sh | bash
 ```
 
 Running the install script again installs the newest release.

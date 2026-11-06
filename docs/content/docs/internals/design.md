@@ -3,7 +3,7 @@ title: Design notes
 weight: 12
 ---
 
-For contributors: why devvm is built the way it is, what was tried and dropped, and what's still open. How each part works is on its own page; the layout and rules are in [AGENTS.md](https://github.com/w3cj/devvm/blob/main/AGENTS.md).
+For contributors: why devvm is built the way it is, what was tried and dropped, and what's still open. How each part works is on its own page; the layout and rules are in [AGENTS.md](https://github.com/devvmhq/devvm/blob/main/AGENTS.md).
 
 ## Emulated features
 

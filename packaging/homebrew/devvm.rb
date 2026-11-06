@@ -2,7 +2,7 @@
 # the result to dist/devvm.rb. Homebrew reads the version from the URL (devvm-<version>.tar.gz).
 class Devvm < Formula
   desc "Isolated Lima VM per project folder, with shared read-only toolchains"
-  homepage "https://github.com/w3cj/devvm"
+  homepage "https://github.com/devvmhq/devvm"
   url "@URL@"
   sha256 "@SHA256@"
   license "MIT"

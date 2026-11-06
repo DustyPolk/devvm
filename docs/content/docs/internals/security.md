@@ -80,4 +80,4 @@ devvm names such files when it makes a VM and once a VM is stopped, by `devvm st
 
 Each defense on this page leaves something open, such as what allowed hosts and secrets permit, open VMs, files the VM writes into the project folder, links between VMs, and escapes from the VM itself through bugs in Lima, Apple's Virtualization framework or QEMU. [Attack vectors](../safety/attack-vectors.md) keeps the one list of them, under [Narrowed, not closed](../safety/attack-vectors.md#narrowed-not-closed) and [Left to you](../safety/attack-vectors.md#left-to-you), and each entry there links back to its mechanism.
 
-Found a way out of a VM? See [SECURITY.md](https://github.com/w3cj/devvm/blob/main/SECURITY.md).
+Found a way out of a VM? See [SECURITY.md](https://github.com/devvmhq/devvm/blob/main/SECURITY.md).

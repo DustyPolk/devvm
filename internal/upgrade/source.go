@@ -16,7 +16,7 @@ import (
 
 // Repo is devvm's repository, whose GitHub releases devvm upgrade
 // installs from, as install.sh does.
-const Repo = "https://github.com/w3cj/devvm"
+const Repo = "https://github.com/devvmhq/devvm"
 
 // Caps on what a release's server sends before it's checked.
 const (

@@ -290,7 +290,7 @@ echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  $3"
 echo "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  $1"
 -- version.sh --
 . "$WORK/lib.sh"
-curl() { echo "https://github.com/w3cj/devvm/releases/tag/v0.3.0"; }
+curl() { echo "https://github.com/devvmhq/devvm/releases/tag/v0.3.0"; }
 version=v0.2.0 release_version=0.1.5
 resolve_version
 version=""
@@ -299,8 +299,8 @@ release_version=""
 resolve_version
 for v in 0.1.0 1.20.3 2.0.0-rc.1; do valid_version "$v" && echo "valid $v"; done
 for v in "" 1.2 "1.2.3/../x" "1.2.3 x" "1.2.3';id"; do valid_version "$v" || echo "invalid '$v'"; done
-curl() { echo "https://github.com/w3cj/devvm/releases/tag/v1.2.3%2F..%2Fx"; }
-(latest_release https://github.com/w3cj/devvm) 2>/dev/null || echo "odd latest refused"
+curl() { echo "https://github.com/devvmhq/devvm/releases/tag/v1.2.3%2F..%2Fx"; }
+(latest_release https://github.com/devvmhq/devvm) 2>/dev/null || echo "odd latest refused"
 -- version.want --
 0.2.0
 0.1.5

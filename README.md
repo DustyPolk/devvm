@@ -17,7 +17,7 @@ brew install w3cj/tap/devvm
 On Linux, install it with the install script, which also works on macOS and asks before it installs Lima, QEMU or access to `/dev/kvm`:
 
 ```sh
-curl -fsSL https://github.com/w3cj/devvm/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/devvmhq/devvm/releases/latest/download/install.sh | bash
 ```
 
 Then run `devvm doctor`, which checks what devvm needs on your machine and says how to get anything that's missing. [Installing](https://devvm.dev/docs/getting-started/install/) has the full list of requirements, the install script's options, and how to upgrade and uninstall devvm.
