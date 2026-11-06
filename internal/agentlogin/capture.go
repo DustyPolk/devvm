@@ -8,7 +8,9 @@ package agentlogin
 // host refreshes the login. The VM's reply says its access token lasts until farFuture, so its
 // agent never refreshes it.
 //
-// Endpoints and replies (checked against upstream, 2026-11): Codex and opencode both post to
+// Endpoints and replies (checked against upstream, 2026-11): Codex and opencode (2's Codex
+// logins, chatgpt-browser and chatgpt-headless; its chatgpt-token-sharing posts to
+// /api/accounts/oauth/token, whose replies the proxy's guard refuses) both post to
 // auth.openai.com/oauth/token, as a form, with OpenAI's client ID: authorization_code (the
 // browser's code, or the device flow's) and refresh_token (Codex sends JSON) grants, answered
 // with id_token, access_token, refresh_token and expires_in. Codex then exchanges the id_token for

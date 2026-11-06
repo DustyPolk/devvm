@@ -202,7 +202,13 @@ func TestCapturePaths(t *testing.T) {
 	if got := te.requests(); len(got) != len(spellings) || slices.ContainsFunc(got, func(r string) bool { return !strings.HasPrefix(r, "POST /oauth/token grant_type") }) {
 		t.Errorf("the endpoint got %q", got)
 	}
-	for _, r := range [][2]string{{http.MethodGet, "/oauth/token"}, {http.MethodPost, "/oauth/tokens"}, {http.MethodPut, "/oauth/token"}, {http.MethodPost, "/api/oauth/token"}} {
+	for _, r := range [][2]string{
+		{http.MethodGet, "/oauth/token"},
+		{http.MethodPost, "/oauth/tokens"},
+		{http.MethodPut, "/oauth/token"},
+		{http.MethodPost, "/api/oauth/token"},
+		{http.MethodPost, "/api/accounts/oauth/token"},
+	} { // opencode 2's Sign in with ChatGPT
 		for _, body := range []string{"x", "text"} {
 			if code, got := post(t, c, r[0], u+r[1], body); code != http.StatusBadGateway || strings.Contains(got, "real-") {
 				t.Errorf("%s %s %s: %d %q (tokens not captured: refused)", r[0], r[1], body, code, got)

@@ -16,6 +16,9 @@
 // access_token, refresh_token, account_id} plus last_refresh; it decodes id_token's claims and
 // access_token's exp (never the signatures) and refreshes 5 minutes before exp. opencode keeps one
 // entry per provider: {"type":"api","key"} or {"type":"oauth","access","refresh","expires" (ms)}.
+// opencode 2 (checked at v2.2.5) keeps its logins in its SQLite database instead, and imports
+// auth.json, in that format, once, as it makes its credential table; devvm's store keeps the
+// file, which a VM's opencode reads as it first runs (OpencodeKeyImport for a key saved later).
 package agentlogin
 
 import (
@@ -340,6 +343,12 @@ func (f File) codexGet(ctx context.Context, name string) (string, error) {
 
 // --- opencode ---
 
+// opencodePlaceholder is the VM's in place of a provider's API key or token, but OpenAI's OAuth
+// login's (openaiPlaceholder).
+func opencodePlaceholder(provider, salt string) string {
+	return salted("devvm-proxy-managed-opencode-"+provider, salt)
+}
+
 func opencodeBindings(m map[string]any, salt string) []proxy.Binding {
 	var bs []proxy.Binding
 	for id := range m {
@@ -356,7 +365,7 @@ func opencodeBindings(m map[string]any, salt string) []proxy.Binding {
 		if !ok {
 			continue
 		}
-		ph := salted("devvm-proxy-managed-opencode-"+id, salt)
+		ph := opencodePlaceholder(id, salt)
 		if id == "openai" && str(e, "type") == "oauth" {
 			ph = openaiPlaceholder(str(e, "access"), salt) // opencode reads the account from it
 		}

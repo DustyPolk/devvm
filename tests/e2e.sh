@@ -21,7 +21,7 @@
 #                image and an unused tool image, keeping base and a VM named like an image; tools resolves
 #                the shared tools' newest versions (every other section has tests/e2e-mise.lock's), makes a node
 #                VM and checks its shared tools, devvm tools, tools update, rm and add, devvm node an
-#                unknown command and --tools ignored on it; network makes a VM with Claude Code and Codex, with
+#                unknown command and --tools ignored on it; network makes a VM with Claude Code, Codex and opencode, with
 #                network policy and checks it reaches only its allowlist, devvm network, its log and rules, its tokens
 #                stay on the host (devvm secret too), open too, and the self-check, on relaunch too; devvm stop
 #                stops its proxy; nix builds the nix layer behind a company proxy (no proxy left in its

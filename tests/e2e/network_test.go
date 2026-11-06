@@ -68,6 +68,7 @@ func networkSection(s *S) {
 	netTokens(n)
 	netCapture(n)
 	netCodexLogin(n)
+	netOpencodeLogin(n)
 	netClaudeLogins(n)
 	netSave(n)
 	netGithub(n)
@@ -136,7 +137,7 @@ func netLaunch(n *netRun) {
 	})
 	n.n, _ = s.NewProject("net")
 	w, werr := WatchProcs(s)
-	n.vm, _, _ = launchWith(s, n.n, n.home(fakeToken), "--network", "allowlist", "--no-git-protect", "--agents", "claude,codex")
+	n.vm, _, _ = launchWith(s, n.n, n.home(fakeToken), "--network", "allowlist", "--no-git-protect", "--agents", "claude,codex,opencode")
 	if werr == nil {
 		w.Stop()
 	}
@@ -877,6 +878,52 @@ func netCodexLogin(n *netRun) {
 		}
 		return nil
 	})
+}
+
+// devvm agent login opencode --device-code: the real opencode 2 logs in
+// in the VM with its Codex device code login, the fake endpoint
+// answering its code and the code's exchange, whose reply the VM's proxy
+// captures, so opencode's database in the VM holds placeholders alone.
+func netOpencodeLogin(n *netRun) {
+	s := n.s
+	s.Check("devvm agent login opencode --device-code logs opencode 2 in in the VM, and the store saves the login", func() error {
+		p, err := s.Start(devvmCmd(s, n.n, "", n.tokenEnv("DEVVM_MESSAGES=names"), "agent", "login", "opencode", "--device-code"))
+		if err != nil {
+			return err
+		}
+		if what := n.opencodeLoggedIn(p); what != "" {
+			p.Stop()
+			return errors.New(what + "\n" + n.loginWhy(p))
+		}
+		return nil
+	}, Tail(60))
+}
+
+// opencodeLoggedIn is the opencode login's first step that failed,
+// nothing when none.
+func (n *netRun) opencodeLoggedIn(p *Proc) string {
+	s := n.s
+	if rc, ok := waitProc(p, 2*time.Minute); !ok || rc != 0 {
+		return "devvm agent login ends, saying what the store saved"
+	}
+	// The fake's access token names no email, and opencode keeps no id_token.
+	if !Matches(p.Out(), `^==> agent_login_saved agent=opencode vm=`) {
+		return "it says the store saved the login"
+	}
+	a := filepath.Join(n.logins, "opencode", ".local", "share", "opencode", "auth.json")
+	if jsonFileAt(a, "openai.refresh") != "rt-e2efake-capture" || !strings.Contains(jsonFileAt(a, "openai.access"), "e2efake") {
+		return "the store has the real tokens"
+	}
+	if has, err := vmHas(s, n.vm, true, "opencode auth export openai", "devvm-placeholder"); err != nil || !has {
+		return "the VM's opencode holds its login's placeholders"
+	}
+	if has, err := vmHas(s, n.vm, true, "opencode auth export openai", "e2efake"); err != nil || has {
+		return "the VM's opencode holds no token of the login"
+	}
+	if !lineWith(readText(n.events), `"event":"login","host":"auth.openai.com","port":443,"method":"POST","path":"/oauth/token","login":"opencode"`) {
+		return "the events name opencode's login"
+	}
+	return ""
 }
 
 // codexLoggedIn is the Codex login's first step that failed, nothing when
@@ -1914,6 +1961,14 @@ def answer(q):
     if g.endswith("token-exchange") and q.get("subject_token", [""])[0] == ID:
         return {"access_token": "sk-e2efake-captured-key"}
     return None
+# The device code login's two requests before its code's, as opencode 2's Codex device code login
+# sends them (JSON): the code to show, then the code's exchange, answered at once.
+def device(path):
+    if path == "/api/accounts/deviceauth/usercode":
+        return {"device_auth_id": "e2e-device", "user_code": "E2E-0000", "interval": "1"}
+    if path == "/api/accounts/deviceauth/token":
+        return {"authorization_code": "e2e-code", "code_verifier": "e2e"}
+    return None
 # Claude's token endpoint, as Claude Code 2.1's bundle has it: JSON, claude setup-token's code with
 # expires_in, and a subscription login's code, each answered with tokens holding e2efake.
 CLAUDE_ACCOUNT = {"account": {"uuid": "acct-e2e", "email_address": "e2e@devvm.test"}, "organization": {"uuid": "org-e2e"}}
@@ -1966,6 +2021,10 @@ def serve(c):
                 with open(log, "a") as o:
                     o.write(h[0] + " " + str(q.get("grant_type", "")) + (" expires_in" if "expires_in" in q else "") + "\n")
                 r = claude(q)
+            elif h[0].split(" ")[1].startswith("/api/accounts/deviceauth/"):
+                with open(log, "a") as o:
+                    o.write(h[0] + "\n")
+                r = device(h[0].split(" ")[1])
             else:
                 with open(log, "a") as o:
                     o.write(h[0] + " " + urllib.parse.parse_qs(body).get("grant_type", [""])[0] + "\n")

@@ -2,6 +2,7 @@ package agentlogin
 
 import (
 	"cmp"
+	"encoding/json"
 	"errors"
 	"maps"
 	"slices"
@@ -21,6 +22,21 @@ func KeyProviders(kind string) []string {
 
 // errKeyProvider: an API key for a provider devvm doesn't put in.
 var errKeyProvider = errors.New("no API key devvm puts in for that provider")
+
+// OpencodeKeyImport is what opencode's auth import reads to add provider's API key, of
+// KeyProviders, to a VM whose opencode has made its database: opencode 2 keeps its logins there
+// and reads auth.json only as it makes it. It's the key's credential as opencode's auth export
+// prints it, the key's placeholder ending in salt, under an ID of devvm's, which opencode skips
+// when it has it, so a second import adds nothing.
+func OpencodeKeyImport(provider, salt string) ([]byte, error) {
+	if !slices.Contains(KeyProviders(Opencode), provider) {
+		return nil, errKeyProvider
+	}
+	return json.Marshal([]map[string]any{{
+		"id": "cred_devvm_" + provider, "integrationID": provider, "label": "devvm", "active": true,
+		"value": map[string]any{"type": "key", "key": opencodePlaceholder(provider, salt)},
+	}})
+}
 
 // SetKey saves key as the agent's API key in f, the store's login file,
 // under its lock, in the agent's own format: Codex's auth.json becomes an

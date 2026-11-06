@@ -11,7 +11,7 @@ go = "latest"
 rust = "latest"        # installed with the rustup pinned in build.sh; rustup checks the toolchain
 claude = "latest"
 codex = "latest"
-opencode = "latest"
+opencode = "2"         # upstream marks its 1.x releases as GitHub's latest, which "latest" resolves to
 
 [settings]
 experimental = true

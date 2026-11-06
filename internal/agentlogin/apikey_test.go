@@ -1,7 +1,9 @@
 package agentlogin
 
 import (
+	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,6 +51,44 @@ func TestSetKey(t *testing.T) {
 	}
 	if str(readStore(t, c), "OPENAI_API_KEY") != "sk-test" {
 		t.Error("a refused key changed Codex's login")
+	}
+}
+
+// opencode's import of a key is opencode 2's auth export entry: devvm's
+// ID, the key's placeholder, which is the one the VM's copy of auth.json
+// holds and the proxy binds, never the key; a provider devvm doesn't put
+// keys in for is refused.
+func TestOpencodeKeyImport(t *testing.T) {
+	o := storeFile(t, Opencode, "auth.json")
+	must(t, o.lockStoreWrite(map[string]any{}))
+	must(t, o.SetKey("anthropic", "sk-ant-secret"))
+	o.Salt = "s4lt"
+	bs, err := o.Bindings()
+	if err != nil || len(bs) != 1 {
+		t.Fatalf("bindings: %v %v", bs, err)
+	}
+	data, err := OpencodeKeyImport("anthropic", "s4lt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []struct {
+		ID, IntegrationID, Label string
+		Active                   bool
+		Value                    struct{ Type, Key string }
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []struct {
+		ID, IntegrationID, Label string
+		Active                   bool
+		Value                    struct{ Type, Key string }
+	}{{"cred_devvm_anthropic", "anthropic", "devvm", true, struct{ Type, Key string }{"key", bs[0].Placeholder}}}
+	if !slices.Equal(got, want) || strings.Contains(string(data), "sk-ant-secret") {
+		t.Errorf("OpencodeKeyImport = %s, want the placeholder %s", data, bs[0].Placeholder)
+	}
+	if _, err := OpencodeKeyImport("groq", "s4lt"); err == nil {
+		t.Error("OpencodeKeyImport(groq) took it")
 	}
 }
 

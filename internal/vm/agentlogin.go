@@ -207,8 +207,11 @@ func (e AgentLogin) endLogin(ctx context.Context, t *target) {
 // its claude setup-token, without a CLAUDE_CODE_OAUTH_TOKEN of the VM's
 // environment, which Claude Code would use instead; Codex's ChatGPT
 // login, kept in its auth.json, which the VM's proxy fills with
-// placeholders, never a keyring; opencode's, for OpenAI, in a browser or
-// headless.
+// placeholders, never a keyring; opencode's Codex login to OpenAI, in a
+// browser or with a code (its methods chatgpt-browser and
+// chatgpt-headless), whose token endpoint the proxy captures: opencode's
+// Sign in with ChatGPT gets its tokens from another endpoint, whose
+// replies the proxy refuses.
 func loginArgv(o AgentLoginOptions) []string {
 	if o.Agent == agentlogin.Claude {
 		argv := []string{"env", "-u", "CLAUDE_CODE_OAUTH_TOKEN", "claude"}
@@ -224,11 +227,11 @@ func loginArgv(o AgentLoginOptions) []string {
 		}
 		return argv
 	}
-	method := "ChatGPT Pro/Plus (browser)"
+	method := "chatgpt-browser"
 	if o.Device {
-		method = "ChatGPT Pro/Plus (headless)"
+		method = "chatgpt-headless"
 	}
-	return []string{"opencode", "auth", "login", "--provider", "openai", "--method", method}
+	return []string{"opencode", "auth", "login", "openai", "--method", method}
 }
 
 // vmLoginScript writes its input to the login file at $1, below the VM's
@@ -265,6 +268,35 @@ func (e AgentLogin) saveKey(ctx context.Context, t *target, store *secrets.Store
 		}
 		return backend.Logged(msg.AgentKeyCopyFailed(o.Agent, vm))
 	}
+	if o.Agent == agentlogin.Opencode {
+		if err := e.importKey(ctx, t, o.Provider, salt); err != nil {
+			return err
+		}
+	}
 	e.Info(msg.AgentKeySaved(o.Agent, provider, vm))
+	return nil
+}
+
+// opencodeImportScript gives opencode in the VM the credential on its
+// input with opencode auth import, in a login shell (opencode on PATH),
+// once opencode has made its database: until then, opencode reads the
+// login file as it makes it.
+const opencodeImportScript = `set -- "$HOME"/.local/share/opencode/opencode*.db; [ -e "$1" ] || exit 0; exec opencode auth import`
+
+// importKey adds provider's API key, as its placeholder ending in salt,
+// to the VM's opencode, which keeps its logins in its database
+// (agentlogin.OpencodeKeyImport).
+func (e AgentLogin) importKey(ctx context.Context, t *target, provider, salt string) error {
+	data, err := agentlogin.OpencodeKeyImport(provider, salt)
+	if err != nil {
+		return msg.LoginCopyFailed(agentlogin.Opencode, err.Error(), t.f.Name).Because(err)
+	}
+	log := e.LogWriter()
+	if err := t.exec(ctx, []string{"bash", "-lc", opencodeImportScript}, backend.ExecOpts{Stdin: bytes.NewReader(data), Stdout: log, Stderr: log}); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return backend.Logged(msg.AgentKeyCopyFailed(agentlogin.Opencode, t.f.Name))
+	}
 	return nil
 }

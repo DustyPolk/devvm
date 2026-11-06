@@ -57,7 +57,7 @@ stub_reset
 ! exec devvm agent login opencode --device-code
 stderr '^devvm: agent_login_not_saved agent=opencode vm=devvm-agents-[0-9a-f]{14}$'
 stub_calls
-stdout '''opencode'' ''auth'' ''login'' ''--provider'' ''openai'' ''--method'' ''ChatGPT Pro/Plus \(headless\)''$'
+stdout '''opencode'' ''auth'' ''login'' ''openai'' ''--method'' ''chatgpt-headless''$'
 
 # In a browser: localhost:1455 is forwarded to the VM while the login
 # runs, and not afterwards.
@@ -91,12 +91,26 @@ stub_calls
 stdout '''sh'' ''-c'' ''f="\$HOME/\$1".*'' ''sh'' ''.codex/auth.json''$'
 ! stdout 'sk-testfake'
 
-# opencode's key for a provider: the store keeps it beside the others.
+# opencode's key for a provider: the store keeps it beside the others,
+# and the VM's opencode, once it has its database, imports the key's
+# placeholder.
+stub_reset
 stdin $WORK/key2
 exec devvm agent login opencode --api-key --provider anthropic --stdin
 stdout '^==> agent_key_saved agent=opencode provider=anthropic vm=devvm-agents-[0-9a-f]{14}$'
 grep '"key": "sk-ant-testfake"' $DATA/logins/opencode/.local/share/opencode/auth.json
 grep '"name":"opencode-anthropic"' $AG_dir/run/secrets.json
+stub_calls
+stdout '''sh'' ''-c'' ''f="\$HOME/\$1".*'' ''sh'' ''.local/share/opencode/auth.json''$'
+stdout '''bash'' ''-lc'' ''[^'']*opencode\*\.db; [^'']*exec opencode auth import''$'
+! stdout 'sk-ant-testfake'
+
+# The import fails: the key is saved, and devvm says the VM's copy failed.
+exec sh -c 'echo "opencode auth import" > "$STUB_DIR/shell-fails-on"'
+stdin $WORK/key2
+! exec devvm agent login opencode --api-key --provider anthropic --stdin
+stderr '^devvm: agent_key_copy_failed agent=opencode vm=devvm-agents-[0-9a-f]{14}$'
+rm $STUB_DIR/shell-fails-on
 
 # The VM's copy can't be written: the key is saved, and devvm says so.
 exec sh -c 'echo "''.codex/auth.json''" > "$STUB_DIR/shell-fails-on"'

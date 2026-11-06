@@ -70,8 +70,8 @@ func TestLoginArgv(t *testing.T) {
 	}{
 		{AgentLoginOptions{Agent: "codex"}, []string{"codex", "-c", `cli_auth_credentials_store="file"`, "login"}},
 		{AgentLoginOptions{Agent: "codex", Device: true}, []string{"codex", "-c", `cli_auth_credentials_store="file"`, "login", "--device-auth"}},
-		{AgentLoginOptions{Agent: "opencode"}, []string{"opencode", "auth", "login", "--provider", "openai", "--method", "ChatGPT Pro/Plus (browser)"}},
-		{AgentLoginOptions{Agent: "opencode", Device: true}, []string{"opencode", "auth", "login", "--provider", "openai", "--method", "ChatGPT Pro/Plus (headless)"}},
+		{AgentLoginOptions{Agent: "opencode"}, []string{"opencode", "auth", "login", "openai", "--method", "chatgpt-browser"}},
+		{AgentLoginOptions{Agent: "opencode", Device: true}, []string{"opencode", "auth", "login", "openai", "--method", "chatgpt-headless"}},
 		{AgentLoginOptions{Agent: "claude"}, []string{"env", "-u", "CLAUDE_CODE_OAUTH_TOKEN", "claude", "auth", "login", "--claudeai"}},
 		{AgentLoginOptions{Agent: "claude", SetupToken: true}, []string{"env", "-u", "CLAUDE_CODE_OAUTH_TOKEN", "claude", "setup-token"}},
 	} {
