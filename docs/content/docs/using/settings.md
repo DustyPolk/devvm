@@ -24,7 +24,7 @@ Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles re
 
 ## config.toml
 
-`~/.config/devvm/config.toml` sets the defaults that new VMs get, the retention settings, the company proxy and an Ubuntu mirror, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
+`~/.config/devvm/config.toml` sets the defaults that new VMs get, the retention settings, the company proxy, an Ubuntu mirror and the release check, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
 
 ```toml
 # The network tier new VMs get: open, internet, allowlist or none.
@@ -44,6 +44,9 @@ layers = ["docker"]
 
 # A mirror of Ubuntu's archive that base's first build tries first.
 ubuntu-mirror = "http://mirror.example.com/ubuntu-ports"
+
+# Whether a launch checks once a day for a newer devvm release.
+release-check = true
 
 # New VMs' CPUs, and their memory and disk in GiB.
 [size]
@@ -76,6 +79,12 @@ The `[proxy]` table is the [company proxy](../safety/network.md#behind-a-company
 `ubuntu-mirror` is a mirror of Ubuntu's archive, such as one your company or university runs, which the first build of base gets its packages from before it tries Ubuntu's own. It must mirror the archive for this machine's architecture: `archive.ubuntu.com/ubuntu` on an Intel or AMD machine, or `ports.ubuntu.com/ubuntu-ports` on an Apple silicon Mac or another arm64 machine. Give it as an `http://` or `https://` address without a user, a query or spaces, and devvm refuses anything else (`config.toml` names the line). A package that the mirror doesn't have, or a mirror that doesn't answer, falls back to Ubuntu's archive for that file.
 
 A mirror can't give base a package that Ubuntu didn't publish. apt checks every list and package against Ubuntu's archive key whichever server sends it, and refuses one that doesn't match, and devvm checks them against that key again on this machine before it keeps any package. A mirror that's behind, or one that's lying, can still serve lists older than Ubuntu's, because Ubuntu's signed lists don't expire. devvm refuses lists more than a day older than the Ubuntu cloud image base starts from, and it names the mirror and keeps none of the build's packages ([old package lists](troubleshooting.md#base-gets-old-package-lists)). devvm compares the lists with the cloud image's date, not with today's, so a mirror that fell behind after that date can still give base packages older than Ubuntu's, and you should only set a mirror you trust to keep up. Only the first build of each base uses the mirror, because a later build of the same base installs the packages devvm kept from that first build ([base](images.md#base)). VMs don't use it, and neither do layers or a `--from` base. No command saves it, so it's only ever in `config.toml`.
+
+### The release check
+
+When you run devvm in a terminal, it checks at most once a day for a newer devvm release, and when one is out it says so in one line before it opens the VM, naming the release, the version you have and devvm upgrade. devvm never installs anything on its own, so you upgrade with [devvm upgrade](../getting-started/install.md#upgrading) when you choose to. `release-check = false` turns the check off, and so does setting `DEVVM_NO_RELEASE_CHECK=1` in the environment, as CI can. `release-check` must be `true` or `false`, and devvm refuses anything else (`config.toml` names the line). No command saves it, so it's only ever in `config.toml`.
+
+The check reads only where GitHub's latest devvm release is, over HTTPS, and sends nothing about you or your machine. It runs beside the launch, so it never makes devvm wait, and when you're offline it says nothing and tries again the next day. The line comes from what the last check found, so a release that came out since then shows up at the launch after the next check. devvm keeps what the check found in `~/.local/share/devvm/cache/release.json`, and `devvm doctor` shows it. devvm says nothing without a terminal, with `--no-input`, for a devvm built from its source, or for a copy that neither the install script nor Homebrew installed, which devvm upgrade can't upgrade.
 
 ### Where a default comes from
 
@@ -256,5 +265,6 @@ devvm decides for standard output and standard error apart, and colors one only 
 | `DEVVM_LIMA_HOME` | move devvm's own Lima home ([details](../internals/lima.md#a-lima-home-of-its-own)) |
 | `DEVVM_FROM` | the container image that the base of new VMs and builds starts from when there's no `--from` ([details](from.md)) |
 | `DEVVM_NO_TOOL_CHECK=1` | don't check for newer shared tools once a day ([details](images.md#shared-tools)) |
+| `DEVVM_NO_RELEASE_CHECK=1` | don't check for a newer devvm release once a day ([details](#the-release-check)) |
 | `DEVVM_SECRET_SERVICE` | the Keychain service devvm saves and reads secrets in, instead of `devvm` ([details](../safety/network.md#saving-and-binding-secrets)) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | the Claude Code token that VMs get, over the saved Claude Code login, whichever it is ([details](coding-agents.md#claude-code-login)) |

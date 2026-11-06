@@ -50,6 +50,9 @@ type configFile struct {
 	// UbuntuMirror is base's first mirror (UbuntuMirror), which no command
 	// saves.
 	UbuntuMirror opt[ubuntuMirrorKind] `toml:"ubuntu-mirror"`
+	// ReleaseCheck is the daily check for a newer release (ReleaseCheck),
+	// which no command saves.
+	ReleaseCheck opt[switchKind] `toml:"release-check"`
 	// Proxy is the company proxy (HostProxy), which no command saves.
 	Proxy struct {
 		HTTPS   opt[proxyHTTPSKind] `toml:"https"`

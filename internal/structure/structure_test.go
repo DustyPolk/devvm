@@ -28,7 +28,7 @@ func devvm() rules {
 		// fake's own types each implement.
 		maxMethods: 24,
 		largeTypes: map[string]large{
-			"internal/paths.Dirs": {57, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
+			"internal/paths.Dirs": {58, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":      {45, "the one terminal: messages and where they go, as text or names, errors with the caller's exit code, prompts and their refusals, whether the picker shows, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: devvmVars(),
@@ -236,13 +236,14 @@ func devvmVars() map[string]string {
 // each with the files that read it and why.
 func devvmEnvSettings() map[string]envSetting {
 	return map[string]envSetting{
-		"DEVVM_NO_TOOL_CHECK":  {[]string{"internal/tools/tools.go"}, "a user setting: no daily check for newer shared tools"},
-		"DEVVM_LIMA_HOME":      {[]string{"internal/paths/dirs.go"}, "a user setting: devvm's Lima home"},
-		"DEVVM_SECRET_SERVICE": {[]string{"internal/secrets/secrets.go"}, "a user setting: the Keychain service secrets are saved under"},
-		"DEVVM_FROM":           {[]string{"internal/cli/flags.go"}, "a user setting: --from's default"},
-		"DEVVM_MESSAGES":       {[]string{"internal/ui/style.go"}, "names mode, which tests and e2e read messages in: any build has it"},
-		"DEVVM_GUESTFWD":       {[]string{"internal/backend/lima/qemu.go"}, "what devvm gives its own QEMU wrapper, devvm _qemu"},
-		"DEVVM_DAEMON_STATUS":  {[]string{"internal/daemon/status.go"}, "what devvm gives its own background processes: where each says it's ready"},
+		"DEVVM_NO_TOOL_CHECK":    {[]string{"internal/tools/tools.go"}, "a user setting: no daily check for newer shared tools"},
+		"DEVVM_NO_RELEASE_CHECK": {[]string{"internal/settings/release.go"}, "a user setting: no daily check for a newer devvm release"},
+		"DEVVM_LIMA_HOME":        {[]string{"internal/paths/dirs.go"}, "a user setting: devvm's Lima home"},
+		"DEVVM_SECRET_SERVICE":   {[]string{"internal/secrets/secrets.go"}, "a user setting: the Keychain service secrets are saved under"},
+		"DEVVM_FROM":             {[]string{"internal/cli/flags.go"}, "a user setting: --from's default"},
+		"DEVVM_MESSAGES":         {[]string{"internal/ui/style.go"}, "names mode, which tests and e2e read messages in: any build has it"},
+		"DEVVM_GUESTFWD":         {[]string{"internal/backend/lima/qemu.go"}, "what devvm gives its own QEMU wrapper, devvm _qemu"},
+		"DEVVM_DAEMON_STATUS":    {[]string{"internal/daemon/status.go"}, "what devvm gives its own background processes: where each says it's ready"},
 	}
 }
 

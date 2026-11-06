@@ -1,0 +1,98 @@
+# A launch in a terminal says, in one line, that a newer devvm release is
+# out, from what the daily check last found, and starts that check beside
+# the launch once a day. The release server is a fake one
+# (release_server), this devvm says it's 0.1.0, installed as install.sh
+# installs it, and every launch here is refused, in the home folder, after
+# the check.
+env DEVVM_TEST_VERSION=0.1.0
+env DEVVM_NO_RELEASE_CHECK=
+env DEVVM_PICK_ON_PIPE=1
+mkdir pfx/lib/devvm/0.1.0 pfx/bin
+cp $DEVVM_BIN/devvm pfx/lib/devvm/0.1.0/devvm
+chmod 0755 pfx/lib/devvm/0.1.0/devvm
+symlink pfx/bin/devvm -> $WORK/pfx/lib/devvm/0.1.0/devvm
+env DEVVM=$WORK/pfx/bin/devvm
+release_server 0.2.0 0.1.0
+env REPO=$DEVVM_REPO_URL
+cd $HOME
+
+# Without a terminal, nothing is checked or said.
+! exec $DEVVM
+! stdout upgrade_available
+! exists $DATA/cache/release.json
+
+# With --no-input, neither.
+ttyin -stdin $WORK/no.txt
+! exec $DEVVM --no-input
+! stdout upgrade_available
+! exists $DATA/cache/release.json
+
+# The first launch in a terminal knows of nothing yet, so it says nothing,
+# and its check records the newest release.
+ttyin -stdin $WORK/no.txt
+! exec $DEVVM
+! stdout upgrade_available
+grep '"latest":"0.2.0"' $DATA/cache/release.json
+
+# The next says it, and checks no more that day: a release server that
+# has gone changes nothing.
+env DEVVM_REPO_URL=$REPO/nope
+ttyin -stdin $WORK/no.txt
+! exec $DEVVM
+stdout '^==> upgrade_available current=0.1.0 latest=0.2.0$'
+grep '"latest":"0.2.0"' $DATA/cache/release.json
+
+# devvm doctor shows what the check last found.
+exec devvm doctor
+stdout '^doctor_latest_release date=\S+ latest=0.2.0$'
+exec devvm doctor --json
+stdout '"latest": "0.2.0"'
+
+# A day later it checks again. Offline, it says what it knew, silently
+# keeps it, and tries again only the next day.
+json_set $DATA/cache/release.json tried=2026-01-01T00:00:00Z
+env DEVVM_REPO_URL=https://127.0.0.1:1
+ttyin -stdin $WORK/no.txt
+! exec $DEVVM
+stdout '^==> upgrade_available current=0.1.0 latest=0.2.0$'
+! stderr 'upgrade_no_latest'
+grep '"latest":"0.2.0"' $DATA/cache/release.json
+! grep '"tried":"2026-01-01' $DATA/cache/release.json
+
+# Online again, a day later, the newest being this devvm's own version:
+# nothing to say from the next launch on.
+json_set $DATA/cache/release.json tried=2026-01-01T00:00:00Z
+env DEVVM_REPO_URL=$REPO
+env DEVVM_TEST_VERSION=0.2.0
+ttyin -stdin $WORK/no.txt
+! exec $DEVVM
+! stdout upgrade_available
+
+# An older release than this devvm is nothing to say either.
+env DEVVM_TEST_VERSION=0.3.0
+ttyin -stdin $WORK/no.txt
+! exec $DEVVM
+! stdout upgrade_available
+env DEVVM_TEST_VERSION=0.1.0
+
+# Off: with DEVVM_NO_RELEASE_CHECK, or config.toml's release-check.
+env DEVVM_NO_RELEASE_CHECK=1
+ttyin -stdin $WORK/no.txt
+! exec $DEVVM
+! stdout upgrade_available
+env DEVVM_NO_RELEASE_CHECK=
+cp $WORK/off.toml $CFG/config.toml
+ttyin -stdin $WORK/no.txt
+! exec $DEVVM
+! stdout upgrade_available
+
+# On again, it says it.
+rm $CFG/config.toml
+ttyin -stdin $WORK/no.txt
+! exec $DEVVM
+stdout '^==> upgrade_available current=0.1.0 latest=0.2.0$'
+
+-- no.txt --
+n
+-- off.toml --
+release-check = false

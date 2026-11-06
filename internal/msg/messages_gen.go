@@ -1079,6 +1079,11 @@ func DoctorFailed(reason string) M {
 	return M{id: "doctor_failed", vals: []val{{"reason", reason}}}
 }
 
+// DoctorLatestRelease is [doctor_latest_release]: "The newest devvm release is {{.latest}}, as of {{.date}}."
+func DoctorLatestRelease(date string, latest string) M {
+	return M{id: "doctor_latest_release", vals: []val{{"date", date}, {"latest", latest}}}
+}
+
 // DoctorOK is [doctor_ok]: "This is devvm {{.version}}, and the {{.backend}} backend has everything it needs."
 func DoctorOK(backend string, version string) M {
 	return M{id: "doctor_ok", vals: []val{{"backend", backend}, {"version", version}}}
@@ -4086,6 +4091,7 @@ var specs = map[string]spec{
 	"docker_missing":                 {},
 	"docker_only":                    {fields: []string{"from"}},
 	"doctor_failed":                  {fields: []string{"reason"}},
+	"doctor_latest_release":          {fields: []string{"date", "latest"}},
 	"doctor_ok":                      {fields: []string{"backend", "version"}},
 	"doctor_proxy_ca":                {fields: []string{"dir"}},
 	"downloading_mise":               {fields: []string{"version"}},

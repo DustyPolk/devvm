@@ -70,6 +70,7 @@ func (uf *upFlags) options() vm.Options {
 // up opens a shell in this folder's VM, making it first.
 func up(ctx context.Context, a *app, uf *upFlags) error {
 	o := uf.options()
+	defer releaseNotice(ctx, a)()
 	return a.env(func(env *vm.Env) error {
 		env.AddInclude = uf.sshConfig
 		return vm.Launch{Env: env}.Up(ctx, o)

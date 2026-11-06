@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/w3cj/devvm/internal/state"
 	"github.com/w3cj/devvm/internal/trust"
 	"github.com/w3cj/devvm/internal/ui"
+	"github.com/w3cj/devvm/internal/upgrade"
 	"github.com/w3cj/devvm/internal/vm"
 )
 
@@ -60,6 +62,13 @@ func newDoctorCmd(a *app) *cobra.Command {
 					}
 					return state.VMFolderProblems(dirs)
 				},
+				Release: func() upgrade.Known {
+					dirs, err := a.dirs()
+					if err != nil {
+						return upgrade.Known{}
+					}
+					return upgrade.ReadKnown(dirs.ReleaseCheck())
+				},
 			}
 			if asJSON {
 				return printJSON(u, d.report(cmd.Context(), u.Text, reg.All(), b))
@@ -82,6 +91,16 @@ type doctorOutput struct {
 	// Features is, for each backend, how it has each feature: native,
 	// emulated, unreviewed or none.
 	Features map[string]map[string]string `json:"features"`
+	// Release is the newest release the daily check found, and when;
+	// null before it found one.
+	Release *releaseJSON `json:"release"`
+}
+
+// releaseJSON is the newest devvm release a launch's daily check found,
+// and when, in RFC 3339.
+type releaseJSON struct {
+	Latest  string `json:"latest"`
+	Checked string `json:"checked"`
 }
 
 // problemJSON is something the backend is missing: its key, the command
@@ -117,6 +136,9 @@ func (d doctor) report(ctx context.Context, text func(msg.M) string, all []backe
 			fs[string(f)] = be.Caps()[f].String()
 		}
 		out.Features[be.Name()] = fs
+	}
+	if k := d.known(); k.Latest != "" {
+		out.Release = &releaseJSON{Latest: k.Latest, Checked: k.Checked.UTC().Format(time.RFC3339)}
 	}
 	return out
 }
@@ -162,6 +184,17 @@ type doctor struct {
 	// Folders are the warnings for what in the VMs' folder isn't a VM's
 	// (state.VMFolderProblems); nil for none.
 	Folders func() []msg.M
+	// Release is what the daily release check last found
+	// (upgrade.ReadKnown); nil for nothing.
+	Release func() upgrade.Known
+}
+
+// known is what the daily release check last found, if anything.
+func (d doctor) known() upgrade.Known {
+	if d.Release == nil {
+		return upgrade.Known{}
+	}
+	return d.Release()
 }
 
 // run checks b, the backend new VMs get, and lists its features. It
@@ -181,6 +214,9 @@ func (d doctor) run(ctx context.Context, u *ui.UI, b backend.Backend) error {
 	sayProxyCA(u, d.Dirs)
 	for _, m := range d.warnings(b) {
 		u.Warn(m)
+	}
+	if k := d.known(); k.Latest != "" {
+		u.Say(msg.DoctorLatestRelease(k.Checked.Local().Format(time.DateOnly), k.Latest))
 	}
 	if len(problems) == 0 {
 		u.Say(msg.DoctorOK(b.Name(), devvmVersion()))

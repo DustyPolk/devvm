@@ -195,6 +195,10 @@ other = "This machine has {{.have}} CPUs, fewer than the {{.want}} devvm recomme
 [doctor_ok]
 other = "This is devvm {{.version}}, and the {{.backend}} backend has everything it needs."
 
+[doctor_latest_release]
+description = "devvm doctor: the newest release a launch's daily check found, and the day it found it."
+other = "The newest devvm release is {{.latest}}, as of {{.date}}."
+
 [doctor_failed]
 description = "reason is an error from the system, in English"
 other = "Checking what devvm needs failed: {{.reason}}."

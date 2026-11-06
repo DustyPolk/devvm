@@ -163,6 +163,10 @@ func (d Dirs) Cache() string { return filepath.Join(d.Data, "cache") }
 // reference.
 func (d Dirs) FromDigests() string { return filepath.Join(d.Cache(), "from-digests.json") }
 
+// ReleaseCheck is the daily release check's record: the newest devvm
+// release it found, and when it last checked.
+func (d Dirs) ReleaseCheck() string { return filepath.Join(d.Cache(), "release.json") }
+
 // Run holds what running VMs need that isn't one VM's, or whose path
 // must be short: the QEMU wrapper, the claims lock, the port forwarders'
 // and link sessions' sockets, named by hashes (a socket's path is at most

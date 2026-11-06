@@ -215,6 +215,9 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	}
 	env.Setenv("DEVVM_KVM", kvm)
 	env.Setenv("DEVVM_SECRET_SERVICE", "devvm-test")
+	// No launch asks GitHub for devvm's newest release: a script that
+	// tests the check unsets it and serves its own (release_server).
+	env.Setenv("DEVVM_NO_RELEASE_CHECK", "1")
 	// A large host, whatever runs the tests: a script that tests a small
 	// one sets its own.
 	for name, v := range fakeHost() {

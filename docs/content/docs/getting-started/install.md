@@ -88,6 +88,8 @@ devvm upgrade
 
 It says which release it will install in place of the devvm you have, and asks first. `devvm upgrade --force` installs it without asking, which devvm needs without a terminal or with `--no-input`, and `devvm upgrade --check` says whether a newer release is out and installs nothing.
 
+You don't have to remember to check. When you run devvm in a terminal, it checks at most once a day for a newer release without making you wait, and when one is out it says so in one line that names devvm upgrade. It never upgrades on its own, and `release-check = false` in `config.toml` or `DEVVM_NO_RELEASE_CHECK=1` turns the check off ([the release check](../using/settings.md#the-release-check)).
+
 You can also upgrade devvm without devvm upgrade, with the command for the way you installed it:
 
 {{< os-tabs >}}
