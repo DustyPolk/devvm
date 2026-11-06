@@ -15,6 +15,10 @@ import (
 // before a space or the end, as in prose, so devvm.dev or 1.5 isn't one.
 var sentenceEnd = regexp.MustCompile(`[.?!](\s|$)`)
 
+// unspaced is a sentence's end with the next one's start right after it,
+// a space missing between two strings of a Long.
+var unspaced = regexp.MustCompile(`[a-z)][.?!](devvm |[A-Z])`)
+
 // Every command users see has help of the same shape: a Short in sentence
 // case without a full stop, a Long of one to three sentences, Examples and
 // its docs page, and each of the root's is in a group.
@@ -37,6 +41,9 @@ func TestEveryCommandsHelp(t *testing.T) {
 		}
 		if n := len(sentenceEnd.FindAllString(c.Long, -1)); n < 1 || n > 3 || !strings.HasSuffix(c.Long, ".") {
 			t.Errorf("%s: Long has %d sentences, want one to three, the last ending with a full stop: %q", path, n, c.Long)
+		}
+		if j := unspaced.FindString(c.Long); j != "" {
+			t.Errorf("%s: Long joins two sentences without a space, at %q", path, j)
 		}
 		if path == excepted {
 			return

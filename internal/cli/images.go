@@ -75,7 +75,7 @@ func newImagesRmCmd(a *app) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "rm IMAGE|KEY...",
 		Short: "Delete images, by name or by key",
-		Long: "Delete images, each by its name or by the key devvm images shows, after asking in a terminal without --no-input." +
+		Long: "Delete images, each by its name or by the key devvm images shows, after asking in a terminal without --no-input. " +
 			"Every one must be built, or devvm deletes nothing. " +
 			"VMs made from an image keep working, except on Linux hosts, where devvm refuses an image whose disk VMs use.",
 		Example: examples(

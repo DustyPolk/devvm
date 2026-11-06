@@ -7,7 +7,7 @@ Make this folder's VM again with more layers, then open a shell in it
 
 ## Synopsis
 
-Make this folder's VM again from an image with each LAYER added on top, in the order given, then open a shell in it, after asking in a terminal without --no-input.devvm keeps its home folder, the project folder and its settings, and everything else on its disk is lost. When its image has an agent, devvm first exports the agents' history, unless you give --no-export.
+Make this folder's VM again from an image with each LAYER added on top, in the order given, then open a shell in it, after asking in a terminal without --no-input. devvm keeps its home folder, the project folder and its settings, and everything else on its disk is lost. When its image has an agent, devvm first exports the agents' history, unless you give --no-export.
 
 ```text
 devvm layer add LAYER... [flags]
