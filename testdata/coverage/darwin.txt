@@ -21,7 +21,7 @@ internal/image 99.4
 internal/jsonc 97.1
 internal/msg 72.0
 internal/msg/gen 93.3
-internal/netpolicy 89.6
+internal/netpolicy 89.7
 internal/paths 98.1
 internal/platform 87.6
 internal/ports 91.2
@@ -29,7 +29,7 @@ internal/project 98.5
 internal/proxy 91.5
 internal/redact 97.7
 internal/secrets 92.6
-internal/settings 96.2
+internal/settings 96.3
 internal/shell 100.0
 internal/sshagent 84.2
 internal/sshconfig 95.0
@@ -44,7 +44,7 @@ internal/ubuntu 97.3
 internal/ui 95.2
 internal/upgrade 91.9
 internal/upgrade/upgradetest 97.1
-internal/vm 88.1
+internal/vm 88.2
 internal/vmname 100.0
 internal/vmssh 90.7
 packaging 42.9
