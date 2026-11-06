@@ -1,6 +1,6 @@
 ---
 title: Managing VMs
-weight: 14
+weight: 5
 ---
 
 This page covers a VM from the time devvm makes it until you delete it: opening, restarting and stopping it, deleting it, listing your VMs, and what devvm does when you run a command in a subfolder or when the project folder is made again, moved, deleted or on a disk that isn't connected. [Overview](../internals/overview.md) has each step devvm takes for a new VM and an existing one.

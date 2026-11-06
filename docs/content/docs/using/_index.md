@@ -9,6 +9,7 @@ These pages cover what you change as you work, such as the images VMs are made f
 - [Toolchains](toolchains.md): node, python, rust and go, with what each brings, the files that choose it, its version files, its global installs and its allowlist.
 - [SSH and editors](ssh.md): reaching VMs by name from ssh and VS Code, and forwarding your SSH agent.
 - [Ports and size](ports-size.md): the ports a VM forwards to your machine, and its CPUs, memory and disk.
+- [Managing VMs](vms.md): restarting, stopping, deleting and listing VMs, and what devvm does in a subfolder or when a project folder is made again, moved, deleted or on a disk that isn't connected.
 - [Images and tools](images.md): base, the desktop, docker and nix layers and your own layers, how the shared tools work, which image a new VM gets, and rebuilding, listing and deleting images.
 - [Customizing images](customizing.md): your own layers, and the optional features in every VM, such as oh-my-bash and fzf.
 - [Settings and files](settings.md): your settings and the commands that write them, devvm's state, and the environment variables devvm reads.
@@ -18,7 +19,6 @@ These pages cover what you change as you work, such as the images VMs are made f
 - [A VM's desktop](desktop.md): the `desktop` layer, and opening a VM's desktop in Screen Sharing with `devvm desktop`.
 - [Starting from a container image](from.md): `--from`, which starts base from `node:24`, `alpine:3` or your own image.
 - [What devvm keeps on this machine](space.md): everything devvm, its tools and its backends keep outside your project folders, and how each is cleaned up.
-- [Managing VMs](vms.md): restarting, stopping, deleting and listing VMs, and what devvm does in a subfolder or when a project folder is made again, moved, deleted or on a disk that isn't connected.
 - [The command line](command-line.md): the help, flags and their values, the questions devvm asks and what answers them, `--json` for scripts, and shell completion.
 - [Upgrading and uninstalling](upgrading.md): `devvm upgrade`, switching between Homebrew and the install script, and removing devvm with everything it keeps.
 - [Troubleshooting](troubleshooting.md): what to do when a command or a build fails, a request is blocked, or a VM won't start.

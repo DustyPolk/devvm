@@ -1,6 +1,6 @@
 ---
 title: Customizing images
-weight: 6
+weight: 7
 ---
 
 You customize images with your own layers, which add what a project needs, and by choosing base's features, which are devvm's optional extras that every VM gets. Your layers live in `~/.config/devvm` (`$XDG_CONFIG_HOME/devvm`), not next to devvm's binary, so upgrading devvm keeps them. To give every new VM something of your own, write it as a layer and make it one of the layers new VMs get ([extras of your own](#extras-of-your-own)).

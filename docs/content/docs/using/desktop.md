@@ -1,6 +1,6 @@
 ---
 title: A VM's desktop
-weight: 11
+weight: 12
 ---
 
 A VM has no screen of its own, but with the `desktop` layer it gets an Xfce desktop, which `devvm desktop` opens in a window on this machine. This page covers adding the desktop, opening it, its password and the clipboard, and what it costs. [The desktop](../internals/desktop.md) explains how devvm keeps it to this machine.

@@ -1,6 +1,6 @@
 ---
 title: devcontainer.json
-weight: 9
+weight: 10
 ---
 
 devvm supports the [Dev Container specification](https://containers.dev/), so a project's `devcontainer.json` sets up its VM. When you run devvm in a folder with a `.devcontainer/devcontainer.json`, or else a `.devcontainer.json` at the folder's root, the new VM gets that file's settings by default, as far as devvm supports them. To make the VM without reading the file, run `devvm --no-devcontainer`.

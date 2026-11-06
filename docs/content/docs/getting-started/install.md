@@ -5,6 +5,22 @@ weight: 1
 
 This page gets devvm installed and checked on your machine. [Upgrading and uninstalling](../using/upgrading.md) covers what comes later.
 
+## Installing devvm
+
+Run the command for your system:
+
+{{< install >}}
+
+Install devvm one way, with Homebrew or with the install script, but not both ([one devvm](../using/upgrading.md#one-devvm)). The install script needs `curl`, `tar`, and `sha256sum` or `shasum`, it never needs sudo for devvm itself, and it checks the download's checksum and signature before it installs anything ([Installing and updating](../internals/install.md)). It takes options after `bash -s --`, as in `curl -fsSL … | bash -s -- --yes`:
+
+| Option | What it does |
+| --- | --- |
+| `--yes` | answer yes to every question |
+| `--version 0.1.0`, or `DEVVM_VERSION=0.1.0` | install that release |
+| `--no-deps` | install devvm only |
+| `--force` | install even when Homebrew installed devvm, which leaves you with two copies |
+| `DEVVM_PREFIX=/some/dir` | install under that folder instead of `~/.local` |
+
 ## Requirements
 
 devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [backend](../backends/_index.md). It's tested on Apple silicon Macs and on Linux on both arm64 and x86_64, but not yet on Intel Macs ([Known limits](../using/limits.md#intel-macs)). The last column says whether the install script offers to install a requirement for you.
@@ -40,22 +56,6 @@ devvm runs its VMs on [Lima](../backends/lima.md#requirements), its default [bac
 - **Your first VM needs 8 GiB of free disk space**, for the base image, the VM's own image and the shared tools ([free space](../using/ports-size.md#free-space)).
 - **Everything else goes inside the VMs,** including the toolchains, the coding agents and Docker for your projects ([docker layer](../using/images.md#built-in-layers)), so you don't install Claude Code, Codex or opencode on this machine ([devvm's agent store](../using/coding-agents.md#devvms-agent-store)).
 - **Linux hosts** have a few limits, such as no `.git` protection ([Known limits](../using/limits.md#linux-hosts)).
-
-## Installing devvm
-
-Run the command for your system:
-
-{{< install >}}
-
-Install devvm one way, with Homebrew or with the install script, but not both ([one devvm](../using/upgrading.md#one-devvm)). The install script needs `curl`, `tar`, and `sha256sum` or `shasum`, it never needs sudo for devvm itself, and it checks the download's checksum and signature before it installs anything ([Installing and updating](../internals/install.md)). It takes options after `bash -s --`, as in `curl -fsSL … | bash -s -- --yes`:
-
-| Option | What it does |
-| --- | --- |
-| `--yes` | answer yes to every question |
-| `--version 0.1.0`, or `DEVVM_VERSION=0.1.0` | install that release |
-| `--no-deps` | install devvm only |
-| `--force` | install even when Homebrew installed devvm, which leaves you with two copies |
-| `DEVVM_PREFIX=/some/dir` | install under that folder instead of `~/.local` |
 
 ## Checking what devvm needs
 
