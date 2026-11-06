@@ -3239,7 +3239,7 @@ check "so does devvm host, which names nothing" bash -c "
 perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(LocalPort => shift, Listen => 5, ReuseAddr => 1) or die;
   while ($c = $s->accept) { while (<$c>) { last if /^\r?$/ } print $c "HTTP/1.0 200 OK\r\nContent-Length: 9\r\n\r\nhost-lan\n"; close $c }' "$P47198" &
 lan_server=$!
-lan=$({ ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p'; ipconfig getifaddr en0 2>/dev/null; ipconfig getifaddr en1 2>/dev/null; } | head -1)
+lan=$({ ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p'; lan_if=$(route -n get default 2>/dev/null | sed -n 's/^ *interface: *//p') && [[ -n $lan_if ]] && ipconfig getifaddr "$lan_if" 2>/dev/null; } | head -1)
 echo "  e2e: this machine's LAN address: ${lan:-none}"
 # Stopped by the self-check, it's still unenforced: its last self-check failed. Open from its next
 # start: unconfined, so a direct connection works, and its proxy, an open one, set in it and
