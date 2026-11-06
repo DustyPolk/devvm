@@ -2,14 +2,15 @@
 # Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, layers/nix.sh, features/*.sh,
 # shared-tools/build.sh, oci/build.sh) and internal/tools/mise.go (devvm's host mise), and the
 # end-to-end tests' own pins (tests/e2e-mise.lock, the --from images' digests in tests/e2e/from_test.go,
-# and Ubuntu's cloud image release in tests/e2e/sandbox_test.go).
+# Ubuntu's cloud image release in tests/e2e/sandbox_test.go, and CI's Lima in .github/workflows/e2e.yml).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
-# Tools: docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu
+# Tools: docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu e2e-lima
 #   mise: base's, and the one devvm runs on the host to resolve the shared tools' versions
 #   e2e-tools: the shared tools' versions every e2e section but tools uses
 #   e2e-from: the container images e2e's --from checks start from, by digest
 #   e2e-ubuntu: the dated release of Ubuntu's cloud image e2e pins base to
+#   e2e-lima: the Lima release CI's e2e workflow installs, and its tarball's checksum
 # The shared tools themselves (node, claude, ...) and Ubuntu's cloud image aren't pinned for users:
 # devvm resolves them per user. Only e2e pins them, so its cached images stay valid between runs.
 # Needs curl and jq. Checksums come from upstream's published sums where there are
@@ -18,7 +19,7 @@
 # `devvm gc`.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all="docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu"
+all="docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu e2e-lima"
 
 check=false
 if [[ ${1:-} == --check ]]; then check=true; shift; fi
@@ -43,6 +44,8 @@ sha_of() { fetch -o "$tmp/dl" "$1"; sha256 "$tmp/dl"; rm -f "$tmp/dl"; }
 # `"VAR": "…",`.
 get() { sed -n "s/^$2=\([^ ]*\).*/\1/p" "$root/$1"; }
 get_const() { sed -n "s/^const $2 = \"\(.*\)\"$/\1/p" "$root/$1"; }
+# get_env FILE VAR: the value of an indented `VAR: value` line in a workflow.
+get_env() { sed -n "s/^ *$2: \([^ ]*\)$/\1/p" "$root/$1"; }
 # valid VAR VALUE: VALUE comes from upstream and lands in a script that runs (some on the host), so
 # only the shape a pin can have: a checksum, a commit, an image digest, a date or a version.
 # Else exit.
@@ -73,6 +76,11 @@ write_staged() {
           b = e - 1; while (substr($0, b, 1) != "\"") b--
           $0 = substr($0, 1, b) ENVIRON["V"] substr($0, e)
         }
+        { print }' "$root/${staged[i]}" > "$tmp/edit"
+    elif [[ ${staged[i]} == *.yml ]]; then
+      N=${staged[i + 1]} V=${staged[i + 2]} awk '
+        { l = $0; sub(/^[ \t]*/, "", l) }
+        index(l, ENVIRON["N"] ": ") == 1 { $0 = substr($0, 1, length($0) - length(l)) ENVIRON["N"] ": " ENVIRON["V"] }
         { print }' "$root/${staged[i]}" > "$tmp/edit"
     else
       N=${staged[i + 1]} V=${staged[i + 2]} awk 'index($0, ENVIRON["N"] "=") == 1 { s = index($0, " "); $0 = ENVIRON["N"] "=" ENVIRON["V"] (s ? substr($0, s) : "") } { print }' \
@@ -105,6 +113,23 @@ bump_e2e-ubuntu() {
   local f=tests/e2e/sandbox_test.go new
   new=$(fetch https://cloud-images.ubuntu.com/releases/resolute/ | grep -o 'release-[0-9]\{8\}' | sort -ru | head -1 || true)
   if report e2e-ubuntu "$(get_const $f e2eUbuntuRelease)" "$new"; then set_var $f e2eUbuntuRelease "$new" e2e_ubuntu_release; fi
+}
+
+# The Lima release CI's e2e workflow installs (.github/workflows/e2e.yml's LIMA_VERSION), and its
+# Linux x86_64 tarball's line in the release's SHA256SUMS (LIMA_SHA256). Lima's release notes print
+# SHA256SUMS's own SHA-256, so the file is checked against them before a line of it is used.
+bump_e2e-lima() {
+  local f=.github/workflows/e2e.yml new want got
+  fetch https://api.github.com/repos/lima-vm/lima/releases/latest > "$tmp/lima-release"
+  new=$(jq -r .tag_name "$tmp/lima-release"); new=${new#v}
+  report e2e-lima "$(get_env $f LIMA_VERSION)" "$new" || return 0
+  valid lima_version "$new"
+  want=$(jq -r .body "$tmp/lima-release" | sed -n 's/.*sha256sum of the SHA256SUMS file itself is `\([0-9a-f]\{64\}\)`.*/\1/p' | head -1)
+  fetch -o "$tmp/lima-sums" "https://github.com/lima-vm/lima/releases/download/v$new/SHA256SUMS"
+  got=$(sha256 "$tmp/lima-sums")
+  [[ -n $want && $got == "$want" ]] || { echo "bump: Lima $new's SHA256SUMS doesn't match its release notes' sha256" >&2; exit 1; }
+  set_var $f LIMA_VERSION "$new" lima_version
+  set_var $f LIMA_SHA256 "$(awk -v n="lima-$new-Linux-x86_64.tar.gz" '$2 == n { print $1 }' "$tmp/lima-sums")" lima_sha256
 }
 
 # Docker's packages: the newest of each in its repository for base's Ubuntu release, and its signing key.

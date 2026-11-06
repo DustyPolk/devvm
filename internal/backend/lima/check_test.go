@@ -51,8 +51,14 @@ func TestProblems(t *testing.T) {
 		},
 		{
 			name: "Lima 1", path: []string{"limactl"}, version: "limactl version 1.2.0\n",
-			want: []string{"lima||program_old min=2.0 name=Lima version=1.2.0"},
+			want: []string{"lima||program_old min=2.2 name=Lima version=1.2.0"},
 		},
+		{
+			name: "Lima 2.1", path: []string{"limactl"}, version: "limactl version 2.1.9\n",
+			want: []string{"lima||program_old min=2.2 name=Lima version=2.1.9"},
+		},
+		{name: "Lima 2.2.0", path: []string{"limactl"}, version: "limactl version 2.2.0\n"},
+		{name: "Lima 3.0", path: []string{"limactl"}, version: "limactl version 3.0.0\n"},
 		{
 			name: "Lima 1, Homebrew", path: []string{"limactl", "brew"}, version: "limactl version 1.2.0\n",
 			want: []string{"lima|brew upgrade lima|program_old_fix fix=brew upgrade lima name=Lima version=1.2.0"},

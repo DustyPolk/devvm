@@ -11,13 +11,13 @@ weight: 1
 {{< os-tab name="macOS" >}}
 
 - macOS 13 or newer, on arm64 or x86_64.
-- Lima 2.0 or newer, with `limactl` on your `PATH`. Install it with Homebrew, `brew install lima`, or see [Lima's install guide](https://lima-vm.io/docs/installation/).
+- Lima 2.2 or newer, with `limactl` on your `PATH`. Install it with Homebrew, `brew install lima`, or see [Lima's install guide](https://lima-vm.io/docs/installation/).
 
 {{< /os-tab >}}
 {{< os-tab name="Linux" >}}
 
 - Linux on arm64 or x86_64.
-- Lima 2.0 or newer, with `limactl` on your `PATH`. Install it with Homebrew, `brew install lima`, or see [Lima's install guide](https://lima-vm.io/docs/installation/).
+- Lima 2.2 or newer, with `limactl` on your `PATH`. Install it with Homebrew, `brew install lima`, or see [Lima's install guide](https://lima-vm.io/docs/installation/).
 - QEMU from your package manager: `qemu-system-aarch64` (or `qemu-system-x86_64`) and `qemu-img`.
 - Read and write access to `/dev/kvm`. That means virtualization is turned on in the firmware (or nested virtualization, in a VM), and your user is in the `kvm` group.
 

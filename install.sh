@@ -324,8 +324,8 @@ install_deps() {
     case $key in
       lima)
         if [[ -n $fix ]]; then # Homebrew's
-          if ask "devvm needs Lima 2.0 or newer, working. Run $fix?"; then run_fix "$fix"; else echo "  skipped: $fix"; fi
-        elif ask "devvm needs Lima 2.0 or newer. Install Lima's latest release into $prefix?"; then
+          if ask "devvm needs Lima 2.2 or newer, working. Run $fix?"; then run_fix "$fix"; else echo "  skipped: $fix"; fi
+        elif ask "devvm needs Lima 2.2 or newer. Install Lima's latest release into $prefix?"; then
           install_lima_tarball
         else
           echo "  skipped: see https://lima-vm.io/docs/installation/"

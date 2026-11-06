@@ -17,7 +17,7 @@ import (
 // only their first number is compared (major).
 const (
 	minMacOS = "13"
-	minLima  = "2.0"
+	minLima  = "2.2"
 )
 
 // Problems lists what Lima needs that this host lacks: macOS minMacOS or
@@ -70,10 +70,10 @@ func (l *host) limaProblem(ctx context.Context) (backend.Problem, bool) {
 	}
 	ver := l.limaVersion(ctx)
 	const command = "limactl --version"
-	switch n := major(strings.TrimPrefix(ver, "v")); {
-	case n < 0:
+	switch v := strings.TrimPrefix(ver, "v"); {
+	case major(v) < 0:
 		return problem("brew reinstall lima", msg.ProgramBroken(command, "Lima"), func(fix string) msg.M { return msg.ProgramBrokenFix(command, fix, "Lima") })
-	case n < major(minLima):
+	case older(v, minLima):
 		return problem("brew upgrade lima", msg.ProgramOld(minLima, "Lima", ver), func(fix string) msg.M { return msg.ProgramOldFix(fix, "Lima", ver) })
 	}
 	return backend.Problem{}, false
@@ -163,6 +163,26 @@ func major(v string) int {
 	n, err := strconv.Atoi(s)
 	if err != nil {
 		return -1
+	}
+	return n
+}
+
+// older reports whether version v's major and minor numbers come before
+// minimum's (2.1.9 before 2.2); a missing minor is 0.
+func older(v, minimum string) bool {
+	if a, b := major(v), major(minimum); a != b {
+		return a < b
+	}
+	return minor(v) < minor(minimum)
+}
+
+// minor is a version's second number (4 for 13.4.1), or 0.
+func minor(v string) int {
+	_, rest, _ := strings.Cut(v, ".")
+	s, _, _ := strings.Cut(rest, ".")
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
 	}
 	return n
 }
