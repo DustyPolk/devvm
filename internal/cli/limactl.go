@@ -12,10 +12,10 @@ import (
 func newLimactlCmd(a *app) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "limactl [ARGS...]",
-		Short: "Run Lima's limactl for debugging, which starts VMs without network policy",
+		Short: "Run Lima's limactl for debugging, which starts VMs unconfined, whatever their tier",
 		Long: "Run limactl with ARGS on devvm's own Lima home, where the lima backend's VMs and images live, " +
 			"passing on every argument, --help included. " +
-			"A VM started this way runs without its network policy, so start VMs with devvm.",
+			"A VM started this way runs unconfined, whatever its tier, so start VMs with devvm.",
 		Example: examples(
 			"devvm limactl list", "list the lima backend's VMs and images",
 			"devvm limactl shell devvm-website-71a99b1076d92c", "open a shell in a running VM through Lima",

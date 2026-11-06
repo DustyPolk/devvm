@@ -50,7 +50,7 @@ The desktop is only ever on this machine, and only while `devvm desktop` runs:
 
 - devvm serves it on this machine's `127.0.0.1` alone, so nothing else on your network reaches it. Each VM keeps its port, which no other VM and no program on this machine has. When a program has taken it, devvm chooses another one and keeps that.
 - In the VM, the desktop listens on no port at all, so a VM that [forwards every port](ports-size.md#ports) never forwards it.
-- With [network policy](../safety/network.md), the VM still reaches only its proxy while you use its desktop.
+- On a confined [network tier](../safety/network.md#network-tiers), the VM still reaches only its proxy while you use its desktop.
 
 ## The password
 

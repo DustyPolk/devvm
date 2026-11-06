@@ -49,5 +49,5 @@ devvm network [open|internet|allowlist|none] [flags]
 - [devvm](devvm.md): Open a shell in this folder's VM, creating it first
 - [devvm network allow](devvm_network_allow.md): Allow hosts for this folder's VM
 - [devvm network deny](devvm_network_deny.md): Deny hosts for this folder's VM
-- [devvm network log](devvm_network_log.md): Show what this folder's VM connected to and what its network policy blocked
+- [devvm network log](devvm_network_log.md): Show what this folder's VM connected to and what its proxy blocked
 - [devvm network rm](devvm_network_rm.md): Remove rules from this folder's VM

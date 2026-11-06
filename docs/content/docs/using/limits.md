@@ -27,4 +27,4 @@ These are the things devvm can't do, everywhere, on Linux hosts and on Intel Mac
 
 ## Intel Macs
 
-devvm has a release for Intel Macs, which the install script and Homebrew install, but nobody has tested it on one yet. The tested systems are Apple silicon Macs and Linux on arm64 and x86_64, so on an Intel Mac, VMs, `--from` and network policy may fail in ways that devvm's tests haven't caught.
+devvm has a release for Intel Macs, which the install script and Homebrew install, but nobody has tested it on one yet. The tested systems are Apple silicon Macs and Linux on arm64 and x86_64, so on an Intel Mac, VMs, `--from` and the network tiers' confinement may fail in ways that devvm's tests haven't caught.

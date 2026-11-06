@@ -12,7 +12,7 @@ devvm writes nothing into your project folders. It keeps the settings you edit i
 | File | What it holds | Written by |
 | --- | --- | --- |
 | `config.toml` | the defaults that new VMs get and the [retention settings](#retention), which win over what devvm's commands save, the [company proxy](../safety/network.md#behind-a-company-proxy) and an [Ubuntu mirror](#an-ubuntu-mirror) ([config.toml](#configtoml)) | you |
-| `policy` | your [network policy](../safety/network.md#changing-rules) rules for every VM | `devvm network allow -g`, `deny -g`, `rm -g`, or you |
+| `policy` | your [network rules](../safety/network.md#changing-rules) for every VM | `devvm network allow -g`, `deny -g`, `rm -g`, or you |
 | `layers/` | your own [layers](customizing.md#your-own-layers) and their allowlists | `devvm layer new`, then you |
 | `ca/` | your [company's CA certificates](#a-companys-ca), which VMs and builds trust | you |
 | `version` | the folder's [layout version](troubleshooting.md#a-newer-devvm-changed-devvms-folders), which says how devvm keeps its files here | devvm, when it's missing or older |
@@ -26,8 +26,8 @@ Upgrading devvm keeps this folder as it is. Back it up, such as in a dotfiles re
 `~/.config/devvm/config.toml` sets the defaults that new VMs get, the retention settings, the company proxy and an Ubuntu mirror, in a file you write by hand. devvm reads it and never writes it. Every key is optional, and devvm has no `config.toml` until you write one. This example sets every key:
 
 ```toml
-# Whether new VMs get network policy: ask, on or off.
-network = "on"
+# The network tier new VMs get: ask, open, internet, allowlist or none.
+network = "allowlist"
 
 # The ports new VMs forward: all, none, or ports and ranges.
 ports = "5173,8000-8010"
@@ -68,7 +68,7 @@ no-proxy = "localhost,.example.com"
 
 Each key takes what its command takes. `network` is `ask` or a tier, `open`, `internet`, `allowlist` or `none`, as `devvm network -g` sets it ([choosing a tier](../safety/network.md#choosing-a-tier)). `ports` is `all`, `none` or a list, as `devvm ports -g` takes it ([size and ports](ports-size.md#size-and-ports)). `features` lists the [features](customizing.md#choosing-features) that base gets, `agents` the [coding agents](#coding-agents-for-new-vms) that new VMs get, and `layers` the [layers](#layers-for-new-vms) that new VMs get, bottom first. `cpus` is a whole number, and `memory` and `disk` are a number of GiB, such as `8`, `8.5` or `"8G"`, as `devvm size -g` takes them. The `[retention]` keys are the [retention settings](#retention), with a duration such as `"90d"` or a size such as `"20G"` in quotes, and a count as a number.
 
-The `[proxy]` table is the [company proxy](../safety/network.md#behind-a-company-proxy) that VMs with network policy, builds and devvm's own downloads go through when the shell you run devvm in sets neither `HTTPS_PROXY` nor `HTTP_PROXY`. VMs without network policy never get it, and devvm warns you when it starts one. That shell's settings win over the whole table. `https` and `http` take what `HTTPS_PROXY` and `HTTP_PROXY` take, an `http://` URL or `host:port`, and `no-proxy` takes what `NO_PROXY` takes. A URL never holds a password, and devvm refuses one that does, so put only the user in it and save the password with `devvm secret set proxy`. No command saves the proxy, so it's only ever in `config.toml`.
+The `[proxy]` table is the [company proxy](../safety/network.md#behind-a-company-proxy) that every VM's proxy, builds and devvm's own downloads go through when the shell you run devvm in sets neither `HTTPS_PROXY` nor `HTTP_PROXY`, whatever the VM's tier. No VM gets the company proxy's settings itself. That shell's settings win over the whole table. `https` and `http` take what `HTTPS_PROXY` and `HTTP_PROXY` take, an `http://` URL or `host:port`, and `no-proxy` takes what `NO_PROXY` takes. A URL never holds a password, and devvm refuses one that does, so put only the user in it and save the password with `devvm secret set proxy`. No command saves the proxy, so it's only ever in `config.toml`.
 
 ### An Ubuntu mirror
 
@@ -201,7 +201,7 @@ cp company-root.pem ~/.config/devvm/ca/
 
 devvm reads every `*.pem` and `*.crt` file in that folder each time you open a VM and each time it builds an image, and it leaves other files alone. A file can hold one certificate or several, in PEM, the text form that starts with `-----BEGIN CERTIFICATE-----`. devvm accepts only CA certificates. When a file holds anything else, such as a private key, a certificate devvm can't read or a certificate that isn't a CA's, devvm refuses the whole folder and names the file. It sends only the certificates it read out of a file, never the rest of the file. devvm doesn't follow links there, so copy each certificate into the folder rather than linking to it. When a `*.pem` or `*.crt` file is a link, or the folder itself is one, devvm refuses the whole folder and names the link, because a link into a project folder would let that project's VM replace the CA that every VM, build and proxy trusts. devvm also refuses the folder, naming the file, when it can't read a file there or the folder itself.
 
-Every project VM trusts these CAs in its system's store from its next launch, and so does every VM that devvm builds an image or shared tools in. devvm takes them out of a build VM before the image is finished, so images never keep them, and adding or removing a CA rebuilds nothing. A layer script of yours that copies the system's CA bundle somewhere else does keep that copy. With [network policy](../safety/network.md), the VM's proxy also trusts them for the connections it makes itself. When you take a certificate out of the folder, VMs stop trusting it at their next launch, and stores that copy the system's CAs, such as Java's `cacerts`, drop it too.
+Every project VM trusts these CAs in its system's store from its next launch, and so does every VM that devvm builds an image or shared tools in. devvm takes them out of a build VM before the image is finished, so images never keep them, and adding or removing a CA rebuilds nothing. A layer script of yours that copies the system's CA bundle somewhere else does keep that copy. On every [network tier](../safety/network.md), the VM's proxy also trusts them for the connections it makes itself. When you take a certificate out of the folder, VMs stop trusting it at their next launch, and stores that copy the system's CAs, such as Java's `cacerts`, drop it too.
 
 Most tools read the system's store, among them apt, apk, curl, git and Python's `ssl` module. For those that don't, every VM's environment points them at it:
 
@@ -212,7 +212,7 @@ Most tools read the system's store, among them apt, apk, curl, git and Python's 
 | `REQUESTS_CA_BUNDLE`, `PIP_CERT` | the system's bundle | Python's `requests` and pip, which use their own CA list otherwise |
 | `UV_SYSTEM_CERTS` | `1` | uv |
 
-A CA in the folder can read every TLS connection a VM makes, as it can this machine's, so put only CAs there that you trust as much as this machine does. [Network policy](../internals/network.md#a-companys-ca) explains how the CAs reach VMs, and [Images and caching](../internals/images.md#a-companys-ca-in-builds) how builds use them.
+A CA in the folder can read every TLS connection a VM makes, as it can this machine's, so put only CAs there that you trust as much as this machine does. [How it works › Network tiers](../internals/network.md#a-companys-ca) explains how the CAs reach VMs, and [Images and caching](../internals/images.md#a-companys-ca-in-builds) how builds use them.
 
 ## devvm's state
 
@@ -237,7 +237,7 @@ When devvm refuses a folder, make the VM in a project folder inside it, or keep 
 
 In a terminal, devvm colors the labels and links around its messages, while the messages' own text stays in your terminal's usual color. The values a message fills in, such as a VM's name, a path, a port or a count, are bold, so they stand out from the words around them. An error's `devvm:` label is red and a warning's is yellow, a doc link is blue and underlined, and the `==>` before what devvm did is bold. When a step fails, the end of the run log that devvm prints is dim, and so is the log's latest line on the status line and each line that `-v` shows. The mark a slow step leaves when it's done is green.
 
-The tables that devvm ls, devvm images, devvm space and devvm doctor print are colored too. Each table's header row and the totals row are bold, and a state is green when it's good, such as current, Running or native, yellow when it needs your attention, such as stale, unused, Stopped or emulated, and red when something is wrong, such as an unenforced network policy or an unreviewed emulation. Digests, image keys and a feature a backend doesn't have, which devvm doctor lists as none, are dim, and names, paths, sizes and counts stay in your terminal's usual color. The columns line up the same with colors or without.
+The tables that devvm ls, devvm images, devvm space and devvm doctor print are colored too. Each table's header row and the totals row are bold, and a state is green when it's good, such as current, Running or native, yellow when it needs your attention, such as stale, unused, Stopped or emulated, and red when something is wrong, such as an unenforced tier or an unreviewed emulation. Digests, image keys and a feature a backend doesn't have, which devvm doctor lists as none, are dim, and names, paths, sizes and counts stay in your terminal's usual color. The columns line up the same with colors or without.
 
 devvm uses only your terminal's 16 base colors, so your theme picks shades that read well on its background, light or dark. It never sets a background color.
 

@@ -1,9 +1,9 @@
 ---
-title: Network policy
+title: Network tiers
 weight: 1
 ---
 
-Every VM goes through a proxy that devvm runs for it on this machine, and the VM's network tier decides what the proxy lets it reach. A VM on the allowlist tier, which is network policy as the rest of this page describes it, reaches only the hosts on its allowlist. No VM holds your secrets, whatever its tier, because its proxy puts them into its requests. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key. New VMs get network policy by default. An open VM, one without network policy, reaches anything this machine can, including this machine's own services on `localhost` and your LAN.
+Every VM goes through a proxy that devvm runs for it on this machine, and the VM's network tier decides what the proxy lets it reach. New VMs get the allowlist tier by default, so they reach only the hosts on their allowlist. No VM holds your secrets, whatever its tier, because its proxy puts them into its requests. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key. An open VM, the one tier that isn't confined to its proxy, reaches anything this machine can, including this machine's own services on `localhost` and your LAN.
 
 ```mermaid
 sequenceDiagram
@@ -19,7 +19,7 @@ sequenceDiagram
   X-->>P: 403: not on<br>the allowlist
 ```
 
-This page covers what you do with network policy and what you see. [How it works › Network policy](../internals/network.md) explains how devvm confines a VM to its proxy and how the proxy handles each connection.
+This page covers what you do with a VM's tier and what you see. [How it works › Network tiers](../internals/network.md) explains how devvm confines a VM to its proxy and how the proxy handles each connection.
 
 ## Network tiers
 
@@ -100,7 +100,7 @@ A rule is plain ASCII with no spaces in it, and a port is a number from 1 to 655
 
 When a line that isn't a rule starts with `!`, it reads as a deny, but the proxy can't tell what it would deny. So while the line is there, the proxy of every VM that reads the file denies every new connection apart from the VM's [links](#links-between-vms), whatever the other rules allow. Connections that are already open stay open. Each refusal names the file and the line, and it suggests no `devvm network allow` command, because no rule would help. Any other line that isn't a rule is skipped, and the file's other lines still apply. The proxy names each such line in its own log.
 
-devvm warns about each line that isn't a rule, with the file and the line's number, and the warning for a broken deny says that the proxies deny everything until it's fixed. It warns when you open a VM with network policy whose proxy reads the file, when `devvm network allow`, `deny` or `rm` changes the file, and in `devvm doctor`. `devvm network` also marks the line. Fix the line or remove it, and the change applies from the next connection.
+devvm warns about each line that isn't a rule, with the file and the line's number, and the warning for a broken deny says that the proxies deny everything until it's fixed. It warns when you open a confined VM whose proxy reads the file, when `devvm network allow`, `deny` or `rm` changes the file, and in `devvm doctor`. `devvm network` also marks the line. Fix the line or remove it, and the change applies from the next connection.
 
 The proxy never dials a denied address, even for an allowed name that resolves to it or to its NAT64 form. A missing file has no rules. A file that changed but can't be read keeps its last rules, so a deny never lapses.
 
@@ -214,7 +214,7 @@ In the VM, `devvm-why` prints what the proxy blocked lately, and a note before e
 
 In a VM with the [`nix` layer](../using/images.md#nix), Nix's daemon makes most of Nix's downloads, and devvm also points it at the proxy, so its downloads go through the same allowlists. The layer's allowlist has `cache.nixos.org` for Nix's binary cache, and `channels.nixos.org` and `releases.nixos.org` for its channels and flake registry, and GitHub, where most flakes' inputs come from, is in devvm's rules for every VM.
 
-Nix asks the proxy's shared cache, `http://devvm.proxy/nix`, before cache.nixos.org, so every VM with network policy and the layer shares the packages that any of them downloaded ([shared downloads](../using/toolchains.md#nix-projects)). The proxy fetches what the cache doesn't have from cache.nixos.org alone, and only while the VM's allowlist allows `cache.nixos.org`. It keeps a package only when cache.nixos.org's signature on it checks, and the VM's Nix checks that signature again. A VM can only make the proxy fetch from cache.nixos.org: the proxy refuses anything a VM sends to store, and every request that isn't for one of Nix's cache files. Each request shows in `devvm network log` as `cache`, with whether it was a `hit`, `fetched`, or why it wasn't found. What one VM can learn of another through the cache is under [Attack vectors](attack-vectors.md#network). An open VM has its proxy too, so it shares the cache as well, and its proxy fetches from cache.nixos.org for it.
+Nix asks the proxy's shared cache, `http://devvm.proxy/nix`, before cache.nixos.org, so every VM with the layer shares the packages that any of them downloaded ([shared downloads](../using/toolchains.md#nix-projects)). The proxy fetches what the cache doesn't have from cache.nixos.org alone, and only while the VM's tier and rules let it reach `cache.nixos.org`. It keeps a package only when cache.nixos.org's signature on it checks, and the VM's Nix checks that signature again. A VM can only make the proxy fetch from cache.nixos.org: the proxy refuses anything a VM sends to store, and every request that isn't for one of Nix's cache files. Each request shows in `devvm network log` as `cache`, with whether it was a `hit`, `fetched`, or why it wasn't found. What one VM can learn of another through the cache is under [Attack vectors](attack-vectors.md#network). An open VM has its proxy too, so it shares the cache as well, and its proxy fetches from cache.nixos.org for it.
 
 When a package isn't in the binary cache, Nix builds it from source, and the build downloads its sources from their own hosts, such as `ftpmirror.gnu.org`. The proxy blocks those hosts until you allow them, so the build fails, and the error, `devvm-why` and `devvm network log --blocked` name the host and the `devvm network allow` command that allows it.
 
@@ -233,13 +233,13 @@ devvm passes the settings to the VM's proxy when the proxy starts, and when you 
 
 The VM's proxy still decides each request by the host name the VM asked for, against the same allowlists, and only then passes it on. It sends tunnels, which carry HTTPS and the requests it puts your secrets into, through `HTTPS_PROXY`'s proxy, and plain HTTP requests through `HTTP_PROXY`'s. It reaches the hosts that `NO_PROXY` names directly, and also `localhost` and loopback addresses. In `NO_PROXY`, `example.com` matches that host and its subdomains, `.example.com` matches only its subdomains, an address or a CIDR matches addresses, any entry can end in a port, and `*` matches every host. `devvm network log` adds `through host:port` to each request that went through the company proxy.
 
-The company proxy needs an `http://` address, such as `http://user:password@proxy.example.com:8080` in `HTTPS_PROXY`, and a proxy without a port is on port 80. devvm doesn't start a VM with network policy while `HTTPS_PROXY`, `HTTP_PROXY` or a `[proxy]` key names an `https://` or `socks5://` proxy, and it tells you which setting to change. The company proxy's password stays on this machine. The VM never gets it, and devvm writes it into no log, no image and no process's arguments.
+The company proxy needs an `http://` address, such as `http://user:password@proxy.example.com:8080` in `HTTPS_PROXY`, and a proxy without a port is on port 80. devvm doesn't start a VM's proxy while `HTTPS_PROXY`, `HTTP_PROXY` or a `[proxy]` key names an `https://` or `socks5://` proxy, and it tells you which setting to change. The company proxy's password stays on this machine. The VM never gets it, and devvm writes it into no log, no image and no process's arguments.
 
-`config.toml` never holds the password, because it's a file you might copy to other machines or keep with your dotfiles, and devvm refuses a `[proxy]` URL that has one. Put only the user in the URL, as `http://alice@proxy.example.com:8080`, and save the password with `devvm secret set proxy`, which keeps it as it keeps the other [secrets](#saving-and-binding-secrets). devvm's proxies look it up themselves when they start, so no file of devvm's holds it in the clear. devvm doesn't make a new VM, start one with network policy, or build an image or the shared tools while `config.toml`'s proxy names a user and no password is saved, and it checks before anything starts. A VM's proxy reads the password only when it starts, so after you change it, run `devvm restart` in each VM's folder. No VM ever gets the `proxy` secret, and `devvm secret use proxy` refuses.
+`config.toml` never holds the password, because it's a file you might copy to other machines or keep with your dotfiles, and devvm refuses a `[proxy]` URL that has one. Put only the user in the URL, as `http://alice@proxy.example.com:8080`, and save the password with `devvm secret set proxy`, which keeps it as it keeps the other [secrets](#saving-and-binding-secrets). devvm's proxies look it up themselves when they start, so no file of devvm's holds it in the clear. devvm doesn't make a new VM, start a VM's proxy, or build an image or the shared tools while `config.toml`'s proxy names a user and no password is saved, and it checks before anything starts. A VM's proxy reads the password only when it starts, so after you change it, run `devvm restart` in each VM's folder. No VM ever gets the `proxy` secret, and `devvm secret use proxy` refuses.
 
 The company proxy sees the name and port of every host the VM reaches, and if it inspects TLS, the [CA you add for it](../using/settings.md#a-companys-ca) also lets it read the traffic. The company proxy also looks up each name itself, so the VM's proxy can't check every address a name leads to. It still refuses an address that's this machine's own or internal, unless a rule names it, and it refuses a name when this machine's lookup gives an internal or denied address for it. A name that this machine can't look up goes to the company proxy unchecked only when an allowlist names it, as `example.com` or `*.example.com`. When only `**` allows a name that this machine can't look up, the VM's proxy refuses it, so `**` never lets a VM send the company proxy a name of its own making. What a VM can still reach through the company proxy, such as hosts on your company's network, is under [Attack vectors](attack-vectors.md#network).
 
-### Without network policy
+### Open VMs and builds
 
 An open VM goes through its proxy as every VM does, and its proxy sends its requests through the company proxy, from the shell's settings or `config.toml`'s, so the company proxy's password stays on this machine for it too. The VM never gets the shell's proxy settings, and Lima gets none to pass on to it. What an open VM reaches directly, past its proxy, such as the hosts its `NO_PROXY` names, doesn't go through the company proxy.
 
@@ -251,9 +251,19 @@ A build's proxy allows any host, as `**` does. It sends a name that this machine
 
 devvm's own downloads on this machine go through the company proxy too. They are devvm's copy of mise and the versions it looks up for the shared tools, the list of Ubuntu's cloud images, and a container registry's answers for `--from`. With the shell's settings, each of them uses the shell's. With `config.toml`'s, devvm's own requests send the password only to the company proxy. The mise it runs on this machine gets the proxy's URL with the password in it, in its environment, because mise takes a proxy's password nowhere else. devvm percent-encodes the password in that URL and mise decodes it before it sends it, so a password with characters such as `@`, `:`, `/`, `#`, `%` or a space works too. devvm never puts that URL in mise's arguments or in a file. When a VM's proxy refreshes a Codex or opencode login on this machine, the refresh goes through the same company proxy as the VM's requests, with the password kept on this machine.
 
+## Tools that ignore the proxy
+
+On the open tier, a tool that ignores the proxy settings in the VM's environment connects directly, past its proxy. Its connections still work, because an open VM reaches everything this machine can, but they don't show in `devvm network log`, they don't go through your company proxy, and a request of theirs that needs one of your secrets carries only its placeholder, so the secret's host refuses it. On every other tier such a tool's direct connection fails, so it needs the proxy's address in its own settings. These common tools don't read `HTTP_PROXY` and `HTTPS_PROXY`, or read them only when told to:
+
+- **Node's `fetch`** reads them only with `NODE_USE_ENV_PROXY=1`, from Node 24.0.0 and 22.21.0, or with `--use-env-proxy`, from Node 24.5.0 and 22.21.0. devvm sets `NODE_USE_ENV_PROXY` in every VM, so an older Node's `fetch` is the one that connects directly.
+- **Python's aiohttp** reads them only when a program makes its session with `trust_env=True`.
+- **Go programs** read them through Go's default HTTP transport, but a program that makes its own transport without a proxy function connects directly.
+- **Java** reads none of them. It takes its proxy from the `https.proxyHost` and `https.proxyPort` system properties, such as `-Dhttps.proxyHost=…`, and `http.proxyHost` and `http.proxyPort` for plain HTTP.
+- **The Docker daemon** reads them only from its own environment as it starts, or from its `daemon.json`, never from your shell. devvm points the daemon at the proxy itself, as [Inside the VM](#inside-the-vm) says.
+
 ## Secrets
 
-Secrets stay on this machine, whatever the VM's tier. A VM gets a placeholder of its own for each one, and its proxy puts the real value into requests for that secret's hosts. An open VM can send a request around its proxy, but then the request carries only the placeholder, which the secret's host refuses. The proxy puts each secret into one header:
+Secrets stay on this machine, whatever the VM's tier. A VM gets a placeholder of its own for each one, and its proxy puts the real value into requests for that secret's hosts. An open VM can send a request around its proxy, but then the request carries only the placeholder, which the secret's host refuses ([tools that ignore the proxy](#tools-that-ignore-the-proxy)). The proxy puts each secret into one header:
 
 | Secret | Hosts | Header | Used by |
 | --- | --- | --- | --- |
@@ -379,7 +389,7 @@ With `--blocked`, each of the `blocked` has the `last` time it was blocked, the 
 
 ## Links between VMs
 
-A [link between VMs](../using/links.md) lets a program in one VM, the client, reach a port that another VM, the target, publishes. devvm carries a link's connections over ssh through this machine, so they use neither VM's network, and with network policy a VM reaches only the hosts on its allowlist and the links you added to it. A client's proxy is a second way into its links: it carries a request for one of the client's own links, by the link's name and port, to the same link on this machine, and passes it on as it is, without looking into it or putting a secret into it. It reaches no other socket on this machine and no other VM's links. The allowlist's rules don't apply to links, so `devvm network deny` doesn't stop one, and `devvm link rm` does.
+A [link between VMs](../using/links.md) lets a program in one VM, the client, reach a port that another VM, the target, publishes. devvm carries a link's connections over ssh through this machine, so they use neither VM's network, and a confined VM reaches only what its tier allows and the links you added to it. A client's proxy is a second way into its links: it carries a request for one of the client's own links, by the link's name and port, to the same link on this machine, and passes it on as it is, without looking into it or putting a secret into it. It reaches no other socket on this machine and no other VM's links. The allowlist's rules don't apply to links, so `devvm network deny` doesn't stop one, and `devvm link rm` does.
 
 A link joins the two VMs' trust. Code in the client can often run code in the target through the target's service, such as Postgres's `COPY … TO PROGRAM`, and it then has whatever the target has: its network, the secrets it may use and its project folder. So devvm keeps two rules:
 
@@ -392,4 +402,4 @@ A [group](../using/links.md#groups) links each of its VMs to the ports that the 
 
 ## Not covered
 
-Network policy leaves some things open, such as what an allowed host accepts, whatever your secrets allow, such as pushes and API calls, and what a company CA that you add can read. [Attack vectors](attack-vectors.md) lists them under [Narrowed, not closed](attack-vectors.md#network) and [Left to you](attack-vectors.md#the-network).
+The tiers leave some things open, such as what an allowed host accepts, whatever your secrets allow, such as pushes and API calls, and what a company CA that you add can read. [Attack vectors](attack-vectors.md) lists them under [Narrowed, not closed](attack-vectors.md#network) and [Left to you](attack-vectors.md#the-network).

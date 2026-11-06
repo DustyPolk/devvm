@@ -75,7 +75,7 @@ When the file is gone, devvm makes the VM again without it, so what the file gav
 
 A command is a string, which devvm runs with `sh -c`, an array, which it runs as it is, or an object of named commands, which it runs one by one, sorted by name. The commands run in the VM, as its user, in the project folder, in a login shell, and never on this machine. Their output goes to the [run log](troubleshooting.md#a-command-fails).
 
-When a command fails, devvm names it in one line, and the commands after it that would run once, or at that start, don't run. devvm keeps the VM and opens it, because the command is the project's and not devvm's. With [network policy](../safety/network.md), the commands reach only what the VM's allowlist allows, like anything else in the VM.
+When a command fails, devvm names it in one line, and the commands after it that would run once, or at that start, don't run. devvm keeps the VM and opens it, because the command is the project's and not devvm's. The commands reach only what the VM's [network tier](../safety/network.md#network-tiers) allows, like anything else in the VM.
 
 ## Variables
 

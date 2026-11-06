@@ -30,7 +30,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm layer add](devvm_layer_add.md): Make this folder's VM again with more layers, then open a shell in it
 - [devvm layer new](devvm_layer_new.md): Start a layer of your own
 - [devvm layer rm](devvm_layer_rm.md): Make this folder's VM again without some of its layers, then open a shell in it
-- [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs without network policy
+- [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs unconfined, whatever their tier
 - [devvm link](devvm_link.md): List this folder's VM's links to your other VMs
 - [devvm link add](devvm_link_add.md): Link this folder's VM to a port of another VM
 - [devvm link publish](devvm_link_publish.md): Show or add the ports this folder's VM offers to links
@@ -40,7 +40,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm network](devvm_network.md): Show or change the network tier of this folder's VM
 - [devvm network allow](devvm_network_allow.md): Allow hosts for this folder's VM
 - [devvm network deny](devvm_network_deny.md): Deny hosts for this folder's VM
-- [devvm network log](devvm_network_log.md): Show what this folder's VM connected to and what its network policy blocked
+- [devvm network log](devvm_network_log.md): Show what this folder's VM connected to and what its proxy blocked
 - [devvm network rm](devvm_network_rm.md): Remove rules from this folder's VM
 - [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards
 - [devvm ports add](devvm_ports_add.md): Forward more ports from this folder's VM

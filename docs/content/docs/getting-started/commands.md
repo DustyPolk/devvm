@@ -97,7 +97,7 @@ When you make one of these changes to a running VM with `devvm size`, `devvm net
 
 When devvm opens a running VM that still has changes waiting for its next start, it names them, such as its size and its agent folder mounts, and asks in a terminal once whether to restart the VM now. It names each change on a line of its own, and when more than two wait, it names the first and says how many more there are. When the VM's agent folder mounts are among the changes, the answer is yes unless you type n (`[Y/n]`), because an agent you just added needs its folders. Otherwise the answer is no unless you type y (`[y/N]`), because the VM is already running and you may only want its shell. If you answer yes, devvm stops the VM, starts it with the changes and opens a shell in it. If you answer no, or there's no terminal, or you pass `--no-input`, devvm warns about each change and opens a shell in the running VM.
 
-`devvm stop` stops this folder's VM and its network policy proxy ([stopping a VM](../internals/overview.md#stopping-a-vm)). Once the VM is stopped, devvm locks its `.git` again and checks it, as a launch that finds the VM stopped does, and it takes the VM's entry out of devvm's [ssh config](../using/ssh.md#ssh-access-by-name). devvm, `devvm restart`, and the commands that need the VM running, such as `devvm host`, start it again.
+`devvm stop` stops this folder's VM and its proxy ([stopping a VM](../internals/overview.md#stopping-a-vm)). Once the VM is stopped, devvm locks its `.git` again and checks it, as a launch that finds the VM stopped does, and it takes the VM's entry out of devvm's [ssh config](../using/ssh.md#ssh-access-by-name). devvm, `devvm restart`, and the commands that need the VM running, such as `devvm host`, start it again.
 
 ### Deleting a VM
 
@@ -223,14 +223,14 @@ A value the VM's state doesn't have shows as `-`, so a VM whose creation didn't 
 | `devvm network [open\|internet\|allowlist\|none]` | show this folder's VM's tier, `open`, `internet`, `allowlist`, `none` or `unenforced`, and then its allowlist, file by file, or give it a tier: between the confined tiers at once, and into or out of open from its next start, offering to restart a running VM now ([details](../safety/network.md#choosing-a-tier)) |
 | `devvm network -g [open\|internet\|allowlist\|none\|ask]` | show or change new VMs' tier, which is `ask` until you change it ([details](../safety/network.md#choosing-a-tier)) |
 | `devvm network allow\|deny\|rm RULE... [-g]` | add allow or deny rules to this folder's VM's own, or remove them, at once, and with `-g`, change yours for every VM ([details](../safety/network.md#changing-rules)) |
-| `devvm network log [--follow] [-n N] [--blocked]` | show what this folder's VM connected to and what its network policy blocked ([details](../safety/network.md#logs)) |
+| `devvm network log [--follow] [-n N] [--blocked]` | show what this folder's VM connected to and what its proxy blocked ([details](../safety/network.md#logs)) |
 | `devvm ssh-agent [on\|devvm\|off]` | show this folder's VM's SSH agent forwarding, which is `off`, `on` for yours or `devvm` for devvm's own, then the keys devvm's own agent holds and those added to it, or change the forwarding from the VM's next start ([details](../using/ssh.md#agent-forwarding)) |
 | `devvm ssh-agent add KEY_FILE [--confirm] [--lifetime DURATION]` | load a key into devvm's own agent, and load it again whenever a VM needs it ([details](../using/ssh.md#devvms-own-agent)) |
 | `devvm ssh-agent rm KEY_FILE` | take a key out of devvm's own agent, so devvm doesn't load it again ([details](../using/ssh.md#devvms-own-agent)) |
 | `devvm git-protect [on\|strict\|off]` | show or change this folder's VM's `.git` protection, while it's stopped ([details](../safety/git-protection.md#turning-it-on-or-off)) |
 | `devvm clone [on\|off] [--force] [--no-export] [--clean-home] [--no-clone-check]` | show whether this folder's VM has its own clone of the repo, or make it again with one, or with the folder mounted, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/clone.md#switching-a-vm-that-exists)) |
 | `devvm secret`, `devvm secret rm NAME` | list the secrets, whether each is saved and the VMs using it, or delete a saved one ([details](../safety/network.md#saving-and-binding-secrets)) |
-| `devvm secret set claude\|github [--stdin]` | save your Claude Code token or GitHub token on this machine, so that with network policy VMs get a placeholder and their proxy puts the secret in ([details](../safety/network.md#saving-and-binding-secrets)) |
+| `devvm secret set claude\|github [--stdin]` | save your Claude Code token or GitHub token on this machine, so that VMs get a placeholder and their proxy puts the secret in ([details](../safety/network.md#saving-and-binding-secrets)) |
 | `devvm secret use\|unuse NAME` | let this folder's VM use a secret, or stop it, though a VM with Claude Code always uses `claude` ([details](../safety/network.md#saving-and-binding-secrets)) |
 | `devvm layer add LAYER... [--force] [--no-export] [--clean-home]` | make this folder's VM again with more layers on top, keeping its home folder and settings, after asking, then open a shell in it ([details](#adding-to-a-vm)) |
 | `devvm layer rm LAYER... [--force] [--no-export] [--clean-home]` | make this folder's VM again without some of its layers, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/images.md#taking-layers-out-of-a-vm)) |
@@ -292,7 +292,7 @@ A layer's script changes the VM's disk, so `devvm layer add LAYER...` gives the 
 | `devvm agent import [AGENT...]` | copy the agents' settings and logins from your home folder into devvm's agent store, which every VM gets them from, never their history, asking before it replaces the store's ([details](../using/coding-agents.md#importing-from-this-machine)) |
 | `devvm doctor` | check what devvm needs on this machine and say how to get what's missing ([details](install.md#checking-what-devvm-needs)) |
 | `devvm completion SHELL` | print the shell completion script for `bash`, `zsh` or `fish` ([details](#shell-completion)) |
-| `devvm limactl ARGS...` | run Lima's `limactl` on the VMs and images in devvm's own Lima home, not `~/.lima`, for debugging, which starts VMs without network policy ([details](../backends/lima.md#running-limactl)) |
+| `devvm limactl ARGS...` | run Lima's `limactl` on the VMs and images in devvm's own Lima home, not `~/.lima`, for debugging, which starts VMs unconfined, whatever their tier ([details](../backends/lima.md#running-limactl)) |
 
 ### Shell completion
 

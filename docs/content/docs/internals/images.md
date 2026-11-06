@@ -52,7 +52,7 @@ This means:
 - Each backend builds its own images and never uses another backend's.
 - With `--from`, base's key has the image's [digest](#digests), so when the tag moves to a new image, base and everything on it rebuild.
 - A layer whose script is gone hashes as missing, so its images don't match any more.
-- Nothing else counts. Features you haven't chosen change no key, and neither do network policy files (`*.policy`), which the proxy reads at run time and which never go into an image.
+- Nothing else counts. Features you haven't chosen change no key, and neither do policy files (`*.policy`), which the proxy reads at run time and which never go into an image.
 
 An image whose key doesn't match its inputs any more is stale. It stays until it's deleted ([cleaning up](../using/images.md#cleaning-up)), and the next use builds a new one.
 
@@ -138,7 +138,7 @@ The script runs the tarball's own installer as `install --daemon --yes --no-chan
 
 It also adds Nix's default profile to the end of sudo's `secure_path`, through `/etc/sudoers.d/devvm-nix`, so `sudo nix` works, and appends Nix's profiles to the `PATH` that `BASH_ENV` gives shells that read no profile. direnv goes into `/usr/local/bin` and nix-direnv into `/usr/local/share/nix-direnv`. A file in `~/.config/direnv/lib` loads nix-direnv and puts each project's direnv layout under `~/.cache/direnv/layouts`, named by a hash of the project's path, so its cached dev shell and garbage collector roots stay in the VM's home and out of the project folder. direnv's shell hook is in `~/.bashrc.d/direnv.sh`, which bash loads before `mise.sh`, and since each hook puts itself first in `PROMPT_COMMAND`, direnv's runs after mise's, and a dev shell's `PATH` comes before the shared tools'.
 
-The daemon doesn't read `/etc/environment`, so the [VM's setup](network.md#the-vms-setup) gives it the proxy when network policy is on, in a drop-in of its own under systemd, or else in `/etc/conf.d/nix-daemon`, which OpenRC reads for the service. With network policy, the setup also puts the [shared Nix cache](network.md#the-shared-nix-cache) first in Nix's substituters, in `/etc/nix/devvm-cache.conf`, which it removes when network policy is off. Running the layer is a backend feature, `nix-layer` ([features](backends.md#features)), and building it also needs the feature, so a backend without it refuses `devvm build nix`. With `sandbox-fallback = false`, every Nix build fails in a VM that can't make the kernel namespaces that Nix's sandbox needs.
+The daemon doesn't read `/etc/environment`, so the [VM's setup](network.md#the-vms-setup) gives it the VM's proxy on every tier, in a drop-in of its own under systemd, or else in `/etc/conf.d/nix-daemon`, which OpenRC reads for the service. The setup also puts the [shared Nix cache](network.md#the-shared-nix-cache) first in Nix's substituters, in `/etc/nix/devvm-cache.conf`. It removes both files from a VM whose environment names no proxy. Running the layer is a backend feature, `nix-layer` ([features](backends.md#features)), and building it also needs the feature, so a backend without it refuses `devvm build nix`. With `sandbox-fallback = false`, every Nix build fails in a VM that can't make the kernel namespaces that Nix's sandbox needs.
 
 ## How it's converted
 
@@ -199,7 +199,7 @@ An image is base and its layers alone, and a VM's shared tools are a list in its
 
 ## A company's CA in builds
 
-Build VMs trust the CA certificates in `~/.config/devvm/ca` ([a company's CA](../using/settings.md#a-companys-ca)) while they build, and images never keep them. [Network policy](network.md#a-companys-ca) describes how devvm reads them and how `assets/guest/ca.sh` installs them.
+Build VMs trust the CA certificates in `~/.config/devvm/ca` ([a company's CA](../using/settings.md#a-companys-ca)) while they build, and images never keep them. [Network tiers](network.md#a-companys-ca) describes how devvm reads them and how `assets/guest/ca.sh` installs them.
 
 A build's `ImageSpec.Trust` holds two scripts made from `ca.sh`, which run as root: `Add`, which writes the certificates from heredocs to a temporary folder and installs them, and `Remove`, which is `ca.sh` without a folder. Each script of the build, `build.sh` of a tools build too, also gets the Trust's `Env` at its start, which exports `trust.Env`, so its tools find the CAs, and nothing of that is written in the VM. The backend puts it there, as it does the build's proxy variables. Each backend runs `Add` before anything in the build VM downloads, and `Remove` once the scripts are done, before the VM stops:
 

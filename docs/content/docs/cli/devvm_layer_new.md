@@ -7,7 +7,7 @@ Start a layer of your own
 
 ## Synopsis
 
-Start a layer of your own, ~/.config/devvm/layers/NAME.sh, a script to edit, and NAME.policy next to it, the hosts that VMs with the layer can reach with network policy. NAME is lowercase letters, digits and dashes, and not base or a built-in layer's or shared tool's name.
+Start a layer of your own, ~/.config/devvm/layers/NAME.sh, a script to edit, and NAME.policy next to it, the hosts that VMs with the layer can reach on the allowlist tier. NAME is lowercase letters, digits and dashes, and not base or a built-in layer's or shared tool's name.
 
 ```text
 devvm layer new NAME [flags]

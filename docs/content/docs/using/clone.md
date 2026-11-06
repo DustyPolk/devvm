@@ -72,11 +72,11 @@ Install each worktree's dependencies in that worktree, and never share one `node
 
 The agents also share the VM's ports, so two servers on the same port collide. Give each worktree's server a port of its own, such as with `PORT=3001`. A VM that forwards every port, as new VMs do by default, forwards each of them to this machine's `localhost` ([ports](ports-size.md#ports)).
 
-The agents in one VM share its network policy, its secrets, and its CPUs, memory and disk, and each agent can read and change every other agent's worktree. When the agents need different network policies, secrets or sizes, or when one agent mustn't reach another's work, give each agent a folder of its own on this machine, such as a separate clone of the repo, and run `devvm --clone` in each, so each gets a VM of its own.
+The agents in one VM share its network tier and rules, its secrets, and its CPUs, memory and disk, and each agent can read and change every other agent's worktree. When the agents need different network tiers or rules, secrets or sizes, or when one agent mustn't reach another's work, give each agent a folder of its own on this machine, such as a separate clone of the repo, and run `devvm --clone` in each, so each gets a VM of its own.
 
 ## Deleting the VM
 
-Before `devvm rm` deletes a `--clone` VM, it checks the clone for work you'd lose. It starts a stopped VM for the check as a launch does, so the VM's network policy is checked first:
+Before `devvm rm` deletes a `--clone` VM, it checks the clone for work you'd lose. It starts a stopped VM for the check as a launch does, so the VM's confinement is checked first:
 
 1. If the clone has branches with commits this repo hasn't fetched, devvm names them and offers to fetch them into new local branches named `saved/devvm/<branch>`. It skips a branch whose name git on this machine refuses and names it, and that branch goes with the VM. To keep such a branch, rename it in the VM with `git branch -m` before you run `devvm rm`.
 2. If the clone or a worktree inside its folder has uncommitted changes, devvm lists the first 20 of them in all, with each worktree's changes under its path, and asks before deleting them along with the VM. devvm skips a worktree whose folder is gone or that git would prune, and it doesn't check worktrees outside the clone's folder. When the clone has more than 100 worktrees, devvm checks the first 100 and asks before deleting the VM, even if none of them has changes.
@@ -89,7 +89,7 @@ The saved branches are named after the remote, as `saved/<remote>/<branch>`, and
 
 `devvm rm --force` skips only the question whether to delete the VM at all, and both checks still run. `devvm rm --no-export` skips the export of the agents' history, and it also leaves both checks as they are.
 
-`devvm rm --no-clone-check` skips both checks, so the VM goes with the commits this repo hasn't fetched and the uncommitted changes, and devvm warns you of that first. Use it when a check can't read the clone, such as when git in the VM is broken, and devvm refuses and keeps the VM. Use it too when the VM doesn't start for the check, such as when its network policy doesn't hold, because devvm then says what kept it from starting and keeps the VM. devvm still asks whether to delete the VM unless you also give `--force`, and it still keeps the `devvm/*` branches you fetched as `saved/devvm/` branches.
+`devvm rm --no-clone-check` skips both checks, so the VM goes with the commits this repo hasn't fetched and the uncommitted changes, and devvm warns you of that first. Use it when a check can't read the clone, such as when git in the VM is broken, and devvm refuses and keeps the VM. Use it too when the VM doesn't start for the check, such as when its tier isn't enforced, because devvm then says what kept it from starting and keeps the VM. devvm still asks whether to delete the VM unless you also give `--force`, and it still keeps the `devvm/*` branches you fetched as `saved/devvm/` branches.
 
 ## Switching a VM that exists
 

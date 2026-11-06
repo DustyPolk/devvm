@@ -3,7 +3,7 @@ title: Backends
 weight: 40
 ---
 
-A backend is the program that runs devvm's VMs and builds their images. devvm decides what goes into a VM, such as its image, its folders, its size and its network policy, and the backend runs it. [Lima](lima.md) is devvm's backend.
+A backend is the program that runs devvm's VMs and builds their images. devvm decides what goes into a VM, such as its image, its folders, its size and its network tier, and the backend runs it. [Lima](lima.md) is devvm's backend.
 
 ## What Lima gives you
 
@@ -12,7 +12,7 @@ A backend is the program that runs devvm's VMs and builds their images. devvm de
 | Each project gets | a full VM with a kernel of its own |
 | Hosts | macOS 13 or newer, or Linux, on arm64 or x86_64 |
 | You need | Lima 2.0 or newer, and on Linux QEMU and access to `/dev/kvm` ([requirements](lima.md#requirements)) |
-| Network policy | {{< yes >}} yes |
+| Confined network tiers | {{< yes >}} yes |
 | The docker layer | {{< yes >}} yes |
 | The nix layer | {{< yes >}} yes |
 | Limits | paths with commas, and shrinking a disk ([limits](lima.md#limits)) |
@@ -31,6 +31,6 @@ The `--json` output of `devvm ls`, `devvm images` and `devvm space` names each V
 
 ## When a backend lacks something
 
-When a VM needs something its backend can't do, devvm stops and says so in one line, naming the VM and what to do. It never falls back to something weaker, so a VM that asks for network policy never starts with an open network.
+When a VM needs something its backend can't do, devvm stops and says so in one line, naming the VM and what to do. It never falls back to something weaker, so a VM on a confined tier never starts with an open network.
 
-That holds for network policy too, though it's on by default. When a backend can't confine a new VM to its proxy, the VM can only be open, so devvm refuses to make it unless you give `--network open`, and it says so in one line ([network tiers](../safety/network.md#network-tiers)).
+That holds for a new VM's tier too, though allowlist is the default. When a backend can't confine a new VM to its proxy, the VM can only be open, so devvm refuses to make it unless you give `--network open`, and it says so in one line ([network tiers](../safety/network.md#network-tiers)).

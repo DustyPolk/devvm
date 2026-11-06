@@ -7,7 +7,7 @@ Stop this folder's VM
 
 ## Synopsis
 
-Stop this folder's VM and its network policy proxy. devvm, devvm restart or a command that needs the VM running starts it again.
+Stop this folder's VM and its proxy. devvm, devvm restart or a command that needs the VM running starts it again.
 
 ```text
 devvm stop [flags]

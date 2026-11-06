@@ -10,7 +10,7 @@ These pages explain how devvm does what the other sections describe, for readers
 - [Images and caching](images.md): how images and shared tools are built, keyed and cached, and how devvm checks what they start from.
 - [Port forwarding](ports.md): how devvm's forwarder forwards a VM's ports to your machine.
 - [The desktop](desktop.md): how `devvm desktop` serves a VM's desktop on your machine, checks its password and keeps your clipboard out, and why devvm doesn't forward X11.
-- [Network policy](network.md): the proxy, the self-check, and how secrets get into requests.
+- [Network tiers](network.md): each tier's confinement, the proxy, the self-check, and how secrets get into requests.
 - [.git protection](git-protection.md): what devvm locks, when it checks the locks, and what they can't stop.
 - [Security model](security.md): what devvm protects on your machine and how, and what it doesn't protect.
 - [Backends](backends.md): each backend's features, native or emulated, and what happens when one is missing.

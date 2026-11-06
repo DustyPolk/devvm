@@ -128,7 +128,7 @@ type notRuleJSON struct {
 	Text string `json:"text"`
 }
 
-// printNetwork writes the VM's network policy: its line then its rules,
+// printNetwork writes the VM's tier: its line then its rules,
 // or with asJSON as networkOutput.
 func printNetwork(u *ui.UI, asJSON bool, s vm.NetworkShown) error {
 	if !asJSON {
@@ -215,9 +215,9 @@ func newNetworkLogCmd(a *app) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "log",
-		Short: "Show what this folder's VM connected to and what its network policy blocked",
-		Long: "Show the network log of this folder's VM, oldest first: with network policy, one line per connection " +
-			"or request its proxy allowed or blocked, and with or without it, one line per connection to one of its links " +
+		Short: "Show what this folder's VM connected to and what its proxy blocked",
+		Long: "Show the network log of this folder's VM, oldest first: one line per connection " +
+			"or request its proxy allowed or blocked, and one line per connection to one of its links " +
 			"and each that devvm refused. " +
 			"--blocked lists the blocks instead, one row per host and port, with the devvm network allow " +
 			"command that allows each.",

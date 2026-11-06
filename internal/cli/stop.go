@@ -12,7 +12,7 @@ func newStopCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stop",
 		Short: "Stop this folder's VM",
-		Long: "Stop this folder's VM and its network policy proxy. " +
+		Long: "Stop this folder's VM and its proxy. " +
 			"devvm, devvm restart or a command that needs the VM running starts it again.",
 		Example: examples(
 			"devvm stop", "stop this folder's VM",

@@ -8,7 +8,7 @@ import (
 	"github.com/w3cj/devvm/internal/proxy"
 )
 
-// newProxyCmd is devvm _proxy: one VM's network policy proxy, run with
+// newProxyCmd is devvm _proxy: one VM's proxy, run with
 // its config (-config FILE). Hidden: it's not for users. Its flag is the
 // proxy's own (one dash or two), parsed by proxy.Main; its event log and
 // log lines are data, written to devvm's stdout and stderr. Its built-in
@@ -18,7 +18,7 @@ func newProxyCmd(a *app) *cobra.Command {
 	u := a.u
 	return &cobra.Command{
 		Use:                "_proxy [flags]",
-		Short:              "Run a VM's network policy proxy",
+		Short:              "Run a VM's proxy",
 		Hidden:             true,
 		DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {

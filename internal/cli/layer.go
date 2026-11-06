@@ -31,7 +31,7 @@ func newLayerCmd(a *app) *cobra.Command {
 		Use:   "new NAME",
 		Short: "Start a layer of your own",
 		Long: "Start a layer of your own, ~/.config/devvm/layers/NAME.sh, a script to edit, and NAME.policy next to it, " +
-			"the hosts that VMs with the layer can reach with network policy. " +
+			"the hosts that VMs with the layer can reach on the allowlist tier. " +
 			"NAME is lowercase letters, digits and dashes, and not base or a built-in layer's or shared tool's name.",
 		Example: examples(
 			"devvm layer new mailpit", "start the mailpit layer, then edit its script",

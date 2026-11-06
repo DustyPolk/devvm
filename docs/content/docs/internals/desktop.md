@@ -30,7 +30,7 @@ Root in the VM can change its desktop, or run another server on the socket in it
 - **The password:** the relay checks it on this machine before it opens the channel, so a VM's server that asks for none still gets no viewer without it.
 - **The address:** the relay listens on this machine's loopback, so no server in the VM reaches other machines through it. A server root starts on a TCP port of the VM's is an ordinary server of the VM's, which the VM's [ports](../using/ports-size.md#ports) forward to this machine's loopback, or don't, as for any other.
 - **This machine's clipboard:** without `--clipboard`, the relay drops it, whatever the VM's server accepts.
-- **No way out:** every connection starts on this machine, and the VM opens none to it through the relay. The channel is a local forward that devvm's ssh asks for, which the VM's sshd connects to the VM's own socket. With network policy, the VM's own connections still reach only its proxy.
+- **No way out:** every connection starts on this machine, and the VM opens none to it through the relay. The channel is a local forward that devvm's ssh asks for, which the VM's sshd connects to the VM's own socket. On a confined tier, the VM's own connections still reach only its proxy.
 
 The relay can't stop a VM's server from sending its clipboard to the viewer, because that would mean reading every screen update the server sends. So the VM's clipboard stays off this machine only while its server is as devvm set it up, or while the viewer doesn't take it, which Screen Sharing's Use Shared Clipboard setting decides.
 

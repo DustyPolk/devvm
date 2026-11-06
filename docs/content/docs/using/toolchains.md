@@ -12,7 +12,7 @@ node brings the newest release of Node 24, with npm, pnpm, yarn through corepack
 - **Files.** devvm chooses node for a folder with `package.json`, `bun.lock` or `bun.lockb` at its top level.
 - **Versions.** A project's `.nvmrc` or `.node-version` picks its Node version, which installs into the VM the first time it's used.
 - **Global installs.** `npm i -g` installs into `~/.npm-global` in the VM, which is on the `PATH`.
-- **Allowlist.** With network policy, the VM can reach npm's, yarn's, pnpm's and bun's registries and Node's downloads, which are `registry.npmjs.org`, `registry.yarnpkg.com`, `repo.yarnpkg.com`, `nodejs.org` and `bun.sh`.
+- **Allowlist.** On the allowlist tier, the VM can reach npm's, yarn's, pnpm's and bun's registries and Node's downloads, which are `registry.npmjs.org`, `registry.yarnpkg.com`, `repo.yarnpkg.com`, `nodejs.org` and `bun.sh`.
 
 ## python
 
@@ -21,7 +21,7 @@ python brings a prebuilt build of the newest CPython release, and uv, so `pip` a
 - **Files.** devvm chooses python for a folder with `pyproject.toml`, `requirements.txt`, `uv.lock`, `setup.py` or `Pipfile` at its top level.
 - **Versions.** A project's `.python-version` picks its Python version, which installs into the VM the first time it's used.
 - **Global installs.** The shared Python is read-only, so packages go into a project's virtual environment or into your home in the VM, and `~/.local/bin` is on the `PATH`.
-- **Allowlist.** With network policy, the VM can reach PyPI and the Python downloads that uv uses, which are `pypi.org`, `files.pythonhosted.org` and `releases.astral.sh`.
+- **Allowlist.** On the allowlist tier, the VM can reach PyPI and the Python downloads that uv uses, which are `pypi.org`, `files.pythonhosted.org` and `releases.astral.sh`.
 
 ## rust
 
@@ -30,7 +30,7 @@ rust brings rustup, cargo and the newest stable toolchain, with the `rust-src` a
 - **Files.** devvm chooses rust for a folder with `Cargo.toml` at its top level.
 - **Versions.** A project's `rust-toolchain.toml` picks its toolchain, which rustup installs into the VM next to the shared one the first time it's used.
 - **Global installs.** `cargo install` installs into `~/.cargo/bin` in the VM, which is on the `PATH`. `rustup component add` can't change the shared toolchain, which is why it comes with `rust-src` and `rust-analyzer`.
-- **Allowlist.** With network policy, the VM can reach crates.io and Rust's toolchain downloads, which are `crates.io`, `index.crates.io`, `static.crates.io` and `static.rust-lang.org`.
+- **Allowlist.** On the allowlist tier, the VM can reach crates.io and Rust's toolchain downloads, which are `crates.io`, `index.crates.io`, `static.crates.io` and `static.rust-lang.org`.
 
 ## go
 
@@ -39,7 +39,7 @@ go brings the newest Go release, and devvm turns Go's telemetry off in the VM.
 - **Files.** devvm chooses go for a folder with `go.mod` at its top level.
 - **Versions.** The `toolchain` line in a project's `go.mod` picks its Go version, and Go itself downloads that version into the VM the first time it's used.
 - **Global installs.** `go install` installs into `~/go/bin` in the VM, which is on the `PATH`.
-- **Allowlist.** With network policy, the VM can reach Go's module proxy, its checksum database and Go's downloads, which are `proxy.golang.org`, `sum.golang.org`, `go.dev` and `dl.google.com`.
+- **Allowlist.** On the allowlist tier, the VM can reach Go's module proxy, its checksum database and Go's downloads, which are `proxy.golang.org`, `sum.golang.org`, `go.dev` and `dl.google.com`.
 
 ## Nix projects
 
@@ -51,11 +51,11 @@ A project whose toolchain comes from Nix gets the [`nix` layer](images.md#nix), 
 - **One store per VM.** Each VM has its own Nix store, so a package one VM builds isn't in another's. `nix run nixpkgs#hello` works in any VM with the layer.
 - **Shared downloads.** VMs share their downloads from Nix's binary cache, on every [network tier](../safety/network.md#network-tiers), an open VM's included, because every VM's Nix goes through its proxy. The first VM that needs a package gets it from cache.nixos.org through devvm, which keeps a copy on this machine, and the other VMs get that copy, so each package downloads once per machine instead of once per VM. Only devvm adds to this shared cache, and only what cache.nixos.org signed, so no VM can change what another VM gets. When the cache doesn't have a package or can't get it, Nix goes to cache.nixos.org itself. The cache keeps to 10 GiB, deleting the packages used least recently first, unless you set another size with `devvm retention nix-cache.size=20G` ([retention](settings.md#retention)). `devvm space` shows what it takes, and `devvm gc --nix-cache` empties it ([how it works](../internals/network.md#the-shared-nix-cache)).
 - **Trust.** Only root is a trusted Nix user, so the VM's user can't add caches or signing keys of their own, and Nix ignores `--option substituters` from them. `sudo nix` works. Nix builds every package in its sandbox, and a build fails rather than run without it.
-- **Allowlist.** With network policy, the VM can reach Nix's binary cache and its channels and flake registry, which are `cache.nixos.org`, `channels.nixos.org` and `releases.nixos.org`, and GitHub, where most flakes' inputs come from. A package that isn't in Nix's binary cache builds from source, which downloads its sources from their own hosts, and those are blocked until you allow them ([Nix with network policy](../safety/network.md#nix)).
+- **Allowlist.** On the allowlist tier, the VM can reach Nix's binary cache and its channels and flake registry, which are `cache.nixos.org`, `channels.nixos.org` and `releases.nixos.org`, and GitHub, where most flakes' inputs come from. A package that isn't in Nix's binary cache builds from source, which downloads its sources from their own hosts, and those are blocked until you allow them ([Nix through the proxy](../safety/network.md#nix)).
 
 ### Sharing a team's packages
 
-When your team's projects use one flake for their dev shell, you can put that dev shell's packages into an image, so every VM made from the image starts with them in its store and downloads none of them. VMs made from one image share its disk, because on macOS each VM's disk is a copy-on-write clone of the image's, and on Linux hosts it's an overlay of the image's, so the packages take their space once. This works with the stable Nix that the `nix` layer installs, with network policy or without it.
+When your team's projects use one flake for their dev shell, you can put that dev shell's packages into an image, so every VM made from the image starts with them in its store and downloads none of them. VMs made from one image share its disk, because on macOS each VM's disk is a copy-on-write clone of the image's, and on Linux hosts it's an overlay of the image's, so the packages take their space once. This works with the stable Nix that the `nix` layer installs, on every network tier.
 
 To do it, make a [layer of your own](customizing.md#your-own-layers) that builds the dev shell while the image builds, and give it after `nix`, so that it runs on top of the `nix` layer:
 
@@ -82,7 +82,7 @@ rm -f /tmp/myteam-shell /tmp/myteam-shell-*-link
 
 What this doesn't cover:
 
-- **Packages a VM gets after it's made** stay on that VM's own disk. With network policy, the [shared downloads](#nix-projects) at least save downloading them again.
+- **Packages a VM gets after it's made** stay on that VM's own disk. The [shared downloads](#nix-projects) at least save downloading them again.
 - **A new version of the flake** needs a new image. Moving `flake` to another commit edits the script, so devvm builds the image again the next time it's used, while VMs made earlier keep the packages they have. When the script names a branch instead of a commit, a changed `flake.lock` upstream doesn't change the script, so run `devvm rebuild myteam` to build the image again.
 - **A flake that pins another nixpkgs revision** shares few packages with the image, and its VM downloads the rest.
 - **Nix's local overlay store**, which would let VMs share one store as it changes, is left out until Nix makes it stable.

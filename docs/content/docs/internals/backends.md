@@ -76,11 +76,11 @@ flowchart TD
   np -- "yes" --> warned["the VM is made open,<br>as asked"]
 ```
 
-Before devvm builds an image, makes or starts a VM, or changes a VM's settings, it checks that the backend has every feature the image or the VM needs. The backend itself is behind the same check: every time devvm asks it to build an image or the shared tools, make a VM or start one, devvm checks the features that request needs before the backend sees it, so a request that skipped the first check is refused too. When the backend lacks one, devvm stops and names the VM, the feature and the backend (`backend_lacks`). It does the same for a feature the backend only emulates when that emulation's review hasn't passed (`backend_unreviewed`). devvm never falls back to something weaker, so a VM that asks for network policy never starts with an open network.
+Before devvm builds an image, makes or starts a VM, or changes a VM's settings, it checks that the backend has every feature the image or the VM needs. The backend itself is behind the same check: every time devvm asks it to build an image or the shared tools, make a VM or start one, devvm checks the features that request needs before the backend sees it, so a request that skipped the first check is refused too. When the backend lacks one, devvm stops and names the VM, the feature and the backend (`backend_lacks`). It does the same for a feature the backend only emulates when that emulation's review hasn't passed (`backend_unreviewed`). devvm never falls back to something weaker, so a VM on a confined tier never starts with an open network.
 
 To get the feature, use a backend that has it. A VM keeps its backend, so that means making a new VM.
 
-Network policy is the one exception, because it's on by default, and [When a backend lacks something](../backends/_index.md#when-a-backend-lacks-something) says what devvm does instead.
+A new VM's tier is the one exception, because allowlist is the default, and [When a backend lacks something](../backends/_index.md#when-a-backend-lacks-something) says what devvm does instead.
 
 ## What a start changes
 

@@ -3,11 +3,11 @@ title: devvm limactl
 weight: 26
 ---
 
-Run Lima's limactl for debugging, which starts VMs without network policy
+Run Lima's limactl for debugging, which starts VMs unconfined, whatever their tier
 
 ## Synopsis
 
-Run limactl with ARGS on devvm's own Lima home, where the lima backend's VMs and images live, passing on every argument, --help included. A VM started this way runs without its network policy, so start VMs with devvm.
+Run limactl with ARGS on devvm's own Lima home, where the lima backend's VMs and images live, passing on every argument, --help included. A VM started this way runs unconfined, whatever its tier, so start VMs with devvm.
 
 ```text
 devvm limactl [ARGS...]

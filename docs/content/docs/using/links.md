@@ -3,7 +3,7 @@ title: Links between VMs
 weight: 5
 ---
 
-A link lets a program in one of your VMs reach a TCP service in another by name, as in `postgres://db:5432/app` or `fetch("http://api:3000")`. The VM with the service is the target, and you publish its port in its folder. The VM that reaches it is the client, and you add the link in the client's folder. Links work on every backend, with or without network policy on either VM. devvm carries each connection over ssh through this machine, so neither VM's network changes, and [How it works › Links between VMs](../internals/ports.md#links-between-vms) explains how.
+A link lets a program in one of your VMs reach a TCP service in another by name, as in `postgres://db:5432/app` or `fetch("http://api:3000")`. The VM with the service is the target, and you publish its port in its folder. The VM that reaches it is the client, and you add the link in the client's folder. Links work on every backend, whatever the two VMs' network tiers, as long as the target's tier is the client's or a stricter one. devvm carries each connection over ssh through this machine, so neither VM's network changes, and [How it works › Links between VMs](../internals/ports.md#links-between-vms) explains how.
 
 For a database in `~/code/db` and an app in `~/code/app`, both with VMs:
 
@@ -73,7 +73,7 @@ A link stays with the VM it was made for, because devvm records the target VM's 
 
 ### A link joins the two VMs' trust
 
-Code in the client can often run code in the target through the target's own service, such as Postgres's `COPY … TO PROGRAM`. It then has whatever the target has: its network, the secrets it may use and its project folder. devvm doesn't stop that, because it's what the service itself allows. So add a link only between VMs you'd trust with each other's reach, and publish only the ports that you mean other VMs to use. [Network policy](../safety/network.md#links-between-vms) explains what this means for a VM with network policy.
+Code in the client can often run code in the target through the target's own service, such as Postgres's `COPY … TO PROGRAM`. It then has whatever the target has: its network, the secrets it may use and its project folder. devvm doesn't stop that, because it's what the service itself allows. So add a link only between VMs you'd trust with each other's reach, and publish only the ports that you mean other VMs to use. [Network tiers](../safety/network.md#links-between-vms) explains what this means for each tier.
 
 ## Links and network tiers
 
@@ -83,7 +83,7 @@ devvm checks this rule when you add a link, at each launch of the client and on 
 
 Every VM has its proxy, so a program that uses the VM's proxy settings, such as curl, sends its requests for a link to the VM's proxy, and the proxy carries a request for one of the link's names and its port, such as `db:5432` or `db.devvm.internal:5432`, to the link. Other programs reach the link by its name directly. The proxy passes a link's connection on as it is, so it doesn't look into it and puts none of your secrets into it.
 
-Network policy's rules don't apply to links. The allowlist doesn't allow or block a link's connections, and `devvm network deny db` doesn't stop the link `db`. The rule above and the published ports decide which connections a link carries, and `devvm network log` shows them ([the link log](#the-link-log)). To stop a link, remove it with `devvm link rm`, or unpublish its port in the target's folder.
+The network rules don't apply to links. The allowlist doesn't allow or block a link's connections, and `devvm network deny db` doesn't stop the link `db`. The rule above and the published ports decide which connections a link carries, and `devvm network log` shows them ([the link log](#the-link-log)). To stop a link, remove it with `devvm link rm`, or unpublish its port in the target's folder.
 
 ## Listing links
 
@@ -100,7 +100,7 @@ db    8000  devvm-db-71a99b1076d92c  /Users/you/code/db  Running  unpublished
 - `gone`: the target VM no longer exists.
 - `replaced`: the target's folder has another VM, made again since the link was.
 - `unpublished`: the target doesn't publish the port.
-- `policy`: the client has network policy and the target doesn't.
+- `policy`: the target is on a lower network tier than the client.
 - `ungrouped`: a [group](#groups) made the link, and the two VMs aren't in that group together any more. You can remove such a link with `devvm link rm`.
 
 `devvm ls` shows how many links each VM has, in its `LINKS` column.
@@ -150,7 +150,7 @@ The link's next connection is refused, while connections that are open stay unti
 
 ## When links change
 
-A change of links reaches a running client at once and a stopped one when it next starts, and devvm says which. On a running client, the names resolve at once, because devvm rewrites the client's `/etc/hosts`, and a link's port answers within a few seconds. With network policy, the VM's proxy reaches a new link as soon as its port answers, so the programs that use the VM's proxy settings also reach it, including those that were already running. Nothing in the VM restarts, and the VM's environment doesn't change, with or without network policy.
+A change of links reaches a running client at once and a stopped one when it next starts, and devvm says which. On a running client, the names resolve at once, because devvm rewrites the client's `/etc/hosts`, and a link's port answers within a few seconds. The VM's proxy reaches a new link as soon as its port answers, so the programs that use the VM's proxy settings also reach it, including those that were already running. Nothing in the VM restarts, and the VM's environment doesn't change, whatever its tier.
 
 ## When a target stops or goes
 
@@ -172,7 +172,7 @@ cd ~/code/api && devvm link publish 8080 && devvm group join web
 cd ~/code/app && devvm group join web
 ```
 
-Programs in the app's VM then reach `db:5432` and `api:8080`, programs in the API's VM reach `db:5432`, and programs in the database's VM reach `api:8080`. The links a group makes are links like any other, so what this page says about names, ports, network policy, the link log and stopped targets holds for them too, and `devvm link` lists them.
+Programs in the app's VM then reach `db:5432` and `api:8080`, programs in the API's VM reach `db:5432`, and programs in the database's VM reach `api:8080`. The links a group makes are links like any other, so what this page says about names, ports, network tiers, the link log and stopped targets holds for them too, and `devvm link` lists them.
 
 ### Joining a group
 
@@ -251,7 +251,7 @@ A container that the [docker layer](images.md#built-in-layers) runs in the clien
 
 ## The link log
 
-`devvm network log` in the client's folder shows its links' connections, with or without network policy. A line has the time, `link` for a connection devvm carried or `REFUSED` for one it refused, the link's name and port, and the target VM, with why devvm refused it:
+`devvm network log` in the client's folder shows its links' connections, whatever its tier. A line has the time, `link` for a connection devvm carried or `REFUSED` for one it refused, the link's name and port, and the target VM, with why devvm refused it:
 
 ```text
 2026-11-01T10:00:00Z  link     db:5432  to devvm-db-71a99b1076d92c

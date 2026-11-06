@@ -107,7 +107,7 @@ devvm ships the `docker`, `nix` and `desktop` layers, which you check in the lis
 {{< feature title="Isolated sandbox" icon="locked" art="isolated" >}}
 
 - The VM mounts your project folder at the same path. Apart from your agents' settings from devvm's own store, which it gets read-only, it sees nothing else in your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
-- New VMs get [network policy](docs/safety/network.md) by default, so they reach only an allowlist of hosts, through a proxy on your machine.
+- New VMs get the allowlist [network tier](docs/safety/network.md) by default, so they reach only an allowlist of hosts, through a proxy on your machine. You can choose a looser tier, internet or open, or a stricter one, none.
 - On macOS, `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)).
 - With [`--clone`](docs/using/clone.md), the VM works on a clone of the repo of its own instead of your folder, so nothing in it can touch your working tree or `.git`, and its work reaches your repo only when you fetch it.
 - No sandbox closes every gap, so [attack vectors](docs/safety/attack-vectors.md#narrowed-not-closed) lists what's left open, and [staying safe](docs/safety/_index.md#the-habits) lists the habits that close most of it.
@@ -117,7 +117,7 @@ devvm ships the `docker`, `nix` and `desktop` layers, which you check in the lis
 {{< feature title="Made for coding agents" icon="robot" art="agents" >}}
 
 - The agent runs in the VM, so an attack on it stays in the sandbox. You check Claude Code, Codex or opencode when devvm makes the VM and start it in the VM's shell, and it gets your settings, skills and MCP servers but never your history ([coding agents](docs/using/coding-agents.md)).
-- With network policy, their secrets, such as your Claude Code token and your Codex login, stay on your machine, because the VM gets placeholders and devvm's proxy puts the real ones into its requests on the way out.
+- On every network tier, their secrets, such as your Claude Code token and your Codex login, stay on your machine, because the VM gets placeholders and devvm's proxy puts the real ones into its requests on the way out.
 
 {{< /feature >}}
 

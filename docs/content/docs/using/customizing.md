@@ -21,7 +21,7 @@ A [layer](images.md#layers) is a script, `~/.config/devvm/layers/<name>.sh`, tha
 - Built-in layers go in the same image names as yours, bottom first, as in `devvm --layers docker,mailpit`, which makes the image `docker+mailpit`.
 - Put interactive shell setup in `~/.bashrc.d/<name>.sh`, which every VM's `~/.bashrc` reads, and PATH changes in `~/.profile`.
 - Download files with `devvm-fetch URL SHA256 OUT`, which `base` installs. It fails when the file's checksum doesn't match.
-- `NAME.policy` lists the hosts that VMs with the layer can reach with [network policy](../safety/network.md#allowlists), one rule per line.
+- `NAME.policy` lists the hosts that VMs with the layer can reach on the [allowlist tier](../safety/network.md#allowlists), one rule per line.
 - Editing the script rebuilds its image, and the ones built on it, the next time they're used ([rebuilding](images.md#rebuilding)).
 - A layer's script changes the VM's disk, so `devvm layer add mailpit` gives a VM you have the layer by making the VM again, keeping its home folder and settings ([adding layers to a VM](images.md#adding-layers-to-a-vm)), and `devvm layer rm mailpit` takes it out again in the same way ([taking layers out of a VM](images.md#taking-layers-out-of-a-vm)).
 
@@ -78,7 +78,7 @@ devvm setup --features fzf,omb  # without asking
 devvm setup --features none     # without asking, and base gets no features
 ```
 
-In a terminal, `devvm setup` first asks for the features, and then for the [CPUs and memory](ports-size.md#choosing-new-vms-size) and the network policy that new VMs get ([devvm setup](settings.md#devvm-setup)). `--features` asks for none of the others. Without a terminal, `devvm setup` keeps the choice. devvm refuses a name that isn't a feature, and an empty `--features ''`, and then nothing changes. You can also choose them by hand with `features` in `config.toml`, such as `features = ["fzf", "omb"]`, which wins over what `devvm setup` saved, and then `devvm setup --features` refuses to change them. `features = []` chooses none, and devvm skips a name without a script, with a warning.
+In a terminal, `devvm setup` first asks for the features, and then for the [CPUs and memory](ports-size.md#choosing-new-vms-size) and the network tier that new VMs get ([devvm setup](settings.md#devvm-setup)). `--features` asks for none of the others. Without a terminal, `devvm setup` keeps the choice. devvm refuses a name that isn't a feature, and an empty `--features ''`, and then nothing changes. You can also choose them by hand with `features` in `config.toml`, such as `features = ["fzf", "omb"]`, which wins over what `devvm setup` saved, and then `devvm setup --features` refuses to change them. `features = []` chooses none, and devvm skips a name without a script, with a warning.
 
 A new choice makes `base` and the images built on it rebuild the next time they're used, and `devvm setup` says so. The old images are then stale, and [`devvm gc`](images.md#cleaning-up) deletes them.
 

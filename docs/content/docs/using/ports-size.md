@@ -37,11 +37,11 @@ devvm ports -g none         # what new VMs forward (default: all)
 - A change applies at once. A stopped VM forwards the new ports from its next start. On a running VM, devvm starts its forwarder again with the new ports while the VM runs on, so a server on an added port reaches this machine within a few seconds. The connections that were open through the old forwarder close, so a client that was connected through it has to connect again.
 - `add` and `rm` take ports and ranges, not `all` or `none`. devvm refuses `rm` on a VM that forwards every port, because there's no list to remove from. `-g` also works with `add` and `rm`.
 - `devvm ports -g` shows what new VMs forward, followed by where it came from after a `#`, and `devvm ports -g --json` adds it as `source`. When [`config.toml`](settings.md#configtoml) sets `ports`, `devvm ports -g` refuses to change it and names the file, so edit `config.toml` instead ([where a default comes from](settings.md#where-a-default-comes-from)).
-- devvm forwards ports with or without [network policy](../safety/network.md), and it forwards no ports from builds.
+- devvm forwards ports on every [network tier](../safety/network.md#network-tiers), and it forwards no ports from builds.
 
 When a VM forwards every port, devvm forwards each TCP port from 1024 up that a server in the VM listens on, whether on the VM's loopback or on all its addresses. When a VM lists its ports, devvm forwards those ports alone, however many there are, ports below 1024 included. A port reaches this machine within a few seconds of the server starting, only on `localhost` (`127.0.0.1` and `::1`), and the forward goes away when the server stops. At most 256 ports are forwarded at once.
 
-A VM never takes a port that a program on this machine already has, a port that another VM lists, or a port that devvm uses for its VMs' ssh and network policy. When a port you listed is taken by a program on this machine as the VM starts, or as you change its ports, devvm warns you and the VM runs on without that port. The next start or change that finds the port free forwards it. A program that starts on a port after the VM's forward does can still bind it on all addresses, as most servers do, and then that program's `localhost` connections reach the VM.
+A VM never takes a port that a program on this machine already has, a port that another VM lists, or a port that devvm uses for its VMs' ssh and proxies. When a port you listed is taken by a program on this machine as the VM starts, or as you change its ports, devvm warns you and the VM runs on without that port. The next start or change that finds the port free forwards it. A program that starts on a port after the VM's forward does can still bind it on all addresses, as most servers do, and then that program's `localhost` connections reach the VM.
 
 If the forwarder can't start, devvm warns you and names its log, and the VM runs on without forwarded ports.
 
@@ -76,7 +76,7 @@ devvm size -g                      # cpus=, memory= and disk= lines, empty for t
 devvm asks for the CPUs and memory that new VMs get on your first run, before it asks which features base gets, and again whenever you run `devvm setup`:
 
 ```sh
-devvm setup                         # asks for the backend, base's features, the CPUs and memory, then the network policy
+devvm setup                         # asks for the backend, base's features, the CPUs and memory, then the network tier
 devvm size -g --cpus 6 --memory 16  # only the size, without asking
 ```
 
