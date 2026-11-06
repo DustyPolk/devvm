@@ -1,8 +1,8 @@
 #!/bin/bash
 # Update the versions and checksums pinned in assets/ (layers/base.sh, layers/docker.sh, layers/nix.sh, features/*.sh,
 # shared-tools/build.sh, oci/build.sh) and internal/tools/mise.go (devvm's host mise), and the
-# end-to-end tests' own pins (tests/e2e-mise.lock, and in tests/e2e.sh the --from images' digests
-# and Ubuntu's cloud image release).
+# end-to-end tests' own pins (tests/e2e-mise.lock, the --from images' digests in tests/e2e/from_test.go,
+# and Ubuntu's cloud image release in tests/e2e.sh).
 #   scripts/bump.sh --check     show current and latest for every pin; change nothing
 #   scripts/bump.sh [tool...]   update the given tools (default: all) and print a summary
 # Tools: docker nix direnv nix-direnv mise rustup crane omb eza tealdeer e2e-tools e2e-from e2e-ubuntu
@@ -295,15 +295,15 @@ hub_index() {
   jq -e '.manifests | length > 0' "$3" >/dev/null || { echo "bump: Docker Hub sent no index for $1:$2" >&2; exit 1; }
 }
 
-# The container images e2e's --from checks start from (tests/e2e.sh's from_*_digest), by the digest
-# of their index on Docker Hub, so the bases made from them stay cached until these pins move.
+# The container images e2e's --from checks start from (tests/e2e/from_test.go's from*Digest), by the
+# digest of their index on Docker Hub, so the bases made from them stay cached until these pins move.
 bump_e2e-from() {
-  local f=tests/e2e.sh p ref var new
-  for p in node:24=from_node_digest alpine:3=from_alpine_digest ubuntu:26.04=from_ubuntu_digest; do
+  local f=tests/e2e/from_test.go p ref var new
+  for p in node:24=fromNodeDigest alpine:3=fromAlpineDigest ubuntu:26.04=fromUbuntuDigest; do
     ref=${p%%=*} var=${p#*=}
     hub_index "${ref%%:*}" "${ref#*:}" "$tmp/e2e-from-index"
     new=sha256:$(shasum -a 256 "$tmp/e2e-from-index" | cut -c1-64)
-    if report "$ref" "$(get $f "$var" | cut -c8-19)" "${new:7:12}"; then set_var $f "$var" "$new"; fi
+    if report "$ref" "$(get_const $f "$var" | cut -c8-19)" "${new:7:12}"; then set_var $f "$var" "$new"; fi
   done
 }
 

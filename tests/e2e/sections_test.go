@@ -27,8 +27,8 @@ func sections() []section {
 		{name: "network", guess: 600, tools: []tool{python3Tool(), sshTool()}, run: networkSection},
 		{name: "desktop", guess: 300, tools: []tool{listenTool()}, run: desktopSection},
 		{name: "nix", guess: 900, tools: []tool{sshTool()}, run: nixSection},
-		{name: "from", guess: 1800},
-		{name: "link", guess: 900},
+		{name: "from", guess: 1800, run: fromSection},
+		{name: "link", guess: 900, tools: linkTools(), run: linkSection},
 	}
 }
 

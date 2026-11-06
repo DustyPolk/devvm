@@ -103,7 +103,7 @@ A Mac clones the images it gives each slot, because `/tmp` and your home folder 
 
 ## End-to-end tests in Go
 
-The end-to-end tests are moving from `tests/e2e.sh` to Go, one section at a time, into `tests/e2e`. That package builds only with the `e2e` build tag, and its `TestE2E` is the run. Every section but `from` and `link` is in Go so far, and `tests/e2e.sh` runs those two. After its own sections, `tests/e2e.sh` hands the chosen sections that are Go's, the ones its `go_sections` lists, to `TestE2E`, in the same sandbox and under the same lock. It passes the Go run its own pid, which holds the lock, how many checks it has run and expects in all, and when it started, so the Go run's results count on from its own. The Go run writes its results to `summary.go` in the sandbox's state folder, and `tests/e2e.sh` adds them to its own. So `tests/e2e.sh`, `mise run e2e` and `tests/e2e.sh --only gc` still run every section they choose, and `--slots` places the Go sections as it places the others.
+The end-to-end tests are in Go, in `tests/e2e`, a file for each section. That package builds only with the `e2e` build tag, and its `TestE2E` is the run. `tests/e2e.sh` runs no section of its own: it hands the chosen ones, all of which its `go_sections` lists, to `TestE2E`, in the same sandbox and under the same lock. It passes the Go run its own pid, which holds the lock, how many checks it has run and expects in all, and when it started, so the Go run's results count on from its own. The Go run writes its results to `summary.go` in the sandbox's state folder, and `tests/e2e.sh` adds them to its own. So `tests/e2e.sh`, `mise run e2e` and `tests/e2e.sh --only gc` still run every section they choose, and `--slots` places the Go sections as it places the others.
 
 ### Running the Go runner
 
@@ -191,7 +191,7 @@ A helper that more than one section needs goes in the harness's files, beside th
 | `s.Paths.RunLogHas(line)` | whether one of devvm's run logs has the line, whole: what a build's script printed | `grep -qx … logs/runs/*.log` |
 | `MountLine(s, vm)` | the host folders a VM's Lima config mounts, each with a space after it | `limactl list --format '{{range .Config.Mounts}}…'` |
 | `HasLine`, `CaptureLine`, `ExitStatus` | whether text has a line, whole; the first group of the first line a regular expression matches; the exit status a command's error says | `grep -qx`, `sed -n 's/…/\1/p'`, `$?` |
-| `launchWith(s, dir, env, args…)`, `devvmCmd(s, dir, input, env, args…)` | `Launch` and devvm with variables of their own in devvm's environment, such as a fake token or a `HOME` of the section's, never in its arguments | `HOME=… "$D"` |
+| `launchWith(s, dir, env, args…)`, `devvmCmd(s, dir, input, env, args…)` | `Launch` and devvm with variables of their own in devvm's environment, such as a fake token, a `HOME` of the section's or `NoDocker`'s `PATH`, never in its arguments | `HOME=… "$D"` |
 | `vmHas(s, vm, login, script, secrets…)`, `vmGrep(s, vm, script, re)` | whether what a script prints in the VM holds one of the secrets, or matches `re`, looked for in the VM with the secrets on its shell's input, so neither they nor what the script printed reach the check's log | `in_vm … \| grep -qF` |
 | `limaListens(s, proto, port)`, `loopbackOnly(s, port)` | whether Lima's own processes listen on a port of this machine, and whether what listens on one listens on loopback alone, with `lsof` on macOS and `ss` on Linux | `lima_listens`, `loopback_only` |
 | `DevvmIn(s, dir, input, env, args…)`, `OwnVM(s, vm)` | runs `devvmCmd`'s command, and makes a VM that a step launched the run's, so that the cleanup deletes it | `(cd DIR && VAR=… "$D" …)` |
@@ -205,6 +205,10 @@ A helper that more than one section needs goes in the harness's files, beside th
 | `WatchSees(s, vm, dir, by, nested)`, `WatchMisses(s, vm, dir)` | runs a file watcher in the VM and checks which changes, made in the VM or on this machine, it sees | `watch_sees`, `watch_misses` |
 | `SSHAgent(s, sock)`, `KeyComments(out)`, `RfwdLinks(s, host, sock, ssh…)` | starts a throwaway `ssh-agent`, reads the keys' comments from `ssh-add -l`, and checks that a VM's sshd binds remote forwards only on links' addresses | `ssh-agent -a`, `awk '{ print $3 }'`, `rfwd_links` |
 | `ExecQuoting(s, vm)`, `ServeDesktop(s, dir, args…)`, `Desktop` | runs `TestE2EExecQuoting` on a VM, and runs `devvm desktop --no-open` in the background until it says where the desktop is, which `View` checks with `TestE2EDesktop` and `End` ends with Ctrl+C | `go_e2e`, `desktop_serve`, `desktop_view`, `desktop_end` |
+| `Note(s, format, …)` | adds a line of the check's own to its log, which a failure shows among its last lines | a check's `echo` |
+| `SetState(s.Paths, vm, key, json)` | sets a dotted key of a VM's `vm.json` to a JSON value by hand, as nothing devvm runs would, keeping the rest | `vm_set` |
+| `NoDocker(s)`, `DockerCalls(s)` | a `PATH` with a docker first on it that's installed but not running, which logs what devvm asked it to the file `DockerCalls` names | `nd` |
+| `NewestLog(s.Paths)` | devvm's newest run log, the last devvm's | `newest_log` |
 
 A secret that a check looks for is never in a process's arguments, where other users can see it. The company proxy's password is in its config file and in the environment of the commands that `Env` is given to, and each helper above takes a secret as a Go value, so it reaches `grep` on its input and is never on a command line.
 
