@@ -474,8 +474,8 @@ func TestUpSetupLayerLacks(t *testing.T) {
 // shows the defaults checked, each detected toolchain naming its file
 // and setup's agents and layers saying so, the nix layer naming the
 // flake.nix, and the other layers unchecked; what's checked is what the
-// VM gets. On the first run it asks for setup's agents first, before the
-// summary.
+// VM gets. On the first run it asks for setup's agents and base's
+// features first, under the first run's line, before the summary.
 func TestUpPicker(t *testing.T) {
 	e, f, _ := upEnv(t, allNative())
 	for _, file := range []string{"package.json", "flake.nix"} {
@@ -516,12 +516,14 @@ func TestUpPicker(t *testing.T) {
 	if !slices.Equal(asked, []string{"agents_help", "pick_new_help"}) {
 		t.Fatalf("asked %q", asked)
 	}
-	// setup's agents, then the summary, then the picker.
+	// The first run's line, setup's agents and base's features, then the
+	// summary, then the picker.
+	want := []string{"first_run_defaults", "agents_help", "base_features", "new_vm_summary", "pick_new_help"}
 	order := slices.DeleteFunc(said.Names(), func(s string) bool {
-		return !strings.HasPrefix(s, "agents_help") && !strings.HasPrefix(s, "new_vm_summary") && !strings.HasPrefix(s, "pick_new_help")
+		return !slices.ContainsFunc(want, func(w string) bool { return strings.HasPrefix(s, w) })
 	})
-	if len(order) != 3 || order[0] != "agents_help" || !strings.HasPrefix(order[1], "new_vm_summary") || !strings.HasPrefix(order[2], "pick_new_help") {
-		t.Errorf("order %q", order)
+	if len(order) != len(want) || !slices.EqualFunc(order, want, strings.HasPrefix) {
+		t.Errorf("order %q, want %q", order, want)
 	}
 	if def, _ := settings.Read(e.Dirs); !def.Agents.Chosen || !slices.Equal(def.Agents.Names, []string{"codex"}) {
 		t.Errorf("setup's agents = %+v", def.Agents)

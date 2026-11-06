@@ -59,9 +59,10 @@ func (b *Env) chosenFeatures() ([]string, error) {
 	return b.Features(), nil
 }
 
-// chooseFeatures asks which features base gets, the first time anything
-// is built (PickFeatures).
-func (b Choice) chooseFeatures() error {
+// Choose asks which features base gets until they're chosen
+// (PickFeatures): with devvm's first run's other questions, before a new
+// VM's summary, and before anything is built.
+func (b Choice) Choose() error {
 	if def, err := settings.Read(b.Dirs); err != nil || def.Features.Chosen {
 		return err
 	}

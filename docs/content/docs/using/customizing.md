@@ -68,7 +68,7 @@ The desktop that [`devvm desktop`](desktop.md) opens isn't a feature but a [buil
 
 ### Choosing features
 
-The first time devvm builds anything, it asks which features `base` gets, with every one chosen to start with. Up and down (or `k` and `j`) move, space toggles, and Enter confirms. Without a terminal, devvm chooses every feature. devvm prints the choice and saves it, in the order the features run. When `features` in [`config.toml`](settings.md#configtoml) chooses them, devvm doesn't ask.
+On its first run, devvm asks which features `base` gets, after the size and coding agents that new VMs get and before it shows what the folder's new VM gets. devvm build and devvm rebuild ask too, until the features are chosen. The list starts with every feature chosen. Up and down (or `k` and `j`) move, space toggles, and Enter confirms. Without a terminal, devvm chooses every feature. devvm prints the choice and saves it, in the order the features run. When `features` in [`config.toml`](settings.md#configtoml) chooses them, devvm doesn't ask.
 
 To change the choice:
 

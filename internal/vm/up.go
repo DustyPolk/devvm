@@ -371,18 +371,27 @@ func (e creation) created(ctx context.Context, b backend.Backend, st *state.VM, 
 }
 
 // firstRun asks devvm's first run's questions, new VMs' size and agents
-// (firstRunSize, firstRunAgents), then returns the defaults in effect, a
+// (firstRunSize, firstRunAgents), then the features of b's base, until
+// they're chosen (build's Choose), all under a line saying they set the
+// defaults for every new VM and base (first_run_defaults), before the
+// summary of this folder's VM. It returns the defaults in effect, a
 // snapshot the rest of the plan reads: the files may be edited by hand
 // while it runs.
-func (e creation) firstRun(o Options, size Size) (settings.Defaults, error) {
+func (e creation) firstRun(o Options, size Size, b *build.Env) (settings.Defaults, error) {
 	def, err := settings.Read(e.Dirs)
 	if err != nil {
 		return def, err
+	}
+	if !def.Features.Chosen || e.asksAgents(o, def) {
+		e.Info(msg.FirstRunDefaults())
 	}
 	if err := e.firstRunSize(size, def); err != nil {
 		return def, err
 	}
 	if err := e.firstRunAgents(o, def); err != nil {
+		return def, err
+	}
+	if err := (build.Choice{Env: b}).Choose(); err != nil {
 		return def, err
 	}
 	return settings.Read(e.Dirs)
@@ -412,7 +421,8 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if n.from, n.dc, err = e.devcontainers.prepare(ctx, o, f.Dir); err != nil {
 		return newVM{}, err
 	}
-	def, err := e.firstRun(o, size)
+	n.builder = e.Builder(b, n.from)
+	def, err := e.firstRun(o, size, n.builder)
 	if err != nil {
 		return newVM{}, err
 	}
@@ -431,7 +441,6 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if err != nil {
 		return newVM{}, err
 	}
-	n.builder = e.Builder(b, n.from)
 	parts, err := e.choose(o, f, b, def, host, &n)
 	if err != nil {
 		return newVM{}, err

@@ -31,7 +31,7 @@ cd ~/some-project
 devvm
 ```
 
-The first time, devvm asks for the size and the coding agents that new VMs get. Then it shows what this VM gets, with the toolchains your project's files call for and those agents, and asks `Customize it? [y/N]`. Press Enter to make the VM as shown, or type y to check or uncheck its toolchains, coding agents, such as Claude Code, and layers, then choose its network tier and size. On that first run, it also asks which optional extras every VM gets, then builds the base image, which takes a few minutes once. Later VMs start in seconds.
+The first time, devvm asks a few questions that set its defaults for every new VM and its base image: the size and the coding agents that new VMs get, and the optional extras the base image gets. Then it shows what this folder's new VM gets, with the toolchains your project's files call for and those agents, and asks `Customize it? [y/N]`. Press Enter to make the VM as shown, or type y to check or uncheck its toolchains, coding agents, such as Claude Code, and layers, then choose its network tier and size. On that first run, devvm then builds the base image, which takes a few minutes once. Later VMs start in seconds.
 
 devvm then opens a shell in the VM, at the same path as on your machine, and its prompt starts with `(devvm)`. Start the agent there, so it runs in the VM. Claude Code needs your Claude login before its first start, which `devvm agent login claude`, run in the folder on your machine, makes from the VM and keeps on your machine ([your first VM](https://devvm.dev/docs/getting-started/first-vm/#claude-codes-login)):
 

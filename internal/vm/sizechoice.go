@@ -173,11 +173,11 @@ func (c SizeChoice) Fitted() Size {
 	return Size{CPUs: strconv.Itoa(cpus), Memory: strconv.FormatFloat(mem, 'g', -1, 64)}
 }
 
-// firstRunSize asks for the size new VMs get on devvm's first run, before
-// base's features are first chosen (def), when nothing sets a size and
-// the user gave neither --cpus nor --memory; where it can't ask, new VMs
-// keep the size they get. After it, base's features are chosen, so it
-// doesn't ask again.
+// firstRunSize asks for the size new VMs get on devvm's first run, until
+// base's features are chosen (def), when nothing sets a size and the
+// user gave neither --cpus nor --memory; where it can't ask, new VMs
+// keep the size they get. The first run chooses base's features after
+// it (firstRun), so it doesn't ask again.
 func (e creation) firstRunSize(given Size, def settings.Defaults) error {
 	if given.CPUs != "" || given.Memory != "" || def.Features.Chosen {
 		return nil

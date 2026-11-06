@@ -288,7 +288,7 @@ func (b Builds) Build(ctx context.Context, name image.Name) error {
 		return err
 	}
 	// Every key holds base's, so its features are chosen first.
-	if err := Choice(b).chooseFeatures(); err != nil {
+	if err := Choice(b).Choose(); err != nil {
 		return err
 	}
 	return b.build(ctx, name)
@@ -642,7 +642,7 @@ func (b Builds) Rebuild(ctx context.Context, name image.Name) error {
 	if err := b.checkProxy(ctx); err != nil {
 		return err
 	}
-	if err := Choice(b).chooseFeatures(); err != nil {
+	if err := Choice(b).Choose(); err != nil {
 		return err
 	}
 	old, err := b.Key(name)

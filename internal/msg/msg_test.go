@@ -54,6 +54,11 @@ func TestEveryMessageRenders(t *testing.T) {
 				if text == "" || strings.Contains(text, "<no value>") {
 					t.Errorf("%s in %s: %q", id, tag, text)
 				}
+				// The prompt owns its answers: Ask prints [y/N] after the
+				// question and Confirm [Y/n], so a message never has them.
+				if strings.Contains(text, "[y/N]") || strings.Contains(text, "[Y/n]") {
+					t.Errorf("%s in %s: %q has the answers its prompt prints", id, tag, text)
+				}
 				for _, f := range s.fields {
 					if f != "count" && !strings.Contains(text, "v_"+f) {
 						t.Errorf("%s in %s: %q doesn't show %s", id, tag, text, f)

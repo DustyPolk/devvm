@@ -330,15 +330,15 @@ devvm asks a question only in a terminal, and each question has a flag or a comm
 
 | Question | Answered by |
 | --- | --- |
+| the CPUs and memory new VMs get, on the first run | `--cpus` and `--memory`, or `devvm size -g`, or nothing: where devvm can't ask, new VMs get the size they would anyway |
+| the coding agents new VMs get, on the first run and in `devvm setup` | `devvm setup --agents LIST` or `devvm setup --agents none` |
+| base's features, on the first run before the new VM's summary, or on the first build | `devvm setup --features LIST` or `devvm setup --features none` |
 | whether to customize a new VM, after its summary | `--tools`, `--agents`, `--layers`, `--network`, `--cpus` and `--memory`, or nothing: where devvm can't ask, the VM gets what the summary shows |
 | a new VM's toolchains, coding agents and layers, when you customize it | `--tools`, `--agents` and `--layers` |
 | a new VM's network tier, when you customize it | `--network TIER`, or `devvm network -g` with a tier for every new VM |
 | a new VM's CPUs and memory, when you customize it | `--cpus` and `--memory` |
-| the CPUs and memory new VMs get, on the first run | `--cpus` and `--memory`, or `devvm size -g`, or nothing: where devvm can't ask, new VMs get the size they would anyway |
-| the coding agents new VMs get, on the first run and in `devvm setup` | `devvm setup --agents LIST` or `devvm setup --agents none` |
 | the layers new VMs get, in `devvm setup` | `devvm setup --layers LIST` or `devvm setup --layers none` |
 | a VM's toolchains and agents, in `devvm tools` | `devvm tools add` and `devvm tools rm`, or `--json` to show them |
-| base's features, on the first build | `devvm setup --features LIST` or `devvm setup --features none` |
 | new VMs' network tier, in `devvm setup` | `devvm network -g` |
 | whether to load an SSH key into your agent | `devvm ssh-agent add KEY_FILE` beforehand |
 | whether to restart a running VM to apply a change from `devvm size`, `devvm network`, `devvm ssh-agent` or `devvm git-protect`, or, as devvm opens it, the changes that wait for its next start, such as an agent's new folders | `devvm restart` afterwards, or nothing: without a terminal or with `--no-input`, the change waits for the VM's next start |

@@ -14,12 +14,18 @@ cd ~/some-project
 devvm
 ```
 
-The first time, devvm asks for the CPUs and memory that new VMs get. It shows how many CPUs and how much memory this machine has, and offers the base image's 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them. Press Enter to keep each value, or type another, and devvm asks again when this machine can't give what you typed. devvm saves what you type as the size new VMs get, which you can change later with `devvm setup` or `devvm size -g`, and when you keep both values it saves nothing ([choosing new VMs' size](../using/ports-size.md#choosing-new-vms-size)). It also asks which coding agents new VMs get, and you can change them later with `devvm setup --agents`.
-
-Then devvm shows what the new VM gets and asks whether you want to change it:
+The first time, devvm starts with a few questions that set its defaults for every new VM and for its base image, and it says so before the first one:
 
 ```text
-==> devvm-some-project-71a99b1076d92c gets:
+==> These first questions set devvm's defaults for every new VM and its base image.
+```
+
+devvm asks for the CPUs and memory that new VMs get first. It shows how many CPUs and how much memory this machine has, and offers the base image's 4 CPUs and 8 GiB, or less on a machine that doesn't have room for them. Press Enter to keep each value, or type another, and devvm asks again when this machine can't give what you typed. devvm saves what you type as the size new VMs get, which you can change later with `devvm setup` or `devvm size -g`, and when you keep both values it saves nothing ([choosing new VMs' size](../using/ports-size.md#choosing-new-vms-size)). Then it asks which coding agents new VMs get, which you can change later with `devvm setup --agents`. Last, it asks which optional extras the base image gets, such as oh-my-bash and fzf, which every VM has and which you can change later with `devvm setup --features`.
+
+Then devvm shows what this folder's new VM gets and asks whether you want to change it. Your answers here are for this VM alone:
+
+```text
+==> This folder's new VM, devvm-some-project-71a99b1076d92c, gets:
   toolchain node, for package.json
   agent claude, from devvm setup
   layers: none
@@ -57,7 +63,7 @@ After the list, devvm asks for the VM's network tier, and pressing Enter gives i
 > [!TIP]
 > Keep allowlist, the default, unless the VM needs more. The allowlist [network tier](../safety/network.md) limits the VM to the hosts you allow, and every tier keeps your secrets on your machine.
 
-The first time, devvm also asks which optional extras every VM gets, such as oh-my-bash and fzf, then builds the base image, which takes a few minutes once:
+The first time, devvm then builds the base image with the extras you chose, which takes a few minutes once:
 
 ```console
 ==> building image base (e9f517dddef1)
@@ -73,12 +79,12 @@ Later VMs start in seconds.
 ```mermaid
 flowchart TD
   run["devvm in a project folder"] --> first{{"the first time?"}}
-  first -- "yes" --> size["asks: how many CPUs and how much memory, and which agents?"] --> summary
-  first -- "no" --> summary["shows what the VM gets"]
+  first -- "yes" --> size["devvm's defaults for every new VM and base:<br>how many CPUs and how much memory, which agents, which extras?"] --> summary
+  first -- "no" --> summary["shows what this folder's VM gets"]
   summary --> custom{{"Customize it?"}}
   custom -- "y" --> pick["lists the toolchains, agents and layers to check,<br>then asks: network tier? CPUs and memory?"] --> built
   custom -- "Enter" --> built{{"base built?"}}
-  built -- "no, the first time" --> extras["asks: which extras?"] --> build["builds base, a few minutes"] --> copy
+  built -- "no, the first time" --> build["builds base, a few minutes"] --> copy
   built -- "yes" --> copy["copies the image into a new VM"]
   copy --> start["starts it"] --> shell["opens a shell in ~/some-project"]
 ```

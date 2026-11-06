@@ -428,8 +428,14 @@ func CheckLayerNames(given, layers []string) error {
 // firstRunAgents asks which agents new VMs get on devvm's first run in a
 // terminal, until they're chosen (def), unless --agents chose this VM's.
 func (e creation) firstRunAgents(o Options, def settings.Defaults) error {
-	if o.Agents != nil || !e.CanPick() || e.PickParts == nil || def.Agents.Chosen {
+	if !e.asksAgents(o, def) {
 		return nil
 	}
 	return AgentsChoice{Dirs: e.Dirs, Pick: e.PickParts, Reporter: e.Reporter}.Ask()
+}
+
+// asksAgents reports whether firstRunAgents asks: in a terminal with the
+// picker, until they're chosen (def), without --agents.
+func (e creation) asksAgents(o Options, def settings.Defaults) bool {
+	return o.Agents == nil && e.CanPick() && e.PickParts != nil && !def.Agents.Chosen
 }

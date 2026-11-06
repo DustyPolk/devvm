@@ -1408,8 +1408,11 @@ other = "{{.vm}} doesn't reach {{.links}} through the group {{.group}} any more.
 [group_link_name_clash]
 other = "{{.vm}} has a link of its own called {{.name}}, so it gets none of the group's links to {{.target}}. To get them, remove that link with devvm link rm."
 
+[first_run_defaults]
+other = "These first questions set devvm's defaults for every new VM and its base image."
+
 [new_vm_summary]
-other = "{{.vm}} gets:"
+other = "This folder's new VM, {{.vm}}, gets:"
 
 [new_vm_toolchain_for]
 description = "file is the project's file that calls for the toolchain, such as package.json, or its devcontainer.json"
@@ -1460,7 +1463,7 @@ other = "  devcontainer.json: {{.file}}, which devvm --no-devcontainer skips"
 other = "To choose others, give --tools, --agents, --layers, --network, --cpus or --memory."
 
 [new_vm_customize]
-other = "Customize it? [y/N]"
+other = "Customize it?"
 
 [new_vm_size_question]
 description = "have_cpus and have_memory are this machine's CPUs and memory in GiB"

@@ -4,20 +4,22 @@
 # ttyin's terminal on stdin.
 env DEVVM_PICK_ON_PIPE=1
 
-# The first run: its size and agents asked first and saved, then the
-# summary shows what they chose, then the question; Enter makes the VM
-# as shown, and base's features are asked as base is first built. Each
-# input file answers every question asked, as a terminal's input never
-# ends: the space toggles claude in the agents picker.
+# The first run: a line saying its questions set the defaults for every
+# new VM and base, then its size, agents and base's features asked and
+# saved, then this folder's VM's summary shows what they chose, then the
+# question; Enter makes the VM as shown. Each input file answers every
+# question asked, as a terminal's input never ends: the space toggles
+# claude in the agents picker.
 rm $DATA/settings.json
 project first
 exec sh -c 'echo "{}" > package.json'
 ttyin -stdin $WORK/first.txt
 exec devvm --no-git-protect --network open
+stdout '^==> first_run_defaults$'
 stderr 'size_question have_cpus=8 have_memory=16'
-stdout '==> default_agents agents=claude$'
+stdout '(?s)^==> first_run_defaults\n.*==> default_agents agents=claude\n.*features_help\r\n.*==> base_features features=\S.*==> new_vm_summary vm=devvm-first-'
 stdout '^==> new_vm_summary vm=devvm-first-[0-9a-f]{14}\nnew_vm_toolchain_for file=package\.json tool=node\nnew_vm_agent_from agent=claude from=devvm setup\nnew_vm_layers_none\nnew_vm_size cpus=2 disk=100 memory=8\nnew_vm_network tier=open\nnew_vm_ports ports=all\n'
-stderr 'new_vm_customize \[y/N\]'
+stderr 'new_vm_customize \[y/N\] '
 ! stdout 'new_vm_choose|pick_new_help'
 grep '"cpus": "2"' $DATA/settings.json
 vm_name FIRST first
@@ -30,6 +32,7 @@ exec devvm setup --agents none
 project enter
 ttyin -stdin $WORK/enter.txt
 exec devvm --no-git-protect
+! stdout 'first_run_defaults|features_help|base_features'
 stdout '^==> new_vm_summary vm=devvm-enter-[0-9a-f]{14}$'
 stdout '^new_vm_network tier=allowlist$'
 stderr 'new_vm_customize \[y/N\]'

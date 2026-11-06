@@ -1144,6 +1144,11 @@ func Fetching(prefix string) M {
 	return M{id: "fetching", vals: []val{{"prefix", prefix}}}
 }
 
+// FirstRunDefaults is [first_run_defaults]: "These first questions set devvm's defaults for every new VM and its base image."
+func FirstRunDefaults() M {
+	return M{id: "first_run_defaults"}
+}
+
 // FlagBadSwitch is [flag_bad_switch]: "{{.flag}} takes true or false, not {{.value}}."
 func FlagBadSwitch(flag string, value string) M {
 	return M{id: "flag_bad_switch", vals: []val{{"flag", flag}, {"value", value}}}
@@ -2194,7 +2199,7 @@ func NewVMCpusPrompt(cpus string) M {
 	return M{id: "new_vm_cpus_prompt", vals: []val{{"cpus", cpus}}}
 }
 
-// NewVMCustomize is [new_vm_customize]: "Customize it? [y/N]"
+// NewVMCustomize is [new_vm_customize]: "Customize it?"
 func NewVMCustomize() M {
 	return M{id: "new_vm_customize"}
 }
@@ -2254,7 +2259,7 @@ func NewVMSizeQuestion(haveCpus string, haveMemory string) M {
 	return M{id: "new_vm_size_question", vals: []val{{"have_cpus", haveCpus}, {"have_memory", haveMemory}}}
 }
 
-// NewVMSummary is [new_vm_summary]: "{{.vm}} gets:"
+// NewVMSummary is [new_vm_summary]: "This folder's new VM, {{.vm}}, gets:"
 func NewVMSummary(vm string) M {
 	return M{id: "new_vm_summary", vals: []val{{"vm", vm}}}
 }
@@ -4109,6 +4114,7 @@ var specs = map[string]spec{
 	"fetch_failed":                   {fields: []string{"command", "vm"}},
 	"fetch_until":                    {fields: []string{"file", "remote"}},
 	"fetching":                       {fields: []string{"prefix"}},
+	"first_run_defaults":             {},
 	"flag_bad_switch":                {fields: []string{"flag", "value"}},
 	"flag_bad_value":                 {fields: []string{"flag", "form", "value"}},
 	"flag_blank":                     {fields: []string{"flag"}},

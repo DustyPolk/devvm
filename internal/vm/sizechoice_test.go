@@ -271,8 +271,15 @@ func TestFirstRunSize(t *testing.T) {
 	if got := f.Instances[st.Name()].Size; got.CPUs != 2 || got.MemoryGiB != 4 {
 		t.Errorf("the new VM got %+v", got)
 	}
-	if len(a.shown) == 0 || a.shown[0] != "size_question have_cpus=8 have_memory=32" {
+	// Under the first run's line, then base's features, before the
+	// summary.
+	if len(a.shown) < 2 || a.shown[0] != "first_run_defaults" || a.shown[1] != "size_question have_cpus=8 have_memory=32" {
 		t.Errorf("shown %q", a.shown)
+	}
+	feat, sum := slices.IndexFunc(a.shown, func(s string) bool { return strings.HasPrefix(s, "base_features ") }),
+		slices.IndexFunc(a.shown, func(s string) bool { return strings.HasPrefix(s, "new_vm_summary ") })
+	if feat < 0 || sum < feat {
+		t.Errorf("shown %q: want base's features before the summary", a.shown)
 	}
 	if def, err := settings.Read(e.Dirs); err != nil || !def.Features.Chosen {
 		t.Errorf("base's features unchosen: %+v, %v", def.Features, err)

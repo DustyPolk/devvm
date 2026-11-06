@@ -134,7 +134,7 @@ flowchart TD
 Before devvm makes a new VM, it shows a summary of what the VM gets. The summary names each toolchain, coding agent and layer with why the VM gets it, such as `for package.json`, `from devvm setup` or `from --tools`, and then the VM's size, its network tier, its ports and the folder's `devcontainer.json`, when there is one:
 
 ```text
-==> devvm-some-project-71a99b1076d92c gets:
+==> This folder's new VM, devvm-some-project-71a99b1076d92c, gets:
   toolchain node, for package.json
   agent claude, from devvm setup
   layers: none
