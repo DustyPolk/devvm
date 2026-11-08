@@ -20,6 +20,7 @@ import (
 	"github.com/devvmhq/devvm/internal/image"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/netpolicy"
+	"github.com/devvmhq/devvm/internal/safefile"
 	"github.com/devvmhq/devvm/internal/secrets"
 	"github.com/devvmhq/devvm/internal/state"
 	"github.com/devvmhq/devvm/internal/tools"
@@ -380,7 +381,7 @@ type storeFile struct {
 // path relative to it; none when it isn't there.
 func storeFiles(dir string) (map[string]storeFile, error) {
 	have := map[string]storeFile{}
-	root, err := os.OpenRoot(dir)
+	root, err := safefile.OpenRoot(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return have, nil
 	} else if err != nil {
@@ -401,7 +402,7 @@ func storeFiles(dir string) (map[string]storeFile, error) {
 		if err != nil {
 			return err
 		}
-		data, err := root.ReadFile(filepath.FromSlash(p))
+		data, err := root.Read(filepath.FromSlash(p), storeFileMax, safefile.Opts{})
 		if err != nil {
 			return err
 		}
@@ -411,14 +412,18 @@ func storeFiles(dir string) (map[string]storeFile, error) {
 	return have, err
 }
 
-// readStoreFile reads a file of devvm's store, when it's a regular file;
-// nil otherwise.
+// storeFileMax is the most of a store's file devvm agent save reads, to
+// compare with what the VM sent: as much as the VM's whole stream.
+const storeFileMax = saveMaxBytes
+
+// readStoreFile reads a file of devvm's store, when it's a regular file
+// (safefile's, not a link); nil otherwise.
 func readStoreFile(p string) ([]byte, error) {
 	fi, err := os.Lstat(p)
 	if err != nil || !fi.Mode().IsRegular() {
 		return nil, err
 	}
-	return os.ReadFile(p) //nolint:gosec // devvm's own store
+	return safefile.Read(p, storeFileMax, safefile.Opts{})
 }
 
 // storeExec reports whether the store's file at rel may be run by its

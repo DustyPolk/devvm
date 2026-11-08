@@ -4,13 +4,6 @@ package platform
 
 import "io/fs"
 
-// NoBlock is the open flag that keeps opening a FIFO from waiting: none
-// on this system.
-const NoBlock = 0
-
-// NoFollow is the open flag that fails on a symlink: none on this system.
-const NoFollow = 0
-
 // SameDevice reports whether two files are on the same file system: on
 // this system, always yes.
 func SameDevice(fs.FileInfo, fs.FileInfo) bool { return true }

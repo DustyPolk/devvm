@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/devvmhq/devvm/internal/safefile"
 )
 
 // A config devvm writes reads back as it was, and Sum tells any change apart.
@@ -84,12 +86,12 @@ func TestReadConfigRefuses(t *testing.T) {
 		want       error
 		text       string
 	}{
-		{"a link", link, ErrNotRegular, ""},
-		{"a FIFO", fifo, ErrNotRegular, ""},
-		{"a folder", dir, ErrNotRegular, ""},
+		{"a link", link, safefile.ErrNotRegular, ""},
+		{"a FIFO", fifo, safefile.ErrNotRegular, ""},
+		{"a folder", dir, safefile.ErrNotRegular, ""},
 		{"others may read it", write("0640", good.Encode(), 0o640), ErrNotPrivate, ""},
 		{"others may write it", write("0620", good.Encode(), 0o620), ErrNotPrivate, ""},
-		{"too long", write("long", append(good.Encode(), bytes.Repeat([]byte(" "), configMax)...), 0o600), ErrTooLong, ""},
+		{"too long", write("long", append(good.Encode(), bytes.Repeat([]byte(" "), configMax)...), 0o600), safefile.ErrTooLong, ""},
 		{"another version", write("v2", bytes.Replace(good.Encode(), []byte(`"version": 1`), []byte(`"version": 2`), 1), 0o600), nil, "version 2, not 1"},
 		{"no version", write("v0", []byte(`{"listen":"127.0.0.1:0","password":"k3y"}`), 0o600), nil, "version 0, not 1"},
 		{"an unknown field", write("field", []byte(`{"version":1,"listen":"127.0.0.1:0","password":"k3y","auth_file":"/x"}`), 0o600), nil, `unknown field "auth_file"`},
@@ -134,9 +136,9 @@ func TestReadConfigRefuses(t *testing.T) {
 	}
 }
 
-// ReadRegular, which policy files are read with, follows a link to a regular file, and refuses a
-// FIFO, a device and a file past its cap with a named error, without hanging.
-func TestReadRegular(t *testing.T) {
+// ReadPolicy follows a link to a regular file, and refuses a FIFO, a device and a file past its cap
+// with a named error, without hanging.
+func TestReadPolicy(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "policy")
@@ -150,20 +152,20 @@ func TestReadRegular(t *testing.T) {
 	big := filepath.Join(dir, "big")
 	must(t, os.WriteFile(big, bytes.Repeat([]byte("a.test\n"), PolicyMax/7+1), 0o600))
 	for _, p := range []string{f, link} {
-		if b, err := ReadRegular(p, PolicyMax); err != nil || string(b) != "a.test\n" {
-			t.Errorf("ReadRegular(%s) = %q, %v", p, b, err)
+		if b, err := ReadPolicy(p); err != nil || string(b) != "a.test\n" {
+			t.Errorf("ReadPolicy(%s) = %q, %v", p, b, err)
 		}
 	}
-	for p, want := range map[string]error{fifo: ErrNotRegular, zero: ErrNotRegular, dir: ErrNotRegular, big: ErrTooLong} {
+	for p, want := range map[string]error{fifo: safefile.ErrNotRegular, zero: safefile.ErrNotRegular, dir: safefile.ErrNotRegular, big: safefile.ErrTooLong} {
 		done := make(chan error, 1)
-		go func() { _, err := ReadRegular(p, PolicyMax); done <- err }()
+		go func() { _, err := ReadPolicy(p); done <- err }()
 		select {
 		case err := <-done:
 			if !errors.Is(err, want) || !strings.Contains(err.Error(), p) {
-				t.Errorf("ReadRegular(%s) = %v, want %v", p, err, want)
+				t.Errorf("ReadPolicy(%s) = %v, want %v", p, err, want)
 			}
 		case <-time.After(5 * time.Second):
-			t.Fatalf("ReadRegular(%s) hangs", p)
+			t.Fatalf("ReadPolicy(%s) hangs", p)
 		}
 	}
 }
@@ -205,7 +207,7 @@ func TestPolicyFileNotRegular(t *testing.T) {
 			t.Error("its last rules weren't kept")
 		}
 	}
-	if n := strings.Count(errs.String(), ErrNotRegular.Error()); n != 1 {
+	if n := strings.Count(errs.String(), safefile.ErrNotRegular.Error()); n != 1 {
 		t.Errorf("logged %d times, want once: %q", n, errs.String())
 	}
 }

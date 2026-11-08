@@ -135,8 +135,8 @@ func devvm() rules {
 				to: []string{"..."},
 			},
 			{
-				name: "internal/proxy is standard library only, with internal/daemon",
-				from: []string{"internal/proxy/..."}, exceptTo: []string{"internal/proxy/...", "internal/daemon"},
+				name: "internal/proxy is standard library only, with internal/daemon and internal/safefile",
+				from: []string{"internal/proxy/..."}, exceptTo: []string{"internal/proxy/...", "internal/daemon", "internal/safefile"},
 				to: []string{"..."},
 			},
 			{
@@ -144,15 +144,15 @@ func devvm() rules {
 				from: []string{
 					"assets", "locales", "packaging", "internal/platform", "internal/msg/gen", "internal/testbuild", "internal/hostgit",
 					"internal/shell", "internal/vmname", "internal/daemon", "internal/fetch", "internal/jsonc",
-					"internal/redact", "internal/agents",
+					"internal/redact", "internal/agents", "internal/safefile",
 				},
 				to: []string{"..."},
 			},
 			{
 				// Agents' logins hold their tokens: the package that reads,
 				// refreshes and writes them knows nothing of VMs or the UI.
-				name: "internal/agentlogin imports only internal/agents, internal/fetch, internal/jsonc, internal/proxy and internal/state",
-				from: []string{"internal/agentlogin"}, exceptTo: []string{"internal/agents", "internal/fetch", "internal/jsonc", "internal/proxy", "internal/state"},
+				name: "internal/agentlogin imports only internal/agents, internal/fetch, internal/jsonc, internal/proxy, internal/safefile and internal/state",
+				from: []string{"internal/agentlogin"}, exceptTo: []string{"internal/agents", "internal/fetch", "internal/jsonc", "internal/proxy", "internal/safefile", "internal/state"},
 				to: []string{"..."},
 			},
 			{

@@ -182,6 +182,9 @@ func encoded(resp *http.Response) bool {
 	return ce != "" && !strings.EqualFold(ce, "identity")
 }
 
+// errBodyTooLong is readMax's error for a body past its cap.
+var errBodyTooLong = errors.New("too long")
+
 // readMax reads r whole when it's at most limit bytes: the proxy's fetch.ReadCapped.
 func readMax(r io.Reader, limit int64) ([]byte, error) {
 	b, err := io.ReadAll(io.LimitReader(r, limit+1))
@@ -189,7 +192,7 @@ func readMax(r io.Reader, limit int64) ([]byte, error) {
 		return nil, err
 	}
 	if int64(len(b)) > limit {
-		return nil, ErrTooLong
+		return nil, errBodyTooLong
 	}
 	return b, nil
 }

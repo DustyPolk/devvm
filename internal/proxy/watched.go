@@ -24,9 +24,9 @@ const watchTick = 2 * time.Second
 // it has none until it's read again.
 type watched[T any] struct {
 	path   string
-	follow bool                              // Stat, for a file read through a symbolic link (ReadRegular)
+	follow bool                              // Stat, for a file read through a symbolic link (ReadPolicy)
 	keep   bool                              // on a failure, keep the last good T rather than none
-	read   func(path string) ([]byte, error) // readPrivate or ReadRegular, with the file's cap
+	read   func(path string) ([]byte, error) // readPrivate, with the file's cap, or ReadPolicy
 	parse  func(b []byte) (T, error)
 	onFail func(err error) // called once for each distinct failure in a row
 	// changed, when set, runs with mu held whenever the file changes: its stamp or its bytes (a

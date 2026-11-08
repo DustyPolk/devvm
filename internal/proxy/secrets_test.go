@@ -26,6 +26,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/devvmhq/devvm/internal/safefile"
 )
 
 // writeAtomic replaces a file whole with the mode asked for, a file there
@@ -367,7 +369,7 @@ func TestReadBindings(t *testing.T) {
 	}
 	link := filepath.Join(dir, "link")
 	must(t, os.Symlink(path, link))
-	if _, err := ReadBindings(link); !errors.Is(err, ErrNotRegular) {
+	if _, err := ReadBindings(link); !errors.Is(err, safefile.ErrNotRegular) {
 		t.Errorf("a link: %v", err)
 	}
 	hosts := InterceptLines([]string{"api.github.com", "github.com", "api.github.com"})
@@ -566,7 +568,7 @@ func TestLoadCA(t *testing.T) {
 	must(t, os.Chmod(nkey, 0o600))
 	link := filepath.Join(dir, "link.key")
 	must(t, os.Symlink(nkey, link))
-	if _, err := loadCA(ncert, link); !errors.Is(err, ErrNotRegular) {
+	if _, err := loadCA(ncert, link); !errors.Is(err, safefile.ErrNotRegular) {
 		t.Errorf("a key that's a link: %v", err)
 	}
 	if _, err := loadCA(ncert, key); err == nil {

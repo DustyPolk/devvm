@@ -8,14 +8,6 @@ import (
 	"syscall"
 )
 
-// NoBlock is the open flag that keeps opening a FIFO from waiting for a
-// writer: a file a VM could swap in for one devvm reads.
-const NoBlock = syscall.O_NONBLOCK
-
-// NoFollow is the open flag that fails on a symlink rather than opening
-// what it points to: a file a VM could swap for a link out of its folder.
-const NoFollow = syscall.O_NOFOLLOW
-
 // SameDevice reports whether two files are on the same file system.
 func SameDevice(a, b fs.FileInfo) bool {
 	sa, oka := a.Sys().(*syscall.Stat_t)

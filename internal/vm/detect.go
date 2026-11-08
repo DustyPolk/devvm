@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/safefile"
 )
 
 // nixMarkers are a Nix project's own files, which call for the nix layer.
@@ -37,12 +38,10 @@ const nixShellMax = 64 << 10
 
 // nixShell reports whether dir's default.nix makes a shell (mkShell, or
 // mkShellNoCC), as one for nix-shell does; most build a package instead.
+// It reads the first nixShellMax bytes of a regular file, not a link
+// (safefile's), so a FIFO the VM swaps in can't hold it.
 func nixShell(dir string) bool {
-	p := filepath.Join(dir, "default.nix")
-	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
-		return false
-	}
-	f, err := os.Open(p) //nolint:gosec // a regular file in the project folder, read
+	f, err := safefile.Open(filepath.Join(dir, "default.nix"), safefile.Opts{})
 	if err != nil {
 		return false
 	}

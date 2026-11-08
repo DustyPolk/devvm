@@ -28,6 +28,7 @@ import (
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/safefile"
 	"github.com/devvmhq/devvm/internal/state"
 )
 
@@ -348,7 +349,7 @@ func (p *Protector) protect(ctx context.Context, rec InVM, w why, h how) (Made, 
 		return was, nil
 	}
 	if isDir(g) && exists(filepath.Join(g, "commondir")) {
-		target, _ := os.ReadFile(filepath.Join(g, "commondir")) //nolint:gosec // the project's own
+		target, _ := gitFile(filepath.Join(g, "commondir"))
 		p.Warn(msg.GitCommondir(g, strings.TrimSpace(string(target))))
 	}
 	for _, s := range p.worktreeStrays() {
@@ -625,9 +626,17 @@ func (p *Protector) embeddedIn(ctx context.Context, e *embeds, gitDir, worktree 
 	}
 }
 
+// gitFile reads one of git's own small files, which the VM can change: a
+// .git file, a commondir, a worktree's gitdir. It follows a symbolic link,
+// as git does, but reads only a regular file of at most maxWatchBytes
+// (safefile's), so a FIFO there can't hold devvm.
+func gitFile(path string) ([]byte, error) {
+	return safefile.Read(path, maxWatchBytes, safefile.Opts{Follow: true})
+}
+
 // gitdirOf returns the git dir a .git file points to, resolved, or "".
 func gitdirOf(file, worktree string) string {
-	data, err := os.ReadFile(file) //nolint:gosec // the project's own
+	data, err := gitFile(file)
 	if err != nil {
 		return ""
 	}
@@ -713,7 +722,7 @@ func (p *Protector) worktreeStrays() []string {
 // reads it), else g itself, resolved. It's false when that isn't there.
 func commonOf(g string) (string, bool) {
 	target := g
-	if c, err := os.ReadFile(filepath.Join(g, "commondir")); err == nil { //nolint:gosec // the project's own
+	if c, err := gitFile(filepath.Join(g, "commondir")); err == nil {
 		target = strings.TrimRight(string(c), "\n")
 		if !filepath.IsAbs(target) {
 			target = filepath.Join(g, target)
@@ -860,7 +869,7 @@ func (p *Protector) lock(ctx context.Context, emb embeds) {
 			// existing name, and neither follows a symlink.
 			switch filepath.Base(path) {
 			case "config.worktree":
-				if f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600); err == nil { //nolint:gosec // checked by realInDir
+				if f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600); err == nil { //nolint:gosec,forbidigo // a new empty file, checked by realInDir, never read
 					_ = f.Close()
 				}
 			case "hooks":

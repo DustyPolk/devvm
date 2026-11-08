@@ -30,10 +30,10 @@ func Rule(rule string, deny bool) (string, error) {
 }
 
 // readRules reads a policy file's lines; a missing file has none. It reads
-// it as the proxy does (proxy.ReadRegular), so a FIFO or a device there
+// it as the proxy does (proxy.ReadPolicy), so a FIFO or a device there
 // can't hang devvm network or doctor.
 func readRules(path string) ([]string, error) {
-	b, err := proxy.ReadRegular(path, proxy.PolicyMax)
+	b, err := proxy.ReadPolicy(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	} else if err != nil || len(b) == 0 {

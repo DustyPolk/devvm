@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"io/fs"
-	"os"
 	"slices"
 	"strings"
 
@@ -15,8 +13,8 @@ import (
 	"github.com/devvmhq/devvm/internal/from"
 	"github.com/devvmhq/devvm/internal/image"
 	"github.com/devvmhq/devvm/internal/msg"
-	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/ports"
+	"github.com/devvmhq/devvm/internal/safefile"
 	"github.com/devvmhq/devvm/internal/settings"
 	"github.com/devvmhq/devvm/internal/shell"
 	"github.com/devvmhq/devvm/internal/state"
@@ -35,23 +33,16 @@ const commandScript = `exec "$@"`
 type devcontainers struct{ *Env }
 
 // find reads the folder's devcontainer.json, never following a link out
-// of it: its path in the folder ("" for none) and its contents.
+// of it: its path in the folder ("" for none) and its contents. The folder
+// is a safefile.Root, which opens only regular files, without waiting: a
+// FIFO the VM made in place of the file, or swaps in, is refused at once.
 func (e devcontainers) find(dir string) (string, []byte, error) {
-	root, err := os.OpenRoot(dir)
+	root, err := safefile.OpenRoot(dir)
 	if err != nil {
 		return "", nil, err
 	}
 	defer func() { _ = root.Close() }()
-	return devcontainer.Find(rootFS{root})
-}
-
-// rootFS is a folder's files, as os.Root opens them (never through a
-// link out of it), opened without waiting: a FIFO the VM made in place of
-// a file opens at once, and Find refuses it.
-type rootFS struct{ root *os.Root }
-
-func (f rootFS) Open(name string) (fs.File, error) {
-	return f.root.OpenFile(name, os.O_RDONLY|platform.NoBlock, 0)
+	return devcontainer.Find(root.FS())
 }
 
 // prepare reads the folder's devcontainer.json for a new VM, unless

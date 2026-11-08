@@ -16,6 +16,7 @@ import (
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/safefile"
 )
 
 func TestRule(t *testing.T) {
@@ -211,7 +212,7 @@ func TestPolicyNotRegular(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for f, want := range map[string]error{fifo: proxy.ErrNotRegular, zero: proxy.ErrNotRegular, big: proxy.ErrTooLong} {
+		for f, want := range map[string]error{fifo: safefile.ErrNotRegular, zero: safefile.ErrNotRegular, big: safefile.ErrTooLong} {
 			if _, err := ReadRules(nil, nil, []string{f}); !errors.Is(err, want) {
 				t.Errorf("ReadRules(%s) = %v, want %v", f, err, want)
 			}

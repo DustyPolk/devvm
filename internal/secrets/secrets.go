@@ -24,6 +24,7 @@ import (
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/safefile"
 	"github.com/devvmhq/devvm/internal/settings"
 	"github.com/devvmhq/devvm/internal/state"
 	"github.com/devvmhq/devvm/internal/tools"
@@ -227,7 +228,7 @@ func (s *Store) SaveKey(ctx context.Context, kind, provider, key string) error {
 // it can't be read: what tells a login that changed it from one that
 // didn't.
 func (s *Store) LoginSum(kind string) string {
-	data, err := proxy.ReadRegular(LoginFile(s.Dirs, kind), 64<<20)
+	data, err := safefile.Read(LoginFile(s.Dirs, kind), 64<<20, safefile.Opts{Follow: true})
 	if err != nil {
 		return ""
 	}

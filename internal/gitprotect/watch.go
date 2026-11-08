@@ -17,6 +17,7 @@ import (
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/safefile"
 	"github.com/devvmhq/devvm/internal/state"
 )
 
@@ -343,7 +344,8 @@ func boolOrder(b bool) int {
 func relTo(top, path string) string { return strings.TrimPrefix(path, top+"/") }
 
 // sumOf sums what's at path, which fi (from Lstat) describes: a regular
-// file by its contents, read without following a symlink, past
+// file by its contents, read without following a symlink or waiting on a
+// FIFO swapped in (safefile's), past
 // maxWatchBytes by its size, inode and change time (which the VM can't set
 // back), a symlink by where it points, and anything else by its type.
 func sumOf(path string, fi fs.FileInfo) string {
@@ -356,14 +358,11 @@ func sumOf(path string, fi fs.FileInfo) string {
 	case fi.Size() > maxWatchBytes:
 		return "size " + strconv.FormatInt(fi.Size(), 10) + ", " + platform.ChangeID(fi)
 	}
-	f, err := os.OpenFile(path, os.O_RDONLY|platform.NoBlock|platform.NoFollow, 0) //nolint:gosec // the project's own, not through a symlink
+	f, err := safefile.Open(path, safefile.Opts{})
 	if err != nil {
 		return "unreadable"
 	}
 	defer func() { _ = f.Close() }()
-	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
-		return "unreadable"
-	}
 	h := sha256.New()
 	if _, err := io.Copy(h, io.LimitReader(f, maxWatchBytes)); err != nil {
 		return "unreadable"

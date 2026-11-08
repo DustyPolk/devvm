@@ -47,6 +47,7 @@ import (
 	"github.com/devvmhq/devvm/internal/agents"
 	"github.com/devvmhq/devvm/internal/fetch"
 	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/safefile"
 	"github.com/devvmhq/devvm/internal/state"
 )
 
@@ -195,10 +196,10 @@ var opencodeOAuth = map[string]provider{
 // grows.
 const fileMax = 64 << 20
 
-// readJSON reads an agent's file: a regular file (proxy.ReadRegular, so a FIFO or a device there
-// can't hold devvm), at most fileMax, holding a JSON object.
+// readJSON reads an agent's file: a regular file, through a symbolic link if it's one (safefile's,
+// so a FIFO or a device there can't hold devvm), at most fileMax, holding a JSON object.
 func readJSON(path string) (map[string]any, error) {
-	data, err := proxy.ReadRegular(path, fileMax)
+	data, err := safefile.Read(path, fileMax, safefile.Opts{Follow: true})
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +216,7 @@ func readJSON(path string) (map[string]any, error) {
 // writes it back: VMs each have a proxy, and two refreshing with the same (rotating) refresh token
 // would lose one result or get the login revoked. It returns the unlock.
 func lockLogin(path string) (func(), error) {
-	d, err := os.Open(filepath.Dir(path))
+	d, err := os.Open(filepath.Dir(path)) //nolint:forbidigo // a folder, locked, never read
 	if err != nil {
 		return nil, err
 	}

@@ -26,17 +26,19 @@ linters:
   settings:
     depguard:
       rules:
-        # The proxy, and the background-process helper it uses: the
-        # standard library alone.
+        # The proxy, and the background-process helper and the file
+        # reader it uses: the standard library alone.
         proxy:
           list-mode: strict
           files:
             - "**/internal/proxy/**"
             - "**/internal/daemon/**"
+            - "**/internal/safefile/**"
           allow:
             - $gostd
             - github.com/devvmhq/devvm/internal/proxy
             - github.com/devvmhq/devvm/internal/daemon
+            - github.com/devvmhq/devvm/internal/safefile
         main:
           list-mode: strict
           files:
@@ -44,6 +46,7 @@ linters:
             - "!$test"
             - "!**/internal/proxy/**"
             - "!**/internal/daemon/**"
+            - "!**/internal/safefile/**"
           allow:
             - $gostd
             - github.com/devvmhq/devvm
@@ -67,6 +70,7 @@ linters:
             - $test
             - "!**/internal/proxy/**"
             - "!**/internal/daemon/**"
+            - "!**/internal/safefile/**"
           allow:
             - $gostd
             - github.com/devvmhq/devvm
@@ -106,6 +110,8 @@ linters:
           msg: devvm's environment never changes, as every command and process it starts inherits it; set a command's own (exec.Cmd's Env), as a VM's SSH agent is (backend.ExecOpts.Agent). Only daemon.Ready takes its status file out.
         - pattern: ^unicode\.(IsGraphic|IsPrint|IsControl|Bidi_Control)$
           msg: ask msg.Safe which characters reach the terminal (msg.Printable and msg.OneLine drop the rest); a check that isn't about the terminal says why in a nolint.
+        - pattern: ^(os\.(Open|OpenFile|ReadFile|OpenRoot|OpenInRoot|DirFS)|os\.Root\.(Open|OpenFile|ReadFile|FS))$
+          msg: read a file a VM can write through internal/safefile (Read, Open, OpenRoot), which never waits on a FIFO or follows a link it wasn't asked to, and reads only a regular file within its cap; what opens a file to write, or a folder, says why in a nolint.
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -174,6 +180,16 @@ linters:
       - path: ^internal/daemon/status\.go$|_test\.go$
         linters: [forbidigo]
         text: devvm's environment never changes
+      # The readers of files a VM can write, or swap, are held to
+      # internal/safefile: the project folder's (devcontainer.json, its
+      # default.nix, .git's), devvm agent save's store, the agents' logins and
+      # the policy files. Tests make their own fixtures.
+      - path-except: ^internal/(gitprotect/|vm/(devcontainer|detect|agentsave[a-z_]*)\.go$|agentlogin/|netpolicy/rules\.go$|proxy/(config|policy)\.go$)|^testdata/lint/
+        linters: [forbidigo]
+        text: internal/safefile
+      - path: _test\.go$
+        linters: [forbidigo]
+        text: internal/safefile
     paths:
       - ^\.agents/
 

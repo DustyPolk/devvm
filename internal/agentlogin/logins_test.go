@@ -19,6 +19,7 @@ import (
 
 	"github.com/devvmhq/devvm/internal/fetch"
 	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/safefile"
 )
 
 func must(t *testing.T, err error) {
@@ -295,10 +296,10 @@ func TestLoginFileNotRegular(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "auth.json")
 	must(t, syscall.Mkfifo(p, 0o600))
 	_, err := File{Kind: Codex, Path: p}.Bindings()
-	if !errors.Is(err, proxy.ErrNotRegular) {
+	if !errors.Is(err, safefile.ErrNotRegular) {
 		t.Errorf("Bindings of a FIFO = %v", err)
 	}
-	if _, err := ClaudeCopy(p); !errors.Is(err, proxy.ErrNotRegular) {
+	if _, err := ClaudeCopy(p); !errors.Is(err, safefile.ErrNotRegular) {
 		t.Errorf("ClaudeCopy of a FIFO = %v", err)
 	}
 }

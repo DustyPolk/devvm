@@ -60,7 +60,7 @@ func linkedWorktree(dir string) (gitDir, commonDir string) {
 	if t == "" || filepath.Base(filepath.Dir(t)) != "worktrees" || filepath.Base(repo) != ".git" {
 		return "", ""
 	}
-	back, err := os.ReadFile(filepath.Join(t, "gitdir")) //nolint:gosec // the repo's own
+	back, err := gitFile(filepath.Join(t, "gitdir"))
 	if err != nil {
 		return "", ""
 	}

@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/netip"
 	"os"
 	"path"
 	"strings"
 	"syscall"
+
+	"github.com/devvmhq/devvm/internal/safefile"
 )
 
 // --- how devvm runs it ---
@@ -207,63 +208,24 @@ func checkCaptures(cs []Capture, withCA bool) error {
 	return nil
 }
 
-// ErrNotRegular is a read's error for a path that isn't a regular file (a FIFO, a device, a
-// folder), or, where it must not be, a symbolic link.
-var ErrNotRegular = errors.New("not a regular file")
-
 // ErrNotPrivate is a read's error for a file that must be its owner's alone, this process's user,
 // and isn't: another user owns it, or may write it, or for the config, read it.
 var ErrNotPrivate = errors.New("another user may read or change it")
 
-// ErrTooLong is a read's error for a file past its cap.
-var ErrTooLong = errors.New("too long")
-
-// ReadRegular reads the file at path, through a symbolic link if it's one: a regular file, at most
-// limit bytes long. It opens it without blocking and checks the file it opened, so a FIFO or a
-// device there (a link to /dev/zero) can't hold or flood its reader: ErrNotRegular, ErrTooLong.
-// The proxy, devvm network and devvm doctor read policy files with it.
-func ReadRegular(path string, limit int64) ([]byte, error) {
-	return readChecked(path, limit, 0, 0)
-}
-
-// readPrivate is ReadRegular for a file devvm writes for the proxy alone: not a symbolic link, and
+// readPrivate reads a file devvm writes for the proxy alone, as safefile reads it (a regular file,
+// not a symbolic link, at most limit bytes long: safefile.ErrNotRegular, safefile.ErrTooLong),
 // owned by this process's user, with none of deny's permission bits (0o022: only its owner may
-// write it; 0o077: nobody else may read it either).
+// write it; 0o077: nobody else may read it either): ErrNotPrivate.
 func readPrivate(path string, limit int64, deny os.FileMode) ([]byte, error) {
-	return readChecked(path, limit, syscall.O_NOFOLLOW, deny)
-}
-
-// readChecked opens path with flags besides O_RDONLY and O_NONBLOCK, and reads it when what it
-// opened is a regular file of at most limit bytes (ErrNotRegular, ErrTooLong); with deny, owned by
-// this process's user, and with none of deny's permission bits (ErrNotPrivate).
-func readChecked(path string, limit int64, flags int, deny os.FileMode) ([]byte, error) {
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|flags, 0) //nolint:gosec // devvm names the file
+	f, err := safefile.Open(path, safefile.Opts{})
 	if err != nil {
-		if errors.Is(err, syscall.ELOOP) {
-			return nil, fmt.Errorf("%s: %w", path, ErrNotRegular)
-		}
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	fi, err := f.Stat()
-	switch {
-	case err != nil:
-		return nil, err
-	case !fi.Mode().IsRegular():
-		return nil, fmt.Errorf("%s: %w", path, ErrNotRegular)
-	case fi.Mode().Perm()&deny != 0 || deny != 0 && !ownedByMe(fi):
+	if f.Info.Mode().Perm()&deny != 0 || !ownedByMe(f.Info) {
 		return nil, fmt.Errorf("%s: %w", path, ErrNotPrivate)
-	case fi.Size() > limit:
-		return nil, fmt.Errorf("%s: %w", path, ErrTooLong)
 	}
-	b, err := io.ReadAll(io.LimitReader(f, limit+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(b)) > limit { // it grew as it was read
-		return nil, fmt.Errorf("%s: %w", path, ErrTooLong)
-	}
-	return b, nil
+	return f.ReadAll(limit)
 }
 
 // ownedByMe reports whether fi's file is this process's user's.
