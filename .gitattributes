@@ -1,0 +1,3 @@
+# Generated files: GitHub collapses them in diffs.
+internal/msg/messages_gen.go linguist-generated=true
+docs/content/docs/cli/** linguist-generated=true

@@ -1,6 +1,5 @@
 ---
 title: devvm group
-weight: 15
 explainer: "Show the group this folder's VM is in"
 ---
 

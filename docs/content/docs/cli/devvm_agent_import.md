@@ -1,6 +1,5 @@
 ---
 title: devvm agent import
-weight: 4
 explainer: "Copy the agents' settings and logins from this machine into devvm's store"
 ---
 

@@ -1,6 +1,5 @@
 ---
 title: devvm secret use
-weight: 51
 explainer: "Let this folder's VM use a secret"
 ---
 

@@ -1,6 +1,5 @@
 ---
 title: devvm
-weight: 1
 explainer: "Open a shell in this folder's VM, creating it first"
 ---
 

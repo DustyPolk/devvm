@@ -79,11 +79,12 @@ func TestStaleReferenceIsCaught(t *testing.T) {
 			find(t, root, "rebuild").Short = "Edited"
 		}, []string{"_index.md", "devvm.md", "devvm_rebuild.md"}},
 		{"a new command", func(root *cobra.Command) {
-			root.AddCommand(&cobra.Command{Use: "zap", Short: "Zap", Run: func(*cobra.Command, []string) {}})
-		}, []string{"_index.md", "devvm.md", "devvm_zap.md"}},
+			// First of all: no other page's place changes.
+			root.AddCommand(&cobra.Command{Use: "aaa", Short: "Aaa", Run: func(*cobra.Command, []string) {}})
+		}, []string{"_index.md", "devvm.md", "devvm_aaa.md"}},
 		{"a command gone", func(root *cobra.Command) {
-			root.RemoveCommand(find(t, root, "upgrade")) // the last: no other page's place changes
-		}, []string{"_index.md", "devvm.md", "devvm_upgrade.md"}},
+			root.RemoveCommand(find(t, root, "adopt"))
+		}, []string{"_index.md", "devvm.md", "devvm_adopt.md"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := newRoot()
@@ -92,6 +93,25 @@ func TestStaleReferenceIsCaught(t *testing.T) {
 				t.Errorf("differences = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// A command's page has no weight, which would depend on its place: Hugo
+// sorts the section by title. Only the index has one, the section's place.
+func TestPagesHaveNoWeight(t *testing.T) {
+	files, err := generate(newRoot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n, data := range files {
+		weight, ok := frontMatter(data)["weight"]
+		if n == "_index.md" {
+			if weight != "90" {
+				t.Errorf("_index.md: weight = %q, want 90", weight)
+			}
+		} else if ok {
+			t.Errorf("%s has weight %s: commands' pages sort by title", n, weight)
+		}
 	}
 }
 

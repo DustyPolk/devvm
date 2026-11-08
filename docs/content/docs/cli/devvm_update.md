@@ -1,6 +1,5 @@
 ---
 title: devvm update
-weight: 63
 explainer: "Bring this folder's VM up to date, then open a shell in it"
 ---
 

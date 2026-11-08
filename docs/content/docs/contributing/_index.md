@@ -610,7 +610,7 @@ The [CLI reference](../cli/_index.md) in `docs/content/docs/cli/` is generated f
 mise run cli-docs
 ```
 
-It runs `internal/cli/docgen`, which replaces every page in that folder: `_index.md`, listing the commands, and a page per command named after its path (`devvm_build.md`), with `title`, `weight` and `explainer` front matter, the explainer being the command's `Short`, and links to the other pages as files. Each page has the command's examples, and a Docs section before See also that links to the command's docs page on the site. Hidden commands (`_msg`, `_qemu`) and Cobra's help command are left out. The pages carry no dates, so the same commands give the same files.
+It runs `internal/cli/docgen`, which replaces every page in that folder: `_index.md`, listing the commands, and a page per command named after its path (`devvm_build.md`), with `title` and `explainer` front matter, the explainer being the command's `Short`, and links to the other pages as files. Each page has the command's examples, and a Docs section before See also that links to the command's docs page on the site. Hidden commands (`_msg`, `_qemu`) and Cobra's help command are left out. The pages carry no dates, so the same commands give the same files. They carry no weight either, so Hugo sorts the section by title, and a new command adds its own page and changes only `_index.md` and the root's `devvm.md`; `TestPagesHaveNoWeight` checks this. The `.gitattributes` file marks the pages as generated, so GitHub collapses them in a diff.
 
 ### A command's help
 

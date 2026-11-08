@@ -1,6 +1,5 @@
 ---
 title: devvm history export
-weight: 19
 explainer: "Save this folder's VM's agent history to a .tar.gz"
 ---
 

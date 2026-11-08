@@ -1,6 +1,5 @@
 ---
 title: devvm link rm
-weight: 32
 explainer: "Remove one of this folder's VM's links"
 ---
 

@@ -1,6 +1,5 @@
 ---
 title: devvm group join
-weight: 16
 explainer: "Put this folder's VM in a group of VMs"
 ---
 

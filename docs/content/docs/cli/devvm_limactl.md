@@ -1,6 +1,5 @@
 ---
 title: devvm limactl
-weight: 28
 explainer: "Run Lima's limactl for debugging, which starts VMs unconfined, whatever their tier"
 ---
 

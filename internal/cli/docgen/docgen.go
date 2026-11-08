@@ -51,7 +51,7 @@ func generate(root *cobra.Command) (map[string][]byte, error) {
 	var index bytes.Buffer
 	index.WriteString("---\ntitle: CLI reference\nweight: 90\nexplainer: Every devvm command, with its arguments and flags\n---\n\n" +
 		"Every devvm command, with its arguments and flags. `devvm <command> --help` prints the same.\n\n")
-	for i, c := range cmds {
+	for _, c := range cmds {
 		c.DisableAutoGenTag = true
 		var md bytes.Buffer
 		if err := doc.GenMarkdownCustom(c, &md, func(s string) string { return s }); err != nil {
@@ -59,7 +59,8 @@ func generate(root *cobra.Command) (map[string][]byte, error) {
 		}
 		body := withDocs(tidy(md.String()), c.CommandPath(), msg.CommandDoc(c.CommandPath()))
 		// The command's Short is its page's explainer, the line under its title on the social card.
-		page := fmt.Sprintf("---\ntitle: %s\nweight: %d\nexplainer: %q\n---\n\n%s", c.CommandPath(), i+1, c.Short, body)
+		// No weight: Hugo sorts the section by title, so a new command moves no other page.
+		page := fmt.Sprintf("---\ntitle: %s\nexplainer: %q\n---\n\n%s", c.CommandPath(), c.Short, body)
 		files[fileName(c)] = []byte(page)
 		fmt.Fprintf(&index, "- [%s](%s): %s\n", c.CommandPath(), fileName(c), c.Short)
 	}
