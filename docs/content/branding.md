@@ -61,7 +61,7 @@ Click a swatch to copy its hex.
 
 ## Fonts
 
-All three are free under the SIL Open Font License.
+All three are free under the SIL Open Font License, and this site serves each one itself, with its license.
 
 <!-- markdownlint-disable MD034 -- the font-sample shortcodes' parameters, not bare URLs -->
 
@@ -69,11 +69,11 @@ All three are free under the SIL Open Font License.
 A pixel font by Helena Zhang, for the logo, headings and buttons. It's sharp at multiples of 11px.
 {{< /font-sample >}}
 
-{{< font-sample name="Instrument Sans" font="sans" link="https://fonts.google.com/specimen/Instrument+Sans" >}}
+{{< font-sample name="Instrument Sans" font="sans" link="https://github.com/Instrument/instrument-sans" license="fonts/instrument-sans/LICENSE" >}}
 The font for text.
 {{< /font-sample >}}
 
-{{< font-sample name="Martian Mono" font="mono" link="https://fonts.google.com/specimen/Martian+Mono" >}}
+{{< font-sample name="Martian Mono" font="mono" link="https://github.com/evilmartians/mono" license="fonts/martian-mono/LICENSE" >}}
 The font for code, set narrower than its default and without ligatures.
 {{< /font-sample >}}
 

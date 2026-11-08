@@ -8,13 +8,55 @@
 <meta property="og:image:alt" content="{{ .Alt }}">
 <meta name="twitter:image:alt" content="{{ .Alt }}">
 {{- end }}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Martian+Mono:wdth,wght@75..112.5,100..800&display=swap">
+{{- /* The site's three fonts, served from the site itself, so a page asks no other host for anything
+   (internal/cli/docgen's TestNoThirdPartyLoads checks the built site). Each is upstream's file as it is,
+   with its OFL as LICENSE beside it; a new version is downloaded from the same place, checked against
+   its SHA-256 here, then the sums here are updated.
+   - Instrument Sans, variable (wdth 75-100, wght 400-700), roman and italic: Instrument/instrument-sans
+     at commit 7fa22308a3d0c94ee2b3cd537a1196b65db34a3e, fonts/webfonts/InstrumentSans[wdth,wght].woff2
+     (sha256 aa72922aafcc0dc18f36ec1d805b0212057dabe8b9d5b8b57f67035aea1b826d) and
+     InstrumentSans-Italic[wdth,wght].woff2 (e958f71ffb2d576dd6a9499bd9bb336ad060ab48e1920b2444d68919dee29ba5),
+     and OFL.txt (9e27a72ed30eb49a08678f6a5d6ed98ec7ba5368f541637ee0683ec9134ef966).
+   - Martian Mono, variable (wdth 75-112.5, wght 100-800): evilmartians/mono's release v1.1.0
+     (commit 8ffa86c2998677256252336f3662d60997e74b05), martian-mono-1.1.0-variable.zip
+     (sha256 b87730975931dc2dbf0129ecf392ccaf8d29f46bc05e995703da4155db510867), its MartianMonoVF.woff2
+     (7cdf8e985a4872246d8c2a19333bcc5e8cbcf512746128823f35c1c43aac238a), and the commit's OFL.txt
+     (ddafd2c3f37ef1d83ef284ca63e159befd3820850c5e9eded14ca52eee92c256).
+   - Departure Mono: rektdeckard/departure-mono's release v1.500, DepartureMono-1.500.zip
+     (sha256 bf3e48059aeef4617ec585bdea81dcc3491c576b3e7a472f52faf40e09ee5c3a), its
+     DepartureMono-Regular.woff2 (5b4fed1daa90708aa9c6ee1190abca9dc22164a1c1def0020386e46b61038cfb). */ -}}
+{{- $sans := "fonts/instrument-sans/InstrumentSans.woff2" | relURL }}
+{{- $sansItalic := "fonts/instrument-sans/InstrumentSans-Italic.woff2" | relURL }}
+{{- $mono := "fonts/martian-mono/MartianMono.woff2" | relURL }}
 {{- $departure := "fonts/departure-mono/DepartureMono-Regular.woff2" | relURL }}
+<link rel="preload" href="{{ $sans }}" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="{{ $departure }}" as="font" type="font/woff2" crossorigin>
 <style>
-  /* Here, not in custom.css: Hugo moves that file, and relURL keeps this path right. */
+  /* Here, not in custom.css: Hugo moves that file, and relURL keeps these paths right. */
+  @font-face {
+    font-family: "Instrument Sans";
+    src: url("{{ $sans }}") format("woff2");
+    font-weight: 400 700;
+    font-stretch: 75% 100%;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "Instrument Sans";
+    src: url("{{ $sansItalic }}") format("woff2");
+    font-weight: 400 700;
+    font-stretch: 75% 100%;
+    font-style: italic;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "Martian Mono";
+    src: url("{{ $mono }}") format("woff2");
+    font-weight: 100 800;
+    font-stretch: 75% 112.5%;
+    font-style: normal;
+    font-display: swap;
+  }
   @font-face {
     font-family: "Departure Mono";
     src: url("{{ $departure }}") format("woff2");

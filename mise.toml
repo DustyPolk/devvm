@@ -71,8 +71,13 @@ run = [
   # Social cards: every page has an explainer, and it and the title fit the card.
   "go test ./internal/cli/docgen -run '^TestExplainers$'",
   # The site builds with no warning, a deprecation's included, into a folder
-  # the run removes.
-  "d=$(mktemp -d) && trap 'rm -rf \"$d\"' EXIT && hugo -s docs --quiet --panicOnWarning -d \"$d\"",
+  # the run removes, and its pages and stylesheets load nothing from another
+  # host.
+  '''
+  d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
+  hugo -s docs --quiet --panicOnWarning -d "$d" &&
+  DOCS_SITE="$d" go test -count=1 ./internal/cli/docgen -run '^TestNoThirdPartyLoads$'
+  ''',
 ]
 
 [tasks.test]
