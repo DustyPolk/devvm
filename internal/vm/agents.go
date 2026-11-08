@@ -316,7 +316,7 @@ func agentFiles(home, agent string) []string {
 // control character: the VM's setup takes paths one per line.
 func readDir(dir string) []os.DirEntry {
 	es, _ := os.ReadDir(dir)
-	return slices.DeleteFunc(es, func(e os.DirEntry) bool { return strings.IndexFunc(e.Name(), unicode.IsControl) >= 0 })
+	return slices.DeleteFunc(es, func(e os.DirEntry) bool { return strings.IndexFunc(e.Name(), unicode.IsControl) >= 0 }) //nolint:forbidigo // the setup's one path per line, not the terminal
 }
 
 // AgentMounts returns the host folders a VM with these shared tools

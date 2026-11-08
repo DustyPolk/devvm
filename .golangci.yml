@@ -104,6 +104,8 @@ linters:
           msg: write a file whole through state.WriteFile, or state.WriteFileMode for another mode, which replace it atomically; internal/proxy uses its writeAtomic; a log or a download streamed into its file says why in a nolint.
         - pattern: ^(os|syscall)\.(Setenv|Unsetenv|Clearenv)$
           msg: devvm's environment never changes, as every command and process it starts inherits it; set a command's own (exec.Cmd's Env), as a VM's SSH agent is (backend.ExecOpts.Agent). Only daemon.Ready takes its status file out.
+        - pattern: ^unicode\.(IsGraphic|IsPrint|IsControl|Bidi_Control)$
+          msg: ask msg.Safe which characters reach the terminal (msg.Printable and msg.OneLine drop the rest); a check that isn't about the terminal says why in a nolint.
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -122,6 +124,10 @@ linters:
     presets:
       - std-error-handling
     rules:
+      # msg.Safe is the one rule for which characters reach the terminal.
+      - path: ^internal/msg/
+        linters: [forbidigo]
+        text: ask msg\.Safe
       - path: ^cmd/devvm/
         linters: [forbidigo]
         text: os\.Exit|context\.(Background|TODO)

@@ -134,7 +134,7 @@ func New(dir string, nameMax int) (Folder, error) { return Nth(dir, nameMax, 0) 
 // from dir keeps its name, and so its folder in devvm's data folder, so
 // a new VM for dir takes the next name.
 func Nth(dir string, nameMax, n int) (Folder, error) {
-	if strings.Contains(dir, ",") || strings.IndexFunc(dir, unicode.IsControl) >= 0 {
+	if strings.Contains(dir, ",") || strings.IndexFunc(dir, unicode.IsControl) >= 0 { //nolint:forbidigo // what a VM's mount takes, not the terminal
 		return Folder{}, &BadPathError{Dir: dir}
 	}
 	room := slugMax

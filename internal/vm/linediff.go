@@ -3,8 +3,9 @@ package vm
 import (
 	"strconv"
 	"strings"
-	"unicode"
 	"unicode/utf8"
+
+	"github.com/devvmhq/devvm/internal/msg"
 )
 
 // diffContext is how many unchanged lines a diff shows around each change.
@@ -187,7 +188,6 @@ func middleOps(a, b []string) []diffOp {
 // \u{HEX} (a byte that isn't UTF-8 as \x{HEX}), so nothing in it hides
 // or changes what the diff shows.
 func shownLine(s string) string {
-	const softHyphen = 0xad // graphic to Unicode, but most terminals show nothing
 	var b strings.Builder
 	for i := 0; i < len(s); {
 		r, n := utf8.DecodeRuneInString(s[i:])
@@ -196,7 +196,7 @@ func shownLine(s string) string {
 			b.WriteString(`\x{` + strconv.FormatUint(uint64(s[i]), 16) + "}")
 		case r == '\\':
 			b.WriteString(`\\`)
-		case r == '\t' || unicode.IsGraphic(r) && r != softHyphen:
+		case r == '\t' || msg.Safe(r):
 			b.WriteRune(r)
 		default:
 			b.WriteString(`\u{` + strconv.FormatInt(int64(r), 16) + "}")

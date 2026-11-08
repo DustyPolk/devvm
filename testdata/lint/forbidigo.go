@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"syscall"
+	"unicode"
 
 	"github.com/devvmhq/devvm/internal/testbuild"
 )
@@ -49,3 +50,5 @@ func truncates() (*os.File, error) { return os.OpenFile("f", os.O_WRONLY|os.O_TR
 func setsEnv() error { return os.Setenv("SSH_AUTH_SOCK", "/s") } // want forbidigo
 
 func unsetsEnv() error { return os.Unsetenv("SSH_AUTH_SOCK") } // want forbidigo
+
+func shows(r rune) bool { return unicode.IsGraphic(r) } // want forbidigo

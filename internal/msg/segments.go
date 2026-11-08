@@ -30,22 +30,10 @@ func (m M) Segments() (segs []Segment, link string) {
 }
 
 func (m M) segmentsIn(b *i18n.Bundle, lang string) []Segment {
-	marked := m
-	marked.vals = make([]val, len(m.vals))
-	for i, v := range m.vals {
-		marked.vals[i] = val{v.key, string(valueStart) + unmarked(v.value) + string(valueEnd)}
-	}
-	return split(marked.textIn(b, lang))
-}
-
-// unmarked is s without the marker runes.
-func unmarked(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r == valueStart || r == valueEnd {
-			return -1
-		}
-		return r
-	}, s)
+	// OneLine drops private-use runes, the markers among them (Safe).
+	return split(m.renderIn(b, lang, func(v string) string {
+		return string(valueStart) + OneLine(v) + string(valueEnd)
+	}))
 }
 
 // split cuts marked text into segments, the marked parts values; empty

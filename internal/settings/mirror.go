@@ -39,7 +39,7 @@ func checkUbuntuMirror(s string) error {
 	u, err := url.Parse(s)
 	bad := err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
 		u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" ||
-		strings.ContainsFunc(s, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) })
+		strings.ContainsFunc(s, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) //nolint:forbidigo // a line of apt's list, not the terminal
 	if bad {
 		return msg.UbuntuMirrorInvalid(KeyUbuntuMirror)
 	}

@@ -8,7 +8,6 @@ import (
 	"path"
 	"slices"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/devvmhq/devvm/internal/agentlogin"
@@ -144,13 +143,13 @@ func readSent(r io.Reader, vm string, agents []string) (*sent, error) {
 // entryName is a stream entry's path relative to the VM's home, a
 // folder's without its last /, when it's one devvm takes: relative,
 // clean (no . or .. part), valid UTF-8 and only of characters a terminal
-// shows (unicode.IsGraphic: no control, format or bidi characters), so
+// shows as they are (msg.Safe), so
 // the diff shows each name as it is.
 func entryName(raw string) (string, bool) {
 	name := strings.TrimSuffix(raw, "/")
 	ok := name != "" && name != "." && !path.IsAbs(name) && path.Clean(name) == name &&
 		name != ".." && !strings.HasPrefix(name, "../") && utf8.ValidString(name) &&
-		strings.IndexFunc(name, func(r rune) bool { return !unicode.IsGraphic(r) }) < 0
+		strings.IndexFunc(name, func(r rune) bool { return !msg.Safe(r) }) < 0
 	return name, ok
 }
 

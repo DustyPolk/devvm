@@ -95,12 +95,15 @@ func (m M) Text() string {
 	return m.textIn(loadBundle(), userLanguage(os.Getenv))
 }
 
-func (m M) textIn(b *i18n.Bundle, lang string) string {
-	// Values are made by anyone, a VM included, so each goes on one line
-	// without control characters, here, wherever the message is shown.
+func (m M) textIn(b *i18n.Bundle, lang string) string { return m.renderIn(b, lang, OneLine) }
+
+// renderIn is the message's text with each value as value makes it, which
+// goes through OneLine: values are made by anyone, a VM included, so each
+// goes on one line without what Safe refuses, wherever the message is shown.
+func (m M) renderIn(b *i18n.Bundle, lang string, value func(string) string) string {
 	data := make(map[string]string, len(m.vals))
 	for _, v := range m.vals {
-		data[v.key] = OneLine(v.value)
+		data[v.key] = value(v.value)
 	}
 	lc := &i18n.LocalizeConfig{MessageID: m.id, TemplateData: data}
 	if m.plural {
