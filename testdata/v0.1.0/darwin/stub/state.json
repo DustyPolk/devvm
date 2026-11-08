@@ -1,0 +1,90 @@
+{
+  "instances": {
+    "devvm-app-0c3c7077e29f06": {
+      "status": "Stopped",
+      "cpus": 4,
+      "memory": 8589934592,
+      "disk": 107374182400,
+      "config": {
+        "dns": "[\"127.0.0.1\"]",
+        "hostResolver.enabled": "false",
+        "images": "[{\"location\":\"file:///tmp/dvt.3732593290/ubuntu/release-20261016/ubuntu-26.04-server-cloudimg-arm64.img\",\"arch\":\"aarch64\",\"digest\":\"sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24\"}]",
+        "mounts": "[{\"location\":\"/private/tmp/dvt.3732593290/home/src/app\",\"writable\":true},{\"location\":\"/tmp/dvt.3732593290/config/devvm/agents/claude/.claude/skills\",\"writable\":false},{\"location\":\"/tmp/dvt.3732593290/data/devvm/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]",
+        "portForwards": "[{\"guestIP\":\"127.0.0.1\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"0.0.0.0\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"::\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true}]",
+        "propagateProxyEnv": "false",
+        "ssh.forwardAgent": "false",
+        "ssh.localPort": "28662"
+      }
+    },
+    "devvm-db-530f81025873e9": {
+      "status": "Stopped",
+      "cpus": 4,
+      "memory": 8589934592,
+      "disk": 107374182400,
+      "config": {
+        "dns": "[\"127.0.0.1\"]",
+        "hostResolver.enabled": "false",
+        "images": "[{\"location\":\"file:///tmp/dvt.3732593290/ubuntu/release-20261016/ubuntu-26.04-server-cloudimg-arm64.img\",\"arch\":\"aarch64\",\"digest\":\"sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24\"}]",
+        "mounts": "[{\"location\":\"/private/tmp/dvt.3732593290/home/src/db\",\"writable\":true},{\"location\":\"/tmp/dvt.3732593290/data/devvm/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]",
+        "portForwards": "[{\"guestIP\":\"127.0.0.1\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"0.0.0.0\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"::\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true}]",
+        "propagateProxyEnv": "false",
+        "ssh.forwardAgent": "false",
+        "ssh.localPort": "21257"
+      }
+    },
+    "devvm-img-25f6c4644ea6": {
+      "status": "Stopped",
+      "cpus": 4,
+      "memory": 8589934592,
+      "disk": 107374182400,
+      "config": {
+        "images": "[{\"location\":\"file:///tmp/dvt.3732593290/ubuntu/release-20261016/ubuntu-26.04-server-cloudimg-arm64.img\",\"arch\":\"aarch64\",\"digest\":\"sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24\"}]",
+        "portForwards": "[{\"guestIP\":\"127.0.0.1\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"0.0.0.0\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"::\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true}]",
+        "propagateProxyEnv": "false",
+        "ssh.localPort": "27297"
+      }
+    },
+    "devvm-scratch-368bb075d4c7fb": {
+      "status": "Stopped",
+      "cpus": 4,
+      "memory": 8589934592,
+      "disk": 107374182400,
+      "config": {
+        "dns": "[\"127.0.0.1\"]",
+        "hostResolver.enabled": "false",
+        "images": "[{\"location\":\"file:///tmp/dvt.3732593290/ubuntu/release-20261016/ubuntu-26.04-server-cloudimg-arm64.img\",\"arch\":\"aarch64\",\"digest\":\"sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24\"}]",
+        "mounts": "[{\"location\":\"/private/tmp/dvt.3732593290/home/src/scratch\",\"writable\":true},{\"location\":\"/tmp/dvt.3732593290/config/devvm/agents/claude/.claude/skills\",\"writable\":false},{\"location\":\"/tmp/dvt.3732593290/data/devvm/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]",
+        "portForwards": "[{\"guestIP\":\"127.0.0.1\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"0.0.0.0\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"::\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true}]",
+        "propagateProxyEnv": "false",
+        "ssh.forwardAgent": "false",
+        "ssh.localPort": "43993"
+      }
+    },
+    "devvm-web-f348ad75b7e608": {
+      "status": "Stopped",
+      "cpus": 4,
+      "memory": 8589934592,
+      "disk": 107374182400,
+      "config": {
+        "images": "[{\"location\":\"file:///tmp/dvt.3732593290/ubuntu/release-20261016/ubuntu-26.04-server-cloudimg-arm64.img\",\"arch\":\"aarch64\",\"digest\":\"sha256:8eb876c2ccc4b6ff89e4a65d511815923b285e04503ba465809bf587f763da24\"}]",
+        "mounts": "[{\"location\":\"/tmp/dvt.3732593290/config/devvm/agents/claude/.claude/skills\",\"writable\":false},{\"location\":\"/tmp/dvt.3732593290/data/devvm/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]",
+        "portForwards": "[{\"guestIP\":\"127.0.0.1\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"0.0.0.0\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true},{\"guestIP\":\"::\",\"guestPortRange\":[1,65535],\"proto\":\"any\",\"ignore\":true}]",
+        "propagateProxyEnv": "false",
+        "ssh.forwardAgent": "false",
+        "ssh.localPort": "40605"
+      }
+    }
+  },
+  "toolsOut": "/private/tmp/dvt.3732593290/data/devvm/tools-build.674176925",
+  "keychain": {
+    "github": "ghp_testfakev010"
+  },
+  "excluded": [
+    "/tmp/dvt.3732593290/data/devvm/logins/claude",
+    "/tmp/dvt.3732593290/data/devvm/logins/codex",
+    "/tmp/dvt.3732593290/data/devvm/vms/530f81025873e9/run/ca",
+    "/tmp/dvt.3732593290/data/devvm/vms/0c3c7077e29f06/run/ca",
+    "/tmp/dvt.3732593290/data/devvm/vms/f348ad75b7e608/run/ca",
+    "/tmp/dvt.3732593290/data/devvm/vms/368bb075d4c7fb/run/ca"
+  ]
+}

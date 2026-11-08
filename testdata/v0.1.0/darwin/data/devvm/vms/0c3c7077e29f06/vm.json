@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "id": "3e0e8015873ccefe69d6dd1f9b1c760f",
+  "name": "devvm-app-0c3c7077e29f06",
+  "alias": "devvm-app",
+  "image": "base",
+  "chain": "base=25f6c4644ea6",
+  "dir": "/private/tmp/dvt.3732593290/home/src/app",
+  "folder": "16777234:207176686:1794153291.206917229",
+  "backend": "lima",
+  "backend_at": "a710c79c0cd6b20d",
+  "created": "2026-11-08T15:54:53.63178Z",
+  "made_by": "0.1.0",
+  "agent": {
+    "mode": "off",
+    "made": {
+      "started": "off_319288b25df2de505680ed07f8ea1832"
+    }
+  },
+  "clone": {
+    "on": false
+  },
+  "git": {
+    "mode": "on",
+    "made": {
+      "protected": true,
+      "git_id": "16777234:207176782:1794153292.802502574",
+      "delegations": "e3b0c44298fc1c14"
+    }
+  },
+  "links": {
+    "links": [
+      {
+        "name": "db",
+        "port": 5432,
+        "target": "devvm-db-530f81025873e9",
+        "target_id": "ccc304fb80640f52b66575cff9a88932",
+        "addr": "127.77.0.1"
+      }
+    ],
+    "group": "backend"
+  },
+  "net": {
+    "tier": "allowlist",
+    "made": {
+      "check": "ok",
+      "proxy_key": "002d35608a1dcd5de3ffcbda8c6e178bd83556f0ebfce02dd868b114a1456543",
+      "proxy_salt": "a0202f456c810c4bfd74df1aba55a65e"
+    }
+  },
+  "ports": {
+    "forward": "3000,8080",
+    "host": {
+      "ssh": 28662,
+      "proxy": 46240
+    }
+  },
+  "secrets": {
+    "names": [
+      "github"
+    ]
+  },
+  "size": {
+    "cpus": "4",
+    "memory": "8"
+  },
+  "tools": {
+    "names": [
+      "node",
+      "claude",
+      "codex"
+    ],
+    "made": {
+      "files": [
+        "node-24.21.0-91ed6dbe288e.erofs",
+        "pnpm-12.10.1-ee2de6895483.erofs",
+        "bun-1.4.2-7982779c7d15.erofs",
+        "claude-2.1.295-1a5c03878963.erofs",
+        "codex-0.162.0-c1769dbf43f7.erofs"
+      ],
+      "libc": "gnu"
+    }
+  }
+}

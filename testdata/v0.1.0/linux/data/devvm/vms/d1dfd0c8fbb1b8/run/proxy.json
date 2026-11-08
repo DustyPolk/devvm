@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "listen": "127.0.0.1:28715",
+  "vm": "devvm-db-d1dfd0c8fbb1b8",
+  "password": "a12433cdeb9a3377c48f7b026eb3453382c243fc5de3dec9b287b7bba9036e8c",
+  "builtin_policies": [
+    "layers/base.policy"
+  ],
+  "policies": [
+    "/tmp/dvt.4158414630/config/devvm/policy",
+    "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/policy",
+    "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/run/secrets.policy"
+  ],
+  "log": "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/logs/network.jsonl",
+  "proxy_log": "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/logs/proxy.log",
+  "lifeline": "/tmp/dvt.4158414630/lima/devvm-db-d1dfd0c8fbb1b8/ha.pid",
+  "ca": "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/run/ca/ca.pem",
+  "ca_key": "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/run/ca/ca.key",
+  "ca_next": "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/run/ca/next.pem",
+  "ca_next_key": "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/run/ca/next.key",
+  "secrets": "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/run/secrets.json",
+  "captures": [
+    {
+      "agent": "codex",
+      "host": "auth.openai.com",
+      "path": "/oauth/token"
+    },
+    {
+      "agent": "opencode",
+      "host": "auth.openai.com",
+      "path": "/oauth/token"
+    },
+    {
+      "agent": "claude",
+      "host": "platform.claude.com",
+      "path": "/v1/oauth/token"
+    },
+    {
+      "agent": "claude",
+      "host": "console.anthropic.com",
+      "path": "/v1/oauth/token"
+    }
+  ],
+  "links": "/tmp/dvt.4158414630/data/devvm/vms/d1dfd0c8fbb1b8/run/links.json",
+  "link_sockets": "/tmp/dvt.4158414630/data/devvm/run",
+  "devvm_sha256": "f6e713e44d65ca81d6d035e6f2fedf4534acc1ee72391702ff302dcd3ae53029",
+  "ca_sha256": "889d7ff6217253d2fced1bb51e4f2695d193ece28328acd067d3cf1ca57484aa",
+  "ca_next_sha256": "c397fe81ac9dfb05a3719ad5524613469aed19ffddec3de8a9ed006325705eb4"
+}

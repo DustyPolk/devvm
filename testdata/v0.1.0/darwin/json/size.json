@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "cpus": 4,
+  "memory_gib": 8,
+  "disk_gib": 100
+}

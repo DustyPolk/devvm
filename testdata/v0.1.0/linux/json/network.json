@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "policy": "allowlist",
+  "allowlist": [
+    {
+      "builtin": "layers/base.policy",
+      "rules": [
+        "ports.ubuntu.com",
+        "archive.ubuntu.com",
+        "security.ubuntu.com",
+        "esm.ubuntu.com",
+        "deb.debian.org",
+        "security.debian.org",
+        "dl-cdn.alpinelinux.org",
+        "mise-versions.jdx.dev",
+        "tuf-repo-cdn.sigstore.dev",
+        "tuf-repo.github.com",
+        "nodejs.org",
+        "unofficial-builds.nodejs.org",
+        "github.com",
+        "github.com:22",
+        "api.github.com",
+        "codeload.github.com",
+        "raw.githubusercontent.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "lfs.github.com"
+      ],
+      "not_rules": []
+    },
+    {
+      "builtin": "shared-tools/node.policy",
+      "rules": [
+        "registry.npmjs.org",
+        "registry.yarnpkg.com",
+        "repo.yarnpkg.com",
+        "nodejs.org",
+        "bun.sh"
+      ],
+      "not_rules": []
+    },
+    {
+      "builtin": "shared-tools/claude.policy",
+      "rules": [
+        "api.anthropic.com",
+        "claude.ai",
+        "downloads.claude.ai",
+        "platform.claude.com",
+        "mcp-proxy.anthropic.com"
+      ],
+      "not_rules": []
+    },
+    {
+      "builtin": "shared-tools/codex.policy",
+      "rules": [
+        "api.openai.com",
+        "chatgpt.com",
+        "auth.openai.com"
+      ],
+      "not_rules": []
+    },
+    {
+      "file": "/tmp/dvt.4158414630/data/devvm/vms/6a14d8553d070e/run/secrets.policy",
+      "rules": [
+        "api.github.com:443",
+        "github.com:443",
+        "codeload.github.com:443",
+        "raw.githubusercontent.com:443",
+        "api.anthropic.com:443",
+        "api.openai.com:443",
+        "auth.openai.com:443",
+        "platform.claude.com:443",
+        "console.anthropic.com:443"
+      ],
+      "not_rules": []
+    }
+  ]
+}

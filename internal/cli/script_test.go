@@ -52,8 +52,10 @@ func scriptCmds() map[string]func(ts *testscript.TestScript, neg bool, args []st
 	return map[string]func(ts *testscript.TestScript, neg bool, args []string){
 		"catg":           catGlob,
 		"cp_exe":         cpExe,
+		"fixture":        fixture,
 		"free_port":      freePort,
 		"json_set":       jsonSet,
+		"json_superset":  jsonSuperset,
 		"listen_any":     listenAny,
 		"project":        project,
 		"release_server": releaseServer,

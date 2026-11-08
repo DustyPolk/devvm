@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "group": "backend",
+  "members": [
+    {
+      "name": "app",
+      "vm": "devvm-app-0c3c7077e29f06",
+      "folder": "/private/tmp/dvt.3732593290/home/src/app",
+      "published": "none"
+    },
+    {
+      "name": "db",
+      "vm": "devvm-db-530f81025873e9",
+      "folder": "/private/tmp/dvt.3732593290/home/src/db",
+      "published": "5432"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "vms": [
+    {
+      "name": "devvm-app-0c3c7077e29f06",
+      "status": "Stopped",
+      "image": "base",
+      "tools": [
+        "node",
+        "claude",
+        "codex"
+      ],
+      "git": "on",
+      "net": "allowlist",
+      "backend": "lima",
+      "folder": "/private/tmp/dvt.3732593290/home/src/app",
+      "folder_state": "there",
+      "links": 1
+    },
+    {
+      "name": "devvm-db-530f81025873e9",
+      "status": "Stopped",
+      "image": "base",
+      "tools": [],
+      "git": "off",
+      "net": "allowlist",
+      "backend": "lima",
+      "folder": "/private/tmp/dvt.3732593290/home/src/db",
+      "folder_state": "there",
+      "links": 0
+    },
+    {
+      "name": "devvm-scratch-368bb075d4c7fb",
+      "status": "Stopped",
+      "image": "base",
+      "tools": [
+        "claude"
+      ],
+      "git": "off",
+      "net": "none",
+      "backend": "lima",
+      "folder": "/private/tmp/dvt.3732593290/home/src/scratch",
+      "folder_state": "there",
+      "links": 0
+    },
+    {
+      "name": "devvm-web-f348ad75b7e608",
+      "status": "Stopped",
+      "image": "base",
+      "tools": [
+        "go",
+        "claude"
+      ],
+      "git": "clone",
+      "net": "open",
+      "backend": "lima",
+      "folder": "/private/tmp/dvt.3732593290/home/src/web",
+      "folder_state": "there",
+      "links": 0
+    }
+  ]
+}

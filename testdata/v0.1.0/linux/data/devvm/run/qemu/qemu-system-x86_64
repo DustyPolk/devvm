@@ -1,0 +1,3 @@
+#!/bin/sh
+# Written by devvm: QEMU with devvm's network restrictions.
+exec '/tmp/TestScript1850124304/001/devvm' _qemu exec "$0" "$@"

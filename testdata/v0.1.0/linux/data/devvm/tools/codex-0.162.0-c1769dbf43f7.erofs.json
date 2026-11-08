@@ -1,0 +1,8 @@
+{
+  "sha256": "e7e5521b751a9b088c0f114cdfdde21ee7b131d16c428d5289b6beadf162ca64",
+  "libc": "gnu",
+  "format": "",
+  "backend": "lima",
+  "built": "2026-11-08T16:01:55Z",
+  "made_by": "0.1.0"
+}

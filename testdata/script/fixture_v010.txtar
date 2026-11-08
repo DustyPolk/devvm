@@ -1,0 +1,162 @@
+# devvm 0.1.0's state (testdata/v0.1.0/GOOS, which 0.1.0 itself made:
+# see its README), read and used by this devvm: four VMs (app: node,
+# Claude Code and Codex, allowlist, ports, .git protected on macOS, the
+# github secret, a link to db and a group; db: publishes 5432; web:
+# --clone and Claude Code; scratch: no network, .git protection off),
+# 0.1.0's defaults, its agent store and logins. Nothing is migrated: the
+# layout version stays, the read-only commands change no file, each
+# --json has all that 0.1.0's had, and a launch starts the VM as it is,
+# with only the notes an upgrade brings.
+[!darwin] [!linux] skip 'a fixture for macOS and Linux only'
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+
+# The projects' folders, as the user has them, then 0.1.0's state for
+# them.
+mkdir $HOME/src/db $HOME/src/app $HOME/src/web $HOME/src/scratch
+cd $HOME/src/app
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+cd $HOME/src/web
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+cd $HOME/src/scratch
+exec git init -q
+fixture v0.1.0
+vm_name APP app
+vm_name DB db
+vm_name WEB web
+vm_name SCRATCH scratch
+exec sh -c 'mkdir "$WORK/before" && cp -R "$DATA" "$WORK/before/data" && cp -R "$CFG" "$WORK/before/config"'
+
+# Every VM is listed as 0.1.0 listed it, without a warning.
+exec devvm ls
+[darwin] stdout '^devvm-app-[0-9a-f]{14} +Stopped +base +node,claude,codex +on +allowlist +1 '
+[linux] stdout '^devvm-app-[0-9a-f]{14} +Stopped +base +node,claude,codex +off +allowlist +1 '
+stdout '^devvm-db-[0-9a-f]{14} +Stopped +base +- +off +allowlist +- '
+stdout '^devvm-scratch-[0-9a-f]{14} +Stopped +base +claude +off +none +- '
+stdout '^devvm-web-[0-9a-f]{14} +Stopped +base +go,claude +clone +open +- '
+! stderr .
+exec devvm ls --json
+cp stdout $WORK/ls.json
+json_superset $WORK/fixture/json/ls.json $WORK/ls.json
+! stderr .
+
+# The global settings and the store, read as 0.1.0 saved them.
+exec devvm secret --json
+cp stdout $WORK/secret.json
+json_superset $WORK/fixture/json/secret.json $WORK/secret.json
+exec devvm network -g --json
+cp stdout $WORK/network-g.json
+json_superset $WORK/fixture/json/network-g.json $WORK/network-g.json
+exec devvm ports -g --json
+cp stdout $WORK/ports-g.json
+json_superset $WORK/fixture/json/ports-g.json $WORK/ports-g.json
+exec devvm retention --json
+cp stdout $WORK/retention.json
+json_superset $WORK/fixture/json/retention.json $WORK/retention.json
+# The images and tools: newer catalogs and keys, so their shape only.
+exec devvm images --json
+cp stdout $WORK/images.json
+json_superset -shape $WORK/fixture/json/images.json $WORK/images.json
+
+# Each VM's own settings, as 0.1.0 showed them.
+cd $HOME/src/web
+exec devvm clone --json
+cp stdout $WORK/clone.json
+json_superset $WORK/fixture/json/clone.json $WORK/clone.json
+cd $HOME/src/app
+exec devvm git-protect
+[darwin] stdout '\Aon\n\z'
+[linux] stdout '\Aoff\n\z'
+exec devvm git-protect --json
+cp stdout $WORK/git-protect.json
+json_superset $WORK/fixture/json/git-protect.json $WORK/git-protect.json
+exec devvm network
+stdout '\Aallowlist\n'
+exec devvm network --json
+cp stdout $WORK/network.json
+json_superset $WORK/fixture/json/network.json $WORK/network.json
+exec devvm ports --json
+cp stdout $WORK/ports.json
+json_superset $WORK/fixture/json/ports.json $WORK/ports.json
+exec devvm link --json
+cp stdout $WORK/link.json
+json_superset $WORK/fixture/json/link.json $WORK/link.json
+exec devvm group --json
+cp stdout $WORK/group.json
+json_superset $WORK/fixture/json/group.json $WORK/group.json
+exec devvm size --json
+cp stdout $WORK/size.json
+json_superset $WORK/fixture/json/size.json $WORK/size.json
+exec devvm tools --json
+cp stdout $WORK/tools.json
+json_superset -shape $WORK/fixture/json/tools.json $WORK/tools.json
+exec devvm ssh-agent --json
+cp stdout $WORK/ssh-agent.json
+json_superset $WORK/fixture/json/ssh-agent.json $WORK/ssh-agent.json
+cd $HOME/src/scratch
+exec devvm git-protect
+stdout '\Aoff\n\z'
+exec devvm network
+stdout '\Anone\n'
+
+# None of that wrote a file: the layout version is 0.1.0's, and every
+# state is as 0.1.0 left it.
+exec diff -r -x logs $WORK/before/data $DATA
+exec diff -r $WORK/before/config $CFG
+grep '\A1\n\z' $DATA/version
+grep '\A1\n\z' $CFG/version
+
+# A launch: app starts as it is, its Lima config unchanged (an edit
+# would give it new host keys), its .git locked again on macOS. What an upgrade
+# says: base and the tools are newer than the VM's, Codex's login has a
+# field devvm doesn't know, which the VM doesn't get, while Claude Code's
+# account has only fields it knows, and the link's target is stopped.
+cd $HOME/src/app
+cp $APP_dir/vm.json $WORK/app-before.json
+stub_reset
+exec devvm
+stdout '^==> starting vm=devvm-app-[0-9a-f]{14}$'
+stderr '^devvm: vm_outdated changed=base$'
+stderr '^devvm: newer_tools tools='
+stderr '^devvm: login_fields_withheld agent=Codex file=auth\.json keys=extra_field$'
+! stderr 'login_fields_withheld agent=Claude'
+stderr '^devvm: link_target_stopped target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
+! stderr 'unreadable|corrupt|layout_|moved|replaced|refused|failed'
+# On Linux, where the tests' host can't pin (DEVVM_PINS), .git is
+# unprotected, as it was, and the watch 0.1.0 didn't have takes its first
+# scan, which reports nothing.
+[linux] stderr '^devvm: git_unprotected vm=devvm-app-[0-9a-f]{14}$'
+! stderr 'git_changed|git_watch_blind'
+stub_calls
+stdout '^limactl start --tty=false devvm-app-[0-9a-f]{14}$'
+! stdout 'limactl (edit|create|clone|delete)'
+[darwin] stdout '^chflags -R -P uchg \S*/home/src/app/\.git/config$'
+stdout '^limactl shell --workdir \S*/home/src/app devvm-app-[0-9a-f]{14}$'
+
+# The launch kept every field 0.1.0 wrote, but the start it records.
+json_superset -changes .agent.made.started $WORK/app-before.json $APP_dir/vm.json
+vm_state $APP_dir/vm.json
+stdout '^agent\.made\.started=off_[0-9a-f]{32}$'
+[linux] stdout '^git\.watched\.scanned=true$'
+[darwin] ! stdout '^git\.watched'
+grep '\A1\n\z' $DATA/version
+
+# scratch and web start too, with the same notes.
+cd $HOME/src/scratch
+exec devvm
+stdout '^==> starting vm=devvm-scratch-[0-9a-f]{14}$'
+stderr '^devvm: vm_outdated changed=base$'
+! stderr 'unreadable|corrupt|layout_|moved|replaced|refused|failed'
+cd $HOME/src/web
+exec devvm
+stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
+stderr '^devvm: vm_outdated changed=base$'
+! stderr 'unreadable|corrupt|layout_|moved|replaced|refused|failed'
+
+# devvm agent save reads web's Claude Code settings, which are 0.1.0's
+# store's.
+exec devvm agent save --no-input
+stdout '^==> agent_save_nothing vm=devvm-web-[0-9a-f]{14}$'
+! stderr .
+grep '\A1\n\z' $DATA/version

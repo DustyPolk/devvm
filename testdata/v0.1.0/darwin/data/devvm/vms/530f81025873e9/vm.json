@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "id": "ccc304fb80640f52b66575cff9a88932",
+  "name": "devvm-db-530f81025873e9",
+  "alias": "devvm-db",
+  "image": "base",
+  "chain": "base=25f6c4644ea6",
+  "dir": "/private/tmp/dvt.3732593290/home/src/db",
+  "folder": "16777234:207176685:1794153291.206875313",
+  "backend": "lima",
+  "backend_at": "a710c79c0cd6b20d",
+  "created": "2026-11-08T15:54:51.394986Z",
+  "made_by": "0.1.0",
+  "agent": {
+    "mode": "off",
+    "made": {
+      "started": "off_59d1433afcb599760cb67488268716af"
+    }
+  },
+  "clone": {
+    "on": false
+  },
+  "git": {
+    "mode": "off"
+  },
+  "links": {
+    "publish": "5432",
+    "group": "backend"
+  },
+  "net": {
+    "tier": "allowlist",
+    "made": {
+      "check": "ok",
+      "proxy_key": "a35cf93083bf652aa2e7c0862686c71325e0304abd19cc12a476e4a095399552",
+      "proxy_salt": "9edd8e483f99399cbf237b5162d5ed16"
+    }
+  },
+  "ports": {
+    "forward": "3000,5173",
+    "host": {
+      "ssh": 21257,
+      "proxy": 40802
+    }
+  },
+  "size": {
+    "cpus": "4",
+    "memory": "8"
+  },
+  "tools": {
+    "made": {
+      "libc": "gnu"
+    }
+  }
+}

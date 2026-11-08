@@ -1,0 +1,7 @@
+{
+  "hasCompletedOnboarding": true,
+  "oauthAccount": {
+    "emailAddress": "fake@example.com"
+  },
+  "theme": "dark"
+}

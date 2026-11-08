@@ -1,0 +1,9 @@
+{
+  "name": "base",
+  "chain": "base=6a7a1fbb44eb",
+  "from": "",
+  "digest": "file:///tmp/dvt.4158414630/ubuntu/release-20261016/ubuntu-26.04-server-cloudimg-amd64.img sha256:5645d0318ad21f643ebb1ac4567514620e9893380b07b0201fda163baa5b7eb5",
+  "libc": "gnu",
+  "built": "2026-11-08T16:01:54Z",
+  "made_by": "0.1.0"
+}

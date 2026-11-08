@@ -1,0 +1,10 @@
+{
+  "network": "allowlist",
+  "ports": "3000,5173",
+  "features": [],
+  "agents": [
+    "claude",
+    "codex"
+  ],
+  "layers": []
+}

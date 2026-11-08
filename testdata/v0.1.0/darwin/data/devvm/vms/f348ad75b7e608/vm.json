@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "id": "ccb1ea37ba2c725ae22c5f840f3fe4b9",
+  "name": "devvm-web-f348ad75b7e608",
+  "alias": "devvm-web",
+  "image": "base",
+  "chain": "base=25f6c4644ea6",
+  "dir": "/private/tmp/dvt.3732593290/home/src/web",
+  "folder": "16777234:207176687:1794153291.206964438",
+  "backend": "lima",
+  "backend_at": "a710c79c0cd6b20d",
+  "created": "2026-11-08T15:54:56.174575Z",
+  "made_by": "0.1.0",
+  "agent": {
+    "mode": "off",
+    "made": {
+      "started": "off_165707fed58e9b6f199f400ca7f3c64f"
+    }
+  },
+  "clone": {
+    "on": true,
+    "made": {
+      "remote": "devvm",
+      "seeded": true
+    }
+  },
+  "git": {
+    "mode": "clone"
+  },
+  "net": {
+    "tier": "open",
+    "made": {
+      "proxy_key": "26b460d5a3fb63e035a34978c05e7f5aa4c7abcbe1aa5309f4966d9dee745527",
+      "proxy_salt": "e65144d1bcd8b27e917f998006033e37"
+    }
+  },
+  "ports": {
+    "forward": "3000,5173",
+    "host": {
+      "ssh": 40605,
+      "proxy": 46005
+    }
+  },
+  "size": {
+    "cpus": "4",
+    "memory": "8"
+  },
+  "tools": {
+    "names": [
+      "go",
+      "claude"
+    ],
+    "made": {
+      "files": [
+        "go-1.27.2-8d2edd5eeccf.erofs",
+        "claude-2.1.295-1a5c03878963.erofs"
+      ],
+      "libc": "gnu"
+    }
+  }
+}

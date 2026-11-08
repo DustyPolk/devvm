@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "links": [
+    {
+      "name": "db",
+      "port": 5432,
+      "target": "devvm-db-530f81025873e9",
+      "target_folder": "/private/tmp/dvt.3732593290/home/src/db",
+      "target_status": "Stopped",
+      "applies": true,
+      "reason": ""
+    }
+  ]
+}

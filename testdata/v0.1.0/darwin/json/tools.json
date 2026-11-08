@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "tool": "node",
+      "version": "24.21.0"
+    },
+    {
+      "tool": "pnpm",
+      "version": "12.10.1"
+    },
+    {
+      "tool": "bun",
+      "version": "1.4.2"
+    },
+    {
+      "tool": "claude",
+      "version": "2.1.295"
+    },
+    {
+      "tool": "codex",
+      "version": "0.162.0"
+    }
+  ]
+}

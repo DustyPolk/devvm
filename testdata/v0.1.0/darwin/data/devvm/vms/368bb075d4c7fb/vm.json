@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "id": "cbd663b42a1efd8d54242e85db19e290",
+  "name": "devvm-scratch-368bb075d4c7fb",
+  "alias": "devvm-scratch",
+  "image": "base",
+  "chain": "base=25f6c4644ea6",
+  "dir": "/private/tmp/dvt.3732593290/home/src/scratch",
+  "folder": "16777234:207176688:1794153291.207007396",
+  "backend": "lima",
+  "backend_at": "a710c79c0cd6b20d",
+  "created": "2026-11-08T15:54:58.171083Z",
+  "made_by": "0.1.0",
+  "agent": {
+    "mode": "off",
+    "made": {
+      "started": "off_8d87e0441965c3d0fd806bd66dc9c67a"
+    }
+  },
+  "clone": {
+    "on": false
+  },
+  "git": {
+    "mode": "off"
+  },
+  "net": {
+    "tier": "none",
+    "made": {
+      "check": "ok",
+      "proxy_key": "995e67af48e27466dcc926ea1d43f8124178ceb84fc7c7488edc4c746741143e",
+      "proxy_salt": "c952cf6acfef9cf3602066ca538906eb"
+    }
+  },
+  "ports": {
+    "forward": "3000,5173",
+    "host": {
+      "ssh": 43993,
+      "proxy": 27823
+    }
+  },
+  "size": {
+    "cpus": "4",
+    "memory": "8"
+  },
+  "tools": {
+    "names": [
+      "claude"
+    ],
+    "made": {
+      "files": [
+        "claude-2.1.295-1a5c03878963.erofs"
+      ],
+      "libc": "gnu"
+    }
+  }
+}

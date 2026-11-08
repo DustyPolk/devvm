@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "settings": {
+    "history.age": "off",
+    "history.count": "20",
+    "logs.runs": "off",
+    "nix-cache.size": "off",
+    "orphans.age": "off",
+    "tools.unused-age": "off"
+  },
+  "sources": {
+    "history.age": "built-in",
+    "history.count": "config.toml",
+    "logs.runs": "built-in",
+    "nix-cache.size": "built-in",
+    "orphans.age": "built-in",
+    "tools.unused-age": "built-in"
+  }
+}

@@ -1,0 +1,120 @@
+# The state devvm 0.1.0 leaves, made by 0.1.0 itself: generate.sh runs
+# this script in a checkout of v0.1.0, with that version's own CLI test
+# harness (its sandbox and stubs), and keeps what the run leaves in
+# $DEVVM_REPO/fixture-out. Never run it from a newer devvm: this folder
+# is 0.1.0's, frozen.
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+
+# The user's own defaults (config.toml) and devvm setup's (settings.json).
+cp config.toml $CFG/config.toml
+exec devvm setup --agents claude,codex --layers none
+exec devvm network -g allowlist
+exec devvm ports -g 3000,5173
+
+# The home folder's agents, all fakes, imported into devvm's store.
+mkdir $HOME/.claude/skills/review $HOME/.codex
+cp skill.md $HOME/.claude/skills/review/SKILL.md
+cp claude-settings.json $HOME/.claude/settings.json
+cp claude.json $HOME/.claude.json
+cp codex-auth.json $HOME/.codex/auth.json
+cp codex-config.toml $HOME/.codex/config.toml
+exec devvm agent import
+
+# A token for VMs to use through their proxy.
+stdin github.token
+exec devvm secret set github --stdin
+
+# app: a git repo, node, both agents, allowlist, its ports, .git protected
+# (on macOS), the github secret, a link to db.
+mkdir $HOME/src/db $HOME/src/app $HOME/src/web $HOME/src/scratch
+cd $HOME/src/db
+exec devvm --network allowlist --no-git-protect --tools none --agents none
+exec devvm link publish 5432
+cd $HOME/src/app
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+exec devvm --tools node --agents claude,codex --network allowlist --ports 3000,8080
+exec devvm secret use github
+exec devvm link add db 5432
+exec devvm group join backend
+cd $HOME/src/db
+exec devvm group join backend
+
+# web: --clone, open network, Claude Code.
+cd $HOME/src/web
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+exec devvm --clone --network open --tools go --agents claude
+
+# scratch: git protection off, no network.
+cd $HOME/src/scratch
+exec git init -q
+exec devvm --no-git-protect --network none --tools none --agents claude
+
+# Every VM stopped, as an upgrade finds them after a restart.
+exec devvm stop
+cd $HOME/src/app
+exec devvm stop
+cd $HOME/src/db
+exec devvm stop
+cd $HOME/src/web
+exec devvm stop
+
+# What 0.1.0's --json said of them, which today's must keep.
+mkdir $DEVVM_REPO/fixture-out/json
+exec devvm ls --json
+cp stdout $DEVVM_REPO/fixture-out/json/ls.json
+exec devvm secret --json
+cp stdout $DEVVM_REPO/fixture-out/json/secret.json
+exec devvm network -g --json
+cp stdout $DEVVM_REPO/fixture-out/json/network-g.json
+exec devvm ports -g --json
+cp stdout $DEVVM_REPO/fixture-out/json/ports-g.json
+exec devvm retention --json
+cp stdout $DEVVM_REPO/fixture-out/json/retention.json
+exec devvm images --json
+cp stdout $DEVVM_REPO/fixture-out/json/images.json
+exec devvm clone --json
+cp stdout $DEVVM_REPO/fixture-out/json/clone.json
+cd $HOME/src/app
+exec devvm network --json
+cp stdout $DEVVM_REPO/fixture-out/json/network.json
+exec devvm git-protect --json
+cp stdout $DEVVM_REPO/fixture-out/json/git-protect.json
+exec devvm ports --json
+cp stdout $DEVVM_REPO/fixture-out/json/ports.json
+exec devvm link --json
+cp stdout $DEVVM_REPO/fixture-out/json/link.json
+exec devvm group --json
+cp stdout $DEVVM_REPO/fixture-out/json/group.json
+exec devvm size --json
+cp stdout $DEVVM_REPO/fixture-out/json/size.json
+exec devvm tools --json
+cp stdout $DEVVM_REPO/fixture-out/json/tools.json
+exec devvm ssh-agent --json
+cp stdout $DEVVM_REPO/fixture-out/json/ssh-agent.json
+
+# Everything the run left, for generate.sh: the sandbox's folder, as
+# given and physical, and its files.
+exec sh -c 'out=$DEVVM_REPO/fixture-out; cd "$HOME/.." && printf "%s\n%s\n" "$PWD" "$(pwd -P)" > "$out/root" && cp -R data config lima stub "$out/"'
+
+-- config.toml --
+# The user's own defaults.
+[size]
+cpus = 4
+memory = 8
+
+[retention.history]
+count = 20
+-- skill.md --
+# review: a fake skill
+-- claude-settings.json --
+{"theme":"dark","permissions":{"allow":["Bash(git status)"]}}
+-- claude.json --
+{"theme":"dark","hasCompletedOnboarding":true,"oauthAccount":{"emailAddress":"fake@example.com"},"projects":{"/p":{"history":["testfake-history"]}}}
+-- codex-auth.json --
+{"OPENAI_API_KEY":"sk-testfake-codex","last_refresh":null,"extra_field":"testfake-unknown"}
+-- codex-config.toml --
+model = "gpt-5"
+-- github.token --
+ghp_testfakev010

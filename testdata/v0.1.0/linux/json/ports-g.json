@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "ports": "3000,5173",
+  "source": "settings.json"
+}

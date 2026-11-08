@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "listen": "127.0.0.1:23027",
+  "vm": "devvm-web-667e3969040727",
+  "password": "c0dad33d0fe563d09ded0b1e87b3c6c7dc62c1dde5761902e02a36e96bd578ad",
+  "open": true,
+  "log": "/tmp/dvt.4158414630/data/devvm/vms/667e3969040727/logs/network.jsonl",
+  "proxy_log": "/tmp/dvt.4158414630/data/devvm/vms/667e3969040727/logs/proxy.log",
+  "lifeline": "/tmp/dvt.4158414630/lima/devvm-web-667e3969040727/ha.pid",
+  "ca": "/tmp/dvt.4158414630/data/devvm/vms/667e3969040727/run/ca/ca.pem",
+  "ca_key": "/tmp/dvt.4158414630/data/devvm/vms/667e3969040727/run/ca/ca.key",
+  "ca_next": "/tmp/dvt.4158414630/data/devvm/vms/667e3969040727/run/ca/next.pem",
+  "ca_next_key": "/tmp/dvt.4158414630/data/devvm/vms/667e3969040727/run/ca/next.key",
+  "secrets": "/tmp/dvt.4158414630/data/devvm/vms/667e3969040727/run/secrets.json",
+  "captures": [
+    {
+      "agent": "codex",
+      "host": "auth.openai.com",
+      "path": "/oauth/token"
+    },
+    {
+      "agent": "opencode",
+      "host": "auth.openai.com",
+      "path": "/oauth/token"
+    },
+    {
+      "agent": "claude",
+      "host": "platform.claude.com",
+      "path": "/v1/oauth/token"
+    },
+    {
+      "agent": "claude",
+      "host": "console.anthropic.com",
+      "path": "/v1/oauth/token"
+    }
+  ],
+  "links": "/tmp/dvt.4158414630/data/devvm/vms/667e3969040727/run/links.json",
+  "link_sockets": "/tmp/dvt.4158414630/data/devvm/run",
+  "devvm_sha256": "f6e713e44d65ca81d6d035e6f2fedf4534acc1ee72391702ff302dcd3ae53029",
+  "ca_sha256": "69c0761b0218f728a2b465a21c9a33d3577078dc30ced22936f97118d00c9d9c",
+  "ca_next_sha256": "a290a10904bd100d8300b5f9f7f602c4fba78c4575d1683b1f8ede8cdd7a2033"
+}

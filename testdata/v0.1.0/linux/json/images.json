@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "name": "base",
+      "from": "ubuntu 26.04 (20261016)",
+      "digest": "sha256:5645d0318ad21f643ebb1ac4567514620e9893380b07b0201fda163baa5b7eb5",
+      "key": "6a7a1fbb44eb",
+      "state": "current",
+      "size": 4096,
+      "sized": true,
+      "backend": "lima"
+    }
+  ],
+  "tools": [
+    {
+      "name": "node",
+      "tool": "node",
+      "version": "24.21.0",
+      "built": true,
+      "backend": "lima",
+      "libc": "gnu",
+      "size": 4096,
+      "vms": 1,
+      "state": "current"
+    },
+    {
+      "name": "node",
+      "tool": "pnpm",
+      "version": "12.10.1",
+      "built": true,
+      "backend": "lima",
+      "libc": "gnu",
+      "size": 4096,
+      "vms": 1,
+      "state": "current"
+    },
+    {
+      "name": "node",
+      "tool": "bun",
+      "version": "1.4.2",
+      "built": true,
+      "backend": "lima",
+      "libc": "gnu",
+      "size": 4096,
+      "vms": 1,
+      "state": "current"
+    },
+    {
+      "name": "python",
+      "tool": "",
+      "version": "",
+      "built": false,
+      "size": 0,
+      "vms": 0,
+      "state": "not installed"
+    },
+    {
+      "name": "rust",
+      "tool": "",
+      "version": "",
+      "built": false,
+      "size": 0,
+      "vms": 0,
+      "state": "not installed"
+    },
+    {
+      "name": "go",
+      "tool": "go",
+      "version": "1.27.2",
+      "built": true,
+      "backend": "lima",
+      "libc": "gnu",
+      "size": 4096,
+      "vms": 1,
+      "state": "current"
+    },
+    {
+      "name": "claude",
+      "tool": "claude",
+      "version": "2.1.295",
+      "built": true,
+      "backend": "lima",
+      "libc": "gnu",
+      "size": 4096,
+      "vms": 3,
+      "state": "current"
+    },
+    {
+      "name": "codex",
+      "tool": "codex",
+      "version": "0.162.0",
+      "built": true,
+      "backend": "lima",
+      "libc": "gnu",
+      "size": 4096,
+      "vms": 1,
+      "state": "current"
+    },
+    {
+      "name": "opencode",
+      "tool": "",
+      "version": "",
+      "built": false,
+      "size": 0,
+      "vms": 0,
+      "state": "not installed"
+    }
+  ],
+  "total": 28672,
+  "unused_tools": 0,
+  "nix_cache": {
+    "files": 0,
+    "size": 0,
+    "cap": 10737418240
+  }
+}
