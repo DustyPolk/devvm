@@ -35,12 +35,18 @@ import (
 const Section = "git"
 
 // InVM is a VM's .git protection section: its mode, as asked (recorded
-// before its backend makes it, so it's never unset), the mode chosen
-// while it ran, and what protecting it found.
+// before its backend makes it, so it's never unset), whether the user
+// chose it, the mode chosen while it ran, and what protecting it found;
+// on hosts without locks, what watching it found.
 type InVM struct {
-	Mode string `json:"mode"`           // On, Strict, Off, or Clone for a --clone VM
-	Next string `json:"next,omitempty"` // the mode chosen while the VM ran, set when it's next stopped
-	Made Made   `json:"made,omitzero"`
+	Mode string `json:"mode"` // On, Strict, Off, or Clone for a --clone VM
+	// Chosen is set once the user chose the mode (--no-git-protect,
+	// devvm git-protect), rather than the host: off chosen on a host
+	// without locks quiets the launches' warning (WarnUnprotected).
+	Chosen  bool    `json:"chosen,omitempty"`
+	Next    string  `json:"next,omitempty"` // the mode chosen while the VM ran, set when it's next stopped
+	Made    Made    `json:"made,omitzero"`
+	Watched Watched `json:"watched,omitzero"`
 }
 
 // Made is what protecting a VM's .git found, and checks compare with.
@@ -115,31 +121,35 @@ func New(dir, home string, r msg.Reporter) *Protector {
 	}
 }
 
-// NewMode is the protection a new VM gets, recorded before its backend
-// makes it: off when asked, or on hosts without locks (saying so when
-// there's a .git); otherwise on, which NewVM sets up once it's made.
-func (p *Protector) NewMode(off bool) string {
+// NewSection is the protection a new VM gets, recorded before its
+// backend makes it: off when asked (chosen), or on hosts without locks,
+// whose launches warn (WarnUnprotected); otherwise on, which NewVM sets
+// up once it's made.
+func (p *Protector) NewSection(off bool) InVM {
 	switch {
 	case off:
-		return Off
+		return InVM{Mode: Off, Chosen: true}
 	case !p.CanLock:
-		if exists(p.git()) {
-			p.Warn(msg.GitProtectNeedsMacosNew())
-		}
-		return Off
+		return InVM{Mode: Off}
 	}
-	return On
+	return InVM{Mode: On}
 }
 
 // NewVM sets up the protection of a VM just made for the folder,
-// stopped, as its mode says (NewMode): on locks .git and reports what a
-// lock can't cover.
+// stopped, as its mode says (NewSection): on locks .git and reports what
+// a lock can't cover. On a host without locks, it records the watch's
+// first sums instead, so the next check names what changed since.
 func (p *Protector) NewVM(ctx context.Context, vm *state.VM) error {
 	g, err := Of(vm)
-	if err != nil || g.Mode != On && g.Mode != Strict || !p.CanLock {
+	switch {
+	case err != nil:
 		return err
+	case !p.CanLock && g.Mode != Clone:
+		return watcher{p}.check(ctx, vm, g)
+	case g.Mode != On && g.Mode != Strict || !p.CanLock:
+		return nil
 	}
-	made, err := p.protect(ctx, g, whyNew, false)
+	made, err := p.protect(ctx, g, whyNew, lockNow)
 	if err != nil {
 		return err
 	}
@@ -178,7 +188,7 @@ func SetNext(ctx context.Context, vm *state.VM, mode string) error {
 // sets diff.ignoreSubmodules=all in the locked .git/config, which on and
 // off take out again; off unlocks. On and strict need macOS. Once it's
 // set, a mode saved for the VM's next stop (SetNext) is dropped: both
-// are recorded at once.
+// are recorded at once, with the mode as the user's choice (Chosen).
 func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
 	g, err := Of(vm)
 	if err != nil {
@@ -192,7 +202,7 @@ func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
 				return err
 			}
 		}
-		return record(ctx, vm, func(g *InVM) { g.Mode, g.Next = Off, "" })
+		return record(ctx, vm, func(g *InVM) { g.Mode, g.Chosen, g.Next = Off, true, "" })
 	}
 	if !p.CanLock {
 		return msg.GitProtectOnNeedsMacos()
@@ -207,11 +217,11 @@ func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
 		}
 	}
 	g.Mode = mode
-	made, err := p.protect(ctx, g, whyOn, false)
+	made, err := p.protect(ctx, g, whyOn, lockNow)
 	if err != nil {
 		return err
 	}
-	return record(ctx, vm, func(g *InVM) { g.Mode, g.Next, g.Made = mode, "", made })
+	return record(ctx, vm, func(g *InVM) { g.Mode, g.Chosen, g.Next, g.Made = mode, true, "", made })
 }
 
 // ignoreSubmodules sets diff.ignoreSubmodules=all in .git/config, or takes
@@ -264,13 +274,22 @@ func (p *Protector) warnDelegations(ds []delegation) {
 // folder when they change. Locks are set only while the VM is stopped
 // (running), so nothing in it can race them; a running VM gets them at
 // its next start. A VM whose protection was never set up (its creation
-// stopped short, or devvm adopt moved it) gets it as a new VM does.
+// stopped short, or devvm adopt moved it) gets it as a new VM does. On a
+// host without locks, a stopped VM's .git is watched instead, whatever
+// its mode: what a lock can't stop is reported all the same, and what a
+// lock would cover that changed since the last check is named
+// (watcher.check).
 func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error {
 	g, err := Of(vm)
 	switch {
 	case err != nil:
 		return err
-	case g.Mode != On && g.Mode != Strict, !p.CanLock:
+	case !p.CanLock:
+		if running || g.Mode == Clone {
+			return nil
+		}
+		return watcher{p}.check(ctx, vm, g)
+	case g.Mode != On && g.Mode != Strict:
 		return nil
 	case !g.Made.Protected:
 		if running {
@@ -278,7 +297,11 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 		}
 		return p.NewVM(ctx, vm)
 	}
-	made, err := p.protect(ctx, g, whyCheck, running)
+	h := lockNow
+	if running {
+		h = later
+	}
+	made, err := p.protect(ctx, g, whyCheck, h)
 	if err != nil {
 		return err
 	}
@@ -294,12 +317,23 @@ const (
 	whyCheck            // a launch of an existing VM
 )
 
-// protect locks .git, unless running, and reports what a lock can't stop;
-// it returns what it found (g's Made, as it is now), for the caller to
+// how protect treats the locks.
+type how int
+
+const (
+	lockNow  how = iota // a stopped VM's: lock
+	later               // a running VM's: report, and lock at its next stop
+	watching            // a host without locks: report, record .git's identity, lock nothing
+)
+
+// protect locks .git, as h says, and reports what a lock can't stop; it
+// returns what it found (g's Made, as it is now), for the caller to
 // record with the mode it set. A new VM's git dirs are recorded, not
 // reported; a check reports what changed since the last one, and the
-// hooks path and delegations only when they change.
-func (p *Protector) protect(ctx context.Context, rec InVM, w why, running bool) (Made, error) {
+// hooks path and delegations only when they change. Watching, nothing is
+// locked, so the hooks in folders a lock would cover aren't news: the
+// watch names their changes.
+func (p *Protector) protect(ctx context.Context, rec InVM, w why, h how) (Made, error) {
 	g := p.git()
 	was := rec.Made
 	if !exists(g) {
@@ -307,6 +341,10 @@ func (p *Protector) protect(ctx context.Context, rec InVM, w why, running bool) 
 	}
 	if w == whyCheck && was.GitID != "" && was.GitID != folderID(g) {
 		p.Warn(msg.GitReplaced(g))
+		if h == watching {
+			// Nothing to lock again: the next check compares with this one.
+			was.GitID = folderID(g)
+		}
 		return was, nil
 	}
 	if isDir(g) && exists(filepath.Join(g, "commondir")) {
@@ -333,16 +371,20 @@ func (p *Protector) protect(ctx context.Context, rec InVM, w why, running bool) 
 	// Hooks in a hooks folder that isn't locked appeared since the last
 	// lock (there was no folder to lock, or it's a new submodule's), so the
 	// VM may have made them.
-	if w == whyCheck {
+	if w == whyCheck && h != watching {
 		for _, path := range p.paths(ctx, emb) {
 			if filepath.Base(path) == "hooks" && isDir(path) && !isLink(path) && !p.Locked(path) && hasHooks(path) {
 				p.Warn(msg.GitHooksUnlocked(path))
 			}
 		}
 	}
-	if !running {
+	switch h {
+	case lockNow:
 		p.lock(ctx, emb)
 		made.GitID = folderID(g)
+	case watching:
+		made.GitID = folderID(g)
+	case later:
 	}
 	if w != whyCheck {
 		if hp := gitConfig(ctx, filepath.Join(g, "config"), "core.hooksPath"); hp != "" && p.hooksPathInside(hp) {
@@ -384,7 +426,7 @@ func (p *Protector) abs(rel []string) []string {
 func (p *Protector) rel(dirs []string) []string {
 	var out []string
 	for _, d := range dirs {
-		out = append(out, strings.TrimPrefix(d, p.Dir+"/"))
+		out = append(out, relTo(p.Dir, d))
 	}
 	return out
 }
@@ -686,7 +728,7 @@ func commonOf(g string) (string, bool) {
 // working tree. A path that isn't an existing folder counts by name and
 // resolved as far as it exists.
 func (p *Protector) hooksPathInside(hp string) bool {
-	hp = p.expandHome(hp)
+	hp = expandHome(p.Home, hp)
 	if !filepath.IsAbs(hp) {
 		return true
 	}
@@ -696,10 +738,10 @@ func (p *Protector) hooksPathInside(hp string) bool {
 	return paths.Within(filepath.Clean(hp), p.Dir) || paths.Within(physicalParent(hp), p.Dir)
 }
 
-// expandHome expands ~ as git does.
-func (p *Protector) expandHome(path string) string {
+// expandHome expands ~ as git does, to home.
+func expandHome(home, path string) string {
 	if path == "~" || strings.HasPrefix(path, "~/") {
-		return p.Home + path[1:]
+		return home + path[1:]
 	}
 	return path
 }
@@ -710,6 +752,7 @@ type delegation struct {
 	kind   string // include, hook, outside or notgit
 	where  string // the config, the hook, or the submodule's folder
 	target string // the include's path or the hook's link as written, or the git dir
+	path   string // what an include leads to, absolute, for the watch
 }
 
 // delegations finds what the locked config and hooks hand over to files
@@ -729,12 +772,12 @@ func (p *Protector) delegations(ctx context.Context, emb embeds) []delegation {
 			if !ok || len(v) == 0 {
 				continue
 			}
-			path := p.expandHome(string(v))
+			path := expandHome(p.Home, string(v))
 			if !filepath.IsAbs(path) {
 				path = filepath.Join(d, path)
 			}
 			if p.into(path) {
-				out = append(out, delegation{"include", cfg, string(v)})
+				out = append(out, delegation{"include", cfg, string(v), filepath.Clean(path)})
 			}
 		}
 		_ = filepath.WalkDir(filepath.Join(d, "hooks"), func(path string, e fs.DirEntry, err error) error {
@@ -750,16 +793,16 @@ func (p *Protector) delegations(ctx context.Context, emb embeds) []delegation {
 				target = filepath.Join(filepath.Dir(path), target)
 			}
 			if p.into(target) {
-				out = append(out, delegation{"hook", path, link})
+				out = append(out, delegation{"hook", path, link, ""})
 			}
 			return nil
 		})
 	}
 	for _, o := range emb.outside {
-		out = append(out, delegation{"outside", o[0], o[1]})
+		out = append(out, delegation{"outside", o[0], o[1], ""})
 	}
 	for _, n := range emb.notGit {
-		out = append(out, delegation{"notgit", n[0], n[1]})
+		out = append(out, delegation{"notgit", n[0], n[1], ""})
 	}
 	return out
 }
