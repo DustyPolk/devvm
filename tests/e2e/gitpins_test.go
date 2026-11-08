@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -38,12 +39,32 @@ func pinnedProcs(p, vm string) map[int]bool {
 		args := string(cmd)
 		ns, _ := os.Readlink(filepath.Join("/proc", e.Name(), "ns", "mnt"))
 		qemu := strings.Contains(args, "qemu-system") && strings.Contains(args, "/"+vm+"/") && !strings.Contains(args, "_qemu") && ns != self
-		keeper := strings.Contains(args, "_qemu\x00keep") && strings.Contains(string(env), `"root":"`+p+`"`)
+		keeper := strings.Contains(args, "_qemu\x00pinned") && pinsRoot(string(env)) == p
 		if qemu || keeper {
 			out[pid] = qemu
 		}
 	}
 	return out
+}
+
+// pinsRoot is the project folder whose pins a process's environment env
+// (/proc/PID/environ) names: the root in the file DEVVM_QEMU_PINS holds;
+// "" for none.
+func pinsRoot(env string) string {
+	for kv := range strings.SplitSeq(env, "\x00") {
+		if f, ok := strings.CutPrefix(kv, "DEVVM_QEMU_PINS="); ok && f != "" {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				return ""
+			}
+			var set struct {
+				Root string `json:"root"`
+			}
+			_ = json.Unmarshal(b, &set)
+			return set.Root
+		}
+	}
+	return ""
 }
 
 func projectGitPins(s *S, w *webVM) {

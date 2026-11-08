@@ -39,7 +39,7 @@ func newFixture(t *testing.T, name string) *fixture {
 	f := &fixture{t: t, root: root, dir: filepath.Join(root, name), immutable: map[string]bool{}}
 	mkdirs(t, f.dir)
 	f.p = &Protector{
-		tree:     tree{Dir: f.dir, Home: filepath.Join(root, "home")},
+		tree:     tree{Dir: f.dir, Root: f.dir, Home: filepath.Join(root, "home")},
 		Reporter: &msg.Fake{OnWarn: f.warns.Add},
 	}
 	f.canLock(true)

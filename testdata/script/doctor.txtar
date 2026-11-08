@@ -26,8 +26,20 @@ stdout '^doctor_ok backend=lima version=\S+\n\z'
 ! stderr .
 stub_calls
 stdout '^limactl --version\n\z'
+
+# git that takes any folder shaped like a git folder for a bare repo gets
+# a tip, which isn't a warning, and --json lists it apart; the sandbox's
+# own git takes one only when it's named.
+exec git config --global --unset safe.bareRepository
+exec devvm doctor
+stdout '^doctor_git_bare$'
+! stderr .
 exec devvm doctor --json
-stdout '^{\n  "version": 1,\n  "backend": "lima",\n  "problems": \[\],\n  "warnings": \[\],\n  "docker": true,\n'
+stdout '^  "tips": \[\n    "doctor_git_bare"\n  \],$'
+exec git config --global safe.bareRepository explicit
+
+exec devvm doctor --json
+stdout '^{\n  "version": 1,\n  "backend": "lima",\n  "problems": \[\],\n  "warnings": \[\],\n  "tips": \[\],\n  "docker": true,\n'
 stdout '^      "ports": "emulated",$'
 ! stderr .
 

@@ -125,6 +125,11 @@ func ownerDocs() []ownerDoc {
 			elsewhere: "`internal/state`, and tests",
 		},
 		{
+			check:     "the structure test's `owners`, `hostsafety.Walk`",
+			owner:     "the start in `internal/vm/start.go`, whose `starter.walk` walks a VM's project folder once for each check of the folder on the host, for the git repos nested in it, which `.git` protection goes by (`gitprotect.Protector.Nested`), and on Linux hosts its set-id files, so a check never walks the folder twice. It walks when a VM is made and when a check finds it stopped, at a launch or at `devvm stop` (`starter.hostChecks`), and at `devvm git-protect` on a stopped VM, never at a launch into a running VM",
+			elsewhere: "`internal/hostsafety`, and tests",
+		},
+		{
 			check:     "the structure test's `owners`, `state.ReadAll`",
 			owner:     "the inventory in `internal/vm/inventory.go`, which reads every VM's state (`ReadStates`), and with `ReadInventory` the backends' lists too, each within its wait, for every listing of VMs: `devvm ls`, `devvm space`, `devvm images` and `devvm gc`, the ssh config, `devvm gc --orphans`, the links, `devvm secret`'s list, finding a VM by its name and the mounts that devvm's SSH agent checks a key against. Its one failure policy is that a backend that can't list fails a listing (`Inventory.Err`) only when some VM's state names it, and that a state that can't be read is a row of its own, which the readers leave out and `ToolsInUse` and `Mounts` fail on. `state.VMNames`, which fails on such a state, stays for the readers below `internal/vm`: `netpolicy`, `ports` and `sshconfig.ChooseAlias`",
 			elsewhere: "`internal/state`, and tests",

@@ -12,9 +12,11 @@ import (
 
 	"github.com/devvmhq/devvm/internal/backend"
 	"github.com/devvmhq/devvm/internal/backend/backendtest"
+	"github.com/devvmhq/devvm/internal/gitprotect"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/project"
 	"github.com/devvmhq/devvm/internal/sshagent"
 	"github.com/devvmhq/devvm/internal/state"
 	"github.com/devvmhq/devvm/internal/tools"
@@ -349,5 +351,48 @@ func TestFolderWithin(t *testing.T) {
 	}
 	if got := folderWithin(st, func(*state.VM) FolderState { return FolderGone }, time.Minute); got != FolderGone {
 		t.Errorf("an answer in time = %v", got)
+	}
+}
+
+// A VM's unlock leaves what another VM's .git protection covers, and what
+// a VM whose state can't be read may: every path in the folder its state's
+// folder is named after.
+func TestGitKeeper(t *testing.T) {
+	d := paths.Dirs{Data: t.TempDir()}
+	parent, err := state.New(d, "devvm-ws-0123456789abcd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent.Image, parent.Dir, parent.Backend = "base", "/p/ws", "fake"
+	if err := parent.Create(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	g := gitprotect.InVM{Mode: gitprotect.On, Made: gitprotect.Made{Protected: true, Nested: true, Repos: map[string]gitprotect.Repo{"a": {}}}}
+	if err := parent.Update(t.Context(), func(st *state.VM) error { return gitprotect.Set(st, g) }); err != nil {
+		t.Fatal(err)
+	}
+	broken := d.VMDir(project.Hash("/q/other"))
+	if err := os.MkdirAll(broken, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.VM{Dir: broken}.State(), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inv, err := ReadStates(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	k := inv.GitKeeper("devvm-a-0123456789abce")
+	for path, want := range map[string]string{
+		"/p/ws/a/.git/config":    "git_kept_locked vm=devvm-ws-0123456789abcd",
+		"/p/ws/b/.git/config":    "",
+		"/q/other/x/.git/config": "git_kept_unread state=" + paths.VM{Dir: broken}.State(),
+	} {
+		if got := k(path); got.ID() != "" && got.Names() != want || got.ID() == "" && want != "" {
+			t.Errorf("%s: %q, want %q", path, got.Names(), want)
+		}
+	}
+	if inv.GitKeeper("devvm-ws-0123456789abcd")("/p/ws/a/.git/config").ID() != "" {
+		t.Error("its own protection keeps it")
 	}
 }

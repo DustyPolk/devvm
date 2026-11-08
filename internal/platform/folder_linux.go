@@ -57,6 +57,10 @@ func uniqueFS(fsType int64) bool {
 // Linux's immutable attribute needs root.
 const HasImmutableFlag = false
 
+// FoldsCase reports whether file names here may match whatever their
+// case: not on Linux's file systems, as devvm's project folders use them.
+const FoldsCase = false
+
 // Chflags sets file flags: Linux has no unprivileged immutable flag.
 func Chflags(context.Context, string, string) error { return errors.ErrUnsupported }
 

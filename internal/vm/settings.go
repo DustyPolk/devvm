@@ -72,6 +72,12 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 			return e.restartOr(ctx, vm, e.Info, msg.GitProtectNextStop(mode, vm))
 		}
 	}
+	// The VM is stopped, or the host has no locks to race: on and strict
+	// name the nested repos the protection doesn't cover.
+	if mode != gitprotect.Off {
+		found := e.starter.walk(t.f.Dir, false)
+		p.Nested = &found.Repos
+	}
 	return setGitProtect(ctx, e.Env, p, t, mode)
 }
 
@@ -82,12 +88,13 @@ func setGitProtect(ctx context.Context, e *Env, p *gitprotect.Protector, t *targ
 	if err := p.Set(ctx, t.st, mode); err != nil {
 		return err
 	}
+	g, _ := gitprotect.Of(t.st)
 	switch _, err := os.Lstat(filepath.Join(t.f.Dir, ".git")); {
 	case mode == gitprotect.Off && !p.Locker.Locks():
 		e.Info(msg.GitUnprotectedQuiet(vm))
 	case mode == gitprotect.Off:
 		e.Info(msg.GitUnlocked(vm))
-	case err != nil:
+	case err != nil && len(g.Made.Repos) == 0:
 		e.Info(msg.GitLockLater(vm))
 	case mode == gitprotect.Strict:
 		e.Info(msg.GitLockedStrict(vm))

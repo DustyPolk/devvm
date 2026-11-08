@@ -206,6 +206,9 @@ other = "The newest devvm release is {{.latest}}, as of {{.date}}."
 description = "reason is an error from the system, in English"
 other = "Checking what devvm needs failed: {{.reason}}."
 
+[doctor_git_bare]
+other = "Tip: run git config --global safe.bareRepository explicit, so git on this machine uses a bare repo only when you name it. Then a folder that a VM makes look like a git folder can't take over git in the folders below it."
+
 [doctor_pins_apparmor]
 other = "AppArmor on this machine keeps devvm out of the user namespace it locks .git in, so devvm only watches .git here. To keep a VM out of .git, use devvm --clone."
 
@@ -2187,6 +2190,73 @@ other = "WARNING: Each of {{.paths}} is a symlink, under one, or past what devvm
 description = "paths is a comma-separated list of paths relative to the project folder; count is how many more there are"
 one = "WARNING: Each of {{.paths}} and 1 more path is a symlink, under one, or past what devvm reads, so the VM can change what git on this machine runs from it without devvm naming the change. Check them before you run git here, or use devvm --clone."
 other = "WARNING: Each of {{.paths}} and {{.count}} more paths is a symlink, under one, or past what devvm reads, so the VM can change what git on this machine runs from it without devvm naming the change. Check them before you run git here, or use devvm --clone."
+
+[git_nested_unprotected]
+description = "repos is a comma-separated list of folders relative to the project folder"
+other = "WARNING: .git protection doesn't cover the git repos nested in this folder at {{.repos}}, so {{.vm}} can change their hooks and config, which git on this machine runs. Check them before you run git there."
+
+[git_nested_unprotected_more]
+description = "repos is a comma-separated list of folders relative to the project folder; count is how many more there are"
+one = "WARNING: .git protection doesn't cover the git repos nested in this folder at {{.repos}} and 1 more folder, so {{.vm}} can change their hooks and config, which git on this machine runs. Check them before you run git there."
+other = "WARNING: .git protection doesn't cover the git repos nested in this folder at {{.repos}} and {{.count}} more folders, so {{.vm}} can change their hooks and config, which git on this machine runs. Check them before you run git there."
+
+[git_nested_past_bound]
+description = "count is how many repos past the bound there are; repos is a comma-separated list of the first of them, relative to the project folder"
+one = "WARNING: .git protection covers the first 100 git repos nested in this folder, and not 1 more, {{.repos}}, so {{.vm}} can change its hooks and config, which git on this machine runs. Move the repos you don't use out of this folder."
+other = "WARNING: .git protection covers the first 100 git repos nested in this folder, and not {{.count}} more, such as {{.repos}}, so {{.vm}} can change their hooks and config, which git on this machine runs. Move the repos you don't use out of this folder."
+
+[git_nested_protectable]
+description = "repos is a comma-separated list of folders relative to the project folder"
+other = "WARNING: {{.vm}}'s .git protection doesn't cover the git repos nested in this folder at {{.repos}}, so the VM can change their hooks and config, which git on this machine runs. Run devvm git-protect on to protect them too, as devvm does for new VMs."
+
+[git_nested_protectable_more]
+description = "repos is a comma-separated list of folders relative to the project folder; count is how many more there are"
+one = "WARNING: {{.vm}}'s .git protection doesn't cover the git repos nested in this folder at {{.repos}} and 1 more folder, so the VM can change their hooks and config, which git on this machine runs. Run devvm git-protect on to protect them too, as devvm does for new VMs."
+other = "WARNING: {{.vm}}'s .git protection doesn't cover the git repos nested in this folder at {{.repos}} and {{.count}} more folders, so the VM can change their hooks and config, which git on this machine runs. Run devvm git-protect on to protect them too, as devvm does for new VMs."
+
+[git_nested_appeared]
+description = "repo is a folder relative to the project folder"
+other = "WARNING: A git repo appeared at {{.repo}} while {{.vm}} could write this folder, so the VM may have made it. devvm protects it from now on, but check its hooks and config before you run git there."
+
+[git_nested_gone]
+description = "repo is a folder relative to the project folder"
+other = "WARNING: The git repo at {{.repo}} that devvm protected is gone or moved, perhaps by {{.vm}}. If you didn't move it, check where it went before you run git there."
+
+[git_nested_appeared_runs]
+description = "repo is a folder relative to the project folder; runs is a comma-separated list of config keys and hooks that run programs"
+other = "WARNING: A git repo appeared at {{.repo}} while {{.vm}} could write this folder, and its {{.runs}} run programs on this machine. devvm protects it as it is from now on, so check them before you run git there."
+
+[git_nested_gitdir_outside]
+description = "repo is a folder relative to the project folder; git is the git folder its .git names"
+other = "The git repo at {{.repo}} keeps its git folder outside the project, at {{.git}}, so devvm can't lock it. git on this machine still reads its config there."
+
+[git_nested_bare]
+description = "dirs is a comma-separated list of folders relative to the project folder"
+other = "WARNING: {{.dirs}} in this folder look like git folders, which git run below them can take for its repo, and {{.vm}} can change them. Check them before you run git there, and see devvm doctor for git's safe.bareRepository."
+
+[git_nested_skipped]
+description = "count is how many repos the walk saw where it doesn't protect them"
+one = "WARNING: devvm doesn't protect 1 git repo in this folder, as it's deeper than four folders or in a folder such as node_modules, so {{.vm}} can change its hooks and config. Check it before you run git there."
+other = "WARNING: devvm doesn't protect {{.count}} git repos in this folder, as they're deeper than four folders or in folders such as node_modules, so {{.vm}} can change their hooks and config. Check them before you run git there."
+
+[git_nested_devices]
+description = "count is how many folders are on another file system"
+one = "WARNING: devvm doesn't look for git repos in 1 folder of this folder that's on another disk, so {{.vm}} can change the hooks and config of any repo there. Check it before you run git there."
+other = "WARNING: devvm doesn't look for git repos in {{.count}} folders of this folder that are on another disk, so {{.vm}} can change the hooks and config of any repo there. Check them before you run git there."
+
+[git_scan_bounded]
+other = "WARNING: devvm stopped following the submodules of {{.git}} after 1,000 git folders, so it doesn't lock the rest. Check them before you run git there, or move the repos you don't use out of this folder."
+
+[git_kept_unread]
+description = "state is the VM state file, or the folder of them, that can't be read"
+other = "Some of .git's locks stay on, as devvm can't read {{.state}}, the state of a VM that may protect the same repos. Fix or remove that VM's state, then run this again."
+
+[git_locks_left]
+description = "repos is a comma-separated list of folders relative to the project folder"
+other = "WARNING: devvm locked the .git of the git repos at {{.repos}}, which aren't in this folder any more, so it can't take their locks off. If you moved them, run chflags -R nouchg on their .git/hooks and .git/config."
+
+[git_kept_locked]
+other = "Some of .git's locks stay on, as {{.vm}}'s .git protection covers the same repos. Run devvm git-protect off in that VM's folder to take them off too."
 
 [no_vm_git_protect]
 other = "There's no VM for {{.dir}}. Run devvm to make one, or devvm --no-git-protect to make one without .git protection."

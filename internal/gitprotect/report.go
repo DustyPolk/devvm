@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"slices"
 	"strconv"
 
@@ -28,15 +29,18 @@ const (
 	watching            // a host without locks: report, record .git's identity, lock nothing
 )
 
-// run is one protect: what it runs for, how it treats the locks, what
-// the last one recorded, what the scan found, and the sum of its
-// delegations.
+// run is one repo's protect: what it runs for, how it treats the locks,
+// what the last one recorded of the repo, whether it had protected it
+// (Made.Protected, or a nested repo's record), whether it's the folder's
+// own repo, what the scan found, and the sum of its delegations.
 type run struct {
-	why why
-	how how
-	was Made
-	s   snapshot
-	sum string
+	why       why
+	how       how
+	was       Repo
+	protected bool
+	top       bool
+	s         snapshot
+	sum       string
 }
 
 // report is something protect tells: when says whether a run tells it,
@@ -53,6 +57,10 @@ type report struct {
 // locked, so the hooks in folders a lock would cover aren't news: the
 // watch names their changes.
 var reports = []report{
+	{ // submodules past what one check follows, on every run
+		when:   func(r *run) bool { return r.s.emb.bounded },
+		report: func(p *Protector, r *run) { p.Warn(msg.GitScanBounded(r.s.git)) },
+	},
 	{ // commondir points git elsewhere for config and hooks, on every run
 		when:   func(r *run) bool { return r.s.commondir },
 		report: func(p *Protector, r *run) { p.Warn(msg.GitCommondir(r.s.git, r.s.target)) },
@@ -65,12 +73,13 @@ var reports = []report{
 			}
 		},
 	},
-	{ // a repo made since the VM was
-		when:   func(r *run) bool { return r.why == whyCheck && r.was.GitID == "" },
+	{ // the folder's own repo, made since the VM was (a nested one's
+		// is git_nested_appeared, from protect)
+		when:   func(r *run) bool { return r.top && r.why == whyCheck && r.was.GitID == "" },
 		report: func(p *Protector, _ *run) { p.Warn(msg.GitAppeared()) },
 	},
 	{ // git dirs that appeared since the last time, once there was one
-		when: func(r *run) bool { return r.why != whyNew && r.was.Protected },
+		when: func(r *run) bool { return r.why != whyNew && r.protected },
 		report: func(p *Protector, r *run) {
 			seen := p.abs(r.was.GitDirs)
 			for _, d := range r.s.dirs {
@@ -100,14 +109,82 @@ var reports = []report{
 	},
 }
 
-// protect locks .git, as h says, and reports what a lock can't stop
-// (reports); it returns what it found (g's Made, as it is now), for the
-// caller to record with the mode it set. Before anything else, a check
-// whose .git replaced the one it locked reports that alone.
-func (p *Protector) protect(ctx context.Context, s snapshot, rec InVM, w why, h how) Made {
+// protect locks each repo the scans in snaps found, as h says, and
+// reports what a lock can't stop (protectRepo); it returns what it found
+// (rec's Made, as it is now), for the caller to record with the mode it
+// set. A nested repo without a record is scanned for the first time, as a
+// new VM's (whyNew); at a check of a VM that protected its nested repos,
+// it's one that appeared since (git_nested_appeared). A recorded one the
+// walk found gone is named (git_nested_gone), and its record moves to
+// Made.Left, as does that of one whose git dir another repo's protection
+// now covers, so the locks it may have left are taken off with the rest.
+// A running VM's check scans the folder's own repo alone, and keeps the
+// nested repos' records as they are.
+func (p *Protector) protect(ctx context.Context, vm string, snaps []snapshot, rec InVM, w why, h how, c repoSet) Made {
 	was := rec.Made
+	made := Made{Protected: true, Nested: was.Nested || w != whyCheck, Left: maps.Clone(was.Left)}
+	if h == later {
+		made.Repos = maps.Clone(was.Repos)
+	}
+	for _, s := range snaps {
+		if s.tree.Root == p.Dir {
+			made.Repo = p.protectRepo(ctx, &run{why: w, how: h, was: was.Repo, protected: was.Protected, top: true, s: s})
+			continue
+		}
+		rel := relTo(p.Dir, s.tree.Root)
+		r, ok := was.Repos[rel]
+		wi := w
+		if !ok {
+			wi = whyNew
+			if w == whyCheck && was.Nested && s.exists {
+				p.warnAppeared(ctx, s, rel, vm)
+			}
+		}
+		if made.Repos == nil {
+			made.Repos = map[string]Repo{}
+		}
+		made.Repos[rel] = p.protectRepo(ctx, &run{why: wi, how: h, was: r, protected: ok, s: s})
+		delete(made.Left, rel)
+	}
+	for _, rel := range c.gone {
+		p.Warn(msg.GitNestedGone(rel, vm))
+	}
+	if h != later {
+		for rel, r := range was.Repos {
+			if _, ok := made.Repos[rel]; !ok {
+				if made.Left == nil {
+					made.Left = map[string]Repo{}
+				}
+				made.Left[rel] = r
+			}
+		}
+	}
+	return made
+}
+
+// warnAppeared names a nested repo that appeared since the last check,
+// scanned as s, at rel, with what in its config and hooks runs programs
+// on this machine (programs), which devvm locks as it is.
+func (p *Protector) warnAppeared(ctx context.Context, s snapshot, rel, vm string) {
+	if runs := programs(ctx, s); len(runs) > 0 {
+		l, _ := listed(runs)
+		p.Warn(msg.GitNestedAppearedRuns(rel, l, vm))
+		return
+	}
+	p.Warn(msg.GitNestedAppeared(rel, vm))
+}
+
+// protectRepo locks one repo's .git, as r.how says, and reports what a
+// lock can't stop (reports); it returns what it found of the repo. Before
+// anything else, a check whose .git replaced the one it locked reports
+// that alone.
+func (p *Protector) protectRepo(ctx context.Context, r *run) Repo {
+	was, s, w, h := r.was, r.s, r.why, r.how
 	if !s.exists {
-		return Made{Protected: true, GitDirs: was.GitDirs, Delegations: was.Delegations}
+		if !r.top {
+			return was
+		}
+		return Repo{GitDirs: was.GitDirs, Delegations: was.Delegations}
 	}
 	if w == whyCheck && was.GitID != "" && was.GitID != s.id {
 		p.Warn(msg.GitReplaced(s.git))
@@ -117,13 +194,13 @@ func (p *Protector) protect(ctx context.Context, s snapshot, rec InVM, w why, h 
 		}
 		return was
 	}
-	r := &run{why: w, how: h, was: was, s: s, sum: delegationsSum(s.ds)}
+	r.sum = delegationsSum(s.ds)
 	for _, rep := range reports {
 		if rep.when(r) {
 			rep.report(p, r)
 		}
 	}
-	made := Made{Protected: true, GitID: was.GitID, GitDirs: p.rel(s.dirs), Delegations: r.sum}
+	made := Repo{GitID: was.GitID, GitDirs: p.rel(s.dirs), Delegations: r.sum}
 	switch h {
 	case lockNow:
 		p.lock(ctx, s)

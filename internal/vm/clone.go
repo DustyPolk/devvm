@@ -760,7 +760,10 @@ func (e remaking) leftBehind(ctx context.Context, t *target, clone string) error
 // section keeps the remote's name, for putBack (unmountFolder).
 func (e remaking) mountFolder(ctx context.Context, t *target) error {
 	e.clones.removeRemote(ctx, t.f.Dir, t.f.Name, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
-	return e.Protector(t.f.Dir).NewVM(ctx, t.st)
+	p := e.Protector(t.f.Dir)
+	found := e.starter.walk(t.f.Dir, false)
+	p.Nested = &found.Repos
+	return p.NewVM(ctx, t.st)
 }
 
 // unmountFolder undoes mountFolder, once putBack has deleted the new

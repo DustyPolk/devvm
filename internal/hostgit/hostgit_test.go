@@ -306,3 +306,62 @@ func TestStatusNoSubmodules(t *testing.T) {
 		t.Error("ran the submodule's filter")
 	}
 }
+
+// The user's config files the environment names: only an absolute path to
+// a file that's there, else unset; GIT_CONFIG_NOSYSTEM as git reads it.
+func TestUserFilesOf(t *testing.T) {
+	d := t.TempDir()
+	f := filepath.Join(d, "gitconfig")
+	if err := os.WriteFile(f, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for env, want := range map[[3]string]UserFiles{
+		{f, f, "1"}:                        {Global: f, System: f, NoSystem: true},
+		{"gitconfig", d, "no"}:             {},
+		{filepath.Join(d, "none"), "", ""}: {},
+	} {
+		got := UserFilesOf(func(k string) string {
+			return map[string]string{"GIT_CONFIG_GLOBAL": env[0], "GIT_CONFIG_SYSTEM": env[1], "GIT_CONFIG_NOSYSTEM": env[2]}[k]
+		})
+		if got != want {
+			t.Errorf("%q: %+v, want %+v", env, got, want)
+		}
+	}
+}
+
+// UserConfig reads the global file GIT_CONFIG_GLOBAL names, then the
+// system's, which GIT_CONFIG_NOSYSTEM leaves out; else ~/.gitconfig.
+func TestUserConfig(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	write := func(name, data string) string {
+		p := filepath.Join(home, name)
+		if err := os.WriteFile(p, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	write(".gitconfig", "[e2e]\n\tk = home\n")
+	global := write("global", "[e2e]\n\tk = global\n")
+	system := write("system", "[e2e]\n\ts = system\n")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	if v, ok := UserConfig(t.Context(), "e2e.k"); !ok || v != "home" {
+		t.Errorf("default: %q %v", v, ok)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+	if v, _ := UserConfig(t.Context(), "e2e.k"); v != "global" {
+		t.Errorf("GIT_CONFIG_GLOBAL: %q", v)
+	}
+	t.Setenv("GIT_CONFIG_SYSTEM", system)
+	if _, ok := UserConfig(t.Context(), "e2e.s"); ok {
+		t.Error("read the system's with GIT_CONFIG_NOSYSTEM")
+	}
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "")
+	if v, _ := UserConfig(t.Context(), "e2e.s"); v != "system" {
+		t.Errorf("GIT_CONFIG_SYSTEM: %q", v)
+	}
+}

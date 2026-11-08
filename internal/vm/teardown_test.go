@@ -21,7 +21,7 @@ func everyFile(t *testing.T, e *Env, vm string) {
 	t.Helper()
 	v := e.Dirs.VM(vm)
 	for _, p := range []string{
-		v.Policy(), v.Proxy(".pid"), v.ProxyConfig(), v.Proxy(".status"), v.GitPins(), v.Profile(), v.Started(), v.Secrets(), v.SecretsPolicy(),
+		v.Policy(), v.Proxy(".pid"), v.ProxyConfig(), v.Proxy(".status"), v.GitPins(".jsonl"), v.GitPins(".json"), v.Profile(), v.Started(), v.Secrets(), v.SecretsPolicy(),
 		v.LinksPID(), v.LinkList(), v.EventLog(), v.EventLog() + ".1", v.ProxyLog(), v.LinksLog(),
 		v.Forwarder(".known_hosts"), v.Forwarder(".log"), v.Forwarder(".lock"),
 		filepath.Join(v.Run(), ".proxy.json.tmp-1"), // a write that never finished

@@ -54,11 +54,13 @@ func (v VM) ProxyConfig() string { return filepath.Join(v.Run(), "proxy.json") }
 // and .status, the status file it writes once it listens.
 func (v VM) Proxy(ext string) string { return filepath.Join(v.Run(), "proxy"+ext) }
 
-// GitPins is what a Linux host's QEMU namespace records of the pins it
-// lost and made again while the VM ran (a git command on the host
-// replaced a pinned file, a hard link), one JSON object a line, which
-// .git protection reports once the VM stops.
-func (v VM) GitPins() string { return filepath.Join(v.Run(), "git-pins.jsonl") }
+// GitPins is a file of a Linux host's pins in QEMU's namespace, by ext:
+// .jsonl, what the namespace records of the pins it lost and made again
+// while the VM ran (a git command on the host replaced a pinned file, a
+// hard link), one JSON object a line, which .git protection reports once
+// the VM stops; .json, what the start pins, which devvm _qemu reads
+// (backend.Pins.File), written private at each start that pins.
+func (v VM) GitPins(ext string) string { return filepath.Join(v.Run(), "git-pins"+ext) }
 
 // CA is the folder of the VM's own CA, which its proxy intercepts with
 // and which only it trusts.

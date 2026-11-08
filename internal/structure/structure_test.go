@@ -33,7 +33,7 @@ func devvm() rules {
 		// fake's own types each implement.
 		maxMethods: 24,
 		largeTypes: map[string]large{
-			"internal/paths.Dirs": {60, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
+			"internal/paths.Dirs": {61, "one method per folder or file devvm uses: a list (a VM's own files are paths.VM's)"},
 			"internal/ui.UI":      {46, "the one terminal: messages and where they go, as text or names, the logo, errors with the caller's exit code, prompts and their refusals, whether the picker shows, status line, tables, run log and how many are kept, cleanups, signals"},
 		},
 		allowedVars: devvmVars(),
@@ -61,7 +61,9 @@ func devvm() rules {
 		// devvm's agent store alone holds what VMs get of the agents:
 		// agentStore its settings, secrets.LoginFile its logins, so
 		// nothing reads them from the home folder.
+		// The start alone walks a project folder, once per check.
 		callers: map[string]string{
+			"internal/hostsafety.Walk":          "internal/vm/start.go",
 			"internal/state.ReadHash":           "internal/vm/finder.go",
 			"internal/project.Parents":          "internal/vm/finder.go",
 			"internal/state.ReadAll":            "internal/vm/inventory.go",

@@ -6,21 +6,54 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync/atomic"
 
+	"github.com/devvmhq/devvm/internal/hostsafety"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/safefile"
 )
 
-// tree is a project folder whose .git the protection finds (scan).
+// tree is a repo in a project folder whose .git the protection finds
+// (scan): the folder's own, or one nested in it. It has two bounds. Its
+// own top folder, Root, is where its .git, .git/modules and a relative
+// core.hooksPath are; the project folder, Dir, which the VM mounts, is
+// what the VM can write, so what's in it counts as inside (realInDir,
+// into, hooksPathInside) and a submodule's git dir outside it can't be
+// locked (embeddedIn).
 type tree struct {
 	Dir  string // the project folder, a physical path
+	Root string // the repo's top folder: Dir, or a folder below it
 	Home string // for ~ in git's paths
+	// budget is the submodule git dirs the check's scans may still follow,
+	// shared by every repo they scan (scanAll); nil for this scan's own
+	// maxEmbedded alone.
+	budget *budget
 }
 
-// snapshot is what one scan of the project's .git found: what locking,
+// budget is how many submodule git dirs one check's scans follow in all,
+// so the VM can't make a check slow with many repos full of them.
+type budget struct{ left atomic.Int64 }
+
+// newBudget is the budget of one check: maxChecked git dirs.
+func newBudget() *budget {
+	b := &budget{}
+	b.left.Store(maxChecked)
+	return b
+}
+
+// take takes one from the budget, and reports whether there was one.
+func (b *budget) take() bool { return b == nil || b.left.Add(-1) >= 0 }
+
+// maxChecked is how many submodule git dirs one check follows across
+// every repo it scans.
+const maxChecked = 1000
+
+// snapshot is what one scan of a repo's .git found: what locking,
 // unlocking, the watch and the reports all go by, found once per check.
 type snapshot struct {
+	tree   tree   // the repo it scanned
 	git    string // .git
 	exists bool   // whether there's anything at .git
 	id     string // .git's identity (folderID)
@@ -36,12 +69,16 @@ type snapshot struct {
 	// hooksPath is core.hooksPath as written, when it leads into the
 	// project folder (hooksPathInside); else "".
 	hooksPath string
+	// covered is the git dirs, resolved, whose hooks and config this scan
+	// protects whole (coveredDirs), which a nested repo's .git can be left
+	// to.
+	covered []string
 }
 
 // scan finds what the protection goes by.
 func (t tree) scan(ctx context.Context) snapshot {
 	g := t.git()
-	s := snapshot{git: g, exists: exists(g), id: folderID(g)}
+	s := snapshot{tree: t, git: g, exists: exists(g), id: folderID(g)}
 	if isDir(g) && exists(filepath.Join(g, "commondir")) {
 		target, _ := gitFile(filepath.Join(g, "commondir"))
 		s.commondir, s.target = true, strings.TrimSpace(string(target))
@@ -54,10 +91,55 @@ func (t tree) scan(ctx context.Context) snapshot {
 	if hp := gitConfig(ctx, filepath.Join(g, "config"), "core.hooksPath"); hp != "" && t.hooksPathInside(hp) {
 		s.hooksPath = hp
 	}
+	s.covered = t.coveredDirs(s.strays)
 	return s
 }
 
-func (t tree) git() string { return filepath.Join(t.Dir, ".git") }
+// coveredDirs are the git dirs, resolved, whose hooks and config the
+// repo's locks cover whole: .git, the git dirs under .git/modules that
+// read their config from themselves (no commondir that leads elsewhere),
+// and the linked worktrees under them whose commondir leads back (not in
+// strays), each a real folder whose commondir a lock can reach. A git dir
+// the VM made elsewhere under .git, such as .git/evil, or a worktree that
+// is a symlink to one, isn't one: nothing locks it.
+func (t tree) coveredDirs(strays []string) []string {
+	g := t.git()
+	if !isDir(g) {
+		return nil
+	}
+	var out []string
+	add := func(d string) {
+		if r, err := filepath.EvalSymlinks(d); err == nil {
+			out = append(out, r)
+		}
+	}
+	add(g)
+	for _, d := range t.gitDirs() {
+		if c, ok := commonOf(d); d != g && ok && c == resolved(d) {
+			add(d)
+		}
+		for _, w := range worktrees(d) {
+			// A worktree that's a symlink, or whose commondir is under one,
+			// can't be locked (realInDir), so the VM can point it anywhere
+			// once the check is done: what names it isn't covered.
+			if !slices.Contains(strays, w) && !isLink(w) && t.realInDir(filepath.Join(w, "commondir")) {
+				add(w)
+			}
+		}
+	}
+	return out
+}
+
+// resolved is path with its symlinks resolved, or "" when it can't be.
+func resolved(path string) string {
+	r, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return ""
+	}
+	return r
+}
+
+func (t tree) git() string { return filepath.Join(t.Root, ".git") }
 
 // lockedDirs are the git dirs protect locks besides .git: those under
 // .git/modules (gitDirs) and the submodules' in the working tree.
@@ -92,7 +174,7 @@ func (t tree) rel(dirs []string) []string {
 }
 
 // gitDirs returns the repo's git dirs: .git and its submodules', anything
-// under .git/modules that git would take for one (isGitDir).
+// under .git/modules that git would take for one (hostsafety.IsGitDir).
 func (t tree) gitDirs() []string {
 	g := t.git()
 	if !isDir(g) {
@@ -103,7 +185,7 @@ func (t tree) gitDirs() []string {
 		if err != nil || d.Name() != "HEAD" {
 			return nil //nolint:nilerr // unreadable: skipped, like find
 		}
-		if dir := filepath.Dir(path); isGitDir(dir) {
+		if dir := filepath.Dir(path); hostsafety.IsGitDir(dir) {
 			dirs = append(dirs, dir)
 		}
 		return nil
@@ -114,11 +196,15 @@ func (t tree) gitDirs() []string {
 // embeds are the submodule git dirs of the repo's working tree: inside
 // the project folder, or (with the submodule's folder) outside it; and
 // the folders inside it that a submodule names as its git dir but that
-// aren't one (isGitDir), which nothing locks.
+// aren't one (hostsafety.IsGitDir), which nothing locks.
 type embeds struct {
 	inside  []string
-	outside [][2]string // the submodule's folder, its git dir
-	notGit  [][2]string // the submodule's folder, the folder it names
+	outside [][2]string     // the submodule's folder, its git dir
+	notGit  [][2]string     // the submodule's folder, the folder it names
+	seen    map[string]bool // the git dirs followed, resolved
+	// bounded is set when the scan stopped following them, past
+	// maxEmbedded or the check's budget (git_scan_bounded).
+	bounded bool
 }
 
 // embedded finds the submodules whose git dir is in the working tree: a
@@ -132,10 +218,17 @@ func (t tree) embedded(ctx context.Context) embeds {
 	var e embeds
 	g := t.git()
 	if isDir(g) && !isLink(g) {
-		t.embeddedIn(ctx, &e, g, t.Dir, 0)
+		e.seen = map[string]bool{}
+		if r, err := filepath.EvalSymlinks(g); err == nil {
+			e.seen[r] = true
+		}
+		t.embeddedIn(ctx, &e, g, t.Root, 0)
 	}
 	return e
 }
+
+// maxEmbedded is how many submodule git dirs one repo's scan follows.
+const maxEmbedded = 1000
 
 func (t tree) embeddedIn(ctx context.Context, e *embeds, gitDir, worktree string, depth int) {
 	if depth >= maxDepth {
@@ -168,14 +261,25 @@ func (t tree) embeddedIn(ctx context.Context, e *embeds, gitDir, worktree string
 			e.outside = append(e.outside, [2]string{w, d})
 			continue
 		}
-		if !isGitDir(d) {
+		if !hostsafety.IsGitDir(d) {
 			// The VM can point a .git file, or make a .git folder, at
 			// any folder in the project: locking its hooks would lock
 			// the project's own files.
 			e.notGit = append(e.notGit, [2]string{w, d})
 			continue
 		}
-		if !paths.Below(d, filepath.Join(t.Dir, ".git", "modules")) { // gitDirs has those
+		// Each git dir once: the VM can make gitlinks that lead back to
+		// their own git dir, or through a symlinked folder to one seen.
+		r, err := filepath.EvalSymlinks(d)
+		if err != nil || e.seen[r] {
+			continue
+		}
+		if len(e.seen) >= maxEmbedded || !t.budget.take() {
+			e.bounded = true
+			return
+		}
+		e.seen[r] = true
+		if !paths.Below(d, filepath.Join(t.git(), "modules")) { // gitDirs has those
 			e.inside = append(e.inside, d)
 		}
 		t.embeddedIn(ctx, e, d, w, depth+1)
@@ -324,18 +428,6 @@ func (t tree) realInDir(path string) bool {
 	parent := filepath.Dir(path)
 	r, err := filepath.EvalSymlinks(parent)
 	return err == nil && r == parent
-}
-
-// isGitDir reports whether dir is what git would take for a git dir: a
-// HEAD (a file, or a symlink, which git still accepts) next to objects
-// and refs folders. A submodule's .git file can name any folder, so only
-// one that passes has its hooks and config locked.
-func isGitDir(dir string) bool {
-	fi, err := os.Lstat(filepath.Join(dir, "HEAD"))
-	if err != nil || !fi.Mode().IsRegular() && fi.Mode()&fs.ModeSymlink == 0 {
-		return false
-	}
-	return isDir(filepath.Join(dir, "objects")) && isDir(filepath.Join(dir, "refs"))
 }
 
 // worktrees returns a git dir's linked worktrees' folders, as the glob

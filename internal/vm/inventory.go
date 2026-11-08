@@ -4,10 +4,13 @@ import (
 	"cmp"
 	"context"
 	"maps"
+	"path/filepath"
 	"slices"
 	"time"
 
 	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/gitprotect"
+	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/project"
@@ -221,6 +224,34 @@ func (inv *Inventory) States() []*state.VM {
 		}
 	}
 	return out
+}
+
+// GitKeeper is, for the VM self, whether another VM's .git protection
+// keeps a path locked too (gitprotect.Keeps), as the warning that says
+// so, or a zero msg.M, so self's unlock leaves the path locked
+// (gitprotect.Protector.Kept). A parent folder's VM protects the repos
+// nested in its folder, and a nested repo's own VM its own. A state that
+// can't be read keeps every path in the folder whose hash names its
+// folder (project.Hash), as it may protect them: what it protects, devvm
+// can't tell.
+func (inv *Inventory) GitKeeper(self string) func(path string) msg.M {
+	states := inv.States()
+	unread := inv.Unreadable()
+	return func(path string) msg.M {
+		for _, st := range states {
+			if st.Name() != self && gitprotect.Keeps(st, path) {
+				return msg.GitKeptLocked(st.Name())
+			}
+		}
+		for _, k := range unread {
+			for d := path; d != "/" && d != "."; d = filepath.Dir(d) {
+				if project.Hash(d) == k.Hash {
+					return msg.GitKeptUnread(k.Path)
+				}
+			}
+		}
+		return msg.M{}
+	}
 }
 
 // Unreadable are the VMs whose vm.json can't be read.

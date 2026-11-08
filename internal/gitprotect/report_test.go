@@ -40,7 +40,8 @@ func reportsFixture(t *testing.T) (*fixture, snapshot) {
 	mkdirs(t, f.path(".git/hooks"))
 	write(t, f.path(".git/hooks/pre-commit"), "#!/bin/sh\n")
 	s := snapshot{
-		git: f.path(".git"), exists: true, id: folderID(f.path(".git")),
+		tree: f.p.tree,
+		git:  f.path(".git"), exists: true, id: folderID(f.path(".git")),
 		commondir: true, target: "../x",
 		strays: []string{f.path(".git/worktrees/w")},
 		dirs:   []string{f.path("sub/.git")},
@@ -95,9 +96,9 @@ func TestReports(t *testing.T) {
 			}
 			was := Made{}
 			if tc.set {
-				was = Made{Protected: true, GitID: s.id, Delegations: delegationsSum(s.ds)}
+				was = Made{Protected: true, Repo: Repo{GitID: s.id, Delegations: delegationsSum(s.ds)}}
 			}
-			made := f.p.protect(t.Context(), s, InVM{Made: was}, tc.why, tc.how)
+			made := f.protectOne(s, was, tc.why, tc.how)
 			var want []string
 			for _, g := range strings.Fields(tc.want) {
 				for _, m := range groups[g] {
@@ -111,7 +112,7 @@ func TestReports(t *testing.T) {
 			if tc.how == later {
 				gitID = was.GitID
 			}
-			if want := (Made{Protected: true, GitID: gitID, GitDirs: []string{"sub/.git"}, Delegations: delegationsSum(s.ds)}); !madeEqual(made, want) {
+			if want := (Made{Protected: true, Nested: tc.why != whyCheck, Repo: Repo{GitID: gitID, GitDirs: []string{"sub/.git"}, Delegations: delegationsSum(s.ds)}}); !madeEqual(made, want) {
 				t.Errorf("made %+v, want %+v", made, want)
 			}
 			if locked := f.locked(s.paths[0]); locked != (tc.how == lockNow) {
@@ -126,23 +127,29 @@ func TestReports(t *testing.T) {
 // to compare the next check with); without a .git, nothing is reported.
 func TestReportsReplacedAndMissing(t *testing.T) {
 	f, s := reportsFixture(t)
-	was := Made{Protected: true, GitID: "1:2", GitDirs: []string{"x"}, Delegations: "d"}
-	if made := f.p.protect(t.Context(), s, InVM{Made: was}, whyCheck, lockNow); !madeEqual(made, was) ||
+	was := Made{Protected: true, Repo: Repo{GitID: "1:2", GitDirs: []string{"x"}, Delegations: "d"}}
+	if made := f.protectOne(s, was, whyCheck, lockNow); !madeEqual(made, was) ||
 		!slices.Equal(f.warns.Names(), []string{msg.GitReplaced(s.git).Names()}) || len(f.flags) > 0 {
 		t.Errorf("replaced: made %+v, warned %q, locks %q", made, f.warns.Names(), f.flags)
 	}
 	f.canLock(false)
-	if made := f.p.protect(t.Context(), s, InVM{Made: was}, whyCheck, watching); made.GitID != s.id {
+	if made := f.protectOne(s, was, whyCheck, watching); made.GitID != s.id {
 		t.Errorf("replaced, watching: made %+v", made)
 	}
 	f.warns.Reset()
 	s.exists = false
-	if made := f.p.protect(t.Context(), s, InVM{Made: was}, whyNew, lockNow); !madeEqual(made, Made{Protected: true, GitDirs: was.GitDirs, Delegations: "d"}) ||
+	if made := f.protectOne(s, was, whyNew, lockNow); !madeEqual(made, Made{Protected: true, Nested: true, Repo: Repo{GitDirs: was.GitDirs, Delegations: "d"}}) ||
 		len(f.warns.Names()) > 0 {
 		t.Errorf("no .git: made %+v, warned %q", made, f.warns.Names())
 	}
 }
 
+// protectOne is protect of the folder's own repo alone, its scan s,
+// recorded as was.
+func (f *fixture) protectOne(s snapshot, was Made, w why, h how) Made {
+	return f.p.protect(f.t.Context(), f.vm.Name(), []snapshot{s}, InVM{Made: was}, w, h, repoSet{trees: []tree{f.p.tree}})
+}
+
 func madeEqual(a, b Made) bool {
-	return a.Protected == b.Protected && a.GitID == b.GitID && slices.Equal(a.GitDirs, b.GitDirs) && a.Delegations == b.Delegations
+	return a.Protected == b.Protected && a.Nested == b.Nested && a.GitID == b.GitID && slices.Equal(a.GitDirs, b.GitDirs) && a.Delegations == b.Delegations
 }

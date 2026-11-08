@@ -18,6 +18,10 @@ func UniqueFolderID(_, _ string) bool { return false }
 // not this one.
 const HasImmutableFlag = false
 
+// FoldsCase reports whether file names here may match whatever their
+// case: taken to on this system, so a .GIT counts as .git.
+const FoldsCase = true
+
 // Chflags sets file flags: not on this system.
 func Chflags(context.Context, string, string) error { return errors.ErrUnsupported }
 

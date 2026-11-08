@@ -160,7 +160,26 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 		PortInUse: platform.PortInUse, Forwarders: vmssh.NewForwards(d, reg.Review, self), PublicImage: from.NewLookup(d, r, tl.Proxy).Public, FreeSpace: reg.Host.FreeSpace,
 	}
 	locker := sync.OnceValue(func() gitprotect.Locker { return gitprotect.HostLocker(canPin(reg)) })
-	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, locker(), e.Reporter) }
+	e.Protector = func(dir string) *gitprotect.Protector {
+		p := gitprotect.New(dir, d.Home, locker(), e.Reporter)
+		p.Kept = func(vm string) func(string) msg.M {
+			inv, err := ReadStates(d)
+			if err != nil {
+				// What another VM protects, devvm can't tell: all stays.
+				return func(string) msg.M { return msg.GitKeptUnread(d.VMs()).Because(err) }
+			}
+			return inv.GitKeeper(vm)
+		}
+		p.Serial = func(ctx context.Context, f func() error) error {
+			unlock, err := platform.LockFile(ctx, d.GitLock())
+			if err != nil {
+				return err
+			}
+			defer unlock()
+			return f()
+		}
+		return p
+	}
 	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }
 	e.Agent = sshagent.New(d, e.mounts, r)
 	return wire(e)

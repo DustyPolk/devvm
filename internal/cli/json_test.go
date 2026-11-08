@@ -71,12 +71,12 @@ func machineShapes() []shapeCase {
 			"doctor",
 			doctorOutput{
 				Backend: "lima", Problems: []problemJSON{{Key: "lima", Fix: &fix, Message: "m"}, {Key: "kvm", Message: "m"}},
-				Warnings: []string{"w"}, Docker: yes, Features: map[string]map[string]string{"lima": {"ssh": "native"}},
+				Warnings: []string{"w"}, Tips: []string{"t"}, Docker: yes, Features: map[string]map[string]string{"lima": {"ssh": "native"}},
 				Release: &releaseJSON{Latest: "0.2.0", Checked: "2026-11-05T00:00:00Z"},
 			},
 			[]string{
 				"backend: string", "docker: bool", "features.lima.ssh: string", "problems[].fix: string", "problems[].key: string",
-				"problems[].message: string", "release.checked: string", "release.latest: string", "warnings[]: string",
+				"problems[].message: string", "release.checked: string", "release.latest: string", "tips[]: string", "warnings[]: string",
 			},
 		},
 		{

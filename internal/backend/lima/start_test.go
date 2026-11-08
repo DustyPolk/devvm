@@ -54,7 +54,7 @@ func TestStartConfined(t *testing.T) {
 	open := proxy
 	open.Net = backend.NetDirect
 	pinned := proxy
-	pinned.Pins = backend.Pins{Root: "/p", Fixed: []string{".git"}, ReadOnly: []string{".git/config", ".git/hooks"}}
+	pinned.Pins = backend.Pins{Root: "/p", Fixed: []string{".git"}, ReadOnly: []string{".git/config", ".git/hooks"}, File: filepath.Join(t.TempDir(), "git-pins.json")}
 	for _, tc := range []struct {
 		name, os string
 		c        backend.Confinement
@@ -171,8 +171,11 @@ func TestStartConfined(t *testing.T) {
 			if n, _ := envOf(s, NetEnv); tc.qemu && n != tc.net {
 				t.Errorf("%s=%q, want %q", NetEnv, n, tc.net)
 			}
-			if p, _ := envOf(s, PinsEnv); tc.qemu && p != tc.pins {
+			// The pins go in their file, which the variable names.
+			if p, _ := envOf(s, PinsEnv); tc.qemu && (p == "") != (tc.pins == "") {
 				t.Errorf("%s=%q, want %q", PinsEnv, p, tc.pins)
+			} else if b, _ := os.ReadFile(p); tc.qemu && p != "" && (p != tc.c.Pins.File || string(b) != tc.pins) { //nolint:gosec // the test's own
+				t.Errorf("%s=%q holds %s, want %s", PinsEnv, p, b, tc.pins)
 			}
 			// Lima propagates the host's proxy settings only to a VM on its
 			// own network without devvm's proxy.

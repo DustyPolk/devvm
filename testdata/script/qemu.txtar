@@ -31,8 +31,12 @@ stdout '^user,id=net0,net=192.168.5.0/24\n'
 ! stdout restrict
 env DEVVM_QEMU_NET=
 
-# Pins that aren't what devvm writes: QEMU doesn't run.
-env DEVVM_QEMU_PINS='{"root":"/p","pins":[{"path":"../x"}]}'
+# Pins that aren't what devvm writes, in their file or as the variable:
+# QEMU doesn't run.
+env DEVVM_QEMU_PINS=$WORK/bad-pins.json
+! exec wrap/qemu-system-aarch64 -m 4G -netdev user,id=net0,net=192.168.5.0/24
+! stdout .
+env DEVVM_QEMU_PINS='{"root":"/p","pins":[{"path":".git"}]}'
 ! exec wrap/qemu-system-aarch64 -m 4G -netdev user,id=net0,net=192.168.5.0/24
 ! stdout .
 env DEVVM_QEMU_PINS=
@@ -69,3 +73,5 @@ virtio-net-pci,netdev=net0
 none
 -netdev
 help
+-- bad-pins.json --
+{"root":"/p","pins":[{"path":"../x"}]}

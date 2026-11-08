@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -26,8 +27,9 @@ import (
 // (backend.PinEvent) and ReportPinEvents names, as the watch names what
 // changed. A running VM's pins are checked as it runs (PinsMissing).
 
-// Pins are what the start of the VM vm pins for its locks (Binds), none
-// unless its mode is on or strict, each relative to the project folder and
+// Pins are what the start of the VM vm pins for its locks (Binds), in the
+// folder's own repo and each nested repo its state records protecting,
+// none unless its mode is on or strict, each relative to the project folder and
 // a real path in it (realInDir), as lock takes them: .git, when it's a
 // folder, and the git dirs a lock covers besides (fixed), which the guest
 // can write in but not rename or remove, and each path a lock covers that
@@ -36,25 +38,56 @@ import (
 // a hook in a hooks folder to pin, with another name is refused
 // (git_pin_linked): its other name would stay the guest's to change.
 func (p *Protector) Pins(ctx context.Context, vm *state.VM) (fixed, readOnly []string, err error) {
-	if m := Mode(vm); m != On && m != Strict {
+	g, _ := Of(vm)
+	if g.Mode != On && g.Mode != Strict {
 		return nil, nil, nil
 	}
-	s := p.scan(ctx)
-	for _, d := range append([]string{s.git}, s.dirs...) {
-		if isDir(d) && p.realInDir(d) {
-			fixed = append(fixed, relTo(p.Dir, d))
+	return p.pinsOf(vm.Name(), scanAll(ctx, p.recorded(g.Made)))
+}
+
+// pinsOf is what to pin of the repos snaps scanned, as Pins has it, for
+// the VM vm.
+func (t tree) pinsOf(vm string, snaps []snapshot) (fixed, readOnly []string, err error) {
+	for _, s := range snaps {
+		for _, d := range append([]string{s.git}, s.dirs...) {
+			if isDir(d) && t.realInDir(d) {
+				fixed = append(fixed, relTo(t.Dir, d))
+			}
 		}
-	}
-	for _, path := range s.paths {
-		if _, err := os.Lstat(path); err != nil || !p.realInDir(path) {
-			continue
+		for _, path := range s.paths {
+			if _, err := os.Lstat(path); err != nil || !t.realInDir(path) {
+				continue
+			}
+			if l, ok := linkedFile(path); ok {
+				return nil, nil, msg.GitPinLinked(l, vm)
+			}
+			readOnly = append(readOnly, relTo(t.Dir, path))
 		}
-		if l, ok := linkedFile(path); ok {
-			return nil, nil, msg.GitPinLinked(l, vm.Name())
-		}
-		readOnly = append(readOnly, relTo(p.Dir, path))
 	}
 	return fixed, readOnly, nil
+}
+
+// recordedPins is what a running VM's start pinned of the nested repos
+// made records, as far as their records tell without scanning them: each
+// git dir, fixed, and its hooks and config, read-only.
+func (t tree) recordedPins(made Made) (fixed, readOnly []string) {
+	for _, rel := range slices.Sorted(maps.Keys(made.Repos)) {
+		if !filepath.IsLocal(rel) {
+			continue
+		}
+		for _, d := range append([]string{t.repoAt(rel).git()}, t.abs(made.Repos[rel].GitDirs)...) {
+			if !isDir(d) || !t.realInDir(d) {
+				continue
+			}
+			fixed = append(fixed, relTo(t.Dir, d))
+			for _, f := range []string{"hooks", "config"} {
+				if _, err := os.Lstat(filepath.Join(d, f)); err == nil {
+					readOnly = append(readOnly, relTo(t.Dir, filepath.Join(d, f)))
+				}
+			}
+		}
+	}
+	return fixed, readOnly
 }
 
 // linkedFile is path, or the file in it, a folder, that has another name
@@ -158,12 +191,23 @@ func (p *Protector) PinsMissing(ctx context.Context, vm *state.VM, readOnly, mou
 	if readOnly == nil || mounted == nil {
 		return nil
 	}
-	fixed, want, err := p.Pins(ctx, vm)
+	g, _ := Of(vm)
+	if g.Mode != On && g.Mode != Strict {
+		return nil
+	}
+	// The folder's own repo scanned, the nested ones as recorded: a
+	// launch into a running VM scans no nested repo.
+	fixed, want, err := p.pinsOf(vm.Name(), scanAll(ctx, []tree{p.tree}))
 	if err != nil {
 		return nil
 	}
-	g, _ := Of(vm)
+	nf, nr := p.recordedPins(g.Made)
+	fixed, want = append(fixed, nf...), append(want, nr...)
 	known := append([]string{".git"}, g.Made.GitDirs...)
+	for rel, r := range g.Made.Repos {
+		known = append(known, filepath.Join(rel, ".git"))
+		known = append(known, r.GitDirs...)
+	}
 	mine := func(rel string) bool {
 		return slices.ContainsFunc(known, func(d string) bool { return rel == d || strings.HasPrefix(rel, d+"/") })
 	}

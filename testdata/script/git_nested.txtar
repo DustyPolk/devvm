@@ -1,0 +1,85 @@
+# The git repos nested in a VM's folder get .git protection as the
+# folder's own repo does, in a folder of repos without one of its own
+# too: on macOS they're locked, and on a host without locks they're
+# watched. The walk that finds them, when the VM is made and when a check
+# finds it stopped, looks no deeper than four folders, and not in a
+# package manager's folder, such as node_modules. The chflags stub changes
+# no flags.
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+
+project ws
+exec git init -q a
+exec git init -q b/c
+exec git init -q node_modules/x
+exec git init -q deep/1/2/3/4
+exec devvm --network open
+vm_name WS ws
+! stderr 'git_nested_(unprotected|appeared|bare|gone)'
+[linux] stderr '^devvm: git_unprotected vm=devvm-ws-[0-9a-f]{14}$'
+# On Linux, the walk for set-id files sees the repos it skips, and counts
+# them; on macOS it doesn't enter their folders.
+[linux] stderr '^devvm: git_nested_skipped count=2 vm=devvm-ws-[0-9a-f]{14}$'
+[darwin] ! stderr git_nested_skipped
+[darwin] stub_calls
+[darwin] stdout '^chflags -R -P uchg /\S*/ws/a/\.git/config$'
+[darwin] stdout '^chflags -R -P uchg /\S*/ws/b/c/\.git/hooks$'
+[darwin] ! stdout 'node_modules|deep'
+vm_state $WS_dir/vm.json
+stdout '^git.made.nested=true$'
+stdout '^git.made.repos.a.git_id=[0-9]+:[0-9]+'
+stdout '^git.made.repos.b/c.git_id=[0-9]+:[0-9]+'
+! stdout 'repos.node_modules|repos.deep'
+
+# A repo made while the VM runs: a launch into it walks nothing, and
+# devvm stop names it and protects it from then on.
+exec git init -q d
+exec devvm
+! stderr git_nested
+stub_reset
+exec devvm stop
+stderr '^devvm: git_nested_appeared repo=d vm=devvm-ws-[0-9a-f]{14}$'
+[darwin] stub_calls
+[darwin] stdout '^chflags -R -P uchg /\S*/ws/d/\.git/config$'
+vm_state $WS_dir/vm.json
+stdout '^git.made.repos.d.git_id='
+
+# On a host without locks, the watch names what changed in one.
+[linux] exec git -C a config core.fsmonitor ./evil
+[linux] exec devvm stop
+[linux] stderr '^devvm: git_changed paths=a/\.git/config vm=devvm-ws-[0-9a-f]{14}$'
+
+# A VM whose protection covers its own repo alone, as an older devvm's
+# does, is told once that devvm git-protect on protects them.
+[linux] stop 'devvm git-protect on needs locks'
+json_set $WS_dir/vm.json git.made.nested:=false git.made.repos:=null
+exec devvm stop
+stderr '^devvm: git_nested_protectable repos=a, b/c, d vm=devvm-ws-[0-9a-f]{14}$'
+exec devvm stop
+! stderr git_nested
+exec devvm git-protect on
+stdout '^==> git_locked vm=devvm-ws-[0-9a-f]{14}$'
+vm_state $WS_dir/vm.json
+stdout '^git.made.nested=true$'
+stdout '^git.made.repos.d.git_id='
+
+# devvm rm unlocks them.
+stub_reset
+exec devvm rm --force --no-export
+stub_calls
+stdout '^chflags -R -P nouchg /\S*/ws/a/\.git/config$'
+
+# A nested repo with a VM of its own: the parent folder's VM locks it
+# too, and its rm leaves the locks the nested VM holds.
+project parent git
+exec git init -q child
+cd child
+exec devvm --network open
+vm_name CHILD child
+cd ..
+exec devvm --here --network open
+stub_reset
+exec devvm rm --force --no-export
+stderr '^devvm: git_kept_locked vm=devvm-child-[0-9a-f]{14}$'
+stub_calls
+stdout '^chflags -R -P nouchg /\S*/parent/\.git/config$'
+! stdout 'nouchg /\S*/child/'

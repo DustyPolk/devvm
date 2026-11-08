@@ -41,6 +41,10 @@ func UniqueFolderID(path, id string) bool {
 // (Chflags, Immutable): macOS's uchg, which the user sets without root.
 const HasImmutableFlag = true
 
+// FoldsCase reports whether file names here may match whatever their
+// case: macOS's APFS and HFS+ do by default, so .GIT is .git to git.
+const FoldsCase = true
+
 // Chflags sets file flags (uchg, nouchg) on path and everything under it,
 // following no symlink, path itself included: chflags -R -P.
 func Chflags(ctx context.Context, flags, path string) error {

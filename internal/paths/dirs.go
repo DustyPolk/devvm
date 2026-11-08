@@ -178,6 +178,12 @@ func (d Dirs) Run() string { return filepath.Join(d.Data, "run") }
 // after the VM's own lock (VM.Lock), never before.
 func (d Dirs) ClaimsLock() string { return filepath.Join(d.Run(), "claims.lock") }
 
+// GitLock is held while .git protection locks a VM's repos and records
+// them, and while it unlocks them, so one VM's unlock never runs between
+// another's locks and their record. It's taken before a VM's own lock
+// (VM.Lock), never after.
+func (d Dirs) GitLock() string { return filepath.Join(d.Run(), "git.lock") }
+
 // CreateLock is the creation lock of the project folder whose hash is
 // hash (project.Hash): held while a devvm makes the folder's VM, from
 // when it finds the folder has none until the VM's creation is recorded.

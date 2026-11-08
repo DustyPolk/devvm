@@ -141,6 +141,56 @@ func split(key string) (section, name string, ok bool) {
 	return section, rest[:i], true
 }
 
+// UserFiles are the user's own config files that git reads when the
+// environment devvm runs in names them, which Command's git ignores with
+// the rest of GIT_*: GIT_CONFIG_GLOBAL's in place of ~/.gitconfig, and
+// GIT_CONFIG_SYSTEM's in place of the system's, or no system config
+// (nosystem) with GIT_CONFIG_NOSYSTEM. A path that isn't absolute, or a
+// file that isn't there, counts as unset ("").
+type UserFiles struct {
+	Global, System string
+	NoSystem       bool
+}
+
+// UserFilesOf is the user's config files that getenv (os.Getenv) names.
+func UserFilesOf(getenv func(string) string) UserFiles {
+	file := func(name string) string {
+		p := getenv(name)
+		if fi, err := os.Stat(p); p == "" || !filepath.IsAbs(p) || err != nil || !fi.Mode().IsRegular() {
+			return ""
+		}
+		return p
+	}
+	no, _ := strconv.ParseBool(getenv("GIT_CONFIG_NOSYSTEM"))
+	return UserFiles{Global: file("GIT_CONFIG_GLOBAL"), System: file("GIT_CONFIG_SYSTEM"), NoSystem: no}
+}
+
+// UserConfig returns key's value in the user's global config, else in the
+// system's, as git reads them for the user (UserFilesOf the environment):
+// a file the environment names is read by name (--file), so no other
+// GIT_* reaches git; and whether either has it. It reads only.
+func UserConfig(ctx context.Context, key string) (string, bool) {
+	f := UserFilesOf(os.Getenv)
+	global, system := []string{"--global"}, []string{"--system"}
+	if f.Global != "" {
+		global = []string{"--file", f.Global}
+	}
+	if f.System != "" {
+		system = []string{"--file", f.System}
+	}
+	scopes := [][]string{global}
+	if !f.NoSystem {
+		scopes = append(scopes, system)
+	}
+	for _, s := range scopes {
+		out, err := Output(ctx, append(append([]string{"config"}, s...), "--get", key)...)
+		if err == nil {
+			return strings.TrimRight(string(out), "\n"), true
+		}
+	}
+	return "", false
+}
+
 // environ is env without git's own variables (GIT_*), which would point
 // git at another repo, worktree, index, object store or config, or at
 // other programs, whatever devvm runs in (a hook, a rebase's exec); and

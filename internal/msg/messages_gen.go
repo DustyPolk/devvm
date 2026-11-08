@@ -1149,6 +1149,11 @@ func DoctorFailed(reason string) M {
 	return M{id: "doctor_failed", vals: []val{{"reason", reason}}}
 }
 
+// DoctorGitBare is [doctor_git_bare]: "Tip: run git config --global safe.bareRepository explicit, so git on this machine uses a bare repo only when you name it. Then a folder that a VM makes look like a git folder can't take over git in the folders below it."
+func DoctorGitBare() M {
+	return M{id: "doctor_git_bare"}
+}
+
 // DoctorLatestRelease is [doctor_latest_release]: "The newest devvm release is {{.latest}}, as of {{.date}}."
 func DoctorLatestRelease(date string, latest string) M {
 	return M{id: "doctor_latest_release", vals: []val{{"date", date}, {"latest", latest}}}
@@ -1509,6 +1514,16 @@ func GitIncludeInside(config string, path string) M {
 	return M{id: "git_include_inside", vals: []val{{"config", config}, {"path", path}}}
 }
 
+// GitKeptLocked is [git_kept_locked]: "Some of .git's locks stay on, as {{.vm}}'s .git protection covers the same repos. Run devvm git-protect off in that VM's folder to take them off too."
+func GitKeptLocked(vm string) M {
+	return M{id: "git_kept_locked", vals: []val{{"vm", vm}}}
+}
+
+// GitKeptUnread is [git_kept_unread]: "Some of .git's locks stay on, as devvm can't read {{.state}}, the state of a VM that may protect the same repos. Fix or remove that VM's state, then run this again."
+func GitKeptUnread(state string) M {
+	return M{id: "git_kept_unread", vals: []val{{"state", state}}}
+}
+
 // GitLockLater is [git_lock_later]: "This folder has no .git yet. devvm locks it for {{.vm}} when one appears."
 func GitLockLater(vm string) M {
 	return M{id: "git_lock_later", vals: []val{{"vm", vm}}}
@@ -1527,6 +1542,71 @@ func GitLocked(vm string) M {
 // GitLockedStrict is [git_locked_strict]: "devvm locked the hooks and config in .git for {{.vm}}. git status and git diff on this machine don't look inside submodules."
 func GitLockedStrict(vm string) M {
 	return M{id: "git_locked_strict", vals: []val{{"vm", vm}}}
+}
+
+// GitLocksLeft is [git_locks_left]: "WARNING: devvm locked the .git of the git repos at {{.repos}}, which aren't in this folder any more, so it can't take their locks off. If you moved them, run chflags -R nouchg on their .git/hooks and .git/config."
+func GitLocksLeft(repos string) M {
+	return M{id: "git_locks_left", vals: []val{{"repos", repos}}}
+}
+
+// GitNestedAppeared is [git_nested_appeared]: "WARNING: A git repo appeared at {{.repo}} while {{.vm}} could write this folder, so the VM may have made it. devvm protects it from now on, but check its hooks and config before you run git there."
+func GitNestedAppeared(repo string, vm string) M {
+	return M{id: "git_nested_appeared", vals: []val{{"repo", repo}, {"vm", vm}}}
+}
+
+// GitNestedAppearedRuns is [git_nested_appeared_runs]: "WARNING: A git repo appeared at {{.repo}} while {{.vm}} could write this folder, and its {{.runs}} run programs on this machine. devvm protects it as it is from now on, so check them before you run git there."
+func GitNestedAppearedRuns(repo string, runs string, vm string) M {
+	return M{id: "git_nested_appeared_runs", vals: []val{{"repo", repo}, {"runs", runs}, {"vm", vm}}}
+}
+
+// GitNestedBare is [git_nested_bare]: "WARNING: {{.dirs}} in this folder look like git folders, which git run below them can take for its repo, and {{.vm}} can change them. Check them before you run git there, and see devvm doctor for git's safe.bareRepository."
+func GitNestedBare(dirs string, vm string) M {
+	return M{id: "git_nested_bare", vals: []val{{"dirs", dirs}, {"vm", vm}}}
+}
+
+// GitNestedDevices is [git_nested_devices]: "WARNING: devvm doesn't look for git repos in {{.count}} folders of this folder that are on another disk, so {{.vm}} can change the hooks and config of any repo there. Check them before you run git there."
+func GitNestedDevices(count int, vm string) M {
+	return M{id: "git_nested_devices", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"vm", vm}}}
+}
+
+// GitNestedGitdirOutside is [git_nested_gitdir_outside]: "The git repo at {{.repo}} keeps its git folder outside the project, at {{.git}}, so devvm can't lock it. git on this machine still reads its config there."
+func GitNestedGitdirOutside(git string, repo string) M {
+	return M{id: "git_nested_gitdir_outside", vals: []val{{"git", git}, {"repo", repo}}}
+}
+
+// GitNestedGone is [git_nested_gone]: "WARNING: The git repo at {{.repo}} that devvm protected is gone or moved, perhaps by {{.vm}}. If you didn't move it, check where it went before you run git there."
+func GitNestedGone(repo string, vm string) M {
+	return M{id: "git_nested_gone", vals: []val{{"repo", repo}, {"vm", vm}}}
+}
+
+// GitNestedPastBound is [git_nested_past_bound]: "WARNING: .git protection covers the first 100 git repos nested in this folder, and not {{.count}} more, such as {{.repos}}, so {{.vm}} can change their hooks and config, which git on this machine runs. Move the repos you don't use out of this folder."
+func GitNestedPastBound(count int, repos string, vm string) M {
+	return M{id: "git_nested_past_bound", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"repos", repos}, {"vm", vm}}}
+}
+
+// GitNestedProtectable is [git_nested_protectable]: "WARNING: {{.vm}}'s .git protection doesn't cover the git repos nested in this folder at {{.repos}}, so the VM can change their hooks and config, which git on this machine runs. Run devvm git-protect on to protect them too, as devvm does for new VMs."
+func GitNestedProtectable(repos string, vm string) M {
+	return M{id: "git_nested_protectable", vals: []val{{"repos", repos}, {"vm", vm}}}
+}
+
+// GitNestedProtectableMore is [git_nested_protectable_more]: "WARNING: {{.vm}}'s .git protection doesn't cover the git repos nested in this folder at {{.repos}} and {{.count}} more folders, so the VM can change their hooks and config, which git on this machine runs. Run devvm git-protect on to protect them too, as devvm does for new VMs."
+func GitNestedProtectableMore(count int, repos string, vm string) M {
+	return M{id: "git_nested_protectable_more", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"repos", repos}, {"vm", vm}}}
+}
+
+// GitNestedSkipped is [git_nested_skipped]: "WARNING: devvm doesn't protect {{.count}} git repos in this folder, as they're deeper than four folders or in folders such as node_modules, so {{.vm}} can change their hooks and config. Check them before you run git there."
+func GitNestedSkipped(count int, vm string) M {
+	return M{id: "git_nested_skipped", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"vm", vm}}}
+}
+
+// GitNestedUnprotected is [git_nested_unprotected]: "WARNING: .git protection doesn't cover the git repos nested in this folder at {{.repos}}, so {{.vm}} can change their hooks and config, which git on this machine runs. Check them before you run git there."
+func GitNestedUnprotected(repos string, vm string) M {
+	return M{id: "git_nested_unprotected", vals: []val{{"repos", repos}, {"vm", vm}}}
+}
+
+// GitNestedUnprotectedMore is [git_nested_unprotected_more]: "WARNING: .git protection doesn't cover the git repos nested in this folder at {{.repos}} and {{.count}} more folders, so {{.vm}} can change their hooks and config, which git on this machine runs. Check them before you run git there."
+func GitNestedUnprotectedMore(count int, repos string, vm string) M {
+	return M{id: "git_nested_unprotected_more", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"repos", repos}, {"vm", vm}}}
 }
 
 // GitNotLocked is [git_not_locked]: "WARNING: If you didn't make {{.path}}, check it before you run git here. It's a symlink or under one, so devvm can't lock it."
@@ -1602,6 +1682,11 @@ func GitProtectOnNeedsLocks() M {
 // GitReplaced is [git_replaced]: "WARNING: Something replaced {{.git}} after devvm locked it, possibly the VM. Check its hooks and config before you run git here."
 func GitReplaced(git string) M {
 	return M{id: "git_replaced", vals: []val{{"git", git}}}
+}
+
+// GitScanBounded is [git_scan_bounded]: "WARNING: devvm stopped following the submodules of {{.git}} after 1,000 git folders, so it doesn't lock the rest. Check them before you run git there, or move the repos you don't use out of this folder."
+func GitScanBounded(git string) M {
+	return M{id: "git_scan_bounded", vals: []val{{"git", git}}}
 }
 
 // GitUnlocked is [git_unlocked]: "devvm unlocked .git, so {{.vm}} can change its hooks and config, which run on this machine. To lock it again, run devvm git-protect on."
@@ -4605,6 +4690,7 @@ var specs = map[string]spec{
 	"docker_missing":                 {},
 	"docker_only":                    {fields: []string{"from"}},
 	"doctor_failed":                  {fields: []string{"reason"}},
+	"doctor_git_bare":                {},
 	"doctor_latest_release":          {fields: []string{"date", "latest"}},
 	"doctor_ok":                      {fields: []string{"backend", "version"}},
 	"doctor_pins_apparmor":           {},
@@ -4677,10 +4763,25 @@ var specs = map[string]spec{
 	"git_hooks_path":                 {fields: []string{"path"}},
 	"git_hooks_unlocked":             {fields: []string{"hooks"}},
 	"git_include_inside":             {fields: []string{"config", "path"}},
+	"git_kept_locked":                {fields: []string{"vm"}},
+	"git_kept_unread":                {fields: []string{"state"}},
 	"git_lock_later":                 {fields: []string{"vm"}},
 	"git_lock_raced":                 {fields: []string{"path"}},
 	"git_locked":                     {fields: []string{"vm"}},
 	"git_locked_strict":              {fields: []string{"vm"}},
+	"git_locks_left":                 {fields: []string{"repos"}},
+	"git_nested_appeared":            {fields: []string{"repo", "vm"}},
+	"git_nested_appeared_runs":       {fields: []string{"repo", "runs", "vm"}},
+	"git_nested_bare":                {fields: []string{"dirs", "vm"}},
+	"git_nested_devices":             {plural: true, fields: []string{"count", "vm"}},
+	"git_nested_gitdir_outside":      {fields: []string{"git", "repo"}},
+	"git_nested_gone":                {fields: []string{"repo", "vm"}},
+	"git_nested_past_bound":          {plural: true, fields: []string{"count", "repos", "vm"}},
+	"git_nested_protectable":         {fields: []string{"repos", "vm"}},
+	"git_nested_protectable_more":    {plural: true, fields: []string{"count", "repos", "vm"}},
+	"git_nested_skipped":             {plural: true, fields: []string{"count", "vm"}},
+	"git_nested_unprotected":         {fields: []string{"repos", "vm"}},
+	"git_nested_unprotected_more":    {plural: true, fields: []string{"count", "repos", "vm"}},
 	"git_not_locked":                 {fields: []string{"path"}},
 	"git_pin_again":                  {fields: []string{"path", "vm"}},
 	"git_pin_events_kept":            {fields: []string{"file"}},
@@ -4696,6 +4797,7 @@ var specs = map[string]spec{
 	"git_protect_next_stop":          {fields: []string{"mode", "vm"}},
 	"git_protect_on_needs_locks":     {},
 	"git_replaced":                   {fields: []string{"git"}},
+	"git_scan_bounded":               {fields: []string{"git"}},
 	"git_unlocked":                   {fields: []string{"vm"}},
 	"git_unprotected":                {fields: []string{"vm"}},
 	"git_unprotected_quiet":          {fields: []string{"vm"}},

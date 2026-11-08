@@ -6,7 +6,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
+
+	"github.com/devvmhq/devvm/internal/platform"
 )
 
 func touch(t *testing.T, paths ...string) {
@@ -27,6 +30,86 @@ func mkdirs(t *testing.T, dirs ...string) {
 	}
 }
 
+func setIDFiles(dir string) []SetIDFile { return Walk(dir, true).SetID }
+
+// gitDir makes dir a git dir, as IsGitDir has it.
+func gitDir(t *testing.T, dir string) {
+	t.Helper()
+	mkdirs(t, filepath.Join(dir, "objects"), filepath.Join(dir, "refs"))
+	touch(t, filepath.Join(dir, "HEAD"))
+}
+
+// The walk finds the folders nested in the folder, below its own, with
+// anything named .git, at most RepoDepth folders down and MaxRepos of
+// them, and counts the rest; never through a symlink, in a .git folder or
+// in a package manager's folder, where a set-id walk counts them.
+func TestWalkRepos(t *testing.T) {
+	d := t.TempDir()
+	gitDir(t, filepath.Join(d, ".git"))
+	for _, r := range []string{"a", "a/inner", "b/c/d/e", "deep/1/2/3/4", "node_modules/x", "x/vendor/y"} {
+		gitDir(t, filepath.Join(d, r, ".git"))
+	}
+	// A linked worktree's .git file, a .git symlink and a .git folder that
+	// isn't a git dir yet count, but not a repo in .git.
+	mkdirs(t, filepath.Join(d, "wt"), filepath.Join(d, "fake", ".git"), filepath.Join(d, ".git", "modules", "m"))
+	touch(t, filepath.Join(d, "wt", ".git"))
+	gitDir(t, filepath.Join(d, ".git", "modules", "m", ".git"))
+	mkdirs(t, filepath.Join(d, "ln"))
+	if err := os.Symlink(filepath.Join(d, "a", ".git"), filepath.Join(d, "ln", ".git")); err != nil {
+		t.Fatal(err)
+	}
+	// A symlink to a repo isn't followed.
+	if err := os.Symlink(filepath.Join(d, "a"), filepath.Join(d, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	// A folder shaped like a git dir, not a .git, is named as one.
+	gitDir(t, filepath.Join(d, "shadow"))
+	want := []string{"a", "a/inner", "b/c/d/e", "fake", "ln", "wt"}
+	for _, setID := range []bool{false, true} {
+		got := Walk(d, setID).Repos
+		if !slices.Equal(got.Dirs, want) || got.More != 0 || !slices.Equal(got.Bare, []string{"shadow"}) {
+			t.Errorf("setID %v: Repos = %+v, want %v", setID, got, want)
+		}
+		if skipped := map[bool]int{false: 0, true: 3}[setID]; got.Skipped != skipped {
+			t.Errorf("setID %v: skipped %d, want %d", setID, got.Skipped, skipped)
+		}
+	}
+	// Past MaxRepos, they're counted, the first of them named.
+	for i := range MaxRepos + 2 {
+		gitDir(t, filepath.Join(d, "many", strconv.Itoa(i), ".git"))
+	}
+	got := Walk(d, false).Repos
+	if len(got.Dirs) != MaxRepos || got.More != len(want)+2 || len(got.Past) != min(got.More, MaxPast) {
+		t.Errorf("past the bound: %d repos, %d more, %q", len(got.Dirs), got.More, got.Past)
+	}
+	if got := Walk(filepath.Join(d, "none"), true); got.Repos.Dirs != nil || got.SetID != nil {
+		t.Errorf("no folder: %+v", got)
+	}
+}
+
+// git takes for a git dir a folder with a HEAD and objects and refs, which
+// may be files, there or in the folder its commondir names; a .GIT is a
+// .git where names fold case.
+func TestIsGitDir(t *testing.T) {
+	d := t.TempDir()
+	gitDir(t, filepath.Join(d, "plain"))
+	mkdirs(t, filepath.Join(d, "files"), filepath.Join(d, "common"), filepath.Join(d, "none"))
+	touch(t, filepath.Join(d, "files", "HEAD"), filepath.Join(d, "files", "objects"), filepath.Join(d, "files", "refs"))
+	touch(t, filepath.Join(d, "common", "HEAD"))
+	if err := os.WriteFile(filepath.Join(d, "common", "commondir"), []byte("../plain\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	touch(t, filepath.Join(d, "none", "HEAD"))
+	for dir, want := range map[string]bool{"plain": true, "files": true, "common": true, "none": false} {
+		if got := IsGitDir(filepath.Join(d, dir)); got != want {
+			t.Errorf("%s: %v", dir, got)
+		}
+	}
+	if IsGitName(".GIT") != platform.FoldsCase || !IsGitName(".git") || IsGitName(".gitx") {
+		t.Error("IsGitName")
+	}
+}
+
 func TestSetIDFiles(t *testing.T) {
 	d := t.TempDir()
 	mkdirs(t, filepath.Join(d, "sub"))
@@ -35,19 +118,19 @@ func TestSetIDFiles(t *testing.T) {
 	if err := os.Chmod(tool, fs.ModeSetuid|0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := SetIDFiles(d); !slices.Equal(got, []SetIDFile{{Path: tool, Root: os.Getuid() == 0}}) {
+	if got := setIDFiles(d); !slices.Equal(got, []SetIDFile{{Path: tool, Root: os.Getuid() == 0}}) {
 		t.Errorf("SetIDFiles = %v, want %s", got, tool)
 	}
 	if err := os.Chmod(tool, fs.ModeSetgid|0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := SetIDFiles(d); len(got) != 1 {
+	if got := setIDFiles(d); len(got) != 1 {
 		t.Errorf("set-group-id: SetIDFiles = %v", got)
 	}
 	if err := os.Chmod(tool, 0o755); err != nil { //nolint:gosec // the test's own file
 		t.Fatal(err)
 	}
-	if got := SetIDFiles(d); got != nil {
+	if got := setIDFiles(d); got != nil {
 		t.Errorf("none: SetIDFiles = %v", got)
 	}
 	// None in a .git folder, the project's or a submodule's, counts.
@@ -59,7 +142,7 @@ func TestSetIDFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := SetIDFiles(d); got != nil {
+	if got := setIDFiles(d); got != nil {
 		t.Errorf("in .git: SetIDFiles = %v", got)
 	}
 	// At most five.
@@ -70,10 +153,10 @@ func TestSetIDFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got := SetIDFiles(d); len(got) != setIDMax {
+	if got := setIDFiles(d); len(got) != setIDMax {
 		t.Errorf("SetIDFiles = %d files, want %d", len(got), setIDMax)
 	}
-	if got := SetIDFiles(filepath.Join(d, "none")); got != nil {
+	if got := setIDFiles(filepath.Join(d, "none")); got != nil {
 		t.Errorf("no folder: SetIDFiles = %v", got)
 	}
 }
@@ -96,6 +179,35 @@ func TestRootSetID(t *testing.T) {
 		if got := rootSetID(c.m, c.uid, c.gid); got != c.want {
 			t.Errorf("%s: %v", c.name, got)
 		}
+	}
+}
+
+// BareExplicit reads safe.bareRepository from your global config.
+func TestBareExplicit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	if BareExplicit(t.Context()) {
+		t.Skip("this machine's system config sets it")
+	}
+	// Your own global file, as GIT_CONFIG_GLOBAL names it.
+	own := filepath.Join(home, "own.gitconfig")
+	if err := os.WriteFile(own, []byte("[safe]\n\tbareRepository = explicit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", own)
+	if !BareExplicit(t.Context()) {
+		t.Error("GIT_CONFIG_GLOBAL's not read")
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", "")
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[safe]\n\tbareRepository = explicit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !BareExplicit(t.Context()) {
+		t.Error("explicit not read")
 	}
 }
 

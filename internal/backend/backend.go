@@ -513,6 +513,11 @@ type Pins struct {
 	// start when it can't), then one each time a pin changed while the VM
 	// ran; "" for none.
 	Events string
+	// File is a file of devvm's own, in the VM's folder, that a backend
+	// whose pinning process reads the pins from a file writes them to:
+	// a VM with many nested repos has more than an environment variable
+	// holds.
+	File string
 }
 
 // A PinEvent is a pin that changed while the VM ran: a path, relative to

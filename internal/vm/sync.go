@@ -582,8 +582,18 @@ func hostTZ() string {
 	return strings.TrimSpace(string(b))
 }
 
-// gitConfig is git's setting for key in dir, or "".
+// gitConfig is git's setting for key in dir, or "". When devvm's
+// environment names the user's own config files (GIT_CONFIG_GLOBAL and
+// the rest), which host git ignores, it's the repo's own setting, else
+// theirs, read by name (hostgit.UserConfig).
 func gitConfig(ctx context.Context, dir, key string) string {
+	if f := hostgit.UserFilesOf(os.Getenv); f != (hostgit.UserFiles{}) {
+		if out, err := hostgit.Output(ctx, "-C", dir, "config", "--local", "--get", key); err == nil {
+			return strings.TrimRight(string(out), "\n")
+		}
+		v, _ := hostgit.UserConfig(ctx, key)
+		return v
+	}
 	cmd := hostgit.Command(ctx, "config", "--get", key)
 	cmd.Dir = dir
 	out, err := cmd.Output()

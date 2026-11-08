@@ -14,6 +14,8 @@ import (
 	"github.com/devvmhq/devvm/internal/backend"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/safefile"
+	"github.com/devvmhq/devvm/internal/state"
 )
 
 // On a Linux host, a start with pins (backend.Confinement.Pins: .git's
@@ -31,9 +33,14 @@ import (
 // which watches each pinned path's folder, pins it again, and records
 // that in the pins' events file, which .git protection reports.
 
-// PinsEnv names the variable holding what QEMU's namespace pins
-// (encodePins); unset or empty, QEMU runs in devvm's.
+// PinsEnv names the variable holding the file that says what QEMU's
+// namespace pins (backend.Pins.File, written by encodePins); unset or
+// empty, QEMU runs in devvm's.
 const PinsEnv = "DEVVM_QEMU_PINS"
+
+// maxPinsFile bounds the pins file decodePins reads: 100 nested repos'
+// pins take a few hundred KiB at most.
+const maxPinsFile = 8 << 20
 
 // NetEnv names the variable that says how QEMU's network is restricted:
 // open for a VM on Lima's own network, whose arguments QEMU gets as Lima
@@ -109,21 +116,36 @@ func (s pinSet) pins() []platform.Pin {
 	return out
 }
 
-// encodePins is p as PinsEnv holds it, checked first.
+// encodePins writes p, checked first, to its file (p.File), private, and
+// returns the file, as PinsEnv holds it.
 func encodePins(p backend.Pins) (string, error) {
 	s := pinsOf(p)
 	if err := s.check(); err != nil {
 		return "", err
 	}
+	if !filepath.IsAbs(p.File) {
+		return "", msg.QEMUPinsInvalid(p.File)
+	}
 	b, err := json.Marshal(s)
-	return string(b), err
+	if err != nil {
+		return "", err
+	}
+	return p.File, state.WriteFileMode(p.File, b, 0o600)
 }
 
-// decodePins reads what encodePins wrote, checking it again.
+// decodePins reads what encodePins wrote to the file v, a regular file
+// read through no symlink, checking it again.
 func decodePins(v string) (pinSet, error) {
+	if !filepath.IsAbs(v) {
+		return pinSet{}, msg.QEMUPinsInvalid(PinsEnv)
+	}
+	b, err := safefile.Read(v, maxPinsFile, safefile.Opts{})
+	if err != nil {
+		return pinSet{}, msg.QEMUPinsInvalid(v).Because(err)
+	}
 	var s pinSet
-	if err := json.Unmarshal([]byte(v), &s); err != nil {
-		return pinSet{}, msg.QEMUPinsInvalid(PinsEnv).Because(err)
+	if err := json.Unmarshal(b, &s); err != nil {
+		return pinSet{}, msg.QEMUPinsInvalid(v).Because(err)
 	}
 	return s, s.check()
 }

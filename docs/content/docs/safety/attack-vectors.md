@@ -93,6 +93,7 @@ The attacks in this section run the attacker's code, and devvm doesn't stop that
 
 - **Submodules with their own config.** The VM writes `.git/index` to commit, so it can add a submodule whose config sets `core.fsmonitor`. Host `git status` reads that config before devvm's next launch finds the submodule and locks it. [`devvm git-protect strict`](git-protection.md#strict) stops `git status` and `git diff` from looking inside submodules, but `git submodule` commands still enter them, so use `--clone` for a repo with submodules you don't trust.
 - **Replacing `.git`.** The VM can rename `.git` and put a new one in its place, or add a `commondir` that points git at another config. devvm reports these on each launch but doesn't prevent them, so check what it names before you run git in the folder ([what a lock can't stop](../internals/git-protection.md#what-a-lock-cant-stop)).
+- **Nested repos.** devvm protects the git repos nested in the folder, but the VM can clone a new one while it runs, or move a protected one aside and put another in its place, and git on this machine runs its config before devvm's next check names it. devvm also doesn't protect a nested repo deeper than four folders, in a folder such as `node_modules`, or past the first 100, which it counts and names ([nested repos](git-protection.md#nested-repos)).
 
 ### Network
 

@@ -137,7 +137,7 @@ cmp stdout assets.want
 cmp gh/notes notes.want
 cmp tap/Formula/devvm.rb repo/dist/devvm.rb
 cmp tap/Formula/devvm-rc.rb repo/dist/devvm-rc.rb
-exec git -C tap.git log -1 --format=%s main
+exec git --git-dir=tap.git log -1 --format=%s main
 stdout '^devvm 1\.2\.3$'
 
 # And once more: everything's done, so it asks nothing.
@@ -178,9 +178,9 @@ stdout '^Check it with Homebrew, brew update && brew upgrade devvm-rc \(or brew 
 cmp calls calls.pre
 exists gh/prerelease
 cmp gh/notes notes.pre
-exec git -C tap.git log -1 --format=%s main
+exec git --git-dir=tap.git log -1 --format=%s main
 stdout '^devvm-rc 1\.3\.0-rc\.1$'
-exec git -C tap.git show --name-only --format= main
+exec git --git-dir=tap.git show --name-only --format= main
 cmp stdout rc.changed
 cmp tap/Formula/devvm-rc.rb repo/dist/devvm-rc.rb
 grep 'download/v1\.2\.3/' tap/Formula/devvm.rb
@@ -209,7 +209,7 @@ rm calls
 ttyin -stdin yes.txt
 exec repo/scripts/publish.sh
 stdout '^==> the tap''s Formula/devvm\.rb$'
-exec git -C tap.git show --name-only --format= main
+exec git --git-dir=tap.git show --name-only --format= main
 stdout '^Formula/devvm\.rb\n\z'
 grep 'download/v1\.3\.0-rc\.1/' tap/Formula/devvm-rc.rb
 
@@ -239,9 +239,9 @@ stdout '^\+      url "https://github.com/devvmhq/devvm/releases/download/v1\.3\.
 rm calls
 ttyin -stdin yes.txt
 exec repo/scripts/publish.sh
-exec git -C tap.git log -1 --format=%s main
+exec git --git-dir=tap.git log -1 --format=%s main
 stdout '^devvm 1\.3\.0$'
-exec git -C tap.git show --name-only --format= main
+exec git --git-dir=tap.git show --name-only --format= main
 cmp stdout both.changed
 cmp tap/Formula/devvm.rb repo/dist/devvm.rb
 cmp tap/Formula/devvm-rc.rb repo/dist/devvm-rc.rb
@@ -329,10 +329,10 @@ bash tag.sh good "v$1"
 -- refs.sh --
 # What origin and the tap hold: main's commit message, the tag, the tap's
 # last commit, and whether it has the formula.
-git -C origin.git log -1 --format=%s main
-git -C origin.git tag -l
-git -C tap.git log -1 --format=%s main
-f=$(git -C tap.git ls-tree --name-only main Formula/ | paste -sd' ' -)
+git --git-dir=origin.git log -1 --format=%s main
+git --git-dir=origin.git tag -l
+git --git-dir=tap.git log -1 --format=%s main
+f=$(git --git-dir=tap.git ls-tree --name-only main Formula/ | paste -sd' ' -)
 echo "formulas: ${f:-none}"
 -- refs.before --
 r

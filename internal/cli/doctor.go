@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/hostsafety"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/netpolicy"
 	"github.com/devvmhq/devvm/internal/paths"
@@ -45,10 +46,11 @@ func newDoctorCmd(a *app) *cobra.Command {
 				return failed(err, msg.DoctorFailed)
 			}
 			d := doctor{
-				Path: onPath{LookPath: exec.LookPath, Executable: os.Executable},
-				Free: reg.Host.FreeSpace,
-				Host: func() (vm.Host, error) { return vm.ThisHost(reg.Host) },
-				Dirs: a.dirs,
+				GitBare: func() bool { return hostsafety.BareExplicit(cmd.Context()) },
+				Path:    onPath{LookPath: exec.LookPath, Executable: os.Executable},
+				Free:    reg.Host.FreeSpace,
+				Host:    func() (vm.Host, error) { return vm.ThisHost(reg.Host) },
+				Dirs:    a.dirs,
 				Policies: func() []msg.M {
 					dirs, err := a.dirs()
 					if err != nil {
@@ -83,13 +85,16 @@ func newDoctorCmd(a *app) *cobra.Command {
 }
 
 // doctorOutput is devvm doctor --json: the backend new VMs get and what
-// it's missing, doctor's warnings, whether Docker is installed, and every
-// backend's features.
+// it's missing, doctor's warnings and tips, whether Docker is installed,
+// and every backend's features.
 type doctorOutput struct {
 	Backend  string        `json:"backend"`
 	Problems []problemJSON `json:"problems"`
 	Warnings []string      `json:"warnings"`
-	Docker   bool          `json:"docker"`
+	// Tips is doctor's advice, which isn't a problem: git's
+	// safe.bareRepository.
+	Tips   []string `json:"tips"`
+	Docker bool     `json:"docker"`
 	// Features is, for each backend, how it has each feature: native,
 	// emulated, unreviewed or none.
 	Features map[string]map[string]string `json:"features"`
@@ -118,7 +123,7 @@ type problemJSON struct {
 func (d doctor) report(ctx context.Context, text func(msg.M) string, all []backend.Backend, b backend.Backend) doctorOutput {
 	out := doctorOutput{
 		Backend:  b.Name(),
-		Problems: []problemJSON{}, Warnings: []string{}, Features: map[string]map[string]string{},
+		Problems: []problemJSON{}, Warnings: []string{}, Tips: []string{}, Features: map[string]map[string]string{},
 	}
 	for _, p := range b.Problems(ctx) {
 		j := problemJSON{Key: p.Key, Message: text(p.Msg)}
@@ -129,6 +134,9 @@ func (d doctor) report(ctx context.Context, text func(msg.M) string, all []backe
 	}
 	for _, m := range d.warnings(b) {
 		out.Warnings = append(out.Warnings, text(m))
+	}
+	for _, m := range d.tips() {
+		out.Tips = append(out.Tips, text(m))
 	}
 	_, err := exec.LookPath("docker")
 	out.Docker = err == nil
@@ -169,6 +177,16 @@ func (d doctor) warnings(b backend.Backend) []msg.M {
 	return ms
 }
 
+// tips are doctor's advice, which it says rather than warns, as nothing
+// is wrong: git's safe.bareRepository, which hardens git on this machine
+// against a bare repo a VM makes.
+func (d doctor) tips() []msg.M {
+	if d.GitBare != nil && !d.GitBare() {
+		return []msg.M{msg.DoctorGitBare()}
+	}
+	return nil
+}
+
 // The host devvm recommends: base asks for 4 CPUs and 8 GiB.
 const (
 	recommendedCPUs      = 4
@@ -195,6 +213,9 @@ type doctor struct {
 	// Pins is the check of whether this Linux host locks .git, and why
 	// not.
 	Pins pinsCheck
+	// GitBare reports whether this machine's git takes a bare repo only
+	// when it's named (hostsafety.BareExplicit); nil checks nothing.
+	GitBare func() bool
 }
 
 // known is what the daily release check last found, if anything.
@@ -220,6 +241,9 @@ func (d doctor) run(ctx context.Context, u *ui.UI, b backend.Backend) error {
 		u.Say(msg.DockerMissing())
 	}
 	sayProxyCA(u, d.Dirs)
+	for _, m := range d.tips() {
+		u.Say(m)
+	}
 	for _, m := range d.warnings(b) {
 		u.Warn(m)
 	}

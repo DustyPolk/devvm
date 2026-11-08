@@ -44,18 +44,34 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run()) //nolint:forbidigo // the test binary
 }
 
+// pinsFile writes data, a set of pins as encodePins writes them, to a
+// file of the test's own, and returns it, as PinsEnv holds it.
+func pinsFile(t *testing.T, data string) string {
+	t.Helper()
+	f := filepath.Join(t.TempDir(), "git-pins.json")
+	if err := os.WriteFile(f, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
 // Pins go folders first, so a folder's pin never hides one below it, and
-// what _qemu reads back is what was written, its events file included.
+// what _qemu reads back is what was written, private, its events file
+// included.
 func TestPinsOrder(t *testing.T) {
 	p := backend.Pins{
 		Root:     "/p",
 		Fixed:    []string{".git/modules/a", ".git", "sub/.git"},
 		ReadOnly: []string{".git/modules/a/config", ".git/config", ".git/hooks", "sub/.git/hooks"},
 		Events:   "/d/git-pins.jsonl",
+		File:     filepath.Join(t.TempDir(), "git-pins.json"),
 	}
 	v, err := encodePins(p)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if fi, err := os.Stat(v); err != nil || v != p.File || fi.Mode().Perm() != 0o600 {
+		t.Errorf("file %s: %v", v, err)
 	}
 	s, err := decodePins(v)
 	if err != nil {
@@ -92,12 +108,26 @@ func TestPinsRefused(t *testing.T) {
 		{Root: "/p", Fixed: []string{".."}},
 		{Root: "/p", ReadOnly: []string{".git/config"}, Events: "events"},
 		{Root: "/p"},
+		{Root: "/p", ReadOnly: []string{".git/config"}, File: "git-pins.json"},
 	} {
+		if p.File == "" {
+			p.File = filepath.Join(t.TempDir(), "git-pins.json")
+		}
 		if _, err := encodePins(p); !errors.As(err, new(msg.M)) {
 			t.Errorf("%+v: %v", p, err)
 		}
 	}
 	for _, v := range []string{"", "x", `{"root":"/p","pins":[{"path":"../x"}]}`, `{"root":"/p","pins":[]}`} {
+		if _, err := decodePins(pinsFile(t, v)); err == nil {
+			t.Errorf("%q read", v)
+		}
+	}
+	// A file that isn't absolute, isn't there, or is a symlink.
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(pinsFile(t, `{"root":"/p","pins":[{"path":".git"}]}`), link); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []string{"", "git-pins.json", "/no/git-pins.json", link} {
 		if _, err := decodePins(v); err == nil {
 			t.Errorf("%q read", v)
 		}
@@ -107,7 +137,7 @@ func TestPinsRefused(t *testing.T) {
 // Without pins it can read, or off Linux, nothing pins and QEMU doesn't
 // start: _qemu exec and pinned refuse, and so does the probe.
 func TestPinsRefuseToStart(t *testing.T) {
-	t.Setenv(PinsEnv, `{"root":"/p","pins":[{"path":"../x"}]}`)
+	t.Setenv(PinsEnv, pinsFile(t, `{"root":"/p","pins":[{"path":"../x"}]}`))
 	var m msg.M
 	if err := runPinned("/no/devvm", "/no/qemu", nil); !errors.As(err, &m) || m.ID() != "qemu_pins_invalid" {
 		t.Errorf("exec: %v", err)
@@ -124,7 +154,7 @@ func TestPinsRefuseToStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, root := range []string{filepath.Join(dir, "gone"), filepath.Join(dir, "link")} {
-		v, err := encodePins(backend.Pins{Root: root, ReadOnly: []string{".git/config"}})
+		v, err := encodePins(backend.Pins{Root: root, ReadOnly: []string{".git/config"}, File: filepath.Join(t.TempDir(), "git-pins.json")})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +164,7 @@ func TestPinsRefuseToStart(t *testing.T) {
 		}
 	}
 	// An events file it can't write: what changes would go unrecorded.
-	v, err := encodePins(backend.Pins{Root: dir, ReadOnly: []string{".git/config"}, Events: filepath.Join(dir, "gone", "git-pins.jsonl")})
+	v, err := encodePins(backend.Pins{Root: dir, ReadOnly: []string{".git/config"}, Events: filepath.Join(dir, "gone", "git-pins.jsonl"), File: filepath.Join(t.TempDir(), "git-pins.json")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +179,7 @@ func TestPinsRefuseToStart(t *testing.T) {
 		if err := probePins("/no/devvm"); !errors.Is(err, errors.ErrUnsupported) {
 			t.Errorf("probe off Linux: %v", err)
 		}
-		t.Setenv(PinsEnv, `{"root":"/p","pins":[{"path":".git"}]}`)
+		t.Setenv(PinsEnv, pinsFile(t, `{"root":"/p","pins":[{"path":".git"}]}`))
 		if err := runPinned("/no/devvm", "/no/qemu", nil); err == nil {
 			t.Error("a namespace off Linux")
 		}
@@ -248,7 +278,7 @@ func pinnedProject(t *testing.T) (dir, events string) {
 		}
 	}
 	events = filepath.Join(t.TempDir(), "git-pins.jsonl")
-	v, err := encodePins(backend.Pins{Root: dir, Fixed: []string{".git"}, ReadOnly: []string{".git/config", ".git/hooks"}, Events: events})
+	v, err := encodePins(backend.Pins{Root: dir, Fixed: []string{".git"}, ReadOnly: []string{".git/config", ".git/hooks"}, Events: events, File: filepath.Join(t.TempDir(), "git-pins.json")})
 	if err != nil {
 		t.Fatal(err)
 	}

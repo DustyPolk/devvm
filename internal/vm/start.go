@@ -411,13 +411,19 @@ func (s starter) refuse(b backend.Backend, vm string, fs []backend.Feature) erro
 // without locks, what changed of what a lock would cover), and once it's
 // stopped, what its pins recorded first (gitprotect's ReportPinEvents);
 // then the protection chosen while it ran is set, and its set-id files
-// are named (not while it runs: the walk is slow). devvm stop does the
-// latter too.
+// are named. Both a new VM's checks and a stopped one's go by one walk of
+// the folder (walk), which finds its nested repos too (not while it runs:
+// the walk is slow). devvm stop does the latter too.
 func (s starter) hostChecks(ctx context.Context, t *target, running, made bool) error {
 	if isClone(t.st) {
 		return nil
 	}
 	p := s.Protector(t.f.Dir)
+	var found hostsafety.Found
+	if made || !running {
+		found = s.walk(t.f.Dir, s.OS == "linux")
+		p.Nested = &found.Repos
+	}
 	if made {
 		if err := p.NewVM(ctx, t.st); err != nil {
 			return err
@@ -426,13 +432,13 @@ func (s starter) hostChecks(ctx context.Context, t *target, running, made bool) 
 			s.Warn(msg.SSHRemoteHint(t.f.Name))
 		}
 		// Files an earlier VM of this folder made are named too.
-		s.checkSetID(t.f.Dir)
+		s.warnSetID(found.SetID)
 		return nil
 	}
 	if !running {
 		// What the VM's runs recorded of its pins, now it's stopped, named
 		// even when the check that follows refuses.
-		p.ReportPinEvents(s.Dirs.VM(t.f.Name).GitPins(), t.f.Name)
+		p.ReportPinEvents(s.Dirs.VM(t.f.Name).GitPins(".jsonl"), t.f.Name)
 	}
 	if err := p.Check(ctx, t.st, running); err != nil {
 		return err
@@ -445,19 +451,22 @@ func (s starter) hostChecks(ctx context.Context, t *target, running, made bool) 
 			return err
 		}
 	}
-	s.checkSetID(t.f.Dir)
+	s.warnSetID(found.SetID)
 	return nil
 }
 
-// checkSetID names set-id files in the folder on Linux hosts, where they
-// reach the host (macOS's virtiofs drops the bits): those running as root
-// apart.
-func (s starter) checkSetID(dir string) {
-	if s.OS != "linux" {
-		return
-	}
+// walk walks the VM's project folder dir once (hostsafety.Walk), for the
+// git repos nested in it, and with setID, its set-id files: on Linux
+// hosts, where their bits reach the host (macOS's virtiofs drops them).
+func (s starter) walk(dir string, setID bool) hostsafety.Found {
+	return hostsafety.Walk(dir, setID)
+}
+
+// warnSetID names the set-id files the walk found in the folder, those
+// running as root apart.
+func (s starter) warnSetID(files []hostsafety.SetIDFile) {
 	var root, other []string
-	for _, f := range hostsafety.SetIDFiles(dir) {
+	for _, f := range files {
 		if f.Root {
 			root = append(root, f.Path)
 		} else {
@@ -596,7 +605,8 @@ func (s starter) pins(ctx context.Context, t *target) (backend.Pins, error) {
 	if err != nil {
 		return backend.Pins{}, err
 	}
-	p := backend.Pins{Root: t.f.Dir, Fixed: fixed, ReadOnly: readOnly, Events: s.Dirs.VM(t.f.Name).GitPins()}
+	v := s.Dirs.VM(t.f.Name)
+	p := backend.Pins{Root: t.f.Dir, Fixed: fixed, ReadOnly: readOnly, Events: v.GitPins(".jsonl"), File: v.GitPins(".json")}
 	if _, err := os.Lstat(filepath.Join(t.f.Dir, ".git")); err == nil && len(readOnly) == 0 {
 		s.Warn(msg.GitPinsNone(t.f.Name))
 	}

@@ -22,11 +22,14 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/devvmhq/devvm/internal/hostgit"
+	"github.com/devvmhq/devvm/internal/hostsafety"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/state"
@@ -48,13 +51,48 @@ type InVM struct {
 	Next    string  `json:"next,omitempty"` // the mode chosen while the VM ran, set when it's next stopped
 	Made    Made    `json:"made,omitzero"`
 	Watched Watched `json:"watched,omitzero"`
+	// Nested is the git repos nested in the folder that the last walk
+	// found (Protector.Nested) and the protection doesn't cover
+	// (uncovered), relative to the folder, and NestedMore how many more
+	// the walk counted past its bound: launches name them, as the VM can
+	// change their .git.
+	Nested     []string `json:"nested,omitempty"`
+	NestedMore int      `json:"nested_more,omitempty"`
+	NestedPast []string `json:"nested_past,omitempty"` // the first of those NestedMore counts
+	// Bare, Skipped and Devices are what else the last walk found
+	// (hostsafety.Repos), which checks name when it's new.
+	Bare    []string `json:"bare,omitempty"`
+	Skipped int      `json:"skipped,omitempty"`
+	Devices int      `json:"devices,omitempty"`
+	// NestedNoticed is set once a VM whose protection doesn't cover its
+	// nested repos (Made.Nested unset) was told it can (git_nested_protectable).
+	NestedNoticed bool `json:"nested_noticed,omitempty"`
 }
 
-// Made is what protecting a VM's .git found, and checks compare with.
+// Made is what protecting a VM's .git found, and checks compare with:
+// of the folder's own repo, and of each repo nested in it that it
+// protects.
 type Made struct {
 	// Protected is set once its protection was set up as a new VM's
 	// (NewVM) or turned on: until then, there's nothing to compare with.
 	Protected bool `json:"protected,omitempty"`
+	Repo           // the folder's own repo's, as its fields
+	// Nested is set once the repos nested in the folder are protected
+	// too: by a new VM, devvm git-protect on or strict, or the watch. A
+	// VM an older devvm made protects only its own until then.
+	Nested bool `json:"nested,omitempty"`
+	// Repos is each nested repo's, by its top folder relative to the
+	// project folder. A repo without one is scanned the first time, which
+	// records it without reporting.
+	Repos map[string]Repo `json:"repos,omitempty"`
+	// Left is the nested repos it stopped protecting, as they're gone or
+	// another repo's protection covers them, whose locks may still be on:
+	// Unlock takes them off too, and names those not in the folder.
+	Left map[string]Repo `json:"left,omitempty"`
+}
+
+// Repo is what protecting one repo's .git found.
+type Repo struct {
 	// GitID is .git's identity (platform.FolderID) when it was last
 	// locked.
 	GitID string `json:"git_id,omitempty"`
@@ -104,13 +142,28 @@ type Protector struct {
 	Locker Locker
 	// Reporter is where it warns.
 	msg.Reporter
+	// Nested is the git repos nested in the folder, as the walk of a
+	// stopped VM's folder found them (hostsafety.Walk), which the caller
+	// sets; nil when it didn't walk, as for a running VM, whose recorded
+	// repos are protected.
+	Nested *hostsafety.Repos
+	// Kept says, for the VM vm, whether another VM keeps a path locked
+	// too, as its own protection covers it (Keeps), or may (its state
+	// can't be read): the warning that names it (git_kept_locked,
+	// git_kept_unread), or a zero msg.M for none. Unlock and strict leave
+	// such a path locked. nil keeps none.
+	Kept func(vm string) func(path string) msg.M
+	// Serial runs f holding the host's lock of .git protection
+	// (paths.Dirs.GitLock), so one VM's unlock never runs between
+	// another's locks and their record; nil runs f alone.
+	Serial func(ctx context.Context, f func() error) error
 }
 
 // New returns the protector for the project folder dir, ~ in git's paths
 // being home (paths.Dirs.Home), locking with l (HostLocker), warning
 // through r.
 func New(dir, home string, l Locker, r msg.Reporter) *Protector {
-	return &Protector{tree: tree{Dir: dir, Home: home}, Locker: l, Reporter: r}
+	return &Protector{tree: tree{Dir: dir, Root: dir, Home: home}, Locker: l, Reporter: r}
 }
 
 // NewSection is the protection a new VM gets, recorded before its
@@ -149,17 +202,35 @@ func (p *Protector) NewVM(ctx context.Context, vm *state.VM) error {
 // the locker leaves a window the guest could use (Locker.Watches), sums
 // what a lock covers once the VM is stopped, naming what changed since
 // was, as a host without locks does (watcher.watch). A zero was records
-// the sums without naming anything: .git as it is now, as trusted.
+// the sums without naming anything: .git as it is now, as trusted. The
+// repos nested in the folder are protected too once the VM's protection
+// covers them (Made.Nested), which a new VM's and devvm git-protect's
+// does.
 func (p *Protector) lockAndWatch(ctx context.Context, vm *state.VM, g InVM, w why, h how, was Watched, set func(*InVM)) error {
-	snap := p.scan(ctx)
-	made := p.protect(ctx, snap, g, w, h)
-	if err := record(ctx, vm, func(g *InVM) { set(g); g.Made = made }); err != nil {
+	// A running VM's check is the folder's own repo's alone: it locks
+	// nothing, so its nested repos wait for the next stopped one, which a
+	// launch into a running VM never pays for.
+	nested := g.Made.Nested || w != whyCheck
+	c := p.repos(g.Made, nested && h != later, p.Nested)
+	var snaps []snapshot
+	var made Made
+	// The locks and their record, under the host's lock: another VM's
+	// unlock goes by the record.
+	err := serial(ctx, p.Serial, func() error {
+		snaps = scanAll(ctx, c.trees)
+		made = p.protect(ctx, vm.Name(), snaps, g, w, h, c)
+		return record(ctx, vm, func(g *InVM) { set(g); g.Made = made })
+	})
+	if err != nil {
+		return err
+	}
+	if err := p.nested(ctx, vm, snaps, w); err != nil {
 		return err
 	}
 	if h != lockNow || !p.Locker.Watches() {
 		return nil
 	}
-	return watcher{p}.watch(ctx, vm, snap, was)
+	return watcher{p}.watch(ctx, vm, snaps, was, unwatched(g.Made, made, c.gone))
 }
 
 // Modes of .git protection, as devvm git-protect takes them. Strict is on,
@@ -190,10 +261,11 @@ func SetNext(ctx context.Context, vm *state.VM, mode string) error {
 }
 
 // Set changes the protection of a stopped VM: on and strict lock .git as
-// it is now, as trusted, and report what a lock can't cover; strict also
-// sets diff.ignoreSubmodules=all in the locked .git/config, which on and
-// off take out again; off unlocks. On and strict need a host that locks.
-// Once it's set, a mode saved for the VM's next stop (SetNext) is
+// it is now, as trusted, the repos nested in the folder's included, and
+// report what a lock can't cover; strict also sets
+// diff.ignoreSubmodules=all in each repo's locked .git/config, which on
+// and off take out again; off unlocks. On and strict need a host that
+// locks. Once it's set, a mode saved for the VM's next stop (SetNext) is
 // dropped: both are recorded at once, with the mode as the user's choice
 // (Chosen).
 func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
@@ -205,21 +277,17 @@ func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
 	if mode == Off {
 		p.Unlock(ctx, vm)
 		if was == Strict {
-			if err := p.ignoreSubmodules(ctx, false); err != nil {
+			if err := p.strict(ctx, vm.Name(), p.recorded(g.Made), false); err != nil {
 				return err
 			}
 		}
-		return record(ctx, vm, func(g *InVM) { g.Mode, g.Chosen, g.Next = Off, true, "" })
+		return record(ctx, vm, func(g *InVM) { g.Mode, g.Chosen, g.Next, g.Made.Left = Off, true, "", nil })
 	}
 	if !p.Locker.Locks() {
 		return msg.GitProtectOnNeedsLocks()
 	}
 	if mode == Strict || was == Strict {
-		if err := p.ignoreSubmodules(ctx, mode == Strict); err != nil {
-			// Locked as it was.
-			if cfg := filepath.Join(p.git(), "config"); was != Off && isFile(cfg) && p.realInDir(cfg) {
-				p.flag(ctx, true, cfg)
-			}
+		if err := p.strict(ctx, vm.Name(), p.repos(g.Made, true, p.Nested).trees, mode == Strict); err != nil {
 			return err
 		}
 	}
@@ -227,12 +295,50 @@ func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
 	return p.lockAndWatch(ctx, vm, g, whyOn, lockNow, Watched{}, func(g *InVM) { g.Mode, g.Chosen, g.Next = mode, true, "" })
 }
 
-// ignoreSubmodules sets diff.ignoreSubmodules=all in .git/config, or takes
-// it out, unlocking the file for the moment (protect locks it again).
-func (p *Protector) ignoreSubmodules(ctx context.Context, on bool) error {
-	cfg := filepath.Join(p.git(), "config")
+// strict sets diff.ignoreSubmodules=all in the .git/config of each of
+// trees that has a .git folder, or takes it out (ignoreSubmodules), for
+// the VM vm: never in a config another VM's protection keeps locked too
+// (Kept), which unlocking would leave that VM's to race, and which it
+// names. When setting one fails, the configs it unlocked that were locked
+// are locked again.
+func (p *Protector) strict(ctx context.Context, vm string, trees []tree, on bool) error {
+	kept := keeper(p.Kept, vm)
+	keepers := map[string]msg.M{}
+	var relock []string
+	for _, t := range trees {
+		cfg := filepath.Join(t.git(), "config")
+		if t.Root != p.Dir && (!isDir(t.git()) || isLink(t.git())) {
+			continue
+		}
+		if k := kept(cfg); k.ID() != "" {
+			keepers[k.String()] = k
+			continue
+		}
+		if p.Locker.Locked(cfg) {
+			relock = append(relock, cfg)
+		}
+		if err := p.ignoreSubmodules(ctx, t, on); err != nil {
+			for _, c := range relock {
+				if isFile(c) && p.realInDir(c) {
+					p.flag(ctx, true, c)
+				}
+			}
+			return err
+		}
+	}
+	for _, k := range slices.Sorted(maps.Keys(keepers)) {
+		p.Warn(keepers[k])
+	}
+	return nil
+}
+
+// ignoreSubmodules sets diff.ignoreSubmodules=all in t's .git/config, or
+// takes it out, unlocking the file for the moment (protect locks it
+// again).
+func (p *Protector) ignoreSubmodules(ctx context.Context, t tree, on bool) error {
+	cfg := filepath.Join(t.git(), "config")
 	if !isFile(cfg) || !p.realInDir(cfg) {
-		if on && exists(p.git()) {
+		if on && exists(t.git()) {
 			return msg.GitConfigFailed(cfg)
 		}
 		return nil
@@ -293,30 +399,85 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 }
 
 // Unlock takes the locks off, for a VM that's being deleted or turned
-// off: what's to lock now, and the hooks and config of every git dir its
-// state records locking (vm; nil for none), which the VM may since have
-// dropped from its index. Like locking, it never acts through a symlink.
+// off: of the folder's own repo and of each nested repo its state records
+// protecting (vm; nil for none), what's to lock now, and the hooks and
+// config of every git dir its state records locking, which the VM may
+// since have dropped from its index. A path another VM's protection
+// keeps locked too (Kept) stays locked, and that VM is named. Like
+// locking, it never acts through a symlink.
 func (p *Protector) Unlock(ctx context.Context, vm *state.VM) {
 	if !p.Locker.Locks() {
 		return
 	}
-	todo := p.scan(ctx).paths
+	var g InVM
+	name := ""
 	if vm != nil {
-		g, _ := Of(vm)
-		for _, d := range p.abs(g.Made.GitDirs) {
+		g, _ = Of(vm)
+		name = vm.Name()
+	}
+	_ = serial(ctx, p.Serial, func() error {
+		p.unlock(ctx, name, g.Made)
+		return nil
+	})
+}
+
+// unlock is Unlock's, under the host's lock: of the repos made records,
+// those it protects and those it stopped protecting but may have left
+// locked (Made.Left), the git dirs it recorded locking too. Those of the
+// latter that aren't in the folder any more are named.
+func (p *Protector) unlock(ctx context.Context, vm string, made Made) {
+	trees := p.recorded(made)
+	repos := append([]Repo{made.Repo}, slices.Collect(maps.Values(made.Repos))...)
+	var lost []string
+	for _, rel := range slices.Sorted(maps.Keys(made.Left)) {
+		repos = append(repos, made.Left[rel])
+		if r := p.repoAt(rel); filepath.IsLocal(rel) && exists(r.Root) {
+			trees = append(trees, r)
+		} else {
+			lost = append(lost, rel)
+		}
+	}
+	var todo []string
+	for _, s := range scanAll(ctx, trees) {
+		todo = append(todo, s.paths...)
+	}
+	for _, r := range repos {
+		for _, d := range p.abs(r.GitDirs) {
 			todo = append(todo, filepath.Join(d, "hooks"), filepath.Join(d, "config"))
 		}
 	}
+	kept := keeper(p.Kept, vm)
+	keepers := map[string]msg.M{}
 	done := map[string]bool{}
 	for _, path := range todo {
 		if done[path] {
 			continue
 		}
 		done[path] = true
+		if k := kept(path); k.ID() != "" {
+			keepers[k.String()] = k
+			continue
+		}
 		if _, err := os.Lstat(path); err == nil && p.realInDir(path) {
 			p.flag(ctx, false, path)
 		}
 	}
+	for _, k := range slices.Sorted(maps.Keys(keepers)) {
+		p.Warn(keepers[k])
+	}
+	if _, flags := p.Locker.(Flags); flags && len(lost) > 0 {
+		l, _ := listed(lost)
+		p.Warn(msg.GitLocksLeft(l))
+	}
+}
+
+// serial runs f under the host's lock of .git protection, with s
+// (Protector.Serial), or alone when it's nil.
+func serial(ctx context.Context, s func(context.Context, func() error) error, f func() error) error {
+	if s == nil {
+		return f()
+	}
+	return s(ctx, f)
 }
 
 // lock locks the paths to protect (s.paths), which only happens while
@@ -339,8 +500,12 @@ func (p *Protector) lock(ctx context.Context, s snapshot) {
 				_ = os.Mkdir(path, 0o700)
 			}
 		}
-		if _, err := os.Lstat(path); err == nil {
+		switch _, err := os.Lstat(path); {
+		case err == nil:
 			p.flag(ctx, true, path)
+		case !errors.Is(err, fs.ErrNotExist):
+			// One the VM made unreadable can't be locked, nor known gone.
+			p.Warn(msg.GitNotLocked(path))
 		}
 	}
 }

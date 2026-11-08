@@ -204,6 +204,10 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	if err := os.WriteFile(filepath.Join(root, "data", "devvm", "settings.json"), []byte(`{"features": []}`+"\n"), 0o600); err != nil {
 		return err
 	}
+	// git takes a bare repo only when it's named, as devvm doctor asks.
+	if err := os.WriteFile(filepath.Join(root, "home", ".gitconfig"), []byte("[safe]\n\tbareRepository = explicit\n"), 0o600); err != nil {
+		return err
+	}
 	// Ubuntu's cloud images: a dated release in a folder, as Ubuntu
 	// published and signed it (internal/ubuntu's fixture), never the
 	// network.

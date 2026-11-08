@@ -47,26 +47,33 @@ type Watched struct {
 const (
 	maxWatchEntries = 1000     // entries of one hooks folder
 	maxWatchBytes   = 16 << 20 // bytes of one file
-	maxWatchTotal   = 2000     // sums of one watch
+	maxWatchTotal   = 2000     // sums of the folder's own repo
+	maxWatchNested  = 200      // sums of each repo nested in it
 	maxListed       = 10       // paths one warning names
 )
 
 // WarnUnprotected warns, at each launch of the VM vm on a host without
 // locks, that it can change the hooks and config of the folder's .git,
-// which git on this machine runs: unless the folder has no .git, or the
-// user chose off (Chosen), which says they know. On a Linux host that
-// locks now (Binds), a VM left off because the host couldn't lock when it
-// was made, or by a devvm that didn't record the choice, is told it can
-// be.
+// which git on this machine runs, and names the repos nested in the
+// folder that the last walk found (InVM.Nested): unless the folder has
+// neither, or the user chose off (Chosen), which says they know. On a
+// Linux host that locks now (Binds), a VM left off because the host
+// couldn't lock when it was made, or by a devvm that didn't record the
+// choice, is told it can be.
 func (p *Protector) WarnUnprotected(vm *state.VM) {
 	g, _ := Of(vm)
-	if g.Mode == Clone || g.Mode == Off && g.Chosen || !exists(p.git()) {
+	repos := exists(p.git()) || len(g.Made.Repos) > 0
+	if g.Mode == Clone || g.Mode == Off && g.Chosen || !repos && len(g.Nested) == 0 {
 		return
 	}
 	_, binds := p.Locker.(Binds)
 	switch {
 	case !p.Locker.Locks():
-		p.Warn(msg.GitUnprotected(vm.Name()))
+		if repos {
+			p.Warn(msg.GitUnprotected(vm.Name()))
+		}
+		p.warnNested(g.Nested, unprotected(vm.Name()))
+		p.warnPast(vm.Name(), g.NestedMore, g.NestedPast)
 	case binds && g.Mode == Off:
 		p.Warn(msg.GitProtectAvailable(vm.Name()))
 	}
@@ -84,22 +91,37 @@ func (w watcher) check(ctx context.Context, vm *state.VM, g InVM) error {
 	if !g.Made.Protected {
 		why = whyNew
 	}
-	snap := w.scan(ctx)
-	made := w.protect(ctx, snap, g, why, watching)
+	// Watching changes nothing in the folder, so its nested repos are
+	// watched from the first check: each is recorded without naming.
+	c := w.repos(g.Made, true, w.Nested)
+	snaps := scanAll(ctx, c.trees)
+	made := w.protect(ctx, vm.Name(), snaps, g, why, watching, c)
+	made.Nested = true
 	if err := record(ctx, vm, func(g *InVM) { g.Made = made }); err != nil {
 		return err
 	}
-	return w.watch(ctx, vm, snap, g.Watched)
+	if err := w.nested(ctx, vm, snaps, why); err != nil {
+		return err
+	}
+	return w.watch(ctx, vm, snaps, g.Watched, unwatched(g.Made, made, c.gone))
 }
 
-// watch sums what a lock would cover, names what changed since the last
-// check, once there was one, and what it can't fully watch, at every
-// check, and records the sums.
-func (w watcher) watch(ctx context.Context, vm *state.VM, snap snapshot, was Watched) error {
-	s := w.sums(snap)
+// watch sums what a lock would cover in each repo snaps scanned, names
+// what changed since the last check, once there was one, but in the
+// nested repos skip (scanned for the first time, or gone), and what it
+// can't fully watch, at every check, and records the sums.
+func (w watcher) watch(ctx context.Context, vm *state.VM, snaps []snapshot, was Watched, skip []string) error {
+	s := w.sums(snaps)
 	now := Watched{Scanned: true, Sums: s.sums}
 	if was.Scanned {
-		if changed := changedPaths(was.Sums, now.Sums); len(changed) > 0 {
+		roots := slices.Clone(skip)
+		for _, s := range snaps {
+			roots = append(roots, relTo(w.Dir, s.tree.Root))
+		}
+		changed := slices.DeleteFunc(changedPaths(was.Sums, now.Sums), func(path string) bool {
+			return slices.Contains(skip, repoOf(path, roots))
+		})
+		if len(changed) > 0 {
 			l, more := listed(changed)
 			if more == 0 {
 				w.Warn(msg.GitChanged(l, vm.Name()))
@@ -116,6 +138,18 @@ func (w watcher) watch(ctx context.Context, vm *state.VM, snap snapshot, was Wat
 		}
 	}
 	return record(ctx, vm, func(g *InVM) { g.Watched = now })
+}
+
+// repoOf is the deepest of roots, repos' top folders relative to the
+// project folder, that path, relative to it too, is in; "" for none.
+func repoOf(path string, roots []string) string {
+	best := ""
+	for _, r := range roots {
+		if strings.HasPrefix(path, r+"/") && len(r) > len(best) {
+			best = r
+		}
+	}
+	return best
 }
 
 // listed is paths as a warning names them: at most maxListed, joined, and
@@ -145,13 +179,32 @@ func changedPaths(was, now map[string]string) []string {
 	return out
 }
 
-// sums sums each path a lock would cover (paths), each file in its hooks
-// folders, .git/commondir, there or not, and what the config hands over
-// to the project folder (watchedDelegations), by path relative to the
-// project folder. It never reads through a symlink that leads out of the
+// sums sums, in each repo snaps scanned, each path a lock would cover
+// (paths), each file in its hooks folders, .git/commondir, there or not,
+// and what the config hands over to the project folder
+// (watchedDelegations), by path relative to the project folder, at most
+// maxWatchTotal for the folder's own repo and maxWatchNested for each
+// nested one. It never reads through a symlink that leads out of the
 // project folder.
-func (w watcher) sums(snap snapshot) summer {
-	s := summer{top: w.Dir, real: w.realInDir, sums: map[string]string{}}
+func (w watcher) sums(snaps []snapshot) summer {
+	all := summer{sums: map[string]string{}}
+	for _, snap := range snaps {
+		s := w.repoSums(snap)
+		maps.Copy(all.sums, s.sums)
+		all.blind = append(all.blind, s.blind...)
+	}
+	slices.Sort(all.blind)
+	all.blind = slices.Compact(all.blind)
+	return all
+}
+
+// repoSums is sums of one repo.
+func (w watcher) repoSums(snap snapshot) summer {
+	bound := maxWatchNested
+	if snap.tree.Root == w.Dir {
+		bound = maxWatchTotal
+	}
+	s := summer{top: w.Dir, real: w.realInDir, max: bound, sums: map[string]string{}}
 	todo := slices.Clone(snap.paths)
 	if !isFile(snap.git) {
 		todo = append(todo, filepath.Join(snap.git, "commondir"))
@@ -183,7 +236,7 @@ func (w watcher) watchedDelegations(snap snapshot) []string {
 	if hp := snap.hooksPath; hp != "" {
 		hp = expandHome(w.Home, hp)
 		if !filepath.IsAbs(hp) {
-			hp = filepath.Join(w.Dir, hp)
+			hp = filepath.Join(snap.tree.Root, hp)
 		}
 		out = append(out, filepath.Clean(hp))
 	}
@@ -192,10 +245,11 @@ func (w watcher) watchedDelegations(snap snapshot) []string {
 
 // summer sums a watch's paths, bounded, and keeps those it can't watch
 // fully (blind): a symlink or a path under one, a file past maxWatchBytes,
-// a folder past maxWatchEntries, a path past maxWatchTotal.
+// a folder past maxWatchEntries, a path past max.
 type summer struct {
 	top   string // the project folder
 	real  func(path string) bool
+	max   int // how many sums it keeps: maxWatchTotal or maxWatchNested
 	sums  map[string]string
 	blind []string
 }
@@ -220,10 +274,9 @@ func (s *summer) add(path string) {
 	}
 }
 
-// put records a sum, or past maxWatchTotal, the path as one it can't
-// watch.
+// put records a sum, or past max, the path as one it can't watch.
 func (s *summer) put(rel, sum string) {
-	if len(s.sums) >= maxWatchTotal {
+	if len(s.sums) >= s.max {
 		s.blind = append(s.blind, rel)
 		return
 	}
@@ -252,7 +305,7 @@ func (s *summer) within(path string) string {
 	case err != nil:
 		return ""
 	case fi.IsDir():
-		inner := summer{top: s.top, real: s.real, sums: map[string]string{}}
+		inner := summer{top: s.top, real: s.real, max: s.max, sums: map[string]string{}}
 		inner.hooks(r)
 		h := sha256.New()
 		for _, k := range slices.Sorted(maps.Keys(inner.sums)) {

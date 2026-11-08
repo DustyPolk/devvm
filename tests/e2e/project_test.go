@@ -32,6 +32,7 @@ func projectSection(s *S) {
 	projectPorts(s, w)
 	projectGitProtect(s, w)
 	projectNested(s, w)
+	projectNestedRepos(s)
 	projectMoved(s, w)
 	projectDevcontainer(s)
 	projectAgents(s)
