@@ -347,16 +347,17 @@ func TestOpencodeLogins(t *testing.T) {
 // fields: an unknown provider's key, an OAuth login devvm doesn't bind (a provider it doesn't know,
 // Copilot Enterprise) and a well-known login, which holds a token. The api entry of a provider
 // File.Pass lists (a local model server) goes as it is, but neither an OAuth login File.Pass names
-// nor a bound provider's key File.Pass names.
+// nor a bound provider's key File.Pass names, which PassBound lists. A bound OAuth login File.Pass
+// names (OpenAI's) stays bound, and PassBound, which notes API keys, doesn't list it.
 func TestOpencodeVMCopy(t *testing.T) {
-	f := File{Kind: Opencode, Salt: "s1", Pass: []string{"ollama", "groq-oauth", "anthropic", "mcp"}, Path: writeFile(t, map[string]any{
+	f := File{Kind: Opencode, Salt: "s1", Pass: []string{"ollama", "groq-oauth", "anthropic", "openai", "mcp"}, Path: writeFile(t, map[string]any{
 		"anthropic": map[string]any{"type": "api", "key": "sk-ant-e2efake", "metadata": map[string]any{"account": "md-e2efake"}, "extra": "x-e2efake"},
 		"openai": map[string]any{
 			"type": "oauth", "access": jwtWith(time.Now().Add(time.Hour), map[string]any{"https://api.openai.com/auth": openaiAuth}),
 			"refresh": "rt-e2efake-openai", "expires": 1, "accountId": "acct-1", "other": "o-e2efake",
 		},
 		"ollama":         map[string]any{"type": "api", "key": "ollama-local", "metadata": map[string]any{"host": "kept"}},
-		"groq":           map[string]any{"type": "api", "key": "gsk-e2efake", "metadata": map[string]any{"m": "md-e2efake"}},
+		"lmstudio":       map[string]any{"type": "api", "key": "lms-e2efake", "metadata": map[string]any{"m": "md-e2efake"}},
 		"groq-oauth":     map[string]any{"type": "oauth", "access": "at-e2efake-passed", "refresh": "rt-e2efake-passed", "expires": 1},
 		"github-copilot": map[string]any{"type": "oauth", "access": "at-e2efake-ghe", "refresh": "rt-e2efake-ghe", "expires": 0, "enterpriseUrl": "ghe.example.com"},
 		"mcp":            map[string]any{"type": "wellknown", "key": "k-e2efake", "token": "t-e2efake"}, //nolint:gosec // fake values
@@ -371,7 +372,7 @@ func TestOpencodeVMCopy(t *testing.T) {
 		"anthropic": {"type": "api", "key": "devvm-proxy-managed-opencode-anthropic-s1"},
 		"openai": {"type": "oauth", "access": "`+ph+`", "refresh": "`+ph+`", "expires": 4070908800000, "accountId": "acct-1"},
 		"ollama": {"type": "api", "key": "ollama-local", "metadata": {"host": "kept"}},
-		"groq": {"type": "api"},
+		"lmstudio": {"type": "api"},
 		"groq-oauth": {"type": "oauth", "expires": 1},
 		"github-copilot": {"type": "oauth", "expires": 0, "enterpriseUrl": "ghe.example.com"},
 		"mcp": {"type": "wellknown"}
@@ -382,14 +383,15 @@ func TestOpencodeVMCopy(t *testing.T) {
 	if strings.Contains(string(c.Data), "e2efake") {
 		t.Errorf("the VM's copy holds a key or token:\n%s", c.Data)
 	}
-	if !slices.Equal(c.Kept, []string{"ollama"}) || !slices.Equal(c.Withheld, []string{"github-copilot", "groq", "groq-oauth", "mcp"}) {
-		t.Errorf("kept %v, withheld %v", c.Kept, c.Withheld)
+	if !slices.Equal(c.Kept, []string{"ollama"}) || !slices.Equal(c.Withheld, []string{"github-copilot", "groq-oauth", "lmstudio", "mcp"}) ||
+		!slices.Equal(c.PassBound, []string{"anthropic"}) {
+		t.Errorf("kept %v, withheld %v, passed but bound %v", c.Kept, c.Withheld, c.PassBound)
 	}
 	// opencode 2's import gets the passed key, its metadata too, beside the bound ones.
 	imp, err := OpencodeImport(c.Data)
 	must(t, err)
 	if !strings.Contains(string(imp), `"id":"cred_devvm_ollama","integrationID":"ollama","label":"devvm","value":{"key":"ollama-local","metadata":{"host":"kept"},"type":"key"}`) ||
-		strings.Contains(string(imp), "groq") || strings.Contains(string(imp), "mcp") {
+		strings.Contains(string(imp), "lmstudio") || strings.Contains(string(imp), "groq") || strings.Contains(string(imp), "mcp") {
 		t.Errorf("opencode's import: %s", imp)
 	}
 }

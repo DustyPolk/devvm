@@ -139,34 +139,42 @@ func plainField(v any) bool {
 	return true
 }
 
-// splitUnbound returns the entries of m, a login file of one entry per provider, that devvm
-// doesn't bind: those passed, which the VM's copy holds as they are, and the others, which it
-// holds withheld (withheldEntry), each sorted.
-func splitUnbound(m map[string]any, bound, passed func(id string) bool) (pass, withheld []string) {
+// splitUnbound sorts the entries of m, a login file of one entry per provider, into the VMFile
+// lists: those devvm doesn't bind that it passes, which the VM's copy holds as they are (Kept),
+// the others it doesn't bind, which it holds withheld (withheldEntry), and the API keys it binds
+// that pass lists all the same (PassBound), each sorted. keyType is the type of the file's API-key
+// entries, so a bound OAuth login that pass lists isn't noted as an API key: pass never applies
+// to a login, whose tokens the VM never gets.
+func splitUnbound(m map[string]any, pass []string, keyType string, bound, passed func(id string) bool) VMFile {
+	var c VMFile
 	for _, id := range sortedKeys(m) {
 		switch {
+		case bound(id) && slices.Contains(pass, id) && str(obj(m, id), "type") == keyType:
+			c.PassBound = append(c.PassBound, id)
 		case bound(id):
 		case passed(id):
-			pass = append(pass, id)
+			c.Kept = append(c.Kept, id)
 		default:
-			withheld = append(withheld, id)
+			c.Withheld = append(c.Withheld, id)
 		}
 	}
-	return pass, withheld
+	return c
 }
 
-// opencode providers devvm knows: where an API key or access token goes. Logins for other providers
-// are withheld from the VM's copy unless config.toml's [pass-keys] passes them (opencodeVM). pi's
-// API keys are bound for opencodeAPI's providers too (pi.go).
+// Where a provider's API key or access token goes. opencode's and pi's API keys are bound for
+// agents.Providers (keyProvider), and opencode's OAuth logins for opencodeOAuth's. Logins for other
+// providers are withheld from the VM's copy unless config.toml's [pass-keys] passes them
+// (opencodeVM, piVM).
 type provider struct {
 	hosts  []string
 	header string
 }
 
-var opencodeAPI = map[string]provider{
-	"anthropic":  {[]string{"api.anthropic.com"}, "x-api-key"},
-	"openai":     {[]string{"api.openai.com"}, "Authorization"},
-	"openrouter": {[]string{"openrouter.ai"}, "Authorization"},
+// keyProvider is where the API key of the provider whose ID is id goes, false for a provider not
+// in agents.Providers.
+func keyProvider(id string) (provider, bool) {
+	p, ok := agents.ProviderOf(id)
+	return provider{p.Hosts, p.Header}, ok
 }
 
 var opencodeOAuth = map[string]provider{
@@ -410,7 +418,7 @@ func opencodeBindings(m map[string]any, salt string) []proxy.Binding {
 		var ok bool
 		switch str(e, "type") {
 		case "api":
-			p, ok = opencodeAPI[id]
+			p, ok = keyProvider(id)
 		case "oauth":
 			p, ok = opencodeOAuth[id]
 			ok = ok && str(e, "enterpriseUrl") == ""
@@ -476,14 +484,14 @@ func opencodePassed(m map[string]any, id string, bound map[string]any, pass []st
 }
 
 // opencodeSplit returns the providers of opencode's whose entries the VM's copy holds as they are
-// (passed) and those it holds without their keys and tokens (neither bound nor passed), each
-// sorted.
-func opencodeSplit(m map[string]any, pass []string) (passed, withheld []string) {
+// (passed), those it holds without their keys and tokens (neither bound nor passed), and those
+// pass lists that it binds all the same (splitUnbound).
+func opencodeSplit(m map[string]any, pass []string) VMFile {
 	bound := map[string]any{}
 	for _, b := range opencodeBindings(m, "") {
 		bound[strings.TrimPrefix(b.Name, "opencode-")] = true
 	}
-	return splitUnbound(m,
+	return splitUnbound(m, pass, "api",
 		func(id string) bool { _, ok := bound[id]; return ok },
 		func(id string) bool { return opencodePassed(m, id, bound, pass) })
 }
@@ -916,6 +924,10 @@ type VMFile struct {
 	// Withheld: every opencode or pi login devvm neither binds nor passes, sorted, which the
 	// copy holds without their keys and tokens.
 	Withheld []string
+	// PassBound: the opencode or pi providers File.Pass lists whose API keys devvm binds all the
+	// same, sorted, which the copy holds as their placeholders: binding wins. A bound OAuth login
+	// File.Pass lists isn't among them.
+	PassBound []string
 }
 
 // VMCopy returns the VM's copy of the file, with placeholders ending in f.Salt in place of its keys

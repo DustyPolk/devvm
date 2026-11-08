@@ -6,6 +6,7 @@
 // tool is also its line in assets/shared-tools/mise.toml's [tool_alias] and its policy,
 // assets/shared-tools/<Name>.policy; its login files' formats are internal/agentlogin's; and
 // its row in the docs' Supported agents table names it (TestDefsComplete checks them all).
+// Providers are the model providers whose API keys the VM's proxy puts in for opencode and pi.
 // Adding an agent is a Def here and those files; Contributing's "Adding a coding agent" lists
 // them.
 package agents
@@ -82,10 +83,68 @@ const (
 	// OneKey: one key for the agent's own provider, given without --provider (Codex's OpenAI
 	// key).
 	OneKey
-	// ProviderKeys: a key for each provider whose hosts devvm knows, named with --provider
-	// (agentlogin.KeyProviders).
+	// ProviderKeys: a key for each of Providers, named with --provider (agentlogin.KeyProviders).
 	ProviderKeys
 )
+
+// Provider is a model provider whose API keys the VM's proxy puts in for the agents with a key
+// for each provider (ProviderKeys).
+type Provider struct {
+	// ID is its entry's name in those agents' login files, and --provider's value.
+	ID string
+	// Display is its name as people know it: OpenRouter.
+	Display string
+	// Hosts are the hosts the agents send its API key to, and no others: the proxy puts the key
+	// in for them alone, and allows them.
+	Hosts []string
+	// Header is the request header the agents send the key in, where the proxy swaps the
+	// placeholder for it.
+	Header string
+}
+
+// Providers are the providers whose API keys the proxy puts in, sorted by ID: every list of
+// them comes from here, and the docs' table of them names each (TestProvidersComplete). Each
+// is checked against opencode 2.2.6's and pi 1.5.0's own source (2026-11): both name it by the
+// same ID, send its key in that header alone, never in a URL, and to those hosts alone (Gemini's
+// API, not Vertex AI's).
+//
+// A bound key still lets the VM mint credentials that work without the proxy, which the proxy
+// allows because opencode 2.2.6's experimental realtime mode mints them itself
+// (packages/ai/src/experimental/realtime.ts): Gemini's POST /v1*/auth_tokens, ephemeral Live API
+// tokens of up to about 20 h whose expireTime and uses the VM sets; xAI's POST
+// /v1/realtime/client_secrets, its expiry the VM's choice; and OpenAI's
+// /v1/realtime/client_secrets, up to 2 h. Some providers' own tools also fetch URLs the VM
+// names (Gemini's url_context and Search grounding, xAI's live search, Groq's compound,
+// Mistral's agents' web_search), a way out the allowlist doesn't cover, as Anthropic's and
+// OpenAI's are. The safety docs' attack vectors name both.
+var Providers = []Provider{
+	{ID: "anthropic", Display: "Anthropic", Hosts: []string{"api.anthropic.com"}, Header: "x-api-key"},
+	{ID: "deepseek", Display: "DeepSeek", Hosts: []string{"api.deepseek.com"}, Header: "Authorization"},
+	{ID: "google", Display: "Google Gemini", Hosts: []string{"generativelanguage.googleapis.com"}, Header: "x-goog-api-key"},
+	{ID: "groq", Display: "Groq", Hosts: []string{"api.groq.com"}, Header: "Authorization"},
+	{ID: "mistral", Display: "Mistral", Hosts: []string{"api.mistral.ai"}, Header: "Authorization"},
+	{ID: "openai", Display: "OpenAI", Hosts: []string{"api.openai.com"}, Header: "Authorization"},
+	{ID: "openrouter", Display: "OpenRouter", Hosts: []string{"openrouter.ai"}, Header: "Authorization"},
+	{ID: "xai", Display: "xAI", Hosts: []string{"api.x.ai"}, Header: "Authorization"},
+}
+
+// ProviderIDs are the providers' IDs, sorted.
+func ProviderIDs() []string {
+	out := make([]string, 0, len(Providers))
+	for _, p := range Providers {
+		out = append(out, p.ID)
+	}
+	return out
+}
+
+// ProviderOf returns the provider whose ID is id, false when none is.
+func ProviderOf(id string) (Provider, bool) {
+	i := slices.IndexFunc(Providers, func(p Provider) bool { return p.ID == id })
+	if i < 0 {
+		return Provider{}, false
+	}
+	return Providers[i], true
+}
 
 // Env is a variable of the guest environment that every VM's shells get.
 type Env struct{ Name, Value string }

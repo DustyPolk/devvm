@@ -73,6 +73,7 @@ func networkSection(s *S) {
 	netOpencodeHistory(n)
 	netOpencodeKeys(n)
 	netPi(n)
+	netProviderKeys(n)
 	netClaudeLogins(n)
 	netSave(n)
 	netGithub(n)
@@ -771,7 +772,7 @@ func netTokenServer(n *netRun) error {
 	if err != nil {
 		return err
 	}
-	cf, kf, err := ca.Sign("auth", "auth.openai.com", "platform.claude.com", "api.anthropic.com")
+	cf, kf, err := ca.Sign("auth", "auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", geminiAPIHost)
 	if err != nil {
 		return err
 	}
@@ -1094,7 +1095,8 @@ const piKey = "sk-ant-e2efake-pi"
 // (fdfind) and rg rather than downloading its own. devvm agent login pi --api-key saves a fake Anthropic key in
 // the store; the VM's pi gets only its placeholder, and pi's own request
 // to Anthropic's API, which the run's fake answers, carries the key the
-// VM's proxy put in, logged nowhere.
+// VM's proxy put in, logged nowhere; a fake Groq key the same, in pi's
+// Authorization to Groq's API.
 func netPi(n *netRun) {
 	s, vm := n.s, n.vm
 	s.Check("pi runs in the VM from its read-only shared image, its version check and install report off", func() error {
@@ -1137,6 +1139,97 @@ func netPi(n *netRun) {
 			return errors.New("no event shows pi's key put in")
 		}
 		return NoLeak([]string{piKey}, filepath.Join(n.vmd, "logs"), filepath.Join(s.Paths.Devvm, "logs"))
+	}, Tail(40))
+	s.Check("devvm agent login pi --api-key --provider groq: the VM's pi holds the placeholder, and Groq's API gets the key in Authorization", func() error {
+		r, err := n.dv(groqKey+"\n", n.tokenEnv("DEVVM_MESSAGES=names"), "agent", "login", "pi", "--api-key", "--provider", "groq", "--stdin")
+		if err != nil || !Matches(r.Out, `^==> agent_key_saved agent=pi provider=groq vm=`) {
+			return failed("devvm agent login pi --api-key --provider groq didn't save the key:\n"+r.Out, err)
+		}
+		ph := "devvm-proxy-managed-pi-groq-" + n.salt
+		if vmOut(s, vm, "jq -r .groq.key ~/.pi/agent/auth.json") != ph {
+			return errors.New("the VM's pi login doesn't hold Groq's key's placeholder")
+		}
+		if has, err := vmHas(s, vm, false, "cat ~/.pi/agent/auth.json", "e2efake"); err != nil || has {
+			return failed("the VM's pi login holds the key", err)
+		}
+		// The fake answers with a 404, so pi fails, after its request.
+		_, _ = s.InVM(vm, `timeout 120 pi --no-session --no-tools -p --provider groq --model llama-3.1-8b-instant "e2e" </dev/null`)
+		switch {
+		case !lineWith(readText(n.tokLog), "groq /openai/v1/chat/completions", "Bearer "+groqKey):
+			return errors.New("pi's request didn't reach Groq's API with the key the proxy put in\n" + n.tokenWhy())
+		case !lineWith(readText(n.events), `"host":"api.groq.com"`, `"secrets":["pi-groq"]`):
+			return errors.New("no event shows pi's Groq key put in")
+		}
+		return NoLeak([]string{groqKey}, filepath.Join(n.vmd, "logs"), filepath.Join(s.Paths.Devvm, "logs"))
+	}, Tail(40))
+}
+
+// groqKey is the fake Groq API key devvm agent login pi saves.
+const groqKey = "gsk_e2efake-pi-groq"
+
+// Fake keys of the providers whose header or agent differs: Gemini's
+// for pi, Groq's for opencode.
+const (
+	googleKey     = "AIza-e2efake-pi-google"
+	opencodeGroq  = "gsk_e2efake-opencode-groq"
+	geminiAPIHost = "generativelanguage.googleapis.com"
+)
+
+// netProviderKeys: the providers whose keys reach their API another way
+// than pi's Anthropic and Groq keys. devvm agent login pi saves a fake
+// Gemini key, and pi's request to Gemini's API, which the run's fake
+// answers, carries it in x-goog-api-key and never in its URL; devvm agent
+// login opencode saves a fake Groq key, and opencode's own request to
+// Groq's API carries it in its Authorization. The VM holds only their
+// placeholders, and no log the keys.
+func netProviderKeys(n *netRun) {
+	s, vm := n.s, n.vm
+	s.Check("devvm agent login pi --api-key --provider google: the VM's pi holds the placeholder, and Gemini's API gets the key in x-goog-api-key, not in the URL", func() error {
+		r, err := n.dv(googleKey+"\n", n.tokenEnv("DEVVM_MESSAGES=names"), "agent", "login", "pi", "--api-key", "--provider", "google", "--stdin")
+		if err != nil || !Matches(r.Out, `^==> agent_key_saved agent=pi provider=google vm=`) {
+			return failed("devvm agent login pi --api-key --provider google didn't save the key:\n"+r.Out, err)
+		}
+		if vmOut(s, vm, "jq -r .google.key ~/.pi/agent/auth.json") != "devvm-proxy-managed-pi-google-"+n.salt {
+			return errors.New("the VM's pi login doesn't hold Gemini's key's placeholder")
+		}
+		if has, err := vmHas(s, vm, false, "cat ~/.pi/agent/auth.json", "e2efake"); err != nil || has {
+			return failed("the VM's pi login holds the key", err)
+		}
+		// The fake answers with a 404, so pi fails, after its request.
+		_, _ = s.InVM(vm, `timeout 120 pi --no-session --no-tools -p --provider google --model gemini-2.5-flash "e2e" </dev/null`)
+		got := readText(n.tokLog)
+		switch {
+		case !lineWith(got, "google /v1", "x-goog-api-key "+googleKey):
+			return errors.New("pi's request didn't reach Gemini's API with the key the proxy put in\n" + n.tokenWhy())
+		case lineWith(got, "google /", "key="):
+			return errors.New("pi's request to Gemini's API has a key in its URL\n" + n.tokenWhy())
+		case !lineWith(readText(n.events), `"host":"`+geminiAPIHost+`"`, `"secrets":["pi-google"]`):
+			return errors.New("no event shows pi's Gemini key put in")
+		}
+		return NoLeak([]string{googleKey}, filepath.Join(n.vmd, "logs"), filepath.Join(s.Paths.Devvm, "logs"))
+	}, Tail(40))
+	s.Check("devvm agent login opencode --api-key --provider groq: the VM's opencode holds the placeholder, and its request to Groq's API gets the key", func() error {
+		r, err := n.dv(opencodeGroq+"\n", n.tokenEnv("DEVVM_MESSAGES=names"), "agent", "login", "opencode", "--api-key", "--provider", "groq", "--stdin")
+		if err != nil {
+			return failed("devvm agent login opencode --api-key --provider groq failed:\n"+r.Out+"\n"+n.runLogEnd(r.Out), err)
+		}
+		if has, err := vmHas(s, vm, true, "opencode auth export groq", "devvm-proxy-managed-opencode-groq-"+n.salt); err != nil || !has {
+			return errors.New("the VM's opencode has no placeholder of Groq's key\n" + n.opencodeWhy(vm))
+		}
+		if has, err := vmHas(s, vm, true, "opencode auth export; cat ~/.local/share/opencode/auth.json", "e2efake-opencode"); err != nil || has {
+			return failed("the VM's opencode holds the key", err)
+		}
+		// Any of Groq's models in opencode's own catalog, which the company proxy keeps it from
+		// updating. The fake answers with a 404, so opencode fails, after its request.
+		out, _ := s.InVM(vm, `l=$(opencode models </dev/null 2>&1); m=$(grep -m1 '^groq/' <<<"$l") || { echo "no Groq model in: $(head -5 <<<"$l")"; exit 1; }; `+
+			`echo "model $m"; timeout 120 opencode run -m "$m" "e2e" </dev/null`)
+		switch {
+		case !lineWith(readText(n.tokLog), "groq /openai/v1/", "Bearer "+opencodeGroq):
+			return errors.New("opencode's request didn't reach Groq's API with the key the proxy put in\n" + tailLines(out.Out, 20) + "\n" + n.tokenWhy())
+		case !lineWith(readText(n.events), `"host":"api.groq.com"`, `"secrets":["opencode-groq"]`):
+			return errors.New("no event shows opencode's Groq key put in")
+		}
+		return NoLeak([]string{opencodeGroq}, filepath.Join(n.vmd, "logs"), filepath.Join(s.Paths.Devvm, "logs"))
 	}, Tail(40))
 }
 
@@ -2276,9 +2369,10 @@ socketserver.ThreadingTCPServer(("", int(sys.argv[1])), H).serve_forever()
 `
 
 // fakeTokenPy is the fake token endpoints: a company proxy that answers a
-// CONNECT to auth.openai.com, platform.claude.com or api.anthropic.com
-// itself, with its certificate (port, cert, key and its log are its
-// arguments), and refuses any other.
+// CONNECT to auth.openai.com, platform.claude.com, api.anthropic.com,
+// api.groq.com or generativelanguage.googleapis.com itself, with its
+// certificate (port, cert, key and its log are its arguments), and
+// refuses any other.
 //
 //nolint:gosec // G101: its tokens are fakes, which no service takes
 const fakeTokenPy = `import base64, json, socket, ssl, sys, threading, urllib.parse
@@ -2339,7 +2433,20 @@ def api(path, h):
         return 200, {"account": {"uuid": "acct-e2e", "email": "e2e@devvm.test", "display_name": "e2e"},
                      "organization": {"uuid": "org-e2e", "organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x"}}
     return 404, {"type": "error", "error": {"type": "not_found_error", "message": "e2e"}}
-HOSTS = ("auth.openai.com", "platform.claude.com", "api.anthropic.com")
+# Groq's API, as Anthropic's: each request's Authorization logged, under "groq", answered 404.
+def groq(path, h):
+    a = [x.split(":", 1)[1].strip() for x in h[1:] if x.lower().startswith("authorization:")]
+    with open(log, "a") as o:
+        o.write("groq " + path + " " + (a[0] if a else "-") + "\n")
+    return 404, {"error": {"message": "e2e", "type": "invalid_request_error"}}
+# Gemini's API, as Groq's, under "google": each request's path, query and all, and its x-goog-api-key,
+# the header Google's SDK sends an API key in, so a check sees the key there and not in the URL.
+def google(path, h):
+    k = [x.split(":", 1)[1].strip() for x in h[1:] if x.lower().startswith("x-goog-api-key:")]
+    with open(log, "a") as o:
+        o.write("google " + path + " x-goog-api-key " + (k[0] if k else "-") + "\n")
+    return 404, {"error": {"code": 404, "message": "e2e", "status": "NOT_FOUND"}}
+HOSTS = ("auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", "generativelanguage.googleapis.com")
 def serve(c):
     try:
         req = head(c.makefile("rb"))
@@ -2362,6 +2469,10 @@ def serve(c):
             code = 200
             if host == "api.anthropic.com":
                 code, r = api(h[0].split(" ")[1], h)
+            elif host == "api.groq.com":
+                code, r = groq(h[0].split(" ")[1], h)
+            elif host == "generativelanguage.googleapis.com":
+                code, r = google(h[0].split(" ")[1], h)
             elif host == "platform.claude.com":
                 q = json.loads(body) if body.startswith("{") else {}
                 with open(log, "a") as o:
