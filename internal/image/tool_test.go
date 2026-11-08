@@ -284,8 +284,14 @@ func TestSortToolsAndGroups(t *testing.T) {
 // lock, dotnet alone has build.sh fetch its own, and an agent its registry
 // marks (pi) alone has builds for glibc alone.
 func TestSharedTools(t *testing.T) {
-	if want := []string{"node", "python", "rust", "go", "dotnet"}; !slices.Equal(Toolchains, want) {
-		t.Errorf("Toolchains = %q, want %q", Toolchains, want)
+	var toolchains []string
+	for _, d := range SharedTools {
+		if d.Kind == Toolchain {
+			toolchains = append(toolchains, d.Name)
+		}
+	}
+	if !slices.Equal(Toolchains, toolchains) || !slices.Contains(Toolchains, "node") {
+		t.Errorf("Toolchains = %q, want %q", Toolchains, toolchains)
 	}
 	if want := agents.Names(); !slices.Equal(Agents, want) || !slices.Contains(want, "claude") {
 		t.Errorf("Agents = %q, want %q", Agents, want)
@@ -334,6 +340,99 @@ func TestSharedTools(t *testing.T) {
 				t.Errorf("member %q: repeated or not a tool's name", m)
 			}
 			seen[m] = true
+		}
+	}
+}
+
+var (
+	envName = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+	homeDir = regexp.MustCompile(`^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`)
+)
+
+// A toolchain's guest environment, folders for the PATH and version files
+// are its own and well formed: a variable's name a shell's, set once; a
+// folder relative to the home folder, inside it, on the PATH once; version
+// files only its members'. An agent has none of them: its environment is
+// its agents.Def's. The views list them in SharedTools' order.
+func TestToolchainGuest(t *testing.T) {
+	names, dirs := map[string]bool{}, map[string]bool{}
+	var env []Env
+	var path, versions []string
+	for _, d := range SharedTools {
+		if d.Kind == Agent && (len(d.Env) > 0 || len(d.PathDirs) > 0 || len(d.VersionFiles) > 0) {
+			t.Errorf("%s: an agent with a toolchain's environment, PATH or version files", d.Name)
+		}
+		for _, v := range d.Env {
+			if !envName.MatchString(v.Name) || names[v.Name] || (v.Home && !homeDir.MatchString(v.Value)) {
+				t.Errorf("%s: variable %+v is set twice, or isn't a name and a value", d.Name, v)
+			}
+			names[v.Name] = true
+		}
+		for _, p := range d.PathDirs {
+			if !homeDir.MatchString(p) || strings.HasPrefix(p, "..") || dirs[p] {
+				t.Errorf("%s: PATH folder %q is repeated or not one in the home folder", d.Name, p)
+			}
+			dirs[p] = true
+		}
+		for _, m := range d.VersionFiles {
+			if !slices.Contains(d.Members, m) {
+				t.Errorf("%s: version files of %s, which isn't one of its members %q", d.Name, m, d.Members)
+			}
+		}
+		env, path, versions = append(env, d.Env...), append(path, d.PathDirs...), append(versions, d.VersionFiles...)
+	}
+	if !slices.Equal(GuestEnv(), env) || !slices.Equal(GuestPath(), path) || !slices.Equal(VersionFileTools(), versions) {
+		t.Errorf("GuestEnv = %v, GuestPath = %q, VersionFileTools = %q", GuestEnv(), GuestPath(), VersionFileTools())
+	}
+	if !slices.Contains(GuestEnv(), Env{Name: "DOTNET_CLI_TELEMETRY_OPTOUT", Value: "1"}) || !slices.Contains(GuestPath(), "go/bin") {
+		t.Error("the views lack dotnet's telemetry switch or go's folder")
+	}
+}
+
+// Every toolchain has what the rest of devvm finds it by, beside its
+// entry: files that call for it, and its row in the docs' toolchains table,
+// in the registry's order, and its section there, which names those files
+// and the folders it puts on the PATH. (Its policy and its members in
+// shared-tools/mise.toml are every shared tool's, which
+// TestSharedToolsPolicies and internal/tools' TestConfigTools check.)
+func TestToolchainsComplete(t *testing.T) {
+	page, err := os.ReadFile(filepath.Join("..", "..", "docs", "content", "docs", "using", "toolchains.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := regexp.MustCompile(`(?m)^\| \[([a-z0-9]+)\]\(#([a-z0-9]+)\) \|`)
+	var table []string
+	for _, m := range row.FindAllStringSubmatch(string(page), -1) {
+		if m[1] != m[2] {
+			t.Errorf("the toolchains table's %s links #%s", m[1], m[2])
+		}
+		table = append(table, m[1])
+	}
+	if !slices.Equal(table, Toolchains) {
+		t.Errorf("the toolchains table lists %q, the registry %q, in its order", table, Toolchains)
+	}
+	for _, d := range SharedTools {
+		if d.Kind != Toolchain {
+			continue
+		}
+		if len(d.Detect) == 0 {
+			t.Errorf("%s: no files call for it", d.Name)
+		}
+		_, section, ok := strings.Cut(string(page), "\n## "+d.Name+"\n")
+		if !ok {
+			t.Errorf("toolchains.md has no section for %s", d.Name)
+			continue
+		}
+		section, _, _ = strings.Cut(section, "\n## ")
+		for _, f := range d.Detect {
+			if !strings.Contains(section, "`"+f+"`") {
+				t.Errorf("toolchains.md's %s section doesn't name %s, a file that calls for it", d.Name, f)
+			}
+		}
+		for _, p := range d.PathDirs {
+			if top, _, _ := strings.Cut(p, "/"); !strings.Contains(section, "`~/"+top) {
+				t.Errorf("toolchains.md's %s section doesn't name ~/%s, where its global installs go", d.Name, top)
+			}
 		}
 	}
 }

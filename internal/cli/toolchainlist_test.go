@@ -13,20 +13,15 @@ import (
 )
 
 // listedToolchains are the files that may list every toolchain: the
-// toolchains page, which owns the list, and the two home pages, where it
-// helps a visitor decide. A list about something else, such as what an
-// e2e image holds, gets its file here with why.
+// toolchains page, which owns the list. A list about something else, such
+// as what an e2e image holds, gets its file here with why.
 func listedToolchains() []string {
 	return []string{
 		"docs/content/docs/using/toolchains.md",
-		"docs/content/_index.md",
-		"README.md",
 		// the e2e images' contents and the e2e sections' tools, not the
 		// toolchains' list
 		"docs/content/docs/using/from.md",
 		"docs/content/docs/contributing/_index.md",
-		// design notes on the shared tools' mechanisms
-		"docs/content/docs/internals/design.md",
 	}
 }
 
@@ -39,12 +34,13 @@ func sentencesOf(text string) []string {
 	return out
 }
 
-// The toolchains are listed once, on the toolchains page (and the home
-// pages): a sentence elsewhere in the docs, the in-VM guide, the messages
-// or the issue forms that names three or more of image.Toolchains links to
-// that page instead, so a new toolchain changes one list.
+// The toolchains are listed once, on the toolchains page: a sentence
+// elsewhere in the docs, the README, the in-VM guide and scripts, base's
+// scripts, the messages or the issue forms that names three or more of
+// image.Toolchains links to that page instead, or gives one example, so a
+// new toolchain changes one list.
 func TestToolchainsListedOnce(t *testing.T) {
-	var files []string
+	files := []string{filepath.Join(repoRoot, "README.md"), filepath.Join(repoRoot, "assets", "layers", "base.sh")}
 	for _, dir := range []string{"docs/content", "assets/guest", ".github/ISSUE_TEMPLATE"} {
 		err := filepath.WalkDir(filepath.Join(repoRoot, dir), func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -53,7 +49,7 @@ func TestToolchainsListedOnce(t *testing.T) {
 			if d.IsDir() && d.Name() == "cli" {
 				return filepath.SkipDir // generated from the help
 			}
-			if !d.IsDir() && (strings.HasSuffix(path, ".md") || strings.HasSuffix(path, ".yml")) {
+			if !d.IsDir() && (strings.HasSuffix(path, ".md") || strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".sh")) {
 				files = append(files, path)
 			}
 			return nil

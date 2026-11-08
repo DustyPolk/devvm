@@ -21,6 +21,11 @@
 #                tool's image was built from, which mise's registry might not give its name
 #   agent-env    export lines of every coding agent's guest environment (its self-update, version
 #                check and telemetry off), installed as /etc/devvm/agents.sh, which devvm-tools.sh reads
+#   toolchain-env  export lines of every toolchain's guest environment (its telemetry off, its global
+#                installs into ~), then devvm_path, their folders of ~ for the PATH, each followed by a
+#                colon; installed as /etc/devvm/toolchains.sh, which devvm-tools.sh reads
+#   version-files.toml  the VM's mise's idiomatic_version_file_enable_tools setting: the toolchains'
+#                tools whose version files (.nvmrc, global.json) a project chooses versions with
 #   opencode-import.json  the store's opencode logins as opencode auth import reads them, with
 #                placeholders (none: no opencode login in the store); opencode.sh imports them
 #   hosts        the VM's links (devvm checked them): a line per target, "ADDRESS NAME
@@ -80,8 +85,11 @@ fi
 # (~/.config/mise) comes first.
 cmp -s "$s/tools.sh" /usr/local/sbin/devvm-tools 2>/dev/null || sudo install -D -m 755 "$s/tools.sh" /usr/local/sbin/devvm-tools
 cmp -s "$s/tools" /etc/devvm/tools 2>/dev/null || sudo install -D -m 644 "$s/tools" /etc/devvm/tools
-# The agents' environment (their self-updates and telemetry off), which base's devvm-tools.sh reads in
-# every shell, before anything here runs one.
+# The toolchains' and the agents' environment (their telemetry and self-updates off, the toolchains'
+# folders for the PATH), which base's devvm-tools.sh reads in every shell, before anything here runs
+# one.
+cmp -s "$s/toolchain-env" /etc/devvm/toolchains.sh 2>/dev/null ||
+  sudo install -D -m 644 "$s/toolchain-env" /etc/devvm/toolchains.sh
 cmp -s "$s/agent-env" /etc/devvm/agents.sh 2>/dev/null || sudo install -D -m 644 "$s/agent-env" /etc/devvm/agents.sh
 # A tool it can't mount fails the setup, and devvm names it from /run/devvm/tools-unmounted.
 sudo /usr/local/sbin/devvm-tools
@@ -95,10 +103,8 @@ sudo /usr/local/sbin/devvm-tools
 [settings]
 experimental = true
 shared_install_dirs = ["/opt/devvm/tools"]
-# A project's version files choose versions, as their own tools would; a version that isn't shared
-# installs into the VM on first use. Not go: go.mod's go line is a minimum, and Go's own GOTOOLCHAIN
-# reads its toolchain line. dotnet's is global.json's sdk.version, which mise installs as it is.
-idiomatic_version_file_enable_tools = ["node", "python", "bun", "pnpm", "dotnet"]
+# A version that a project's version files choose and that isn't shared installs into the VM on first
+# use.
 auto_install = true
 not_found_auto_install = true
 python.compile = false
@@ -110,6 +116,9 @@ dotnet.isolated = true
 # The project folder is the user's own: trust its mise.toml without asking.
 trusted_config_paths = ["/"]
 T
+  # A project's version files choose versions, as their own tools would: the toolchains' tools that
+  # devvm's registry names, in [settings] still.
+  cat "$s/version-files.toml"
 } > "$s/mise.toml"
 cmp -s "$s/mise.toml" /etc/mise/config.toml 2>/dev/null || sudo install -D -m 644 "$s/mise.toml" /etc/mise/config.toml
 # Links into tools this VM doesn't have any more (devvm tools rm, devvm tools update).

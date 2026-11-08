@@ -70,19 +70,66 @@ type ToolDef struct {
 	// GlibcOnly: its project releases builds for glibc alone, none for
 	// musl, so a VM whose base has musl (Alpine) can't run it.
 	GlibcOnly bool
+	// Env is a toolchain's guest environment, which every VM's shells get,
+	// whichever toolchains the VM has (GuestEnv): its telemetry off, its
+	// global installs into the VM's home. No image build reads it.
+	Env []Env
+	// PathDirs are a toolchain's folders in the VM's home, relative to it,
+	// where its global installs go: every VM's PATH has them ahead of
+	// mise's shims (GuestPath).
+	PathDirs []string
+	// VersionFiles are the members whose idiomatic version files, such as
+	// .nvmrc, mise reads in a project to choose their version
+	// (VersionFileTools). go has none: go.mod's go line is a minimum, and
+	// Go's own GOTOOLCHAIN reads its toolchain line.
+	VersionFiles []string
+}
+
+// Env is a variable of the guest environment: its name, and its value,
+// which with Home is a path in the VM's home folder, relative to it.
+type Env struct {
+	Name, Value string
+	Home        bool
 }
 
 // SharedTools are the shared tools, in the fixed order a VM's list holds
 // them: the toolchains, then the agents, one for each of agents.Defs.
 // Every list of shared tools derives from it: Toolchains, Agents,
-// GroupTools, what a project's files call for, and the devcontainer
-// features devvm maps.
+// GroupTools, what a project's files call for, the devcontainer features
+// devvm maps, and the toolchains' guest environment, PATH and version
+// files. Each toolchain also has its members in shared-tools/mise.toml,
+// its policy, shared-tools/<Name>.policy, and its row and section on the
+// docs' toolchains page (TestToolchainsComplete); Contributing's "Adding a
+// toolchain" lists them.
 var SharedTools = append([]ToolDef{
-	{Name: "node", Kind: Toolchain, Members: []string{"node", "pnpm", "bun"}, Detect: []string{"package.json", "bun.lock", "bun.lockb"}},
-	{Name: "python", Kind: Toolchain, Members: []string{"python", "uv"}, Detect: []string{"pyproject.toml", "requirements.txt", "uv.lock", "setup.py", "Pipfile"}},
-	{Name: "rust", Kind: Toolchain, Members: []string{"rust"}, Detect: []string{"Cargo.toml"}, Installer: Rustup},
-	{Name: "go", Kind: Toolchain, Members: []string{"go"}, Detect: []string{"go.mod"}},
-	{Name: "dotnet", Kind: Toolchain, Members: []string{"dotnet"}, Detect: []string{"*.sln", "*.slnx", "*.csproj", "*.fsproj", "global.json"}, Installer: DotnetSDK},
+	{
+		Name: "node", Kind: Toolchain, Members: []string{"node", "pnpm", "bun"}, Detect: []string{"package.json", "bun.lock", "bun.lockb"},
+		// npm i -g installs into the VM's home: node's folder is read-only.
+		Env: []Env{{Name: "NPM_CONFIG_PREFIX", Value: ".npm-global", Home: true}}, PathDirs: []string{".npm-global/bin"},
+		VersionFiles: []string{"node", "bun", "pnpm"},
+	},
+	{
+		Name: "python", Kind: Toolchain, Members: []string{"python", "uv"},
+		Detect: []string{"pyproject.toml", "requirements.txt", "uv.lock", "setup.py", "Pipfile"}, VersionFiles: []string{"python"},
+	},
+	{Name: "rust", Kind: Toolchain, Members: []string{"rust"}, Detect: []string{"Cargo.toml"}, Installer: Rustup, PathDirs: []string{".cargo/bin"}},
+	{Name: "go", Kind: Toolchain, Members: []string{"go"}, Detect: []string{"go.mod"}, PathDirs: []string{"go/bin"}},
+	{
+		Name: "dotnet", Kind: Toolchain, Members: []string{"dotnet"}, Detect: []string{"*.sln", "*.slnx", "*.csproj", "*.fsproj", "global.json"},
+		Installer: DotnetSDK,
+		// Its telemetry, first-run banner and background check for workload
+		// updates off; dotnet tool install -g into ~/.dotnet/tools, on the
+		// PATH already, so the SDK doesn't add it to a shell's profile.
+		Env: []Env{
+			{Name: "DOTNET_CLI_TELEMETRY_OPTOUT", Value: "1"},
+			{Name: "DOTNET_NOLOGO", Value: "1"},
+			{Name: "DOTNET_ADD_GLOBAL_TOOLS_TO_PATH", Value: "false"},
+			{Name: "DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE", Value: "true"},
+		},
+		PathDirs: []string{".dotnet/tools"},
+		// global.json's sdk.version, which mise installs as it is.
+		VersionFiles: []string{"dotnet"},
+	},
 }, agentTools()...)
 
 // agentTools are the agents' shared tools, each its own one tool in the
@@ -109,6 +156,37 @@ func namesOf(k ToolKind) []string {
 		if d.Kind == k {
 			out = append(out, d.Name)
 		}
+	}
+	return out
+}
+
+// GuestEnv is every toolchain's guest environment, in SharedTools' order:
+// what every VM's shells get, whichever toolchains it has, as a VM can
+// gain one at any launch.
+func GuestEnv() []Env {
+	var out []Env
+	for _, d := range SharedTools {
+		out = append(out, d.Env...)
+	}
+	return out
+}
+
+// GuestPath is every toolchain's PathDirs, in SharedTools' order: the
+// folders of the VM's home that every VM's PATH has, in that order.
+func GuestPath() []string {
+	var out []string
+	for _, d := range SharedTools {
+		out = append(out, d.PathDirs...)
+	}
+	return out
+}
+
+// VersionFileTools are every toolchain's VersionFiles, in SharedTools'
+// order: the tools whose idiomatic version files every VM's mise reads.
+func VersionFileTools() []string {
+	var out []string
+	for _, d := range SharedTools {
+		out = append(out, d.VersionFiles...)
 	}
 	return out
 }

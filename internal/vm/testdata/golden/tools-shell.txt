@@ -1,0 +1,12 @@
+DISABLE_AUTOUPDATER=1
+DISABLE_ERROR_REPORTING=1
+DISABLE_TELEMETRY=1
+DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false
+DOTNET_CLI_TELEMETRY_OPTOUT=1
+DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true
+DOTNET_NOLOGO=1
+NPM_CONFIG_PREFIX=/home/u/.npm-global
+OPENCODE_DISABLE_AUTOUPDATE=1
+PATH=/home/u/.npm-global/bin:/home/u/.cargo/bin:/home/u/go/bin:/home/u/.dotnet/tools:/home/u/.local/bin:/home/u/.local/share/mise/shims:/usr/bin:/bin
+PI_SKIP_VERSION_CHECK=1
+PI_TELEMETRY=0

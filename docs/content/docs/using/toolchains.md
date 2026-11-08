@@ -109,7 +109,7 @@ What this doesn't cover:
 
 ## How toolchains are shared and updated
 
-The toolchains are [shared tools](images.md#shared-tools), like the [coding agents](coding-agents.md#supported-agents), so they aren't part of any image. devvm builds each version once and mounts it read-only into every VM that has it, and [mise](https://mise.jdx.dev) runs it, so `node`, `python`, `cargo`, `go` and `dotnet` work from any shell in the VM, including `bash -c` from agents and from editors over SSH. Because the shared copy is read-only, a toolchain can't update itself, and anything you install globally goes into your home in the VM, as each section above says.
+The toolchains are [shared tools](images.md#shared-tools), like the [coding agents](coding-agents.md#supported-agents), so they aren't part of any image. devvm builds each version once and mounts it read-only into every VM that has it, and [mise](https://mise.jdx.dev) runs it, so each toolchain's commands, such as `node` or `cargo`, work from any shell in the VM, including `bash -c` from agents and from editors over SSH. Because the shared copy is read-only, a toolchain can't update itself, and anything you install globally goes into your home in the VM, as each section above says.
 
 devvm follows each toolchain's newest release, and Node 24 for node. [Which bases they run on](#which-bases-they-run-on) says what each one needs from a VM's base. [Adding and removing tools](#adding-and-removing-tools) explains how `devvm update` and `devvm tools update` move a VM to newer versions, how `devvm tools add` adds a toolchain to an existing VM, and how `devvm tools rm` takes one out. [What a new VM gets](images.md#what-a-new-vm-gets) explains what happens when a folder calls for more than one toolchain.
 

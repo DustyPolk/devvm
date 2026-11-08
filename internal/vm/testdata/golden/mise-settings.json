@@ -1,0 +1,25 @@
+{
+  "auto_install": true,
+  "dotnet": {
+    "isolated": true
+  },
+  "experimental": true,
+  "go_set_gobin": false,
+  "idiomatic_version_file_enable_tools": [
+    "bun",
+    "dotnet",
+    "node",
+    "pnpm",
+    "python"
+  ],
+  "not_found_auto_install": true,
+  "python": {
+    "compile": false
+  },
+  "shared_install_dirs": [
+    "/opt/devvm/tools"
+  ],
+  "trusted_config_paths": [
+    "/"
+  ]
+}

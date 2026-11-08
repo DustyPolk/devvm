@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/devvmhq/devvm/internal/image"
+	"github.com/devvmhq/devvm/internal/shell"
 	"github.com/devvmhq/devvm/internal/tools"
 )
 
@@ -435,10 +437,33 @@ func toolsRmAdd(s *S, vm, t2 string) {
 // isn't the shared one: mise installs it into the VM.
 const dotnetOther = "8.0.427"
 
+// toolchainShell is a bash script that fails, printing its environment,
+// unless it has every toolchain's guest environment (image.GuestEnv) and
+// their folders (image.GuestPath) on its PATH, in order, just before
+// ~/.local/bin and mise's shims: what the launch's toolchains.sh and
+// base's devvm-tools.sh give every shell.
+func toolchainShell() string {
+	var checks []string
+	for _, v := range image.GuestEnv() {
+		want := shell.Quote(v.Value)
+		if v.Home {
+			want = `"$HOME"/` + want
+		}
+		checks = append(checks, `[[ ${`+v.Name+`-} == `+want+` ]]`)
+	}
+	var dirs strings.Builder
+	for _, d := range image.GuestPath() {
+		dirs.WriteString(`"$HOME"/` + shell.Quote(d) + ":")
+	}
+	checks = append(checks, `[[ :$PATH: == *:`+dirs.String()+`"$HOME"/.local/bin:"$HOME"/.local/share/mise/shims:* ]]`)
+	return strings.Join(checks, " && ") + " || { env | sort; false; }"
+}
+
 // toolsDotnet: a .NET project's VM on the allowlist tier, its file calling
 // for dotnet: the shared SDK runs from the share; a console project
 // restores a package from NuGet, builds and runs; a global tool installs
-// into ~/.dotnet/tools and runs from a non-login shell; a workload
+// into ~/.dotnet/tools and runs from a non-login shell; every toolchain's
+// environment and PATH folders reach a login shell and a non-login one; a workload
 // installs into ~/.dotnet, the SDK's folder being read-only; nothing it
 // reached was blocked; and a global.json's SDK installs into the VM.
 func toolsDotnet(s *S) {
@@ -479,6 +504,15 @@ func toolsDotnet(s *S) {
 	s.Check("the global tool runs from a non-login shell", func() error {
 		_, err := s.Run(Cmd{Args: []string{"ssh", "-F", filepath.Join(s.sb.lima, vm, "ssh.config"), "lima-" + vm, "dotnetsay hi"}})
 		return err
+	})
+	s.Check("every toolchain's environment and PATH folders, in a login shell and a non-login one", func() error {
+		if _, err := s.InVM(vm, toolchainShell()); err != nil {
+			return fmt.Errorf("a login shell: %w", err)
+		}
+		if _, err := s.Run(Cmd{Args: []string{"ssh", "-F", filepath.Join(s.sb.lima, vm, "ssh.config"), "lima-" + vm, toolchainShell()}}); err != nil {
+			return fmt.Errorf("a non-login shell: %w", err)
+		}
+		return nil
 	})
 	s.Check("a workload installs into ~/.dotnet", inVM(
 		"dotnet workload install wasi-experimental >/dev/null && dotnet workload list | grep -q '^wasi-experimental ' && [[ -d ~/.dotnet/packs ]]"))

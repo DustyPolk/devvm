@@ -29,28 +29,24 @@ func heredoc(t *testing.T, start, end string) string {
 }
 
 // Every VM's shells get the tools' environment from base's
-// /etc/profile.d/devvm-tools.sh, which reads the agents' environment
-// (their self-updates, version checks and telemetry off) from
+// /etc/profile.d/devvm-tools.sh, which reads the toolchains' environment
+// (their telemetry off, their global installs into the VM's home) and
+// their folders for the PATH from /etc/devvm/toolchains.sh, and the
+// agents' (their self-updates, version checks and telemetry off) from
 // /etc/devvm/agents.sh, which every launch's setup writes, so base holds
-// none of it: their installs are read-only shared tools, and mise pins
-// their versions. It turns off .NET's telemetry, first-run banner,
-// profile edit and workload update check too, and puts its global tools
-// on the PATH. Non-login shells read it too (BASH_ENV), but not
-// devvm-telemetry.sh, so no agent's switch is there.
+// none of it (internal/vm's TestToolchainsOwnTheirEnvironment): their
+// installs are read-only shared tools, and mise pins their versions.
+// Non-login shells read it too (BASH_ENV), but not devvm-telemetry.sh, so
+// no agent's switch is there.
 func TestToolsEnvironment(t *testing.T) {
 	block := heredoc(t, "sudo tee /etc/profile.d/devvm-tools.sh >/dev/null <<'SH'", "SH")
 	for _, line := range []string{
+		"if [ -r /etc/devvm/toolchains.sh ]; then . /etc/devvm/toolchains.sh; fi",
+		`  export PATH="$devvm_path$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH" ;;`,
 		"if [ -r /etc/devvm/agents.sh ]; then . /etc/devvm/agents.sh; fi",
-		"export DOTNET_CLI_TELEMETRY_OPTOUT=1", "export DOTNET_NOLOGO=1",
-		"export DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false", "export DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true",
 	} {
 		if !strings.Contains("\n"+block+"\n", "\n"+line+"\n") {
 			t.Errorf("devvm-tools.sh lacks %q", line)
-		}
-	}
-	for _, dir := range []string{"$HOME/.npm-global/bin:", "$HOME/go/bin:", "$HOME/.cargo/bin:", "$HOME/.dotnet/tools:", "$HOME/.local/bin:"} {
-		if !strings.Contains(block, `export PATH="`) || !strings.Contains(block, dir) {
-			t.Errorf("devvm-tools.sh's PATH lacks %s", dir)
 		}
 	}
 	telemetry := heredoc(t, "sudo tee /etc/profile.d/devvm-telemetry.sh >/dev/null <<'SH'", "SH")

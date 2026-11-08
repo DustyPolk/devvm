@@ -64,6 +64,11 @@ func TestUp(t *testing.T) {
 			t.Errorf("staged agent-env lacks %q", line)
 		}
 	}
+	// Every toolchain's environment, PATH folders and version files, from
+	// the registry (TestToolsShellGolden).
+	if got["toolchain-env"] != string(toolchainEnv()) || got["version-files.toml"] != string(versionFiles()) {
+		t.Errorf("staged toolchain-env = %q, version-files.toml = %q", got["toolchain-env"], got["version-files.toml"])
+	}
 	if len(*execs) != 1 || (*execs)[0].Path != "/bin/shell" {
 		t.Errorf("exec = %+v", *execs)
 	}

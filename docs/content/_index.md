@@ -60,7 +60,7 @@ Claude Code needs your Claude login before its first start, which `devvm agent l
 
 {{< feature title="Toolchains" icon="code" level="3" art="toolchains" >}}
 
-`devvm` has toolchains for node, python, rust, go and dotnet. It chooses the ones your project's files call for, and you can choose more when you customize a new VM or name them with `--tools` ([toolchains](docs/using/toolchains.md)).
+`devvm` has [toolchains](docs/using/toolchains.md) for your project's languages, node among them. It chooses the ones your project's files call for, and you can choose more when you customize a new VM or name them with `--tools`.
 
 {{< /feature >}}
 

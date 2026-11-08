@@ -19,6 +19,7 @@ import (
 	"github.com/rogpeppe/go-internal/testscript"
 
 	"github.com/devvmhq/devvm/internal/daemon"
+	"github.com/devvmhq/devvm/internal/image"
 	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/stubtest"
 	"github.com/devvmhq/devvm/internal/ubuntu"
@@ -230,6 +231,10 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 	if err != nil {
 		return err
 	}
+	// The registries' lists, as devvm's messages join them, so a script
+	// that checks one names no toolchain or agent itself.
+	env.Setenv("TOOLCHAINS", strings.Join(image.Toolchains, " "))
+	env.Setenv("AGENTS", strings.Join(image.Agents, " "))
 	env.Setenv("DEVVM_HOST_MISE", filepath.Join(stubs, "mise"))
 	env.Setenv("MISE_STUB_LOCK", filepath.Join(repo, "testdata", "mise.lock"))
 	env.Setenv("DEVVM_BIN", bin) // for scripts that set their own PATH

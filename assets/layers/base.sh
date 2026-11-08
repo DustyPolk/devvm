@@ -79,7 +79,7 @@ fi
 mkdir -p ~/.bashrc.d
 grep -qs bashrc.d ~/.bashrc || echo 'for f in ~/.bashrc.d/*.sh; do [ -r "$f" ] && . "$f"; done' >> ~/.bashrc
 
-# mise runs the shared tools (node, python, go, rust, dotnet, agents), read-only images mounted at
+# mise runs the shared tools (the toolchains and the coding agents), read-only images mounted at
 # /opt/devvm/tools by devvm-tools (guest/tools.sh). Each VM's tools and versions are in
 # /etc/mise/config.toml (written by guest/sync.sh); the user's own mise config and a project's version
 # files (.nvmrc, .python-version, ...) come first, and versions that aren't shared install into the VM.
@@ -91,23 +91,20 @@ rm /tmp/mise
 # Every shell finds the tools: login shells through profile.d, interactive ones through mise activate
 # (it follows `cd` into projects with other versions), and the rest (`bash -c` from agents, editors
 # over SSH) through BASH_ENV and mise's shims. Read-only installs can't take global packages or update
-# themselves: npm installs globals into ~/.npm-global, the coding agents' self-updates are off (their
-# environment, which every launch's setup writes into /etc/devvm/agents.sh, read here, so a new agent
-# changes no image), and dotnet tool install -g installs into ~/.dotnet/tools, which is on the PATH,
-# so the SDK doesn't add it to a shell's profile on its first run. .NET's telemetry, its first-run
-# banner and its background check for workload updates are off, and so are the agents' telemetry and
-# version checks, here rather than in devvm-telemetry.sh, so a tool that a non-login shell runs (ssh
-# VM pi, an editor's terminal) sends none either.
+# themselves, so global installs go into the VM's home, on the PATH, and the coding agents'
+# self-updates are off. The toolchains' environment and their folders for the PATH (devvm_path), and
+# the agents', come from /etc/devvm/toolchains.sh and /etc/devvm/agents.sh, which every launch's setup
+# writes from devvm's registries, so a new toolchain or agent changes no image. Their telemetry and
+# version checks are off here rather than in devvm-telemetry.sh, so a tool that a non-login shell runs
+# (ssh VM pi, an editor's terminal) sends none either.
 sudo tee /etc/profile.d/devvm-tools.sh >/dev/null <<'SH'
+devvm_path=
+if [ -r /etc/devvm/toolchains.sh ]; then . /etc/devvm/toolchains.sh; fi
 case ":$PATH:" in *":$HOME/.local/share/mise/shims:"*) ;; *)
-  export PATH="$HOME/.npm-global/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.dotnet/tools:$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH" ;;
+  export PATH="$devvm_path$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH" ;;
 esac
-export NPM_CONFIG_PREFIX="$HOME/.npm-global"
+unset devvm_path
 if [ -r /etc/devvm/agents.sh ]; then . /etc/devvm/agents.sh; fi
-export DOTNET_CLI_TELEMETRY_OPTOUT=1
-export DOTNET_NOLOGO=1
-export DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false
-export DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true
 SH
 grep -qs devvm-tools /etc/environment || echo 'BASH_ENV=/etc/profile.d/devvm-tools.sh' | sudo tee -a /etc/environment >/dev/null
 echo 'eval "$(mise activate bash)"' > ~/.bashrc.d/mise.sh
@@ -147,7 +144,7 @@ sudo chmod 755 /usr/local/bin/xdg-open
 echo 'export BROWSER=xdg-open' | sudo tee /etc/profile.d/devvm-browser.sh >/dev/null
 
 # Telemetry off for every tool that has a switch (installed by devvm or commonly by projects), but
-# .NET's and the coding agents', which devvm-tools.sh turns off in every shell.
+# the toolchains' and the coding agents', which devvm-tools.sh turns off in every shell.
 sudo tee /etc/profile.d/devvm-telemetry.sh >/dev/null <<'SH'
 export DO_NOT_TRACK=1                 # generic opt-out (bun and others)
 export NEXT_TELEMETRY_DISABLED=1

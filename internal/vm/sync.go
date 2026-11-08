@@ -276,6 +276,8 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	}
 	s.put("tool-alias.toml", 0o644, aliases)
 	s.put("agent-env", 0o644, agentEnv())
+	s.put("toolchain-env", 0o644, toolchainEnv())
+	s.put("version-files.toml", 0o644, versionFiles())
 
 	// The host's settings, for every VM.
 	lang := e.Getenv("LC_ALL")
@@ -375,6 +377,42 @@ func agentEnv() []byte {
 		b.WriteString("export " + v.Name + "=" + shell.Quote(v.Value) + "\n")
 	}
 	return b.Bytes()
+}
+
+// toolchainEnv is the setup's toolchain-env file: an export line for each
+// of the toolchains' guest environment (image.GuestEnv), then devvm_path,
+// their folders of the VM's home for the PATH (image.GuestPath), each
+// followed by a colon, which guest/sync.sh installs as
+// /etc/devvm/toolchains.sh, for base's devvm-tools.sh to read in every
+// shell and put ahead of mise's shims.
+func toolchainEnv() []byte {
+	var b bytes.Buffer
+	for _, v := range image.GuestEnv() {
+		value := shell.Quote(v.Value)
+		if v.Home {
+			value = `"$HOME"/` + value
+		}
+		b.WriteString("export " + v.Name + "=" + value + "\n")
+	}
+	b.WriteString("devvm_path=")
+	for _, dir := range image.GuestPath() {
+		b.WriteString(`"$HOME"/` + shell.Quote(dir) + ":")
+	}
+	b.WriteString("\n")
+	return b.Bytes()
+}
+
+// versionFiles is the setup's version-files.toml: the VM's mise's
+// idiomatic_version_file_enable_tools setting, the toolchains' tools whose
+// version files a project's folder chooses versions with
+// (image.VersionFileTools), which guest/sync.sh adds to the VM's mise
+// settings.
+func versionFiles() []byte {
+	var names []string
+	for _, n := range image.VersionFileTools() {
+		names = append(names, strconv.Quote(n))
+	}
+	return []byte("idiomatic_version_file_enable_tools = [" + strings.Join(names, ", ") + "]\n")
 }
 
 // stageAgents adds the agents' settings from devvm's store (agentStore)

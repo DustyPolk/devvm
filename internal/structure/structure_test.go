@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/devvmhq/devvm/internal/agents"
+	"github.com/devvmhq/devvm/internal/image"
 )
 
 // root is the repo's root, from this package's folder.
@@ -300,11 +301,22 @@ func devvmLiterals() map[string]literalOwner {
 // devvmNames are the coding agents' names and login kinds, which only
 // internal/agents' literals are: its registry holds every agent, and code
 // of one agent's own names it by its constant there, so a new agent is a
-// Def and no copy of a list of them goes stale.
+// Def and no copy of a list of them goes stale. The toolchains' names and
+// their members' are internal/image's, whose SharedTools holds every
+// toolchain, so a new toolchain is an entry there: code elsewhere asks it
+// (image.Def, its Installer, its fields) rather than naming one.
 func devvmNames() map[string]literalOwner {
 	names := map[string]literalOwner{}
 	for _, n := range slices.Concat(agents.Names(), agents.LoginKinds()) {
 		names[n] = literalOwner{"internal/agents", "its constant in internal/agents"}
+	}
+	for _, d := range image.SharedTools {
+		if d.Kind != image.Toolchain {
+			continue
+		}
+		for _, m := range d.Members {
+			names[m] = literalOwner{"internal/image", "its image.SharedTools entry"}
+		}
 	}
 	return names
 }

@@ -296,6 +296,7 @@ Besides the agents' config, every launch sets the VM up from this machine's sett
 - git's `user.name` and `user.email`, as git has them in the project folder;
 - telemetry off where an environment variable can't turn it off, which is Go's, and Codex's analytics and metrics;
 - every agent's environment variables, which turn off its self-update and its telemetry ([supported agents](#supported-agents));
+- every toolchain's environment variables, such as the ones that turn off .NET's telemetry and send `npm i -g` into your home, and the folders where the toolchains' global installs go, on the `PATH` ([toolchains](toolchains.md));
 - `(devvm)` at the start of the prompt.
 
 On every network tier, the launch also installs the VM's own CA and the next one, points apt, sudo, ssh, the [docker layer](images.md#docker)'s Docker and the [nix layer](images.md#nix)'s Nix at the proxy, and adds `devvm-why`, which shows what the proxy blocked lately. It also tells the agents, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail ([inside the VM](../safety/network.md#inside-the-vm)). The VM's secrets go in `~/.config/devvm/env` in the VM, which login shells read, and that file holds their placeholders.

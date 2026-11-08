@@ -429,6 +429,20 @@ func agentCases() []ruleCase {
 			files: map[string]string{"internal/vm/a.go": "package vm\n\nconst rel = \".codex/auth.json\"\n"},
 			want:  &want{ruleOwners, "holds .codex/: a copy of what internal/agents owns, so use an agents.Def's paths"},
 		},
+		{
+			name:  "a toolchain's name outside image",
+			files: map[string]string{"internal/tools/a.go": "package tools\n\nfunc f(t string) bool { return t == \"dotnet\" }\n"},
+			want:  &want{ruleOwners, `is "dotnet", a name internal/image owns, so use its image.SharedTools entry`},
+		},
+		{
+			name:  "a toolchain's member outside image",
+			files: map[string]string{"internal/vm/a.go": "package vm\n\nconst m = \"pnpm\"\n"},
+			want:  &want{ruleOwners, `is "pnpm", a name internal/image owns, so use its image.SharedTools entry`},
+		},
+		{
+			name:  "a toolchain's name in image",
+			files: map[string]string{"internal/image/a.go": "package image\n\nconst n = \"rust\"\n"},
+		},
 	}
 }
 
