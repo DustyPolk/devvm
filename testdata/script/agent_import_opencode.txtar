@@ -53,7 +53,7 @@ stub_reset
 exec devvm --network open --no-git-protect --agents opencode
 vm_name P p
 stderr '^devvm: login_withheld agent=opencode name=opencode providers=copilot-ghe, mcp, ollama$'
-! stderr 'login_passed|login_kept'
+! stderr 'login_passed|login_fields_withheld'
 exec tar -xOf $STUB_DIR/sync.tar home/.local/share/opencode/auth.json
 stdout '"key": "devvm-proxy-managed-opencode-anthropic-[0-9a-f]{32}"'
 ! stdout 'testfake|"metadata"|"access"|"refresh"|"token"'

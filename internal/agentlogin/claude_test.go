@@ -11,6 +11,31 @@ import (
 	"time"
 )
 
+// ~/.claude.json's oauthAccount keeps claudeAccountKeep's fields; one that isn't an object is
+// withheld whole, and a file without one gets none.
+func TestClaudeAccount(t *testing.T) {
+	for _, c := range []struct {
+		in       map[string]any
+		want     map[string]any
+		withheld []string
+	}{
+		{
+			map[string]any{"oauthAccount": map[string]any{"accountUuid": "a", "fullName": map[string]any{"x": 1}}},
+			map[string]any{"oauthAccount": map[string]any{"accountUuid": "a"}},
+			[]string{"oauthAccount.fullName"},
+		},
+		{map[string]any{"oauthAccount": "sk-e2efake", "theme": "dark"}, map[string]any{"theme": "dark"}, []string{"oauthAccount"}},
+		{map[string]any{"theme": "dark"}, map[string]any{"theme": "dark"}, nil},
+	} {
+		w := claudeAccount(c.in)
+		got, _ := json.Marshal(c.in)
+		want, _ := json.Marshal(c.want)
+		if string(got) != string(want) || !slices.Equal(w, c.withheld) {
+			t.Errorf("claudeAccount = %s, %q; want %s, %q", got, w, want, c.withheld)
+		}
+	}
+}
+
 func strs(v any) []string {
 	var out []string
 	for _, x := range v.([]any) {

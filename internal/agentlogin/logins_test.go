@@ -121,15 +121,51 @@ func TestCodexVMCopyHoldsOnlyPlaceholders(t *testing.T) {
 }
 
 // A tokens object without an access token still has its other tokens scrubbed, and what the copy
-// holds as it is is named.
+// withholds, at the top and in tokens, is named.
 func TestCodexVMScrubsTokensWithoutAnAccessToken(t *testing.T) {
-	f := File{Kind: Codex, Path: writeFile(t, map[string]any{"tokens": map[string]any{"refresh_token": "rt-real", "id_token": "id-real"}, "extra": "x", "b": 1})}
-	out, kept := vmCopy(t, f)
-	if strings.Contains(out, "rt-real") || strings.Contains(out, "id-real") {
-		t.Errorf("the VM's copy holds a token:\n%s", out)
+	f := File{Kind: Codex, Path: writeFile(t, map[string]any{
+		"tokens": map[string]any{"refresh_token": "rt-real", "id_token": "id-real", "access_token": "", "zz": "z-real"},
+		"extra":  "x-real", "b": 1, "personal_access_token": "pat-real",
+	})}
+	c, err := f.VMCopy()
+	must(t, err)
+	for _, s := range []string{"rt-real", "id-real", "z-real", "x-real", "pat-real"} {
+		if strings.Contains(string(c.Data), s) {
+			t.Errorf("the VM's copy holds %q:\n%s", s, c.Data)
+		}
 	}
-	if !slices.Equal(kept, []string{"b", "extra"}) {
-		t.Errorf("kept = %q", kept)
+	if want := []string{"b", "extra", "personal_access_token", "tokens.zz"}; !slices.Equal(c.Unknown, want) || c.Kept != nil {
+		t.Errorf("unknown = %q, kept = %q; want unknown %q", c.Unknown, c.Kept, want)
+	}
+	var m map[string]any
+	must(t, json.Unmarshal(c.Data, &m))
+	// Codex reads every token as a string: an empty one stays.
+	if tk := obj(m, "tokens"); tk["access_token"] != "" || tk["refresh_token"] != managed || tk["id_token"] != managed {
+		t.Errorf("tokens = %v", tk)
+	}
+}
+
+// What Codex's copy keeps that it doesn't bind: the account and login IDs and the refresh token's
+// issuer and client ID, each a plain value; one that isn't is withheld.
+func TestCodexVMKeepsAccountFields(t *testing.T) {
+	f := File{Kind: Codex, Path: writeFile(t, map[string]any{
+		"auth_mode": "chatgpt", "last_refresh": map[string]any{"x": 1},
+		"tokens": map[string]any{
+			"account_id": "acct-1", "login_owner_id": "lo-1", "refresh_token": "rt-real",
+			"oauth_provenance": map[string]any{"issuer": "https://auth.openai.com", "client_id": "app_x", "extra": "e"},
+		},
+	})}
+	c, err := f.VMCopy()
+	must(t, err)
+	var m map[string]any
+	must(t, json.Unmarshal(c.Data, &m))
+	tk := obj(m, "tokens")
+	if p := obj(tk, "oauth_provenance"); tk["account_id"] != "acct-1" || tk["login_owner_id"] != "lo-1" ||
+		p["issuer"] != "https://auth.openai.com" || p["client_id"] != "app_x" || len(p) != 2 || m["auth_mode"] != "chatgpt" {
+		t.Errorf("the VM's copy = %s", c.Data)
+	}
+	if want := []string{"last_refresh", "tokens.oauth_provenance.extra"}; !slices.Equal(c.Unknown, want) {
+		t.Errorf("unknown = %q, want %q", c.Unknown, want)
 	}
 }
 

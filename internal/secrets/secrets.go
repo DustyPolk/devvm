@@ -282,9 +282,9 @@ func (s *Store) login(kind, salt string) agentlogin.File {
 }
 
 // VMLogin returns the VM's copy of an agent's login file: placeholders
-// ending in salt in place of its keys and tokens. It warns about what of
-// the file the copy holds as it is, and about the logins it holds without
-// their tokens. The copy of an agent that config.toml's [pass-keys] takes
+// ending in salt in place of its keys and tokens. It warns about the
+// fields of Codex's file the copy leaves out, and about the logins it
+// holds without their tokens. The copy of an agent that config.toml's [pass-keys] takes
 // (agents.Def's PassKeys) holds as they are the API keys of the providers
 // it lists for the agent (settings.PassKeys), which it notes, and
 // withholds every other key devvm doesn't bind. A provider it lists whose
@@ -300,10 +300,11 @@ func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
 		f.Pass = pass
 	}
 	c, err := f.VMCopy()
-	if list := strings.Join(c.Kept, ", "); list != "" && d.PassKeys {
+	if list := strings.Join(c.Kept, ", "); list != "" {
 		s.Note(msg.LoginPassed(d.Display, list))
-	} else if list != "" {
-		s.Warn(msg.LoginKept(d.Display, path.Base(l.Rel), list))
+	}
+	if list := strings.Join(c.Unknown, ", "); list != "" {
+		s.Warn(msg.LoginFieldsWithheld(d.Display, path.Base(l.Rel), list))
 	}
 	if list := strings.Join(c.Withheld, ", "); list != "" {
 		s.Warn(msg.LoginWithheld(d.Display, d.Name, list))

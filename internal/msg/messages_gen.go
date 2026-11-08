@@ -2064,9 +2064,9 @@ func LoginCopyFailed(agent string, reason string, vm string) M {
 	return M{id: "login_copy_failed", vals: []val{{"agent", agent}, {"reason", reason}, {"vm", vm}}}
 }
 
-// LoginKept is [login_kept]: "The VM gets {{.keys}} from {{.agent}}'s {{.file}} unchanged."
-func LoginKept(agent string, file string, keys string) M {
-	return M{id: "login_kept", vals: []val{{"agent", agent}, {"file", file}, {"keys", keys}}}
+// LoginFieldsWithheld is [login_fields_withheld]: "The VM gets {{.agent}}'s {{.file}} without {{.keys}}, because devvm doesn't know what they're for."
+func LoginFieldsWithheld(agent string, file string, keys string) M {
+	return M{id: "login_fields_withheld", vals: []val{{"agent", agent}, {"file", file}, {"keys", keys}}}
 }
 
 // LoginPassBound is [login_pass_bound]: "The VM's proxy puts in {{.agent}}'s {{.providers}} API key itself, so the VM gets its placeholder, and you can take the provider out of {{.name}} in config.toml's [pass-keys]. A key that a VM was given as it was before still works wherever the VM copied it, so make a new one if you don't trust that VM."
@@ -4463,7 +4463,7 @@ var specs = map[string]spec{
 	"log_failed":                     {fields: []string{"reason"}},
 	"login_capture_refused":          {fields: []string{"agent", "vm"}},
 	"login_copy_failed":              {fields: []string{"agent", "reason", "vm"}},
-	"login_kept":                     {fields: []string{"agent", "file", "keys"}},
+	"login_fields_withheld":          {fields: []string{"agent", "file", "keys"}},
 	"login_pass_bound":               {fields: []string{"agent", "name", "providers"}},
 	"login_passed":                   {fields: []string{"agent", "providers"}},
 	"login_read_failed":              {fields: []string{"file", "reason"}},

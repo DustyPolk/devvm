@@ -2591,9 +2591,9 @@ other = "{{.vm}} doesn't use the {{.secret}} secret any more."
 [secret_with_claude]
 other = "{{.vm}} has Claude Code, so the VM always uses the Claude Code token. To stop it, run devvm tools rm claude."
 
-[login_kept]
-description = "agent is the agent as people know it, such as Codex; file is its login file's name, such as auth.json; keys lists what of it devvm doesn't know, its top-level keys or its providers, comma-separated"
-other = "The VM gets {{.keys}} from {{.agent}}'s {{.file}} unchanged."
+[login_fields_withheld]
+description = "agent is the agent as people know it, such as Codex; file is its login file's name, such as auth.json or .claude.json; keys lists the fields of it that the VM's copy leaves out, a nested one by its path, such as tokens.x or oauthAccount.x, comma-separated"
+other = "The VM gets {{.agent}}'s {{.file}} without {{.keys}}, because devvm doesn't know what they're for."
 
 [login_passed]
 description = "agent is the agent as people know it, such as pi; providers lists its providers that config.toml's [pass-keys] lists, comma-separated"

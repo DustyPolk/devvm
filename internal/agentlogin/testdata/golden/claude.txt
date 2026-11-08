@@ -1,6 +1,7 @@
 binding {"name":"claude-mcp-4192ba186e64","kind":"login","agent":"claude","hosts":["mcp.example.com"],"header":"Authorization","placeholder":"devvm-proxy-managed-claude-mcp-4192ba186e64-s4lt"}
 kept 
 withheld 
+unknown oauthAccount.ccOnboardingFlags.flag,oauthAccount.zz_secret
 passed but bound 
 providers 
 chatgpt  no
@@ -42,7 +43,11 @@ vm copy
     }
   },
   "oauthAccount": {
-    "emailAddress": "a@b"
+    "accountUuid": "acct-1",
+    "ccOnboardingFlags": {},
+    "emailAddress": "a@b",
+    "profileFetchedAt": 1,
+    "seatTier": null
   },
   "theme": "dark"
 }

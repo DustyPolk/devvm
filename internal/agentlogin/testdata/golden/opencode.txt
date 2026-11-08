@@ -4,6 +4,7 @@ binding {"name":"opencode-openai","kind":"login","agent":"opencode","hosts":["ch
 binding {"name":"opencode-openrouter","kind":"login","agent":"opencode","hosts":["openrouter.ai"],"header":"Authorization","placeholder":"devvm-proxy-managed-opencode-openrouter-s4lt"}
 kept ollama
 withheld copilot-ghe,llama-cpp,mcp
+unknown 
 passed but bound anthropic
 providers anthropic,deepseek,google,groq,mistral,openai,openrouter,xai
 chatgpt e2efake@example.com yes

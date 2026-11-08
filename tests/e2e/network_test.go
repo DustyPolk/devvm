@@ -108,6 +108,14 @@ func (n *netRun) tier() string {
 // key is the VM's proxy's password.
 func (n *netRun) key() string { return n.s.Paths.State(n.vm)["net.made.proxy_key"] }
 
+// codexWithheld is the warning, in names mode, for the fields of the
+// imported Codex login that the VM's copy leaves out.
+const codexWithheld = `login_fields_withheld agent=Codex file=auth\.json keys=personal_access_token, zz_e2e`
+
+// claudeWithheld is the same warning for the imported ~/.claude.json's
+// oauthAccount.
+const claudeWithheld = `login_fields_withheld agent=Claude Code file=\.claude\.json keys=oauthAccount\.zz_e2e`
+
 func netSetup(n *netRun) {
 	s := n.s
 	n.nh = filepath.Join(s.sb.work, "net-home")
@@ -115,8 +123,11 @@ func netSetup(n *netRun) {
 	madeFile(s.sb, n.nh)
 	_ = os.MkdirAll(filepath.Join(n.nh, ".codex"), 0o700)
 	n.before = map[string]string{
-		"claude": `{"mcpServers":{"e2e":{"type":"http","url":"https://api.github.com/devvm-e2e-mcp","headers":{"X-Devvm-E2e":"e2efake-mcp"}}}}` + "\n",
-		"codex":  `{"OPENAI_API_KEY":"sk-e2efake-codex","last_refresh":null}` + "\n",
+		// An account field devvm doesn't know, which the VM's copy leaves out (claudeWithheld).
+		"claude": `{"mcpServers":{"e2e":{"type":"http","url":"https://api.github.com/devvm-e2e-mcp","headers":{"X-Devvm-E2e":"e2efake-mcp"}}},` +
+			`"oauthAccount":{"emailAddress":"e2e@devvm.test","zz_e2e":"e2efake-account"}}` + "\n",
+		// Fields devvm doesn't know, which the VM's copy leaves out (codexWithheld).
+		"codex": `{"OPENAI_API_KEY":"sk-e2efake-codex","last_refresh":null,"personal_access_token":"pat-e2efake-codex","zz_e2e":{"nested":["e2efake-codex"]}}` + "\n",
 	}
 	_ = os.WriteFile(filepath.Join(n.nh, ".claude.json"), []byte(n.before["claude"]), 0o600)
 	_ = os.WriteFile(filepath.Join(n.nh, ".codex", "auth.json"), []byte(n.before["codex"]), 0o600)
@@ -143,10 +154,17 @@ func netLaunch(n *netRun) {
 	})
 	n.n, _ = s.NewProject("net")
 	w, werr := WatchProcs(s)
-	n.vm, _, _ = launchWith(s, n.n, n.home(fakeToken), "--network", "allowlist", "--no-git-protect", "--agents", "claude,codex,opencode,pi")
+	var lr Res
+	n.vm, lr, _ = launchWith(s, n.n, n.home(fakeToken, "DEVVM_MESSAGES=names"), "--network", "allowlist", "--no-git-protect", "--agents", "claude,codex,opencode,pi")
 	if werr == nil {
 		w.Stop()
 	}
+	s.Check("the launch names the fields of Codex's login and Claude Code's account that the VM's copies leave out", func() error {
+		if !Matches(lr.Out, `^devvm: `+codexWithheld+`$`) || !Matches(lr.Out, `^devvm: `+claudeWithheld+`$`) {
+			return errors.New("no warning names them:\n" + lr.Out)
+		}
+		return nil
+	}, Tail(40))
 	n.vmd = s.Paths.VMDir(n.vm)
 	st := s.Paths.State(n.vm)
 	n.pp, n.salt = st["ports.host.proxy"], st["net.made.proxy_salt"]
@@ -691,6 +709,13 @@ func netTokens(n *netRun) {
 		c, _ := vmRun(s, vm, "bash", "-c", "cat ~/.codex/auth.json")
 		if strings.Contains(r.Stdout, "e2efake") || !strings.Contains(c.Stdout, "devvm-proxy-managed") {
 			return errors.New("a login holds a token, or Codex's no placeholder")
+		}
+		return nil
+	})
+	s.Check("the VM's Codex reads its copy of the login, the fields devvm doesn't know left out", func() error {
+		r, err := s.InVM(vm, "codex login status")
+		if err != nil || !strings.Contains(r.Out, "API key configured") {
+			return failed("codex login status:\n"+r.Out, err)
 		}
 		return nil
 	})

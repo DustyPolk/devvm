@@ -552,8 +552,8 @@ func TestVMCopies(t *testing.T) {
 	if err != nil || strings.Contains(string(data), "sk-codex-secret") || !strings.Contains(string(data), salt) || warned != nil {
 		t.Errorf("VMLogin = %s, %v; warned %q", data, err, warned)
 	}
-	// What a copy holds as it is is warned about.
-	writeLogin(t, s, "codex", `{"OPENAI_API_KEY":"sk-codex-secret","extra":"x","b":1}`)
+	// What a copy leaves out is warned about.
+	writeLogin(t, s, "codex", `{"OPENAI_API_KEY":"sk-codex-secret","extra":"x","b":1,"tokens":{"zz":"z"}}`)
 	writeLogin(t, s, "opencode", `{"llama":{"type":"api","key":"local"},"other":{"type":"oauth","access":"a","refresh":"r"}}`)
 	writeLogin(t, s, "pi", `{"anthropic":{"type":"api_key","key":"sk-ant-pi-secret"},"lmstudio":{"type":"api_key","key":"g"},"openai-codex":{"type":"oauth","access":"a","refresh":"r"}}`)
 	for _, kind := range []string{"codex", "opencode", "pi"} {
@@ -562,7 +562,7 @@ func TestVMCopies(t *testing.T) {
 		}
 	}
 	if want := []string{
-		"login_kept agent=Codex file=auth.json keys=b, extra",
+		"login_fields_withheld agent=Codex file=auth.json keys=b, extra, tokens.zz",
 		"login_withheld agent=opencode name=opencode providers=llama, other", "login_withheld agent=pi name=pi providers=lmstudio, openai-codex",
 	}; !slices.Equal(warned, want) {
 		t.Errorf("warned %q, want %q", warned, want)

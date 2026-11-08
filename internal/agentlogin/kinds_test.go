@@ -1,8 +1,12 @@
 package agentlogin
 
 import (
+	"encoding/json"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/devvmhq/devvm/internal/agents"
@@ -16,6 +20,54 @@ const (
 	Pi          = agents.Pi
 	ClaudeOAuth = agents.ClaudeOAuth
 )
+
+// canary is the value planted where no format knows a field (plantCanaries).
+const canary = "devvm-canary-e2efake"
+
+// plantCanaries adds to v, and to every object in it, a field no format knows, holding canary as
+// a string, in an object and in a list.
+func plantCanaries(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		for _, x := range t {
+			plantCanaries(x)
+		}
+		t["zz_canary"] = canary
+		t["zz_canary_object"] = map[string]any{"zz_canary": canary}
+		t["zz_canary_list"] = []any{canary, map[string]any{"zz_canary": canary}}
+	case []any:
+		for _, x := range t {
+			plantCanaries(x)
+		}
+	}
+}
+
+// Every format's VM copy holds only the fields it knows: a field it doesn't, at the top, in an
+// object or in a list, at any depth, never reaches the VM. A new format is checked as its golden
+// login is added (goldenLogins).
+func TestFormatsWithholdUnknown(t *testing.T) {
+	logins := goldenLogins()
+	for kind := range formats() {
+		t.Run(kind, func(t *testing.T) {
+			data, ok := logins[kind]
+			if !ok {
+				t.Fatalf("no golden login for %s in goldenLogins", kind)
+			}
+			var m map[string]any
+			must(t, json.Unmarshal([]byte(data), &m))
+			plantCanaries(m)
+			b, err := json.Marshal(m)
+			must(t, err)
+			f := File{Kind: kind, Path: filepath.Join(t.TempDir(), "auth.json"), Salt: "s4lt"}
+			must(t, os.WriteFile(f.Path, b, 0o600))
+			c, err := f.VMCopy()
+			must(t, err)
+			if strings.Contains(string(c.Data), canary) {
+				t.Errorf("the VM's copy holds a field devvm doesn't know:\n%s", c.Data)
+			}
+		})
+	}
+}
 
 // Every agent's login file has a format, and every format is an agent's login file's: one
 // with API keys (agents.Keys) can save them, and none can that has none to save.

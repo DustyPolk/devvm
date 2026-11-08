@@ -190,7 +190,8 @@ func devvm() rules {
 func devvmVars() map[string]string {
 	return map[string]string{
 		"internal/agentlogin.opencodeOAuth":       table,
-		"internal/agentlogin.codexKnown":          table,
+		"internal/agentlogin.codexKeep":           table,
+		"internal/agentlogin.claudeAccountKeep":   table,
 		"internal/agentlogin.claudeTopKeys":       table,
 		"internal/agentlogin.claudeServerKeys":    table,
 		"internal/agentlogin.openaiAuth":          fixture,

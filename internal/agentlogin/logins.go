@@ -15,7 +15,8 @@
 //
 // Formats (checked against upstream, 2026-10): Codex keeps OPENAI_API_KEY or tokens{id_token,
 // access_token, refresh_token, account_id} plus last_refresh; it decodes id_token's claims and
-// access_token's exp (never the signatures) and refreshes 5 minutes before exp. opencode keeps one
+// access_token's exp (never the signatures) and refreshes 5 minutes before exp. The VM's copy of
+// it holds only codexKeep's fields. opencode keeps one
 // entry per provider: {"type":"api","key"} or {"type":"oauth","access","refresh","expires" (ms)}.
 // opencode 2 (checked at v2.2.5) keeps its logins in its SQLite database instead, and imports
 // auth.json, in that format, once, as it makes its credential table; devvm's store keeps the
@@ -108,20 +109,10 @@ func salted(ph, salt string) string {
 	return ph + "-" + salt
 }
 
-// withheldKeep are the fields a withheld login entry (opencode's or pi's, neither bound nor
-// passed) keeps in the VM's copy: those that name an account or how it logs in, never a key or a
-// token.
-var withheldKeep = []string{"type", "expires", "accountId", "enterpriseUrl", "projectId", "email", "scope", "scopes", "clientId"}
-
 // withheldEntry is a login entry e as the VM's copy holds it withheld: withheldKeep's fields
 // alone, each a plain value or a list of strings.
 func withheldEntry(e map[string]any) map[string]any {
-	kept := map[string]any{}
-	for _, k := range withheldKeep {
-		if v, ok := e[k]; ok && plainField(v) {
-			kept[k] = v
-		}
-	}
+	kept, _ := withheldKeep.apply(e)
 	return kept
 }
 
@@ -332,43 +323,34 @@ func codexBindings(m map[string]any, salt string) []proxy.Binding {
 	return bs
 }
 
-// codexKnown: auth.json's keys codexVM knows. Others are copied as they are, and named.
-var codexKnown = map[string]bool{"OPENAI_API_KEY": true, "tokens": true, "last_refresh": true, "auth_mode": true}
-
-func codexOthers(m map[string]any) []string {
-	var others []string
-	for k := range m {
-		if !codexKnown[k] {
-			others = append(others, k)
-		}
-	}
-	sort.Strings(others)
-	return others
-}
-
-func codexVM(m map[string]any, salt string) map[string]any {
-	bs := codexBindings(m, salt)
-	t := obj(m, "tokens")
-	// The placeholder Codex's API-key exchange sends back (CaptureRequest).
-	id := openaiPlaceholder(str(t, "id_token"), salt)
-	// Every token goes, bound or not (a login without an access token still has the others).
+// codexVM is the VM's copy of Codex's auth.json m: what codexKeep keeps, its API key and tokens
+// placeholders, and the paths of the fields it withholds, sorted.
+func codexVM(m map[string]any, salt string) (map[string]any, []string) {
+	out, withheld := codexKeep.apply(m)
+	ht, t := obj(m, "tokens"), obj(out, "tokens")
+	// Every token goes, bound or not (a login without an access token still has the others); one
+	// that's empty stays empty, as Codex reads each as a string.
 	for _, k := range []string{"id_token", "refresh_token", "access_token"} {
-		if str(t, k) != "" {
-			t[k] = managed
+		if v, ok := ht[k].(string); ok && t != nil {
+			if v != "" {
+				v = managed
+			}
+			t[k] = v
 		}
 	}
-	for _, b := range bs {
+	for _, b := range codexBindings(m, salt) {
 		switch b.Name {
 		case "codex-key":
-			m["OPENAI_API_KEY"] = b.Placeholder
+			out["OPENAI_API_KEY"] = b.Placeholder
 		case codexLogin:
-			t["id_token"] = id
+			// The id token's is the placeholder Codex's API-key exchange sends back (CaptureRequest).
+			t["id_token"] = openaiPlaceholder(str(ht, "id_token"), salt)
 			t["access_token"] = b.Placeholder
 			// Just refreshed, as far as the VM's Codex can tell: it never tries.
-			m["last_refresh"] = time.Now().UTC().Format(time.RFC3339)
+			out["last_refresh"] = time.Now().UTC().Format(time.RFC3339)
 		}
 	}
-	return m
+	return out, withheld
 }
 
 func (f File) codexGet(ctx context.Context, name string) (string, error) {
@@ -841,6 +823,21 @@ func ClaudeCopy(path string) ([]byte, error) {
 	return encode("json", claudeTop(m))
 }
 
+// claudeAccount makes m's oauthAccount what claudeAccountKeep keeps of it, and returns the paths
+// of the fields it withholds, sorted.
+func claudeAccount(m map[string]any) []string {
+	a, ok := m["oauthAccount"]
+	if !ok {
+		return nil
+	}
+	kept, withheld := claudeAccountKeep.apply(map[string]any{"oauthAccount": a})
+	delete(m, "oauthAccount")
+	if v, ok := kept["oauthAccount"]; ok {
+		m["oauthAccount"] = v
+	}
+	return withheld
+}
+
 func claudeVM(m map[string]any, salt string) map[string]any {
 	claudeTop(m)
 	names, servers := claudeServers(m)
@@ -922,9 +919,13 @@ func (f File) Bindings() ([]proxy.Binding, error) {
 // VMFile is the VM's copy of an agent's file (File.VMCopy).
 type VMFile struct {
 	Data []byte
-	// Kept: what of the file the copy holds as it is, sorted: Codex's auth.json keys, or
-	// opencode's or pi's providers that File.Pass lists.
+	// Kept: the opencode or pi providers File.Pass lists, sorted, whose entries the copy holds as
+	// they are.
 	Kept []string
+	// Unknown: the fields the copy leaves out as devvm doesn't know them, sorted, a nested one's
+	// path as tokens.x: Codex's auth.json's (codexKeep) or ~/.claude.json's oauthAccount's
+	// (claudeAccountKeep).
+	Unknown []string
 	// Withheld: every opencode or pi login devvm neither binds nor passes, sorted, which the
 	// copy holds without their keys and tokens.
 	Withheld []string

@@ -193,7 +193,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"upstream_proxy_gone":            "using/troubleshooting#behind-a-company-proxy",
 	"net_proxy_down_stopped":         "using/troubleshooting#the-proxy-doesnt-start",
 	"no_secret":                      "safety/network#saving-and-binding-secrets",
-	"login_kept":                     "using/coding-agents#codex-and-opencode-logins",
+	"login_fields_withheld":          "using/coding-agents#codex-and-opencode-logins",
 	"login_passed":                   "using/settings#configtoml",
 	"login_pass_bound":               "using/coding-agents#api-keys-the-proxy-puts-in",
 	"login_withheld":                 "using/settings#configtoml",

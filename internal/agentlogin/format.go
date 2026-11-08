@@ -3,6 +3,7 @@ package agentlogin
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/devvmhq/devvm/internal/agents"
 	"github.com/devvmhq/devvm/internal/proxy"
@@ -30,6 +31,76 @@ type keyFormat interface {
 // that grants access last, none when m holds no ChatGPT login.
 type chatGPTFormat interface {
 	chatGPT(m map[string]any) []string
+}
+
+// keep is what of a JSON object in a login file the VM's copy holds: plain, the fields it copies
+// when each is a plain value (plainField); bound, those the format puts its placeholders in,
+// never copied; and nested, the objects it holds some of, each by its own keep. Everything else is
+// withheld (keep.apply), so a field devvm doesn't know never reaches a VM
+// (TestFormatsWithholdUnknown).
+type keep struct {
+	plain, bound []string
+	nested       map[string]keep
+}
+
+// What each format keeps or binds, in one place: the formats' VM copies hold only these.
+var (
+	// withheldKeep is a withheld login entry (opencode's or pi's, neither bound nor passed): the
+	// fields that name an account or how it logs in, never a key or a token.
+	withheldKeep = keep{plain: []string{"type", "expires", "accountId", "enterpriseUrl", "projectId", "email", "scope", "scopes", "clientId"}}
+	// codexKeep is Codex's auth.json (AuthDotJson and TokenData in codex-rs/login, checked at
+	// 0.166.0): its API key and tokens bound, the account and login IDs and the refresh token's
+	// issuer and client ID kept. Its other logins (agent_identity, personal_access_token,
+	// bedrock_api_key, bedrock_access_keys) have no binding, so they're withheld.
+	codexKeep = keep{
+		plain: []string{"auth_mode", "last_refresh"},
+		bound: []string{"OPENAI_API_KEY"},
+		nested: map[string]keep{"tokens": {
+			plain:  []string{"account_id", "login_owner_id"},
+			bound:  []string{"id_token", "access_token", "refresh_token"},
+			nested: map[string]keep{"oauth_provenance": {plain: []string{"issuer", "client_id"}}},
+		}},
+	}
+	// claudeAccountKeep is ~/.claude.json's oauthAccount, as Claude Code writes it (checked at
+	// 2.1.319: its profile, its roles and its rate-limit tiers). ccOnboardingFlags stays, empty,
+	// as Claude Code fetches the profile again while it's missing; its flags are withheld.
+	claudeAccountKeep = keep{nested: map[string]keep{"oauthAccount": {
+		plain: []string{
+			"accountUuid", "emailAddress", "organizationUuid", "hasExtraUsageEnabled", "billingType",
+			"accountCreatedAt", "subscriptionCreatedAt", "claudeCodeTrialEndsAt", "claudeCodeTrialDurationDays",
+			"seatTier", "planDisplayName", "displayName", "fullName", "profileFetchedAt", "organizationRole",
+			"workspaceRole", "organizationName", "organizationType", "organizationRateLimitTier", "userRateLimitTier",
+		},
+		nested: map[string]keep{"ccOnboardingFlags": {}},
+	}}}
+)
+
+// apply returns what of m the VM's copy holds by k, without k's bound fields, which the format
+// fills in, and the paths of the fields it withholds (tokens.x for a nested one), sorted.
+func (k keep) apply(m map[string]any) (map[string]any, []string) {
+	out, withheld := map[string]any{}, []string{}
+	for _, f := range sortedKeys(m) {
+		v := m[f]
+		switch n, nested := k.nested[f]; {
+		case slices.Contains(k.bound, f):
+		case nested:
+			o, ok := v.(map[string]any)
+			if !ok {
+				withheld = append(withheld, f)
+				continue
+			}
+			sub, w := n.apply(o)
+			out[f] = sub
+			for _, p := range w {
+				withheld = append(withheld, f+"."+p)
+			}
+		case slices.Contains(k.plain, f) && plainField(v):
+			out[f] = v
+		default:
+			withheld = append(withheld, f)
+		}
+	}
+	return out, withheld
 }
 
 // formats are every login kind's format (agents.LoginKinds; TestFormatsCoverLogins).
@@ -63,9 +134,10 @@ func (codexFormat) bindings(m map[string]any, salt string) []proxy.Binding {
 	return codexBindings(m, salt)
 }
 
+// vmCopy: Unknown are the fields codexKeep withholds.
 func (codexFormat) vmCopy(m map[string]any, f File) (map[string]any, VMFile) {
-	kept := codexOthers(m)
-	return codexVM(m, f.Salt), VMFile{Kept: kept}
+	c, unknown := codexVM(m, f.Salt)
+	return c, VMFile{Unknown: unknown}
 }
 
 func (codexFormat) get(ctx context.Context, f File, name string) (string, error) {
@@ -133,8 +205,10 @@ func (claudeFormat) bindings(m map[string]any, salt string) []proxy.Binding {
 	return claudeBindings(m, salt)
 }
 
+// vmCopy: Unknown are the fields of oauthAccount that claudeAccountKeep withholds.
 func (claudeFormat) vmCopy(m map[string]any, f File) (map[string]any, VMFile) {
-	return claudeVM(m, f.Salt), VMFile{}
+	c := claudeVM(m, f.Salt)
+	return c, VMFile{Unknown: claudeAccount(c)}
 }
 
 func (claudeFormat) get(_ context.Context, f File, name string) (string, error) {

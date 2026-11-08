@@ -44,10 +44,14 @@ func goldenLogins() map[string]string {
 	id := jwtWith(future, map[string]any{"https://api.openai.com/profile": map[string]any{"email": "e2efake@example.com"}})
 	enc := func(v any) string { b, _ := json.Marshal(v); return string(b) }
 	return map[string]string{
-		Codex: enc(map[string]any{
+		Codex: enc(map[string]any{ //nolint:gosec // fake values
 			"OPENAI_API_KEY": "sk-e2efake", "auth_mode": "chatgpt", "last_refresh": "2026-01-01T00:00:00Z",
-			"tokens":   map[string]any{"id_token": id, "access_token": access, "refresh_token": "rt-e2efake", "account_id": "acct-1"}, //nolint:gosec // fake values
-			"zz_extra": map[string]any{"kept": true}, "aa_other": "kept",
+			"tokens": map[string]any{ //nolint:gosec // fake values
+				"id_token": id, "access_token": access, "refresh_token": "rt-e2efake", "account_id": "acct-1",
+				"login_owner_id": "lo-1", "oauth_provenance": map[string]any{"issuer": "https://auth.openai.com", "client_id": openaiClientID},
+				"zz_token": "tk-e2efake",
+			},
+			"zz_extra": map[string]any{"withheld": true}, "aa_other": "withheld", "personal_access_token": "pat-e2efake",
 		}),
 		Opencode: enc(map[string]any{
 			"anthropic":      map[string]any{"type": "api", "key": "sk-ant-e2efake", "metadata": map[string]any{"m": "md-e2efake"}},
@@ -61,7 +65,10 @@ func goldenLogins() map[string]string {
 		}),
 		Pi: piHostLogins,
 		Claude: enc(map[string]any{ //nolint:gosec // fake values
-			"theme": "dark", "primaryApiKey": "sk-ant-api03-e2efake", "oauthAccount": map[string]any{"emailAddress": "a@b"},
+			"theme": "dark", "primaryApiKey": "sk-ant-api03-e2efake", "oauthAccount": map[string]any{ //nolint:gosec // fake values
+				"emailAddress": "a@b", "accountUuid": "acct-1", "seatTier": nil, "profileFetchedAt": 1,
+				"ccOnboardingFlags": map[string]any{"flag": true}, "zz_secret": "sk-ant-e2efake-account",
+			},
 			"projects": map[string]any{"/x": map[string]any{"history": []any{"e2efake-history"}}},
 			"mcpServers": map[string]any{
 				"remote": map[string]any{"type": "http", "url": "https://mcp.example.com/mcp?key=e2efake-key-1234567890abcdef", "headers": map[string]any{"Authorization": "Bearer e2efake"}},
@@ -98,6 +105,7 @@ func TestLoginsGolden(t *testing.T) {
 			must(t, err)
 			out.WriteString("kept " + strings.Join(c.Kept, ",") + "\n")
 			out.WriteString("withheld " + strings.Join(c.Withheld, ",") + "\n")
+			out.WriteString("unknown " + strings.Join(c.Unknown, ",") + "\n")
 			out.WriteString("passed but bound " + strings.Join(c.PassBound, ",") + "\n")
 			out.WriteString("providers " + strings.Join(KeyProviders(kind), ",") + "\n")
 			email, ok, err := f.ChatGPT()
