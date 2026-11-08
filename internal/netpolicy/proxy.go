@@ -2,6 +2,7 @@ package netpolicy
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"runtime"
@@ -292,7 +293,9 @@ func (p *Proxy) proxyPort(ctx context.Context, st *state.VM, up, running bool) (
 // every VM) whose proxy has them, so a token saved, deleted, bound or
 // unbound applies at once: a proxy reads its files again when they change,
 // and looks its values up afresh. Its logins' bindings stay as its start
-// wrote them.
+// wrote them. A VM whose files can't be written doesn't stop the others',
+// so a secret deleted or unbound leaves every other VM's proxy at once,
+// and the errors come back together.
 func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
 	if len(vms) == 0 {
 		all, err := state.VMNames(p.Dirs)
@@ -301,6 +304,7 @@ func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
 		}
 		vms = all
 	}
+	var errs []error
 	for _, vm := range vms {
 		if _, err := os.Stat(p.Dirs.VM(vm).Secrets()); err != nil {
 			continue
@@ -314,10 +318,10 @@ func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
 			continue
 		}
 		if err := p.Secrets.RefreshFiles(ctx, st, n.Made.ProxySalt); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // start writes cfg, the VM's proxy's config, and starts the proxy with

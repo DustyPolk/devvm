@@ -101,6 +101,19 @@ type File struct {
 	Pass []string
 }
 
+// Placeholder is the one shape of a placeholder that the proxy fills in, made the VM's own by its
+// salt: prefix, which a client may check a key's start for (sk-ant-oat01-, sk_), then
+// devvm-proxy-managed (managedMark, which HasPlaceholder finds), then what it stands for, if
+// anything. devvm's secrets (internal/secrets' Secret.Placeholder), yours included, and the
+// logins' placeholders are made with it.
+func Placeholder(prefix, what, salt string) string {
+	ph := prefix + managedMark
+	if what != "" {
+		ph += "-" + what
+	}
+	return salted(ph, salt)
+}
+
 // salted: a placeholder made the VM's own.
 func salted(ph, salt string) string {
 	if salt == "" {
@@ -181,7 +194,7 @@ func authorization(hosts ...string) provider {
 // the key for, then devvm-proxy-managed, the agent and the provider.
 func keyPlaceholder(agent, id, salt string) string {
 	p, _ := keyProvider(id)
-	return salted(p.prefix+"devvm-proxy-managed-"+agent+"-"+id, salt)
+	return Placeholder(p.prefix, agent+"-"+id, salt)
 }
 
 var opencodeOAuth = map[string]provider{
@@ -661,7 +674,7 @@ func claudeBindings(m map[string]any, salt string) []proxy.Binding {
 		}
 		for _, h := range sortedKeys(obj(s, "headers")) {
 			name := claudeBindingName(n, h)
-			bs = append(bs, login(agents.Claude, name, provider{hosts: []string{host}, headers: []string{h}}, salted("devvm-proxy-managed-"+name, salt))...)
+			bs = append(bs, login(agents.Claude, name, provider{hosts: []string{host}, headers: []string{h}}, Placeholder("", name, salt))...)
 		}
 	}
 	return bs
@@ -889,7 +902,7 @@ func claudeVM(m map[string]any, salt string) map[string]any {
 		https := claudeHost(s) != ""
 		for _, h := range sortedKeys(obj(s, "headers")) {
 			if https {
-				obj(s, "headers")[h] = salted("devvm-proxy-managed-"+claudeBindingName(n, h), salt)
+				obj(s, "headers")[h] = Placeholder("", claudeBindingName(n, h), salt)
 			} else {
 				obj(s, "headers")[h] = "devvm-redacted"
 			}

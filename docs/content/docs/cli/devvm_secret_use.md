@@ -7,7 +7,7 @@ Let this folder's VM use a secret
 
 ## Synopsis
 
-Let this folder's VM use a secret. Its proxy puts the secret in at once, and the VM gets its placeholder from its next launch.
+Let this folder's VM use a secret, and reach its hosts on port 443. Its proxy puts the secret in at once, and the VM gets its placeholder from its next launch.
 
 ```text
 devvm secret use NAME [flags]
@@ -17,6 +17,7 @@ devvm secret use NAME [flags]
 
 ```text
   devvm secret use github  # let the VM use your GitHub token
+  devvm secret use stripe  # let the VM use a secret of yours
 ```
 
 ## Options

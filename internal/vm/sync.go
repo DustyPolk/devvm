@@ -325,9 +325,22 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	if err != nil {
 		return nil, err
 	}
+	all, err := secrets.YoursOf(store).Using(secrets.Names(st))
+	if err != nil {
+		return nil, err
+	}
 	for _, name := range secrets.Names(st) {
-		sec, ok := secrets.Lookup(name)
+		sec, ok := secrets.Find(all, name)
 		if !ok {
+			continue
+		}
+		// A secret of yours the VM was bound to before it was saved again
+		// (its definition's ID another) gives it nothing, nor one none of
+		// whose hosts it was bound to are left.
+		if _, used := secrets.UsedAs(st, sec); sec.Custom && !used {
+			if secrets.Stale(st, sec) {
+				e.Warn(msg.SecretStale(name, vm))
+			}
 			continue
 		}
 		v, err := store.Value(ctx, name)
@@ -339,6 +352,8 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 				e.Warn(msg.NoClaudeToken(vm))
 			case name == "github":
 				e.Warn(msg.NoGithubToken(vm))
+			default:
+				e.Warn(msg.SecretNotSaved(name, vm))
 			}
 			continue
 		} else if err != nil {

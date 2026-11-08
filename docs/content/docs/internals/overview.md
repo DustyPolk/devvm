@@ -175,6 +175,7 @@ In the data folder, each VM has a folder of its own, `vms/<hash>/` ([a VM's fold
 - `ssh_config` is the [ssh config](security.md#ssh-into-vms) for running VMs, and each entry checks its VM against the host keys in the VM's own folder.
 - `agent-keys.json` lists the keys added to [devvm's own SSH agent](../using/ssh.md#devvms-own-agent), with each one's file, fingerprint, `confirm` and `lifetime`, and `agent.sock` is that agent's socket.
 - `secrets/` holds each [secret](network.md#where-secrets-are-saved) in a file of its own, on hosts without a Keychain.
+- `custom-secrets.json` holds the definitions of [your own secrets](network.md#where-secrets-are-saved), their hosts, headers, variables and prefixes, never their values.
 - `images/<key>/record.json` is each image's record, and `images/rebuilds.json` holds the [rebuild counters](images.md#rebuilding), by backend, `--from` and image. `images/ubuntu.json` is the [Ubuntu cloud image](images.md#ubuntus-cloud-image) that base starts from on this machine.
 - `tools/` holds the [shared tools](images.md#the-share), each image with its record. Beside it are the tools lock, `mise.lock`, the `mise.toml` it was resolved from, `mise.lock.toml`, and `mise.lock.checked`, which says when devvm last [checked](images.md#versions) for newer versions.
 - `logs/runs/` holds the [run logs](../using/troubleshooting.md#a-command-fails), and `logs/tools-check.log` the daily tools check's output.
@@ -247,6 +248,7 @@ Every lock devvm takes is an OS file lock on an open file, which the system lets
 | `tools.lock` | a devvm [writing to the share](images.md#building-tools) or swapping the tools lock |
 | `making.lock` | each devvm making a VM or giving one new shared tools, shared, and `devvm gc --tool-images --force`, alone ([cleaning up](images.md#listing-and-cleaning-up)) |
 | `groups.lock` | a devvm [joining or leaving a group](design.md#groups), or working its links out again |
+| `custom-secrets.lock` | a devvm [saving or deleting a secret of yours, or binding a VM to one](network.md#where-secrets-are-saved) |
 | `retention.lock` | the devvm applying the [retention settings](../using/settings.md#retention) |
 
 ### The layout version

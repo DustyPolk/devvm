@@ -46,6 +46,9 @@ exec devvm link add db 5432
 stdin $WORK/github.token
 exec devvm secret set github --stdin
 exec devvm secret use github
+stdin $WORK/stripe.token
+exec devvm secret set stripe --host api.stripe.com --env STRIPE_API_KEY --stdin
+exec devvm secret use stripe
 vm_name APP app
 vm_name DB db
 vm_state $APP_dir/vm.json
@@ -67,6 +70,8 @@ exec sh $WORK/list.sh $DATA
 one
 -- github.token --
 ghp_testfake
+-- stripe.token --
+sk_test_fake
 -- list.sh --
 # list.sh FOLDER: every path under FOLDER, sorted, with APP's and DB's
 # hashes named and other hashes, times, versions and QEMU's architecture
@@ -80,6 +85,8 @@ find . -mindepth 1 | sed -E \
 -- config.txt --
 version
 -- data.txt --
+custom-secrets.json
+custom-secrets.lock
 groups.lock
 images
 images/X
@@ -162,6 +169,8 @@ vms/DB/run/secrets.policy
 vms/DB/run/started
 vms/DB/vm.json
 -- data-linux.txt --
+custom-secrets.json
+custom-secrets.lock
 groups.lock
 images
 images/X
@@ -187,6 +196,7 @@ run/link-X.sock
 run/qemu
 run/qemu/qemu-system-X
 secrets
+secrets/custom.stripe
 secrets/github
 settings.json
 ssh_config

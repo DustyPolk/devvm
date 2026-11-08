@@ -32,14 +32,34 @@ func KeychainGet(ctx context.Context, service, account string) (string, error) {
 // a backslash or a line break, which would end its command line. Its
 // output is discarded.
 func KeychainSet(ctx context.Context, service, account, label, value string) error {
-	for _, s := range []string{service, account, label, value} {
-		if strings.ContainsAny(s, "\"\\\r\n") {
-			return errors.New("a quote, backslash or line break in a Keychain item")
-		}
+	line, err := keychainLine(service, account, label, value)
+	if err != nil {
+		return err
 	}
 	cmd := exec.CommandContext(ctx, "security", "-i")
-	cmd.Stdin = strings.NewReader("add-generic-password -U -s \"" + service + "\" -a \"" + account + "\" -l \"" + label + "\" -w \"" + value + "\"\n")
+	cmd.Stdin = strings.NewReader(line)
 	return cmd.Run()
+}
+
+// keychainLineMax bounds security -i's command line, which it reads in
+// lines of 4096 bytes: a longer one would be cut, the item saved with what
+// fits (in place of the one there, -U), and the rest run as commands.
+const keychainLineMax = 4000
+
+// keychainLine is KeychainSet's command line for security -i, refused
+// before anything runs when a part holds a quote, a backslash or a line
+// break, which would end it, or when it's past keychainLineMax.
+func keychainLine(service, account, label, value string) (string, error) {
+	for _, s := range []string{service, account, label, value} {
+		if strings.ContainsAny(s, "\"\\\r\n") {
+			return "", errors.New("a quote, backslash or line break in a Keychain item")
+		}
+	}
+	line := "add-generic-password -U -s \"" + service + "\" -a \"" + account + "\" -l \"" + label + "\" -w \"" + value + "\"\n"
+	if len(line) > keychainLineMax {
+		return "", errors.New("a Keychain item too long for security -i's line")
+	}
+	return line, nil
 }
 
 // KeychainDelete deletes the generic password for service and account:

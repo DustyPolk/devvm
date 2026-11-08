@@ -1047,6 +1047,37 @@ func TestRefreshSecrets(t *testing.T) {
 	if err := p.RefreshSecrets(ctx, other.Name()); err != nil {
 		t.Fatal(err)
 	}
+	// A VM whose files can't be written again (its bindings unreadable)
+	// doesn't keep the others' from it: its error comes back after.
+	broken := newVM(t, d, "devvm-aaa-0123456789abc7", "base", "node")
+	if _, err := Salt(ctx, broken); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.WriteFile(d.VM(broken.Name()).Secrets(), []byte("not json\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Secrets.Save(ctx, "github", "ghp_testfake2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.WriteFile(d.VM(st.Name()).Secrets(), []byte(`{"version":1,"bindings":[]}`+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.RefreshSecrets(ctx, broken.Name(), st.Name()); err == nil {
+		t.Error("the broken VM's error was lost")
+	}
+	if data, _ := os.ReadFile(d.VM(st.Name()).Secrets()); !strings.Contains(string(data), `"name":"github"`) {
+		t.Errorf("the VM after the broken one = %s", data)
+	}
+}
+
+// The proxy's variables, which every VM's environment has, are ones a
+// secret of yours can't take (secrets.CheckEnv).
+func TestEnvReservedForSecrets(t *testing.T) {
+	for name := range Env {
+		if secrets.CheckEnv(name) == nil {
+			t.Errorf("a secret of yours may take %s", name)
+		}
+	}
 }
 
 // A running VM whose proxy couldn't start is stopped, and the reason

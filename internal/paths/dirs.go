@@ -314,5 +314,13 @@ func (d Dirs) AgentLogins(agent string) string { return filepath.Join(d.Data, "l
 // Secrets holds secrets' values on hosts without a Keychain, one file each.
 func (d Dirs) Secrets() string { return filepath.Join(d.Data, "secrets") }
 
+// CustomSecrets lists your own secrets (devvm secret set NAME --host
+// HOST): each one's name, hosts, header, variable and placeholder's
+// start, never its value, which is where the other secrets' are.
+func (d Dirs) CustomSecrets() string { return filepath.Join(d.Data, "custom-secrets.json") }
+
+// CustomSecretsLock is held while CustomSecrets changes.
+func (d Dirs) CustomSecretsLock() string { return filepath.Join(d.Data, "custom-secrets.lock") }
+
 // SSHConfig is the SSH config devvm writes for its VMs.
 func (d Dirs) SSHConfig() string { return filepath.Join(d.Data, "ssh_config") }

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -211,7 +212,9 @@ func netSetup(n *netRun) {
 	_ = os.WriteFile(filepath.Join(n.nh, ".claude.json"), []byte(n.before["claude"]), 0o600)
 	_ = os.WriteFile(filepath.Join(n.nh, ".codex", "auth.json"), []byte(n.before["codex"]), 0o600)
 	n.logins = filepath.Join(s.Paths.Devvm, "logins")
-	s.Defer(func(ctx context.Context) { forgetSecrets(ctx, s, "github", "claude") })
+	s.Defer(func(ctx context.Context) {
+		forgetSecrets(ctx, s, "github", "claude", "custom."+customName, "custom."+basicName)
+	})
 }
 
 func netLaunch(n *netRun) {
@@ -867,6 +870,121 @@ func netCapture(n *netRun) {
 	}, Tail(60))
 }
 
+// A secret of yours, its host faked by the fake token endpoints' company
+// proxy (customHost), which logs the headers each request arrives with.
+const (
+	customName  = "e2e-custom"
+	customHost  = "api.devvm-e2e-custom.dev"
+	customValue = "sk_e2e_e2efake-custom-value"
+	// A second secret of yours, in Authorization below /v1/ alone.
+	basicName  = "e2e-basic"
+	basicValue = "e2efake-basic-value"
+)
+
+// netCustomSecret: two secrets of yours, saved on stdin with their hosts,
+// headers, variables, prefix and path, and used by the VM, which sees only
+// its own placeholders in the variables. Their host gets the real values in
+// their headers, in the shapes the proxy fills in, and below the path
+// alone; another host, another path and an echoed shape, Basic's username,
+// get only the placeholder, and no log holds a value.
+func netCustomSecret(n *netRun) {
+	s, vm := n.s, n.vm
+	s.Check("a secret of yours reaches its host alone, in its header, and the VM holds only its placeholder", func() error {
+		if n.tok == nil {
+			return errors.New("the fake endpoints didn't start")
+		}
+		// Saved and deleted with the VM's HOME, as netGithub's token is: the
+		// proxy, which that HOME's launch started, reads the Keychain with it.
+		defer func() {
+			for _, name := range []string{customName, basicName} {
+				_, _ = s.Run(devvmCmd(s, "", "", n.home(), "secret", "rm", "--force", name))
+			}
+		}()
+		for _, set := range [][]string{
+			{customValue, customName, "--header", "x-api-key", "--env", "E2E_CUSTOM_KEY", "--prefix", "sk_e2e_"},
+			{basicValue, basicName, "--env", "E2E_BASIC_KEY", "--path", "/v1/"},
+		} {
+			args := append([]string{"secret", "set", set[1], "--host", customHost, "--stdin"}, set[2:]...)
+			if _, err := s.Run(devvmCmd(s, "", set[0]+"\n", n.home(), args...)); err != nil {
+				return fmt.Errorf("devvm secret set %s: %w", set[1], err)
+			}
+			if _, err := n.dv("", n.tokenEnv(), "secret", "use", set[1]); err != nil {
+				return fmt.Errorf("devvm secret use %s: %w", set[1], err)
+			}
+		}
+		// The variables come with the next launch.
+		if _, err := n.dv("exit\n", n.tokenEnv()); err != nil {
+			return fmt.Errorf("the launch: %w", err)
+		}
+		if err := n.customChecks(vm); err != nil {
+			return err
+		}
+		return basicChecks(n, vm)
+	}, Tail(40))
+}
+
+// basicChecks are netCustomSecret's checks of the secret in Authorization
+// below /v1/: Basic's password and Bearer get the value there, and Basic's
+// username, which servers echo, Bearer on another path, keep the
+// placeholder.
+func basicChecks(n *netRun, vm string) error {
+	s := n.s
+	ph := "devvm-proxy-managed-secret-" + basicName + "-" + n.salt
+	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+	for _, req := range []string{
+		`-u "x-access-token:$E2E_BASIC_KEY" https://` + customHost + `/v1/basic-pass`,
+		`-u "$E2E_BASIC_KEY:x" https://` + customHost + `/v1/basic-user`,
+		`-H "Authorization: Bearer $E2E_BASIC_KEY" https://` + customHost + `/v1/bearer`,
+		`-H "Authorization: Bearer $E2E_BASIC_KEY" https://` + customHost + `/other/bearer`,
+		`-H "Authorization: Bearer x$E2E_BASIC_KEY" https://` + customHost + `/v1/framed`,
+	} {
+		if err := inVM(s, vm, `curl -sS -m 20 -o /dev/null `+req); err != nil {
+			return fmt.Errorf("curl %s: %w", req, err)
+		}
+	}
+	got := readText(n.tokLog)
+	for path, want := range map[string]string{
+		"/v1/basic-pass": "Basic " + b64("x-access-token:"+basicValue),
+		"/v1/basic-user": "Basic " + b64(ph+":x"),
+		"/v1/bearer":     "Bearer " + basicValue,
+		"/other/bearer":  "Bearer " + ph,
+		"/v1/framed":     "Bearer x" + ph,
+	} {
+		if !lineWith(got, "api "+path+" "+want) {
+			return fmt.Errorf("%s didn't arrive with %q:\n%s", path, want, got)
+		}
+	}
+	return NoLeak([]string{basicValue}, filepath.Join(n.vmd, "logs"), filepath.Join(n.vmd, "run"),
+		filepath.Join(s.Paths.Devvm, "logs"), filepath.Join(s.Paths.Devvm, "custom-secrets.json"))
+}
+
+// customChecks are netCustomSecret's checks once the VM uses the secret:
+// its first that failed, nil when none.
+func (n *netRun) customChecks(vm string) error {
+	s := n.s
+	ph := "sk_e2e_devvm-proxy-managed-secret-" + customName + "-" + n.salt
+	if err := inVM(s, vm, `[[ $E2E_CUSTOM_KEY == `+ph+` ]] && ! grep -rqF e2efake-custom ~/.config/devvm /etc/environment`); err != nil {
+		return errors.New("the VM's variable isn't its placeholder alone, or the value is in the VM")
+	}
+	if err := inVM(s, vm, `curl -sS -m 20 -o /dev/null https://`+customHost+`/devvm-e2e-custom -H "X-Api-Key: $E2E_CUSTOM_KEY"`); err != nil {
+		return fmt.Errorf("the request to its host: %w", err)
+	}
+	if err := inVM(s, vm, `curl -sS -m 20 -o /dev/null https://api.anthropic.com/devvm-e2e-custom-other -H "X-Api-Key: $E2E_CUSTOM_KEY"`); err != nil {
+		return fmt.Errorf("the request to another host: %w", err)
+	}
+	got := readText(n.tokLog)
+	switch {
+	case !lineWith(got, "api /devvm-e2e-custom ", "x-api-key "+customValue):
+		return errors.New("its host didn't get the value in X-Api-Key:\n" + got)
+	case !lineWith(got, "api /devvm-e2e-custom-other ", "x-api-key "+ph) || lineWith(got, "/devvm-e2e-custom-other", customValue):
+		return errors.New("another host got more than the placeholder:\n" + got)
+	case !lineWith(readText(n.events), `"path":"/devvm-e2e-custom"`, `"secrets":["`+customName+`"]`):
+		return errors.New("no event shows the secret put in")
+	}
+	return NoLeak([]string{customValue}, filepath.Join(n.vmd, "logs"), filepath.Join(n.vmd, "run"),
+		filepath.Join(s.Paths.Devvm, "logs"), filepath.Join(s.Paths.Devvm, "custom-secrets.json"))
+}
+
 // netTokenServer starts the fake token endpoints (fakeTokenPy) on slot 0's
 // port 47199 as the slot has it, with a certificate the run's CA signed,
 // which devvm's CA folder holds until they stop.
@@ -876,7 +994,7 @@ func netTokenServer(n *netRun) error {
 	if err != nil {
 		return err
 	}
-	cf, kf, err := ca.Sign("auth", "auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", "api.openai.com", geminiAPIHost, "openrouter.ai")
+	cf, kf, err := ca.Sign("auth", "auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", "api.openai.com", geminiAPIHost, "openrouter.ai", customHost)
 	if err != nil {
 		return err
 	}
@@ -1651,6 +1769,9 @@ func netClaudeLogins(n *netRun) {
 		}
 		return nil
 	}, Tail(40))
+	// While the fake endpoints still run, and once a secret has been saved
+	// in the Keychain with the VM's HOME, as netGithub's is.
+	netCustomSecret(n)
 	if n.tok != nil {
 		n.tok.Stop()
 	}
@@ -1935,7 +2056,7 @@ func netGithub(n *netRun) {
 		if has, err := vmHas(s, n.vm, true, "env; cat ~/.config/devvm/env", tok); err != nil || has {
 			return failed("the VM holds the token", err)
 		}
-		if !Matches(list(), `^github +yes +`+regexp.QuoteMeta(n.vm)+`$`) {
+		if !Matches(list(), `^github +yes .* `+regexp.QuoteMeta(n.vm)+`$`) {
 			return errors.New("devvm secret doesn't list the VM using github")
 		}
 		return nil
@@ -2548,11 +2669,10 @@ socketserver.ThreadingTCPServer(("", int(sys.argv[1])), H).serve_forever()
 
 // fakeTokenPy is the fake token endpoints: a company proxy that answers a
 // CONNECT to auth.openai.com, platform.claude.com, api.anthropic.com,
-// api.groq.com, api.openai.com, generativelanguage.googleapis.com or
-// openrouter.ai itself, with its certificate (port, cert, key and its log are its
-// arguments), and refuses any other.
-//
-//nolint:gosec // G101: its tokens are fakes, which no service takes
+// api.groq.com, api.openai.com, generativelanguage.googleapis.com,
+// openrouter.ai or customHost itself, with its certificate (port, cert, key
+// and its log are its arguments), and refuses any other. customHost answers
+// as Anthropic's API does, logging each request's headers.
 const fakeTokenPy = `import base64, json, socket, ssl, sys, threading, urllib.parse
 port, cert, key, log = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -2639,7 +2759,7 @@ def openrouter(path, h):
     with open(log, "a") as o:
         o.write("openrouter " + path + " authorization " + (a[0] if a else "-") + " x-api-key " + (k[0] if k else "-") + "\n")
     return 404, {"error": {"code": 404, "message": "e2e"}}
-HOSTS = ("auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", "api.openai.com", "generativelanguage.googleapis.com", "openrouter.ai")
+HOSTS = ("auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", "api.openai.com", "generativelanguage.googleapis.com", "openrouter.ai", "` + customHost + `")
 def serve(c):
     try:
         req = head(c.makefile("rb"))
@@ -2660,7 +2780,7 @@ def serve(c):
             n = sum(int(x.split(":", 1)[1]) for x in h[1:] if x.lower().startswith("content-length:"))
             body = f.read(n).decode()
             code = 200
-            if host == "api.anthropic.com":
+            if host in ("api.anthropic.com", "` + customHost + `"):
                 code, r = api(h[0].split(" ")[1], h)
             elif host == "api.groq.com":
                 code, r = groq(h[0].split(" ")[1], h)

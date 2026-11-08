@@ -56,7 +56,7 @@ var errConsole = errors.New("a Claude login without the " + claudeInference + " 
 
 // claudeOAuthPlaceholder is the VM's in place of the OAuth login's access token.
 func claudeOAuthPlaceholder(salt string) string {
-	return salted(claudeTokenStart+"devvm-proxy-managed-oauth", salt)
+	return Placeholder(claudeTokenStart, "oauth", salt)
 }
 
 func claudeOAuth(m map[string]any) map[string]any { return obj(m, "claudeAiOauth") }

@@ -444,6 +444,41 @@ func BadPath(dir string) M {
 	return M{id: "bad_path", vals: []val{{"dir", dir}}}
 }
 
+// BadSecretEnv is [bad_secret_env]: "{{.given}} can't hold a secret's placeholder, because it isn't a variable's name, or devvm or the shell sets it. Give another name, such as STRIPE_API_KEY."
+func BadSecretEnv(given string) M {
+	return M{id: "bad_secret_env", vals: []val{{"given", given}}}
+}
+
+// BadSecretHeader is [bad_secret_header]: "A secret can't go in the header {{.given}}. Give a header name such as Authorization or X-Api-Key, but not Host, Cookie or a header that the proxy sets or drops."
+func BadSecretHeader(given string) M {
+	return M{id: "bad_secret_header", vals: []val{{"given", given}}}
+}
+
+// BadSecretHost is [bad_secret_host]: "A secret can't go to {{.given}}. Give a host name such as api.example.com, with no wildcard, address, internal name or port other than 443."
+func BadSecretHost(given string) M {
+	return M{id: "bad_secret_host", vals: []val{{"given", given}}}
+}
+
+// BadSecretName is [bad_secret_name]: "{{.given}} can't name a secret. A name has lowercase letters, digits and dashes, at most {{.most}} of them, and starts and ends with a letter or a digit."
+func BadSecretName(given string, most string) M {
+	return M{id: "bad_secret_name", vals: []val{{"given", given}, {"most", most}}}
+}
+
+// BadSecretPath is [bad_secret_path]: "A secret can't go in below {{.given}}. Give a path that starts and ends with a slash, such as /api/, with no . or .. part, doubled slash, backslash, ; or %."
+func BadSecretPath(given string) M {
+	return M{id: "bad_secret_path", vals: []val{{"given", given}}}
+}
+
+// BadSecretPrefix is [bad_secret_prefix]: "{{.given}} can't start a placeholder. Give at most {{.most}} letters, digits, dots, dashes or underscores, such as sk_."
+func BadSecretPrefix(given string, most string) M {
+	return M{id: "bad_secret_prefix", vals: []val{{"given", given}, {"most", most}}}
+}
+
+// BadSecretScheme is [bad_secret_scheme]: "{{.given}} can't be a secret's own scheme. Give one such as ApiKey, of letters, digits, dots, dashes or underscores, but not Basic, Digest, Bearer or Token, which devvm handles itself."
+func BadSecretScheme(given string) M {
+	return M{id: "bad_secret_scheme", vals: []val{{"given", given}}}
+}
+
 // BadSecretService is [bad_secret_service]: "DEVVM_SECRET_SERVICE can only have letters, digits, '.', '_' and '-'."
 func BadSecretService() M {
 	return M{id: "bad_secret_service"}
@@ -777,6 +812,26 @@ func CreatingFromUbuntu(vm string) M {
 // CustomLayerRemove is [custom_layer_remove]: "{{.layer}} is one of {{.vm}}'s layers, not a shared tool. To take it out, run devvm layer rm {{.layer}}."
 func CustomLayerRemove(layer string, vm string) M {
 	return M{id: "custom_layer_remove", vals: []val{{"layer", layer}, {"vm", vm}}}
+}
+
+// CustomSecretHowto is [custom_secret_howto]: "Paste the value of {{.secret}}, which VMs that use it send to {{.hosts}}.\nThe VMs that use it can reach those hosts on port 443."
+func CustomSecretHowto(hosts string, secret string) M {
+	return M{id: "custom_secret_howto", vals: []val{{"hosts", hosts}, {"secret", secret}}}
+}
+
+// CustomSecretRefused is [custom_secret_refused]: "The entry for {{.secret}} in {{.path}} breaks the rules for a secret of yours. Fix the entry, or delete it and save the secret again."
+func CustomSecretRefused(path string, secret string) M {
+	return M{id: "custom_secret_refused", vals: []val{{"path", path}, {"secret", secret}}}
+}
+
+// CustomSecretUsed is [custom_secret_used]: "{{.vm}} uses the {{.secret}} secret from its next launch, and its allowlist has {{.hosts}} on port 443."
+func CustomSecretUsed(hosts string, secret string, vm string) M {
+	return M{id: "custom_secret_used", vals: []val{{"hosts", hosts}, {"secret", secret}, {"vm", vm}}}
+}
+
+// CustomSecretsUnreadable is [custom_secrets_unreadable]: "Reading your secrets' list in {{.path}} failed: {{.reason}}."
+func CustomSecretsUnreadable(path string, reason string) M {
+	return M{id: "custom_secrets_unreadable", vals: []val{{"path", path}, {"reason", reason}}}
 }
 
 // DefaultAgents is [default_agents]: "New VMs get these coding agents: {{.agents}}. To change them, run devvm setup --agents."
@@ -3429,14 +3484,64 @@ func ScriptFailed(script string, vm string) M {
 	return M{id: "script_failed", vals: []val{{"script", script}, {"vm", vm}}}
 }
 
+// SecretBindingChanged is [secret_binding_changed]: "The VM's proxy has a binding of {{.secret}} that isn't the secret as it's saved now, so it put nothing in. The VM's next launch writes its bindings again."
+func SecretBindingChanged(secret string) M {
+	return M{id: "secret_binding_changed", vals: []val{{"secret", secret}}}
+}
+
+// SecretEnvTaken is [secret_env_taken]: "Your {{.secret}} secret already gives VMs its placeholder in {{.env}}. Give this one another variable with --env."
+func SecretEnvTaken(env string, secret string) M {
+	return M{id: "secret_env_taken", vals: []val{{"env", env}, {"secret", secret}}}
+}
+
 // SecretFailed is [secret_failed]: "Reading or changing the saved secrets failed: {{.reason}}."
 func SecretFailed(reason string) M {
 	return M{id: "secret_failed", vals: []val{{"reason", reason}}}
 }
 
+// SecretFixed is [secret_fixed]: "The {{.secret}} secret's hosts, header and variable are devvm's own, so devvm secret set {{.secret}} takes no --host, --header, --env or --prefix."
+func SecretFixed(secret string) M {
+	return M{id: "secret_fixed", vals: []val{{"secret", secret}}}
+}
+
 // SecretHostOnly is [secret_host_only]: "VMs never get the {{.secret}} secret, because only devvm's proxies on this machine send it to the company proxy."
 func SecretHostOnly(secret string) M {
 	return M{id: "secret_host_only", vals: []val{{"secret", secret}}}
+}
+
+// SecretHostsChanged is [secret_hosts_changed]: "{{.vms}} use the {{.secret}} secret, which now goes only to {{.hosts}} on port 443."
+func SecretHostsChanged(count int, hosts string, secret string, vms string) M {
+	return M{id: "secret_hosts_changed", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"hosts", hosts}, {"secret", secret}, {"vms", vms}}}
+}
+
+// SecretHostsGrown is [secret_hosts_grown]: "{{.vms}} keep sending the {{.secret}} secret to the hosts each had. Run devvm secret use {{.secret}} in a VM's folder to give it the new ones."
+func SecretHostsGrown(count int, secret string, vms string) M {
+	return M{id: "secret_hosts_grown", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"secret", secret}, {"vms", vms}}}
+}
+
+// SecretNameTaken is [secret_name_taken]: "{{.given}} is a name of devvm's own, or starts with a coding agent's, so it can't name a secret of yours. Give it another name."
+func SecretNameTaken(given string) M {
+	return M{id: "secret_name_taken", vals: []val{{"given", given}}}
+}
+
+// SecretNeedsEnv is [secret_needs_env]: "The {{.secret}} secret needs the variable VMs find its placeholder in. Give it with --env, such as --env STRIPE_API_KEY."
+func SecretNeedsEnv(secret string) M {
+	return M{id: "secret_needs_env", vals: []val{{"secret", secret}}}
+}
+
+// SecretNeedsHost is [secret_needs_host]: "The {{.secret}} secret isn't saved yet, so it needs the hosts it goes to and its variable. Give them with --host and --env, such as --host api.example.com --env EXAMPLE_API_KEY."
+func SecretNeedsHost(secret string) M {
+	return M{id: "secret_needs_host", vals: []val{{"secret", secret}}}
+}
+
+// SecretNewLike is [secret_new_like]: "There's no secret {{.given}} yet, but there's {{.like}}. To save a new secret of yours, give it --host and --env."
+func SecretNewLike(given string, like string) M {
+	return M{id: "secret_new_like", vals: []val{{"given", given}, {"like", like}}}
+}
+
+// SecretNotSaved is [secret_not_saved]: "{{.vm}} uses the {{.secret}} secret, but no value is saved for it. Run devvm secret set {{.secret}}."
+func SecretNotSaved(secret string, vm string) M {
+	return M{id: "secret_not_saved", vals: []val{{"secret", secret}, {"vm", vm}}}
 }
 
 // SecretRemoved is [secret_removed]: "devvm deleted the {{.secret}} secret."
@@ -3449,6 +3554,11 @@ func SecretRmConfirm(name string) M {
 	return M{id: "secret_rm_confirm", vals: []val{{"name", name}}}
 }
 
+// SecretRmUsers is [secret_rm_users]: "{{.vms}} use the {{.secret}} secret, and stop using it once it's deleted."
+func SecretRmUsers(count int, secret string, vms string) M {
+	return M{id: "secret_rm_users", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"secret", secret}, {"vms", vms}}}
+}
+
 // SecretSaved is [secret_saved]: "devvm saved the {{.secret}} secret in {{.file}}."
 func SecretSaved(file string, secret string) M {
 	return M{id: "secret_saved", vals: []val{{"file", file}, {"secret", secret}}}
@@ -3457,6 +3567,21 @@ func SecretSaved(file string, secret string) M {
 // SecretSavedKeychain is [secret_saved_keychain]: "devvm saved the {{.secret}} secret in the Keychain."
 func SecretSavedKeychain(secret string) M {
 	return M{id: "secret_saved_keychain", vals: []val{{"secret", secret}}}
+}
+
+// SecretSchemeHeader is [secret_scheme_header]: "The {{.secret}} secret's --scheme and --basic-user go with the Authorization header alone. Leave --header out, or them."
+func SecretSchemeHeader(secret string) M {
+	return M{id: "secret_scheme_header", vals: []val{{"secret", secret}}}
+}
+
+// SecretStale is [secret_stale]: "{{.vm}} was bound to an earlier secret named {{.secret}}, so it gets nothing of this one. Run devvm secret use {{.secret}} to bind it again, or devvm secret unuse {{.secret}}."
+func SecretStale(secret string, vm string) M {
+	return M{id: "secret_stale", vals: []val{{"secret", secret}, {"vm", vm}}}
+}
+
+// SecretTooManyHosts is [secret_too_many_hosts]: "The {{.secret}} secret has more than {{.most}} hosts. Give it fewer, or save another secret for the rest."
+func SecretTooManyHosts(most string, secret string) M {
+	return M{id: "secret_too_many_hosts", vals: []val{{"most", most}, {"secret", secret}}}
 }
 
 // SecretUnused is [secret_unused]: "{{.vm}} doesn't use the {{.secret}} secret any more."
@@ -3684,6 +3809,16 @@ func TierLinkedTargets(targets string, tier string, vm string) M {
 	return M{id: "tier_linked_targets", vals: []val{{"targets", targets}, {"tier", tier}, {"vm", vm}}}
 }
 
+// TokenIsPlaceholder is [token_is_placeholder]: "The secret you gave holds a VM's placeholder, not the real value, so devvm didn't save it. Copy the value from where you made it."
+func TokenIsPlaceholder() M {
+	return M{id: "token_is_placeholder"}
+}
+
+// TokenNotAscii is [token_not_ascii]: "The secret you gave has a character that isn't printable ASCII, such as an accented letter, so devvm didn't save it."
+func TokenNotAscii() M {
+	return M{id: "token_not_ascii"}
+}
+
 // TokenPrompt is [token_prompt]: "Token:"
 func TokenPrompt() M {
 	return M{id: "token_prompt"}
@@ -3692,6 +3827,11 @@ func TokenPrompt() M {
 // TokenQuotes is [token_quotes]: "The secret you gave has a quote, a backslash or a control character, so devvm didn't save it."
 func TokenQuotes() M {
 	return M{id: "token_quotes"}
+}
+
+// TokenTooLong is [token_too_long]: "The secret you gave is longer than {{.most}} bytes, so devvm didn't save it, and the one saved before stays."
+func TokenTooLong(most string) M {
+	return M{id: "token_too_long", vals: []val{{"most", most}}}
 }
 
 // TooManyCpus is [too_many_cpus]: "This machine has {{.have}} CPUs, fewer than --cpus {{.want}} asks for."
@@ -4324,6 +4464,13 @@ var specs = map[string]spec{
 	"bad_duration":                   {fields: []string{"value"}},
 	"bad_from":                       {fields: []string{"from"}},
 	"bad_path":                       {fields: []string{"dir"}},
+	"bad_secret_env":                 {fields: []string{"given"}},
+	"bad_secret_header":              {fields: []string{"given"}},
+	"bad_secret_host":                {fields: []string{"given"}},
+	"bad_secret_name":                {fields: []string{"given", "most"}},
+	"bad_secret_path":                {fields: []string{"given"}},
+	"bad_secret_prefix":              {fields: []string{"given", "most"}},
+	"bad_secret_scheme":              {fields: []string{"given"}},
 	"bad_secret_service":             {},
 	"base_build_time":                {},
 	"base_features":                  {fields: []string{"features"}},
@@ -4391,6 +4538,10 @@ var specs = map[string]spec{
 	"creating_from":                  {fields: []string{"image", "vm"}},
 	"creating_from_ubuntu":           {fields: []string{"vm"}},
 	"custom_layer_remove":            {fields: []string{"layer", "vm"}},
+	"custom_secret_howto":            {fields: []string{"hosts", "secret"}},
+	"custom_secret_refused":          {fields: []string{"path", "secret"}},
+	"custom_secret_used":             {fields: []string{"hosts", "secret", "vm"}},
+	"custom_secrets_unreadable":      {fields: []string{"path", "reason"}},
 	"default_agents":                 {fields: []string{"agents"}},
 	"default_agents_none":            {},
 	"default_layer_gone":             {fields: []string{"dir", "layer", "vm"}},
@@ -4921,12 +5072,26 @@ var specs = map[string]spec{
 	"saved_names_taken":              {fields: []string{"command", "remote", "vm"}},
 	"saving_home":                    {fields: []string{"vm"}},
 	"script_failed":                  {fields: []string{"script", "vm"}},
+	"secret_binding_changed":         {fields: []string{"secret"}},
+	"secret_env_taken":               {fields: []string{"env", "secret"}},
 	"secret_failed":                  {fields: []string{"reason"}},
+	"secret_fixed":                   {fields: []string{"secret"}},
 	"secret_host_only":               {fields: []string{"secret"}},
+	"secret_hosts_changed":           {plural: true, fields: []string{"count", "hosts", "secret", "vms"}},
+	"secret_hosts_grown":             {plural: true, fields: []string{"count", "secret", "vms"}},
+	"secret_name_taken":              {fields: []string{"given"}},
+	"secret_needs_env":               {fields: []string{"secret"}},
+	"secret_needs_host":              {fields: []string{"secret"}},
+	"secret_new_like":                {fields: []string{"given", "like"}},
+	"secret_not_saved":               {fields: []string{"secret", "vm"}},
 	"secret_removed":                 {fields: []string{"secret"}},
 	"secret_rm_confirm":              {fields: []string{"name"}},
+	"secret_rm_users":                {plural: true, fields: []string{"count", "secret", "vms"}},
 	"secret_saved":                   {fields: []string{"file", "secret"}},
 	"secret_saved_keychain":          {fields: []string{"secret"}},
+	"secret_scheme_header":           {fields: []string{"secret"}},
+	"secret_stale":                   {fields: []string{"secret", "vm"}},
+	"secret_too_many_hosts":          {fields: []string{"most", "secret"}},
 	"secret_unused":                  {fields: []string{"secret", "vm"}},
 	"secret_used":                    {fields: []string{"secret", "vm"}},
 	"secret_with_claude":             {fields: []string{"vm"}},
@@ -4972,8 +5137,11 @@ var specs = map[string]spec{
 	"sync_failed":                    {fields: []string{"vm"}},
 	"tier_linked_clients":            {fields: []string{"tier", "vm", "vms"}},
 	"tier_linked_targets":            {fields: []string{"targets", "tier", "vm"}},
+	"token_is_placeholder":           {},
+	"token_not_ascii":                {},
 	"token_prompt":                   {},
 	"token_quotes":                   {},
+	"token_too_long":                 {fields: []string{"most"}},
 	"too_many_cpus":                  {fields: []string{"have", "want"}},
 	"too_much_memory":                {fields: []string{"have", "max", "want"}},
 	"tool_bad_output":                {fields: []string{"file"}},

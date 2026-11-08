@@ -82,7 +82,7 @@ func fakeSecret(s *secrets, value string) *[]Binding {
 	s.valueMu.Lock()
 	defer s.valueMu.Unlock()
 	s.lookup = func(_ context.Context, b Binding) (string, error) { asked = append(asked, b); return value, nil }
-	s.values = map[string]cached{}
+	s.values = map[valueKey]cached{}
 	return &asked
 }
 
@@ -111,12 +111,115 @@ func TestInject(t *testing.T) {
 	if used := s.inject(h, bs); len(used) != 0 || h.Get("Authorization") != "Bearer something-else" {
 		t.Error("a header without the placeholder changed")
 	}
-	// A secret's placeholder goes wherever its header holds it, in each of its values.
+	// Two values that hold the placeholder, which a server may join into one: neither changes.
 	h = http.Header{}
 	h.Add("Authorization", "xxxx PH yyyy")
 	h.Add("Authorization", "token PH")
-	if used := s.inject(h, bs); len(used) != 1 || !reflect.DeepEqual(h.Values("Authorization"), []string{"xxxx real yyyy", "token real"}) {
+	if used := s.inject(h, bs); len(used) != 0 || !reflect.DeepEqual(h.Values("Authorization"), []string{"xxxx PH yyyy", "token PH"}) {
 		t.Errorf("a secret's values = %q, used %v", h.Values("Authorization"), used)
+	}
+}
+
+// A secret's value goes in only in the shapes that put it where a server reads a credential:
+// the placeholder alone, Bearer, Token or the binding's own scheme before it in Authorization,
+// the password of Basic credentials, and the username only with BasicUser. Every other shape,
+// each of which a server could echo (a username it doesn't know, a framed or doubled value, a
+// Digest field), keeps the placeholder.
+func TestInjectSecretShapes(t *testing.T) {
+	t.Parallel()
+	enc := func(s string) string { return "Basic " + base64.StdEncoding.EncodeToString([]byte(s)) }
+	auth := Binding{Name: "s", Kind: KindSecret, Header: "Authorization", Placeholder: "PH"}
+	apiKey := auth
+	apiKey.Scheme = "ApiKey"
+	user := auth
+	user.BasicUser = true
+	plain := Binding{Name: "s", Kind: KindSecret, Header: "X-Api-Key", Placeholder: "PH"}
+	long := strings.Repeat("u", basicPartMax+1)
+	for _, tc := range []struct {
+		b         Binding
+		vals      []string
+		want      []string // nil: unchanged
+		basicWant string   // the Basic credentials put in, decoded
+	}{
+		// Allowed, and swapped.
+		{auth, []string{"PH"}, []string{"real"}, ""},
+		{auth, []string{"Bearer PH"}, []string{"Bearer real"}, ""},
+		{auth, []string{"bearer PH"}, []string{"bearer real"}, ""},
+		{auth, []string{"token PH"}, []string{"token real"}, ""},
+		{auth, []string{"Token PH"}, []string{"Token real"}, ""},
+		{apiKey, []string{"ApiKey PH"}, []string{"ApiKey real"}, ""},
+		{apiKey, []string{"apikey PH"}, []string{"apikey real"}, ""},
+		{auth, []string{enc("x-access-token:PH")}, nil, "x-access-token:real"},
+		{auth, []string{enc("api:PH")}, nil, "api:real"},
+		{auth, []string{enc(":PH")}, nil, ":real"},
+		{user, []string{enc("PH:")}, nil, "real:"},
+		{user, []string{enc("PH:x")}, nil, "real:x"},
+		{user, []string{enc("PH:a:b")}, nil, "real:a:b"},
+		{user, []string{enc("api:PH")}, nil, "api:real"},
+		{plain, []string{"PH"}, []string{"real"}, ""},
+		{auth, []string{"PH", "Other x"}, []string{"real", "Other x"}, ""},
+		// Refused: the placeholder stays.
+		{auth, []string{enc("PH:x")}, nil, ""},                 // the username, which Elasticsearch echoes
+		{auth, []string{enc("PH:")}, nil, ""},                  // the username alone
+		{auth, []string{"Basic PH"}, nil, ""},                  // raw Basic
+		{auth, []string{`Digest username="PH"`}, nil, ""},      // a Digest field
+		{auth, []string{"Bearer aaaaPHbbbb"}, nil, ""},         // framed
+		{auth, []string{"Bearer  PH"}, nil, ""},                // two spaces
+		{auth, []string{"Bearer PH "}, nil, ""},                // a byte after it
+		{auth, []string{"PH,PH"}, nil, ""},                     // doubled in one value
+		{auth, []string{"PH PH"}, nil, ""},                     // doubled, a space between
+		{auth, []string{"PH", "PH"}, nil, ""},                  // in two values
+		{auth, []string{"PH", "Bearer PH"}, nil, ""},           // in two values, both fine alone
+		{auth, []string{"ApiKey PH"}, nil, ""},                 // a scheme the binding doesn't have
+		{auth, []string{"Negotiate PH"}, nil, ""},              // nor this one
+		{apiKey, []string{"Basic PH"}, nil, ""},                // Basic is never a scheme of its own
+		{auth, []string{enc("PH" + "x:PH")}, nil, ""},          // the username holds it too
+		{auth, []string{enc(long + ":PH")}, nil, ""},           // a username past basicPartMax
+		{auth, []string{enc("a\x01b:PH")}, nil, ""},            // a control character in it
+		{auth, []string{enc("é:PH")}, nil, ""},                 // not ASCII
+		{user, []string{enc("PH:" + long)}, nil, ""},           // a password past basicPartMax
+		{user, []string{enc("PH:PH")}, nil, ""},                // both
+		{auth, []string{enc("x:PH") + "="}, nil, ""},           // not canonical base64
+		{auth, []string{"Basic  " + enc("x:PH")[6:]}, nil, ""}, // two spaces
+		{plain, []string{"Bearer PH"}, nil, ""},                // a scheme outside Authorization
+		{plain, []string{enc("x:PH")}, nil, ""},                // Basic outside Authorization
+		{plain, []string{"xPH"}, nil, ""},
+	} {
+		s := newSecrets("", nil, quiet())
+		fakeSecret(s, "real")
+		h := http.Header{}
+		for _, v := range tc.vals {
+			h.Add(tc.b.Header, v)
+		}
+		used := s.inject(h, []Binding{tc.b})
+		got := h.Values(tc.b.Header)
+		switch {
+		case tc.basicWant != "":
+			raw, _ := basic(got[0])
+			if len(used) != 1 || raw != tc.basicWant {
+				t.Errorf("%+v %q: Basic %q, used %v, want %q", tc.b, tc.vals, raw, used, tc.basicWant)
+			}
+		case tc.want != nil:
+			if len(used) != 1 || !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("%+v %q: %q, used %v, want %q", tc.b, tc.vals, got, used, tc.want)
+			}
+		case len(used) != 0 || !reflect.DeepEqual(got, tc.vals):
+			t.Errorf("%+v %q: %q, used %v: want it refused, unchanged", tc.b, tc.vals, got, used)
+		}
+	}
+}
+
+// A secret's own scheme: a token of its own, never Basic, Digest, Bearer or Token.
+func TestSchemeOK(t *testing.T) {
+	t.Parallel()
+	for s, ok := range map[string]bool{
+		"ApiKey": true, "SSWS": true, "Klaviyo-API-Key": true, "GenieKey": true,
+		"": false, "Basic": false, "basic": false, "Digest": false, "Bearer": false, "token": false,
+		"Api Key": false, "Api:Key": false, strings.Repeat("a", 33): false,
+	} {
+		if SchemeOK(s) != ok {
+			t.Errorf("SchemeOK(%q) = %v", s, !ok)
+		}
 	}
 }
 
@@ -525,11 +628,11 @@ func TestSecretValueLooksUpInProcess(t *testing.T) {
 	if len(*asked) != 1 || !reflect.DeepEqual((*asked)[0], b) {
 		t.Errorf("looked up %+v, want %+v once", *asked, b)
 	}
-	s.values[b.Name] = cached{"real", time.Now().Add(-loginTTL)}
+	s.values[valueKeyOf(b)] = cached{"real", time.Now().Add(-loginTTL)}
 	if _, err := s.value(b); err != nil || len(*asked) != 2 {
 		t.Errorf("an expired value: %v, %d lookups", err, len(*asked))
 	}
-	s.values = map[string]cached{}
+	s.values = map[valueKey]cached{}
 	s.lookup = func(context.Context, Binding) (string, error) { return "", errors.New("locked") }
 	if _, err := s.value(b); err == nil || !strings.Contains(err.Error(), "codex: locked") {
 		t.Errorf("a failed lookup: %v", err)
@@ -538,7 +641,7 @@ func TestSecretValueLooksUpInProcess(t *testing.T) {
 	if _, err := s.value(b); err == nil {
 		t.Error("an empty value was taken")
 	}
-	if _, ok := s.values[b.Name]; ok {
+	if _, ok := s.values[valueKeyOf(b)]; ok {
 		t.Error("a failed lookup was cached")
 	}
 	s.lookup = nil
@@ -549,6 +652,24 @@ func TestSecretValueLooksUpInProcess(t *testing.T) {
 	h.Set("Authorization", "Bearer PH")
 	if used := s.inject(h, []Binding{{Name: "codex", Kind: KindLogin, Header: "Authorization", Placeholder: "PH"}}); used != nil || h.Get("Authorization") != "Bearer PH" {
 		t.Errorf("without a value: used %v, %q", used, h.Get("Authorization"))
+	}
+}
+
+// A secret of yours and an agent's login that share a name are cached apart: neither binding's
+// host ever gets the other's value.
+func TestValuesCachedByBinding(t *testing.T) {
+	t.Parallel()
+	s := newSecrets("", nil, quiet())
+	s.lookup = func(_ context.Context, b Binding) (string, error) { return b.Kind + "-value", nil }
+	login := Binding{Name: "pi-openai", Kind: KindLogin, Agent: "pi"}
+	secret := Binding{Name: "pi-openai", Kind: KindSecret}
+	for _, tc := range []struct {
+		b    Binding
+		want string
+	}{{login, "login-value"}, {secret, "secret-value"}, {login, "login-value"}} {
+		if v, err := s.value(tc.b); v != tc.want || err != nil {
+			t.Errorf("value(%+v) = %q, %v, want %q", tc.b, v, err, tc.want)
+		}
 	}
 }
 
@@ -812,14 +933,14 @@ func TestBindingsChangeDropsCachedValues(t *testing.T) {
 	writeBindings(t, path)
 	s.all()
 	s.valueMu.Lock()
-	s.values["t"] = cached{"old", time.Now()}
+	s.values[valueKey{name: "t"}] = cached{"old", time.Now()}
 	s.valueMu.Unlock()
 	later := time.Now().Add(2 * time.Second)
 	must(t, os.Chtimes(path, later, later))
 	s.all()
 	s.valueMu.Lock()
 	defer s.valueMu.Unlock()
-	if _, ok := s.values["t"]; ok {
+	if _, ok := s.values[valueKey{name: "t"}]; ok {
 		t.Error("a cached value survived the bindings file changing")
 	}
 }

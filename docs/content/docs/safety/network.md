@@ -358,6 +358,7 @@ Secrets stay on this machine, whatever the VM's tier. A VM gets a placeholder of
 | --- | --- | --- | --- |
 | `claude` | `api.anthropic.com` | `Authorization` | every VM whose image has `claude` |
 | `github` | `api.github.com`, `github.com`, `codeload.github.com`, `raw.githubusercontent.com` | `Authorization` | VMs it's bound to |
+| [your own](#your-own-secrets) | the hosts you give it | `Authorization`, or the header you give it | VMs it's bound to |
 
 Agents' logins work the same way. When a VM's image has a coding agent and devvm's agent store has a login or an API key for it, the VM gets placeholders for the login, and so do Claude Code's MCP servers' secrets ([agents' logins and settings](../internals/network.md#agents-logins-and-settings)). A Claude Code, Codex or opencode login that you make inside a VM goes to the store, and the VM gets placeholders for it too ([Claude Code login](../using/coding-agents.md#claude-code-login)). A VM saves a login only for an agent that its image has, and its proxy refuses a login for any other agent, so a VM without Codex can never replace the store's Codex login. Because the store keeps one login for each agent, any VM with the agent can replace it, so a VM you don't trust can log your other VMs in to an account of its choosing ([logins made in a VM](../internals/network.md#logins-made-in-a-vm)).
 
@@ -367,14 +368,17 @@ Agents' logins work the same way. When a VM's image has a coding agent and devvm
 | --- | --- |
 | `devvm secret set claude` or `github` | asks for the Claude Code token or the GitHub token without showing it, and saves it (`--stdin` reads a line instead) |
 | `devvm secret set proxy` | asks for the [company proxy](#behind-a-company-proxy)'s password, for the user that `config.toml`'s `[proxy]` names, and saves it (`--stdin` reads a line instead) |
-| `devvm secret rm NAME` | deletes a saved secret |
-| `devvm secret` | lists the secrets, whether each is saved, and the VMs using each |
-| `devvm secret use NAME` | lets this folder's VM use the secret |
+| `devvm secret set NAME --host HOST --env VARIABLE` | asks for a [secret of your own](#your-own-secrets), such as an API key, and saves it with the hosts it goes to and the variable that VMs find its placeholder in (`--stdin` reads a line instead) |
+| `devvm secret rm NAME` | deletes a saved secret, after asking |
+| `devvm secret` | lists the secrets, each with its variable, header and hosts, whether it's saved, and the VMs using it |
+| `devvm secret use NAME` | lets this folder's VM use the secret, and reach its hosts on port 443 |
 | `devvm secret unuse NAME` | stops this folder's VM using it, though a VM whose image has `claude` always uses `claude` |
 
-devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devvm/secrets/<name>`, a file only you can read ([details](../internals/network.md#where-secrets-are-saved)). No devvm command prints a saved secret, because each VM's proxy reads the values it needs itself. devvm drops whitespace in a secret's value, except inside the `proxy` password, which loses only the whitespace around it. It refuses a value with a quote, a backslash or a control character, and a `claude` value that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
+devvm saves a secret in the macOS Keychain, or elsewhere in `~/.local/share/devvm/secrets/<name>`, a file only you can read ([details](../internals/network.md#where-secrets-are-saved)). No devvm command prints a saved secret, because each VM's proxy reads the values it needs itself. devvm drops whitespace in a secret's value, except inside the `proxy` password, which loses only the whitespace around it. It refuses a value with a quote, a backslash or a control character, a value that holds a VM's placeholder, such as one copied from a VM's `GH_TOKEN`, and a `claude` value that isn't a setup token (`sk-ant-oat01-…`, from `claude setup-token`). A `CLAUDE_CODE_OAUTH_TOKEN` in devvm's environment wins over a saved one.
 
-Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`, and with `github` a git credential helper for `https://github.com`.
+Saving, deleting, binding and unbinding apply at once to the proxies that are running. From its next launch, the VM gets the placeholder in `CLAUDE_CODE_OAUTH_TOKEN`, `GH_TOKEN` or your own secret's variable, and with `github` a git credential helper for `https://github.com`.
+
+A secret's hosts join the allowlist of each VM that uses it, on port 443 alone, whatever the VM's tier, so a VM on the none tier reaches them too.
 
 To put a secret in, the proxy shows the VM a certificate from the VM's own CA, which every VM has, an open one's included, and which no other VM trusts, so one VM's proxy can't make certificates that another VM accepts. Each CA lasts 30 days, and its key stays on this machine. Each launch installs the VM's current CA and the next one, which starts a week before the current one ends, and the proxy switches to the next CA then on its own, without a launch. So a VM that you don't open again keeps working for at least 30 days after its last launch with `devvm` in its folder. Connecting with `ssh` alone isn't a launch. When a VM runs past its next CA's end without a launch, its proxy refuses its HTTPS connections to secrets' hosts, and `devvm network log --blocked` gives the reason `devvm's CA has ended`. The VM's other requests keep working. Run `devvm` in the VM's folder to install new CAs, which also starts the VM's proxy again and ends the connections open through it ([how](../internals/network.md#the-vms-ca)). `devvm rm` deletes a VM's CAs with the VM, and a VM keeps them when its tier changes.
 
@@ -382,7 +386,7 @@ To put a secret in, the proxy shows the VM a certificate from the VM's own CA, w
 
 #### devvm secret --json
 
-`devvm secret --json` prints the list as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes. Each of the `secrets` has its name, `saved`, which is `true` when it's saved or, for `claude`, in devvm's environment, and `used_by`, the names of the VMs using it. The JSON never holds a secret's value.
+`devvm secret --json` prints the list as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes. Each of the `secrets` has its name, `saved`, which is `true` when it's saved or, for `claude`, in devvm's environment, and `used_by`, the names of the VMs using it. Then `custom` is `true` for a [secret of your own](#your-own-secrets), and `hosts` lists the hosts the proxy puts it in for, none for `proxy`. A secret that VMs get has its `header` and `env`, the variable that holds its placeholder, and `prefix` when its placeholder starts with one. A secret of yours also has its `scheme`, its `path` and `basic_user` when it has them. The JSON never holds a secret's value.
 
 ```json
 {
@@ -393,21 +397,100 @@ To put a secret in, the proxy shows the VM a certificate from the VM's own CA, w
       "saved": true,
       "used_by": [
         "devvm-some-project-71a99b1076d92c"
-      ]
+      ],
+      "custom": false,
+      "hosts": [
+        "api.anthropic.com"
+      ],
+      "header": "Authorization",
+      "env": "CLAUDE_CODE_OAUTH_TOKEN",
+      "prefix": "sk-ant-oat01-"
     },
     {
       "name": "github",
       "saved": false,
-      "used_by": []
+      "used_by": [],
+      "custom": false,
+      "hosts": [
+        "api.github.com",
+        "github.com",
+        "codeload.github.com",
+        "raw.githubusercontent.com"
+      ],
+      "header": "Authorization",
+      "env": "GH_TOKEN"
     },
     {
       "name": "proxy",
       "saved": false,
-      "used_by": []
+      "used_by": [],
+      "custom": false,
+      "hosts": []
+    },
+    {
+      "name": "stripe",
+      "saved": true,
+      "used_by": [
+        "devvm-some-project-71a99b1076d92c"
+      ],
+      "custom": true,
+      "hosts": [
+        "api.stripe.com"
+      ],
+      "header": "Authorization",
+      "env": "STRIPE_API_KEY",
+      "prefix": "sk_"
     }
   ]
 }
 ```
+
+### Your own secrets
+
+Any other credential that a tool in a VM sends in a header, such as an API key for Stripe, OpenRouter or your company's own service, can be a secret of your own. You give it a name, the hosts it goes to and the variable that VMs find its placeholder in, and devvm asks for the value without showing it:
+
+```text
+$ devvm secret set stripe --host api.stripe.com --env STRIPE_API_KEY --prefix sk_
+Paste the value of stripe, which VMs that use it send to api.stripe.com.
+The VMs that use it can reach those hosts on port 443.
+Token:
+==> devvm saved the stripe secret in the Keychain.
+$ devvm secret use stripe
+==> devvm-web-71a99b1076d92c uses the stripe secret from its next launch, and its allowlist has api.stripe.com on port 443.
+```
+
+From its next launch, the VM has `STRIPE_API_KEY` set to its own placeholder, such as `sk_devvm-proxy-managed-secret-stripe-…`, and a tool there sends it as `Authorization: Bearer $STRIPE_API_KEY`. The proxy puts the real value in place of the placeholder only in requests to `api.stripe.com` on port 443, over TLS, and a request to any other host goes out with the placeholder alone. A program that loads a `.env` file gets the placeholder too, as long as the file doesn't set `STRIPE_API_KEY` itself, because most dotenv libraries leave a variable that's already set as it is. Keep the real key out of the project's `.env`, which the VM can read.
+
+A secret of yours goes only to the VMs you use it in with `devvm secret use`, and each one's hosts then join that VM's allowlist on port 443. `devvm secret set` takes these flags:
+
+| Flag | What it gives the secret |
+| --- | --- |
+| `--host HOST` | a host it goes to, such as `api.stripe.com`: repeat the flag, or join hosts with commas, for up to 16 |
+| `--env VARIABLE` | the variable that VMs find its placeholder in, such as `STRIPE_API_KEY` |
+| `--header HEADER` | the header it goes in, such as `X-Api-Key`, when it isn't `Authorization` |
+| `--prefix PREFIX` | what its placeholder starts with, such as `sk_`, for a client that checks how its key starts |
+| `--path PATH` | the path below which it goes in, such as `/api/`, so a request to the host's other paths carries the placeholder alone, or `none` for every path |
+| `--scheme SCHEME` | a scheme of its own before it in `Authorization`, besides `Bearer` and `Token`, such as `ApiKey`, or `none` |
+| `--basic-user` | lets it go in as the username of `Basic` credentials, as Stripe and some other services take a key (`--basic-user=false` takes that away) |
+
+The proxy puts the value in only when exactly one of the header's values holds the placeholder, in one of these shapes, so that the value lands where the server reads a credential:
+
+- the placeholder alone, such as `X-Api-Key: PLACEHOLDER`;
+- for `Authorization`, `Bearer`, `Token` or the secret's own `--scheme`, in any case, then one space and the placeholder;
+- for `Authorization`, `Basic` credentials whose password is the placeholder, after a username of printable ASCII up to 64 characters, such as git's `x-access-token:PLACEHOLDER`;
+- with `--basic-user`, `Basic` credentials whose username is the placeholder, before a password of printable ASCII up to 64 characters, such as `PLACEHOLDER:`.
+
+The placeholder in any other shape stays as it is, and the proxy's own log says why without the value. That includes bytes of the VM's own around it, the placeholder twice, a `Digest` field, and the username of `Basic` credentials without `--basic-user`, because a server can show the VM those parts of a request it refuses, such as a username it doesn't know. The same shapes apply to the `github` and `claude` secrets, which the GitHub CLI, git and Claude Code send as `Bearer`, `token` and git's `Basic` password.
+
+A name has lowercase letters, digits and dashes, and it can't be `claude`, `github` or `proxy`, nor start with a coding agent's name, such as `codex-key`. A host is a host name, such as `api.example.com`. devvm refuses a wildcard, such as `*.example.com`, because some domains let anyone own a name under them. It also refuses an address, any port but 443, and a name that's only ever internal, such as `localhost`, `printer.local` or a Tailscale or `nip.io` name. The proxy refuses an internal address whatever name resolves to it anyway. The header can't be `Host`, `Cookie`, `Content-Length`, `Content-Type`, `Transfer-Encoding`, `Expect`, `Forwarded`, `Via`, an `X-Forwarded-` or `Proxy-` header, or one that ends at the next hop, such as `Connection`, because the proxy drops or sets those itself. Nor can it be one that servers commonly log or send back, such as `Origin`, `Referer`, `User-Agent`, `X-Request-Id` or `Traceparent`. The variable can't be one that devvm or the VM's shell sets, such as `PATH`, `GH_TOKEN`, `HTTPS_PROXY`, `NPM_CONFIG_PREFIX` or any `DEVVM_` variable, nor one that changes what a program runs or trusts, such as a `GIT_` or `PYTHON` variable, `NODE_OPTIONS`, `EDITOR` or `SSL_CERT_DIR`, nor another secret's. A prefix can't hold `devvm-proxy-managed`, which every placeholder holds after its prefix. A value has printable ASCII alone and at most 3,800 characters, and devvm refuses a longer one before it touches the one saved.
+
+To save a new value, such as after you rotate the key, run `devvm secret set NAME` without the other flags, and the secret keeps its hosts, header, variable, prefix, path and scheme. To change one of those, give only its flag with the new value, and the rest stay as they are, so `devvm secret set stripe --host api.stripe.com,files.stripe.com` gives the secret a second host. `--host` gives the whole list of hosts each time. A host the secret loses goes from every VM at once. A host it gains reaches only the VMs you then run `devvm secret use NAME` in again, so a host you add never gets the value from a VM you didn't give it to, and devvm names the VMs that keep the hosts they had. To take a prefix away, delete the secret and save it again. Running VMs keep the variable they launched with, so after you change `--env` or `--prefix`, a VM that uses the secret gets the new placeholder at its next launch.
+
+`devvm secret rm NAME` deletes the secret with its definition after asking, and the question names the VMs that use it, which stop using it before it goes. It also deletes a value that a failed save left without its definition. Each VM records the secret it was bound to by an ID that the secret gets as it's first saved, so a secret saved again later by the same name goes to none of those VMs until you use it there again. A VM still bound to an earlier secret of the name gets nothing of the new one, its launch says so, and `devvm secret unuse NAME` takes the name away whether a secret has it or not.
+
+devvm keeps your secrets' hosts, headers, variables, prefixes, paths and schemes in `~/.local/share/devvm/custom-secrets.json`, without their values, and checks each entry again whenever it reads the file. When it can't read the file, or an entry breaks the rules above, such as after an edit by hand, devvm secret and the launch of each VM that uses one of your secrets fail and name the file. Fix the entry, or delete the file and save your secrets again with devvm secret set ([details](../internals/network.md#where-secrets-are-saved)).
+
+The proxy passes the replies from a secret's hosts to the VM as they are, so a host that sends the request's headers back, such as an echo or debug endpoint, shows the VM the real value. Give a secret only hosts that you trust with it, and a key scoped to what the VMs need. A secret's hosts are also open to the VMs that use it for requests without the placeholder, on every tier, the none tier included. So on a host where anyone can make an account, such as a storage or payments service, code in the VM can send data to an account of its own there.
 
 ## Logs
 

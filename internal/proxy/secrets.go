@@ -52,11 +52,14 @@ const (
 // (Kind, with a login's Agent). It holds no value. internal/secrets and internal/agentlogin make
 // them, and devvm writes a VM's in a BindingList (Config.Secrets).
 //
-// A secret's placeholder is replaced wherever its header holds it, also inside Basic credentials
-// (git sends x-access-token:TOKEN that way). A login's is replaced only when the header's one value
-// is the placeholder alone, or for Authorization, Bearer and one space before it (the scheme in
-// any case), so a VM can't put bytes of its own around the value: a provider that quotes part of
-// a key it refuses could show the VM where the value starts.
+// A placeholder is replaced only when exactly one value of its header holds it, in a shape that
+// puts the value where a server reads a credential and nowhere it echoes, so a VM can't put bytes
+// of its own around the value: a server that quotes part of a key it refuses, or a username it
+// doesn't know, could show the VM the value. A login's header value is the placeholder alone, or
+// for Authorization, Bearer and one space before it (the scheme in any case). A secret's may also
+// be, for Authorization, Token or the binding's own Scheme before it, or Basic credentials whose
+// password is the placeholder (git sends x-access-token:TOKEN that way), or with BasicUser, whose
+// username is (secretValue).
 type Binding struct {
 	Name string `json:"name"`
 	Kind string `json:"kind"` // KindSecret or KindLogin
@@ -68,6 +71,13 @@ type Binding struct {
 	Path        string `json:"path,omitempty"`
 	Header      string `json:"header"` // e.g. Authorization
 	Placeholder string `json:"placeholder"`
+	// Scheme is a secret's own Authorization scheme besides Bearer and Token, such as ApiKey:
+	// never Basic or Digest, and never one the VM chooses.
+	Scheme string `json:"scheme,omitempty"`
+	// BasicUser lets a secret go in as the username of Basic credentials, as Stripe takes its key.
+	BasicUser bool `json:"basic_user,omitempty"`
+	// ID is a secret of yours' definition's, which devvm's lookup checks the binding against.
+	ID string `json:"id,omitempty"`
 }
 
 // BindingList is the VM's bindings file (Config.Secrets), which devvm writes and the proxy reads
@@ -119,16 +129,20 @@ func parseBindings(path string, b []byte) (BindingList, error) {
 		if x.Kind != KindSecret && x.Kind != KindLogin {
 			return BindingList{}, fmt.Errorf("%s: binding %q of kind %q", path, x.Name, x.Kind)
 		}
-		if x.Path != "" && !pathPrefixOK(x.Path) {
+		if x.Path != "" && !PathPrefixOK(x.Path) {
 			return BindingList{}, fmt.Errorf("%s: binding %q's path %q", path, x.Name, x.Path)
+		}
+		if x.Scheme != "" && !SchemeOK(x.Scheme) {
+			return BindingList{}, fmt.Errorf("%s: binding %q's scheme %q", path, x.Name, x.Scheme)
 		}
 	}
 	return l, nil
 }
 
-// pathPrefixOK reports whether p can be a binding's Path: it starts and ends with /, and is
-// clean (no . or .. segment, no doubled slash), with nothing pathWithin refuses in it.
-func pathPrefixOK(p string) bool {
+// PathPrefixOK reports whether p can be a binding's Path: it starts and ends with /, and is
+// clean (no . or .. segment, no doubled slash), with nothing pathWithin refuses in it. devvm
+// secret set --path takes only these.
+func PathPrefixOK(p string) bool {
 	if len(p) < 2 || p[0] != '/' || p[len(p)-1] != '/' || strings.ContainsAny(p, `\;% `) {
 		return false
 	}
@@ -165,14 +179,20 @@ type secrets struct {
 	// system roots and the user's CAs. nil: the system roots.
 	roots *x509.CertPool
 	log   *log.Logger
-	// valueMu holds the values, by binding name, and is held through a lookup, so lookups go one
-	// at a time.
+	// valueMu holds the values, by binding (valueKeyOf), and is held through a lookup, so lookups
+	// go one at a time.
 	valueMu sync.Mutex
-	values  map[string]cached
+	values  map[valueKey]cached
 }
 
+// valueKey is what a value is cached by: its binding's kind, agent and name together, so a
+// secret of yours and an agent's login that share a name never get each other's value.
+type valueKey struct{ kind, agent, name string }
+
+func valueKeyOf(b Binding) valueKey { return valueKey{b.Kind, b.Agent, b.Name} }
+
 func newSecrets(path string, lookup Lookup, l *log.Logger) *secrets {
-	s := &secrets{lookup: lookup, log: l, values: map[string]cached{}}
+	s := &secrets{lookup: lookup, log: l, values: map[valueKey]cached{}}
 	if path != "" {
 		s.file = &watched[[]Binding]{
 			path: path, read: readBindingsFile,
@@ -187,7 +207,7 @@ func newSecrets(path string, lookup Lookup, l *log.Logger) *secrets {
 			// devvm rewrites the file when a value is set or removed: look values up afresh.
 			changed: func() {
 				s.valueMu.Lock()
-				s.values = map[string]cached{}
+				s.values = map[valueKey]cached{}
 				s.valueMu.Unlock()
 			},
 		}
@@ -270,7 +290,7 @@ func ttlOf(b Binding) time.Duration {
 func (s *secrets) value(b Binding) (string, error) {
 	s.valueMu.Lock()
 	defer s.valueMu.Unlock()
-	if c, ok := s.values[b.Name]; ok && time.Since(c.at) < ttlOf(b) {
+	if c, ok := s.values[valueKeyOf(b)]; ok && time.Since(c.at) < ttlOf(b) {
 		return c.value, nil
 	}
 	if s.lookup == nil {
@@ -292,7 +312,7 @@ func (s *secrets) value(b Binding) (string, error) {
 	if v = strings.TrimSpace(v); v == "" {
 		return "", fmt.Errorf("secret %s is empty", b.Name)
 	}
-	s.values[b.Name] = cached{v, time.Now()}
+	s.values[valueKeyOf(b)] = cached{v, time.Now()}
 	return v, nil
 }
 
@@ -302,8 +322,8 @@ func (s *secrets) inject(h http.Header, bs []Binding) (used []string) {
 	for _, b := range bs {
 		vs := h.Values(b.Header)
 		if !b.takes(vs) {
-			if b.Kind == KindLogin && slices.ContainsFunc(vs, func(v string) bool { return strings.Contains(v, b.Placeholder) }) {
-				s.log.Printf("secret %s: not put in: its %s header holds more than its placeholder", b.Name, b.Header)
+			if slices.ContainsFunc(vs, b.holds) {
+				s.log.Printf("secret %s: not put in: its %s header holds its placeholder in a form the proxy doesn't fill in", b.Name, b.Header)
 			}
 			continue
 		}
@@ -328,16 +348,93 @@ func (s *secrets) inject(h http.Header, bs []Binding) (used []string) {
 	return used
 }
 
-// takes reports whether b's value goes in the values vs of its header: for a secret, when one of
-// them holds the placeholder, also inside Basic credentials; for a login, when there's one value
-// and it's the placeholder alone, or Bearer and the placeholder in Authorization (loginValue). A
-// login's header that holds the placeholder any other way, or twice, which a server may join into
-// one value, keeps it, and the proxy's log says so.
+// takes reports whether b's value goes in the values vs of its header: for a secret, when exactly
+// one of them holds the placeholder, also inside Basic credentials, and it's one of the shapes
+// secretValue takes; for a login, when there's one value and it's the placeholder alone, or Bearer
+// and the placeholder in Authorization (loginValue). A header that holds the placeholder any
+// other way, or twice, which a server may join into one value, keeps it, and the proxy's log
+// says so.
 func (b Binding) takes(vs []string) bool {
 	if b.Kind != KindLogin {
-		return slices.ContainsFunc(vs, func(v string) bool { return strings.Contains(v, b.Placeholder) || basicHas(v, b.Placeholder) })
+		var held []string
+		for _, v := range vs {
+			if b.holds(v) {
+				held = append(held, v)
+			}
+		}
+		return len(held) == 1 && b.secretValue(held[0]) != nil
 	}
 	return len(vs) == 1 && b.loginValue(vs[0])
+}
+
+// holds reports whether the header value v holds b's placeholder, as it is or inside Basic
+// credentials.
+func (b Binding) holds(v string) bool {
+	return strings.Contains(v, b.Placeholder) || basicHas(v, b.Placeholder)
+}
+
+// basicPartMax bounds the part of Basic credentials besides a secret: a username such as git's
+// x-access-token, or a password beside a key that is the username.
+const basicPartMax = 64
+
+// secretValue is how a secret's header value v takes its value, nil when it doesn't: the
+// placeholder alone; for Authorization, Bearer, Token or the binding's Scheme (in any case), one
+// space and the placeholder; Basic credentials whose password is the placeholder, after a username
+// of printable ASCII without a colon, at most basicPartMax long; or with BasicUser, whose username
+// is, before a password of printable ASCII, at most basicPartMax long. It returns v with val in
+// the placeholder's place.
+func (b Binding) secretValue(v string) func(val string) string {
+	ph := b.Placeholder
+	if v == ph {
+		return func(val string) string { return val }
+	}
+	if !strings.EqualFold(b.Header, "Authorization") {
+		return nil
+	}
+	scheme, rest, ok := strings.Cut(v, " ")
+	switch {
+	case !ok:
+		return nil
+	case rest == ph && (strings.EqualFold(scheme, "Bearer") || strings.EqualFold(scheme, "Token") || b.Scheme != "" && strings.EqualFold(scheme, b.Scheme)):
+		return func(val string) string { return scheme + " " + val }
+	case !strings.EqualFold(scheme, "Basic"):
+		return nil
+	}
+	raw, err := base64.StdEncoding.Strict().DecodeString(rest)
+	if err != nil || base64.StdEncoding.EncodeToString(raw) != rest {
+		return nil
+	}
+	user, pass, ok := strings.Cut(string(raw), ":")
+	switch {
+	case !ok:
+		return nil
+	case pass == ph && len(user) <= basicPartMax && printable(user) && !strings.Contains(user, ph):
+		return func(val string) string { return scheme + " " + base64.StdEncoding.EncodeToString([]byte(user+":"+val)) }
+	case b.BasicUser && user == ph && len(pass) <= basicPartMax && printable(strings.ReplaceAll(pass, ":", "")) && !strings.Contains(pass, ph):
+		return func(val string) string { return scheme + " " + base64.StdEncoding.EncodeToString([]byte(val+":"+pass)) }
+	}
+	return nil
+}
+
+// printable reports whether s is printable ASCII alone, spaces included, without a colon.
+func printable(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool { return r < 0x20 || r > 0x7e || r == ':' })
+}
+
+// SchemeOK reports whether s can be a secret's own Authorization scheme (Binding.Scheme): a
+// token of at most 32 letters, digits, '-', '_' and '.', and not Basic or Digest, whose
+// credentials the proxy reads itself (secretValue), nor Bearer or Token, which every secret takes.
+func SchemeOK(s string) bool {
+	if s == "" || len(s) > 32 || strings.ContainsFunc(s, func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' && r != '.'
+	}) {
+		return false
+	}
+	switch strings.ToLower(s) {
+	case "basic", "digest", "bearer", "token":
+		return false
+	}
+	return true
 }
 
 // loginValue reports whether v is a login's header value the proxy fills in: the placeholder
@@ -351,8 +448,8 @@ func (b Binding) loginValue(v string) bool {
 }
 
 // swap is v, a value of b's header that takes b's value, with val in place of the placeholder: a
-// login's is the whole value, or what follows Bearer; a secret's is every copy of it, also inside
-// Basic credentials.
+// login's is the whole value, or what follows Bearer; a secret's where secretValue puts it. A
+// value that doesn't hold the placeholder stays as it is.
 func (b Binding) swap(v, val string) string {
 	if b.Kind == KindLogin {
 		if !b.loginValue(v) {
@@ -360,11 +457,10 @@ func (b Binding) swap(v, val string) string {
 		}
 		return strings.TrimSuffix(v, b.Placeholder) + val
 	}
-	nv := strings.ReplaceAll(v, b.Placeholder, val)
-	if raw, ok := basic(nv); ok && strings.Contains(raw, b.Placeholder) {
-		nv = "Basic " + base64.StdEncoding.EncodeToString([]byte(strings.ReplaceAll(raw, b.Placeholder, val)))
+	if put := b.secretValue(v); put != nil {
+		return put(val)
 	}
-	return nv
+	return v
 }
 
 func basic(v string) (string, bool) {

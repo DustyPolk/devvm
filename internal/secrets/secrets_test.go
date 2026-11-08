@@ -66,12 +66,22 @@ func TestToken(t *testing.T) {
 		{"github", "  \n", "", "no_token"},
 		{"github", `ghp_x" -A -T "`, "", "token_quotes"},
 		{"github", `ghp_x\`, "", "token_quotes"},
-		{"github", "ghp_\x00x", "", "token_quotes"},
-		{"github", "ghp_\x7fx", "", "token_quotes"},
+		{"github", "ghp_\x00x", "", "token_not_ascii"},
+		{"github", "ghp_\x7fx", "", "token_not_ascii"},
+		{"stripe", "sk_tést", "", "token_not_ascii"},
+		{"stripe", "sk_" + string(rune(0xa0)) + "x", "sk_x", ""}, // a no-break space (U+00A0) is whitespace, which goes
+		{"stripe", "sk_" + string(rune(0x200b)) + "x", "", "token_not_ascii"},
+		{"stripe", "sk_!#$%&'()*+,-./:;<=>?@[]^_`{|}~", "sk_!#$%&'()*+,-./:;<=>?@[]^_`{|}~", ""},
 		{"claude", "some-browser-code", "", "not_setup_token"},
+		// A VM's placeholder, copied from its environment, is never the value.
+		{"claude", "sk-ant-oat01-devvm-proxy-managed-0123", "", "token_is_placeholder"},
+		{"github", "devvm-proxy-managed-github-0123", "", "token_is_placeholder"},
+		{"stripe", "sk_devvm-proxy-managed-stripe-0123", "", "token_is_placeholder"},
+		{"stripe", " sk_test_x \n", "sk_test_x", ""},
 		// The company proxy's password keeps its spaces inside.
 		{"proxy", " pa55 word \n", "pa55 word", ""},
-		{"proxy", "pa55\tword", "", "token_quotes"},
+		{"proxy", "pa55\tword", "", "token_not_ascii"},
+		{"proxy", "pä55 word", "", "token_not_ascii"},
 		{"proxy", `pa55"`, "", "token_quotes"},
 		{"proxy", " \n", "", "no_token"},
 	} {
@@ -243,7 +253,13 @@ func TestProxyPassword(t *testing.T) {
 }
 
 // secretOf is the binding of a secret devvm keeps, as the proxy has it.
-func secretOf(name string) proxy.Binding { return proxy.Binding{Name: name, Kind: proxy.KindSecret} }
+func secretOf(name string) proxy.Binding {
+	sec, ok := Lookup(name)
+	if !ok {
+		return proxy.Binding{Name: name, Kind: proxy.KindSecret}
+	}
+	return proxy.Binding{Name: name, Kind: proxy.KindSecret, Hosts: sec.Hosts, Header: sec.Header, Placeholder: sec.Placeholder(strings.Repeat("ab", 16))}
+}
 
 // loginOf is agent's login binding name, as the proxy has it.
 func loginOf(agent, name string) proxy.Binding {

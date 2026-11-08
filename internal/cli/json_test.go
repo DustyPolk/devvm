@@ -190,8 +190,8 @@ func TestJSONShapes(t *testing.T) {
 		{"clone", map[string]string{"clone": "on"}, []string{"clone: string"}},
 		{
 			"secret",
-			secretOutput{Secrets: []secretJSON{{Name: "github", Saved: true, UsedBy: []string{"devvm-a"}}}},
-			[]string{"secrets[].name: string", "secrets[].saved: bool", "secrets[].used_by[]: string"},
+			secretOutput{Secrets: []secretJSON{{Name: "stripe", Saved: true, UsedBy: []string{"devvm-a"}, Custom: true, Hosts: []string{"api.stripe.com"}, Header: "Authorization", Env: "STRIPE_API_KEY", Prefix: "sk_", Scheme: "ApiKey", Path: "/v1/", BasicUser: true}}},
+			[]string{"secrets[].name: string", "secrets[].saved: bool", "secrets[].used_by[]: string", "secrets[].custom: bool", "secrets[].hosts[]: string", "secrets[].header: string", "secrets[].env: string", "secrets[].prefix: string", "secrets[].scheme: string", "secrets[].path: string", "secrets[].basic_user: bool"},
 		},
 		{
 			"link", linkJSON([]vm.LinkListed{{Name: "db", Port: 5432, Target: "devvm-db-0123456789abcd", Folder: "/db", Status: "Running", Reason: vm.LinkUnpublished}}),

@@ -155,8 +155,8 @@ func TestCheckCommandLine(t *testing.T) {
 		{"a.md", "`devvm tools add NAME...`", true},
 		{"a.md", "`devvm ports maybe`", true},
 		{"a.md", "```sh\ndevvm gc --older-than 30\n```", true},
-		{"a.txtar", "exec devvm secret set nope", true},
-		{"a.txtar", "! exec devvm secret set nope", false},
+		{"a.txtar", "exec devvm secret set no_pe", true},
+		{"a.txtar", "! exec devvm secret set no_pe", false},
 		{"a.txtar", "project devvm gc --nope", false},
 		{"a.txtar", "# devvm gc --nope", true},
 	} {
@@ -520,9 +520,13 @@ func checkWords(c *cobra.Command, words []string, code bool) (concrete bool, err
 			value = strings.Trim(words[i], "[]")
 		}
 		switch form := flagForm(f); {
-		case value != form && placeholderName.MatchString(value) && strings.ToUpper(value) == value && !strings.Contains(value, "$"):
+		case value != form && placeholderName.MatchString(value) && strings.ToUpper(value) == value && !strings.Contains(value, "$") && !capitalValues(f.Name):
 			return false, fmt.Errorf("%s's value is %s, not %s", name, form, value)
 		case !code:
+		case capitalValues(f.Name) && value != form:
+			if err := checkFlagValue(f.Name, value); err != nil {
+				return false, err
+			}
 		case placeholderWord.MatchString(value) || value == form:
 			concrete = false
 		default:
@@ -533,6 +537,11 @@ func checkWords(c *cobra.Command, words []string, code bool) (concrete bool, err
 	}
 	return concrete, nil
 }
+
+// capitalValues reports whether the flag's values are written in capitals,
+// so one isn't taken for a placeholder: --env's, a variable's name, such
+// as STRIPE_API_KEY.
+func capitalValues(flag string) bool { return flag == "env" }
 
 // lookupFlag is c's flag, its own or inherited, as written: --name or -n.
 func lookupFlag(c *cobra.Command, written string) *pflag.Flag {

@@ -7,7 +7,7 @@ Delete a saved secret
 
 ## Synopsis
 
-Delete a saved secret, after asking in a terminal without --no-input. Proxies that are running stop putting it in at once, but what a VM did with it stays done.
+Delete a saved secret, after asking in a terminal without --no-input. A secret of your own goes with its hosts, header and variable, and the VMs using it stop using it. Proxies that are running stop putting it in at once, but what a VM did with it stays done.
 
 ```text
 devvm secret rm NAME [flags]

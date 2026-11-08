@@ -21,8 +21,9 @@ import (
 	"github.com/devvmhq/devvm/internal/jsonc"
 )
 
-// managedMark starts every placeholder the proxy fills in (salted), such as an MCP server's
-// header's in a VM's ~/.claude.json and Claude Code's and GitHub's tokens in its environment.
+// managedMark is in every placeholder the proxy fills in (Placeholder), after any prefix, such as
+// an MCP server's header's in a VM's ~/.claude.json and Claude Code's and GitHub's tokens in its
+// environment.
 const managedMark = "devvm-proxy-managed"
 
 // HasPlaceholder reports whether data holds a placeholder of a VM's copies: devvm-redacted, one

@@ -208,6 +208,21 @@ func TestPartFlags(t *testing.T) {
 		{"to", "latest", "upgrade_not_version value=latest"},
 		{"to", "0.2", "upgrade_not_version value=0.2"},
 		{"to", "0.2.0/../x", "upgrade_not_version value=0.2.0/../x"},
+		{"host", "api.stripe.com", ""},
+		{"host", "*.stripe.com", "bad_secret_host given=*.stripe.com"},
+		{"header", "x-api-key", ""},
+		{"header", "Host", "bad_secret_header given=Host"},
+		{"env", "STRIPE_API_KEY", ""},
+		{"env", "PATH", "bad_secret_env given=PATH"},
+		{"prefix", "sk_", ""},
+		{"prefix", "sk:", "bad_secret_prefix given=sk: most=32"},
+		{"scheme", "ApiKey", ""},
+		{"scheme", "none", ""},
+		{"scheme", "Digest", "bad_secret_scheme given=Digest"},
+		{"path", "/api/", ""},
+		{"path", "none", ""},
+		{"path", "/api", "bad_secret_path given=/api"},
+		{"path", "/api/../x/", "bad_secret_path given=/api/../x/"},
 	} {
 		if got := msg.NamesOf(checkFlagValue(tc.flag, tc.value)); got != tc.want {
 			t.Errorf("--%s %s: %q, want %q", tc.flag, tc.value, got, tc.want)

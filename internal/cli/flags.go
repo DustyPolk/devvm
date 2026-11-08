@@ -110,7 +110,13 @@ func noBlanks(cmd *cobra.Command, args []string) error {
 	}
 	var err error
 	cmd.Flags().Visit(func(f *pflag.Flag) {
-		if err == nil && f.Value.Type() == "string" && f.Value.String() == "" {
+		sv, slice := f.Value.(pflag.SliceValue)
+		switch {
+		case err != nil:
+		case f.Value.Type() == "string" && f.Value.String() == "":
+			err = msg.FlagBlank(f.Name)
+		case slice && (len(sv.GetSlice()) == 0 || slices.Contains(sv.GetSlice(), "")):
+			// --host "", or a comma too many: --host a.com,
 			err = msg.FlagBlank(f.Name)
 		}
 	})

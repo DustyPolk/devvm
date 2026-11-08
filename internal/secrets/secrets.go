@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/devvmhq/devvm/internal/agentlogin"
@@ -34,9 +35,21 @@ import (
 const Section = "secrets"
 
 // Bound is a VM's secrets section: the secrets bound to it, as asked
-// (claude comes with its shared tools).
+// (claude comes with its shared tools), and for each of yours among them
+// what it was bound to (Yours).
 type Bound struct {
-	Names []string `json:"names,omitempty"`
+	Names []string      `json:"names,omitempty"`
+	Yours []BoundSecret `json:"yours,omitempty"`
+}
+
+// BoundSecret is a secret of yours as devvm secret use bound a VM to it:
+// its name, its definition's ID, and the hosts it had then, beyond which
+// the VM's proxy never puts it in, whatever hosts a later devvm secret set
+// gives it, until devvm secret use binds the VM again (UsedAs).
+type BoundSecret struct {
+	Name  string   `json:"name"`
+	ID    string   `json:"id"`
+	Hosts []string `json:"hosts"`
 }
 
 // Of returns a VM's secrets section.
@@ -44,29 +57,38 @@ func Of(st *state.VM) (Bound, error) { return state.Section[Bound](st, Section) 
 
 // Secret is a token devvm keeps on the host: the hosts it's for, the header
 // the proxy puts it in, and the environment variable a VM finds its
-// placeholder in. A HostOnly one is devvm's own, which no VM is bound to:
-// the company proxy's password (proxy.UpstreamSecret), which devvm's
-// proxies send only to the company proxy.
+// placeholder in, which starts with Prefix. A HostOnly one is devvm's own,
+// which no VM is bound to: the company proxy's password
+// (proxy.UpstreamSecret), which devvm's proxies send only to the company
+// proxy. A Custom one is yours (custom.go), any other one of Known, and
+// only yours have an ID, a Scheme, a Path or BasicUser (proxy.Binding's).
 type Secret struct {
-	Name     string
-	Hosts    []string
-	Header   string
-	Env      string
-	HostOnly bool
-	prefix   string // the placeholder's start; a VM's salt ends it
+	Name      string
+	Hosts     []string
+	Header    string
+	Env       string
+	Prefix    string
+	Scheme    string
+	Path      string
+	BasicUser bool
+	ID        string
+	HostOnly  bool
+	Custom    bool
+	unnamed   bool // its placeholder doesn't name it: Claude Code's token's
 }
 
 // Known are the secrets devvm keeps, by name.
 var Known = []Secret{
-	{Name: ClaudeToken, Hosts: []string{"api.anthropic.com"}, Header: "Authorization", Env: "CLAUDE_CODE_OAUTH_TOKEN", prefix: "sk-ant-oat01-devvm-proxy-managed"},
+	{Name: ClaudeToken, Hosts: []string{"api.anthropic.com"}, Header: "Authorization", Env: "CLAUDE_CODE_OAUTH_TOKEN", Prefix: "sk-ant-oat01-", unnamed: true},
 	{
 		Name: "github", Hosts: []string{"api.github.com", "github.com", "codeload.github.com", "raw.githubusercontent.com"},
-		Header: "Authorization", Env: "GH_TOKEN", prefix: "devvm-proxy-managed-github",
+		Header: "Authorization", Env: "GH_TOKEN",
 	},
 	{Name: proxy.UpstreamSecret, HostOnly: true},
 }
 
-// Lookup returns the known secret by that name.
+// Lookup returns the known secret by that name: devvm's own, never yours
+// (Store.Lookup).
 func Lookup(name string) (Secret, bool) {
 	i := slices.IndexFunc(Known, func(s Secret) bool { return s.Name == name })
 	if i < 0 {
@@ -75,8 +97,20 @@ func Lookup(name string) (Secret, bool) {
 	return Known[i], true
 }
 
-// Placeholder is what a VM with that salt gets in place of the secret.
-func (s Secret) Placeholder(salt string) string { return s.prefix + "-" + salt }
+// Placeholder is what a VM with that salt gets in place of the secret
+// (agentlogin.Placeholder): its Prefix, devvm-proxy-managed, its name, and
+// the salt. Yours have secret- before the name, which no agent's login's
+// placeholder has, so none of yours ever has another's shape.
+func (s Secret) Placeholder(salt string) string {
+	what := s.Name
+	switch {
+	case s.unnamed:
+		what = ""
+	case s.Custom:
+		what = "secret-" + s.Name
+	}
+	return agentlogin.Placeholder(s.Prefix, what, salt)
+}
 
 // ErrNone is Value's error for a secret with no value saved.
 var ErrNone = errors.New("no value saved")
@@ -330,14 +364,27 @@ func (s *Store) Service() (string, error) {
 	return svc, nil
 }
 
+// storageKey is what a secret's value is saved under, its Keychain account
+// or its file's name: a known secret's name as it is, and one of yours'
+// after custom., which no known secret's name has, so a known secret added
+// later never finds a value of yours.
+func storageKey(name string) string {
+	if _, ok := Lookup(name); ok {
+		return name
+	}
+	return "custom." + name
+}
+
 // File is where a secret's value is kept without a Keychain.
-func (s *Store) File(name string) string { return filepath.Join(s.Dirs.Secrets(), name) }
+func (s *Store) File(name string) string { return filepath.Join(s.Dirs.Secrets(), storageKey(name)) }
 
 // Value returns a known secret's value, or ErrNone. A claude token in
 // devvm's environment (CLAUDE_CODE_OAUTH_TOKEN) wins: the proxy inherits it
 // from the devvm that started it.
 func (s *Store) Value(ctx context.Context, name string) (string, error) {
-	if _, ok := Lookup(name); !ok {
+	if _, ok, err := YoursOf(s).Lookup(name); err != nil {
+		return "", err
+	} else if !ok {
 		return "", ErrNone
 	}
 	if name == ClaudeToken {
@@ -357,7 +404,7 @@ func (s *Store) saved(ctx context.Context, name string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if v, err = s.KeychainGet(ctx, svc, name); errors.Is(err, platform.ErrNoSecret) {
+		if v, err = s.KeychainGet(ctx, svc, storageKey(name)); errors.Is(err, platform.ErrNoSecret) {
 			return "", ErrNone
 		} else if err != nil {
 			return "", err
@@ -389,22 +436,37 @@ func (s *Store) ProxyPassword(ctx context.Context, name string) (string, error) 
 	return v, err
 }
 
+// ValueMax is the longest value a secret may have: the Keychain's command
+// line (security -i) is read in lines of 4096 bytes, and a longer one would
+// be cut, its end run as commands of its own.
+const ValueMax = 3800
+
 // Token returns a token as given for the secret (pasted, or a line on
-// stdin) without its whitespace. It refuses an empty one, one with a quote,
-// a backslash or a control character (they'd end the Keychain's command
-// line, or a request's header), and for claude anything but a setup-token
-// token. The company proxy's password (proxy.UpstreamSecret) loses only
-// the whitespace around it: a password may hold spaces.
+// stdin) without its whitespace. It refuses an empty one, one with a quote
+// or a backslash (they'd end the Keychain's command line), one past
+// ValueMax, one with anything but printable ASCII (a request's header
+// carries no other, and the Keychain gives what isn't back as hex), one
+// that holds a VM's placeholder (agentlogin.HasPlaceholder: copied from a
+// VM, it would never be the real value), and for claude anything but a
+// setup-token token. The company proxy's password (proxy.UpstreamSecret)
+// loses only the whitespace around it: a password may hold spaces.
 func Token(name, given string) (string, error) {
 	v := strings.Join(strings.Fields(given), "")
+	lowest := rune(0x21) // a header's value: no space
 	if name == proxy.UpstreamSecret {
-		v = strings.TrimSpace(given)
+		v, lowest = strings.TrimSpace(given), 0x20
 	}
 	switch {
 	case v == "":
 		return "", msg.NoToken()
-	case strings.ContainsFunc(v, func(r rune) bool { return r == '"' || r == '\\' || r < 0x20 || r == 0x7f }):
+	case strings.ContainsAny(v, `"\`):
 		return "", msg.TokenQuotes()
+	case strings.ContainsFunc(v, func(r rune) bool { return r < lowest || r > 0x7e }):
+		return "", msg.TokenNotAscii()
+	case len(v) > ValueMax:
+		return "", msg.TokenTooLong(strconv.Itoa(ValueMax))
+	case agentlogin.HasPlaceholder([]byte(v)):
+		return "", msg.TokenIsPlaceholder()
 	case name == ClaudeToken && !strings.HasPrefix(v, "sk-ant-oat01-"):
 		return "", msg.NotSetupToken()
 	}
@@ -414,7 +476,7 @@ func Token(name, given string) (string, error) {
 // Save saves a known secret's value (one Token returned): in the Keychain,
 // else in a file only the user can read. A Claude Code token takes the
 // Claude Code OAuth login in devvm's store away, as devvm keeps one Claude
-// Code login, the newest.
+// Code login, the newest. Yours are saved with Yours.Save.
 func (s *Store) Save(ctx context.Context, name, value string) error {
 	if _, ok := Lookup(name); !ok {
 		return msg.NoSecret(name)
@@ -431,8 +493,13 @@ func (s *Store) Save(ctx context.Context, name, value string) error {
 	return c.saveToken(ctx, value)
 }
 
-// save saves a known secret's value: Save's, alone.
+// save saves a secret's value under its storageKey: Save's, alone. One
+// past ValueMax is refused before the saved one is touched.
 func (s *Store) save(ctx context.Context, name, value string) error {
+	if len(value) > ValueMax {
+		return msg.TokenTooLong(strconv.Itoa(ValueMax))
+	}
+	key := storageKey(name)
 	if !s.Keychain {
 		if err := state.PrivateDir(s.Dirs.Secrets()); err != nil {
 			return err
@@ -443,21 +510,23 @@ func (s *Store) save(ctx context.Context, name, value string) error {
 	if err != nil {
 		return err
 	}
-	if s.KeychainSet(ctx, svc, name, "devvm "+name, value) != nil {
+	if s.KeychainSet(ctx, svc, key, "devvm "+key, value) != nil {
 		return msg.KeychainSaveFailed(name)
 	}
 	return nil
 }
 
-// Delete deletes a known secret's saved value: ErrNone when there's none.
+// Delete deletes a secret's saved value, a known one's or one of yours',
+// whose definition goes with Yours.Delete: ErrNone when there's none.
 func (s *Store) Delete(ctx context.Context, name string) error {
-	if _, ok := Lookup(name); !ok {
+	if _, ok := Lookup(name); !ok && !nameOK(name) {
 		return ErrNone
 	}
+	key := storageKey(name)
 	if !s.Keychain {
 		// A save that never finished leaves its value in a temporary file
-		// (state.WriteFile's, .<name>.tmp-*): gone with the secret.
-		tmps, _ := filepath.Glob(filepath.Join(s.Dirs.Secrets(), "."+name+".tmp-*"))
+		// (state.WriteFile's, .<key>.tmp-*): gone with the secret.
+		tmps, _ := filepath.Glob(filepath.Join(s.Dirs.Secrets(), "."+key+".tmp-*"))
 		for _, f := range tmps {
 			if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
@@ -474,7 +543,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.KeychainDelete(ctx, svc, name); errors.Is(err, platform.ErrNoSecret) {
+	if err := s.KeychainDelete(ctx, svc, key); errors.Is(err, platform.ErrNoSecret) {
 		return ErrNone
 	} else if err != nil {
 		return err
@@ -509,6 +578,9 @@ func (s *Store) Get(ctx context.Context, b proxy.Binding) (string, error) {
 		}
 		return strings.TrimSpace(v), nil
 	case proxy.KindSecret:
+		if err := fits(s, b); err != nil {
+			return "", err
+		}
 		v, err := s.Value(ctx, b.Name)
 		if errors.Is(err, ErrNone) && b.Name == ClaudeToken {
 			return s.Get(ctx, proxy.Binding{Kind: proxy.KindLogin, Agent: agents.ClaudeOAuth, Name: agentlogin.ClaudeOAuthName})
@@ -519,6 +591,41 @@ func (s *Store) Get(ctx context.Context, b proxy.Binding) (string, error) {
 		return v, err
 	}
 	return "", msg.NoSecret(b.Name)
+}
+
+// fits checks a secret's binding against the secret as it's saved now,
+// before its value goes to the proxy that asks for it: the bindings file
+// is devvm's, but a VM's proxy may run with one written before a change,
+// so its hosts must be within the secret's, and its header, scheme, path,
+// way into Basic credentials, definition (ID) and placeholder its own.
+// One that doesn't is secret_binding_changed, which the VM's next launch
+// or devvm secret use writes again.
+func fits(s *Store, b proxy.Binding) error {
+	sec, ok, err := YoursOf(s).Lookup(b.Name)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return msg.NoSecret(b.Name)
+	}
+	// The company proxy's password: the proxy asks for it itself, as it
+	// starts, with no hosts or placeholder, and never puts it in a VM's
+	// request (proxy.UpstreamSecret). A binding of it that has either is
+	// no proxy's own.
+	if sec.HostOnly {
+		if len(b.Hosts) > 0 || b.Placeholder != "" || b.Header != "" {
+			return msg.SecretBindingChanged(b.Name)
+		}
+		return nil
+	}
+	salt, own := strings.CutPrefix(b.Placeholder, sec.Placeholder("")+"-")
+	switch {
+	case slices.ContainsFunc(b.Hosts, func(h string) bool { return !slices.Contains(sec.Hosts, h) }),
+		b.Header != sec.Header, b.Scheme != sec.Scheme, b.Path != sec.Path, b.BasicUser != sec.BasicUser, b.ID != sec.ID,
+		!own || salt == "" || strings.Trim(salt, "0123456789abcdef") != "":
+		return msg.SecretBindingChanged(b.Name)
+	}
+	return nil
 }
 
 // loginFailed is the message for a login's lookup that failed: what
@@ -572,18 +679,57 @@ func FromTools(st *state.VM, name string) bool {
 	return false
 }
 
-// Bind binds a secret to a VM (use), or unbinds it, in st alone: inside
-// st.Update. claude stays with a VM that has Claude Code.
+// Bind binds a known secret to a VM (use), or unbinds any secret, in st
+// alone: inside st.Update. claude stays with a VM that has Claude Code.
 func Bind(st *state.VM, name string, use bool) error {
 	b, err := Of(st)
 	if err != nil {
 		return err
 	}
 	b.Names = slices.DeleteFunc(b.Names, func(n string) bool { return n == name })
+	b.Yours = slices.DeleteFunc(b.Yours, func(y BoundSecret) bool { return y.Name == name })
 	if use {
 		b.Names = append(b.Names, name)
 	}
 	return state.SetSection(st, Section, b)
+}
+
+// BindYours binds a secret of yours to a VM, in st alone (inside
+// st.Update): its definition, by its ID, and its hosts now, which are all
+// the VM's proxy ever puts it in for (UsedAs).
+func BindYours(st *state.VM, sec Secret) error {
+	if err := Bind(st, sec.Name, true); err != nil {
+		return err
+	}
+	b, err := Of(st)
+	if err != nil {
+		return err
+	}
+	b.Yours = append(b.Yours, BoundSecret{Name: sec.Name, ID: sec.ID, Hosts: slices.Clone(sec.Hosts)})
+	return state.SetSection(st, Section, b)
+}
+
+// UsedAs is a secret of yours as the VM st uses it: sec with only the
+// hosts it had when the VM was bound to it. ok is false when the VM was
+// bound to another definition by its name (stale: a secret saved again
+// after devvm secret rm), or to none, or none of its hosts are left.
+func UsedAs(st *state.VM, sec Secret) (Secret, bool) {
+	b, _ := Of(st)
+	i := slices.IndexFunc(b.Yours, func(y BoundSecret) bool { return y.Name == sec.Name })
+	if i < 0 || b.Yours[i].ID != sec.ID {
+		return Secret{}, false
+	}
+	sec.Hosts = slices.DeleteFunc(slices.Clone(sec.Hosts), func(h string) bool { return !slices.Contains(b.Yours[i].Hosts, h) })
+	return sec, len(sec.Hosts) > 0
+}
+
+// Stale reports whether the VM st names a secret of yours that it wasn't
+// bound to as it's saved now: bound to another definition by its name (a
+// secret saved again after devvm secret rm), or to none.
+func Stale(st *state.VM, sec Secret) bool {
+	b, _ := Of(st)
+	i := slices.IndexFunc(b.Yours, func(y BoundSecret) bool { return y.Name == sec.Name })
+	return i < 0 || b.Yours[i].ID != sec.ID
 }
 
 // Logins returns the login kinds a VM with these shared tools uses, in
@@ -657,8 +803,15 @@ func (s *Store) RefreshFiles(ctx context.Context, st *state.VM, salt string) err
 func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, logins []proxy.Binding) error {
 	var list []proxy.Binding
 	var hosts []string
+	all, err := YoursOf(s).Using(Names(st))
+	if err != nil {
+		return err
+	}
 	for _, name := range Names(st) {
-		sec, ok := Lookup(name)
+		sec, ok := Find(all, name)
+		if ok && sec.Custom {
+			sec, ok = UsedAs(st, sec)
+		}
 		if !ok {
 			continue
 		}
@@ -671,6 +824,7 @@ func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, login
 		}
 		list = append(list, proxy.Binding{
 			Name: name, Kind: proxy.KindSecret, Hosts: sec.Hosts, Header: sec.Header, Placeholder: sec.Placeholder(salt),
+			Path: sec.Path, Scheme: sec.Scheme, BasicUser: sec.BasicUser, ID: sec.ID,
 		})
 	}
 	for _, b := range logins {

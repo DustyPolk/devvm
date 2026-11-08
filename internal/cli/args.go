@@ -10,6 +10,7 @@ import (
 
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/netpolicy"
+	"github.com/devvmhq/devvm/internal/secrets"
 	"github.com/devvmhq/devvm/internal/settings"
 	"github.com/devvmhq/devvm/internal/sshagent"
 	"github.com/devvmhq/devvm/internal/state"
@@ -218,8 +219,14 @@ func checkFlags(cmd *cobra.Command) error {
 	}
 	var err error
 	f.Visit(func(fl *pflag.Flag) {
-		if err == nil {
-			err = checkFlagValue(fl.Name, fl.Value.String())
+		values := []string{fl.Value.String()}
+		if sv, ok := fl.Value.(pflag.SliceValue); ok {
+			values = sv.GetSlice() // a flag given many times, or with commas: each value
+		}
+		for _, v := range values {
+			if err == nil {
+				err = checkFlagValue(fl.Name, v)
+			}
 		}
 	})
 	if err != nil {
@@ -262,6 +269,27 @@ func checkFlagValue(name, value string) error {
 	case "to":
 		if !upgrade.Valid(strings.TrimPrefix(value, "v")) {
 			err = msg.UpgradeNotVersion(value)
+		}
+	case "host":
+		// One --host, or several joined with commas, as the flag takes them.
+		for h := range strings.SplitSeq(value, ",") {
+			if _, err = secrets.CheckHost(h); err != nil {
+				break
+			}
+		}
+	case "header":
+		_, err = secrets.CheckHeader(value)
+	case "env":
+		err = secrets.CheckEnv(value)
+	case "prefix":
+		err = secrets.CheckPrefix(value)
+	case "scheme":
+		if value != secrets.None {
+			err = secrets.CheckScheme(value)
+		}
+	case "path":
+		if value != secrets.None {
+			err = secrets.CheckPath(value)
 		}
 	}
 	return err

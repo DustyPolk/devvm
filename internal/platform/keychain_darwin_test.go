@@ -114,3 +114,34 @@ func TestExcludeFromBackup(t *testing.T) {
 		t.Errorf("calls = %q", calls)
 	}
 }
+
+// security -i's line holds a whole item or none of it: a value that would
+// take it past keychainLineMax, or a part that would end it, is refused
+// before security runs, so the item saved before stays, and nothing of
+// the value runs as a command.
+func TestKeychainLine(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		ok    bool
+	}{
+		{"ghp_x", true},
+		{strings.Repeat("a", 3800), true},
+		{strings.Repeat("a", keychainLineMax), false},
+		{strings.Repeat("a", 4100) + "\nadd-generic-password -s x -a y -w z", false},
+		{`a"b`, false},
+		{`a\b`, false},
+		{"a\nb", false},
+	} {
+		line, err := keychainLine("devvm", "custom.stripe", "devvm custom.stripe", tc.value)
+		if (err == nil) != tc.ok || tc.ok && (len(line) > keychainLineMax || strings.Count(line, "\n") != 1) {
+			t.Errorf("keychainLine(%d bytes): %d bytes, %v; want ok %v", len(tc.value), len(line), err, tc.ok)
+		}
+	}
+	s := stubtest.New(t)
+	if err := KeychainSet(t.Context(), "devvm-test", "a", "devvm a", strings.Repeat("a", 5000)); err == nil {
+		t.Error("a value past the line was saved")
+	}
+	if calls := s.Read(t, "calls"); strings.Contains(calls, "security") {
+		t.Errorf("security ran: %q", calls)
+	}
+}

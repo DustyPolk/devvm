@@ -228,6 +228,13 @@ func readPrivate(path string, limit int64, deny os.FileMode) ([]byte, error) {
 	return f.ReadAll(limit)
 }
 
+// ReadPrivate is readPrivate for a file of devvm's that decides where the
+// proxy puts a value, read outside this package: internal/secrets' list of
+// your secrets, which only its owner may write (deny 0o022).
+func ReadPrivate(path string, limit int64, deny os.FileMode) ([]byte, error) {
+	return readPrivate(path, limit, deny)
+}
+
 // ownedByMe reports whether fi's file is this process's user's.
 func ownedByMe(fi os.FileInfo) bool {
 	st, ok := fi.Sys().(*syscall.Stat_t)

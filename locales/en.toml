@@ -2724,6 +2724,118 @@ other = "{{.vm}} doesn't use the {{.secret}} secret any more."
 [secret_with_claude]
 other = "{{.vm}} has Claude Code, so the VM always uses the Claude Code token. To stop it, run devvm tools rm claude."
 
+[bad_secret_name]
+description = "given is the name as typed; most is the longest a name may be, such as 40"
+other = "{{.given}} can't name a secret. A name has lowercase letters, digits and dashes, at most {{.most}} of them, and starts and ends with a letter or a digit."
+
+[secret_name_taken]
+description = "given is the name as typed, such as codex-key"
+other = "{{.given}} is a name of devvm's own, or starts with a coding agent's, so it can't name a secret of yours. Give it another name."
+
+[bad_secret_host]
+description = "given is the host as typed, such as *.example.com"
+other = "A secret can't go to {{.given}}. Give a host name such as api.example.com, with no wildcard, address, internal name or port other than 443."
+
+[bad_secret_header]
+description = "given is the header as typed, such as Cookie"
+other = "A secret can't go in the header {{.given}}. Give a header name such as Authorization or X-Api-Key, but not Host, Cookie or a header that the proxy sets or drops."
+
+[bad_secret_env]
+description = "given is the variable's name as typed, such as PATH"
+other = "{{.given}} can't hold a secret's placeholder, because it isn't a variable's name, or devvm or the shell sets it. Give another name, such as STRIPE_API_KEY."
+
+[bad_secret_prefix]
+description = "given is the start as typed; most is the longest it may be, such as 32"
+other = "{{.given}} can't start a placeholder. Give at most {{.most}} letters, digits, dots, dashes or underscores, such as sk_."
+
+[secret_needs_host]
+description = "secret is the secret's name"
+other = "The {{.secret}} secret isn't saved yet, so it needs the hosts it goes to and its variable. Give them with --host and --env, such as --host api.example.com --env EXAMPLE_API_KEY."
+
+[secret_new_like]
+description = "given is the name as typed; like is the saved or known secret it's closest to"
+other = "There's no secret {{.given}} yet, but there's {{.like}}. To save a new secret of yours, give it --host and --env."
+
+[secret_hosts_changed]
+description = "hosts lists the secret's hosts now, comma-separated, which it lost some of; vms lists the VMs that use it, comma-separated; count is how many"
+one = "{{.vms}} uses the {{.secret}} secret, which now goes only to {{.hosts}} on port 443."
+other = "{{.vms}} use the {{.secret}} secret, which now goes only to {{.hosts}} on port 443."
+
+[bad_secret_scheme]
+description = "given is the scheme as typed, such as Basic"
+other = "{{.given}} can't be a secret's own scheme. Give one such as ApiKey, of letters, digits, dots, dashes or underscores, but not Basic, Digest, Bearer or Token, which devvm handles itself."
+
+[bad_secret_path]
+description = "given is the path as typed, such as /api"
+other = "A secret can't go in below {{.given}}. Give a path that starts and ends with a slash, such as /api/, with no . or .. part, doubled slash, backslash, ; or %."
+
+[secret_scheme_header]
+description = "secret is the secret's name"
+other = "The {{.secret}} secret's --scheme and --basic-user go with the Authorization header alone. Leave --header out, or them."
+
+[token_not_ascii]
+other = "The secret you gave has a character that isn't printable ASCII, such as an accented letter, so devvm didn't save it."
+
+[token_too_long]
+description = "most is the longest a secret may be, in bytes, such as 3800"
+other = "The secret you gave is longer than {{.most}} bytes, so devvm didn't save it, and the one saved before stays."
+
+[secret_binding_changed]
+description = "secret is the secret's name: the VM's proxy's binding of it isn't the secret as it's saved now"
+other = "The VM's proxy has a binding of {{.secret}} that isn't the secret as it's saved now, so it put nothing in. The VM's next launch writes its bindings again."
+
+[secret_stale]
+description = "secret is the name of a secret of yours that the VM was bound to before it was deleted and saved again"
+other = "{{.vm}} was bound to an earlier secret named {{.secret}}, so it gets nothing of this one. Run devvm secret use {{.secret}} to bind it again, or devvm secret unuse {{.secret}}."
+
+[secret_hosts_grown]
+description = "vms lists the VMs that use the secret, comma-separated; count is how many"
+one = "{{.vms}} keeps sending the {{.secret}} secret to the hosts it had. Run devvm secret use {{.secret}} in its folder to give it the new ones."
+other = "{{.vms}} keep sending the {{.secret}} secret to the hosts each had. Run devvm secret use {{.secret}} in a VM's folder to give it the new ones."
+
+[secret_needs_env]
+description = "secret is the secret's name"
+other = "The {{.secret}} secret needs the variable VMs find its placeholder in. Give it with --env, such as --env STRIPE_API_KEY."
+
+[secret_too_many_hosts]
+description = "secret is the secret's name; most is how many hosts a secret may have, such as 16"
+other = "The {{.secret}} secret has more than {{.most}} hosts. Give it fewer, or save another secret for the rest."
+
+[secret_fixed]
+description = "secret is one of devvm's own secrets, such as github"
+other = "The {{.secret}} secret's hosts, header and variable are devvm's own, so devvm secret set {{.secret}} takes no --host, --header, --env or --prefix."
+
+[secret_env_taken]
+description = "env is the variable's name; secret is the other secret of yours that gives VMs it"
+other = "Your {{.secret}} secret already gives VMs its placeholder in {{.env}}. Give this one another variable with --env."
+
+[custom_secrets_unreadable]
+description = "path is devvm's list of your secrets; reason is why it can't be read, in English"
+other = "Reading your secrets' list in {{.path}} failed: {{.reason}}."
+
+[custom_secret_refused]
+description = "path is devvm's list of your secrets; secret is the name of its entry that breaks the rules, quoted when it holds a control character"
+other = "The entry for {{.secret}} in {{.path}} breaks the rules for a secret of yours. Fix the entry, or delete it and save the secret again."
+
+[token_is_placeholder]
+other = "The secret you gave holds a VM's placeholder, not the real value, so devvm didn't save it. Copy the value from where you made it."
+
+[custom_secret_howto]
+description = "secret is the secret's name; hosts lists the hosts it goes to, comma-separated"
+other = "Paste the value of {{.secret}}, which VMs that use it send to {{.hosts}}.\nThe VMs that use it can reach those hosts on port 443."
+
+[custom_secret_used]
+description = "hosts lists the secret's hosts, comma-separated"
+other = "{{.vm}} uses the {{.secret}} secret from its next launch, and its allowlist has {{.hosts}} on port 443."
+
+[secret_not_saved]
+other = "{{.vm}} uses the {{.secret}} secret, but no value is saved for it. Run devvm secret set {{.secret}}."
+
+[secret_rm_users]
+description = "vms lists the VMs that use the secret, comma-separated; count is how many"
+one = "{{.vms}} uses the {{.secret}} secret, and stops using it once it's deleted."
+other = "{{.vms}} use the {{.secret}} secret, and stop using it once it's deleted."
+
 [login_fields_withheld]
 description = "agent is the agent as people know it, such as Codex; file is its login file's name, such as auth.json or .claude.json; keys lists the fields of it that the VM's copy leaves out, a nested one by its path, such as tokens.x or oauthAccount.x, comma-separated"
 other = "The VM gets {{.agent}}'s {{.file}} without {{.keys}}, because devvm doesn't know what they're for."
