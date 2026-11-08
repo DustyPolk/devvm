@@ -12,7 +12,11 @@ import (
 // logins, and agent import, which fills it from this machine.
 func newAgentCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "agent",
+		Use: "agent",
+		Annotations: about{
+			docs: "using/coding-agents#devvms-agent-store", group: groupMachine,
+			noJSON: "it prints its help",
+		}.annotations(),
 		Short: "Fill devvm's store of the agents' settings and logins that every VM gets",
 		Long: "devvm keeps the coding agents' settings in ~/.config/devvm/agents and their logins in ~/.local/share/devvm/logins, " +
 			"and every VM with an agent gets them from there, never from the agents' own files in your home folder. " +
@@ -33,7 +37,11 @@ func newAgentCmd(a *app) *cobra.Command {
 // newAgentSaveCmd is devvm agent save [AGENT...].
 func newAgentSaveCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "save [AGENT...]",
+		Use: "save [AGENT...]",
+		Annotations: about{
+			docs:   "using/coding-agents#saving-a-vms-settings",
+			noJSON: "it shows a diff, asks, then copies files into devvm's store",
+		}.annotations(),
 		Short: "Copy the agents' settings from this folder's VM into devvm's store",
 		Long: "Copy the settings of AGENT, " + orList(image.Agents) + ", or of every agent this folder's VM has, from the VM into devvm's store, " +
 			"so every VM with the agent gets them, never its logins or history. " +
@@ -58,7 +66,11 @@ func newAgentSaveCmd(a *app) *cobra.Command {
 func newAgentImportCmd(a *app) *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "import [AGENT...]",
+		Use: "import [AGENT...]",
+		Annotations: about{
+			docs:   "using/coding-agents#importing-from-this-machine",
+			noJSON: "it copies files into devvm's store",
+		}.annotations(),
 		Short: "Copy the agents' settings and logins from this machine into devvm's store",
 		Long: "Copy the settings and logins of AGENT, " + orList(image.Agents) + ", or of every agent, from your home folder into devvm's store, never their history. " +
 			"It follows no link out of an agent's folder, and it asks before replacing what the store has.",

@@ -30,8 +30,9 @@ func oneSecret(cmd *cobra.Command) {
 func newSecretCmd(a *app) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "secret",
-		Short: "List the secrets kept on this machine, for VMs to use",
+		Use:         "secret",
+		Annotations: about{docs: "safety/network#saving-and-binding-secrets", group: groupChange}.annotations(),
+		Short:       "List the secrets kept on this machine, for VMs to use",
 		Long: "List the secrets devvm keeps on this machine, claude for the Claude Code token, github for a GitHub token " +
 			"and proxy for the password of the company proxy that config.toml names, " +
 			"with whether each is saved and the VMs using it. " +
@@ -54,7 +55,11 @@ func newSecretCmd(a *app) *cobra.Command {
 func newSecretSetCmd(a *app) *cobra.Command {
 	var stdin bool
 	cmd := &cobra.Command{
-		Use:   "set NAME",
+		Use: "set NAME",
+		Annotations: about{
+			docs:   "safety/network#saving-and-binding-secrets",
+			noJSON: "it saves a secret",
+		}.annotations(),
 		Short: "Save a secret on this machine",
 		Long: "Save a secret on this machine, claude for the Claude Code token that claude setup-token prints, " +
 			"github for a GitHub token, or proxy for the password of the company proxy that config.toml names. " +
@@ -101,7 +106,11 @@ func newSecretRmCmd(a *app) *cobra.Command {
 	u := a.u
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "rm NAME",
+		Use: "rm NAME",
+		Annotations: about{
+			docs:   "safety/network#saving-and-binding-secrets",
+			noJSON: "it deletes",
+		}.annotations(),
 		Short: "Delete a saved secret",
 		Long: "Delete a saved secret, after asking in a terminal without --no-input. " +
 			"Proxies that are running stop putting it in at once, but what a VM did with it stays done.",
@@ -184,7 +193,11 @@ func newSecretUseCmd(a *app, name string, use bool) *cobra.Command {
 		example = examples("devvm secret unuse github", "stop the VM using your GitHub token")
 	}
 	cmd := &cobra.Command{
-		Use:     name + " NAME",
+		Use: name + " NAME",
+		Annotations: about{
+			docs:   "safety/network#saving-and-binding-secrets",
+			noJSON: "it changes a setting",
+		}.annotations(),
 		Short:   short,
 		Long:    long,
 		Example: example,

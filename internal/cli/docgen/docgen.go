@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 
-	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/cli"
 	"github.com/devvmhq/devvm/internal/state"
 )
 
@@ -57,7 +57,7 @@ func generate(root *cobra.Command) (map[string][]byte, error) {
 		if err := doc.GenMarkdownCustom(c, &md, func(s string) string { return s }); err != nil {
 			return nil, err
 		}
-		body := withDocs(tidy(md.String()), c.CommandPath(), msg.CommandDoc(c.CommandPath()))
+		body := withDocs(tidy(md.String()), c.CommandPath(), cli.DocsPage(c))
 		// The command's Short is its page's explainer, the line under its title on the social card.
 		// No weight: Hugo sorts the section by title, so a new command moves no other page.
 		page := fmt.Sprintf("---\ntitle: %s\nexplainer: %q\n---\n\n%s", c.CommandPath(), c.Short, body)

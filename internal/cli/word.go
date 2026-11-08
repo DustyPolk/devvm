@@ -66,9 +66,10 @@ type wordPanic struct{ err usageError }
 // shown only in a terminal), which the CLI reference's pages never get.
 func addHelp(root *cobra.Command, logo func()) {
 	help := &cobra.Command{
-		Use:   "help [COMMAND]",
-		Short: "Print the help for devvm or a command",
-		Long:  "Print the help of devvm, or of COMMAND, as devvm COMMAND --help does.",
+		Use:         "help [COMMAND]",
+		Annotations: about{noJSON: "it prints help"}.annotations(),
+		Short:       "Print the help for devvm or a command",
+		Long:        "Print the help of devvm, or of COMMAND, as devvm COMMAND --help does.",
 		Args: func(c *cobra.Command, args []string) error {
 			_, err := helpTarget(c.Root(), args)
 			return err

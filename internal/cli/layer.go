@@ -14,7 +14,11 @@ import (
 func newLayerCmd(a *app) *cobra.Command {
 	u := a.u
 	cmd := &cobra.Command{
-		Use:   "layer",
+		Use: "layer",
+		Annotations: about{
+			docs: "using/customizing#your-own-layers", group: groupImages,
+			noJSON: "it prints its help",
+		}.annotations(),
 		Short: "Make image layers of your own, or change this folder's VM's layers",
 		Long: "Make image layers of your own, which are scripts in ~/.config/devvm/layers that an image runs on top of base, or add layers to this folder's VM and take them out. " +
 			"An image names them as it names devvm's built-in layers, bottom first, such as docker+NAME, and a new VM gets them with --layers.",
@@ -28,7 +32,11 @@ func newLayerCmd(a *app) *cobra.Command {
 	}
 	cmd.AddCommand(newLayerAddCmd(a), newLayerRmCmd(a))
 	cmd.AddCommand(&cobra.Command{
-		Use:   "new NAME",
+		Use: "new NAME",
+		Annotations: about{
+			docs: "using/customizing#your-own-layers", group: groupImages,
+			noJSON: "it writes a file",
+		}.annotations(),
 		Short: "Start a layer of your own",
 		Long: "Start a layer of your own, ~/.config/devvm/layers/NAME.sh, a script to edit, and NAME.policy next to it, " +
 			"the hosts that VMs with the layer can reach on the allowlist tier. " +
@@ -62,7 +70,11 @@ func newLayerCmd(a *app) *cobra.Command {
 func newLayerAddCmd(a *app) *cobra.Command {
 	var o vm.RemakeOptions
 	cmd := &cobra.Command{
-		Use:   "add LAYER...",
+		Use: "add LAYER...",
+		Annotations: about{
+			docs: "using/images#adding-layers-to-a-vm", group: groupChange,
+			noJSON: "it makes a VM again, then opens a shell",
+		}.annotations(),
 		Short: "Make this folder's VM again with more layers, then open a shell in it",
 		Long: "Make this folder's VM again from an image with each LAYER added on top, in the order given, then open a shell in it, after asking in a terminal without --no-input. " +
 			"devvm keeps its home folder, the project folder and its settings, and everything else on its disk is lost. " +
@@ -97,7 +109,11 @@ func newLayerAddCmd(a *app) *cobra.Command {
 func newLayerRmCmd(a *app) *cobra.Command {
 	var o vm.RemakeOptions
 	cmd := &cobra.Command{
-		Use:   "rm LAYER...",
+		Use: "rm LAYER...",
+		Annotations: about{
+			docs: "using/images#taking-layers-out-of-a-vm", group: groupChange,
+			noJSON: "it makes a VM again, then opens a shell",
+		}.annotations(),
 		Short: "Make this folder's VM again without some of its layers, then open a shell in it",
 		Long: "Make this folder's VM again from an image without each LAYER, its other layers kept in their order, then open a shell in it, after asking in a terminal without --no-input. " +
 			"devvm keeps its home folder, the project folder and its settings, and everything else on its disk is lost. " +

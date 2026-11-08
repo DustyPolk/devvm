@@ -23,8 +23,9 @@ func newImagesCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	c := &cobra.Command{
-		Use:   "images",
-		Short: "List the images and the shared tools",
+		Use:         "images",
+		Annotations: about{docs: "using/images#listing-images", group: groupImages}.annotations(),
+		Short:       "List the images and the shared tools",
 		Long: "List the images, with whether each is current, stale, unfinished or being built and the disk it takes, " +
 			"then the shared tools devvm has built, with how many VMs have each. " +
 			"It ends with what they take in all.",
@@ -73,8 +74,9 @@ func newImagesRmCmd(a *app) *cobra.Command {
 		force bool
 	)
 	c := &cobra.Command{
-		Use:   "rm IMAGE|KEY...",
-		Short: "Delete images, by name or by key",
+		Use:         "rm IMAGE|KEY...",
+		Annotations: about{docs: "using/images#deleting-images", noJSON: "it deletes"}.annotations(),
+		Short:       "Delete images, by name or by key",
 		Long: "Delete images, each by its name or by the key devvm images shows, after asking in a terminal without --no-input. " +
 			"Every one must be built, or devvm deletes nothing. " +
 			"VMs made from an image keep working, except on Linux hosts, where devvm refuses an image whose disk VMs use.",

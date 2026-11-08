@@ -12,8 +12,9 @@ import (
 func newGitProtectCmd(a *app) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "git-protect [on|strict|off]",
-		Short: "Show or change .git protection for this folder's VM",
+		Use:         "git-protect [on|strict|off]",
+		Annotations: about{docs: "safety/git-protection#turning-it-on-or-off", group: groupChange}.annotations(),
+		Short:       "Show or change .git protection for this folder's VM",
 		Long: "Show this folder's VM's .git protection, which locks the git hooks and config that run code on this machine, " +
 			"as on, strict, off, or clone for a --clone VM. " +
 			"devvm git-protect on, strict or off changes it at once on a stopped VM, and on a running one when it next stops, so in a terminal devvm offers to restart it now.",

@@ -1,4 +1,3 @@
-// Package cli holds devvm's commands.
 package cli
 
 import (
@@ -23,8 +22,9 @@ func NewRoot(u *ui.UI) *cobra.Command {
 	uf := new(upFlags)
 	fl := new(ui.Flags)
 	root := &cobra.Command{
-		Use:   "devvm",
-		Short: "Open a shell in this folder's VM, creating it first",
+		Use:         "devvm",
+		Annotations: about{docs: "getting-started/commands", noJSON: "it opens a shell"}.annotations(),
+		Short:       "Open a shell in this folder's VM, creating it first",
 		Long: "Open a shell in this folder's VM, at the same path, and create the VM first when the folder has none. " +
 			"devvm shows what a new VM gets, and in a terminal you can customize its toolchains, coding agents, layers, tier, ports and size, which --tools, --agents, --layers, --network, --ports, --cpus, --memory and --disk choose without asking. " +
 			"The VM mounts only this folder read-write, and with --clone it gets its own clone of the repo instead.",

@@ -29,7 +29,11 @@ func newSetupCmd(a *app) *cobra.Command {
 		c                        setupChoice
 	)
 	cmd := &cobra.Command{
-		Use:   "setup",
+		Use: "setup",
+		Annotations: about{
+			docs: "using/settings#devvm-setup", group: groupMachine,
+			noJSON: "it asks, then changes settings",
+		}.annotations(),
 		Short: "Choose base's features, and new VMs' size, network tier, coding agents and layers",
 		Long: "Choose the features base gets, and new VMs' CPUs, memory, network tier, coding agents and layers. " +
 			"In a terminal devvm asks for each, starting from the current choice, and --features, --agents and --layers choose without asking. " +
@@ -58,6 +62,9 @@ func newSetupCmd(a *app) *cobra.Command {
 	f.StringVar(&features, "features", "", "the `LIST` of features base gets, such as fzf,omb, or none")
 	addAgentsFlag(f, &agents, "the `LIST` of coding agents new VMs get by default, such as claude,codex, or none")
 	addLayersFlag(f, &layers, "the `LIST` of layers new VMs' images get by default, bottom first, such as docker,mine, or none")
+	_ = cmd.RegisterFlagCompletionFunc("features", completeFeatures(a))
+	_ = cmd.RegisterFlagCompletionFunc("agents", completeParts(a, "agents"))
+	_ = cmd.RegisterFlagCompletionFunc("layers", completeParts(a, "layers"))
 	return cmd
 }
 

@@ -47,8 +47,9 @@ func newSpaceCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	c := &cobra.Command{
-		Use:   "space",
-		Short: "Show what devvm keeps on this machine and the space it takes",
+		Use:         "space",
+		Annotations: about{docs: "using/space#devvm-space", group: groupSpace}.annotations(),
+		Short:       "Show what devvm keeps on this machine and the space it takes",
 		Long: "Show each kind of thing devvm keeps on this machine, with the disk it takes, " +
 			"what devvm gc frees of it now and what frees the rest, then Lima's own caches apart. " +
 			"It changes nothing and starts no VM.",

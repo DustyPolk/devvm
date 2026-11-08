@@ -51,11 +51,26 @@ func TestEveryCommandsHelp(t *testing.T) {
 		if c.Example == "" {
 			t.Errorf("%s: no Example: add one with examples()", path)
 		}
-		if c.Annotations["docs"] == "" {
-			t.Errorf("%s: no docs page: add its path to commandDocs in internal/msg/docs.go", path)
+		if DocsPage(c) == "" || c.Annotations[docsKey] != msg.PageURL(DocsPage(c)) {
+			t.Errorf("%s: no docs page: give it one in its about", path)
 		}
 		if c.Parent() == root && c.GroupID == "" {
-			t.Errorf("%s: in no group: add it to commandGroups", path)
+			t.Errorf("%s: in no group: give it one in its about", path)
+		}
+	})
+}
+
+// Every group a command's about names is one of the root's help's.
+func TestAboutGroupsAreHelpGroups(t *testing.T) {
+	t.Parallel()
+	u, _, _ := testUI()
+	ids := map[string]bool{}
+	for _, g := range helpGroups() {
+		ids[g.ID] = true
+	}
+	eachCommand(NewRoot(u), func(c *cobra.Command) {
+		if g, ok := c.Annotations[groupKey]; ok && !ids[g] {
+			t.Errorf("%s: group %q isn't one of helpGroups", c.CommandPath(), g)
 		}
 	})
 }
@@ -68,7 +83,7 @@ func TestExamples(t *testing.T) {
 	}
 }
 
-// The root's help lists its commands in commandGroups' sections, in
+// The root's help lists its commands in helpGroups' sections, in
 // order, and help in Cobra's own; each help ends with its docs page, and
 // the root's with the issue tracker after it.
 func TestHelpGroupsAndDocs(t *testing.T) {
@@ -93,7 +108,7 @@ func TestHelpGroupsAndDocs(t *testing.T) {
 		!strings.Contains(images, "\n  layer ") || strings.Contains(images, "layer new") {
 		t.Errorf("devvm --help's Change your VM:%s\nand Images:%s", change, images)
 	}
-	wantEnd := "Docs:\n  " + msg.CommandDocURL("devvm") + "\n\nIssues:\n  " + msg.IssuesURL + "\n"
+	wantEnd := "Docs:\n  " + msg.PageURL("getting-started/commands") + "\n\nIssues:\n  " + msg.IssuesURL + "\n"
 	if !strings.HasSuffix(help, wantEnd) {
 		t.Errorf("devvm --help ends:\n%s\nwant it to end with:\n%s", help[max(0, len(help)-200):], wantEnd)
 	}
@@ -110,7 +125,7 @@ func TestHelpGroupsAndDocs(t *testing.T) {
 	if code := Execute(t.Context(), u, []string{"network", "allow", "--help"}); code != 0 {
 		t.Fatalf("devvm network allow --help = %d", code)
 	}
-	wantEnd = "Docs:\n  " + msg.CommandDocURL("devvm network allow") + "\n"
+	wantEnd = "Docs:\n  " + msg.PageURL("safety/network#changing-rules") + "\n"
 	if got := out.String(); !strings.HasSuffix(got, wantEnd) || strings.Contains(got, "Issues:") {
 		t.Errorf("devvm network allow --help:\n%s\nwant it to end with:\n%s", got, wantEnd)
 	}
@@ -118,7 +133,8 @@ func TestHelpGroupsAndDocs(t *testing.T) {
 
 func TestAddGroups(t *testing.T) {
 	root := &cobra.Command{Use: "devvm"}
-	stop, zap := &cobra.Command{Use: "stop"}, &cobra.Command{Use: "zap"}
+	stop := &cobra.Command{Use: "stop", Annotations: about{group: groupVM}.annotations()}
+	zap := &cobra.Command{Use: "zap"}
 	root.AddCommand(stop, zap)
 	addGroups(root)
 	if stop.GroupID != "vm" || zap.GroupID != "" {

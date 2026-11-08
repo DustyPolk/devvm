@@ -10,7 +10,11 @@ import (
 // newStopCmd is devvm stop.
 func newStopCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "stop",
+		Use: "stop",
+		Annotations: about{
+			docs: "using/vms#restarting-and-stopping", group: groupVM,
+			noJSON: "it stops the VM",
+		}.annotations(),
 		Short: "Stop this folder's VM",
 		Long: "Stop this folder's VM and its proxy. " +
 			"devvm, devvm restart or a command that needs the VM running starts it again.",

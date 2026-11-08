@@ -14,8 +14,9 @@ func newGroupCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "group",
-		Short: "Show the group this folder's VM is in",
+		Use:         "group",
+		Annotations: about{docs: "using/links#groups", group: groupLinks}.annotations(),
+		Short:       "Show the group this folder's VM is in",
 		Long: "Show the group this folder's VM is in, with each of its VMs, the name the others reach it by, its folder and the ports it publishes. " +
 			"The VMs in a group reach each other's published ports by name, through links the group makes in each of them.",
 		Example: examples(
@@ -86,8 +87,9 @@ func groupNameArg(_ *cobra.Command, args []string) error { return vm.CheckGroupN
 func newGroupJoinCmd(a *app) *cobra.Command {
 	var as string
 	cmd := &cobra.Command{
-		Use:   "join NAME",
-		Short: "Put this folder's VM in a group of VMs",
+		Use:         "join NAME",
+		Annotations: about{docs: "using/links#joining-a-group", noJSON: "it changes a setting"}.annotations(),
+		Short:       "Put this folder's VM in a group of VMs",
 		Long: "Put this folder's VM in the group NAME, which its first VM makes. " +
 			"Each VM in the group then reaches the ports the others publish with devvm link publish, " +
 			"by each one's folder name or the name it joined with, as in db:5432 and db.devvm.internal:5432.",
@@ -106,8 +108,9 @@ func newGroupJoinCmd(a *app) *cobra.Command {
 
 func newGroupLeaveCmd(a *app) *cobra.Command {
 	return addFolderFlags(&cobra.Command{
-		Use:   "leave",
-		Short: "Take this folder's VM out of its group",
+		Use:         "leave",
+		Annotations: about{docs: "using/links#leaving-a-group", noJSON: "it changes a setting"}.annotations(),
+		Short:       "Take this folder's VM out of its group",
 		Long: "Take this folder's VM out of its group, and remove the links the group made, in this VM and in the group's other VMs, naming them. " +
 			"The links you made with devvm link add stay, and the group goes with its last VM.",
 		Example: examples(

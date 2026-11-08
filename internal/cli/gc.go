@@ -39,7 +39,11 @@ type gcOpts struct {
 func newGCCmd(a *app) *cobra.Command {
 	var o gcOpts
 	c := &cobra.Command{
-		Use:   "gc [--tool-images [TOOL...]]",
+		Use: "gc [--tool-images [TOOL...]]",
+		Annotations: about{
+			docs: "using/images#cleaning-up", group: groupSpace,
+			noJSON: "it deletes",
+		}.annotations(),
 		Short: "Delete stale images, unused tools, old files and the Nix cache over its cap",
 		Long: "Delete the stale and unfinished images, the shared tools devvm images lists as unused, " +
 			"the files devvm itself no longer needs, and the shared Nix cache's least recently used files while it's over its cap, " +

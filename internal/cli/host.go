@@ -11,7 +11,11 @@ import (
 func newHostCmd(a *app) *cobra.Command {
 	var include bool
 	cmd := &cobra.Command{
-		Use:   "host",
+		Use: "host",
+		Annotations: about{
+			docs: "using/ssh#devvm-host-and-devvm-code", group: groupVM,
+			noJSON: "it shows one host name, for ssh as it is",
+		}.annotations(),
 		Short: "Get this folder's VM ready for ssh and editors, and show its host name",
 		Long: "Get this folder's VM ready for ssh and editors as devvm does before it opens a shell, starting the VM if it's stopped. " +
 			"Then show the host name that ssh and VS Code's Remote-SSH reach it by, such as devvm-website for a folder named website.",

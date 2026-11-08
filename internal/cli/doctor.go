@@ -28,8 +28,9 @@ func newDoctorCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "doctor",
-		Short: "Check what devvm needs on this machine",
+		Use:         "doctor",
+		Annotations: about{docs: "getting-started/install#checking-what-devvm-needs", group: groupMachine}.annotations(),
+		Short:       "Check what devvm needs on this machine",
 		Long: "Check what Lima needs on this machine, and say how to get what's missing, " +
 			"because devvm never installs it itself. Then list the features Lima gives VMs. " +
 			"doctor fails when something is missing, but never for a warning, such as one about low free space.",

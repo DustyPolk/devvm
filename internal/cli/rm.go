@@ -11,7 +11,11 @@ import (
 func newRmCmd(a *app) *cobra.Command {
 	var o vm.RmOptions
 	cmd := &cobra.Command{
-		Use:   "rm [VM]",
+		Use: "rm [VM]",
+		Annotations: about{
+			docs: "using/vms#deleting-a-vm", group: groupVM,
+			noJSON: "it deletes",
+		}.annotations(),
 		Short: "Delete this folder's VM, or a VM whose folder is gone",
 		Long: "Delete this folder's VM and what devvm keeps for it, or the VM you name when its folder is gone, after asking in a terminal without --no-input, which --force never answers when its folder is on a disk that isn't connected. " +
 			"When its image has an agent, devvm first exports the agents' history, unless you give --no-export. " +

@@ -30,8 +30,9 @@ func newRetentionCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "retention [KEY=VALUE...]",
-		Short: "Show or change what devvm deletes on its own",
+		Use:         "retention [KEY=VALUE...]",
+		Annotations: about{docs: "using/settings#retention", group: groupSpace}.annotations(),
+		Short:       "Show or change what devvm deletes on its own",
 		Long: "Show the retention settings, which say what devvm deletes on its own, or change them with KEY=VALUE, " +
 			"and KEY=off turns one off. The keys are logs.runs, history.age, history.count, tools.unused-age, " +
 			"orphans.age and nix-cache.size, and every setting is off until you set it. " +

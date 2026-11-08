@@ -82,9 +82,10 @@ func TestEveryMessageIsUsed(t *testing.T) {
 	}
 }
 
-// TestDocLinks checks every doc link in docs.go: a message's key is a
-// message in locales/en.toml, a command's is devvm's path, and its page
-// and anchor exist in docs/content/docs. mise run lint runs it.
+// TestDocLinks checks every doc link, a message's in docs.go and a
+// command's in the CLI reference: a message's key is a message in
+// locales/en.toml, a command's is devvm's path, and its page and anchor
+// exist in docs/content/docs. mise run lint runs it.
 func TestDocLinks(t *testing.T) {
 	dir := filepath.Join(root, "docs", "content", "docs")
 	internal := internalDocLinks()
@@ -96,9 +97,42 @@ func TestDocLinks(t *testing.T) {
 			t.Errorf("internalDocLinks[%q]: docs links it to %q, a user page, so drop it from the list", id, doc)
 		}
 	}
-	for _, err := range checkCommandDocs(commandDocs, dir) {
+	links, err := commandDocs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) == 0 {
+		t.Fatal("the CLI reference links no command to its docs page")
+	}
+	for _, err := range checkCommandDocs(links, dir) {
 		t.Error(err)
 	}
+}
+
+// referenceDocsRe is a CLI reference page's link to its command's docs
+// page, as internal/cli/docgen's withDocs writes it.
+var referenceDocsRe = regexp.MustCompile(`(?m)^\[The docs page for (devvm[^\]]*)\]\(\.\./([^)#]*)\.md(#[^)]*)?\) explains it in full\.$`)
+
+// commandDocs returns each command's docs page, "page#anchor", by its
+// path, as the CLI reference in dir/cli links it. Each command names its
+// page where internal/cli makes it, and TestReferenceIsCurrent keeps the
+// reference up to date with them.
+func commandDocs(dir string) (map[string]string, error) {
+	pages, err := filepath.Glob(filepath.Join(dir, "cli", "*.md"))
+	if err != nil {
+		return nil, err
+	}
+	links := map[string]string{}
+	for _, page := range pages {
+		b, err := os.ReadFile(page) //nolint:gosec // a page of the CLI reference
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range referenceDocsRe.FindAllStringSubmatch(string(b), -1) {
+			links[m[1]] = m[2] + m[3]
+		}
+	}
+	return links, nil
 }
 
 var commandRe = regexp.MustCompile(`^devvm( [a-z][a-z-]*)*$`)
@@ -121,7 +155,7 @@ func checkCommandDocs(links map[string]string, dir string) []error {
 			err = checkDoc(dir, doc)
 		}
 		if err != nil {
-			errs = append(errs, fmt.Errorf("commandDocs[%q] = %q: %w", path, doc, err))
+			errs = append(errs, fmt.Errorf("%s's docs page %q: %w", path, doc, err))
 		}
 	}
 	return errs
@@ -353,10 +387,10 @@ func TestCheckCommandDocs(t *testing.T) {
 		got = append(got, err.Error())
 	}
 	want := []string{
-		`commandDocs["devvm gc"] = "images#nope": images has no heading #nope`,
-		`commandDocs["devvm ls"] = "https://example.com": not page#anchor`,
-		`commandDocs["devvm stop"] = "internals/x": not a user page`,
-		`commandDocs["images"] = "images": not a command's path`,
+		`devvm gc's docs page "images#nope": images has no heading #nope`,
+		`devvm ls's docs page "https://example.com": not page#anchor`,
+		`devvm stop's docs page "internals/x": not a user page`,
+		`images's docs page "images": not a command's path`,
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("got %q, want %q", got, want)

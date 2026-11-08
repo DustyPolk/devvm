@@ -11,7 +11,11 @@ import (
 func newCodeCmd(a *app) *cobra.Command {
 	var include bool
 	cmd := &cobra.Command{
-		Use:   "code",
+		Use: "code",
+		Annotations: about{
+			docs: "using/ssh#vs-code", group: groupVM,
+			noJSON: "it opens VS Code",
+		}.annotations(),
 		Short: "Open this folder's VM in VS Code over Remote-SSH",
 		Long: "Get this folder's VM ready as devvm host does, then open its folder in VS Code over Remote-SSH, " +
 			"with VS Code's code command.",

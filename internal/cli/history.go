@@ -19,8 +19,9 @@ func newHistoryCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "history",
-		Short: "List the saved exports of agents' history",
+		Use:         "history",
+		Annotations: about{docs: "using/coding-agents#history", group: groupVM}.annotations(),
+		Short:       "List the saved exports of agents' history",
 		Long: "List the exports of agents' history that devvm history export and devvm rm saved in " +
 			"~/.local/share/devvm/exports, oldest first. It changes nothing and starts no VM.",
 		Example: examples(
@@ -85,8 +86,9 @@ func writeHistory(tab *ui.Table, es []vm.Export) error {
 // newHistoryExportCmd is devvm history export [FILE].
 func newHistoryExportCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "export [FILE]",
-		Short: "Save this folder's VM's agent history to a .tar.gz",
+		Use:         "export [FILE]",
+		Annotations: about{docs: "using/coding-agents#history", noJSON: "it writes an export"}.annotations(),
+		Short:       "Save this folder's VM's agent history to a .tar.gz",
 		Long: "Save the history of this folder's VM's agents, their transcripts and sessions without their logins, " +
 			"to FILE, a .tar.gz, or to a new file in ~/.local/share/devvm/exports. " +
 			"devvm starts a stopped VM for it.",
@@ -116,8 +118,9 @@ func newHistoryExportCmd(a *app) *cobra.Command {
 // newHistoryImportCmd is devvm history import [FILE].
 func newHistoryImportCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "import [FILE]",
-		Short: "Put an export of agent history into this folder's VM",
+		Use:         "import [FILE]",
+		Annotations: about{docs: "using/coding-agents#importing-history", noJSON: "it changes the VM's files"}.annotations(),
+		Short:       "Put an export of agent history into this folder's VM",
 		Long: "Put the agent history in FILE, a .tar.gz that devvm history export or devvm rm saved, into this folder's VM, " +
 			"or the newest export devvm saved for this folder. " +
 			"It leaves out the agents' logins and the files devvm copies in, and keeps every file the VM already has.",

@@ -44,8 +44,9 @@ func newPortsCmd(a *app) *cobra.Command {
 		return printValue(u, asJSON, "ports", ports)
 	}
 	cmd := &cobra.Command{
-		Use:   "ports [all|none|LIST]",
-		Short: "Show or change which ports this folder's VM forwards",
+		Use:         "ports [all|none|LIST]",
+		Annotations: about{docs: "using/ports-size#ports", group: groupChange}.annotations(),
+		Short:       "Show or change which ports this folder's VM forwards",
 		Long: "Show which ports this folder's VM forwards to the same port on this machine's localhost, " +
 			"or change them at once to all, none or a LIST of ports and ranges like 5173,8000-8010. " +
 			"With -g, show or change what new VMs forward instead.",
@@ -80,10 +81,11 @@ func newPortsCmd(a *app) *cobra.Command {
 	jsonFlag(cmd, &asJSON)
 	sub := func(op, short, long, example string) *cobra.Command {
 		c := &cobra.Command{
-			Use:     op + " LIST",
-			Short:   short,
-			Long:    long,
-			Example: example,
+			Use:         op + " LIST",
+			Annotations: about{docs: "using/ports-size#ports", noJSON: "it changes a setting"}.annotations(),
+			Short:       short,
+			Long:        long,
+			Example:     example,
 			Args: cobra.MatchAll(exactArgs(1), func(_ *cobra.Command, args []string) error {
 				_, err := vm.ParsePortList(args[0])
 				return err

@@ -19,8 +19,9 @@ func newLsCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "ls",
-		Short: "List the project VMs",
+		Use:         "ls",
+		Annotations: about{docs: "using/vms#listing-vms", group: groupVM}.annotations(),
+		Short:       "List the project VMs",
 		Long: "List the project VMs, sorted by name. " +
 			"Each row has the VM's status, image, .git protection, network tier, links to your other VMs and folder.",
 		Example: examples(

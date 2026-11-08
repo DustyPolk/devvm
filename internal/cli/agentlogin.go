@@ -22,7 +22,11 @@ type agentLoginOpts struct {
 func newAgentLoginCmd(a *app) *cobra.Command {
 	var o agentLoginOpts
 	cmd := &cobra.Command{
-		Use:   "login AGENT",
+		Use: "login AGENT",
+		Annotations: about{
+			docs:   "using/coding-agents#logging-in-with-devvm-agent-login",
+			noJSON: "it runs an agent's login",
+		}.annotations(),
 		Short: "Log an agent in, in this folder's VM, and save the login in devvm's store",
 		Long: "Log AGENT in inside this folder's VM, and keep the login in devvm's store for every VM with the agent, which gets only placeholders. " +
 			"claude logs in to your Claude subscription in a browser on any machine, whose code you paste back, " +

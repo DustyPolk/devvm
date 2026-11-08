@@ -11,7 +11,11 @@ import (
 func newAdoptCmd(a *app) *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "adopt [VM]",
+		Use: "adopt [VM]",
+		Annotations: about{
+			docs: "using/vms#a-folder-made-again", group: groupVM,
+			noJSON: "it changes which folder a VM is for",
+		}.annotations(),
 		Short: "Give this folder the VM made for an earlier folder or path",
 		Long: "Give this folder the VM made for an earlier folder at this path, or for this folder before you moved or renamed it, with its files, secrets and allowlist. " +
 			"With VM, its name as devvm ls lists it, devvm moves that VM here from a folder that's gone, such as one you copied to another disk. " +

@@ -19,8 +19,9 @@ func newToolsCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "tools",
-		Short: "Show or choose this folder's VM's shared tools",
+		Use:         "tools",
+		Annotations: about{docs: "using/toolchains#adding-and-removing-tools", group: groupChange}.annotations(),
+		Short:       "Show or choose this folder's VM's shared tools",
 		Long: "In a terminal, choose the toolchains and coding agents of this folder's VM in a list, which shows its layers too, then open a shell in it. " +
 			"Without a terminal, or with --json, show its shared tools, each with its version and any newer version in devvm's tools lock, " +
 			"which changes nothing, starts no VM and doesn't go online.",
@@ -97,7 +98,11 @@ func writeTools(tab *ui.Table, ts []tools.VMTool) error {
 
 func newToolsAddCmd(a *app) *cobra.Command {
 	return addFolderFlags(&cobra.Command{
-		Use:   "add TOOL...",
+		Use: "add TOOL...",
+		Annotations: about{
+			docs:   "using/toolchains#adding-and-removing-tools",
+			noJSON: "it changes a setting",
+		}.annotations(),
 		Short: "Add shared tools to this folder's VM, then open a shell in it",
 		Long: "Add shared tools to this folder's VM, then open a shell in it. " +
 			"TOOL is a toolchain, such as node, or a coding agent, such as claude, each a separate word. " +
@@ -116,7 +121,11 @@ func newToolsAddCmd(a *app) *cobra.Command {
 
 func newToolsRmCmd(a *app) *cobra.Command {
 	return addFolderFlags(&cobra.Command{
-		Use:   "rm TOOL...",
+		Use: "rm TOOL...",
+		Annotations: about{
+			docs:   "using/toolchains#adding-and-removing-tools",
+			noJSON: "it changes a setting",
+		}.annotations(),
 		Short: "Take shared tools out of this folder's VM, then open a shell in it",
 		Long: "Take shared tools out of this folder's VM, each TOOL a separate word, then open a shell in it. " +
 			"What the VM installed itself stays.",
@@ -134,7 +143,11 @@ func newToolsRmCmd(a *app) *cobra.Command {
 
 func newToolsUpdateCmd(a *app) *cobra.Command {
 	return addFolderFlags(&cobra.Command{
-		Use:   "update",
+		Use: "update",
+		Annotations: about{
+			docs:   "using/toolchains#adding-and-removing-tools",
+			noJSON: "it changes a setting",
+		}.annotations(),
 		Short: "Move this folder's VM to the newest shared tools, then open a shell in it",
 		Long: "Check for newer versions of the shared tools, build them, and move this folder's VM to them, " +
 			"then open a shell in it. Nothing in the VM's disk changes, because its tools are mounted.",

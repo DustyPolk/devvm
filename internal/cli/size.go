@@ -19,8 +19,9 @@ func newSizeCmd(a *app) *cobra.Command {
 		s              vm.Size
 	)
 	cmd := &cobra.Command{
-		Use:   "size",
-		Short: "Show or change this folder's VM's size",
+		Use:         "size",
+		Annotations: about{docs: "using/ports-size#size", group: groupChange}.annotations(),
+		Short:       "Show or change this folder's VM's size",
 		Long: "Show this folder's VM's CPUs, memory and disk, or change them with --cpus, --memory and --disk. " +
 			"The VM changes when it next starts, so for a running VM devvm offers in a terminal to restart it now. " +
 			"With -g, show or change the size new VMs get instead.",

@@ -17,8 +17,9 @@ func newLinkCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "link",
-		Short: "List this folder's VM's links to your other VMs",
+		Use:         "link",
+		Annotations: about{docs: "using/links#listing-links", group: groupLinks}.annotations(),
+		Short:       "List this folder's VM's links to your other VMs",
 		Long: "List this folder's VM's links to services in your other VMs, each with its name, port, target VM and folder, " +
 			"the target's status, and whether the link applies. " +
 			"Programs in the VM reach a link as NAME:PORT and NAME.devvm.internal:PORT.",
@@ -99,8 +100,9 @@ func linkPortArg(_ *cobra.Command, args []string) error {
 func newLinkAddCmd(a *app) *cobra.Command {
 	var as string
 	cmd := &cobra.Command{
-		Use:   "add TARGET PORT",
-		Short: "Link this folder's VM to a port of another VM",
+		Use:         "add TARGET PORT",
+		Annotations: about{docs: "using/links#adding-a-link", noJSON: "it changes a setting"}.annotations(),
+		Short:       "Link this folder's VM to a port of another VM",
 		Long: "Link this folder's VM to PORT of the VM TARGET names, a folder's name or path or a VM's name, " +
 			"once that VM publishes the port with devvm link publish. " +
 			"Programs in this VM then reach it as NAME:PORT and NAME.devvm.internal:PORT, where NAME is the target's folder name or --as NAME.",
@@ -123,8 +125,9 @@ func newLinkAddCmd(a *app) *cobra.Command {
 
 func newLinkRmCmd(a *app) *cobra.Command {
 	return addFolderFlags(&cobra.Command{
-		Use:   "rm TARGET PORT",
-		Short: "Remove one of this folder's VM's links",
+		Use:         "rm TARGET PORT",
+		Annotations: about{docs: "using/links#removing-a-link", noJSON: "it changes a setting"}.annotations(),
+		Short:       "Remove one of this folder's VM's links",
 		Long: "Remove this folder's VM's link to PORT of TARGET, " +
 			"where TARGET is the link's name or what devvm link add took.",
 		Example: examples(
@@ -151,8 +154,9 @@ func publishArg(_ *cobra.Command, args []string) error {
 func newLinkPublishCmd(a *app) *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "publish [PORTS]",
-		Short: "Show or add the ports this folder's VM offers to links",
+		Use:         "publish [PORTS]",
+		Annotations: about{docs: "using/links#publishing-a-port"}.annotations(),
+		Short:       "Show or add the ports this folder's VM offers to links",
 		Long: "Show the ports this folder's VM publishes, or offer PORTS, ports and ranges like 5432,8000-8010, " +
 			"to links from any of your other VMs. " +
 			"Each link is still made from the other VM's folder, with devvm link add.",
@@ -185,8 +189,9 @@ func newLinkPublishCmd(a *app) *cobra.Command {
 
 func newLinkUnpublishCmd(a *app) *cobra.Command {
 	return addFolderFlags(&cobra.Command{
-		Use:   "unpublish PORTS",
-		Short: "Stop offering ports of this folder's VM to links",
+		Use:         "unpublish PORTS",
+		Annotations: about{docs: "using/links#publishing-a-port", noJSON: "it changes a setting"}.annotations(),
+		Short:       "Stop offering ports of this folder's VM to links",
 		Long: "Stop offering PORTS, each as devvm link publish lists it, to links from your other VMs. " +
 			"The server in the VM keeps running.",
 		Example: examples(

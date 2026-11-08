@@ -11,7 +11,11 @@ import (
 func newUpdateCmd(a *app) *cobra.Command {
 	var o vm.RemakeOptions
 	cmd := &cobra.Command{
-		Use:   "update",
+		Use: "update",
+		Annotations: about{
+			docs: "using/images#outdated-vms", group: groupVM,
+			noJSON: "it makes a VM again, then opens a shell",
+		}.annotations(),
 		Short: "Bring this folder's VM up to date, then open a shell in it",
 		Long: "Move this folder's VM to the newest shared tools, as devvm tools update does, then open a shell in it. " +
 			"When its image changed since devvm made the VM, or the folder's devcontainer.json did, devvm then asks to make the VM again from the image's new build and the file as it is now, keeping its home folder, the project folder and its settings, and everything else on its disk is lost. " +

@@ -11,7 +11,11 @@ import (
 // backend's VMs and images.
 func newLimactlCmd(a *app) *cobra.Command {
 	c := &cobra.Command{
-		Use:   "limactl [ARGS...]",
+		Use: "limactl [ARGS...]",
+		Annotations: about{
+			docs: "backends/lima#running-limactl", group: groupMachine,
+			noJSON: "it runs limactl, whose output is limactl's",
+		}.annotations(),
 		Short: "Run Lima's limactl for debugging, which starts VMs unconfined, whatever their tier",
 		Long: "Run limactl with ARGS on devvm's own Lima home, where the lima backend's VMs and images live, " +
 			"passing on every argument, --help included. " +

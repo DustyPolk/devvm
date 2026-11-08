@@ -18,7 +18,11 @@ var shells = []string{"bash", "zsh", "fish"}
 // newCompletionCmd is devvm completion SHELL.
 func newCompletionCmd(u *ui.UI) *cobra.Command {
 	return &cobra.Command{
-		Use:   "completion SHELL",
+		Use: "completion SHELL",
+		Annotations: about{
+			docs: "using/command-line#shell-completion", group: groupMachine,
+			noJSON: "it prints a shell script",
+		}.annotations(),
 		Short: "Print the shell completion script for bash, zsh or fish",
 		Long: "Print the script that completes devvm's commands, flags, image names and shared tools in SHELL, which is bash, zsh or fish. " +
 			"Load it from your shell's startup file.",
@@ -43,23 +47,13 @@ func newCompletionCmd(u *ui.UI) *cobra.Command {
 	}
 }
 
-// addCompletions sets how the shell completes root's commands' arguments
-// and flags: image names for IMAGE, the toolchains, agents and layers for
-// --tools, --agents and --layers, and no file names, which none of them
-// take.
+// addCompletions sets how the shell completes root's own flags, the
+// toolchains, agents and layers for --tools, --agents and --layers, and
+// that it completes no file names, which no command takes. Each other
+// command sets its own, as devvm build's IMAGE does with completeImage.
 func addCompletions(root *cobra.Command, a *app) {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.CompletionOptions.SetDefaultShellCompDirective(cobra.ShellCompDirectiveNoFileComp)
-	for _, c := range root.Commands() {
-		switch c.Name() {
-		case "build", "rebuild":
-			c.ValidArgsFunction = completeImage(a)
-		case "setup":
-			_ = c.RegisterFlagCompletionFunc("features", completeFeatures(a))
-			_ = c.RegisterFlagCompletionFunc("agents", completeParts(a, "agents"))
-			_ = c.RegisterFlagCompletionFunc("layers", completeParts(a, "layers"))
-		}
-	}
 	for _, flag := range []string{"tools", "agents", "layers"} {
 		_ = root.RegisterFlagCompletionFunc(flag, completeParts(a, flag))
 	}

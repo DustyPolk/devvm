@@ -10,7 +10,11 @@ import (
 // newRestartCmd is devvm restart.
 func newRestartCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "restart",
+		Use: "restart",
+		Annotations: about{
+			docs: "using/vms#restarting-and-stopping", group: groupVM,
+			noJSON: "it restarts the VM",
+		}.annotations(),
 		Short: "Restart this folder's VM and open a shell in it",
 		Long: "Stop this folder's VM, then start it and open a shell in it as devvm does. " +
 			"Changes that apply only when a VM starts, such as a new size or an agent's folders, apply then.",

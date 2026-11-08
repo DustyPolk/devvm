@@ -8,27 +8,75 @@ import (
 	"github.com/devvmhq/devvm/internal/msg"
 )
 
-// commandGroup is a section of the root's help: its title and the
-// commands in it, by name, a root command's subcommand by both names
-// (layer add).
-type commandGroup struct {
-	id, title string
-	commands  []string
+// about is what a command says of itself that Cobra has no field for, set
+// as its Annotations where the command is made, so a new command is
+// described in its own file alone.
+type about struct {
+	// docs is the user page that covers the command, "page#anchor" in
+	// docs/content/docs: its help and its CLI reference page link to it.
+	docs string
+	// group is the command's section of the root's help, one of
+	// helpGroups' IDs. Every root command has one, and a subcommand has
+	// one only when it belongs in another section than its parent's, as
+	// layer add does.
+	group string
+	// noJSON says why a command users see takes no --json: what it does
+	// shows or lists nothing.
+	noJSON string
 }
 
-// commandGroups are the root's help's sections, in order. help is in
-// Cobra's own section, Additional Commands. A group none of whose commands
-// exist is left out. A subcommand in a group other than its parent's is
-// listed in that one by both names, and its parent's help groups its
-// subcommands the same way.
-func commandGroups() []commandGroup {
-	return []commandGroup{
-		{"vm", "Your VM:", []string{"restart", "stop", "update", "rm", "adopt", "ls", "code", "desktop", "host", "history"}},
-		{"change", "Change your VM:", []string{"tools", "size", "ports", "network", "ssh-agent", "git-protect", "clone", "secret", "layer add", "layer rm"}},
-		{"links", "Links between VMs:", []string{"link", "group"}},
-		{"images", "Images:", []string{"images", "build", "rebuild", "layer", "layer new"}},
-		{"space", "Disk space:", []string{"space", "gc", "retention"}},
-		{"machine", "This machine:", []string{"setup", "agent", "doctor", "upgrade", "completion", "limactl"}},
+// The Annotations keys about sets. docsKey holds the docs page's address,
+// which usageTemplate prints.
+const (
+	docsKey     = "docs"
+	docsPageKey = "devvm-docs-page"
+	groupKey    = "devvm-group"
+	noJSONKey   = "devvm-no-json"
+)
+
+// annotations returns a command's Annotations for what about says.
+func (m about) annotations() map[string]string {
+	out := map[string]string{}
+	if m.docs != "" {
+		out[docsPageKey] = m.docs
+		out[docsKey] = msg.PageURL(m.docs)
+	}
+	if m.group != "" {
+		out[groupKey] = m.group
+	}
+	if m.noJSON != "" {
+		out[noJSONKey] = m.noJSON
+	}
+	return out
+}
+
+// DocsPage returns the "page#anchor" of the user page that covers c, or
+// "" when it has none.
+func DocsPage(c *cobra.Command) string { return c.Annotations[docsPageKey] }
+
+// The IDs of the root's help's sections, which a command's about names.
+const (
+	groupVM      = "vm"
+	groupChange  = "change"
+	groupLinks   = "links"
+	groupImages  = "images"
+	groupSpace   = "space"
+	groupMachine = "machine"
+)
+
+// helpGroups are the root's help's sections, in order. help is in Cobra's
+// own section, Additional Commands. A group none of whose commands exist
+// is left out. A subcommand in a group other than its parent's is listed
+// in that one by both names, and its parent's help groups its subcommands
+// the same way.
+func helpGroups() []cobra.Group {
+	return []cobra.Group{
+		{ID: groupVM, Title: "Your VM:"},
+		{ID: groupChange, Title: "Change your VM:"},
+		{ID: groupLinks, Title: "Links between VMs:"},
+		{ID: groupImages, Title: "Images:"},
+		{ID: groupSpace, Title: "Disk space:"},
+		{ID: groupMachine, Title: "This machine:"},
 	}
 }
 
@@ -72,47 +120,37 @@ Issues:
   {{.}}{{end}}
 `
 
-// addGroups puts root's commands into commandGroups' sections, and a
-// subcommand listed by both names into its parent's section of the same
-// group.
+// addGroups puts each command under root whose about names a group into
+// that section of its parent's help, in helpGroups' order, so a subcommand
+// listed by both names in the root's section is in its parent's section of
+// the same group too.
 func addGroups(root *cobra.Command) {
-	for _, g := range commandGroups() {
-		var cmds []*cobra.Command
-		for _, path := range g.commands {
-			if c, _, err := root.Find(strings.Fields(path)); err == nil && c != root && c.CommandPath() == root.Name()+" "+path {
-				cmds = append(cmds, c)
-			}
-		}
-		for _, c := range cmds {
-			if !c.Parent().ContainsGroup(g.id) {
-				c.Parent().AddGroup(&cobra.Group{ID: g.id, Title: g.title})
-			}
-			c.GroupID = g.id
-		}
+	for _, g := range helpGroups() {
+		addGroup(root, g)
 	}
 }
 
-// addDocs ends the help of root and every command under it with its docs
-// page, from msg's links, and the root's with the issue tracker.
+func addGroup(c *cobra.Command, g cobra.Group) {
+	for _, sub := range c.Commands() {
+		if sub.Annotations[groupKey] == g.ID {
+			if !c.ContainsGroup(g.ID) {
+				c.AddGroup(&cobra.Group{ID: g.ID, Title: g.Title})
+			}
+			sub.GroupID = g.ID
+		}
+		addGroup(sub, g)
+	}
+}
+
+// addDocs gives root the usage template that ends each help with its
+// docs page, from the command's about, and the root's with the issue
+// tracker.
 func addDocs(root *cobra.Command) {
 	root.SetUsageTemplate(usageTemplate)
 	if root.Annotations == nil {
 		root.Annotations = map[string]string{}
 	}
 	root.Annotations["issues"] = msg.IssuesURL
-	setDocs(root)
-}
-
-func setDocs(c *cobra.Command) {
-	if u := msg.CommandDocURL(c.CommandPath()); u != "" {
-		if c.Annotations == nil {
-			c.Annotations = map[string]string{}
-		}
-		c.Annotations["docs"] = u
-	}
-	for _, sub := range c.Commands() {
-		setDocs(sub)
-	}
 }
 
 // orList is a list of names in a help's prose: a, b or c.

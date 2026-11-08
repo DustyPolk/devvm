@@ -210,7 +210,6 @@ func devvmVars() map[string]string {
 		"internal/image.Builtins":                 table,
 		"internal/backend/lima.conversionScripts": table,
 		"internal/msg.docs":                       table,
-		"internal/msg.commandDocs":                table,
 		"internal/msg/gen.taken":                  table,
 		"internal/msg/gen.initialisms":            table,
 		"internal/netpolicy.Env":                  table,

@@ -1,8 +1,3 @@
-// Package vm runs project VMs. Env is what they run with; Launch opens a
-// shell in a folder's VM, making it first if need be; Lifecycle stops,
-// adopts, deletes and exports it; Settings shows and changes its size,
-// ports, SSH agent forwarding and .git protection; Net its network tier,
-// network log, allowlist and secrets.
 package vm
 
 import (

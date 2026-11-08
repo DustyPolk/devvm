@@ -21,8 +21,9 @@ func newNetworkCmd(a *app) *cobra.Command {
 	var global, asJSON bool
 	choices := netpolicy.TierNames
 	cmd := &cobra.Command{
-		Use:   "network [open|internet|allowlist|none]",
-		Short: "Show or change the network tier of this folder's VM",
+		Use:         "network [open|internet|allowlist|none]",
+		Annotations: about{docs: "safety/network#choosing-a-tier", group: groupChange}.annotations(),
+		Short:       "Show or change the network tier of this folder's VM",
 		Long: "Show the network tier of this folder's VM, which is open, internet, allowlist, none or unenforced, and then its allowlist, policy by policy: devvm's built-in ones by name, then your files by path. " +
 			"With a tier, give the VM that tier: between the confined tiers at once, and into or out of open from the VM's next start, so in a terminal devvm offers to restart a running VM now. " +
 			"With -g, show or change the tier new VMs get, allowlist unless you change it.",
@@ -148,10 +149,11 @@ func newNetworkRuleCmds(a *app) []*cobra.Command {
 	sub := func(use, short, long, example string, deny, remove bool) *cobra.Command {
 		var global bool
 		c := &cobra.Command{
-			Use:     use + " RULE...",
-			Short:   short,
-			Long:    long,
-			Example: example,
+			Use:         use + " RULE...",
+			Annotations: about{docs: "safety/network#changing-rules", noJSON: "it changes a setting"}.annotations(),
+			Short:       short,
+			Long:        long,
+			Example:     example,
 			Args: cobra.MatchAll(minArgs(1), func(_ *cobra.Command, args []string) error {
 				if remove {
 					return nil // as written, a deny with its !
@@ -204,8 +206,9 @@ func newNetworkLogCmd(a *app) *cobra.Command {
 	var o vm.LogOptions
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "log",
-		Short: "Show what this folder's VM connected to and what its proxy blocked",
+		Use:         "log",
+		Annotations: about{docs: "safety/network#logs"}.annotations(),
+		Short:       "Show what this folder's VM connected to and what its proxy blocked",
 		Long: "Show the network log of this folder's VM, oldest first: one line per connection " +
 			"or request its proxy allowed or blocked, and one line per connection to one of its links " +
 			"and each that devvm refused. " +

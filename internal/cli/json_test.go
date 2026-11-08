@@ -240,77 +240,25 @@ func TestJSONShapes(t *testing.T) {
 }
 
 // Every command that shows or lists something takes --json: each one
-// users see takes it or is in withoutJSON.
+// users see takes it, or its about says why not: what it does shows or
+// lists nothing.
 func TestShowCommandsTakeJSON(t *testing.T) {
-	// the commands users see that take no --json, each with why: what it
-	// does shows or lists nothing
-	withoutJSON := map[string]string{ //nolint:gosec // G101 takes devvm secret's commands for credentials
-		"devvm":                "it opens a shell",
-		"devvm adopt":          "it changes which folder a VM is for",
-		"devvm agent login":    "it runs an agent's login",
-		"devvm build":          "it builds an image",
-		"devvm rebuild":        "it builds an image",
-		"devvm code":           "it opens VS Code",
-		"devvm desktop":        "it opens a VNC viewer, or shows the address and password to type into one",
-		"devvm host":           "it shows one host name, for ssh as it is",
-		"devvm completion":     "it prints a shell script",
-		"devvm limactl":        "it runs limactl, whose output is limactl's",
-		"devvm gc":             "it deletes",
-		"devvm rm":             "it deletes",
-		"devvm images rm":      "it deletes",
-		"devvm secret rm":      "it deletes",
-		"devvm network rm":     "it changes a setting",
-		"devvm ports rm":       "it changes a setting",
-		"devvm ssh-agent rm":   "it changes a setting",
-		"devvm tools rm":       "it changes a setting",
-		"devvm network allow":  "it changes a setting",
-		"devvm network deny":   "it changes a setting",
-		"devvm ports add":      "it changes a setting",
-		"devvm ssh-agent add":  "it changes a setting",
-		"devvm tools add":      "it changes a setting",
-		"devvm layer add":      "it makes a VM again, then opens a shell",
-		"devvm layer rm":       "it makes a VM again, then opens a shell",
-		"devvm update":         "it makes a VM again, then opens a shell",
-		"devvm tools update":   "it changes a setting",
-		"devvm secret use":     "it changes a setting",
-		"devvm secret unuse":   "it changes a setting",
-		"devvm secret set":     "it saves a secret",
-		"devvm link add":       "it changes a setting",
-		"devvm link rm":        "it changes a setting",
-		"devvm link unpublish": "it changes a setting",
-		"devvm group join":     "it changes a setting",
-		"devvm group leave":    "it changes a setting",
-		"devvm history export": "it writes an export",
-		"devvm history import": "it changes the VM's files",
-		"devvm layer":          "it prints its help",
-		"devvm agent":          "it prints its help",
-		"devvm agent import":   "it copies files into devvm's store",
-		"devvm agent save":     "it shows a diff, asks, then copies files into devvm's store",
-		"devvm layer new":      "it writes a file",
-		"devvm restart":        "it restarts the VM",
-		"devvm stop":           "it stops the VM",
-		"devvm setup":          "it asks, then changes settings",
-		"devvm help":           "it prints help",
-	}
 	u, _, _ := testUI()
 	root := NewRoot(u)
 	root.InitDefaultHelpCmd()
 	eachCommand(root, func(c *cobra.Command) {
 		path := c.CommandPath()
-		_, without := withoutJSON[path]
+		_, without := c.Annotations[noJSONKey]
 		switch takes := c.LocalFlags().Lookup("json") != nil; {
+		case c.Hidden && without:
+			t.Errorf("%s is hidden: take noJSON out of its about", path)
 		case c.Hidden:
 		case takes && without:
-			t.Errorf("%s takes --json: take it out of withoutJSON", path)
+			t.Errorf("%s takes --json: take noJSON out of its about", path)
 		case !takes && !without:
-			t.Errorf("%s takes no --json: give it one, or add it to withoutJSON with why", path)
+			t.Errorf("%s takes no --json: give it one, or say why not in its about's noJSON", path)
 		}
 	})
-	for path := range withoutJSON {
-		if c, rest, err := root.Find(strings.Fields(path)[1:]); err != nil || len(rest) > 0 || c.CommandPath() != path {
-			t.Errorf("withoutJSON has %s, which isn't a command", path)
-		}
-	}
 }
 
 // retentionShape is every retention setting's key, a string each, in

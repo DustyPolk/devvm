@@ -17,7 +17,11 @@ import (
 func newBuildCmd(a *app) *cobra.Command {
 	var f imageFlags
 	cmd := &cobra.Command{
-		Use:   "build IMAGE",
+		Use: "build IMAGE",
+		Annotations: about{
+			docs: "using/images#layers", group: groupImages,
+			noJSON: "it builds an image",
+		}.annotations(),
 		Short: "Build an image and the images under it, unless they're built",
 		Long: "Build an image and the images under it, unless they're built. " +
 			"IMAGE is base, or layers joined with + bottom first, so foo+bar is bar on foo on base. " +
@@ -29,6 +33,7 @@ func newBuildCmd(a *app) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), a, f, args[0], build.Builds.Build)
 		},
+		ValidArgsFunction: completeImage(a),
 	}
 	f.add(cmd)
 	return cmd
@@ -38,7 +43,11 @@ func newBuildCmd(a *app) *cobra.Command {
 func newRebuildCmd(a *app) *cobra.Command {
 	var f imageFlags
 	cmd := &cobra.Command{
-		Use:   "rebuild IMAGE",
+		Use: "rebuild IMAGE",
+		Annotations: about{
+			docs: "using/images#rebuilding", group: groupImages,
+			noJSON: "it builds an image",
+		}.annotations(),
 		Short: "Build an image again, and delete the old one",
 		Long: "Build an image again from its parent as it is, then delete the stale images " +
 			"no VM uses, the old one and those built on it among them. " +
@@ -51,6 +60,7 @@ func newRebuildCmd(a *app) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return imageCmd(cmd.Context(), a, f, args[0], build.Builds.Rebuild)
 		},
+		ValidArgsFunction: completeImage(a),
 	}
 	f.add(cmd)
 	addForceFlag(cmd.Flags(), &f.force)

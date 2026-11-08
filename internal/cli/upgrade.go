@@ -25,8 +25,9 @@ type upgradeOpts struct {
 func newUpgradeCmd(a *app) *cobra.Command {
 	var o upgradeOpts
 	cmd := &cobra.Command{
-		Use:   "upgrade",
-		Short: "Install devvm's newest release",
+		Use:         "upgrade",
+		Annotations: about{docs: "using/upgrading#upgrading", group: groupMachine}.annotations(),
+		Short:       "Install devvm's newest release",
 		Long: "Install devvm's newest release the way this devvm was installed, after asking. " +
 			"The install script's devvm gets the release once its signature and checksum check out, and Homebrew's runs brew upgrade devvm, " +
 			"or brew upgrade devvm-rc for the formula that follows prereleases. " +

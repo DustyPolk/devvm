@@ -16,8 +16,9 @@ func newSSHAgentCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "ssh-agent [on|devvm|off]",
-		Short: "Show or change SSH agent forwarding for this folder's VM",
+		Use:         "ssh-agent [on|devvm|off]",
+		Annotations: about{docs: "using/ssh#agent-forwarding", group: groupChange}.annotations(),
+		Short:       "Show or change SSH agent forwarding for this folder's VM",
 		Long: "Show whether this folder's VM forwards an SSH agent, which is off, on for yours, or devvm for devvm's own " +
 			"with only the keys you added to it, and then those keys. " +
 			"devvm ssh-agent on, devvm or off changes it from the VM's next start, so in a terminal devvm offers to restart a running VM now. " +
@@ -92,8 +93,9 @@ func printAgentJSON(cmd *cobra.Command, a *app, mode string) error {
 func newSSHAgentAddCmd(a *app) *cobra.Command {
 	var o sshagent.AddOptions
 	cmd := &cobra.Command{
-		Use:   "add KEY_FILE",
-		Short: "Load a key into devvm's own SSH agent",
+		Use:         "add KEY_FILE",
+		Annotations: about{docs: "using/ssh#devvms-own-agent", noJSON: "it changes a setting"}.annotations(),
+		Short:       "Load a key into devvm's own SSH agent",
 		Long: "Load a private key into devvm's own SSH agent, starting the agent first, and record it in " +
 			"~/.local/share/devvm/agent-keys.json, so devvm loads it again when a VM needs it. " +
 			"devvm refuses a key in a folder a VM mounts.",
@@ -118,8 +120,9 @@ func newSSHAgentAddCmd(a *app) *cobra.Command {
 
 func newSSHAgentRmCmd(a *app) *cobra.Command {
 	return &cobra.Command{
-		Use:   "rm KEY_FILE",
-		Short: "Remove a key from devvm's own SSH agent",
+		Use:         "rm KEY_FILE",
+		Annotations: about{docs: "using/ssh#devvms-own-agent", noJSON: "it changes a setting"}.annotations(),
+		Short:       "Remove a key from devvm's own SSH agent",
 		Long: "Remove a key added with devvm ssh-agent add from devvm's own SSH agent, and from " +
 			"~/.local/share/devvm/agent-keys.json, so devvm doesn't load it again. " +
 			"The key file stays as it is, and it needn't still exist.",
