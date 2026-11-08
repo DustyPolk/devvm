@@ -468,8 +468,10 @@ func isCommandName(root *cobra.Command, w string) bool {
 func notWordRune(r rune) bool { return (r < 'a' || r > 'z') && r != '-' }
 
 // englishCommands are commands' names that prose uses as English after
-// devvm, as in "what devvm set".
-func englishCommands() []string { return []string{"set", "new", "use", "add", "get", "log", "help"} }
+// devvm, as in "what devvm set" or "lets devvm lock .git".
+func englishCommands() []string {
+	return []string{"set", "new", "use", "add", "get", "log", "lock", "help"}
+}
 
 // notCommands are words a command line might take for a command that
 // devvm doesn't have: the names a noun's bare form and rm stand for, and

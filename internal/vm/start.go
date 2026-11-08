@@ -3,6 +3,7 @@ package vm
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -83,6 +84,7 @@ func (s starter) bringUp(ctx context.Context, t *target, o upOpts) (backend.Conf
 	if err != nil {
 		return backend.Confinement{}, err
 	}
+	need.pins = s.pinsLocks(st)
 	if err := s.refuse(b, vm, requirements(need)); err != nil {
 		return backend.Confinement{}, err
 	}
@@ -107,6 +109,7 @@ func (s starter) bringUp(ctx context.Context, t *target, o upOpts) (backend.Conf
 			return conf, err
 		}
 		s.nextStart(st, in, conf, mountsLater)
+		s.checkRunningPins(ctx, t)
 	} else {
 		s.Info(msg.Starting(vm))
 		if err := start(ctx); err != nil {
@@ -327,6 +330,7 @@ type needs struct {
 	// sshagent.Made.Toggle), which each start relies on.
 	toggle bool
 	ssh    bool // a --clone VM's clone, copied in and fetched over ssh
+	pins   bool // its .git locked by pins at each start (a Linux host's on or strict)
 }
 
 // requirements lists the backend features n asks for, each once, in the
@@ -349,6 +353,9 @@ func requirements(n needs) []backend.Feature {
 	}
 	if n.ssh {
 		fs = append(fs, backend.FeatureSSH)
+	}
+	if n.pins {
+		fs = append(fs, backend.FeatureReadOnlyPaths)
 	}
 	var out []backend.Feature
 	for _, f := range fs {
@@ -401,10 +408,11 @@ func (s starter) refuse(b backend.Backend, vm string, fs []backend.Feature) erro
 // can't push to without an agent named, and its set-id files. A VM that
 // exists gets its .git checked under the protection it ran with
 // (gitprotect's Check), so what it changed meanwhile is named (on a host
-// without locks, what changed of what a lock would cover); then, once
-// it's stopped, the protection chosen while it ran is set, and its set-id
-// files are named (not while it runs: the walk is slow). devvm stop does
-// the latter too.
+// without locks, what changed of what a lock would cover), and once it's
+// stopped, what its pins recorded first (gitprotect's ReportPinEvents);
+// then the protection chosen while it ran is set, and its set-id files
+// are named (not while it runs: the walk is slow). devvm stop does the
+// latter too.
 func (s starter) hostChecks(ctx context.Context, t *target, running, made bool) error {
 	if isClone(t.st) {
 		return nil
@@ -420,6 +428,11 @@ func (s starter) hostChecks(ctx context.Context, t *target, running, made bool) 
 		// Files an earlier VM of this folder made are named too.
 		s.checkSetID(t.f.Dir)
 		return nil
+	}
+	if !running {
+		// What the VM's runs recorded of its pins, now it's stopped, named
+		// even when the check that follows refuses.
+		p.ReportPinEvents(s.Dirs.VM(t.f.Name).GitPins(), t.f.Name)
 	}
 	if err := p.Check(ctx, t.st, running); err != nil {
 		return err
@@ -500,6 +513,10 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 	if err != nil {
 		return conf, err
 	}
+	if conf.Pins, err = s.pins(ctx, t); err != nil {
+		s.Proxy.Stop(vm)
+		return conf, err
+	}
 	// Tools pointed at the CAs devvm adds, on every tier, whether there
 	// are any or not.
 	conf.Env = trust.GuestEnv(conf.Env)
@@ -527,6 +544,15 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 	}
 	if err := b.Start(ctx, vm, want, conf); err != nil {
 		s.Proxy.Stop(vm)
+		// A folder replaced as it started can stop its start (a Linux
+		// host's pins refuse a link): that's what to say, once the VM its
+		// backend may have left half started is stopped.
+		if folderChanged(st) {
+			if err := b.Stop(ctx, vm); err != nil {
+				s.Warn(msg.StopFailed(vm))
+			}
+			return conf, msg.ProjectFolderChangedStopped(st.Dir, vm)
+		}
 		return conf, err
 	}
 	if folderChanged(st) {
@@ -547,6 +573,51 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 		run.ID = ""
 	}
 	return conf, sshagent.RecordStart(ctx, st, mode, run.ID)
+}
+
+// pinsLocks reports whether the VM's .git is locked by its backend's pins
+// at each start: on a Linux host (macOS locks on the host itself), when
+// its protection is on or strict. Its start needs them then, and is
+// refused where the backend can't pin, never started unlocked.
+func (s starter) pinsLocks(st *state.VM) bool {
+	m := gitprotect.Mode(st)
+	return s.OS == "linux" && (m == gitprotect.On || m == gitprotect.Strict)
+}
+
+// pins are what the VM's start pins in its project folder: .git's, as its
+// protection says (gitprotect.Protector.Pins), when pinsLocks, with the
+// file the namespace records what changed in (paths.VM.GitPins). A VM
+// with a .git that has nothing it can pin is warned of: it runs unlocked.
+func (s starter) pins(ctx context.Context, t *target) (backend.Pins, error) {
+	if !s.pinsLocks(t.st) {
+		return backend.Pins{}, nil
+	}
+	fixed, readOnly, err := s.Protector(t.f.Dir).Pins(ctx, t.st)
+	if err != nil {
+		return backend.Pins{}, err
+	}
+	p := backend.Pins{Root: t.f.Dir, Fixed: fixed, ReadOnly: readOnly, Events: s.Dirs.VM(t.f.Name).GitPins()}
+	if _, err := os.Lstat(filepath.Join(t.f.Dir, ".git")); err == nil && len(readOnly) == 0 {
+		s.Warn(msg.GitPinsNone(t.f.Name))
+	}
+	return p, nil
+}
+
+// checkRunningPins warns when the running VM t's .git protection is on
+// but its backend doesn't have its pins (gitprotect.Protector.PinsMissing):
+// one started without devvm, or whose pins went. Where the backend can't
+// tell, it says nothing.
+func (s starter) checkRunningPins(ctx context.Context, t *target) {
+	if !s.pinsLocks(t.st) {
+		return
+	}
+	run, err := t.b.Running(ctx, t.f.Name)
+	if err != nil {
+		return
+	}
+	if missing := s.Protector(t.f.Dir).PinsMissing(ctx, t.st, run.ReadOnly, run.Mounted); len(missing) > 0 {
+		s.Warn(msg.GitPinsMissing(strings.Join(missing, ", "), t.f.Name))
+	}
 }
 
 // confine is start's network: the proxy's confinement for the VM's tier

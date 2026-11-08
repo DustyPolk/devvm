@@ -36,6 +36,8 @@ func (e Lifecycle) Stop(ctx context.Context) error {
 	if t.in.Status == backend.StatusStopped {
 		e.Info(msg.AlreadyStopped(vm))
 	} else {
+		// Pins it ran without, before they're gone with it.
+		e.starter.checkRunningPins(ctx, t)
 		if err := t.stop(ctx); err != nil {
 			return err
 		}

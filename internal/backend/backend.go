@@ -197,6 +197,13 @@ type Run struct {
 	// when that process does. A stopped VM has it too, as its proxy starts
 	// first. Not a VM's own file: the VM can't write it.
 	Lifeline string
+	// ReadOnly is, where the backend can tell (FeatureReadOnlyPaths), the
+	// host paths its running VM sees through a read-only mount of their
+	// own, as the process that serves its folders has them now: what its
+	// pins hold. nil when it can't tell. Mounted is every host path it
+	// sees through a mount of its own, read-only or not: the fixed pins
+	// too.
+	ReadOnly, Mounted []string
 }
 
 // Problem is something a backend needs that the host lacks, as devvm
@@ -486,7 +493,48 @@ type Confinement struct {
 	// NoAgent is set when the VM's choice is no agent: a backend whose VM
 	// forwards one anyway (made so, for agent-toggle) gives it none.
 	NoAgent bool
+	// Pins are what of the project folder the guest can't change while
+	// this start runs (FeatureReadOnlyPaths); none for an empty one.
+	Pins Pins
 }
+
+// Pins are paths in a VM's project folder that a start keeps the guest
+// from changing while it runs, each relative to Root, the folder as the
+// VM mounts it, a physical path. The guest can write in what Fixed names
+// but not rename or remove it, and it can't change what ReadOnly names at
+// all. The backend pins each through no symlink, and refuses to start the
+// VM when it can't.
+type Pins struct {
+	Root     string
+	Fixed    []string
+	ReadOnly []string
+	// Events is a file the backend adds a PinEvent to, a JSON object a
+	// line: a PinKeeping one as it starts keeping the pins (it refuses the
+	// start when it can't), then one each time a pin changed while the VM
+	// ran; "" for none.
+	Events string
+}
+
+// A PinEvent is a pin that changed while the VM ran: a path, relative to
+// Pins.Root, that lost its pin (a file renamed over it on the host) and
+// was pinned again, that has another name now, or that can't be pinned
+// again (What: platform.PinAgain, PinLinked, PinLost).
+type PinEvent struct {
+	Path string `json:"path,omitempty"`
+	What string `json:"what"`
+}
+
+// What a PinEvent says besides how a pin changed: a run keeps its pins
+// from here (each run's first line, so a file without one first lost
+// lines), and an event of the path couldn't be added to the file, so
+// what changed went unrecorded.
+const (
+	PinKeeping    = "keeping"
+	PinUnrecorded = "unrecorded"
+)
+
+// Empty reports whether p pins nothing.
+func (p Pins) Empty() bool { return len(p.Fixed)+len(p.ReadOnly) == 0 }
 
 // GuestProxy reports whether the guest's proxy settings name devvm's
 // proxy: NetProxy, or NetDirect with a ProxyPort, an open VM's. A build's

@@ -493,8 +493,12 @@ func limaSSHD(s *S, vm, host, sock string, ssh []string) error {
 func projectGit(s *S, w *webVM) {
 	s.Section(".git protection")
 	p, vm := w.p, w.vm
+	if runtime.GOOS != "darwin" && w.state(s)["git.mode"] == "on" {
+		projectGitPins(s, w)
+		return
+	}
 	if runtime.GOOS != "darwin" {
-		s.Check("off on Linux (no chflags), and says so", func() error {
+		s.Check("off on a Linux host that can't pin, and says so", func() error {
 			if w.state(s)["git.mode"] != "off" || !grepF(w.launch, s.Msg("git_unprotected", "vm="+vm)) {
 				return errors.New("git protection isn't off, or the launch didn't say so")
 			}
@@ -773,10 +777,14 @@ func projectPorts(s *S, w *webVM) {
 func projectGitProtect(s *S, w *webVM) {
 	p, vm := w.p, w.vm
 	config := filepath.Join(p, ".git", "config")
+	if runtime.GOOS != "darwin" && w.state(s)["git.mode"] == "on" {
+		projectGitProtectPins(s, w)
+		return
+	}
 	if runtime.GOOS != "darwin" {
-		s.Check("git-protect on is refused off macOS", func() error {
+		s.Check("git-protect on is refused on a Linux host that can't pin", func() error {
 			r, _ := s.Devvm(p, "git-protect", "on")
-			if !grepF(r.Out, FirstLine(s.Msg("git_protect_on_needs_macos"))) {
+			if !grepF(r.Out, FirstLine(s.Msg("git_protect_on_needs_locks"))) {
 				return errors.New("devvm git-protect on:\n" + r.Out)
 			}
 			return nil

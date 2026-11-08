@@ -23,6 +23,20 @@ cmp stdout probe
 stderr '^devvm: The arguments for QEMU don''t have exactly one -netdev user'
 ! stdout .
 
+# Lima's own network (an open VM's, a build's with the internet): QEMU
+# gets Lima's arguments as they are.
+env DEVVM_QEMU_NET=open
+exec wrap/qemu-system-aarch64 -m 4G -netdev user,id=net0,net=192.168.5.0/24
+stdout '^user,id=net0,net=192.168.5.0/24\n'
+! stdout restrict
+env DEVVM_QEMU_NET=
+
+# Pins that aren't what devvm writes: QEMU doesn't run.
+env DEVVM_QEMU_PINS='{"root":"/p","pins":[{"path":"../x"}]}'
+! exec wrap/qemu-system-aarch64 -m 4G -netdev user,id=net0,net=192.168.5.0/24
+! stdout .
+env DEVVM_QEMU_PINS=
+
 # No real QEMU on PATH (only the wrapper's and devvm's folders, as a host
 # with QEMU installed has it in /usr/bin): the planted one isn't used either.
 env PATH=$WORK/wrap${:}.${:}$DEVVM_BIN

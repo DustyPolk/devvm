@@ -19,6 +19,7 @@ const (
 	FeatureFrom             Feature = "from"              // base from a container image (--from)
 	FeatureClone            Feature = "clone"             // a VM from an image
 	FeatureProjectMount     Feature = "project-mount"     // the project folder, read-write
+	FeatureReadOnlyPaths    Feature = "read-only-paths"   // paths in the project folder the guest can't change while it runs (Confinement.Pins)
 	FeatureAgentFolders     Feature = "agent-folders"     // agents' host folders, read-only
 	FeatureToolsShare       Feature = "tools-share"       // the shared tools folder, read-only
 	FeatureEgressProxy      Feature = "egress-proxy"      // egress only through devvm's proxy (NetProxy)
@@ -38,7 +39,7 @@ const (
 // Features is every feature, in the backends page's order.
 var Features = []Feature{
 	FeatureBuildImage, FeatureBuildConfinement, FeatureFrom, FeatureClone,
-	FeatureProjectMount, FeatureAgentFolders, FeatureToolsShare,
+	FeatureProjectMount, FeatureReadOnlyPaths, FeatureAgentFolders, FeatureToolsShare,
 	FeatureEgressProxy, FeatureSSH, FeaturePorts, FeaturePortsAll,
 	FeatureAgentForwarding, FeatureAgentToggle,
 	FeatureCPUs, FeatureMemory, FeatureDisk, FeatureDockerLayer, FeatureNixLayer, FeatureLink,
@@ -108,6 +109,8 @@ func (f Feature) BuiltOn() (Feature, bool) {
 		return FeatureAgentForwarding, true
 	case FeatureLink: // a link session over ssh to both VMs
 		return FeatureSSH, true
+	case FeatureReadOnlyPaths: // pins in the project folder's mount
+		return FeatureProjectMount, true
 	case FeatureBuildImage, FeatureBuildConfinement, FeatureFrom, FeatureClone,
 		FeatureProjectMount, FeatureAgentFolders, FeatureToolsShare,
 		FeatureEgressProxy, FeatureSSH, FeaturePorts, FeatureAgentForwarding,
@@ -320,4 +323,10 @@ func (n Net) Features() []Feature {
 }
 
 // Features returns what starting with the confinement needs.
-func (c Confinement) Features() []Feature { return c.Net.Features() }
+func (c Confinement) Features() []Feature {
+	fs := c.Net.Features()
+	if !c.Pins.Empty() {
+		fs = append(fs, FeatureReadOnlyPaths)
+	}
+	return fs
+}

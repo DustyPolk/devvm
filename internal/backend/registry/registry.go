@@ -3,6 +3,7 @@
 package registry
 
 import (
+	"errors"
 	"io/fs"
 
 	"github.com/devvmhq/devvm/internal/backend"
@@ -31,6 +32,9 @@ type Overrides struct {
 	// Ubuntu's cloud image that base is pinned to, in place of the newest:
 	// e2e's, so its runs keep their images.
 	UbuntuRelease string
+	// Pins (DEVVM_PINS) stands in for Lima's probe of whether this host
+	// pins paths in QEMU's namespace: on, or else the error it gives.
+	Pins string
 }
 
 // New returns the registry of devvm's backends, on devvm's folders, its
@@ -45,6 +49,13 @@ func New(d paths.Dirs, assets fs.FS, r msg.Reporter, o Overrides, cp *settings.C
 		l.KVM = o.KVM
 	}
 	l.UbuntuRelease = o.UbuntuRelease
+	switch o.Pins {
+	case "":
+	case "on":
+		l.Pins = func() error { return nil }
+	default:
+		l.Pins = func() error { return errors.New(o.Pins) }
+	}
 	return build(r, host, o.Unreviewed, l)
 }
 

@@ -25,7 +25,7 @@ Each thing devvm needs from a backend is a feature, such as building images, mou
 - **emulated**: devvm builds it from other parts of the backend.
 - **none**: the backend can't do it.
 
-A backend lists every feature, the ones it lacks too, and devvm refuses to use a backend that leaves one out, so a new feature makes each backend say how it has it. Some features are built on others: `ports-all` on `ports`, `agent-toggle` on `agent-forwarding`, and `link` on `ssh`. A backend has such a feature no better than the one it's built on, so the feature is emulated wherever its base is emulated, and none wherever its base is none.
+A backend lists every feature, the ones it lacks too, and devvm refuses to use a backend that leaves one out, so a new feature makes each backend say how it has it. Some features are built on others: `read-only-paths` on `project-mount`, `ports-all` on `ports`, `agent-toggle` on `agent-forwarding`, and `link` on `ssh`. A backend has such a feature no better than the one it's built on, so the feature is emulated wherever its base is emulated, and none wherever its base is none.
 
 devvm uses an emulation only once its review has passed, and until then it refuses the emulation. A review takes a [design note](design.md#emulated-features), a threat check with the security-audit skill, and end-to-end checks that prove the guarantee.
 
@@ -40,6 +40,7 @@ devvm uses an emulation only once its review has passed, and until then it refus
 | `from` | `base` from a container image (`--from`) | native: devvm converts the image to a disk |
 | `clone` | a project VM from an image | native: an APFS copy-on-write copy on macOS, and a qcow2 overlay on Linux ([details](lima.md#clones-and-overlays)) |
 | `project-mount` | the project folder, read-write | native: virtiofs on macOS, and 9p on Linux |
+| `read-only-paths` | paths in the project folder that the guest can't change while the VM runs, which [.git protection](git-protection.md#on-linux-hosts) asks for on Linux | native on Linux where the kernel lets devvm use a user namespace: QEMU runs in one of its own, with the paths bound read-only over themselves ([details](design.md#read-only-paths-on-linux)). None on macOS, where `.git` protection locks the host's files itself, and none where devvm's check of the kernel fails |
 | `agent-folders` | agents' host folders, read-only | native: read-only mounts, enforced by the host |
 | `tools-share` | the shared tools, read-only | native: a read-only mount, enforced by the host |
 | `egress-proxy` | network traffic only through devvm's proxy | native: Seatbelt on macOS, and on Linux QEMU's `restrict=on` with a `guestfwd` to the proxy ([details](lima.md#confinement)) |

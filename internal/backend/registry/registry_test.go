@@ -62,6 +62,18 @@ func TestOverrides(t *testing.T) {
 			t.Errorf("none: KVM %q, Ubuntu %q", l.KVM, l.UbuntuURL)
 		}
 	}
+	// The probe of the host's pins: on, or the error it stands in for.
+	for v, want := range map[string]string{"on": "", "refused": "refused"} {
+		r, err := New(d, assets.FS, &msg.Fake{}, Overrides{Pins: v}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lb, _ := r.Lookup("lima")
+		l, _ := backend.As[*lima.Lima](lb)
+		if err := l.Pins(); err == nil && want != "" || err != nil && err.Error() != want {
+			t.Errorf("DEVVM_PINS=%s: %v", v, err)
+		}
+	}
 }
 
 // A backend whose name is bad or already taken fails the registry, with

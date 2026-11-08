@@ -20,7 +20,8 @@ These are the things devvm can't do, everywhere, on Linux hosts and on Intel Mac
 
 ## Linux hosts
 
-- They have no `.git` protection. devvm warns about it at each launch, and it names the `.git` hooks and config that changed, but only after the fact, so use `--clone` there ([details](../safety/git-protection.md#linux-hosts)).
+- `.git` protection is read-only in the VM's view, not a lock on the host's files, so after a git command on this machine replaces `.git/config` while the VM runs, the VM can change or replace the new file until devvm locks it again. devvm names each such file when the VM stops ([details](../safety/git-protection.md#when-git-on-this-machine-replaces-a-locked-file)). A VM whose `.git/config` or hook has another name doesn't start, and the VM can't rename a file between the working tree and `.git` ([details](../safety/git-protection.md#linux-hosts)).
+- Where the kernel doesn't let devvm use a user namespace, such as on Ubuntu 23.10 and newer, there's no `.git` protection. devvm warns about it at each launch, and it names the `.git` hooks and config that changed, but only after the fact, so use `--clone` there ([details](../safety/git-protection.md#when-linux-cant-lock)).
 - VMs mount the project folder with 9p instead of virtiofs, so file watchers in a VM also miss the VM's own changes in the folder's subfolders, and need polling there ([details](../backends/lima.md#file-watchers)).
 - Set-id bits that root in a VM sets on files in the project folder reach the host, and devvm names such files when it makes a VM and once a VM is stopped ([what to do](troubleshooting.md#devvm-names-set-id-files)).
 - devvm keeps your secrets in files under `~/.local/share/devvm/secrets/`, which only you can read, instead of the Keychain ([details](settings.md#devvms-state)).

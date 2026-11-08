@@ -70,6 +70,7 @@ func newDoctorCmd(a *app) *cobra.Command {
 					}
 					return upgrade.ReadKnown(dirs.ReleaseCheck())
 				},
+				Pins: newPinsCheck(reg),
 			}
 			if asJSON {
 				return printJSON(u, d.report(cmd.Context(), u.Text, reg.All(), b))
@@ -162,6 +163,9 @@ func (d doctor) warnings(b backend.Backend) []msg.M {
 	if d.Folders != nil {
 		ms = append(ms, d.Folders()...)
 	}
+	if m, ok := d.Pins.warning(); ok {
+		ms = append(ms, m)
+	}
 	return ms
 }
 
@@ -188,6 +192,9 @@ type doctor struct {
 	// Release is what the daily release check last found
 	// (upgrade.ReadKnown); nil for nothing.
 	Release func() upgrade.Known
+	// Pins is the check of whether this Linux host locks .git, and why
+	// not.
+	Pins pinsCheck
 }
 
 // known is what the daily release check last found, if anything.

@@ -4,7 +4,10 @@
 // sshCommand in .git/config, and the host's next git command would run it.
 // A read-only mount wouldn't hold (root in the VM can unmount it), so on
 // macOS devvm locks those paths with the user-immutable flag (chflags uchg),
-// which the VM can't clear. Linux hosts have no unprivileged flag like it.
+// which the VM can't clear. Linux hosts have no unprivileged flag like it,
+// so there the VM's backend pins those paths read-only at each start, in
+// the namespace its QEMU runs in (Binds, Pins), where the kernel lets it,
+// and devvm watches .git where it doesn't (watcher).
 //
 // A lock can't stop the VM from swapping the whole .git, or from pointing
 // git elsewhere (commondir), so devvm reports what it finds and never
@@ -104,10 +107,10 @@ type Protector struct {
 }
 
 // New returns the protector for the project folder dir, ~ in git's paths
-// being home (paths.Dirs.Home), locking the host's way (HostLocker),
-// warning through r.
-func New(dir, home string, r msg.Reporter) *Protector {
-	return &Protector{tree: tree{Dir: dir, Home: home}, Locker: HostLocker(), Reporter: r}
+// being home (paths.Dirs.Home), locking with l (HostLocker), warning
+// through r.
+func New(dir, home string, l Locker, r msg.Reporter) *Protector {
+	return &Protector{tree: tree{Dir: dir, Home: home}, Locker: l, Reporter: r}
 }
 
 // NewSection is the protection a new VM gets, recorded before its
@@ -138,8 +141,25 @@ func (p *Protector) NewVM(ctx context.Context, vm *state.VM) error {
 	case g.Mode != On && g.Mode != Strict || !p.Locker.Locks():
 		return nil
 	}
-	made := p.protect(ctx, p.scan(ctx), g, whyNew, lockNow)
-	return record(ctx, vm, func(g *InVM) { g.Made = made })
+	return p.lockAndWatch(ctx, vm, g, whyNew, lockNow, Watched{}, func(*InVM) {})
+}
+
+// lockAndWatch protects a VM's .git as w and h say (protect), recording
+// what it found and what set changes (as Set and Check do), and, where
+// the locker leaves a window the guest could use (Locker.Watches), sums
+// what a lock covers once the VM is stopped, naming what changed since
+// was, as a host without locks does (watcher.watch). A zero was records
+// the sums without naming anything: .git as it is now, as trusted.
+func (p *Protector) lockAndWatch(ctx context.Context, vm *state.VM, g InVM, w why, h how, was Watched, set func(*InVM)) error {
+	snap := p.scan(ctx)
+	made := p.protect(ctx, snap, g, w, h)
+	if err := record(ctx, vm, func(g *InVM) { set(g); g.Made = made }); err != nil {
+		return err
+	}
+	if h != lockNow || !p.Locker.Watches() {
+		return nil
+	}
+	return watcher{p}.watch(ctx, vm, snap, was)
 }
 
 // Modes of .git protection, as devvm git-protect takes them. Strict is on,
@@ -192,7 +212,7 @@ func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
 		return record(ctx, vm, func(g *InVM) { g.Mode, g.Chosen, g.Next = Off, true, "" })
 	}
 	if !p.Locker.Locks() {
-		return msg.GitProtectOnNeedsMacos()
+		return msg.GitProtectOnNeedsLocks()
 	}
 	if mode == Strict || was == Strict {
 		if err := p.ignoreSubmodules(ctx, mode == Strict); err != nil {
@@ -204,8 +224,7 @@ func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
 		}
 	}
 	g.Mode = mode
-	made := p.protect(ctx, p.scan(ctx), g, whyOn, lockNow)
-	return record(ctx, vm, func(g *InVM) { g.Mode, g.Chosen, g.Next, g.Made = mode, true, "", made })
+	return p.lockAndWatch(ctx, vm, g, whyOn, lockNow, Watched{}, func(g *InVM) { g.Mode, g.Chosen, g.Next = mode, true, "" })
 }
 
 // ignoreSubmodules sets diff.ignoreSubmodules=all in .git/config, or takes
@@ -270,8 +289,7 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 	if running {
 		h = later
 	}
-	made := p.protect(ctx, p.scan(ctx), g, whyCheck, h)
-	return record(ctx, vm, func(g *InVM) { g.Made = made })
+	return p.lockAndWatch(ctx, vm, g, whyCheck, h, g.Watched, func(*InVM) {})
 }
 
 // Unlock takes the locks off, for a VM that's being deleted or turned

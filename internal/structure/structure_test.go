@@ -248,6 +248,8 @@ func devvmEnvSettings() map[string]envSetting {
 		"DEVVM_FROM":             {[]string{"internal/cli/flags.go"}, "a user setting: --from's default"},
 		"DEVVM_MESSAGES":         {[]string{"internal/ui/style.go"}, "names mode, which tests and e2e read messages in: any build has it"},
 		"DEVVM_GUESTFWD":         {[]string{"internal/backend/lima/qemu.go"}, "what devvm gives its own QEMU wrapper, devvm _qemu"},
+		"DEVVM_QEMU_NET":         {[]string{"internal/backend/lima/qemu.go"}, "what devvm gives its own QEMU wrapper, devvm _qemu"},
+		"DEVVM_QEMU_PINS":        {[]string{"internal/backend/lima/qemu.go", "internal/backend/lima/pins.go"}, "what devvm gives its own QEMU wrapper, devvm _qemu, and its namespace's pinned and keeper"},
 		"DEVVM_DAEMON_STATUS":    {[]string{"internal/daemon/status.go"}, "what devvm gives its own background processes: where each says it's ready"},
 	}
 }
@@ -262,6 +264,7 @@ func devvmExecSites() map[string]string {
 		"internal/backend/lima/limactl.go":     "limactl's command, which Lima's Runner runs into the run log",
 		"internal/backend/lima/lima.go":        "qemu-img's command, which Lima's Runner runs",
 		"internal/backend/lima/oci.go":         "docker save's command, which Lima's Runner runs",
+		"internal/platform/pinrun_linux.go":    "devvm's own _qemu in QEMU's namespace on Linux: QEMU itself, its keeper and the probe, which outlive the run or are read",
 		"internal/tools/mise.go":               "mise's command, in its own folders, which the UI's LoggedCmd runs, or whose output is read",
 		"internal/from/from.go":                "docker's answers (an image's ID, whether it runs): output or exit code, nothing to log",
 		"internal/sshagent/sshagent.go":        "OpenSSH's tools on devvm's agent socket, their output read or on the terminal",

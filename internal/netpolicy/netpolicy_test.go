@@ -985,7 +985,7 @@ func TestPID(t *testing.T) {
 	}
 	// Nor does a pid file that names no pid, or this test's own.
 	for _, pidFile := range []string{"x\n", "0\n", "-1\n", strconv.Itoa(os.Getpid()) + "\n"} {
-		if err := os.WriteFile(d.VM(st.Name()).ProxyPID(), []byte(pidFile), 0o600); err != nil {
+		if err := os.WriteFile(d.VM(st.Name()).Proxy(".pid"), []byte(pidFile), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if _, ok := p.PID(st.Name()); ok || !p.Stop(st.Name()) || len(signalled) != 0 {

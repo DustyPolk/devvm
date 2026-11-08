@@ -17,13 +17,15 @@ import (
 	"github.com/devvmhq/devvm/internal/state"
 )
 
-// On Linux hosts Lima runs QEMU, with a user-mode network. A VM that must
-// reach nothing, or nothing but devvm's proxy, starts with QEMU_SYSTEM_<ARCH>
-// pointing at a wrapper devvm writes, which runs devvm _qemu exec: it adds
-// restrict=on (no traffic in or out but Lima's own forwards) to Lima's
-// -netdev and, for the proxy, a guestfwd: one address in the VM that QEMU
-// connects to the proxy, through devvm _qemu connect. When it can't, it
-// refuses to start QEMU: never unrestricted.
+// On Linux hosts Lima runs QEMU, with a user-mode network. Every VM starts
+// with QEMU_SYSTEM_<ARCH> pointing at a wrapper devvm writes, which runs
+// devvm _qemu exec. For a VM that must reach nothing, or nothing but
+// devvm's proxy, it adds restrict=on (no traffic in or out but Lima's own
+// forwards) to Lima's -netdev and, for the proxy, a guestfwd: one address
+// in the VM that QEMU connects to the proxy, through devvm _qemu connect.
+// When it can't, it refuses to start QEMU: never unrestricted. Only a VM
+// on Lima's own network says so (NetEnv). A start with pins runs QEMU in a
+// namespace that pins them (pins.go).
 
 // guestFwdHost and guestFwdPort are the proxy's address as every guest
 // sees it.
@@ -57,7 +59,7 @@ func qemuEnvVar(goarch string) string {
 }
 
 var wrapperTmpl = template.Must(template.New("qemu").Funcs(template.FuncMap{"shq": shell.Quote}).Parse(`#!/bin/sh
-# Written by devvm: QEMU with devvm's network restrictions.
+# Written by devvm: QEMU with devvm's network restrictions and pins.
 exec {{shq .}} _qemu exec "$0" "$@"
 `))
 
@@ -140,19 +142,26 @@ func option(a string) (string, bool) {
 	return strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-"), true
 }
 
-// RunQEMU is devvm _qemu exec: it runs the real QEMU for the wrapper at
-// wrapper (its name, on PATH, skipping the wrapper's own folder and
-// relative entries, which name whatever folder Lima runs in) in devvm's
-// place, with args restricted.
-func RunQEMU(wrapper string, args []string) error {
-	out, err := RestrictNetdev(args, os.Getenv(GuestFwdEnv))
-	if err != nil {
-		return err
+// RunQEMU is devvm _qemu exec, devvm being self: it runs the real QEMU
+// for the wrapper at wrapper (its name, on PATH, skipping the wrapper's
+// own folder and relative entries, which name whatever folder Lima runs
+// in), with args restricted unless NetEnv says open, in devvm's place, or,
+// with pins (PinsEnv), in a namespace that pins them (runPinned).
+func RunQEMU(self, wrapper string, args []string) error {
+	out := args
+	if os.Getenv(NetEnv) != netOpen {
+		var err error
+		if out, err = RestrictNetdev(args, os.Getenv(GuestFwdEnv)); err != nil {
+			return err
+		}
 	}
 	name := filepath.Base(wrapper)
 	qemu, err := findQEMU(name, filepath.Dir(wrapper), os.Getenv("PATH"))
 	if err != nil {
 		return err
+	}
+	if os.Getenv(PinsEnv) != "" {
+		return runPinned(self, qemu, out)
 	}
 	return platform.Exec(qemu, append([]string{qemu}, out...), os.Environ())
 }

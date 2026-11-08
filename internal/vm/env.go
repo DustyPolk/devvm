@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/devvmhq/devvm/internal/backend"
@@ -158,10 +159,19 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 		Reporter:  r,
 		PortInUse: platform.PortInUse, Forwarders: vmssh.NewForwards(d, reg.Review, self), PublicImage: from.NewLookup(d, r, tl.Proxy).Public, FreeSpace: reg.Host.FreeSpace,
 	}
-	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, e.Reporter) }
+	locker := sync.OnceValue(func() gitprotect.Locker { return gitprotect.HostLocker(canPin(reg)) })
+	e.Protector = func(dir string) *gitprotect.Protector { return gitprotect.New(dir, d.Home, locker(), e.Reporter) }
 	e.Links = func(st *state.VM) ([]GuestLink, error) { return guestLinks(d, st) }
 	e.Agent = sshagent.New(d, e.mounts, r)
 	return wire(e)
+}
+
+// canPin reports whether the backend new VMs get pins paths in the
+// project folder (read-only-paths), which .git protection locks with on a
+// Linux host (gitprotect.Binds).
+func canPin(reg *backend.Registry) bool {
+	c, err := reg.For(new(state.VM))
+	return err == nil && reg.Allowed(c.Backend, backend.FeatureReadOnlyPaths)
 }
 
 // Builder returns what builds images on b whose base starts from

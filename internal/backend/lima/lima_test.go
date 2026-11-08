@@ -359,7 +359,8 @@ func TestNameMax(t *testing.T) {
 }
 
 // Everything is native but ports, which devvm's forwarder forwards: an
-// emulation, reviewed.
+// emulation, reviewed; and read-only paths, which only a Linux host whose
+// probe passes has.
 func TestCaps(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
 	if err := l.Caps().Check(); err != nil {
@@ -367,6 +368,9 @@ func TestCaps(t *testing.T) {
 	}
 	for _, f := range backend.Features {
 		c := l.Caps()[f]
+		if f == backend.FeatureReadOnlyPaths {
+			continue
+		}
 		if f == backend.FeaturePorts || f == backend.FeaturePortsAll {
 			if c != backend.Emulated(true) {
 				t.Errorf("%s: %+v, want emulated and reviewed", f, c)
@@ -374,6 +378,27 @@ func TestCaps(t *testing.T) {
 		} else if !c.IsNative() {
 			t.Errorf("%s isn't native", f)
 		}
+	}
+	for _, tc := range []struct {
+		os    string
+		probe error
+		want  backend.Support
+	}{
+		{"darwin", nil, backend.None},
+		{"linux", nil, backend.Native},
+		{"linux", errors.New("no"), backend.None},
+	} {
+		l, _, _ := testLima(t, tc.os)
+		l.Pins = func() error { return tc.probe }
+		if got := l.Caps()[backend.FeatureReadOnlyPaths]; got != tc.want {
+			t.Errorf("%s, probe %v: read-only-paths %s", tc.os, tc.probe, got)
+		}
+	}
+	// The probe runs devvm's own binary, which a test binary isn't.
+	n := New(paths.Dirs{}, assets.FS, &msg.Fake{}, platform.Host{}, "", nil)
+	n.Self = "/x/lima.test"
+	if err := n.Pins(); !errors.Is(err, errors.ErrUnsupported) {
+		t.Errorf("a test binary probed: %v", err)
 	}
 }
 

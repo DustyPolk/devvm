@@ -81,7 +81,7 @@ func NewProxy(d paths.Dirs, assets fs.FS, self string, store *secrets.Store, r m
 func (p *Proxy) proc(vm string) daemon.Proc {
 	files := p.Dirs.VM(vm)
 	return daemon.Proc{
-		PIDFile: files.ProxyPID(), Args: p.Args, Signal: p.Signal,
+		PIDFile: files.Proxy(".pid"), Args: p.Args, Signal: p.Signal,
 		Is: func(args []string) bool { return daemon.HasFlag(args, "_proxy", "-config", files.ProxyConfig()) },
 	}
 }
@@ -334,7 +334,7 @@ func (p *Proxy) start(vm string, cfg proxy.Config) error {
 		return err
 	}
 	defer func() { _ = out.Close() }()
-	status := files.ProxyStatus()
+	status := files.Proxy(".status")
 	args := []string{"_proxy", "-config", files.ProxyConfig()}
 	pid, err := p.proc(vm).Start(p.Start, daemon.Cmd{Path: p.Self, Args: args, Out: out, Status: status})
 	if err != nil {

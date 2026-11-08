@@ -216,6 +216,9 @@ func sandbox(env *testscript.Env, bin, stubs string) error {
 		return err
 	}
 	env.Setenv("DEVVM_KVM", kvm)
+	// Linux hosts that can't pin .git in QEMU's namespace, whatever the
+	// host's kernel lets devvm do: a script that tests pins sets on.
+	env.Setenv("DEVVM_PINS", "this host's kernel refused")
 	env.Setenv("DEVVM_SECRET_SERVICE", "devvm-test")
 	// No launch asks GitHub for devvm's newest release: a script that
 	// tests the check unsets it and serves its own (release_server).

@@ -98,6 +98,10 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 	if w != nil {
 		forwarding = w.AgentForwarding
 	}
+	// Pins hold only where QEMU serves the folder, from its namespace.
+	if !c.Pins.Empty() && (l.pinSupport() != backend.Native || in.Config.MountType != "" && in.Config.MountType != "9p") {
+		return msg.BackendLacks(Name, string(backend.FeatureReadOnlyPaths), vm)
+	}
 	wrap, env, err := l.confine(vm, c, sshPort, forwarding)
 	if err != nil {
 		return err
@@ -208,27 +212,39 @@ func (l *machines) confine(vm string, c backend.Confinement, sshPort int, forwar
 		}
 		return []string{sandboxExec, "-f", l.Dirs.VM(vm).Profile()}, env, nil
 	case "linux":
-		switch c.Net {
-		case backend.NetDirect, backend.NetInternet:
-			// QEMU can't keep the internet and drop host loopback. An open
-			// VM's guest reaches devvm's proxy as host loopback, without
-			// the wrapper (proxyURL).
-			return nil, env, nil
-		case backend.NetProxy, backend.NetNone:
-		}
-		w, err := writeWrapper(l.Dirs.QEMUWrapper(), l.Self, l.Arch)
-		if err != nil {
-			return nil, nil, err
-		}
-		env = append(env, qemuEnvVar(l.Arch)+"="+w)
-		if c.Net == backend.NetProxy {
-			env = append(env, GuestFwdEnv+"="+guestFwdCmd(l.Self, "127.0.0.1:"+strconv.Itoa(c.ProxyPort)))
-		} else {
-			env = append(env, GuestFwdEnv) // nothing forwarded
-		}
-		return nil, env, nil
+		qenv, err := l.qemuEnv(c)
+		return nil, append(env, qenv...), err
 	}
 	return nil, nil, msg.LimaHostUnsupported(l.OS)
+}
+
+// qemuEnv is the environment a Linux host's start gives Lima, so its QEMU
+// runs through devvm's wrapper (qemu.go): its network as c's tier says,
+// and c's pins, or none.
+func (l *machines) qemuEnv(c backend.Confinement) ([]string, error) {
+	w, err := writeWrapper(l.Dirs.QEMUWrapper(), l.Self, l.Arch)
+	if err != nil {
+		return nil, err
+	}
+	env := []string{qemuEnvVar(l.Arch) + "=" + w}
+	switch c.Net {
+	case backend.NetDirect, backend.NetInternet:
+		// QEMU can't keep the internet and drop host loopback. An open
+		// VM's guest reaches devvm's proxy as host loopback (proxyURL).
+		env = append(env, NetEnv+"="+netOpen, GuestFwdEnv)
+	case backend.NetProxy:
+		env = append(env, NetEnv, GuestFwdEnv+"="+guestFwdCmd(l.Self, "127.0.0.1:"+strconv.Itoa(c.ProxyPort)))
+	case backend.NetNone:
+		env = append(env, NetEnv, GuestFwdEnv) // nothing forwarded
+	}
+	if c.Pins.Empty() {
+		return append(env, PinsEnv), nil
+	}
+	pins, err := encodePins(c.Pins)
+	if err != nil {
+		return nil, err
+	}
+	return append(env, PinsEnv+"="+pins), nil
 }
 
 // configure edits a stopped VM's config (in, as limactl list has it) to
@@ -420,6 +436,9 @@ func (l *machines) Running(_ context.Context, vm string) (backend.Run, error) {
 	}
 	pid := strings.TrimSpace(string(ha))
 	r.ID = pid + " " + fi.ModTime().UTC().Format(time.RFC3339Nano)
+	if l.OS == "linux" {
+		r.ReadOnly, r.Mounted = qemuMounts(filepath.Join(l.Dirs.LimaVM(vm), "qemu.pid"))
+	}
 	rec, err := os.ReadFile(l.Dirs.VM(vm).Started())
 	if errors.Is(err, os.ErrNotExist) {
 		return r, nil

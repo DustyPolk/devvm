@@ -8,6 +8,9 @@ import "io/fs"
 // this system, always yes.
 func SameDevice(fs.FileInfo, fs.FileInfo) bool { return true }
 
+// Links is how many names a file has: 1, as this system can't tell.
+func Links(fs.FileInfo) uint64 { return 1 }
+
 // allocated is the disk space a file takes: on this system, its length.
 func allocated(fi fs.FileInfo) int64 { return fi.Size() }
 

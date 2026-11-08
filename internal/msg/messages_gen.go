@@ -1104,6 +1104,26 @@ func DoctorOK(backend string, version string) M {
 	return M{id: "doctor_ok", vals: []val{{"backend", backend}, {"version", version}}}
 }
 
+// DoctorPinsApparmor is [doctor_pins_apparmor]: "AppArmor on this machine keeps devvm out of the user namespace it locks .git in, so devvm only watches .git here. To keep a VM out of .git, use devvm --clone."
+func DoctorPinsApparmor() M {
+	return M{id: "doctor_pins_apparmor"}
+}
+
+// DoctorPinsFailed is [doctor_pins_failed]: "devvm couldn't lock a test file in a user namespace ({{.reason}}), so it only watches .git on this machine."
+func DoctorPinsFailed(reason string) M {
+	return M{id: "doctor_pins_failed", vals: []val{{"reason", reason}}}
+}
+
+// DoctorPinsMax is [doctor_pins_max]: "user.max_user_namespaces is 0 on this machine, so devvm can't lock .git in a user namespace and only watches it. Run sudo sysctl user.max_user_namespaces=15000 to let devvm lock it."
+func DoctorPinsMax() M {
+	return M{id: "doctor_pins_max"}
+}
+
+// DoctorPinsSysctl is [doctor_pins_sysctl]: "kernel.unprivileged_userns_clone is 0 on this machine, so devvm can't lock .git in a user namespace and only watches it. Run sudo sysctl kernel.unprivileged_userns_clone=1 to let devvm lock it."
+func DoctorPinsSysctl() M {
+	return M{id: "doctor_pins_sysctl"}
+}
+
 // DoctorProxyCA is [doctor_proxy_ca]: "HTTPS_PROXY is set, and {{.dir}} has no CA certificates. If the proxy inspects TLS, put its CA's certificate there."
 func DoctorProxyCA(dir string) M {
 	return M{id: "doctor_proxy_ca", vals: []val{{"dir", dir}}}
@@ -1459,6 +1479,51 @@ func GitNotLocked(path string) M {
 	return M{id: "git_not_locked", vals: []val{{"path", path}}}
 }
 
+// GitPinAgain is [git_pin_again]: "WARNING: {{.path}} was replaced on this machine while {{.vm}} ran, and {{.vm}} could change the new file until devvm locked it again. Check it before you run git here."
+func GitPinAgain(path string, vm string) M {
+	return M{id: "git_pin_again", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// GitPinEventsKept is [git_pin_events_kept]: "devvm couldn't delete {{.file}}, so it names what's in it again at the next check."
+func GitPinEventsKept(file string) M {
+	return M{id: "git_pin_events_kept", vals: []val{{"file", file}}}
+}
+
+// GitPinLinked is [git_pin_linked]: "{{.path}} has another name in the project folder, which devvm can't lock in the VM's view, so devvm didn't start {{.vm}}. Make it a file of its own (copy it, then move the copy over it), and run devvm again."
+func GitPinLinked(path string, vm string) M {
+	return M{id: "git_pin_linked", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// GitPinLinkedRun is [git_pin_linked_run]: "WARNING: {{.path}} got another name while {{.vm}} ran, so devvm couldn't lock it again, and {{.vm}} could change it. Check it before you run git here, and make it a file of its own."
+func GitPinLinkedRun(path string, vm string) M {
+	return M{id: "git_pin_linked_run", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// GitPinLost is [git_pin_lost]: "WARNING: devvm couldn't lock {{.path}} again after it changed while {{.vm}} ran, so {{.vm}} could change it. Check it before you run git here."
+func GitPinLost(path string, vm string) M {
+	return M{id: "git_pin_lost", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// GitPinsMissing is [git_pins_missing]: "WARNING: {{.vm}} runs without .git locked on {{.paths}}, so it can change them, and git on this machine runs what they hold. Run devvm restart to lock them again."
+func GitPinsMissing(paths string, vm string) M {
+	return M{id: "git_pins_missing", vals: []val{{"paths", paths}, {"vm", vm}}}
+}
+
+// GitPinsNone is [git_pins_none]: "{{.vm}}'s .git protection is on, but devvm found nothing in .git it could lock, so {{.vm}} runs without it."
+func GitPinsNone(vm string) M {
+	return M{id: "git_pins_none", vals: []val{{"vm", vm}}}
+}
+
+// GitPinsUnrecorded is [git_pins_unrecorded]: "WARNING: devvm couldn't record whether {{.vm}}'s .git locks held while it ran, so {{.vm}} may have changed what they cover. Check .git's hooks and config before you run git here."
+func GitPinsUnrecorded(vm string) M {
+	return M{id: "git_pins_unrecorded", vals: []val{{"vm", vm}}}
+}
+
+// GitProtectAvailable is [git_protect_available]: ".git protection is off for {{.vm}}, and this machine can lock .git now. Run devvm git-protect on to lock it, or devvm git-protect off to stop this warning."
+func GitProtectAvailable(vm string) M {
+	return M{id: "git_protect_available", vals: []val{{"vm", vm}}}
+}
+
 // GitProtectClone is [git_protect_clone]: "{{.vm}} is a --clone VM, so it mounts no .git to protect."
 func GitProtectClone(vm string) M {
 	return M{id: "git_protect_clone", vals: []val{{"vm", vm}}}
@@ -1474,9 +1539,9 @@ func GitProtectNextStop(mode string, vm string) M {
 	return M{id: "git_protect_next_stop", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
-// GitProtectOnNeedsMacos is [git_protect_on_needs_macos]: ".git protection needs macOS. To keep a VM out of .git, use devvm --clone."
-func GitProtectOnNeedsMacos() M {
-	return M{id: "git_protect_on_needs_macos"}
+// GitProtectOnNeedsLocks is [git_protect_on_needs_locks]: "This machine can't lock .git, and devvm doctor says why. To keep a VM out of .git, use devvm --clone."
+func GitProtectOnNeedsLocks() M {
+	return M{id: "git_protect_on_needs_locks"}
 }
 
 // GitReplaced is [git_replaced]: "WARNING: Something replaced {{.git}} after devvm locked it, possibly the VM. Check its hooks and config before you run git here."
@@ -1489,7 +1554,7 @@ func GitUnlocked(vm string) M {
 	return M{id: "git_unlocked", vals: []val{{"vm", vm}}}
 }
 
-// GitUnprotected is [git_unprotected]: ".git protection needs macOS, so {{.vm}} can change the hooks and config in .git, which run on this machine. To keep a VM out of .git, use devvm --clone, or run devvm git-protect off to stop this warning."
+// GitUnprotected is [git_unprotected]: "This machine can't lock .git (devvm doctor says why), so {{.vm}} can change the hooks and config in .git, which run on this machine. To keep a VM out of .git, use devvm --clone, or run devvm git-protect off to stop this warning."
 func GitUnprotected(vm string) M {
 	return M{id: "git_unprotected", vals: []val{{"vm", vm}}}
 }
@@ -3049,6 +3114,16 @@ func Published(ports string, vm string) M {
 	return M{id: "published", vals: []val{{"ports", ports}, {"vm", vm}}}
 }
 
+// QEMUPinsFailed is [qemu_pins_failed]: "devvm couldn't pin .git's hooks and config for the VM ({{.reason}}), so devvm didn't start QEMU."
+func QEMUPinsFailed(reason string) M {
+	return M{id: "qemu_pins_failed", vals: []val{{"reason", reason}}}
+}
+
+// QEMUPinsInvalid is [qemu_pins_invalid]: "devvm can't pin {{.path}} in the VM's project folder, so devvm didn't start QEMU."
+func QEMUPinsInvalid(path string) M {
+	return M{id: "qemu_pins_invalid", vals: []val{{"path", path}}}
+}
+
 // QEMURefused is [qemu_refused]: "The arguments for QEMU don't have exactly one -netdev user,id=net0,… for devvm to restrict, so devvm didn't start it."
 func QEMURefused() M {
 	return M{id: "qemu_refused"}
@@ -4381,6 +4456,10 @@ var specs = map[string]spec{
 	"doctor_failed":                  {fields: []string{"reason"}},
 	"doctor_latest_release":          {fields: []string{"date", "latest"}},
 	"doctor_ok":                      {fields: []string{"backend", "version"}},
+	"doctor_pins_apparmor":           {},
+	"doctor_pins_failed":             {fields: []string{"reason"}},
+	"doctor_pins_max":                {},
+	"doctor_pins_sysctl":             {},
 	"doctor_proxy_ca":                {fields: []string{"dir"}},
 	"downloading_mise":               {fields: []string{"version"}},
 	"export_failed":                  {fields: []string{"reason"}},
@@ -4452,10 +4531,19 @@ var specs = map[string]spec{
 	"git_locked":                     {fields: []string{"vm"}},
 	"git_locked_strict":              {fields: []string{"vm"}},
 	"git_not_locked":                 {fields: []string{"path"}},
+	"git_pin_again":                  {fields: []string{"path", "vm"}},
+	"git_pin_events_kept":            {fields: []string{"file"}},
+	"git_pin_linked":                 {fields: []string{"path", "vm"}},
+	"git_pin_linked_run":             {fields: []string{"path", "vm"}},
+	"git_pin_lost":                   {fields: []string{"path", "vm"}},
+	"git_pins_missing":               {fields: []string{"paths", "vm"}},
+	"git_pins_none":                  {fields: []string{"vm"}},
+	"git_pins_unrecorded":            {fields: []string{"vm"}},
+	"git_protect_available":          {fields: []string{"vm"}},
 	"git_protect_clone":              {fields: []string{"vm"}},
 	"git_protect_failed":             {fields: []string{"reason"}},
 	"git_protect_next_stop":          {fields: []string{"mode", "vm"}},
-	"git_protect_on_needs_macos":     {},
+	"git_protect_on_needs_locks":     {},
 	"git_replaced":                   {fields: []string{"git"}},
 	"git_unlocked":                   {fields: []string{"vm"}},
 	"git_unprotected":                {fields: []string{"vm"}},
@@ -4770,6 +4858,8 @@ var specs = map[string]spec{
 	"proxy_start_failed":             {fields: []string{"log", "vm"}},
 	"proxy_stop_failed":              {fields: []string{"vm"}},
 	"published":                      {fields: []string{"ports", "vm"}},
+	"qemu_pins_failed":               {fields: []string{"reason"}},
+	"qemu_pins_invalid":              {fields: []string{"path"}},
 	"qemu_refused":                   {},
 	"reading_images":                 {},
 	"reading_space":                  {},

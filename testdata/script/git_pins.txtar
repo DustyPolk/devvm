@@ -1,0 +1,51 @@
+# On a Linux host that pins (DEVVM_PINS stands in for devvm's check of the
+# kernel), .git protection is on: a new VM's start pins .git in QEMU's
+# namespace, which the stub limactl doesn't run, so this checks devvm's
+# side: the mode, devvm git-protect, and the launches' warnings. A VM left
+# off by a host that couldn't lock is told it can be locked now; a VM
+# that's on doesn't start where the host can't pin, until it's off.
+[!linux] skip 'macOS locks .git on the host: git_protect.txtar'
+env DEVVM_PINS=on
+
+project web git
+exec devvm --network open
+vm_name WEB web
+! stderr git_unprotected
+exec devvm git-protect
+stdout '\Aon\n\z'
+vm_state $WEB_dir/vm.json
+stdout '^git.mode=on$'
+stdout '^git.made.protected=true$'
+
+# A running VM's change waits for its next stop, as on macOS.
+exec devvm git-protect strict
+stdout '^==> git_protect_next_stop mode=strict vm=devvm-web-[0-9a-f]{14}$'
+exec devvm stop
+stdout '^==> git_locked_strict vm=devvm-web-[0-9a-f]{14}$'
+exec git config --file .git/config diff.ignoreSubmodules
+stdout '\Aall\n\z'
+
+# The host can't pin any more: the VM that's on doesn't start, and says
+# what it lacks, until devvm git-protect off.
+env DEVVM_PINS='refused by this kernel'
+! exec devvm
+stderr '^devvm: backend_lacks backend=lima feature=read-only-paths vm=devvm-web-[0-9a-f]{14}$'
+! exec devvm git-protect on
+stderr '^devvm: git_protect_on_needs_locks$'
+exec devvm git-protect off
+exec devvm
+! stderr backend_lacks
+
+# Made off by a host that couldn't lock (not the user's choice): once the
+# host can, each launch says so.
+project api git
+exec devvm --network open
+vm_name API api
+stderr '^devvm: git_unprotected vm=devvm-api-[0-9a-f]{14}$'
+env DEVVM_PINS=on
+exec devvm
+stderr '^devvm: git_protect_available vm=devvm-api-[0-9a-f]{14}$'
+exec devvm stop
+exec devvm git-protect off
+exec devvm
+! stderr git_protect_available

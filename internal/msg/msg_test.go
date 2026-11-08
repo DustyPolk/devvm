@@ -294,6 +294,11 @@ func TestGitWatchMessages(t *testing.T) {
 		GitUnprotected("vm-1"), GitUnprotectedQuiet("vm-1"), GitChanged(".git/config", "vm-1"),
 		GitChangedMore(1, ".git/config", "vm-1"), GitChangedMore(3, ".git/config", "vm-1"),
 		GitWatchBlind(".git/hooks"), GitWatchBlindMore(1, ".git/hooks"), GitWatchBlindMore(3, ".git/hooks"),
+		GitProtectOnNeedsLocks(), GitProtectAvailable("vm-1"),
+		DoctorPinsApparmor(), DoctorPinsSysctl(), DoctorPinsMax(), DoctorPinsFailed("denied"),
+		QEMUPinsInvalid("../x"), QEMUPinsFailed("denied"),
+		GitPinLinked("/p/.git/config", "vm-1"), GitPinAgain("/p/.git/config", "vm-1"), GitPinLinkedRun("/p/.git/config", "vm-1"),
+		GitPinLost("/p/.git/config", "vm-1"), GitPinsMissing("/p/.git/config", "vm-1"), GitPinsUnrecorded("vm-1"),
 	} {
 		text := m.Text()
 		if strings.Contains(text, "{{") || strings.Contains(text, "<no value>") || m.DocURL() == "" {
@@ -302,5 +307,11 @@ func TestGitWatchMessages(t *testing.T) {
 	}
 	if one, many := GitChangedMore(1, "a", "v").Text(), GitChangedMore(3, "a", "v").Text(); !strings.Contains(one, "1 more path ") || !strings.Contains(many, "3 more paths ") {
 		t.Errorf("plurals: %q, %q", one, many)
+	}
+	// Linux's pins' messages without a doc link of their own to act on.
+	for _, m := range []M{GitPinEventsKept("/d/git-pins.jsonl"), GitPinsNone("vm-1")} {
+		if text := m.Text(); text == "" || strings.Contains(text, "{{") || strings.Contains(text, "<no value>") {
+			t.Errorf("%s: %q", m.ID(), text)
+		}
 	}
 }

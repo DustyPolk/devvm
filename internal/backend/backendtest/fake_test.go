@@ -2,6 +2,7 @@ package backendtest
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -65,20 +66,20 @@ func TestFakeRunningAndNone(t *testing.T) {
 	f := New("fake", nil)
 	f.LifelineFile = "/ha.pid"
 	f.Instances["v"] = backend.Instance{Name: "v", Status: backend.StatusRunning}
-	if r, err := f.Running(ctx, "v"); r != (backend.Run{ID: "start-0", Lifeline: "/ha.pid", Confined: true}) || err != nil {
+	if r, err := f.Running(ctx, "v"); !reflect.DeepEqual(r, backend.Run{ID: "start-0", Lifeline: "/ha.pid", Confined: true}) || err != nil {
 		t.Errorf("preset running: %+v, %v", r, err)
 	}
 	f.Instances["v"] = backend.Instance{Name: "v", Status: backend.StatusStopped}
-	if r, err := f.Running(ctx, "v"); r != (backend.Run{Lifeline: "/ha.pid"}) || err != nil {
+	if r, err := f.Running(ctx, "v"); !reflect.DeepEqual(r, backend.Run{Lifeline: "/ha.pid"}) || err != nil {
 		t.Errorf("preset stopped: %+v, %v", r, err)
 	}
-	if r, err := f.Running(ctx, "none"); r != (backend.Run{Lifeline: "/ha.pid"}) || err != nil {
+	if r, err := f.Running(ctx, "none"); !reflect.DeepEqual(r, backend.Run{Lifeline: "/ha.pid"}) || err != nil {
 		t.Errorf("not held: %+v, %v", r, err)
 	}
 	if err := f.Start(ctx, "v", backend.Want{}, backend.Confinement{Net: backend.NetDirect}); err != nil {
 		t.Fatal(err)
 	}
-	if r, err := f.Running(ctx, "v"); r != (backend.Run{ID: "start-1", Lifeline: "/ha.pid"}) || err != nil {
+	if r, err := f.Running(ctx, "v"); !reflect.DeepEqual(r, backend.Run{ID: "start-1", Lifeline: "/ha.pid"}) || err != nil {
 		t.Errorf("started direct: %+v, %v", r, err)
 	}
 	f.Restart("v")

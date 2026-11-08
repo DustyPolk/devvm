@@ -151,6 +151,7 @@ type instance struct {
 // config is the parts of a VM's Lima config devvm reads.
 type config struct {
 	Mounts            []mount           `json:"mounts"`
+	MountType         string            `json:"mountType"`
 	Networks          []json.RawMessage `json:"networks"`
 	Env               map[string]string `json:"env"`
 	PropagateProxyEnv *bool             `json:"propagateProxyEnv"`

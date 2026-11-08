@@ -87,7 +87,7 @@ git fetch devvm               # later, on this machine: the VM's work as devvm/<
 git log -p main..devvm/main   # review it before you merge it
 ```
 
-Use it for an agent working unattended, a repo you don't trust, or on Linux hosts, which have no `.git` protection ([working on a clone](../using/clone.md)).
+Use it for an agent working unattended, a repo you don't trust, or on a Linux host whose kernel doesn't let devvm protect `.git` ([working on a clone](../using/clone.md)).
 
 ## Coming back to it
 

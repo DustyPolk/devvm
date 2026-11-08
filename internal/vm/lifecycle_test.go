@@ -399,12 +399,10 @@ func TestExportStartsAsLaunch(t *testing.T) {
 	gitIn(t, e.Dir, "init", "-q")
 	var locks []string
 	e.Protector = func(dir string) *gitprotect.Protector {
-		p := gitprotect.New(dir, e.Dirs.Home, &msg.Fake{})
-		p.Locker = gitprotect.Flags{Chflags: func(_ context.Context, flags, path string) error {
+		return gitprotect.New(dir, e.Dirs.Home, gitprotect.Flags{Chflags: func(_ context.Context, flags, path string) error {
 			locks = append(locks, flags+" "+path)
 			return nil
-		}}
-		return p
+		}}, &msg.Fake{})
 	}
 	direct := false
 	f.ExecFunc = func(_ string, argv []string, o backend.ExecOpts) error {

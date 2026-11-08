@@ -8,6 +8,19 @@ import (
 	"syscall"
 )
 
+// Links is how many names the file fi describes has (its link count): 1
+// when the system can't tell.
+func Links(fi fs.FileInfo) uint64 {
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return widen(st.Nlink)
+	}
+	return 1
+}
+
+// widen is a link count as a uint64, whatever the system's type for it
+// (uint16 on macOS, uint64 on Linux).
+func widen[T uint16 | uint32 | uint64](n T) uint64 { return uint64(n) }
+
 // SameDevice reports whether two files are on the same file system.
 func SameDevice(a, b fs.FileInfo) bool {
 	sa, oka := a.Sys().(*syscall.Stat_t)

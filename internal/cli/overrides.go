@@ -68,6 +68,7 @@ func readOverrides(getenv func(string) string) Overrides {
 			KVM:           getenv("DEVVM_KVM"),
 			UbuntuURL:     getenv("DEVVM_UBUNTU_URL"),
 			UbuntuRelease: getenv("DEVVM_UBUNTU_RELEASE"),
+			Pins:          getenv("DEVVM_PINS"),
 		},
 		HostMise:     getenv("DEVVM_HOST_MISE"),
 		PipedAnswers: getenv("DEVVM_PIPED_ANSWERS") == "1",

@@ -50,11 +50,15 @@ func (v VM) RemakeLock() string { return filepath.Join(v.Run(), "remake.lock") }
 // (proxy.Config): everything it started with, its password among it.
 func (v VM) ProxyConfig() string { return filepath.Join(v.Run(), "proxy.json") }
 
-// ProxyPID is the VM's proxy's pid file.
-func (v VM) ProxyPID() string { return filepath.Join(v.Run(), "proxy.pid") }
+// Proxy is a file of the VM's proxy's own, by ext: .pid, its pid file,
+// and .status, the status file it writes once it listens.
+func (v VM) Proxy(ext string) string { return filepath.Join(v.Run(), "proxy"+ext) }
 
-// ProxyStatus is the status file the VM's proxy writes once it listens.
-func (v VM) ProxyStatus() string { return filepath.Join(v.Run(), "proxy.status") }
+// GitPins is what a Linux host's QEMU namespace records of the pins it
+// lost and made again while the VM ran (a git command on the host
+// replaced a pinned file, a hard link), one JSON object a line, which
+// .git protection reports once the VM stops.
+func (v VM) GitPins() string { return filepath.Join(v.Run(), "git-pins.jsonl") }
 
 // CA is the folder of the VM's own CA, which its proxy intercepts with
 // and which only it trusts.

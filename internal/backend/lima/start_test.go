@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -52,6 +53,8 @@ func TestStartConfined(t *testing.T) {
 	}
 	open := proxy
 	open.Net = backend.NetDirect
+	pinned := proxy
+	pinned.Pins = backend.Pins{Root: "/p", Fixed: []string{".git"}, ReadOnly: []string{".git/config", ".git/hooks"}}
 	for _, tc := range []struct {
 		name, os string
 		c        backend.Confinement
@@ -59,6 +62,8 @@ func TestStartConfined(t *testing.T) {
 		wrapped  bool     // under sandbox-exec
 		qemu     bool     // through the QEMU wrapper
 		guestfwd string   // DEVVM_GUESTFWD; "" for unset
+		net      string   // DEVVM_QEMU_NET
+		pins     string   // DEVVM_QEMU_PINS
 	}{
 		{
 			name: "macOS, the proxy", os: "darwin", c: proxy, wrapped: true,
@@ -87,8 +92,19 @@ func TestStartConfined(t *testing.T) {
 		},
 		{
 			// Not the host's proxy settings: its image would keep them.
-			name: "Linux, a build with the internet", os: "linux", c: backend.Confinement{Net: backend.NetInternet, SSHPort: 2225},
+			name: "Linux, a build with the internet", os: "linux", c: backend.Confinement{Net: backend.NetInternet, SSHPort: 2225}, qemu: true, net: netOpen,
 			edits: []string{".ssh.localPort=2225", ".propagateProxyEnv=false", noForwardsSet()},
+		},
+		{
+			// Pins, which QEMU's namespace pins: .git first.
+			name: "Linux, the proxy and pins", os: "linux", c: pinned, qemu: true,
+			guestfwd: `'/opt/my devvm/devvm' _qemu connect 127.0.0.1:23456`,
+			pins:     `{"root":"/p","pins":[{"path":".git","read_only":false},{"path":".git/config","read_only":true},{"path":".git/hooks","read_only":true}]}`,
+			edits: []string{
+				".ssh.localPort=2222",
+				`.env = {"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192.168.5.4:3128","HTTP_PROXY":"http://devvm:devvm-proxy-password@192.168.5.4:3128","NO_PROXY":"localhost","http_proxy":"http://devvm:devvm-proxy-password@192.168.5.4:3128","https_proxy":"http://devvm:devvm-proxy-password@192.168.5.4:3128"}`,
+				".propagateProxyEnv=false", ".hostResolver.enabled=false", `.dns=["127.0.0.1"]`, noForwardsSet(),
+			},
 		},
 		{name: "macOS, unconfined", os: "darwin", c: backend.Confinement{}, edits: []string{noForwardsSet()}},
 		{
@@ -102,9 +118,9 @@ func TestStartConfined(t *testing.T) {
 			},
 		},
 		{
-			// Open on Linux: no wrapper, so no restrict=on, and QEMU's
+			// Open on Linux: the wrapper without restrict=on, so QEMU's
 			// user-mode network reaches the proxy on host loopback.
-			name: "Linux, open", os: "linux", c: open,
+			name: "Linux, open", os: "linux", c: open, qemu: true, net: netOpen,
 			edits: []string{
 				".ssh.localPort=2222",
 				`.env = {"HTTPS_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","HTTP_PROXY":"http://devvm:devvm-proxy-password@192.168.5.2:23456","NO_PROXY":"localhost,host.lima.internal,192.168.5.2","http_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456","https_proxy":"http://devvm:devvm-proxy-password@192.168.5.2:23456"}`,
@@ -115,6 +131,7 @@ func TestStartConfined(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			l, f, _ := testLima(t, tc.os)
 			l.Getenv = func(k string) string { return map[string]string{"HTTPS_PROXY": "http://corp.test:8080"}[k] }
+			l.Pins = func() error { return nil }
 			t.Setenv(GuestFwdEnv, "left over")
 			yaml := stoppedWithYAML(t, l, f)
 			if err := l.start(t.Context(), "v", nil, tc.c); err != nil {
@@ -150,6 +167,12 @@ func TestStartConfined(t *testing.T) {
 			}
 			if fwd, _ := envOf(s, GuestFwdEnv); tc.qemu && fwd != tc.guestfwd {
 				t.Errorf("%s=%q, want %q", GuestFwdEnv, fwd, tc.guestfwd)
+			}
+			if n, _ := envOf(s, NetEnv); tc.qemu && n != tc.net {
+				t.Errorf("%s=%q, want %q", NetEnv, n, tc.net)
+			}
+			if p, _ := envOf(s, PinsEnv); tc.qemu && p != tc.pins {
+				t.Errorf("%s=%q, want %q", PinsEnv, p, tc.pins)
 			}
 			// Lima propagates the host's proxy settings only to a VM on its
 			// own network without devvm's proxy.
@@ -716,7 +739,7 @@ func TestRunning(t *testing.T) {
 	l, f, _ := testLima(t, "darwin")
 	f.out["limactl list --json"] = `{"name":"v","status":"Stopped"}`
 	ha := l.haPIDFile("v")
-	if r, err := l.Running(t.Context(), "v"); r != (backend.Run{Lifeline: ha}) || err != nil {
+	if r, err := l.Running(t.Context(), "v"); !reflect.DeepEqual(r, backend.Run{Lifeline: ha}) || err != nil {
 		t.Errorf("never started: %+v, %v", r, err)
 	}
 	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {

@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/devvmhq/devvm/internal/backend"
@@ -111,6 +112,9 @@ type Lima struct {
 	// KVM is Linux's KVM device: /dev/kvm, unless a test build stands in
 	// for it.
 	KVM string
+	// Pins reports whether this host pins paths in QEMU's namespace (nil),
+	// or why not: probePins, once, unless a test build stands in for it.
+	Pins func() error
 	// DockerRunning reports whether Docker runs, for --from images only
 	// it has.
 	DockerRunning func(ctx context.Context) bool
@@ -169,6 +173,14 @@ func New(d paths.Dirs, assets fs.FS, r msg.Reporter, host platform.Host, ubuntuU
 	if l.Company == nil {
 		l.Company = settings.NewCompanyProxy(d, func(k string) string { return l.Getenv(k) }, nil)
 	}
+	// The probe runs devvm's own _qemu probe: a test binary in its place
+	// has none.
+	l.Pins = sync.OnceValue(func() error {
+		if filepath.Base(l.Self) != "devvm" {
+			return errors.ErrUnsupported
+		}
+		return probePins(l.Self)
+	})
 	return l
 }
 
@@ -306,6 +318,7 @@ func (l *Lima) Caps() backend.Caps {
 		backend.FeatureFrom:             backend.Native,
 		backend.FeatureClone:            backend.Native,
 		backend.FeatureProjectMount:     backend.Native,
+		backend.FeatureReadOnlyPaths:    l.pinSupport(),
 		backend.FeatureAgentFolders:     backend.Native,
 		backend.FeatureToolsShare:       backend.Native,
 		backend.FeatureEgressProxy:      backend.Native,
@@ -321,6 +334,17 @@ func (l *Lima) Caps() backend.Caps {
 		backend.FeatureNixLayer:         backend.Native,
 		backend.FeatureLink:             backend.Native,
 	}
+}
+
+// pinSupport is how Lima has read-only paths: native on a Linux host whose
+// kernel lets devvm pin paths in a user namespace (Pins), QEMU's 9p
+// serving the project folder from there; none on macOS, where .git
+// protection locks on the host itself, and where the probe fails.
+func (l *Lima) pinSupport() backend.Support {
+	if l.OS == "linux" && l.Pins != nil && l.Pins() == nil {
+		return backend.Native
+	}
+	return backend.None
 }
 
 // sshSocketExtra is what OpenSSH adds to the socket's name while making it.

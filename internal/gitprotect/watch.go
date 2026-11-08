@@ -54,13 +54,22 @@ const (
 // WarnUnprotected warns, at each launch of the VM vm on a host without
 // locks, that it can change the hooks and config of the folder's .git,
 // which git on this machine runs: unless the folder has no .git, or the
-// user chose off (Chosen), which says they know.
+// user chose off (Chosen), which says they know. On a Linux host that
+// locks now (Binds), a VM left off because the host couldn't lock when it
+// was made, or by a devvm that didn't record the choice, is told it can
+// be.
 func (p *Protector) WarnUnprotected(vm *state.VM) {
 	g, _ := Of(vm)
-	if p.Locker.Locks() || g.Mode == Clone || g.Mode == Off && g.Chosen || !exists(p.git()) {
+	if g.Mode == Clone || g.Mode == Off && g.Chosen || !exists(p.git()) {
 		return
 	}
-	p.Warn(msg.GitUnprotected(vm.Name()))
+	_, binds := p.Locker.(Binds)
+	switch {
+	case !p.Locker.Locks():
+		p.Warn(msg.GitUnprotected(vm.Name()))
+	case binds && g.Mode == Off:
+		p.Warn(msg.GitProtectAvailable(vm.Name()))
+	}
 }
 
 // watcher is a protector's watch, on a host without locks.

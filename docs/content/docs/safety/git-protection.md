@@ -4,15 +4,15 @@ explainer: Keep code in the VM out of your .git
 weight: 2
 ---
 
-The project folder is read-write in the VM, so without protection anything in the VM could add a git hook, or set `core.fsmonitor`, `core.hooksPath` or `core.sshCommand` in `.git/config`, and your next git command on this machine would run it. On macOS, devvm locks the git hooks and config with a flag that even root in the VM can't clear, so nothing the VM does runs through them on this machine.
+The project folder is read-write in the VM, so without protection anything in the VM could add a git hook, or set `core.fsmonitor`, `core.hooksPath` or `core.sshCommand` in `.git/config`, and your next git command on this machine would run it. On macOS, devvm locks the git hooks and config with a flag that even root in the VM can't clear, so nothing the VM does runs through them on this machine. On Linux, devvm makes them read-only in the VM's own view of the folder, which root in the VM can't change either ([Linux hosts](#linux-hosts)).
 
 Every new VM gets `.git` protection. `--no-git-protect` creates a VM without it, and [`devvm git-protect`](#turning-it-on-or-off) changes it later. [How it works › .git protection](../internals/git-protection.md) lists what devvm locks and when it checks the locks again.
 
 ## What still works
 
-git in the VM can commit, branch, check out, stash, fetch and pull, and `git worktree add` works on this machine. Commands that write `.git/config` fail with `Operation not permitted`, in the VM and on this machine. Those are `git config`, `git remote add`, `push -u` to a new branch, and hook installers such as husky or pre-commit. `git worktree remove` and `prune` also fail for the worktrees that were there when devvm locked `.git`.
+git in the VM can commit, branch, check out, stash, fetch and pull, and `git worktree add` works on this machine. Commands that write `.git/config` fail in the VM, and on macOS they fail on this machine too, with `Operation not permitted`. Those are `git config`, `git remote add`, `push -u` to a new branch, and hook installers such as husky or pre-commit. On macOS, `git worktree remove` and `prune` also fail for the worktrees that were there when devvm locked `.git`. On Linux, these commands work on this machine as usual, and the VM sees what they change ([Linux hosts](#linux-hosts)).
 
-To run them, stop the VM, unlock `.git`, run the commands on this machine, and lock it again:
+To run them on macOS, stop the VM, unlock `.git`, run the commands on this machine, and lock it again:
 
 ```sh
 devvm stop
@@ -71,15 +71,47 @@ The lock covers `.git`, and the VM can still put things elsewhere that git on th
 
 ## Linux hosts
 
-Linux has no immutable flag that a user can set, so VMs on Linux hosts have no `.git` protection, and the VM can change `.git` hooks and config, which run on the host. devvm refuses `devvm git-protect on` and `strict` there, and [`--clone`](../using/clone.md) keeps the VM out of `.git` instead, so use it for any repo where you don't trust what runs in the VM.
+On Linux, devvm runs each VM's QEMU in a user namespace of its own, without root, and there it makes the paths that macOS's flag would lock read-only: the hooks and config of `.git` and of its submodules, and the rest of [what's locked](../internals/git-protection.md#whats-locked). The VM reaches the project folder only through QEMU, so root in the VM gets `Read-only file system` when it writes one of them, and `Device or resource busy` when it renames or removes one, or renames `.git` itself. Nothing changes on this machine: your own git commands write `.git/config` as usual, and the read-only view ends when the VM stops. `devvm git-protect` works as it does on macOS, and a change to a running VM's protection applies at its next start.
+
+Start VMs with devvm. A VM that `limactl start` starts runs without the read-only view, and so does one whose view went for another reason, so each launch of a running VM, and `devvm stop`, check that the VM still can't rename `.git` and still sees its hooks and config read-only, and name what it doesn't: run `devvm restart` then. If devvm's own process that runs the VM ends, the VM ends with it at once, as if you pulled its power, so it never runs without the view.
+
+Because a lock in the VM's view covers one name of a file, devvm also [watches](#when-devvm-names-a-change) `.git` as a Linux host without locks does, and names what changed at each launch that finds the VM stopped and at `devvm stop`. That includes your own changes, such as a `git remote add` or `git push -u`.
+
+### When git on this machine replaces a locked file
+
+The VM sees your changes, because its view is the same folder. A git command on this machine that writes `.git/config`, such as `git config`, `git remote add` or `git push -u`, writes a new file and renames it over the old one, and the new file isn't read-only in the VM until devvm locks it again. devvm watches the folders of what it locks, so it locks the new file within milliseconds, but until then the VM can change it, replace it with a file of its own, which devvm then locks as yours, or open it to write it later, which the lock doesn't stop. A VM running code that watches for that moment can use it, so this is a real gap whenever you change a locked file on this machine while the VM runs. devvm doesn't stop it, but it names it: at `devvm stop`, or at the next launch when the VM stopped another way, devvm names each file it locked again, once however often it happened, and the watch names each one whose contents changed. If devvm couldn't record whether its locks held while the VM ran, it says so then, and you should check `.git`'s hooks and config yourself. Check what it names before you run git in the folder, or stop the VM before you change its `.git` on this machine.
+
+### Hard links
+
+A lock in the VM's view covers one name of a file, and macOS's flag covers the file itself, whatever its names. So devvm doesn't start a VM whose `.git/config`, or a hook in a locked hooks folder, has another name (a hard link), because the VM could change the file through that other name. Make it a file of its own, by copying it and moving the copy over it, and start the VM again. A file that gets another name while the VM runs isn't locked again, and devvm names it when the VM stops.
+
+### What else differs in the VM
+
+Two more things work differently in the VM. The VM sees `.git` as a file system of its own, so renaming a file between the working tree and `.git` fails with `Invalid cross-device link`, which `mv` handles by copying the file, and git never does. And the VM can't remove or rename a submodule's git folder, so `git submodule absorbgitdirs`, or `rm -rf` on a submodule, fails while the VM runs.
+
+A VM that a devvm without these locks made on this machine stays off, and each launch says that devvm can lock it now: run `devvm git-protect on` to lock it, or `devvm git-protect off` to keep it off and stop the warning.
+
+### When Linux can't lock
+
+The locks need a kernel that lets a program make a user namespace and mount in it, which Debian, Fedora, RHEL, openSUSE and Arch do by default. Where the kernel doesn't, devvm doesn't lock `.git`, and it [watches](#when-devvm-names-a-change) it instead. `devvm doctor` says why, and what lets devvm lock:
+
+- **AppArmor**, on Ubuntu 23.10 and newer, lets only programs that a profile names use a user namespace ([Ubuntu](#ubuntu)).
+- **`kernel.unprivileged_userns_clone` is 0**, as on Arch's `linux-hardened` kernel. `sudo sysctl kernel.unprivileged_userns_clone=1` lets devvm lock, until the next boot unless you set it in `/etc/sysctl.d/`.
+- **`user.max_user_namespaces` is 0**, which `sudo sysctl user.max_user_namespaces=15000` changes.
+
+Without the locks, VMs get `off` as their mode, devvm refuses `devvm git-protect on` and `strict`, and [`--clone`](../using/clone.md) keeps the VM out of `.git` instead, so use it for any repo where you don't trust what runs in the VM. A VM that's on, made when the kernel let devvm lock, doesn't start until it can again, or until you run `devvm git-protect off`.
+
+### Ubuntu
+
+Ubuntu 23.10 and newer set `kernel.apparmor_restrict_unprivileged_userns` to 1, so a program gets a user namespace with the rights to mount in it only when an AppArmor profile names the program with the `userns` rule. Ubuntu does that to keep programs that don't need one out of the kernel code behind it. devvm's binary lives in a folder you can write, such as `~/.local/lib/devvm/`, and a profile for that path would let any program running as you put itself there and get the same rights, which undoes what Ubuntu set the restriction for. So devvm doesn't ask for a profile, and on Ubuntu with the restriction on it doesn't lock `.git`: it [watches](#when-devvm-names-a-change) it, and `devvm doctor` and each launch say so. Use [`--clone`](../using/clone.md) there for any repo where you don't trust what runs in the VM.
 
 ### The warning at each launch
 
-Each launch of a VM that mounts a folder with a `.git` warns that the VM can change its hooks and config, which run on this machine. That includes the launch that creates the VM, and launches of a VM that's already running. Once you've read the warning and decided to go on without protection, run `devvm git-protect off` in the folder. devvm records that you chose it and stops warning for that VM, but it still names the changes that the next section describes. A VM that you create with `--no-git-protect` doesn't warn either, and a `--clone` VM never warns, because it mounts no `.git`.
+On a Linux host that can't lock, each launch of a VM that mounts a folder with a `.git` warns that the VM can change its hooks and config, which run on this machine. That includes the launch that creates the VM, and launches of a VM that's already running. Once you've read the warning and decided to go on without protection, run `devvm git-protect off` in the folder. devvm records that you chose it and stops warning for that VM, but it still names the changes that the next section describes. A VM that you create with `--no-git-protect` doesn't warn either, and a `--clone` VM never warns, because it mounts no `.git`.
 
 ### When devvm names a change
 
-devvm can't stop the VM from changing `.git` on a Linux host, but it notices the change afterwards. When devvm creates a VM, it records a hash of each path that a lock would cover on macOS, which are the hooks in `.git/hooks`, `.git/config` and the rest of [what's locked](../internals/git-protection.md#whats-locked), submodules' included. It also hashes `.git/commondir`, whether it's there or not, and what the config hands over to the project folder: the files that an `include.path` leads to, and the hooks folder that `core.hooksPath` names, such as husky's `.husky`. Each launch that finds the VM stopped, and `devvm stop`, hash them again and name every path that changed since the last check, such as `.git/config` and `.git/hooks/pre-commit`. A warning names ten paths at most, and then how many more changed. The same checks report what a lock can't stop either, as they do on macOS: a `.git` that was replaced, a `commondir`, a repo or submodule that appeared, and includes, hook links and a `core.hooksPath` into the project folder ([not covered](#not-covered)). A launch of a VM that's already running checks nothing, so run `devvm stop` when you want the check. A VM that devvm has no hashes for yet, such as one that an older devvm made, records them at its first check and names nothing.
+On a Linux host that can't lock, devvm can't stop the VM from changing `.git`, and on one that locks, the VM can change a file that git on this machine [replaced](#when-git-on-this-machine-replaces-a-locked-file), but devvm notices the change afterwards on both. When devvm creates a VM, it records a hash of each path that a lock would cover on macOS, which are the hooks in `.git/hooks`, `.git/config` and the rest of [what's locked](../internals/git-protection.md#whats-locked), submodules' included. It also hashes `.git/commondir`, whether it's there or not, and what the config hands over to the project folder: the files that an `include.path` leads to, and the hooks folder that `core.hooksPath` names, such as husky's `.husky`. Each launch that finds the VM stopped, and `devvm stop`, hash them again and name every path that changed since the last check, such as `.git/config` and `.git/hooks/pre-commit`. A warning names ten paths at most, and then how many more changed. The same checks report what a lock can't stop either, as they do on macOS: a `.git` that was replaced, a `commondir`, a repo or submodule that appeared, and includes, hook links and a `core.hooksPath` into the project folder ([not covered](#not-covered)). A launch of a VM that's already running checks nothing, so run `devvm stop` when you want the check. A VM that devvm has no hashes for yet, such as one that an older devvm made, records them at its first check and names nothing.
 
 devvm names a change only after it happened, so git on this machine may already have run a changed hook or read a changed config. devvm can't tell who made a change, so it also names your own, such as a `git remote add` or `git push -u` that you ran on this machine. When it names a path that you didn't change, check it before you run git in the folder:
 

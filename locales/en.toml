@@ -206,6 +206,47 @@ other = "The newest devvm release is {{.latest}}, as of {{.date}}."
 description = "reason is an error from the system, in English"
 other = "Checking what devvm needs failed: {{.reason}}."
 
+[doctor_pins_apparmor]
+other = "AppArmor on this machine keeps devvm out of the user namespace it locks .git in, so devvm only watches .git here. To keep a VM out of .git, use devvm --clone."
+
+[doctor_pins_sysctl]
+other = "kernel.unprivileged_userns_clone is 0 on this machine, so devvm can't lock .git in a user namespace and only watches it. Run sudo sysctl kernel.unprivileged_userns_clone=1 to let devvm lock it."
+
+[doctor_pins_max]
+other = "user.max_user_namespaces is 0 on this machine, so devvm can't lock .git in a user namespace and only watches it. Run sudo sysctl user.max_user_namespaces=15000 to let devvm lock it."
+
+[doctor_pins_failed]
+description = "reason is the system's error, in English"
+other = "devvm couldn't lock a test file in a user namespace ({{.reason}}), so it only watches .git on this machine."
+
+[git_pin_linked]
+description = "path is the file on this machine with another name"
+other = "{{.path}} has another name in the project folder, which devvm can't lock in the VM's view, so devvm didn't start {{.vm}}. Make it a file of its own (copy it, then move the copy over it), and run devvm again."
+
+[git_pin_again]
+description = "path is the file on this machine that was replaced"
+other = "WARNING: {{.path}} was replaced on this machine while {{.vm}} ran, and {{.vm}} could change the new file until devvm locked it again. Check it before you run git here."
+
+[git_pin_linked_run]
+other = "WARNING: {{.path}} got another name while {{.vm}} ran, so devvm couldn't lock it again, and {{.vm}} could change it. Check it before you run git here, and make it a file of its own."
+
+[git_pin_lost]
+other = "WARNING: devvm couldn't lock {{.path}} again after it changed while {{.vm}} ran, so {{.vm}} could change it. Check it before you run git here."
+
+[git_pins_unrecorded]
+other = "WARNING: devvm couldn't record whether {{.vm}}'s .git locks held while it ran, so {{.vm}} may have changed what they cover. Check .git's hooks and config before you run git here."
+
+[git_pin_events_kept]
+description = "file is devvm's record of a VM's pins, which it couldn't delete"
+other = "devvm couldn't delete {{.file}}, so it names what's in it again at the next check."
+
+[git_pins_missing]
+description = "paths is a comma-separated list of paths on this machine"
+other = "WARNING: {{.vm}} runs without .git locked on {{.paths}}, so it can change them, and git on this machine runs what they hold. Run devvm restart to lock them again."
+
+[git_pins_none]
+other = "{{.vm}}'s .git protection is on, but devvm found nothing in .git it could lock, so {{.vm}} runs without it."
+
 [lima_global_config]
 description = "files is a space-separated list of paths"
 other = "Lima would add {{.files}} to every VM devvm starts. Move them out of devvm's Lima home."
@@ -303,6 +344,14 @@ other = "Changing {{.vm}}'s Lima settings failed."
 
 [qemu_refused]
 other = "The arguments for QEMU don't have exactly one -netdev user,id=net0,… for devvm to restrict, so devvm didn't start it."
+
+[qemu_pins_invalid]
+description = "path is a path in what devvm pins, or the file of them"
+other = "devvm can't pin {{.path}} in the VM's project folder, so devvm didn't start QEMU."
+
+[qemu_pins_failed]
+description = "reason is why the pin failed, as the system says"
+other = "devvm couldn't pin .git's hooks and config for the VM ({{.reason}}), so devvm didn't start QEMU."
 
 [no_ubuntu_image]
 description = "release is a dated release's folder name (release-20260101)"
@@ -2116,7 +2165,7 @@ description = "files is a space-separated list of paths"
 other = "The project folder has set-id files owned by root, which run as root for anyone who runs them: {{.files}}. Don't run them, and delete them with sudo rm FILE."
 
 [git_unprotected]
-other = ".git protection needs macOS, so {{.vm}} can change the hooks and config in .git, which run on this machine. To keep a VM out of .git, use devvm --clone, or run devvm git-protect off to stop this warning."
+other = "This machine can't lock .git (devvm doctor says why), so {{.vm}} can change the hooks and config in .git, which run on this machine. To keep a VM out of .git, use devvm --clone, or run devvm git-protect off to stop this warning."
 
 [git_unprotected_quiet]
 other = "devvm stops warning about .git at each launch of {{.vm}}, and it still names the hooks and config in .git that change."
@@ -2150,8 +2199,11 @@ other = "Showing or changing .git protection failed: {{.reason}}."
 description = "mode is on, strict or off"
 other = "{{.vm}} is running, so devvm turns its .git protection {{.mode}} when the VM next stops. Run devvm stop or devvm restart to apply it now."
 
-[git_protect_on_needs_macos]
-other = ".git protection needs macOS. To keep a VM out of .git, use devvm --clone."
+[git_protect_on_needs_locks]
+other = "This machine can't lock .git, and devvm doctor says why. To keep a VM out of .git, use devvm --clone."
+
+[git_protect_available]
+other = ".git protection is off for {{.vm}}, and this machine can lock .git now. Run devvm git-protect on to lock it, or devvm git-protect off to stop this warning."
 
 [git_protect_clone]
 other = "{{.vm}} is a --clone VM, so it mounts no .git to protect."

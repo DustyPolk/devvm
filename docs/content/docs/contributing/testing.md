@@ -16,12 +16,12 @@ The same code and tests run on macOS and Linux; what differs is behind build tag
 | Mounts | virtiofs | 9p, one mount per share per guest |
 | Project VM disks | APFS copy-on-write clones of the image's | qcow2 overlays of the image's |
 | Confined tiers | the VM's Lima process under a macOS sandbox | QEMU's `restrict=on` and a `guestfwd` to the proxy |
-| `.git` protection | locked with `chflags` | none: devvm says so ([details](../safety/git-protection.md#linux-hosts)) |
+| `.git` protection | locked with `chflags` | read-only in QEMU's namespace, or, where the kernel refuses it, watched, and devvm says so ([details](../safety/git-protection.md#linux-hosts)) |
 | Set-id files | dropped by virtiofs | reach the host: new VMs check for them |
 | Tokens | the Keychain | files only you can read, in `~/.local/share/devvm/secrets/` |
 | The CA | kept out of Time Machine | no backup to keep it out of |
 
-The end-to-end tests check each side where they run: on Linux, the `.git` protection checks become one that it's off and devvm says so, and the Keychain check is left out.
+The end-to-end tests check each side where they run: on Linux, the `.git` protection checks look at QEMU's namespace and what root in the VM can do, or, on a host whose kernel refuses the namespace, that it's off and devvm says so, and the Keychain check is left out. The CLI tests run as on a Linux host that can't pin (`DEVVM_PINS`), whatever the host's kernel allows, and the unit tests that pin for real (`TestRunPinned`, `TestProbePin`) run only on a Linux host that allows it.
 
 On macOS, the end-to-end tests also need OpenSSL as `openssl`, because its CA checks serve HTTPS with `openssl s_server`, and the LibreSSL that macOS ships as `/usr/bin/openssl` cuts the VM's OpenSSL client off mid-request. Install it with `brew install openssl@3`, then put `$(brew --prefix openssl@3)/bin` first on your `PATH`, because Homebrew doesn't link it into its own `bin`. On Linux, `openssl` is OpenSSL, and Ubuntu's images have it installed, as `ca-certificates` needs it.
 

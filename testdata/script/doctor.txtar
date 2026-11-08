@@ -2,6 +2,9 @@
 # the features Lima gives VMs, and whether Docker is there. --json prints
 # what it found as JSON, for scripts, and nothing else.
 env ALL=$PATH
+# A Linux host that can pin .git in QEMU's namespace, until the section
+# that tests one that can't.
+env DEVVM_PINS=on
 chmod 0755 brew/brew
 chmod 0755 broken/limactl
 chmod 0755 qemu/qemu-system-aarch64
@@ -43,6 +46,24 @@ exec devvm doctor --json
 stdout '^  "warnings": \[\n    "vm_folder_stateless path=\S+/vms/0123456789abcd",\n    "vms_stray path=\S+/vms/devvm-old vms=\S+/vms",\n    "vms_stray path=\S+/vms/notes.txt vms=\S+/vms"\n  \],$'
 exists $VMS/devvm-old $VMS/notes.txt $VMS/0123456789abcd/lock
 rm $VMS
+
+# A Linux host that can't pin .git: read-only-paths is none, a warning
+# says why, and doctor doesn't fail for it. macOS locks on the host, so it
+# has no such feature and no warning.
+exec devvm doctor
+[linux] stdout '^read-only-paths +native\n'
+[darwin] stdout '^read-only-paths +none\n'
+env DEVVM_PINS='refused by this kernel'
+exec devvm doctor
+stdout '^read-only-paths +none\n'
+[linux] stderr '^devvm: doctor_pins_'
+[darwin] ! stderr .
+stdout '^doctor_ok '
+exec devvm doctor --json
+stdout '^      "read-only-paths": "none",$'
+[darwin] stdout '^  "warnings": \[\],$'
+[linux] stdout '^  "warnings": \[\n    "doctor_pins_'
+env DEVVM_PINS=on
 
 # No flag or file chooses the backend.
 ! exec devvm doctor --backend lima

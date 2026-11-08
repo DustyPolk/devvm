@@ -16,9 +16,10 @@ func TestVMFiles(t *testing.T) {
 		v.Policy():                    "policy",
 		v.Run():                       "run",
 		v.Logs():                      "logs",
-		v.ProxyPID():                  "run/proxy.pid",
+		v.Proxy(".pid"):               "run/proxy.pid",
 		v.ProxyConfig():               "run/proxy.json",
-		v.ProxyStatus():               "run/proxy.status",
+		v.Proxy(".status"):            "run/proxy.status",
+		v.GitPins():                   "run/git-pins.jsonl",
 		v.Profile():                   "run/sandbox.sb",
 		v.BuildProxy():                "run/build-proxy",
 		v.Started():                   "run/started",
@@ -39,8 +40,8 @@ func TestVMFiles(t *testing.T) {
 		v.CA().NextKey():              "run/ca/next.key",
 		filepath.Join(v.Dir, "other"): "other",
 	}
-	if len(want) != 27 {
-		t.Fatalf("%d paths, want 27: two are the same", len(want))
+	if len(want) != 28 {
+		t.Fatalf("%d paths, want 28: two are the same", len(want))
 	}
 	for got, rel := range want {
 		if got != filepath.Join("/d/vms/0123456789abcd", rel) {

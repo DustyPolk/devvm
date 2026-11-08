@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -630,10 +631,29 @@ func TestNewVMOffAndLinux(t *testing.T) {
 	}
 }
 
-// A protector locks where the host has a user-immutable flag, macOS alone.
-func TestNewCanLock(t *testing.T) {
-	if p := New(t.TempDir(), t.TempDir(), nil); p.Locker.Locks() != platform.HasImmutableFlag {
-		t.Errorf("locks %t on a host whose immutable flag is %t", p.Locker.Locks(), platform.HasImmutableFlag)
+// The host's locker: the user-immutable flag where the host has one
+// (macOS), else pins where the backend pins, else the watch.
+func TestHostLocker(t *testing.T) {
+	for _, pins := range []bool{false, true} {
+		var want Locker
+		switch {
+		case platform.HasImmutableFlag:
+			want = Flags{}
+		case pins:
+			want = Binds{}
+		default:
+			want = Watch{}
+		}
+		got := HostLocker(pins)
+		if reflect.TypeOf(got) != reflect.TypeOf(want) || got.Locks() != (platform.HasImmutableFlag || pins) {
+			t.Errorf("pins %t: %T", pins, got)
+		}
+	}
+	// Pins have nothing to set on the host, and every hooks folder there
+	// at a start was pinned.
+	b := Binds{}
+	if b.Lock(t.Context(), "/x") != nil || b.Unlock(t.Context(), "/x") != nil || !b.Locked("/x") {
+		t.Error("binds act on the host")
 	}
 }
 
@@ -663,7 +683,7 @@ func TestRealLocks(t *testing.T) {
 	if len(f.warns.Names()) > 0 {
 		t.Errorf("warnings %q", f.warns.Names())
 	}
-	if locked := New(f.dir, f.p.Home, nil).Locker.Locked; !locked(f.path(".git/config")) || locked(f.path("HEAD")) {
+	if locked := HostLocker(false).Locked; !locked(f.path(".git/config")) || locked(f.path("HEAD")) {
 		t.Error("Locked doesn't see the flag")
 	}
 }
@@ -941,7 +961,7 @@ func TestSetLinuxAndNoGit(t *testing.T) {
 		t.Errorf("new on linux: %s, %v", Mode(f.vm), err)
 	}
 	for _, m := range []string{On, Strict} {
-		if err := f.p.Set(t.Context(), f.vm, m); err == nil || err.(msg.M).Names() != "git_protect_on_needs_macos" { //nolint:errorlint,forcetypeassert // a message
+		if err := f.p.Set(t.Context(), f.vm, m); err == nil || err.(msg.M).Names() != "git_protect_on_needs_locks" { //nolint:errorlint,forcetypeassert // a message
 			t.Errorf("%s on linux: %v", m, err)
 		}
 	}
@@ -960,7 +980,7 @@ func TestSetLinuxAndNoGit(t *testing.T) {
 // environment's HOME.
 func TestNewHome(t *testing.T) {
 	t.Setenv("HOME", "/elsewhere")
-	p := New("/p", "/h", nil)
+	p := New("/p", "/h", Watch{}, nil)
 	for in, want := range map[string]string{"~": "/h", "~/x": "/h/x", "~x/y": "~x/y", "/a": "/a"} {
 		if got := expandHome(p.Home, in); got != want {
 			t.Errorf("expandHome(%q) = %q, want %q", in, got, want)
