@@ -94,7 +94,7 @@ func AgentImportNone(agent string) M {
 	return M{id: "agent_import_none", vals: []val{{"agent", agent}}}
 }
 
-// AgentImportNothing is [agent_import_nothing]: "There's nothing to import, because this machine has no settings or logins of claude, codex or opencode."
+// AgentImportNothing is [agent_import_nothing]: "There's nothing to import, because this machine has no settings or logins of claude, codex, opencode or pi."
 func AgentImportNothing() M {
 	return M{id: "agent_import_nothing"}
 }
@@ -224,19 +224,24 @@ func AgentLoginNotSaved(agent string, vm string) M {
 	return M{id: "agent_login_not_saved", vals: []val{{"agent", agent}, {"vm", vm}}}
 }
 
+// AgentLoginPiKeyOnly is [agent_login_pi_key_only]: "devvm keeps only API keys for pi, not a login of pi's own. Run devvm agent login pi --api-key --provider PROVIDER."
+func AgentLoginPiKeyOnly() M {
+	return M{id: "agent_login_pi_key_only"}
+}
+
 // AgentLoginPortTaken is [agent_login_port_taken]: "A program on this machine has port {{.port}}, which the browser comes back to as you log in. Stop that program, or run devvm agent login {{.agent}} --device-code."
 func AgentLoginPortTaken(agent string, port string) M {
 	return M{id: "agent_login_port_taken", vals: []val{{"agent", agent}, {"port", port}}}
 }
 
-// AgentLoginProviderAlone is [agent_login_provider_alone]: "--provider goes with devvm agent login opencode --api-key. Run devvm agent login opencode --api-key --provider PROVIDER."
+// AgentLoginProviderAlone is [agent_login_provider_alone]: "--provider goes with --api-key, for opencode and pi. Run devvm agent login opencode --api-key --provider PROVIDER, or the same for pi."
 func AgentLoginProviderAlone() M {
 	return M{id: "agent_login_provider_alone"}
 }
 
-// AgentLoginProviderNeeded is [agent_login_provider_needed]: "devvm agent login opencode --api-key needs --provider, one of {{.providers}}."
-func AgentLoginProviderNeeded(providers string) M {
-	return M{id: "agent_login_provider_needed", vals: []val{{"providers", providers}}}
+// AgentLoginProviderNeeded is [agent_login_provider_needed]: "devvm agent login {{.agent}} --api-key needs --provider, one of {{.providers}}."
+func AgentLoginProviderNeeded(agent string, providers string) M {
+	return M{id: "agent_login_provider_needed", vals: []val{{"agent", agent}, {"providers", providers}}}
 }
 
 // AgentLoginReadFailed is [agent_login_read_failed]: "Reading the login in {{.file}} failed: {{.reason}}."
@@ -2689,6 +2694,26 @@ func PasswordPrompt() M {
 	return M{id: "password_prompt"}
 }
 
+// PiLoginKept is [pi_login_kept]: "The VM gets pi's {{.providers}} login unchanged, as config.toml's [pass-keys] asks."
+func PiLoginKept(providers string) M {
+	return M{id: "pi_login_kept", vals: []val{{"providers", providers}}}
+}
+
+// PiLoginWithheld is [pi_login_withheld]: "The VM gets pi's {{.providers}} login without its key, its env or its tokens. To give the VM one provider's API key as it is, such as a local model server's, list the provider under pi in config.toml's [pass-keys]."
+func PiLoginWithheld(providers string) M {
+	return M{id: "pi_login_withheld", vals: []val{{"providers", providers}}}
+}
+
+// PiSettingsDropped is [pi_settings_dropped]: "The copy of pi's settings.json in {{.vm}} leaves out {{.keys}}, because devvm sets those in VMs."
+func PiSettingsDropped(keys string, vm string) M {
+	return M{id: "pi_settings_dropped", vals: []val{{"keys", keys}, {"vm", vm}}}
+}
+
+// PiTrustsAll is [pi_trusts_all]: "pi's settings.json sets defaultProjectTrust to always, so pi in {{.vm}} loads a project folder's own .pi extensions and settings without asking. Set it to ask in devvm's agent store to have pi ask again."
+func PiTrustsAll(vm string) M {
+	return M{id: "pi_trusts_all", vals: []val{{"vm", vm}}}
+}
+
 // PickAgents is [pick_agents]: "Coding agents, which you start in the VM's shell"
 func PickAgents() M {
 	return M{id: "pick_agents"}
@@ -3509,6 +3534,11 @@ func ToolBadVersion(tool string, version string) M {
 	return M{id: "tool_bad_version", vals: []val{{"tool", tool}, {"version", version}}}
 }
 
+// ToolGlibcOnly is [tool_glibc_only]: "{{.tool}} has no build for musl, so a VM from an Alpine-based container image can't run it. Leave {{.tool}} out, or make the VM --from a Debian- or Ubuntu-based image."
+func ToolGlibcOnly(tool string) M {
+	return M{id: "tool_glibc_only", vals: []val{{"tool", tool}}}
+}
+
 // ToolNeedsGlibc is [tool_needs_glibc]: "{{.tool}} {{.version}} needs glibc {{.needs}} or newer, but this VM's container image has glibc {{.has}}. Start it from a newer container image with --from."
 func ToolNeedsGlibc(has string, needs string, tool string, version string) M {
 	return M{id: "tool_needs_glibc", vals: []val{{"has", has}, {"needs", needs}, {"tool", tool}, {"version", version}}}
@@ -4070,9 +4100,10 @@ var specs = map[string]spec{
 	"agent_login_imported":           {fields: []string{"agent", "file"}},
 	"agent_login_no_agent":           {fields: []string{"agent", "vm"}},
 	"agent_login_not_saved":          {fields: []string{"agent", "vm"}},
+	"agent_login_pi_key_only":        {},
 	"agent_login_port_taken":         {fields: []string{"agent", "port"}},
 	"agent_login_provider_alone":     {},
-	"agent_login_provider_needed":    {fields: []string{"providers"}},
+	"agent_login_provider_needed":    {fields: []string{"agent", "providers"}},
 	"agent_login_read_failed":        {fields: []string{"file", "reason"}},
 	"agent_login_saved":              {fields: []string{"agent", "vm"}},
 	"agent_login_saved_for":          {fields: []string{"agent", "email", "vm"}},
@@ -4563,6 +4594,10 @@ var specs = map[string]spec{
 	"part_none_alone":                {fields: []string{"flag"}},
 	"part_other_flag":                {fields: []string{"flag", "given", "other"}},
 	"password_prompt":                {},
+	"pi_login_kept":                  {fields: []string{"providers"}},
+	"pi_login_withheld":              {fields: []string{"providers"}},
+	"pi_settings_dropped":            {fields: []string{"keys", "vm"}},
+	"pi_trusts_all":                  {fields: []string{"vm"}},
 	"pick_agents":                    {},
 	"pick_called_for":                {fields: []string{"file"}},
 	"pick_from_flag":                 {fields: []string{"flag"}},
@@ -4727,6 +4762,7 @@ var specs = map[string]spec{
 	"too_much_memory":                {fields: []string{"have", "max", "want"}},
 	"tool_bad_output":                {fields: []string{"file"}},
 	"tool_bad_version":               {fields: []string{"tool", "version"}},
+	"tool_glibc_only":                {fields: []string{"tool"}},
 	"tool_needs_glibc":               {fields: []string{"has", "needs", "tool", "version"}},
 	"tool_no_download":               {fields: []string{"tool", "version"}},
 	"tool_not_layer":                 {fields: []string{"tool"}},

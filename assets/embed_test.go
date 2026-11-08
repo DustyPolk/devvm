@@ -30,14 +30,16 @@ func heredoc(t *testing.T, start, end string) string {
 
 // Every VM's shells get the tools' environment from base's
 // /etc/profile.d/devvm-tools.sh, which turns off the agents'
-// self-updates: their installs are read-only shared tools, and mise pins
-// their versions. It turns off .NET's telemetry, first-run banner, profile
-// edit and workload update check too, and puts its global tools on the
-// PATH.
+// self-updates and pi's check for a newer pi: their installs are
+// read-only shared tools, and mise pins their versions. It turns off
+// .NET's telemetry, first-run banner, profile edit and workload update
+// check too, and pi's install report, and puts its global tools on the
+// PATH. Non-login shells read it too (BASH_ENV), but not
+// devvm-telemetry.sh, so pi's switch isn't there.
 func TestToolsEnvironment(t *testing.T) {
 	block := heredoc(t, "sudo tee /etc/profile.d/devvm-tools.sh >/dev/null <<'SH'", "SH")
 	for _, line := range []string{
-		"export DISABLE_AUTOUPDATER=1", "export OPENCODE_DISABLE_AUTOUPDATE=1",
+		"export DISABLE_AUTOUPDATER=1", "export OPENCODE_DISABLE_AUTOUPDATE=1", "export PI_SKIP_VERSION_CHECK=1", "export PI_TELEMETRY=0",
 		"export DOTNET_CLI_TELEMETRY_OPTOUT=1", "export DOTNET_NOLOGO=1",
 		"export DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false", "export DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true",
 	} {
@@ -49,6 +51,10 @@ func TestToolsEnvironment(t *testing.T) {
 		if !strings.Contains(block, `export PATH="`) || !strings.Contains(block, dir) {
 			t.Errorf("devvm-tools.sh's PATH lacks %s", dir)
 		}
+	}
+	telemetry := heredoc(t, "sudo tee /etc/profile.d/devvm-telemetry.sh >/dev/null <<'SH'", "SH")
+	if strings.Contains(telemetry, "PI_") {
+		t.Error("devvm-telemetry.sh, which only login shells read, sets pi's switches")
 	}
 }
 

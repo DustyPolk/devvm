@@ -22,6 +22,7 @@ import (
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/settings"
 	"github.com/devvmhq/devvm/internal/state"
 	"github.com/devvmhq/devvm/internal/tools"
 )
@@ -79,11 +80,11 @@ var ErrNone = errors.New("no value saved")
 
 // loginKinds are the kinds of login files that stay on the host, in
 // order: the agents', and Claude Code's OAuth login (agentlogin.ClaudeOAuth).
-var loginKinds = []string{agentlogin.Codex, agentlogin.Opencode, agentlogin.Claude, agentlogin.ClaudeOAuth}
+var loginKinds = []string{agentlogin.Codex, agentlogin.Opencode, agentlogin.Pi, agentlogin.Claude, agentlogin.ClaudeOAuth}
 
 // LoginRel is a login file, relative to a home folder, where the agent
-// keeps it and where devvm's store of its logins keeps it too: Codex's and
-// opencode's auth.json, for claude .claude.json (its MCP servers'
+// keeps it and where devvm's store of its logins keeps it too: Codex's,
+// opencode's and pi's auth.json, for claude .claude.json (its MCP servers'
 // secrets), and Claude Code's OAuth login's .credentials.json.
 func LoginRel(kind string) string {
 	switch kind {
@@ -91,6 +92,8 @@ func LoginRel(kind string) string {
 		return ".codex/auth.json"
 	case agentlogin.Opencode:
 		return ".local/share/opencode/auth.json"
+	case agentlogin.Pi:
+		return ".pi/agent/auth.json"
 	case agentlogin.ClaudeOAuth:
 		return ".claude/.credentials.json"
 	}
@@ -218,7 +221,7 @@ func (s *Store) loginsDir(ctx context.Context, kind string) error {
 }
 
 // SaveKey saves an API key as the agent's login in devvm's store, for
-// opencode as provider's (agentlogin.File.SetKey), the agent's logins
+// opencode and pi as provider's (agentlogin.File.SetKey), the agent's logins
 // folder kept out of backups.
 func (s *Store) SaveKey(ctx context.Context, kind, provider, key string) error {
 	if err := s.loginsDir(ctx, kind); err != nil {
@@ -287,19 +290,37 @@ func (s *Store) login(kind, salt string) agentlogin.File {
 // VMLogin returns the VM's copy of an agent's login file: placeholders
 // ending in salt in place of its keys and tokens. It warns about what of
 // the file the copy holds as it is, and about the logins it holds without
-// their tokens.
+// their tokens. pi's copy holds as they are the API keys of the providers
+// config.toml's [pass-keys] lists for it (settings.PassKeys), which it
+// notes, and withholds every other key devvm doesn't bind.
 func (s *Store) VMLogin(kind, salt string) ([]byte, error) {
-	c, err := s.login(kind, salt).VMCopy()
+	f := s.login(kind, salt)
+	if kind == agentlogin.Pi {
+		pass, err := settings.PassKeys(s.Dirs, kind)
+		if err != nil {
+			return nil, err
+		}
+		f.Pass = pass
+	}
+	c, err := f.VMCopy()
 	if len(c.Kept) > 0 {
 		list := strings.Join(c.Kept, ", ")
-		if kind == agentlogin.Codex {
+		switch kind {
+		case agentlogin.Codex:
 			s.Warn(msg.CodexLoginKept(list))
-		} else {
+		case agentlogin.Pi:
+			s.Note(msg.PiLoginKept(list))
+		default:
 			s.Warn(msg.OpencodeLoginKept(list))
 		}
 	}
 	if len(c.Withheld) > 0 {
-		s.Warn(msg.OpencodeLoginWithheld(strings.Join(c.Withheld, ", ")))
+		list := strings.Join(c.Withheld, ", ")
+		if kind == agentlogin.Pi {
+			s.Warn(msg.PiLoginWithheld(list))
+		} else {
+			s.Warn(msg.OpencodeLoginWithheld(list))
+		}
 	}
 	return c.Data, err
 }
@@ -568,7 +589,7 @@ func Bind(st *state.VM, name string, use bool) error {
 }
 
 // Logins returns the login kinds a VM with these shared tools uses: its
-// agents' (codex, opencode, claude) that have a login file in devvm's
+// agents' (codex, opencode, pi, claude) that have a login file in devvm's
 // store, and Claude Code's OAuth login when it's the Claude Code login VMs
 // get (ClaudeLogin), never with the Claude Code token.
 func (s *Store) Logins(ctx context.Context, tools []string) []string {

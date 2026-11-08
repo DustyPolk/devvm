@@ -554,15 +554,46 @@ func TestVMCopies(t *testing.T) {
 	// What a copy holds as it is is warned about.
 	writeLogin(t, s, "codex", `{"OPENAI_API_KEY":"sk-codex-secret","extra":"x","b":1}`)
 	writeLogin(t, s, "opencode", `{"llama":{"type":"api","key":"local"},"other":{"type":"oauth","access":"a","refresh":"r"}}`)
-	for _, kind := range []string{"codex", "opencode"} {
+	writeLogin(t, s, "pi", `{"anthropic":{"type":"api_key","key":"sk-ant-pi-secret"},"groq":{"type":"api_key","key":"g"},"openai-codex":{"type":"oauth","access":"a","refresh":"r"}}`)
+	for _, kind := range []string{"codex", "opencode", "pi"} {
 		if _, err := s.VMLogin(kind, salt); err != nil {
 			t.Errorf("VMLogin(%s): %v", kind, err)
 		}
 	}
 	if want := []string{
 		"codex_login_kept keys=b, extra", "opencode_login_kept providers=llama", "opencode_login_withheld providers=other",
+		"pi_login_withheld providers=groq, openai-codex",
 	}; !slices.Equal(warned, want) {
 		t.Errorf("warned %q, want %q", warned, want)
+	}
+	if f := LoginFile(s.Dirs, "pi"); !strings.HasSuffix(f, filepath.Join("logins", "pi", ".pi", "agent", "auth.json")) {
+		t.Errorf("pi's login file is %s", f)
+	}
+	// config.toml's [pass-keys] gives the VM pi's groq key as it is, which is noted, not warned.
+	if err := os.MkdirAll(s.Dirs.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.Dirs.ConfigFile(), []byte("[pass-keys]\npi = [\"groq\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var noted []string
+	warned = nil
+	s.Reporter = &msg.Fake{OnWarn: func(m msg.M) { warned = append(warned, m.Names()) }, OnNote: func(m msg.M) { noted = append(noted, m.Names()) }}
+	data, err = s.VMLogin("pi", salt)
+	switch {
+	case err != nil || strings.Contains(string(data), "sk-ant-pi-secret") || !strings.Contains(string(data), "devvm-proxy-managed-pi-anthropic-"+salt):
+		t.Errorf("pi's VM copy: %s, %v", data, err)
+	case !strings.Contains(string(data), `"key": "g"`):
+		t.Errorf("pi's VM copy lacks the passed key: %s", data)
+	case !slices.Equal(noted, []string{"pi_login_kept providers=groq"}) || !slices.Equal(warned, []string{"pi_login_withheld providers=openai-codex"}):
+		t.Errorf("noted %q, warned %q", noted, warned)
+	}
+	// A config.toml devvm can't read fails the copy.
+	if err := os.WriteFile(s.Dirs.ConfigFile(), []byte("[pass-keys]\npi = [\"Not A Provider\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.VMLogin("pi", salt); err == nil {
+		t.Error("VMLogin with a bad [pass-keys]: no error")
 	}
 }
 
