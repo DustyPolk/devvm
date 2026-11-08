@@ -206,6 +206,7 @@ func devvmVars() map[string]string {
 		"internal/backend/lima.sshLogin":          table,
 		"internal/cli.shells":                     table,
 		"internal/gitprotect.Modes":               table,
+		"internal/gitprotect.reports":             table,
 		"internal/image.SharedTools":              table,
 		"internal/image.Toolchains":               derived,
 		"internal/image.Agents":                   derived,

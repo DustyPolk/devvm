@@ -57,7 +57,7 @@ const (
 // user chose off (Chosen), which says they know.
 func (p *Protector) WarnUnprotected(vm *state.VM) {
 	g, _ := Of(vm)
-	if p.CanLock || g.Mode == Clone || g.Mode == Off && g.Chosen || !exists(p.git()) {
+	if p.Locker.Locks() || g.Mode == Clone || g.Mode == Off && g.Chosen || !exists(p.git()) {
 		return
 	}
 	p.Warn(msg.GitUnprotected(vm.Name()))
@@ -69,27 +69,25 @@ type watcher struct{ *Protector }
 // check is a check of a stopped VM's .git on a host without locks: what a
 // lock can't stop, reported as protect reports it, without locking (a VM
 // whose protection was never set up reports as a new VM does), then the
-// watch.
+// watch, both from one scan.
 func (w watcher) check(ctx context.Context, vm *state.VM, g InVM) error {
 	why := whyCheck
 	if !g.Made.Protected {
 		why = whyNew
 	}
-	made, err := w.protect(ctx, g, why, watching)
-	if err != nil {
-		return err
-	}
+	snap := w.scan(ctx)
+	made := w.protect(ctx, snap, g, why, watching)
 	if err := record(ctx, vm, func(g *InVM) { g.Made = made }); err != nil {
 		return err
 	}
-	return w.watch(ctx, vm, g.Watched)
+	return w.watch(ctx, vm, snap, g.Watched)
 }
 
 // watch sums what a lock would cover, names what changed since the last
 // check, once there was one, and what it can't fully watch, at every
 // check, and records the sums.
-func (w watcher) watch(ctx context.Context, vm *state.VM, was Watched) error {
-	s := w.sums(ctx)
+func (w watcher) watch(ctx context.Context, vm *state.VM, snap snapshot, was Watched) error {
+	s := w.sums(snap)
 	now := Watched{Scanned: true, Sums: s.sums}
 	if was.Scanned {
 		if changed := changedPaths(was.Sums, now.Sums); len(changed) > 0 {
@@ -143,14 +141,13 @@ func changedPaths(was, now map[string]string) []string {
 // to the project folder (watchedDelegations), by path relative to the
 // project folder. It never reads through a symlink that leads out of the
 // project folder.
-func (w watcher) sums(ctx context.Context) summer {
+func (w watcher) sums(snap snapshot) summer {
 	s := summer{top: w.Dir, real: w.realInDir, sums: map[string]string{}}
-	emb := w.embedded(ctx)
-	todo := w.paths(ctx, emb)
-	if g := w.git(); !isFile(g) {
-		todo = append(todo, filepath.Join(g, "commondir"))
+	todo := slices.Clone(snap.paths)
+	if !isFile(snap.git) {
+		todo = append(todo, filepath.Join(snap.git, "commondir"))
 	}
-	todo = append(todo, w.watchedDelegations(ctx, emb)...)
+	todo = append(todo, w.watchedDelegations(snap)...)
 	done := map[string]bool{}
 	for _, path := range todo {
 		if !done[path] {
@@ -167,14 +164,14 @@ func (w watcher) sums(ctx context.Context) summer {
 // that the config hands over to git: include.path's and includeIf's
 // files (delegations), and the folder core.hooksPath names, whose hooks
 // git runs in place of .git/hooks.
-func (w watcher) watchedDelegations(ctx context.Context, emb embeds) []string {
+func (w watcher) watchedDelegations(snap snapshot) []string {
 	var out []string
-	for _, d := range w.delegations(ctx, emb) {
-		if d.kind == "include" && d.path != "" {
+	for _, d := range snap.ds {
+		if d.kind == includeInside && d.path != "" {
 			out = append(out, d.path)
 		}
 	}
-	if hp := gitConfig(ctx, filepath.Join(w.git(), "config"), "core.hooksPath"); hp != "" && w.hooksPathInside(hp) {
+	if hp := snap.hooksPath; hp != "" {
 		hp = expandHome(w.Home, hp)
 		if !filepath.IsAbs(hp) {
 			hp = filepath.Join(w.Dir, hp)

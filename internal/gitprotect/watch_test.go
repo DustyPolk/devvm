@@ -14,7 +14,7 @@ import (
 func linuxFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := newFixture(t, "p")
-	f.p.CanLock = false
+	f.canLock(false)
 	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
@@ -43,9 +43,9 @@ func TestWarnUnprotected(t *testing.T) {
 		t.Errorf("off by the host: %q", f.warns.Names())
 	}
 	f.warns.Reset()
-	f.p.CanLock = true
+	f.canLock(true)
 	f.p.WarnUnprotected(f.vm)
-	f.p.CanLock = false
+	f.canLock(false)
 	if err := os.RemoveAll(f.path(".git")); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestWatch(t *testing.T) {
 	f := newFixture(t, "p")
 	f.git(f.dir, "init", "-q")
 	write(t, f.path(".git/hooks/post-merge"), "#!/bin/sh\n")
-	f.p.CanLock = false
+	f.canLock(false)
 	if err := f.newVM(false); err != nil || len(f.warns.Names()) > 0 {
 		t.Errorf("new VM: %v, %q", err, f.warns.Names())
 	}
@@ -129,7 +129,7 @@ func TestWatchFirstOfExisting(t *testing.T) {
 	}
 	// A folder with no .git yet: one that appears is named.
 	g := newFixture(t, "q")
-	g.p.CanLock = false
+	g.canLock(false)
 	if err := g.newVM(false); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestWatchSymlinks(t *testing.T) {
 	// .git itself a symlink: to a repo elsewhere, never read; to one in
 	// the project folder, read.
 	g := newFixture(t, "q")
-	g.p.CanLock = false
+	g.canLock(false)
 	if err := g.newVM(false); err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestWatchReportsWhatALockCantStop(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "p")
 	f.git(f.dir, "init", "-q")
-	f.p.CanLock = false
+	f.canLock(false)
 	if err := f.newVM(false); err != nil || len(f.warns.Names()) > 0 {
 		t.Fatalf("new VM: %v, %q", err, f.warns.Names())
 	}
@@ -362,7 +362,7 @@ func TestWatchGitdirNotGit(t *testing.T) {
 	f := newFixture(t, "p")
 	f.git(f.dir, "init", "-q")
 	f.git(f.dir, "commit", "-q", "--allow-empty", "-m", "x")
-	f.p.CanLock = false
+	f.canLock(false)
 	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}

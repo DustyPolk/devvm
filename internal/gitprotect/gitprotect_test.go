@@ -38,15 +38,10 @@ func newFixture(t *testing.T, name string) *fixture {
 	f := &fixture{t: t, root: root, dir: filepath.Join(root, name), immutable: map[string]bool{}}
 	mkdirs(t, f.dir)
 	f.p = &Protector{
-		Dir: f.dir, Home: filepath.Join(root, "home"), CanLock: true,
-		Chflags: func(_ context.Context, flags, path string) error {
-			f.flags = append(f.flags, flags+" "+path)
-			f.immutable[path] = flags == "uchg"
-			return nil
-		},
-		Locked:   func(path string) bool { return f.immutable[path] },
+		tree:     tree{Dir: f.dir, Home: filepath.Join(root, "home")},
 		Reporter: &msg.Fake{OnWarn: f.warns.Add},
 	}
+	f.canLock(true)
 	f.vm, err = state.New(paths.Dirs{Data: filepath.Join(root, "data")}, "devvm-p-0123456789abcd")
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +51,24 @@ func newFixture(t *testing.T, name string) *fixture {
 		t.Fatal(err)
 	}
 	return f
+}
+
+// canLock makes the fixture's host one with locks, as macOS (a Flags
+// locker whose chflags calls are recorded), or one without (Watch).
+func (f *fixture) canLock(can bool) {
+	f.p.Locker = Watch{}
+	if can {
+		f.setChflags(func(_ context.Context, flags, path string) error {
+			f.flags = append(f.flags, flags+" "+path)
+			f.immutable[path] = flags == "uchg"
+			return nil
+		})
+	}
+}
+
+// setChflags makes the fixture's locker a Flags whose chflags is c.
+func (f *fixture) setChflags(c func(ctx context.Context, flags, path string) error) {
+	f.p.Locker = Flags{Chflags: c, Immutable: func(path string) bool { return f.immutable[path] }}
 }
 
 // newVM sets up protection as up does for a VM just made: its mode
@@ -188,7 +201,7 @@ func TestLockNeverThroughSymlinks(t *testing.T) {
 	symlink(t, filepath.Join(out, "marker"), f.path(".git/worktrees/x/config.worktree")) // dangling
 	symlink(t, out, f.path(".git/worktrees/y"))
 	write(t, filepath.Join(out, "commondir"), "")
-	f.p.lock(t.Context(), embeds{})
+	f.p.lock(t.Context(), f.p.scan(t.Context()))
 	for _, p := range []string{filepath.Join(out, "marker"), filepath.Join(out, "config.worktree")} {
 		if _, err := os.Lstat(p); err == nil {
 			t.Errorf("%s was created", p)
@@ -247,7 +260,7 @@ func TestLockOnlyRealPaths(t *testing.T) {
 	mkdirs(t, f.path(".git/hooks"))
 	write(t, f.path("cfg"), "[core]\n")
 	symlink(t, "../cfg", f.path(".git/config"))
-	f.p.lock(t.Context(), embeds{})
+	f.p.lock(t.Context(), f.p.scan(t.Context()))
 	if !f.warned("git_not_locked path="+f.path(".git/config")) || f.locked(f.path(".git/config")) || f.locked(f.path("cfg")) {
 		t.Errorf("warnings %q, locks %q", f.warns.Names(), f.flags)
 	}
@@ -495,7 +508,7 @@ func TestFlagRaced(t *testing.T) {
 	mkdirs(t, f.path(".git"))
 	cfg := f.path(".git/config")
 	write(t, cfg, "[core]\n")
-	f.p.Chflags = func(_ context.Context, flags, path string) error {
+	f.setChflags(func(_ context.Context, flags, path string) error {
 		f.flags = append(f.flags, flags+" "+path)
 		if flags == "uchg" {
 			if err := os.Rename(cfg, cfg+".old"); err != nil {
@@ -504,8 +517,8 @@ func TestFlagRaced(t *testing.T) {
 			write(t, cfg, "x")
 		}
 		return nil
-	}
-	if f.p.flag(t.Context(), "uchg", cfg) {
+	})
+	if f.p.flag(t.Context(), true, cfg) {
 		t.Error("flag succeeded")
 	}
 	if !slices.Equal(f.flags, []string{"uchg " + cfg, "nouchg " + cfg}) || !f.warned("git_lock_raced path="+cfg) {
@@ -526,7 +539,7 @@ func TestUnlock(t *testing.T) {
 		t.Errorf("flags %q", f.flags)
 	}
 	f.flags = nil
-	f.p.CanLock = false
+	f.canLock(false)
 	f.p.Unlock(t.Context(), f.vm)
 	if len(f.flags) > 0 {
 		t.Errorf("linux: flags %q", f.flags)
@@ -601,7 +614,7 @@ func TestNewVMOffAndLinux(t *testing.T) {
 	if Mode(f.vm) != "off" || !f.section().Chosen || len(f.flags) > 0 || len(f.warns.Names()) > 0 {
 		t.Errorf("off: %s, chosen %t, locks %q, warnings %q", Mode(f.vm), f.section().Chosen, f.flags, f.warns.Names())
 	}
-	f.p.CanLock = false
+	f.canLock(false)
 	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
@@ -611,7 +624,7 @@ func TestNewVMOffAndLinux(t *testing.T) {
 	if err := os.RemoveAll(f.path(".git")); err != nil {
 		t.Fatal(err)
 	}
-	f.p.CanLock = true
+	f.canLock(true)
 	if err := f.newVM(false); err != nil || Mode(f.vm) != "on" || len(f.flags) > 0 {
 		t.Errorf("no .git: %v, %s, locks %q", err, Mode(f.vm), f.flags)
 	}
@@ -619,8 +632,8 @@ func TestNewVMOffAndLinux(t *testing.T) {
 
 // A protector locks where the host has a user-immutable flag, macOS alone.
 func TestNewCanLock(t *testing.T) {
-	if p := New(t.TempDir(), t.TempDir(), nil); p.CanLock != platform.HasImmutableFlag {
-		t.Errorf("CanLock %t on a host whose immutable flag is %t", p.CanLock, platform.HasImmutableFlag)
+	if p := New(t.TempDir(), t.TempDir(), nil); p.Locker.Locks() != platform.HasImmutableFlag {
+		t.Errorf("locks %t on a host whose immutable flag is %t", p.Locker.Locks(), platform.HasImmutableFlag)
 	}
 }
 
@@ -633,7 +646,7 @@ func TestRealLocks(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "p")
 	t.Cleanup(func() { _ = exec.Command("chflags", "-R", "nouchg", f.root).Run() }) //nolint:noctx,gosec // cleanup, of the test's own folder
-	f.p.Chflags = New(f.dir, f.p.Home, nil).Chflags
+	f.setChflags(platform.Chflags)
 	f.git(f.root, "init", "-q", "--template=", f.dir)
 	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
@@ -650,7 +663,7 @@ func TestRealLocks(t *testing.T) {
 	if len(f.warns.Names()) > 0 {
 		t.Errorf("warnings %q", f.warns.Names())
 	}
-	if locked := New(f.dir, f.p.Home, nil).Locked; !locked(f.path(".git/config")) || locked(f.path("HEAD")) {
+	if locked := New(f.dir, f.p.Home, nil).Locker.Locked; !locked(f.path(".git/config")) || locked(f.path("HEAD")) {
 		t.Error("Locked doesn't see the flag")
 	}
 }
@@ -923,7 +936,7 @@ func TestSetStrictFails(t *testing.T) {
 // Without a .git, on is recorded for when one appears.
 func TestSetLinuxAndNoGit(t *testing.T) {
 	f := newFixture(t, "p")
-	f.p.CanLock = false
+	f.canLock(false)
 	if err := f.newVM(false); err != nil || Mode(f.vm) != Off {
 		t.Errorf("new on linux: %s, %v", Mode(f.vm), err)
 	}
@@ -936,7 +949,7 @@ func TestSetLinuxAndNoGit(t *testing.T) {
 	if Mode(f.vm) != Off || len(f.flags) > 0 {
 		t.Errorf("off on linux: %s, locks %q", Mode(f.vm), f.flags)
 	}
-	f.p.CanLock = true
+	f.canLock(true)
 	f.set(Strict)
 	if Mode(f.vm) != Strict || len(f.flags)+len(f.warns.Names()) > 0 {
 		t.Errorf("no .git: %s, locks %q, warnings %q", Mode(f.vm), f.flags, f.warns.Names())

@@ -86,8 +86,8 @@ func upEnv(t *testing.T, caps backend.Caps) (*Env, *backendtest.Fake, *[]backend
 		Host: func() (Host, error) { return Host{CPUs: 8, MemoryGiB: 32}, nil },
 		Protector: func(dir string) *gitprotect.Protector {
 			p := gitprotect.New(dir, d.Home, &msg.Fake{})
-			p.CanLock = true // as macOS, the Env's OS
-			p.Chflags = func(context.Context, string, string) error { return nil }
+			// As macOS, the Env's OS.
+			p.Locker = gitprotect.Flags{Chflags: func(context.Context, string, string) error { return nil }}
 			return p
 		},
 		Exec:   func(c backend.Command) error { execs = append(execs, c); return nil },

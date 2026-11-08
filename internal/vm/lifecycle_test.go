@@ -400,11 +400,10 @@ func TestExportStartsAsLaunch(t *testing.T) {
 	var locks []string
 	e.Protector = func(dir string) *gitprotect.Protector {
 		p := gitprotect.New(dir, e.Dirs.Home, &msg.Fake{})
-		p.CanLock = true
-		p.Chflags = func(_ context.Context, flags, path string) error {
+		p.Locker = gitprotect.Flags{Chflags: func(_ context.Context, flags, path string) error {
 			locks = append(locks, flags+" "+path)
 			return nil
-		}
+		}}
 		return p
 	}
 	direct := false

@@ -8,6 +8,8 @@ This page explains what devvm locks in a project's git folder, when it locks and
 
 On macOS devvm locks with the user-immutable flag (`chflags uchg`), which even root in the VM can't clear. A read-only mount wouldn't hold, because root in the VM can unmount it.
 
+Each check reads `.git` once, finding its git folders, submodules, what it would lock, what the locked files hand over and what points git elsewhere, and then locks, unlocks, watches and reports from what it found. The host's locker does the locking: the flag on macOS, and nothing on Linux, where devvm [watches](#on-linux-hosts) instead.
+
 ## What's locked
 
 devvm locks these paths:

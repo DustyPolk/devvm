@@ -61,7 +61,7 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 	}
 	// Elsewhere there are no locks to race. It's read again, as it may
 	// have started while widen asked.
-	if p.CanLock {
+	if p.Locker.Locks() {
 		if err := t.refresh(ctx); err != nil {
 			return err
 		}
@@ -83,7 +83,7 @@ func setGitProtect(ctx context.Context, e *Env, p *gitprotect.Protector, t *targ
 		return err
 	}
 	switch _, err := os.Lstat(filepath.Join(t.f.Dir, ".git")); {
-	case mode == gitprotect.Off && !p.CanLock:
+	case mode == gitprotect.Off && !p.Locker.Locks():
 		e.Info(msg.GitUnprotectedQuiet(vm))
 	case mode == gitprotect.Off:
 		e.Info(msg.GitUnlocked(vm))

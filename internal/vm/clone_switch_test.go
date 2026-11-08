@@ -23,15 +23,14 @@ func chflagsCalls(e *Env) *[]string {
 	var calls []string
 	e.Protector = func(dir string) *gitprotect.Protector {
 		p := gitprotect.New(dir, e.Dirs.Home, &msg.Fake{})
-		p.CanLock = true
-		p.Chflags = func(ctx context.Context, flags, path string) error {
+		p.Locker = gitprotect.Flags{Chflags: func(ctx context.Context, flags, path string) error {
 			if flags == "uchg" && path == filepath.Join(dir, ".git", "config") {
 				out, _ := hostGit(ctx, dir, "remote")
 				calls = append(calls, "remotes="+out)
 			}
 			calls = append(calls, flags+" "+path)
 			return nil
-		}
+		}}
 		return p
 	}
 	return &calls
