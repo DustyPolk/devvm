@@ -2069,11 +2069,6 @@ func LoginKept(agent string, file string, keys string) M {
 	return M{id: "login_kept", vals: []val{{"agent", agent}, {"file", file}, {"keys", keys}}}
 }
 
-// LoginOauthWithheld is [login_oauth_withheld]: "The VM gets {{.agent}}'s {{.providers}} login without its OAuth tokens, because devvm keeps them on this machine. To use that provider in the VM, log in to it with an API key on this machine and run devvm agent import --force {{.name}}."
-func LoginOauthWithheld(agent string, name string, providers string) M {
-	return M{id: "login_oauth_withheld", vals: []val{{"agent", agent}, {"name", name}, {"providers", providers}}}
-}
-
 // LoginPassed is [login_passed]: "The VM gets {{.agent}}'s {{.providers}} login unchanged, as config.toml's [pass-keys] asks."
 func LoginPassed(agent string, providers string) M {
 	return M{id: "login_passed", vals: []val{{"agent", agent}, {"providers", providers}}}
@@ -4464,7 +4459,6 @@ var specs = map[string]spec{
 	"login_capture_refused":          {fields: []string{"agent", "vm"}},
 	"login_copy_failed":              {fields: []string{"agent", "reason", "vm"}},
 	"login_kept":                     {fields: []string{"agent", "file", "keys"}},
-	"login_oauth_withheld":           {fields: []string{"agent", "name", "providers"}},
 	"login_passed":                   {fields: []string{"agent", "providers"}},
 	"login_read_failed":              {fields: []string{"file", "reason"}},
 	"login_withheld":                 {fields: []string{"agent", "name", "providers"}},
