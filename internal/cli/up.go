@@ -41,7 +41,7 @@ func addUpFlags(root *cobra.Command, a *app, uf *upFlags) {
 	addAgentsFlag(f, &uf.agents, "the `LIST` of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)")
 	addLayersFlag(f, &uf.layers, "the `LIST` of layers a new VM's image gets, bottom first, such as docker,mine, or none (default: devvm setup's)")
 	addFromFlag(f, &uf.from)
-	f.StringVar(&uf.network, "network", "", "the network `TIER` a new VM gets: open, internet, allowlist or none (default: devvm network -g's, else allowlist)")
+	f.StringVar(&uf.network, "network", "", "the network `TIER` a new VM gets: open, internet, allowlist or none, or learn for internet while it learns the hosts it needs (default: devvm network -g's, else allowlist)")
 	f.StringVar(&uf.size.CPUs, "cpus", "", "the `N` CPUs the VM gets (default: devvm size -g, else the image's)")
 	f.StringVar(&uf.size.Memory, "memory", "", "the VM's memory in `GiB`, such as 16 or 16G (default: devvm size -g, else the image's)")
 	f.StringVar(&uf.size.Disk, "disk", "", "the VM's disk in `GiB`, at least the image's (default: devvm size -g, else the image's)")
@@ -58,9 +58,13 @@ func addUpFlags(root *cobra.Command, a *app, uf *upFlags) {
 
 // options are what the flags ask of up.
 func (uf *upFlags) options() vm.Options {
+	tier, learn, _ := netpolicy.Choice(uf.network)
+	if uf.network == "" {
+		tier = ""
+	}
 	return vm.Options{
 		Toolchains: partFlag(uf.tools), Agents: partFlag(uf.agents), Layers: partFlag(uf.layers),
-		Network: netpolicy.Tier(uf.network), Size: uf.size, Ports: uf.ports,
+		Network: tier, Learn: learn, Size: uf.size, Ports: uf.ports,
 		From: fromRef(uf.from), FromSet: uf.from != "",
 		UnsafeFolder: uf.unsafeFolder, NoGitProtect: uf.noGitProtect, Clone: uf.clone, SSHAgent: uf.sshAgent,
 		NoDevcontainer: uf.noDevcontainer,
@@ -78,9 +82,21 @@ func up(ctx context.Context, a *app, uf *upFlags) error {
 }
 
 // pickParts returns what shows the tools picker in u's terminal, each
-// part under its heading; without one, the rows stay as they are.
+// part under its heading; without one, or where it couldn't show, the
+// rows stay as they are.
 func pickParts(u *ui.UI) func(msg.M, []vm.PickPart) []vm.PickPart {
+	pick := pickMany(u)
 	return func(help msg.M, parts []vm.PickPart) []vm.PickPart {
+		out, _ := pick(help, parts)
+		return out
+	}
+}
+
+// pickMany is the VM environment's PickMany: the UI's Pick over the
+// parts, each under its heading, with why it couldn't show or didn't
+// end at Enter, the parts as they were then.
+func pickMany(u *ui.UI) func(msg.M, []vm.PickPart) ([]vm.PickPart, error) {
+	return func(help msg.M, parts []vm.PickPart) ([]vm.PickPart, error) {
 		sections := make([]ui.Section, len(parts))
 		for i, p := range parts {
 			sections[i].Heading = p.Heading
@@ -88,15 +104,18 @@ func pickParts(u *ui.UI) func(msg.M, []vm.PickPart) []vm.PickPart {
 				sections[i].Choices = append(sections[i].Choices, ui.Choice{Name: r.Name, Desc: u.Text(r.Desc), On: r.On, Fixed: r.Fixed})
 			}
 		}
-		picked := u.Pick(help, sections)
+		picked, err := u.Pick(help, sections)
 		out := make([]vm.PickPart, len(parts))
 		for i, p := range parts {
 			out[i] = vm.PickPart{Heading: p.Heading, Rows: slices.Clone(p.Rows)}
+			if err != nil {
+				continue
+			}
 			for j := range out[i].Rows {
 				out[i].Rows[j].On = picked[i].Choices[j].On
 			}
 		}
-		return out
+		return out, err
 	}
 }
 

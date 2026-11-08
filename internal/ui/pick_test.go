@@ -1,9 +1,14 @@
 package ui
 
 import (
+	"bufio"
+	"errors"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/devvmhq/devvm/internal/msg"
 )
@@ -31,6 +36,174 @@ func pickTerminal(u *UI) *int {
 	return &restored
 }
 
+// Each row's description starts in one column: 10 wide, or past the
+// longest name, such as a host's.
+func TestPickColumns(t *testing.T) {
+	t.Parallel()
+	p := newPicking([]Section{{Choices: []Choice{{Name: "a", Desc: "first"}, {Name: "registry.npmjs.org", Desc: "second"}}}}, false)
+	out, _ := p.draw(style{}, -1)
+	if !strings.Contains(out, "  [ ] a                  first\r\n") || !strings.Contains(out, "  [ ] registry.npmjs.org second\r\n") {
+		t.Errorf("drew %q", out)
+	}
+	short := newPicking([]Section{{Choices: choices()[:2]}}, false)
+	if out, _ := short.draw(style{}, -1); !strings.Contains(out, "  [x] a          first\r\n") {
+		t.Errorf("short names: drew %q", out)
+	}
+}
+
+// redraw is a cursor move back up, as pickLoop writes it before a
+// redraw.
+var redraw = regexp.MustCompile(`\x1b\[(\d+)A`)
+
+// In a terminal of 60 by 20, a list of 200 hosts, one of them 253
+// characters long, draws each line within the width, its long name cut
+// from the left so its domain shows, and scrolls in a window of the same
+// lines every time, with how many more there are above and below, so a
+// redraw never leaves a line of the last one behind. a ticks every row,
+// and again unticks them all.
+func TestPickFitsTheTerminal(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("a", 236) + ".attacker.example" // 253
+	many := []Choice{{Name: long, Desc: "1 connection"}}
+	for i := range 199 {
+		many = append(many, Choice{Name: "h" + strconv.Itoa(i) + ".example.com:443", Desc: strings.Repeat("d", 80)})
+	}
+	for _, tc := range []struct {
+		keys string
+		on   int
+	}{{strings.Repeat("j", 150) + "a\r", 200}, {"aa\r", 0}, {strings.Repeat("k", 3) + " \r", 1}} {
+		u, out, _ := testUI(t, tc.keys)
+		pickTerminal(u)
+		u.termSize = func() (int, int) { return 60, 20 }
+		got := picked(t, u, []Section{{Choices: many}})[0].Choices
+		if n := len(onOf(got)); n != tc.on {
+			t.Errorf("%q: %d on, want %d", tc.keys, n, tc.on)
+		}
+		s := out.String()
+		moves := redraw.FindAllStringSubmatch(s, -1)
+		if len(moves) == 0 {
+			t.Fatalf("%q: no redraw", tc.keys)
+		}
+		for _, m := range moves {
+			if m[1] != moves[0][1] {
+				t.Errorf("%q: redraws of %s and %s lines: one leaves lines behind", tc.keys, moves[0][1], m[1])
+			}
+		}
+		if n, _ := strconv.Atoi(moves[0][1]); n > 20-2 {
+			t.Errorf("%q: %d lines, under a help line, in a terminal of 20", tc.keys, n)
+		}
+		plain := redraw.ReplaceAllString(strings.NewReplacer("\x1b[2K", "", "\x1b[?25l", "", "\x1b[?25h", "").Replace(s), "")
+		for line := range strings.SplitSeq(plain, "\r\n") {
+			if runes(line) >= 60 {
+				t.Errorf("%q: a line of %d columns in 60: %q", tc.keys, runes(line), line)
+			}
+		}
+		if !strings.Contains(plain, "attacker.example") || strings.Contains(plain, long) {
+			t.Errorf("%q: the long name isn't cut from the left", tc.keys)
+		}
+		if !strings.Contains(plain, "pick_more count=") {
+			t.Errorf("%q: no line says how many more", tc.keys)
+		}
+	}
+}
+
+// picked is what u's Pick returns for sections under a help of its own,
+// which mustn't fail.
+func picked(t *testing.T, u *UI, sections []Section) []Section {
+	t.Helper()
+	got, err := u.Pick(msg.MsgUnknown("x"), sections)
+	if err != nil {
+		t.Errorf("Pick = %v", err)
+	}
+	return got
+}
+
+// The lock's risky hosts are a section of their own, under a heading, so
+// at 80, 100 and 120 columns, with names the VM made as long as they come
+// and a User-Agent of 32 characters, the heading shows whole, above the
+// risky rows, and every line fits.
+func TestPickRiskySection(t *testing.T) {
+	t.Parallel()
+	ua := strings.Repeat("u", 32)
+	for _, width := range []int{80, 100, 120} {
+		u, out, _ := testUI(t, "\r")
+		u.outStyle = style{}
+		pickTerminal(u)
+		u.termSize = func() (int, int) { return width, 40 }
+		heading := msg.NetLearnedRiskyHeading()
+		long := strings.Repeat("a", 200) + ".example.com:443"
+		sections := []Section{
+			{Choices: []Choice{{Name: long, Desc: "2 connections, User-Agent: " + ua}}},
+			{Heading: heading, Choices: []Choice{{Name: "evil" + strings.Repeat("e", 100) + ".ngrok-free.app:443", Desc: "1 connection, User-Agent: " + ua}}},
+		}
+		if _, err := u.Pick(msg.MsgUnknown("x"), sections); err != nil {
+			t.Fatal(err)
+		}
+		plain := strings.NewReplacer("\x1b[2K", "", "\x1b[?25l", "", "\x1b[?25h", "").Replace(out.String())
+		text := style{}.line(heading)
+		at, risky := strings.Index(plain, text+"\r\n"), strings.Index(plain, "ngrok-free.app:443")
+		if at < 0 || risky < at {
+			t.Errorf("%d columns: the heading %q isn't whole above the risky row:\n%s", width, text, plain)
+		}
+		for line := range strings.SplitSeq(plain, "\r\n") {
+			if runes(line) >= width {
+				t.Errorf("%d columns: a line of %d: %q", width, runes(line), line)
+			}
+		}
+	}
+}
+
+// A terminal too short for the list's window, under its help, is refused,
+// before raw mode, rather than redraw over the wrong lines; a short list
+// that fits is shown.
+func TestPickTooSmall(t *testing.T) {
+	t.Parallel()
+	many := make([]Choice, 10)
+	for i := range many {
+		many[i] = Choice{Name: "h" + strconv.Itoa(i)}
+	}
+	for _, c := range []struct {
+		height  int
+		choices []Choice
+		want    string
+	}{{3, many, "pick_too_small lines=3"}, {4, many, "pick_too_small lines=4"}, {5, many, ""}, {4, many[:2], ""}} {
+		u, _, _ := testUI(t, "\r")
+		pickTerminal(u)
+		u.termSize = func() (int, int) { return 80, c.height }
+		_, err := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: c.choices}})
+		if got := msg.NamesOf(err); got != c.want {
+			t.Errorf("%d lines, %d rows: %q, want %q", c.height, len(c.choices), got, c.want)
+		}
+	}
+}
+
+// When the terminal goes away while the list is open, a read that fails
+// confirms nothing: Pick says why, the run isn't interrupted, and the
+// list's ends at Enter or the input's end still confirm.
+func TestPickTerminalGone(t *testing.T) {
+	t.Parallel()
+	u, _, _ := testUI(t, "")
+	pickTerminal(u)
+	u.stdin = bufio.NewReader(iotest.ErrReader(errors.New("input/output error")))
+	_, err := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: choices()}})
+	if got := msg.NamesOf(err); got != "pick_failed reason=input/output error" || u.Interrupted() {
+		t.Errorf("Pick on a terminal gone = %q, interrupted %v", got, u.Interrupted())
+	}
+}
+
+// Where the terminal won't go into raw mode, Pick says why and leaves
+// the choices as they were.
+func TestPickRawFails(t *testing.T) {
+	t.Parallel()
+	u, _, _ := testUI(t, "")
+	pickTerminal(u)
+	u.rawInput = func() (func(), error) { return nil, errors.New("no tty") }
+	got, err := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: choices()}})
+	if msg.NamesOf(err) != "pick_failed reason=no tty" || !slices.Equal(onOf(got[0].Choices), []string{"a", "b"}) {
+		t.Errorf("Pick = %q, %v", onOf(got[0].Choices), msg.NamesOf(err))
+	}
+}
+
 func TestPickKeys(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -51,7 +224,7 @@ func TestPickKeys(t *testing.T) {
 			u, out, _ := testUI(t, tc.keys)
 			restored := pickTerminal(u)
 			in := choices()
-			got := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: in}})[0].Choices
+			got := picked(t, u, []Section{{Choices: in}})[0].Choices
 			if !slices.Equal(onOf(got), tc.want) {
 				t.Errorf("chosen %q, want %q", onOf(got), tc.want)
 			}
@@ -151,7 +324,7 @@ func TestPickSectionsKeys(t *testing.T) {
 			u, out, _ := testUI(t, tc.keys)
 			pickTerminal(u)
 			in := sections()
-			got := u.Pick(msg.MsgUnknown("x"), in)
+			got := picked(t, u, in)
 			if !slices.Equal(onOfAll(got), tc.want) {
 				t.Errorf("chosen %q, want %q", onOfAll(got), tc.want)
 			}
@@ -178,7 +351,7 @@ func TestPickFixedDim(t *testing.T) {
 	u, out, _ := testUI(t, "\r")
 	pickTerminal(u)
 	u.outStyle = style{on: true}
-	u.Pick(msg.MsgUnknown("x"), sections())
+	picked(t, u, sections())
 	if s := out.String(); !strings.Contains(s, "\033["+sgrDim+"m  [x] x") || strings.Contains(s, "\033["+sgrDim+"m> [x] a") {
 		t.Errorf("output %q: fixed rows not dim, or a movable one dim", s)
 	}
@@ -189,7 +362,7 @@ func TestPickAllFixed(t *testing.T) {
 	t.Parallel()
 	u, _, _ := testUI(t, " j\r")
 	pickTerminal(u)
-	got := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: []Choice{{Name: "x", On: true, Fixed: true}}}})
+	got := picked(t, u, []Section{{Choices: []Choice{{Name: "x", On: true, Fixed: true}}}})
 	if !slices.Equal(onOfAll(got), []string{"x"}) {
 		t.Errorf("chosen %q", onOfAll(got))
 	}
@@ -219,7 +392,7 @@ func TestPickNoInput(t *testing.T) {
 	u, out, _ := testUI(t, " \r")
 	restored := pickTerminal(u)
 	u.SetFlags(Flags{NoInput: true})
-	got := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: choices()}})[0].Choices
+	got := picked(t, u, []Section{{Choices: choices()}})[0].Choices
 	if !slices.Equal(onOf(got), []string{"a", "b"}) || out.Len() != 0 || *restored != 0 {
 		t.Errorf("chosen %q, printed %q, raw mode %d: want the choices as given, nothing printed", onOf(got), out, *restored)
 	}
@@ -239,7 +412,7 @@ func TestPickOneWithoutTerminal(t *testing.T) {
 func TestPickWithoutTerminal(t *testing.T) {
 	t.Parallel()
 	u, out, _ := testUI(t, " \r")
-	got := u.Pick(msg.MsgUnknown("x"), []Section{{Choices: choices()}})[0].Choices
+	got := picked(t, u, []Section{{Choices: choices()}})[0].Choices
 	if !slices.Equal(onOf(got), []string{"a", "b"}) || out.Len() != 0 {
 		t.Errorf("chosen %q, printed %q: want the choices as given, nothing printed", onOf(got), out)
 	}
@@ -249,7 +422,7 @@ func TestPickCtrlC(t *testing.T) {
 	t.Parallel()
 	u, _, _ := testUI(t, "j\x03 \r")
 	restored := pickTerminal(u)
-	if code := exitCode(func() { u.Pick(msg.MsgUnknown("x"), []Section{{Choices: choices()}}) }); code != InterruptedCode {
+	if code := exitCode(func() { picked(t, u, []Section{{Choices: choices()}}) }); code != InterruptedCode {
 		t.Errorf("exit code %d, want %d", code, InterruptedCode)
 	}
 	if !u.Interrupted() || *restored != 1 {

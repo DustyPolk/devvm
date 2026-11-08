@@ -475,7 +475,15 @@ func (e Groups) rejoin(ctx context.Context, t *target, cur, group, as string) er
 // and gives each its links.
 func (e Groups) join(ctx context.Context, t *target, group, as string, members []*state.VM) error {
 	vm := t.f.Name
-	if err := update(ctx, t.st, linksSection, func(l *linksInVM) error { l.Group, l.GroupAs = group, as; return nil }); err != nil {
+	// Under the VM's lock: a devvm network learn that raced the join never
+	// leaves a learning VM in the group.
+	err := t.st.Update(ctx, func(st *state.VM) error {
+		if netpolicy.LearningOf(st).On() {
+			return msg.GroupJoinLearning(group, vm)
+		}
+		return edit(st, linksSection, func(l *linksInVM) error { l.Group, l.GroupAs = group, as; return nil })
+	})
+	if err != nil {
 		return err
 	}
 	if len(members) == 0 {
@@ -501,6 +509,11 @@ func (e Groups) join(ctx context.Context, t *target, group, as string, members [
 // every backend has links.
 func (e Groups) checkJoin(t *target, group, as string) ([]*state.VM, error) {
 	vm := t.f.Name
+	// A learning VM goes to the allowlist tier once it's locked, which a
+	// group's VMs can't do alone.
+	if netpolicy.LearningOf(t.st).On() {
+		return nil, msg.GroupJoinLearning(group, vm)
+	}
 	members, err := groupMembers(e.Dirs, group)
 	if err != nil {
 		return nil, err

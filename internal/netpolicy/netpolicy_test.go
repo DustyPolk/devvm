@@ -313,9 +313,9 @@ func TestTierDesc(t *testing.T) {
 	}
 }
 
-// settings' network defaults are the tiers, in their order, and its
-// default is TierDefault: its own list, as settings can't import this
-// package.
+// settings' network defaults are the tiers, in their order, without
+// learn, which is for one VM alone, and its default is TierDefault: its
+// own list, as settings can't import this package.
 func TestNetworkChoicesAreTheTiers(t *testing.T) {
 	if got, want := settings.NetworkChoices(), TierNames(); !slices.Equal(got, want) {
 		t.Errorf("settings.NetworkChoices() = %v, want %v", got, want)

@@ -1534,6 +1534,11 @@ func GroupGone(group string) M {
 	return M{id: "group_gone", vals: []val{{"group", group}}}
 }
 
+// GroupJoinLearning is [group_join_learning]: "{{.vm}} is learning the hosts it needs, and the group {{.group}}'s VMs are all on one tier, so it can't join until it's locked. Run devvm network lock first."
+func GroupJoinLearning(group string, vm string) M {
+	return M{id: "group_join_learning", vals: []val{{"group", group}, {"vm", vm}}}
+}
+
 // GroupJoined is [group_joined]: "{{.vm}} is in the group {{.group}}."
 func GroupJoined(group string, vm string) M {
 	return M{id: "group_joined", vals: []val{{"group", group}, {"vm", vm}}}
@@ -2164,6 +2169,11 @@ func NetAllowsUnused(tier string, vm string) M {
 	return M{id: "net_allows_unused", vals: []val{{"tier", tier}, {"vm", vm}}}
 }
 
+// NetChoiceLearn is [net_choice_learn]: "reaches any public host while it learns which it needs, until devvm network lock"
+func NetChoiceLearn() M {
+	return M{id: "net_choice_learn"}
+}
+
 // NetDefaultFailed is [net_default_failed]: "Reading or saving new VMs' network tier failed: {{.reason}}."
 func NetDefaultFailed(reason string) M {
 	return M{id: "net_default_failed", vals: []val{{"reason", reason}}}
@@ -2172,6 +2182,86 @@ func NetDefaultFailed(reason string) M {
 // NetDirectRoute is [net_direct_route]: "{{.vm}} reached the internet without going through its proxy, so devvm stopped it. Something outside devvm may have given it another network."
 func NetDirectRoute(vm string) M {
 	return M{id: "net_direct_route", vals: []val{{"vm", vm}}}
+}
+
+// NetLearnNotGlobal is [net_learn_not_global]: "New VMs can't learn by default, because each VM learns the hosts it needs on its own. Make one learn with devvm --network learn, or with devvm network learn in its folder."
+func NetLearnNotGlobal() M {
+	return M{id: "net_learn_not_global"}
+}
+
+// NetLearnStarted is [net_learn_started]: "{{.vm}} learns the hosts it reaches from now on, with the internet tier's access. To lock it to the hosts you choose, run devvm network lock."
+func NetLearnStarted(vm string) M {
+	return M{id: "net_learn_started", vals: []val{{"vm", vm}}}
+}
+
+// NetLearnStopped is [net_learn_stopped]: "{{.vm}} stopped learning the hosts it reaches."
+func NetLearnStopped(vm string) M {
+	return M{id: "net_learn_stopped", vals: []val{{"vm", vm}}}
+}
+
+// NetLearnedHost is [net_learned_host]: "{{.count}} connections, User-Agent: {{.agent}}"
+func NetLearnedHost(agent string, count int) M {
+	return M{id: "net_learned_host", plural: true, count: count, vals: []val{{"agent", agent}, {"count", strconv.Itoa(count)}}}
+}
+
+// NetLearnedHostAnon is [net_learned_host_anon]: "{{.count}} connections"
+func NetLearnedHostAnon(count int) M {
+	return M{id: "net_learned_host_anon", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
+// NetLearnedPartial is [net_learned_partial]: "{{.vm}}'s network log no longer goes back to {{.since}}, when it started learning, so hosts it reached early on may be missing. To allow one later, run devvm network allow."
+func NetLearnedPartial(since string, vm string) M {
+	return M{id: "net_learned_partial", vals: []val{{"since", since}, {"vm", vm}}}
+}
+
+// NetLearnedRiskyHeading is [net_learned_risky_heading]: "Risky, each an easy way to send data out:"
+func NetLearnedRiskyHeading() M {
+	return M{id: "net_learned_risky_heading"}
+}
+
+// NetLearning is [net_learning]: "{{.vm}} is learning the hosts it reaches, with internet access, and since {{.since}} it has reached {{.count}} hosts beyond its allowlist. To lock it to the hosts you choose, run devvm network lock."
+func NetLearning(count int, since string, vm string) M {
+	return M{id: "net_learning", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"since", since}, {"vm", vm}}}
+}
+
+// NetLearningLock is [net_learning_lock]: "{{.vm}} is learning the hosts it reaches, so devvm network lock puts it on the allowlist tier with the hosts you choose. To add none of them, run devvm network lock --none."
+func NetLearningLock(vm string) M {
+	return M{id: "net_learning_lock", vals: []val{{"vm", vm}}}
+}
+
+// NetLearningSince is [net_learning_since]: "{{.vm}} has been learning the hosts it reaches, with internet access, since {{.since}}. To lock it to the hosts you choose, run devvm network lock."
+func NetLearningSince(since string, vm string) M {
+	return M{id: "net_learning_since", vals: []val{{"since", since}, {"vm", vm}}}
+}
+
+// NetLockChanged is [net_lock_changed]: "{{.vm}}'s network tier changed while devvm network lock was asking, so it changed nothing. To lock it, run devvm network lock again."
+func NetLockChanged(vm string) M {
+	return M{id: "net_lock_changed", vals: []val{{"vm", vm}}}
+}
+
+// NetLockContext is [net_lock_context]: "Since {{.since}} the VM could reach any public host, so this list can hold a host that a compromised dependency reached. Only a host on port 443 of a package registry or vendor devvm knows starts ticked, so read the others before you tick them."
+func NetLockContext(since string) M {
+	return M{id: "net_lock_context", vals: []val{{"since", since}}}
+}
+
+// NetLockContextMany is [net_lock_context_many]: "Since {{.since}} the VM could reach any public host, so this list of {{.count}} hosts can hold one that a compromised dependency reached. None starts ticked in a list this long, and devvm network lock --json lists them to read first."
+func NetLockContextMany(count int, since string) M {
+	return M{id: "net_lock_context_many", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"since", since}}}
+}
+
+// NetLockHelp is [net_lock_help]: "Choose the hosts {{.vm}} keeps. Use up and down to move, space to toggle, a to toggle them all and enter to confirm."
+func NetLockHelp(vm string) M {
+	return M{id: "net_lock_help", vals: []val{{"vm", vm}}}
+}
+
+// NetLocked is [net_locked]: "Added {{.count}} hosts to {{.vm}}'s own rules, and gave it the allowlist tier."
+func NetLocked(count int, vm string) M {
+	return M{id: "net_locked", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"vm", vm}}}
+}
+
+// NetNotLearning is [net_not_learning]: "{{.vm}} isn't learning the hosts it reaches, so there's nothing to lock. To start, run devvm network learn."
+func NetNotLearning(vm string) M {
+	return M{id: "net_not_learning", vals: []val{{"vm", vm}}}
 }
 
 // NetOpenLog is [net_open_log]: "{{.vm}} is open, so devvm logs only what goes through its proxy, not what it reaches directly."
@@ -2327,6 +2417,11 @@ func NewVMMemoryPrompt(memory string) M {
 // NewVMNetwork is [new_vm_network]: "  network tier: {{.tier}}"
 func NewVMNetwork(tier string) M {
 	return M{id: "new_vm_network", vals: []val{{"tier", tier}}}
+}
+
+// NewVMNetworkLearn is [new_vm_network_learn]: "  network tier: internet, while it learns the hosts it needs, until devvm network lock"
+func NewVMNetworkLearn() M {
+	return M{id: "new_vm_network_learn"}
 }
 
 // NewVMPorts is [new_vm_ports]: "  ports: {{.ports}}"
@@ -2719,6 +2814,11 @@ func PickCalledFor(file string) M {
 	return M{id: "pick_called_for", vals: []val{{"file", file}}}
 }
 
+// PickFailed is [pick_failed]: "The list couldn't show or was cut short, because devvm couldn't read keys from the terminal, so nothing was chosen: {{.reason}}."
+func PickFailed(reason string) M {
+	return M{id: "pick_failed", vals: []val{{"reason", reason}}}
+}
+
 // PickFromFlag is [pick_from_flag]: "from {{.flag}}"
 func PickFromFlag(flag string) M {
 	return M{id: "pick_from_flag", vals: []val{{"flag", flag}}}
@@ -2759,9 +2859,19 @@ func PickLayersFixed() M {
 	return M{id: "pick_layers_fixed"}
 }
 
+// PickMore is [pick_more]: "{{.count}} more"
+func PickMore(count int) M {
+	return M{id: "pick_more", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // PickNewHelp is [pick_new_help]: "Choose what {{.vm}} gets. Use up and down to move, space to toggle and enter to confirm."
 func PickNewHelp(vm string) M {
 	return M{id: "pick_new_help", vals: []val{{"vm", vm}}}
+}
+
+// PickTooSmall is [pick_too_small]: "The terminal has only {{.lines}} lines, too few to show the list. Make it taller, or answer with the command's flags."
+func PickTooSmall(lines string) M {
+	return M{id: "pick_too_small", vals: []val{{"lines", lines}}}
 }
 
 // PickToolchains is [pick_toolchains]: "Toolchains"
@@ -4357,6 +4467,7 @@ var specs = map[string]spec{
 	"group_already":                  {fields: []string{"group", "vm"}},
 	"group_failed":                   {fields: []string{"reason"}},
 	"group_gone":                     {fields: []string{"group"}},
+	"group_join_learning":            {fields: []string{"group", "vm"}},
 	"group_joined":                   {fields: []string{"group", "vm"}},
 	"group_left":                     {fields: []string{"group", "vm"}},
 	"group_link_name_clash":          {fields: []string{"name", "target", "vm"}},
@@ -4483,8 +4594,25 @@ var specs = map[string]spec{
 	"msg_unexpected_value":           {fields: []string{"key", "name"}},
 	"msg_unknown":                    {fields: []string{"name"}},
 	"net_allows_unused":              {fields: []string{"tier", "vm"}},
+	"net_choice_learn":               {},
 	"net_default_failed":             {fields: []string{"reason"}},
 	"net_direct_route":               {fields: []string{"vm"}},
+	"net_learn_not_global":           {},
+	"net_learn_started":              {fields: []string{"vm"}},
+	"net_learn_stopped":              {fields: []string{"vm"}},
+	"net_learned_host":               {plural: true, fields: []string{"agent", "count"}},
+	"net_learned_host_anon":          {plural: true, fields: []string{"count"}},
+	"net_learned_partial":            {fields: []string{"since", "vm"}},
+	"net_learned_risky_heading":      {},
+	"net_learning":                   {plural: true, fields: []string{"count", "since", "vm"}},
+	"net_learning_lock":              {fields: []string{"vm"}},
+	"net_learning_since":             {fields: []string{"since", "vm"}},
+	"net_lock_changed":               {fields: []string{"vm"}},
+	"net_lock_context":               {fields: []string{"since"}},
+	"net_lock_context_many":          {plural: true, fields: []string{"count", "since"}},
+	"net_lock_help":                  {fields: []string{"vm"}},
+	"net_locked":                     {plural: true, fields: []string{"count", "vm"}},
+	"net_not_learning":               {fields: []string{"vm"}},
 	"net_open_log":                   {fields: []string{"vm"}},
 	"net_open_policy":                {fields: []string{"vm"}},
 	"net_proxy_down_stopped":         {fields: []string{"vm"}},
@@ -4516,6 +4644,7 @@ var specs = map[string]spec{
 	"new_vm_layers_none":             {},
 	"new_vm_memory_prompt":           {fields: []string{"memory"}},
 	"new_vm_network":                 {fields: []string{"tier"}},
+	"new_vm_network_learn":           {},
 	"new_vm_ports":                   {fields: []string{"ports"}},
 	"new_vm_ports_all":               {},
 	"new_vm_ports_help":              {fields: []string{"vm"}},
@@ -4594,6 +4723,7 @@ var specs = map[string]spec{
 	"pi_trusts_all":                  {fields: []string{"vm"}},
 	"pick_agents":                    {},
 	"pick_called_for":                {fields: []string{"file"}},
+	"pick_failed":                    {fields: []string{"reason"}},
 	"pick_from_flag":                 {fields: []string{"flag"}},
 	"pick_from_setup":                {},
 	"pick_layer_desktop":             {},
@@ -4602,7 +4732,9 @@ var specs = map[string]spec{
 	"pick_layer_yours":               {},
 	"pick_layers":                    {},
 	"pick_layers_fixed":              {},
+	"pick_more":                      {plural: true, fields: []string{"count"}},
 	"pick_new_help":                  {fields: []string{"vm"}},
+	"pick_too_small":                 {fields: []string{"lines"}},
 	"pick_toolchains":                {},
 	"pick_vm_help":                   {fields: []string{"vm"}},
 	"policy_broken_deny":             {fields: []string{"file", "line", "rule"}},

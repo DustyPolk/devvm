@@ -142,6 +142,7 @@ func TestConfigRefused(t *testing.T) {
 		{"bad network", "network = \"maybe\"\n", 1, `"maybe" isn't one of open, internet, allowlist, none`},
 		{"network on", "network = \"on\"\n", 1, `"on" isn't one of open, internet, allowlist, none`},
 		{"network ask", "network = \"ask\"\n", 1, `"ask" isn't one of open, internet, allowlist, none`},
+		{"network learn", "network = \"learn\"\n", 1, `"learn" isn't one of open, internet, allowlist, none`},
 		{"bad ports", "\nports = \"5173,,80\"\n", 2, "port_invalid"},
 		{"bad cpus", "[size]\ncpus = 1.5\n", 2, "cpus_not_number flag=cpus"},
 		{"bad memory", "[size]\nmemory = \"16M\"\n", 2, "size_not_gib flag=memory"},

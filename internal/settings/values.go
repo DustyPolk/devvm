@@ -64,7 +64,8 @@ const NetworkDefault = "allowlist"
 // NetworkChoices are the network defaults, the tiers, in the order devvm
 // shows them, lowest to highest. They are netpolicy's (netpolicy.Tiers,
 // which imports this package), and netpolicy's tests check the two lists
-// match.
+// match. Learning the hosts a VM needs is no default: each VM is made to
+// learn on its own.
 func NetworkChoices() []string {
 	return []string{"open", "internet", NetworkDefault, "none"}
 }
