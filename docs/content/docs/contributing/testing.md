@@ -4,7 +4,7 @@ explainer: Run devvm's tests on Linux, x86_64 and other hosts
 weight: 1
 ---
 
-For contributors. The everyday tests, CLI tests and end-to-end tests are in [Contributing](_index.md#end-to-end-tests), and how to raise a package's coverage baseline is in [Coverage](_index.md#coverage); this page is about running them on a host other than your Mac.
+For contributors. The everyday tests, CLI tests and end-to-end tests are in [Contributing](tests.md#end-to-end-tests), and how to raise a package's coverage baseline is in [Coverage](tests.md#coverage); this page is about running them on a host other than your Mac.
 
 ## What's platform-specific
 
@@ -70,7 +70,7 @@ Test in a Lima VM with nested virtualization, which needs an M3 or newer and mac
 
    A clone has only what's committed, so commit a change before you test it this way.
 
-The first `--from` run builds every image and takes about half an hour on an M3 Max. Later ones reuse them, because every section but `tools` uses the pinned shared tools' versions and `--from` images, and those images stay valid until `scripts/bump.sh e2e-tools` or `scripts/bump.sh e2e-from` moves a pin ([end-to-end tests](_index.md#end-to-end-tests)). Stop the VM when done (`limactl stop linuxhost`); it keeps its images for the next run.
+The first `--from` run builds every image and takes about half an hour on an M3 Max. Later ones reuse them, because every section but `tools` uses the pinned shared tools' versions and `--from` images, and those images stay valid until `scripts/bump.sh e2e-tools` or `scripts/bump.sh e2e-from` moves a pin ([end-to-end tests](tests.md#end-to-end-tests)). Stop the VM when done (`limactl stop linuxhost`); it keeps its images for the next run.
 
 Gotchas of this setup:
 
@@ -92,7 +92,7 @@ GitHub's Linux runners are x86_64 with KVM, and the E2E workflow (`.github/workf
 
 ## Slots for each host
 
-`mise run e2e -- --slots N` runs the end-to-end sections in N sandboxes at once ([slots](_index.md#slots)), and each slot runs its own VMs, up to three at a time in the link section. How many slots a host can run depends on its cores and memory:
+`mise run e2e -- --slots N` runs the end-to-end sections in N sandboxes at once ([slots](tests.md#slots)), and each slot runs its own VMs, up to three at a time in the link section. How many slots a host can run depends on its cores and memory:
 
 | Host | Slots |
 | --- | --- |
@@ -115,7 +115,7 @@ mise run e2e -- --only gc
 cd tests/e2e && CGO_ENABLED=0 go test -tags e2e -count=1 -timeout 0 -run '^TestE2E$' -args --only gc
 ```
 
-Run `go test` from `tests/e2e` without naming a package, because only then does `go test` show the run's lines as they come, and in a package list it holds them until the package ends. `TestE2E` refuses any `-timeout` but `0`, because `go test`'s default of 10 minutes would end a long section in the middle of a check, and `-count=1` keeps `go test` from showing a cached result. The run's flags, which [Contributing](_index.md#end-to-end-tests) lists, come after `-args`. `--reuse` keeps the VMs that a section makes with `Reuse` for the next run, which takes each one as it finds it when it's still running, so iterating on one check doesn't launch its VM again.
+Run `go test` from `tests/e2e` without naming a package, because only then does `go test` show the run's lines as they come, and in a package list it holds them until the package ends. `TestE2E` refuses any `-timeout` but `0`, because `go test`'s default of 10 minutes would end a long section in the middle of a check, and `-count=1` keeps `go test` from showing a cached result. The run's flags, which [Contributing](tests.md#end-to-end-tests) lists, come after `-args`. `--reuse` keeps the VMs that a section makes with `Reuse` for the next run, which takes each one as it finds it when it's still running, so iterating on one check doesn't launch its VM again.
 
 The runner uses a sandbox for each slot, with its own fixed ports, it refuses your real Lima home, and it builds devvm from the checkout into `src-go` in the sandbox's state folder, as a test build with its files embedded. It writes a `config.toml` that chooses base's features, so nothing asks, and puts the pinned tool lock in place, after checking the lock's first line. Base starts from the dated Ubuntu release in `e2eUbuntuRelease` (`tests/e2e/sandbox_test.go`), which `scripts/bump.sh e2e-ubuntu` moves. The runner takes the slot's lock, a symlink to its pid, and it deletes only the VMs, files and project folders that it made. Before anything else, it names each host command that the chosen sections need and this machine lacks, with what installs it. Its lines are each section's `== name` heading, then `PASS`, `FAIL`, `SKIP` or `RETRY` with `[n/N]`, the check's title, its time, the run's time and the time left. A heartbeat every minute shows the newest line of the check's output or devvm's run log, and the run ends with a summary line. It keeps each section's times in slot 0's timings folder, under its tier, and beside them a checksum of `tests/e2e`'s Go files, so a section's check count is compared only with a run of the same Go files. With `--slots`, it plans, seeds and runs the slots, each slot a run of the same test binary, and it adds up their results. On macOS it seeds each slot with APFS clones (`clonefile`), and on Linux with reflinks. With `--newest-base`, its last lines name the release Ubuntu lists as its newest and the one devvm pinned, and a failure is named as upstream drift.
 
@@ -226,7 +226,7 @@ Each test walks through `scenario`, which makes every kind of Lima config devvm 
 
 ## Golden fixtures
 
-The golden fixtures are what the real tools printed, kept in `testdata/golden/darwin/` and `testdata/golden/linux/`, so the tests can check both devvm's parsers and the [stubs](_index.md#stubs) against real output on any machine. Each system's folder holds what its tools printed there:
+The golden fixtures are what the real tools printed, kept in `testdata/golden/darwin/` and `testdata/golden/linux/`, so the tests can check both devvm's parsers and the [stubs](tests.md#stubs) against real output on any machine. Each system's folder holds what its tools printed there:
 
 | Fixture | The real output of | Captured from |
 | --- | --- | --- |

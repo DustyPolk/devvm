@@ -1,6 +1,6 @@
 # The rules a reviewer checks
 
-The tests in [The CLI rule tests](../../../docs/content/docs/contributing/_index.md#the-cli-rule-tests) check a command's shape: its names, its flags, its help's parts and its `--json`. They can't tell whether a command is in the right place, whether its arguments are the right ones, or whether its words help the user. Those choices are yours, and this page explains each one with examples from devvm's own commands. Each section ends with the question to ask in a review.
+The tests in [The CLI rule tests](../../../docs/content/docs/contributing/cli.md#the-cli-rule-tests) check a command's shape: its names, its flags, its help's parts and its `--json`. They can't tell whether a command is in the right place, whether its arguments are the right ones, or whether its words help the user. Those choices are yours, and this page explains each one with examples from devvm's own commands. Each section ends with the question to ask in a review.
 
 ## Where a command goes
 

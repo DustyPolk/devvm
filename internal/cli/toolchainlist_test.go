@@ -21,7 +21,12 @@ func listedToolchains() []string {
 		// the e2e images' contents and the e2e sections' tools, not the
 		// toolchains' list
 		"docs/content/docs/using/from.md",
-		"docs/content/docs/contributing/_index.md",
+		"docs/content/docs/contributing/tests.md",
+		// the shared tools' table, ToolDef's fields
+		"docs/content/docs/contributing/structure.md",
+		// adding a toolchain: the toolchains that need nothing but mise, and
+		// the steps of those that need more
+		"docs/content/docs/contributing/extending.md",
 	}
 }
 

@@ -6,6 +6,7 @@ package structure
 import (
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/devvmhq/devvm/internal/agents"
@@ -234,6 +235,7 @@ func devvmVars() map[string]string {
 		"internal/build.keyImages":                fixture,
 		"internal/tools.gnuT":                     fixture,
 		"internal/tools.muslT":                    fixture,
+		"internal/structure.update":               "a test flag, set on go test's command line",
 	}
 }
 
@@ -289,18 +291,34 @@ func devvmExecSites() map[string]string {
 // a second copy of an agent's folders below the home folder can leave its
 // logins or history where its registry entry no longer looks.
 func devvmLiterals() map[string]literalOwner {
-	agentPaths := literalOwner{"internal/agents", "an agents.Def's paths"}
-	return map[string]literalOwner{
-		`'\''`:                  {"internal/shell", "shell.Quote"},
-		`[0-9a-f]{14}`:          {"internal/vmname", "vmname.IsVM"},
-		".claude/":              agentPaths,
-		".claude.json":          agentPaths,
-		".codex/":               agentPaths,
-		".config/opencode":      agentPaths,
-		".local/share/opencode": agentPaths,
-		".local/state/opencode": agentPaths,
-		".pi/agent":             agentPaths,
+	literals := map[string]literalOwner{
+		`'\''`:         {"internal/shell", "shell.Quote"},
+		`[0-9a-f]{14}`: {"internal/vmname", "vmname.IsVM"},
 	}
+	for _, p := range agentHomePaths(agents.Defs) {
+		literals[p] = literalOwner{"internal/agents", "an agents.Def's paths"}
+	}
+	return literals
+}
+
+// agentHomePaths are the agents' paths below the home folder: each one's
+// settings folder, with a slash when it's one folder's name (.claude/, not
+// .claude.json), and what of its history is outside it.
+func agentHomePaths(defs []agents.Def) []string {
+	var paths []string
+	for _, d := range defs {
+		folder := d.Folder
+		if !strings.Contains(folder, "/") {
+			folder += "/"
+		}
+		paths = append(paths, folder)
+		for _, h := range d.History {
+			if h != d.Folder && !strings.HasPrefix(h, d.Folder+"/") {
+				paths = append(paths, h)
+			}
+		}
+	}
+	return paths
 }
 
 // devvmNames are the coding agents' names and login kinds, which only

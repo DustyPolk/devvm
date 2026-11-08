@@ -4,7 +4,7 @@ explainer: What a backend gives devvm, and how VMs are named
 weight: 8
 ---
 
-This page explains how a backend gives devvm what it needs to run a VM, what devvm does when a backend lacks something, and how devvm names VMs. devvm runs its VMs on [Lima](../backends/lima.md), and another backend would plug in the same way, through the features below ([how a backend plugs in](../contributing/_index.md#how-a-backend-plugs-in)).
+This page explains how a backend gives devvm what it needs to run a VM, what devvm does when a backend lacks something, and how devvm names VMs. devvm runs its VMs on [Lima](../backends/lima.md), and another backend would plug in the same way, through the features below ([how a backend plugs in](../contributing/extending.md#how-a-backend-plugs-in)).
 
 ## What a backend does
 
