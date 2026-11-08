@@ -291,7 +291,7 @@ func (e Groups) change(ctx context.Context, st *state.VM, group string, before, 
 		e.Warn(msg.LinksUpdateFailed(vm).Because(err))
 		return nil
 	}
-	running, err := runs.apply(ctx, c.Backend, st, added, from)
+	running, err := runs.apply(ctx, c.Backend, st, added, false, from)
 	switch {
 	case err != nil:
 		e.Warn(msg.LinksUpdateFailed(vm).Because(err))

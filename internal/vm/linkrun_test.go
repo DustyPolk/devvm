@@ -266,12 +266,14 @@ func linkRunsEnv(t *testing.T, logged string) (linkRuns, *[][]string) {
 }
 
 // A client's link session is started once, found by its pid file and
-// arguments, waited for to say what came of its links, and stopped.
+// arguments, waited for to say what came of its links and clipboard
+// images, and stopped.
 func TestLinkRuns(t *testing.T) {
 	vm := "devvm-app-0123456789abc1"
 	db := Link{Name: "db", Port: 5432, Addr: netip.MustParseAddr("127.77.0.1")}
 	api := Link{Name: "api", Port: 3000, Addr: netip.MustParseAddr("127.77.0.2")}
-	r, started := linkRunsEnv(t, "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.2:3000: refused by the VM: exit status 255\n")
+	r, started := linkRunsEnv(t, "devvm links: 127.77.0.1:5432: carried\ndevvm links: 127.77.0.2:3000: refused by the VM: exit status 255\n"+
+		"devvm links: 127.77.255.255:7737: refused by the VM: exit status 255\n")
 	var warned msg.Recorder
 	fake(r.Env).OnWarn = warned.Add
 	if _, ok := r.pid(vm); ok {
@@ -285,13 +287,13 @@ func TestLinkRuns(t *testing.T) {
 		t.Errorf("ensure again: %v, %v; started %v", ok, err, *started)
 	}
 	start := time.Now()
-	r.report(t.Context(), vm, []Link{db, api}, from)
-	if !slices.Equal(warned.Names(), []string{"link_port_taken name=api port=3000 vm=" + vm}) || time.Since(start) > time.Second {
+	r.report(t.Context(), vm, []Link{db, api}, true, from)
+	if !slices.Equal(warned.Names(), []string{"link_port_taken name=api port=3000 vm=" + vm, "clipboard_port_taken vm=" + vm}) || time.Since(start) > time.Second {
 		t.Errorf("warned %q after %v", warned.Names(), time.Since(start))
 	}
 	// Lines before from aren't this change's.
 	warned.Reset()
-	r.report(t.Context(), vm, []Link{api}, r.logSize(vm))
+	r.report(t.Context(), vm, []Link{api}, false, r.logSize(vm))
 	if len(warned.Names()) != 0 {
 		t.Errorf("warned %q of an earlier line", warned.Names())
 	}

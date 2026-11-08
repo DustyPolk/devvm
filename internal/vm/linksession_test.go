@@ -15,6 +15,7 @@ import (
 
 	"github.com/devvmhq/devvm/internal/backend"
 	"github.com/devvmhq/devvm/internal/backend/backendtest"
+	"github.com/devvmhq/devvm/internal/clipboard"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/netpolicy"
 	"github.com/devvmhq/devvm/internal/paths"
@@ -360,19 +361,28 @@ func TestWarnUnenforced(t *testing.T) {
 }
 
 // A session carries every link its client's state has, applying or not,
-// and none once the client is gone; it refuses a client that isn't
-// running, or whose ssh isn't devvm's.
+// and the clipboard's with clipboard images on, and none once the client
+// is gone; it refuses a client that isn't running, or whose ssh isn't
+// devvm's.
 func TestSessionLinks(t *testing.T) {
 	e, _, client, _, l := linkSessionEnv(t)
-	got, err := e.sessionLinks(client.Name())
+	clip := clipboardLink(&clipboard.Server{})
+	got, err := e.sessionLinks(client.Name(), clip)
 	want := vmssh.Link{Name: "db", Target: l.Target, Addr: l.Addr, Port: 5432, Hosts: []string{"db", "db.devvm.internal"}}
 	if err != nil || len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 		t.Errorf("sessionLinks = %+v, %v", got, err)
 	}
+	if err := client.Update(t.Context(), func(st *state.VM) error { return clipboard.SetMode(st, clipboard.Images) }); err != nil {
+		t.Fatal(err)
+	}
+	got, err = e.sessionLinks(client.Name(), clip)
+	if err != nil || len(got) != 2 || got[1].Serve == nil || got[1].Addr.String() != "127.77.255.255" || got[1].Port != clipboard.Port {
+		t.Errorf("sessionLinks with clipboard images = %+v, %v", got, err)
+	}
 	if err := client.Remove(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := e.sessionLinks(client.Name()); err != nil || len(got) != 0 {
+	if got, err := e.sessionLinks(client.Name(), clip); err != nil || len(got) != 0 {
 		t.Errorf("a client that's gone: %+v, %v", got, err)
 	}
 	if err := e.Session(t.Context(), client.Name(), nil); err == nil || !strings.Contains(err.Error(), "no such VM") {

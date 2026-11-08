@@ -1,6 +1,6 @@
 ---
 title: devvm layer add
-weight: 25
+weight: 26
 explainer: "Make this folder's VM again with more layers, then open a shell in it"
 ---
 

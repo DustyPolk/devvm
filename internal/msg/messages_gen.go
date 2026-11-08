@@ -584,6 +584,26 @@ func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
 
+// ClipboardFailed is [clipboard_failed]: "Showing or changing whether this folder's VM reads your clipboard's images failed: {{.reason}}."
+func ClipboardFailed(reason string) M {
+	return M{id: "clipboard_failed", vals: []val{{"reason", reason}}}
+}
+
+// ClipboardNoReader is [clipboard_no_reader]: "This machine has nothing to read its clipboard with, so images pasted in {{.vm}} come through empty. Install wl-clipboard or xclip, then start the VM from a terminal on your desktop."
+func ClipboardNoReader(vm string) M {
+	return M{id: "clipboard_no_reader", vals: []val{{"vm", vm}}}
+}
+
+// ClipboardOnRisk is [clipboard_on_risk]: "While {{.vm}} runs, anything in it can read the image on your clipboard, though never its text."
+func ClipboardOnRisk(vm string) M {
+	return M{id: "clipboard_on_risk", vals: []val{{"vm", vm}}}
+}
+
+// ClipboardPortTaken is [clipboard_port_taken]: "Pasting images doesn't work in {{.vm}}, because a program in it already listens on the clipboard's address. Stop that program, then run devvm restart."
+func ClipboardPortTaken(vm string) M {
+	return M{id: "clipboard_port_taken", vals: []val{{"vm", vm}}}
+}
+
 // CloneAlternates is [clone_alternates]: "--clone copies only a repo's own objects, and {{.path}} borrows objects from another repo. Run git repack -a -d, delete that file, then run devvm --clone again."
 func CloneAlternates(path string) M {
 	return M{id: "clone_alternates", vals: []val{{"path", path}}}
@@ -2534,6 +2554,11 @@ func NoVM(dir string) M {
 	return M{id: "no_vm", vals: []val{{"dir", dir}}}
 }
 
+// NoVMClipboard is [no_vm_clipboard]: "There's no VM for {{.dir}}. Run devvm to make one, then devvm clipboard images."
+func NoVMClipboard(dir string) M {
+	return M{id: "no_vm_clipboard", vals: []val{{"dir", dir}}}
+}
+
 // NoVMGitProtect is [no_vm_git_protect]: "There's no VM for {{.dir}}. Run devvm to make one, or devvm --no-git-protect to make one without .git protection."
 func NoVMGitProtect(dir string) M {
 	return M{id: "no_vm_git_protect", vals: []val{{"dir", dir}}}
@@ -4162,6 +4187,10 @@ var specs = map[string]spec{
 	"claude_setup_token_saved":       {fields: []string{"vm"}},
 	"claude_token_howto":             {},
 	"claude_token_invalid":           {},
+	"clipboard_failed":               {fields: []string{"reason"}},
+	"clipboard_no_reader":            {fields: []string{"vm"}},
+	"clipboard_on_risk":              {fields: []string{"vm"}},
+	"clipboard_port_taken":           {fields: []string{"vm"}},
 	"clone_alternates":               {fields: []string{"path"}},
 	"clone_check_failed":             {fields: []string{"command", "vm"}},
 	"clone_check_not_started":        {fields: []string{"command", "vm"}},
@@ -4552,6 +4581,7 @@ var specs = map[string]spec{
 	"no_ubuntu_image":                {fields: []string{"release", "url", "version"}},
 	"no_ubuntu_release":              {fields: []string{"url", "version"}},
 	"no_vm":                          {fields: []string{"dir"}},
+	"no_vm_clipboard":                {fields: []string{"dir"}},
 	"no_vm_git_protect":              {fields: []string{"dir"}},
 	"no_vm_group":                    {fields: []string{"dir"}},
 	"no_vm_policy":                   {fields: []string{"dir"}},

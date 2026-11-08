@@ -1,6 +1,6 @@
 ---
 title: devvm images
-weight: 22
+weight: 23
 explainer: "List the images and the shared tools"
 ---
 

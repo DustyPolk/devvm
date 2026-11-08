@@ -1,7 +1,7 @@
 ---
 title: Starting from a container image
 explainer: Start base from a Debian, Ubuntu or Alpine image
-weight: 13
+weight: 14
 ---
 
 By default `base` starts from Ubuntu 26.04's cloud image. `--from IMAGE` starts it from a Debian-, Ubuntu- or Alpine-based container image instead, such as `node:24`, `python:3.13`, `debian:13`, `alpine:3` or an image you built yourself. Use it when your project needs a distribution or a system package set that Ubuntu doesn't give you.

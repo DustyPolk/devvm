@@ -1,6 +1,6 @@
 ---
 title: devvm clone
-weight: 8
+weight: 9
 explainer: "Show or change whether this folder's VM has its own clone of the repo"
 ---
 

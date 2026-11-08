@@ -1,0 +1,103 @@
+# Clipboard images: off unless asked for. devvm clipboard images turns them
+# on at once on a running VM: its setup sent again with devvm-clip and its
+# address, and its link session (devvm _links, the stub ssh standing in for
+# its connections) asking the VM to listen on the clipboard's address and
+# answering each connection itself, from this machine's clipboard (the
+# wl-paste and osascript stubs, never the real one) as a PNG. devvm
+# clipboard off undoes both, and a stopped VM gets the change at its start.
+env WAYLAND_DISPLAY=wayland-test
+exec sh -c 'base64 -d < img.b64 > "$STUB_DIR/clipboard-png"'
+
+# No VM yet, and a word that isn't a choice.
+project web
+! exec devvm clipboard
+stderr '^devvm: no_vm_clipboard dir=\S*/web$'
+! exec devvm clipboard on
+stderr '^devvm: arg_not_choice choices=images, off command=devvm clipboard given=on$'
+
+# A new VM: off, no address in its setup, and no session.
+exec devvm --network open --no-git-protect
+vm_name WEB web
+exec devvm clipboard
+stdout '\Aoff\n\z'
+exec devvm clipboard --json
+stdout '\A{\n  "version": 1,\n  "clipboard": "off"\n}\n\z'
+! exec devvm clipboard --json off
+stderr '^devvm: json_shows_only command=devvm clipboard$'
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_CLIPBOARD=''''$'
+exec tar -tf $STUB_DIR/sync.tar
+stdout '^clip\.sh$'
+exec sh -c 'ls "$WEB_dir"/run | grep "links.pid" || true'
+! stdout .
+
+# On, on the running VM: warned of, applied at once, and the session asks
+# the VM to listen on the clipboard's address, which no link has.
+exec devvm clipboard images
+stderr '^devvm: clipboard_on_risk vm=devvm-web-[0-9a-f]{14}$'
+! stderr clipboard_no_reader
+stdout '^==> setting_applied vm=devvm-web-[0-9a-f]{14}$'
+vm_state $WEB_dir/vm.json
+stdout '^clipboard\.mode=images$'
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_CLIPBOARD=''127\.77\.255\.255 7737''$'
+exec sh -c 'for i in $(seq 60); do grep -qx "devvm links: 127\.77\.255\.255:7737: carried" "$WEB_dir"/logs/links.log && exit 0; sleep 0.5; done; exit 1'
+exec sh -c 'grep -- "-O forward -R 127\.77\.255\.255:7737:$RUN/link-" "$STUB_LOG"'
+exec devvm clipboard images
+stdout '^==> setting_already command=devvm clipboard images vm=devvm-web-[0-9a-f]{14}$'
+exec devvm ls --json
+stdout '"clipboard": "images"'
+
+# What the VM's devvm-clip asks, answered from this machine's clipboard: its
+# types, then its image as a PNG; anything else gets nothing. devvm network
+# log says what was sent and what was refused.
+unix_ask $RUN/link-*.sock types
+stdout '\Aimage/png\n\z'
+unix_ask $RUN/link-*.sock image/png
+stdout '\Apng 2x3\n\z'
+unix_ask $RUN/link-*.sock text/plain
+! stdout .
+[linux] exec sh -c 'grep -c "^wl-paste --list-types$" "$STUB_LOG"'
+[linux] stdout '^1$'
+exec devvm network log
+stdout 'clipboard +clipboard:7737 +image sent, [0-9]+ bytes$'
+stdout 'REFUSED +clipboard:7737 +clipboard image: bad request$'
+
+# Off: applied at once, the session ends with nothing left to carry, and
+# the setup removes devvm-clip.
+exec devvm clipboard off
+stdout '^==> setting_applied vm=devvm-web-[0-9a-f]{14}$'
+! stderr .
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_CLIPBOARD=''''$'
+exec sh -c 'for i in $(seq 60); do pid=$(cat "$WEB_dir"/run/links.pid 2>/dev/null) || exit 0; kill -0 "$pid" 2>/dev/null || exit 0; sleep 0.5; done; exit 1'
+exec sh -c 'for i in $(seq 60); do ls "$RUN" | grep -q "^link-.*\.\(sock\|ctl\)$" || exit 0; sleep 0.5; done; exit 1'
+
+# A program in the VM holding the clipboard's address: said at once.
+exec sh -c 'echo 127.77.255.255:7737 > "$STUB_DIR"/link-taken'
+exec devvm clipboard images
+stderr '^devvm: clipboard_port_taken vm=devvm-web-[0-9a-f]{14}$'
+rm $STUB_DIR/link-taken
+exec devvm clipboard off
+
+# Stopped: the change waits for its start, which starts the session.
+exec devvm stop
+exec devvm clipboard images
+stdout '^==> setting_set vm=devvm-web-[0-9a-f]{14}$'
+exec devvm --network open
+exec sh -c 'for i in $(seq 60); do grep -qx "devvm links: 127\.77\.255\.255:7737: carried" "$WEB_dir"/logs/links.log && exit 0; sleep 0.5; done; exit 1'
+
+# With nothing on this machine to read the clipboard with, each start says
+# so (macOS always has osascript).
+[linux] env WAYLAND_DISPLAY=
+[linux] env DISPLAY=
+[linux] exec devvm --network open
+[linux] stderr '^devvm: clipboard_no_reader vm=devvm-web-[0-9a-f]{14}$'
+
+# Deleted, it leaves no socket.
+exec devvm rm --force --no-export
+exec sh -c 'ls "$RUN" | grep "^link-.*\.sock$" || true'
+! stdout .
+
+-- img.b64 --
+iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAYAAAC56t6BAAAAKElEQVR4nAAbAOT/Av8AAP8AAAAAAAAAAAAAAAAAAgAAAAAAAAAAAwAxMgIDFrOpdgAAAABJRU5ErkJggg==

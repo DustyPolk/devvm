@@ -67,7 +67,7 @@ stdout '\ndevvm-cl-.*\ndevvm-from-.*\ndevvm-half-.*\ndevvm-img-foo-.*\ndevvm-net
 exec devvm ls --json
 stdout '^{\n  "version": 1,\n  "vms": \[\n'
 stdout '^      "name": "devvm-cl-0123456789ab01",\n      "status": "Stopped",\n      "image": "base",\n      "tools": \[\n        "node",\n        "claude"\n      \],\n'
-stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "open",\n      "backend": "lima",\n      "folder": "/p/from",\n      "folder_state": "gone",\n      "links": 0\n'
+stdout '^      "name": "devvm-from-0123456789ab02",\n      "status": "Running",\n      "image": "base",\n      "tools": \[\],\n      "from": "node:24",\n      "git": "on",\n      "net": "open",\n      "backend": "lima",\n      "folder": "/p/from",\n      "folder_state": "gone",\n      "links": 0,\n      "clipboard": "off"\n'
 stdout '^      "name": "devvm-half-0123456789ab03",\n      "status": "Stopped",\n      "image": "",\n      "tools": \[\],\n      "git": "",\n'
 ! stdout '^NAME'
 

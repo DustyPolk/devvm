@@ -66,6 +66,9 @@ type vmJSON struct {
 	FolderState string `json:"folder_state"`
 	// Links is how many links the VM has to other VMs' ports.
 	Links int `json:"links"`
+	// Clipboard is whether the VM reads the image on this machine's
+	// clipboard: images or off ("" while its creation hasn't finished).
+	Clipboard string `json:"clipboard"`
 }
 
 func lsJSON(ls []vm.Listed) lsOutput {
@@ -73,7 +76,7 @@ func lsJSON(ls []vm.Listed) lsOutput {
 	for _, l := range ls {
 		out.VMs = append(out.VMs, vmJSON{
 			Name: l.Name, Status: l.Status, Image: l.Image, Tools: append([]string{}, l.Tools...), From: l.From, Git: l.Git, Net: l.Net,
-			Backend: l.Backend, Folder: l.Folder, FolderState: string(l.FolderState), Links: l.Links,
+			Backend: l.Backend, Folder: l.Folder, FolderState: string(l.FolderState), Links: l.Links, Clipboard: l.Clipboard,
 		})
 	}
 	return out

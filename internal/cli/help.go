@@ -24,7 +24,7 @@ type commandGroup struct {
 func commandGroups() []commandGroup {
 	return []commandGroup{
 		{"vm", "Your VM:", []string{"restart", "stop", "update", "rm", "adopt", "ls", "code", "desktop", "host", "history"}},
-		{"change", "Change your VM:", []string{"tools", "size", "ports", "network", "ssh-agent", "git-protect", "clone", "secret", "layer add", "layer rm"}},
+		{"change", "Change your VM:", []string{"tools", "size", "ports", "network", "ssh-agent", "git-protect", "clipboard", "clone", "secret", "layer add", "layer rm"}},
 		{"links", "Links between VMs:", []string{"link", "group"}},
 		{"images", "Images:", []string{"images", "build", "rebuild", "layer", "layer new"}},
 		{"space", "Disk space:", []string{"space", "gc", "retention"}},

@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/clipboard"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/netpolicy"
+	"github.com/devvmhq/devvm/internal/platform"
 	"github.com/devvmhq/devvm/internal/proxy"
 	"github.com/devvmhq/devvm/internal/state"
 	"github.com/devvmhq/devvm/internal/vmssh"
@@ -73,6 +75,11 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 		return err
 	}
 	events := linkEvents{path: e.Dirs.VM(vm).EventLog(), vm: vm, mu: &sync.Mutex{}}
+	srv := &clipboard.Server{Read: func(ctx context.Context) ([]byte, error) {
+		return platform.ClipboardImage(ctx, e.Getenv, clipboard.MaxBytes)
+	}}
+	clip := clipboardLink(srv)
+	srv.Event = func(event, why string) { events.add(event, clip, why) }
 	s := &vmssh.Links{
 		VM: vm, SSH: ssh, Dir: e.Dirs.Run(), Log: log, List: e.Dirs.VM(vm).LinkList(),
 		Every: linkAliveEvery, Sync: linkSyncEvery, Tick: 2 * time.Second,
@@ -80,10 +87,14 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 			now, err := b.Running(ctx, vm)
 			return err == nil && now.ID == start
 		},
-		Want:  func() ([]vmssh.Link, error) { return e.sessionLinks(vm) },
+		Want:  func() ([]vmssh.Link, error) { return e.sessionLinks(vm, clip) },
 		Check: e.linkCheck(vm),
 		Event: events.add,
 		Failed: func(l vmssh.Link, err error) {
+			if l.Serve != nil {
+				e.Warn(msg.ClipboardPortTaken(vm).Because(err))
+				return
+			}
 			e.Warn(Link{Name: l.Name, Port: l.Port}.PortTaken(vm).Because(err))
 		},
 	}
@@ -92,9 +103,9 @@ func (e Links) Session(ctx context.Context, vm string, log io.Writer) error {
 
 // sessionLinks returns a client's links as its session carries them:
 // every one its state has, whether it applies now or not, as each
-// connection is checked again, with the names its proxy takes it by. A
-// client that's gone has none.
-func (e Links) sessionLinks(vm string) ([]vmssh.Link, error) {
+// connection is checked again, with the names its proxy takes it by, and
+// clip with clipboard images on. A client that's gone has none.
+func (e Links) sessionLinks(vm string, clip vmssh.Link) ([]vmssh.Link, error) {
 	st, err := state.ReadVM(e.Dirs, vm)
 	if err != nil || !st.Exists() {
 		return nil, err
@@ -106,6 +117,9 @@ func (e Links) sessionLinks(vm string) ([]vmssh.Link, error) {
 	out := make([]vmssh.Link, len(links))
 	for i, l := range links {
 		out[i] = vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port, Hosts: []string{l.Name, l.Name + "." + proxy.LinkDomain}}
+	}
+	if clipboard.Mode(st) == clipboard.Images {
+		out = append(out, clip)
 	}
 	return out, nil
 }

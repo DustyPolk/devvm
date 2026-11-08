@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting
 explainer: What to do when something fails
-weight: 17
+weight: 18
 ---
 
 Each section below starts with what you see, then says what to do, with a link to the details.

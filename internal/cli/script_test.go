@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"image/png"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -58,6 +62,7 @@ func scriptCmds() map[string]func(ts *testscript.TestScript, neg bool, args []st
 		"release_server": releaseServer,
 		"stub_calls":     stubCalls,
 		"stub_reset":     stubReset,
+		"unix_ask":       unixAsk,
 		"vm_name":        vmName,
 		"vm_state":       vmState,
 		"wait_file":      waitFile,
@@ -362,6 +367,34 @@ func listenAny(ts *testscript.TestScript, neg bool, args []string) {
 	ts.Check(err)
 	ts.Defer(func() { _ = l.Close() })
 	ts.Setenv(args[0], strconv.Itoa(l.Addr().(*net.TCPAddr).Port))
+}
+
+// unixAsk sends LINE and a newline to the one unix socket GLOB matches, as
+// a VM's devvm-clip asks for clipboard images, and prints what comes back
+// before the socket closes: a PNG as "png WIDTHxHEIGHT", anything else as
+// it is.
+func unixAsk(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 2 {
+		ts.Fatalf("usage: unix_ask GLOB LINE")
+	}
+	socks, err := filepath.Glob(args[0])
+	ts.Check(err)
+	if len(socks) != 1 {
+		ts.Fatalf("%s: %d sockets", args[0], len(socks))
+	}
+	c, err := net.DialTimeout("unix", socks[0], 2*time.Second) //nolint:noctx // the script's own socket, its dial bounded
+	ts.Check(err)
+	defer func() { _ = c.Close() }()
+	ts.Check(c.SetDeadline(time.Now().Add(10 * time.Second)))
+	_, err = io.WriteString(c, args[1]+"\n")
+	ts.Check(err)
+	got, err := io.ReadAll(c)
+	ts.Check(err)
+	if cfg, err := png.DecodeConfig(bytes.NewReader(got)); err == nil {
+		_, _ = fmt.Fprintf(ts.Stdout(), "png %dx%d\n", cfg.Width, cfg.Height)
+		return
+	}
+	_, _ = ts.Stdout().Write(got)
 }
 
 // freePort sets each VAR to a different port nothing on the host listens

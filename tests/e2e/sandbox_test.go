@@ -107,13 +107,14 @@ func newSandbox(o options) (*sandbox, error) {
 }
 
 // environ is env with what e2e never inherits taken out and set's
-// variables in their place. Your SSH agent is never reached, devvm's
-// output stays plain, and no setting of yours picks its messages, mise,
-// Ubuntu's mirror or --from.
+// variables in their place. Your SSH agent and your clipboard (no
+// display to read it from) are never reached, devvm's output stays plain,
+// and no setting of yours picks its messages, mise, Ubuntu's mirror or
+// --from.
 func environ(env []string, set map[string]string) []string {
 	drop := []string{
 		"DEVVM_MESSAGES", "DEVVM_UBUNTU_URL", "DEVVM_UBUNTU_RELEASE", "DEVVM_HOST_MISE", "CLAUDE_CODE_OAUTH_TOKEN",
-		"DEVVM_FROM", "SSH_AUTH_SOCK", "FORCE_COLOR", "CLICOLOR_FORCE",
+		"DEVVM_FROM", "SSH_AUTH_SOCK", "FORCE_COLOR", "CLICOLOR_FORCE", "WAYLAND_DISPLAY", "DISPLAY",
 	}
 	var out []string
 	for _, kv := range env {

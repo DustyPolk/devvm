@@ -7,6 +7,7 @@ You're running in a devvm VM. devvm gives each project folder on the user's mach
 - The project folder is mounted read-write at the same path as on the host, so the user's editor sees your changes at once. It's the only folder of the host's that the VM can write to: the agent store's folders and the shared tools are mounted read-only.
 - Your home folder is on the VM's own disk, not the host's. The coding agents' settings, skills and logins come from devvm's agent store, and the folders among them are mounted read-only.
 - devvm update, devvm layer add and devvm layer rm make the VM again from a newer or another image. The project folder and your home folder survive, and everything else on the disk is lost, such as packages installed with apt, programs installed outside your home and Docker's images. Shell settings of your own go in `~/.bashrc.d`, because the image owns `~/.bashrc`.
+- An image the user pastes into you comes from the host's clipboard only in a VM where they ran devvm clipboard images. Then `xclip` and `wl-paste` read that image as a PNG, but never text, and nothing they copy reaches the host.
 - In the project folder, git can commit, branch, fetch and pull, but `.git`'s hooks and config are locked, so `git config`, `git remote add`, `push -u` to a new branch and hook installers fail with `Operation not permitted`. Ask the user to change them on the host. A VM made with `--clone` has its own clone of the repo instead, and the user fetches its branches with `git fetch devvm`.
 
 ## Network and secrets
@@ -48,4 +49,5 @@ These commands run on the host, in the project folder, so ask the user to run th
 | an agent's changed settings, skills or plugins kept for every VM | `devvm agent save` |
 | the GitHub token in this VM | `devvm secret set github`, then `devvm secret use github` |
 | an agent logged in | `devvm agent login AGENT`, such as `devvm agent login claude` |
+| images pasted from the host's clipboard | `devvm clipboard images` |
 | `.git`'s hooks or config changed | devvm git-protect off, with the VM stopped, then devvm git-protect on |

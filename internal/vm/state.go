@@ -3,6 +3,7 @@ package vm
 import (
 	"context"
 
+	"github.com/devvmhq/devvm/internal/clipboard"
 	"github.com/devvmhq/devvm/internal/devcontainer"
 	"github.com/devvmhq/devvm/internal/gitprotect"
 	"github.com/devvmhq/devvm/internal/netpolicy"
@@ -157,7 +158,7 @@ func update[T any](ctx context.Context, st *state.VM, name string, f func(*T) er
 func checkState(st *state.VM) error {
 	for _, err := range []error{
 		check(st, netpolicy.Of), check(st, gitprotect.Of), check(st, ports.Of), check(st, sshagent.Of),
-		check(st, secrets.Of), check(st, tools.Of),
+		check(st, secrets.Of), check(st, tools.Of), check(st, clipboard.Of),
 		section[Size](st, sizeSection), section[cloneInVM](st, cloneSection),
 		section[devcontainerInVM](st, devcontainerSection), section[desktopInVM](st, desktopSection),
 		section[remakeInVM](st, remakeSection), section[movedInVM](st, movedSection), check(st, ReadLinks),

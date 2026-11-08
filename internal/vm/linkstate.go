@@ -109,7 +109,7 @@ func (e linkRuns) unlinkTarget(ctx context.Context, target string) error {
 	for _, st := range lost {
 		c, err := e.Registry.For(st)
 		if err == nil {
-			_, err = e.apply(ctx, c.Backend, st, nil, 0)
+			_, err = e.apply(ctx, c.Backend, st, nil, false, 0)
 		}
 		if err != nil {
 			e.Warn(msg.LinksUpdateFailed(st.Name()).Because(err))

@@ -666,6 +666,39 @@ func TestOpencode(t *testing.T) {
 	s.fails(1, "opencode", "run")
 }
 
+// The clipboard's stubs: no image, the image, and no display.
+func TestClipboard(t *testing.T) {
+	s := newSandbox(t)
+	s.fails(1, "wl-paste", "--list-types")
+	s.fails(1, "wl-paste", "--no-newline", "--type", "image/png")
+	if out := s.ok("", "xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"); out != "TARGETS\nUTF8_STRING\n" {
+		t.Errorf("xclip's targets without an image %q", out)
+	}
+	s.fails(1, "xclip", "-selection", "clipboard", "-t", "image/png", "-o")
+	s.fails(1, "osascript", "-e", "the clipboard as «class PNGf»")
+	s.write("clipboard-png", "\x89PNG\x00")
+	if out := s.ok("", "wl-paste", "--list-types"); out != "image/png\n" {
+		t.Errorf("wl-paste --list-types %q", out)
+	}
+	if out := s.ok("", "wl-paste", "--no-newline", "--type", "image/png"); out != "\x89PNG\x00" {
+		t.Errorf("wl-paste --type image/png %q", out)
+	}
+	if out := s.ok("", "xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"); out != "TARGETS\nimage/png\n" {
+		t.Errorf("xclip's targets %q", out)
+	}
+	if out := s.ok("", "xclip", "-selection", "clipboard", "-t", "image/png", "-o"); out != "\x89PNG\x00" {
+		t.Errorf("xclip -t image/png %q", out)
+	}
+	if out := s.ok("", "osascript", "-e", "the clipboard as «class PNGf»"); out != "«data PNGf89504E4700»\n" {
+		t.Errorf("osascript %q", out)
+	}
+	s.fails(1, "wl-paste", "--type=image/jpeg")
+	s.touch("clipboard-fails")
+	s.fails(1, "wl-paste", "--list-types")
+	s.fails(1, "xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
+	s.fails(1, "osascript", "-e", "the clipboard as «class PNGf»")
+}
+
 // docker: down, an image or none, and save's tarball.
 func TestDocker(t *testing.T) {
 	s := newSandbox(t)

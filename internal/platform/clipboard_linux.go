@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"os/exec"
 	"strings"
 )
 
@@ -15,6 +16,23 @@ const clipboardTypesLimit = 64 << 10
 // else xclip under X11 (DISPLAY), getenv reading those.
 func ClipboardImage(ctx context.Context, getenv func(string) string, limit int64) ([]byte, error) {
 	return clipboardImage(ctx, getenv, limit, runClipboard)
+}
+
+// ClipboardReader reports whether ClipboardImage has a reader here, without
+// reading the clipboard: ErrNoClipboardReader without a display, or
+// without its reader on PATH.
+func ClipboardReader(getenv func(string) string) error {
+	name := "xclip"
+	switch {
+	case getenv("WAYLAND_DISPLAY") != "":
+		name = "wl-paste"
+	case getenv("DISPLAY") == "":
+		return ErrNoClipboardReader
+	}
+	if _, err := exec.LookPath(name); err != nil {
+		return ErrNoClipboardReader
+	}
+	return nil
 }
 
 func clipboardImage(ctx context.Context, getenv func(string) string, limit int64, run clipboardRun) ([]byte, error) {

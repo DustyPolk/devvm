@@ -28,6 +28,7 @@ func sections() []section {
 		{name: "nix", guess: 900, tools: []tool{sshTool()}, run: nixSection},
 		{name: "from", guess: 1800, run: fromSection},
 		{name: "link", guess: 900, tools: linkTools(), run: linkSection},
+		{name: "clipboard", guess: 300, run: clipboardSection},
 	}
 }
 

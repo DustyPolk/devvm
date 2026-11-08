@@ -1,7 +1,7 @@
 ---
 title: Upgrading and uninstalling
 explainer: Upgrade devvm, or remove it and what it keeps
-weight: 16
+weight: 17
 ---
 
 This page covers upgrading devvm, switching between Homebrew and the install script, and removing devvm with everything it keeps. Each depends on how you [installed devvm](../getting-started/install.md), and your images, VMs and settings stay through an upgrade or a switch, because they don't live with devvm. [Installing and updating](../internals/install.md) explains what the install script and devvm upgrade check.

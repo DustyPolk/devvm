@@ -97,7 +97,7 @@ func TestJSONShapes(t *testing.T) {
 		{
 			"ls", lsJSON([]vm.Listed{{Name: "devvm-a", Status: "Running", Image: "base", Tools: []string{"node"}, From: "node:24", Git: "on", Net: "allowlist", Backend: "lima", Folder: "/a"}}),
 			[]string{
-				"vms[].backend: string", "vms[].folder: string", "vms[].folder_state: string", "vms[].from: string", "vms[].git: string", "vms[].image: string", "vms[].links: number",
+				"vms[].backend: string", "vms[].clipboard: string", "vms[].folder: string", "vms[].folder_state: string", "vms[].from: string", "vms[].git: string", "vms[].image: string", "vms[].links: number",
 				"vms[].name: string", "vms[].net: string", "vms[].status: string", "vms[].tools[]: string",
 			},
 		},
@@ -175,6 +175,7 @@ func TestJSONShapes(t *testing.T) {
 		},
 		{"git-protect", map[string]string{"mode": "on"}, []string{"mode: string"}},
 		{"clone", map[string]string{"clone": "on"}, []string{"clone: string"}},
+		{"clipboard", map[string]string{"clipboard": "images"}, []string{"clipboard: string"}},
 		{
 			"secret",
 			secretOutput{Secrets: []secretJSON{{Name: "github", Saved: true, UsedBy: []string{"devvm-a"}}}},

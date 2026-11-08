@@ -1857,6 +1857,22 @@ other = "While you're connected, anything in {{.vm}} can use the keys in your SS
 [agent_devvm_risk]
 other = "While you're connected, anything in {{.vm}} can use the keys in devvm's SSH agent. Run devvm ssh-agent to list them."
 
+[clipboard_failed]
+description = "reason is an error from the system, in English"
+other = "Showing or changing whether this folder's VM reads your clipboard's images failed: {{.reason}}."
+
+[no_vm_clipboard]
+other = "There's no VM for {{.dir}}. Run devvm to make one, then devvm clipboard images."
+
+[clipboard_on_risk]
+other = "While {{.vm}} runs, anything in it can read the image on your clipboard, though never its text."
+
+[clipboard_no_reader]
+other = "This machine has nothing to read its clipboard with, so images pasted in {{.vm}} come through empty. Install wl-clipboard or xclip, then start the VM from a terminal on your desktop."
+
+[clipboard_port_taken]
+other = "Pasting images doesn't work in {{.vm}}, because a program in it already listens on the clipboard's address. Stop that program, then run devvm restart."
+
 [agent_start_failed]
 other = "The SSH agent devvm runs didn't start at {{.sock}}."
 

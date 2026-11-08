@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/clipboard"
 	"github.com/devvmhq/devvm/internal/gitprotect"
 	"github.com/devvmhq/devvm/internal/netpolicy"
 	"github.com/devvmhq/devvm/internal/tools"
@@ -27,6 +28,9 @@ type Listed struct {
 	FolderState FolderState
 	// Links is how many links it has to other VMs' ports, as a client.
 	Links int
+	// Clipboard is whether it reads the image on this machine's
+	// clipboard: images or off.
+	Clipboard string
 }
 
 // List lists the project VMs the backends' lists have, sorted by name
@@ -63,7 +67,7 @@ func listed(ctx context.Context, k Known) (Listed, error) {
 	l.Image, l.Tools, l.Git, l.Folder = st.Image, tools.Names(st), gitprotect.Mode(st), st.Dir
 	l.FolderState, l.Links = FolderOf(st), len(linksOf(st).Links)
 	if l.Image != "" {
-		l.From = st.From
+		l.From, l.Clipboard = st.From, clipboard.Mode(st)
 	}
 	var err error
 	l.Net, err = netpolicy.Listed(ctx, k.Backend, st, in.Status == backend.StatusRunning)

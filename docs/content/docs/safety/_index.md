@@ -37,7 +37,8 @@ flowchart TB
     git[".git hooks<br>and config,<br>locked on<br>macOS"]
     agent["your SSH<br>agent,<br>unless you<br>turn it on"]
     secrets["your secrets<br>stay on this<br>machine"]
-    home ~~~ git ~~~ agent ~~~ secrets
+    clip["your<br>clipboard,<br>unless you<br>turn on its<br>images"]
+    home ~~~ git ~~~ agent ~~~ secrets ~~~ clip
   end
   subgraph copied["Read-only or copied"]
     direction TB
@@ -63,6 +64,7 @@ flowchart TB
 | Your SSH keys | Only with `devvm ssh-agent on`, and only while you're connected. With `devvm ssh-agent devvm`, the VM can use only the keys you added to devvm's own agent ([details](../using/ssh.md#agent-forwarding)). |
 | The network | On every tier but open, the VM reaches only its proxy on this machine, which lets it reach what [its tier](network.md#network-tiers) allows. On the open tier it reaches everything this machine reaches, including this machine's own services on `localhost` ([details](network.md#network-tiers)). |
 | Your secrets | Your GitHub token, Claude Code's token, the coding agents' logins and API keys and Claude Code's MCP secrets stay on this machine on every network tier, and the proxy puts them into requests ([details](network.md#secrets)). opencode's and pi's keys that the proxy can't put in, such as a local model server's, stay on this machine too, unless you pass one to VMs in `config.toml` ([opencode logins](../using/coding-agents.md#codex-and-opencode-logins), [pi logins](../using/coding-agents.md#pi-logins)). |
+| Your clipboard | Out of reach unless you run `devvm clipboard images` in the VM's folder. Then, while the VM runs, anything in it can read the image on your clipboard, as a PNG with its metadata dropped, but never its text, and nothing the VM copies reaches this machine ([details](../using/clipboard.md#what-a-vm-can-read)). |
 
 > [!NOTE]
 > Everything here rests on the VM's boundary: the VM runs its own kernel, apart from this machine's.

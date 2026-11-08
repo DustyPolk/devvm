@@ -1,7 +1,7 @@
 ---
 title: Known limits
 explainer: What devvm can't do, and where
-weight: 18
+weight: 19
 ---
 
 These are the things devvm can't do, everywhere, on Linux hosts and on Intel Macs.
@@ -14,6 +14,7 @@ These are the things devvm can't do, everywhere, on Linux hosts and on Intel Mac
 - **Agent folders** that you make or delete on this machine reach a running VM only after a restart, which devvm offers ([details](coding-agents.md#mounts)).
 - **Ports** are forwarded over TCP only, and forwarding every port means every port from 1024 up. You can tunnel UDP over a forwarded TCP port with socat ([details](ports-size.md#ports)).
 - **Links between VMs** carry TCP over IPv4 alone, and a container in a VM reaches them only with `--network host` ([details](links.md#ports)).
+- **Pasting images** works in Claude Code and pi alone, carries only an image from this machine into the VM, never text, and needs a display to read the clipboard from on Linux hosts ([details](clipboard.md)).
 - **Changing a running VM's ports** closes the connections that are open through its forwards ([details](ports-size.md#ports)).
 - **With Lima,** project paths can't contain commas, folder names in VM names are cut short, and disks grow but never shrink ([details](../backends/lima.md#limits)).
 - **File watchers in a Lima VM** don't see the edits you make on this machine, only those made in the VM, so set a dev server that should reload on your edits to poll the project folder ([details](../backends/lima.md#file-watchers)).

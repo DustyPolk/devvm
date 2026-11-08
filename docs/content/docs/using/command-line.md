@@ -1,7 +1,7 @@
 ---
 title: The command line
 explainer: Help, flags, questions, JSON output and completion
-weight: 15
+weight: 16
 ---
 
 This page covers what works the same way in every command: the help, flags and their values, the questions devvm asks and what answers them beforehand, `--json` for scripts, and shell completion. [Everyday commands](../getting-started/commands.md) lists the commands, and the [CLI reference](../cli/_index.md) has every command with all its flags.
@@ -78,6 +78,7 @@ A command that shows a setting when you run it bare and changes the setting when
 | `devvm link --json` | [this folder's VM's links](links.md#devvm-link---json) |
 | `devvm link publish --json` | [the ports this folder's VM publishes to links](links.md#devvm-link-publish---json) |
 | `devvm git-protect --json` | [this folder's VM's `.git` protection](../safety/git-protection.md#devvm-git-protect---json) |
+| `devvm clipboard --json` | [whether this folder's VM reads your clipboard's images](clipboard.md#devvm-clipboard---json) |
 | `devvm history --json` | [the saved exports of agents' history](coding-agents.md#devvm-history---json) |
 | `devvm space --json` | [what devvm keeps on this machine](space.md#devvm-space---json) |
 | `devvm retention --json` | [the retention settings](settings.md#devvm-retention---json) |

@@ -75,6 +75,8 @@ The clipboard isn't shared unless you add `--clipboard`. With sharing on, what y
 
 `--clipboard` turns sharing on in both directions for that run, and the next run without it turns sharing off again. devvm can't stop a VM whose desktop was changed from sending its clipboard to Screen Sharing, so when you don't want the VM's clipboard on this machine, also turn off Use Shared Clipboard in Screen Sharing's Edit menu.
 
+To paste an image into a coding agent in the VM, such as Claude Code, you don't need the desktop. `devvm clipboard images` sends the image on your clipboard into the VM whenever something in it asks, in any VM, while `--clipboard` shares text in both directions, with the desktop alone ([pasting images](clipboard.md)).
+
 ## What it costs
 
 - About 370 MB of disk for the `desktop` image, which every VM with the layer shares, while `base` and the VMs without the layer stay that much smaller.

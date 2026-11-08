@@ -64,7 +64,7 @@ stdout '^\.claude/skills\n\S+/config/devvm/agents/claude/\.claude/skills\n\.clau
 exec tar -xOf $STUB_DIR/sync.tar vm
 stdout '\A\QDEVVM_HOSTNAME=''plain''\E\n\QDEVVM_TZ=''Europe/Paris''\E\n\QDEVVM_LANG=''en_US.UTF-8''\E\n\QDEVVM_GIT_NAME=''Test User''\E\n\QDEVVM_GIT_EMAIL=''test@example.com''\E\n'
 # An open VM's proxy too, as its environment has it, and where its local proxy listens.
-stdout '^DEVVM_PROXY=''http://devvm:[0-9a-f]{64}@192\.168\.5\.2:[0-9]+''\n\QDEVVM_NO_PROXY=''localhost,127.0.0.1,::1''\E\n\QDEVVM_LOCAL_PROXY=''127.0.77.1:3128''\E\n\z'
+stdout '^DEVVM_PROXY=''http://devvm:[0-9a-f]{64}@192\.168\.5\.2:[0-9]+''\n\QDEVVM_NO_PROXY=''localhost,127.0.0.1,::1''\E\n\QDEVVM_LOCAL_PROXY=''127.0.77.1:3128''\E\n\QDEVVM_CLIPBOARD=''''\E\n\z'
 # Without links, the hosts file for /etc/hosts is empty.
 exec tar -xOf $STUB_DIR/sync.tar hosts
 ! stdout .

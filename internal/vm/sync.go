@@ -253,7 +253,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	if m := claudeMoved(in.moved, st.Dir); m != nil {
 		s.put("moved", 0o644, m)
 	}
-	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh", "claude.sh", "guide.md", opencodeScript} {
+	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh", "claude.sh", "guide.md", "clip.sh", opencodeScript} {
 		data, err := fs.ReadFile(e.Assets, "guest/"+name)
 		if err != nil {
 			return nil, err
@@ -298,6 +298,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		{"DEVVM_PROXY", proxyURL},
 		{"DEVVM_NO_PROXY", netpolicy.NoProxy},
 		{"DEVVM_LOCAL_PROXY", localProxy(proxyURL)},
+		{"DEVVM_CLIPBOARD", clipboardGuest(st)},
 	}
 	// The devcontainer.json's variables first: devvm's own win.
 	dcEnv, err := devcontainerEnv(st)

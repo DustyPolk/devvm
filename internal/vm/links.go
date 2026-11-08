@@ -234,7 +234,7 @@ func (e Links) changeLinks(ctx context.Context, t *target, links, added []Link, 
 		return err
 	}
 	said()
-	running, err := runs.apply(ctx, t.b, t.st, added, from)
+	running, err := runs.apply(ctx, t.b, t.st, added, false, from)
 	if err == nil && !running {
 		e.Info(msg.SettingSet(t.f.Name))
 	}

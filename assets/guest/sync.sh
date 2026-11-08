@@ -14,8 +14,9 @@
 #   vm           DEVVM_* host settings applied to every VM: hostname, timezone, locale, git identity,
 #                DEVVM_PROXY (the proxy URL, empty when the guest has none),
 #                DEVVM_NO_PROXY (what reaches the VM itself without the proxy; its links go through it),
-#                and DEVVM_LOCAL_PROXY (ADDRESS:PORT on the VM's loopback, where devvm-local-proxy
-#                listens; empty without a proxy)
+#                DEVVM_LOCAL_PROXY (ADDRESS:PORT on the VM's loopback, where devvm-local-proxy
+#                listens; empty without a proxy), and DEVVM_CLIPBOARD ("ADDRESS PORT" where devvm
+#                answers for the host's clipboard image; empty unless devvm clipboard images)
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
 #   tool-alias.toml  the [tool_alias] table of devvm's shared-tools/mise.toml: the backend each
 #                tool's image was built from, which mise's registry might not give its name
@@ -26,6 +27,7 @@
 #   hosts        the VM's links (devvm checked them): a line per target, "ADDRESS NAME
 #                NAME.devvm.internal...", for /etc/hosts
 #   guide.md     devvm's guide for the agents in the VM, installed as /usr/share/doc/devvm/README.md
+#   clip.sh      xclip and wl-paste for clipboard images, installed as devvm-clip with DEVVM_CLIPBOARD
 #   moved        only after the project folder moved: moved_from and moved_to, its old path and
 #                its new, and claude_from and claude_to, their Claude Code slugs; claude.sh moves
 #                Claude Code's sessions and settings from the old to the new
@@ -506,6 +508,30 @@ cmp -s "$s/guide.md" "$guide" 2>/dev/null || sudo install -D -m 644 -o root -g r
 if [[ "$(cat /usr/local/bin/devvm-help 2>/dev/null)" != "$(printf '#!/bin/sh\nexec cat %s\n' "$guide")" ]]; then
   printf '#!/bin/sh\nexec cat %s\n' "$guide" | sudo tee /usr/local/bin/devvm-help >/dev/null
   sudo chmod 755 /usr/local/bin/devvm-help
+fi
+
+# Clipboard images (devvm clipboard images): devvm-clip asks devvm on the host, at DEVVM_CLIPBOARD,
+# for the image on its clipboard, and xclip and wl-paste are linked to it where the VM has neither in
+# /usr/local/bin, ahead of /usr/bin, so an agent that runs them when you paste gets it. Without the
+# setting, only the links devvm made go, with devvm-clip and its address.
+clip_links() { # add|rm
+  local n p
+  for n in xclip wl-paste; do
+    p=/usr/local/bin/$n
+    if [[ $1 == add ]]; then
+      [[ -e $p || -L $p ]] || sudo ln -s devvm-clip "$p"
+    elif [[ "$(readlink "$p" 2>/dev/null)" == devvm-clip ]]; then
+      sudo rm -f "$p"
+    fi
+  done
+}
+if [[ -n "${DEVVM_CLIPBOARD:-}" ]]; then
+  cmp -s "$s/clip.sh" /usr/local/bin/devvm-clip 2>/dev/null || sudo install -D -m 755 "$s/clip.sh" /usr/local/bin/devvm-clip
+  [[ "$(cat /etc/devvm/clipboard 2>/dev/null)" == "$DEVVM_CLIPBOARD" ]] || echo "$DEVVM_CLIPBOARD" | sudo tee /etc/devvm/clipboard >/dev/null
+  clip_links add
+else
+  clip_links rm
+  sudo rm -f /usr/local/bin/devvm-clip /etc/devvm/clipboard
 fi
 
 # Tell agents why the network may fail, and what to do about it.

@@ -10,17 +10,20 @@ import (
 	"time"
 
 	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/clipboard"
 	"github.com/devvmhq/devvm/internal/daemon"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/project"
+	"github.com/devvmhq/devvm/internal/proxy"
 	"github.com/devvmhq/devvm/internal/state"
 	"github.com/devvmhq/devvm/internal/tools"
 	"github.com/devvmhq/devvm/internal/vmssh"
 )
 
 // linkRuns starts and stops client VMs' link sessions: devvm _links VM,
-// one detached process for each running client with links, its output in
+// one detached process for each running client with links or clipboard
+// images, its output in
 // its log (paths.VM.LinksLog), its pid in its run folder
 // (paths.VM.LinksPID). The proxies' seams start, find and signal them
 // (Proxy.Start, Args and Signal), through daemon.Proc.
@@ -58,8 +61,8 @@ func (e linkRuns) stop(ctx context.Context, vm string) {
 }
 
 // removeSockets deletes what a session of vm's that was killed leaves
-// behind and nothing listens on: each of its links' sockets and its own
-// master's control socket. Its masters' to targets, named by their starts
+// behind and nothing listens on: each of its links' sockets, the
+// clipboard's, and its own master's control socket. Its masters' to targets, named by their starts
 // too, are devvm gc --orphans's. Its list for the VM's proxy stays: with
 // no socket to reach, the proxy refuses those links rather than ask its
 // rules, and a new session writes it again.
@@ -70,7 +73,7 @@ func (e linkRuns) removeSockets(ctx context.Context, vm string) {
 	}
 	links, _ := ReadLinks(st)
 	s := vmssh.Links{VM: vm, Dir: e.Dirs.Run()}
-	paths := []string{s.Control("", "")}
+	paths := []string{s.Control("", ""), s.Socket(clipboardLink(nil))}
 	for _, l := range links {
 		paths = append(paths, s.Socket(vmssh.Link{Addr: l.Addr, Port: l.Port}))
 	}
@@ -130,12 +133,16 @@ func (e linkRuns) start(vm string) (int64, error) {
 }
 
 // report waits, up to linksReportWait, for vm's link session to say what
-// came of links, in its log after from, and warns of each the VM refused:
-// a program there holds the link's address and port.
-func (e linkRuns) report(ctx context.Context, vm string, links []Link, from int64) {
+// came of links, and of clipboard images with clip, in its log after from,
+// and warns of each the VM refused: a program there holds the address and
+// port.
+func (e linkRuns) report(ctx context.Context, vm string, links []Link, clip bool, from int64) {
 	want := make([]vmssh.Link, len(links))
 	for i, l := range links {
 		want[i] = vmssh.Link{Name: l.Name, Target: l.Target, Addr: l.Addr, Port: l.Port}
+	}
+	if clip {
+		want = append(want, clipboardLink(nil))
 	}
 	var r vmssh.LinksReport
 	deadline := time.Now().Add(linksReportWait)
@@ -156,6 +163,10 @@ func (e linkRuns) report(ctx context.Context, vm string, links []Link, from int6
 		}
 	}
 	for _, l := range r.Refused {
+		if proxy.IsClipboardAddr(l.Addr) {
+			e.Warn(msg.ClipboardPortTaken(vm))
+			continue
+		}
 		e.Warn(Link{Name: l.Name, Port: l.Port}.PortTaken(vm))
 	}
 }
@@ -167,7 +178,8 @@ func (e linkRuns) report(ctx context.Context, vm string, links []Link, from int6
 func (e linkRuns) atLaunch(ctx context.Context, b backend.Backend, st *state.VM) error {
 	vm := st.Name()
 	links, err := ReadLinks(st)
-	if err != nil || len(links) == 0 {
+	on := clipboard.Mode(st) == clipboard.Images
+	if err != nil || len(links) == 0 && !on {
 		return err
 	}
 	if err := e.Registry.Require(b, vm, linkFeatures()...); err != nil {
@@ -176,12 +188,15 @@ func (e linkRuns) atLaunch(ctx context.Context, b backend.Backend, st *state.VM)
 	if err := e.warnTargets(ctx, st, links); err != nil {
 		return err
 	}
+	if on {
+		e.warnNoClipboardReader(vm)
+	}
 	started, from, err := e.ensure(vm)
 	if err != nil {
 		return err
 	}
 	if started {
-		e.report(ctx, vm, links, from)
+		e.report(ctx, vm, links, on, from)
 	}
 	return nil
 }
@@ -257,10 +272,11 @@ func guestLinks(d paths.Dirs, st *state.VM) ([]GuestLink, error) {
 // apply gives a running client its changed links: its setup sent again,
 // for its /etc/hosts and NO_PROXY settings, and its link session running,
 // which reads its links again each second. It waits for the session to
-// say what came of added, the links that are new, in its log after from
-// (logSize, before the change was written). It reports whether the client
-// runs: a stopped one gets them at its next start.
-func (e linkRuns) apply(ctx context.Context, b backend.Backend, st *state.VM, added []Link, from int64) (bool, error) {
+// say what came of added, the links that are new, and of clipboard images
+// when clip turned them on, in its log after from (logSize, before the
+// change was written). It reports whether the client runs: a stopped one
+// gets them at its next start.
+func (e linkRuns) apply(ctx context.Context, b backend.Backend, st *state.VM, added []Link, clip bool, from int64) (bool, error) {
 	vm := st.Name()
 	in, err := b.Inspect(ctx, vm)
 	if err != nil || in.Status != backend.StatusRunning {
@@ -281,7 +297,8 @@ func (e linkRuns) apply(ctx context.Context, b backend.Backend, st *state.VM, ad
 		return true, err
 	}
 	links, err := ReadLinks(st)
-	if err != nil || len(links) == 0 {
+	on := clipboard.Mode(st) == clipboard.Images
+	if err != nil || len(links) == 0 && !on {
 		return true, err // its session ends on its own, having none
 	}
 	if err := e.Registry.Require(b, vm, linkFeatures()...); err != nil {
@@ -292,9 +309,9 @@ func (e linkRuns) apply(ctx context.Context, b backend.Backend, st *state.VM, ad
 	case err != nil:
 		return true, err
 	case started:
-		e.report(ctx, vm, links, start)
-	case len(added) > 0:
-		e.report(ctx, vm, added, from)
+		e.report(ctx, vm, links, on, start)
+	case len(added) > 0 || clip:
+		e.report(ctx, vm, added, clip, from)
 	}
 	return true, nil
 }

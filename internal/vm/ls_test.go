@@ -136,11 +136,11 @@ func TestList(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Listed{
-		{Name: other, Status: "Running", Image: "base", Tools: []string{"go"}, Git: "on", Net: "open", Backend: "other", Folder: "/p/api", FolderState: FolderGone},
-		{Name: clone, Status: "Stopped", Image: "base", Git: "clone", Net: "unenforced", Backend: "lima", Folder: "/p/cl", FolderState: FolderGone},
+		{Name: other, Status: "Running", Image: "base", Tools: []string{"go"}, Git: "on", Net: "open", Backend: "other", Folder: "/p/api", FolderState: FolderGone, Clipboard: "off"},
+		{Name: clone, Status: "Stopped", Image: "base", Git: "clone", Net: "unenforced", Backend: "lima", Folder: "/p/cl", FolderState: FolderGone, Clipboard: "off"},
 		{Name: half, Status: "Stopped", Backend: "lima", FolderState: FolderThere},
-		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "open", Backend: "lima", Folder: "/p/img-foo", FolderState: FolderGone},
-		{Name: web, Status: "Running", Image: "docker", Tools: []string{"node", "claude"}, Git: "on", Net: "unenforced", Backend: "lima", Folder: webDir, FolderState: FolderThere},
+		{Name: img, Status: "Stopped", Image: "base", From: "node:24", Git: "off", Net: "open", Backend: "lima", Folder: "/p/img-foo", FolderState: FolderGone, Clipboard: "off"},
+		{Name: web, Status: "Running", Image: "docker", Tools: []string{"node", "claude"}, Git: "on", Net: "unenforced", Backend: "lima", Folder: webDir, FolderState: FolderThere, Clipboard: "off"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("List =\n%+v\nwant\n%+v", got, want)

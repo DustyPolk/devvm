@@ -18,6 +18,7 @@ These pages cover what you change as you work, such as the images VMs are made f
 - [devcontainer.json](devcontainer.md): what a new VM takes from a project's `devcontainer.json`, and what devvm refuses.
 - [Links between VMs](links.md): `devvm link`, which lets a program in one VM reach a service in another by name, as in `postgres://db:5432/app`, once that VM publishes the port.
 - [A VM's desktop](desktop.md): the `desktop` layer, and opening a VM's desktop in Screen Sharing with `devvm desktop`.
+- [Pasting images](clipboard.md): `devvm clipboard images`, which lets Claude Code and pi in a VM paste the image on your clipboard, and what a VM can read once it's on.
 - [Starting from a container image](from.md): `--from`, which starts base from `node:24`, `alpine:3` or your own image.
 - [What devvm keeps on this machine](space.md): everything devvm, its tools and its backends keep outside your project folders, and how each is cleaned up.
 - [The command line](command-line.md): the help, flags and their values, the questions devvm asks and what answers them, `--json` for scripts, and shell completion.
