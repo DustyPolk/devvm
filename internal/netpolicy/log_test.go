@@ -29,6 +29,8 @@ func TestFormatEvent(t *testing.T) {
 		{`{"time":"T","event":"link_refused","host":"db","port":5432,"target":"devvm-db-x","reason":"unpublished"}`, "T  REFUSED  db:5432  to devvm-db-x: unpublished"},
 		{`{"time":"T","event":"link_target_stopped","host":"db","port":80,"target":"devvm-db-x"}`, "T  REFUSED  db:80  to devvm-db-x: it isn't running"},
 		{`{"time":"T","event":"link_limit","host":"db","port":80,"target":"devvm-db-x","reason":"256"}`, "T  REFUSED  db:80  256 connections carried already"},
+		{`{"time":"T","event":"clipboard","host":"clipboard","port":7737,"reason":"48213 bytes"}`, "T  clipboard  clipboard:7737  image sent, 48213 bytes"},
+		{`{"time":"T","event":"clipboard_refused","host":"clipboard","port":7737,"reason":"no image"}`, "T  REFUSED  clipboard:7737  clipboard image: no image"},
 		{`not json`, ""},
 		{`{"time":"T"}`, ""},
 		{``, ""},

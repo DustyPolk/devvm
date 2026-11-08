@@ -63,11 +63,15 @@ const (
 // Link is one link a session carries: the client listens on Addr:Port.
 // Name and Target are what its events name: the client's name for it and
 // the target VM. Hosts are the names the VM's proxy takes it by (List).
+// Serve, when set, makes it devvm's own: each connection is Serve's, in
+// the session's process, with no target, no check and no entry in List,
+// as for clipboard images; Serve closes it.
 type Link struct {
 	Name, Target string
 	Addr         netip.Addr
 	Port         int
 	Hosts        []string
+	Serve        func(ctx context.Context, conn net.Conn)
 }
 
 // linkKey is what identifies a link in its client: its address and port.
@@ -419,6 +423,9 @@ func (l *Links) writeList(want []Link) {
 	listed := slices.Clone(want)
 	slices.SortFunc(listed, compareLinks)
 	for _, lk := range listed {
+		if lk.Serve != nil {
+			continue
+		}
 		list.Links = append(list.Links, proxy.LinkEntry{
 			Hosts: slices.Clone(lk.Hosts), Addr: lk.Addr.String(), Port: lk.Port, Target: lk.Target, Socket: l.Socket(lk),
 		})
@@ -688,9 +695,13 @@ func (l *Links) take(ctx context.Context, end *linkEnd, conn net.Conn) {
 }
 
 // carry checks a connection's link again, then carries it to the target
-// through a master to it, or refuses it.
+// through a master to it, or refuses it. A link of devvm's own serves it.
 func (l *Links) carry(ctx context.Context, conn net.Conn, lk Link) {
 	defer func() { _ = conn.Close() }()
+	if lk.Serve != nil {
+		lk.Serve(ctx, conn)
+		return
+	}
 	t, event, why := l.Check(ctx, lk)
 	if event != "" {
 		l.Event(event, lk, why)

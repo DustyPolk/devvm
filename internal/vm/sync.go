@@ -158,7 +158,7 @@ type GuestLink struct {
 
 // checkLinks refuses links that aren't as devvm makes them, before any of
 // them reaches the VM (vm, its hostname host): an address outside
-// 127.77.0.0/16 (proxy.IsLinkAddr) or given twice, or a name that isn't one lowercase DNS label, is
+// 127.77.0.0/16 (proxy.IsLinkAddr), the clipboard's or given twice, or a name that isn't one lowercase DNS label, is
 // localhost or the VM's hostname, or is given twice. The setup writes
 // them into /etc/hosts and NO_PROXY as they are.
 func checkLinks(vm, host string, links []GuestLink) error {
@@ -166,7 +166,7 @@ func checkLinks(vm, host string, links []GuestLink) error {
 	var names []string
 	for _, l := range links {
 		bad := func(name string) error { return msg.LinkSetupInvalid(l.Addr.String(), name, vm) }
-		if !l.Addr.Is4() || !proxy.IsLinkAddr(l.Addr) || slices.Contains(addrs, l.Addr) {
+		if !l.Addr.Is4() || !proxy.IsLinkAddr(l.Addr) || proxy.IsClipboardAddr(l.Addr) || slices.Contains(addrs, l.Addr) {
 			return bad(strings.Join(l.Names, " "))
 		}
 		addrs = append(addrs, l.Addr)

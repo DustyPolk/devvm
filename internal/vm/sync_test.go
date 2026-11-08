@@ -32,6 +32,7 @@ func TestCheckLinks(t *testing.T) {
 		{"none", nil, ""},
 		{"two targets, one with two names", []GuestLink{db, cache}, ""},
 		{"the range's last address", []GuestLink{{a("127.77.255.254"), []string{"x"}}}, ""},
+		{"the clipboard's address", []GuestLink{{a("127.77.255.255"), []string{"x"}}}, "link_setup_invalid address=127.77.255.255 name=x vm=v"},
 		{"outside the range", []GuestLink{{a("127.0.0.1"), []string{"db"}}}, "link_setup_invalid address=127.0.0.1 name=db vm=v"},
 		{"the next range", []GuestLink{{a("127.78.0.2"), []string{"db"}}}, "link_setup_invalid address=127.78.0.2 name=db vm=v"},
 		{"IPv6", []GuestLink{{a("::ffff:127.77.0.2"), []string{"db"}}}, "link_setup_invalid address=::ffff:127.77.0.2 name=db vm=v"},

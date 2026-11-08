@@ -276,6 +276,10 @@ func FormatEvent(line string) (string, bool) {
 		what, d = "cache", e.Method+" "+e.Path+": "+e.Reason
 	case "link", "link_refused", "link_target_stopped", "link_limit": // devvm _links's
 		what, d = linkEvent(e)
+	case "clipboard": // devvm _links's too: the host's clipboard image, sent to the VM
+		what, d = "clipboard", "image sent, "+e.Reason
+	case "clipboard_refused":
+		what, d = "REFUSED", "clipboard image: "+e.Reason
 	}
 	if len(e.Secrets) > 0 {
 		d += ", token: " + strings.Join(e.Secrets, ",")

@@ -79,7 +79,7 @@ func ReadLinks(st *state.VM) ([]Link, error) {
 }
 
 // checkLink refuses a link whose name, port, target or address isn't
-// one.
+// one: the clipboard's address is never a link's.
 func checkLink(l Link) error {
 	switch {
 	case CheckLinkName(l.Name) != nil:
@@ -88,7 +88,7 @@ func checkLink(l Link) error {
 		return fmt.Errorf("%s: the port %d", l.Name, l.Port)
 	case !vmname.IsVM(l.Target) || l.TargetID == "":
 		return fmt.Errorf("%s: the target %q, %q", l.Name, l.Target, l.TargetID)
-	case !proxy.IsLinkAddr(l.Addr) || l.Addr != l.Addr.Unmap():
+	case !proxy.IsLinkAddr(l.Addr) || proxy.IsClipboardAddr(l.Addr) || l.Addr != l.Addr.Unmap():
 		return fmt.Errorf("%s: the address %q", l.Name, l.Addr)
 	}
 	return nil

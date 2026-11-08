@@ -158,6 +158,17 @@ func IsLocalProxyAddr(a netip.Addr) bool {
 	return a.Unmap() == netip.MustParseAddr(LocalProxyAddr)
 }
 
+// ClipboardAddr is the address in 127.77.0.0/16 kept for clipboard images (internal/clipboard),
+// where a VM that has them reads the image on the host's clipboard: no link gets it, as links take
+// their addresses from 127.77.0.1 up to 127.77.255.254, and a link that names it is refused
+// (IsClipboardAddr). It's in the links' range because the VM's sshd lets devvm listen there alone.
+const ClipboardAddr = "127.77.255.255"
+
+// IsClipboardAddr reports whether a is ClipboardAddr, as itself or mapped into IPv6.
+func IsClipboardAddr(a netip.Addr) bool {
+	return a.Unmap() == netip.MustParseAddr(ClipboardAddr)
+}
+
 // LinkAddr is the address i in 127.77.0.0/16.
 func LinkAddr(i uint16) netip.Addr {
 	b := [4]byte{linkNetA, linkNetB}

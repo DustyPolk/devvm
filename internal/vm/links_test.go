@@ -112,6 +112,7 @@ func TestReadLinks(t *testing.T) {
 		"db,5432,devvm-db-0123456789abc2,,127.77.0.1",
 		"db,5432,devvm-db-0123456789abc2,i1,127.0.0.1",
 		"db,5432,devvm-db-0123456789abc2,i1,::ffff:127.77.0.1",
+		"db,5432,devvm-db-0123456789abc2,i1,127.77.255.255", // the clipboard's
 	} {
 		if err := set(t, st, KeyLinks, bad); err != nil {
 			t.Fatal(err)

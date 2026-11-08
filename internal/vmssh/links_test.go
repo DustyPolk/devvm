@@ -697,6 +697,55 @@ func TestLinksList(t *testing.T) {
 	}
 }
 
+// A link of devvm's own (Serve) keeps a session with no other link going:
+// the client is asked to listen for it as for any link, each connection
+// is served in the session's process, never checked or relayed to a
+// target, and the proxy's list leaves it out. Once it's gone, the session
+// ends.
+func TestLinksServe(t *testing.T) {
+	served := Link{
+		Name: "clipboard", Addr: netip.MustParseAddr(proxy.ClipboardAddr), Port: 7737,
+		Serve: func(_ context.Context, conn net.Conn) {
+			defer func() { _ = conn.Close() }()
+			_, _ = io.WriteString(conn, "served\n")
+		},
+	}
+	f := &fakeLinks{}
+	l := f.newLinks(t)
+	l.List = filepath.Join(l.Dir, l.VM+".links.json")
+	f.target = func(Link) (LinkTarget, string, string) {
+		t.Error("a link of devvm's own checked")
+		return LinkTarget{}, EventLinkRefused, "checked"
+	}
+	f.setWant(served)
+	done := make(chan error, 1)
+	go func() { done <- l.Run(t.Context()) }()
+	waitFor(t, "the link served", func() bool { return dial(t, l.Socket(served)) == "served" })
+	cmds := f.snap(&f.commands)
+	if len(cmds) != 1 || !slices.Contains(cmds[0], "127.77.255.255:7737:"+l.Socket(served)) || !slices.Contains(cmds[0], "forward") {
+		t.Errorf("the client asked: %q", cmds)
+	}
+	if n := f.count(&f.relays); n != 0 {
+		t.Errorf("%d relays", n)
+	}
+	var list proxy.LinkList
+	if b, err := os.ReadFile(l.List); err != nil || json.Unmarshal(b, &list) != nil || len(list.Links) != 0 {
+		t.Errorf("the proxy's list: %s, %v", b, err)
+	}
+	f.setWant()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the session didn't end")
+	}
+	if _, err := os.Lstat(l.Socket(served)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("its socket stays: %v", err)
+	}
+}
+
 // ReadLinksLog finds the links the client refused and says when there's
 // nothing more to wait for: a line for every link, or the session ending
 // or failing.
