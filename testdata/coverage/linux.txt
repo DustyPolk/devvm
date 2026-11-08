@@ -10,6 +10,7 @@ internal/backend/registry 100.0
 internal/build 88.5
 internal/cli 88.7
 internal/cli/docgen 85.3
+internal/clipboard 93.9
 internal/daemon 97.9
 internal/desktop 77.2
 internal/devcontainer 96.8
