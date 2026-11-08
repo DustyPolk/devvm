@@ -100,13 +100,18 @@ type Provider struct {
 	// Header is the request header the agents send the key in, where the proxy swaps the
 	// placeholder for it.
 	Header string
+	// Prefix starts the VM's placeholder for its key, as an agent may tell its key from another
+	// credential by how it starts: pi 1.5.0 takes an OpenAI key that doesn't start with sk- for
+	// a ChatGPT sign-in's token, and leaves max_output_tokens, temperature and prompt caching's
+	// settings out of its requests.
+	Prefix string
 }
 
 // Providers are the providers whose API keys the proxy puts in, sorted by ID: every list of
 // them comes from here, and the docs' table of them names each (TestProvidersComplete). Each
 // is checked against opencode 2.2.6's and pi 1.5.0's own source (2026-11): both name it by the
 // same ID, send its key in that header alone, never in a URL, and to those hosts alone (Gemini's
-// API, not Vertex AI's).
+// API, not Vertex AI's), and neither checks how a key starts but where Prefix says.
 //
 // A bound key still lets the VM mint credentials that work without the proxy, which the proxy
 // allows because opencode 2.2.6's experimental realtime mode mints them itself
@@ -123,7 +128,7 @@ var Providers = []Provider{
 	{ID: "google", Display: "Google Gemini", Hosts: []string{"generativelanguage.googleapis.com"}, Header: "x-goog-api-key"},
 	{ID: "groq", Display: "Groq", Hosts: []string{"api.groq.com"}, Header: "Authorization"},
 	{ID: "mistral", Display: "Mistral", Hosts: []string{"api.mistral.ai"}, Header: "Authorization"},
-	{ID: "openai", Display: "OpenAI", Hosts: []string{"api.openai.com"}, Header: "Authorization"},
+	{ID: "openai", Display: "OpenAI", Hosts: []string{"api.openai.com"}, Header: "Authorization", Prefix: "sk-"},
 	{ID: "openrouter", Display: "OpenRouter", Hosts: []string{"openrouter.ai"}, Header: "Authorization"},
 	{ID: "xai", Display: "xAI", Hosts: []string{"api.x.ai"}, Header: "Authorization"},
 }
