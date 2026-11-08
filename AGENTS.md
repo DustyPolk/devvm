@@ -129,7 +129,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 - **Lima can report a failed start for a VM that is running but degraded.** Starting tolerates it.
 - **`limactl list --json` fills in the config:** mounts get `mountPoint`, port forwards a `guestIP` (`127.0.0.1`) and host side; compare only what devvm set. `--set` applies after `--mount-none`. `limactl create` downloads the image at once (no dry run).
 - **`limactl shell` quotes each argument for the guest's shell**, so `Exec` passes `sh -c` and one `shell.QuoteJoin` string. QEMU's guestfwd command goes through `/bin/sh -c` too, commas doubled.
-- **The ssh socket path limit (104 characters)** bounds VM names (`NameMax`).
+- **The ssh socket path limit (103 characters at most: macOS's 104 include the NUL)** bounds VM names (`NameMax`).
 - **Linux hosts (QEMU):** mounts are 9p, and a 9p share mounts once per guest. Debian's tmpfs `/tmp` hides anything mounted below it during boot. Project VMs' qcow2 disks are overlays of their image's, so never start an image VM or write its disk after it's built.
 - **Shared tools:** mise rewrites `latest`/`24`/`lts` links in a tool's folder after any install, so those folders are local in the VM; only version folders are mounted.
 - **Linux's `pgrep -f` matches the shell running it** (procps), so e2e's patterns are written `[_]proxy`. mise skips minisign on linux/arm64 (no build).
