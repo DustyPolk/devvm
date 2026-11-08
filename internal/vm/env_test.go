@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -133,7 +134,10 @@ func (a *agentCalls) run(_ context.Context, _ bool, argv ...string) (string, int
 }
 
 // testProxy runs each VM's "proxy" as a sleep that says it listens, with
-// no Keychain and no backups.
+// no Keychain and no backups. A signal to one returns once it has ended
+// and been reaped, as Stop's few milliseconds (Tick) are too short for
+// the reaping goroutine on a busy machine: until then its pid is alive,
+// a zombie still named in args, and Stop would give up on it.
 func testProxy(t *testing.T, d paths.Dirs) *netpolicy.Proxy {
 	t.Helper()
 	store := secrets.NewStore(d, &msg.Fake{})
@@ -141,6 +145,7 @@ func testProxy(t *testing.T, d paths.Dirs) *netpolicy.Proxy {
 	p := netpolicy.NewProxy(d, assets.FS, "/devvm", store, testUI(t))
 	var mu sync.Mutex
 	args := map[int][]string{}
+	ended := map[int]chan struct{}{}
 	p.Start = func(c daemon.Cmd) (int, error) {
 		path, a := c.Path, c.Args
 		cmd := exec.CommandContext(t.Context(), "sleep", "30")
@@ -153,6 +158,7 @@ func testProxy(t *testing.T, d paths.Dirs) *netpolicy.Proxy {
 		mu.Lock()
 		defer mu.Unlock()
 		args[cmd.Process.Pid] = append([]string{path}, a...)
+		ended[cmd.Process.Pid] = done
 		// It listens where its config says: _proxy -config FILE.
 		cfg, err := proxy.ReadConfig(a[2])
 		if err != nil {
@@ -164,6 +170,19 @@ func testProxy(t *testing.T, d paths.Dirs) *netpolicy.Proxy {
 		mu.Lock()
 		defer mu.Unlock()
 		return args[pid], nil
+	}
+	p.Signal = func(pid int, sig syscall.Signal) error {
+		err := daemon.Signal(pid, sig)
+		mu.Lock()
+		done := ended[pid]
+		mu.Unlock()
+		if err == nil && sig != 0 && done != nil {
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+			}
+		}
+		return err
 	}
 	p.Listening = func(context.Context, int) bool { return false }
 	p.ExcludeFromBackup = func(context.Context, string) error { return nil }
