@@ -111,6 +111,188 @@ func TestInject(t *testing.T) {
 	if used := s.inject(h, bs); len(used) != 0 || h.Get("Authorization") != "Bearer something-else" {
 		t.Error("a header without the placeholder changed")
 	}
+	// A secret's placeholder goes wherever its header holds it, in each of its values.
+	h = http.Header{}
+	h.Add("Authorization", "xxxx PH yyyy")
+	h.Add("Authorization", "token PH")
+	if used := s.inject(h, bs); len(used) != 1 || !reflect.DeepEqual(h.Values("Authorization"), []string{"xxxx real yyyy", "token real"}) {
+		t.Errorf("a secret's values = %q, used %v", h.Values("Authorization"), used)
+	}
+}
+
+// A login's value goes in only when its header's one value is the placeholder alone, or in
+// Authorization, Bearer (in any case), one space and the placeholder: any other value, with
+// bytes of the VM's around the placeholder, Basic credentials or a second value, keeps the
+// placeholder, and so does every other header.
+func TestInjectLoginExact(t *testing.T) {
+	t.Parallel()
+	enc := func(s string) string { return "Basic " + base64.StdEncoding.EncodeToString([]byte(s)) }
+	for _, tc := range []struct {
+		header string
+		values []string
+		want   []string // nil: unchanged
+	}{
+		{"x-api-key", []string{"PH"}, []string{"real"}},
+		{"Authorization", []string{"Bearer PH"}, []string{"Bearer real"}},
+		{"Authorization", []string{"bearer PH"}, []string{"bearer real"}},
+		{"Authorization", []string{"BEARER PH"}, []string{"BEARER real"}},
+		{"Authorization", []string{"PH"}, []string{"real"}}, // an MCP server's header, its whole value bound
+		{"x-api-key", []string{"Bearer PH"}, nil},
+		{"x-api-key", []string{"xxxx PH"}, nil},
+		{"x-api-key", []string{"PH "}, nil},
+		{"Authorization", []string{"xxxx PH yyyy"}, nil},
+		{"Authorization", []string{"Bearer PH yyyy"}, nil},
+		{"Authorization", []string{"Bearer xxxxPH"}, nil},
+		{"Authorization", []string{"Bearer  PH"}, nil},
+		{"Authorization", []string{"Bearer\tPH"}, nil},
+		{"Authorization", []string{"Token PH"}, nil},
+		{"Authorization", []string{"Bearer PH,Bearer PH"}, nil},
+		{"Authorization", []string{enc("x-access-token:PH")}, nil},
+		{"Authorization", []string{"Bearer PH", "Bearer PH"}, nil},
+		{"Authorization", []string{"Bearer PH", "yyyy"}, nil},
+		{"Authorization", []string{"yyyy", "Bearer PH"}, nil},
+	} {
+		s := newSecrets("", nil, quiet())
+		asked := fakeSecret(s, "real")
+		b := Binding{Name: "pi-groq", Kind: KindLogin, Agent: "pi", Header: tc.header, Placeholder: "PH"}
+		h := http.Header{}
+		for _, v := range tc.values {
+			h.Add(tc.header, v)
+		}
+		h.Set("X-Echo", "PH")
+		used := s.inject(h, []Binding{b})
+		want := tc.want
+		if want == nil {
+			want = tc.values
+		}
+		if got := h.Values(tc.header); !reflect.DeepEqual(got, want) || h.Get("X-Echo") != "PH" {
+			t.Errorf("%s %q: got %q, X-Echo %q; want %q", tc.header, tc.values, got, h.Get("X-Echo"), want)
+		}
+		if put := tc.want != nil; (len(used) == 1) != put || (len(*asked) == 1) != put {
+			t.Errorf("%s %q: used %v, looked up %d times", tc.header, tc.values, used, len(*asked))
+		}
+	}
+}
+
+// A login bound in two headers, as OpenRouter's key is (Authorization and x-api-key, one name and
+// placeholder), gets its value in either, each by the exact rule, and is named once when both
+// take it; another login's placeholder in either header stays as it is.
+func TestInjectLoginTwoHeaders(t *testing.T) {
+	t.Parallel()
+	or := func(header string) Binding {
+		return Binding{Name: "pi-openrouter", Kind: KindLogin, Agent: "pi", Hosts: []string{"openrouter.ai"}, Path: "/api/", Header: header, Placeholder: "PH"}
+	}
+	bs := []Binding{or("Authorization"), or("x-api-key")}
+	for _, tc := range []struct {
+		auth, key         string
+		wantAuth, wantKey string
+		used              int
+	}{
+		{"Bearer PH", "", "Bearer real", "", 1},
+		{"", "PH", "", "real", 1},
+		{"Bearer PH", "PH", "Bearer real", "real", 1},
+		{"xxxx PH", "PH", "xxxx PH", "real", 1},
+		{"Bearer PH", "xxxx PH", "Bearer real", "xxxx PH", 1},
+		{"", "Bearer PH", "", "Bearer PH", 0},
+		{"Bearer OTHER", "OTHER", "Bearer OTHER", "OTHER", 0},
+		{"", "devvm-proxy-managed-pi-anthropic-s1", "", "devvm-proxy-managed-pi-anthropic-s1", 0},
+	} {
+		s := newSecrets("", nil, quiet())
+		fakeSecret(s, "real")
+		h := http.Header{}
+		if tc.auth != "" {
+			h.Set("Authorization", tc.auth)
+		}
+		if tc.key != "" {
+			h.Set("x-api-key", tc.key)
+		}
+		used := s.inject(h, bs)
+		if h.Get("Authorization") != tc.wantAuth || h.Get("x-api-key") != tc.wantKey || len(used) != tc.used {
+			t.Errorf("%q, %q: got %q, %q, used %v", tc.auth, tc.key, h.Get("Authorization"), h.Get("x-api-key"), used)
+		}
+	}
+}
+
+// pathWithin takes a request's path only in its clean form, unencoded, below the prefix: no dot
+// segment, doubled slash, encoded slash, dot or backslash, backslash or ; can take it elsewhere.
+func TestPathWithin(t *testing.T) {
+	t.Parallel()
+	for uri, want := range map[string]bool{
+		"/api/v1/chat/completions":  true,
+		"/api/v1/models?x=/../":     true,
+		"/api/":                     true,
+		"/api":                      false,
+		"/apix/v1":                  false,
+		"/API/v1":                   false,
+		"/v1/keys":                  false,
+		"/":                         false,
+		"":                          false,
+		"/api/../v1/keys":           false,
+		"/api/./v1":                 false,
+		"/api/v1/..":                false,
+		"/api//v1":                  false,
+		"//api/v1":                  false,
+		"/x/../api/v1":              false,
+		"/api%2F..%2Fsettings":      false,
+		"/api/%2e%2e/settings":      false,
+		"/api/..%2fsettings":        false,
+		"/api/v1%2Fx":               false,
+		"/%61pi/v1":                 false,
+		"/api/%252e%252e/settings":  false,
+		`/api/..\settings`:          false,
+		"/api/%5C..%5Csettings":     false,
+		"/api/..;/settings":         false,
+		"/api/v1;x":                 false,
+		"https://openrouter.ai/api": false,
+	} {
+		u, err := url.ParseRequestURI(uri)
+		if uri == "" {
+			u, err = &url.URL{}, nil
+		}
+		if err != nil {
+			t.Errorf("%q: %v", uri, err)
+			continue
+		}
+		if got := pathWithin(u, "/api/"); got != want {
+			t.Errorf("pathWithin(%q) = %v, want %v", uri, got, want)
+		}
+	}
+	if pathWithin(&url.URL{Opaque: "/api/v1"}, "/api/") {
+		t.Error("an opaque URL was taken")
+	}
+	if !pathWithin(&url.URL{Scheme: "https", Host: "openrouter.ai", Path: "/api/v1/x"}, "/api/") {
+		t.Error("an absolute-form request's path was refused")
+	}
+}
+
+// A binding with a Path applies to a host's requests below it alone; one without, to all of them.
+func TestForRequestPath(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	file := filepath.Join(dir, "bindings.json")
+	writeBindings(t, file,
+		Binding{Name: "or", Kind: KindLogin, Agent: "pi", Hosts: []string{"openrouter.ai"}, Path: "/api/", Header: "Authorization", Placeholder: "PH"},
+		Binding{Name: "any", Kind: KindLogin, Agent: "pi", Hosts: []string{"openrouter.ai"}, Header: "x-api-key", Placeholder: "PH2"},
+	)
+	s := newSecrets(file, nil, quiet())
+	names := func(p string) []string {
+		var out []string
+		for _, b := range s.forRequest("openrouter.ai", &url.URL{Path: p}) {
+			out = append(out, b.Name)
+		}
+		return out
+	}
+	if got := names("/api/v1/chat/completions"); !reflect.DeepEqual(got, []string{"or", "any"}) {
+		t.Errorf("below the path: %v", got)
+	}
+	for _, p := range []string{"/settings/keys", "/api/../settings", "/api"} {
+		if got := names(p); !reflect.DeepEqual(got, []string{"any"}) {
+			t.Errorf("%s: %v", p, got)
+		}
+	}
+	if got := s.forRequest("example.com", &url.URL{Path: "/api/v1"}); len(got) != 0 {
+		t.Errorf("another host: %v", got)
+	}
 }
 
 // TestLookupRoots: each lookup's context carries the proxy's own roots (WithRoots), the user's CAs
@@ -203,6 +385,44 @@ func TestInterceptRefusesAnotherHost(t *testing.T) {
 	code, body := get(t, c, u, "other.example")
 	if code != http.StatusMisdirectedRequest || strings.Contains(body, "real") {
 		t.Errorf("another Host: %d %q (want 421 and no secret)", code, body)
+	}
+}
+
+// Through the proxy, a login bound below a path gets its value only for a request whose path, as
+// it goes upstream, is below it in its clean form, and only for a header that's Bearer and the
+// placeholder alone: the upstream gets the placeholder for any other.
+func TestInterceptLoginPathAndExact(t *testing.T) {
+	t.Parallel()
+	_, port, file, c := interceptSetup(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s|%s", r.URL.EscapedPath(), r.Header.Get("Authorization")) //nolint:gosec // a test echo server
+	})
+	writeBindings(t, file, Binding{
+		Name: "pi-openrouter", Kind: KindLogin, Agent: "pi", Hosts: []string{"localhost"}, Path: "/api/", Header: "Authorization", Placeholder: "PH",
+	})
+	send := func(p, auth string) string {
+		t.Helper()
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("https://localhost:%d", port), nil)
+		req.URL.Opaque = p // sent as it is, unparsed
+		req.Header.Set("Authorization", auth)
+		resp, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+	for _, tc := range []struct{ path, auth, want string }{
+		{"/api/v1/chat/completions", "Bearer PH", "/api/v1/chat/completions|Bearer real"},
+		{"/settings/keys", "Bearer PH", "/settings/keys|Bearer PH"},
+		{"/api/../settings/keys", "Bearer PH", "/api/../settings/keys|Bearer PH"},
+		{"/api/%2e%2e/settings/keys", "Bearer PH", "/api/%2e%2e/settings/keys|Bearer PH"},
+		{"/api%2F..%2Fsettings", "Bearer PH", "/api%2F..%2Fsettings|Bearer PH"},
+		{"/api/v1/chat/completions", "xxxx PH yyyy", "/api/v1/chat/completions|xxxx PH yyyy"},
+	} {
+		if got := send(tc.path, tc.auth); got != tc.want {
+			t.Errorf("%s %q: upstream saw %q, want %q", tc.path, tc.auth, got, tc.want)
+		}
 	}
 }
 
@@ -340,6 +560,7 @@ func TestReadBindings(t *testing.T) {
 	l := BindingList{Bindings: []Binding{
 		{Name: "github", Kind: KindSecret, Hosts: []string{"api.github.com"}, Header: "Authorization", Placeholder: "PH"},
 		{Name: "codex", Kind: KindLogin, Agent: "codex", Hosts: []string{"chatgpt.com"}, Header: "Authorization", Placeholder: "PH2"},
+		{Name: "pi-openrouter", Kind: KindLogin, Agent: "pi", Hosts: []string{"openrouter.ai"}, Path: "/api/v1/", Header: "Authorization", Placeholder: "PH3"},
 	}}
 	must(t, os.WriteFile(path, l.Encode(), 0o600))
 	got, err := ReadBindings(path)
@@ -354,11 +575,18 @@ func TestReadBindings(t *testing.T) {
 		data string
 		mode os.FileMode
 	}{
-		"another version": {`{"version":2,"bindings":[]}`, 0o600},
-		"a bare list":     {`[]`, 0o600},
-		"an unknown kind": {`{"version":1,"bindings":[{"name":"x","kind":"env"}]}`, 0o600},
-		"no kind":         {`{"version":1,"bindings":[{"name":"x"}]}`, 0o600},
-		"others may read": {`{"version":1,"bindings":[]}`, 0o644},
+		"another version":               {`{"version":2,"bindings":[]}`, 0o600},
+		"a bare list":                   {`[]`, 0o600},
+		"an unknown kind":               {`{"version":1,"bindings":[{"name":"x","kind":"env"}]}`, 0o600},
+		"no kind":                       {`{"version":1,"bindings":[{"name":"x"}]}`, 0o600},
+		"others may read":               {`{"version":1,"bindings":[]}`, 0o644},
+		"a relative path":               {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"api/"}]}`, 0o600},
+		"a path without its last slash": {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api"}]}`, 0o600},
+		"a path of /":                   {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/"}]}`, 0o600},
+		"a path with a dot segment":     {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api/../"}]}`, 0o600},
+		"a path with a doubled slash":   {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api//"}]}`, 0o600},
+		"an encoded path":               {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/%61pi/"}]}`, 0o600},
+		"a path with a ;":               {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api;x/"}]}`, 0o600},
 	} {
 		p := filepath.Join(dir, strings.ReplaceAll(name, " ", "-"))
 		must(t, os.WriteFile(p, []byte(tc.data), 0o600))

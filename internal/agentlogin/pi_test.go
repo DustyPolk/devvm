@@ -46,6 +46,7 @@ func TestPiLogins(t *testing.T) {
 		"pi-anthropic api.anthropic.com x-api-key devvm-proxy-managed-pi-anthropic-s1",
 		"pi-groq api.groq.com Authorization devvm-proxy-managed-pi-groq-s1",
 		"pi-openrouter openrouter.ai Authorization devvm-proxy-managed-pi-openrouter-s1",
+		"pi-openrouter openrouter.ai x-api-key devvm-proxy-managed-pi-openrouter-s1",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("bindings:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

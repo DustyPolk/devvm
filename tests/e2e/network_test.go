@@ -797,7 +797,7 @@ func netTokenServer(n *netRun) error {
 	if err != nil {
 		return err
 	}
-	cf, kf, err := ca.Sign("auth", "auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", "api.openai.com", geminiAPIHost)
+	cf, kf, err := ca.Sign("auth", "auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", "api.openai.com", geminiAPIHost, "openrouter.ai")
 	if err != nil {
 		return err
 	}
@@ -1280,6 +1280,56 @@ func netProviderKeys(n *netRun) {
 		}
 		return NoLeak([]string{opencodeGroq}, filepath.Join(n.vmd, "logs"), filepath.Join(s.Paths.Devvm, "logs"))
 	}, Tail(40))
+	s.Check("devvm agent login pi --api-key --provider openrouter: OpenRouter's site gets the key below /api/ alone, in x-api-key or after Bearer, and the placeholder for anything else", func() error {
+		return netOpenRouter(n)
+	}, Tail(40))
+}
+
+// openRouterKey is the fake OpenRouter API key devvm agent login pi saves.
+const openRouterKey = "sk-or-e2efake-pi-openrouter"
+
+// netOpenRouter saves a fake OpenRouter key for pi, then sends OpenRouter's
+// site the VM's placeholder from the VM, as pi does for its anthropic/*
+// models (x-api-key, /api/v1/messages) and its others (Bearer), and in
+// ways the proxy leaves alone: framed, outside /api/, through a dot
+// segment, and another provider's placeholder in x-api-key.
+func netOpenRouter(n *netRun) error {
+	s, vm := n.s, n.vm
+	r, err := n.dv(openRouterKey+"\n", n.tokenEnv("DEVVM_MESSAGES=names"), "agent", "login", "pi", "--api-key", "--provider", "openrouter", "--stdin")
+	if err != nil || !Matches(r.Out, `^==> agent_key_saved agent=pi provider=openrouter vm=`) {
+		return failed("devvm agent login pi --api-key --provider openrouter didn't save the key:\n"+r.Out, err)
+	}
+	ph := "devvm-proxy-managed-pi-openrouter-" + n.salt
+	if vmOut(s, vm, "jq -r .openrouter.key ~/.pi/agent/auth.json") != ph {
+		return errors.New("the VM's pi login doesn't hold OpenRouter's key's placeholder")
+	}
+	other := "devvm-proxy-managed-pi-groq-" + n.salt
+	c := `curl -sS -m 20 -o /dev/null --path-as-is https://openrouter.ai`
+	if err := inVM(s, vm, c+`/api/v1/messages -H "x-api-key: `+ph+`" && `+
+		c+`/api/v1/chat/completions -H "Authorization: Bearer `+ph+`" && `+
+		c+`/api/v1/e2e-framed -H "Authorization: xxxx `+ph+`" -H "x-api-key: xxxx `+ph+`" && `+
+		c+`/settings/e2e -H "Authorization: Bearer `+ph+`" -H "x-api-key: `+ph+`" && `+
+		c+`/api/../settings/e2e-dots -H "x-api-key: `+ph+`" && `+
+		c+`/api/v1/e2e-other -H "x-api-key: `+other+`"`); err != nil {
+		return failed("the VM's requests to OpenRouter's site", err)
+	}
+	got := readText(n.tokLog)
+	for _, want := range []string{
+		"openrouter /api/v1/messages authorization - x-api-key " + openRouterKey,
+		"openrouter /api/v1/chat/completions authorization Bearer " + openRouterKey + " x-api-key -",
+		"openrouter /api/v1/e2e-framed authorization xxxx " + ph + " x-api-key xxxx " + ph,
+		"openrouter /settings/e2e authorization Bearer " + ph + " x-api-key " + ph,
+		"openrouter /api/../settings/e2e-dots authorization - x-api-key " + ph,
+		"openrouter /api/v1/e2e-other authorization - x-api-key " + other,
+	} {
+		if !HasLine(got, want) {
+			return errors.New("OpenRouter's site didn't get " + want + "\n" + n.tokenWhy())
+		}
+	}
+	if !lineWith(readText(n.events), `"host":"openrouter.ai"`, `"/api/v1/messages"`, `"secrets":["pi-openrouter"]`) {
+		return errors.New("no event shows pi's OpenRouter key put in")
+	}
+	return NoLeak([]string{openRouterKey}, filepath.Join(n.vmd, "logs"), filepath.Join(s.Paths.Devvm, "logs"))
 }
 
 // pi's terminal UI looks for fd (as fd or fdfind) and rg as it starts,
@@ -2419,8 +2469,8 @@ socketserver.ThreadingTCPServer(("", int(sys.argv[1])), H).serve_forever()
 
 // fakeTokenPy is the fake token endpoints: a company proxy that answers a
 // CONNECT to auth.openai.com, platform.claude.com, api.anthropic.com,
-// api.groq.com, api.openai.com or generativelanguage.googleapis.com
-// itself, with its certificate (port, cert, key and its log are its
+// api.groq.com, api.openai.com, generativelanguage.googleapis.com or
+// openrouter.ai itself, with its certificate (port, cert, key and its log are its
 // arguments), and refuses any other.
 //
 //nolint:gosec // G101: its tokens are fakes, which no service takes
@@ -2502,7 +2552,15 @@ def google(path, h):
     with open(log, "a") as o:
         o.write("google " + path + " x-goog-api-key " + (k[0] if k else "-") + "\n")
     return 404, {"error": {"code": 404, "message": "e2e", "status": "NOT_FOUND"}}
-HOSTS = ("auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", "api.openai.com", "generativelanguage.googleapis.com")
+# OpenRouter's site, under "openrouter": each request's path, Authorization and x-api-key, as pi
+# sends its key in either, answered 404.
+def openrouter(path, h):
+    a = [x.split(":", 1)[1].strip() for x in h[1:] if x.lower().startswith("authorization:")]
+    k = [x.split(":", 1)[1].strip() for x in h[1:] if x.lower().startswith("x-api-key:")]
+    with open(log, "a") as o:
+        o.write("openrouter " + path + " authorization " + (a[0] if a else "-") + " x-api-key " + (k[0] if k else "-") + "\n")
+    return 404, {"error": {"code": 404, "message": "e2e"}}
+HOSTS = ("auth.openai.com", "platform.claude.com", "api.anthropic.com", "api.groq.com", "api.openai.com", "generativelanguage.googleapis.com", "openrouter.ai")
 def serve(c):
     try:
         req = head(c.makefile("rb"))
@@ -2531,6 +2589,8 @@ def serve(c):
                 code, r = openai(h[0].split(" ")[1], h, body)
             elif host == "generativelanguage.googleapis.com":
                 code, r = google(h[0].split(" ")[1], h)
+            elif host == "openrouter.ai":
+                code, r = openrouter(h[0].split(" ")[1], h)
             elif host == "platform.claude.com":
                 q = json.loads(body) if body.startswith("{") else {}
                 with open(log, "a") as o:

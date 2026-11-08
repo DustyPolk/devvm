@@ -158,16 +158,22 @@ func splitUnbound(m map[string]any, pass []string, keyType string, bound, passed
 // providers are withheld from the VM's copy unless config.toml's [pass-keys] passes them
 // (opencodeVM, piVM).
 type provider struct {
-	hosts  []string
-	header string
-	prefix string // what the VM's placeholder starts with (agents.Provider's Prefix)
+	hosts   []string
+	path    string   // the path below which it goes (agents.Provider's Path), "" for any
+	headers []string // the headers it goes in, a binding each
+	prefix  string   // what the VM's placeholder starts with (agents.Provider's Prefix)
 }
 
 // keyProvider is where the API key of the provider whose ID is id goes, false for a provider not
 // in agents.Providers.
 func keyProvider(id string) (provider, bool) {
 	p, ok := agents.ProviderOf(id)
-	return provider{p.Hosts, p.Header, p.Prefix}, ok
+	return provider{hosts: p.Hosts, path: p.Path, headers: p.Headers, prefix: p.Prefix}, ok
+}
+
+// authorization is where a login goes that its agent sends in Authorization alone, to hosts.
+func authorization(hosts ...string) provider {
+	return provider{hosts: hosts, headers: []string{"Authorization"}}
 }
 
 // keyPlaceholder is the VM's in place of the API key or token of agent's login for the provider
@@ -179,8 +185,8 @@ func keyPlaceholder(agent, id, salt string) string {
 }
 
 var opencodeOAuth = map[string]provider{
-	"openai":         {hosts: []string{"chatgpt.com"}, header: "Authorization"},
-	"github-copilot": {hosts: []string{"api.githubcopilot.com"}, header: "Authorization"},
+	"openai":         authorization("chatgpt.com"),
+	"github-copilot": authorization("api.githubcopilot.com"),
 }
 
 // fileMax is the most of an agent's file read: ~/.claude.json keeps every project's history, so it
@@ -306,19 +312,26 @@ const codexLogin = agents.Codex
 // codexKeyPlaceholder is the VM's in place of Codex's API key.
 func codexKeyPlaceholder(salt string) string { return salted("sk-devvm-proxy-managed-codex", salt) }
 
-// login is one of agent's logins as a binding, of proxy.KindLogin: its value is File.Get's for name.
-func login(agent, name string, hosts []string, header, placeholder string) proxy.Binding {
-	return proxy.Binding{Name: name, Kind: proxy.KindLogin, Agent: agent, Hosts: hosts, Header: header, Placeholder: placeholder}
+// login is one of agent's logins as bindings of proxy.KindLogin, one for each of p's headers, all
+// of one name and placeholder: their value is File.Get's for name, and the proxy puts it in only
+// for a header that's the placeholder alone, or Bearer and the placeholder in Authorization, as
+// every agent sends it.
+func login(agent, name string, p provider, placeholder string) []proxy.Binding {
+	bs := make([]proxy.Binding, 0, len(p.headers))
+	for _, h := range p.headers {
+		bs = append(bs, proxy.Binding{Name: name, Kind: proxy.KindLogin, Agent: agent, Hosts: p.hosts, Path: p.path, Header: h, Placeholder: placeholder})
+	}
+	return bs
 }
 
 func codexBindings(m map[string]any, salt string) []proxy.Binding {
 	var bs []proxy.Binding
 	if str(m, "OPENAI_API_KEY") != "" {
-		bs = append(bs, login(agents.Codex, "codex-key", []string{"api.openai.com"}, "Authorization", codexKeyPlaceholder(salt)))
+		bs = append(bs, login(agents.Codex, "codex-key", authorization("api.openai.com"), codexKeyPlaceholder(salt))...)
 	}
 	if t := obj(m, "tokens"); str(t, "access_token") != "" {
-		bs = append(bs, login(agents.Codex, codexLogin, []string{"chatgpt.com", "api.openai.com"}, "Authorization",
-			openaiPlaceholder(str(t, "access_token"), salt)))
+		bs = append(bs, login(agents.Codex, codexLogin, authorization("chatgpt.com", "api.openai.com"),
+			openaiPlaceholder(str(t, "access_token"), salt))...)
 	}
 	return bs
 }
@@ -416,7 +429,7 @@ func opencodeBindings(m map[string]any, salt string) []proxy.Binding {
 		if id == "openai" && str(e, "type") == "oauth" {
 			ph = openaiPlaceholder(str(e, "access"), salt) // opencode reads the account from it
 		}
-		bs = append(bs, login(agents.Opencode, "opencode-"+id, p.hosts, p.header, ph))
+		bs = append(bs, login(agents.Opencode, "opencode-"+id, p, ph)...)
 	}
 	return bs
 }
@@ -648,7 +661,7 @@ func claudeBindings(m map[string]any, salt string) []proxy.Binding {
 		}
 		for _, h := range sortedKeys(obj(s, "headers")) {
 			name := claudeBindingName(n, h)
-			bs = append(bs, login(agents.Claude, name, []string{host}, h, salted("devvm-proxy-managed-"+name, salt)))
+			bs = append(bs, login(agents.Claude, name, provider{hosts: []string{host}, headers: []string{h}}, salted("devvm-proxy-managed-"+name, salt))...)
 		}
 	}
 	return bs

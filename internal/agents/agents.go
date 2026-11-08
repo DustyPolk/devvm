@@ -97,9 +97,15 @@ type Provider struct {
 	// Hosts are the hosts the agents send its API key to, and no others: the proxy puts the key
 	// in for them alone, and allows them.
 	Hosts []string
-	// Header is the request header the agents send the key in, where the proxy swaps the
-	// placeholder for it.
-	Header string
+	// Path, when set, is the path below which the agents send its API key on those hosts, and
+	// the proxy puts the key in for paths below it alone: it starts and ends with /, as
+	// OpenRouter's /api/ does, so another of the host's pages never gets the key.
+	Path string
+	// Headers are the request headers the agents send the key in, each a binding of its own,
+	// where the proxy swaps the placeholder for it: the header's value is the placeholder alone,
+	// or for Authorization, Bearer and the placeholder. Most providers have one; OpenRouter's
+	// Anthropic models take the key in x-api-key, as Anthropic's API does.
+	Headers []string
 	// Prefix starts the VM's placeholder for its key, as an agent may tell its key from another
 	// credential by how it starts: pi 1.5.0 takes an OpenAI key that doesn't start with sk- for
 	// a ChatGPT sign-in's token, and leaves max_output_tokens, temperature and prompt caching's
@@ -110,8 +116,12 @@ type Provider struct {
 // Providers are the providers whose API keys the proxy puts in, sorted by ID: every list of
 // them comes from here, and the docs' table of them names each (TestProvidersComplete). Each
 // is checked against opencode 2.2.6's and pi 1.5.0's own source (2026-11): both name it by the
-// same ID, send its key in that header alone, never in a URL, and to those hosts alone (Gemini's
-// API, not Vertex AI's), and neither checks how a key starts but where Prefix says.
+// same ID, send its key in those headers alone, as the whole value or after Bearer, never in a
+// URL, and to those hosts alone (Gemini's API, not Vertex AI's), below Path where it's set
+// (OpenRouter's /api/), and neither checks how a key starts but where Prefix says. OpenRouter's
+// x-api-key is pi's for its anthropic/* models (api anthropic-messages, base
+// https://openrouter.ai/api, so /api/v1/messages), and opencode's when models.dev lists a model's
+// messages API first (route() in packages/core/src/models-dev.ts takes the first).
 //
 // A bound key still lets the VM mint credentials that work without the proxy, which the proxy
 // allows because opencode 2.2.6's experimental realtime mode mints them itself
@@ -123,14 +133,14 @@ type Provider struct {
 // Mistral's agents' web_search), a way out the allowlist doesn't cover, as Anthropic's and
 // OpenAI's are. The safety docs' attack vectors name both.
 var Providers = []Provider{
-	{ID: "anthropic", Display: "Anthropic", Hosts: []string{"api.anthropic.com"}, Header: "x-api-key"},
-	{ID: "deepseek", Display: "DeepSeek", Hosts: []string{"api.deepseek.com"}, Header: "Authorization"},
-	{ID: "google", Display: "Google Gemini", Hosts: []string{"generativelanguage.googleapis.com"}, Header: "x-goog-api-key"},
-	{ID: "groq", Display: "Groq", Hosts: []string{"api.groq.com"}, Header: "Authorization"},
-	{ID: "mistral", Display: "Mistral", Hosts: []string{"api.mistral.ai"}, Header: "Authorization"},
-	{ID: "openai", Display: "OpenAI", Hosts: []string{"api.openai.com"}, Header: "Authorization", Prefix: "sk-"},
-	{ID: "openrouter", Display: "OpenRouter", Hosts: []string{"openrouter.ai"}, Header: "Authorization"},
-	{ID: "xai", Display: "xAI", Hosts: []string{"api.x.ai"}, Header: "Authorization"},
+	{ID: "anthropic", Display: "Anthropic", Hosts: []string{"api.anthropic.com"}, Headers: []string{"x-api-key"}},
+	{ID: "deepseek", Display: "DeepSeek", Hosts: []string{"api.deepseek.com"}, Headers: []string{"Authorization"}},
+	{ID: "google", Display: "Google Gemini", Hosts: []string{"generativelanguage.googleapis.com"}, Headers: []string{"x-goog-api-key"}},
+	{ID: "groq", Display: "Groq", Hosts: []string{"api.groq.com"}, Headers: []string{"Authorization"}},
+	{ID: "mistral", Display: "Mistral", Hosts: []string{"api.mistral.ai"}, Headers: []string{"Authorization"}},
+	{ID: "openai", Display: "OpenAI", Hosts: []string{"api.openai.com"}, Headers: []string{"Authorization"}, Prefix: "sk-"},
+	{ID: "openrouter", Display: "OpenRouter", Hosts: []string{"openrouter.ai"}, Path: "/api/", Headers: []string{"Authorization", "x-api-key"}},
+	{ID: "xai", Display: "xAI", Hosts: []string{"api.x.ai"}, Headers: []string{"Authorization"}},
 }
 
 // ProviderIDs are the providers' IDs, sorted.

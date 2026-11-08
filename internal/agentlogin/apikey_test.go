@@ -120,15 +120,16 @@ func TestOpencodeImport(t *testing.T) {
 
 // Each provider's API key, saved as devvm agent login --api-key --provider
 // saves it for opencode and for pi, is bound for that provider's hosts and
-// header alone, as checked against both agents' source, under the agent's
-// placeholder, which starts as the agent checks the provider's keys start
-// and which the VM's copy holds in the key's place; Get gives the key back.
+// headers alone, a binding each, below its path when it has one, as checked
+// against both agents' source, under the agent's placeholder, which starts
+// as the agent checks the provider's keys start and which the VM's copy
+// holds in the key's place; Get gives the key back.
 func TestProviderKeys(t *testing.T) {
-	want := map[string][2]string{
-		"anthropic": {"api.anthropic.com", "x-api-key"}, "deepseek": {"api.deepseek.com", "Authorization"},
-		"google": {"generativelanguage.googleapis.com", "x-goog-api-key"}, "groq": {"api.groq.com", "Authorization"},
-		"mistral": {"api.mistral.ai", "Authorization"}, "openai": {"api.openai.com", "Authorization"},
-		"openrouter": {"openrouter.ai", "Authorization"}, "xai": {"api.x.ai", "Authorization"},
+	want := map[string][]string{
+		"anthropic": {"api.anthropic.com", "", "x-api-key"}, "deepseek": {"api.deepseek.com", "", "Authorization"},
+		"google": {"generativelanguage.googleapis.com", "", "x-goog-api-key"}, "groq": {"api.groq.com", "", "Authorization"},
+		"mistral": {"api.mistral.ai", "", "Authorization"}, "openai": {"api.openai.com", "", "Authorization"},
+		"openrouter": {"openrouter.ai", "/api/", "Authorization", "x-api-key"}, "xai": {"api.x.ai", "", "Authorization"},
 	}
 	// pi takes an OpenAI key that doesn't start with sk- for a ChatGPT sign-in's token.
 	prefix := map[string]string{"openai": "sk-"}
@@ -144,9 +145,15 @@ func TestProviderKeys(t *testing.T) {
 			f.Salt = "s1"
 			ph := prefix[id] + "devvm-proxy-managed-" + kind + "-" + id + "-s1"
 			bs := bindings(t, f)
-			if len(bs) != 1 || bs[0].Name != kind+"-"+id || !slices.Equal(bs[0].Hosts, []string{want[id][0]}) ||
-				bs[0].Header != want[id][1] || bs[0].Placeholder != ph {
-				t.Errorf("%s's %s bindings: %+v", kind, id, bs)
+			var headers []string
+			for _, b := range bs {
+				headers = append(headers, b.Header)
+				if b.Name != kind+"-"+id || !slices.Equal(b.Hosts, []string{want[id][0]}) || b.Path != want[id][1] || b.Placeholder != ph {
+					t.Errorf("%s's %s binding: %+v", kind, id, b)
+				}
+			}
+			if !slices.Equal(headers, want[id][2:]) {
+				t.Errorf("%s's %s bindings' headers: %q, want %q", kind, id, headers, want[id][2:])
 			}
 			c, err := f.VMCopy()
 			must(t, err)

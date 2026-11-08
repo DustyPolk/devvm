@@ -45,7 +45,7 @@ func piBindings(m map[string]any, salt string) []proxy.Binding {
 	for _, id := range sortedKeys(m) {
 		if _, ok := piKey(m, id); ok {
 			p, _ := keyProvider(id)
-			bs = append(bs, login(agents.Pi, "pi-"+id, p.hosts, p.header, keyPlaceholder(agents.Pi, id, salt)))
+			bs = append(bs, login(agents.Pi, "pi-"+id, p, keyPlaceholder(agents.Pi, id, salt))...)
 		}
 	}
 	return bs

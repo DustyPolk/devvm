@@ -1,7 +1,8 @@
 binding {"name":"opencode-anthropic","kind":"login","agent":"opencode","hosts":["api.anthropic.com"],"header":"x-api-key","placeholder":"devvm-proxy-managed-opencode-anthropic-s4lt"}
 binding {"name":"opencode-github-copilot","kind":"login","agent":"opencode","hosts":["api.githubcopilot.com"],"header":"Authorization","placeholder":"devvm-proxy-managed-opencode-github-copilot-s4lt"}
 binding {"name":"opencode-openai","kind":"login","agent":"opencode","hosts":["chatgpt.com"],"header":"Authorization","placeholder":"eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJkZXZ2bSI6InBsYWNlaG9sZGVyLXM0bHQiLCJlbWFpbCI6ImUyZWZha2VAZXhhbXBsZS5jb20iLCJleHAiOjQwNzA5MDg4MDAsImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJjaGF0Z3B0X2FjY291bnRfaWQiOiJhY2N0LTEiLCJjaGF0Z3B0X3BsYW5fdHlwZSI6InBybyJ9fQ.devvm-placeholder"}
-binding {"name":"opencode-openrouter","kind":"login","agent":"opencode","hosts":["openrouter.ai"],"header":"Authorization","placeholder":"devvm-proxy-managed-opencode-openrouter-s4lt"}
+binding {"name":"opencode-openrouter","kind":"login","agent":"opencode","hosts":["openrouter.ai"],"path":"/api/","header":"Authorization","placeholder":"devvm-proxy-managed-opencode-openrouter-s4lt"}
+binding {"name":"opencode-openrouter","kind":"login","agent":"opencode","hosts":["openrouter.ai"],"path":"/api/","header":"x-api-key","placeholder":"devvm-proxy-managed-opencode-openrouter-s4lt"}
 kept ollama
 withheld copilot-ghe,llama-cpp,mcp
 unknown 
@@ -419,6 +420,7 @@ set key openrouter
     "type": "api"
   }
 }
+placeholder devvm-proxy-managed-opencode-openrouter-s4lt
 placeholder devvm-proxy-managed-opencode-openrouter-s4lt
 set key xai
 {

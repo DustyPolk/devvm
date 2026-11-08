@@ -2,6 +2,7 @@ package agents
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -88,8 +89,16 @@ func TestProvidersComplete(t *testing.T) {
 		t.Errorf("the docs' table has %d providers, the registry %d", len(rows), len(Providers))
 	}
 	for i, p := range Providers {
-		if p.ID == "" || p.Display == "" || len(p.Hosts) == 0 || p.Header == "" {
-			t.Errorf("%+v: no ID, name, hosts or header", p)
+		if p.ID == "" || p.Display == "" || len(p.Hosts) == 0 || len(p.Headers) == 0 || slices.Contains(p.Headers, "") {
+			t.Errorf("%+v: no ID, name, hosts or headers", p)
+		}
+		// The proxy reads a bindings file whose path is anything else as none (proxy.ReadBindings).
+		if p.Path != "" && (!strings.HasPrefix(p.Path, "/") || !strings.HasSuffix(p.Path, "/") || path.Clean(p.Path)+"/" != p.Path) {
+			t.Errorf("%s: path %q doesn't start and end with / in its clean form", p.ID, p.Path)
+		}
+		var paths []string
+		if p.Path != "" {
+			paths = []string{p.Path}
 		}
 		if i > 0 && Providers[i-1].ID >= p.ID {
 			t.Errorf("%s: after %s, out of order", p.ID, Providers[i-1].ID)
@@ -101,7 +110,8 @@ func TestProvidersComplete(t *testing.T) {
 			continue
 		}
 		row := rows[i]
-		if len(row) != 4 || row[0] != p.ID || row[1] != p.Display || !slices.Equal(spans(row[2]), p.Hosts) || !slices.Equal(spans(row[3]), []string{p.Header}) {
+		if len(row) != 5 || row[0] != p.ID || row[1] != p.Display || !slices.Equal(spans(row[2]), p.Hosts) ||
+			!slices.Equal(spans(row[3]), paths) || !slices.Equal(spans(row[4]), p.Headers) {
 			t.Errorf("the docs' table's row %v isn't %+v", row, p)
 		}
 	}

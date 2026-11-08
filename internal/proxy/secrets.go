@@ -31,6 +31,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,18 +47,27 @@ const (
 	KindLogin = "login"
 )
 
-// Binding is one of the VM's secret bindings: the hosts whose :443 requests get a value, the header
-// it goes in, the placeholder it replaces there, and where the value comes from (Kind, with a
-// login's Agent). It holds no value. internal/secrets and internal/agentlogin make them, and devvm
-// writes a VM's in a BindingList (Config.Secrets).
+// Binding is one of the VM's secret bindings: the hosts whose :443 requests get a value, the paths
+// there, the header it goes in, the placeholder it replaces there, and where the value comes from
+// (Kind, with a login's Agent). It holds no value. internal/secrets and internal/agentlogin make
+// them, and devvm writes a VM's in a BindingList (Config.Secrets).
+//
+// A secret's placeholder is replaced wherever its header holds it, also inside Basic credentials
+// (git sends x-access-token:TOKEN that way). A login's is replaced only when the header's one value
+// is the placeholder alone, or for Authorization, Bearer and one space before it (the scheme in
+// any case), so a VM can't put bytes of its own around the value: a provider that quotes part of
+// a key it refuses could show the VM where the value starts.
 type Binding struct {
 	Name string `json:"name"`
 	Kind string `json:"kind"` // KindSecret or KindLogin
 	// Agent is a login's agent, whose login file holds its value (codex, opencode, claude).
-	Agent       string   `json:"agent,omitempty"`
-	Hosts       []string `json:"hosts"`  // host patterns, as in policy files
-	Header      string   `json:"header"` // e.g. Authorization; the placeholder is replaced inside its value
-	Placeholder string   `json:"placeholder"`
+	Agent string   `json:"agent,omitempty"`
+	Hosts []string `json:"hosts"` // host patterns, as in policy files
+	// Path, when set, is the only path below which the value goes in: it starts and ends with /,
+	// and a request's path must start with it, in its clean form (pathWithin).
+	Path        string `json:"path,omitempty"`
+	Header      string `json:"header"` // e.g. Authorization
+	Placeholder string `json:"placeholder"`
 }
 
 // BindingList is the VM's bindings file (Config.Secrets), which devvm writes and the proxy reads
@@ -109,8 +119,20 @@ func parseBindings(path string, b []byte) (BindingList, error) {
 		if x.Kind != KindSecret && x.Kind != KindLogin {
 			return BindingList{}, fmt.Errorf("%s: binding %q of kind %q", path, x.Name, x.Kind)
 		}
+		if x.Path != "" && !pathPrefixOK(x.Path) {
+			return BindingList{}, fmt.Errorf("%s: binding %q's path %q", path, x.Name, x.Path)
+		}
 	}
 	return l, nil
+}
+
+// pathPrefixOK reports whether p can be a binding's Path: it starts and ends with /, and is
+// clean (no . or .. segment, no doubled slash), with nothing pathWithin refuses in it.
+func pathPrefixOK(p string) bool {
+	if len(p) < 2 || p[0] != '/' || p[len(p)-1] != '/' || strings.ContainsAny(p, `\;% `) {
+		return false
+	}
+	return path.Clean(p)+"/" == p
 }
 
 // InterceptLines returns what a VM's allowlist gets for its bindings' hosts, as policy lines: each
@@ -196,6 +218,29 @@ func (s *secrets) forHost(host string) []Binding {
 	return out
 }
 
+// forRequest: the bindings that apply to a request to host for u, as the proxy forwards it:
+// forHost's, but a binding with a Path only when u's path is within it (pathWithin).
+func (s *secrets) forRequest(host string, u *url.URL) []Binding {
+	return slices.DeleteFunc(s.forHost(host), func(b Binding) bool { return b.Path != "" && !pathWithin(u, b.Path) })
+}
+
+// pathWithin reports whether u's path, as the proxy forwards it, starts with prefix (a binding's
+// Path) in a form every server reads alike: no opaque URL, nothing percent-encoded (an encoded
+// slash or dot that a server decodes could take the request outside prefix after the check), no
+// backslash or ; (which some servers read as a separator, or drop with what follows), and the
+// path clean already (no . or .. segment, no doubled slash).
+func pathWithin(u *url.URL, prefix string) bool {
+	p := u.Path
+	if u.Opaque != "" || strings.Contains(u.EscapedPath(), "%") || strings.ContainsAny(p, `\;`) {
+		return false
+	}
+	clean := path.Clean(p)
+	if strings.HasSuffix(p, "/") && clean != "/" {
+		clean += "/"
+	}
+	return clean == p && strings.HasPrefix(p, prefix)
+}
+
 // --- values ---
 
 type cached struct {
@@ -251,43 +296,75 @@ func (s *secrets) value(b Binding) (string, error) {
 	return v, nil
 }
 
-// inject replaces each binding's placeholder in its header, also inside "Basic" credentials (git
-// over HTTPS sends user:token that way). Only the binding's header is touched. It returns the names
-// of the secrets it put in.
+// inject puts each binding's value in its header, where it takes it (takes): only the binding's
+// header is touched. It returns the names of the secrets it put in.
 func (s *secrets) inject(h http.Header, bs []Binding) (used []string) {
 	for _, b := range bs {
 		vs := h.Values(b.Header)
-		if len(vs) == 0 {
+		if !b.takes(vs) {
+			if b.Kind == KindLogin && slices.ContainsFunc(vs, func(v string) bool { return strings.Contains(v, b.Placeholder) }) {
+				s.log.Printf("secret %s: not put in: its %s header holds more than its placeholder", b.Name, b.Header)
+			}
 			continue
 		}
-		var val string
-		var err error
-		replaced := false
-		for i, v := range vs {
-			nv := v
-			if strings.Contains(nv, b.Placeholder) || basicHas(nv, b.Placeholder) {
-				if val == "" {
-					if val, err = s.value(b); err != nil {
-						s.log.Printf("%v", err)
-						return used
-					}
-				}
-				nv = strings.ReplaceAll(nv, b.Placeholder, val)
-				if raw, ok := basic(nv); ok && strings.Contains(raw, b.Placeholder) {
-					nv = "Basic " + base64.StdEncoding.EncodeToString([]byte(strings.ReplaceAll(raw, b.Placeholder, val)))
-				}
-				vs[i], replaced = nv, true
-			}
+		val, err := s.value(b)
+		if err != nil {
+			s.log.Printf("%v", err)
+			return used
 		}
-		if replaced {
-			h.Del(b.Header)
-			for _, v := range vs {
-				h.Add(b.Header, v)
-			}
+		out := make([]string, len(vs))
+		for i, v := range vs {
+			out[i] = b.swap(v, val)
+		}
+		h.Del(b.Header)
+		for _, v := range out {
+			h.Add(b.Header, v)
+		}
+		// A login can have a binding for each of its headers, all of one name.
+		if !slices.Contains(used, b.Name) {
 			used = append(used, b.Name)
 		}
 	}
 	return used
+}
+
+// takes reports whether b's value goes in the values vs of its header: for a secret, when one of
+// them holds the placeholder, also inside Basic credentials; for a login, when there's one value
+// and it's the placeholder alone, or Bearer and the placeholder in Authorization (loginValue). A
+// login's header that holds the placeholder any other way, or twice, which a server may join into
+// one value, keeps it, and the proxy's log says so.
+func (b Binding) takes(vs []string) bool {
+	if b.Kind != KindLogin {
+		return slices.ContainsFunc(vs, func(v string) bool { return strings.Contains(v, b.Placeholder) || basicHas(v, b.Placeholder) })
+	}
+	return len(vs) == 1 && b.loginValue(vs[0])
+}
+
+// loginValue reports whether v is a login's header value the proxy fills in: the placeholder
+// alone, or in Authorization, Bearer (in any case), one space and the placeholder.
+func (b Binding) loginValue(v string) bool {
+	if v == b.Placeholder {
+		return true
+	}
+	scheme, rest, ok := strings.Cut(v, " ")
+	return ok && strings.EqualFold(b.Header, "Authorization") && strings.EqualFold(scheme, "Bearer") && rest == b.Placeholder
+}
+
+// swap is v, a value of b's header that takes b's value, with val in place of the placeholder: a
+// login's is the whole value, or what follows Bearer; a secret's is every copy of it, also inside
+// Basic credentials.
+func (b Binding) swap(v, val string) string {
+	if b.Kind == KindLogin {
+		if !b.loginValue(v) {
+			return v
+		}
+		return strings.TrimSuffix(v, b.Placeholder) + val
+	}
+	nv := strings.ReplaceAll(v, b.Placeholder, val)
+	if raw, ok := basic(nv); ok && strings.Contains(raw, b.Placeholder) {
+		nv = "Basic " + base64.StdEncoding.EncodeToString([]byte(strings.ReplaceAll(raw, b.Placeholder, val)))
+	}
+	return nv
 }
 
 func basic(v string) (string, bool) {
@@ -677,11 +754,6 @@ func (s *server) forwarder(scheme, target, host string, port int) (fwd http.Hand
 					pr.Out.Header.Set("Proxy-Authorization", up.auth)
 				}
 			}
-			if scheme == "https" && s.interceptPorts[port] { // secrets only ever go over TLS, to :443
-				if bs := s.secrets.forHost(host); len(bs) > 0 {
-					e.Secrets = s.secrets.inject(pr.Out.Header, bs)
-				}
-			}
 			// A token endpoint's host's replies come as they are, or as gzip that Go's transport
 			// undoes, so the proxy reads them (capture.go).
 			if s.captures.has(host) {
@@ -691,6 +763,12 @@ func (s *server) forwarder(scheme, target, host string, port int) (fwd http.Hand
 			// which another handler there could read apart.
 			if c := captured(pr.In.Context()); c != nil {
 				pr.Out.URL.Path, pr.Out.URL.RawPath, pr.Out.URL.RawQuery = c.path, "", ""
+			}
+			// Secrets only ever go over TLS, to :443, each for the path that goes out.
+			if scheme == "https" && s.interceptPorts[port] {
+				if bs := s.secrets.forRequest(host, pr.Out.URL); len(bs) > 0 {
+					e.Secrets = s.secrets.inject(pr.Out.Header, bs)
+				}
 			}
 			s.events.record(e)
 		},

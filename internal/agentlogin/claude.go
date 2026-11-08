@@ -71,7 +71,7 @@ func claudeOAuthBindings(m map[string]any, salt string) []proxy.Binding {
 // ClaudeOAuthBinding is the binding of the OAuth login's placeholder ending in salt: its access
 // token goes into Authorization for api.anthropic.com.
 func ClaudeOAuthBinding(salt string) proxy.Binding {
-	return login(agents.ClaudeOAuth, ClaudeOAuthName, []string{"api.anthropic.com"}, "Authorization", claudeOAuthPlaceholder(salt))
+	return login(agents.ClaudeOAuth, ClaudeOAuthName, authorization("api.anthropic.com"), claudeOAuthPlaceholder(salt))[0]
 }
 
 // claudeOAuthVM is the VM's .credentials.json: the login's placeholder, a refresh token that's

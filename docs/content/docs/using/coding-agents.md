@@ -231,18 +231,20 @@ When the store's `settings.json` sets `defaultProjectTrust` to `always`, devvm w
 
 ### API keys the proxy puts in
 
-The VM's proxy puts in opencode's and pi's API keys for the providers in this table. The ID is the provider's entry in the agent's `auth.json` and the value that `devvm agent login --provider` takes. The VM's copy of the login holds a placeholder in place of each of these keys, and on every network tier the proxy swaps it for the key in the header that the table names, in requests to the provider's hosts alone, so any other host gets only the placeholder. The proxy also allows those hosts on port 443, as it allows the hosts of every secret it puts in, so you don't allow them yourself:
+The VM's proxy puts in opencode's and pi's API keys for the providers in this table. The ID is the provider's entry in the agent's `auth.json` and the value that `devvm agent login --provider` takes. The VM's copy of the login holds a placeholder in place of each of these keys, and on every network tier the proxy swaps it for the key in the headers that the table names, in requests to the provider's hosts alone, so any other host gets only the placeholder. Where the table names a path, the proxy swaps it only in requests for paths that start with it, so the rest of that host gets the placeholder too. The proxy also allows those hosts on port 443, as it allows the hosts of every secret it puts in, so you don't allow them yourself:
 
-| ID | Provider | Hosts | Header |
-| --- | --- | --- | --- |
-| `anthropic` | Anthropic | `api.anthropic.com` | `x-api-key` |
-| `deepseek` | DeepSeek | `api.deepseek.com` | `Authorization` |
-| `google` | Google Gemini | `generativelanguage.googleapis.com` | `x-goog-api-key` |
-| `groq` | Groq | `api.groq.com` | `Authorization` |
-| `mistral` | Mistral | `api.mistral.ai` | `Authorization` |
-| `openai` | OpenAI | `api.openai.com` | `Authorization` |
-| `openrouter` | OpenRouter | `openrouter.ai` | `Authorization` |
-| `xai` | xAI | `api.x.ai` | `Authorization` |
+| ID | Provider | Hosts | Paths | Headers |
+| --- | --- | --- | --- | --- |
+| `anthropic` | Anthropic | `api.anthropic.com` | any | `x-api-key` |
+| `deepseek` | DeepSeek | `api.deepseek.com` | any | `Authorization` |
+| `google` | Google Gemini | `generativelanguage.googleapis.com` | any | `x-goog-api-key` |
+| `groq` | Groq | `api.groq.com` | any | `Authorization` |
+| `mistral` | Mistral | `api.mistral.ai` | any | `Authorization` |
+| `openai` | OpenAI | `api.openai.com` | any | `Authorization` |
+| `openrouter` | OpenRouter | `openrouter.ai` | `/api/` | `Authorization`, `x-api-key` |
+| `xai` | xAI | `api.x.ai` | any | `Authorization` |
+
+OpenRouter's key goes in either of its two headers, because pi sends it in `x-api-key` for OpenRouter's Anthropic models, as Anthropic's own API takes a key, and in `Authorization` for every other model. The proxy swaps the placeholder only when the header holds the placeholder and nothing else, or for `Authorization`, `Bearer`, one space and the placeholder, which is how opencode and pi send each of these keys. A header that holds anything else beside the placeholder, or a second header of the same name, keeps the placeholder, so code in the VM can't surround your key with text of its own, which a provider that quotes part of a key it refuses could show back to it.
 
 The placeholder for an OpenAI key starts with `sk-`, as an OpenAI API key does, because pi takes an OpenAI key that starts any other way for a Sign in with ChatGPT login and then leaves settings such as the longest reply it wants out of its requests. The Google Gemini key is the Gemini API's, for Google AI Studio. Vertex AI logs in with a Google Cloud account or a service account instead, so devvm withholds its logins, as it does any other provider's. These providers' keys never need `[pass-keys]`, and when it lists one of them all the same, the VM still gets the key's placeholder, not the key, and devvm notes at each launch that you can take the provider out.
 

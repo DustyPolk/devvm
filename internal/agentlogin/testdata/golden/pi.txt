@@ -1,6 +1,7 @@
 binding {"name":"pi-anthropic","kind":"login","agent":"pi","hosts":["api.anthropic.com"],"header":"x-api-key","placeholder":"devvm-proxy-managed-pi-anthropic-s4lt"}
 binding {"name":"pi-groq","kind":"login","agent":"pi","hosts":["api.groq.com"],"header":"Authorization","placeholder":"devvm-proxy-managed-pi-groq-s4lt"}
-binding {"name":"pi-openrouter","kind":"login","agent":"pi","hosts":["openrouter.ai"],"header":"Authorization","placeholder":"devvm-proxy-managed-pi-openrouter-s4lt"}
+binding {"name":"pi-openrouter","kind":"login","agent":"pi","hosts":["openrouter.ai"],"path":"/api/","header":"Authorization","placeholder":"devvm-proxy-managed-pi-openrouter-s4lt"}
+binding {"name":"pi-openrouter","kind":"login","agent":"pi","hosts":["openrouter.ai"],"path":"/api/","header":"x-api-key","placeholder":"devvm-proxy-managed-pi-openrouter-s4lt"}
 kept ollama
 withheld amazon-bedrock,azure,google,groq-oauth,openai,openai-codex
 unknown 
@@ -609,6 +610,7 @@ set key openrouter
     "type": "api_key"
   }
 }
+placeholder devvm-proxy-managed-pi-openrouter-s4lt
 placeholder devvm-proxy-managed-pi-openrouter-s4lt
 set key xai
 {
