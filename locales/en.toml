@@ -2042,6 +2042,84 @@ other = "Screen Sharing didn't open. Open {{.url}} in a VNC viewer instead."
 [desktop_vm_stopped]
 other = "{{.vm}} stopped, and its desktop with it."
 
+[paste_failed]
+description = "reason is an error from the system, in English"
+other = "Sending the clipboard to this folder's VM failed: {{.reason}}."
+
+[paste_sent]
+description = "path is the file's path in the VM, which devvm chose"
+other = "put {{.path}} into {{.vm}} and copied the path, for your terminal's paste shortcut"
+
+[paste_copy_failed]
+other = "Copying the path to the clipboard failed. Paste {{.path}} into the agent yourself."
+
+[paste_nothing]
+other = "There's no image and no copied file on the clipboard. Copy one, then run devvm paste again."
+
+[paste_many_files]
+description = "count is how many files are on the clipboard, more than one"
+one = "{{.count}} file is on the clipboard, and devvm paste sends one. Copy one file, then run it again."
+other = "{{.count}} files are on the clipboard, and devvm paste sends one. Copy one file, then run it again."
+
+[paste_too_large]
+description = "max is the most devvm paste sends, such as 64 MiB"
+other = "What's on the clipboard is over {{.max}}, more than devvm paste sends."
+
+[paste_needs_tool]
+description = "tool is the clipboard tool's command: wl-paste, wl-copy or xclip"
+other = "{{.tool}} isn't on PATH, and devvm paste reads and writes the clipboard with it. Install it, then run devvm paste again."
+
+[paste_no_session]
+other = "Neither WAYLAND_DISPLAY nor DISPLAY is set, so there's no clipboard to read. Run devvm paste from a terminal in your desktop session."
+
+[paste_tool_failed]
+description = "tool is the clipboard tool's command, wl-paste or xclip; reason is what it printed, in English"
+other = "Reading the clipboard with {{.tool}} failed: {{.reason}}. Run devvm paste from a terminal in your current desktop session."
+
+[paste_unsupported]
+other = "The clipboard can be read only on macOS and Linux."
+
+[paste_not_file]
+other = "{{.file}} isn't a regular file, so devvm sent nothing. Copy a file, not a folder."
+
+[paste_file_link]
+other = "{{.file}} is a symbolic link, or has one on its path, so devvm sent nothing. Copy the file from the folder it's really in."
+
+[paste_not_sent]
+other = "Writing {{.path}} in {{.vm}} failed."
+
+[paste_count_failed]
+other = "Counting the pasted files in {{.dir}} in {{.vm}} failed."
+
+[paste_rm_not_done]
+other = "Deleting the pasted files in {{.dir}} in {{.vm}} failed."
+
+[paste_rm_ask]
+description = "count is how many pasted files are in dir, the paste folder in the VM"
+one = "Delete {{.count}} pasted file in {{.dir}} in {{.vm}}?"
+other = "Delete {{.count}} pasted files in {{.dir}} in {{.vm}}?"
+
+[paste_rm_none]
+other = "There are no pasted files in {{.dir}} in {{.vm}}."
+
+[paste_rm_done]
+description = "count is how many pasted files devvm deleted"
+one = "deleted {{.count}} pasted file from {{.dir}} in {{.vm}}"
+other = "deleted {{.count}} pasted files from {{.dir}} in {{.vm}}"
+
+[paste_rm_failed]
+description = "reason is an error from the system, in English"
+other = "Deleting the pasted files in this folder's VM failed: {{.reason}}."
+
+[paste_launch_ask]
+description = "count is how many pasted files are in dir, the paste folder in the VM, from before it stopped"
+one = "{{.vm}} still has {{.count}} pasted file in {{.dir}} from before it stopped.\nDelete it?"
+other = "{{.vm}} still has {{.count}} pasted files in {{.dir}} from before it stopped.\nDelete them?"
+
+[paste_dir_invalid]
+description = "setting is config.toml's paste-dir"
+other = "{{.setting}} isn't a folder devvm paste can use. Set it as an absolute path of letters, digits, dots, dashes and _, such as /tmp/devvm-paste."
+
 [limactl_failed]
 description = "reason is an error from the system, in English"
 other = "Running limactl failed: {{.reason}}."

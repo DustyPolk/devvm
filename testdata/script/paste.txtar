@@ -1,0 +1,247 @@
+# devvm paste: an image, or one copied file, from this machine's clipboard
+# (stub wl-paste, xclip, osascript) into the folder's running VM, written
+# by paste.sh in its paste folder (config.toml's paste-dir, else
+# /tmp/devvm-paste) under a name devvm picks here, then that path copied
+# (stub wl-copy, pbcopy). devvm asks the clipboard only for a file's
+# reference and image types, never text, and the connection carries no
+# SSH agent. A stopped VM is refused, as are an empty clipboard, text
+# alone, several files, a link on a copied file's path, bytes that aren't
+# the type claimed, anything over 64 MiB, a missing tool and no session.
+env WAYLAND_DISPLAY=wayland-0
+env DISPLAY=
+project plain
+! exec devvm paste
+stderr '^devvm: no_vm dir=\S*/plain$'
+
+# A stopped VM is refused before the clipboard is read.
+exec devvm --network open --no-git-protect
+vm_name PLAIN plain
+exec limactl stop $PLAIN
+stub_reset
+! exec devvm paste
+stderr '^devvm: vm_not_running vm=devvm-plain-[0-9a-f]{14}$'
+stub_calls
+! stdout 'wl-paste|osascript'
+exec devvm
+
+# Nothing on the clipboard, then text alone: nothing sent, and the text
+# never asked for.
+stub_reset
+! exec devvm paste
+stderr '^devvm: paste_nothing$'
+exec sh -c 'printf "text/plain\nUTF8_STRING\n" > "$STUB_DIR/clip-types"'
+! exec devvm paste
+stderr '^devvm: paste_nothing$'
+stub_calls
+! stdout 'devvm-paste'
+[linux] ! stdout 'wl-paste --no-newline'
+
+# An image: the PNG's bytes go to paste.sh put on stdin, under a name
+# devvm picked, into the default folder, with no SSH agent on the
+# connection; the path is copied, and only image/png was read.
+exec sh -c 'printf "text/html\nimage/png\n" > "$STUB_DIR/clip-types"'
+exec sh -c 'printf "\211PNG\r\n\032\nthe image" > "$STUB_DIR/clip"'
+stub_reset
+exec devvm paste
+stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png vm=devvm-plain-[0-9a-f]{14}$'
+! stderr .
+cmp $STUB_DIR/paste-in $STUB_DIR/clip
+grep '^/tmp/devvm-paste paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png$' $STUB_DIR/paste-put
+grep '^/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png$' $STUB_DIR/copied
+grep '^unset$' $STUB_DIR/shell-agent
+stub_calls
+[linux] stdout '^wl-paste --list-types$'
+[linux] stdout '^wl-paste --no-newline --type image/png$'
+[linux] stdout '^wl-copy$'
+[darwin] stdout '^osascript .*PNGf'
+[darwin] stdout '^pbcopy$'
+! stdout 'text/html'
+
+# --json: the same, as one object.
+exec devvm paste --json
+stdout '"version": ?1'
+stdout '"kind": ?"image"'
+stdout '"type": ?"image/png"'
+stdout '"bytes": ?17'
+stdout '"copied": ?true'
+stdout '"path": ?"/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png"'
+! stdout 'paste_sent'
+
+# A copy that fails is a warning: the image is in the VM already.
+exec sh -c ': > "$STUB_DIR/copy-fails"'
+exec devvm paste
+stdout '^==> paste_sent path=/tmp/devvm-paste/paste-'
+stderr '^devvm: paste_copy_failed path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png$'
+exec devvm paste --json
+stdout '"copied": ?false'
+rm $STUB_DIR/copy-fails
+
+# Bytes that aren't the type claimed are nothing devvm sends.
+exec sh -c 'printf "hello" > "$STUB_DIR/clip"'
+! exec devvm paste
+stderr '^devvm: paste_nothing$'
+
+# Over 64 MiB: stopped at the cap, nothing sent.
+[linux] exec sh -c ': > "$STUB_DIR/clip-floods"'
+[darwin] exec sh -c 'head -c 67108865 /dev/zero > "$STUB_DIR/clip"'
+stub_reset
+! exec devvm paste
+stderr '^devvm: paste_too_large max=64 MiB$'
+stub_calls
+! stdout 'devvm-paste'
+[linux] rm $STUB_DIR/clip-floods
+
+# paste.sh failing in the VM: nothing copied.
+exec sh -c 'printf "\211PNG\r\n\032\nthe image" > "$STUB_DIR/clip"'
+exec sh -c 'echo "devvm-paste" > "$STUB_DIR/shell-fails-on"'
+stub_reset
+! exec devvm paste
+stderr '^devvm: paste_not_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png vm=devvm-plain-[0-9a-f]{14}$'
+stub_calls
+! stdout '^(wl-copy|pbcopy)$'
+rm $STUB_DIR/shell-fails-on
+
+# A copied file wins over the image beside it (its icon), is read as
+# named in its folder, and keeps its name with every other character
+# made _.
+cp $WORK/doc.txt doc.txt
+cp $WORK/doc.txt 'my doc (1).txt'
+exec sh -c 'printf "text/uri-list\nimage/png\n" > "$STUB_DIR/clip-types"'
+exec sh -c 'printf "file://%s/my%%20doc%%20(1).txt\r\n" "$PWD" > "$STUB_DIR/clip"'
+exec sh -c 'printf "%s/my doc (1).txt\n" "$PWD" > "$STUB_DIR/clip-file"'
+stub_reset
+exec devvm paste
+stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}-my_doc__1_\.txt vm=devvm-plain-[0-9a-f]{14}$'
+cmp $STUB_DIR/paste-in doc.txt
+stub_calls
+! stdout 'image/png'
+exec devvm paste --json
+stdout '"kind": ?"file"'
+stdout '"type": ?""'
+stdout '"bytes": ?13'
+
+# A link in the copied file's place, such as one the VM planted at a key
+# of yours, is refused; a link that was there before the copy too.
+symlink planted.txt -> doc.txt
+exec sh -c 'printf "file://%s/planted.txt\n" "$PWD" > "$STUB_DIR/clip"'
+exec sh -c 'printf "%s/planted.txt\n" "$PWD" > "$STUB_DIR/clip-file"'
+stub_reset
+! exec devvm paste
+stderr '^devvm: paste_file_link file=\S*/plain/planted\.txt$'
+stub_calls
+! stdout 'devvm-paste'
+
+# A link the VM planted at a folder of yours, before the copy, is refused
+# on the way to the file, and so is a copied folder's reference, which
+# ends in a slash, at such a link named like a file under it.
+mkdir $WORK/elsewhere
+cp doc.txt $WORK/elsewhere/id_ed25519
+symlink docs -> $WORK/elsewhere
+symlink id_ed25519 -> $WORK/elsewhere
+exec sh -c 'printf "file://%s/docs/id_ed25519\n" "$PWD" > "$STUB_DIR/clip"'
+exec sh -c 'printf "%s/docs/id_ed25519\n" "$PWD" > "$STUB_DIR/clip-file"'
+! exec devvm paste
+stderr '^devvm: paste_file_link file=\S*/plain/docs/id_ed25519$'
+exec sh -c 'printf "file://%s/id_ed25519/\n" "$PWD" > "$STUB_DIR/clip"'
+exec sh -c 'printf "%s/id_ed25519/\n" "$PWD" > "$STUB_DIR/clip-file"'
+! exec devvm paste
+stderr '^devvm: paste_file_link file=\S*/plain/id_ed25519$'
+stub_calls
+! stdout 'devvm-paste'
+
+# A folder, and a file that's gone.
+exec sh -c 'printf "file://%s\n" "$PWD" > "$STUB_DIR/clip"'
+exec sh -c 'printf "%s\n" "$PWD" > "$STUB_DIR/clip-file"'
+! exec devvm paste
+stderr '^devvm: paste_not_file file=\S*/plain$'
+exec sh -c 'printf "file://%s/gone.txt\n" "$PWD" > "$STUB_DIR/clip"'
+exec sh -c 'printf "%s/gone.txt\n" "$PWD" > "$STUB_DIR/clip-file"'
+! exec devvm paste
+stderr '^devvm: paste_failed reason=.*gone\.txt'
+
+# Several files: devvm paste sends one. (macOS's osascript gives one
+# path, so there's nothing to count there.)
+[linux] exec sh -c 'printf "file://%s/doc.txt\nfile://%s/planted.txt\n" "$PWD" "$PWD" > "$STUB_DIR/clip"'
+[linux] ! exec devvm paste
+[linux] stderr '^devvm: paste_many_files count=2$'
+rm $STUB_DIR/clip-file
+
+# GNOME's file copies, and a web address, which isn't a file: the image
+# beside it is sent instead.
+[linux] exec sh -c 'printf "x-special/gnome-copied-files\nimage/png\n" > "$STUB_DIR/clip-types"'
+[linux] exec sh -c 'printf "copy\nfile://%s/doc.txt\n" "$PWD" > "$STUB_DIR/clip"'
+[linux] exec devvm paste
+[linux] stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}-doc\.txt '
+[linux] exec sh -c 'printf "text/uri-list\nimage/png\n" > "$STUB_DIR/clip-types"'
+[linux] exec sh -c 'printf "https://example.com/x.png\n" > "$STUB_DIR/clip"'
+[linux] ! exec devvm paste
+[linux] stderr '^devvm: paste_nothing$'
+
+# A wl-paste that can't reach the session WAYLAND_DISPLAY names is its
+# failure, with what it said, not an empty clipboard.
+[linux] exec sh -c ': > "$STUB_DIR/clip-fails"'
+[linux] ! exec devvm paste
+[linux] stderr '^devvm: paste_tool_failed reason=Failed to connect to a Wayland server tool=wl-paste$'
+[linux] rm $STUB_DIR/clip-fails
+
+# X11: xclip reads the targets and the type, and copies with -i.
+[linux] env WAYLAND_DISPLAY=
+[linux] env DISPLAY=:0
+[linux] exec sh -c 'printf "TARGETS\nimage/png\n" > "$STUB_DIR/clip-types"'
+[linux] exec sh -c 'printf "\211PNG\r\n\032\nthe image" > "$STUB_DIR/clip"'
+[linux] stub_reset
+[linux] exec devvm paste
+[linux] stdout '^==> paste_sent path=/tmp/devvm-paste/paste-'
+[linux] stub_calls
+[linux] stdout '^xclip -selection clipboard -t TARGETS -o$'
+[linux] stdout '^xclip -selection clipboard -t image/png -o$'
+[linux] stdout '^xclip -selection clipboard -i$'
+# xclip's words for an empty clipboard aren't known, so its failure still
+# reads as one.
+[linux] exec sh -c ': > "$STUB_DIR/clip-fails"'
+[linux] ! exec devvm paste
+[linux] stderr '^devvm: paste_nothing$'
+[linux] rm $STUB_DIR/clip-fails
+
+# No session, and a missing tool (a PATH without xclip, with what devvm
+# itself needs).
+[linux] env DISPLAY=
+[linux] ! exec devvm paste
+[linux] stderr '^devvm: paste_no_session$'
+[linux] env DISPLAY=:0
+[linux] exec sh -c 'mkdir -p "$WORK/bin" && for c in devvm limactl ssh sh git uname qemu-img qemu-system-x86_64 qemu-system-aarch64; do ln -s "$(command -v "$c")" "$WORK/bin/$c"; done'
+[linux] env PATH0=$PATH
+[linux] env PATH=$WORK/bin
+[linux] ! exec devvm paste
+[linux] stderr '^devvm: paste_needs_tool tool=xclip$'
+[linux] env PATH=$PATH0
+[linux] env DISPLAY=
+[linux] env WAYLAND_DISPLAY=wayland-0
+
+# config.toml's paste-dir: the folder devvm paste writes to, and the one a
+# launch makes (sync's vm file). One devvm can't use fails the command,
+# naming its line.
+exec sh -c 'printf "text/html\nimage/png\n" > "$STUB_DIR/clip-types"'
+exec sh -c 'printf "\211PNG\r\n\032\nthe image" > "$STUB_DIR/clip"'
+cp $WORK/pastes.toml $CFG/config.toml
+exec devvm paste
+stdout '^==> paste_sent path=/home/me/pastes/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png '
+grep '^/home/me/pastes paste-' $STUB_DIR/paste-put
+exec devvm
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_PASTE_DIR=''/home/me/pastes''$'
+cp $WORK/bad.toml $CFG/config.toml
+! exec devvm paste
+stderr '^devvm: paste_failed reason=\S*/config\.toml:2: paste_dir_invalid setting=paste-dir$'
+rm $CFG/config.toml
+exec devvm
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_PASTE_DIR=''/tmp/devvm-paste''$'
+
+-- doc.txt --
+twelve chars
+-- pastes.toml --
+paste-dir = "/home/me/pastes"
+-- bad.toml --
+# not absolute
+paste-dir = "pastes"

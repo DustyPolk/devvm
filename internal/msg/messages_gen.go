@@ -3214,6 +3214,111 @@ func PasswordPrompt() M {
 	return M{id: "password_prompt"}
 }
 
+// PasteCopyFailed is [paste_copy_failed]: "Copying the path to the clipboard failed. Paste {{.path}} into the agent yourself."
+func PasteCopyFailed(path string) M {
+	return M{id: "paste_copy_failed", vals: []val{{"path", path}}}
+}
+
+// PasteCountFailed is [paste_count_failed]: "Counting the pasted files in {{.dir}} in {{.vm}} failed."
+func PasteCountFailed(dir string, vm string) M {
+	return M{id: "paste_count_failed", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// PasteDirInvalid is [paste_dir_invalid]: "{{.setting}} isn't a folder devvm paste can use. Set it as an absolute path of letters, digits, dots, dashes and _, such as /tmp/devvm-paste."
+func PasteDirInvalid(setting string) M {
+	return M{id: "paste_dir_invalid", vals: []val{{"setting", setting}}}
+}
+
+// PasteFailed is [paste_failed]: "Sending the clipboard to this folder's VM failed: {{.reason}}."
+func PasteFailed(reason string) M {
+	return M{id: "paste_failed", vals: []val{{"reason", reason}}}
+}
+
+// PasteFileLink is [paste_file_link]: "{{.file}} is a symbolic link, or has one on its path, so devvm sent nothing. Copy the file from the folder it's really in."
+func PasteFileLink(file string) M {
+	return M{id: "paste_file_link", vals: []val{{"file", file}}}
+}
+
+// PasteLaunchAsk is [paste_launch_ask]: "{{.vm}} still has {{.count}} pasted files in {{.dir}} from before it stopped.\nDelete them?"
+func PasteLaunchAsk(count int, dir string, vm string) M {
+	return M{id: "paste_launch_ask", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"dir", dir}, {"vm", vm}}}
+}
+
+// PasteManyFiles is [paste_many_files]: "{{.count}} files are on the clipboard, and devvm paste sends one. Copy one file, then run it again."
+func PasteManyFiles(count int) M {
+	return M{id: "paste_many_files", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
+// PasteNeedsTool is [paste_needs_tool]: "{{.tool}} isn't on PATH, and devvm paste reads and writes the clipboard with it. Install it, then run devvm paste again."
+func PasteNeedsTool(tool string) M {
+	return M{id: "paste_needs_tool", vals: []val{{"tool", tool}}}
+}
+
+// PasteNoSession is [paste_no_session]: "Neither WAYLAND_DISPLAY nor DISPLAY is set, so there's no clipboard to read. Run devvm paste from a terminal in your desktop session."
+func PasteNoSession() M {
+	return M{id: "paste_no_session"}
+}
+
+// PasteNotFile is [paste_not_file]: "{{.file}} isn't a regular file, so devvm sent nothing. Copy a file, not a folder."
+func PasteNotFile(file string) M {
+	return M{id: "paste_not_file", vals: []val{{"file", file}}}
+}
+
+// PasteNotSent is [paste_not_sent]: "Writing {{.path}} in {{.vm}} failed."
+func PasteNotSent(path string, vm string) M {
+	return M{id: "paste_not_sent", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// PasteNothing is [paste_nothing]: "There's no image and no copied file on the clipboard. Copy one, then run devvm paste again."
+func PasteNothing() M {
+	return M{id: "paste_nothing"}
+}
+
+// PasteRmAsk is [paste_rm_ask]: "Delete {{.count}} pasted files in {{.dir}} in {{.vm}}?"
+func PasteRmAsk(count int, dir string, vm string) M {
+	return M{id: "paste_rm_ask", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"dir", dir}, {"vm", vm}}}
+}
+
+// PasteRmDone is [paste_rm_done]: "deleted {{.count}} pasted files from {{.dir}} in {{.vm}}"
+func PasteRmDone(count int, dir string, vm string) M {
+	return M{id: "paste_rm_done", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"dir", dir}, {"vm", vm}}}
+}
+
+// PasteRmFailed is [paste_rm_failed]: "Deleting the pasted files in this folder's VM failed: {{.reason}}."
+func PasteRmFailed(reason string) M {
+	return M{id: "paste_rm_failed", vals: []val{{"reason", reason}}}
+}
+
+// PasteRmNone is [paste_rm_none]: "There are no pasted files in {{.dir}} in {{.vm}}."
+func PasteRmNone(dir string, vm string) M {
+	return M{id: "paste_rm_none", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// PasteRmNotDone is [paste_rm_not_done]: "Deleting the pasted files in {{.dir}} in {{.vm}} failed."
+func PasteRmNotDone(dir string, vm string) M {
+	return M{id: "paste_rm_not_done", vals: []val{{"dir", dir}, {"vm", vm}}}
+}
+
+// PasteSent is [paste_sent]: "put {{.path}} into {{.vm}} and copied the path, for your terminal's paste shortcut"
+func PasteSent(path string, vm string) M {
+	return M{id: "paste_sent", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// PasteTooLarge is [paste_too_large]: "What's on the clipboard is over {{.max}}, more than devvm paste sends."
+func PasteTooLarge(max string) M {
+	return M{id: "paste_too_large", vals: []val{{"max", max}}}
+}
+
+// PasteToolFailed is [paste_tool_failed]: "Reading the clipboard with {{.tool}} failed: {{.reason}}. Run devvm paste from a terminal in your current desktop session."
+func PasteToolFailed(reason string, tool string) M {
+	return M{id: "paste_tool_failed", vals: []val{{"reason", reason}, {"tool", tool}}}
+}
+
+// PasteUnsupported is [paste_unsupported]: "The clipboard can be read only on macOS and Linux."
+func PasteUnsupported() M {
+	return M{id: "paste_unsupported"}
+}
+
 // PiSettingsDropped is [pi_settings_dropped]: "The copy of pi's settings.json in {{.vm}} leaves out {{.keys}}, because devvm sets those in VMs."
 func PiSettingsDropped(keys string, vm string) M {
 	return M{id: "pi_settings_dropped", vals: []val{{"keys", keys}, {"vm", vm}}}
@@ -5483,6 +5588,27 @@ var specs = map[string]spec{
 	"part_none_alone":                {fields: []string{"flag"}},
 	"part_other_flag":                {fields: []string{"flag", "given", "other"}},
 	"password_prompt":                {},
+	"paste_copy_failed":              {fields: []string{"path"}},
+	"paste_count_failed":             {fields: []string{"dir", "vm"}},
+	"paste_dir_invalid":              {fields: []string{"setting"}},
+	"paste_failed":                   {fields: []string{"reason"}},
+	"paste_file_link":                {fields: []string{"file"}},
+	"paste_launch_ask":               {plural: true, fields: []string{"count", "dir", "vm"}},
+	"paste_many_files":               {plural: true, fields: []string{"count"}},
+	"paste_needs_tool":               {fields: []string{"tool"}},
+	"paste_no_session":               {},
+	"paste_not_file":                 {fields: []string{"file"}},
+	"paste_not_sent":                 {fields: []string{"path", "vm"}},
+	"paste_nothing":                  {},
+	"paste_rm_ask":                   {plural: true, fields: []string{"count", "dir", "vm"}},
+	"paste_rm_done":                  {plural: true, fields: []string{"count", "dir", "vm"}},
+	"paste_rm_failed":                {fields: []string{"reason"}},
+	"paste_rm_none":                  {fields: []string{"dir", "vm"}},
+	"paste_rm_not_done":              {fields: []string{"dir", "vm"}},
+	"paste_sent":                     {fields: []string{"path", "vm"}},
+	"paste_too_large":                {fields: []string{"max"}},
+	"paste_tool_failed":              {fields: []string{"reason", "tool"}},
+	"paste_unsupported":              {},
 	"pi_settings_dropped":            {fields: []string{"keys", "vm"}},
 	"pi_trusts_all":                  {fields: []string{"vm"}},
 	"pick_agents":                    {},
