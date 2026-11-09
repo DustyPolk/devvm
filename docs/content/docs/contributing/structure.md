@@ -117,13 +117,13 @@ A new file that an older devvm doesn't need to know about, or a field added to a
 
 ### Released state
 
-Someone who upgrades devvm keeps their VMs, defaults, agent store and secrets as the release they came from left them. Until 1.0, an upgrade from every release since 0.1.0 has to work. Each release that changed what devvm writes on disk has a frozen copy of the state it left, called its fixture, and the tests run today's devvm on every fixture, so a change that breaks an older release's state fails the gate.
+Someone who upgrades devvm keeps their VMs, defaults, agent store and secrets as the release they came from left them. Until 1.0, an upgrade from every release since 0.1.0 has to work. Each final release that changed what devvm writes on disk has a frozen copy of the state it left, called its fixture, and the tests run today's devvm on every fixture, so a change that breaks an older release's state fails the gate.
 
 #### What a fixture holds
 
 A release's fixture is the folder `testdata/v<release>/`. Its `darwin/` folder holds the state that the release left on a Mac, and its `linux/` folder the state it left on Linux. For 0.1.0, that's four VMs' states, its defaults, its agent store and logins, the stubs' record of the VMs, and what its `--json` printed for them, and the folder's `README.md` lists what each VM has. The release made these files itself. Its `generate.sh` checks out the release's tag in a temporary folder and runs `generate.txtar` with that version's own CLI test harness, then copies what the run left, with each file's mode in `modes`, because git doesn't keep modes.
 
-A fixture is frozen. It's generated once, from the release's own binary, and never edited or generated again, so never run its `generate.sh` from a newer devvm and never change its files. A release whose state is the same as the one before it adds no fixture.
+A fixture is frozen. It's generated once, from the release's own binary, and never edited or generated again, so never run its `generate.sh` from a newer devvm and never change its files. A release whose state is the same as the one before it adds no fixture, and neither does a release candidate, such as 0.1.1-rc.1, because only a final release that changes the state gets one.
 
 #### The tests on every fixture
 
@@ -139,7 +139,7 @@ A change in what devvm does with existing state gets an entry marked Breaking in
 
 #### Freezing a release's state
 
-At release time, after the tag exists, a release that changed the state format gets its fixture:
+At release time, after the tag exists, a final release that changed the state format gets its fixture. A release candidate gets none, even when it changed the state, and its final release's fixture holds that state:
 
 1. Copy the newest fixture's `generate.sh`, `generate.txtar` and `README.md` into `testdata/v<release>/`. Set the tag, the version and the script's name in `generate.sh`, and add the VMs and commands to `generate.txtar` that make the state the release added.
 2. Run `generate.sh` on a Mac and on Linux, which writes `darwin/` and `linux/`. 0.1.0's were made on an arm64 Mac and on x86_64 Fedora.
