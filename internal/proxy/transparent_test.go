@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -586,7 +587,9 @@ func TestTunnelHelloStall(t *testing.T) {
 		time.Sleep(c.wait)
 		_, _ = conn.Write(c.then)
 		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		if _, err := r.ReadByte(); !errors.Is(err, io.EOF) {
+		// Closed either way: Linux resets a connection closed with bytes
+		// unread, as the proxy leaves what follows a broken hello.
+		if _, err := r.ReadByte(); !errors.Is(err, io.EOF) && !errors.Is(err, syscall.ECONNRESET) {
 			t.Errorf("% x: not closed: %v", c.first, err)
 		}
 		_ = conn.Close()
