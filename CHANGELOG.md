@@ -16,7 +16,7 @@ A release candidate for 0.1.1, adding to 0.1.1-rc.1. Install it with `devvm upgr
 
 - **Transparent mode (#35), on by default:** on every tier but open, tools that ignore the proxy settings, such as `wrangler dev`, static Go binaries and containers, reach the VM's proxy and its allowlist anyway. A VM made before needs `devvm update` first, and `devvm network transparent off` turns it off for a VM ([what it covers](https://next.devvm.dev/docs/safety/network/#tools-that-ignore-the-proxy)).
 - **Folders of repos with `--clone` (#3):** one VM gets a clone of each repo you pick, at the same paths. `devvm clone fetch` brings back every repo's work, and `devvm clone add PATH` adds one ([folders of repos](https://next.devvm.dev/docs/using/clone/#folders-of-repos)).
-- **Rules by HTTP method and path:** `devvm network allow|deny HOST --method … --path …`, such as `devvm network deny api.github.com --method POST,PUT,PATCH,DELETE`.
+- **Rules by HTTP method and path:** `--method` and `--path` on `devvm network allow`, `deny` and `rm`, such as `devvm network deny api.github.com --method POST,PUT,PATCH,DELETE`.
 - **Your own secrets:** `devvm secret set NAME --host HOST --env VARIABLE`, then `devvm secret use NAME`. The VM only ever sees a placeholder, and `--method` and `--path` limit where the real value goes.
 - **Learning a VM's hosts (#17):** `--network learn`, then `devvm network lock` to keep the hosts you choose.
 - **`.git` protection on Linux (#4, #20):** `.git` is locked read-only around QEMU, without root. Where a host can't, such as Ubuntu with AppArmor, devvm watches `.git`, warns at each launch, and names what changed.
