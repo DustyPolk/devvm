@@ -117,6 +117,35 @@ A new file that an older devvm doesn't need to know about, or a field added to a
 
 ### Released state
 
-`testdata/v0.1.0/darwin/` holds the state that devvm 0.1.0 left on a Mac, and `testdata/v0.1.0/linux/` the state it left on Linux: four VMs' states, its defaults, its agent store and logins, the stubs' record of the VMs, and what its `--json` printed for them. Version 0.1.0 made these files itself. `testdata/v0.1.0/generate.sh` checks out the `v0.1.0` tag in a temporary folder and runs `generate.txtar` with that version's own CLI test harness, then copies what the run left, with each file's mode in `modes`, because git doesn't keep modes. `TestFixtureVMStates` and the other `TestFixture` tests in `internal/vm` read every file with today's readers and check that each field 0.1.0 wrote reads and writes back unchanged. `testdata/script/fixture_v010.txtar` puts the state into a sandbox with `fixture v0.1.0`, which moves it to the sandbox's folder: the folder's path, each VM's name hash, its folder's and `.git`'s identities and its backend's place become what they are there, and nothing else changes. The script then runs today's devvm on it. Each `--json` must have everything 0.1.0's had (`json_superset`), the read-only commands must change no file, and a launch must start each VM as it is, without a Lima edit.
+Someone who upgrades devvm keeps their VMs, defaults, agent store and secrets as the release they came from left them. Until 1.0, an upgrade from every release since 0.1.0 has to work. Each release that changed what devvm writes on disk has a frozen copy of the state it left, called its fixture, and the tests run today's devvm on every fixture, so a change that breaks an older release's state fails the gate.
 
-When one of these fails, today's devvm breaks the state that 0.1.0's users have. Fix devvm, or add a migration, but never change the fixture. The fixture is frozen: never run `generate.sh` from a newer devvm, and never edit its files. A new release whose state differs gets its own folder, such as `testdata/v0.2.0/`, with its own `generate.sh`, and the older folders stay as they are.
+#### What a fixture holds
+
+A release's fixture is the folder `testdata/v<release>/`. Its `darwin/` folder holds the state that the release left on a Mac, and its `linux/` folder the state it left on Linux. For 0.1.0, that's four VMs' states, its defaults, its agent store and logins, the stubs' record of the VMs, and what its `--json` printed for them, and the folder's `README.md` lists what each VM has. The release made these files itself. Its `generate.sh` checks out the release's tag in a temporary folder and runs `generate.txtar` with that version's own CLI test harness, then copies what the run left, with each file's mode in `modes`, because git doesn't keep modes.
+
+A fixture is frozen. It's generated once, from the release's own binary, and never edited or generated again, so never run its `generate.sh` from a newer devvm and never change its files. A release whose state is the same as the one before it adds no fixture.
+
+#### The tests on every fixture
+
+The unit tests read every fixture's files with today's readers. `stateFixtures` in `internal/vm/fixture_test.go` lists each release's expectations: its VMs, the version of their `vm.json`, its layout version, its clones of one repo, and functions that check its VMs, its defaults and its agent store. 0.1.0's entry is `v010Fixture` in `fixture_v010_test.go`. `TestFixtureVMStates`, `TestFixtureVMsRead`, `TestFixtureSettings`, `TestFixtureAgentStore` and `TestFixtureClonesReadAsOneRepo` run once for each release and system, and they check that each field the release wrote reads and writes back unchanged. `TestStateFixturesListed` fails when a folder in `testdata` has no entry, or an entry has no folder. Two packages keep a table of their own for what only they read. In `internal/proxy`, `fixtureBinaries` records the SHA-256 of the binary that made each release's state, which its proxy configs name, and `TestFixtureBindings` and `TestFixtureProxyConfig` read every release's bindings files and proxy configs. In `internal/secrets`, `storeFixtures` names a secret that each release's store on Linux keeps as a file, which `TestFixtureStoreGet` reads through a VM's binding. `TestV010Rules` is a copy of 0.1.0's own tests of the proxy's rules, kept apart from today's.
+
+The CLI tests run today's commands on each fixture. A release's scripts are in `testdata/script/`, named `fixture_v` and the release's version without its dots, such as `fixture_v010.txtar`, `fixture_v010_clone.txtar` and `fixture_v010_network.txtar` for 0.1.0. Each one puts the state into a sandbox with `fixture v<release>`, which moves it to the sandbox's folder: the folder's path, each VM's name hash, its folder's and `.git`'s identities and its backend's place become what they are there, and nothing else changes. The script then runs today's devvm on it. Each `--json` must have everything the release's had (`json_superset`), the read-only commands must change no file, and a launch must start each VM as it is, without a Lima edit. The scripts stay separate for each release, because their checks name that release's VMs and what each one has, and `TestFixtureScripts` in `internal/cli` fails when a fixture has no script or a script names a fixture that isn't there.
+
+#### Changing what devvm does with state
+
+A change that reads or writes state, such as a new command, a new section in `vm.json` or a new field in a record, runs its new commands on every fixture in the same commit, and reading the files isn't enough. Add the steps to each release's scripts, as `fixture_v010_network.txtar` runs rules by method and path on 0.1.0's app VM and `fixture_v010_clone.txtar` runs devvm clone add on its web VM. When a fixture's test fails, today's devvm breaks the state that the release's users have. Fix devvm, or add a migration, but never change the fixture.
+
+A change in what devvm does with existing state gets an entry marked Breaking in `CHANGELOG.md`, in the section for the release it goes out in. When the user has to do something about it, such as run a command, devvm also tells them once, at the first launch after the upgrade.
+
+#### Freezing a release's state
+
+At release time, after the tag exists, a release that changed the state format gets its fixture:
+
+1. Copy the newest fixture's `generate.sh`, `generate.txtar` and `README.md` into `testdata/v<release>/`. Set the tag, the version and the script's name in `generate.sh`, and add the VMs and commands to `generate.txtar` that make the state the release added.
+2. Run `generate.sh` on a Mac and on Linux, which writes `darwin/` and `linux/`. 0.1.0's were made on an arm64 Mac and on x86_64 Fedora.
+3. Add the release's entries in `stateFixtures`, `fixtureBinaries` and `storeFixtures`, and its scripts, made from the newest release's scripts with checks of its own VMs.
+4. Commit the folder as the run left it. The older fixtures stay as they are.
+
+#### The support window
+
+An upgrade from every release since 0.1.0 works until 1.0. When a release leaves the window, its fixture and the code that only its state needs, such as a reader of a field that only that release wrote, go together, in one commit that says which release left and why. The commit deletes `testdata/v<release>/`, its scripts and its entries in the tables above.
