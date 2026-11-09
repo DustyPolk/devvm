@@ -1,0 +1,96 @@
+# devvm update on devvm 0.1.0's state (testdata/v0.1.0/GOOS, which 0.1.0
+# itself made: see fixture_v010.txtar). 0.1.0's base isn't today's, so
+# devvm update makes app again from today's base, after asking, through
+# the remake: the history exported, the home folder saved and put back,
+# the old machine set aside, then deleted. app keeps its ID, folder,
+# tier, ports, shared tools, secrets, links and .git protection, and its
+# launch gives transparent mode its stand-in address. A remake keeps the
+# project folder's cache mode: on Linux, 0.1.0's app has none chosen, so
+# it keeps Lima's mmap, still warned of, and only devvm mount-cache none
+# changes it. On macOS, app left strict is on after the update, strict's
+# setting out of its .git/config. web, a --clone VM, is refused before
+# anything changes, so its clone's work stays.
+[!darwin] [!linux] skip 'a fixture for macOS and Linux only'
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+mkdir $HOME/src/db $HOME/src/app $HOME/src/web $HOME/src/scratch
+cd $HOME/src/app
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+cd $HOME/src/web
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+cd $HOME/src/scratch
+exec git init -q
+fixture v0.1.0
+vm_name APP app
+vm_name WEB web
+
+# web: refused as every remake refuses a --clone VM, before anything runs.
+cd $HOME/src/web
+stub_reset
+! exec devvm update --force
+stderr '^devvm: remake_clone vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+vm_state $WEB_dir/vm.json
+stdout '^clone\.on=true$'
+
+# app: host ports of its own, as fixture_v010.txtar launches app with
+# 0.1.0's at the same time; on macOS, strict, as 0.1.0's devvm
+# git-protect strict left it.
+cd $HOME/src/app
+free_port APP_PROXY APP_SSH
+json_set $APP_dir/vm.json ports.host.proxy:=$APP_PROXY ports.host.ssh:=$APP_SSH
+[darwin] json_set $APP_dir/vm.json git.mode=strict
+[darwin] exec git config --file .git/config diff.ignoreSubmodules all
+exec sh -c 'sed -n "s/^  \"id\": \"\(.*\)\",$/\1/p" "$1"' sh $APP_dir/vm.json
+stdout '^[0-9a-f]{32}$'
+cp stdout $WORK/id
+exec sh -c 'sed -n "s/^  \"chain\": \"\(.*\)\",$/\1/p" "$1"' sh $APP_dir/vm.json
+stdout '^base=[0-9a-f]{12}$'
+cp stdout $WORK/chain
+
+# Without a terminal it names what changed and refuses, changing nothing.
+stub_reset
+! exec devvm update
+stdout '^==> vm_changed changed=base vm=devvm-app-[0-9a-f]{14}$'
+stderr '^devvm: no_input answer=--force$'
+stub_calls
+! stdout 'limactl (stop|rename|clone|delete)'
+exec sh -c 'sed -n "s/^  \"chain\": \"\(.*\)\",$/\1/p" "$1"' sh $APP_dir/vm.json
+cmp stdout $WORK/chain
+
+# --force: made again from today's base by the remake.
+stub_reset
+exec devvm update --force
+stdout '==> exported '
+stdout '==> saving_home vm=devvm-app-[0-9a-f]{14}$'
+stdout '==> remade image=base vm=devvm-app-[0-9a-f]{14}$'
+! stderr 'unreadable|corrupt|layout_|refused|failed|remake_undone'
+[darwin] stderr '^devvm: git_strict_converted vm=devvm-app-[0-9a-f]{14}$'
+[linux] stderr '^devvm: mount_cache_unchosen mode=mmap vm=devvm-app-[0-9a-f]{14}$'
+stub_calls
+stdout 'limactl stop devvm-app-[0-9a-f]{14}\n(.*\n)*limactl rename --tty=false devvm-app-[0-9a-f]{14} devvm-[0-9a-f]{14}-old\n(.*\n)*limactl clone --tty=false devvm-img-[0-9a-f]+ devvm-app-[0-9a-f]{14} .*\n(.*\n)*.*tar -xzf - --skip-old-files.*\n(.*\n)*limactl delete -f devvm-[0-9a-f]{14}-old\n'
+stdout 'limactl clone --tty=false devvm-img-[0-9a-f]+ devvm-app-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/src/app","writable":true\},'
+
+# What it kept, and the new image.
+vm_state $APP_dir/vm.json
+stdout '^image=base$'
+stdout '^net\.tier=allowlist$'
+stdout '^ports\.forward=3000,8080$'
+stdout '^tools\.names=node claude codex$'
+stdout '^secrets\.names=github$'
+stdout '^links\.group=backend$'
+[darwin] stdout '^git\.mode=on$'
+[linux] stdout '^git\.mode=off$'
+! stdout '^mount\.cache='
+! stdout '^remake'
+exec sh -c 'sed -n "s/^  \"id\": \"\(.*\)\",$/\1/p" "$1"' sh $APP_dir/vm.json
+cmp stdout $WORK/id
+exec sh -c 'sed -n "s/^  \"chain\": \"\(.*\)\",$/\1/p" "$1"' sh $APP_dir/vm.json
+! cmp stdout $WORK/chain
+[darwin] ! exec git config --file .git/config diff.ignoreSubmodules
+
+# The launch it ends with gives transparent mode its stand-in address.
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''198\.18\.0\.1''$'
