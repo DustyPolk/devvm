@@ -88,7 +88,7 @@ Each launch of a learning VM says that it's learning, since when, and how many h
 
 ### Locking it
 
-`devvm network lock` reads the hosts the VM reached since it started learning from its network log. It leaves out what the VM's allowlist tier would allow already, judged by the proxy's own rules: devvm's built-in rules, its shared tools' and layers', your own rules for every VM and for this VM, and its secrets' and logins' hosts. It also leaves out what your rules deny, which no allow would reach, blocked requests, and internal and LAN addresses, which the internet tier never reaches. In a terminal it lists the rest, one row for each host and port, with how many connections each had and the first word of the `User-Agent` that the requests sent most. That `User-Agent` is the VM's own claim, which any program in it can set to anything, so it's a hint, not proof of which tool made the connection, and devvm shows it only when it's at most 32 letters, digits and `._/+-`. The risky hosts come last, under a heading of their own, so neither a long name nor a `User-Agent` can push off the row what makes them risky. A host name that doesn't fit is cut from the left, so its domain shows, and a list longer than the terminal scrolls, with a line above and below that says how many more rows there are. In a terminal too short to show a few rows, devvm refuses rather than draw the list wrong:
+`devvm network lock` reads the hosts the VM reached since it started learning from its network log. It leaves out what the VM's allowlist tier would allow already, judged by the proxy's own rules: devvm's built-in rules, its shared tools' and layers', your own rules for every VM and for this VM, and its secrets' and logins' hosts. It also leaves out what your rules deny, which no allow would reach, blocked requests, and internal and LAN addresses, which the internet tier never reaches. In a terminal it lists the rest, one row for each host and port, with how many connections each had and the first word of the `User-Agent` that the requests sent most. That `User-Agent` is the VM's own claim, which any program in it can set to anything, so it's a hint, not proof of which tool made the connection, and devvm shows it only when it's at most 32 letters, digits and `._/+-`. The hosts that only tools without proxy settings reached, which [transparent mode](#tools-that-ignore-the-proxy) sent to the proxy, come next, under a heading of their own, because background tools' telemetry and update checks reach the proxy that way, and you may not want to keep them. Which way a connection came is the VM's own doing, as its `User-Agent` is, so the heading is a hint about the tool, not proof of what it is. The risky hosts come last, under a heading of their own, so neither a long name nor a `User-Agent` can push off the row what makes them risky. A host name that doesn't fit is cut from the left, so its domain shows, and a list longer than the terminal scrolls, with a line above and below that says how many more rows there are. In a terminal too short to show a few rows, devvm refuses rather than draw the list wrong:
 
 ```text
 Since 2026-11-08 09:03 the VM could reach any public host, so this list can hold a host that a compromised dependency reached. Only a host on port 443 of a package registry or vendor devvm knows starts ticked, so read the others before you tick them.
@@ -97,6 +97,8 @@ Choose the hosts devvm-some-project-71a99b1076d92c keeps. Use up and down to mov
   [x] static.crates.io:443       1 connection, User-Agent: cargo/1.91.0
   [ ] example.com:8443           1 connection
   [ ] uploads.github.com:443     1 connection, User-Agent: git/2.51.0
+Reached only by tools without proxy settings, which the VM's names sent to its proxy:
+  [ ] api.open-meteo.com:443     3 connections
 Risky, each an easy way to send data out:
   [ ] 203.0.113.5:443            1 connection
   [ ] docs.google.com:443        1 connection, User-Agent: python-requests/2.32
@@ -120,7 +122,7 @@ The proxy keeps each VM's log to its last 10 to 20 MiB ([logs](#logs)), so a VM 
 
 #### devvm network lock --json
 
-`devvm network lock --json` prints what the VM learned as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes, and changes nothing, so devvm refuses it with `--all` or `--none`. `learning_since` is when the VM started learning, `partial` is `true` when the log no longer goes back that far, and each of the `hosts` has the `rule` that `devvm network lock` adds for it, its `host` and `port`, the `count` of its connections, the `last` time the VM reached it, the `User-Agent`'s first word that reached it most as `agent`, when devvm shows one, `tickable` set to `true` for a host on port 443 of a registry or vendor on devvm's list, which starts ticked unless it's risky, and, for a risky host, its `risk`: `address`, `lookalike`, `paste`, `storage`, `mail`, `tunnel`, `webhook`, `hosting` or `chat`. The hosts come in the list's order: the tickable ones first, then the others, then the risky ones.
+`devvm network lock --json` prints what the VM learned as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes, and changes nothing, so devvm refuses it with `--all` or `--none`. `learning_since` is when the VM started learning, `partial` is `true` when the log no longer goes back that far, and each of the `hosts` has the `rule` that `devvm network lock` adds for it, its `host` and `port`, the `count` of its connections, the `last` time the VM reached it, the `User-Agent`'s first word that reached it most as `agent`, when devvm shows one, `tickable` set to `true` for a host on port 443 of a registry or vendor on devvm's list, which starts ticked unless it's risky, for a risky host, its `risk`: `address`, `lookalike`, `paste`, `storage`, `mail`, `tunnel`, `webhook`, `hosting` or `chat`, and `via` set to `dns` for a host that only tools without proxy settings reached. The hosts come in the list's order: the tickable ones first, then the others, then those that only tools without proxy settings reached, then the risky ones.
 
 ```json
 {
@@ -274,7 +276,7 @@ A VM's proxy is the devvm binary that started it, which is the one from before a
 
 ### devvm network --json
 
-`devvm network --json` prints the VM's tier and its allowlist as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes. `policy` is `open`, `internet`, `allowlist`, `none` or `unenforced`, a learning VM also has `learning_since`, the time it started [learning](#learning-the-hosts-a-vm-needs), and `allowlist` has each policy that holds more than comments, in the order the proxy reads them. Each has `builtin`, a built-in policy's name, or `file`, the path of one of your files, then its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. On the internet and none tiers, a file whose denies alone apply also has `denies_only` set to `true`, and its `rules` are its denies, as `devvm network` lists them under `(denies only)`. Without `denies_only`, a file's `rules` are all of its rules. With `-g`, the object has only `policy`, which is the tier new VMs get, and `source`, which says where it came from: `config.toml`, `settings.json` for what `devvm network -g` or `devvm setup` saved, or `built-in` ([where a default comes from](../using/settings.md#where-a-default-comes-from)). With `--json` the command only shows, so devvm refuses a tier with it.
+`devvm network --json` prints the VM's tier and its allowlist as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes. `policy` is `open`, `internet`, `allowlist`, `none` or `unenforced`, a learning VM also has `learning_since`, the time it started [learning](#learning-the-hosts-a-vm-needs), and `allowlist` has each policy that holds more than comments, in the order the proxy reads them. Each has `builtin`, a built-in policy's name, or `file`, the path of one of your files, then its rules and, in `not_rules`, each line that isn't a rule, with its `line` number and its `text`. On the internet and none tiers, a file whose denies alone apply also has `denies_only` set to `true`, and its `rules` are its denies, as `devvm network` lists them under `(denies only)`. Without `denies_only`, a file's `rules` are all of its rules. `transparent` is the VM's [transparent mode](#tools-that-ignore-the-proxy), with `on` and `from`, as `devvm network transparent --json` has it. With `-g`, the object has only `policy`, which is the tier new VMs get, and `source`, which says where it came from: `config.toml`, `settings.json` for what `devvm network -g` or `devvm setup` saved, or `built-in` ([where a default comes from](../using/settings.md#where-a-default-comes-from)). With `--json` the command only shows, so devvm refuses a tier with it.
 
 ```json
 {
@@ -309,7 +311,11 @@ A VM's proxy is the devvm binary that started it, which is the one from before a
         }
       ]
     }
-  ]
+  ],
+  "transparent": {
+    "on": true,
+    "from": "default"
+  }
 }
 ```
 
@@ -342,7 +348,7 @@ On the none tier, a VM with Claude Code gets Claude Code's built-in policy whole
 
 ## Inside the VM
 
-Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at the VM's own CAs. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)), on every tier. On a confined tier, a direct connection fails at once, even as root, and so does DNS, because names resolve in the proxy. A tool that skips the proxy, even for a host the rules allow, fails with a DNS or connection error rather than the proxy's `403`, and nothing reaches the log ([what to do](../using/troubleshooting.md#a-host-on-the-allowlist-doesnt-resolve)).
+Every login in the VM has the proxy settings in its environment (`HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms, `NO_PROXY` for the VM itself, and `NODE_USE_ENV_PROXY`), and the [CA variables](../using/settings.md#a-companys-ca) that every VM has point the tools that don't read the system's store at the VM's own CAs. devvm also points apt, sudo, ssh and Docker at the proxy ([how](../internals/network.md#the-vms-setup)), on every tier. On a confined tier, a direct connection to an address fails at once, even as root, and no DNS query leaves the VM. Names resolve in the proxy, and inside the VM every name resolves to one stand-in address, which leads to the proxy too, so a tool that skips the proxy settings still reaches the hosts the rules allow over HTTPS and HTTP ([tools that ignore the proxy](#tools-that-ignore-the-proxy)). Such a tool's connection to another port of a name is refused at once, and nothing reaches the log for it ([what to do](../using/troubleshooting.md#a-tool-that-skips-the-proxy-fails)).
 
 A blocked request gets `403`, and the response names the host, the reason and the rule that would allow it. The proxy also answers at `http://devvm.proxy/`:
 
@@ -350,8 +356,11 @@ A blocked request gets `403`, and the response names the host, the reason and th
 - `/blocked/new?after=N` gives the number of blocks so far, then those after the Nth, with each rule once, so a shell prompt can show what a command hit.
 - `/ca.pem` is the VM's own CA certificate and the next one's, never their keys.
 - `/nix/` is the shared Nix cache, in a VM with the `nix` layer ([below](#nix)).
+- `/transparent/ports` lists the ports that [transparent mode](#tools-that-ignore-the-proxy) sends to the proxy, one a line.
 
-In the VM, `devvm-why` prints what the proxy blocked lately, and a note before each prompt tells you when something new was blocked. When the proxy blocked nothing lately, `devvm-why` says so, and it adds that a DNS or connection error for a host the tier allows means the tool skipped the proxy, so you turn on the tool's own proxy setting or give it the address in `$HTTPS_PROXY` ([a host on the allowlist doesn't resolve](../using/troubleshooting.md#a-host-on-the-allowlist-doesnt-resolve)). devvm also tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`, and that such an error while `devvm-why` shows nothing means the tool skipped the proxy.
+A request for `http://devvm.proxy/` that comes through transparent mode, without the proxy settings, reaches `/blocked` alone and gets `403` for the rest, because that way asks the tool for no password, so a container without the proxy settings can't fetch the VM's CA or the Nix cache.
+
+In the VM, `devvm-why` prints what the proxy blocked lately, and a note before each prompt tells you when something new was blocked. When the proxy blocked nothing lately, `devvm-why` says so, and it adds that a connection refused, or a DNS error, for a host the tier allows means the tool skipped the proxy on a port or in a way devvm can't send to it, so you turn on the tool's own proxy setting or give it the address in `$HTTPS_PROXY` ([a tool that skips the proxy fails](../using/troubleshooting.md#a-tool-that-skips-the-proxy-fails)). With transparent mode on, `devvm-why` then says which ports it sends to the proxy, lists the connections to other ports that the VM refused lately, by port and time, and lists the names that tools looked up lately. devvm also tells Claude Code and Codex, in `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`, why a request may fail and to run `devvm-why`, that a tool that ignores the proxy settings still reaches the proxy over HTTPS, HTTP and the ports the rules name, and that a connection refused on another port while `devvm-why` shows nothing blocked means the tool skipped the proxy.
 
 ### Nix
 
@@ -396,7 +405,40 @@ devvm's own downloads on this machine go through the company proxy too. They are
 
 ## Tools that ignore the proxy
 
-On the open tier, a tool that ignores the proxy settings in the VM's environment connects directly, past its proxy. Its connections still work, because an open VM reaches everything this machine can, but they don't show in `devvm network log`, they don't go through your company proxy, and a request of theirs that needs one of your secrets carries only its placeholder, so the secret's host refuses it. On every other tier such a tool's direct connection fails, so it needs the proxy's address in its own settings. These common tools don't read `HTTP_PROXY` and `HTTPS_PROXY`, or read them only when told to:
+On every tier but open, devvm sends a tool that ignores the proxy settings to the VM's proxy anyway, by the names it looks up. This is transparent mode, and it's on unless you turn it off. In the VM, every name resolves to one stand-in address, `198.18.0.1`, and a connection to that address on port 443, port 80 or a port that one of your allow rules names goes to the VM's proxy. The proxy reads the host from the connection itself, from the TLS server name (SNI) on HTTPS and from each request's `Host` on plain HTTP, and it judges that host as it judges a request through the proxy settings, against the same allowlist, with the same secrets and the same log. A blocked HTTPS host gets the proxy's `403`, over a certificate for that host from the VM's own CA, so the tool shows the same message, with the `devvm network allow` command, that a request through the proxy settings would show. `devvm network log` and `devvm-why` mark each of these connections `without proxy settings`, and so does the note before the prompt. A tool such as workerd, which `wrangler dev` runs for Cloudflare's adapters, makes its own lookups and connections, and transparent mode is what lets it reach your allowed hosts from a confined VM.
+
+Transparent mode covers HTTPS and HTTP to a host by name on ports 443 and 80, and on up to 32 more ports that your allow rules name for hosts by name, such as `api.example.com:8443`, the lowest first. It never covers port 22 or 53, even when a rule names one, because SSH names no host in its first bytes and port 53 is the VM's own names'. It leaves these to the tool's own proxy settings:
+
+- **Other ports.** A connection to another port of a name is refused at once, and so is UDP to any port, QUIC included, so a client that tries HTTP/3 falls back to TCP. A client that uses HTTP/3 alone doesn't connect.
+- **Protocols that name no host in their first bytes,** such as Postgres, MySQL, Redis, SSH and raw TCP, and those whose server speaks first, such as SMTP. The proxy refuses such a connection and logs why, even on a port a rule names.
+- **Addresses.** A URL with an address in it, such as `https://1.2.3.4/`, is a direct connection, which fails, and so does a tool that looks a name up itself and then gives the proxy the stand-in address, which the proxy refuses with a reason that says so.
+- **IPv6.** Names have no IPv6 address in the VM, so a client that uses IPv6 alone finds no address.
+- **Names without a dot, and your network's names.** A name without a dot, such as `db`, resolves only when `/etc/hosts` has it, as the name of a [link between VMs](../using/links.md) does. The VM's resolver adds the search domain of this machine's network to such a name, and transparent mode can't tell `db.corp.example.com` made that way from one a tool names whole, so every name under that search domain gets no answer either, such as `printer.lan` or `git.corp.example.com` when your network's search domain is `corp.example.com`. A tool that reaches such a host needs its proxy settings.
+- **A DNS server of yours on the VM's `127.0.0.1:53`.** Transparent mode sends the VM's lookups there to its own names, so such a server, and a [forward](../using/ports-size.md#ports) of port 53 to it, gets none. Put the server on another address or port, or turn transparent mode off for the VM.
+- **Clients that don't trust the VM's CA,** such as most Docker containers, and those that pin a certificate. For a blocked HTTPS host they show a certificate error instead of the `403`, and the block is logged all the same.
+
+With the [docker layer](../using/images.md#docker), Docker's containers get the same treatment as the VM's own programs, on Docker's default bridge and on the networks that `docker network create` and Compose make. A container without the proxy settings, whether its environment emptied them or a program made it through Docker's API without them, reaches what the VM's rules allow, as every program in the VM does. To give a container no network, run it with `--network none`, and a container on an `--internal` network reaches nothing either.
+
+`devvm network transparent` shows a VM's transparent mode, `on` or `off`, and where that comes from: the VM's own setting, `config.toml`'s `transparent-proxy`, or devvm's default, which is on. `devvm network transparent off` and `devvm network transparent on` give the folder's VM its own setting, and `transparent-proxy = false` in [`config.toml`](../using/settings.md#transparent-mode) turns it off for every VM that has none of its own. A change applies at the VM's next launch, without a restart. With transparent mode off, names don't resolve in a confined VM at all, so a tool that skips the proxy fails at once with a DNS error. On the open tier there's no transparent mode, and the VM resolves names with Lima's DNS. A VM made from an image built before devvm had transparent mode lacks the programs it runs, so each launch says so, and `devvm update` makes the VM again from a newer image.
+
+```console
+$ devvm network transparent
+on # devvm: default
+$ devvm network transparent off
+==> devvm turns transparent mode off for devvm-web-0c3c7077e29f06 at its next launch, and it applies while the VM is on a confined tier.
+```
+
+`devvm network transparent --json` prints the same as JSON, with `on` and `from`, which is `vm`, `config` or `default`, and `devvm network --json` has it too, as `transparent`:
+
+```json
+{
+  "version": 1,
+  "on": true,
+  "from": "default"
+}
+```
+
+On the open tier, a tool that ignores the proxy settings in the VM's environment connects directly, past its proxy. Its connections still work, because an open VM reaches everything this machine can, but they don't show in `devvm network log`, they don't go through your company proxy, and a request of theirs that needs one of your secrets carries only its placeholder, so the secret's host refuses it. On every other tier, a tool that transparent mode doesn't cover needs the proxy's address in its own settings. These common tools don't read `HTTP_PROXY` and `HTTPS_PROXY`, or read them only when told to:
 
 - **Node's `fetch`** reads them only with `NODE_USE_ENV_PROXY=1`, from Node 24.0.0 and 22.21.0, or with `--use-env-proxy`, from Node 24.5.0 and 22.21.0. devvm sets `NODE_USE_ENV_PROXY` in every VM, so an older Node's `fetch` is the one that connects directly.
 - **Python's aiohttp** reads them only when a program makes its session with `trust_env=True`.
@@ -561,7 +603,7 @@ The proxy passes the replies from a secret's hosts to the VM as they are, so a h
 
 ## Logs
 
-`devvm network log` shows the proxy's decisions for this folder's VM, oldest first, one line each. A line has the time, `allowed`, `BLOCKED` or `cache`, and the host and port. An allowed line then has the rule that allowed it (`, decrypted` for an intercepted tunnel), or the request (`GET /user`), with the [rule by method and path](#rules-by-method-and-path) that let it through when one did, and the secrets put in (`, token: github`). A blocked line has why it was blocked, after the request when the proxy saw one, and a `cache` line, a request to the [shared Nix cache](#nix), has the request and what came of it:
+`devvm network log` shows the proxy's decisions for this folder's VM, oldest first, one line each. A line has the time, `allowed`, `BLOCKED` or `cache`, and the host and port. An allowed line then has the rule that allowed it (`, decrypted` for an intercepted tunnel), or the request (`GET /user`), with the [rule by method and path](#rules-by-method-and-path) that let it through when one did, and the secrets put in (`, token: github`). A blocked line has why it was blocked, after the request when the proxy saw one, and a `cache` line, a request to the [shared Nix cache](#nix), has the request and what came of it. A line ends `, without proxy settings` when [transparent mode](#tools-that-ignore-the-proxy) sent the connection to the proxy:
 
 ```text
 2026-10-09T10:00:00Z  BLOCKED  example.com:443  not on the allowlist
@@ -569,6 +611,7 @@ The proxy passes the replies from a secret's hosts to the VM as they are, so a h
 2026-10-09T10:00:06Z  allowed  api.github.com:443  GET /user, token: github
 2026-10-09T10:00:07Z  BLOCKED  api.github.com:443  POST /gists: denied by !api.github.com POST,PUT,PATCH,DELETE
 2026-10-09T10:00:08Z  cache    cache.nixos.org:443  GET /nix/yv1zf3y6all4j99aad30cb8i55dw9zmp.narinfo: hit
+2026-10-09T10:00:09Z  allowed  api.open-meteo.com:443  rule **, without proxy settings
 ```
 
 | | |
@@ -581,7 +624,7 @@ The proxy passes the replies from a secret's hosts to the VM as they are, so a h
 
 ### devvm network log --json
 
-`devvm network log --json` prints the last N events as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes, and devvm refuses it with `--follow`. Each of the `events` has what the proxy logged, without the VM's name. That's the `time`, the `event`, the `host` and the `port`, and, when the event has them, the request's `method` and `path`, the `rule` that allowed it, the `reason` it was blocked or what came of a cache request, the request's `User-Agent` header as `agent`, the `secrets` put in, `refused` for a request refused whatever the allowlist says, the company proxy it went through as `upstream`, and the VM that a link's connection went to as `target`. The `event` is `tunnel` for an allowed connection, `intercept` for an allowed tunnel that the proxy decrypted, `forward` for an allowed request, `blocked`, or `nix-cache` for a request to the shared Nix cache. A link's connection is `link` when devvm carried it, and `link_refused`, `link_target_stopped` or `link_limit` when devvm refused it, with the link's name as its `host`. A log with nothing in it gives `"events": []`.
+`devvm network log --json` prints the last N events as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes, and devvm refuses it with `--follow`. Each of the `events` has what the proxy logged, without the VM's name. That's the `time`, the `event`, the `host` and the `port`, and, when the event has them, the request's `method` and `path`, the `rule` that allowed it, the `reason` it was blocked or what came of a cache request, the request's `User-Agent` header as `agent`, the `secrets` put in, `refused` for a request refused whatever the allowlist says, the company proxy it went through as `upstream`, the VM that a link's connection went to as `target`, and `via` set to `dns` for a connection that [transparent mode](#tools-that-ignore-the-proxy) sent to the proxy. The `event` is `tunnel` for an allowed connection, `intercept` for an allowed tunnel that the proxy decrypted, `forward` for an allowed request, `blocked`, or `nix-cache` for a request to the shared Nix cache. A link's connection is `link` when devvm carried it, and `link_refused`, `link_target_stopped` or `link_limit` when devvm refused it, with the link's name as its `host`. A log with nothing in it gives `"events": []`.
 
 ```json
 {
@@ -642,4 +685,4 @@ A [group](../using/links.md#groups) links each of its VMs to the ports that the 
 
 ## Not covered
 
-The tiers leave some things open, such as what an allowed host accepts beyond what [rules by method and path](#rules-by-method-and-path) narrow, whatever your secrets allow, such as pushes and API calls, and what a company CA that you add can read. [Attack vectors](attack-vectors.md) lists them under [Narrowed, not closed](attack-vectors.md#network) and [Left to you](attack-vectors.md#the-network).
+The tiers leave some things open, such as what an allowed host accepts beyond what [rules by method and path](#rules-by-method-and-path) narrow, whatever your secrets allow, such as pushes and API calls, and what a company CA that you add can read. [Attack vectors](attack-vectors.md) lists them under [Narrowed, not closed](attack-vectors.md#network) and [Left to you](attack-vectors.md#the-network). What transparent mode leaves to a tool's own proxy settings, such as other ports, databases' protocols, addresses and HTTP/3 alone, is under [tools that ignore the proxy](#tools-that-ignore-the-proxy).

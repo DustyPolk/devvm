@@ -446,9 +446,13 @@ func procAddr(h string) (netip.Addr, bool) {
 // its loopback alone. A link's listener (proxy.IsLinkAddr) is never forwarded,
 // so a link isn't put on the host's loopback, and neither is the VM's local
 // proxy (proxy.IsLocalProxyAddr), which would let the host's programs use the
-// VM's proxy without its password.
+// VM's proxy without its password, nor transparent mode's listeners on the
+// stand-in address (proxy.IsSentinelAddr), which add it too: that one isn't
+// loopback, and it's named here so that stays so whatever this switch takes.
 func dialAddr(a netip.Addr) (netip.Addr, bool) {
 	switch {
+	case proxy.IsSentinelAddr(a):
+		return netip.Addr{}, false
 	case a == netip.IPv4Unspecified():
 		return netip.MustParseAddr("127.0.0.1"), true
 	case a == netip.IPv6Unspecified():

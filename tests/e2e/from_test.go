@@ -213,6 +213,9 @@ func fromDebian(s *S, nd []string) {
 		s.r.out.line("        glibc: %s needs %s", f, n)
 	}
 	fromDebianRuns(s, vm)
+	// Its generic kernel's nftables, systemd-resolved over networkd, and Debian 12's dnsmasq and
+	// socat, confined for one start.
+	fromTransparent(s, vm, f, "Debian 12", env)
 	_, _ = s.Run(Cmd{Args: []string{s.sb.devvm, "rm", "--force", "--no-export"}, Dir: f, Env: []string{"HOME=" + fh}})
 }
 
@@ -313,15 +316,12 @@ func fromAlpineVM(s *S, nd []string) {
 // and /tmp runs past the check's limit there, so the refusal's check
 // looks for the file by name, on the root's disk alone.
 func fromAlpineMore(s *S, nd []string, al, vm string) {
+	// On the allowlist tier from here: transparent mode on OpenRC, musl, busybox's ip and
+	// linux-virt's nftables.
+	fromTransparent(s, vm, al, "Alpine", nd)
 	s.Needing(backend.FeatureNixLayer).Check("devvm network allowlist: after devvm restart, its nix-daemon goes through the proxy", func() error {
-		if _, err := s.Run(Cmd{Args: []string{s.sb.devvm, "network", "allowlist"}, Dir: al, Env: nd}); err != nil {
-			return err
-		}
-		if _, err := s.Run(Cmd{Args: []string{s.sb.devvm, "restart"}, Dir: al, Env: nd, Stdin: "exit\n"}); err != nil {
-			return err
-		}
-		if s.Paths.State(vm)["net.made.check"] != "ok" {
-			return errors.New("its self-check didn't pass")
+		if s.Paths.State(vm)["net.tier"] != "allowlist" || s.Paths.State(vm)["net.made.check"] != "ok" {
+			return errors.New("it isn't on the allowlist tier, or its self-check didn't pass")
 		}
 		// A download only the daemon makes, from a host that isn't
 		// allowed, gets the proxy's 403.

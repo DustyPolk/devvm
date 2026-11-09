@@ -31,11 +31,16 @@ type Learned struct {
 	// vendors' hosts, on port 443 (netpolicy's Tickable).
 	Tickable bool
 	Risk     Risk
+	// NoProxy is whether only tools without proxy settings reached it,
+	// which the VM's names sent to its proxy (proxy.ViaDNS): devvm network
+	// lock lists such hosts apart.
+	NoProxy bool
 }
 
 // LearnedHosts is what a learning VM reached, since it started learning,
 // that its allowlist tier doesn't allow: the tickable hosts first, then
-// the others, then the risky ones, each by its rule.
+// the others, then those only tools without proxy settings reached, then
+// the risky ones, each by its rule.
 type LearnedHosts struct {
 	Since time.Time
 	Hosts []Learned
@@ -92,8 +97,8 @@ func (l *Log) MarkLearning(vm string) error { return AppendEvent(l.Path, vm, Eve
 
 // learnedEvent is what Learned reads of an event: only these.
 type learnedEvent struct {
-	Time, Event, Host, Agent string
-	Port                     int
+	Time, Event, Host, Agent, Via string
+	Port                          int
 }
 
 // readEvent reads what Learned needs of a line of the log; false for a
@@ -121,11 +126,13 @@ func (l *Log) Countable() bool {
 }
 
 // learning is what Learned has counted so far: a row for each rule, the
-// tools that reached each, and the rules it left out, each judged once.
+// tools that reached each, the rules reached with proxy settings, and the
+// rules it left out, each judged once.
 type learning struct {
 	j       Judge
 	rows    map[reachedKey]*Learned
 	agents  map[reachedKey]map[string]int
+	proxied map[reachedKey]bool
 	skipped map[reachedKey]bool
 }
 
@@ -150,6 +157,9 @@ func (c *learning) add(e learnedEvent) {
 	}
 	r.Count++
 	r.Last = e.Time
+	if e.Via != proxy.ViaDNS {
+		c.proxied[k] = true
+	}
 	if a := agentWord(e.Agent); a != "" {
 		c.agents[k][a]++
 	}
@@ -184,7 +194,7 @@ func (l *Log) Learned(since time.Time, j Judge) (LearnedHosts, error) {
 	out := LearnedHosts{Since: since}
 	from := since.Truncate(time.Second)
 	fromText := from.UTC().Format(time.RFC3339)
-	c := learning{j: j, rows: map[reachedKey]*Learned{}, agents: map[reachedKey]map[string]int{}, skipped: map[reachedKey]bool{}}
+	c := learning{j: j, rows: map[reachedKey]*Learned{}, agents: map[reachedKey]map[string]int{}, proxied: map[reachedKey]bool{}, skipped: map[reachedKey]bool{}}
 	marked := false
 	err := l.each(func(line string) {
 		e, ok := readEvent(line)
@@ -206,7 +216,7 @@ func (l *Log) Learned(since time.Time, j Judge) (LearnedHosts, error) {
 	}
 	out.Partial = !marked
 	for k, r := range c.rows {
-		r.Agent = mostOf(c.agents[k])
+		r.Agent, r.NoProxy = mostOf(c.agents[k]), !c.proxied[k]
 		out.Hosts = append(out.Hosts, *r)
 	}
 	slices.SortFunc(out.Hosts, func(a, b Learned) int { return cmp.Or(cmp.Compare(rank(a), rank(b)), cmp.Compare(a.Rule, b.Rule)) })
@@ -214,10 +224,13 @@ func (l *Log) Learned(since time.Time, j Judge) (LearnedHosts, error) {
 }
 
 // rank is where a learned host goes in the list: the tickable ones
-// first, then the others, then the risky ones.
+// first, then the others, then those only tools without proxy settings
+// reached, then the risky ones.
 func rank(l Learned) int {
 	switch {
 	case l.Risk != "":
+		return 3
+	case l.NoProxy:
 		return 2
 	case l.Tickable:
 		return 0

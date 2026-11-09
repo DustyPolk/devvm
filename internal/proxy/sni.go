@@ -12,18 +12,21 @@ import (
 
 var errStop = errors.New("stop after ClientHello")
 
-// sniOf returns the server name in a TLS ClientHello record ("" if none, or it doesn't parse). It
-// lets crypto/tls parse the record and stops the handshake at the ClientHello callback.
-func sniOf(rec []byte) string {
+// sniOf returns the server name in a TLS ClientHello record, "" for none, and whether the record
+// held a whole ClientHello that parsed: one split across records, cut short or refused by
+// crypto/tls (a trailing dot, two names) didn't, and names nothing. It lets crypto/tls parse the
+// record and stops the handshake at the ClientHello callback.
+func sniOf(rec []byte) (string, bool) {
 	var name string
+	parsed := false
 	c := tls.Server(helloConn{bytes.NewReader(rec)}, &tls.Config{
 		GetConfigForClient: func(h *tls.ClientHelloInfo) (*tls.Config, error) {
-			name = h.ServerName
+			name, parsed = h.ServerName, true
 			return nil, errStop
 		},
 	})
 	_ = c.HandshakeContext(context.Background()) //nolint:forbidigo // reads a record in memory: nothing to wait for or cancel
-	return name
+	return name, parsed
 }
 
 // helloConn: a net.Conn that reads the recorded bytes and discards writes.

@@ -11,8 +11,9 @@ import (
 )
 
 // Settings shows and changes the folder's VM's settings: its .git
-// protection (here), its size (size.go), its ports (ports.go) and its SSH
-// agent forwarding (sshagent.go).
+// protection (here), its size (size.go), its ports (ports.go), its SSH
+// agent forwarding (sshagent.go) and its transparent mode
+// (transparent.go).
 type Settings struct{ *Env }
 
 // GitProtect returns the folder's VM's .git protection: on, strict, off,

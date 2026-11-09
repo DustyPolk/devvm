@@ -53,7 +53,12 @@ func (e syncer) sync(ctx context.Context, b backend.Backend, st *state.VM, slug 
 		return err
 	}
 	moved := sectionOf[movedInVM](st, movedSection)
-	s, err := e.stage(ctx, st, setupInputs{slug: slug, files: files, proxyURL: b.ProxyURL(conf), links: links, moved: moved.From})
+	tp, err := netpolicy.TransparentOf(e.Dirs, st)
+	if err != nil {
+		return err
+	}
+	in := setupInputs{slug: slug, files: files, proxyURL: b.ProxyURL(conf), links: links, moved: moved.From, transparent: netpolicy.TransparentAddr(conf, tp)}
+	s, err := e.stage(ctx, st, in)
 	if err != nil {
 		return err
 	}
@@ -139,12 +144,14 @@ func reported(files []string, report []byte) []string {
 
 // setupInputs is what devvm gives a VM's setup besides its state: its
 // hostname (the folder's slug), its tool files, its proxy's address (empty
-// when the backend gives the guest none), its links, and the path its folder moved
-// from, "" when it didn't (its moved section).
+// when the backend gives the guest none), its links, the path its folder moved
+// from, "" when it didn't (its moved section), and the stand-in address its
+// names lead to its proxy by, "" when its transparent mode is off
+// (netpolicy.TransparentAddr).
 type setupInputs struct {
-	slug, proxyURL, moved string
-	files                 []string
-	links                 []GuestLink
+	slug, proxyURL, moved, transparent string
+	files                              []string
+	links                              []GuestLink
 }
 
 // GuestLink is one target a client VM reaches through its links: the
@@ -253,7 +260,7 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 	if m := claudeMoved(in.moved, st.Dir); m != nil {
 		s.put("moved", 0o644, m)
 	}
-	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh", "claude.sh", "guide.md", opencodeScript} {
+	for _, name := range []string{"sync.sh", "tools.sh", "ca.sh", "claude.sh", "guide.md", opencodeScript, "transparent.sh"} {
 		data, err := fs.ReadFile(e.Assets, "guest/"+name)
 		if err != nil {
 			return nil, err
@@ -300,6 +307,10 @@ func (e syncer) stage(ctx context.Context, st *state.VM, in setupInputs) (*stage
 		{"DEVVM_PROXY", proxyURL},
 		{"DEVVM_NO_PROXY", netpolicy.NoProxy},
 		{"DEVVM_LOCAL_PROXY", localProxy(proxyURL)},
+		// Transparent mode (guest/transparent.sh): the stand-in address, or
+		// none for off, and the proxy's reserved target.
+		{"DEVVM_TRANSPARENT_ADDR", in.transparent},
+		{"DEVVM_TRANSPARENT_HOST", proxy.TransparentHost},
 	}
 	// The devcontainer.json's variables first: devvm's own win.
 	dcEnv, err := devcontainerEnv(st)

@@ -90,6 +90,10 @@ type server struct {
 	// proxy's log has said the limit was reached since a tunnel last ended.
 	connects     chan struct{}
 	connectsFull atomic.Bool
+	// helloWait bounds how long a tunnel's TLS ClientHello takes once it starts, and a transparent
+	// connection's first bytes (helloTimeout; tests shorten it).
+	helloWait   time.Duration
+	transparent *transparent
 }
 
 // maxConnects is how many CONNECTs a VM's proxy carries at once, tunnels and interceptions alike:
@@ -110,7 +114,9 @@ func newServer(c Config, std IO, l *log.Logger, out io.Writer) (*server, error) 
 		interceptPorts: map[int]bool{443: true},
 		links:          newLinks(c.Links, c.LinkSockets, c.VM, l, ev),
 		connects:       make(chan struct{}, maxConnects),
+		helloWait:      helloTimeout,
 	}
+	s.transparent = &transparent{s: s}
 	var err error
 	if c.CA != "" {
 		if s.ca, err = loadCA(c.CA, c.CAKey); err != nil {
@@ -210,6 +216,10 @@ type Event struct {
 	Upstream string `json:"upstream,omitempty"`
 	// The VM a link's connection went to (devvm _links's events, Host the link's name): never the proxy's.
 	Target string `json:"target,omitempty"`
+	// Via is how the connection reached the proxy when it isn't a client's own proxy request: ViaDNS
+	// for a tool that skipped the proxy settings, which the VM's names sent to the proxy
+	// (transparent.go).
+	Via string `json:"via,omitempty"`
 }
 
 // A block and its number (the first is 1), for /blocked/new.
@@ -294,7 +304,7 @@ func newBlocks(rs []numbered, count int, after string) string {
 			continue
 		}
 		if r.e.Refused {
-			fmt.Fprintf(&b, "devvm: refused %s %s%s (%s)\n", r.e.Method, r.e.Host, r.e.Path, r.e.Reason)
+			fmt.Fprintf(&b, "devvm: refused %s %s%s (%s)%s\n", r.e.Method, r.e.Host, r.e.Path, r.e.Reason, viaSuffix(r.e))
 			continue
 		}
 		rule := ruleFor(r.e.Host, r.e.Port)
@@ -303,7 +313,7 @@ func newBlocks(rs []numbered, count int, after string) string {
 		}
 		seen[rule] = true
 		rules = append(rules, rule)
-		fmt.Fprintf(&b, "devvm: blocked %s:%d (%s)\n", r.e.Host, r.e.Port, r.e.Reason)
+		fmt.Fprintf(&b, "devvm: blocked %s:%d (%s)%s\n", r.e.Host, r.e.Port, r.e.Reason, viaSuffix(r.e))
 	}
 	if len(rules) > 0 {
 		fmt.Fprintf(&b, "To allow, run this on the host:\ndevvm network allow %s\n", strings.Join(rules, " "))
@@ -492,9 +502,16 @@ func HostOK(h string) bool {
 }
 
 // splitHostPort: the host, lowercased and without a trailing dot (so the policy, bindings, SNI check
-// and log all see one form), and the port (def when there's none).
+// and log all see one form), and the port (def when there's none). A host with anything but
+// printable ASCII keeps its case, so HostOK refuses it: strings.ToLower folds some letters into
+// ASCII (the Kelvin sign into k), and the host judged would then not be the one the client named.
 func splitHostPort(hp string, def int) (string, int) {
-	norm := func(h string) string { return strings.TrimSuffix(strings.ToLower(h), ".") }
+	norm := func(h string) string {
+		if !hostASCII(h) {
+			return h
+		}
+		return strings.TrimSuffix(strings.ToLower(h), ".")
+	}
 	h, p, err := net.SplitHostPort(hp)
 	if err != nil {
 		return norm(strings.Trim(hp, "[]")), def
@@ -506,9 +523,27 @@ func splitHostPort(hp string, def int) (string, int) {
 	return norm(h), n
 }
 
+// hostASCII reports whether s is printable ASCII alone, without spaces: the only bytes a host the
+// proxy takes can have, checked before anything folds its case.
+func hostASCII(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool { return r <= ' ' || r > '~' })
+}
+
+// asciiEqualFold reports whether a and b are the same in ASCII, letters' case aside: never when
+// either has anything but printable ASCII, which a Unicode fold could make equal (U+212A and k).
+func asciiEqualFold(a, b string) bool { return hostASCII(a) && hostASCII(b) && strings.EqualFold(a, b) }
+
+// block records e as a block and answers the request with blockPage.
 func (s *server) block(w http.ResponseWriter, e Event) {
 	e.Event = "blocked"
 	s.events.record(e)
+	blockPage(w, e)
+}
+
+// blockPage answers a request that e, a block, refused: 403, with the reason and, unless no rule
+// would lift it (Refused), the command that allows it on the host. The transparent path's TLS page
+// writes it too.
+func blockPage(w http.ResponseWriter, e Event) {
 	w.Header().Set("X-Devvm-Blocked", e.Host)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
@@ -592,6 +627,11 @@ func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "devvm proxy: not a host name", http.StatusBadRequest)
 		return
 	}
+	// The reserved target names its port: it's the port the connection is judged and dialed on.
+	if host == TransparentHost && !explicitPort(r.Host) {
+		http.Error(w, "devvm proxy: "+TransparentHost+" needs a port from 1 to 65535", http.StatusBadRequest)
+		return
+	}
 	select {
 	case s.connects <- struct{}{}:
 		defer func() { <-s.connects; s.connectsFull.Store(false) }()
@@ -599,20 +639,78 @@ func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		s.refuseConnect(w, host, port)
 		return
 	}
-	// One of the VM's links: its socket, before any rule (links.go).
-	if l, ok := s.links.find(host, port); ok {
-		s.links.connect(w, r, host, port, l)
-		return
-	}
-	if s.links.refuse(w, "CONNECT", host, port) {
+	// A tool that skipped the proxy settings, sent here by the VM's names (transparent.go): its host
+	// is in its first bytes. Before anything else, so no link, rule or company proxy sees the name.
+	if host == TransparentHost {
+		s.transparent.serve(r.Context(), w, port)
 		return
 	}
 	e := Event{Host: host, Port: port, Method: "CONNECT", Agent: r.UserAgent()}
-	rule, why, refused, hr := s.egress.checkHost(r.Context(), host, port, false)
-	if why != "" {
-		e.Reason, e.Refused = why, refused
+	if why := reservedRefusal(host); why != "" {
+		e.Reason, e.Refused = why, true
 		s.block(w, e)
 		return
+	}
+	rt := s.routeFor(r.Context(), host, port, e)
+	switch rt.kind {
+	case routeLink:
+		s.links.connect(w, r, host, port, rt.link)
+	case routeNotLink:
+		s.links.refuse(w, rt.e)
+	case routeBlocked:
+		s.block(w, rt.e)
+	case routeCAEnded:
+		s.caEndedRefusal(w, rt.e)
+	case routeIntercept:
+		client, err := hijack(w)
+		if err != nil {
+			return
+		}
+		s.intercept(r.Context(), client, host, port, rt.e)
+	case routeTunnel:
+		s.tunnel(w, r, host, port, rt.e)
+	}
+}
+
+// routeKind is what a connection to a host and port gets (routeFor).
+type routeKind int
+
+const (
+	routeTunnel    routeKind = iota // carried as it is (tunnel, carry)
+	routeIntercept                  // decrypted to put a secret in or capture a login (intercept)
+	routeLink                       // one of the VM's links: its socket (links.go)
+	routeNotLink                    // a name under the links' domain that's none of them: refused
+	routeBlocked                    // refused by the policy or the floor, its reason in e
+	routeCAEnded                    // to be intercepted, but the CA has ended: refused
+)
+
+// route is a connection's routeKind, its link for routeLink, and its event, with the rule and the
+// company proxy that allowed it, or why not.
+type route struct {
+	kind routeKind
+	link LinkEntry
+	e    Event
+}
+
+// routeFor is what a connection to host:port gets, e its event so far, in the order every one is
+// judged, CONNECT's and the transparent path's alike: one of the VM's links (links.find), a name
+// under the links' domain that's none of them, the policy and the floor (egress.checkHost), the
+// company proxy's name for the event (upstreams.route), a host whose rules narrow it by method or
+// path refused when it can't be decrypted, then interception for such a host, a bound host or a
+// token endpoint's on an intercept port (captures.has, secrets.forHost), refused once the CA has
+// ended (ca.ended).
+func (s *server) routeFor(ctx context.Context, host string, port int, e Event) route {
+	if l, ok := s.links.find(host, port); ok {
+		return route{kind: routeLink, link: l, e: e}
+	}
+	if isLinkDomain(host) {
+		e.Event, e.Reason, e.Refused = "blocked", reasonNotLink, true
+		return route{kind: routeNotLink, e: e}
+	}
+	rule, why, refused, hr := s.egress.checkHost(ctx, host, port, false)
+	if why != "" {
+		e.Reason, e.Refused = why, refused
+		return route{kind: routeBlocked, e: e}
 	}
 	e.Rule = rule
 	if up := s.egress.up.route(host, port, false); up != nil {
@@ -623,21 +721,23 @@ func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	byRequest := hr.byRequest()
 	if byRequest && (!s.interceptPorts[port] || s.ca == nil) {
 		e.Reason, e.Refused = reasonNotDecrypted, true
-		s.block(w, e)
-		return
+		return route{kind: routeBlocked, e: e}
 	}
 	if s.interceptPorts[port] && s.ca != nil && (byRequest || s.captures.has(host) || len(s.secrets.forHost(host)) > 0) {
-		if s.caEndedRefusal(w, e) {
-			return
+		if s.ca.ended(time.Now()) {
+			e.Event, e.Reason, e.Refused = "blocked", caEndedReason, true
+			return route{kind: routeCAEnded, e: e}
 		}
-		client, err := hijack(w)
-		if err != nil {
-			return
-		}
-		s.intercept(r.Context(), client, host, port, e)
-		return
+		return route{kind: routeIntercept, e: e}
 	}
-	s.tunnel(w, r, host, port, e)
+	return route{kind: routeTunnel, e: e}
+}
+
+// explicitPort reports whether hp, a CONNECT's target, ends in a port of 1 to 65535 in digits.
+func explicitPort(hp string) bool {
+	_, p, err := net.SplitHostPort(hp)
+	n, err2 := strconv.Atoi(p)
+	return err == nil && err2 == nil && strings.Trim(p, "0123456789") == "" && n >= 1 && n <= 65535
 }
 
 // refuseConnect refuses a CONNECT past the VM's limit (connects): 503, which a client may try
@@ -655,12 +755,9 @@ func (s *server) refuseConnect(w http.ResponseWriter, host string, port int) {
 	http.Error(w, "devvm proxy: "+net.JoinHostPort(host, strconv.Itoa(port))+" is refused: "+e.Reason, http.StatusServiceUnavailable)
 }
 
-// tunnel carries a CONNECT to host:port that the policy allows, e its event. The far end's bytes
-// go to the client at once, so a protocol whose server speaks first (SMTP) gets its greeting
-// before the client sends anything. The client's go on only once they're checked: when they start
-// a TLS ClientHello, its SNI must be the host that was checked (which blunts domain fronting), and
-// nothing of the client's reaches the far end before that. Other protocols (SSH on :22, …) pass as
-// they are.
+// tunnel carries a CONNECT to host:port that the policy allows, e its event: it dials the far end
+// (egress.dialOut), refusing with reasonConnectFailed when that fails, then carries the client's
+// connection to it (carry).
 func (s *server) tunnel(w http.ResponseWriter, r *http.Request, host string, port int, e Event) {
 	up, err := s.egress.dialOut(r.Context(), host, port)
 	if err != nil {
@@ -675,9 +772,30 @@ func (s *server) tunnel(w http.ResponseWriter, r *http.Request, host string, por
 		return
 	}
 	defer func() { _ = client.Close() }()
+	s.carry(client, up, host, e)
+}
+
+// carry passes client's bytes to up, the far end of an allowed connection to host, and up's to
+// client, e its event. The far end's bytes go to the client at once, so a protocol whose server
+// speaks first (SMTP) gets its greeting before the client sends anything. The client's go on only
+// once they're checked: when they start a TLS ClientHello, it must arrive whole within helloWait,
+// in one record, and its SNI must be host (which blunts domain fronting), and nothing of the
+// client's reaches the far end before that. A client may wait as long as it likes before its first
+// byte, as on any tunnel. Other protocols (SSH on :22, …) pass as they are.
+func (s *server) carry(client bufConn, up net.Conn, host string, e Event) {
 	splice(client, up, func() bool {
+		if _, err := client.r.Peek(1); err != nil {
+			return false
+		}
+		_ = client.SetReadDeadline(time.Now().Add(s.helloWait))
 		first, sni, isTLS := peekClientHello(client.r)
-		if isTLS && !sniMatches(sni, host) {
+		_ = client.SetReadDeadline(time.Time{})
+		switch {
+		case isTLS && first == nil: // no rule could allow it
+			e.Event, e.Reason, e.Refused = "blocked", reasonHelloBroken, true
+			s.events.record(e)
+			return false
+		case isTLS && !sniMatches(sni, host):
 			e.Event, e.Reason = "blocked", fmt.Sprintf("TLS name %q doesn't match %s", sni, host)
 			s.events.record(e)
 			return false
@@ -689,31 +807,61 @@ func (s *server) tunnel(w http.ResponseWriter, r *http.Request, host string, por
 	})
 }
 
+// helloTimeout is how long a tunnel's TLS ClientHello may take once its first byte is in, and a
+// transparent connection's first bytes (server.helloWait): a real client sends them at once, so a VM
+// that trickles them can't hold one of its tunnels' slots for long.
+const helloTimeout = 10 * time.Second
+
+// reasonHelloBroken is why a tunnel whose TLS ClientHello didn't arrive whole, in one record, in
+// time, or didn't parse, is refused.
+const reasonHelloBroken = "its TLS ClientHello didn't arrive whole in one record in time, or doesn't parse"
+
+// sniMatches reports whether sni, a tunnel's TLS server name, names host, which was checked: in
+// ASCII, letters' case aside, so no Unicode fold makes another name match (asciiEqualFold). An
+// address's tunnel may have none.
 func sniMatches(sni, host string) bool {
 	if _, err := netip.ParseAddr(host); err == nil {
-		return sni == "" || strings.EqualFold(sni, host)
+		return sni == "" || asciiEqualFold(sni, host)
 	}
-	return strings.EqualFold(strings.TrimSuffix(sni, "."), host)
+	return asciiEqualFold(strings.TrimSuffix(sni, "."), host)
 }
+
+// helloRecordMax bounds the TLS record peekClientHello reads: a plaintext record holds 16 KiB at
+// most, which crypto/tls reads with 256 bytes to spare. A longer one isn't read, so a VM can't make
+// its proxy hold 64 KiB for each of its tunnels.
+const helloRecordMax = 16<<10 + 256
 
 // peekClientHello reads the first TLS record if the stream starts with one, and returns the bytes
 // read (to replay upstream), the SNI, and whether it was TLS. It looks at one byte first: only a
 // TLS record starts with 0x16, so a client that sends fewer than a record header's five bytes of
-// anything else isn't held.
+// anything else isn't held. A stream whose first byte is 0x16 is TLS from then on, so a record
+// header that doesn't come whole (its read fails, as at a deadline) or isn't TLS's (a version byte
+// but 3), a record that's longer than helloRecordMax, one that ends before its length, or one that
+// doesn't hold a whole ClientHello that parses (sniOf: one split across records), gives no bytes,
+// which its callers refuse: never a stream passed on unchecked, whose ClientHello could follow
+// later, or in its next record, and name another host, an address's tunnel's included, which may
+// have no name.
 func peekClientHello(r *bufio.Reader) ([]byte, string, bool) {
 	if b, err := r.Peek(1); err != nil || b[0] != 0x16 {
 		return nil, "", false
 	}
 	hdr, err := r.Peek(5)
 	if err != nil || hdr[1] != 3 {
-		return nil, "", false
+		return nil, "", true
 	}
 	n := int(hdr[3])<<8 | int(hdr[4])
+	if 5+n > helloRecordMax {
+		return nil, "", true
+	}
 	rec := make([]byte, 5+n)
 	if _, err := io.ReadFull(r, rec); err != nil {
-		return rec, "", true
+		return nil, "", true
 	}
-	return rec, sniOf(rec), true
+	sni, parsed := sniOf(rec)
+	if !parsed {
+		return nil, "", true
+	}
+	return rec, sni, true
 }
 
 // handleHTTP serves absolute-form requests (plain HTTP, or "GET https://…" from clients like
@@ -736,8 +884,14 @@ func (s *server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "devvm proxy: not a host name", http.StatusBadRequest)
 		return
 	}
-	if host == "devvm.proxy" {
+	if host == ProxyDomain {
 		s.serveReserved(w, r)
+		return
+	}
+	e := Event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Via: viaOf(r.Context())}
+	if why := reservedRefusal(host); why != "" {
+		e.Reason, e.Refused = why, true
+		s.block(w, e)
 		return
 	}
 	// One of the VM's links: its socket, before any rule (links.go). HTTPS to a link goes through
@@ -750,10 +904,10 @@ func (s *server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		s.links.forward(w, r, host, port, l)
 		return
 	}
-	if s.links.refuse(w, r.Method, host, port) {
+	if isLinkDomain(host) {
+		s.links.refuse(w, e)
 		return
 	}
-	e := Event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent()}
 	if _, why, refused := s.egress.checkRefused(r.Context(), host, port, scheme == "http"); why != "" {
 		e.Reason, e.Refused = why, refused
 		s.block(w, e)
@@ -774,10 +928,22 @@ type noCloseNotify struct{ http.ResponseWriter }
 func (w noCloseNotify) Flush() { _ = http.NewResponseController(w.ResponseWriter).Flush() }
 
 // nothingBlocked is devvm-why's answer when the proxy blocked nothing: a
-// DNS or connection error then comes from a tool that skipped the proxy.
+// connection refused, or a DNS error, then comes from a tool that skipped
+// the proxy where devvm can't send it there.
 const nothingBlocked = "devvm: nothing blocked recently\n" +
-	"A DNS or connection error for a host the tier allows means the tool skipped the proxy: turn on its own proxy setting, or give it $HTTPS_PROXY.\n" +
-	"https://devvm.dev/docs/using/troubleshooting/#a-host-on-the-allowlist-doesnt-resolve\n"
+	"A connection refused for a host the tier allows, or a DNS error, means the tool skipped the proxy on a port or in a way devvm can't send to it: turn on its own proxy setting, or give it $HTTPS_PROXY.\n" +
+	"https://devvm.dev/docs/using/troubleshooting/#a-tool-that-skips-the-proxy-fails\n"
+
+// viaNote is what /blocked adds to a block of a tool that skipped the proxy settings (ViaDNS).
+const viaNote = " (without proxy settings)"
+
+// viaSuffix is viaNote for e when it came that way, else "".
+func viaSuffix(e Event) string {
+	if e.Via == ViaDNS {
+		return viaNote
+	}
+	return ""
+}
 
 func (s *server) serveReserved(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/nix/") {
@@ -796,12 +962,16 @@ func (s *server) serveReserved(w http.ResponseWriter, r *http.Request) {
 		for _, r := range rs {
 			e := r.e
 			if e.Refused {
-				fmt.Fprintf(&b, "%s  %s %s%s  refused: %s\n", e.Time, e.Method, e.Host, e.Path, e.Reason)
+				fmt.Fprintf(&b, "%s  %s %s%s  refused: %s%s\n", e.Time, e.Method, e.Host, e.Path, e.Reason, viaSuffix(e))
 				continue
 			}
-			fmt.Fprintf(&b, "%s  %s:%d  %s\n    allow on the host: devvm network allow %s\n", e.Time, e.Host, e.Port, e.Reason, ruleFor(e.Host, e.Port))
+			fmt.Fprintf(&b, "%s  %s:%d  %s%s\n    allow on the host: devvm network allow %s\n", e.Time, e.Host, e.Port, e.Reason, viaSuffix(e), ruleFor(e.Host, e.Port))
 		}
 		_, _ = w.Write(b.Bytes())
+	case "/transparent/ports":
+		for _, p := range s.transparent.ports() {
+			fmt.Fprintln(w, p)
+		}
 	case "/blocked/new":
 		rs, count := s.events.blocked()
 		fmt.Fprint(w, newBlocks(rs, count, r.URL.Query().Get("after")))

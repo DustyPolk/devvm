@@ -292,6 +292,9 @@ func FormatEvent(line string) (string, bool) {
 	if e.Upstream != "" {
 		d += ", through " + e.Upstream
 	}
+	if e.Via == proxy.ViaDNS {
+		d += ", without proxy settings"
+	}
 	return fmt.Sprintf("%s  %-7s  %s  %s", msg.OneLine(e.Time), what, hostPort(e.Host, e.Port), msg.OneLine(d)), true
 }
 

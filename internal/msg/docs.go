@@ -204,6 +204,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"net_learning_since":             "safety/network#learning-the-hosts-a-vm-needs",
 	"net_learn_started":              "safety/network#learning-the-hosts-a-vm-needs",
 	"net_learning_lock":              "safety/network#locking-it",
+	"net_transparent_set":            "safety/network#tools-that-ignore-the-proxy",
 	"net_not_learning":               "safety/network#learning-the-hosts-a-vm-needs",
 	"net_learned_partial":            "safety/network#locking-it",
 	"net_open_policy":                "safety/network#network-tiers",

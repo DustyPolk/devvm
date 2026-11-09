@@ -1811,6 +1811,17 @@ other = "{{.count}} connections"
 [net_learned_risky_heading]
 other = "Risky, each an easy way to send data out:"
 
+[net_learned_no_proxy_heading]
+other = "Reached only by tools without proxy settings, which the VM's names sent to its proxy:"
+
+[net_transparent_set]
+description = "mode is on or off"
+other = "devvm turns transparent mode {{.mode}} for {{.vm}} at its next launch, and it applies while the VM is on a confined tier."
+
+[net_transparent_failed]
+description = "reason is an error from the system, in English"
+other = "Showing or changing transparent mode failed: {{.reason}}."
+
 [log_empty]
 other = "{{.vm}}'s network log is empty so far."
 

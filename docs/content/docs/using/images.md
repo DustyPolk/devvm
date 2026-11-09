@@ -46,7 +46,7 @@ The `desktop` layer installs an Xfce desktop with TigerVNC's server, which [`dev
 
 #### docker
 
-The `docker` layer installs Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, adds the VM's user to the `docker` group, and starts the daemon at each boot. On a base made `--from alpine`, it installs Alpine's own packages instead. A VM without the layer has no Docker. A VM with the layer can be on any network tier like any other, because its containers' connections go through the VM's network, which devvm confines from outside the VM ([network tiers](../safety/network.md#network-tiers)).
+The `docker` layer installs Docker's engine, CLI, BuildKit and Compose from Docker's apt repository, adds the VM's user to the `docker` group, and starts the daemon at each boot. On a base made `--from alpine`, it installs Alpine's own packages instead. A VM without the layer has no Docker. A VM with the layer can be on any network tier like any other, because its containers' connections go through the VM's network, which devvm confines from outside the VM ([network tiers](../safety/network.md#network-tiers)). devvm gives every container the VM's proxy settings, and on a confined tier, a container that ignores them, or was made without them through Docker's API, reaches the hosts the VM's rules allow by name through [transparent mode](../safety/network.md#tools-that-ignore-the-proxy), on Docker's default bridge and on networks that `docker network create` and Compose make. Such a container doesn't trust the VM's CA, so a blocked HTTPS host gives it a certificate error rather than the proxy's `403`, and the block is logged all the same. A container run with `--network none`, or on an `--internal` network, reaches nothing.
 
 #### nix
 

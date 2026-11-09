@@ -83,7 +83,7 @@ type ruleKey struct{}
 func (s *server) judgeRequest(w http.ResponseWriter, r *http.Request, host string, port int) (*http.Request, bool) {
 	ok, why, refused, narrowed := s.egress.pol.judge(host, port, r)
 	if !ok {
-		s.block(w, Event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Reason: why, Refused: refused})
+		s.block(w, Event{Host: host, Port: port, Method: r.Method, Path: r.URL.Path, Agent: r.UserAgent(), Reason: why, Refused: refused, Via: viaOf(r.Context())})
 		return r, false
 	}
 	if narrowed {

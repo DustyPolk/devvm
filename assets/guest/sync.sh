@@ -14,8 +14,11 @@
 #   vm           DEVVM_* host settings applied to every VM: hostname, timezone, locale, git identity,
 #                DEVVM_PROXY (the proxy URL, empty when the guest has none),
 #                DEVVM_NO_PROXY (what reaches the VM itself without the proxy; its links go through it),
-#                and DEVVM_LOCAL_PROXY (ADDRESS:PORT on the VM's loopback, where devvm-local-proxy
-#                listens; empty without a proxy)
+#                DEVVM_LOCAL_PROXY (ADDRESS:PORT on the VM's loopback, where devvm-local-proxy
+#                listens; empty without a proxy), and DEVVM_TRANSPARENT_ADDR and
+#                DEVVM_TRANSPARENT_HOST (transparent mode's stand-in address, empty for off, and the
+#                proxy's reserved target; transparent.sh)
+#   transparent.sh  devvm-transparent: transparent mode, for tools that ignore the proxy settings
 #   tools        the VM's shared tool images, "FILE TOOL VERSION" lines; tools.sh mounts them
 #   tool-alias.toml  the [tool_alias] table of devvm's shared-tools/mise.toml: the backend each
 #                tool's image was built from, which mise's registry might not give its name
@@ -451,11 +454,13 @@ SH
   mkdir -p ~/.ssh
   proxy_block ~/.ssh/config "Host *
   ProxyCommand /usr/local/bin/devvm-ssh-proxy %h %p"
-  # devvm-why: what the proxy blocked lately, and how to allow it.
+  # devvm-why: what the proxy blocked lately, and how to allow it; then, with transparent mode, what
+  # it refused in the VM and the names tools looked up.
   sudo tee /usr/local/bin/devvm-why >/dev/null <<'SH'
 #!/bin/sh
 # What this VM's proxy blocked recently, and the host command that allows it.
-exec curl -sS --proxy "$HTTP_PROXY" http://devvm.proxy/blocked
+curl -sS --proxy "$HTTP_PROXY" http://devvm.proxy/blocked
+if [ -x /usr/local/sbin/devvm-transparent ]; then sudo -n /usr/local/sbin/devvm-transparent status; fi
 SH
   sudo chmod 755 /usr/local/bin/devvm-why
   # Before each prompt: what was blocked since the last one (HTTPS clients don't show the proxy's
@@ -483,6 +488,21 @@ else
     /usr/local/bin/devvm-ssh-proxy /usr/local/bin/devvm-local-proxy /etc/profile.d/devvm-proxy.sh
   if $systemd; then sudo rm -f "$dropin"; else conf_block "$dropin"; fi
   [[ ! -f ~/.ssh/config ]] || proxy_block ~/.ssh/config
+fi
+# Transparent mode (transparent.sh, devvm-transparent) on a confined VM: every name resolves to the
+# stand-in address, whose ports 80, 443 and those the rules name go to the proxy, which reads the host
+# from the connection. The proxy URL, which holds the password, goes on stdin, never in arguments.
+# Off on an open VM. An image from before transparent mode lacks its programs, so names don't resolve.
+if [[ -n ${DEVVM_TRANSPARENT_ADDR:-} && -n ${DEVVM_PROXY:-} ]]; then
+  rc=0
+  printf '%s\n' "$DEVVM_PROXY" | sudo bash "$s/transparent.sh" setup "$DEVVM_TRANSPARENT_ADDR" "$DEVVM_TRANSPARENT_HOST" || rc=$?
+  if [[ $rc == 3 ]]; then
+    echo "devvm: this VM's image has no dnsmasq, socat or nft, so tools that skip the proxy can't resolve names in it; devvm update makes it again from a newer image" >&2
+  elif [[ $rc != 0 ]]; then
+    echo "devvm: transparent mode didn't start in this VM, so tools that skip the proxy can't resolve names in it; the next launch tries again" >&2
+  fi
+else
+  sudo bash "$s/transparent.sh" teardown || true
 fi
 if command -v dockerd >/dev/null; then
   docker_proxies ~/.docker/config.json
@@ -518,7 +538,7 @@ if [[ "$(cat /usr/local/bin/devvm-help 2>/dev/null)" != "$(printf '#!/bin/sh\nex
 fi
 
 # Tell agents why the network may fail, and what to do about it.
-note="Network access in this VM goes through devvm's proxy, which allows what the VM's network tier allows. If a download or request fails with a connection error or a 403 from the proxy, run \`devvm-why\` to see what was blocked; the user can allow it on the host with \`devvm network allow <host>\`. A DNS or connection error for an allowed host while \`devvm-why\` shows nothing means the tool skipped the proxy: turn on its own proxy setting, or give it \`\$HTTPS_PROXY\`."
+note="Network access in this VM goes through devvm's proxy, which allows what the VM's network tier allows. If a download or request fails with a connection error or a 403 from the proxy, run \`devvm-why\` to see what was blocked; the user can allow it on the host with \`devvm network allow <host>\`. A tool that ignores the proxy settings still reaches the proxy over HTTPS and HTTP, and on the ports the rules name, by the names it looks up (transparent mode). A connection refused on another port, or a DNS error where transparent mode is off, while \`devvm-why\` shows nothing blocked means the tool skipped the proxy: turn on its own proxy setting, or give it \`\$HTTPS_PROXY\`."
 for f in ~/.claude/CLAUDE.md ~/.codex/AGENTS.md; do
   [[ -d "$(dirname "$f")" ]] || continue
   [[ -f "$f" ]] && sed -i '/^<!-- devvm-proxy -->/,/^<!-- \/devvm-proxy -->/d' "$f"

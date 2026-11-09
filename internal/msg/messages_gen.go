@@ -2584,6 +2584,11 @@ func NetLearnedHostAnon(count int) M {
 	return M{id: "net_learned_host_anon", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
+// NetLearnedNoProxyHeading is [net_learned_no_proxy_heading]: "Reached only by tools without proxy settings, which the VM's names sent to its proxy:"
+func NetLearnedNoProxyHeading() M {
+	return M{id: "net_learned_no_proxy_heading"}
+}
+
 // NetLearnedPartial is [net_learned_partial]: "{{.vm}}'s network log no longer goes back to {{.since}}, when it started learning, so hosts it reached early on may be missing. To allow one later, run devvm network allow."
 func NetLearnedPartial(since string, vm string) M {
 	return M{id: "net_learned_partial", vals: []val{{"since", since}, {"vm", vm}}}
@@ -2687,6 +2692,16 @@ func NetTierNone() M {
 // NetTierOpen is [net_tier_open]: "reaches anything this machine can"
 func NetTierOpen() M {
 	return M{id: "net_tier_open"}
+}
+
+// NetTransparentFailed is [net_transparent_failed]: "Showing or changing transparent mode failed: {{.reason}}."
+func NetTransparentFailed(reason string) M {
+	return M{id: "net_transparent_failed", vals: []val{{"reason", reason}}}
+}
+
+// NetTransparentSet is [net_transparent_set]: "devvm turns transparent mode {{.mode}} for {{.vm}} at its next launch, and it applies while the VM is on a confined tier."
+func NetTransparentSet(mode string, vm string) M {
+	return M{id: "net_transparent_set", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
 // NetUnenforced is [net_unenforced]: "WARNING: {{.vm}} reaches the network directly, so its network tier isn't enforced until devvm starts it again. To enforce it now, run devvm restart."
@@ -5322,6 +5337,7 @@ var specs = map[string]spec{
 	"net_learn_stopped":              {fields: []string{"vm"}},
 	"net_learned_host":               {plural: true, fields: []string{"agent", "count"}},
 	"net_learned_host_anon":          {plural: true, fields: []string{"count"}},
+	"net_learned_no_proxy_heading":   {},
 	"net_learned_partial":            {fields: []string{"since", "vm"}},
 	"net_learned_risky_heading":      {},
 	"net_learning":                   {plural: true, fields: []string{"count", "since", "vm"}},
@@ -5343,6 +5359,8 @@ var specs = map[string]spec{
 	"net_tier_internet":              {},
 	"net_tier_none":                  {},
 	"net_tier_open":                  {},
+	"net_transparent_failed":         {fields: []string{"reason"}},
+	"net_transparent_set":            {fields: []string{"mode", "vm"}},
 	"net_unenforced":                 {fields: []string{"vm"}},
 	"net_unenforced_restart":         {fields: []string{"vm"}},
 	"net_unenforced_stop":            {fields: []string{"vm"}},

@@ -135,9 +135,19 @@ A confined VM runs only with its proxy, so when the proxy doesn't start, devvm s
 
 On the allowlist tier, a VM reaches only the hosts on its allowlist, and on the none tier only its agents' and secrets' hosts. To see what the proxy blocked, run `devvm network log --blocked` on this machine, or `devvm-why` in the VM. `devvm network log --blocked` also shows the `devvm network allow` command that allows each host, and the rule applies at once, to the next connection ([logs](../safety/network.md#logs)).
 
-## A host on the allowlist doesn't resolve
+## A tool that skips the proxy fails
 
-On a confined tier, a tool that doesn't go through the proxy fails with a DNS or connection error, such as `no such host`, `Temporary failure in name resolution`, `ENOTFOUND` or `EAI_AGAIN`, even for a host that the VM's rules allow, and `devvm network log` and `devvm-why` show nothing for it, because the request never reached the proxy. The VM can't resolve names or connect out on its own, so a tool works only through the proxy, and some tools read the proxy variables only when a setting of their own turns them on, or never. Turn on the tool's own proxy setting, so that it uses the environment, or give it the address in `$HTTPS_PROXY`. Hugo's `resources.GetRemote`, for example, uses the proxy only when `security.http.proxyFromEnvironment` is `true` in the site's config ([inside the VM](../safety/network.md#inside-the-vm)).
+On a confined tier, devvm's [transparent mode](../safety/network.md#tools-that-ignore-the-proxy) sends a tool that ignores the proxy settings to the proxy by the names it looks up, over HTTPS and HTTP, on ports 443 and 80 and the ports your allow rules name. Such a tool still fails in these cases, and `devvm network log` shows nothing for it, because the connection never reached the proxy:
+
+- **A connection refused on another port,** such as `ECONNREFUSED` or `Connection refused` for `db.example.com:5432`. `devvm-why` lists the port under the connections the VM refused lately. Give the tool the proxy's address in `$HTTPS_PROXY` or its own setting, or, for HTTPS or HTTP on that port, allow the host with that port, such as `devvm network allow db.example.com:8443`, which redirects the port within 10 seconds.
+- **A protocol that names no host,** such as a database's or SSH, which the proxy refuses and logs as a refused block of `transparent.devvm.proxy`. SSH in the VM goes through the proxy already, and a database client needs a proxy setting of its own.
+- **A DNS error,** such as `no such host`, `Temporary failure in name resolution`, `ENOTFOUND` or `EAI_AGAIN`, which means transparent mode is off for the VM (`devvm network transparent`), or the VM comes from an image that predates it, which each launch says, and `devvm update` makes it again from a newer image.
+
+Some tools read the proxy variables only when a setting of their own turns them on, or never. Turn on the tool's own proxy setting, so that it uses the environment, or give it the address in `$HTTPS_PROXY`. Hugo's `resources.GetRemote`, for example, uses the proxy only when `security.http.proxyFromEnvironment` is `true` in the site's config ([inside the VM](../safety/network.md#inside-the-vm)).
+
+## A server's port is taken in a confined VM
+
+In a confined VM, transparent mode's programs listen on the stand-in address `198.18.0.1`, on port 53 and on ports 61080 and 61443 and 61100 to 61131, so a server of yours that binds one of those ports on every address, such as `0.0.0.0:61443`, fails with `EADDRINUSE`. Ports 80 and 443 stay free for your own servers. A DNS server of yours on `127.0.0.1:53` binds, but gets no lookups, from the VM or through a forward of port 53, because transparent mode sends them to its own names. Move the server to another port, or turn transparent mode off for the VM with `devvm network transparent off`, which applies at its next launch ([tools that ignore the proxy](../safety/network.md#tools-that-ignore-the-proxy)).
 
 ## Behind a company proxy
 

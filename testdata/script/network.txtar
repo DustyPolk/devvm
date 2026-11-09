@@ -79,8 +79,12 @@ stdout '_proxy -config \S*/run/proxy\.json$'
 # devvm-why with nothing blocked points at a tool that skipped the proxy.
 exec sh -c 'pp=$(sed -n "s/^ *\"proxy\": \([0-9]*\).*/\1/p" "$NET_dir/vm.json"); key=$(sed -n "s/^ *\"proxy_key\": \"\(.*\)\".*/\1/p" "$NET_dir/vm.json"); /usr/bin/curl -sS -m 5 --proxy "http://devvm:$key@127.0.0.1:$pp" http://devvm.proxy/blocked'
 stdout '^devvm: nothing blocked recently$'
-stdout 'skipped the proxy: turn on its own proxy setting'
-stdout '/using/troubleshooting/#a-host-on-the-allowlist-doesnt-resolve$'
+stdout 'skipped the proxy on a port or in a way devvm can''t send to it: turn on its own proxy setting'
+stdout '/using/troubleshooting/#a-tool-that-skips-the-proxy-fails$'
+# Transparent mode's ports: 80 and 443 first, then those the rules name, never 22.
+exec sh -c 'pp=$(sed -n "s/^ *\"proxy\": \([0-9]*\).*/\1/p" "$NET_dir/vm.json"); key=$(sed -n "s/^ *\"proxy_key\": \"\(.*\)\".*/\1/p" "$NET_dir/vm.json"); /usr/bin/curl -sS -m 5 --proxy "http://devvm:$key@127.0.0.1:$pp" http://devvm.proxy/transparent/ports'
+stdout '\A80\n443\n'
+! stdout '^22$'
 exec cat $NET_dir/run/secrets.json
 stdout '^\{"version":1,"bindings":\[\]\}$'
 # The run log never holds the key.

@@ -727,7 +727,7 @@ func TestServersApart(t *testing.T) {
 	if _, body := roundTrip(t, aAddr, "GET http://devvm.proxy/blocked HTTP/1.1\r\nHost: devvm.proxy\r\n"+auth("pa")+"\r\n"); body != nothingBlocked {
 		t.Errorf("a lists b's block: %q", body)
 	}
-	for _, want := range []string{"skipped the proxy", "proxy setting", "$HTTPS_PROXY", "#a-host-on-the-allowlist-doesnt-resolve"} {
+	for _, want := range []string{"skipped the proxy", "proxy setting", "$HTTPS_PROXY", "#a-tool-that-skips-the-proxy-fails"} {
 		if !strings.Contains(nothingBlocked, want) {
 			t.Errorf("the empty answer lacks %q", want)
 		}
@@ -1217,19 +1217,22 @@ func FuzzRequest(f *testing.F) {
 	})
 }
 
-// A tunnel's first bytes: whatever they are, reading a ClientHello doesn't panic or hang, and
-// only a TLS handshake record counts as TLS.
+// A tunnel's first bytes: whatever they are, reading a ClientHello doesn't panic or hang, a stream
+// whose first byte starts a TLS record counts as TLS, and only a whole record of TLS's version is
+// returned.
 func FuzzClientHello(f *testing.F) {
 	f.Add([]byte("SSH-2.0-OpenSSH_9.9\r\n"))
 	f.Add([]byte{0x16, 3, 1, 0, 4, 1, 0, 0, 0})
 	f.Add([]byte{0x16, 3, 1, 0xff, 0xff})
+	f.Add([]byte{0x16})
+	f.Add([]byte{0x16, 2, 1, 0, 1, 0})
 	f.Fuzz(func(t *testing.T, b []byte) {
 		rec, _, isTLS := peekClientHello(bufio.NewReader(bytes.NewReader(b)))
-		if isTLS != (len(b) >= 5 && b[0] == 0x16 && b[1] == 3) {
+		if isTLS != (len(b) >= 1 && b[0] == 0x16) {
 			t.Fatalf("% x: TLS = %v", b, isTLS)
 		}
-		if !isTLS && rec != nil {
-			t.Fatalf("% x: a record from a stream that isn't TLS", b)
+		if rec != nil && (!isTLS || len(b) < 5 || b[1] != 3) {
+			t.Fatalf("% x: a record from a stream that isn't TLS's", b)
 		}
 	})
 }

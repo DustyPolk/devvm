@@ -52,6 +52,10 @@ func TestListeners(t *testing.T) {
 		// the VM's local proxy, on 127.0.77.1: never forwarded, on any port
 		"014D007F:0C38",                         // 127.0.77.1:3128
 		"0000000000000000FFFF0000014D007F:153C", // [::ffff:127.0.77.1]:5436
+		// transparent mode's listeners and its dnsmasq, on the stand-in address: never forwarded
+		"010012C6:F003",                         // 198.18.0.1:61443
+		"010012C6:0035",                         // 198.18.0.1:53
+		"0000000000000000FFFF0000010012C6:EE98", // [::ffff:198.18.0.1]:61080
 	})
 	want := map[int]string{
 		3000: "127.0.0.1", 8080: "127.0.0.1", 5173: "::1", 9000: "::1", 9001: "127.0.0.1", 9002: "127.0.0.2",

@@ -652,6 +652,36 @@ func ExactRule(host string, port int) (string, bool) {
 	return net.JoinHostPort(strings.Trim(host, "[]"), strconv.Itoa(port)), true
 }
 
+// transparentPorts are the ports a VM's transparent mode redirects (/transparent/ports): 80 and
+// 443, then each port an allow rule names for hosts by name (** included), ascending, at most
+// transparentPortsMax of them, and those past it, dropped. Not :*, every port, nor an address
+// rule's, which no name reaches, nor 22, whose SSH names no host in its first bytes, nor 53, the
+// VM's own names'. None besides 80 and 443 on an open policy, or while a deny is broken.
+func (p *policy) transparentPorts() (ports, dropped []int) {
+	ports = []int{80, 443}
+	if p.open {
+		return ports, nil
+	}
+	rs, broken := p.all()
+	if broken != "" {
+		return ports, nil
+	}
+	var named []int
+	for _, r := range rs {
+		if r.deny || r.host == "" || r.port <= 0 || slices.Contains([]int{22, 53, 80, 443}, r.port) {
+			continue
+		}
+		if !slices.Contains(named, r.port) {
+			named = append(named, r.port)
+		}
+	}
+	slices.Sort(named)
+	if len(named) > transparentPortsMax {
+		named, dropped = named[:transparentPortsMax], named[transparentPortsMax:]
+	}
+	return append(ports, named...), dropped
+}
+
 // byName: an allow rule that names host, as itself or under *.domain, for port: one that's more
 // than **, which allows any host. None while a deny is broken.
 func (p *policy) byName(host string, port int) bool {

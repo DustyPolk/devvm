@@ -64,6 +64,8 @@ func networkSection(s *S) {
 	netSetup(n)
 	netLaunch(n)
 	netBlocks(n)
+	netTransparent(n)
+	netTransparentDocker(n)
 	netPiTools(n)
 	netLoopback(n)
 	netCorp(n)
@@ -335,41 +337,54 @@ func netLaunch(n *netRun) {
 
 func netBlocks(n *netRun) {
 	s, vm := n.s, n.vm
-	s.Check("direct connections fail, even as root: an address, other ports", func() error {
-		for _, args := range [][]string{
-			{"sudo", "curl", "--noproxy", "*", "-sS", "-m", "5", "-o", "/dev/null", "https://1.1.1.1"},
-			{"sudo", "curl", "--noproxy", "*", "-sS", "-m", "5", "-o", "/dev/null", "http://1.1.1.1"},
-			{"sudo", "timeout", "5", "bash", "-c", "exec 3<>/dev/tcp/1.1.1.1/53"},
-			{"sudo", "timeout", "5", "bash", "-c", "exec 3<>/dev/tcp/140.82.112.3/22"},
-		} {
-			if _, err := vmRun(s, vm, args...); err == nil {
-				return errors.New("connected: " + strings.Join(args, " "))
+	// The host's confinement, without transparent mode's rules in the VM,
+	// which root there could remove: its service stopped for these.
+	s.Check("with transparent mode stopped, direct connections fail, even as root: an address, other ports", func() error {
+		return withoutTransparent(s, vm, func() error {
+			for _, args := range [][]string{
+				{"sudo", "curl", "--noproxy", "*", "-sS", "-m", "5", "-o", "/dev/null", "https://1.1.1.1"},
+				{"sudo", "curl", "--noproxy", "*", "-sS", "-m", "5", "-o", "/dev/null", "http://1.1.1.1"},
+				{"sudo", "timeout", "5", "bash", "-c", "exec 3<>/dev/tcp/1.1.1.1/53"},
+				{"sudo", "timeout", "5", "bash", "-c", "exec 3<>/dev/tcp/140.82.112.3/22"},
+			} {
+				if _, err := vmRun(s, vm, args...); err == nil {
+					return errors.New("connected: " + strings.Join(args, " "))
+				}
 			}
-		}
-		return nil
+			return nil
+		})
+	})
+	// With it running, a public server's DNS is the VM's own dnsmasq, which
+	// has no upstream, and so is the VM's own name servers' (Lima's DHCP
+	// gives it one): any answer is the stand-in address, and nothing else.
+	s.Check("with transparent mode running, a public DNS server and Lima's DNS addresses answer only with the stand-in address, TTL 0, or nothing", func() error {
+		return inVM(s, vm, dnsAnswers(true, "1.1.1.1", "8.8.8.8", "192.168.5.3", "192.168.5.2"))
 	})
 	s.Check("an allowed host works, through the proxy", func() error {
 		return inVM(s, vm, "curl -fsS -m 20 -o /dev/null https://github.com")
 	})
-	// Before anything is blocked: a tool that skips the proxy fails for an
-	// allowed host, and devvm-why, with nothing to show, says why; the
-	// agents' note says the same.
-	s.Check("a request that skips the proxy fails for an allowed host, and devvm-why points at the tool's proxy setting", func() error {
-		if _, err := vmRun(s, vm, "curl", "--noproxy", "*", "-sS", "-m", "5", "-o", "/dev/null", "https://github.com"); err == nil {
-			return errors.New("github.com was reached without the proxy")
-		}
-		r, err := s.InVM(vm, "devvm-why")
-		switch {
-		case err != nil:
-			return err
-		case !r.Has("devvm: nothing blocked recently") || !strings.Contains(r.Stdout, "skipped the proxy: turn on its own proxy setting") ||
-			!strings.Contains(r.Stdout, "#a-host-on-the-allowlist-doesnt-resolve"):
-			return errors.New("devvm-why doesn't point at the tool's proxy setting: " + r.Stdout)
-		}
-		if !vmGrep(s, vm, "cat ~/.claude/CLAUDE.md", "while `devvm-why` shows nothing means the tool skipped the proxy") {
-			return errors.New("~/.claude/CLAUDE.md's note doesn't say a tool may skip the proxy")
-		}
-		return nil
+	// Before anything is blocked, with transparent mode stopped: a tool that
+	// skips the proxy fails for an allowed host, and devvm-why, with nothing
+	// to show, says why and that transparent mode isn't running; the agents'
+	// note says the same.
+	s.Check("with transparent mode stopped, a request that skips the proxy fails for an allowed host, and devvm-why points at the tool's proxy setting", func() error {
+		return withoutTransparent(s, vm, func() error {
+			if _, err := vmRun(s, vm, "curl", "--noproxy", "*", "-sS", "-m", "5", "-o", "/dev/null", "https://github.com"); err == nil {
+				return errors.New("github.com was reached without the proxy")
+			}
+			r, err := s.InVM(vm, "devvm-why")
+			switch {
+			case err != nil:
+				return err
+			case !r.Has("devvm: nothing blocked recently") || !strings.Contains(r.Stdout, "skipped the proxy on a port or in a way devvm can't send to it: turn on its own proxy setting") ||
+				!strings.Contains(r.Stdout, "#a-tool-that-skips-the-proxy-fails") || !r.Has("Transparent mode: not running."):
+				return errors.New("devvm-why doesn't point at the tool's proxy setting: " + r.Stdout)
+			}
+			if !vmGrep(s, vm, "cat ~/.claude/CLAUDE.md", "while `devvm-why` shows nothing blocked means the tool skipped the proxy") {
+				return errors.New("~/.claude/CLAUDE.md's note doesn't say a tool may skip the proxy")
+			}
+			return nil
+		})
 	})
 	// opencode 2 reads its model catalog from models.opencode.ai and its
 	// own service (Zen, the console, MCP's OAuth client) from opencode.ai.
@@ -423,14 +438,17 @@ func netBlocks(n *netRun) {
 	// VM's own file is put back whatever happens, so the checks after
 	// this one see its rules.
 	s.Check("a deny that isn't a rule makes the running proxy refuse everything until it's gone", n.brokenDeny)
-	s.Check("DNS fails at once, not after a timeout", func() error {
-		return inVM(s, vm, "timeout 3 getent hosts example.com; [ $? -eq 2 ]")
-	})
-	// Lima's network's DNS (192.168.5.3) and the host's address on it,
-	// asked directly, as root could: a refusal or no answer passes, an
+	// With transparent mode stopped, as root could stop it: DNS fails at
+	// once, and Lima's network's DNS (192.168.5.3) and the host's address on
+	// it, asked directly, answer nothing: a refusal or no answer passes, an
 	// address for example.com fails.
-	s.Check("... and Lima's network's DNS addresses, asked directly, answer nothing", func() error {
-		return inVM(s, vm, limaDNSAsked)
+	s.Check("with transparent mode stopped, DNS fails at once, not after a timeout, and Lima's network's DNS addresses, asked directly, answer nothing", func() error {
+		return withoutTransparent(s, vm, func() error {
+			if err := inVM(s, vm, "timeout 3 getent hosts example.com; [ $? -eq 2 ]"); err != nil {
+				return err
+			}
+			return inVM(s, vm, limaDNSAsked)
+		})
 	})
 }
 
@@ -2551,6 +2569,11 @@ func netOpen(n *netRun) {
 			return errors.New("devvm network log doesn't show the loopback allowed")
 		}
 		return nil
+	})
+	s.Check("open, it has no transparent mode: no service, table or stand-in address, and names resolve as Lima's DNS has them", func() error {
+		return inVM(s, vm, `! systemctl is-active -q devvm-transparent && [ ! -e /usr/local/sbin/devvm-transparent ] &&
+! sudo nft list table inet devvm_transparent >/dev/null 2>&1 && ! ip -4 addr show dev lo | grep -q 198.18.0.1 &&
+a=$(getent ahostsv4 github.com | awk 'NR == 1 { print $1 }') && [ -n "$a" ] && [ "$a" != 198.18.0.1 ]`)
 	})
 	// Open, it holds no real secret either: the token is nowhere in it,
 	// its environment and Codex's login hold only its own placeholders,

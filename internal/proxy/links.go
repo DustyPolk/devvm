@@ -170,15 +170,22 @@ func LinkAddr(i uint16) netip.Addr {
 // internet, and a host under LinkDomain is a link's or nothing.
 const LinkDomain = "devvm.internal"
 
-// refuse refuses a host under LinkDomain that's none of the VM's links: such a name is never
-// the policy's, so no rule or company proxy sends it anywhere. It reports whether it refused.
-func (k links) refuse(w http.ResponseWriter, method, host string, port int) bool {
-	if !strings.HasSuffix(host, "."+LinkDomain) && host != LinkDomain {
-		return false
-	}
-	k.events.record(Event{Event: "blocked", Host: host, Port: port, Method: method, Reason: "not one of this VM's links", Refused: true})
-	http.Error(w, "devvm proxy: "+net.JoinHostPort(host, strconv.Itoa(port))+" isn't one of this VM's links", http.StatusForbidden)
-	return true
+// isLinkDomain reports whether host is under LinkDomain, or LinkDomain itself: a link's name, or
+// one that's nothing's, which is never the policy's, so no rule or company proxy sends it anywhere.
+func isLinkDomain(host string) bool {
+	return strings.HasSuffix(host, "."+LinkDomain) || host == LinkDomain
+}
+
+// reasonNotLink is the reason of a refused request for a name under LinkDomain that's none of the
+// VM's links.
+const reasonNotLink = "not one of this VM's links"
+
+// refuse refuses e, a request for a host under LinkDomain that's none of the VM's links
+// (isLinkDomain), its reason reasonNotLink: logged as a refused block, and 403.
+func (k links) refuse(w http.ResponseWriter, e Event) {
+	e.Event, e.Reason, e.Refused = "blocked", reasonNotLink, true
+	k.events.record(e)
+	http.Error(w, "devvm proxy: "+net.JoinHostPort(e.Host, strconv.Itoa(e.Port))+" isn't one of this VM's links", http.StatusForbidden)
 }
 
 // linkDialTimeout bounds how long the proxy waits for a link's socket.

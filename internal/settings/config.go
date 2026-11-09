@@ -53,6 +53,10 @@ type configFile struct {
 	// ReleaseCheck is the daily check for a newer release (ReleaseCheck),
 	// which no command saves.
 	ReleaseCheck opt[switchKind] `toml:"release-check"`
+	// TransparentProxy is whether confined VMs send tools that skip the
+	// proxy settings to the proxy (TransparentProxy), which no command
+	// saves.
+	TransparentProxy opt[switchKind] `toml:"transparent-proxy"`
 	// PassKeys are the providers whose API keys an agent's VMs get as
 	// they are (PassKeys), which no command saves.
 	PassKeys passKeys `toml:"pass-keys"`

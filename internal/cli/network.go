@@ -9,6 +9,7 @@ import (
 
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/netpolicy"
+	"github.com/devvmhq/devvm/internal/proxy"
 	"github.com/devvmhq/devvm/internal/settings"
 	"github.com/devvmhq/devvm/internal/ui"
 	"github.com/devvmhq/devvm/internal/vm"
@@ -95,17 +96,19 @@ func newNetworkCmd(a *app) *cobra.Command {
 	cmd.Flags().BoolVarP(&global, "global", "g", false, "show or change new VMs' network tier instead")
 	jsonFlag(cmd, &asJSON)
 	cmd.AddCommand(newNetworkRuleCmds(a)...)
-	cmd.AddCommand(newNetworkLogCmd(a), newNetworkLockCmd(a))
+	cmd.AddCommand(newNetworkLogCmd(a), newNetworkLockCmd(a), newNetworkTransparentCmd(a))
 	return addFolderFlags(cmd, a)
 }
 
 // networkOutput is devvm network --json: the VM's tier (or unenforced),
-// since when it learns the hosts it reaches when it does, and its
-// allowlist, each policy with rules in the order its proxy reads them.
+// since when it learns the hosts it reaches when it does, its allowlist,
+// each policy with rules in the order its proxy reads them, and its
+// transparent mode.
 type networkOutput struct {
 	Policy        string           `json:"policy"`
 	LearningSince string           `json:"learning_since,omitempty"`
 	Allowlist     []policyFileJSON `json:"allowlist"`
+	Transparent   transparentJSON  `json:"transparent"`
 }
 
 // policyFileJSON is a policy: a built-in one, by its name in devvm's
@@ -137,7 +140,7 @@ func printNetwork(u *ui.UI, asJSON bool, s vm.NetworkShown) error {
 		}
 		return netpolicy.WriteRules(u.Stdout(), s.Rules)
 	}
-	out := networkOutput{Policy: s.Policy, LearningSince: jsonTime(s.Learning), Allowlist: []policyFileJSON{}}
+	out := networkOutput{Policy: s.Policy, LearningSince: jsonTime(s.Learning), Allowlist: []policyFileJSON{}, Transparent: transparentJSON(s.Transparent)}
 	for _, f := range s.Rules {
 		j := policyFileJSON{DeniesOnly: f.DeniesOnly, Rules: append([]string{}, f.Rules()...), NotRules: []notRuleJSON{}}
 		if f.Builtin {
@@ -273,6 +276,7 @@ type logEventJSON struct {
 	Refused  bool     `json:"refused,omitempty"`
 	Upstream string   `json:"upstream,omitempty"`
 	Target   string   `json:"target,omitempty"`
+	Via      string   `json:"via,omitempty"`
 }
 
 // logOutput is devvm network log --json; blockedOutput, with --blocked.
@@ -322,7 +326,7 @@ func printLogJSON(cmd *cobra.Command, a *app, o vm.LogOptions) error {
 	for _, e := range events {
 		out.Events = append(out.Events, logEventJSON{
 			Time: e.Time, Event: e.Event, Host: e.Host, Port: e.Port, Method: e.Method, Path: e.Path, Rule: e.Rule,
-			Reason: e.Reason, Agent: e.Agent, Secrets: e.Secrets, Refused: e.Refused, Upstream: e.Upstream, Target: e.Target,
+			Reason: e.Reason, Agent: e.Agent, Secrets: e.Secrets, Refused: e.Refused, Upstream: e.Upstream, Target: e.Target, Via: e.Via,
 		})
 	}
 	return printJSON(u, out)
@@ -374,8 +378,9 @@ type lockOutput struct {
 // learnedJSON is a host a VM learned: the rule devvm network lock adds
 // for it, its host and port, how many connections it had, when it was
 // last reached, the User-Agent's tool that reached it most, whether it's
-// one of the reviewed hosts that start ticked (netpolicy.Tickable), and
-// why it's risky (netpolicy's Risk), if it is.
+// one of the reviewed hosts that start ticked (netpolicy.Tickable), why
+// it's risky (netpolicy's Risk), if it is, and via, dns when only tools
+// without proxy settings reached it (Learned.NoProxy).
 type learnedJSON struct {
 	Rule     string `json:"rule"`
 	Host     string `json:"host"`
@@ -385,6 +390,7 @@ type learnedJSON struct {
 	Agent    string `json:"agent,omitempty"`
 	Tickable bool   `json:"tickable,omitempty"`
 	Risk     string `json:"risk,omitempty"`
+	Via      string `json:"via,omitempty"`
 }
 
 // printLockJSON writes what the folder's VM learned as lockOutput.
@@ -403,9 +409,13 @@ func printLockJSON(cmd *cobra.Command, a *app) error {
 func lockJSON(l netpolicy.LearnedHosts) lockOutput {
 	out := lockOutput{LearningSince: jsonTime(l.Since), Partial: l.Partial, Hosts: make([]learnedJSON, 0, len(l.Hosts))}
 	for _, h := range l.Hosts {
-		out.Hosts = append(out.Hosts, learnedJSON{
+		j := learnedJSON{
 			Rule: h.Rule, Host: h.Host, Port: h.Port, Count: h.Count, Last: h.Last, Agent: h.Agent, Tickable: h.Tickable, Risk: string(h.Risk),
-		})
+		}
+		if h.NoProxy {
+			j.Via = proxy.ViaDNS
+		}
+		out.Hosts = append(out.Hosts, j)
 	}
 	return out
 }

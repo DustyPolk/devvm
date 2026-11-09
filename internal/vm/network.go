@@ -34,6 +34,8 @@ type NetworkShown struct {
 	// Rules are the rules of each policy file its proxy reads that has
 	// any, in order.
 	Rules []netpolicy.RuleFile
+	// Transparent is its transparent mode (devvm network transparent).
+	Transparent netpolicy.Transparent
 }
 
 // Network returns the folder's VM's network tier and its allowlist.
@@ -47,6 +49,9 @@ func (e Net) Network(ctx context.Context) (NetworkShown, error) {
 		return s, err
 	}
 	s.Learning = netpolicy.LearningOf(t.st).Since
+	if s.Transparent, err = netpolicy.TransparentOf(e.Dirs, t.st); err != nil {
+		return s, err
+	}
 	set := netpolicy.Policies(e.Dirs, t.f.Name, netpolicy.TierOf(t.st), image.Name(t.st.Image), tools.Names(t.st))
 	s.Rules, err = netpolicy.ReadPolicies(e.Proxy.Assets, set)
 	return s, err
@@ -369,16 +374,20 @@ func (e Net) chooseLearned(vm string, l netpolicy.LearnedHosts, o LockOptions) (
 	return chosen, nil
 }
 
-// learnedParts are the lock's list: the hosts without a risk, then the
-// risky ones in a part of their own, under a heading that says why, so
-// no width of the terminal, no long name and no User-Agent the VM chose
+// learnedParts are the lock's list: the hosts without a risk, then those
+// only tools without proxy settings reached (Learned.NoProxy), then the
+// risky ones, each in a part of their own, under a heading that says why,
+// so no width of the terminal, no long name and no User-Agent the VM chose
 // can push that off their rows. A host starts ticked as Learned.Ticked
 // says, but none when there are many.
 func learnedParts(l netpolicy.LearnedHosts, many bool) []PickPart {
-	parts := []PickPart{{}, {Heading: msg.NetLearnedRiskyHeading()}}
+	parts := []PickPart{{}, {Heading: msg.NetLearnedNoProxyHeading()}, {Heading: msg.NetLearnedRiskyHeading()}}
 	for _, h := range l.Hosts {
 		i := 0
-		if h.Risk != "" {
+		switch {
+		case h.Risk != "":
+			i = 2
+		case h.NoProxy:
 			i = 1
 		}
 		parts[i].Rows = append(parts[i].Rows, PickRow{Name: h.Rule, Desc: learnedDesc(h), On: h.Ticked() && !many})

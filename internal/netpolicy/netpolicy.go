@@ -27,7 +27,11 @@ type Net struct {
 	// Learning is whether the VM learns the hosts it reaches, on the
 	// internet tier, and since when; the zero value while it doesn't.
 	Learning Learning `json:"learning,omitzero"`
-	Made     NetMade  `json:"made,omitzero"`
+	// Transparent is the VM's own transparent mode, TransparentOn or
+	// TransparentOff (devvm network transparent); "" follows config.toml's
+	// (TransparentOf).
+	Transparent string  `json:"transparent,omitempty"`
+	Made        NetMade `json:"made,omitzero"`
 }
 
 // Learning is a learning VM's: when it started learning the hosts it

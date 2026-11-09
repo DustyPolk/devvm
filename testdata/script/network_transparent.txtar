@@ -1,0 +1,91 @@
+# devvm network transparent: shows a folder's VM's transparent mode and
+# where it comes from (its own, config.toml's transparent-proxy, or the
+# default, on), and gives the VM its own. A launch's setup gets the
+# stand-in address while the VM runs confined and its mode is on, and none
+# on an open VM. config.toml's value must be true or false, and a word
+# that isn't on or off is a usage error.
+
+# No VM yet; a bad word changes nothing.
+project web
+! exec devvm network transparent
+stderr '^devvm: no_vm dir=\S*/web$'
+! exec devvm network transparent maybe
+stderr '^devvm: arg_not_choice choices=on, off command=devvm network transparent given=maybe$'
+
+# A confined VM: on by default, and its setup gets the stand-in address
+# and the proxy's reserved target. (Its hostagent: the test's runner, so
+# its proxy lasts through the launches below.)
+exec sh -c 'echo $PPID > "$STUB_DIR/hostagent"'
+exec devvm --network allowlist --no-git-protect
+vm_name WEB web
+exec devvm network transparent
+stdout '\Aon # devvm: default\n\z'
+exec devvm network transparent --json
+stdout '"on": true'
+stdout '"from": "default"'
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''198\.18\.0\.1''$'
+stdout '^DEVVM_TRANSPARENT_HOST=''transparent\.devvm\.proxy''$'
+exec devvm network --json
+stdout '"transparent": \{\n *"on": true,\n *"from": "default"\n *\}'
+vm_state $WEB_dir/vm.json
+! stdout '^net\.transparent='
+! exec devvm network transparent --json off
+stderr '^devvm: json_shows_only command=devvm network transparent$'
+
+# config.toml turns it off for every VM, from the next launch.
+cp $WORK/off.toml $CFG/config.toml
+exec devvm network transparent
+stdout '\Aoff # \S*/config/devvm/config\.toml\n\z'
+exec devvm network transparent --json
+stdout '"from": "config"'
+exec devvm
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''''$'
+
+# The VM's own setting comes first, from its next launch; the same again
+# changes nothing.
+exec devvm network transparent on
+stdout '^==> net_transparent_set mode=on vm=devvm-web-[0-9a-f]{14}$'
+vm_state $WEB_dir/vm.json
+stdout '^net\.transparent=on$'
+exec devvm network transparent
+stdout '\Aon # devvm network transparent\n\z'
+exec devvm network transparent on
+stdout '^==> setting_already command=devvm network transparent on vm=devvm-web-[0-9a-f]{14}$'
+exec devvm
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''198\.18\.0\.1''$'
+exec devvm network transparent off
+stdout '^==> net_transparent_set mode=off vm=devvm-web-[0-9a-f]{14}$'
+exec devvm
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''''$'
+exec devvm network transparent --json
+stdout '"on": false'
+stdout '"from": "vm"'
+
+# An open VM: none, whatever its setting.
+rm $STUB_DIR/hostagent
+rm $CFG/config.toml
+project open
+exec devvm --network open --no-git-protect
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''''$'
+
+# A value that isn't true or false, for a VM without its own: the command
+# fails, naming the line.
+cp $WORK/bad.toml $CFG/config.toml
+! exec devvm network transparent
+stderr '^devvm: net_transparent_failed reason=\S*/config/devvm/config\.toml:2: '
+rm $CFG/config.toml
+exec devvm network transparent on
+exec devvm
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''''$'
+
+-- off.toml --
+transparent-proxy = false
+-- bad.toml --
+# transparent mode
+transparent-proxy = "no"

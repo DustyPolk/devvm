@@ -629,18 +629,14 @@ const caEndedReason = "devvm's CA has ended: open the VM again (devvm in its fol
 // ended reports whether the CA that signs at now (signer) is past its NotAfter.
 func (c *ca) ended(now time.Time) bool { return !now.Before(c.signer(now).cert.NotAfter) }
 
-// caEndedRefusal refuses a CONNECT to be intercepted (e) once the CA has ended, before the tunnel
-// opens: 403, with the reason and no allow command, since no rule would help, and logged as a
-// refused block. It reports whether it refused.
-func (s *server) caEndedRefusal(w http.ResponseWriter, e Event) bool {
-	if !s.ca.ended(time.Now()) {
-		return false
-	}
+// caEndedRefusal refuses a CONNECT to be intercepted (e) once the CA has ended (ca.ended, which
+// routeFor asks), before the tunnel opens: 403, with the reason and no allow command, since no
+// rule would help, and logged as a refused block.
+func (s *server) caEndedRefusal(w http.ResponseWriter, e Event) {
 	e.Event, e.Reason, e.Refused = "blocked", caEndedReason, true
 	s.events.record(e)
 	w.Header().Set("X-Devvm-Blocked", e.Host)
 	http.Error(w, "devvm proxy: "+net.JoinHostPort(e.Host, strconv.Itoa(e.Port))+" is refused: "+caEndedReason, http.StatusForbidden)
-	return true
 }
 
 // leafFor mints (and caches) a certificate for host, signed by the CA that signs now (signer).
@@ -716,45 +712,71 @@ func (c *ca) keep(host string, l *tls.Certificate) {
 // secrets are bound to it, so another Host (a site on the same CDN, say) gets 421. The handshake
 // with the VM gets 30 seconds.
 func (s *server) intercept(ctx context.Context, client net.Conn, host string, port int, e Event) {
-	tconn := tls.Server(client, &tls.Config{
-		NextProtos: []string{"h2", "http/1.1"},
-		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-			return s.ca.leafFor(host)
-		},
-	})
-	hctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	err := tconn.HandshakeContext(hctx)
-	cancel()
+	tconn, err := handshake(ctx, client, s.ca, host)
 	if err != nil {
 		e.Event, e.Reason = "blocked", "TLS with the VM failed (is the devvm CA installed?): "+err.Error()
 		s.events.record(e)
-		_ = client.Close()
 		return
 	}
 	e.Event = "intercept"
 	s.events.record(e)
-	cn := &closeNotifyConn{Conn: tconn, done: make(chan struct{})}
 	fwd, done := s.forwarder("https", net.JoinHostPort(host, fmt.Sprint(port)), host, port)
 	defer done()
-	srv := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if h, _ := splitHostPort(r.Host, port); h != host {
-				http.Error(w, "devvm proxy: this connection is for "+host, http.StatusMisdirectedRequest)
-				return
-			}
-			// Each request in the tunnel meets the rules, a kept-alive or HTTP/2 one's included.
-			r, ok := s.judgeRequest(w, r, host, port)
-			if !ok {
-				return
-			}
-			fwd.ServeHTTP(w, r)
-		}),
-		Protocols:         new(http.Protocols),
-		IdleTimeout:       10 * time.Minute,
-		ReadHeaderTimeout: 30 * time.Second,
-		ErrorLog:          s.log,
+	serveOne(tconn, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h, _ := splitHostPort(r.Host, port); h != host {
+			http.Error(w, "devvm proxy: this connection is for "+host, http.StatusMisdirectedRequest)
+			return
+		}
+		if e.Via != "" { // the forwarder's events say so too
+			r = r.WithContext(withVia(r.Context(), e.Via))
+		}
+		// Each request in the tunnel meets the rules, a kept-alive or HTTP/2 one's included.
+		r, ok := s.judgeRequest(w, r, host, port)
+		if !ok {
+			return
+		}
+		fwd.ServeHTTP(w, r)
+	}), connServing{header: 30 * time.Second, idle: 10 * time.Minute}, s.log)
+}
+
+// handshake is TLS with the VM on client, as a server for host, with a leaf for host alone from c
+// (ca.leafFor), within 30 seconds: what intercept and the transparent path's 403 page start with.
+// A handshake that fails closes client.
+func handshake(ctx context.Context, client net.Conn, c *ca, host string) (*tls.Conn, error) {
+	tconn := tls.Server(client, &tls.Config{
+		NextProtos: []string{"h2", "http/1.1"},
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return c.leafFor(host)
+		},
+	})
+	hctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := tconn.HandshakeContext(hctx); err != nil {
+		_ = client.Close()
+		return nil, err
 	}
-	// TLS is already done here, so the server sees plain HTTP/1.1, or HTTP/2 with prior knowledge.
+	return tconn, nil
+}
+
+// connServing is how long serveOne waits for a request's headers, and between requests, and the
+// most its headers may hold (0: http.Server's default).
+type connServing struct {
+	header, idle time.Duration
+	maxHeader    int
+}
+
+// serveOne serves HTTP/1.1, or HTTP/2 with prior knowledge, on c alone with h, until c closes or
+// sits idle, logging to l: TLS, when there is any, is already done here.
+func serveOne(c net.Conn, h http.Handler, t connServing, l *log.Logger) {
+	cn := &closeNotifyConn{Conn: c, done: make(chan struct{})}
+	srv := &http.Server{
+		Handler:           h,
+		Protocols:         new(http.Protocols),
+		IdleTimeout:       t.idle,
+		ReadHeaderTimeout: t.header,
+		MaxHeaderBytes:    t.maxHeader,
+		ErrorLog:          l,
+	}
 	srv.Protocols.SetHTTP1(true)
 	srv.Protocols.SetUnencryptedHTTP2(true)
 	_ = srv.Serve(&oneConnListener{c: cn, done: cn.done})
@@ -852,7 +874,10 @@ func (s *server) forwarder(scheme, target, host string, port int) (fwd http.Hand
 			}
 			pr.Out.Header.Del("Proxy-Authorization")
 			pr.Out.Header.Del("Proxy-Connection")
-			e := Event{Event: "forward", Host: host, Port: port, Method: pr.In.Method, Path: pr.In.URL.Path, Agent: pr.In.UserAgent(), Rule: ruleOf(pr.In.Context())}
+			e := Event{
+				Event: "forward", Host: host, Port: port, Method: pr.In.Method, Path: pr.In.URL.Path, Agent: pr.In.UserAgent(),
+				Rule: ruleOf(pr.In.Context()), Via: viaOf(pr.In.Context()),
+			}
 			if up != nil {
 				e.Upstream = up.addr
 				// Only plain HTTP carries them, to the upstream itself; HTTPS's go in the CONNECT.

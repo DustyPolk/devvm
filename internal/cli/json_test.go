@@ -169,20 +169,21 @@ func TestJSONShapes(t *testing.T) {
 			// An entry has builtin or file: both set here, for every field.
 			networkOutput{Policy: "internet", LearningSince: "t", Allowlist: []policyFileJSON{{
 				Builtin: "layers/base.policy", File: "/p", DeniesOnly: true, Rules: []string{"a.test"}, NotRules: []notRuleJSON{{Line: 2, Text: "a b"}},
-			}}},
+			}}, Transparent: transparentJSON{On: true, From: "default"}},
 			[]string{
 				"allowlist[].builtin: string", "allowlist[].denies_only: bool", "allowlist[].file: string", "allowlist[].not_rules[].line: number",
-				"allowlist[].not_rules[].text: string", "allowlist[].rules[]: string", "learning_since: string", "policy: string",
+				"allowlist[].not_rules[].text: string", "allowlist[].rules[]: string", "learning_since: string", "policy: string", "transparent.from: string", "transparent.on: bool",
 			},
 		},
+		{"network transparent", transparentJSON{On: false, From: "vm"}, []string{"from: string", "on: bool"}},
 		{
 			"network lock",
 			lockJSON(netpolicy.LearnedHosts{Since: at, Partial: true, Hosts: []netpolicy.Learned{{
-				Rule: "h:8080", Host: "h", Port: 8080, Count: 2, Last: "t", Agent: "curl/8.5.0", Tickable: true, Risk: netpolicy.RiskPaste,
+				Rule: "h:8080", Host: "h", Port: 8080, Count: 2, Last: "t", Agent: "curl/8.5.0", Tickable: true, Risk: netpolicy.RiskPaste, NoProxy: true,
 			}}}),
 			[]string{
 				"hosts[].agent: string", "hosts[].count: number", "hosts[].host: string", "hosts[].last: string",
-				"hosts[].port: number", "hosts[].risk: string", "hosts[].rule: string", "hosts[].tickable: bool", "learning_since: string", "partial: bool",
+				"hosts[].port: number", "hosts[].risk: string", "hosts[].rule: string", "hosts[].tickable: bool", "hosts[].via: string", "learning_since: string", "partial: bool",
 			},
 		},
 		{"network -g", defaultOutput{"policy": "allowlist", "source": "config.toml"}, []string{"policy: string", "source: string"}},
@@ -190,12 +191,12 @@ func TestJSONShapes(t *testing.T) {
 			"network log",
 			logOutput{Events: []logEventJSON{{
 				Time: "t", Event: "forward", Host: "h", Port: 443, Method: "GET", Path: "/",
-				Rule: "h", Reason: "r", Agent: "claude", Secrets: []string{"github"}, Refused: true, Upstream: "proxy:3128", Target: "devvm-db",
+				Rule: "h", Reason: "r", Agent: "claude", Secrets: []string{"github"}, Refused: true, Upstream: "proxy:3128", Target: "devvm-db", Via: "dns",
 			}}},
 			[]string{
 				"events[].agent: string", "events[].event: string", "events[].host: string", "events[].method: string", "events[].path: string",
 				"events[].port: number", "events[].reason: string", "events[].refused: bool", "events[].rule: string", "events[].secrets[]: string",
-				"events[].target: string", "events[].time: string", "events[].upstream: string",
+				"events[].target: string", "events[].time: string", "events[].upstream: string", "events[].via: string",
 			},
 		},
 		{

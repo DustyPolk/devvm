@@ -17,9 +17,10 @@ if [[ $devvm_libc == musl ]]; then
   # GNU tar: devvm's launch sends files with it (busybox's lacks options it uses). sqlite: an export
   # of agents' history copies opencode's database without its logins with it. icu-libs: the dotnet
   # shared tool's .NET needs ICU. fd: the pi shared tool finds files with it, and downloads it
-  # itself, unpinned, where it's missing.
+  # itself, unpinned, where it's missing. dnsmasq, socat and nftables: transparent mode
+  # (guest/transparent.sh), whose service only a confined VM's setup enables.
   sudo apk add --no-cache git curl wget ca-certificates build-base unzip jq ripgrep bash coreutils tar \
-    util-linux util-linux-misc losetup findmnt erofs-utils sqlite icu-libs fd
+    util-linux util-linux-misc losetup findmnt erofs-utils sqlite icu-libs fd dnsmasq socat nftables
   echo "devvm: Alpine's packages aren't pinned" >&2
 else
 # The package lists are apt.sh begin's: base's packages are recorded at its first build and replayed
@@ -29,8 +30,11 @@ else
 # shared tool's .NET needs it, and its package's name has its version (libicu76), so it's the newest
 # libicuN the package lists have (a replay's lists have only the one recorded). fd-find (fdfind): the
 # pi shared tool finds files with it, and downloads fd itself, unpinned, where it's missing.
+# dnsmasq-base (dnsmasq alone, no service of its own), socat and nftables: transparent mode
+# (guest/transparent.sh), whose service only a confined VM's setup enables.
 icu=$(apt-cache pkgnames libicu | grep -E '^libicu[0-9]+$' | sort -V | tail -1 || true)
-sudo apt-get install -y git curl wget ca-certificates build-essential unzip jq ripgrep erofs-utils sqlite3 fd-find ${icu:+"$icu"}
+sudo apt-get install -y git curl wget ca-certificates build-essential unzip jq ripgrep erofs-utils sqlite3 fd-find \
+  dnsmasq-base socat nftables ${icu:+"$icu"}
 fi
 
 # devvm-fetch URL SHA256 OUT: every layer downloads through this, so an image only ever contains
