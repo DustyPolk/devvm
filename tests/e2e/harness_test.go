@@ -260,3 +260,36 @@ func TestHarnessOutput(t *testing.T) {
 		t.Errorf("lastLine: got %q", got)
 	}
 }
+
+func TestHarnessLeftovers(t *testing.T) {
+	list := "devvm-img-0123abcd\ndevvm-x-0123456789abcd\nmine\ndevvm-img-ffee\n"
+	if got, want := leftoverVMs(list), []string{"devvm-x-0123456789abcd"}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got := leftoverVMs("devvm-img-a\n"); len(got) != 0 {
+		t.Errorf("images only: got %v", got)
+	}
+}
+
+func TestHarnessProjectVMs(t *testing.T) {
+	p := Paths{Devvm: t.TempDir()}
+	for h, body := range map[string]string{
+		"a": `{"name": "devvm-lib-a", "dir": "/w/p/web/src/lib"}`,
+		"b": `{"name": "devvm-web-b", "dir": "/w/p/web"}`,
+		"c": `{"name": "devvm-webx-c", "dir": "/w/p/webx"}`,
+		"d": `{"name": "devvm-o-d", "dir": "/elsewhere"}`,
+	} {
+		d := filepath.Join(p.Devvm, "vms", h)
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "vm.json"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := projectVMs(p, "/w/p/web")
+	slices.Sort(got)
+	if want := []string{"devvm-lib-a", "devvm-web-b"}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

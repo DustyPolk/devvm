@@ -206,7 +206,56 @@ func (sb *sandbox) setup(ctx context.Context, out *output) error {
 	if sb.o.clean {
 		sb.clean(ctx, out)
 	}
-	return nil
+	return sb.refuseLeftovers(ctx)
+}
+
+// refuseLeftovers stops the run when the sandbox's Lima home has project
+// VMs an earlier run left (--reuse keeps its own), naming the commands
+// that delete them, as a check would trip over them.
+func (sb *sandbox) refuseLeftovers(ctx context.Context) error {
+	if sb.o.reuse {
+		return nil
+	}
+	b, err := sb.command(ctx, "limactl", "list", "-q").Output()
+	if err != nil {
+		return fmt.Errorf("couldn't list the sandbox's VMs: %w", err)
+	}
+	left := leftoverVMs(string(b))
+	if len(left) == 0 {
+		return nil
+	}
+	var cmds []string
+	for _, n := range left {
+		cmds = append(cmds, fmt.Sprintf("  LIMA_HOME=%s limactl delete -f %s && rm -rf %s",
+			sb.lima, n, sb.paths().VMDir(n)))
+	}
+	return fmt.Errorf("setup: an earlier run left project VMs in %s; delete them with:\n%s",
+		sb.lima, strings.Join(cmds, "\n"))
+}
+
+// leftoverVMs picks devvm's project VMs out of limactl list -q's output:
+// every devvm-* VM but the cached images.
+func leftoverVMs(list string) []string {
+	var out []string
+	for n := range strings.FieldsSeq(list) {
+		if strings.HasPrefix(n, "devvm-") && !strings.HasPrefix(n, "devvm-img-") {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// projectVMs names the VMs whose state says their folder is under root,
+// the run's project folders: a VM a failed check made without a name to
+// register.
+func projectVMs(p Paths, root string) []string {
+	var out []string
+	for _, st := range allStates(p) {
+		if d := st["dir"]; st["name"] != "" && (d == root || strings.HasPrefix(d, root+"/")) {
+			out = append(out, st["name"])
+		}
+	}
+	return out
 }
 
 // refuseRealLima refuses a Lima home that's ~/.lima or devvm's own.
@@ -318,7 +367,8 @@ func (sb *sandbox) command(ctx context.Context, name string, args ...string) *ex
 	return cmd
 }
 
-// cleanup deletes what the run made: its VMs (an image's record too) and
+// cleanup deletes what the run made: its VMs (an image's record too, and
+// any VM whose folder is under the run's project folders) and
 // their folders, its files, its project folders (unlocked first on
 // macOS), the sandbox's forwarders and devvm's own SSH agent, and what
 // each section deferred. A VM --reuse keeps stays.
@@ -328,7 +378,15 @@ func (sb *sandbox) cleanup(ctx context.Context, out *output) {
 	for i := len(sb.deferred) - 1; i >= 0; i-- {
 		sb.deferred[i](ctx)
 	}
-	for _, n := range sb.created {
+	vms := slices.Clone(sb.created)
+	for _, p := range sb.projects {
+		for _, n := range projectVMs(sb.paths(), p) {
+			if !slices.Contains(vms, n) {
+				vms = append(vms, n)
+			}
+		}
+	}
+	for _, n := range vms {
 		if slices.Contains(sb.kept, n) {
 			continue
 		}

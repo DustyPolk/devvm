@@ -86,6 +86,10 @@ func projectBase(s *S) *webVM {
 	// devvm in a subfolder opens the folder's VM there, says so, and makes none.
 	_ = os.MkdirAll(filepath.Join(p, "src", "lib"), 0o755) //nolint:gosec // a project's folder, as its user's mkdir makes it
 	s.Check("devvm in a subfolder opens the folder's VM in the subfolder", func() error {
+		if vm == "" {
+			// Without the folder's VM, devvm here would make a VM for the subfolder.
+			return errors.New("no VM for the folder: check 1 failed")
+		}
 		r, err := DevvmIn(s, filepath.Join(p, "src", "lib"), "pwd\n", nil)
 		if err != nil {
 			return err
