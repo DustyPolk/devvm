@@ -141,8 +141,11 @@ stderr '^devvm: link_target_stopped target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0
 cmp $APP_dir/run/secrets.json $WORK/app-secrets.json
 # On Linux, where the tests' host can't pin (DEVVM_PINS), .git is
 # unprotected, as it was, and the watch 0.1.0 didn't have takes its first
-# scan, which reports nothing.
+# scan, which reports nothing. 0.1.0 recorded off on Linux, the one mode
+# it could set there, so app is warned of, never refused for the pins it
+# lacks.
 [linux] stderr '^devvm: git_unprotected vm=devvm-app-[0-9a-f]{14}$'
+[linux] ! stderr backend_lacks
 ! stderr 'git_changed|git_watch_blind'
 # Its project folder keeps the cache mode it has, Lima's mmap on Linux,
 # with a warning until a mode is chosen: no edit.
@@ -158,6 +161,8 @@ stdout '^limactl shell --workdir \S*/home/src/app devvm-app-[0-9a-f]{14}$'
 json_superset -changes .agent.made.started $WORK/app-before.json $APP_dir/vm.json
 vm_state $APP_dir/vm.json
 stdout '^agent\.made\.started=off_[0-9a-f]{32}$'
+[linux] stdout '^git\.mode=off$'
+[darwin] stdout '^git\.mode=on$'
 [linux] stdout '^git\.watched\.scanned=true$'
 [darwin] ! stdout '^git\.watched'
 grep '\A1\n\z' $DATA/version
