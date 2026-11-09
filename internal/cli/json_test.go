@@ -72,6 +72,36 @@ func cloneShapes() []shapeCase {
 	}}
 }
 
+// defaultShapes are the shapes of the settings of size, ports and
+// mount-cache: size and ports with and without -g, which shows new VMs'
+// default.
+func defaultShapes() []shapeCase {
+	return []shapeCase{
+		{
+			"size", sizeJSON(vm.SizeShown{Size: backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}, Pending: backend.Size{CPUs: 2, MemoryGiB: 4, DiskGiB: 120}}),
+			[]string{
+				"cpus: number", "disk_gib: number", "memory_gib: number",
+				"pending.cpus: number", "pending.disk_gib: number", "pending.memory_gib: number",
+			},
+		},
+		{
+			"size -g",
+			sizeJSON(vm.SizeShown{
+				Size: backend.Size{CPUs: 4, MemoryGiB: 8}, Global: true,
+				Sources: map[string]string{"cpus": "config.toml", "memory": "settings.json", "disk": "built-in"},
+			}),
+			[]string{"cpus: number", "memory_gib: number", "sources.cpus: string", "sources.disk: string", "sources.memory: string"},
+		},
+		{"ports", map[string]string{"ports": "all"}, []string{"ports: string"}},
+		{"ports -g", defaultOutput{"ports": "all", "source": "built-in"}, []string{"ports: string", "source: string"}},
+		{
+			"mount-cache",
+			mountCacheOutput{Mode: "mmap", Pending: "none"},
+			[]string{"chosen: bool", "mode: string", "pending: string"},
+		},
+	}
+}
+
 // machineShapes are the shapes of This machine's commands.
 func machineShapes() []shapeCase {
 	yes, fix := true, "brew install lima"
@@ -134,23 +164,6 @@ func TestJSONShapes(t *testing.T) {
 			"tools", toolsJSON([]tools.VMTool{{Tool: "node", Version: "24.1", Newer: "24.2", Built: true}}),
 			[]string{"tools[].newer: string", "tools[].newer_built: bool", "tools[].tool: string", "tools[].version: string"},
 		},
-		{
-			"size", sizeJSON(vm.SizeShown{Size: backend.Size{CPUs: 4, MemoryGiB: 8, DiskGiB: 100}, Pending: backend.Size{CPUs: 2, MemoryGiB: 4, DiskGiB: 120}}),
-			[]string{
-				"cpus: number", "disk_gib: number", "memory_gib: number",
-				"pending.cpus: number", "pending.disk_gib: number", "pending.memory_gib: number",
-			},
-		},
-		{
-			"size -g",
-			sizeJSON(vm.SizeShown{
-				Size: backend.Size{CPUs: 4, MemoryGiB: 8}, Global: true,
-				Sources: map[string]string{"cpus": "config.toml", "memory": "settings.json", "disk": "built-in"},
-			}),
-			[]string{"cpus: number", "memory_gib: number", "sources.cpus: string", "sources.disk: string", "sources.memory: string"},
-		},
-		{"ports", map[string]string{"ports": "all"}, []string{"ports: string"}},
-		{"ports -g", defaultOutput{"ports": "all", "source": "built-in"}, []string{"ports: string", "source: string"}},
 		{
 			"network",
 			// An entry has builtin or file: both set here, for every field.
@@ -236,6 +249,7 @@ func TestJSONShapes(t *testing.T) {
 		}},
 		{"retention", retentionJSON(settings.Retention{}), retentionShape()},
 	}
+	cases = append(cases, defaultShapes()...)
 	cases = append(cases, machineShapes()...)
 	cases = append(cases, cloneShapes()...)
 	shaped := map[string]bool{}

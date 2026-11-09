@@ -176,6 +176,9 @@ type newVM struct {
 	tools []string   // its shared tools
 	size  Size
 	ports string
+	// cache is its project folder mount's cache mode, none, where its
+	// backend has the choice (newCache); "" where it has none.
+	cache string
 	net   netpolicy.Tier
 	learn bool            // it learns the hosts it reaches, on the internet tier
 	agent string          // sshagent.On or Off
@@ -464,7 +467,9 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	}
 	n.img, n.tools = parts.image(), parts.tools()
 	n.dcGave = fileParts(o, f.Dir, n.dc, def, parts)
+	n.cache = e.newCache(b)
 	n.spec = e.machineSpec(b, f, n.tools, o.SSHAgent, n.size, o.Clone)
+	n.spec.ProjectCache = n.cache
 	if o.SSHAgent {
 		n.agent = sshagent.On
 	}
@@ -644,6 +649,7 @@ func (n newVM) record(st *state.VM, tg tools.Target, files []string) error {
 		tools.Set(st, tools.InVM{Names: n.tools, Made: tools.Made{Files: files, Libc: tg.Libc, Glibc: tg.Glibc}}),
 		ports.Set(st, ports.Ports{Forward: forward}),
 		state.SetSection(st, sizeSection, n.size),
+		state.SetSection(st, mountSection, mountInVM{Cache: n.cache}),
 		state.SetSection(st, cloneSection, n.clone),
 	} {
 		if err != nil {

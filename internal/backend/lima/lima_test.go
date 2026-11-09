@@ -359,8 +359,9 @@ func TestNameMax(t *testing.T) {
 }
 
 // Everything is native but ports, which devvm's forwarder forwards: an
-// emulation, reviewed; and read-only paths, which only a Linux host whose
-// probe passes has.
+// emulation, reviewed; read-only paths, which only a Linux host whose
+// probe passes has; and the mount cache, which only a Linux host's 9p
+// has.
 func TestCaps(t *testing.T) {
 	l, _, _ := testLima(t, "darwin")
 	if err := l.Caps().Check(); err != nil {
@@ -368,7 +369,7 @@ func TestCaps(t *testing.T) {
 	}
 	for _, f := range backend.Features {
 		c := l.Caps()[f]
-		if f == backend.FeatureReadOnlyPaths {
+		if f == backend.FeatureReadOnlyPaths || f == backend.FeatureMountCache {
 			continue
 		}
 		if f == backend.FeaturePorts || f == backend.FeaturePortsAll {
@@ -392,6 +393,12 @@ func TestCaps(t *testing.T) {
 		l.Pins = func() error { return tc.probe }
 		if got := l.Caps()[backend.FeatureReadOnlyPaths]; got != tc.want {
 			t.Errorf("%s, probe %v: read-only-paths %s", tc.os, tc.probe, got)
+		}
+		if got, want := l.Caps()[backend.FeatureMountCache], tc.os == "linux"; got.IsNative() != want {
+			t.Errorf("%s: mount-cache %s", tc.os, got)
+		}
+		if err := l.Caps().Check(); err != nil {
+			t.Errorf("%s: %v", tc.os, err)
 		}
 	}
 	// The probe runs devvm's own binary, which a test binary isn't.
@@ -713,7 +720,8 @@ func TestOverlay(t *testing.T) {
 
 // A start edits what of a VM's Want differs, and only that: its size
 // (a disk only grows, a smaller one refused), its agent folders, keeping
-// its other mounts, and its agent forwarding.
+// its other mounts and an agent folder's own as it was, and its agent
+// forwarding.
 func TestWantEdits(t *testing.T) {
 	var in instance
 	if err := json.Unmarshal([]byte(`{"name":"v","status":"Stopped","cpus":4,"memory":8589934592,"disk":107374182400,
@@ -745,7 +753,7 @@ func TestWantEdits(t *testing.T) {
 		// same --set as the rest, the project's first.
 		{
 			backend.Want{Project: "/q", AgentDirs: claude},
-			`--set .mounts = [{"location":"/q","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"},{"location":"/h/.claude","writable":false}]`,
+			`--set .mounts = [{"location":"/q","writable":true},{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"},{"location":"/h/.claude","mountPoint":"/h/.claude","writable":false}]`,
 		},
 		{backend.Want{Project: "/q,r", AgentDirs: claude}, "mount_comma path=/q,r"},
 	} {
@@ -790,8 +798,11 @@ func TestCreateVMByInode(t *testing.T) {
 // recorded or its path differs, whatever limactl list fills in; QEMU's
 // is by its path, as is one without a recorded folder.
 func TestProjectMountByInode(t *testing.T) {
-	vol := `{"location":"/.vol/16777232/4242","mountPoint":"/p","writable":true,"sshfs":{"cache":true},"9p":{"cache":"mmap"}}`
+	// Its sshfs and 9p settings: Lima's defaults, which limactl list fills
+	// in, and one of the VM's own of each.
+	vol := `{"location":"/.vol/16777232/4242","mountPoint":"/p","writable":true,"sshfs":{"cache":true,"sftpDriver":"builtin"},"9p":{"cache":"mmap","msize":"512KiB"}}`
 	tools := `{"location":"/d/tools","mountPoint":"/mnt/devvm-tools"}`
+	kept := `"writable":true,"9p":{"msize":"512KiB"},"sshfs":{"sftpDriver":"builtin"}}` // the VM's own of what the mount it replaces had
 	vm := func(vmType, project string) instance {
 		t.Helper()
 		var in instance
@@ -812,12 +823,12 @@ func TestProjectMountByInode(t *testing.T) {
 		{
 			"vz, another folder at its path", vm("vz", vol),
 			backend.Want{Project: "/p", ProjectID: "16777232:99:1.2"},
-			`--set .mounts = [{"location":"/.vol/16777232/99","mountPoint":"/p","writable":true},` + tools + `]`,
+			`--set .mounts = [{"location":"/.vol/16777232/99","mountPoint":"/p",` + kept + `,` + tools + `]`,
 		},
 		{
 			"vz, the folder moved", vm("vz", vol),
 			backend.Want{Project: "/q", ProjectID: id},
-			`--set .mounts = [{"location":"/.vol/16777232/4242","mountPoint":"/q","writable":true},` + tools + `]`,
+			`--set .mounts = [{"location":"/.vol/16777232/4242","mountPoint":"/q",` + kept + `,` + tools + `]`,
 		},
 		{"vz, moved to a path with a comma", vm("vz", vol), backend.Want{Project: "/q,r", ProjectID: id}, "mount_comma path=/q,r"},
 		{
@@ -828,7 +839,7 @@ func TestProjectMountByInode(t *testing.T) {
 		{
 			"vz, no folder recorded", vm("vz", vol),
 			backend.Want{Project: "/p"},
-			`--set .mounts = [{"location":"/p","writable":true},` + tools + `]`,
+			`--set .mounts = [{"location":"/p",` + kept + `,` + tools + `]`,
 		},
 		{"vz, --clone", vm("vz", vol), backend.Want{}, `--set .mounts = [` + tools + `]`},
 		{"qemu, by its path", vm("qemu", `{"location":"/p","mountPoint":"/p","writable":true}`), backend.Want{Project: "/p", ProjectID: id}, ""},
@@ -844,6 +855,176 @@ func TestProjectMountByInode(t *testing.T) {
 	}
 	if p := vm("vz", vol).backend().Project; p != "/p" {
 		t.Errorf("a vz VM's project folder: %q, want its path in the VM", p)
+	}
+}
+
+// On QEMU the project folder's 9p mount gets the cache mode its Want asks
+// for, compared with what limactl list fills in: an edit only where it
+// differs, keeping every setting devvm doesn't set; a Want without one
+// leaves the mount's as it is, and vz's virtiofs, or a mount that isn't
+// 9p, has none to set.
+func TestProjectCache(t *testing.T) {
+	// As real Lima's limactl list has a QEMU VM's mounts (testdata/golden/linux).
+	filled := func(loc, cache string, writable bool) string {
+		return `{"location":"` + loc + `","mountPoint":"` + loc + `","writable":` + strconv.FormatBool(writable) +
+			`,"sshfs":{"cache":true,"followSymlinks":false,"sftpDriver":""},` +
+			`"9p":{"securityModel":"none","protocolVersion":"9p2000.L","msize":"128KiB","cache":"` + cache + `"}}`
+	}
+	claude := filled("/h/.claude", "fscache", false)
+	tools := `{"location":"/d/tools","mountPoint":"/mnt/devvm-tools","writable":false}`
+	vm := func(vmType, mountType, project string) instance {
+		t.Helper()
+		var in instance
+		if err := json.Unmarshal([]byte(`{"name":"v","status":"Stopped","vmType":"`+vmType+`","cpus":4,"memory":8589934592,"disk":107374182400,
+			"config":{"mountType":"`+mountType+`","mounts":[`+project+`,`+claude+`,`+tools+`]}}`), &in); err != nil {
+			t.Fatal(err)
+		}
+		return in
+	}
+	// The project mount devvm writes: its own fields and the cache mode it
+	// chose; what limactl list filled in at Lima's defaults stays out.
+	rewritten := func(loc, cache string) string {
+		if cache == "" {
+			return `{"location":"` + loc + `","writable":true}`
+		}
+		return `{"location":"` + loc + `","writable":true,"9p":{"cache":"` + cache + `"}}`
+	}
+	keptClaude := `{"location":"/h/.claude","mountPoint":"/h/.claude","writable":false}`
+	dirs := []string{"/h/.claude"}
+	for _, tc := range []struct {
+		name string
+		in   instance
+		want backend.Want
+		opts string // the edit's options
+	}{
+		{"qemu, none chosen, as it is", vm("qemu", "", filled("/p", "none", true)), backend.Want{Project: "/p", ProjectCache: "none", AgentDirs: dirs}, ""},
+		{"qemu, mmap chosen, Lima's default", vm("qemu", "", filled("/p", "mmap", true)), backend.Want{Project: "/p", ProjectCache: "mmap", AgentDirs: dirs}, ""},
+		{"qemu, none set, left as it is", vm("qemu", "", filled("/p", "mmap", true)), backend.Want{Project: "/p", AgentDirs: dirs}, ""},
+		{
+			"qemu, none chosen over mmap", vm("qemu", "", filled("/p", "mmap", true)),
+			backend.Want{Project: "/p", ProjectCache: "none", AgentDirs: dirs},
+			`--set .mounts = [` + rewritten("/p", "none") + `,` + tools + `,` + keptClaude + `]`,
+		},
+		{
+			"qemu, mmap chosen over none", vm("qemu", "9p", filled("/p", "none", true)),
+			backend.Want{Project: "/p", ProjectCache: "mmap", AgentDirs: dirs},
+			`--set .mounts = [` + rewritten("/p", "mmap") + `,` + tools + `,` + keptClaude + `]`,
+		},
+		{
+			"qemu, no 9p settings listed", vm("qemu", "", `{"location":"/p","writable":true}`),
+			backend.Want{Project: "/p", ProjectCache: "none", AgentDirs: dirs},
+			`--set .mounts = [{"location":"/p","writable":true,"9p":{"cache":"none"}},` + tools + `,` + keptClaude + `]`,
+		},
+		{"vz: virtiofs, nothing to set", vm("vz", "", filled("/p", "mmap", true)), backend.Want{Project: "/p", ProjectCache: "none", AgentDirs: dirs}, ""},
+		{"qemu, not 9p", vm("qemu", "reverse-sshfs", filled("/p", "mmap", true)), backend.Want{Project: "/p", ProjectCache: "none", AgentDirs: dirs}, ""},
+		{"qemu, --clone", vm("qemu", "", filled("/p", "mmap", true)), backend.Want{ProjectCache: "none", AgentDirs: dirs}, `--set .mounts = [` + tools + `,` + keptClaude + `]`},
+	} {
+		opts, err := wantEdits(tc.in, tc.want)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if got := strings.Join(opts, " "); got != tc.opts {
+			t.Errorf("%s:\n%s\nwant\n%s", tc.name, got, tc.opts)
+		}
+	}
+	// The folder moved: the new mount gets the mode, and the old one's
+	// other settings, at its own path (Lima's mountPoint is devvm's to set).
+	opts, err := wantEdits(vm("qemu", "", filled("/p", "mmap", true)), backend.Want{Project: "/q", ProjectCache: "none", AgentDirs: dirs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(opts, " "); got != `--set .mounts = [`+rewritten("/q", "none")+`,`+tools+`,`+keptClaude+`]` {
+		t.Errorf("moved: %s", got)
+	}
+	// None chosen, Lima's default isn't written in, so a later Lima's
+	// reaches it; a mode of the VM's own moves with it.
+	opts, _ = wantEdits(vm("qemu", "", filled("/p", "mmap", true)), backend.Want{Project: "/q", AgentDirs: dirs})
+	if got := strings.Join(opts, " "); got != `--set .mounts = [`+rewritten("/q", "")+`,`+tools+`,`+keptClaude+`]` {
+		t.Errorf("moved, none chosen: %s", got)
+	}
+	opts, _ = wantEdits(vm("qemu", "", filled("/p", "loose", true)), backend.Want{Project: "/q", AgentDirs: dirs})
+	if got := strings.Join(opts, " "); got != `--set .mounts = [`+rewritten("/q", "loose")+`,`+tools+`,`+keptClaude+`]` {
+		t.Errorf("moved, its own mode: %s", got)
+	}
+	// An unchosen VM's unrelated rewrite (another agent's folder) writes no
+	// cache mode in, and none of what limactl list filled in.
+	opts, _ = wantEdits(vm("qemu", "", filled("/p", "mmap", true)), backend.Want{Project: "/p", AgentDirs: []string{"/h/.codex"}})
+	if got := strings.Join(opts, " "); got != `--set .mounts = [{"location":"/p","mountPoint":"/p","writable":true},`+tools+`,{"location":"/h/.codex","writable":false}]` {
+		t.Errorf("an unrelated rewrite: %s", got)
+	}
+	// What a VM's project mount has, as devvm reads it: Lima's mmap where
+	// none is listed, and nothing on vz.
+	for _, tc := range []struct {
+		in   instance
+		want string
+	}{
+		{vm("qemu", "", filled("/p", "none", true)), "none"},
+		{vm("qemu", "", filled("/p", "mmap", true)), "mmap"},
+		{vm("qemu", "", `{"location":"/p","writable":true}`), "mmap"},
+		{vm("vz", "", filled("/p", "mmap", true)), ""},
+		{vm("qemu", "reverse-sshfs", filled("/p", "mmap", true)), ""},
+	} {
+		if got := tc.in.backend().ProjectCache; got != tc.want {
+			t.Errorf("%s: ProjectCache %q, want %q", tc.in.Config.Mounts[0].Location, got, tc.want)
+		}
+	}
+}
+
+// Mounts read from limactl list and written back keep what devvm sets, in
+// its order, then the VM's own settings by name, and drop what limactl
+// filled in at Lima's defaults (as real Lima's golden fixture has them),
+// so a later Lima's defaults reach them.
+func TestMountRoundTrip(t *testing.T) {
+	for _, tc := range []struct{ in, out string }{
+		{
+			`{"location":"/p","mountPoint":"/p","writable":true,"sshfs":{"cache":true,"followSymlinks":false,"sftpDriver":""},` +
+				`"9p":{"securityModel":"none","protocolVersion":"9p2000.L","msize":"128KiB","cache":"mmap"}}`,
+			`{"location":"/p","mountPoint":"/p","writable":true}`,
+		},
+		{
+			`{"location":"/t","writable":false,"9p":{"msize":"128KiB","cache":"fscache"}}`,
+			`{"location":"/t","writable":false}`,
+		},
+		{
+			`{"location":"/p","writable":true,"sshfs":{"cache":false,"sftpDriver":""},"9p":{"securityModel":"mapped-xattr","msize":"128KiB","cache":"none"},"x":1}`,
+			`{"location":"/p","writable":true,"9p":{"cache":"none","securityModel":"mapped-xattr"},"sshfs":{"cache":false}}`, // x: a setting devvm doesn't know, left to Lima
+		},
+		{`{"location":"/t","9p":{"cache":"mmap"}}`, `{"location":"/t","9p":{"cache":"mmap"}}`}, // read-only by default: mmap is its own
+	} {
+		var m mount
+		if err := json.Unmarshal([]byte(tc.in), &m); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := json.Marshal(m); err != nil || string(out) != tc.out {
+			t.Errorf("%s\nwritten back as\n%s, %v\nwant\n%s", tc.in, out, err, tc.out)
+		}
+	}
+	// Every mount real Lima lists has only its defaults filled in.
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "golden", "linux", "limactl-list-stopped.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	for {
+		var raw struct {
+			Config struct {
+				Mounts []json.RawMessage `json:"mounts"`
+			} `json:"config"`
+		}
+		if err := dec.Decode(&raw); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range raw.Config.Mounts {
+			var m mount
+			if err := json.Unmarshal(r, &m); err != nil {
+				t.Fatal(err)
+			}
+			if m.NineP != nil || m.rest != nil {
+				t.Errorf("%s keeps %+v %v: Lima's defaults changed", r, m.NineP, m.rest)
+			}
+		}
 	}
 }
 

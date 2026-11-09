@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -18,7 +19,8 @@ import (
 // and the folder and Lima home of the last one to $STUB_DIR/limactl-env.
 // Its instances are the state's (name, status, size and config): create,
 // clone, start, stop, edit, rename and delete keep them up to date, and
-// list --json shows them as Lima does, sorted by name.
+// list --json shows them as Lima does, sorted by name: on a Linux host as
+// QEMU's, each mount's 9p cache mode filled in where devvm set none.
 //
 // create, clone and edit: a clone starts with its source's config, size
 // and lima.yaml; --mount-none drops the mounts; then each --set applies,
@@ -294,7 +296,10 @@ func (l *lima) configJSON(name string, in *stubstate.Instance) string {
 	var parts []string
 	keys := sortedKeys(in.Config)
 	for _, k := range keys {
-		if !strings.Contains(k, ".") {
+		switch {
+		case k == "mounts" && runtime.GOOS == "linux":
+			parts = append(parts, strconv.Quote(k)+":"+filledMounts(in.Config[k]))
+		case !strings.Contains(k, "."):
 			parts = append(parts, strconv.Quote(k)+":"+in.Config[k])
 		}
 	}
@@ -320,6 +325,35 @@ func (l *lima) configJSON(name string, in *stubstate.Instance) string {
 		parts = append(parts, `"env":`+strings.Join(env, "\n"))
 	}
 	return "{" + strings.Join(parts, ",") + "}"
+}
+
+// filledMounts is mounts, the JSON devvm set, with each mount's 9p cache
+// mode filled in where it sets none, as list --json has QEMU's: mmap for
+// a writable mount, fscache for a read-only one. Anything it can't read
+// is shown as it is.
+func filledMounts(mounts string) string {
+	var ms []map[string]any
+	if err := json.Unmarshal([]byte(mounts), &ms); err != nil {
+		return mounts
+	}
+	for _, m := range ms {
+		p9, _ := m["9p"].(map[string]any)
+		if p9 == nil {
+			p9 = map[string]any{}
+		}
+		if _, ok := p9["cache"]; !ok {
+			p9["cache"] = "fscache"
+			if w, _ := m["writable"].(bool); w {
+				p9["cache"] = "mmap"
+			}
+		}
+		m["9p"] = p9
+	}
+	out, err := json.Marshal(ms)
+	if err != nil {
+		return mounts
+	}
+	return string(out)
 }
 
 func sortedKeys(m map[string]string) []string {
@@ -533,7 +567,17 @@ type listed struct {
 	SSHConfigFile string          `json:"sshConfigFile"`
 	HostAgentPID  int             `json:"hostAgentPID,omitempty"`
 	DriverPID     int             `json:"driverPID,omitempty"`
+	VMType        string          `json:"vmType,omitempty"`
 	Config        json.RawMessage `json:"config"`
+}
+
+// vmType is the driver list --json shows: QEMU's on a Linux host, and
+// none on macOS, where devvm's tests mount project folders by their path.
+func vmType() string {
+	if runtime.GOOS == "linux" {
+		return "qemu"
+	}
+	return ""
 }
 
 // list prints the instances, one JSON object a line, sorted by name.
@@ -564,7 +608,7 @@ func (l *lima) list() int {
 		err := enc.Encode(listed{
 			Name: n, Status: in.Status, Dir: dir, CPUs: in.CPUs, Memory: in.Memory, Disk: in.Disk,
 			SSHLocalPort: 60022, SSHConfigFile: filepath.Join(dir, "ssh.config"),
-			HostAgentPID: in.HostAgentPID, DriverPID: in.DriverPID,
+			HostAgentPID: in.HostAgentPID, DriverPID: in.DriverPID, VMType: vmType(),
 			Config: json.RawMessage(l.configJSON(n, in)),
 		})
 		if err != nil {
@@ -613,7 +657,11 @@ func (l *lima) toolsBuild() error {
 		if l.on("tools-symlink") {
 			err = os.Symlink(l.path("tools-symlink"), file)
 		} else {
-			err = writeFile(file, []byte("image "+l.args[i]+"\n"))
+			// A page, as a real image is never shorter than its
+			// superblock's end (the shared tools count one cut short).
+			img := make([]byte, 4096)
+			copy(img, "image "+l.args[i]+"\n")
+			err = writeFile(file, img)
 		}
 		if err != nil {
 			return err

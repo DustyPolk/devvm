@@ -84,6 +84,7 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 		}
 		defer release()
 	}
+	remount := w != nil && cacheChanges(in, *w)
 	if err := configure(ctx, l.Lima, in, w, c, sshPort); err != nil {
 		return err
 	}
@@ -123,7 +124,13 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 			return err
 		}
 	}
-	return l.recordStart(vm, c.Net)
+	if err := l.recordStart(vm, c.Net); err != nil {
+		return err
+	}
+	if remount {
+		return remountProject(ctx, l, vm, w.Project, w.ProjectCache)
+	}
+	return nil
 }
 
 // redactLog takes proxy passwords out of the VM's hostagent log, once

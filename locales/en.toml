@@ -1279,6 +1279,58 @@ other = "There's no VM for {{.dir}}. Run devvm --cpus N to make one with a size,
 description = "reason is an error from the system, in English"
 other = "Showing or changing the size failed: {{.reason}}."
 
+[mount_cache_invalid]
+description = "value is quoted, as given"
+other = "{{.value}} isn't a cache mode. Use none, the only one devvm sets."
+
+[mount_cache_unchosen]
+description = "mode is the cache mode the VM's project folder mount has, which nobody chose (mmap)"
+other = "{{.vm}} caches its project folder with {{.mode}}, which can lose writes and breaks SQLite and Gradle there. Run devvm mount-cache none to stop it."
+
+[vm_mount_cache]
+description = "mode is the cache mode devvm sets: none"
+other = "{{.vm}} caches its project folder with {{.mode}}."
+
+[mount_cache_pending]
+description = "mode is the cache mode devvm sets: none"
+other = "{{.vm}} caches its project folder with {{.mode}} from its next start."
+
+[mount_cache_clone]
+description = "mode is the cache mode devvm sets: none"
+other = "{{.vm}} is a --clone VM, so it mounts no project folder to cache. It uses {{.mode}} once devvm clone off mounts the folder."
+
+[mount_cache_remount_failed]
+description = "has is the cache mode the folder is mounted with (mmap), want the one chosen (none)"
+other = "{{.vm}}'s project folder is still mounted with {{.has}}, as mounting it again with {{.want}} failed. It gets {{.want}} when the VM next starts, so run devvm restart to apply it now."
+
+[mount_cache_no_choice]
+other = "{{.vm}} doesn't mount its project folder with 9p, so it has no cache mode to choose."
+
+[mount_cache_unmounted]
+other = "{{.vm}}'s project folder wasn't mounted after its cache mode changed, so devvm stopped the VM before anything could write there. Run devvm restart to mount it again."
+
+[mount_cache_unchecked]
+other = "Checking that {{.vm}}'s project folder is mounted after its cache mode changed failed, so devvm stopped the VM before anything could write there. Run devvm restart to start it again."
+
+[project_unchecked]
+other = "Checking that {{.vm}}'s project folder is mounted in the VM failed, so devvm didn't open a shell in it. Run devvm restart to mount the folder again."
+
+[project_unmounted]
+other = "{{.vm}}'s project folder isn't mounted in the VM, so what's written there goes to the VM's own disk. Run devvm restart to mount it again."
+
+[remounting]
+other = "mounting {{.vm}}'s project folder again"
+
+[next_start_mount_cache]
+other = "{{.vm}} gets its new cache mode only when it starts."
+
+[no_vm_mount_cache]
+other = "There's no VM for {{.dir}}. Run devvm to make one, which caches its project folder with none."
+
+[mount_cache_failed]
+description = "reason is an error from the system, in English"
+other = "Showing or changing the cache mode failed: {{.reason}}."
+
 [port_invalid]
 description = "value is quoted, as given"
 other = "{{.value}} isn't a port list. Use all, none, or ports and ranges such as 5173,8000-8010."

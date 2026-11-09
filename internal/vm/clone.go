@@ -3,6 +3,7 @@ package vm
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"os/exec"
@@ -536,7 +537,9 @@ func (e Lifecycle) canSwitch(ctx context.Context, t *target, p *remakeInVM, o Re
 // the repos to says, a workspace clone's (nil: the folder's own repo).
 // What the old machine's mode left on the host stays recorded until the
 // old machine is gone (leftBehind): .git's locks, or the clone's remotes.
-func switchedTo(st *state.VM, clone string, to *cloneInVM, git gitprotect.InVM) error {
+// The folder mounted gets cache, its mount's cache mode
+// (remaking.switchCache), "" for none to choose.
+func switchedTo(st *state.VM, clone string, to *cloneInVM, git gitprotect.InVM, cache string) error {
 	switch clone {
 	case CloneOn:
 		c := cloneInVM{On: true}
@@ -546,6 +549,10 @@ func switchedTo(st *state.VM, clone string, to *cloneInVM, git gitprotect.InVM) 
 		return state.SetSection(st, cloneSection, c)
 	case CloneOff:
 		if err := gitprotect.Set(st, git); err != nil {
+			return err
+		}
+		// The mount is new: a stored mmap, none chosen (cacheOf), gets cache too.
+		if err := edit(st, mountSection, func(m *mountInVM) error { m.Cache = cmp.Or(cacheOf(st), cache); return nil }); err != nil {
 			return err
 		}
 		return edit(st, cloneSection, func(c *cloneInVM) error { c.On = false; return nil })

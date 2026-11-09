@@ -67,7 +67,7 @@ func TestEveryFeatureIsListed(t *testing.T) {
 		}
 		seen[f] = true
 	}
-	if len(seen) != 20 {
+	if len(seen) != 21 {
 		t.Errorf("%d features; a new one goes in Features and on the backends page", len(seen))
 	}
 }
@@ -145,6 +145,8 @@ func TestFeaturesNeeded(t *testing.T) {
 			"a start wanting agents and memory", backend.Want{AgentDirs: []string{"/h/.claude"}, AgentForwarding: true, Size: backend.Size{MemoryGiB: 8}}.Features(),
 			f(backend.FeatureAgentFolders, backend.FeatureAgentForwarding, backend.FeatureMemory),
 		},
+		{"a start choosing its folder's cache", backend.Want{Project: "/p", ProjectCache: backend.CacheNone}.Features(), f(backend.FeatureMountCache)},
+		{"a --clone VM's cache mode, with no folder", backend.Want{ProjectCache: backend.CacheNone}.Features(), nil},
 		{"every port", backend.Ports{All: true}.Features(), f(backend.FeaturePorts, backend.FeaturePortsAll)},
 		{"some ports", backend.Ports{Ranges: []backend.PortRange{{5173, 5173}}}.Features(), f(backend.FeaturePorts)},
 		{"no ports", backend.Ports{}.Features(), nil},

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -180,6 +181,59 @@ func TestLog(t *testing.T) {
 	}
 }
 
+// QEMU's mounts, as list --json shows them: each one's 9p cache mode
+// filled in where devvm set none, mmap for a writable one and fscache
+// for a read-only one, and devvm's own kept; what isn't a list of mounts
+// is shown as it is.
+func TestFilledMounts(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{
+			`[{"location":"/p","writable":true},{"location":"/t","writable":false}]`,
+			`[{"9p":{"cache":"mmap"},"location":"/p","writable":true},{"9p":{"cache":"fscache"},"location":"/t","writable":false}]`,
+		},
+		{
+			`[{"location":"/p","writable":true,"9p":{"cache":"none","msize":"128KiB"}}]`,
+			`[{"9p":{"cache":"none","msize":"128KiB"},"location":"/p","writable":true}]`,
+		},
+		{`[]`, `[]`},
+		{`not json`, `not json`},
+	} {
+		if got := filledMounts(tc.in); got != tc.want {
+			t.Errorf("filledMounts(%s) = %s, want %s", tc.in, got, tc.want)
+		}
+	}
+	if (vmType() == "qemu") != (runtime.GOOS == "linux") {
+		t.Errorf("vmType() = %q on %s", vmType(), runtime.GOOS)
+	}
+}
+
+// The guest's findmnt shows the project folder's 9p mount options as its
+// mount has them: cache=0x5 for mmap, Lima's default, none for none; and
+// with mount-unmounted, devvm's check's word for a folder not mounted.
+func TestGuestMountOptions(t *testing.T) {
+	s := newSandbox(t)
+	check := "if mountpoint -q '/p'; then findmnt -no OPTIONS '/p'; else echo devvm-not-mounted; fi"
+	s.ok("", "limactl", "create", "--name=a", "--tty=false", "--set", `.mounts = [{"location":"/p","writable":true}]`, "-")
+	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", check); !strings.Contains(out, ",cache=0x5,") {
+		t.Errorf("Lima's mmap: %q", out)
+	}
+	s.ok("", "limactl", "edit", "a", "--set", `.mounts = [{"location":"/p","writable":true,"9p":{"cache":"none"}}]`)
+	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", check); strings.Contains(out, "cache=") || !strings.Contains(out, "trans=virtio") {
+		t.Errorf("none: %q", out)
+	}
+	mountpoint := "cd '/' && exec 'sh' '-c' 'if mountpoint -q '\\''/p'\\''; then echo devvm-mounted; else echo devvm-not-mounted; fi'"
+	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", mountpoint); out != "devvm-mounted\n" {
+		t.Errorf("a running VM's check, mounted: %q", out)
+	}
+	s.touch("mount-unmounted")
+	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", check); out != "devvm-not-mounted\n" {
+		t.Errorf("not mounted: %q", out)
+	}
+	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", mountpoint); out != "devvm-not-mounted\n" {
+		t.Errorf("a running VM's check, not mounted: %q", out)
+	}
+}
+
 // create, clone, edit, start, stop and delete keep Lima's instances as
 // list --json shows them.
 func TestLimactlLifecycle(t *testing.T) {
@@ -193,7 +247,11 @@ func TestLimactlLifecycle(t *testing.T) {
 	if len(ls) != 1 || ls[0].Name != "a" || ls[0].Status != "Stopped" || ls[0].CPUs != 2 || ls[0].Memory != 1610612736 || ls[0].Disk != 10<<30 {
 		t.Fatalf("after create: %+v", ls)
 	}
-	if got, want := string(ls[0].Config), `{"mounts":[{"location":"/x"}],"ssh":{"forwardAgent":false},"env":{"A":"b"}}`; got != want {
+	mounts := `[{"location":"/x"}]`
+	if runtime.GOOS == "linux" {
+		mounts = `[{"9p":{"cache":"fscache"},"location":"/x"}]` // as QEMU's: filledMounts
+	}
+	if got, want := string(ls[0].Config), `{"mounts":`+mounts+`,"ssh":{"forwardAgent":false},"env":{"A":"b"}}`; got != want {
 		t.Errorf("config %s, want %s", got, want)
 	}
 	if !strings.HasPrefix(s.read("limactl-env"), "cwd="+s.dir+" LIMA_HOME=") {
@@ -329,7 +387,7 @@ func TestToolsBuild(t *testing.T) {
 	s.write("tools-glibc-node", "2.28\n")
 	build := []string{"shell", "--workdir", "/", "devvm-tools-build", "bash", "-s", "--", "node", "22", "node-22.erofs", "go", "1.24", "go-1.24.erofs"}
 	s.ok("#!/bin/bash\n", "limactl", build...)
-	if s.read("share/node-22.erofs") != "image node-22.erofs\n" || s.read("share/node-22.erofs.glibc") != "2.28\n" || s.read("share/go-1.24.erofs.glibc") != "" {
+	if !strings.HasPrefix(s.read("share/node-22.erofs"), "image node-22.erofs\n") || len(s.read("share/node-22.erofs")) != 4096 || s.read("share/node-22.erofs.glibc") != "2.28\n" || s.read("share/go-1.24.erofs.glibc") != "" {
 		t.Error("the images")
 	}
 	if err := os.RemoveAll(out); err != nil {

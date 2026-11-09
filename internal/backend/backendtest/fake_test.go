@@ -1,6 +1,7 @@
 package backendtest
 
 import (
+	"bytes"
 	"errors"
 	"reflect"
 	"slices"
@@ -9,6 +10,36 @@ import (
 	"github.com/devvmhq/devvm/internal/backend"
 	"github.com/devvmhq/devvm/internal/msg"
 )
+
+// A check that the project folder is mounted is answered as a guest whose
+// folder is: without ExecFunc, or when ExecFunc says nothing; an ExecFunc
+// that answers, or fails, has its own way. Other commands get no answer.
+func TestFakeMountCheck(t *testing.T) {
+	check := []string{"sh", "-c", "if mountpoint -q '/p'; then echo devvm-mounted; else echo devvm-not-mounted; fi"}
+	for _, tc := range []struct {
+		name string
+		argv []string
+		exec func(string, []string, backend.ExecOpts) error
+		want string
+	}{
+		{"no ExecFunc", check, nil, "devvm-mounted\n"},
+		{"ExecFunc says nothing", check, func(string, []string, backend.ExecOpts) error { return nil }, "devvm-mounted\n"},
+		{"ExecFunc answers", check, func(_ string, _ []string, o backend.ExecOpts) error {
+			_, err := o.Stdout.Write([]byte("devvm-not-mounted\n"))
+			return err
+		}, "devvm-not-mounted\n"},
+		{"ExecFunc fails", check, func(string, []string, backend.ExecOpts) error { return errors.New("no ssh") }, ""},
+		{"another command", []string{"true"}, nil, ""},
+	} {
+		f := New("fake", backend.Caps{})
+		f.ExecFunc = tc.exec
+		var out bytes.Buffer
+		_ = f.Exec(t.Context(), "v", tc.argv, backend.ExecOpts{Stdout: &out})
+		if out.String() != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, out.String(), tc.want)
+		}
+	}
+}
 
 func TestFakeRecordsAndAnswers(t *testing.T) {
 	ctx := t.Context()

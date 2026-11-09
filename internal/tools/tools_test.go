@@ -792,7 +792,7 @@ func TestBuild(t *testing.T) {
 	e.locked(t, fixture(t))
 	f := fake()
 	all := e.files(t, "node", "pnpm", "bun", "claude")
-	write(t, filepath.Join(e.Dirs.Tools(), all[1]), []byte("built"))
+	write(t, filepath.Join(e.Dirs.Tools(), all[1]), backendtest.ToolImage("built"))
 	e.recorded(t, all[1], time.Now())
 	if err := e.Build(t.Context(), backend.Review{}, f, baseKey, gnuT, all); err != nil {
 		t.Fatal(msg.NamesOf(err))
@@ -864,12 +864,12 @@ func TestBuildOneVMEach(t *testing.T) {
 		}
 		if spec.Args[0] == "node" {
 			for _, other := range files {
-				write(t, filepath.Join(spec.Out, other), []byte("node's"))
+				write(t, filepath.Join(spec.Out, other), backendtest.ToolImage("node's"))
 				write(t, filepath.Join(spec.Out, other+".glibc"), nil)
 			}
 			return nil
 		}
-		write(t, filepath.Join(spec.Out, spec.Args[2]), []byte(spec.Args[0]+"'s"))
+		write(t, filepath.Join(spec.Out, spec.Args[2]), backendtest.ToolImage(spec.Args[0]+"'s"))
 		write(t, filepath.Join(spec.Out, spec.Args[2]+".glibc"), nil)
 		return nil
 	}
@@ -881,7 +881,7 @@ func TestBuildOneVMEach(t *testing.T) {
 	}
 	for _, file := range files {
 		tool, _, _ := image.ParseToolFile(file)
-		if got := string(read(t, e.Dirs.ToolImage(file))); got != tool+"'s" {
+		if got := string(read(t, e.Dirs.ToolImage(file))); got != string(backendtest.ToolImage(tool+"'s")) {
 			t.Errorf("%s holds %q", file, got)
 		}
 	}
@@ -909,7 +909,7 @@ func TestBuildHostileOutput(t *testing.T) {
 
 	f.ToolsBuild = func(spec backend.ToolsSpec) error {
 		file := spec.Args[2]
-		write(t, filepath.Join(spec.Out, file), []byte("image"))
+		write(t, filepath.Join(spec.Out, file), backendtest.ToolImage(file))
 		write(t, filepath.Join(spec.Out, file+".glibc"), nil)
 		// The share is the VM's to write in this scenario, through
 		// whatever it planted.
@@ -1561,7 +1561,7 @@ func TestShow(t *testing.T) {
 		t.Errorf("Show another build = %+v", ts)
 	}
 	claude := e.files(t, "claude")[0]
-	write(t, filepath.Join(e.Dirs.Tools(), claude), nil)
+	write(t, filepath.Join(e.Dirs.Tools(), claude), backendtest.ToolImage(claude))
 	e.recorded(t, claude, time.Now())
 	if ts, _ := e.Show([]string{"claude-2.0.0-0123456789ab.erofs"}, gnuT); len(ts) != 1 || !ts[0].Built {
 		t.Errorf("Show built = %+v", ts)

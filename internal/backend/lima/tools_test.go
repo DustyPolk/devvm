@@ -19,8 +19,8 @@ func toolsSpec(t *testing.T, out string) backend.ToolsSpec {
 }
 
 // The tools build: base stopped first, a leftover build VM deleted, then a
-// clone of base whose only mount is the build's own folder, writable,
-// started confined, the script run with its arguments, and the VM deleted.
+// clone of base whose only mount is the build's own folder, writable and
+// uncached, started confined, the script run with its arguments, and the VM deleted.
 func TestBuildTools(t *testing.T) {
 	l, f := buildLima(t, "linux", "Running")
 	f.out["limactl list --json"] += `{"name":"` + ToolsVM + `","status":"Stopped"}` + "\n"
@@ -32,7 +32,7 @@ func TestBuildTools(t *testing.T) {
 		"limactl stop devvm-img-" + baseKey,
 		"limactl delete -f " + ToolsVM,
 		`limactl clone --tty=false --mount-none --set .mounts = [{"location":"` + out +
-			`","mountPoint":"/mnt/devvm-tools","writable":true}] devvm-img-` + baseKey + " " + ToolsVM,
+			`","mountPoint":"/mnt/devvm-tools","writable":true,"9p":{"cache":"none"}}] devvm-img-` + baseKey + " " + ToolsVM,
 		"limactl edit --tty=false " + ToolsVM + " --set .ssh.localPort=",
 		"limactl start --tty=false " + ToolsVM,
 		"limactl shell --workdir / " + ToolsVM + " bash -s -- node 24.21.0 node-24.21.0-0123456789ab.erofs",

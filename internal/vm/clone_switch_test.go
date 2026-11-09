@@ -155,6 +155,9 @@ func TestSetCloneOff(t *testing.T) {
 	flags := chflagsCalls(e)
 	st := existingVM(t, e, Options{Network: "open", Clone: true})
 	vm, clone := st.Name(), vmfs+e.Dir
+	// A clone whose cache mode nobody chose: the folder it mounts is new,
+	// so it gets none.
+	change(t, st, withCache(""))
 	gitIn(t, clone, "commit", "-q", "--allow-empty", "-m", "from-vm")
 	lc := Lifecycle{e}
 	off := func() error {
@@ -213,8 +216,11 @@ func TestSetCloneOff(t *testing.T) {
 	if isClone(after) || get(after, keyGitProtect) != gitprotect.On || get(after, KeyCloneRemote) != "" || remakePending(after) {
 		t.Errorf("clone %v, git %q, remote %q", isClone(after), get(after, keyGitProtect), get(after, KeyCloneRemote))
 	}
-	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); spec.Project != e.Dir || spec.CloneAt != "" {
+	if spec, _ := call(f, "CreateVM").Args[1].(backend.VMSpec); spec.Project != e.Dir || spec.CloneAt != "" || spec.ProjectCache != backend.CacheNone {
 		t.Errorf("made with %+v", spec)
+	}
+	if c := cacheOf(after); c != backend.CacheNone {
+		t.Errorf("its cache mode %q, want none", c)
 	}
 	// The remote went while git could still change .git/config.
 	if lastFlags(*flags, e.Dir) != "uchg" || remotesLocked(*flags) != "" {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/devvmhq/devvm/internal/backend"
+	"github.com/devvmhq/devvm/internal/backend/backendtest"
 	"github.com/devvmhq/devvm/internal/image"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/state"
@@ -41,7 +42,7 @@ func TestBuildGlibc(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.ToolsBuild = func(spec backend.ToolsSpec) error {
-		write(t, filepath.Join(spec.Out, spec.Args[2]), []byte("image"))
+		write(t, filepath.Join(spec.Out, spec.Args[2]), backendtest.ToolImage(spec.Args[2]))
 		return nil
 	}
 	if err := e.Build(t.Context(), backend.Review{}, f, muslKey, muslT, []string{musl}); err != nil {
@@ -80,7 +81,7 @@ func TestBuildGlibcRefused(t *testing.T) {
 			f := fake()
 			f.ToolsBuild = func(spec backend.ToolsSpec) error {
 				file := filepath.Join(spec.Out, spec.Args[2])
-				write(t, file, []byte("image"))
+				write(t, file, backendtest.ToolImage(spec.Args[2]))
 				out(t, file+".glibc")
 				return nil
 			}

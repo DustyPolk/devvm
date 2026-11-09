@@ -67,6 +67,7 @@ These options are for a new VM, and only `devvm` takes them. A VM that exists ig
 | `devvm tools update` | move this folder's VM to the newest shared tools, and only those, then open a shell in it ([details](../using/toolchains.md#adding-and-removing-tools)) |
 | `devvm size [--cpus N] [--memory GiB] [--disk GiB]` | show or change this folder's VM's CPUs, memory and disk ([details](../using/ports-size.md#size)) |
 | `devvm size -g ...` | show or change the size new VMs get ([details](../using/ports-size.md#size)) |
+| `devvm mount-cache [none]` | show how this folder's VM caches its project folder on a Linux host, `none`, which new VMs get, or Lima's `mmap`, which can lose writes, or switch it to `none` from the VM's next start ([details](../backends/lima.md#the-project-folders-cache)) |
 | `devvm ports [all\|none\|LIST]` | show or change which ports this folder's VM forwards to this machine's `localhost`, even while it runs ([details](../using/ports-size.md#ports)) |
 | `devvm ports add\|rm LIST` | forward more ports, or stop forwarding some ([details](../using/ports-size.md#ports)) |
 | `devvm ports -g ...` | show or change what new VMs forward ([details](../using/ports-size.md#ports)) |

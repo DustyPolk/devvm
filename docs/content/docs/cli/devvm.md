@@ -74,6 +74,7 @@ devvm [flags]
 - [devvm limactl](devvm_limactl.md): Run Lima's limactl for debugging, which starts VMs unconfined, whatever their tier
 - [devvm link](devvm_link.md): List this folder's VM's links to your other VMs
 - [devvm ls](devvm_ls.md): List the project VMs
+- [devvm mount-cache](devvm_mount-cache.md): Show or change how this folder's VM caches its project folder
 - [devvm network](devvm_network.md): Show or change the network tier of this folder's VM
 - [devvm ports](devvm_ports.md): Show or change which ports this folder's VM forwards
 - [devvm rebuild](devvm_rebuild.md): Build an image again, and delete the old one

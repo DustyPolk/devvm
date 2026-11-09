@@ -319,6 +319,7 @@ func (l *Lima) Caps() backend.Caps {
 		backend.FeatureClone:            backend.Native,
 		backend.FeatureProjectMount:     backend.Native,
 		backend.FeatureReadOnlyPaths:    l.pinSupport(),
+		backend.FeatureMountCache:       l.cacheSupport(),
 		backend.FeatureAgentFolders:     backend.Native,
 		backend.FeatureToolsShare:       backend.Native,
 		backend.FeatureEgressProxy:      backend.Native,
@@ -342,6 +343,16 @@ func (l *Lima) Caps() backend.Caps {
 // protection locks on the host itself, and where the probe fails.
 func (l *Lima) pinSupport() backend.Support {
 	if l.OS == "linux" && l.Pins != nil && l.Pins() == nil {
+		return backend.Native
+	}
+	return backend.None
+}
+
+// cacheSupport is how Lima has the project mount's cache choice: native on
+// a Linux host, where QEMU's VMs mount it with 9p, whose cache option is
+// the choice; none on macOS, where vz's virtiofs has no such option.
+func (l *Lima) cacheSupport() backend.Support {
+	if l.OS == "linux" {
 		return backend.Native
 	}
 	return backend.None
@@ -429,11 +440,11 @@ func (l *machines) CreateVM(ctx context.Context, image string, spec backend.VMSp
 	} else if err != nil {
 		return err
 	}
-	// The clone has its image's driver, so its project mount is the one
-	// its starts want (projectMount).
+	// The clone has its image's driver and mount type, so its project
+	// mount is the one its starts want (projectMount).
 	var ms []mount
 	if spec.Project != "" {
-		ms = append(ms, projectMount(img.VMType, spec.Want))
+		ms = append(ms, projectMount(img, spec.Want))
 	}
 	ms = append(ms, readOnly(spec.AgentDirs)...)
 	if spec.Tools != "" {
@@ -623,6 +634,9 @@ func (in instance) backend() backend.Instance {
 			b.AgentDirs = append(b.AgentDirs, m.Location)
 		case m.project():
 			b.Project = m.at()
+			if in.ninep() {
+				b.ProjectCache = m.cacheOr()
+			}
 		}
 	}
 	b.AgentForwarding = in.Config.SSH.ForwardAgent != nil && *in.Config.SSH.ForwardAgent
@@ -712,9 +726,10 @@ func (l *machines) SSH(ctx context.Context, vm string) (backend.SSHTarget, error
 // as limactl list has it) what w wants, none where it already is, after
 // checking w (backend.Validate): its CPUs and memory where w sets them,
 // its disk where w's is larger (Lima can't shrink one), its project
-// folder's mount (a folder that moved) and its agent folder mounts,
-// keeping its other mounts (the tools share), in one --set, and its
-// agent forwarding.
+// folder's mount (a folder that moved, or another cache mode) and its
+// agent folder mounts, keeping its other mounts (the tools share) and
+// every mount's settings devvm doesn't set, in one --set, and its agent
+// forwarding.
 func wantEdits(in instance, w backend.Want) ([]string, error) {
 	if err := backend.Validate(w, in.backend()); err != nil {
 		return nil, err
@@ -733,7 +748,7 @@ func wantEdits(in instance, w backend.Want) ([]string, error) {
 	have := in.backend()
 	ms, same := keptMounts(in, w)
 	if !same || !slices.Equal(have.AgentDirs, w.AgentDirs) {
-		set, err := mountsSet(append(ms, readOnly(w.AgentDirs)...))
+		set, err := mountsSet(append(ms, agentMounts(in, w.AgentDirs)...))
 		if err != nil {
 			return nil, err
 		}
@@ -747,18 +762,25 @@ func wantEdits(in instance, w backend.Want) ([]string, error) {
 
 // keptMounts is the mounts of in but its agent folders' that a VM as w
 // wants keeps: its other mounts (the tools share) as they are, and the
-// project mount w wants (projectMount), first when it's new. same: in's
+// project mount w wants (projectMount), first when it's new, with what the
+// one it replaces had of what devvm doesn't set (mount.over). same: in's
 // project mount is already that one, or neither has one.
 func keptMounts(in instance, w backend.Want) (ms []mount, same bool) {
-	want := projectMount(in.VMType, w)
+	want := projectMount(in, w)
 	same = w.Project == "" && in.backend().Project == ""
+	var had *mount
 	for _, m := range in.Config.Mounts {
-		if m.project() && w.Project != "" && m.same(want) {
-			same = true
+		if m.project() {
+			had = &m
+			same = same || w.Project != "" && m.same(want)
 		}
 	}
 	if w.Project != "" && !same {
-		ms = append(ms, want)
+		if had != nil {
+			ms = append(ms, want.over(*had))
+		} else {
+			ms = append(ms, want)
+		}
 	}
 	for _, m := range in.Config.Mounts {
 		if !m.agentDir() && (!m.project() || w.Project != "" && m.same(want)) {
@@ -766,6 +788,24 @@ func keptMounts(in instance, w backend.Want) (ms []mount, same bool) {
 		}
 	}
 	return ms, same
+}
+
+// agentMounts are the agent folder mounts of dirs, read-only: in's own
+// where it has one, with its settings that devvm doesn't set, else a new
+// one.
+func agentMounts(in instance, dirs []string) []mount {
+	var ms []mount
+	for _, d := range dirs {
+		i := slices.IndexFunc(in.Config.Mounts, func(m mount) bool { return m.agentDir() && m.Location == d })
+		if i < 0 {
+			ms = append(ms, readOnly([]string{d})...)
+			continue
+		}
+		m := in.Config.Mounts[i]
+		m.Writable = ptr(false)
+		ms = append(ms, m)
+	}
+	return ms
 }
 
 func gibString(g float64) string { return strconv.FormatFloat(g, 'g', -1, 64) }

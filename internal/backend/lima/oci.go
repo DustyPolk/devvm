@@ -107,7 +107,7 @@ func (l *images) convert(ctx context.Context, f *backend.From, o origin, size ba
 	if err != nil {
 		return nil, err
 	}
-	ms := []mount{{Location: vmOut, Writable: ptr(true)}, {Location: oci, Writable: ptr(false)}}
+	ms := []mount{outMount(vmOut, ""), {Location: oci, Writable: ptr(false)}}
 	if len(trust.Data) > 0 {
 		ms = append(ms, mount{Location: guest, Writable: ptr(false)})
 	}

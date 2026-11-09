@@ -34,7 +34,7 @@ func (l *images) BuildTools(ctx context.Context, spec backend.ToolsSpec) error {
 	if err := l.deleteIfThere(ctx, ToolsVM); err != nil {
 		return err
 	}
-	mounts, err := mountsSet([]mount{{Location: spec.Out, MountPoint: ptr(spec.OutAt), Writable: ptr(true)}})
+	mounts, err := mountsSet([]mount{outMount(spec.Out, spec.OutAt)})
 	if err != nil {
 		return err
 	}

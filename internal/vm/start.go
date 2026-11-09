@@ -47,7 +47,9 @@ type upOpts struct {
 // changes at its next start stopped once the user agrees
 // (restartForNextStart); its
 // project folder checked on the host (hostChecks), and on a host without
-// .git locks, a warning that its .git is unprotected (WarnUnprotected); what it needs of its
+// .git locks, a warning that its .git is unprotected (WarnUnprotected),
+// and one of a cache mode no one chose that can lose writes
+// (warnMountCache); what it needs of its
 // backend refused where the backend can't (requirements); the user's
 // agent checked for keys when it forwards it; then a stopped VM started
 // (start), or a running one gone on with as it runs (runningConfinement),
@@ -80,6 +82,7 @@ func (s starter) bringUp(ctx context.Context, t *target, o upOpts) (backend.Conf
 		return backend.Confinement{}, err
 	}
 	s.Protector(t.f.Dir).WarnUnprotected(st)
+	s.warnMountCache(st, in)
 	need, err := startNeeds(st, in)
 	if err != nil {
 		return backend.Confinement{}, err
@@ -110,6 +113,9 @@ func (s starter) bringUp(ctx context.Context, t *target, o upOpts) (backend.Conf
 		}
 		s.nextStart(st, in, conf, mountsLater)
 		s.checkRunningPins(ctx, t)
+		if err := s.checkMounted(ctx, t, conf.AgentSocket); err != nil {
+			return conf, err
+		}
 	} else {
 		s.Info(msg.Starting(vm))
 		if err := start(ctx); err != nil {
@@ -199,7 +205,7 @@ func (s starter) runningConfinement(ctx context.Context, b backend.Backend, st *
 
 // nextStart says what a running VM gets only at its next start, each
 // where it differs from what its state asks for: its size, its SSH agent
-// forwarding, its agent folder mounts (mountsLater: the user didn't
+// forwarding, its project folder mount's cache mode, its agent folder mounts (mountsLater: the user didn't
 // restart it), its project folder's mount once the folder moved, and
 // its tier made open while it ran confined (conf, as it runs).
 // It warns of each change by name, then once that devvm restart applies
@@ -255,6 +261,9 @@ func nextStartChanges(st *state.VM, in backend.Instance, mountsLater, confined b
 	}
 	if in.AgentForwarding != sshagent.Forwards(sshagent.Mode(st)) {
 		cs = append(cs, msg.NextStartAgent(vm))
+	}
+	if c := cacheOf(st); c != "" && projectMount(st) != "" && in.ProjectCache != "" && in.ProjectCache != c {
+		cs = append(cs, msg.NextStartMountCache(vm))
 	}
 	if mountsLater {
 		cs = append(cs, msg.NextStartMounts(vm))
@@ -331,6 +340,7 @@ type needs struct {
 	toggle bool
 	ssh    bool // a --clone VM's clone, copied in and fetched over ssh
 	pins   bool // its .git locked by pins at each start (a Linux host's on or strict)
+	cache  bool // its project folder mounted with the cache mode chosen for it (mountInVM)
 }
 
 // requirements lists the backend features n asks for, each once, in the
@@ -357,6 +367,9 @@ func requirements(n needs) []backend.Feature {
 	if n.pins {
 		fs = append(fs, backend.FeatureReadOnlyPaths)
 	}
+	if n.cache {
+		fs = append(fs, backend.FeatureMountCache)
+	}
 	var out []backend.Feature
 	for _, f := range fs {
 		if !slices.Contains(out, f) {
@@ -368,8 +381,9 @@ func requirements(n needs) []backend.Feature {
 
 // startNeeds is what a made VM needs of its backend to start, or go on,
 // as in, its instance, is: its state's network tier and ports, its SSH
-// agent forwarding, and agent-toggle when its forwarding is to change, or
-// a stopped one was made ready for it.
+// agent forwarding, agent-toggle when its forwarding is to change, or
+// a stopped one was made ready for it, and mount-cache when it mounts its
+// folder with a cache mode chosen for it.
 func startNeeds(st *state.VM, in backend.Instance) (needs, error) {
 	p, err := ports.Of(st)
 	if err != nil {
@@ -387,6 +401,7 @@ func startNeeds(st *state.VM, in backend.Instance) (needs, error) {
 	return needs{
 		net: confinementFor(st).Net, ports: forward, agent: agent,
 		toggle: in.AgentForwarding != agent || a.Made.Toggle && in.Status != backend.StatusRunning,
+		cache:  cacheOf(st) != "" && projectMount(st) != "",
 	}, nil
 }
 
@@ -537,12 +552,13 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 	}
 	// What its state asks of it, which the start makes it where it
 	// differs: its size, its project folder where it is now (moved),
-	// and the folder itself, its agents' folders in devvm's store now,
-	// its agent forwarding.
+	// and the folder itself, with the cache mode chosen for it (none
+	// chosen: as it is), its agents' folders in devvm's store now, its
+	// agent forwarding.
 	agentDirs, _ := agentMounts(s.Dirs, tools.Names(st))
 	want := backend.Want{
-		Size: sectionOf[Size](st, sizeSection).Backend(), Project: projectMount(st), AgentDirs: agentDirs,
-		AgentForwarding: sshagent.Forwards(mode),
+		Size: sectionOf[Size](st, sizeSection).Backend(), Project: projectMount(st), ProjectCache: cacheOf(st),
+		AgentDirs: agentDirs, AgentForwarding: sshagent.Forwards(mode),
 	}
 	if want.Project != "" {
 		want.ProjectID = st.Folder

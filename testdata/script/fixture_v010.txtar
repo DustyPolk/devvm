@@ -101,6 +101,15 @@ exec devvm git-protect
 stdout '\Aoff\n\z'
 exec devvm network
 stdout '\Anone\n'
+# 0.1.0 chose no cache mode for the project folder: on Linux it keeps
+# Lima's mmap, with the warning each launch gives; macOS has no such
+# choice.
+cd $HOME/src/app
+[linux] exec devvm mount-cache --json
+[linux] stdout '\A{\n  "version": 1,\n  "mode": "mmap",\n  "chosen": false\n}\n\z'
+[linux] stderr '^devvm: mount_cache_unchosen mode=mmap vm=devvm-app-[0-9a-f]{14}$'
+[darwin] ! exec devvm mount-cache
+[darwin] stderr '^devvm: backend_lacks backend=lima feature=mount-cache vm=devvm-app-[0-9a-f]{14}$'
 
 # None of that wrote a file: the layout version is 0.1.0's, and every
 # state is as 0.1.0 left it.
@@ -135,6 +144,10 @@ cmp $APP_dir/run/secrets.json $WORK/app-secrets.json
 # scan, which reports nothing.
 [linux] stderr '^devvm: git_unprotected vm=devvm-app-[0-9a-f]{14}$'
 ! stderr 'git_changed|git_watch_blind'
+# Its project folder keeps the cache mode it has, Lima's mmap on Linux,
+# with a warning until a mode is chosen: no edit.
+[linux] stderr '^devvm: mount_cache_unchosen mode=mmap vm=devvm-app-[0-9a-f]{14}$'
+[darwin] ! stderr mount_cache_unchosen
 stub_calls
 stdout '^limactl start --tty=false devvm-app-[0-9a-f]{14}$'
 ! stdout 'limactl (edit|create|clone|delete)'
@@ -159,8 +172,10 @@ stdout '^==> starting vm=devvm-scratch-[0-9a-f]{14}$'
 stderr '^devvm: vm_outdated changed=base$'
 ! stderr 'unreadable|corrupt|layout_|moved|replaced|refused|failed'
 ! stderr 'git_nested|no_github_token'
+[linux] stderr '^devvm: mount_cache_unchosen mode=mmap vm=devvm-scratch-[0-9a-f]{14}$'
 stub_calls
 ! stdout 'limactl (edit|create|clone|delete)'
+# web is a --clone VM: it mounts no project folder to cache.
 cd $HOME/src/web
 stub_reset
 exec devvm
@@ -168,6 +183,7 @@ stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: vm_outdated changed=base$'
 ! stderr 'unreadable|corrupt|layout_|moved|replaced|refused|failed'
 ! stderr 'git_nested|no_github_token'
+! stderr mount_cache_unchosen
 stub_calls
 ! stdout 'limactl (edit|create|clone|delete)'
 

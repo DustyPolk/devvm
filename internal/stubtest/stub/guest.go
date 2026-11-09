@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"path/filepath"
 	"regexp"
@@ -42,6 +43,8 @@ import (
 //	link-taken          ADDRESS:PORT lines: a link's remote forwards the VM refuses
 //	vmhome-<vm>         the VM's home folder's files (none when it's missing)
 //	tools-glibc-<tool>  the glibc a shared tool's image needs (limactl.go's tools build)
+//	mount-unmounted     the project folder isn't a mount point (the remount's check,
+//	                    mountOptions, and a running VM's, which answers devvm-not-mounted)
 type guest struct {
 	*call
 	vm string // the VM's name, "" over ssh
@@ -245,12 +248,51 @@ func (g *guest) answer() int {
 		}
 		g.print(hostKey(g.vm) + "\nnot a key\n")
 		return 0
+	case strings.Contains(all, "findmnt -no OPTIONS"):
+		g.print(g.mountOptions() + "\n")
+		return 0
+	case strings.Contains(all, "echo devvm-mounted"):
+		if g.on("mount-unmounted") {
+			g.print("devvm-not-mounted\n")
+		} else {
+			g.print("devvm-mounted\n")
+		}
+		return 0
 	case g.on("shell-fails"), g.mentions("shell-fails-on"):
 		return 1
 	case g.on("shell-hangs"):
 		return g.hang()
 	}
 	return 0
+}
+
+// mountOptions is the project folder's 9p mount options, as findmnt shows
+// them in the VM: cache=0x5 for its writable mount's mmap, Lima's default,
+// and no cache option for none; $STUB_DIR/mount-unmounted makes it not a
+// mount point (devvm's check prints its own word then).
+func (g *guest) mountOptions() string {
+	if g.on("mount-unmounted") {
+		return "devvm-not-mounted"
+	}
+	opts := "rw,relatime,access=client,msize=131072,trans=virtio"
+	st, err := g.state()
+	if err != nil {
+		return opts
+	}
+	var ms []struct {
+		Writable bool `json:"writable"`
+		NineP    struct {
+			Cache string `json:"cache"`
+		} `json:"9p"`
+	}
+	if in, ok := st.Instances[g.vm]; ok && json.Unmarshal([]byte(in.Config["mounts"]), &ms) == nil {
+		for _, m := range ms {
+			if m.Writable && m.NineP.Cache != "none" {
+				return "rw,relatime,cache=0x5,access=client,msize=131072,trans=virtio"
+			}
+		}
+	}
+	return opts
 }
 
 // hostKey is a VM's made-up ssh host key: an ed25519 key in ssh's wire

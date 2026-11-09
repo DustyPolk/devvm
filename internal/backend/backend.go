@@ -370,11 +370,30 @@ type Want struct {
 	// identity does, at Project in the VM, so a link put at Project's
 	// path on the host is never followed. "" for none.
 	ProjectID string
-	AgentDirs []string // agents' host folders, read-only
+	// ProjectCache is how the guest caches the project folder's mount,
+	// CacheNone or CacheMmap, on a backend whose mount has that choice
+	// (FeatureMountCache); "" leaves the mount's as it is.
+	ProjectCache string
+	AgentDirs    []string // agents' host folders, read-only
 	// AgentForwarding is whether the VM forwards an ssh-agent; changing
 	// it once the VM is made needs FeatureAgentToggle.
 	AgentForwarding bool
 }
+
+// The project folder mount's cache modes (Want.ProjectCache), as a 9p
+// mount's cache option names them: none reads and writes through to the
+// host, and mmap caches file contents in the guest, which shared writable
+// mmap needs and Linux's 9p client can lose writes with.
+const (
+	CacheNone = "none"
+	CacheMmap = "mmap"
+)
+
+// CacheModes are the cache modes devvm sets: none alone, as Linux's 9p
+// client loses data with mmap, and with loose and fscache serves stale
+// files too. A VM made before devvm set one keeps its backend's (mmap)
+// until it's set.
+func CacheModes() []string { return []string{CacheNone} }
 
 // Validate returns the error a start of the VM in, stopped, would refuse
 // w with, before it changes anything: a disk smaller than its own
@@ -399,6 +418,9 @@ func Apply(in *Instance, w Want) {
 		in.Size.DiskGiB = w.Size.DiskGiB
 	}
 	in.Project = w.Project
+	if w.ProjectCache != "" && w.Project != "" {
+		in.ProjectCache = w.ProjectCache
+	}
 	in.AgentDirs = slices.Clone(w.AgentDirs)
 	in.AgentForwarding = w.AgentForwarding
 }
@@ -559,10 +581,14 @@ const (
 
 // Instance is a VM as its backend has it.
 type Instance struct {
-	Name            string
-	Status          Status
-	Size            Size     // what it has, all set
-	Project         string   // its project folder's mount; "" for none
+	Name    string
+	Status  Status
+	Size    Size   // what it has, all set
+	Project string // its project folder's mount; "" for none
+	// ProjectCache is its project folder mount's cache mode (CacheNone,
+	// CacheMmap, or another its backend's mount has), where the backend
+	// has the choice (FeatureMountCache); "" otherwise.
+	ProjectCache    string
 	AgentDirs       []string // its agent folder mounts
 	AgentForwarding bool
 }

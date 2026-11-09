@@ -263,6 +263,7 @@ func TestRequirements(t *testing.T) {
 		{"agent turned off", needs{toggle: true}, []backend.Feature{backend.FeatureAgentToggle}},
 		{"agent turned on", needs{agent: true, toggle: true}, []backend.Feature{backend.FeatureAgentForwarding, backend.FeatureAgentToggle}},
 		{"clone", needs{ssh: true}, []backend.Feature{backend.FeatureSSH}},
+		{"a cache mode chosen", needs{cache: true}, []backend.Feature{backend.FeatureMountCache}},
 		{"a new machine, its agent once", needs{spec: &spec, net: backend.NetProxy, agent: true, ssh: true}, []backend.Feature{
 			backend.FeatureClone, backend.FeatureProjectMount, backend.FeatureToolsShare, backend.FeatureAgentForwarding,
 			backend.FeatureEgressProxy, backend.FeatureSSH,

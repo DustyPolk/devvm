@@ -292,6 +292,9 @@ func (v *VM) Name() string { return v.name }
 // Exists reports whether the VM has a state file.
 func (v *VM) Exists() bool { return v.exists }
 
+// File is the VM's state file, vm.json, for an error that names it.
+func (v *VM) File() string { return v.file.State() }
+
 // Finished reports whether the VM's creation finished (Created).
 func (v *VM) Finished() bool { return v.exists && !v.Created.IsZero() }
 

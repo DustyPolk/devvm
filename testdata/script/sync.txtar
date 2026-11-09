@@ -36,7 +36,7 @@ exec devvm --network open --no-git-protect --agents claude,codex
 stderr '^config_redacted file=\S*/agents/claude/\.claude/settings\.json keys=env\.ANTHROPIC_API_KEY vm=devvm-plain-[0-9a-f]{14}$'
 stderr '^devvm: config_not_copied file=\S*/agents/codex/\.codex/config\.toml vm=devvm-plain-[0-9a-f]{14}$'
 stub_calls
-stdout '^limactl clone --tty=false \S+ devvm-plain-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/plain","writable":true\},\{"location":"\S*/config/devvm/agents/claude/\.claude/skills","writable":false\},\{"location":"\S*/config/devvm/agents/codex/\.codex/prompts","writable":false\},\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
+stdout '^limactl clone --tty=false \S+ devvm-plain-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/plain","writable":true(,"9p":\{"cache":"none"\})?\},\{"location":"\S*/config/devvm/agents/claude/\.claude/skills","writable":false\},\{"location":"\S*/config/devvm/agents/codex/\.codex/prompts","writable":false\},\{"location":"\S*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\]'
 exec tar -tf $STUB_DIR/sync.tar
 stdout '^home/\.claude/settings\.json$'
 stdout '^home/\.codex/auth\.json$'

@@ -26,7 +26,7 @@ stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 [darwin] ! stderr git_unprotected
 [linux] stderr '^devvm: git_unprotected vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
-stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/web","writable":true\},\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] --set \.ssh\.forwardAgent=false --set \.ssh\.localPort=[1-9][0-9]+ --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"0\.0\.0\.0","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"::","guestPortRange":\[1,65535\],"proto":"any","ignore":true\}\] --set \.propagateProxyEnv=true --set \.env = \{"NODE_EXTRA_CA_CERTS":.*\}$'
+stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"[^"]*/web","writable":true(,"9p":\{"cache":"none"\})?\},\{"location":"[^"]*/data/devvm/tools","mountPoint":"/mnt/devvm-tools","writable":false\}\] --set \.ssh\.forwardAgent=false --set \.ssh\.localPort=[1-9][0-9]+ --set \.portForwards = \[\{"guestIP":"127\.0\.0\.1","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"0\.0\.0\.0","guestPortRange":\[1,65535\],"proto":"any","ignore":true\},\{"guestIP":"::","guestPortRange":\[1,65535\],"proto":"any","ignore":true\}\] --set \.propagateProxyEnv=true --set \.env = \{"NODE_EXTRA_CA_CERTS":.*\}$'
 # Its first start's one edit: its proxy in its environment (the
 # password's stand-in alone), open, so Lima's own proxy settings off.
 stdout -count=1 'limactl edit --tty=false devvm-web'

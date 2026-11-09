@@ -2444,6 +2444,51 @@ func MiseDownloadFailed(version string) M {
 	return M{id: "mise_download_failed", vals: []val{{"version", version}}}
 }
 
+// MountCacheClone is [mount_cache_clone]: "{{.vm}} is a --clone VM, so it mounts no project folder to cache. It uses {{.mode}} once devvm clone off mounts the folder."
+func MountCacheClone(mode string, vm string) M {
+	return M{id: "mount_cache_clone", vals: []val{{"mode", mode}, {"vm", vm}}}
+}
+
+// MountCacheFailed is [mount_cache_failed]: "Showing or changing the cache mode failed: {{.reason}}."
+func MountCacheFailed(reason string) M {
+	return M{id: "mount_cache_failed", vals: []val{{"reason", reason}}}
+}
+
+// MountCacheInvalid is [mount_cache_invalid]: "{{.value}} isn't a cache mode. Use none, the only one devvm sets."
+func MountCacheInvalid(value string) M {
+	return M{id: "mount_cache_invalid", vals: []val{{"value", value}}}
+}
+
+// MountCacheNoChoice is [mount_cache_no_choice]: "{{.vm}} doesn't mount its project folder with 9p, so it has no cache mode to choose."
+func MountCacheNoChoice(vm string) M {
+	return M{id: "mount_cache_no_choice", vals: []val{{"vm", vm}}}
+}
+
+// MountCachePending is [mount_cache_pending]: "{{.vm}} caches its project folder with {{.mode}} from its next start."
+func MountCachePending(mode string, vm string) M {
+	return M{id: "mount_cache_pending", vals: []val{{"mode", mode}, {"vm", vm}}}
+}
+
+// MountCacheRemountFailed is [mount_cache_remount_failed]: "{{.vm}}'s project folder is still mounted with {{.has}}, as mounting it again with {{.want}} failed. It gets {{.want}} when the VM next starts, so run devvm restart to apply it now."
+func MountCacheRemountFailed(has string, vm string, want string) M {
+	return M{id: "mount_cache_remount_failed", vals: []val{{"has", has}, {"vm", vm}, {"want", want}}}
+}
+
+// MountCacheUnchecked is [mount_cache_unchecked]: "Checking that {{.vm}}'s project folder is mounted after its cache mode changed failed, so devvm stopped the VM before anything could write there. Run devvm restart to start it again."
+func MountCacheUnchecked(vm string) M {
+	return M{id: "mount_cache_unchecked", vals: []val{{"vm", vm}}}
+}
+
+// MountCacheUnchosen is [mount_cache_unchosen]: "{{.vm}} caches its project folder with {{.mode}}, which can lose writes and breaks SQLite and Gradle there. Run devvm mount-cache none to stop it."
+func MountCacheUnchosen(mode string, vm string) M {
+	return M{id: "mount_cache_unchosen", vals: []val{{"mode", mode}, {"vm", vm}}}
+}
+
+// MountCacheUnmounted is [mount_cache_unmounted]: "{{.vm}}'s project folder wasn't mounted after its cache mode changed, so devvm stopped the VM before anything could write there. Run devvm restart to mount it again."
+func MountCacheUnmounted(vm string) M {
+	return M{id: "mount_cache_unmounted", vals: []val{{"vm", vm}}}
+}
+
 // MountComma is [mount_comma]: "Lima can't mount {{.path}} because its path has a comma."
 func MountComma(path string) M {
 	return M{id: "mount_comma", vals: []val{{"path", path}}}
@@ -2839,6 +2884,11 @@ func NextStartMore(count int) M {
 	return M{id: "next_start_more", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
+// NextStartMountCache is [next_start_mount_cache]: "{{.vm}} gets its new cache mode only when it starts."
+func NextStartMountCache(vm string) M {
+	return M{id: "next_start_mount_cache", vals: []val{{"vm", vm}}}
+}
+
 // NextStartMounts is [next_start_mounts]: "{{.vm}}'s agent folder mounts change only when it starts."
 func NextStartMounts(vm string) M {
 	return M{id: "next_start_mounts", vals: []val{{"vm", vm}}}
@@ -2977,6 +3027,11 @@ func NoVMGitProtect(dir string) M {
 // NoVMGroup is [no_vm_group]: "There's no VM for {{.dir}}, so it isn't in a group. Run devvm to make one."
 func NoVMGroup(dir string) M {
 	return M{id: "no_vm_group", vals: []val{{"dir", dir}}}
+}
+
+// NoVMMountCache is [no_vm_mount_cache]: "There's no VM for {{.dir}}. Run devvm to make one, which caches its project folder with none."
+func NoVMMountCache(dir string) M {
+	return M{id: "no_vm_mount_cache", vals: []val{{"dir", dir}}}
 }
 
 // NoVMPolicy is [no_vm_policy]: "There's no VM for {{.dir}}. Run devvm to make one, or add -g to change every VM's rules."
@@ -3339,6 +3394,16 @@ func ProjectInVMFolder(dir string, vm string) M {
 	return M{id: "project_in_vm_folder", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
+// ProjectUnchecked is [project_unchecked]: "Checking that {{.vm}}'s project folder is mounted in the VM failed, so devvm didn't open a shell in it. Run devvm restart to mount the folder again."
+func ProjectUnchecked(vm string) M {
+	return M{id: "project_unchecked", vals: []val{{"vm", vm}}}
+}
+
+// ProjectUnmounted is [project_unmounted]: "{{.vm}}'s project folder isn't mounted in the VM, so what's written there goes to the VM's own disk. Run devvm restart to mount it again."
+func ProjectUnmounted(vm string) M {
+	return M{id: "project_unmounted", vals: []val{{"vm", vm}}}
+}
+
 // ProxyCAFailed is [proxy_ca_failed]: "Creating the proxy's CA in {{.dir}} failed."
 func ProxyCAFailed(dir string) M {
 	return M{id: "proxy_ca_failed", vals: []val{{"dir", dir}}}
@@ -3517,6 +3582,11 @@ func RemoteKept(remote string) M {
 // RemotesTaken is [remotes_taken]: "This repo already has other git remotes named devvm, devvm-{{.slug}} and {{.vm}}. Remove one, then run devvm again."
 func RemotesTaken(slug string, vm string) M {
 	return M{id: "remotes_taken", vals: []val{{"slug", slug}, {"vm", vm}}}
+}
+
+// Remounting is [remounting]: "mounting {{.vm}}'s project folder again"
+func Remounting(vm string) M {
+	return M{id: "remounting", vals: []val{{"vm", vm}}}
 }
 
 // RemovedRemote is [removed_remote]: "removed git remote {{.remote}}"
@@ -4564,6 +4634,11 @@ func VMLacks(has string, tool string, vm string) M {
 	return M{id: "vm_lacks", vals: []val{{"has", has}, {"tool", tool}, {"vm", vm}}}
 }
 
+// VMMountCache is [vm_mount_cache]: "{{.vm}} caches its project folder with {{.mode}}."
+func VMMountCache(mode string, vm string) M {
+	return M{id: "vm_mount_cache", vals: []val{{"mode", mode}, {"vm", vm}}}
+}
+
 // VMMovedHere is [vm_moved_here]: "{{.vm}} was made for {{.was}}, and that folder moved here. To move the VM here, run devvm adopt in a terminal without --no-input to confirm, or devvm adopt --force."
 func VMMovedHere(vm string, was string) M {
 	return M{id: "vm_moved_here", vals: []val{{"vm", vm}, {"was", was}}}
@@ -5219,6 +5294,15 @@ var specs = map[string]spec{
 	"making_waiting":                 {},
 	"mise_checksum":                  {fields: []string{"version"}},
 	"mise_download_failed":           {fields: []string{"version"}},
+	"mount_cache_clone":              {fields: []string{"mode", "vm"}},
+	"mount_cache_failed":             {fields: []string{"reason"}},
+	"mount_cache_invalid":            {fields: []string{"value"}},
+	"mount_cache_no_choice":          {fields: []string{"vm"}},
+	"mount_cache_pending":            {fields: []string{"mode", "vm"}},
+	"mount_cache_remount_failed":     {fields: []string{"has", "vm", "want"}},
+	"mount_cache_unchecked":          {fields: []string{"vm"}},
+	"mount_cache_unchosen":           {fields: []string{"mode", "vm"}},
+	"mount_cache_unmounted":          {fields: []string{"vm"}},
 	"mount_comma":                    {fields: []string{"path"}},
 	"mounts_updated":                 {fields: []string{"vm"}},
 	"move_folder_changed":            {fields: []string{"dir", "vm"}},
@@ -5298,6 +5382,7 @@ var specs = map[string]spec{
 	"next_start_agent":               {fields: []string{"vm"}},
 	"next_start_folder":              {fields: []string{"dir", "vm"}},
 	"next_start_more":                {plural: true, fields: []string{"count"}},
+	"next_start_mount_cache":         {fields: []string{"vm"}},
 	"next_start_mounts":              {fields: []string{"vm"}},
 	"next_start_net_off":             {fields: []string{"vm"}},
 	"next_start_size":                {fields: []string{"vm"}},
@@ -5326,6 +5411,7 @@ var specs = map[string]spec{
 	"no_vm":                          {fields: []string{"dir"}},
 	"no_vm_git_protect":              {fields: []string{"dir"}},
 	"no_vm_group":                    {fields: []string{"dir"}},
+	"no_vm_mount_cache":              {fields: []string{"dir"}},
 	"no_vm_policy":                   {fields: []string{"dir"}},
 	"no_vm_ports":                    {fields: []string{"dir"}},
 	"no_vm_size":                     {fields: []string{"dir"}},
@@ -5398,6 +5484,8 @@ var specs = map[string]spec{
 	"project_folder_changed":         {fields: []string{"dir", "vm"}},
 	"project_folder_changed_stopped": {fields: []string{"dir", "vm"}},
 	"project_in_vm_folder":           {fields: []string{"dir", "vm"}},
+	"project_unchecked":              {fields: []string{"vm"}},
+	"project_unmounted":              {fields: []string{"vm"}},
 	"proxy_ca_failed":                {fields: []string{"dir"}},
 	"proxy_failed":                   {fields: []string{"reason"}},
 	"proxy_other_binary":             {fields: []string{"vm"}},
@@ -5434,6 +5522,7 @@ var specs = map[string]spec{
 	"remote_add_failed":              {fields: []string{"remote"}},
 	"remote_kept":                    {fields: []string{"remote"}},
 	"remotes_taken":                  {fields: []string{"slug", "vm"}},
+	"remounting":                     {fields: []string{"vm"}},
 	"removed_remote":                 {fields: []string{"remote"}},
 	"rename_failed":                  {fields: []string{"to", "vm"}},
 	"renaming":                       {fields: []string{"to", "vm"}},
@@ -5643,6 +5732,7 @@ var specs = map[string]spec{
 	"vm_folder_stateless":            {fields: []string{"path"}},
 	"vm_has_networks":                {fields: []string{"file", "vm"}},
 	"vm_lacks":                       {fields: []string{"has", "tool", "vm"}},
+	"vm_mount_cache":                 {fields: []string{"mode", "vm"}},
 	"vm_moved_here":                  {fields: []string{"vm", "was"}},
 	"vm_name_no_room":                {fields: []string{"backend", "max"}},
 	"vm_not_running":                 {fields: []string{"vm"}},

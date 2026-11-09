@@ -78,6 +78,18 @@ stdout '\Amain\nother\n\z'
 exec devvm clone
 stdout '\Aon\n\z'
 
+# On a Linux host, a --clone VM mounts no project folder, so it has no
+# cache mode to warn of, even with none chosen; the mode it shows is the
+# one the folder devvm clone off mounts gets: none.
+[linux] json_set $WEB_dir/vm.json mount:={}
+[linux] exec devvm
+[linux] ! stderr mount_cache_unchosen
+[linux] exec devvm mount-cache
+[linux] stdout '\Anone\n\z'
+[linux] stderr '^mount_cache_clone mode=none vm=devvm-web-[0-9a-f]{14}$'
+[linux] exec devvm mount-cache --json
+[linux] stdout '"chosen": false'
+
 # Again: said, and nothing made.
 stub_reset
 exec devvm clone on --force
@@ -106,8 +118,12 @@ stderr 'fetch_before_delete prefix=saved/devvm'
 stdout '==> saved_branches branches="saved/devvm/main"$'
 stdout '==> removed_remote remote=devvm\n(.*\n)*==> starting vm=devvm-web-[0-9a-f]{14}\n'
 stdout '==> remade image=base vm=devvm-web-[0-9a-f]{14}$'
+! stderr mount_cache_unchosen
 stub_calls
 stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[.*"location":"/\S*/web","writable":true'
+# The folder it mounts is new, so on Linux it's cached with none, which
+# its state records, and nothing warned of it.
+[linux] stdout '^limactl clone --tty=false devvm-img-[0-9a-f]{12} devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[.*"location":"/\S*/web","writable":true,"9p":\{"cache":"none"\}\}'
 [darwin] stdout '^chflags -R -P uchg /\S*/web/\.git/config\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n'
 exec git log --format=%s -1 saved/devvm/main
 stdout '^from-vm$'
@@ -116,6 +132,7 @@ vm_state $WEB_dir/vm.json
 ! stdout '^clone\.(on=true|made)'
 [darwin] stdout '^git.mode=on$'
 [linux] stdout '^git.mode=off$'
+[linux] stdout '^mount.cache=none$'
 ! stdout '^remake'
 exec devvm clone
 stdout '\Aoff\n\z'

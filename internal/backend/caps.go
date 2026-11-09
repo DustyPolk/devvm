@@ -20,6 +20,7 @@ const (
 	FeatureClone            Feature = "clone"             // a VM from an image
 	FeatureProjectMount     Feature = "project-mount"     // the project folder, read-write
 	FeatureReadOnlyPaths    Feature = "read-only-paths"   // paths in the project folder the guest can't change while it runs (Confinement.Pins)
+	FeatureMountCache       Feature = "mount-cache"       // choosing how the guest caches the project folder's mount (Want.ProjectCache)
 	FeatureAgentFolders     Feature = "agent-folders"     // agents' host folders, read-only
 	FeatureToolsShare       Feature = "tools-share"       // the shared tools folder, read-only
 	FeatureEgressProxy      Feature = "egress-proxy"      // egress only through devvm's proxy (NetProxy)
@@ -39,7 +40,7 @@ const (
 // Features is every feature, in the backends page's order.
 var Features = []Feature{
 	FeatureBuildImage, FeatureBuildConfinement, FeatureFrom, FeatureClone,
-	FeatureProjectMount, FeatureReadOnlyPaths, FeatureAgentFolders, FeatureToolsShare,
+	FeatureProjectMount, FeatureReadOnlyPaths, FeatureMountCache, FeatureAgentFolders, FeatureToolsShare,
 	FeatureEgressProxy, FeatureSSH, FeaturePorts, FeaturePortsAll,
 	FeatureAgentForwarding, FeatureAgentToggle,
 	FeatureCPUs, FeatureMemory, FeatureDisk, FeatureDockerLayer, FeatureNixLayer, FeatureLink,
@@ -110,6 +111,8 @@ func (f Feature) BuiltOn() (Feature, bool) {
 	case FeatureLink: // a link session over ssh to both VMs
 		return FeatureSSH, true
 	case FeatureReadOnlyPaths: // pins in the project folder's mount
+		return FeatureProjectMount, true
+	case FeatureMountCache: // the project folder mount's own option
 		return FeatureProjectMount, true
 	case FeatureBuildImage, FeatureBuildConfinement, FeatureFrom, FeatureClone,
 		FeatureProjectMount, FeatureAgentFolders, FeatureToolsShare,
@@ -279,6 +282,9 @@ func (w Want) Features() []Feature {
 	}
 	if w.AgentForwarding {
 		fs = append(fs, FeatureAgentForwarding)
+	}
+	if w.ProjectCache != "" && w.Project != "" {
+		fs = append(fs, FeatureMountCache)
 	}
 	return append(fs, w.Size.Features()...)
 }

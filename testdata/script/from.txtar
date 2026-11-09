@@ -38,7 +38,7 @@ stdout '^==> image_ready image=base$'
 ! stdout oci_waiting
 stub_calls
 ! stdout '^docker'
-stdout '^limactl create --tty=false --mount-none --name=devvm-oci-build --set \.images = \[\{"location":"file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:[0-9a-f]{64}"\}\] --set \.mounts = \[\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm","writable":true\},\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/oci","writable":false\}\] --cpus=4 --memory=8 --disk=100 -$'
+stdout '^limactl create --tty=false --mount-none --name=devvm-oci-build --set \.images = \[\{"location":"file://.*/release-[0-9]{8}/ubuntu-26\.04-server-cloudimg-(arm64|amd64)\.img","arch":"(aarch64|x86_64)","digest":"sha256:[0-9a-f]{64}"\}\] --set \.mounts = \[\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/vm","writable":true,"9p":\{"cache":"none"\}\},\{"location":"/\S*/tmp/devvm-oci\.[0-9]+/oci","writable":false\}\] --cpus=4 --memory=8 --disk=100 -$'
 stdout '^limactl start --tty=false devvm-oci-build$'
 # With HTTPS_PROXY set, the build goes through a proxy of devvm's, which
 # alone has the host's proxy settings: the script reads that proxy's

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -49,8 +50,48 @@ func (t Share) Built(file string) bool {
 	if fi, err := os.Stat(t.Dirs.ToolImage(file)); err != nil || !fi.Mode().IsRegular() {
 		return false
 	}
-	_, err := state.ReadToolImage(t.Dirs, file)
-	return err == nil
+	rec, err := state.ReadToolImage(t.Dirs, file)
+	return err == nil && (rec.Format != "" || !cutShort(t.Dirs.ToolImage(file)))
+}
+
+// The EROFS superblock, 1024 bytes into an image: its magic, then at 12
+// the log2 of its block size and at 36 its block count, little-endian.
+const (
+	erofsSuper     = 1024
+	erofsMagic     = 0xE0F5E1E2
+	erofsBlkszBits = 12
+	erofsBlocks    = 36
+)
+
+// cutShort reports whether path, an EROFS tool image (build.sh's own
+// format), ends before its superblock does (empty included), or is
+// shorter than its superblock says: what Linux's 9p client can leave of a
+// file written into a mount with Lima's mmap cache, as builds were before
+// devvm chose none. Such an image counts as not built (Built), so the next
+// build makes it again. A file long enough whose superblock isn't EROFS's
+// is left to the guest's mount to refuse.
+func cutShort(path string) bool {
+	f, err := os.Open(path) //nolint:gosec // a tool image in devvm's own share
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	sb := make([]byte, erofsBlocks+4)
+	if fi.Size() < erofsSuper+int64(len(sb)) {
+		return true // empty, or ending before its superblock does
+	}
+	if _, err := f.ReadAt(sb, erofsSuper); err != nil || binary.LittleEndian.Uint32(sb) != erofsMagic {
+		return false
+	}
+	bits := sb[erofsBlkszBits]
+	if bits < 9 || bits > 16 {
+		return false
+	}
+	return int64(binary.LittleEndian.Uint32(sb[erofsBlocks:]))<<bits > fi.Size()
 }
 
 // Build builds the tool images these files name that the share lacks,
@@ -234,7 +275,7 @@ func (t Share) buildOne(ctx context.Context, b backend.Backend, base string, tg 
 // have planted.
 func (t Share) moveIn(b backend.Backend, out string, tg Target, file string) error {
 	src := filepath.Join(out, file)
-	if fi, err := os.Lstat(src); err != nil || !fi.Mode().IsRegular() {
+	if fi, err := os.Lstat(src); err != nil || !fi.Mode().IsRegular() || tg.Format == "" && cutShort(src) {
 		return msg.ToolBadOutput(file)
 	}
 	sum, err := image.SHA256File(src)

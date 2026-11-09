@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -514,6 +515,157 @@ func TestStartWantInOneEdit(t *testing.T) {
 	w.Size = backend.Size{DiskGiB: 50}
 	if err := l.Start(t.Context(), "v", w, c); msg.NamesOf(err) != "disk_shrink have=100 vm=v want=50" || len(f.lines()) > 0 {
 		t.Errorf("a smaller disk: %v, ran %q", err, f.lines())
+	}
+}
+
+// A cache mode chosen for a QEMU VM's project folder is set by one edit
+// at its next start, which then mounts the folder again, and the start
+// after that, which finds it set, edits nothing.
+func TestStartSetsProjectCacheOnce(t *testing.T) {
+	l, f, warned := testLima(t, "linux")
+	c := backend.Confinement{SSHPort: 2222}
+	vm := func(cache string) string {
+		return `{"name":"v","status":"Stopped","vmType":"qemu","cpus":4,"memory":8589934592,"disk":107374182400,"config":{` +
+			`"ssh":{"localPort":2222,"forwardAgent":false},"portForwards":` + yqJSON(noForwards()) + `,"mounts":[` +
+			`{"location":"/p","mountPoint":"/p","writable":true,"9p":{"msize":"128KiB","cache":"` + cache + `"}}]}}`
+	}
+	// The folder as the guest has it after the remount: mounted with none.
+	check := `limactl shell --workdir / v sh -c if mountpoint -q '/p'; then findmnt -no OPTIONS '/p'; else echo devvm-not-mounted; fi`
+	remount := `limactl shell --workdir / v sudo sh -c umount '/p' || exit 3; mount '/p' || { mount '/p'; mountpoint -q '/p' || exit 4; }`
+	f.stdout = map[string]string{check: "rw,relatime,access=client,msize=131072,trans=virtio\n"}
+	f.out["limactl list --json"] = vm("mmap")
+	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	w := backend.Want{Project: "/p", ProjectCache: backend.CacheNone}
+	if err := l.Start(t.Context(), "v", w, c); err != nil {
+		t.Fatal(err)
+	}
+	edits := func() []string {
+		var out []string
+		for _, line := range f.lines() {
+			if strings.HasPrefix(line, "limactl edit") {
+				out = append(out, line)
+			}
+		}
+		return out
+	}
+	want := []string{`limactl edit --tty=false v --set .mounts = [{"location":"/p","writable":true,"9p":{"cache":"none"}}]`}
+	if got := edits(); !slices.Equal(got, want) {
+		t.Errorf("edits %q, want %q", got, want)
+	}
+	// Once it runs, the folder is mounted again, as the fstab its boot
+	// wrote has it, and checked: mounted with none, nothing to say.
+	lines := f.lines()
+	if i, j, k := slices.Index(lines, "limactl start --tty=false v"), slices.Index(lines, remount), slices.Index(lines, check); i < 0 || j < i || k < j {
+		t.Errorf("not mounted again and checked after the start: %q", lines)
+	}
+	if got := warned.Names(); len(got) > 0 {
+		t.Errorf("warned %q", got)
+	}
+	f.calls = nil
+	f.out["limactl list --json"] = vm("none")
+	if err := l.Start(t.Context(), "v", w, c); err != nil {
+		t.Fatal(err)
+	}
+	if got := edits(); len(got) > 0 || slices.Contains(f.lines(), remount) {
+		t.Errorf("set already, edited or mounted again: %q", f.lines())
+	}
+	for _, tc := range []struct {
+		name  string
+		check string // what the check prints; "" for a check that fails
+		fail  string // a command that fails
+		err   string // the start's error
+		warn  string
+	}{
+		// The unmount refused (the share busy): the old mount stays, and
+		// gets the mode at the next start.
+		{"kept the old mount", "rw,relatime,cache=0x5,access=client,trans=virtio", remount, "", "mount_cache_remount_failed has=mmap vm=v want=none"},
+		// A degraded start's old fstab: mounted again, with the old mode.
+		{"the old mode again", "rw,cache=0x5,trans=virtio", "", "", "mount_cache_remount_failed has=mmap vm=v want=none"},
+		// Stacked mounts: the last line, the mount visible there, counts.
+		{"stacked", "rw,cache=0x5,trans=virtio\nrw,relatime,trans=virtio\n", "", "", ""},
+		// A mode devvm doesn't know is named as such, never as the guest's
+		// text.
+		{"another mode", "rw,cache=0xf,trans=virtio\x1b[2J", "", "", "mount_cache_remount_failed has=unknown vm=v want=none"},
+		// Unmounted, or not known to be mounted: the VM stops, and the start
+		// fails, as what's written there would vanish under the share.
+		{"not mounted", "devvm-not-mounted\n", remount, "mount_cache_unmounted vm=v", ""},
+		{"mounted, then not", "rw,trans=virtio\ndevvm-not-mounted", "", "mount_cache_unmounted vm=v", ""},
+		{"the check fails", "", check, "mount_cache_unchecked vm=v", ""},
+		{"no answer", "\n", "", "mount_cache_unchecked vm=v", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			*warned = msg.Recorder{}
+			f.calls, f.fail = nil, nil
+			if tc.fail != "" {
+				f.fail = []string{tc.fail}
+			}
+			f.stdout[check] = tc.check
+			f.out["limactl list --json"] = vm("mmap")
+			err := l.Start(t.Context(), "v", w, c)
+			if got := msg.NamesOf(err); got != tc.err {
+				t.Errorf("start: %q, want %q", got, tc.err)
+			}
+			if stopped := slices.Contains(f.lines(), "limactl stop v"); stopped != (tc.err != "") {
+				t.Errorf("stopped %v, want %v: %q", stopped, tc.err != "", f.lines())
+			}
+			var warns []string
+			if tc.warn != "" {
+				warns = []string{tc.warn}
+			}
+			if got := warned.Names(); !slices.Equal(got, warns) {
+				t.Errorf("warned %q, want %q", got, warns)
+			}
+		})
+	}
+}
+
+// An interrupt during the remount leaves a cleanup that stops the VM, on
+// any tier; without one, the cleanup goes once the folder's checked.
+func TestRemountInterrupted(t *testing.T) {
+	for _, interrupted := range []bool{false, true} {
+		l, f, _ := testLima(t, "linux")
+		var cleanups []func(context.Context)
+		removed := 0
+		fk := &msg.Fake{Interrupt: interrupted, OnCleanup: func(c func(context.Context)) func() {
+			cleanups = append(cleanups, c)
+			return func() { removed++ }
+		}}
+		l.Reporter = fk
+		check := `limactl shell --workdir / v sh -c if mountpoint -q '/p'; then findmnt -no OPTIONS '/p'; else echo devvm-not-mounted; fi`
+		f.stdout = map[string]string{check: "rw,trans=virtio\n"}
+		if err := remountProject(t.Context(), &l.machines, "v", "/p", backend.CacheNone); err != nil {
+			t.Fatal(err)
+		}
+		if len(cleanups) != 1 || (removed == 1) == interrupted {
+			t.Fatalf("interrupted %v: %d cleanups, %d removed", interrupted, len(cleanups), removed)
+		}
+		if interrupted {
+			f.calls = nil
+			cleanups[0](t.Context())
+			if !slices.Contains(f.lines(), "limactl stop v") {
+				t.Errorf("the cleanup didn't stop the VM: %q", f.lines())
+			}
+		}
+	}
+}
+
+// The remount's commands end with their timeout though a child they left
+// holds their output open, and only so much of what they print is kept.
+func TestRemountBounded(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	cmd := bounded(exec.CommandContext(ctx, "sh", "-c", "sleep 30 & echo started; sleep 30"))
+	out := &capped{max: 4}
+	cmd.Stdout = out
+	start := time.Now()
+	_ = logRunner{}.Attach(cmd)
+	if d := time.Since(start); d > 10*time.Second {
+		t.Errorf("it waited %s for the child", d)
+	}
+	if out.String() != "star" {
+		t.Errorf("kept %q", out.String())
 	}
 }
 

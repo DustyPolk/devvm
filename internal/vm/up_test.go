@@ -739,6 +739,7 @@ func TestUpRequires(t *testing.T) {
 	caps := allNative()
 	delete(caps, backend.FeatureProjectMount)
 	delete(caps, backend.FeatureReadOnlyPaths) // built on it
+	delete(caps, backend.FeatureMountCache)    // and this one
 	e, f, execs := upEnv(t, caps)
 	err := Launch{e}.Up(t.Context(), Options{Network: "open"})
 	if got := msg.NamesOf(err); !strings.HasPrefix(got, "backend_lacks backend=fake feature=project-mount vm=devvm-web-") {

@@ -6,11 +6,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/devvmhq/devvm/internal/backend"
@@ -269,9 +271,18 @@ func (f *images) DeleteImage(_ context.Context, key string) error {
 	return nil
 }
 
+// ToolImage is a made-up tool image of file: "image FILE", padded to a
+// page, as a real image is never shorter than its superblock's end (the
+// shared tools count a shorter one as cut short).
+func ToolImage(file string) []byte {
+	b := make([]byte, 4096)
+	copy(b, "image "+file+"\n")
+	return b
+}
+
 // BuildTools records the call, then runs ToolsBuild on the spec, or
 // writes each image its script would (every third argument, from the
-// third) into spec.Out as "image FILE", with FILE.glibc, the tool's
+// third) into spec.Out as ToolImage, with FILE.glibc, the tool's
 // ToolGlibc.
 func (f *images) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
 	f.mu.Lock()
@@ -284,7 +295,7 @@ func (f *images) BuildTools(_ context.Context, spec backend.ToolsSpec) error {
 	}
 	for i := 2; i < len(spec.Args); i += 3 {
 		file := spec.Args[i]
-		if err := state.WriteFile(filepath.Join(spec.Out, file), []byte("image "+file+"\n")); err != nil {
+		if err := state.WriteFile(filepath.Join(spec.Out, file), ToolImage(file)); err != nil {
 			return err
 		}
 		var glibc []byte
@@ -461,10 +472,40 @@ func (f *machines) Inspect(_ context.Context, vm string) (backend.Instance, erro
 func (f *machines) Exec(_ context.Context, vm string, argv []string, o backend.ExecOpts) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.record("Exec", vm, slices.Clone(argv), o); err != nil || f.ExecFunc == nil {
+	if err := f.record("Exec", vm, slices.Clone(argv), o); err != nil {
 		return err
 	}
-	return f.ExecFunc(vm, argv, o)
+	// A check that the project folder is mounted (vm's checkMounted) is
+	// answered as a guest whose folder is mounted, unless ExecFunc
+	// answers it itself.
+	check := len(argv) == 3 && argv[0] == "sh" && strings.Contains(argv[2], "then echo devvm-mounted;") && o.Stdout != nil
+	if f.ExecFunc == nil {
+		if check {
+			_, _ = io.WriteString(o.Stdout, "devvm-mounted\n")
+		}
+		return nil
+	}
+	w := &counted{w: o.Stdout}
+	if o.Stdout != nil {
+		o.Stdout = w
+	}
+	err := f.ExecFunc(vm, argv, o)
+	if err == nil && check && w.n == 0 {
+		_, _ = io.WriteString(w.w, "devvm-mounted\n")
+	}
+	return err
+}
+
+// counted is a writer that counts what's written through it.
+type counted struct {
+	w io.Writer
+	n int
+}
+
+func (c *counted) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += n
+	return n, err
 }
 
 // Restart stands for a start of vm outside devvm: it runs, on a start of

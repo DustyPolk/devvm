@@ -63,6 +63,54 @@ To have a watcher see your edits, set it to poll the project folder, which costs
 
 Set the variables in the VM's shell or in your project's scripts, before the tool starts. Leave Lima's own file event setting, `mountInotify`, off, because with it on, commands in the VM that write to the project folder, such as `git init`, fail at random ([details](../internals/lima.md#what-devvm-sets-on-a-vm)).
 
+## The project folder's cache
+
+On Linux, QEMU shares the project folder with the VM over 9p, and the VM's kernel can cache the folder's files as it reads and writes them. devvm gives every new VM the cache mode `none`, so the VM reads and writes straight through to the folder on this machine, and what you edit on either side is what the other side sees.
+
+Lima's own default for a writable folder is `mmap`, which caches the files' contents in the VM, and Linux's 9p client loses data with it in two ways. When a program reads a file's size while another write is making the file longer, the VM can take the older size from this machine and drop the new data, even after `fsync` succeeded, so the file ends up empty or cut to 4096 bytes, and Claude Code's edits are one way to set it off. And when a program locks a file it has written, its next read of that file returns zeros. That stops SQLite at its second write with `file is not a database`, whatever its journal mode, and Gradle's second build with `Unexpected lock protocol found in lock file`.
+
+A VM made before devvm chose `none` keeps `mmap`, and devvm doesn't change its mount on its own, so each launch of such a VM warns until you switch it. `devvm mount-cache` shows how this folder's VM caches its project folder, and `devvm mount-cache none` switches it from the VM's next start, so in a terminal devvm offers to restart a running VM now. `none` is the only mode devvm sets, so any other value is refused.
+
+```sh
+devvm mount-cache
+devvm mount-cache none
+```
+
+A [`--clone` VM](../using/clone.md) mounts no project folder, so it has no cache mode until `devvm clone off` mounts the folder, which then gets `none`. On macOS, VMs share the project folder with virtiofs, which has no cache mode to choose, so there `devvm mount-cache` refuses. On Linux it refuses the same for a VM whose project folder isn't a 9p mount, such as one whose Lima config you gave another mount type.
+
+### When the cache mode changes
+
+The VM gets `none` at its next start, and that start mounts the project folder again once the VM runs, before devvm sets the VM up or opens its shell. The VM's first mount of the folder at boot still has the old mode, because the guest reads its new mount options only after it has mounted the folder. devvm then checks the folder:
+
+- When the folder is mounted with `none`, the VM goes on as usual.
+- When the folder is still mounted with the old mode, devvm warns and goes on. That happens when the VM couldn't unmount the folder, because something it started at boot, such as a container, was using it, or when the VM's start was degraded. The VM gets `none` at its next start, so run `devvm restart` to apply it now.
+- When the folder isn't mounted at all, or the VM doesn't answer the check, devvm stops the VM before it sets it up or opens its shell, because files written there would go to the VM's own disk and vanish once the folder is mounted over them. Run `devvm restart`, which starts it and mounts the folder again. Pressing Ctrl+C while devvm mounts the folder again stops the VM too.
+
+The run log has what the VM's `umount` and `mount` said ([logs](../using/troubleshooting.md#a-command-fails)). A launch into a running VM checks too that its project folder is mounted, and refuses to open a shell in one whose folder isn't, naming `devvm restart`.
+
+### devvm mount-cache --json
+
+`devvm mount-cache --json` prints the VM's mode, whether it was chosen, as the VM was made or with `devvm mount-cache none`, rather than kept from Lima, and the mode its next start gives it, when that differs:
+
+```json
+{
+  "version": 1,
+  "mode": "mmap",
+  "chosen": true,
+  "pending": "none"
+}
+```
+
+### Programs that map files for writing
+
+With `none`, a program in the VM can't map a file in the project folder for shared writing, or map one it opened for writing at all, and it fails at once with `Invalid argument`, so nothing is lost. LMDB, numpy's `memmap` in `r+` or `w+` mode, Java's read-write `MappedByteBuffer` and the mold linker do this, while git, npm, Vite, webpack, esbuild, jest, Go, cargo with Rust's own linker, GNU ld, lld, Gradle, DuckDB, ccache and Terraform work as they do on any disk. LMDB is what Parcel's `.parcel-cache` and Gatsby's cache use.
+
+For a program that maps its files, keep them on the VM's own disk, such as in its home folder: for mold, a `CARGO_TARGET_DIR` there, or lld instead. Or use a [`--clone` VM](../using/clone.md), whose repo is on the VM's own disk. The VM's own disk is also far faster than the shared folder, so a `--clone` VM suits large repos and heavy builds: on a Fedora 43 host, `npm ci` of 369 packages took 4.8 s in the shared folder and 2.8 s on the VM's disk, a debug `cargo build` of ripgrep 8.5 s and 4.8 s, and a cold `git status` of an 18,000-file tree 23 s and 1 s.
+
+### SQLite and the cache
+
+SQLite's default journal works in the project folder. WAL mode doesn't, because SQLite maps its shared index and fails with `disk I/O error`, unless the connection sets `PRAGMA locking_mode=EXCLUSIVE` before `PRAGMA journal_mode=WAL`. That keeps the index in memory, and lets only that connection use the database. A project whose database is in WAL mode works in a `--clone` VM, or with the database outside the project folder, such as in the VM's home folder or `/tmp`.
+
 ## Cleaning up
 
 `devvm gc` deletes devvm's stale and unfinished Lima images and the shared tools that no VM has and that aren't current, and it leaves your VMs as they are. `devvm images rm` deletes an image that's current, except on Linux hosts one whose disk VMs use ([cleaning up](../using/images.md#cleaning-up)). Lima also keeps a download cache of its own, which holds Ubuntu's cloud images that devvm's builds downloaded, and which your own Lima VMs share. `devvm gc --caches` deletes the cloud images that devvm downloads and that no image of devvm's names, after listing them and asking, and devvm never runs `limactl prune`, which empties the whole cache ([what devvm keeps](../using/space.md#lima)).
@@ -72,5 +120,5 @@ Set the variables in the VM's shell or in your project's scripts, before the too
 - **Folder names in VM names are cut short.** Lima keeps each VM's ssh socket in the VM's folder in its home, and a socket path has fewer than 104 characters. A long Lima home leaves less room for the name, so set `DEVVM_LIMA_HOME` to a shorter folder if devvm says the home is too long, or that a VM's name leaves no room for the folder's name ([VM names](../internals/backends.md#vm-names)).
 - **Paths can't contain commas.** Lima and QEMU split mount options on commas, so devvm refuses to mount a project folder whose path has one, and it leaves out an agent's folder whose path has one, with a warning.
 - **Disks can grow but not shrink.**
-- **Mounts on Linux are 9p.** A 9p share mounts once per guest, and file watchers in the VM miss changes in its subfolders ([file watchers](#file-watchers)).
+- **Mounts on Linux are 9p.** A 9p share mounts once per guest, file watchers in the VM miss changes in its subfolders ([file watchers](#file-watchers)), and SQLite's WAL mode doesn't work in the project folder, which a `--clone` VM avoids ([SQLite and the cache](#sqlite-and-the-cache)).
 - **A VM that Lima reports as failed to start** still starts, with a warning, when it's running but degraded because one of Lima's boot scripts failed. A VM that doesn't answer over ssh within a minute is stopped instead, and its console log is in its Lima folder (`serial*.log`).

@@ -1,0 +1,155 @@
+# devvm mount-cache [none]: how a VM caches its project folder's mount,
+# which on a Linux host QEMU's 9p does. A new VM gets none, the one mode
+# devvm sets; a VM whose mode nobody chose keeps Lima's mmap untouched,
+# warned of at each launch, until devvm mount-cache none switches it from
+# its next start, which makes it in one edit and mounts the folder again.
+# On macOS the backend has no such choice.
+
+cp $WORK/features-none.json $DATA/settings.json
+
+# No VM yet; a mode that isn't none, and a value with --json, are refused
+# before devvm looks for one.
+project web
+! exec devvm mount-cache
+stderr '^devvm: no_vm_mount_cache dir=\S*/web$'
+! exec devvm mount-cache mmap
+stderr '^devvm: mount_cache_invalid value="mmap"$'
+stderr '^usage_help command=devvm mount-cache$'
+! stderr no_vm_mount_cache
+! exec devvm mount-cache loose
+stderr '^devvm: mount_cache_invalid value="loose"$'
+! exec devvm mount-cache none none
+stderr '^devvm: args_too_many '
+! exec devvm mount-cache --json none
+stderr '^devvm: json_shows_only command=devvm mount-cache$'
+! exec devvm mount-cache -g
+stderr '^devvm: flag_unknown '
+
+# A new VM gets none: on Linux it's in its state, and its project folder
+# is mounted with it as it's made.
+stub_reset
+exec devvm --network open --no-git-protect
+! stderr mount_cache_unchosen
+vm_name WEB web
+vm_state $WEB_dir/vm.json
+[linux] stdout '^mount\.cache=none$'
+[darwin] ! stdout '^mount\.'
+stub_calls
+[linux] stdout '^limactl clone --tty=false \S+ devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/web","writable":true,"9p":\{"cache":"none"\}\},'
+[darwin] stdout '^limactl clone --tty=false \S+ devvm-web-[0-9a-f]{14} --mount-none --set \.mounts = \[\{"location":"\S*/web","writable":true\},'
+
+# macOS: the VM's mode is refused, to show or to change.
+[darwin] ! exec devvm mount-cache
+[darwin] stderr '^devvm: backend_lacks backend=lima feature=mount-cache vm=devvm-web-[0-9a-f]{14}$'
+[darwin] ! exec devvm mount-cache none
+[darwin] stderr '^devvm: backend_lacks backend=lima feature=mount-cache vm=devvm-web-[0-9a-f]{14}$'
+[darwin] stop 'the rest is a Linux host''s'
+
+# Running: its mode, chosen, as it has it.
+exec devvm mount-cache
+stdout '\Anone\n\z'
+! stderr .
+exec devvm mount-cache --json
+stdout '\A{\n  "version": 1,\n  "mode": "none",\n  "chosen": true\n}\n\z'
+exec devvm mount-cache none
+stdout '^==> vm_mount_cache mode=none vm=devvm-web-[0-9a-f]{14}$'
+
+# A VM whose mode nobody chose, as one made before devvm chose it: none
+# in its state, and Lima's mmap on its mount. Its start leaves the mount
+# as it is, and each launch warns.
+exec limactl stop $WEB
+json_set $WEB_dir/vm.json mount:={}
+exec sh -c 'limactl edit "$1" --set ".mounts = [{\"location\":\"$(pwd -P)\",\"writable\":true},{\"location\":\"$DATA/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]"' sh $WEB
+stub_reset
+exec devvm
+stderr '^devvm: mount_cache_unchosen mode=mmap vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl edit'
+exec devvm
+stderr '^devvm: mount_cache_unchosen '
+exec devvm mount-cache --json
+stdout '"mode": "mmap",\n  "chosen": false'
+stderr '^devvm: mount_cache_unchosen '
+
+# Running, devvm mount-cache none waits for its next start.
+stub_reset
+exec devvm mount-cache none
+stderr '^devvm: next_start count=1 vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (edit|stop)'
+vm_state $WEB_dir/vm.json
+stdout '^mount\.cache=none$'
+exec devvm mount-cache
+stdout '\Ammap\n\z'
+stderr '^mount_cache_pending mode=none vm=devvm-web-[0-9a-f]{14}$'
+exec devvm mount-cache --json
+stdout '"pending": "none"'
+exec devvm
+stderr '^devvm: next_start_mount_cache vm=devvm-web-[0-9a-f]{14}$'
+! stderr mount_cache_unchosen
+
+# Stopped: the next start sets it in its one edit, then mounts the folder
+# again and checks it; the start after that edits nothing.
+exec limactl stop $WEB
+stub_reset
+exec devvm
+stub_calls
+stdout '^limactl edit --tty=false devvm-web-[0-9a-f]{14} --set \.mounts = \[\{"location":"\S*/web","writable":true,"9p":\{"cache":"none"\}\},'
+! stdout '(?s)limactl edit --tty=false devvm-web.*limactl edit --tty=false devvm-web'
+stdout '^limactl start --tty=false devvm-web-[0-9a-f]{14}\n(.*\n)*limactl shell --workdir / devvm-web-[0-9a-f]{14} sudo sh -c umount ''\S*/web'' \|\| exit 3; mount '
+stdout '^limactl shell --workdir / devvm-web-[0-9a-f]{14} sh -c if mountpoint -q ''\S*/web''; then findmnt -no OPTIONS '
+exec devvm mount-cache
+stdout '\Anone\n\z'
+! stderr .
+exec limactl stop $WEB
+stub_reset
+exec devvm
+stub_calls
+! stdout 'limactl edit'
+
+# A folder that isn't mounted after the remount fails the launch before
+# its shell opens, naming devvm restart.
+exec limactl stop $WEB
+json_set $WEB_dir/vm.json mount:={}
+exec sh -c 'limactl edit "$1" --set ".mounts = [{\"location\":\"$(pwd -P)\",\"writable\":true},{\"location\":\"$DATA/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]"' sh $WEB
+exec devvm mount-cache none
+stdout '^==> mount_cache_pending mode=none vm=devvm-web-[0-9a-f]{14}$'
+exec sh -c ': > "$STUB_DIR/mount-unmounted"'
+stub_reset
+! exec devvm
+stderr '^devvm: mount_cache_unmounted vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout '^limactl shell --workdir \S*/web devvm-web'
+stdout '^limactl stop devvm-web-[0-9a-f]{14}$'
+rm $STUB_DIR/mount-unmounted
+
+# A launch into a running VM whose folder isn't mounted is refused before
+# its shell.
+exec devvm
+exec sh -c ': > "$STUB_DIR/mount-unmounted"'
+stub_reset
+! exec devvm
+stderr '^devvm: project_unmounted vm=devvm-web-[0-9a-f]{14}$'
+stub_calls
+! stdout '^limactl shell --workdir \S*/web devvm-web'
+rm $STUB_DIR/mount-unmounted
+
+# A stored mmap, as a build of devvm before none alone wrote, is none
+# chosen: the VM works, warns, and devvm mount-cache none switches it.
+exec limactl stop $WEB
+json_set $WEB_dir/vm.json mount.cache=mmap
+exec sh -c 'limactl edit "$1" --set ".mounts = [{\"location\":\"$(pwd -P)\",\"writable\":true},{\"location\":\"$DATA/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]"' sh $WEB
+exec devvm mount-cache
+stdout '\Ammap\n\z'
+stderr '^devvm: mount_cache_unchosen mode=mmap '
+exec devvm mount-cache none
+stdout '^==> mount_cache_pending mode=none '
+
+# A state with a mode devvm doesn't know is refused as the VM is found,
+# naming its state file.
+json_set $WEB_dir/vm.json mount.cache=loose
+! exec devvm mount-cache
+stderr '\S*/vm\.json: mount\.cache: mount_cache_invalid value="loose"'
+
+-- features-none.json --
+{"features": []}

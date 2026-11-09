@@ -42,6 +42,7 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm link rm](devvm_link_rm.md): Remove one of this folder's VM's links
 - [devvm link unpublish](devvm_link_unpublish.md): Stop offering ports of this folder's VM to links
 - [devvm ls](devvm_ls.md): List the project VMs
+- [devvm mount-cache](devvm_mount-cache.md): Show or change how this folder's VM caches its project folder
 - [devvm network](devvm_network.md): Show or change the network tier of this folder's VM
 - [devvm network allow](devvm_network_allow.md): Allow hosts for this folder's VM
 - [devvm network deny](devvm_network_deny.md): Deny hosts for this folder's VM

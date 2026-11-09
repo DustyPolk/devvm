@@ -445,11 +445,29 @@ func (e remaking) check(t *target, p remakeInVM) error {
 
 // spec is the new machine of t's VM as its state asks for it
 // (creation.machineSpec, as up makes a new VM's): its shared tools, SSH
-// agent and size, in the clone mode p makes it in (wantsClone).
+// agent, size and cache mode, in the clone mode p makes it in
+// (wantsClone). devvm clone off mounts the folder anew, so with no mode
+// chosen it's none (switchCache).
 func (e remaking) spec(t *target, p remakeInVM) backend.VMSpec {
 	st := t.st
-	return e.creation.machineSpec(t.b, t.f, tools.Names(st), sshagent.Forwards(sshagent.Mode(st)),
+	spec := e.creation.machineSpec(t.b, t.f, tools.Names(st), sshagent.Forwards(sshagent.Mode(st)),
 		sectionOf[Size](st, sizeSection), wantsClone(st, p))
+	spec.ProjectCache = cacheOf(st)
+	if p.Clone == CloneOff {
+		spec.ProjectCache = e.switchCache(t)
+	}
+	return spec
+}
+
+// switchCache is the cache mode of the folder that devvm clone off mounts
+// for t's VM: the one chosen for it, else none, where its backend has the
+// choice (newCache). The mount is new, so it never keeps the backend's
+// own.
+func (e remaking) switchCache(t *target) string {
+	if c := cacheOf(t.st); c != "" {
+		return c
+	}
+	return e.newCache(t.b)
 }
 
 // wantsClone reports whether p makes st's VM's new machine with its own
@@ -594,15 +612,18 @@ func (e remaking) finish(ctx context.Context, t *target, p remakeInVM, c chainOf
 	// The new machine is the one by its name now, in its clone mode, with
 	// what p read again, and its devcontainer.json's commands run again
 	// on its new disk.
-	var git gitprotect.InVM
+	var (
+		git   gitprotect.InVM
+		cache string
+	)
 	if p.Clone == CloneOff {
-		git = e.Protector(t.f.Dir).NewSection(false)
+		git, cache = e.Protector(t.f.Dir).NewSection(false), e.switchCache(t)
 	}
 	err := st.Update(ctx, func(st *state.VM) error {
 		if err := madeWith(st, p); err != nil {
 			return err
 		}
-		return switchedTo(st, p.Clone, p.CloneTo, git)
+		return switchedTo(st, p.Clone, p.CloneTo, git, cache)
 	})
 	if err != nil {
 		return err
