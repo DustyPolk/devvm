@@ -37,13 +37,13 @@ Its `forwardPorts` are added to the VM's ports, as `devvm ports add` adds them, 
 
 ### Read-only and confined builds
 
-devvm builds images with nothing from the host mounted, and it confines their builds so that they reach the internet but not your machine's own services ([details](lima.md#confinement)). Credentials never go into images.
+devvm builds images with nothing from the host mounted, and it confines their builds ([details](lima.md#confinement)). Every build reaches the internet. On macOS it can't reach the host's loopback, but it reaches your LAN, the host's own address on it included, and on Linux it reaches the host's loopback too. Credentials never go into images.
 
 A tool build writes into a folder of its own and never into the shared tools, and devvm checks each tool image, moves it in and writes its record, with its hash ([details](images.md#building-tools)). Tool images for glibc, which any VM may mount, build only in devvm's own Ubuntu base, never in a `--from` image, and musl ones are keyed by the digest of the `--from` base they build in, so a container image's code never reaches another VM's tools. devvm's VMs live in a Lima home of their own, so Lima settings you made for other VMs never reach them. devvm also refuses a VM with a network it didn't give the VM, because that network would reach around the proxy ([details](lima.md#a-lima-home-of-its-own)).
 
 ### `.git` protection
 
-The VM can't change the parts of `.git` that run code on the host, because devvm locks hooks and config with a flag the VM can't clear ([details](git-protection.md)).
+The VM can't change the parts of `.git` that run code on the host, because devvm locks hooks and config. On macOS it sets a flag the VM can't clear, and on Linux it makes them read-only in the user namespace that QEMU runs in. A Linux host whose kernel doesn't let devvm use a user namespace has no locks, and devvm only watches `.git` there ([details](git-protection.md)).
 
 ### Network tiers
 

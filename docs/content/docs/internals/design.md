@@ -638,7 +638,6 @@ User-facing limits are in [Known limits](../using/limits.md), and what devvm lea
 - **x86_64 hosts** are untested on real hardware; on Intel Macs, `--from`'s kernel is untested with `vz`.
 - **Linux hosts:** the QEMU wrapper depends on the shape of Lima's `-netdev user,id=net0,…` argument. If Lima changes it, the wrapper refuses to start QEMU rather than run it unrestricted.
 - **Network tiers, not built:**
-  - tokens for services devvm doesn't know: a host, a header, a format and an environment variable;
   - method and path rules on decrypted hosts, such as read-only GitHub, or no `git-receive-pack` unless approved;
   - approving blocked hosts as they're hit.
 - **Claude Code's login is captured on a path Anthropic doesn't document.** devvm reads Claude Code's token endpoint, its client ID, its requests and replies and the `.credentials.json` format from Claude Code 2.1's bundle, and refreshes the login on the host as Claude Code would ([logins made in a VM](network.md#logins-made-in-a-vm)). A release that changes any of them can break the login in VMs, or the host's refresh, without warning. The `network` end-to-end section drives the real Claude Code's `claude auth login` against a fake endpoint, so a change to its requests fails that section, and a Claude Code token from `claude setup-token`, which Anthropic documents, stays the fallback.

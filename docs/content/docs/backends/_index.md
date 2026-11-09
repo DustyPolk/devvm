@@ -18,7 +18,7 @@ A backend is the program that runs devvm's VMs and builds their images. devvm de
 | The nix layer | {{< yes >}} yes |
 | Limits | paths with commas, and shrinking a disk ([limits](lima.md#limits)) |
 
-`.git` protection uses your machine's file flags, so it doesn't depend on the backend.
+On macOS, `.git` protection uses your machine's file flags, so it doesn't depend on the backend. On Linux it needs the backend to keep paths in the project folder read-only in the VM, which Lima does where the kernel lets devvm use a user namespace ([.git protection on Linux hosts](../safety/git-protection.md#linux-hosts)).
 
 An image's key includes its backend, so a backend never uses an image another backend built.
 

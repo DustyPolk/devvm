@@ -71,7 +71,7 @@ Run the agent the VM has by its name, such as `claude`, which the [supported age
 
 ## What's in the VM
 
-- **Your project folder**, read-write, so your editor and the VM share the same files. It's the only folder of yours the VM sees, and its `.git` hooks and config are locked ([.git protection](../safety/git-protection.md)).
+- **Your project folder**, read-write, so your editor and the VM share the same files. It's the only folder of yours the VM sees, and its `.git` hooks and config are locked, except on a Linux host that can't lock them, such as Ubuntu 23.10 and newer, where devvm only watches them ([.git protection](../safety/git-protection.md)).
 - **The toolchains**, ready at once ([toolchains](../using/toolchains.md)).
 - **Your git name and email**, so commits made in the VM are yours.
 - **Ports**: a dev server on `:5173` in the VM opens at `localhost:5173` on your machine ([ports](../using/ports-size.md#ports)).

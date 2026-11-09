@@ -8,6 +8,7 @@ These are the things devvm can't do, everywhere, on Linux hosts and on Intel Mac
 
 ## Everywhere
 
+- **devvm runs on macOS and Linux only,** not on Windows ([requirements](../getting-started/install.md#requirements)).
 - **Shared tools are read-only,** so a tool can't update itself or add components, for example with `rustup component add` ([details](images.md#shared-tools)).
 - **A layer goes in and comes out by making the VM again.** A layer's script changes the VM's disk, so `devvm layer add` gives a VM more layers by making it again, and everything on its disk but its home folder is lost ([details](images.md#adding-layers-to-a-vm)). `devvm layer rm` takes layers out in the same way ([details](images.md#taking-layers-out-of-a-vm)). Shared tools go in with `devvm tools add` and come out with `devvm tools rm`, and the VM's disk stays as it is ([details](toolchains.md#adding-and-removing-tools)).
 - **`--from` takes only Debian-, Ubuntu- and Alpine-based images,** and Alpine, Debian 12 (`node:24`) and Ubuntu before 26.04 on arm64 build with unpinned packages ([details](from.md#supported-images)).

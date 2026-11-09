@@ -8,7 +8,7 @@ This page covers a VM from the time devvm makes it until you delete it: opening,
 
 ## Opening a VM
 
-devvm makes a new VM from its image of base and the layers you chose, building the image first if it isn't built yet, then starts the VM and opens a shell in it in devvm's place, so devvm ends when the shell does. The VM mounts only the project folder, read-write, and the shared tools and its [agents' config folders](coding-agents.md), read-only, or with `--clone` it gets its own clone of the repo instead of the folder. On macOS, devvm also locks the `.git` hooks and config of the folder and of the repos nested in it against changes from the VM ([.git protection](../safety/git-protection.md)). For a VM that exists, devvm starts it if it's stopped and opens it as it is.
+devvm makes a new VM from its image of base and the layers you chose, building the image first if it isn't built yet, then starts the VM and opens a shell in it in devvm's place, so devvm ends when the shell does. The VM mounts only the project folder, read-write, and the shared tools and its [agents' config folders](coding-agents.md), read-only, or with `--clone` it gets its own clone of the repo instead of the folder. devvm also locks the `.git` hooks and config of the folder and of the repos nested in it against changes from the VM. On macOS it locks them with a file flag, and on Linux it makes them read-only in the VM where the kernel lets it and only watches them where it doesn't ([.git protection](../safety/git-protection.md)). For a VM that exists, devvm starts it if it's stopped and opens it as it is.
 
 A VM is running or stopped from the time devvm makes it until you delete it.
 

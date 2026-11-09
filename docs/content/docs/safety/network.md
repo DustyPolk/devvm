@@ -4,7 +4,7 @@ explainer: Choose what each VM can reach on the network
 weight: 1
 ---
 
-Every VM goes through a proxy that devvm runs for it on this machine, and the VM's network tier decides what the proxy lets it reach. New VMs get the allowlist tier by default, so they reach only the hosts on their allowlist. No VM holds your secrets, whatever its tier, because its proxy puts them into its requests. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key. An open VM, the one tier that isn't confined to its proxy, reaches anything this machine can, including this machine's own services on `localhost` and your LAN.
+Every VM goes through a proxy that devvm runs for it on this machine, and the VM's network tier decides what the proxy lets it reach. New VMs get the allowlist tier by default, so they reach only the hosts on their allowlist, which are devvm's built-in hosts, your secrets' hosts and the hosts you add. No VM holds the secrets that devvm saved, whatever its tier, because its proxy puts them into its requests, but code in the VM can still use each secret the VM may use, on that secret's hosts. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key. An open VM, the one tier that isn't confined to its proxy, reaches anything this machine can, including this machine's own services on `localhost` and your LAN.
 
 ```mermaid
 sequenceDiagram

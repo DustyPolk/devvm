@@ -4,7 +4,7 @@ explainer: How devvm keeps untrusted code off your machine
 weight: 30
 ---
 
-devvm runs installs, project code and coding agents in a VM, so code you didn't write can't read your credentials, run git hooks on this machine or reach your other projects. On the allowlist tier, which new VMs get by default, that code can send data only to the hosts you allow. A few habits close most of what devvm can't close on its own, so read this page before you trust a VM with a project.
+devvm runs installs, project code and coding agents in a VM, so code you didn't write can't, on its own, read your credentials, run git hooks on this machine or reach your other projects, and [Attack vectors](attack-vectors.md) lists the exceptions. On the allowlist tier, which new VMs get by default, that code can send data only to the hosts on the VM's allowlist, which are devvm's built-in hosts, such as package registries, GitHub and your agents' providers, your secrets' hosts and the hosts you add. A few habits close most of what devvm can't close on its own, so read this page before you trust a VM with a project.
 
 Some of what devvm protects are your secrets. A secret is a credential devvm keeps on this machine for VMs to use: your GitHub token, Claude Code's token, an agent's login or an API key.
 
@@ -34,7 +34,7 @@ flowchart TB
   subgraph out["Out of reach"]
     direction TB
     home["the rest of<br>your home<br>folder"]
-    git[".git hooks<br>and config,<br>locked on<br>macOS"]
+    git[".git hooks<br>and config,<br>locked"]
     agent["your SSH<br>agent,<br>unless you<br>turn it on"]
     secrets["your secrets<br>stay on this<br>machine"]
     home ~~~ git ~~~ agent ~~~ secrets
@@ -57,12 +57,12 @@ flowchart TB
 | | |
 | --- | --- |
 | The project folder | The VM reads and writes it. With `--clone` the folder isn't mounted, and the VM has a clone of its own ([details](../using/clone.md)). |
-| `.git` hooks and config | devvm locks them on macOS, and it reports what a lock can't stop without preventing it ([details](git-protection.md)). With `--clone` they're out of reach. |
+| `.git` hooks and config | devvm locks them on macOS, and on Linux it makes them read-only in the VM where the kernel lets it, and watches them where it doesn't. It reports what a lock can't stop without preventing it ([details](git-protection.md)). With `--clone` they're out of reach. |
 | Your agents' settings and logins (skills, settings, logins) | The VM mounts the folders of devvm's agent store read-only and gets copies of its files, but never your agents' history, and never the agents' own files in your home folder ([details](../using/coding-agents.md#devvms-agent-store)). |
 | The rest of your home folder, other projects | The VM doesn't mount them. |
 | Your SSH keys | Only with `devvm ssh-agent on`, and only while you're connected. With `devvm ssh-agent devvm`, the VM can use only the keys you added to devvm's own agent ([details](../using/ssh.md#agent-forwarding)). |
 | The network | On every tier but open, the VM reaches only its proxy on this machine, which lets it reach what [its tier](network.md#network-tiers) allows. On the open tier it reaches everything this machine reaches, including this machine's own services on `localhost` ([details](network.md#network-tiers)). |
-| Your secrets | Your GitHub token, Claude Code's token, the coding agents' logins and API keys and Claude Code's MCP secrets stay on this machine on every network tier, and the proxy puts them into requests ([details](network.md#secrets)). opencode's and pi's keys that the proxy can't put in, such as a local model server's, stay on this machine too, unless you pass one to VMs in `config.toml` ([opencode logins](../using/coding-agents.md#codex-and-opencode-logins), [pi logins](../using/coding-agents.md#pi-logins)). |
+| Your secrets | Your GitHub token, Claude Code's token, the coding agents' logins and API keys and Claude Code's MCP secrets stay on this machine on every network tier, and the proxy puts them into requests, so code in the VM can still use each secret the VM may use ([details](network.md#secrets)). opencode's and pi's keys that the proxy can't put in, such as a local model server's, stay on this machine too, unless you pass one to VMs in `config.toml` ([opencode logins](../using/coding-agents.md#codex-and-opencode-logins), [pi logins](../using/coding-agents.md#pi-logins)). |
 
 > [!NOTE]
 > Everything here rests on the VM's boundary: the VM runs its own kernel, apart from this machine's.

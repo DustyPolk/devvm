@@ -111,7 +111,7 @@ devvm ships the `docker`, `nix` and `desktop` layers, which you choose when you 
 
 - The VM mounts your project folder at the same path. Apart from your agents' settings from devvm's own store, which it gets read-only, it sees nothing else in your home folder ([what a VM can reach](docs/safety/_index.md#what-a-vm-can-reach)).
 - New VMs get the allowlist [network tier](docs/safety/network.md) by default, so they reach only an allowlist of hosts, through a proxy on your machine. You can choose a looser tier, internet or open, or a stricter one, none.
-- On macOS, `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine ([.git protection](docs/safety/git-protection.md)).
+- `devvm` locks `.git`'s hooks and config, so the VM can't change what git runs on your machine, except on a Linux host whose kernel doesn't let it lock them, where it watches them instead ([.git protection](docs/safety/git-protection.md)).
 - With [`--clone`](docs/using/clone.md), the VM works on a clone of the repo of its own instead of your folder, so nothing in it can touch your working tree or `.git`, and its work reaches your repo only when you fetch it.
 - No sandbox closes every gap, so [attack vectors](docs/safety/attack-vectors.md#narrowed-not-closed) lists what's left open, and [staying safe](docs/safety/_index.md#the-habits) lists the habits that close most of it.
 
