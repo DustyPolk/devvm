@@ -6,6 +6,7 @@ getting-started: rocket
 using: wrench
 safety: locked
 backends: cube
+compared: view-grid
 cli: prompt
 internals: gear
 contributing: brand-github
