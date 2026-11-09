@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -48,7 +49,7 @@ func projectMountCache(s *S, w *webVM) {
 	}
 	s.Check("a new VM's folder is a 9p mount with cache none, as its state says", func() error {
 		opts := mountOptions(s, vm, p)
-		s.r.out.line("  findmnt -no OPTIONS: %s", opts)
+		s.r.out.line("  mount options: %s", opts)
 		if w.state(s)["mount.cache"] != "none" || cacheOption(opts) != "none" {
 			return fmt.Errorf("its state's %q, its options %q", w.state(s)["mount.cache"], opts)
 		}
@@ -112,7 +113,7 @@ func projectMountCache(s *S, w *webVM) {
 		}
 		after, _ := os.ReadFile(lyaml)
 		opts := mountOptions(s, vm, p)
-		s.r.out.line("  findmnt -no OPTIONS: %s", opts)
+		s.r.out.line("  mount options: %s", opts)
 		switch {
 		case !grepF(r.Out, FirstLine(warn)):
 			return errors.New("no warning at the next launch:\n" + r.Out)
@@ -153,7 +154,7 @@ func projectMountCache(s *S, w *webVM) {
 			return err
 		}
 		opts := mountOptions(s, vm, p)
-		s.r.out.line("  findmnt -no OPTIONS: %s", opts)
+		s.r.out.line("  mount options: %s", opts)
 		if cacheOption(opts) != "none" || w.state(s)["mount.cache"] != "none" {
 			return fmt.Errorf("its options %q, its state's %q", opts, w.state(s)["mount.cache"])
 		}
@@ -197,10 +198,54 @@ except OSError as e:
 	})
 }
 
-// mountOptions is findmnt's options for the VM's mount at dir.
+// mountOptions is the options of the VM's mount at dir, the mount's and
+// its file system's, from the last line of /proc/self/mountinfo for it,
+// as devvm's own check reads them: Alpine's busybox has no findmnt.
 func mountOptions(s *S, vm, dir string) string {
-	r, _ := s.InVM(vm, `findmnt -no OPTIONS `+shell.Quote(dir))
-	return Trim(r.Stdout)
+	p := strings.NewReplacer(`\`, `\134`, " ", `\040`, "\t", `\011`, "\n", `\012`).Replace(dir)
+	r, _ := s.InVM(vm, `P=`+shell.Quote(p)+` awk '$5 == ENVIRON["P"] { l = $0 } END { print l }' /proc/self/mountinfo`)
+	f := strings.Fields(Trim(r.Stdout))
+	if len(f) < 10 {
+		return Trim(r.Stdout)
+	}
+	sep := slices.Index(f[6:], "-")
+	if sep < 0 || 6+sep+3 >= len(f) {
+		return Trim(r.Stdout)
+	}
+	return f[5] + "," + f[6+sep+3]
+}
+
+// mountCacheSwitch: on a Linux host, vm, dir's VM, given Lima's mmap with
+// no mode chosen, as a VM made before devvm chose one, gets devvm
+// mount-cache none at its next start, whose remount devvm checks in
+// /proc/self/mountinfo, so it works without findmnt, as on Alpine.
+func mountCacheSwitch(s *S, vm, dir, title string) {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	s.Check(title+": devvm mount-cache none switches a VM left on Lima's mmap at its next start, its remount checked", func() error {
+		if _, err := s.Devvm(dir, "stop"); err != nil {
+			return err
+		}
+		if err := SetState(s.Paths, vm, "mount", "{}"); err != nil {
+			return err
+		}
+		if r, err := s.Limactl("edit", "--tty=false", vm, "--set", `.mounts[0]["9p"].cache = "mmap"`); err != nil {
+			return fmt.Errorf("limactl edit: %w: %s", err, r.Out)
+		}
+		if r, err := s.Devvm(dir, "mount-cache", "none"); err != nil {
+			return fmt.Errorf("devvm mount-cache none: %w: %s", err, r.Out)
+		}
+		if r, err := DevvmIn(s, dir, "exit\n", nil); err != nil {
+			return fmt.Errorf("the launch: %w\n%s", err, r.Out)
+		}
+		opts := mountOptions(s, vm, dir)
+		s.r.out.line("  %s's mount options: %s", title, opts)
+		if cacheOption(opts) != "none" || s.Paths.State(vm)["mount.cache"] != "none" {
+			return fmt.Errorf("its options %q, its state's %q", opts, s.Paths.State(vm)["mount.cache"])
+		}
+		return nil
+	})
 }
 
 // cacheOption is the cache mode 9p's options name, as the kernel shows

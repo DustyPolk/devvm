@@ -207,14 +207,15 @@ func TestFilledMounts(t *testing.T) {
 	}
 }
 
-// The guest's findmnt shows the project folder's 9p mount options as its
-// mount has them: cache=0x5 for mmap, Lima's default, none for none; and
-// with mount-unmounted, devvm's check's word for a folder not mounted.
+// The guest's mountinfo line for the project folder has its 9p options as
+// its mount has them: cache=0x5 for mmap, Lima's default, none for none;
+// and with mount-unmounted, devvm's check's word for a folder not mounted.
 func TestGuestMountOptions(t *testing.T) {
 	s := newSandbox(t)
-	check := "if mountpoint -q '/p'; then findmnt -no OPTIONS '/p'; else echo devvm-not-mounted; fi"
+	check := `if mountpoint -q '/p'; then P='/p' awk '$5 == ENVIRON["P"] { l = $0 } END { print l }' /proc/self/mountinfo; else echo devvm-not-mounted; fi`
 	s.ok("", "limactl", "create", "--name=a", "--tty=false", "--set", `.mounts = [{"location":"/p","writable":true}]`, "-")
-	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", check); !strings.Contains(out, ",cache=0x5,") {
+	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", check); !strings.Contains(out, ",cache=0x5,") ||
+		!strings.HasPrefix(out, "1109 29 0:61 / /p rw,relatime shared:604 - 9p ") {
 		t.Errorf("Lima's mmap: %q", out)
 	}
 	s.ok("", "limactl", "edit", "a", "--set", `.mounts = [{"location":"/p","writable":true,"9p":{"cache":"none"}}]`)

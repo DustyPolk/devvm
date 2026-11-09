@@ -330,6 +330,8 @@ func fromAlpineMore(s *S, nd []string, al, vm string) {
 		return err
 	})
 	s.Check("an Alpine VM's commands run GNU tar", func() error { return gnuTar(s, vm) })
+	// Alpine's busybox has no findmnt, so this checks the remount's own check.
+	mountCacheSwitch(s, vm, al, "Alpine")
 	export := filepath.Join(s.sb.work, "export")
 	madeFile(s.sb, export)
 	s.Check("history import puts an export into an Alpine VM", func() error {

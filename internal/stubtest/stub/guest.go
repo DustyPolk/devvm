@@ -248,8 +248,8 @@ func (g *guest) answer() int {
 		}
 		g.print(hostKey(g.vm) + "\nnot a key\n")
 		return 0
-	case strings.Contains(all, "findmnt -no OPTIONS"):
-		g.print(g.mountOptions() + "\n")
+	case strings.Contains(all, "/proc/self/mountinfo"):
+		g.print(g.mountinfo(all) + "\n")
 		return 0
 	case strings.Contains(all, "echo devvm-mounted"):
 		if g.on("mount-unmounted") {
@@ -266,15 +266,30 @@ func (g *guest) answer() int {
 	return 0
 }
 
-// mountOptions is the project folder's 9p mount options, as findmnt shows
-// them in the VM: cache=0x5 for its writable mount's mmap, Lima's default,
-// and no cache option for none; $STUB_DIR/mount-unmounted makes it not a
-// mount point (devvm's check prints its own word then).
-func (g *guest) mountOptions() string {
+// mountinfo is the project folder's line of /proc/self/mountinfo, which
+// devvm's check (all) asks for by the folder that mountpoint -q names: a
+// 9p share with mountOptions's options; $STUB_DIR/mount-unmounted makes
+// it not a mount point (devvm's check prints its own word then).
+func (g *guest) mountinfo(all string) string {
 	if g.on("mount-unmounted") {
 		return "devvm-not-mounted"
 	}
-	opts := "rw,relatime,access=client,msize=131072,trans=virtio"
+	dir := "/"
+	if m := mountpointArg.FindStringSubmatch(all); m != nil {
+		dir = m[1]
+	}
+	dir = strings.NewReplacer(`\`, `\134`, " ", `\040`, "\t", `\011`, "\n", `\012`).Replace(dir)
+	return "1109 29 0:61 / " + dir + " rw,relatime shared:604 - 9p mount0 " + g.mountOptions()
+}
+
+// mountpointArg finds the folder devvm's check gives mountpoint -q.
+var mountpointArg = regexp.MustCompile(`mountpoint -q '([^']*)'`)
+
+// mountOptions is the project folder's 9p file system options, as the
+// kernel shows them in the VM: cache=0x5 for its writable mount's mmap,
+// Lima's default, and no cache option for none.
+func (g *guest) mountOptions() string {
+	opts := "rw,access=client,msize=131072,trans=virtio"
 	st, err := g.state()
 	if err != nil {
 		return opts
@@ -288,7 +303,7 @@ func (g *guest) mountOptions() string {
 	if in, ok := st.Instances[g.vm]; ok && json.Unmarshal([]byte(in.Config["mounts"]), &ms) == nil {
 		for _, m := range ms {
 			if m.Writable && m.NineP.Cache != "none" {
-				return "rw,relatime,cache=0x5,access=client,msize=131072,trans=virtio"
+				return "rw,cache=0x5,access=client,msize=131072,trans=virtio"
 			}
 		}
 	}

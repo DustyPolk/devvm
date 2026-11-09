@@ -530,9 +530,9 @@ func TestStartSetsProjectCacheOnce(t *testing.T) {
 			`{"location":"/p","mountPoint":"/p","writable":true,"9p":{"msize":"128KiB","cache":"` + cache + `"}}]}}`
 	}
 	// The folder as the guest has it after the remount: mounted with none.
-	check := `limactl shell --workdir / v sh -c if mountpoint -q '/p'; then findmnt -no OPTIONS '/p'; else echo devvm-not-mounted; fi`
+	check := checkOfP
 	remount := `limactl shell --workdir / v sudo sh -c umount '/p' || exit 3; mount '/p' || { mount '/p'; mountpoint -q '/p' || exit 4; }`
-	f.stdout = map[string]string{check: "rw,relatime,access=client,msize=131072,trans=virtio\n"}
+	f.stdout = map[string]string{check: mountinfoOfP("rw,access=client,msize=131072,trans=virtio") + "\n"}
 	f.out["limactl list --json"] = vm("mmap")
 	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
 		t.Fatal(err)
@@ -580,20 +580,22 @@ func TestStartSetsProjectCacheOnce(t *testing.T) {
 	}{
 		// The unmount refused (the share busy): the old mount stays, and
 		// gets the mode at the next start.
-		{"kept the old mount", "rw,relatime,cache=0x5,access=client,trans=virtio", remount, "", "mount_cache_remount_failed has=mmap vm=v want=none"},
+		{"kept the old mount", mountinfoOfP("rw,cache=0x5,access=client,trans=virtio"), remount, "", "mount_cache_remount_failed has=mmap vm=v want=none"},
 		// A degraded start's old fstab: mounted again, with the old mode.
-		{"the old mode again", "rw,cache=0x5,trans=virtio", "", "", "mount_cache_remount_failed has=mmap vm=v want=none"},
+		{"the old mode again", mountinfoOfP("rw,cache=0x5,trans=virtio"), "", "", "mount_cache_remount_failed has=mmap vm=v want=none"},
 		// Stacked mounts: the last line, the mount visible there, counts.
-		{"stacked", "rw,cache=0x5,trans=virtio\nrw,relatime,trans=virtio\n", "", "", ""},
+		{"stacked", mountinfoOfP("rw,cache=0x5,trans=virtio") + "\n" + mountinfoOfP("rw,trans=virtio") + "\n", "", "", ""},
 		// A mode devvm doesn't know is named as such, never as the guest's
 		// text.
-		{"another mode", "rw,cache=0xf,trans=virtio\x1b[2J", "", "", "mount_cache_remount_failed has=unknown vm=v want=none"},
+		{"another mode", mountinfoOfP("rw,cache=0xf,trans=virtio\x1b[2J"), "", "", "mount_cache_remount_failed has=unknown vm=v want=none"},
 		// Unmounted, or not known to be mounted: the VM stops, and the start
 		// fails, as what's written there would vanish under the share.
 		{"not mounted", "devvm-not-mounted\n", remount, "mount_cache_unmounted vm=v", ""},
-		{"mounted, then not", "rw,trans=virtio\ndevvm-not-mounted", "", "mount_cache_unmounted vm=v", ""},
+		{"mounted, then not", mountinfoOfP("rw,trans=virtio") + "\ndevvm-not-mounted", "", "mount_cache_unmounted vm=v", ""},
 		{"the check fails", "", check, "mount_cache_unchecked vm=v", ""},
 		{"no answer", "\n", "", "mount_cache_unchecked vm=v", ""},
+		// An answer that isn't a line of mountinfo can't be read.
+		{"not mountinfo", "rw,trans=virtio\n", "", "mount_cache_unchecked vm=v", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			*warned = msg.Recorder{}
@@ -633,8 +635,7 @@ func TestRemountInterrupted(t *testing.T) {
 			return func() { removed++ }
 		}}
 		l.Reporter = fk
-		check := `limactl shell --workdir / v sh -c if mountpoint -q '/p'; then findmnt -no OPTIONS '/p'; else echo devvm-not-mounted; fi`
-		f.stdout = map[string]string{check: "rw,trans=virtio\n"}
+		f.stdout = map[string]string{checkOfP: mountinfoOfP("rw,trans=virtio") + "\n"}
 		if err := remountProject(t.Context(), &l.machines, "v", "/p", backend.CacheNone); err != nil {
 			t.Fatal(err)
 		}
