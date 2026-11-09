@@ -1,71 +1,9 @@
 package proxy
 
 import (
-	"bytes"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 )
-
-// v010Files are the files of name in every VM's run folder of devvm 0.1.0's state
-// (testdata/v0.1.0/GOOS, which 0.1.0 itself made), both systems': never regenerated.
-func v010Files(t *testing.T, name string) []string {
-	t.Helper()
-	found, err := filepath.Glob(filepath.Join("..", "..", "testdata", "v0.1.0", "*", "data", "devvm", "vms", "*", "run", name))
-	if err != nil || len(found) == 0 {
-		t.Fatalf("no %s in 0.1.0's state: %v", name, err)
-	}
-	return found
-}
-
-// Every bindings file 0.1.0 wrote reads as it was, of version 1, and writing its bindings again
-// gives the same bytes: a version 1 file, which 0.1.0's proxy reads alike, so a launch after an
-// upgrade, or a proxy still running from before it, keeps the VM's secrets.
-func TestV010Bindings(t *testing.T) {
-	t.Parallel()
-	for _, f := range v010Files(t, "secrets.json") {
-		b, err := os.ReadFile(f) //nolint:gosec // G304: the repo's frozen fixture
-		must(t, err)
-		l, err := parseBindings(f, b)
-		if err != nil || l.Version != 1 {
-			t.Errorf("%s: version %d, %v", f, l.Version, err)
-			continue
-		}
-		if again := (BindingList{Bindings: l.Bindings}).Encode(); !bytes.Equal(again, b) {
-			t.Errorf("%s: written again as\n%s\nnot\n%s", f, again, b)
-		}
-	}
-}
-
-// Every proxy config 0.1.0 wrote, as the file the user has (mode 600: git keeps no mode), reads
-// with today's ReadConfig, which refuses a field it doesn't know, and records the binary that
-// started its proxy, so devvm tells that proxy is another binary's (otherBinary).
-func TestV010ProxyConfig(t *testing.T) {
-	t.Parallel()
-	// The SHA-256 of the devvm binary that made 0.1.0's state on each system.
-	recorded := map[string]string{
-		"darwin": "f8016a61f83f96d6ace74a381630be63d56979eeab3e789d29e4b09106d5d3a6",
-		"linux":  "f6e713e44d65ca81d6d035e6f2fedf4534acc1ee72391702ff302dcd3ae53029",
-	}
-	dir := t.TempDir()
-	for i, f := range v010Files(t, "proxy.json") {
-		b, err := os.ReadFile(f) //nolint:gosec // G304: the repo's frozen fixture
-		must(t, err)
-		cp := filepath.Join(dir, filepath.Base(filepath.Dir(filepath.Dir(f)))+"-"+string(rune('a'+i)))
-		must(t, os.WriteFile(cp, b, 0o600)) //nolint:gosec // G703: a file in the test's own temp folder
-		c, err := ReadConfig(cp)
-		if err != nil {
-			t.Errorf("%s: %v", f, err)
-			continue
-		}
-		// .../v0.1.0/GOOS/data/devvm/vms/HASH/run/proxy.json
-		goos := filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(f)))))))
-		if want := recorded[goos]; c.DevvmSHA256 != want {
-			t.Errorf("%s: devvm_sha256 %q, want %s's %q", f, c.DevvmSHA256, goos, want)
-		}
-	}
-}
 
 // devvm 0.1.0's grammar, frozen: its TestParsePolicy's lines and whether each is a rule, and its
 // TestDecide's policy and verdicts, as `git show v0.1.0:internal/proxy/proxy_test.go` has them.

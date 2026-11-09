@@ -242,6 +242,49 @@ func fixtureModes(ts *testscript.TestScript, src string) map[string]os.FileMode 
 	return modes
 }
 
+// Every release's frozen state (testdata/v<release>/) has CLI tests of
+// its own, which put it in a sandbox with fixture v<release> and run
+// today's commands on it, and every fixture a script names is a folder
+// there. Each release's scripts are its own, as their checks are of that
+// release's VMs.
+func TestFixtureScripts(t *testing.T) {
+	folders, err := filepath.Glob(filepath.Join("..", "..", "testdata", "v*", runtime.GOOS))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scripts, err := filepath.Glob(filepath.Join(scriptsDir(), "*.txtar"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := map[string][]string{}
+	for _, s := range scripts {
+		b, err := os.ReadFile(s) //nolint:gosec // the repo's own scripts
+		if err != nil {
+			t.Fatal(err)
+		}
+		script, _, _ := strings.Cut(string(b), "\n-- ")
+		for line := range strings.Lines(script) {
+			if f := strings.Fields(line); len(f) == 2 && f[0] == "fixture" {
+				named[f[1]] = append(named[f[1]], filepath.Base(s))
+			}
+		}
+	}
+	for _, f := range folders {
+		release := filepath.Base(filepath.Dir(f))
+		if len(named[release]) == 0 {
+			t.Errorf("testdata/%s has no CLI test: no script runs fixture %s", release, release)
+		}
+	}
+	for release, by := range named {
+		if !slices.Contains(folders, fixtureDir(filepath.Join("..", ".."), release)) {
+			t.Errorf("%q run fixture %s, which isn't a folder in testdata", by, release)
+		}
+	}
+	if len(named) == 0 {
+		t.Error("no script runs fixture")
+	}
+}
+
 // json_superset's check: added keys and elements pass; a key gone, a
 // value changed or an element gone fails, naming where; -shape takes any
 // value of the same type, -changes one at its path.

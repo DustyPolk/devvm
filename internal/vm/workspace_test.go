@@ -403,36 +403,28 @@ func TestCloneRepos(t *testing.T) {
 	}
 }
 
-// 0.1.0's clone VMs read today as one repo at "." each.
-func TestV010CloneReadsAsOneRepo(t *testing.T) {
-	for goos, d := range v010Fixtures(t) {
-		names, err := state.VMNames(d)
-		if err != nil {
-			t.Fatal(goos, err)
-		}
-		seen := 0
-		for _, name := range names {
-			st, err := state.ReadVM(d, name)
-			if err != nil {
-				t.Fatal(goos, err)
+// A release's clones of their folder's own repo (its fixture's clones)
+// read today as one repo at "." each.
+func TestFixtureClonesReadAsOneRepo(t *testing.T) {
+	for _, c := range fixtureCopies(t) {
+		t.Run(c.name(), func(t *testing.T) {
+			vms := fixtureVMs(t, c)
+			for _, slug := range c.clones {
+				st := vms[slug]
+				if st == nil {
+					t.Fatalf("no VM %s", slug)
+				}
+				cl := sectionOf[cloneInVM](st, cloneSection)
+				if r := cl.repos(); !cl.On || cl.Workspace || len(r) != 1 || r[0].Path != "." || r[0].Remote != cl.Made.Remote || r[0].Seeded != cl.Made.Seeded {
+					t.Errorf("%s: %+v", slug, r)
+				}
+				// Not a workspace clone: the finder never opens it in a
+				// repo below its folder.
+				if coversRepo(st, st.Dir, filepath.Join(st.Dir, "sub")) {
+					t.Errorf("%s covers a repo below its folder", slug)
+				}
 			}
-			c := sectionOf[cloneInVM](st, cloneSection)
-			if !c.On {
-				continue
-			}
-			seen++
-			if r := c.repos(); c.Workspace || len(r) != 1 || r[0].Path != "." || r[0].Remote != c.Made.Remote || r[0].Seeded != c.Made.Seeded {
-				t.Errorf("%s %s: %+v", goos, name, r)
-			}
-			// Not a workspace clone: the finder never opens it in a repo
-			// below its folder.
-			if coversRepo(st, st.Dir, filepath.Join(st.Dir, "sub")) {
-				t.Errorf("%s %s covers a repo below its folder", goos, name)
-			}
-		}
-		if seen == 0 {
-			t.Errorf("%s: no clone VM in the fixture", goos)
-		}
+		})
 	}
 }
 
