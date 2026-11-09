@@ -187,13 +187,13 @@ func keeper(kept func(vm string) func(path string) msg.M, vm string) func(path s
 }
 
 // Keeps reports whether the VM st's .git protection keeps path locked:
-// it's on or strict, it was set up, and path is a git dir it locked, or
+// it locks (InVM.locks), it was set up, and path is a git dir it locked, or
 // in one: its folder's .git, the git dirs it recorded locking besides,
 // and those of the nested repos it protects. Another VM's Unlock leaves
 // such a path locked (Protector.Kept).
 func Keeps(st *state.VM, path string) bool {
 	g, err := Of(st)
-	if err != nil || g.Mode != On && g.Mode != Strict || !g.Made.Protected || st.Dir == "" {
+	if err != nil || !g.locks() || !g.Made.Protected || st.Dir == "" {
 		return false
 	}
 	t := tree{Dir: st.Dir, Root: st.Dir}

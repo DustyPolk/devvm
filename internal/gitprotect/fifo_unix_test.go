@@ -3,12 +3,38 @@
 package gitprotect
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"syscall"
 	"testing"
 	"time"
 )
+
+// A FIFO swapped in at a strict VM's .git/config is never read for what
+// strict set: it returns at once, and leaves it.
+func TestUnstrictFIFO(t *testing.T) {
+	needGit(t)
+	f := newFixture(t, "p")
+	f.git(f.dir, "init", "-q")
+	if err := f.newVM(false); err != nil {
+		t.Fatal(err)
+	}
+	f.strictAsBefore(".")
+	cfg := f.path(".git/config")
+	if err := os.Remove(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := converter{f.p}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if c.setsAll(ctx, c.strictRepos(f.section().Made, nil)[0], cfg) || ctx.Err() != nil {
+		t.Errorf("a FIFO was taken for a config, or read: %v", ctx.Err())
+	}
+}
 
 // The VM can make any file in .git a FIFO, which nothing writes to: the reads of a git dir's
 // files return at once rather than wait on one.

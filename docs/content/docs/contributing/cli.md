@@ -137,7 +137,7 @@ The codes are added after `msg.Printable` and `msg.OneLine`, so they're the only
 Tables on `Stdout()` are colored as stdout is. A command gets a `ui.Table` from `u.Table()` and adds a header, rows of `ui.Cell`s and a totals row, and cli never reads the environment itself. Each cell has a `ui.Role`: `Good` is green (`32`), `Attention` yellow (`33`), `Bad` red (`31`), `Secondary` dim (`2`), and `Plain` stays in the default color, while the header and totals rows are bold. `Table` pads each cell on its plain text before painting it, because `text/tabwriter` counts the codes' bytes as width, and a plain table is byte for byte what `text/tabwriter` writes with a padding of 2 (`TestTableLikeTabwriter`). The roles for each table's values are next to the code that writes it:
 
 - devvm images: `current` is good, `stale`, `unfinished`, `unused` and `not built` need attention, and digests and keys are secondary.
-- devvm ls: `Running` and the `.git` protections `on`, `strict` and `clone` are good, `Stopped` needs attention, and any other status, such as `Broken`, is bad, as is the tier `unenforced`, while a confined tier, `internet`, `allowlist` or `none`, is good and `open` stays plain.
+- devvm ls: `Running` and the `.git` protections `on` and `clone` are good, `Stopped` needs attention, and any other status, such as `Broken`, is bad, as is the tier `unenforced`, while a confined tier, `internet`, `allowlist` or `none`, is good and `open` stays plain.
 - devvm space: `only copy` and `leftover` in KEPT need attention.
 - devvm doctor: `native` is good, `emulated` needs attention, and `unreviewed` and `none` are bad.
 

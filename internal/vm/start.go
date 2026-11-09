@@ -339,7 +339,7 @@ type needs struct {
 	// sshagent.Made.Toggle), which each start relies on.
 	toggle bool
 	ssh    bool // a --clone VM's clone, copied in and fetched over ssh
-	pins   bool // its .git locked by pins at each start (a Linux host's on or strict)
+	pins   bool // its .git locked by pins at each start (a Linux host's on)
 	cache  bool // its project folder mounted with the cache mode chosen for it (mountInVM)
 }
 
@@ -602,11 +602,10 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 
 // pinsLocks reports whether the VM's .git is locked by its backend's pins
 // at each start: on a Linux host (macOS locks on the host itself), when
-// its protection is on or strict. Its start needs them then, and is
-// refused where the backend can't pin, never started unlocked.
+// its protection is on. Its start needs them then, and is refused where
+// the backend can't pin, never started unlocked.
 func (s starter) pinsLocks(st *state.VM) bool {
-	m := gitprotect.Mode(st)
-	return s.OS == "linux" && (m == gitprotect.On || m == gitprotect.Strict)
+	return s.OS == "linux" && gitprotect.Mode(st) == gitprotect.On
 }
 
 // pins are what the VM's start pins in its project folder: .git's, as its

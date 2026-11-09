@@ -43,7 +43,7 @@ const Section = "git"
 // chose it, the mode chosen while it ran, and what protecting it found;
 // on hosts without locks, what watching it found.
 type InVM struct {
-	Mode string `json:"mode"` // On, Strict, Off, or Clone for a --clone VM
+	Mode string `json:"mode"` // On, Off, Clone for a --clone VM, or an earlier devvm's Strict
 	// Chosen is set once the user chose the mode (--no-git-protect,
 	// devvm git-protect), rather than the host: off chosen on a host
 	// without locks quiets the launches' warning (WarnUnprotected).
@@ -67,6 +67,12 @@ type InVM struct {
 	// NestedNoticed is set once a VM whose protection doesn't cover its
 	// nested repos (Made.Nested unset) was told it can (git_nested_protectable).
 	NestedNoticed bool `json:"nested_noticed,omitempty"`
+	// StrictLeft is the repos, by their top folder relative to the project
+	// folder ("." for its own), whose config keeps the
+	// diff.ignoreSubmodules = all that an earlier devvm's strict set, as
+	// another VM's protection keeps it locked too, or it changed after the
+	// check: each stopped check tries again (unstrict).
+	StrictLeft []string `json:"strict_left,omitempty"`
 }
 
 // Made is what protecting a VM's .git found, and checks compare with:
@@ -78,7 +84,7 @@ type Made struct {
 	Protected bool `json:"protected,omitempty"`
 	Repo           // the folder's own repo's, as its fields
 	// Nested is set once the repos nested in the folder are protected
-	// too: by a new VM, devvm git-protect on or strict, or the watch. A
+	// too: by a new VM, devvm git-protect on, or the watch. A
 	// VM an older devvm made protects only its own until then.
 	Nested bool `json:"nested,omitempty"`
 	// Repos is each nested repo's, by its top folder relative to the
@@ -112,12 +118,18 @@ func Of(st *state.VM) (InVM, error) { return state.Section[InVM](st, Section) }
 // st.Update.
 func Set(st *state.VM, g InVM) error { return state.SetSection(st, Section, g) }
 
-// Mode returns a VM's .git protection: on, strict, off, or clone for a
-// --clone VM, which mounts no .git; "" when it can't be read.
+// Mode returns a VM's .git protection: on, off, or clone for a --clone
+// VM, which mounts no .git; "" when it can't be read. An earlier devvm's
+// strict is on, which the VM's next check that finds it stopped records
+// (unstrict).
 func Mode(st *state.VM) string {
 	g, _ := Of(st)
-	return g.Mode
+	return asOn(g.Mode)
 }
+
+// locks reports whether the section's mode locks .git: on, or an earlier
+// devvm's strict, until a check converts it (unstrict).
+func (g InVM) locks() bool { return g.Mode == On || g.Mode == Strict }
 
 // record changes the VM's section as f says, under its lock.
 func record(ctx context.Context, vm *state.VM, f func(*InVM)) error {
@@ -137,8 +149,8 @@ const maxDepth = 8
 // Protector protects one project folder's .git.
 type Protector struct {
 	tree // the project folder (Dir) and the home folder for ~ (Home)
-	// Locker locks, the host's way (HostLocker): on and strict need one
-	// that does (Locker.Locks).
+	// Locker locks, the host's way (HostLocker): on needs one that does
+	// (Locker.Locks).
 	Locker Locker
 	// Reporter is where it warns.
 	msg.Reporter
@@ -150,8 +162,9 @@ type Protector struct {
 	// Kept says, for the VM vm, whether another VM keeps a path locked
 	// too, as its own protection covers it (Keeps), or may (its state
 	// can't be read): the warning that names it (git_kept_locked,
-	// git_kept_unread), or a zero msg.M for none. Unlock and strict leave
-	// such a path locked. nil keeps none.
+	// git_kept_unread), or a zero msg.M for none. Unlock, and taking out
+	// what strict set (dropIgnore), leave such a path as it is. nil keeps
+	// none.
 	Kept func(vm string) func(path string) msg.M
 	// Serial runs f holding the host's lock of .git protection
 	// (paths.Dirs.GitLock), so one VM's unlock never runs between
@@ -191,7 +204,7 @@ func (p *Protector) NewVM(ctx context.Context, vm *state.VM) error {
 		return err
 	case !p.Locker.Locks() && g.Mode != Clone:
 		return watcher{p}.check(ctx, vm, g)
-	case g.Mode != On && g.Mode != Strict || !p.Locker.Locks():
+	case !g.locks() || !p.Locker.Locks():
 		return nil
 	}
 	return p.lockAndWatch(ctx, vm, g, whyNew, lockNow, Watched{}, func(*InVM) {})
@@ -233,25 +246,24 @@ func (p *Protector) lockAndWatch(ctx context.Context, vm *state.VM, g InVM, w wh
 	return watcher{p}.watch(ctx, vm, snaps, was, unwatched(g.Made, made, c.gone))
 }
 
-// Modes of .git protection, as devvm git-protect takes them. Strict is on,
-// with host git status and diff kept out of submodules.
+// Modes of .git protection, as devvm git-protect takes them.
 const (
-	On     = "on"
-	Strict = "strict"
-	Off    = "off"
+	On  = "on"
+	Off = "off"
 )
 
 // Clone is the mode of a --clone VM, which mounts no .git to protect.
 const Clone = "clone"
 
 // Modes are the modes devvm git-protect takes.
-var Modes = []string{On, Strict, Off}
+var Modes = []string{On, Off}
 
 // Next returns the mode chosen for a VM while it ran (SetNext), which
-// the caller sets with Set once it's stopped; "" for none.
+// the caller sets with Set once it's stopped; "" for none. An earlier
+// devvm's strict is on.
 func Next(vm *state.VM) string {
 	g, _ := Of(vm)
-	return g.Next
+	return asOn(g.Next)
 }
 
 // SetNext saves mode for a running VM, whose locks can't change until it
@@ -260,104 +272,33 @@ func SetNext(ctx context.Context, vm *state.VM, mode string) error {
 	return record(ctx, vm, func(g *InVM) { g.Next = mode })
 }
 
-// Set changes the protection of a stopped VM: on and strict lock .git as
-// it is now, as trusted, the repos nested in the folder's included, and
-// report what a lock can't cover; strict also sets
-// diff.ignoreSubmodules=all in each repo's locked .git/config, which on
-// and off take out again; off unlocks. On and strict need a host that
-// locks. Once it's set, a mode saved for the VM's next stop (SetNext) is
-// dropped: both are recorded at once, with the mode as the user's choice
-// (Chosen).
+// Set changes the protection of a stopped VM: on locks .git as it is
+// now, as trusted, the repos nested in the folder's included, and
+// reports what a lock can't cover; off unlocks. On needs a host that
+// locks. A VM an earlier devvm made strict loses what strict set in its
+// repos' configs either way, and so do those a conversion left
+// (strictLeft), whose repos it leaves are recorded. Once it's set, a mode saved for
+// the VM's next stop (SetNext) is dropped: both are recorded at once,
+// with the mode as the user's choice (Chosen).
 func (p *Protector) Set(ctx context.Context, vm *state.VM, mode string) error {
 	g, err := Of(vm)
 	if err != nil {
 		return err
 	}
-	was := g.Mode
 	if mode == Off {
-		p.Unlock(ctx, vm)
-		if was == Strict {
-			if err := p.strict(ctx, vm.Name(), p.recorded(g.Made), false); err != nil {
-				return err
-			}
-		}
-		return record(ctx, vm, func(g *InVM) { g.Mode, g.Chosen, g.Next, g.Made.Left = Off, true, "", nil })
+		left := p.unlockAll(ctx, vm)
+		return record(ctx, vm, func(g *InVM) { g.Mode, g.Chosen, g.Next, g.Made.Left, g.StrictLeft = Off, true, "", nil, left })
 	}
 	if !p.Locker.Locks() {
 		return msg.GitProtectOnNeedsLocks()
 	}
-	if mode == Strict || was == Strict {
-		if err := p.strict(ctx, vm.Name(), p.repos(g.Made, true, p.Nested).trees, mode == Strict); err != nil {
-			return err
-		}
-	}
+	var left []string
+	_ = serial(ctx, p.Serial, func() error {
+		left = converter{p}.strictLeft(ctx, vm.Name(), g, true)
+		return nil
+	})
 	g.Mode = mode
-	return p.lockAndWatch(ctx, vm, g, whyOn, lockNow, Watched{}, func(g *InVM) { g.Mode, g.Chosen, g.Next = mode, true, "" })
-}
-
-// strict sets diff.ignoreSubmodules=all in the .git/config of each of
-// trees that has a .git folder, or takes it out (ignoreSubmodules), for
-// the VM vm: never in a config another VM's protection keeps locked too
-// (Kept), which unlocking would leave that VM's to race, and which it
-// names. When setting one fails, the configs it unlocked that were locked
-// are locked again.
-func (p *Protector) strict(ctx context.Context, vm string, trees []tree, on bool) error {
-	kept := keeper(p.Kept, vm)
-	keepers := map[string]msg.M{}
-	var relock []string
-	for _, t := range trees {
-		cfg := filepath.Join(t.git(), "config")
-		if t.Root != p.Dir && (!isDir(t.git()) || isLink(t.git())) {
-			continue
-		}
-		if k := kept(cfg); k.ID() != "" {
-			keepers[k.String()] = k
-			continue
-		}
-		if p.Locker.Locked(cfg) {
-			relock = append(relock, cfg)
-		}
-		if err := p.ignoreSubmodules(ctx, t, on); err != nil {
-			for _, c := range relock {
-				if isFile(c) && p.realInDir(c) {
-					p.flag(ctx, true, c)
-				}
-			}
-			return err
-		}
-	}
-	for _, k := range slices.Sorted(maps.Keys(keepers)) {
-		p.Warn(keepers[k])
-	}
-	return nil
-}
-
-// ignoreSubmodules sets diff.ignoreSubmodules=all in t's .git/config, or
-// takes it out, unlocking the file for the moment (protect locks it
-// again).
-func (p *Protector) ignoreSubmodules(ctx context.Context, t tree, on bool) error {
-	cfg := filepath.Join(t.git(), "config")
-	if !isFile(cfg) || !p.realInDir(cfg) {
-		if on && exists(t.git()) {
-			return msg.GitConfigFailed(cfg)
-		}
-		return nil
-	}
-	if !p.flag(ctx, false, cfg) {
-		if on {
-			return msg.GitConfigFailed(cfg)
-		}
-		return nil
-	}
-	args := []string{"config", "--file", cfg, "--unset", "diff.ignoreSubmodules"}
-	if on {
-		args = []string{"config", "--file", cfg, "diff.ignoreSubmodules", "all"}
-	}
-	// --unset fails when there's nothing to take out.
-	if err := hostgit.Command(ctx, args...).Run(); err != nil && on {
-		return msg.GitConfigFailed(cfg)
-	}
-	return nil
+	return p.lockAndWatch(ctx, vm, g, whyOn, lockNow, Watched{}, func(g *InVM) { g.Mode, g.Chosen, g.Next, g.StrictLeft = mode, true, "", left })
 }
 
 // Check runs on every launch of an existing VM: it locks again what's new
@@ -372,8 +313,23 @@ func (p *Protector) ignoreSubmodules(ctx context.Context, t tree, on bool) error
 // host without locks, a stopped VM's .git is watched instead, whatever
 // its mode: what a lock can't stop is reported all the same, and what a
 // lock would cover that changed since the last check is named
-// (watcher.check).
+// (watcher.check). A stopped VM an earlier devvm made strict is on once
+// it's checked, in the repos its state recorded before the check
+// (unstrict): one the check found is new, so strict never set anything
+// there.
 func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error {
+	was, err := Of(vm)
+	if err != nil {
+		return err
+	}
+	if err := p.check(ctx, vm, running); err != nil || running {
+		return err
+	}
+	return converter{p}.unstrict(ctx, vm, was.Made)
+}
+
+// check is Check's, before a strict VM is converted.
+func (p *Protector) check(ctx context.Context, vm *state.VM, running bool) error {
 	g, err := Of(vm)
 	switch {
 	case err != nil:
@@ -383,7 +339,7 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 			return nil
 		}
 		return watcher{p}.check(ctx, vm, g)
-	case g.Mode != On && g.Mode != Strict:
+	case !g.locks():
 		return nil
 	case !g.Made.Protected:
 		if running {
@@ -404,21 +360,28 @@ func (p *Protector) Check(ctx context.Context, vm *state.VM, running bool) error
 // config of every git dir its state records locking, which the VM may
 // since have dropped from its index. A path another VM's protection
 // keeps locked too (Kept) stays locked, and that VM is named. Like
-// locking, it never acts through a symlink.
-func (p *Protector) Unlock(ctx context.Context, vm *state.VM) {
-	if !p.Locker.Locks() {
-		return
-	}
+// locking, it never acts through a symlink. A VM an earlier devvm made
+// strict loses what strict set in its repos' configs too (strictLeft).
+func (p *Protector) Unlock(ctx context.Context, vm *state.VM) { p.unlockAll(ctx, vm) }
+
+// unlockAll is Unlock's, and returns the repos whose config keeps what
+// strict set (InVM.StrictLeft).
+func (p *Protector) unlockAll(ctx context.Context, vm *state.VM) []string {
 	var g InVM
 	name := ""
 	if vm != nil {
 		g, _ = Of(vm)
 		name = vm.Name()
 	}
+	var left []string
 	_ = serial(ctx, p.Serial, func() error {
-		p.unlock(ctx, name, g.Made)
+		if p.Locker.Locks() {
+			p.unlock(ctx, name, g.Made)
+		}
+		left = converter{p}.strictLeft(ctx, name, g, false)
 		return nil
 	})
+	return left
 }
 
 // unlock is Unlock's, under the host's lock: of the repos made records,

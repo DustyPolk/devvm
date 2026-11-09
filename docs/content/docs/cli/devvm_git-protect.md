@@ -7,10 +7,10 @@ Show or change .git protection for this folder's VM
 
 ## Synopsis
 
-Show this folder's VM's .git protection, which locks the git hooks and config that run code on this machine, as on, strict, off, or clone for a --clone VM. devvm git-protect on, strict or off changes it at once on a stopped VM, and on a running one when it next stops, so in a terminal devvm offers to restart it now.
+Show this folder's VM's .git protection, which locks the git hooks and config that run code on this machine, as on, off, or clone for a --clone VM. devvm git-protect on or off changes it at once on a stopped VM, and on a running one when it next stops, so in a terminal devvm offers to restart it now.
 
 ```text
-devvm git-protect [on|strict|off] [flags]
+devvm git-protect [on|off] [flags]
 ```
 
 ## Examples

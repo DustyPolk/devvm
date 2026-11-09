@@ -52,7 +52,7 @@ devvm deletes the VM made for an earlier folder at this path only after you conf
 | `STATUS` | its state as its backend reports it, such as `Running` or `Stopped` |
 | `IMAGE` | its image, base and its layers, with a base from a container image as `base (from node:24)` ([details](from.md)) |
 | `TOOLS` | its shared tools, joined with commas, such as `node,claude`, or `-` for none |
-| `GIT` | its [`.git` protection](../safety/git-protection.md), `on`, `strict` or `off`, or `clone` for a [`--clone`](clone.md) VM |
+| `GIT` | its [`.git` protection](../safety/git-protection.md), `on` or `off`, or `clone` for a [`--clone`](clone.md) VM |
 | `NET` | its [network tier](../safety/network.md#network-tiers), `open`, `internet`, `allowlist` or `none`, or `unenforced` ([the self-check](../internals/network.md#the-self-check)), and `internet (learning)` while it [learns the hosts it needs](../safety/network.md#learning-the-hosts-a-vm-needs) |
 | `LINKS` | how many [links](links.md) it has to ports of your other VMs, or `-` for none |
 | `FOLDER` | its project folder, with `(gone)` after it when nothing is at that path, which `devvm rm VM` deals with ([a VM whose folder is gone](#a-vm-whose-folder-is-gone)), or `(not connected)` when the folder was on a disk that isn't connected ([details](#a-folder-on-a-disk-that-isnt-connected)) |

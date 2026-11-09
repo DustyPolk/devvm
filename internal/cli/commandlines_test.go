@@ -79,6 +79,7 @@ func TestCommandLines(t *testing.T) {
 		"ports 5173 8080":    "Troubleshooting's example of a usage error",
 		"allow":              "the cli skill's example of a command in the wrong place",
 		"images build":       "the cli skill's example of a command in the wrong place",
+		"git-protect strict": ".git protection's and the changelog's mode devvm 0.1.0 took, refused since",
 		"--snapshot DEVVM_VERSION=1.2.3 GORELEASER_CURRENT_TAG= pins=": "goreleaser's --id devvm in a testscript stub's log, not devvm",
 	}
 	files := commandLineFiles(t)

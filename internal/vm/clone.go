@@ -586,7 +586,7 @@ func (e remaking) leftBehind(ctx context.Context, t *target, clone string) error
 	st := t.st
 	switch clone {
 	case CloneOn:
-		if m := gitprotect.Mode(st); m == gitprotect.On || m == gitprotect.Strict {
+		if gitprotect.Mode(st) == gitprotect.On {
 			p := e.Protector(t.f.Dir)
 			if err := p.Check(ctx, st, false); err != nil {
 				return err
@@ -623,7 +623,7 @@ func (e remaking) mountFolder(ctx context.Context, t *target) error {
 // the old machine still has, is added again when it's gone.
 func (e remaking) unmountFolder(ctx context.Context, t *target) {
 	dir, vm := t.f.Dir, t.f.Name
-	if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
+	if gitprotect.Mode(t.st) == gitprotect.On {
 		p := e.Protector(dir)
 		// An undo goes on whatever Check finds: it has named it.
 		_ = p.Check(ctx, t.st, false)

@@ -1599,12 +1599,7 @@ func GitCommondir(git string, target string) M {
 	return M{id: "git_commondir", vals: []val{{"git", git}, {"target", target}}}
 }
 
-// GitConfigFailed is [git_config_failed]: "Setting diff.ignoreSubmodules in {{.config}} failed."
-func GitConfigFailed(config string) M {
-	return M{id: "git_config_failed", vals: []val{{"config", config}}}
-}
-
-// GitEmbeddedNew is [git_embedded_new]: "WARNING: A submodule appeared with its git folder at {{.git}}, inside the project. If you didn't add it, check its hooks and config before you run git here."
+// GitEmbeddedNew is [git_embedded_new]: "WARNING: A submodule appeared with its git folder at {{.git}}, inside the project, and git on this machine may already have run what its config says. If you didn't add it, check its hooks and config before you run git here."
 func GitEmbeddedNew(git string) M {
 	return M{id: "git_embedded_new", vals: []val{{"git", git}}}
 }
@@ -1659,14 +1654,9 @@ func GitLockRaced(path string) M {
 	return M{id: "git_lock_raced", vals: []val{{"path", path}}}
 }
 
-// GitLocked is [git_locked]: "devvm locked the hooks and config in .git for {{.vm}}."
+// GitLocked is [git_locked]: "devvm locked the hooks and config in .git for {{.vm}}. git on this machine still runs what a submodule or repo the VM adds says until devvm stop or the next launch names it, and only devvm clone on keeps the VM's code away from git here."
 func GitLocked(vm string) M {
 	return M{id: "git_locked", vals: []val{{"vm", vm}}}
-}
-
-// GitLockedStrict is [git_locked_strict]: "devvm locked the hooks and config in .git for {{.vm}}. git status and git diff on this machine don't look inside submodules."
-func GitLockedStrict(vm string) M {
-	return M{id: "git_locked_strict", vals: []val{{"vm", vm}}}
 }
 
 // GitLocksLeft is [git_locks_left]: "WARNING: devvm locked the .git of the git repos at {{.repos}}, which aren't in this folder any more, so it can't take their locks off. If you moved them, run chflags -R nouchg on their .git/hooks and .git/config."
@@ -1804,6 +1794,11 @@ func GitProtectOnNeedsLocks() M {
 	return M{id: "git_protect_on_needs_locks"}
 }
 
+// GitProtectStrictRefused is [git_protect_strict_refused]: "Strict .git protection can't keep git on this machine out of submodules the VM adds, so devvm git-protect takes only on or off. To keep the VM's code away from git on this machine, use devvm clone on."
+func GitProtectStrictRefused() M {
+	return M{id: "git_protect_strict_refused"}
+}
+
 // GitReplaced is [git_replaced]: "WARNING: Something replaced {{.git}} after devvm locked it, possibly the VM. Check its hooks and config before you run git here."
 func GitReplaced(git string) M {
 	return M{id: "git_replaced", vals: []val{{"git", git}}}
@@ -1812,6 +1807,26 @@ func GitReplaced(git string) M {
 // GitScanBounded is [git_scan_bounded]: "WARNING: devvm stopped following the submodules of {{.git}} after 1,000 git folders, so it doesn't lock the rest. Check them before you run git there, or move the repos you don't use out of this folder."
 func GitScanBounded(git string) M {
 	return M{id: "git_scan_bounded", vals: []val{{"git", git}}}
+}
+
+// GitStrictConverted is [git_strict_converted]: "Strict .git protection can't keep git on this machine out of submodules the VM adds, so {{.vm}}'s protection is on now. To keep the VM's code away from git on this machine, use devvm clone on."
+func GitStrictConverted(vm string) M {
+	return M{id: "git_strict_converted", vals: []val{{"vm", vm}}}
+}
+
+// GitStrictKept is [git_strict_kept]: "{{.config}} keeps the diff.ignoreSubmodules = all that strict .git protection set, because {{.vm}}'s .git protection also keeps that file locked. Run devvm stop here and in {{.vm}}'s folder, then chflags nouchg '{{.config}}' on macOS and git config --file '{{.config}}' --unset-all diff.ignoreSubmodules '^all$', and the next launch of either VM locks it again."
+func GitStrictKept(config string, vm string) M {
+	return M{id: "git_strict_kept", vals: []val{{"config", config}, {"vm", vm}}}
+}
+
+// GitStrictLeft is [git_strict_left]: "Taking diff.ignoreSubmodules = all, which strict .git protection set, out of {{.config}} failed, so git status and git diff on this machine still skip that repo's submodules."
+func GitStrictLeft(config string) M {
+	return M{id: "git_strict_left", vals: []val{{"config", config}}}
+}
+
+// GitStrictUnknown is [git_strict_unknown]: "{{.config}} sets diff.ignoreSubmodules = all in a .git that isn't the one devvm recorded, so devvm left it, as it can't tell whether strict .git protection set it. If you didn't set it, run devvm stop and devvm git-protect off, then git config --file '{{.config}}' --unset-all diff.ignoreSubmodules '^all$' and devvm git-protect on."
+func GitStrictUnknown(config string) M {
+	return M{id: "git_strict_unknown", vals: []val{{"config", config}}}
 }
 
 // GitUnlocked is [git_unlocked]: "devvm unlocked .git, so {{.vm}} can change its hooks and config, which run on this machine. To lock it again, run devvm git-protect on."
@@ -5140,7 +5155,6 @@ var specs = map[string]spec{
 	"git_changed":                    {fields: []string{"paths", "vm"}},
 	"git_changed_more":               {plural: true, fields: []string{"count", "paths", "vm"}},
 	"git_commondir":                  {fields: []string{"git", "target"}},
-	"git_config_failed":              {fields: []string{"config"}},
 	"git_embedded_new":               {fields: []string{"git"}},
 	"git_gitdir_not_git":             {fields: []string{"git", "sub"}},
 	"git_gitdir_outside":             {fields: []string{"git", "sub"}},
@@ -5153,7 +5167,6 @@ var specs = map[string]spec{
 	"git_lock_later":                 {fields: []string{"vm"}},
 	"git_lock_raced":                 {fields: []string{"path"}},
 	"git_locked":                     {fields: []string{"vm"}},
-	"git_locked_strict":              {fields: []string{"vm"}},
 	"git_locks_left":                 {fields: []string{"repos"}},
 	"git_nested_appeared":            {fields: []string{"repo", "vm"}},
 	"git_nested_appeared_runs":       {fields: []string{"repo", "runs", "vm"}},
@@ -5181,8 +5194,13 @@ var specs = map[string]spec{
 	"git_protect_failed":             {fields: []string{"reason"}},
 	"git_protect_next_stop":          {fields: []string{"mode", "vm"}},
 	"git_protect_on_needs_locks":     {},
+	"git_protect_strict_refused":     {},
 	"git_replaced":                   {fields: []string{"git"}},
 	"git_scan_bounded":               {fields: []string{"git"}},
+	"git_strict_converted":           {fields: []string{"vm"}},
+	"git_strict_kept":                {fields: []string{"config", "vm"}},
+	"git_strict_left":                {fields: []string{"config"}},
+	"git_strict_unknown":             {fields: []string{"config"}},
 	"git_unlocked":                   {fields: []string{"vm"}},
 	"git_unprotected":                {fields: []string{"vm"}},
 	"git_unprotected_quiet":          {fields: []string{"vm"}},

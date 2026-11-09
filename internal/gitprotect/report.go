@@ -16,7 +16,7 @@ type why int
 
 const (
 	whyNew   why = iota // a VM just made
-	whyOn               // devvm git-protect on or strict
+	whyOn               // devvm git-protect on
 	whyCheck            // a launch of an existing VM
 )
 

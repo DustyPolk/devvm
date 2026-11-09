@@ -18,12 +18,23 @@ stdout '^git.mode=on$'
 stdout '^git.made.protected=true$'
 
 # A running VM's change waits for its next stop, as on macOS.
-exec devvm git-protect strict
-stdout '^==> git_protect_next_stop mode=strict vm=devvm-web-[0-9a-f]{14}$'
+exec devvm git-protect on
+stdout '^==> git_protect_next_stop mode=on vm=devvm-web-[0-9a-f]{14}$'
 exec devvm stop
-stdout '^==> git_locked_strict vm=devvm-web-[0-9a-f]{14}$'
-exec git config --file .git/config diff.ignoreSubmodules
-stdout '\Aall\n\z'
+stdout '^==> git_locked vm=devvm-web-[0-9a-f]{14}$'
+
+# A VM an earlier devvm left strict: the launch's check takes strict's
+# diff.ignoreSubmodules = all out and says so, and the start pins .git as
+# it does when it's on. devvm's own change is in the watch's sums, so the
+# next check names nothing.
+json_set $WEB_dir/vm.json git.mode=strict
+exec git config --file .git/config diff.ignoreSubmodules all
+exec devvm
+stderr '^devvm: git_strict_converted vm=devvm-web-[0-9a-f]{14}$'
+! exec git config --file .git/config diff.ignoreSubmodules
+grep '\{"path":"\.git/config","read_only":true\}' $WEB_dir/run/git-pins.json
+exec devvm stop
+! stderr 'git_changed|git_strict'
 
 # The host can't pin any more: the VM that's on doesn't start, and says
 # what it lacks, until devvm git-protect off.

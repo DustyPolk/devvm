@@ -866,27 +866,47 @@ func projectGitProtect(s *S, w *webVM) {
 			return nil
 		})
 	})
-	s.Check("git-protect strict keeps host git status out of submodules", func() error {
+	s.Check("git-protect strict is refused, and a VM an earlier devvm left strict is on at its next launch", func() error {
 		_, _ = s.Limactl("stop", vm)
-		if _, err := s.Devvm(p, "git-protect", "strict"); err != nil {
+		if r, err := s.Devvm(p, "git-protect", "strict"); err == nil || !strings.Contains(err.Error(), "exit status 2") ||
+			!grepF(r.Out, FirstLine(s.Msg("git_protect_strict_refused"))) {
+			return fmt.Errorf("devvm git-protect strict: %w\n%s", err, r.Out)
+		}
+		// As strict left it: diff.ignoreSubmodules = all in the locked
+		// config, and its mode.
+		for _, c := range [][]string{
+			{"chflags", "nouchg", config},
+			{"git", "config", "--file", config, "diff.ignoreSubmodules", "all"},
+			{"chflags", "uchg", config},
+		} {
+			if _, err := s.Run(Cmd{Args: c}); err != nil {
+				return err
+			}
+		}
+		if err := SetState(s.Paths, vm, "git.mode", `"strict"`); err != nil {
 			return err
 		}
-		g, _ := s.Run(Cmd{Args: []string{"git", "config", "--file", ".git/config", "diff.ignoreSubmodules"}, Dir: p})
+		r, err := DevvmIn(s, p, "exit\n", nil)
+		if err != nil {
+			return err
+		}
+		if !grepF(r.Out, FirstLine(s.Msg("git_strict_converted", "vm="+vm))) {
+			return errors.New("the launch didn't say it's on:\n" + r.Out)
+		}
+		g, _ := s.Run(Cmd{Args: []string{"git", "config", "--file", config, "diff.ignoreSubmodules"}})
 		m, _ := s.Devvm(p, "git-protect")
-		if Trim(g.Stdout) != "all" || Trim(m.Stdout) != "strict" || !Locked(s, config) {
+		if Trim(g.Stdout) != "" || Trim(m.Stdout) != "on" || w.state(s)["git.mode"] != "on" || !Locked(s, config) {
 			return fmt.Errorf("diff.ignoreSubmodules %q, mode %q, locked %v", g.Stdout, m.Stdout, Locked(s, config))
 		}
 		return nil
 	})
 	s.Check("git-protect off unlocks, and on locks again", func() error {
+		_, _ = s.Limactl("stop", vm)
 		if _, err := s.Devvm(p, "git-protect", "off"); err != nil {
 			return err
 		}
 		if Locked(s, config) {
 			return errors.New("still locked")
-		}
-		if _, err := s.Run(Cmd{Args: []string{"git", "config", "--file", ".git/config", "diff.ignoreSubmodules"}, Dir: p}); err == nil {
-			return errors.New("diff.ignoreSubmodules is still set")
 		}
 		if _, err := s.Devvm(p, "git-protect", "on"); err != nil {
 			return err

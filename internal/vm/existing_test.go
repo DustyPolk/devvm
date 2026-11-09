@@ -495,9 +495,9 @@ func TestRestartToApply(t *testing.T) {
 			"next_start count=1", nil,
 		},
 		{
-			"devvm git-protect strict", func(e *Env) error { return Settings{e}.SetGitProtect(t.Context(), gitprotect.Strict) },
-			"git_protect_next_stop mode=strict",
-			func(st *state.VM) bool { return gitprotect.Mode(st) == gitprotect.Strict },
+			"devvm git-protect off", func(e *Env) error { return Settings{e}.SetGitProtect(t.Context(), gitprotect.Off) },
+			"git_protect_next_stop mode=off",
+			func(st *state.VM) bool { return gitprotect.Mode(st) == gitprotect.Off },
 		},
 	} {
 		for _, a := range []struct {

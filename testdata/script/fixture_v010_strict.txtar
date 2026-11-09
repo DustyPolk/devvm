@@ -1,0 +1,43 @@
+# devvm 0.1.0's app VM (testdata/v0.1.0/darwin: see fixture_v010.txtar)
+# as 0.1.0's devvm git-protect strict would have left it on macOS, the
+# one host where 0.1.0 locked .git: its mode strict, and
+# diff.ignoreSubmodules = all in .git/config. It reads as on, its next
+# launch takes strict's all out, .git/config unlocked for the edit and
+# locked again before the VM starts, and says so once.
+[!darwin] skip '0.1.0 locked .git on macOS only'
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+mkdir $HOME/src/db $HOME/src/app $HOME/src/web $HOME/src/scratch
+cd $HOME/src/app
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+fixture v0.1.0
+vm_name APP app
+
+# Host ports of its own, as fixture_v010.txtar launches app with 0.1.0's
+# at the same time; then strict, as 0.1.0 recorded and set it.
+free_port APP_PROXY APP_SSH
+json_set $APP_dir/vm.json ports.host.proxy:=$APP_PROXY ports.host.ssh:=$APP_SSH git.mode=strict
+exec git config --file .git/config diff.ignoreSubmodules all
+
+exec devvm ls
+stdout '^devvm-app-[0-9a-f]{14} +Stopped +base +node,claude,codex +on +allowlist '
+exec devvm git-protect --json
+stdout '\A{\n  "version": 1,\n  "mode": "on"\n}\n\z'
+
+stub_reset
+exec devvm
+stdout '^==> starting vm=devvm-app-[0-9a-f]{14}$'
+stderr '^devvm: git_strict_converted vm=devvm-app-[0-9a-f]{14}$'
+! stderr 'replaced|refused|failed|git_strict_left'
+! exec git config --file .git/config diff.ignoreSubmodules
+stub_calls
+stdout '^chflags -R -P nouchg \S*/home/src/app/\.git/config\n(.*\n)*chflags -R -P uchg \S*/home/src/app/\.git/config\n(.*\n)*limactl start '
+vm_state $APP_dir/vm.json
+stdout '^git\.mode=on$'
+
+# Once only.
+exec devvm stop
+! stderr git_strict
+exec devvm
+! stderr git_strict
+exec devvm stop

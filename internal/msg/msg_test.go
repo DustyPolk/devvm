@@ -108,6 +108,16 @@ func TestNames(t *testing.T) {
 	}
 }
 
+// Value is a field's value as given, and "" for a field it hasn't.
+func TestValue(t *testing.T) {
+	m := MsgMissingValue("dir", "no_vm")
+	for key, want := range map[string]string{"key": "dir", "name": "no_vm", "vm": ""} {
+		if got := m.Value(key); got != want {
+			t.Errorf("Value(%q) = %q, want %q", key, got, want)
+		}
+	}
+}
+
 // errors.Is and errors.As see through a message to its cause, which
 // changes nothing it shows.
 func TestBecause(t *testing.T) {

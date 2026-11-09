@@ -103,8 +103,7 @@ func TestNestedProtected(t *testing.T) {
 }
 
 // A folder of repos without one of its own: each is protected; devvm
-// git-protect off unlocks them, and on locks them again; strict keeps
-// host git out of their submodules too.
+// git-protect off unlocks them, and on locks them again.
 func TestNestedNoTopRepo(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "ws")
@@ -123,15 +122,9 @@ func TestNestedNoTopRepo(t *testing.T) {
 		t.Errorf("off: %q", f.flags)
 	}
 	f.walked()
-	f.set(Strict)
-	if !f.locked(f.path("a/.git/config")) {
-		t.Errorf("strict: %q", f.flags)
-	}
-	for _, r := range []string{"a", "b"} {
-		out := f.git(f.path(r), "config", "--file", ".git/config", "diff.ignoreSubmodules")
-		if out != "all" {
-			t.Errorf("%s: diff.ignoreSubmodules %q", r, out)
-		}
+	f.set(On)
+	if !f.locked(f.path("a/.git/config")) || !f.locked(f.path("b/.git/config")) {
+		t.Errorf("on: %q", f.flags)
 	}
 	// Past the walk's bound, what isn't protected is counted.
 	f.p.Nested.More, f.p.Nested.Past = 3, []string{"x", "y", "z"}
@@ -446,39 +439,9 @@ func TestEmbeddedOnce(t *testing.T) {
 	}
 }
 
-// devvm git-protect strict and off leave a config another VM keeps
-// locked as it is, and name that VM.
-func TestStrictKept(t *testing.T) {
-	needGit(t)
-	f := newFixture(t, "ws")
-	f.repo("a")
-	f.repo("b")
-	f.walked()
-	if err := f.newVM(false); err != nil {
-		t.Fatal(err)
-	}
-	f.p.Kept = func(string) func(string) msg.M {
-		return func(path string) msg.M {
-			if strings.HasPrefix(path, f.path("b")+"/") {
-				return msg.GitKeptLocked("devvm-b-0123456789abcd")
-			}
-			return msg.M{}
-		}
-	}
-	f.set(Strict)
-	if slices.Contains(f.flags, "nouchg "+f.path("b/.git/config")) || !slices.Contains(f.flags, "nouchg "+f.path("a/.git/config")) {
-		t.Errorf("strict: %q", f.flags)
-	}
-	if !f.warned("git_kept_locked vm=devvm-b-0123456789abcd") {
-		t.Errorf("strict: %q", f.warns.Names())
-	}
-	if out := f.git(f.path("a"), "config", "--file", ".git/config", "diff.ignoreSubmodules"); out != "all" {
-		t.Errorf("a: %q", out)
-	}
-}
-
 // A VM's protection keeps the git dirs it locked: its own repo's, its
-// submodules', and its nested repos', while it's on or strict.
+// submodules', and its nested repos', while it's on, or an earlier
+// devvm's strict.
 func TestKeeps(t *testing.T) {
 	f := newFixture(t, "ws")
 	g := InVM{Mode: On, Made: Made{
@@ -495,6 +458,13 @@ func TestKeeps(t *testing.T) {
 		if got := Keeps(f.vm, path); got != want {
 			t.Errorf("%s: %v", path, got)
 		}
+	}
+	g.Mode = Strict
+	if err := f.vm.Update(t.Context(), func(st *state.VM) error { return Set(st, g) }); err != nil {
+		t.Fatal(err)
+	}
+	if !Keeps(f.vm, f.path(".git/config")) {
+		t.Error("strict doesn't keep")
 	}
 	g.Mode = Off
 	if err := f.vm.Update(t.Context(), func(st *state.VM) error { return Set(st, g) }); err != nil {

@@ -29,7 +29,7 @@ import (
 
 // Pins are what the start of the VM vm pins for its locks (Binds), in the
 // folder's own repo and each nested repo its state records protecting,
-// none unless its mode is on or strict, each relative to the project folder and
+// none unless its mode locks (InVM.locks), each relative to the project folder and
 // a real path in it (realInDir), as lock takes them: .git, when it's a
 // folder, and the git dirs a lock covers besides (fixed), which the guest
 // can write in but not rename or remove, and each path a lock covers that
@@ -39,7 +39,7 @@ import (
 // (git_pin_linked): its other name would stay the guest's to change.
 func (p *Protector) Pins(ctx context.Context, vm *state.VM) (fixed, readOnly []string, err error) {
 	g, _ := Of(vm)
-	if g.Mode != On && g.Mode != Strict {
+	if !g.locks() {
 		return nil, nil, nil
 	}
 	return p.pinsOf(vm.Name(), scanAll(ctx, p.recorded(g.Made)))
@@ -192,7 +192,7 @@ func (p *Protector) PinsMissing(ctx context.Context, vm *state.VM, readOnly, mou
 		return nil
 	}
 	g, _ := Of(vm)
-	if g.Mode != On && g.Mode != Strict {
+	if !g.locks() {
 		return nil
 	}
 	// The folder's own repo scanned, the nested ones as recorded: a

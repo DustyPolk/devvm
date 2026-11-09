@@ -79,6 +79,17 @@ func (m M) Because(err error) M {
 // Unwrap returns the error the message reports, or nil.
 func (m M) Unwrap() error { return m.cause }
 
+// Value returns the value of the message's field key, or "" when it has
+// none, so a caller can name what another message names.
+func (m M) Value(key string) string {
+	for _, v := range m.vals {
+		if v.key == key {
+			return v.value
+		}
+	}
+	return ""
+}
+
 // Names returns the message's ID and values: no_vm dir=/x.
 func (m M) Names() string {
 	var b strings.Builder

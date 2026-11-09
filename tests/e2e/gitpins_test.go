@@ -246,24 +246,40 @@ func projectGitProtectPins(s *S, w *webVM) {
 		}
 		return nil
 	})
-	s.Check("git-protect strict keeps host git status out of submodules, and on pins again", func() error {
+	s.Check("a VM an earlier devvm left strict is on at its next launch, and pinned", func() error {
 		_, _ = s.Limactl("stop", vm)
-		if _, err := s.Devvm(p, "git-protect", "strict"); err != nil {
-			return err
-		}
-		g, _ := s.Run(Cmd{Args: []string{"git", "config", "--file", ".git/config", "diff.ignoreSubmodules"}, Dir: p})
-		m, _ := s.Devvm(p, "git-protect")
-		if Trim(g.Stdout) != "all" || Trim(m.Stdout) != "strict" {
-			return fmt.Errorf("diff.ignoreSubmodules %q, mode %q", g.Stdout, m.Stdout)
-		}
 		if _, err := s.Devvm(p, "git-protect", "on"); err != nil {
 			return err
 		}
-		if _, err := DevvmIn(s, p, "exit\n", nil); err != nil {
+		// As strict left it: diff.ignoreSubmodules = all in the config, and
+		// its mode.
+		if _, err := s.Run(Cmd{Args: []string{"git", "config", "--file", ".git/config", "diff.ignoreSubmodules", "all"}, Dir: p}); err != nil {
 			return err
+		}
+		if err := SetState(s.Paths, vm, "git.mode", `"strict"`); err != nil {
+			return err
+		}
+		r, err := DevvmIn(s, p, "exit\n", nil)
+		if err != nil {
+			return err
+		}
+		if !grepF(r.Out, FirstLine(s.Msg("git_strict_converted", "vm="+vm))) {
+			return errors.New("the launch didn't say it's on:\n" + r.Out)
+		}
+		g, _ := s.Run(Cmd{Args: []string{"git", "config", "--file", ".git/config", "diff.ignoreSubmodules"}, Dir: p})
+		m, _ := s.Devvm(p, "git-protect")
+		if Trim(g.Stdout) != "" || Trim(m.Stdout) != "on" {
+			return fmt.Errorf("diff.ignoreSubmodules %q, mode %q", g.Stdout, m.Stdout)
 		}
 		if _, err := s.Limactl("shell", "--workdir", "/", vm, "sudo", "sh", "-c", "echo x >> "+p+"/.git/config"); err == nil {
 			return errors.New("on again, root changed the config")
+		}
+		r, err = s.Devvm(p, "stop")
+		if err != nil {
+			return err
+		}
+		if grepF(r.Out, FirstLine(s.Msg("git_strict_converted", "vm="+vm))) || strings.Contains(r.Out, ".git/config") {
+			return errors.New("devvm stop named it again:\n" + r.Out)
 		}
 		return nil
 	})

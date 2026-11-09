@@ -587,12 +587,12 @@ func TestSetNext(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.flags = nil
-	for _, m := range []string{Off, Strict} {
+	for _, m := range []string{On, Off} {
 		if err := SetNext(t.Context(), f.vm, m); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if Next(f.vm) != Strict || Mode(f.vm) != On || len(f.flags) > 0 {
+	if Next(f.vm) != Off || Mode(f.vm) != On || len(f.flags) > 0 {
 		t.Errorf("saved: next %q, mode %q, flags %q", Next(f.vm), Mode(f.vm), f.flags)
 	}
 	if err := f.p.Set(t.Context(), f.vm, Off); err != nil {
@@ -874,36 +874,26 @@ func (f *fixture) ignoreSubmodules() string {
 	return strings.TrimSpace(string(out))
 }
 
-// Strict keeps host git out of submodules (diff.ignoreSubmodules=all, set
-// with the config unlocked, then locked again); on and off take it back
-// out. On locks .git as it is now, a replaced one included, and names
-// submodules that appeared, and what's handed over, as a new VM does.
+// On locks .git as it is now, a replaced one included, and names
+// submodules that appeared, and what's handed over, as a new VM does; off
+// unlocks. Neither touches a diff.ignoreSubmodules of the user's own.
 func TestSet(t *testing.T) {
 	needGit(t)
 	f := newFixture(t, "p")
 	f.git(f.dir, "init", "-q")
 	f.git(f.dir, "config", "--file", f.path(".git/config"), "include.path", "../x.gitconfig")
+	f.git(f.dir, "config", "--file", f.path(".git/config"), "diff.ignoreSubmodules", "all")
 	if err := f.newVM(false); err != nil {
 		t.Fatal(err)
 	}
 	cfg := f.path(".git/config")
-	f.set(Strict)
-	if f.ignoreSubmodules() != "all" || Mode(f.vm) != Strict || Mode(f.vm) != Strict {
-		t.Errorf("strict: diff.ignoreSubmodules=%q, mode %s", f.ignoreSubmodules(), Mode(f.vm))
-	}
-	if !slices.Equal(f.flags[:1], []string{"nouchg " + cfg}) || !f.locked(cfg) {
-		t.Errorf("strict: locks %q", f.flags)
-	}
-	if !f.warned("git_include_inside") {
-		t.Errorf("strict: warnings %q", f.warns.Names())
-	}
-	f.set(On)
-	if f.ignoreSubmodules() != "" || Mode(f.vm) != On || !f.locked(cfg) {
-		t.Errorf("on: diff.ignoreSubmodules=%q, mode %s, locks %q", f.ignoreSubmodules(), Mode(f.vm), f.flags)
-	}
-	f.set(Strict)
 	f.set(Off)
-	if f.ignoreSubmodules() != "" || Mode(f.vm) != Off || !slices.Contains(f.flags, "nouchg "+cfg) || f.locked(cfg) {
+	f.set(On)
+	if Mode(f.vm) != On || !f.locked(cfg) || !f.warned("git_include_inside") {
+		t.Errorf("on: mode %s, locks %q, warnings %q", Mode(f.vm), f.flags, f.warns.Names())
+	}
+	f.set(Off)
+	if f.ignoreSubmodules() != "all" || Mode(f.vm) != Off || !slices.Contains(f.flags, "nouchg "+cfg) || f.locked(cfg) {
 		t.Errorf("off: diff.ignoreSubmodules=%q, mode %s, locks %q", f.ignoreSubmodules(), Mode(f.vm), f.flags)
 	}
 	// Off again, and checks, lock nothing.
@@ -931,47 +921,24 @@ func TestSet(t *testing.T) {
 	}
 }
 
-// Strict that can't set diff.ignoreSubmodules fails, with the config
-// locked again and the mode as it was.
-func TestSetStrictFails(t *testing.T) {
-	needGit(t)
-	f := newFixture(t, "p")
-	f.git(f.dir, "init", "-q")
-	if err := f.newVM(false); err != nil {
-		t.Fatal(err)
-	}
-	cfg := f.path(".git/config")
-	write(t, cfg, "[core\n")
-	f.flags = nil
-	err := f.p.Set(t.Context(), f.vm, Strict)
-	if err == nil || err.(msg.M).Names() != "git_config_failed config="+cfg { //nolint:errorlint,forcetypeassert // a message
-		t.Fatalf("err = %v", err)
-	}
-	if !slices.Equal(f.flags, []string{"nouchg " + cfg, "uchg " + cfg}) || Mode(f.vm) != On {
-		t.Errorf("locks %q, mode %s", f.flags, Mode(f.vm))
-	}
-}
-
-// On a host without locks, on and strict are refused; off is taken.
-// Without a .git, on is recorded for when one appears.
+// On a host without locks, on is refused; off is taken. Without a .git,
+// on is recorded for when one appears.
 func TestSetLinuxAndNoGit(t *testing.T) {
 	f := newFixture(t, "p")
 	f.canLock(false)
 	if err := f.newVM(false); err != nil || Mode(f.vm) != Off {
 		t.Errorf("new on linux: %s, %v", Mode(f.vm), err)
 	}
-	for _, m := range []string{On, Strict} {
-		if err := f.p.Set(t.Context(), f.vm, m); err == nil || err.(msg.M).Names() != "git_protect_on_needs_locks" { //nolint:errorlint,forcetypeassert // a message
-			t.Errorf("%s on linux: %v", m, err)
-		}
+	if err := f.p.Set(t.Context(), f.vm, On); err == nil || err.(msg.M).Names() != "git_protect_on_needs_locks" { //nolint:errorlint,forcetypeassert // a message
+		t.Errorf("on on linux: %v", err)
 	}
 	f.set(Off)
 	if Mode(f.vm) != Off || len(f.flags) > 0 {
 		t.Errorf("off on linux: %s, locks %q", Mode(f.vm), f.flags)
 	}
 	f.canLock(true)
-	f.set(Strict)
-	if Mode(f.vm) != Strict || len(f.flags)+len(f.warns.Names()) > 0 {
+	f.set(On)
+	if Mode(f.vm) != On || len(f.flags)+len(f.warns.Names()) > 0 {
 		t.Errorf("no .git: %s, locks %q, warnings %q", Mode(f.vm), f.flags, f.warns.Names())
 	}
 }

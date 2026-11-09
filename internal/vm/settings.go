@@ -16,8 +16,8 @@ import (
 // (transparent.go).
 type Settings struct{ *Env }
 
-// GitProtect returns the folder's VM's .git protection: on, strict, off,
-// or clone for a --clone VM, which mounts no .git (gitprotect.Mode, as
+// GitProtect returns the folder's VM's .git protection: on, off, or
+// clone for a --clone VM, which mounts no .git (gitprotect.Mode, as
 // devvm ls shows it).
 func (e Settings) GitProtect(ctx context.Context) (string, error) {
 	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMGitProtect})
@@ -40,11 +40,11 @@ func (e Settings) Clone(ctx context.Context) (string, error) {
 	return CloneOff, nil
 }
 
-// SetGitProtect turns the folder's VM's .git protection on, strict or
-// off. Locks change only while the VM is stopped, so nothing in it can
-// race them: a running VM's choice is saved, and set when devvm next
-// finds it stopped (starter.hostChecks), which a restart the user agrees to does
-// now (restartOr). On and strict lock .git as it is then.
+// SetGitProtect turns the folder's VM's .git protection on or off. Locks
+// change only while the VM is stopped, so nothing in it can race them: a
+// running VM's choice is saved, and set when devvm next finds it stopped
+// (starter.hostChecks), which a restart the user agrees to does now
+// (restartOr). On locks .git as it is then.
 func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 	t, err := e.finder.target(ctx, need{has: hasMade, noVM: msg.NoVMGitProtect})
 	if err != nil {
@@ -73,8 +73,8 @@ func (e Settings) SetGitProtect(ctx context.Context, mode string) error {
 			return e.restartOr(ctx, vm, e.Info, msg.GitProtectNextStop(mode, vm))
 		}
 	}
-	// The VM is stopped, or the host has no locks to race: on and strict
-	// name the nested repos the protection doesn't cover.
+	// The VM is stopped, or the host has no locks to race: on names the
+	// nested repos the protection doesn't cover.
 	if mode != gitprotect.Off {
 		found := e.starter.walk(t.f.Dir, false)
 		p.Nested = &found.Repos
@@ -97,8 +97,6 @@ func setGitProtect(ctx context.Context, e *Env, p *gitprotect.Protector, t *targ
 		e.Info(msg.GitUnlocked(vm))
 	case err != nil && len(g.Made.Repos) == 0:
 		e.Info(msg.GitLockLater(vm))
-	case mode == gitprotect.Strict:
-		e.Info(msg.GitLockedStrict(vm))
 	default:
 		e.Info(msg.GitLocked(vm))
 	}

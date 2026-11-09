@@ -680,7 +680,7 @@ func (e creation) undoCreate(b backend.Backend, f project.Folder, locking *atomi
 		if err != nil {
 			st = new(state.VM)
 		}
-		if m := gitprotect.Mode(st); locking.Load() && m != gitprotect.On && m != gitprotect.Strict {
+		if locking.Load() && gitprotect.Mode(st) != gitprotect.On {
 			e.Protector(f.Dir).Unlock(ctx, st)
 		}
 		if deleted {

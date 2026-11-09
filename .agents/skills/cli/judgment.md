@@ -34,7 +34,7 @@ Don't name a command `delete`, `remove` or `disable`, because rm and unX cover t
 A setting is a value devvm keeps, which a user reads and changes. Each setting is one command that does both:
 
 - **Bare, it shows the value.** devvm size shows the VM's CPUs, memory and disk, devvm ports shows what it forwards, and devvm git-protect shows its `.git` protection.
-- **With a value, it changes it.** devvm ports none, devvm network open, devvm ssh-agent devvm and devvm git-protect strict each set the value. devvm size takes its values as `--cpus`, `--memory` and `--disk`, because it holds three, and devvm retention takes `KEY=VALUE` words, because it holds many.
+- **With a value, it changes it.** devvm ports none, devvm network open, devvm ssh-agent devvm and devvm git-protect off each set the value. devvm size takes its values as `--cpus`, `--memory` and `--disk`, because it holds three, and devvm retention takes `KEY=VALUE` words, because it holds many.
 - **With `-g`, it shows or changes what new VMs get.** devvm size -g --memory 16, devvm ports -g none and devvm network -g none change the defaults. A setting takes `-g` only when new VMs get a default for it, so devvm git-protect, devvm ssh-agent and devvm clone have none, and devvm retention is about the whole machine.
 - **With `--json`, it only shows.** `showsOnly` refuses a value, so devvm network --json off is a usage error and changes nothing.
 

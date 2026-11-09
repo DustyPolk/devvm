@@ -33,7 +33,7 @@ func (e vmFolders) teardown(ctx context.Context, t *target, leaves bool) error {
 	// Both, for a VM devvm clone was switching: its remote, if its clone
 	// made one, and .git's locks, if it locked any.
 	e.clones.removeRemotes(ctx, t.f.Dir, vm, sectionOf[cloneInVM](t.st, cloneSection))
-	if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
+	if gitprotect.Mode(t.st) == gitprotect.On {
 		e.Protector(t.f.Dir).Unlock(ctx, t.st)
 	}
 	if err := e.groups.forget(ctx, vm); err != nil {
