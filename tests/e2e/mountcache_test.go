@@ -200,7 +200,7 @@ except OSError as e:
 
 // mountOptions is the options of the VM's mount at dir, the mount's and
 // its file system's, from the last line of /proc/self/mountinfo for it,
-// as devvm's own check reads them: Alpine's busybox has no findmnt.
+// as devvm's own check reads them, with a POSIX awk and no findmnt.
 func mountOptions(s *S, vm, dir string) string {
 	p := strings.NewReplacer(`\`, `\134`, " ", `\040`, "\t", `\011`, "\n", `\012`).Replace(dir)
 	r, _ := s.InVM(vm, `P=`+shell.Quote(p)+` awk '$5 == ENVIRON["P"] { l = $0 } END { print l }' /proc/self/mountinfo`)
@@ -218,7 +218,7 @@ func mountOptions(s *S, vm, dir string) string {
 // mountCacheSwitch: on a Linux host, vm, dir's VM, given Lima's mmap with
 // no mode chosen, as a VM made before devvm chose one, gets devvm
 // mount-cache none at its next start, whose remount devvm checks in
-// /proc/self/mountinfo, so it works without findmnt. Where the remount
+// /proc/self/mountinfo, portably, with no findmnt. Where the remount
 // fails, as an OpenRC guest's mount of the share it just unmounted does,
 // the launch restarts the VM once, and its boot mounts the folder with
 // none: the launch succeeds either way.

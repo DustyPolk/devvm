@@ -95,6 +95,18 @@ func TestWarnAndDiePrefixEveryLine(t *testing.T) {
 	}
 }
 
+// A run says each warning once: the same name and values again print
+// nothing, other values do.
+func TestWarnOnce(t *testing.T) {
+	u, _, errOut := testUI(t, "")
+	u.Warn(msg.MsgUnknown("a"))
+	u.Warn(msg.MsgUnknown("b"))
+	u.Warn(msg.MsgUnknown("a"))
+	if got, want := errOut.String(), "devvm: msg_unknown name=a\ndevvm: msg_unknown name=b\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestDiePrintsAndExits1(t *testing.T) {
 	t.Parallel()
 	u, out, errOut := testUI(t, "")

@@ -2484,12 +2484,12 @@ func MountCachePending(mode string, vm string) M {
 	return M{id: "mount_cache_pending", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
-// MountCacheRemountFailed is [mount_cache_remount_failed]: "{{.vm}}'s project folder is still mounted with {{.has}}, as mounting it again with {{.want}} failed. Run devvm restart to try again."
+// MountCacheRemountFailed is [mount_cache_remount_failed]: "{{.vm}}'s project folder is still mounted with {{.has}} instead of {{.want}}, which can lose writes there. Something the VM starts at boot may be holding the folder."
 func MountCacheRemountFailed(has string, vm string, want string) M {
 	return M{id: "mount_cache_remount_failed", vals: []val{{"has", has}, {"vm", vm}, {"want", want}}}
 }
 
-// MountCacheUnchecked is [mount_cache_unchecked]: "Checking that {{.vm}}'s project folder is mounted after its cache mode changed failed, so devvm stopped the VM before anything could write there. Run devvm restart to start it again."
+// MountCacheUnchecked is [mount_cache_unchecked]: "Checking that {{.vm}}'s project folder is mounted after its cache mode changed failed, even after a restart, so devvm stopped the VM before anything could write there. Its console log may say why."
 func MountCacheUnchecked(vm string) M {
 	return M{id: "mount_cache_unchecked", vals: []val{{"vm", vm}}}
 }
@@ -2499,7 +2499,7 @@ func MountCacheUnchosen(mode string, vm string) M {
 	return M{id: "mount_cache_unchosen", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
-// MountCacheUnmounted is [mount_cache_unmounted]: "{{.vm}}'s project folder wasn't mounted after its cache mode changed, so devvm stopped the VM before anything could write there. Run devvm restart to mount it again."
+// MountCacheUnmounted is [mount_cache_unmounted]: "{{.vm}}'s project folder wasn't mounted after its cache mode changed, even after a restart, so devvm stopped the VM before anything could write there. Its console log may say why."
 func MountCacheUnmounted(vm string) M {
 	return M{id: "mount_cache_unmounted", vals: []val{{"vm", vm}}}
 }

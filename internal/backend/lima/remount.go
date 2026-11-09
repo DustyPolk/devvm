@@ -49,7 +49,8 @@ func cacheChanges(in instance, w backend.Want) bool {
 // the start, as what's written there would land on the VM's disk and
 // vanish under the share at its next mount; one mounted with another
 // mode is warned of. An interrupt meanwhile stops the VM too, whatever
-// its tier, and gets no restart.
+// its tier, and gets no restart: the cleanup that stops it stays until
+// any stop here returns.
 func remountProject(ctx context.Context, l *machines, vm string, w backend.Want, remount bool) error {
 	stopIt := func(ctx context.Context) { _ = l.stop(ctx, vm) }
 	done := l.AddCleanup(func(ctx context.Context) {
@@ -67,10 +68,13 @@ func remountProject(ctx context.Context, l *machines, vm string, w backend.Want,
 		_ = l.Runner.Run(ctx, msg.Remounting(vm), bounded(l.limactl(ctx, "shell", "--workdir", "/", vm, "sudo", "sh", "-c", script)))
 	}
 	has, err := mountedCache(ctx, l, vm, w.Project)
-	if !l.Interrupted() {
-		// An interrupt's is the cleanup's to stop, once the command returns.
-		done()
-	}
+	// The cleanup stays until any stop here returns. An interrupt's is the
+	// cleanup's to stop, once the command returns.
+	defer func() {
+		if !l.Interrupted() {
+			done()
+		}
+	}()
 	var fail msg.M
 	var why string
 	switch {
@@ -83,10 +87,11 @@ func remountProject(ctx context.Context, l *machines, vm string, w backend.Want,
 	default:
 		return nil
 	}
+	mounted := err == nil && has != ""
 	switch {
 	case !w.CheckCache && !l.Interrupted():
-		return restartToMount(parent, l, vm, why, fail)
-	case err == nil && has != "":
+		return restartToMount(parent, l, vm, why, fail, mounted)
+	case mounted:
 		l.Warn(fail)
 		return nil
 	case !l.Interrupted():
@@ -98,12 +103,18 @@ func remountProject(ctx context.Context, l *machines, vm string, w backend.Want,
 
 // restartToMount stops the VM vm, whose project folder its start left as
 // why says, for a start again that mounts it as it boots: it returns
-// fail as a RemountError then, which the run log explains. A stop that
-// fails returns fail itself, the VM as it is.
-func restartToMount(ctx context.Context, l *machines, vm, why string, fail msg.M) error {
+// fail as a RemountError then, which the run log explains. Where the stop
+// fails, a folder mounted with the old mode (mounted) is warned of, fail,
+// and the VM goes on as it runs; one that isn't fails the start, as a
+// stop that failed, the VM maybe still running.
+func restartToMount(ctx context.Context, l *machines, vm, why string, fail msg.M, mounted bool) error {
 	_, _ = io.WriteString(l.LogWriter(), "devvm: "+vm+"'s project folder after its remount: "+why+"; restarting the VM\n")
 	if err := l.Runner.Run(ctx, msg.RemountRestarting(vm), l.limactl(ctx, "stop", vm)); err != nil {
-		return fail
+		if mounted {
+			l.Warn(fail)
+			return nil
+		}
+		return backend.Logged(msg.StopFailed(vm))
 	}
 	return &backend.RemountError{Msg: fail}
 }
@@ -116,8 +127,9 @@ const maxCheckOutput = 4096
 // file whose mount point, its fifth field, is $P exactly, as mountinfo
 // escapes it (mountinfoPath): where mounts are stacked, the last is the
 // one visible there. P comes in through the environment, which awk reads
-// as it is, unlike -v, which would undo the escapes. It's POSIX, so
-// busybox's awk runs it, as on an Alpine base, which has no findmnt.
+// as it is, unlike -v, which would undo the escapes. It's POSIX, so any
+// guest's awk runs it, busybox's too, and the check depends on no
+// util-linux tool but mountpoint, which busybox has as well.
 const lastMount = `awk '$5 == ENVIRON["P"] { l = $0 } END { print l }'`
 
 // mountedCache asks the guest how its folder at dir is mounted: the cache

@@ -88,10 +88,12 @@ The VM gets `none` at its next start, and that start mounts the project folder a
 After the restart, devvm checks the folder once more and doesn't restart the VM again:
 
 - When the folder is mounted with `none`, the VM goes on as usual.
-- When the folder is still mounted with the old mode, devvm warns and goes on. Run `devvm restart` to try again.
-- When the folder isn't mounted at all, or the VM doesn't answer the check, devvm stops the VM before it sets it up or opens its shell, because files written there would go to the VM's own disk and vanish once the folder is mounted over them. Run `devvm restart`, which starts it and mounts the folder again.
+- When the folder is still mounted with the old mode, devvm warns and goes on, though the folder can lose writes under that mode.
+- When the folder isn't mounted at all, or the VM doesn't answer the check, devvm stops the VM before it sets it up or opens its shell, because files written there would go to the VM's own disk and vanish once the folder is mounted over them.
 
-Pressing Ctrl+C while devvm mounts or checks the folder stops the VM, without a restart. The run log has what the VM's `umount` and `mount` said, and why devvm restarted the VM ([logs](../using/troubleshooting.md#a-command-fails)). A launch into a running VM checks too that its project folder is mounted, and refuses to open a shell in one whose folder isn't, naming `devvm restart`.
+In both cases a restart of your own repeats what failed, so look first at why the VM's boot didn't mount the folder with `none`. Its console log, which [A VM won't boot](../using/troubleshooting.md#a-vm-wont-boot) shows where to find, has what the boot said, and the run log has what the VM's `umount` and `mount` said and why devvm restarted the VM ([logs](../using/troubleshooting.md#a-command-fails)).
+
+When devvm can't stop the VM for the restart, a folder still mounted with the old mode is warned of and the VM goes on as it runs. Otherwise the launch fails, saying the VM didn't stop, because it may still be running. Pressing Ctrl+C while devvm mounts or checks the folder, or stops the VM for the restart, stops the VM, without a restart. A launch into a running VM checks too that its project folder is mounted, and refuses to open a shell in one whose folder isn't, naming `devvm restart`.
 
 ### devvm mount-cache --json
 

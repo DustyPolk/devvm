@@ -128,15 +128,21 @@ rm $STUB_DIR/mount-unmounted
 
 # The remount fails, as an Alpine guest's can, and leaves the folder
 # unmounted: the restart's boot mounts it with none, and the launch goes
-# on into its shell, with the restart in the run log.
+# on into its shell, with the restart in the run log. The restart is a
+# whole start again, on the allowlist tier a proxy of its own, which
+# warns of a policy line that isn't a rule once, not at each start.
 exec limactl stop $WEB
 json_set $WEB_dir/vm.json mount:={}
 exec sh -c 'limactl edit "$1" --set ".mounts = [{\"location\":\"$(pwd -P)\",\"writable\":true},{\"location\":\"$DATA/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]"' sh $WEB
 exec devvm mount-cache none
+exec devvm network allowlist
+exec sh -c 'echo "example.com:x" >> "$CFG/policy"'
 exec sh -c ': > "$STUB_DIR/remount-fails"'
 stub_reset
 exec devvm
 ! stderr 'mount_cache_'
+stderr -count=1 '^devvm: policy_not_rule file=\S*/policy line=\d+ rule=example\.com:x$'
+exec sh -c 'grep -v "example.com:x" "$CFG/policy" > "$WORK/p"; cat "$WORK/p" > "$CFG/policy"'
 stub_calls
 stdout '(?s)sudo sh -c umount .*\nlimactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n(.*\n)*limactl shell --workdir \S*/web devvm-web-[0-9a-f]{14}\n'
 ! stdout '(?s)sudo sh -c umount .*sudo sh -c umount '
@@ -145,6 +151,8 @@ stdout 'devvm: devvm-web-[0-9a-f]{14}''s project folder after its remount: it is
 exec devvm mount-cache
 stdout '\Anone\n\z'
 rm $STUB_DIR/remount-fails
+exec devvm stop
+exec devvm network open
 
 # A launch into a running VM whose folder isn't mounted is refused before
 # its shell.

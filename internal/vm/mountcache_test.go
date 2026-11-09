@@ -1,10 +1,13 @@
 package vm
 
 import (
+	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/devvmhq/devvm/internal/backend"
@@ -328,6 +331,128 @@ func TestRemountRestart(t *testing.T) {
 			}
 		})
 	}
+}
+
+// On a confined tier, each start has its interrupt's undo (undoStart)
+// while it runs, removed once it returns, so the restart's is the only
+// one then and none is left. An interrupt between the two starts gets no
+// start again: its proxy is stopped, and only the first start's undo is
+// left, for the run's cleanups. A start again whose proxy fails to start
+// fails the launch with the VM stopped and no proxy.
+func TestRemountRestartConfined(t *testing.T) {
+	e, f, _ := upEnv(t, allNative())
+	f.LifelineFile = filepath.Join(e.Dirs.Lima, "vm", "ha.pid")
+	f.ExecFunc = noDirect
+	st := existingVM(t, e, Options{Network: "allowlist"})
+	vm := st.Name()
+	var mu sync.Mutex
+	live := map[int]func(context.Context){}
+	next := 0
+	fake(e).OnCleanup = func(c func(context.Context)) func() {
+		mu.Lock()
+		defer mu.Unlock()
+		n := next
+		next++
+		live[n] = c
+		return func() { mu.Lock(); defer mu.Unlock(); delete(live, n) }
+	}
+	count := func() int { mu.Lock(); defer mu.Unlock(); return len(live) }
+	starts := func(before int) int {
+		n := 0
+		for _, c := range f.Calls()[before:] {
+			if c.Method == "Start" {
+				n++
+			}
+		}
+		return n
+	}
+	remount := &backend.RemountError{Msg: msg.MountCacheUnmounted(vm)}
+	t.Run("restart", func(t *testing.T) {
+		if err := f.Stop(t.Context(), vm); err != nil {
+			t.Fatal(err)
+		}
+		base, before := count(), len(f.Calls())
+		var during []int
+		f.StartErr = func(string, backend.Want) error {
+			during = append(during, count())
+			if len(during) == 1 {
+				return remount
+			}
+			return nil
+		}
+		defer func() { f.StartErr = nil }()
+		if err := (Launch{e}).Up(t.Context(), Options{}); err != nil {
+			t.Fatal(msg.NamesOf(err))
+		}
+		if len(during) != 2 || during[0] != base+1 || during[1] != base+1 || count() != base {
+			t.Errorf("cleanups: %d before, %v during the starts, %d after", base, during, count())
+		}
+		if _, ok := e.Proxy.PID(vm); !ok || starts(before) != 2 {
+			t.Errorf("%d starts, proxy running %v", starts(before), ok)
+		}
+	})
+	t.Run("interrupted between the starts", func(t *testing.T) {
+		if err := f.Stop(t.Context(), vm); err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		base, before := count(), len(f.Calls())
+		f.StartErr = func(string, backend.Want) error {
+			fake(e).Interrupt = true
+			cancel()
+			return remount
+		}
+		defer func() { f.StartErr, fake(e).Interrupt = nil, false }()
+		if err := (Launch{e}).Up(ctx, Options{}); err == nil {
+			t.Fatal("an interrupted launch went on")
+		}
+		if n := starts(before); n != 1 {
+			t.Errorf("%d starts, want 1", n)
+		}
+		if _, ok := e.Proxy.PID(vm); ok {
+			t.Error("its proxy runs")
+		}
+		if count() != base+1 {
+			t.Fatalf("cleanups: %d before, %d after, want the one undo kept", base, count())
+		}
+		mu.Lock()
+		var undo func(context.Context)
+		for n, c := range live {
+			undo = c
+			delete(live, n)
+		}
+		mu.Unlock()
+		undo(t.Context())
+		if f.Instances[vm].Status != backend.StatusStopped {
+			t.Errorf("the undo left it %s", f.Instances[vm].Status)
+		}
+	})
+	t.Run("its proxy fails at the start again", func(t *testing.T) {
+		if err := f.Stop(t.Context(), vm); err != nil {
+			t.Fatal(err)
+		}
+		before, proxies := len(f.Calls()), 0
+		start := e.Proxy.Start
+		e.Proxy.Start = func(c daemon.Cmd) (int, error) {
+			if proxies++; proxies == 2 {
+				return 0, errors.New("no proxy")
+			}
+			return start(c)
+		}
+		defer func() { e.Proxy.Start = start }()
+		f.StartErr = func(string, backend.Want) error { return remount }
+		defer func() { f.StartErr = nil }()
+		if err := (Launch{e}).Up(t.Context(), Options{}); err == nil {
+			t.Fatal("the launch went on without a proxy")
+		}
+		if n := starts(before); n != 1 || f.Instances[vm].Status != backend.StatusStopped {
+			t.Errorf("%d starts, the VM %s", n, f.Instances[vm].Status)
+		}
+		if _, ok := e.Proxy.PID(vm); ok {
+			t.Error("a proxy runs")
+		}
+	})
 }
 
 // A state whose cache mode isn't one devvm sets is refused as the VM is

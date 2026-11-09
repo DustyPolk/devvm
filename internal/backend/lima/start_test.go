@@ -629,6 +629,66 @@ func TestStartSetsProjectCacheOnce(t *testing.T) {
 	}
 }
 
+// The restart's stop runs with the interrupt's cleanup still in place,
+// which goes once it returns. Where the stop fails, a folder mounted with
+// the old mode is warned of and the VM goes on with no RemountError; one
+// that isn't mounted fails the start as a logged stop_failed, the VM
+// maybe still running.
+func TestRemountRestartStop(t *testing.T) {
+	w := backend.Want{Project: "/p", ProjectCache: backend.CacheNone}
+	for _, tc := range []struct {
+		name  string
+		check string
+		fails bool // the stop fails
+		err   string
+		warn  string
+	}{
+		{"stopped", "devvm-not-mounted\n", false, "mount_cache_unmounted vm=v", ""},
+		{"old mode, the stop fails", mountinfoOfP("rw,cache=0x5,trans=virtio"), true, "", "mount_cache_remount_failed has=mmap vm=v want=none"},
+		{"not mounted, the stop fails", "devvm-not-mounted\n", true, "stop_failed vm=v", ""},
+		{"no answer, the stop fails", "\n", true, "stop_failed vm=v", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, f, _ := testLima(t, "linux")
+			warned := &msg.Recorder{}
+			live := 0
+			l.Reporter = &msg.Fake{OnWarn: warned.Add, OnCleanup: func(func(context.Context)) func() {
+				live++
+				return func() { live-- }
+			}}
+			f.stdout = map[string]string{checkOfP: tc.check}
+			held := -1
+			f.do = func(c call) {
+				if c.line() == "limactl stop v" {
+					held = live
+				}
+			}
+			if tc.fails {
+				f.fail = []string{"limactl stop v"}
+			}
+			err := remountProject(t.Context(), &l.machines, "v", w, true)
+			if got := msg.NamesOf(err); got != tc.err {
+				t.Errorf("start: %q, want %q", got, tc.err)
+			}
+			_, restart := errors.AsType[*backend.RemountError](err)
+			_, logged := errors.AsType[*backend.LoggedError](err)
+			if restart != (!tc.fails) || logged != (tc.err == "stop_failed vm=v") {
+				t.Errorf("a RemountError %v, logged %v: %v", restart, logged, err)
+			}
+			if held != 1 || live != 0 {
+				t.Errorf("cleanups during the stop %d, after %d; want 1, then 0", held, live)
+			}
+			var warns []string
+			if tc.warn != "" {
+				warns = []string{tc.warn}
+			}
+			if got := warned.Names(); !slices.Equal(got, warns) {
+				t.Errorf("warned %q, want %q", got, warns)
+			}
+		})
+	}
+}
+
 // The start again after a RemountError checks the folder, its config's
 // mode set already, without mounting it again: mounted with none, the
 // VM goes on; not mounted, or a check that fails, stops it and fails the

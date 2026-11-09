@@ -70,6 +70,9 @@ type UI struct {
 	// dataOnly sends what Say, Info and LogNote print to stderr, so
 	// stdout gets only data (DataOnly).
 	dataOnly atomic.Bool
+	// warned holds the warnings said, by their names (msg.M.Names), so
+	// each is said once a run.
+	warned sync.Map
 	// commands is read-locked while a logged command runs, so an
 	// interrupt can wait for the run's commands to end before cleaning up.
 	commands sync.RWMutex
@@ -212,8 +215,16 @@ func (u *UI) Text(m msg.M) string { return u.outStyle.line(m) }
 func (u *UI) Note(m msg.M) { u.write(u.stderr, u.errStyle.message(m)+"\n") }
 
 // Warn prints the message to stderr, with "devvm: " before each line,
-// yellow in a terminal.
-func (u *UI) Warn(m msg.M) { u.write(u.stderr, u.errStyle.labelled(sgrWarn, m)) }
+// yellow in a terminal, once a run: the same warning again (its name and
+// values) prints nothing, as a step done twice, such as a VM's start
+// again after its project folder's remount failed, would repeat what it
+// said.
+func (u *UI) Warn(m msg.M) {
+	if _, said := u.warned.LoadOrStore(m.Names(), true); said {
+		return
+	}
+	u.write(u.stderr, u.errStyle.labelled(sgrWarn, m))
+}
 
 func prefixLines(prefix, s string) string {
 	var b strings.Builder
