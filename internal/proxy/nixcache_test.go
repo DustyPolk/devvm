@@ -315,6 +315,22 @@ func TestNixCachePolicy(t *testing.T) {
 	}
 }
 
+// The cache's own fetch from cache.nixos.org meets the rules by method and path too: a deny of
+// its NARs leaves narinfos alone and refuses the NARs, which nothing fetches.
+func TestNixCacheRulesByPath(t *testing.T) {
+	t.Parallel()
+	s, f, _ := useNixCache(t, nixHost+"\n!"+nixHost+" /nar/\n")
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixHash+".narinfo"); code != 200 {
+		t.Fatalf("a narinfo: %d", code)
+	}
+	if code, _ := nixReq(t, s, "GET", "http://devvm.proxy/nix/"+fixNar); code != 404 {
+		t.Errorf("a NAR a deny names: %d", code)
+	}
+	if got := f.requests(); len(got) != 1 {
+		t.Errorf("upstream got %q, want the narinfo alone", got)
+	}
+}
+
 // A NAR is fetched once however many ask for it at once, a HEAD fetches nothing, a copy that
 // isn't the size its narinfo says goes, and files being fetched never take the cache past its cap.
 func TestNixCacheFetches(t *testing.T) {

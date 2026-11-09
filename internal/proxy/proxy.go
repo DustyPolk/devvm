@@ -547,14 +547,22 @@ func (e *egress) check(ctx context.Context, host string, port int, plain bool) (
 // checkRefused is check, and whether a refusal is one no allow rule would lift (a broken deny's),
 // which its event marks Refused.
 func (e *egress) checkRefused(ctx context.Context, host string, port int, plain bool) (string, string, bool) {
-	ok, rule, refused := e.pol.verdict(host, port) // rule: the allowing rule, or why not
+	rule, why, refused, _ := e.checkHost(ctx, host, port, plain)
+	return rule, why, refused
+}
+
+// checkHost is checkRefused, and the rules that cover host:port, read once, so the caller asks
+// them whether its requests are judged one by one from the same read as the verdict.
+func (e *egress) checkHost(ctx context.Context, host string, port int, plain bool) (string, string, bool, hostRules) {
+	hr := e.pol.rulesFor(host, port)
+	ok, rule, refused := hr.verdict() // rule: the allowing rule, or why not
 	if !ok {
-		return "", rule, refused
+		return "", rule, refused, hr
 	}
 	if why := e.floorCheck(ctx, host, port, plain); why != "" {
-		return "", why, false
+		return "", why, false, hr
 	}
-	return rule, "", false
+	return rule, "", false, hr
 }
 
 // floorCheck is check past the rules for an allowed host: the address floor, or the company
@@ -600,7 +608,7 @@ func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e := Event{Host: host, Port: port, Method: "CONNECT", Agent: r.UserAgent()}
-	rule, why, refused := s.egress.checkRefused(r.Context(), host, port, false)
+	rule, why, refused, hr := s.egress.checkHost(r.Context(), host, port, false)
 	if why != "" {
 		e.Reason, e.Refused = why, refused
 		s.block(w, e)
@@ -610,7 +618,15 @@ func (s *server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if up := s.egress.up.route(host, port, false); up != nil {
 		e.Upstream = up.addr
 	}
-	if s.interceptPorts[port] && s.ca != nil && (s.captures.has(host) || len(s.secrets.forHost(host)) > 0) {
+	// Rules that narrow the host to some methods or paths need its requests, which only a
+	// decrypted tunnel shows: one the proxy can't decrypt is refused, never tunneled unjudged.
+	byRequest := hr.byRequest()
+	if byRequest && (!s.interceptPorts[port] || s.ca == nil) {
+		e.Reason, e.Refused = reasonNotDecrypted, true
+		s.block(w, e)
+		return
+	}
+	if s.interceptPorts[port] && s.ca != nil && (byRequest || s.captures.has(host) || len(s.secrets.forHost(host)) > 0) {
 		if s.caEndedRefusal(w, e) {
 			return
 		}
@@ -741,6 +757,10 @@ func (s *server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	if _, why, refused := s.egress.checkRefused(r.Context(), host, port, scheme == "http"); why != "" {
 		e.Reason, e.Refused = why, refused
 		s.block(w, e)
+		return
+	}
+	r, ok := s.judgeRequest(w, r, host, port)
+	if !ok {
 		return
 	}
 	// Some clients half-close after sending; don't treat that as the client going away.

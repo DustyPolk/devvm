@@ -330,6 +330,10 @@ func checkFlagValue(name, value string) error {
 		if value != secrets.None {
 			err = secrets.CheckPath(value)
 		}
+	case "method":
+		if value != secrets.None {
+			_, err = secrets.CheckMethods(value)
+		}
 	}
 	return err
 }

@@ -316,10 +316,14 @@ func TestInjectLoginTwoHeaders(t *testing.T) {
 	}
 }
 
-// pathWithin takes a request's path only in its clean form, unencoded, below the prefix: no dot
+// A path's match takes a request's path only in its clean form, unencoded, below /api/: no dot
 // segment, doubled slash, encoded slash, dot or backslash, backslash or ; can take it elsewhere.
+// A rule's allow and a secret's binding are judged by this one matcher (match.allows).
 func TestPathWithin(t *testing.T) {
 	t.Parallel()
+	within := func(u *url.URL, p string) bool {
+		return newMatch("", p).allows(&http.Request{Method: http.MethodGet, URL: u, Header: http.Header{}})
+	}
 	for uri, want := range map[string]bool{
 		"/api/v1/chat/completions":  true,
 		"/api/v1/models?x=/../":     true,
@@ -356,14 +360,17 @@ func TestPathWithin(t *testing.T) {
 			t.Errorf("%q: %v", uri, err)
 			continue
 		}
-		if got := pathWithin(u, "/api/"); got != want {
-			t.Errorf("pathWithin(%q) = %v, want %v", uri, got, want)
+		if got := within(u, "/api/"); got != want {
+			t.Errorf("within(%q) = %v, want %v", uri, got, want)
+		}
+		if got := within(u, "/api/**"); got != want {
+			t.Errorf("within(%q, /api/**) = %v, want %v", uri, got, want)
 		}
 	}
-	if pathWithin(&url.URL{Opaque: "/api/v1"}, "/api/") {
+	if within(&url.URL{Opaque: "/api/v1"}, "/api/") {
 		t.Error("an opaque URL was taken")
 	}
-	if !pathWithin(&url.URL{Scheme: "https", Host: "openrouter.ai", Path: "/api/v1/x"}, "/api/") {
+	if !within(&url.URL{Scheme: "https", Host: "openrouter.ai", Path: "/api/v1/x"}, "/api/") {
 		t.Error("an absolute-form request's path was refused")
 	}
 }
@@ -380,7 +387,7 @@ func TestForRequestPath(t *testing.T) {
 	s := newSecrets(file, nil, quiet())
 	names := func(p string) []string {
 		var out []string
-		for _, b := range s.forRequest("openrouter.ai", &url.URL{Path: p}) {
+		for _, b := range s.forRequest("openrouter.ai", &http.Request{Method: http.MethodPost, URL: &url.URL{Path: p}, Header: http.Header{}}) {
 			out = append(out, b.Name)
 		}
 		return out
@@ -393,7 +400,7 @@ func TestForRequestPath(t *testing.T) {
 			t.Errorf("%s: %v", p, got)
 		}
 	}
-	if got := s.forRequest("example.com", &url.URL{Path: "/api/v1"}); len(got) != 0 {
+	if got := s.forRequest("example.com", &http.Request{Method: http.MethodGet, URL: &url.URL{Path: "/api/v1"}}); len(got) != 0 {
 		t.Errorf("another host: %v", got)
 	}
 }
@@ -682,6 +689,7 @@ func TestReadBindings(t *testing.T) {
 		{Name: "github", Kind: KindSecret, Hosts: []string{"api.github.com"}, Header: "Authorization", Placeholder: "PH"},
 		{Name: "codex", Kind: KindLogin, Agent: "codex", Hosts: []string{"chatgpt.com"}, Header: "Authorization", Placeholder: "PH2"},
 		{Name: "pi-openrouter", Kind: KindLogin, Agent: "pi", Hosts: []string{"openrouter.ai"}, Path: "/api/v1/", Header: "Authorization", Placeholder: "PH3"},
+		{Name: "mine", Kind: KindSecret, Hosts: []string{"api.example.com"}, Path: "/v1/*/charges", Methods: "GET,HEAD", Header: "Authorization", Placeholder: "PH4"},
 	}}
 	must(t, os.WriteFile(path, l.Encode(), 0o600))
 	got, err := ReadBindings(path)
@@ -692,22 +700,56 @@ func TestReadBindings(t *testing.T) {
 	if s := string(BindingList{}.Encode()); s != `{"version":1,"bindings":[]}`+"\n" {
 		t.Errorf("no bindings = %q", s)
 	}
+	// Version 1 while every binding reads alike to a proxy that knows only it; 2 for methods, a
+	// pattern with a *, or a path without its last /, which such a proxy reads otherwise.
+	for _, tc := range []struct {
+		b    Binding
+		want int
+	}{
+		{Binding{Name: "a", Kind: KindLogin, Path: "/api/"}, 1},
+		{Binding{Name: "a", Kind: KindLogin}, 1},
+		{Binding{Name: "a", Kind: KindSecret, Methods: "GET"}, 2},
+		{Binding{Name: "a", Kind: KindSecret, Path: "/v1/*/x"}, 2},
+		{Binding{Name: "a", Kind: KindSecret, Path: "/v1"}, 2},
+		{Binding{Name: "a", Kind: KindSecret, Path: "/"}, 2}, // which PathPrefixOK refused
+		{Binding{Name: "a", Kind: KindSecret, Path: "/v1/", Methods: "GET,HEAD"}, 2},
+	} {
+		b, want := tc.b, tc.want
+		var got BindingList
+		must(t, json.Unmarshal(BindingList{Bindings: []Binding{b}}.Encode(), &got))
+		if got.Version != want {
+			t.Errorf("%+v: version %d, want %d", b, got.Version, want)
+		}
+		if _, err := parseBindings("x", BindingList{Bindings: []Binding{b}}.Encode()); err != nil {
+			t.Errorf("%+v: not read back: %v", b, err)
+		}
+	}
+	// Version 1, as an earlier devvm wrote it: read, as it can hold no methods and its paths, which
+	// were prefixes then, no *; one that has either isn't.
+	v1 := `{"version":1,"bindings":[{"name":"or","kind":"login","agent":"pi","hosts":["openrouter.ai"],"path":"/api/","header":"Authorization","placeholder":"PH"}]}`
+	if got, err := parseBindings("v1", []byte(v1)); err != nil || len(got.Bindings) != 1 || got.Bindings[0].Path != "/api/" {
+		t.Errorf("version 1: %+v, %v", got, err)
+	}
 	for name, tc := range map[string]struct {
 		data string
 		mode os.FileMode
 	}{
-		"another version":               {`{"version":2,"bindings":[]}`, 0o600},
-		"a bare list":                   {`[]`, 0o600},
-		"an unknown kind":               {`{"version":1,"bindings":[{"name":"x","kind":"env"}]}`, 0o600},
-		"no kind":                       {`{"version":1,"bindings":[{"name":"x"}]}`, 0o600},
-		"others may read":               {`{"version":1,"bindings":[]}`, 0o644},
-		"a relative path":               {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"api/"}]}`, 0o600},
-		"a path without its last slash": {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api"}]}`, 0o600},
-		"a path of /":                   {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/"}]}`, 0o600},
-		"a path with a dot segment":     {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api/../"}]}`, 0o600},
-		"a path with a doubled slash":   {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api//"}]}`, 0o600},
-		"an encoded path":               {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/%61pi/"}]}`, 0o600},
-		"a path with a ;":               {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api;x/"}]}`, 0o600},
+		"another version":             {`{"version":3,"bindings":[]}`, 0o600},
+		"version 1 with methods":      {`{"version":1,"bindings":[{"name":"x","kind":"login","methods":"GET"}]}`, 0o600},
+		"version 1 with a * path":     {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/a*/"}]}`, 0o600},
+		"a bare list":                 {`[]`, 0o600},
+		"an unknown kind":             {`{"version":1,"bindings":[{"name":"x","kind":"env"}]}`, 0o600},
+		"no kind":                     {`{"version":1,"bindings":[{"name":"x"}]}`, 0o600},
+		"others may read":             {`{"version":1,"bindings":[]}`, 0o644},
+		"a relative path":             {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"api/"}]}`, 0o600},
+		"a ** within a segment":       {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/a**/"}]}`, 0o600},
+		"a path with a ?":             {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api?x"}]}`, 0o600},
+		"methods it doesn't know":     {`{"version":1,"bindings":[{"name":"x","kind":"login","methods":"GTE"}]}`, 0o600},
+		"methods not canonical":       {`{"version":1,"bindings":[{"name":"x","kind":"login","methods":"head,get"}]}`, 0o600},
+		"a path with a dot segment":   {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api/../"}]}`, 0o600},
+		"a path with a doubled slash": {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api//"}]}`, 0o600},
+		"an encoded path":             {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/%61pi/"}]}`, 0o600},
+		"a path with a ;":             {`{"version":1,"bindings":[{"name":"x","kind":"login","path":"/api;x/"}]}`, 0o600},
 	} {
 		p := filepath.Join(dir, strings.ReplaceAll(name, " ", "-"))
 		must(t, os.WriteFile(p, []byte(tc.data), 0o600))

@@ -26,6 +26,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -327,7 +328,10 @@ func (n *nixCache) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "devvm proxy: no Nix cache", http.StatusNotFound)
 		return
 	}
-	if ok, why := n.egress.pol.decide(nixHost, 443); !ok {
+	// The cache's own fetch, a GET of p from cache.nixos.org, meets the rules as the VM's request
+	// would, rules by method and path included.
+	fetch := &http.Request{Method: http.MethodGet, URL: &url.URL{Path: "/" + p}, Header: http.Header{}}
+	if ok, why, _, _ := n.egress.pol.judge(nixHost, 443, fetch); !ok {
 		e.Reason = "not found: " + nixHost + " isn't allowed (" + why + ")"
 		n.events.record(e)
 		http.Error(w, "devvm proxy: "+nixHost+" isn't allowed", http.StatusNotFound)

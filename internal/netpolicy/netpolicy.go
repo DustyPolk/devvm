@@ -147,6 +147,10 @@ type PolicySet struct{ Builtin, Files, Denies []string }
 // any port.
 const InternetPolicy = "network/internet.policy"
 
+// BasePolicy is devvm's built-in policy for every VM on the allowlist
+// tier.
+const BasePolicy = "layers/base.policy"
+
 // Policies returns the policies of the VM vm on tier t, of image img with
 // these shared tools. The user's files are each of the image's own
 // layers' policy file, next to its script, the user's own for every VM
@@ -181,7 +185,7 @@ func Policies(d paths.Dirs, vm string, t Tier, img image.Name, tools []string) P
 		return PolicySet{Builtin: toolPolicies(image.AgentsOf(tools)), Files: []string{secrets}, Denies: files}
 	case TierAllowlist:
 	}
-	builtin = append(append([]string{"layers/base.policy"}, toolPolicies(tools)...), builtin...)
+	builtin = append(append([]string{BasePolicy}, toolPolicies(tools)...), builtin...)
 	return PolicySet{Builtin: builtin, Files: append(files, secrets)}
 }
 

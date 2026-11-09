@@ -61,13 +61,18 @@ func (p *Proxy) Learned(st *state.VM) (LearnedHosts, error) {
 	if !lr.On() {
 		return LearnedHosts{}, nil
 	}
-	vm := st.Name()
-	set := Policies(p.Dirs, vm, TierAllowlist, image.Name(st.Image), tools.Names(st))
-	al, err := proxy.ReadAllowlist(p.Assets, set.Builtin, set.Files, set.Denies)
+	al, err := p.Allowlist(st)
 	if err != nil {
 		return LearnedHosts{}, err
 	}
-	return NewLog(p.Dirs, vm).Learned(lr.Since, Judge{Allows: al.Allows, Denies: al.Denies})
+	return NewLog(p.Dirs, st.Name()).Learned(lr.Since, Judge{Allows: al.Allows, Denies: al.Denies})
+}
+
+// Allowlist is the policies st's VM has on the allowlist tier (Policies), read as its proxy reads
+// them (proxy.ReadAllowlist).
+func (p *Proxy) Allowlist(st *state.VM) (proxy.Allowlist, error) {
+	set := Policies(p.Dirs, st.Name(), TierAllowlist, image.Name(st.Image), tools.Names(st))
+	return proxy.ReadAllowlist(p.Assets, set.Builtin, set.Files, set.Denies)
 }
 
 // reached is whether an event is a connection or request the proxy let

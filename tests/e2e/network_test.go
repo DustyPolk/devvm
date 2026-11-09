@@ -876,17 +876,19 @@ const (
 	customName  = "e2e-custom"
 	customHost  = "api.devvm-e2e-custom.dev"
 	customValue = "sk_e2e_e2efake-custom-value"
-	// A second secret of yours, in Authorization below /v1/ alone.
+	// A second secret of yours, in Authorization below /v1/ alone, for GET
+	// and HEAD alone.
 	basicName  = "e2e-basic"
 	basicValue = "e2efake-basic-value"
 )
 
 // netCustomSecret: two secrets of yours, saved on stdin with their hosts,
-// headers, variables, prefix and path, and used by the VM, which sees only
-// its own placeholders in the variables. Their host gets the real values in
-// their headers, in the shapes the proxy fills in, and below the path
-// alone; another host, another path and an echoed shape, Basic's username,
-// get only the placeholder, and no log holds a value.
+// headers, variables, prefix, path and methods, and used by the VM, which
+// sees only its own placeholders in the variables. Their host gets the real
+// values in their headers, in the shapes the proxy fills in, and below the
+// path for those methods alone; another host, another path, another method
+// and an echoed shape, Basic's username, get only the placeholder, and no
+// log holds a value.
 func netCustomSecret(n *netRun) {
 	s, vm := n.s, n.vm
 	s.Check("a secret of yours reaches its host alone, in its header, and the VM holds only its placeholder", func() error {
@@ -902,7 +904,7 @@ func netCustomSecret(n *netRun) {
 		}()
 		for _, set := range [][]string{
 			{customValue, customName, "--header", "x-api-key", "--env", "E2E_CUSTOM_KEY", "--prefix", "sk_e2e_"},
-			{basicValue, basicName, "--env", "E2E_BASIC_KEY", "--path", "/v1/"},
+			{basicValue, basicName, "--env", "E2E_BASIC_KEY", "--path", "/v1/", "--method", "GET,HEAD"},
 		} {
 			args := append([]string{"secret", "set", set[1], "--host", customHost, "--stdin"}, set[2:]...)
 			if _, err := s.Run(devvmCmd(s, "", set[0]+"\n", n.home(), args...)); err != nil {
@@ -923,6 +925,72 @@ func netCustomSecret(n *netRun) {
 	}, Tail(40))
 }
 
+// rulesPath is what netRequestRules' rule narrows customHost to.
+const rulesPath = "/devvm-e2e-rules/"
+
+// netRequestRules: a rule by method and path for customHost, which the fake
+// endpoints' company proxy fakes and no other rule allows once
+// netCustomSecret's secrets are gone. The VM's proxy decrypts the host to
+// check each request: a GET below the path reaches the host, while a POST
+// to the same path, a GET elsewhere and a GET that names POST in an
+// override header or a _method parameter get the proxy's 403, never reach
+// the host, and are logged as blocked with their method and path, which devvm
+// network log shows.
+func netRequestRules(n *netRun) {
+	s, vm := n.s, n.vm
+	s.Check("a rule by method and path lets a GET through and blocks a POST to the same host, logged", func() error {
+		if n.tok == nil {
+			return errors.New("the fake endpoints didn't start")
+		}
+		rule := []string{customHost, "--method", "GET", "--path", rulesPath}
+		defer func() { _, _ = n.dv("", n.tokenEnv(), append([]string{"network", "rm"}, rule...)...) }()
+		added, err := n.dv("", n.tokenEnv(), append([]string{"network", "allow"}, rule...)...)
+		if err != nil {
+			return fmt.Errorf("devvm network allow: %w", err)
+		}
+		Note(s, "devvm network allow %s:\n%s", strings.Join(rule, " "), added.Out)
+		if _, err := n.dv("exit\n", n.tokenEnv()); err != nil {
+			return fmt.Errorf("the launch: %w", err)
+		}
+		for _, req := range []struct{ method, path, header, code string }{
+			{"GET", rulesPath + "get", "", "404"}, // the fake host's answer
+			{"POST", rulesPath + "post", "", "403"},
+			{"GET", "/devvm-e2e-other", "", "403"},
+			// A GET that names another method, as some servers read it, isn't the GET it allows.
+			{"GET", rulesPath + "override", "X_HTTP_METHOD_OVERRIDE: POST", "403"},
+			{"GET", rulesPath + "override?_method=POST", "", "403"},
+			{"GET", rulesPath + "get-again", "", "404"},
+		} {
+			h := ""
+			if req.header != "" {
+				h = ` -H '` + req.header + `'`
+			}
+			r, err := s.InVM(vm, `curl -sS -m 20 -o /dev/null -w '%{http_code}' -X `+req.method+h+` 'https://`+customHost+req.path+`'`)
+			if got := strings.TrimSpace(r.Stdout); err != nil || got != req.code {
+				return fmt.Errorf("%s %s: %q; want %s (%w)", req.method, req.path, got, req.code, err)
+			}
+		}
+		got, events := readText(n.tokLog), readText(n.events)
+		switch {
+		case !lineWith(got, "api "+rulesPath+"get ") || !lineWith(got, "api "+rulesPath+"get-again "):
+			return errors.New("the GETs didn't reach the host:\n" + got)
+		case strings.Contains(got, rulesPath+"post") || strings.Contains(got, rulesPath+"override") || strings.Contains(got, "/devvm-e2e-other"):
+			return errors.New("a blocked request reached the host:\n" + got)
+		case !lineWith(events, `"event":"blocked"`, `"method":"POST"`, `"path":"`+rulesPath+`post"`):
+			return errors.New("no blocked event for the POST")
+		case !lineWith(events, `"event":"forward"`, `"path":"`+rulesPath+`get"`, `"rule":"`+customHost+` GET `+rulesPath+`"`):
+			return errors.New("no event names the rule that let the GET through")
+		}
+		page, _ := s.InVM(vm, `curl -sS -m 20 -X POST https://`+customHost+rulesPath+`post`)
+		r, err := n.dv("", n.tokenEnv(), "network", "log", "-n", "20")
+		if err != nil || !lineWith(r.Stdout, "BLOCKED", customHost+":443", "POST "+rulesPath+"post: ") {
+			return fmt.Errorf("devvm network log doesn't show the POST blocked (%w):\n%s", err, r.Stdout)
+		}
+		Note(s, "the POST's answer in the VM:\n%s\ndevvm network log:\n%s", page.Stdout, r.Stdout)
+		return nil
+	}, Tail(40))
+}
+
 // basicChecks are netCustomSecret's checks of the secret in Authorization
 // below /v1/: Basic's password and Bearer get the value there, and Basic's
 // username, which servers echo, Bearer on another path, keep the
@@ -937,6 +1005,7 @@ func basicChecks(n *netRun, vm string) error {
 		`-H "Authorization: Bearer $E2E_BASIC_KEY" https://` + customHost + `/v1/bearer`,
 		`-H "Authorization: Bearer $E2E_BASIC_KEY" https://` + customHost + `/other/bearer`,
 		`-H "Authorization: Bearer x$E2E_BASIC_KEY" https://` + customHost + `/v1/framed`,
+		`-X POST -H "Authorization: Bearer $E2E_BASIC_KEY" https://` + customHost + `/v1/post`,
 	} {
 		if err := inVM(s, vm, `curl -sS -m 20 -o /dev/null `+req); err != nil {
 			return fmt.Errorf("curl %s: %w", req, err)
@@ -949,6 +1018,7 @@ func basicChecks(n *netRun, vm string) error {
 		"/v1/bearer":     "Bearer " + basicValue,
 		"/other/bearer":  "Bearer " + ph,
 		"/v1/framed":     "Bearer x" + ph,
+		"/v1/post":       "Bearer " + ph, // a method the secret doesn't go in for
 	} {
 		if !lineWith(got, "api "+path+" "+want) {
 			return fmt.Errorf("%s didn't arrive with %q:\n%s", path, want, got)
@@ -1772,6 +1842,7 @@ func netClaudeLogins(n *netRun) {
 	// While the fake endpoints still run, and once a secret has been saved
 	// in the Keychain with the VM's HOME, as netGithub's is.
 	netCustomSecret(n)
+	netRequestRules(n)
 	if n.tok != nil {
 		n.tok.Stop()
 	}

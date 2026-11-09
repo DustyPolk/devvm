@@ -61,7 +61,8 @@ func Of(st *state.VM) (Bound, error) { return state.Section[Bound](st, Section) 
 // which no VM is bound to: the company proxy's password
 // (proxy.UpstreamSecret), which devvm's proxies send only to the company
 // proxy. A Custom one is yours (custom.go), any other one of Known, and
-// only yours have an ID, a Scheme, a Path or BasicUser (proxy.Binding's).
+// only yours have an ID, a Scheme, a Path, Methods or BasicUser
+// (proxy.Binding's).
 type Secret struct {
 	Name      string
 	Hosts     []string
@@ -70,6 +71,7 @@ type Secret struct {
 	Prefix    string
 	Scheme    string
 	Path      string
+	Methods   string
 	BasicUser bool
 	ID        string
 	HostOnly  bool
@@ -621,7 +623,7 @@ func fits(s *Store, b proxy.Binding) error {
 	salt, own := strings.CutPrefix(b.Placeholder, sec.Placeholder("")+"-")
 	switch {
 	case slices.ContainsFunc(b.Hosts, func(h string) bool { return !slices.Contains(sec.Hosts, h) }),
-		b.Header != sec.Header, b.Scheme != sec.Scheme, b.Path != sec.Path, b.BasicUser != sec.BasicUser, b.ID != sec.ID,
+		b.Header != sec.Header, b.Scheme != sec.Scheme, b.Path != sec.Path, b.Methods != sec.Methods, b.BasicUser != sec.BasicUser, b.ID != sec.ID,
 		!own || salt == "" || strings.Trim(salt, "0123456789abcdef") != "":
 		return msg.SecretBindingChanged(b.Name)
 	}
@@ -824,7 +826,7 @@ func (s *Store) writeFiles(ctx context.Context, st *state.VM, salt string, login
 		}
 		list = append(list, proxy.Binding{
 			Name: name, Kind: proxy.KindSecret, Hosts: sec.Hosts, Header: sec.Header, Placeholder: sec.Placeholder(salt),
-			Path: sec.Path, Scheme: sec.Scheme, BasicUser: sec.BasicUser, ID: sec.ID,
+			Path: sec.Path, Methods: sec.Methods, Scheme: sec.Scheme, BasicUser: sec.BasicUser, ID: sec.ID,
 		})
 	}
 	for _, b := range logins {

@@ -18,6 +18,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/devvmhq/devvm/assets"
@@ -951,6 +952,117 @@ func TestPrepareWriteFails(t *testing.T) {
 		if strings.Contains(e.Name(), "tmp") {
 			t.Errorf("left in the run folder: %s", e.Name())
 		}
+	}
+}
+
+// A change to a rule by method and path warns, naming the VM, while its
+// proxy runs from another devvm binary than this one, which may read the
+// rule otherwise; a change to a host's rule, the same binary's proxy and a
+// stopped one don't, and with no VM every VM's proxy is asked.
+func TestOtherBinaries(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, f := testProxy(t, d)
+	var warned []string
+	p.Reporter = &msg.Fake{OnWarn: func(m msg.M) { warned = append(warned, m.Names()) }}
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+		t.Fatal(err)
+	}
+	narrowed := []string{"!api.example.com POST"}
+	p.OtherBinaries(narrowed, st.Name())
+	if len(warned) != 0 {
+		t.Errorf("the same binary's proxy: %q", warned)
+	}
+	other := filepath.Join(t.TempDir(), "devvm")
+	if err := os.WriteFile(other, []byte("another devvm"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p.Self = other
+	p.OtherBinaries([]string{"example.com", "!example.com"}, st.Name())
+	if len(warned) != 0 {
+		t.Errorf("a host's rule: %q", warned)
+	}
+	want := "proxy_other_binary vm=" + st.Name()
+	p.OtherBinaries(narrowed, st.Name())
+	p.OtherBinaries(narrowed, "")
+	if !slices.Equal(warned, []string{want, want}) {
+		t.Errorf("another binary's proxy: %q, want %q twice", warned, want)
+	}
+	pid, _ := p.PID(st.Name())
+	delete(f.args, pid)
+	warned = nil
+	p.OtherBinaries(narrowed, st.Name())
+	if len(warned) != 0 {
+		t.Errorf("a stopped proxy: %q", warned)
+	}
+}
+
+// A bindings file that a proxy from another devvm binary may refuse whole,
+// one of version 2 for a binding by method or pattern, warns as it's
+// written, naming the VM; one of version 1, which such a proxy reads alike,
+// doesn't, and neither does the same binary's proxy. A proxy whose config
+// can't be read counts as another binary's.
+func TestRefreshSecretsOtherBinary(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, _ := testProxy(t, d)
+	var warned []string
+	p.Reporter = &msg.Fake{OnWarn: func(m msg.M) { warned = append(warned, m.Names()) }}
+	if _, err := p.Prepare(t.Context(), lifelined(), st, false); err != nil {
+		t.Fatal(err)
+	}
+	file := d.VM(st.Name()).Secrets()
+	write := func(bs ...proxy.Binding) {
+		t.Helper()
+		if err := state.WriteFile(file, proxy.BindingList{Bindings: bs}.Encode()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	narrowed := proxy.Binding{Name: "k", Kind: proxy.KindSecret, Hosts: []string{"api.example.com"}, Methods: "GET", Header: "Authorization", Placeholder: "PH"}
+	write(narrowed)
+	p.SecretsWritten(st.Name())
+	if len(warned) != 0 {
+		t.Errorf("the same binary's proxy: %q", warned)
+	}
+	other := filepath.Join(t.TempDir(), "devvm")
+	if err := os.WriteFile(other, []byte("another devvm"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p.Self = other
+	plain := narrowed
+	plain.Methods = ""
+	write(plain)
+	p.SecretsWritten(st.Name())
+	if len(warned) != 0 {
+		t.Errorf("a file of version 1: %q", warned)
+	}
+	write(narrowed)
+	p.SecretsWritten(st.Name())
+	if want := []string{"secrets_other_binary vm=" + st.Name()}; !slices.Equal(warned, want) {
+		t.Errorf("a file of version 2, another binary's proxy: %q, want %q", warned, want)
+	}
+	// A config that can't be read: devvm can't tell, so it warns.
+	p.Self = "/bin/sh"
+	warned = nil
+	if err := os.Chmod(d.VM(st.Name()).ProxyConfig(), 0o644); err != nil { //nolint:gosec // G302: a config others may read, which the proxy refuses
+		t.Fatal(err)
+	}
+	p.OtherBinaries([]string{"!api.example.com POST"}, st.Name())
+	if want := []string{"proxy_other_binary vm=" + st.Name()}; !slices.Equal(warned, want) {
+		t.Errorf("a config that can't be read: %q, want %q", warned, want)
+	}
+}
+
+// NarrowNotes runs once the rule is written, so a VM whose rules can't be
+// read is a warning naming it, not a failure, and the host's note follows,
+// as devvm can't tell that the allow narrows nothing there.
+func TestNarrowNotesUnreadable(t *testing.T) {
+	d, st := sandbox(t, "base")
+	p, _ := testProxy(t, d)
+	var got []string
+	p.Reporter = &msg.Fake{OnAny: func(m msg.M) { got = append(got, msg.IDOf(m)) }}
+	p.Assets = fstest.MapFS{} // no built-in policy, which reading the allowlist needs
+	p.NarrowNotes([]string{"api.github.com GET"}, st, false)
+	if want := []string{"rule_narrows_unknown", "rule_narrows"}; !slices.Equal(got, want) {
+		t.Errorf("said %q, want %q", got, want)
 	}
 }
 

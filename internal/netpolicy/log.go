@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -254,7 +255,8 @@ func readLines(r *bufio.Reader, read *int64, line func(string)) (string, error) 
 
 // FormatEvent turns one line of an event log into what devvm network log shows:
 // the time, allowed or BLOCKED, the host and port, and the rule that
-// allowed it, the request, the tokens put in, or why it was blocked. The
+// allowed it, the request, the tokens put in, or why it was blocked, after
+// a blocked request's method and path. The
 // VM chose the host and path: control characters are dropped. false for a
 // line that isn't an event, and for devvm's mark of a VM starting to learn
 // (MarkLearning), which is no connection.
@@ -267,8 +269,14 @@ func FormatEvent(line string) (string, bool) {
 	switch e.Event {
 	case "blocked":
 		what, d = "BLOCKED", e.Reason
+		if e.Method != "" && e.Method != http.MethodConnect && e.Path != "" { // a request, not a tunnel
+			d = e.Method + " " + e.Path + ": " + e.Reason
+		}
 	case "forward":
 		d = e.Method + " " + e.Path
+		if e.Rule != "" { // the rule that let it through, by method and path
+			d += ", rule " + e.Rule
+		}
 	case "intercept":
 		d += ", decrypted"
 	case "login": // an agent's login, captured at its token endpoint

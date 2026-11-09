@@ -7,6 +7,7 @@ import (
 
 	"github.com/devvmhq/devvm/internal/agentlogin"
 	"github.com/devvmhq/devvm/internal/msg"
+	"github.com/devvmhq/devvm/internal/proxy"
 )
 
 // A secret of yours has a name of its own: lower case, digits and dashes,
@@ -154,8 +155,11 @@ func TestDefine(t *testing.T) {
 		{Def{Hosts: many, Env: "X_KEY"}, "secret_too_many_hosts most=16 secret=stripe"},
 		{Def{Hosts: host, Env: "X_KEY", Prefix: "sk "}, "bad_secret_prefix given=sk  most=32"},
 		{Def{Hosts: host, Env: "X_KEY", Scheme: "Basic"}, "bad_secret_scheme given=Basic"},
-		{Def{Hosts: host, Env: "X_KEY", Path: "/api"}, "bad_secret_path given=/api"},
-		{Def{Hosts: host, Env: "X_KEY", Path: "/a/../b/"}, "bad_secret_path given=/a/../b/"},
+		{Def{Hosts: host, Env: "X_KEY", Path: "api/"}, "bad_request_path given=api/"},
+		{Def{Hosts: host, Env: "X_KEY", Path: "/a/../b/"}, "bad_request_path given=/a/../b/"},
+		{Def{Hosts: host, Env: "X_KEY", Path: "/v1/*/charges", Methods: "get,HEAD"}, ""},
+		{Def{Hosts: host, Env: "X_KEY", Path: "/"}, ""},
+		{Def{Hosts: host, Env: "X_KEY", Methods: "GET,CONNECT"}, "bad_methods given=GET,CONNECT methods=" + strings.Join(proxy.Methods(), ", ")},
 		{Def{Hosts: host, Env: "X_KEY", Header: "X-Api-Key", Scheme: "ApiKey"}, "secret_scheme_header secret=stripe"},
 		{Def{Hosts: host, Env: "X_KEY", Header: "X-Api-Key", BasicUser: true}, "secret_scheme_header secret=stripe"},
 		{Def{Hosts: host, Env: "X_KEY", Scheme: "ApiKey", Path: "/v1/", BasicUser: true}, ""},
@@ -164,12 +168,18 @@ func TestDefine(t *testing.T) {
 			t.Errorf("Define(%+v) = %v, want %s", tc.d, msg.NamesOf(err), tc.err)
 		}
 	}
+	// A path of / is every path, so it's none: a bindings file of version 1 that a proxy from
+	// before patterns reads, whose prefixes are longer than /.
+	if every, err := Define("stripe", Def{Hosts: host, Env: "X_KEY", Path: "/"}); err != nil || every.Path != "" {
+		t.Errorf("a path of /: %q, %v", every.Path, msg.NamesOf(err))
+	}
 }
 
 // devvm secret set's flags over a saved secret: only what's given
-// changes, none takes a scheme or a path away, and the ID stays.
+// changes, none takes a scheme, a path or methods away, a secret saved
+// without --method goes in for every method, and the ID stays.
 func TestChangeApply(t *testing.T) {
-	saved, err := Define("stripe", Def{Hosts: []string{"api.stripe.com"}, Env: "STRIPE_API_KEY", Prefix: "sk_", Scheme: "ApiKey", Path: "/v1/", BasicUser: true})
+	saved, err := Define("stripe", Def{Hosts: []string{"api.stripe.com"}, Env: "STRIPE_API_KEY", Prefix: "sk_", Scheme: "ApiKey", Path: "/v1/", Methods: "get", BasicUser: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,10 +189,12 @@ func TestChangeApply(t *testing.T) {
 		want func(Secret) bool
 	}{
 		{Change{}, func(s Secret) bool {
-			return s.Scheme == "ApiKey" && s.Path == "/v1/" && s.BasicUser && s.Prefix == "sk_"
+			return s.Scheme == "ApiKey" && s.Path == "/v1/" && s.Methods == "GET" && s.BasicUser && s.Prefix == "sk_"
 		}},
 		{Change{Def: Def{Hosts: []string{"files.stripe.com"}}}, func(s Secret) bool { return s.Hosts[0] == "files.stripe.com" && s.Env == "STRIPE_API_KEY" }},
-		{Change{Def: Def{Scheme: None, Path: None}}, func(s Secret) bool { return s.Scheme == "" && s.Path == "" && s.BasicUser }},
+		{Change{Def: Def{Scheme: None, Path: None}}, func(s Secret) bool { return s.Scheme == "" && s.Path == "" && s.Methods == "GET" && s.BasicUser }},
+		{Change{Def: Def{Methods: "HEAD,GET"}}, func(s Secret) bool { return s.Methods == "GET,HEAD" }},
+		{Change{Def: Def{Methods: None}}, func(s Secret) bool { return s.Methods == "" && s.Path == "/v1/" }},
 		{Change{BasicUserSet: true}, func(s Secret) bool { return !s.BasicUser }},
 	} {
 		got, err := tc.c.Apply("stripe", &saved)
@@ -250,6 +262,8 @@ func TestCustomsUnreadable(t *testing.T) {
 		{`{"version":1,"secrets":[{"name":"github",` + id + `"hosts":["evil.example.com"],"header":"Authorization","env":"X_KEY"}]}`, 0o600, "custom_secret_refused path=" + path + " secret=github"},
 		{`{"version":1,"secrets":[{"name":"x","hosts":["api.example.com"],"header":"Authorization","env":"X_KEY"}]}`, 0o600, "custom_secret_refused path=" + path + " secret=x"},
 		{`{"version":1,"secrets":[{"name":"x",` + id + `"hosts":["api.example.com"],"header":"Authorization","env":"X_KEY","scheme":"Basic"}]}`, 0o600, "custom_secret_refused path=" + path + " secret=x"},
+		// A path saved as a prefix whose * was itself isn't read as a wider pattern.
+		{`{"version":1,"secrets":[{"name":"x",` + id + `"hosts":["api.example.com"],"header":"Authorization","env":"X_KEY","path":"/v*/"}]}`, 0o600, "custom_secret_refused path=" + path + " secret=x"},
 	} {
 		if err := os.MkdirAll(s.Dirs.Data, 0o700); err != nil {
 			t.Fatal(err)

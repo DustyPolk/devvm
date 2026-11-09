@@ -479,7 +479,7 @@ func TestWidenParentVM(t *testing.T) {
 			func() bool { return sshagent.Mode(reread(t, e, vm)) == sshagent.On },
 		},
 		{
-			"devvm network allow", func() error { return n.PolicyChange(t.Context(), []string{"example.com"}, false, false, false) },
+			"devvm network allow", func() error { return n.PolicyChange(t.Context(), []string{"example.com"}, RuleChange{}) },
 			func() bool { return policyHas(t, e, vm, "example.com") },
 		},
 		{
@@ -522,16 +522,16 @@ func TestWidenParentVM(t *testing.T) {
 	if err := setNetwork(t.Context(), n, true); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, true, false, false); err != nil {
+	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, RuleChange{Deny: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
-	if err := n.PolicyChange(t.Context(), []string{"example.com"}, false, true, false); err != nil {
+	if err := n.PolicyChange(t.Context(), []string{"example.com"}, RuleChange{Remove: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if len(*asked) != 0 {
 		t.Errorf("asked %q", *asked)
 	}
-	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, false, true, false); err != nil {
+	if err := n.PolicyChange(t.Context(), []string{"!bad.example.com"}, RuleChange{Remove: true}); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	if want := "widen_parent_vm cmd=devvm network rm dir=" + web + " vm=" + vm; !slices.Equal(*asked, []string{want}) {

@@ -540,8 +540,8 @@ func checkWords(c *cobra.Command, words []string, code bool) (concrete bool, err
 
 // capitalValues reports whether the flag's values are written in capitals,
 // so one isn't taken for a placeholder: --env's, a variable's name, such
-// as STRIPE_API_KEY.
-func capitalValues(flag string) bool { return flag == "env" }
+// as STRIPE_API_KEY, and --method's, HTTP methods, such as GET,HEAD.
+func capitalValues(flag string) bool { return flag == "env" || flag == "method" }
 
 // lookupFlag is c's flag, its own or inherited, as written: --name or -n.
 func lookupFlag(c *cobra.Command, written string) *pflag.Flag {

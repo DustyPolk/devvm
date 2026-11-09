@@ -1,0 +1,69 @@
+# Rules by method and path, and a secret by method, on devvm 0.1.0's
+# state (testdata/v0.1.0/GOOS, which 0.1.0 itself made): app, on the
+# allowlist tier with the github secret and Codex's API key, takes them
+# as a VM this devvm made does, its launch keeps 0.1.0's bindings file
+# byte for byte, and only a secret by method makes it of version 2.
+[!darwin] [!linux] skip 'a fixture for macOS and Linux only'
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+mkdir $HOME/src/db $HOME/src/app $HOME/src/web $HOME/src/scratch
+cd $HOME/src/app
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+cd $HOME/src/web
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+cd $HOME/src/scratch
+exec git init -q
+fixture v0.1.0
+vm_name APP app
+cd $HOME/src/app
+# Host ports of its own, as fixture_v010.txtar launches app with 0.1.0's at
+# the same time.
+free_port PROXY SSH
+json_set $APP_dir/vm.json ports.host.proxy:=$PROXY ports.host.ssh:=$SSH
+
+# devvm's own rules allow api.github.com whole, so an allow by method
+# narrows nothing on app, and devvm says so and names the deny.
+exec devvm network allow api.github.com --method GET
+stderr '^devvm: rule_narrows_nothing host=api\.github\.com rule=api\.github\.com GET vms=devvm-app-[0-9a-f]{14}$'
+! stderr '^rule_narrows host='
+exec devvm network rm api.github.com --method GET
+
+# A deny by method is in app's rules, as devvm network --json shows them.
+exec devvm network deny api.github.com --method POST,DELETE
+stdout '^==> rule_added rule=!api\.github\.com POST,DELETE vm=devvm-app-[0-9a-f]{14}$'
+stderr '^rule_narrows host=api\.github\.com$'
+exec devvm network --json
+stdout '"!api\.github\.com POST,DELETE"'
+! stdout '"not_rules": \[\n *\{'
+
+# The next launch starts app with the deny, and writes its bindings file
+# again byte for byte as 0.1.0 wrote it: of version 1, which a proxy from
+# before an upgrade reads alike.
+cp $APP_dir/run/secrets.json $WORK/secrets-before.json
+grep '^\{"version":1,' $APP_dir/run/secrets.json
+exec devvm
+stdout '^==> starting vm=devvm-app-[0-9a-f]{14}$'
+! stderr 'unreadable|corrupt|layout_|refused|failed|policy_not_rule|policy_broken_deny'
+cmp $APP_dir/run/secrets.json $WORK/secrets-before.json
+
+# A secret of yours by method makes app's bindings file of version 2, with
+# 0.1.0's bindings kept in it.
+stdin $WORK/key.token
+exec devvm secret set reports --host api.example.com --env REPORTS_API_KEY --method GET --stdin
+exec devvm secret use reports
+stdout '^==> custom_secret_used hosts=api\.example\.com secret=reports vm=devvm-app-[0-9a-f]{14}$'
+exec cat $APP_dir/run/secrets.json
+stdout '^\{"version":2,"bindings":\[\{"name":"github",'
+stdout '"name":"reports","kind":"secret","hosts":\["api\.example\.com"\],"methods":"GET",'
+stdout '"name":"codex-key"'
+
+# The deny comes out by its flags, a deny with its !.
+exec devvm network rm '!api.github.com' --method POST,DELETE
+stdout '^==> rule_removed rule=!api\.github\.com POST,DELETE vm=devvm-app-[0-9a-f]{14}$'
+exec devvm network --json
+! stdout 'POST,DELETE'
+exec devvm secret rm reports --force
+
+-- key.token --
+rk_e2efake_reports

@@ -1783,6 +1783,32 @@ other = "There's no VM for {{.dir}}. Run devvm to make one, or add -g to change 
 description = "rule is what was typed, quoted"
 other = "{{.rule}} isn't a rule."
 
+[rule_not_narrowable]
+description = "rule is what was typed, such as 10.0.0.5 or **"
+other = "{{.rule}} can't take --method or --path, because an address, a CIDR or ** names no host whose HTTPS the proxy could decrypt. Give a host name instead, such as api.github.com or *.example.com."
+
+[rule_narrows]
+description = "host is the rule's host, such as api.github.com or *.example.com"
+other = "The proxy now decrypts {{.host}}'s HTTPS on port 443 to check each request, so a tool that doesn't trust the VM's CA fails there, and a new tunnel to it on another port is refused. Tunnels to it that are open already carry on unchecked until they close."
+
+[rule_narrows_nothing]
+description = "rule is the allow as added, such as api.github.com GET; host is its host; vms lists the VMs where another rule allows the host whole, comma-separated"
+other = "{{.rule}} narrows nothing on {{.vms}}, because another rule there already allows {{.host}} whole, and allows add up. To keep a VM from some of its requests there, deny them instead, such as devvm network deny {{.host}} --method POST,PUT,PATCH,DELETE."
+
+[rule_narrows_http_only]
+description = "rule is the allow as added, such as api.github.com GET; host is its host; vms lists the VMs where another rule allows the host whole on port 443, comma-separated"
+other = "{{.rule}} narrows only plain HTTP on port 80 on {{.vms}}, because another rule there already allows {{.host}}:443 whole, and allows add up. To keep a VM from some of its HTTPS requests there, deny them instead, such as devvm network deny {{.host}} --method POST,PUT,PATCH,DELETE."
+
+[rule_narrows_unknown]
+description = "reason is an error from the system, in English"
+other = "Reading {{.vm}}'s rules failed, so devvm can't tell whether the allow narrows anything there: {{.reason}}."
+
+[proxy_other_binary]
+other = "{{.vm}}'s proxy is from another devvm binary, which denies the VM everything while it has a deny by method and path, and skips an allow by method and path, until it starts again. Run devvm in the VM's folder to start its proxy again."
+
+[secrets_other_binary]
+other = "{{.vm}}'s proxy is from another devvm binary, which puts none of the VM's secrets in now that one of them goes in by method or by a path pattern, until it starts again. Run devvm in the VM's folder to start its proxy again."
+
 [rule_added]
 other = "devvm added {{.rule}} to {{.vm}}'s rules."
 
@@ -2992,9 +3018,13 @@ other = "{{.vms}} use the {{.secret}} secret, which now goes only to {{.hosts}} 
 description = "given is the scheme as typed, such as Basic"
 other = "{{.given}} can't be a secret's own scheme. Give one such as ApiKey, of letters, digits, dots, dashes or underscores, but not Basic, Digest, Bearer or Token, which devvm handles itself."
 
-[bad_secret_path]
-description = "given is the path as typed, such as /api"
-other = "A secret can't go in below {{.given}}. Give a path that starts and ends with a slash, such as /api/, with no . or .. part, doubled slash, backslash, ; or %."
+[bad_request_path]
+description = "given is --path's value as typed, such as /api/../x"
+other = "{{.given}} isn't a path. Give one that starts with a slash, such as /api/ for everything below /api/ or /repos/*/*/issues, with no . or .. part, doubled slash, space, %, backslash, ;, ? or #."
+
+[bad_methods]
+description = "given is --method's value as typed, such as GTE; methods lists the methods devvm takes, comma-separated"
+other = "{{.given}} isn't a list of methods. Give some of {{.methods}}, joined with commas, such as GET,HEAD."
 
 [secret_scheme_header]
 description = "secret is the secret's name"

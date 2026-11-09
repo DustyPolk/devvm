@@ -31,7 +31,7 @@ import (
 // password of Basic credentials, which the proxy reads too.
 const DefaultHeader = "Authorization"
 
-// None is what --scheme and --path take to have none.
+// None is what --scheme, --path and --method take to have none.
 const None = "none"
 
 const (
@@ -43,12 +43,13 @@ const (
 
 // Def is a secret of yours' definition as devvm secret set's flags give
 // it: its hosts, its header ("": DefaultHeader), its variable, its
-// placeholder's start, its own Authorization scheme, the path below which
-// it goes in, and whether it may go in as Basic credentials' username.
+// placeholder's start, its own Authorization scheme, the path and the
+// methods of the requests it goes in for, and whether it may go in as
+// Basic credentials' username.
 type Def struct {
 	Hosts                       []string
 	Header, Env, Prefix, Scheme string
-	Path                        string
+	Path, Methods               string
 	BasicUser                   bool
 }
 
@@ -57,13 +58,14 @@ type Def struct {
 // once, at least one and at most hostsMax), its header (CheckHeader), its
 // variable (CheckEnv), which it needs, as a VM finds its placeholder
 // nowhere else, its placeholder's start (CheckPrefix), its scheme
-// (proxy.SchemeOK) and its path (proxy.PathPrefixOK). A scheme and
-// BasicUser go with Authorization alone.
+// (proxy.SchemeOK), its path (proxy.PathOK) and its methods (CheckMethods,
+// in their canonical form). A scheme and BasicUser go with Authorization
+// alone.
 func Define(name string, d Def) (Secret, error) {
 	if err := CheckName(name); err != nil {
 		return Secret{}, err
 	}
-	sec := Secret{Name: name, Header: DefaultHeader, Env: d.Env, Prefix: d.Prefix, Scheme: d.Scheme, Path: d.Path, BasicUser: d.BasicUser, Custom: true}
+	sec := Secret{Name: name, Header: DefaultHeader, Env: d.Env, Prefix: d.Prefix, Scheme: d.Scheme, Path: d.Path, Methods: d.Methods, BasicUser: d.BasicUser, Custom: true}
 	hosts, err := checkHosts(name, d.Hosts)
 	if err != nil {
 		return Secret{}, err
@@ -85,7 +87,7 @@ func Define(name string, d Def) (Secret, error) {
 			return Secret{}, err
 		}
 	}
-	if err := checkHow(sec); err != nil {
+	if err := checkHow(&sec); err != nil {
 		return Secret{}, err
 	}
 	return sec, nil
@@ -113,8 +115,10 @@ func checkHosts(name string, given []string) ([]string, error) {
 }
 
 // checkHow is Define's check of how a secret goes in: its scheme, its
-// path, and that a scheme and BasicUser go with Authorization alone.
-func checkHow(sec Secret) error {
+// path, a path of / written as none, as it's every path, its methods,
+// which it writes in their canonical form, and that a scheme and
+// BasicUser go with Authorization alone.
+func checkHow(sec *Secret) error {
 	if sec.Scheme != "" {
 		if err := CheckScheme(sec.Scheme); err != nil {
 			return err
@@ -122,6 +126,15 @@ func checkHow(sec Secret) error {
 	}
 	if sec.Path != "" {
 		if err := CheckPath(sec.Path); err != nil {
+			return err
+		}
+	}
+	if sec.Path == "/" {
+		sec.Path = "" // everything below /, which is every path
+	}
+	if sec.Methods != "" {
+		var err error
+		if sec.Methods, err = CheckMethods(sec.Methods); err != nil {
 			return err
 		}
 	}
@@ -133,7 +146,7 @@ func checkHow(sec Secret) error {
 
 // Change is a secret of yours as devvm secret set's flags give it: each
 // part not given ("" or nil, BasicUser without BasicUserSet) stays as it's
-// saved, and a scheme or path of None takes the saved one away.
+// saved, and a scheme, path or methods of None takes the saved one away.
 type Change struct {
 	Def
 	BasicUserSet bool // --basic-user was given, as BasicUser says
@@ -142,7 +155,7 @@ type Change struct {
 // Empty reports whether the flags give nothing: a new value alone.
 func (c Change) Empty() bool {
 	d := c.Def
-	return len(d.Hosts) == 0 && d.Header == "" && d.Env == "" && d.Prefix == "" && d.Scheme == "" && d.Path == "" && !c.BasicUserSet
+	return len(d.Hosts) == 0 && d.Header == "" && d.Env == "" && d.Prefix == "" && d.Scheme == "" && d.Path == "" && d.Methods == "" && !c.BasicUserSet
 }
 
 // Apply returns the secret of yours named name with c's parts over saved,
@@ -159,15 +172,15 @@ func (c Change) Apply(name string, saved *Secret) (Secret, error) {
 		d.Prefix = cmp.Or(d.Prefix, saved.Prefix)
 		d.Scheme = cmp.Or(d.Scheme, saved.Scheme)
 		d.Path = cmp.Or(d.Path, saved.Path)
+		d.Methods = cmp.Or(d.Methods, saved.Methods)
 		if !c.BasicUserSet {
 			d.BasicUser = saved.BasicUser
 		}
 	}
-	if d.Scheme == None {
-		d.Scheme = ""
-	}
-	if d.Path == None {
-		d.Path = ""
+	for _, f := range []*string{&d.Scheme, &d.Path, &d.Methods} {
+		if *f == None {
+			*f = ""
+		}
 	}
 	sec, err := Define(name, d)
 	if saved != nil {
@@ -290,13 +303,25 @@ func CheckScheme(scheme string) error {
 	return nil
 }
 
-// CheckPath checks the path below which a secret of yours goes in
-// (proxy.PathPrefixOK), such as /api/.
+// CheckPath checks a path pattern (proxy.PathOK), such as /api/ for
+// everything below /api/: where a secret of yours goes in, or what a rule
+// narrows its host to, as --path takes it.
 func CheckPath(p string) error {
-	if !proxy.PathPrefixOK(p) {
-		return msg.BadSecretPath(p)
+	if !proxy.PathOK(p) {
+		return msg.BadRequestPath(p)
 	}
 	return nil
+}
+
+// CheckMethods checks a list of methods (proxy.ParseMethods), such as
+// GET,HEAD: those a secret of yours goes in for, or a rule narrows its host
+// to, as --method takes it. It returns the list in its canonical form.
+func CheckMethods(given string) (string, error) {
+	m, ok := proxy.ParseMethods(given)
+	if !ok {
+		return "", msg.BadMethods(given, strings.Join(proxy.Methods(), ", "))
+	}
+	return m, nil
 }
 
 // CheckEnv checks the variable a secret of yours gives VMs its placeholder

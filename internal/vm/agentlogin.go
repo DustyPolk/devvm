@@ -261,6 +261,7 @@ func (e AgentLogin) saveKey(ctx context.Context, t *target, store *secrets.Store
 	if err := store.WriteFiles(ctx, t.st, salt); err != nil {
 		return err
 	}
+	e.Proxy.SecretsWritten(vm)
 	data, err := store.VMLogin(o.Agent, salt)
 	if err != nil {
 		return msg.LoginCopyFailed(o.Agent, err.Error(), vm).Because(err)

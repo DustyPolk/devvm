@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -13,20 +14,185 @@ import (
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/paths"
 	"github.com/devvmhq/devvm/internal/proxy"
+	"github.com/devvmhq/devvm/internal/secrets"
 	"github.com/devvmhq/devvm/internal/state"
 )
 
 // Rule is the rule for devvm network allow (deny false) or deny: rule as
-// given, with deny's leading ! added. It refuses what the proxy wouldn't
-// take as one rule, and an allow of a deny.
-func Rule(rule string, deny bool) (string, error) {
+// given, with deny's leading ! added, narrowed to methods and the path
+// pattern p when --method and --path give them ("" or secrets.None for
+// none), in the proxy's canonical form when it narrows. It refuses what
+// the proxy wouldn't take as one rule, a rule with spaces in it, which the
+// flags write, an allow of a deny, and methods or a path on an address, a
+// CIDR or **.
+func Rule(rule string, deny bool, methods, p string) (string, error) {
 	if deny && !strings.HasPrefix(rule, "!") {
 		rule = "!" + rule
 	}
-	if !proxy.ValidRule(rule) || !deny && strings.HasPrefix(rule, "!") {
+	if !proxy.ValidRule(rule) || strings.ContainsAny(rule, " \t") || !deny && strings.HasPrefix(rule, "!") {
 		return "", msg.NotARule(rule)
 	}
-	return rule, nil
+	if methods == secrets.None {
+		methods = ""
+	}
+	if p == secrets.None {
+		p = ""
+	}
+	if methods == "" && p == "" {
+		return rule, nil
+	}
+	if !proxy.Narrowable(rule) {
+		return "", msg.RuleNotNarrowable(rule)
+	}
+	if methods != "" {
+		var err error
+		if methods, err = secrets.CheckMethods(methods); err != nil {
+			return "", err
+		}
+	}
+	if p != "" {
+		if err := secrets.CheckPath(p); err != nil {
+			return "", err
+		}
+	}
+	narrowed, _ := proxy.NarrowRule(rule, methods, p)
+	return narrowed, nil
+}
+
+// NarrowedHost is a rule's host as written, without its !, port, methods
+// or path, when the rule narrows it to some requests; false for any other
+// rule.
+func NarrowedHost(rule string) (string, bool) {
+	f := strings.Fields(strings.TrimPrefix(rule, "!"))
+	if len(f) < 2 {
+		return "", false
+	}
+	h, _, err := net.SplitHostPort(f[0])
+	if err != nil {
+		h = f[0]
+	}
+	return h, true
+}
+
+// NarrowNotes says, once for each host that rules narrow, that its proxy
+// now decrypts it to check each request (rule_narrows). For an allow whose
+// host a rule that doesn't narrow already allows whole on st's VM's
+// allowlist, or with st nil on each VM's, it warns instead, naming those
+// VMs, that the allow narrows nothing there, or only port 80's plain HTTP,
+// because allows add up, and names the deny that would (narrowsOn).
+//
+// It runs once the rules are written, so a VM whose rules can't be read is
+// a warning naming it (rule_narrows_unknown), never a failure of the change.
+func (p *Proxy) NarrowNotes(rules []string, st *state.VM, deny bool) {
+	var als []namedAllowlist
+	noted := map[string]bool{}
+	for _, r := range rules {
+		h, ok := NarrowedHost(r)
+		if !ok {
+			continue
+		}
+		decrypts := true
+		if !deny {
+			if als == nil {
+				als = allowlists(p, st)
+			}
+			decrypts = narrowsOn(p, als, h, r)
+		}
+		if decrypts && !noted[h] {
+			noted[h] = true
+			p.Note(msg.RuleNarrows(h))
+		}
+	}
+}
+
+// namedAllowlist is a VM's allowlist (Proxy.Allowlist), by the VM's name.
+type namedAllowlist struct {
+	vm string
+	al proxy.Allowlist
+}
+
+// allowlists are the allowlists an allow by method and path joins: st's
+// VM's, or with st nil, each VM's, as -g's file joins every VM's. A VM's
+// that can't be read is left out, with a warning naming it.
+func allowlists(p *Proxy, st *state.VM) []namedAllowlist {
+	sts := []*state.VM{st}
+	if st == nil {
+		sts = nil
+		vms, _ := state.VMNames(p.Dirs)
+		for _, vm := range vms {
+			if s, err := state.ReadVM(p.Dirs, vm); err == nil && s.Exists() {
+				sts = append(sts, s)
+			}
+		}
+	}
+	out := make([]namedAllowlist, 0, len(sts))
+	for _, s := range sts {
+		al, err := p.Allowlist(s)
+		if err != nil {
+			p.Warn(msg.RuleNarrowsUnknown(err.Error(), s.Name()).Because(err))
+			continue
+		}
+		out = append(out, namedAllowlist{s.Name(), al})
+	}
+	return out
+}
+
+// narrowsOn warns about the VMs whose allowlists already allow the host h
+// of r, an allow by method and path, whole (proxy.Allowlist.CoversWhole):
+// where it narrows nothing, and where it narrows only port 80's plain HTTP.
+// It reports whether r narrows HTTPS on any of them, or there's none, so
+// the proxy decrypts the host.
+func narrowsOn(p msg.Reporter, als []namedAllowlist, h, r string) bool {
+	var nothing, httpOnly []string
+	https := len(als) == 0
+	for _, a := range als {
+		switch no, plain := a.al.CoversWhole(r); {
+		case no:
+			nothing = append(nothing, a.vm)
+		case plain:
+			httpOnly = append(httpOnly, a.vm)
+		default:
+			https = true
+		}
+	}
+	if len(nothing) > 0 {
+		p.Warn(msg.RuleNarrowsNothing(h, r, strings.Join(nothing, ", ")))
+	}
+	if len(httpOnly) > 0 {
+		p.Warn(msg.RuleNarrowsHTTPOnly(h, r, strings.Join(httpOnly, ", ")))
+	}
+	return https
+}
+
+// OtherBinaries warns, when rules hold one by method and path, about each
+// VM whose proxy runs from another devvm binary (otherBinary), which may
+// read that rule otherwise until the VM's next launch: vm's, or with none,
+// every VM's.
+func (p *Proxy) OtherBinaries(rules []string, vm string) {
+	if !slices.ContainsFunc(rules, func(r string) bool { _, ok := NarrowedHost(r); return ok }) {
+		return
+	}
+	vms := []string{vm}
+	if vm == "" {
+		vms, _ = state.VMNames(p.Dirs)
+	}
+	for _, v := range vms {
+		if otherBinary(p, v) {
+			p.Warn(msg.ProxyOtherBinary(v))
+		}
+	}
+}
+
+// sameRule reports whether the policy line text and rule are one rule: the
+// same in the proxy's canonical form, or, for what isn't a rule, the same
+// text in any case.
+func sameRule(text, rule string) bool {
+	a, okA := proxy.CanonicalRule(text)
+	b, okB := proxy.CanonicalRule(strings.TrimSpace(rule))
+	if okA && okB {
+		return a == b
+	}
+	return strings.EqualFold(text, strings.TrimSpace(rule))
 }
 
 // readRules reads a policy file's lines; a missing file has none. It reads
@@ -52,22 +218,22 @@ func writeRules(path string, lines []string) error {
 }
 
 // AddRule adds rule to the policy file at path, unless a line has it
-// already (in any case); false then.
+// already (sameRule); false then.
 func AddRule(path, rule string) (bool, error) {
 	lines, err := readRules(path)
 	if err != nil {
 		return false, err
 	}
 	for _, l := range proxy.ParsePolicy(strings.Join(lines, "\n")) {
-		if strings.EqualFold(l.Text, rule) {
+		if sameRule(l.Text, rule) {
 			return false, nil
 		}
 	}
 	return true, writeRules(path, append(lines, rule))
 }
 
-// RemoveRule removes the lines with rule (in any case, comments aside)
-// from the policy file at path; false when none has it.
+// RemoveRule removes the lines with rule (sameRule, comments aside) from
+// the policy file at path; false when none has it.
 func RemoveRule(path, rule string) (bool, error) {
 	lines, err := readRules(path)
 	if err != nil {
@@ -75,7 +241,7 @@ func RemoveRule(path, rule string) (bool, error) {
 	}
 	drop := map[int]bool{}
 	for _, l := range proxy.ParsePolicy(strings.Join(lines, "\n")) {
-		drop[l.N] = strings.EqualFold(l.Text, strings.TrimSpace(rule))
+		drop[l.N] = sameRule(l.Text, rule)
 	}
 	kept := lines[:0:0]
 	for i, l := range lines {

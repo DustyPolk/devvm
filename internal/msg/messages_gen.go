@@ -439,9 +439,19 @@ func BadFrom(from string) M {
 	return M{id: "bad_from", vals: []val{{"from", from}}}
 }
 
+// BadMethods is [bad_methods]: "{{.given}} isn't a list of methods. Give some of {{.methods}}, joined with commas, such as GET,HEAD."
+func BadMethods(given string, methods string) M {
+	return M{id: "bad_methods", vals: []val{{"given", given}, {"methods", methods}}}
+}
+
 // BadPath is [bad_path]: "The path {{.dir}} has a comma or a control character, so devvm can't mount it into a VM."
 func BadPath(dir string) M {
 	return M{id: "bad_path", vals: []val{{"dir", dir}}}
+}
+
+// BadRequestPath is [bad_request_path]: "{{.given}} isn't a path. Give one that starts with a slash, such as /api/ for everything below /api/ or /repos/*/*/issues, with no . or .. part, doubled slash, space, %, backslash, ;, ? or #."
+func BadRequestPath(given string) M {
+	return M{id: "bad_request_path", vals: []val{{"given", given}}}
 }
 
 // BadSecretEnv is [bad_secret_env]: "{{.given}} can't hold a secret's placeholder, because it isn't a variable's name, or devvm or the shell sets it. Give another name, such as STRIPE_API_KEY."
@@ -462,11 +472,6 @@ func BadSecretHost(given string) M {
 // BadSecretName is [bad_secret_name]: "{{.given}} can't name a secret. A name has lowercase letters, digits and dashes, at most {{.most}} of them, and starts and ends with a letter or a digit."
 func BadSecretName(given string, most string) M {
 	return M{id: "bad_secret_name", vals: []val{{"given", given}, {"most", most}}}
-}
-
-// BadSecretPath is [bad_secret_path]: "A secret can't go in below {{.given}}. Give a path that starts and ends with a slash, such as /api/, with no . or .. part, doubled slash, backslash, ; or %."
-func BadSecretPath(given string) M {
-	return M{id: "bad_secret_path", vals: []val{{"given", given}}}
 }
 
 // BadSecretPrefix is [bad_secret_prefix]: "{{.given}} can't start a placeholder. Give at most {{.most}} letters, digits, dots, dashes or underscores, such as sk_."
@@ -3344,6 +3349,11 @@ func ProxyFailed(reason string) M {
 	return M{id: "proxy_failed", vals: []val{{"reason", reason}}}
 }
 
+// ProxyOtherBinary is [proxy_other_binary]: "{{.vm}}'s proxy is from another devvm binary, which denies the VM everything while it has a deny by method and path, and skips an allow by method and path, until it starts again. Run devvm in the VM's folder to start its proxy again."
+func ProxyOtherBinary(vm string) M {
+	return M{id: "proxy_other_binary", vals: []val{{"vm", vm}}}
+}
+
 // ProxyPasswordHowto is [proxy_password_howto]: "Type the company proxy's password for the user that config.toml's proxy names. Only devvm's proxies on this machine send it, and only to the company proxy."
 func ProxyPasswordHowto() M {
 	return M{id: "proxy_password_howto"}
@@ -3659,6 +3669,31 @@ func RuleMissing(file string, rule string) M {
 	return M{id: "rule_missing", vals: []val{{"file", file}, {"rule", rule}}}
 }
 
+// RuleNarrows is [rule_narrows]: "The proxy now decrypts {{.host}}'s HTTPS on port 443 to check each request, so a tool that doesn't trust the VM's CA fails there, and a new tunnel to it on another port is refused. Tunnels to it that are open already carry on unchecked until they close."
+func RuleNarrows(host string) M {
+	return M{id: "rule_narrows", vals: []val{{"host", host}}}
+}
+
+// RuleNarrowsHTTPOnly is [rule_narrows_http_only]: "{{.rule}} narrows only plain HTTP on port 80 on {{.vms}}, because another rule there already allows {{.host}}:443 whole, and allows add up. To keep a VM from some of its HTTPS requests there, deny them instead, such as devvm network deny {{.host}} --method POST,PUT,PATCH,DELETE."
+func RuleNarrowsHTTPOnly(host string, rule string, vms string) M {
+	return M{id: "rule_narrows_http_only", vals: []val{{"host", host}, {"rule", rule}, {"vms", vms}}}
+}
+
+// RuleNarrowsNothing is [rule_narrows_nothing]: "{{.rule}} narrows nothing on {{.vms}}, because another rule there already allows {{.host}} whole, and allows add up. To keep a VM from some of its requests there, deny them instead, such as devvm network deny {{.host}} --method POST,PUT,PATCH,DELETE."
+func RuleNarrowsNothing(host string, rule string, vms string) M {
+	return M{id: "rule_narrows_nothing", vals: []val{{"host", host}, {"rule", rule}, {"vms", vms}}}
+}
+
+// RuleNarrowsUnknown is [rule_narrows_unknown]: "Reading {{.vm}}'s rules failed, so devvm can't tell whether the allow narrows anything there: {{.reason}}."
+func RuleNarrowsUnknown(reason string, vm string) M {
+	return M{id: "rule_narrows_unknown", vals: []val{{"reason", reason}, {"vm", vm}}}
+}
+
+// RuleNotNarrowable is [rule_not_narrowable]: "{{.rule}} can't take --method or --path, because an address, a CIDR or ** names no host whose HTTPS the proxy could decrypt. Give a host name instead, such as api.github.com or *.example.com."
+func RuleNotNarrowable(rule string) M {
+	return M{id: "rule_not_narrowable", vals: []val{{"rule", rule}}}
+}
+
 // RulePresent is [rule_present]: "{{.rule}} is already in {{.file}}."
 func RulePresent(file string, rule string) M {
 	return M{id: "rule_present", vals: []val{{"file", file}, {"rule", rule}}}
@@ -3817,6 +3852,11 @@ func SecretUsed(secret string, vm string) M {
 // SecretWithClaude is [secret_with_claude]: "{{.vm}} has Claude Code, so the VM always uses the Claude Code token. To stop it, run devvm tools rm claude."
 func SecretWithClaude(vm string) M {
 	return M{id: "secret_with_claude", vals: []val{{"vm", vm}}}
+}
+
+// SecretsOtherBinary is [secrets_other_binary]: "{{.vm}}'s proxy is from another devvm binary, which puts none of the VM's secrets in now that one of them goes in by method or by a path pattern, until it starts again. Run devvm in the VM's folder to start its proxy again."
+func SecretsOtherBinary(vm string) M {
+	return M{id: "secrets_other_binary", vals: []val{{"vm", vm}}}
 }
 
 // SetInConfig is [set_in_config]: "{{.file}} sets {{.key}}, and devvm never changes that file. To change it, edit {{.key}} there, or delete it to let devvm's commands set it."
@@ -4778,12 +4818,13 @@ var specs = map[string]spec{
 	"backend_unreviewed_used":        {fields: []string{"backend", "feature", "vm"}},
 	"bad_duration":                   {fields: []string{"value"}},
 	"bad_from":                       {fields: []string{"from"}},
+	"bad_methods":                    {fields: []string{"given", "methods"}},
 	"bad_path":                       {fields: []string{"dir"}},
+	"bad_request_path":               {fields: []string{"given"}},
 	"bad_secret_env":                 {fields: []string{"given"}},
 	"bad_secret_header":              {fields: []string{"given"}},
 	"bad_secret_host":                {fields: []string{"given"}},
 	"bad_secret_name":                {fields: []string{"given", "most"}},
-	"bad_secret_path":                {fields: []string{"given"}},
 	"bad_secret_prefix":              {fields: []string{"given", "most"}},
 	"bad_secret_scheme":              {fields: []string{"given"}},
 	"bad_secret_service":             {},
@@ -5359,6 +5400,7 @@ var specs = map[string]spec{
 	"project_in_vm_folder":           {fields: []string{"dir", "vm"}},
 	"proxy_ca_failed":                {fields: []string{"dir"}},
 	"proxy_failed":                   {fields: []string{"reason"}},
+	"proxy_other_binary":             {fields: []string{"vm"}},
 	"proxy_password_howto":           {},
 	"proxy_password_in_config":       {fields: []string{"key"}},
 	"proxy_password_missing":         {},
@@ -5422,6 +5464,11 @@ var specs = map[string]spec{
 	"rule_added":                     {fields: []string{"rule", "vm"}},
 	"rule_added_global":              {fields: []string{"rule"}},
 	"rule_missing":                   {fields: []string{"file", "rule"}},
+	"rule_narrows":                   {fields: []string{"host"}},
+	"rule_narrows_http_only":         {fields: []string{"host", "rule", "vms"}},
+	"rule_narrows_nothing":           {fields: []string{"host", "rule", "vms"}},
+	"rule_narrows_unknown":           {fields: []string{"reason", "vm"}},
+	"rule_not_narrowable":            {fields: []string{"rule"}},
 	"rule_present":                   {fields: []string{"file", "rule"}},
 	"rule_removed":                   {fields: []string{"rule", "vm"}},
 	"rule_removed_global":            {fields: []string{"rule"}},
@@ -5454,6 +5501,7 @@ var specs = map[string]spec{
 	"secret_unused":                  {fields: []string{"secret", "vm"}},
 	"secret_used":                    {fields: []string{"secret", "vm"}},
 	"secret_with_claude":             {fields: []string{"vm"}},
+	"secrets_other_binary":           {fields: []string{"vm"}},
 	"set_in_config":                  {fields: []string{"file", "key"}},
 	"setid_files":                    {fields: []string{"files"}},
 	"setid_root_files":               {fields: []string{"files"}},

@@ -91,6 +91,24 @@ func (p *Proxy) proc(vm string) daemon.Proc {
 // names, if that still runs as the VM's proxy.
 func (p *Proxy) PID(vm string) (int, bool) { return p.proc(vm).PID() }
 
+// otherBinary reports whether p's VM vm has a proxy running, started from
+// another devvm binary than p's (the config it started with, its
+// DevvmSHA256), so it may read a rule or a bindings file this devvm writes
+// otherwise, such as one by method and path, until the VM's next launch
+// starts it again. A running proxy whose config, or this binary, can't be
+// read counts as another's: devvm can't tell.
+func otherBinary(p *Proxy, vm string) bool {
+	if _, ok := p.PID(vm); !ok {
+		return false
+	}
+	c, err := proxy.ReadConfig(p.Dirs.VM(vm).ProxyConfig())
+	if err != nil {
+		return true
+	}
+	self, err := image.SHA256File(p.Self)
+	return err != nil || c.DevvmSHA256 != self
+}
+
 // Stop stops the VM's proxy, if it runs: SIGTERM, then after two seconds
 // SIGKILL, waiting up to two more for it to end. It reports whether no
 // proxy of the VM's runs then.
@@ -319,9 +337,22 @@ func (p *Proxy) RefreshSecrets(ctx context.Context, vms ...string) error {
 		}
 		if err := p.Secrets.RefreshFiles(ctx, st, n.Made.ProxySalt); err != nil {
 			errs = append(errs, err)
+			continue
 		}
+		p.SecretsWritten(vm)
 	}
 	return errors.Join(errs...)
+}
+
+// SecretsWritten is what follows every write of vm's bindings file
+// (secrets.Store's WriteFiles and RefreshFiles): a warning when the file is
+// of a version after 1, for a binding by method or pattern, which a proxy
+// from another devvm binary (otherBinary) may refuse whole, so it puts none
+// of the VM's secrets in until it starts again.
+func (p *Proxy) SecretsWritten(vm string) {
+	if l, err := proxy.ReadBindings(p.Dirs.VM(vm).Secrets()); err == nil && l.Version != 1 && otherBinary(p, vm) {
+		p.Warn(msg.SecretsOtherBinary(vm))
+	}
 }
 
 // start writes cfg, the VM's proxy's config, and starts the proxy with

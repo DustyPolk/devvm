@@ -27,15 +27,16 @@ devvm secret set NAME [flags]
 ## Options
 
 ```text
-      --basic-user      let a secret of your own go in as the username of Basic credentials, as Stripe takes a key
-      --env VARIABLE    the VARIABLE that holds the placeholder of a secret of your own in VMs, such as STRIPE_API_KEY
-      --header HEADER   the HEADER that a secret of your own goes in, such as X-Api-Key (default: Authorization)
-  -h, --help            help for set
-      --host HOST       a HOST that a secret of your own goes to, such as api.example.com: repeat it, or join hosts with commas
-      --path PATH       the PATH below which a secret of your own goes in, such as /api/, or none for every path
-      --prefix PREFIX   the PREFIX that the placeholder of a secret of your own starts with, such as sk_, for a client that checks how a key starts
-      --scheme SCHEME   the SCHEME of a secret of your own in Authorization besides Bearer and Token, such as ApiKey, or none
-      --stdin           read the secret from a line of input, without asking
+      --basic-user       let a secret of your own go in as the username of Basic credentials, as Stripe takes a key
+      --env VARIABLE     the VARIABLE that holds the placeholder of a secret of your own in VMs, such as STRIPE_API_KEY
+      --header HEADER    the HEADER that a secret of your own goes in, such as X-Api-Key (default: Authorization)
+  -h, --help             help for set
+      --host HOST        a HOST that a secret of your own goes to, such as api.example.com: repeat it, or join hosts with commas
+      --method METHODS   the METHODS of the requests a secret of your own goes in, such as GET,HEAD, or none for every method
+      --path PATH        the PATH of the requests a secret of your own goes in, such as /api/ for everything below /api/, or none for every path
+      --prefix PREFIX    the PREFIX that the placeholder of a secret of your own starts with, such as sk_, for a client that checks how a key starts
+      --scheme SCHEME    the SCHEME of a secret of your own in Authorization besides Bearer and Token, such as ApiKey, or none
+      --stdin            read the secret from a line of input, without asking
 ```
 
 ## Options inherited from parent commands

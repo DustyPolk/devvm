@@ -173,7 +173,7 @@ The first three are built in: they come with devvm, inside its binary, so you ca
 
 ### Rules
 
-A policy file holds one rule per line. `#` starts a comment, and matching ignores case.
+A policy file holds one rule per line. `#` starts a comment, and matching a host ignores case.
 
 | Rule | Matches |
 | --- | --- |
@@ -184,8 +184,9 @@ A policy file holds one rule per line. `#` starts a comment, and matching ignore
 | `RULE:22`, `[fd00::1]:22`, `10.0.0.0/8:8080` | only that port; without a port, 443 and 80 |
 | `RULE:*`, `**:*` | any port |
 | `!RULE` | deny: a deny beats any allow |
+| `RULE METHODS PATH`, such as `api.github.com GET,HEAD /repos/` | only those requests to a host name, by their methods, their path or both ([rules by method and path](#rules-by-method-and-path)) |
 
-A rule is plain ASCII with no spaces in it, and a port is a number from 1 to 65535, or `*` for any port. A host's one trailing dot is dropped, so `example.com.` matches `example.com`. Brackets hold only an IPv6 address, and an address can't follow `*.`. A line that holds anything else, such as `example.com:x`, `a*.example.com` or `! example.com` with a space after the `!`, isn't a rule.
+A rule is plain ASCII, and a host's part has no spaces in it, while a rule by method and path has its methods and its path after the host, each after a space. A port is a number from 1 to 65535, or `*` for any port. A host's one trailing dot is dropped, so `example.com.` matches `example.com`. Brackets hold only an IPv6 address, and an address can't follow `*.`. A line that holds anything else, such as `example.com:x`, `a*.example.com` or `! example.com` with a space after the `!`, isn't a rule.
 
 When a line that isn't a rule starts with `!`, it reads as a deny, but the proxy can't tell what it would deny. So while the line is there, the proxy of every VM that reads the file denies every new connection apart from the VM's [links](#links-between-vms), whatever the other rules allow. Connections that are already open stay open. Each refusal names the file and the line, and it suggests no `devvm network allow` command, because no rule would help. Any other line that isn't a rule is skipped, and the file's other lines still apply. The proxy names each such line in its own log.
 
@@ -213,10 +214,63 @@ allowlist
 | `devvm network deny RULE...` | add them as denies, adding `!` when it's missing |
 | `devvm network rm RULE...` | remove the lines with these rules, a deny with its `!`, and warn about one that isn't there |
 | `-g`, `--global` | with `allow`, `deny` or `rm`, change `~/.config/devvm/policy`, for every VM, instead, which needs no VM |
+| `--method METHODS`, `--path PATH` | with `allow`, `deny` or `rm`, narrow each rule to those requests ([rules by method and path](#rules-by-method-and-path)) |
 
-A rule is what [Rules](#rules) lists, without spaces or a comment. devvm refuses anything else before it adds any rule, and it also refuses `allow !RULE`. A rule that's already in the file, in any case, isn't added again. Each change applies at once, from the next connection. For an open VM, devvm notes that no rule applies to it, and for an allow on the internet or none tier, that only denies apply there. When `devvm network log --blocked` or a blocked request in the VM suggests a `devvm network allow` command, its rule is one that `devvm network allow` takes.
+A rule is what [Rules](#rules) lists, without spaces or a comment, and `--method` and `--path` add its methods and its path. devvm refuses anything else before it adds any rule, and it also refuses `allow !RULE`. A rule that's already in the file, in any case, isn't added again, and a rule by method and path is the same rule however its methods are written, while its path's case is its own. Each change applies at once, from the next connection. For an open VM, devvm notes that no rule applies to it, and for an allow on the internet or none tier, that only denies apply there. When `devvm network log --blocked` or a blocked request in the VM suggests a `devvm network allow` command, its rule is one that `devvm network allow` takes.
 
 If a VM was deleted outside devvm, devvm deletes what it kept for that VM when it makes a new VM for the same project folder, so the new VM never gets the old one's rules.
+
+### Rules by method and path
+
+A rule for a host name can also name the requests it covers, by their methods, their path or both. So a VM can read from an API without changing anything there, or reach a host without pushing to it. `devvm network allow`, `deny` and `rm` take `--method` and `--path` for this, and the file gets the rule as one line, such as `api.github.com GET,HEAD /repos/`:
+
+| | |
+| --- | --- |
+| `devvm network allow api.example.com --method GET,HEAD` | let the VM only read from `api.example.com`, a host that no other rule allows |
+| `devvm network allow api.example.com --path /v1/` | let it reach only the paths below `/v1/` there |
+| `devvm network deny api.github.com --method POST,PUT,PATCH,DELETE` | keep it from changing anything through GitHub's API, which devvm's rules allow |
+| `devvm network deny github.com --path '/*/*/git-receive-pack'` | keep it from pushing to GitHub over HTTPS |
+| `devvm network deny -g pastebin.com --method POST` | keep every VM from posting there |
+
+Allows add up and a deny beats any allow, as for every rule. An allow by method and path lets through only the requests it names, and the host's other requests stay blocked unless another rule allows the whole host. So to narrow a host that a rule already allows whole, such as `api.github.com`, which devvm's own rules allow, add a deny of what the VM mustn't do. An allow by method and path for such a host narrows nothing, and devvm warns you so when you add one, naming the VMs where another rule allows the host whole, with `-g` each VM's own rules counted, and the deny to add instead. Where a whole allow names port 443 alone, such as `api.example.com:443`, an allow by method and path still narrows the host's plain HTTP on port 80, and the warning says that. A deny by method and path refuses only the requests it names, and the host's other requests go on. You can narrow any host this way, devvm's built-in ones, a secret's and an agent's included, for one VM or with `-g` for every VM. On the internet and none tiers your denies apply, by method and path too, while your allows apply only on the allowlist tier, as for every rule.
+
+The methods are some of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `TRACE` and `QUERY`, in any case, joined by commas, and devvm writes them in capitals in that order. `GET` doesn't include `HEAD`, so name both for reading. A deny refuses only the methods it names, so to keep a host read-only, name `POST`, `PUT`, `PATCH` and `DELETE`. A GraphQL API, such as GitHub's at `api.github.com/graphql`, takes its reads as `POST` too, so such a deny refuses them as well, and the GitHub CLI, which reads through it, fails there.
+
+Some servers take a request's method from a header or a parameter instead of the request itself, so the proxy judges a request by every method it names. It reads the `X-HTTP-Method-Override` and `X-HTTP-Method` headers and every header with `method-override` in its name, in any case and with `_` for `-`, as some servers read `X_HTTP_METHOD_OVERRIDE`, and the `_method` parameter of the query. While a rule by method covers a host, a request there whose header or parameter isn't exactly one of those methods in capitals, such as `DELETE, GET`, `delete` or nothing at all, is refused, because servers could read it either way, and so is a request whose query has a `;` in it, which some servers split the query at, or a query with an escape that doesn't decode. Otherwise an allow needs the request's own method and every one it names to be among its methods, so an allow of `GET` refuses a `GET` that says it's a `DELETE`, and a deny refuses a request that names any of its methods. The proxy doesn't read a request's body, so a `_method` field in a form that a `POST` sends, which some frameworks take as the method, is judged as the `POST` it is: a deny of `POST` refuses it, and an allow of `POST` lets it through whatever the field says.
+
+A path starts with `/`. In it, `*` matches any part of one segment, such as `/repos/*/*/issues` or `/*/*.git/info/refs`, and `**` as a whole segment matches one segment or more. A path that ends with `/` matches everything below it, as `/**` there would, so `/repos/` matches `/repos/a` and `/repos/a/b` but not `/repos` itself. A path without a `/` at its end also matches the request's path with one, so `/user` matches `/user/`. The query never counts, so `/search` matches `/search?q=x`. A path has no `.` or `..` part, no doubled slash, and no space, `%`, `\`, `;`, `?` or `#`.
+
+Servers don't all read a request's path alike, so a rule's path matches only a path that every server reads the same way: one with nothing percent-encoded, no `\` or `;`, no `.` or `..` part and no doubled slash. An allow matches exactly, its method and its path in their own case, and no path in any other form. A deny matches broadly instead. It matches in any case and every path that isn't in that plain form, a deny whose path ends with `/` also matches the path above it, a path's last segment matches with what follows its first `.` cut off too, as frameworks that take a format from a suffix route `/admin.json` to `/admin`, and every segment matches with its trailing dots dropped, as some servers drop them, so a deny of `/config.json` refuses `/config.json.`. So a deny of `/gists/` refuses `/gists`, `/GISTS/1`, `/gists/`, `/gists.json`, `/%67ists/1`, `/x/../gists/1` and `/gists;x/1` alike, and a deny of `/admin` refuses `/admin.json` and `/admin.` but not `/administrator`. So while a rule with a path covers a host, a request there whose path has an encoded character, such as a file name with a space, is refused unless a rule without a path allows it.
+
+To see each request, the proxy decrypts the host's HTTPS on port 443 with [the VM's own CA](#secrets), as it does for a secret's hosts, and it checks every request on the connection, each one on a kept-alive connection and on HTTP/2 alike, with the rules as they are then, so a change to them applies to a decrypted tunnel from its next request. A tunnel that was open to the host before a rule narrowed it isn't decrypted, so it carries on unchecked until it closes. A tunnel to such a host on any other port is refused, because the proxy can't see the requests in it, while plain HTTP on any port gets the same check for each request. A tool in the VM that doesn't trust the VM's CA fails there, and `devvm network log` gives the reason `TLS with the VM failed`, which is why devvm reminds you when you add such a rule that the host is now decrypted. A host that a whole allow covers, with no deny by method and path, stays a tunnel. A rule by method and path needs a host name or `*.name`, so devvm refuses `--method` and `--path` with an address or a CIDR, which have no name to decrypt by, and with `**`, which would decrypt every host. A WebSocket is checked by the request that opens it, and what it carries after that isn't. A switch to any other protocol, such as `Upgrade: h2c`, and a `CONNECT` inside a decrypted tunnel are refused, because the proxy couldn't check the requests that would follow.
+
+A request that the rules block gets `403` from the proxy, with the reason, and never reaches the host. `devvm network log` shows it with its method and its path, and `devvm-why` lists it. For a request that no allow covers, the proxy suggests the `devvm network allow` command for the whole host, and for one that a deny refuses it suggests nothing, because no allow lifts a deny. A request that a rule by method and path let through shows that rule in `devvm network log`:
+
+```text
+$ devvm network allow api.example.com --method GET --path /v1/
+==> devvm added api.example.com GET /v1/ to devvm-some-project-71a99b1076d92c's rules.
+The proxy now decrypts api.example.com's HTTPS on port 443 to check each request, so a tool that doesn't trust the VM's CA fails there, and a new tunnel to it on another port is refused. Tunnels to it that are open already carry on unchecked until they close.
+https://devvm.dev/docs/safety/network/#rules-by-method-and-path
+```
+
+In the VM, a `GET` below `/v1/` reaches the host, while a `POST` there gets the proxy's answer:
+
+```text
+$ curl -X POST https://api.example.com/v1/charges
+devvm: api.example.com:443 is blocked (no rule allows this method and path). Allow it on the host with: devvm network allow api.example.com
+```
+
+And on this machine, `devvm network log` shows both:
+
+```text
+2026-11-08T10:00:01Z  allowed  api.example.com:443  rule api.example.com GET /v1/, decrypted
+2026-11-08T10:00:01Z  allowed  api.example.com:443  GET /v1/charges, rule api.example.com GET /v1/
+2026-11-08T10:00:02Z  BLOCKED  api.example.com:443  POST /v1/charges: no rule allows this method and path
+```
+
+Learning stays by host: `devvm network lock` adds whole hosts, and you can narrow them afterwards with these flags ([learning the hosts a VM needs](#learning-the-hosts-a-vm-needs)). A line with a method that devvm doesn't know, such as `!api.github.com PSOT`, isn't a rule, so as a deny it makes the proxy deny everything until you fix it ([rules](#rules)). The shared Nix cache's own downloads from `cache.nixos.org` meet these rules too, as `GET`s of the paths the VM asked the cache for ([Nix](#nix)).
+
+A VM's proxy is the devvm binary that started it, which is the one from before an upgrade until the VM's next launch. A proxy from before rules by method and path reads such a rule as a line that isn't a rule: it skips an allow by method and path, and a deny by method and path makes it deny the VM everything, until it starts again. Likewise, once one of a VM's secrets goes in by method or by a path pattern, such a proxy puts none of the VM's secrets in. So when you add or remove such a rule, or change such a secret, while a VM's proxy runs from another devvm binary, or from one devvm can't tell, devvm warns you and names the VM, and running `devvm` in the VM's folder starts its proxy again.
 
 ### devvm network --json
 
@@ -358,7 +412,7 @@ Secrets stay on this machine, whatever the VM's tier. A VM gets a placeholder of
 | --- | --- | --- | --- |
 | `claude` | `api.anthropic.com` | `Authorization` | every VM whose image has `claude` |
 | `github` | `api.github.com`, `github.com`, `codeload.github.com`, `raw.githubusercontent.com` | `Authorization` | VMs it's bound to |
-| [your own](#your-own-secrets) | the hosts you give it | `Authorization`, or the header you give it | VMs it's bound to |
+| [your own](#your-own-secrets) | the hosts you give it, for the paths and methods you give it | `Authorization`, or the header you give it | VMs it's bound to |
 
 Agents' logins work the same way. When a VM's image has a coding agent and devvm's agent store has a login or an API key for it, the VM gets placeholders for the login, and so do Claude Code's MCP servers' secrets ([agents' logins and settings](../internals/network.md#agents-logins-and-settings)). A Claude Code, Codex or opencode login that you make inside a VM goes to the store, and the VM gets placeholders for it too ([Claude Code login](../using/coding-agents.md#claude-code-login)). A VM saves a login only for an agent that its image has, and its proxy refuses a login for any other agent, so a VM without Codex can never replace the store's Codex login. Because the store keeps one login for each agent, any VM with the agent can replace it, so a VM you don't trust can log your other VMs in to an account of its choosing ([logins made in a VM](../internals/network.md#logins-made-in-a-vm)).
 
@@ -370,7 +424,7 @@ Agents' logins work the same way. When a VM's image has a coding agent and devvm
 | `devvm secret set proxy` | asks for the [company proxy](#behind-a-company-proxy)'s password, for the user that `config.toml`'s `[proxy]` names, and saves it (`--stdin` reads a line instead) |
 | `devvm secret set NAME --host HOST --env VARIABLE` | asks for a [secret of your own](#your-own-secrets), such as an API key, and saves it with the hosts it goes to and the variable that VMs find its placeholder in (`--stdin` reads a line instead) |
 | `devvm secret rm NAME` | deletes a saved secret, after asking |
-| `devvm secret` | lists the secrets, each with its variable, header and hosts, whether it's saved, and the VMs using it |
+| `devvm secret` | lists the secrets, each with its variable, header and hosts, a secret of your own's path and methods, whether it's saved, and the VMs using it |
 | `devvm secret use NAME` | lets this folder's VM use the secret, and reach its hosts on port 443 |
 | `devvm secret unuse NAME` | stops this folder's VM using it, though a VM whose image has `claude` always uses `claude` |
 
@@ -386,7 +440,7 @@ To put a secret in, the proxy shows the VM a certificate from the VM's own CA, w
 
 #### devvm secret --json
 
-`devvm secret --json` prints the list as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes. Each of the `secrets` has its name, `saved`, which is `true` when it's saved or, for `claude`, in devvm's environment, and `used_by`, the names of the VMs using it. Then `custom` is `true` for a [secret of your own](#your-own-secrets), and `hosts` lists the hosts the proxy puts it in for, none for `proxy`. A secret that VMs get has its `header` and `env`, the variable that holds its placeholder, and `prefix` when its placeholder starts with one. A secret of yours also has its `scheme`, its `path` and `basic_user` when it has them. The JSON never holds a secret's value.
+`devvm secret --json` prints the list as one JSON object, as [output for scripts](../using/command-line.md#output-for-scripts) describes. Each of the `secrets` has its name, `saved`, which is `true` when it's saved or, for `claude`, in devvm's environment, and `used_by`, the names of the VMs using it. Then `custom` is `true` for a [secret of your own](#your-own-secrets), and `hosts` lists the hosts the proxy puts it in for, none for `proxy`. A secret that VMs get has its `header` and `env`, the variable that holds its placeholder, and `prefix` when its placeholder starts with one. A secret of yours also has its `scheme`, its `path`, its `methods` and `basic_user` when it has them. The JSON never holds a secret's value.
 
 ```json
 {
@@ -469,7 +523,8 @@ A secret of yours goes only to the VMs you use it in with `devvm secret use`, an
 | `--env VARIABLE` | the variable that VMs find its placeholder in, such as `STRIPE_API_KEY` |
 | `--header HEADER` | the header it goes in, such as `X-Api-Key`, when it isn't `Authorization` |
 | `--prefix PREFIX` | what its placeholder starts with, such as `sk_`, for a client that checks how its key starts |
-| `--path PATH` | the path below which it goes in, such as `/api/`, so a request to the host's other paths carries the placeholder alone, or `none` for every path |
+| `--path PATH` | the path of the requests it goes in for, written as a [rule's path](#rules-by-method-and-path) is, such as `/api/` for everything below `/api/`, so a request to the host's other paths carries the placeholder alone, or `none` for every path |
+| `--method METHODS` | the methods of the requests it goes in for, such as `GET,HEAD`, so a request with another method carries the placeholder alone, or `none` for every method |
 | `--scheme SCHEME` | a scheme of its own before it in `Authorization`, besides `Bearer` and `Token`, such as `ApiKey`, or `none` |
 | `--basic-user` | lets it go in as the username of `Basic` credentials, as Stripe and some other services take a key (`--basic-user=false` takes that away) |
 
@@ -482,25 +537,38 @@ The proxy puts the value in only when exactly one of the header's values holds t
 
 The placeholder in any other shape stays as it is, and the proxy's own log says why without the value. That includes bytes of the VM's own around it, the placeholder twice, a `Digest` field, and the username of `Basic` credentials without `--basic-user`, because a server can show the VM those parts of a request it refuses, such as a username it doesn't know. The same shapes apply to the `github` and `claude` secrets, which the GitHub CLI, git and Claude Code send as `Bearer`, `token` and git's `Basic` password.
 
+Without `--path` and `--method`, the value goes in for every path and every method. With them, the proxy judges each request as it judges an allow by method and path: by its method as written and each method it names in a method-override header or a `_method` parameter, and by its path only in a plain form ([rules by method and path](#rules-by-method-and-path)). So a key that may only read goes in for `GET` and `HEAD` alone:
+
+```text
+$ devvm secret set reports --host api.example.com --env REPORTS_API_KEY --method GET,HEAD
+Paste the value of reports, which VMs that use it send to api.example.com.
+The VMs that use it can reach those hosts on port 443.
+Token:
+==> devvm saved the reports secret in the Keychain.
+```
+
+A `POST` from the VM to `api.example.com` then carries the placeholder, which the host refuses, while a `GET` gets the key. The proxy judges every request on a connection, so a kept-alive connection or an HTTP/2 one gets the key only in the requests that have those methods. The `github` and `claude` secrets go in for every method. To keep a VM from writing with your GitHub token, give it a deny instead, such as `devvm network deny api.github.com --method POST,PUT,PATCH,DELETE`, which refuses those requests before they leave the proxy.
+
 A name has lowercase letters, digits and dashes, and it can't be `claude`, `github` or `proxy`, nor start with a coding agent's name, such as `codex-key`. A host is a host name, such as `api.example.com`. devvm refuses a wildcard, such as `*.example.com`, because some domains let anyone own a name under them. It also refuses an address, any port but 443, and a name that's only ever internal, such as `localhost`, `printer.local` or a Tailscale or `nip.io` name. The proxy refuses an internal address whatever name resolves to it anyway. The header can't be `Host`, `Cookie`, `Content-Length`, `Content-Type`, `Transfer-Encoding`, `Expect`, `Forwarded`, `Via`, an `X-Forwarded-` or `Proxy-` header, or one that ends at the next hop, such as `Connection`, because the proxy drops or sets those itself. Nor can it be one that servers commonly log or send back, such as `Origin`, `Referer`, `User-Agent`, `X-Request-Id` or `Traceparent`. The variable can't be one that devvm or the VM's shell sets, such as `PATH`, `GH_TOKEN`, `HTTPS_PROXY`, `NPM_CONFIG_PREFIX` or any `DEVVM_` variable, nor one that changes what a program runs or trusts, such as a `GIT_` or `PYTHON` variable, `NODE_OPTIONS`, `EDITOR` or `SSL_CERT_DIR`, nor another secret's. A prefix can't hold `devvm-proxy-managed`, which every placeholder holds after its prefix. A value has printable ASCII alone and at most 3,800 characters, and devvm refuses a longer one before it touches the one saved.
 
-To save a new value, such as after you rotate the key, run `devvm secret set NAME` without the other flags, and the secret keeps its hosts, header, variable, prefix, path and scheme. To change one of those, give only its flag with the new value, and the rest stay as they are, so `devvm secret set stripe --host api.stripe.com,files.stripe.com` gives the secret a second host. `--host` gives the whole list of hosts each time. A host the secret loses goes from every VM at once. A host it gains reaches only the VMs you then run `devvm secret use NAME` in again, so a host you add never gets the value from a VM you didn't give it to, and devvm names the VMs that keep the hosts they had. To take a prefix away, delete the secret and save it again. Running VMs keep the variable they launched with, so after you change `--env` or `--prefix`, a VM that uses the secret gets the new placeholder at its next launch.
+To save a new value, such as after you rotate the key, run `devvm secret set NAME` without the other flags, and the secret keeps its hosts, header, variable, prefix, path, methods and scheme. To change one of those, give only its flag with the new value, and the rest stay as they are, so `devvm secret set stripe --host api.stripe.com,files.stripe.com` gives the secret a second host. `--host` gives the whole list of hosts each time. A host the secret loses goes from every VM at once. A host it gains reaches only the VMs you then run `devvm secret use NAME` in again, so a host you add never gets the value from a VM you didn't give it to, and devvm names the VMs that keep the hosts they had. To take a prefix away, delete the secret and save it again. Running VMs keep the variable they launched with, so after you change `--env` or `--prefix`, a VM that uses the secret gets the new placeholder at its next launch.
 
 `devvm secret rm NAME` deletes the secret with its definition after asking, and the question names the VMs that use it, which stop using it before it goes. It also deletes a value that a failed save left without its definition. Each VM records the secret it was bound to by an ID that the secret gets as it's first saved, so a secret saved again later by the same name goes to none of those VMs until you use it there again. A VM still bound to an earlier secret of the name gets nothing of the new one, its launch says so, and `devvm secret unuse NAME` takes the name away whether a secret has it or not.
 
-devvm keeps your secrets' hosts, headers, variables, prefixes, paths and schemes in `~/.local/share/devvm/custom-secrets.json`, without their values, and checks each entry again whenever it reads the file. When it can't read the file, or an entry breaks the rules above, such as after an edit by hand, devvm secret and the launch of each VM that uses one of your secrets fail and name the file. Fix the entry, or delete the file and save your secrets again with devvm secret set ([details](../internals/network.md#where-secrets-are-saved)).
+devvm keeps your secrets' hosts, headers, variables, prefixes, paths, methods and schemes in `~/.local/share/devvm/custom-secrets.json`, without their values, and checks each entry again whenever it reads the file. When it can't read the file, or an entry breaks the rules above, such as after an edit by hand, devvm secret and the launch of each VM that uses one of your secrets fail and name the file. Fix the entry, or delete the file and save your secrets again with devvm secret set ([details](../internals/network.md#where-secrets-are-saved)).
 
 The proxy passes the replies from a secret's hosts to the VM as they are, so a host that sends the request's headers back, such as an echo or debug endpoint, shows the VM the real value. Give a secret only hosts that you trust with it, and a key scoped to what the VMs need. A secret's hosts are also open to the VMs that use it for requests without the placeholder, on every tier, the none tier included. So on a host where anyone can make an account, such as a storage or payments service, code in the VM can send data to an account of its own there.
 
 ## Logs
 
-`devvm network log` shows the proxy's decisions for this folder's VM, oldest first, one line each. A line has the time, `allowed`, `BLOCKED` or `cache`, and the host and port. An allowed line then has the rule that allowed it (`, decrypted` for an intercepted tunnel), the request (`GET /user`) and the secrets put in (`, token: github`), a blocked line has why it was blocked, and a `cache` line, a request to the [shared Nix cache](#nix), has the request and what came of it:
+`devvm network log` shows the proxy's decisions for this folder's VM, oldest first, one line each. A line has the time, `allowed`, `BLOCKED` or `cache`, and the host and port. An allowed line then has the rule that allowed it (`, decrypted` for an intercepted tunnel), or the request (`GET /user`), with the [rule by method and path](#rules-by-method-and-path) that let it through when one did, and the secrets put in (`, token: github`). A blocked line has why it was blocked, after the request when the proxy saw one, and a `cache` line, a request to the [shared Nix cache](#nix), has the request and what came of it:
 
 ```text
 2026-10-09T10:00:00Z  BLOCKED  example.com:443  not on the allowlist
 2026-10-09T10:00:05Z  allowed  github.com:443  rule github.com
 2026-10-09T10:00:06Z  allowed  api.github.com:443  GET /user, token: github
-2026-10-09T10:00:07Z  cache    cache.nixos.org:443  GET /nix/yv1zf3y6all4j99aad30cb8i55dw9zmp.narinfo: hit
+2026-10-09T10:00:07Z  BLOCKED  api.github.com:443  POST /gists: denied by !api.github.com POST,PUT,PATCH,DELETE
+2026-10-09T10:00:08Z  cache    cache.nixos.org:443  GET /nix/yv1zf3y6all4j99aad30cb8i55dw9zmp.narinfo: hit
 ```
 
 | | |
@@ -574,4 +642,4 @@ A [group](../using/links.md#groups) links each of its VMs to the ports that the 
 
 ## Not covered
 
-The tiers leave some things open, such as what an allowed host accepts, whatever your secrets allow, such as pushes and API calls, and what a company CA that you add can read. [Attack vectors](attack-vectors.md) lists them under [Narrowed, not closed](attack-vectors.md#network) and [Left to you](attack-vectors.md#the-network).
+The tiers leave some things open, such as what an allowed host accepts beyond what [rules by method and path](#rules-by-method-and-path) narrow, whatever your secrets allow, such as pushes and API calls, and what a company CA that you add can read. [Attack vectors](attack-vectors.md) lists them under [Narrowed, not closed](attack-vectors.md#network) and [Left to you](attack-vectors.md#the-network).

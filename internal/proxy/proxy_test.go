@@ -1127,6 +1127,7 @@ func FuzzParseRule(f *testing.F) {
 	for _, s := range []string{
 		"example.com", "*.github.com  # c", "github.com:22", "!evil.github.com", "10.1.2.3",
 		"192.168.0.0/16:8080", "**:9999", "[::1]:8080", "::1:8080", "!127.0.0.1:8080", "fd00::/8", "a b", "x/y", "#", ":", "!",
+		"api.github.com GET,HEAD /repos/**", "!github.com post /*/*.git/git-receive-pack", "a.test\t/x/", "** GET", "10.0.0.1 GET",
 	} {
 		f.Add(s)
 	}

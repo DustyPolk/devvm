@@ -32,15 +32,24 @@ type customJSON struct {
 	Name string `json:"name"`
 	// ID is the definition's own, made as it's first saved: a VM bound to
 	// another one (after devvm secret rm and set) gets nothing of this one.
-	ID        string   `json:"id"`
-	Hosts     []string `json:"hosts"`
-	Header    string   `json:"header"`
-	Env       string   `json:"env"`
-	Prefix    string   `json:"prefix,omitempty"`
-	Scheme    string   `json:"scheme,omitempty"`
-	Path      string   `json:"path,omitempty"`
-	BasicUser bool     `json:"basic_user,omitempty"`
+	ID     string   `json:"id"`
+	Hosts  []string `json:"hosts"`
+	Header string   `json:"header"`
+	Env    string   `json:"env"`
+	Prefix string   `json:"prefix,omitempty"`
+	Scheme string   `json:"scheme,omitempty"`
+	Path   string   `json:"path,omitempty"`
+	// PathPattern marks Path as a pattern (proxy.PathOK), in which * is a
+	// wildcard: every path devvm writes has it. A path without it was saved
+	// as a prefix whose * was itself, so one holding a * is refused, not
+	// read as a wider pattern than it was saved as.
+	PathPattern bool   `json:"path_pattern,omitempty"`
+	Methods     string `json:"methods,omitempty"`
+	BasicUser   bool   `json:"basic_user,omitempty"`
 }
+
+// errPathPrefix is why a saved path whose * was a literal one isn't read as a pattern.
+var errPathPrefix = errors.New("its path was saved as a prefix in which * is itself, not a wildcard")
 
 // Yours are your secrets in the store s: their definitions in
 // Dirs.CustomSecrets, their values where the known secrets' are, each
@@ -73,9 +82,13 @@ func (y Yours) List() ([]Secret, error) {
 	}
 	out := make([]Secret, 0, len(l.Secrets))
 	for _, c := range l.Secrets {
-		sec, err := Define(c.Name, Def{Hosts: c.Hosts, Header: c.Header, Env: c.Env, Prefix: c.Prefix, Scheme: c.Scheme, Path: c.Path, BasicUser: c.BasicUser})
-		if err == nil && !idOK(c.ID) {
+		sec, err := Define(c.Name, Def{Hosts: c.Hosts, Header: c.Header, Env: c.Env, Prefix: c.Prefix, Scheme: c.Scheme, Path: c.Path, Methods: c.Methods, BasicUser: c.BasicUser})
+		switch {
+		case err != nil:
+		case !idOK(c.ID):
 			err = errors.New("no id")
+		case strings.Contains(c.Path, "*") && !c.PathPattern:
+			err = errPathPrefix
 		}
 		if err != nil {
 			return nil, msg.CustomSecretRefused(path, c.Name).Because(err)
@@ -277,7 +290,7 @@ func (y Yours) write(cs []Secret) error {
 	for _, c := range cs {
 		l.Secrets = append(l.Secrets, customJSON{
 			Name: c.Name, ID: c.ID, Hosts: c.Hosts, Header: c.Header, Env: c.Env, Prefix: c.Prefix,
-			Scheme: c.Scheme, Path: c.Path, BasicUser: c.BasicUser,
+			Scheme: c.Scheme, Path: c.Path, PathPattern: c.Path != "", Methods: c.Methods, BasicUser: c.BasicUser,
 		})
 	}
 	b, err := json.MarshalIndent(l, "", "  ")

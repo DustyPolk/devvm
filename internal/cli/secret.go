@@ -122,7 +122,8 @@ func newSecretSetCmd(a *app) *cobra.Command {
 	f.StringVar(&o.change.Env, "env", "", "the `VARIABLE` that holds the placeholder of a secret of your own in VMs, such as STRIPE_API_KEY")
 	f.StringVar(&o.change.Prefix, "prefix", "", "the `PREFIX` that the placeholder of a secret of your own starts with, such as sk_, for a client that checks how a key starts")
 	f.StringVar(&o.change.Scheme, "scheme", "", "the `SCHEME` of a secret of your own in Authorization besides Bearer and Token, such as ApiKey, or none")
-	f.StringVar(&o.change.Path, "path", "", "the `PATH` below which a secret of your own goes in, such as /api/, or none for every path")
+	f.StringVar(&o.change.Path, "path", "", "the `PATH` of the requests a secret of your own goes in, such as /api/ for everything below /api/, or none for every path")
+	f.StringVar(&o.change.Methods, "method", "", "the `METHODS` of the requests a secret of your own goes in, such as GET,HEAD, or none for every method")
 	f.BoolVar(&o.change.BasicUser, "basic-user", false, "let a secret of your own go in as the username of Basic credentials, as Stripe takes a key")
 	return cmd
 }
@@ -202,9 +203,11 @@ type secretJSON struct {
 	Header string   `json:"header,omitempty"`
 	Env    string   `json:"env,omitempty"`
 	Prefix string   `json:"prefix,omitempty"`
-	// A secret of yours' own scheme, path and way into Basic credentials.
+	// A secret of yours' own scheme, path, methods and way into Basic
+	// credentials.
 	Scheme    string `json:"scheme,omitempty"`
 	Path      string `json:"path,omitempty"`
+	Methods   string `json:"methods,omitempty"`
 	BasicUser bool   `json:"basic_user,omitempty"`
 }
 
@@ -226,19 +229,20 @@ func listSecrets(cmd *cobra.Command, a *app, asJSON bool) error {
 			out.Secrets = append(out.Secrets, secretJSON{
 				Name: s.Name, Saved: s.Saved, UsedBy: append([]string{}, s.UsedBy...),
 				Custom: s.Custom, Hosts: append([]string{}, s.Hosts...), Header: s.Header, Env: s.Env, Prefix: s.Prefix,
-				Scheme: s.Scheme, Path: s.Path, BasicUser: s.BasicUser,
+				Scheme: s.Scheme, Path: s.Path, Methods: s.Methods, BasicUser: s.BasicUser,
 			})
 		}
 		return printJSON(u, out)
 	}
 	tab := u.Table()
-	tab.Header("NAME", "SAVED", "VARIABLE", "HEADER", "HOSTS", "PATH", "USED BY")
+	tab.Header("NAME", "SAVED", "VARIABLE", "HEADER", "HOSTS", "PATH", "METHODS", "USED BY")
 	for _, s := range ss {
 		saved := "no"
 		if s.Saved {
 			saved = "yes"
 		}
-		tab.Row(cell(s.Name), cell(saved), cell(s.Env), cell(s.Header), cell(strings.Join(s.Hosts, ", ")), cell(s.Path), cell(strings.Join(s.UsedBy, ", ")))
+		tab.Row(cell(s.Name), cell(saved), cell(s.Env), cell(s.Header), cell(strings.Join(s.Hosts, ", ")), cell(s.Path), cell(s.Methods),
+			cell(strings.Join(s.UsedBy, ", ")))
 	}
 	return tab.Flush()
 }

@@ -156,19 +156,19 @@ func printNetwork(u *ui.UI, asJSON bool, s vm.NetworkShown) error {
 // newNetworkRuleCmds are devvm network allow, deny and rm RULE... [-g].
 func newNetworkRuleCmds(a *app) []*cobra.Command {
 	sub := func(use, short, long, example string, deny, remove bool) *cobra.Command {
-		var global bool
-		c := &cobra.Command{
+		c := vm.RuleChange{Deny: deny, Remove: remove}
+		cmd := &cobra.Command{
 			Use:         use + " RULE...",
 			Annotations: about{docs: "safety/network#changing-rules", noJSON: "it changes a setting"}.annotations(),
 			Short:       short,
 			Long:        long,
 			Example:     example,
 			Args: cobra.MatchAll(minArgs(1), func(_ *cobra.Command, args []string) error {
-				if remove {
+				if remove && c.Methods == "" && c.Path == "" {
 					return nil // as written, a deny with its !
 				}
 				for _, r := range args {
-					if _, err := netpolicy.Rule(r, deny); err != nil {
+					if _, err := netpolicy.Rule(r, deny || remove && strings.HasPrefix(r, "!"), c.Methods, c.Path); err != nil {
 						return err
 					}
 				}
@@ -176,35 +176,44 @@ func newNetworkRuleCmds(a *app) []*cobra.Command {
 			}),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return a.env(func(env *vm.Env) error {
-					return vm.Net{Env: env}.PolicyChange(cmd.Context(), args, deny, remove, global)
+					return vm.Net{Env: env}.PolicyChange(cmd.Context(), args, c)
 				}, msg.PolicyFailed)
 			},
 		}
-		c.Flags().BoolVarP(&global, "global", "g", false, "change your rules for every VM instead")
-		return addFolderFlags(c, a)
+		f := cmd.Flags()
+		f.BoolVarP(&c.Global, "global", "g", false, "change your rules for every VM instead")
+		f.StringVar(&c.Methods, "method", "", "narrow each rule to these `METHODS` of a host's requests, such as GET,HEAD")
+		f.StringVar(&c.Path, "path", "", "narrow each rule to the requests whose path matches `PATH`, such as /repos/ for everything below /repos/")
+		return addFolderFlags(cmd, a)
 	}
 	rules := " RULE is a host, *.host for its subdomains, ** for any host, or an address or CIDR, " +
 		"and with a port, such as example.com:8443, it matches only that port instead of 443 and 80."
+	narrow := " --method and --path narrow a host's rule to some of its requests, which its proxy decrypts to check."
 	return []*cobra.Command{
 		sub("allow", "Allow hosts for this folder's VM", "Add RULEs to the allowlist of this folder's VM, "+
-			"or with -g of every VM, from the next connection on."+rules,
+			"or with -g of every VM, from the next connection on."+rules+narrow,
 			examples(
 				"devvm network allow example.com", "let the VM reach example.com",
 				"devvm network allow '*.example.com'", "and any of its subdomains",
 				"devvm network allow 10.0.0.5:5432", "one port of one address",
+				"devvm network allow api.example.com --method GET,HEAD", "let it only read from api.example.com",
 				"devvm network allow -g pypi.org", "let every VM reach pypi.org",
 			), false, false),
 		sub("deny", "Deny hosts for this folder's VM", "Add RULEs as denies to this folder's VM's rules, "+
-			"or with -g every VM's, from the next connection on, and a deny beats any allow."+rules,
+			"or with -g every VM's, from the next connection on, and a deny beats any allow."+rules+narrow,
 			examples(
 				"devvm network deny example.com", "keep the VM from reaching example.com",
+				"devvm network deny api.github.com --method POST,PUT,PATCH,DELETE", "keep it from changing anything through GitHub's API",
+				"devvm network deny github.com --path '/*/*/git-receive-pack'", "keep it from pushing to GitHub over HTTPS",
 				"devvm network deny -g '*.example.com'", "keep every VM from its subdomains",
 			), true, false),
 		sub("rm", "Remove rules from this folder's VM", "Remove RULEs, as written with a deny's !, from "+
-			"this folder's VM's own rules, or with -g yours for every VM. The change applies at once.",
+			"this folder's VM's own rules, or with -g yours for every VM, with --method and --path for a rule that narrows. "+
+			"The change applies at once.",
 			examples(
 				"devvm network rm example.com", "remove an allow",
 				"devvm network rm '!example.com'", "remove a deny",
+				"devvm network rm api.example.com --method GET,HEAD", "remove an allow that narrows",
 			), false, true),
 	}
 }

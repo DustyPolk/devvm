@@ -21,27 +21,67 @@ import (
 
 func TestRule(t *testing.T) {
 	for _, c := range []struct {
-		in   string
-		deny bool
-		want string
+		in            string
+		deny          bool
+		methods, path string
+		want          string // or the message's names
 	}{
-		{"example.com", false, "example.com"},
-		{"example.com", true, "!example.com"},
-		{"!example.com", true, "!example.com"},
-		{"[fd00::1]:22", true, "![fd00::1]:22"},
-		{"!example.com", false, ""},
-		{"a b", false, ""},
-		{"!!x", true, ""},
+		{"example.com", false, "", "", "example.com"},
+		{"example.com", true, "", "", "!example.com"},
+		{"!example.com", true, "", "", "!example.com"},
+		{"[fd00::1]:22", true, "", "", "![fd00::1]:22"},
+		{"!example.com", false, "", "", "not_a_rule rule=!example.com"},
+		{"a b", false, "", "", "not_a_rule rule=a b"},
+		{"api.github.com GET", false, "", "", "not_a_rule rule=api.github.com GET"},
+		{"!!x", true, "", "", "not_a_rule rule=!!x"},
+		// --method and --path narrow a host's rule, in the proxy's canonical form.
+		{"API.github.com", false, "head,get", "/repos/", "api.github.com GET,HEAD /repos/"},
+		{"api.github.com", true, "POST,PUT", "", "!api.github.com POST,PUT"},
+		{"*.example.com:443", false, "", "/v1/*/x", "*.example.com:443 /v1/*/x"},
+		{"example.com", false, "none", "none", "example.com"},
+		{"10.0.0.5", false, "GET", "", "rule_not_narrowable rule=10.0.0.5"},
+		{"10.0.0.0/8", true, "", "/x", "rule_not_narrowable rule=!10.0.0.0/8"},
+		{"**", false, "GET", "", "rule_not_narrowable rule=**"},
+		{"example.com", false, "GTE", "", "bad_methods given=GTE methods=" + strings.Join(proxy.Methods(), ", ")},
+		{"example.com", false, "CONNECT", "", "bad_methods given=CONNECT methods=" + strings.Join(proxy.Methods(), ", ")},
+		{"example.com", false, "", "/a/../b", "bad_request_path given=/a/../b"},
+		{"example.com", false, "", "repos", "bad_request_path given=repos"},
 	} {
-		got, err := Rule(c.in, c.deny)
-		if c.want == "" {
-			if msg.IDOf(err) != "not_a_rule" {
-				t.Errorf("Rule(%q, %v): %v; want not_a_rule", c.in, c.deny, err)
-			}
-			continue
+		got, err := Rule(c.in, c.deny, c.methods, c.path)
+		if err != nil {
+			got = msg.NamesOf(err)
 		}
-		if err != nil || got != c.want {
-			t.Errorf("Rule(%q, %v) = %q, %v; want %q", c.in, c.deny, got, err, c.want)
+		if got != c.want {
+			t.Errorf("Rule(%q, %v, %q, %q) = %q; want %q", c.in, c.deny, c.methods, c.path, got, c.want)
+		}
+	}
+}
+
+// A rule that narrows is the same rule however its methods are written,
+// and its host in any case, so add finds it there and rm takes it out; a
+// path's case is its own. NarrowedHost names its host for the note.
+func TestNarrowedRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy")
+	if err := os.WriteFile(path, []byte("Api.GitHub.com  HEAD,get  /repos/ # read\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := AddRule(path, "api.github.com GET,HEAD /repos/"); ok || err != nil {
+		t.Errorf("added again: %v, %v", ok, err)
+	}
+	if ok, err := AddRule(path, "api.github.com GET,HEAD /Repos/"); !ok || err != nil {
+		t.Errorf("another path's case: %v, %v", ok, err)
+	}
+	if ok, err := RemoveRule(path, "api.github.com GET,HEAD /repos/"); !ok || err != nil {
+		t.Errorf("removed: %v, %v", ok, err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "api.github.com GET,HEAD /Repos/\n" { //nolint:gosec // the test's own file
+		t.Errorf("left %q", b)
+	}
+	for rule, want := range map[string]string{
+		"api.github.com GET": "api.github.com", "!*.example.com:443 /x": "*.example.com", "example.com": "",
+	} {
+		if h, ok := NarrowedHost(rule); h != want || ok != (want != "") {
+			t.Errorf("NarrowedHost(%q) = %q, %v", rule, h, ok)
 		}
 	}
 }

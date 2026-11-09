@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"net"
+	"net/http"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -24,26 +25,71 @@ import (
 //	…:22              only that port; without a port, 443 and 80
 //	…:*               any port
 //	!rule             deny; a deny beats any allow
+//	… GET,HEAD /repos/**   only those methods, or that path, or both, of a host name's requests
 //
-// Matching is case-insensitive.
+// Matching hosts is case-insensitive. A rule with methods or a path narrows its host to some
+// requests (match), which the proxy judges one by one (policy.judge), decrypting the host's HTTPS
+// to see them.
 type rule struct {
 	text   string
 	deny   bool
 	host   string       // "", "**", "*.example.com" or "example.com"
 	prefix netip.Prefix // for address rules
 	port   int          // 0: 443 and 80; anyPort: every port
+	req    match        // the requests it covers: every one unless it narrows
+}
+
+// narrows reports whether r covers some of its host's requests alone.
+func (r rule) narrows() bool { return r.req.narrows() }
+
+// parseRule reads one rule, strictly: a host rule (parseHostRule), then, for a host name or
+// *.name, optionally its methods (ParseMethods) and then its path (PathOK), each after spaces or
+// tabs. Its text is the host rule as parseHostRule has it, then the methods in their canonical
+// form and the path as written, joined by one space.
+func parseRule(s string) (rule, bool) {
+	f := strings.FieldsFunc(s, func(c rune) bool { return c == ' ' || c == '\t' })
+	if len(f) == 0 || len(f) > 3 {
+		return rule{}, false
+	}
+	r, ok := parseHostRule(f[0])
+	if !ok || len(f) == 1 {
+		return r, ok
+	}
+	var methods, p string
+	for _, x := range f[1:] {
+		switch {
+		case strings.HasPrefix(x, "/") && p == "":
+			if !PathOK(x) {
+				return rule{}, false
+			}
+			p = x
+		case methods == "" && p == "":
+			if methods, ok = ParseMethods(x); !ok {
+				return rule{}, false
+			}
+		default:
+			return rule{}, false
+		}
+	}
+	// A host name's alone: an address has no name to decrypt by, and ** would decrypt everything.
+	if r.host == "" || r.host == "**" {
+		return rule{}, false
+	}
+	r.req = newMatch(methods, p)
+	r.text = strings.Join(slices.DeleteFunc([]string{r.text, methods, p}, func(x string) bool { return x == "" }), " ")
+	return r, true
 }
 
 // anyPort is a rule's port for :*, every port.
 const anyPort = -1
 
-// parseRule reads one rule, strictly: s is the whole rule, without a comment or spaces. It
-// refuses anything that wouldn't match as written: a port that isn't 1 to 65535 in digits, a host
-// that isn't a plain name (HostOK, with no empty label), a zone, a wildcard other than a leading
-// "*." or "**", an address under "*.", an IPv4-mapped prefix shorter than the mapping, anything
-// but printable ASCII. A host's one trailing dot is dropped, as requests' are, and a mapped
-// prefix is its IPv4 one.
-func parseRule(s string) (rule, bool) {
+// parseHostRule reads a rule's host, its port and its !, strictly: s is the whole of it, without a
+// comment or spaces. It refuses anything that wouldn't match as written: a port that isn't 1 to
+// 65535 in digits, a host that isn't a plain name (HostOK, with no empty label), a zone, a
+// wildcard other than a leading "*." or "**", an address under "*.", an IPv4-mapped prefix shorter
+// than the mapping, anything but printable ASCII. A host's one trailing dot is dropped, as
+// requests' are, and a mapped prefix is its IPv4 one.
+func parseHostRule(s string) (rule, bool) {
 	// Printable ASCII alone: no spaces, and nothing strings.ToLower would fold into ASCII (the
 	// Kelvin sign into k).
 	if s == "" || strings.ContainsAny(s, "#%") || strings.ContainsFunc(s, func(c rune) bool { return c <= ' ' || c > '~' }) {
@@ -118,10 +164,36 @@ func cutPort(s string) (string, int, bool) {
 // ValidRule reports whether s is one rule, as devvm network allow writes it
 // and the proxy takes it from a policy file's line: a host name, *.name, **
 // or an address or CIDR (no zone), optionally with a port (or :* for any)
-// and a leading !, and no spaces or comment. AllowRule's rules are valid.
+// and a leading !, and for a host name or *.name, its methods and its path
+// after spaces, and no comment. AllowRule's rules are valid.
 func ValidRule(s string) bool {
 	_, ok := parseRule(s)
 	return ok
+}
+
+// CanonicalRule is s, a rule (ValidRule), as the proxy reads it: its host
+// in lower case, its methods in their canonical form, and one space between
+// the parts. false for what isn't a rule.
+func CanonicalRule(s string) (string, bool) {
+	r, ok := parseRule(s)
+	return r.text, ok
+}
+
+// NarrowRule is the rule host (a rule without spaces, ValidRule's) narrowed
+// to methods (ParseMethods' form, or "") and the path pattern p (PathOK, or
+// ""), as devvm network allow, deny and rm write it from their flags, in
+// its canonical form. false when it isn't a rule: methods or a path on an
+// address, a CIDR or **.
+func NarrowRule(host, methods, p string) (string, bool) {
+	return CanonicalRule(strings.Join(slices.DeleteFunc([]string{host, methods, p}, func(x string) bool { return x == "" }), " "))
+}
+
+// Narrowable reports whether the rule host (without spaces) may take
+// methods or a path: a host name or *.name, never an address, a CIDR or **,
+// which have no name the proxy could decrypt their HTTPS by.
+func Narrowable(host string) bool {
+	r, ok := parseHostRule(host)
+	return ok && r.host != "" && r.host != "**"
 }
 
 // A PolicyLine is a line of a policy file that holds more than a comment.
@@ -331,40 +403,173 @@ func (p *policy) decide(host string, port int) (bool, string) {
 // deniedBy starts the reason of a refusal by a deny rule, which its text follows.
 const deniedBy = "denied by "
 
-// verdict is decide, and whether a refusal is one no allow rule would lift: a broken deny's.
+// verdict is decide, and whether a refusal is one no allow rule would lift: a broken deny's. It
+// judges host:port as a whole: a deny that narrows doesn't refuse it, as some of its requests may
+// pass, and an allow that narrows allows it, for judge to look at each request.
 func (p *policy) verdict(host string, port int) (bool, string, bool) {
+	return p.rulesFor(host, port).verdict()
+}
+
+// byRequest is rulesFor(host, port).byRequest.
+func (p *policy) byRequest(host string, port int) bool { return p.rulesFor(host, port).byRequest() }
+
+// judge is rulesFor(host, port).judge(r).
+func (p *policy) judge(host string, port int, r *http.Request) (ok bool, why string, refused, narrowed bool) {
+	return p.rulesFor(host, port).judge(r)
+}
+
+// hostRules are the rules that cover one host and port, from one read of the policy's files, so a
+// connection's verdict and whether its requests are judged one by one come from the same rules.
+type hostRules struct {
+	open   bool   // the policy is open: no rule applies
+	broken string // while a file has a broken deny, why the policy denies everything
+	rs     []rule
+}
+
+// rulesFor is the rules that cover host:port, as verdict matches them, read from the files once.
+func (p *policy) rulesFor(host string, port int) hostRules {
 	if p.open {
-		return true, openRule, false
+		return hostRules{open: true}
 	}
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	rs, broken := p.all()
 	if broken != "" {
-		return false, broken, true
+		return hostRules{broken: broken}
 	}
 	addr, err := netip.ParseAddr(strings.Trim(host, "[]"))
 	isAddr := err == nil
-	match := func(r rule) bool {
+	return hostRules{rs: slices.DeleteFunc(rs, func(r rule) bool {
 		if !r.portOK(port) {
-			return false
+			return true
 		}
 		if isAddr {
 			// ** is any host, an address too; the floor still refuses an
 			// internal one that no address rule names (addrAllowed).
-			return r.matchAddr(addr) || r.host == "**"
+			return !r.matchAddr(addr) && r.host != "**"
 		}
-		return r.matchHost(host)
+		return !r.matchHost(host)
+	})}
+}
+
+// verdict judges the host as a whole, as policy.verdict says.
+func (h hostRules) verdict() (bool, string, bool) {
+	switch {
+	case h.open:
+		return true, openRule, false
+	case h.broken != "":
+		return false, h.broken, true
 	}
-	for _, r := range rs {
-		if r.deny && match(r) {
+	for _, r := range h.rs {
+		if r.deny && !r.narrows() {
 			return false, deniedBy + r.text, false
 		}
 	}
-	for _, r := range rs {
-		if !r.deny && match(r) {
+	for _, r := range h.rs {
+		if !r.deny {
 			return true, r.text, false
 		}
 	}
 	return false, "not on the allowlist", false
+}
+
+// byRequest reports whether the host's requests are judged one by one (judge), as its verdict
+// alone can't decide them: a rule that narrows covers it, and either it's a deny or no allow
+// covers all of its requests. The proxy decrypts such a host's HTTPS to see them.
+func (h hostRules) byRequest() bool {
+	if h.open || h.broken != "" {
+		return false
+	}
+	whole, narrowed := false, false
+	for _, r := range h.rs {
+		switch {
+		case r.deny && r.narrows():
+			return true
+		case !r.deny && r.narrows():
+			narrowed = true
+		case !r.deny:
+			whole = true
+		}
+	}
+	return narrowed && !whole
+}
+
+// Why a request is refused by the rules that narrow its host (judge).
+const (
+	reasonPathNotPlain = "its path isn't in a plain form, which rules with a path need: no %, \\, ; or . or .. segment, and no doubled slash"
+	reasonConnectIn    = "CONNECT inside a decrypted tunnel"
+	reasonUpgrade      = "an upgrade to a protocol other than WebSocket, whose requests the proxy couldn't judge"
+	reasonOverride     = "a method-override header or _method parameter that isn't exactly one method, which rules by method need"
+	reasonNoRequest    = "no rule allows this method and path"
+)
+
+// judge decides r, a request to the host the proxy forwards, by the rules that cover it: a deny
+// beats any allow, a deny that narrows refuses the requests it matches, and an allow that narrows
+// lets through only those it matches. A path that isn't plain (plainPath) matches every deny with
+// a path and no allow with one, so no server's reading of it slips past a deny. It returns whether
+// r may go, the allowing rule's text or why not, whether no allow would lift the refusal, and
+// whether a rule that narrows covered the host (narrowed). A host no rule narrows gets its
+// verdict.
+func (h hostRules) judge(r *http.Request) (ok bool, why string, refused, narrowed bool) {
+	switch {
+	case h.open:
+		return true, openRule, false, false
+	case h.broken != "":
+		return false, h.broken, true, false
+	}
+	narrowed = slices.ContainsFunc(h.rs, rule.narrows)
+	for _, x := range h.rs {
+		if x.deny && !x.narrows() {
+			return false, deniedBy + x.text, false, narrowed
+		}
+	}
+	if why := h.unjudgeable(r); why != "" {
+		return false, why, true, narrowed
+	}
+	plain := plainPath(r.URL)
+	rs := h.rs
+	for _, x := range rs {
+		if x.deny && x.req.denies(r) {
+			if x.req.path != "" && !plain {
+				return false, reasonPathNotPlain, true, narrowed
+			}
+			return false, deniedBy + x.text, true, narrowed
+		}
+	}
+	for _, x := range rs {
+		if !x.deny && x.req.allows(r) {
+			return true, x.text, false, narrowed
+		}
+	}
+	switch {
+	case !narrowed:
+		return false, "not on the allowlist", false, false
+	case !plain && slices.ContainsFunc(rs, func(x rule) bool { return x.req.path != "" }):
+		return false, reasonPathNotPlain, false, narrowed
+	}
+	return false, reasonNoRequest, false, narrowed
+}
+
+// unjudgeable is why r can't be judged by the rules that narrow its host, which refuses it
+// whatever they say, or "": a CONNECT inside the tunnel, or a switch to another protocol than
+// WebSocket, after which the proxy would pass the bytes unread (an h2c upgrade would carry requests
+// unjudged); and while a rule narrows the host by method, a method-override header or _method
+// parameter that isn't exactly one method (overrides), which a server might read either way.
+func (h hostRules) unjudgeable(r *http.Request) string {
+	if !slices.ContainsFunc(h.rs, rule.narrows) {
+		return ""
+	}
+	if r.Method == http.MethodConnect {
+		return reasonConnectIn
+	}
+	if up := r.Header.Get("Upgrade"); up != "" && !strings.EqualFold(up, "websocket") {
+		return reasonUpgrade
+	}
+	if slices.ContainsFunc(h.rs, func(x rule) bool { return x.req.methods != "" }) {
+		if _, odd := overrides(r); odd {
+			return reasonOverride
+		}
+	}
+	return ""
 }
 
 // Allowlist is a set of policies as a VM's proxy reads them, read once: what devvm network lock
@@ -391,6 +596,43 @@ func ReadAllowlist(own fs.FS, builtin, files, denies []string) (Allowlist, error
 func (p Allowlist) Allows(host string, port int) bool {
 	ok, _, _ := p.p.verdict(host, port)
 	return ok
+}
+
+// CoversWhole reports, for rule, an allow that narrows (NarrowRule's), whether an allow that
+// doesn't narrow already covers every host it covers on each of HTTPS's port 443 and plain HTTP's
+// 80 that it covers, so it narrows nothing (nothing), as allows add up and that one lets every
+// request through; and whether that's so on 443 alone, so it narrows only port 80's plain HTTP
+// (httpOnly). A host name's is covered by a rule that matches it, and *.name's by ** or by *.name
+// or *.parent.
+func (p Allowlist) CoversWhole(rule string) (nothing, httpOnly bool) {
+	n, ok := parseRule(rule)
+	on443, on80 := n.portOK(443), n.portOK(80)
+	if !ok || n.deny || !n.narrows() || !on443 && !on80 {
+		return false, false
+	}
+	w443, w80 := on443 && p.coversOn(n, 443), on80 && p.coversOn(n, 80)
+	return (!on443 || w443) && (!on80 || w80), w443 && on80 && !w80
+}
+
+// coversOn is CoversWhole for one port.
+func (p Allowlist) coversOn(n rule, port int) bool {
+	if p.p.open {
+		return true
+	}
+	rs, broken := p.p.all()
+	if broken != "" {
+		return false
+	}
+	for _, r := range rs {
+		if r.deny || r.narrows() || !r.portOK(port) || r.host == "" {
+			continue
+		}
+		if d, wild := strings.CutPrefix(n.host, "*."); !wild && r.matchHost(n.host) ||
+			wild && (r.host == "**" || strings.HasPrefix(r.host, "*.") && (d == r.host[2:] || strings.HasSuffix(d, r.host[1:]))) {
+			return true
+		}
+	}
+	return false
 }
 
 // Denies reports whether the policies deny host:port, so that no allow would lift it: a deny rule

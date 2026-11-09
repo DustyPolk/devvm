@@ -66,9 +66,11 @@ type Binding struct {
 	// Agent is a login's agent, whose login file holds its value (codex, opencode, claude).
 	Agent string   `json:"agent,omitempty"`
 	Hosts []string `json:"hosts"` // host patterns, as in policy files
-	// Path, when set, is the only path below which the value goes in: it starts and ends with /,
-	// and a request's path must start with it, in its clean form (pathWithin).
+	// Path, when set, is the path pattern (PathOK) a request's must match for the value to go in,
+	// such as /api/ for everything below /api/, and Methods the methods it must have, such as
+	// GET,HEAD (ParseMethods' form): each judged as a rule's allow is (match.allows).
 	Path        string `json:"path,omitempty"`
+	Methods     string `json:"methods,omitempty"`
 	Header      string `json:"header"` // e.g. Authorization
 	Placeholder string `json:"placeholder"`
 	// Scheme is a secret's own Authorization scheme besides Bearer and Token, such as ApiKey:
@@ -87,20 +89,40 @@ type BindingList struct {
 	Bindings []Binding `json:"bindings"`
 }
 
-// BindingListVersion is the bindings file's version: a file of another isn't read.
-const BindingListVersion = 1
+// BindingListVersion is the bindings file's newest version, 2, whose bindings may have methods and
+// a path pattern, which devvm writes when one does (Encode). A proxy that knows only version 1
+// refuses it, so has no bindings, rather than put a value in for every method. A file of version
+// 1 whose bindings are all v1Binding is read too; a file of any other isn't.
+const BindingListVersion = 2
 
 // bindingListMax bounds the bindings file the proxy reads.
 const bindingListMax = 1 << 20
 
-// Encode is the list as devvm writes it, of BindingListVersion, a line at its end.
+// Encode is the list as devvm writes it, a line at its end: of version 1 while every binding is
+// one a proxy that knows only version 1 reads alike, or for a 0.1.0 proxy wider only as 0.1.0
+// bound it (v1Binding), so such a proxy, still running from before an upgrade, keeps the VM's
+// bindings, its agents' logins included; and of BindingListVersion otherwise, which that proxy
+// refuses rather than put a value in for every method or below a pattern it reads otherwise.
 func (l BindingList) Encode() []byte {
-	l.Version = BindingListVersion
+	l.Version = 1
+	if slices.ContainsFunc(l.Bindings, func(b Binding) bool { return !v1Binding(b) }) {
+		l.Version = BindingListVersion
+	}
 	if l.Bindings == nil {
 		l.Bindings = []Binding{}
 	}
 	b, _ := json.Marshal(l) // only strings: it never fails
 	return append(b, '\n')
+}
+
+// v1Binding reports whether a proxy from after version 1 gained paths, which knows only that
+// version, reads b as this one does: no methods, and no path but a prefix longer than / that ends
+// with / and has no *, the only paths its PathPrefixOK took (one that refuses any other refuses
+// the whole file). A proxy of devvm 0.1.0 or 0.1.1-rc.1 has no path in its bindings, so it reads
+// such a prefix as every path: for the built-in bindings that only widens OpenRouter's key to all
+// of openrouter.ai, as 0.1.0 bound it, until the VM starts again with a new proxy.
+func v1Binding(b Binding) bool {
+	return b.Methods == "" && (b.Path == "" || len(b.Path) > 1 && strings.HasSuffix(b.Path, "/") && !strings.Contains(b.Path, "*"))
 }
 
 // ReadBindings reads the bindings file at path: a regular file, not a link, that only its owner,
@@ -122,31 +144,27 @@ func parseBindings(path string, b []byte) (BindingList, error) {
 	if err := json.Unmarshal(b, &l); err != nil {
 		return BindingList{}, fmt.Errorf("%s: %w", path, err)
 	}
-	if l.Version != BindingListVersion {
+	if l.Version != BindingListVersion && l.Version != 1 {
 		return BindingList{}, fmt.Errorf("%s: version %d", path, l.Version)
 	}
 	for _, x := range l.Bindings {
+		if l.Version == 1 && !v1Binding(x) {
+			return BindingList{}, fmt.Errorf("%s: binding %q of version 1 with methods or a * in its path", path, x.Name)
+		}
 		if x.Kind != KindSecret && x.Kind != KindLogin {
 			return BindingList{}, fmt.Errorf("%s: binding %q of kind %q", path, x.Name, x.Kind)
 		}
-		if x.Path != "" && !PathPrefixOK(x.Path) {
+		if x.Path != "" && !PathOK(x.Path) {
 			return BindingList{}, fmt.Errorf("%s: binding %q's path %q", path, x.Name, x.Path)
+		}
+		if m, ok := ParseMethods(x.Methods); x.Methods != "" && (!ok || m != x.Methods) {
+			return BindingList{}, fmt.Errorf("%s: binding %q's methods %q", path, x.Name, x.Methods)
 		}
 		if x.Scheme != "" && !SchemeOK(x.Scheme) {
 			return BindingList{}, fmt.Errorf("%s: binding %q's scheme %q", path, x.Name, x.Scheme)
 		}
 	}
 	return l, nil
-}
-
-// PathPrefixOK reports whether p can be a binding's Path: it starts and ends with /, and is
-// clean (no . or .. segment, no doubled slash), with nothing pathWithin refuses in it. devvm
-// secret set --path takes only these.
-func PathPrefixOK(p string) bool {
-	if len(p) < 2 || p[0] != '/' || p[len(p)-1] != '/' || strings.ContainsAny(p, `\;% `) {
-		return false
-	}
-	return path.Clean(p)+"/" == p
 }
 
 // InterceptLines returns what a VM's allowlist gets for its bindings' hosts, as policy lines: each
@@ -238,28 +256,15 @@ func (s *secrets) forHost(host string) []Binding {
 	return out
 }
 
-// forRequest: the bindings that apply to a request to host for u, as the proxy forwards it:
-// forHost's, but a binding with a Path only when u's path is within it (pathWithin).
-func (s *secrets) forRequest(host string, u *url.URL) []Binding {
-	return slices.DeleteFunc(s.forHost(host), func(b Binding) bool { return b.Path != "" && !pathWithin(u, b.Path) })
+// forRequest: the bindings that apply to r, a request to host as the proxy forwards it: forHost's,
+// but a binding with a Path or Methods only when r is one its match allows (match.allows), the
+// matcher a rule's allow judges requests with.
+func (s *secrets) forRequest(host string, r *http.Request) []Binding {
+	return slices.DeleteFunc(s.forHost(host), func(b Binding) bool { return !b.match().allows(r) })
 }
 
-// pathWithin reports whether u's path, as the proxy forwards it, starts with prefix (a binding's
-// Path) in a form every server reads alike: no opaque URL, nothing percent-encoded (an encoded
-// slash or dot that a server decodes could take the request outside prefix after the check), no
-// backslash or ; (which some servers read as a separator, or drop with what follows), and the
-// path clean already (no . or .. segment, no doubled slash).
-func pathWithin(u *url.URL, prefix string) bool {
-	p := u.Path
-	if u.Opaque != "" || strings.Contains(u.EscapedPath(), "%") || strings.ContainsAny(p, `\;`) {
-		return false
-	}
-	clean := path.Clean(p)
-	if strings.HasSuffix(p, "/") && clean != "/" {
-		clean += "/"
-	}
-	return clean == p && strings.HasPrefix(p, prefix)
-}
+// match is the requests b's value goes in for: its Methods and its Path.
+func (b Binding) match() match { return newMatch(b.Methods, b.Path) }
 
 // --- values ---
 
@@ -737,6 +742,11 @@ func (s *server) intercept(ctx context.Context, client net.Conn, host string, po
 				http.Error(w, "devvm proxy: this connection is for "+host, http.StatusMisdirectedRequest)
 				return
 			}
+			// Each request in the tunnel meets the rules, a kept-alive or HTTP/2 one's included.
+			r, ok := s.judgeRequest(w, r, host, port)
+			if !ok {
+				return
+			}
 			fwd.ServeHTTP(w, r)
 		}),
 		Protocols:         new(http.Protocols),
@@ -842,7 +852,7 @@ func (s *server) forwarder(scheme, target, host string, port int) (fwd http.Hand
 			}
 			pr.Out.Header.Del("Proxy-Authorization")
 			pr.Out.Header.Del("Proxy-Connection")
-			e := Event{Event: "forward", Host: host, Port: port, Method: pr.In.Method, Path: pr.In.URL.Path, Agent: pr.In.UserAgent()}
+			e := Event{Event: "forward", Host: host, Port: port, Method: pr.In.Method, Path: pr.In.URL.Path, Agent: pr.In.UserAgent(), Rule: ruleOf(pr.In.Context())}
 			if up != nil {
 				e.Upstream = up.addr
 				// Only plain HTTP carries them, to the upstream itself; HTTPS's go in the CONNECT.
@@ -860,9 +870,9 @@ func (s *server) forwarder(scheme, target, host string, port int) (fwd http.Hand
 			if c := captured(pr.In.Context()); c != nil {
 				pr.Out.URL.Path, pr.Out.URL.RawPath, pr.Out.URL.RawQuery = c.path, "", ""
 			}
-			// Secrets only ever go over TLS, to :443, each for the path that goes out.
+			// Secrets only ever go over TLS, to :443, each for the method and the path that go out.
 			if scheme == "https" && s.interceptPorts[port] {
-				if bs := s.secrets.forRequest(host, pr.Out.URL); len(bs) > 0 {
+				if bs := s.secrets.forRequest(host, pr.Out); len(bs) > 0 {
 					e.Secrets = s.secrets.inject(pr.Out.Header, bs)
 				}
 			}

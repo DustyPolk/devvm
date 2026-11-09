@@ -69,6 +69,8 @@ func TestFlagNames(t *testing.T) {
 		"as":     "the name a VM reaches another by: devvm link add's for the link's target, devvm group join's for this VM in the others",
 		"agents": "the coding agents a list of them gives: a new VM's, or with devvm setup new VMs' default",
 		"layers": "the layers a list of them gives: a new VM's, or with devvm setup new VMs' default",
+		"method": "the methods of the requests something covers: a rule's with devvm network allow, deny and rm, a secret of your own's with devvm secret set",
+		"path":   "the path of the requests something covers: a rule's with devvm network allow, deny and rm, a secret of your own's with devvm secret set",
 	}
 	u, _, _ := testUI()
 	root := NewRoot(u)
@@ -221,8 +223,13 @@ func TestPartFlags(t *testing.T) {
 		{"scheme", "Digest", "bad_secret_scheme given=Digest"},
 		{"path", "/api/", ""},
 		{"path", "none", ""},
-		{"path", "/api", "bad_secret_path given=/api"},
-		{"path", "/api/../x/", "bad_secret_path given=/api/../x/"},
+		{"path", "/api", ""},
+		{"path", "/repos/*/*/issues", ""},
+		{"path", "api/", "bad_request_path given=api/"},
+		{"path", "/api/../x/", "bad_request_path given=/api/../x/"},
+		{"method", "get,HEAD", ""},
+		{"method", "none", ""},
+		{"method", "GET,CONNECT", "bad_methods given=GET,CONNECT methods=GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, TRACE, QUERY"},
 	} {
 		if got := msg.NamesOf(checkFlagValue(tc.flag, tc.value)); got != tc.want {
 			t.Errorf("--%s %s: %q, want %q", tc.flag, tc.value, got, tc.want)

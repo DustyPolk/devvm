@@ -74,6 +74,7 @@ These options are for a new VM, and only `devvm` takes them. A VM that exists ig
 | `devvm network -g [open\|internet\|allowlist\|none]` | show or change new VMs' tier, which is `allowlist` until you change it ([details](../safety/network.md#choosing-a-tier)) |
 | `devvm network lock [--all] [--none]` | choose which of the hosts this folder's VM learned it keeps, add them to its own rules, and give it the allowlist tier ([details](../safety/network.md#locking-it)) |
 | `devvm network allow\|deny\|rm RULE... [-g]` | add allow or deny rules to this folder's VM's own, or remove them, at once, and with `-g`, change yours for every VM ([details](../safety/network.md#changing-rules)) |
+| `devvm network allow\|deny\|rm RULE... --method METHODS --path PATH` | narrow those rules to some of a host's requests, such as only `GET` and `HEAD` ([details](../safety/network.md#rules-by-method-and-path)) |
 | `devvm network log [--follow] [-n N] [--blocked]` | show what this folder's VM connected to and what its proxy blocked ([details](../safety/network.md#logs)) |
 | `devvm ssh-agent [on\|devvm\|off]` | show this folder's VM's SSH agent forwarding, which is `off`, `on` for yours or `devvm` for devvm's own, then the keys devvm's own agent holds and those added to it, or change the forwarding from the VM's next start ([details](../using/ssh.md#agent-forwarding)) |
 | `devvm ssh-agent add KEY_FILE [--confirm] [--lifetime DURATION]` | load a key into devvm's own agent, and load it again whenever a VM needs it ([details](../using/ssh.md#devvms-own-agent)) |

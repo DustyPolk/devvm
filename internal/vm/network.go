@@ -476,12 +476,50 @@ func widensPolicy(rules []string, deny, remove bool) string {
 	return ""
 }
 
+// RuleChange is how devvm network allow, deny and rm change rules: as
+// denies, taking them out, in the user's file for every VM, and narrowed
+// to the methods and the path pattern their --method and --path give (""
+// for none).
+type RuleChange struct {
+	Deny, Remove, Global bool
+	Methods, Path        string
+}
+
+// rules are the lines c makes of rules as given: each checked
+// (netpolicy.Rule) and narrowed, or for Remove as written, a deny with its
+// !, narrowed when --method or --path gives it.
+func (c RuleChange) rules(rules []string) ([]string, error) {
+	out := make([]string, len(rules))
+	for i, r := range rules {
+		var err error
+		switch {
+		case !c.Remove:
+			out[i], err = netpolicy.Rule(r, c.Deny, c.Methods, c.Path)
+		case c.Methods != "" || c.Path != "":
+			out[i], err = netpolicy.Rule(r, strings.HasPrefix(r, "!"), c.Methods, c.Path)
+		default:
+			out[i] = r
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // PolicyChange adds rules to the folder's VM's own policy file (deny: as
 // denies), or with remove takes them out; with global, the user's file
 // for every VM instead. Its proxy reads the file again at its next
 // connection, so a change applies at once.
-func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, global bool) error {
+func (e Net) PolicyChange(ctx context.Context, given []string, c RuleChange) error {
+	// Every rule is checked before any is changed.
+	rules, err := c.rules(given)
+	if err != nil {
+		return err
+	}
+	deny, remove, global := c.Deny, c.Remove, c.Global
 	file, vm := e.Dirs.Policy(), ""
+	var st *state.VM
 	if !global {
 		// The folder's VM, which its backend has, made for this folder.
 		t, err := e.finder.target(ctx, need{has: hasMachine, folder: true, noVM: msg.NoVMPolicy})
@@ -499,14 +537,16 @@ func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, glo
 				return err
 			}
 		}
-		vm = t.f.Name
+		vm, st = t.f.Name, t.st
 		file = e.Dirs.VM(vm).Policy()
 	}
-	// The file's lines that aren't rules, once it's changed (or not).
+	// The file's lines that aren't rules, once it's changed (or not), and
+	// the proxies that may read a rule by method and path otherwise.
 	defer func() {
 		for _, m := range netpolicy.PolicyWarnings([]string{file}) {
 			e.Warn(m)
 		}
+		e.Proxy.OtherBinaries(rules, vm)
 	}()
 	if remove {
 		for _, r := range rules {
@@ -523,15 +563,7 @@ func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, glo
 		}
 		return nil
 	}
-	// Every rule is checked before any is added.
-	checked := make([]string, len(rules))
-	for i, r := range rules {
-		var err error
-		if checked[i], err = netpolicy.Rule(r, deny); err != nil {
-			return err
-		}
-	}
-	for _, r := range checked {
+	for _, r := range rules {
 		switch ok, err := netpolicy.AddRule(file, r); {
 		case err != nil:
 			return err
@@ -543,5 +575,6 @@ func (e Net) PolicyChange(ctx context.Context, rules []string, deny, remove, glo
 			e.Info(msg.RuleAdded(r, vm))
 		}
 	}
+	e.Proxy.NarrowNotes(rules, st, deny)
 	return nil
 }

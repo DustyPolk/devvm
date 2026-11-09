@@ -83,7 +83,7 @@ stderr '^net_open_log vm=devvm-off-[0-9a-f]{14}$'
 {"time":"2026-10-09T10:00:00Z","vm":"x","event":"blocked","host":"a.test","port":443,"method":"CONNECT","reason":"not on the allowlist"}
 {"time":"2026-10-09T10:00:05Z","vm":"x","event":"tunnel","host":"ok.test","port":443,"method":"CONNECT","rule":"ok.test"}
 {"time":"2026-10-09T10:00:06Z","vm":"x","event":"intercept","host":"api.github.com","port":443,"method":"CONNECT","rule":"*.github.com"}
-{"time":"2026-10-09T10:00:06Z","vm":"x","event":"forward","host":"api.github.com","port":443,"method":"GET","path":"/user","secrets":["github"]}
+{"time":"2026-10-09T10:00:06Z","vm":"x","event":"forward","host":"api.github.com","port":443,"method":"GET","path":"/user","rule":"api.github.com GET /user","secrets":["github"]}
 {"time":"2026-10-09T10:00:07Z","vm":"x","event":"blocked","host":"api.github.com","port":443,"method":"POST","path":"/user/keys","reason":"makes an account key","refused":true}
 not an event
 {"time":"2026-10-09T10:00:08Z","vm":"x","event":"tunnel","host":"fd00::1","port":22,"method":"CONNECT","rule":"[fd00::1]:22"}
@@ -93,8 +93,8 @@ not an event
 2026-10-09T10:00:00Z  BLOCKED  a.test:443  not on the allowlist
 2026-10-09T10:00:05Z  allowed  ok.test:443  rule ok.test
 2026-10-09T10:00:06Z  allowed  api.github.com:443  rule *.github.com, decrypted
-2026-10-09T10:00:06Z  allowed  api.github.com:443  GET /user, token: github
-2026-10-09T10:00:07Z  BLOCKED  api.github.com:443  makes an account key
+2026-10-09T10:00:06Z  allowed  api.github.com:443  GET /user, rule api.github.com GET /user, token: github
+2026-10-09T10:00:07Z  BLOCKED  api.github.com:443  POST /user/keys: makes an account key
 2026-10-09T10:00:08Z  allowed  [fd00::1]:22  rule [fd00::1]:22
 2026-10-09T10:01:00Z  BLOCKED  a.test:443  not on the allowlist
 2026-10-09T10:02:00Z  BLOCKED  db.test:5432  not on the allowlist

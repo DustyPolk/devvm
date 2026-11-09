@@ -1,0 +1,135 @@
+# Rules by method and path: devvm network allow, deny and rm take --method
+# and --path for a host name's rule, write it in the proxy's canonical form
+# and say that the proxy decrypts the host to check each request.
+env GLOBAL=$XDG_CONFIG_HOME/devvm/policy
+project net
+exec devvm --network allowlist --no-git-protect
+vm_name NET net
+
+# An allow narrowed to methods and a path, a deny narrowed to methods, and
+# one to a path; the host's note once for each.
+exec devvm network allow api.example.com --method head,get --path /repos/
+stdout '^==> rule_added rule=api\.example\.com GET,HEAD /repos/ vm=devvm-net-[0-9a-f]{14}$'
+stderr '^rule_narrows host=api\.example\.com$'
+exec devvm network deny api.github.com --method POST,PUT,PATCH,DELETE
+stdout '^==> rule_added rule=!api\.github\.com POST,PUT,PATCH,DELETE vm=devvm-net-[0-9a-f]{14}$'
+exec devvm network deny github.com '*.githubusercontent.com' --path '/*/*/git-receive-pack'
+stdout '^==> rule_added rule=!github\.com /\*/\*/git-receive-pack vm='
+stdout '^==> rule_added rule=!\*\.githubusercontent\.com /\*/\*/git-receive-pack vm='
+stderr -count=1 '^rule_narrows host=github\.com$'
+stderr -count=1 '^rule_narrows host=\*\.githubusercontent\.com$'
+cmp $NET_dir/policy $WORK/narrowed.policy
+
+# The same rule, however its methods are written, is there already; another
+# path's case isn't the same rule.
+exec devvm network allow Api.Example.com --method GET,HEAD --path /repos/
+stdout '^==> rule_present file=\S*/vms/[0-9a-f]{14}/policy rule=api\.example\.com GET,HEAD /repos/$'
+! stdout rule_added
+
+# devvm network shows the rules as the file has them, and none of them is
+# a line that isn't a rule.
+exec devvm network
+stdout '^  api\.example\.com GET,HEAD /repos/$'
+stdout '^  !api\.github\.com POST,PUT,PATCH,DELETE$'
+! stdout 'not a rule'
+exec devvm network --json
+stdout '"api\.example\.com GET,HEAD /repos/"'
+
+# rm takes a narrowed rule out by its flags, a deny with its !, and none
+# of --method or --path is every method or every path.
+exec devvm network rm api.example.com --method HEAD,GET --path /repos/
+stdout '^==> rule_removed rule=api\.example\.com GET,HEAD /repos/ vm='
+exec devvm network rm '!api.github.com' --method POST,PUT,PATCH,DELETE
+stdout '^==> rule_removed rule=!api\.github\.com POST,PUT,PATCH,DELETE vm='
+exec devvm network allow ok.example.com --method none --path none
+stdout '^==> rule_added rule=ok\.example\.com vm='
+! stderr rule_narrows
+exec devvm network rm ok.example.com
+cmp $NET_dir/policy $WORK/left.policy
+
+# -g narrows every VM's rules.
+exec devvm network deny -g pastebin.example --method POST
+stdout '^==> rule_added_global rule=!pastebin\.example POST$'
+cmp $GLOBAL $WORK/global.policy
+
+# An allow by method and path for a host that a rule already allows whole,
+# as devvm's own rules allow api.github.com and -g's *.corp.test its
+# subdomains, narrows nothing: a warning names the deny that would, and
+# there's no note that the host is decrypted. The warning names the VMs.
+exec devvm network allow api.github.com --method GET,HEAD
+stderr '^devvm: rule_narrows_nothing host=api\.github\.com rule=api\.github\.com GET,HEAD vms=devvm-net-[0-9a-f]{14}$'
+! stderr '^rule_narrows host='
+exec devvm network rm api.github.com --method GET,HEAD
+exec devvm network allow -g '*.corp.test'
+exec devvm network allow -g dev.corp.test --method GET
+stderr '^devvm: rule_narrows_nothing host=dev\.corp\.test rule=dev\.corp\.test GET vms=devvm-net-[0-9a-f]{14}$'
+exec devvm network allow -g '*.dev.corp.test' --path /api/
+stderr '^devvm: rule_narrows_nothing host=\*\.dev\.corp\.test rule=\*\.dev\.corp\.test /api/ vms='
+exec devvm network allow -g '*.corp.test' --method GET
+stderr '^devvm: rule_narrows_nothing host=\*\.corp\.test '
+exec devvm network rm -g '*.corp.test'
+exec devvm network rm -g dev.corp.test --method GET
+exec devvm network rm -g '*.dev.corp.test' --path /api/
+exec devvm network rm -g '*.corp.test' --method GET
+cmp $GLOBAL $WORK/global.policy
+# With -g, each VM's own rules count too: a whole allow in this VM's file
+# makes an allow for every VM narrow nothing on it. One of port 443 alone
+# leaves port 80's plain HTTP narrowed.
+exec devvm network allow whole.example.com https.example.com:443
+exec devvm network allow -g whole.example.com --method GET
+stderr '^devvm: rule_narrows_nothing host=whole\.example\.com rule=whole\.example\.com GET vms=devvm-net-[0-9a-f]{14}$'
+exec devvm network allow https.example.com --method GET
+stderr '^devvm: rule_narrows_http_only host=https\.example\.com rule=https\.example\.com GET vms=devvm-net-[0-9a-f]{14}$'
+! stderr '^rule_narrows host='
+exec devvm network rm -g whole.example.com --method GET
+exec devvm network rm whole.example.com https.example.com:443
+exec devvm network rm https.example.com --method GET
+cmp $GLOBAL $WORK/global.policy
+
+# Refusals, before anything runs: methods devvm doesn't know, CONNECT, a
+# path that isn't a pattern, and methods or a path on an address, a CIDR
+# or **, each a usage error that changes nothing.
+! exec devvm network allow api.example.com --method GTE
+stderr '^devvm: bad_methods given=GTE methods=GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, TRACE, QUERY$'
+stderr '^usage_help command=devvm network allow$'
+! exec devvm network allow api.example.com --method CONNECT
+stderr '^devvm: bad_methods given=CONNECT '
+! exec devvm network allow api.example.com --method GET,
+stderr '^devvm: bad_methods given=GET, '
+! exec devvm network allow api.example.com --path repos
+stderr '^devvm: bad_request_path given=repos$'
+! exec devvm network deny api.example.com --path '/a/../b'
+stderr '^devvm: bad_request_path given=/a/\.\./b$'
+! exec devvm network deny api.example.com --path '/a%2Fb'
+stderr '^devvm: bad_request_path given=/a%2Fb$'
+! exec devvm network allow 10.0.0.5 --method GET
+stderr '^devvm: rule_not_narrowable rule=10\.0\.0\.5$'
+! exec devvm network deny 10.0.0.0/8 --path /x
+stderr '^devvm: rule_not_narrowable rule=!10\.0\.0\.0/8$'
+! exec devvm network allow '**' --method GET
+stderr '^devvm: rule_not_narrowable rule=\*\*$'
+! exec devvm network allow 'api.example.com GET'
+stderr '^devvm: not_a_rule rule=api\.example\.com GET$'
+! exec devvm network rm 10.0.0.5 --method GET
+stderr '^devvm: rule_not_narrowable rule=10\.0\.0\.5$'
+cmp $NET_dir/policy $WORK/left.policy
+cmp $GLOBAL $WORK/global.policy
+
+# A line written by hand with a method devvm doesn't know isn't a rule, so
+# as a deny it's a broken one, which denies everything, and devvm says so.
+exec sh -c 'echo "!api.github.com PSOT" >> "$NET_dir/policy"'
+exec devvm network
+stdout '^  !api\.github\.com PSOT  # not a rule, skipped \(line 3\)$'
+exec devvm network allow fine.example.com
+stderr '^devvm: policy_broken_deny file=\S*/vms/[0-9a-f]{14}/policy line=3 rule=!api\.github\.com PSOT$'
+
+-- narrowed.policy --
+api.example.com GET,HEAD /repos/
+!api.github.com POST,PUT,PATCH,DELETE
+!github.com /*/*/git-receive-pack
+!*.githubusercontent.com /*/*/git-receive-pack
+-- left.policy --
+!github.com /*/*/git-receive-pack
+!*.githubusercontent.com /*/*/git-receive-pack
+-- global.policy --
+!pastebin.example POST
