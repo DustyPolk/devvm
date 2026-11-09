@@ -47,6 +47,28 @@ stdout '^==> starting vm=devvm-app-[0-9a-f]{14}$'
 ! stderr 'unreadable|corrupt|layout_|refused|failed|policy_not_rule|policy_broken_deny'
 cmp $APP_dir/run/secrets.json $WORK/secrets-before.json
 
+# 0.1.0 recorded no transparent mode: app, confined, follows the default,
+# on, and its launch gave its setup the stand-in address. Its own setting
+# goes in its state and applies from its next launch.
+exec devvm network transparent
+stdout '\Aon # devvm: default\n\z'
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''198\.18\.0\.1''$'
+exec devvm network transparent off
+stdout '^==> net_transparent_set mode=off vm=devvm-app-[0-9a-f]{14}$'
+vm_state $APP_dir/vm.json
+stdout '^net\.transparent=off$'
+exec devvm stop
+exec devvm
+! stderr 'unreadable|corrupt|layout_|refused|failed'
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''''$'
+exec devvm network transparent on
+exec devvm stop
+exec devvm
+exec tar -xOf $STUB_DIR/sync.tar vm
+stdout '^DEVVM_TRANSPARENT_ADDR=''198\.18\.0\.1''$'
+
 # A secret of yours by method makes app's bindings file of version 2, with
 # 0.1.0's bindings kept in it.
 stdin $WORK/key.token

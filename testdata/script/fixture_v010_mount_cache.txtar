@@ -1,0 +1,51 @@
+# devvm mount-cache on devvm 0.1.0's state (testdata/v0.1.0/GOOS, which
+# 0.1.0 itself made: see fixture_v010.txtar). On a Linux host, app's
+# project folder has Lima's mmap, which 0.1.0 chose nothing about: devvm
+# mount-cache shows it, with the warning, and devvm mount-cache none
+# switches it from its next start, in one edit, with the folder mounted
+# again. macOS has no such choice, which fixture_v010.txtar checks.
+[!linux] skip 'a Linux host''s cache mode'
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+mkdir $HOME/src/db $HOME/src/app $HOME/src/web $HOME/src/scratch
+cd $HOME/src/app
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+fixture v0.1.0
+vm_name APP app
+
+# Host ports of its own, as fixture_v010.txtar launches app with 0.1.0's
+# at the same time.
+free_port APP_PROXY APP_SSH
+json_set $APP_dir/vm.json ports.host.proxy:=$APP_PROXY ports.host.ssh:=$APP_SSH
+
+exec devvm mount-cache
+stdout '\Ammap\n\z'
+stderr '^devvm: mount_cache_unchosen mode=mmap vm=devvm-app-[0-9a-f]{14}$'
+
+# Stopped, it's set for the next start, which makes it in one edit, then
+# mounts the folder again and checks it.
+stub_reset
+exec devvm mount-cache none
+stdout '^==> mount_cache_pending mode=none vm=devvm-app-[0-9a-f]{14}$'
+stub_calls
+! stdout 'limactl (edit|start)'
+vm_state $APP_dir/vm.json
+stdout '^mount\.cache=none$'
+stub_reset
+exec devvm
+stdout '^==> starting vm=devvm-app-[0-9a-f]{14}$'
+! stderr 'unreadable|corrupt|layout_|replaced|refused|failed|mount_cache_unchosen'
+stub_calls
+stdout '^limactl edit --tty=false devvm-app-[0-9a-f]{14} --set \.mounts = \[\{"location":"\S*/app","writable":true,"9p":\{"cache":"none"\}\},'
+! stdout '(?s)limactl edit --tty=false devvm-app.*limactl edit --tty=false devvm-app'
+stdout '^limactl start --tty=false devvm-app-[0-9a-f]{14}\n(.*\n)*limactl shell --workdir / devvm-app-[0-9a-f]{14} sudo sh -c umount ''\S*/app'' \|\| exit 3; mount '
+exec devvm mount-cache --json
+stdout '\A{\n  "version": 1,\n  "mode": "none",\n  "chosen": true\n}\n\z'
+
+# The start after that edits nothing.
+exec devvm stop
+stub_reset
+exec devvm
+! stderr mount_cache_unchosen
+stub_calls
+! stdout 'limactl edit'

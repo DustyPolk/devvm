@@ -93,7 +93,9 @@ func checkV010Git(t *testing.T, goos string, app *state.VM) {
 }
 
 // checkV010Others checks web (--clone, open) and scratch (no network, no
-// .git protection), and that every VM's size is config.toml's.
+// .git protection), that every VM's size is config.toml's, and that none
+// has a cache mode or a transparent mode of its own, which 0.1.0 didn't
+// have.
 func checkV010Others(t *testing.T, vms map[string]*state.VM) {
 	t.Helper()
 	web, scratch := vms["web"], vms["scratch"]
@@ -115,6 +117,12 @@ func checkV010Others(t *testing.T, vms map[string]*state.VM) {
 	for slug, st := range vms {
 		if s := sectionOf[Size](st, sizeSection); s != (Size{CPUs: "4", Memory: "8"}) {
 			t.Errorf("%s's size: %+v", slug, s)
+		}
+		if m, err := readMount(st); err != nil || cacheOf(st) != "" {
+			t.Errorf("%s's mount: %+v, %v; want no cache mode chosen", slug, m, err)
+		}
+		if n, err := netpolicy.Of(st); err != nil || n.Transparent != "" {
+			t.Errorf("%s's transparent mode: %q, %v; want none of its own", slug, n.Transparent, err)
 		}
 	}
 }
