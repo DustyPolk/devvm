@@ -32,7 +32,7 @@ func (e vmFolders) teardown(ctx context.Context, t *target, leaves bool) error {
 	e.linkRuns.stop(ctx, vm)
 	// Both, for a VM devvm clone was switching: its remote, if its clone
 	// made one, and .git's locks, if it locked any.
-	e.clones.removeRemote(ctx, t.f.Dir, vm, sectionOf[cloneInVM](t.st, cloneSection).Made.Remote)
+	e.clones.removeRemotes(ctx, t.f.Dir, vm, sectionOf[cloneInVM](t.st, cloneSection))
 	if m := gitprotect.Mode(t.st); m == gitprotect.On || m == gitprotect.Strict {
 		e.Protector(t.f.Dir).Unlock(ctx, t.st)
 	}

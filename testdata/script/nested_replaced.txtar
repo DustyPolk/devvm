@@ -6,7 +6,8 @@
 # starts the VM, devvm stops it again and refuses. Put back, it starts.
 # Each launch of the nested VM, its creation included, warns once that
 # the parent folder's VM mounts it, running or not; the parent's own
-# launch, a --clone VM's and devvm restart don't.
+# launch and devvm restart don't, and --clone there is refused, naming
+# the parent's VM, without that warning.
 env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 mkdir $WORK/app/inner
 mkdir $WORK/app/cloned
@@ -26,7 +27,8 @@ stderr -count=1 '^devvm: project_in_vm_folder dir=/\S*/app/inner vm=devvm-app-[0
 cd $WORK/app/cloned
 exec git init -q
 exec git commit -q --allow-empty -m init
-exec devvm --clone --network open
+! exec devvm --clone --network open
+stderr '^devvm: clone_folder_mounted dir=/\S*/app/cloned vm=devvm-app-[0-9a-f]{14}$'
 ! stderr project_in_vm_folder
 cd $WORK/app/inner
 

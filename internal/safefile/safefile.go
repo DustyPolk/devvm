@@ -157,6 +157,43 @@ func (r *Root) Read(name string, limit int64, o Opts) ([]byte, error) {
 	return f.ReadAll(limit)
 }
 
+// Lstat is what's at name in the root, a link's own, never what it leads to.
+func (r *Root) Lstat(name string) (fs.FileInfo, error) { return r.root.Lstat(name) }
+
+// Readlink is the target of the symbolic link at name in the root, as the link has it, which
+// may lead out of it: read, never followed.
+func (r *Root) Readlink(name string) (string, error) { return r.root.Readlink(name) }
+
+// ErrSwapped is OpenDir's error for a folder that changed as it was opened, such as one swapped
+// for a link.
+var ErrSwapped = errors.New("changed as it was opened")
+
+// OpenDir opens the folder at name in the root as a Root of its own, which its caller closes:
+// what's at name once it's open must be a folder, never a link, and the folder opened (ErrSwapped), so a walk that opens each folder from its parent's Root, and each file by its
+// own name in its folder's, never goes through a link, even one swapped in as it walks.
+func (r *Root) OpenDir(name string) (*Root, error) {
+	// Opened first, then what's at name looked at, never followed: a link
+	// there, then or as it opened, makes them differ.
+	sub, err := r.root.OpenRoot(name)
+	if err != nil {
+		return nil, err
+	}
+	opened, err1 := sub.Stat(".")
+	there, err2 := r.root.Lstat(name)
+	if err1 != nil || err2 != nil || !there.IsDir() || !os.SameFile(opened, there) {
+		_ = sub.Close()
+		return nil, fmt.Errorf("%s: %w", filepath.Join(r.root.Name(), name), ErrSwapped)
+	}
+	return &Root{root: sub}, nil
+}
+
+// ReadDir lists the root's own folder, sorted by name, each entry's type its own, never a
+// link's target's.
+func (r *Root) ReadDir() ([]fs.DirEntry, error) { return fs.ReadDir(r.root.FS(), ".") }
+
+// Stat is what the root's own folder is, as it was opened.
+func (r *Root) Stat() (fs.FileInfo, error) { return r.root.Stat(".") }
+
 // FS is the root as an fs.FS: Open opens only regular files, following links in the root
 // (Follow); Stat and ReadDir read what's there, opening no file.
 func (r *Root) FS() fs.FS { return rootFS{r} }

@@ -1,0 +1,85 @@
+# devvm 0.1.0's --clone VM (web, testdata/v0.1.0/GOOS: see
+# fixture_v010.txtar), its clone as 0.1.0 left it, used by this devvm's
+# clone commands: devvm clone fetch, rm's check, devvm clone add (the one
+# change of 0.1.0's clone section, to a workspace clone of its own repo
+# and the one added, pinned here), devvm clone off; and devvm clone on
+# for 0.1.0's scratch, a clone of its own repo alone.
+[!darwin] [!linux] skip 'a fixture for macOS and Linux only'
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+mkdir $HOME/src/db $HOME/src/app $HOME/src/web $HOME/src/scratch
+cd $HOME/src/app
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+cd $HOME/src/web
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+cd $HOME/src/scratch
+exec git init -q -b main
+fixture v0.1.0
+vm_name WEB web
+vm_name SCRATCH scratch
+
+# Host ports of their own, as fixture_v010.txtar launches web and scratch
+# with 0.1.0's at the same time.
+free_port WEB_PROXY WEB_SSH SCRATCH_PROXY SCRATCH_SSH
+json_set $WEB_dir/vm.json ports.host.proxy:=$WEB_PROXY ports.host.ssh:=$WEB_SSH
+json_set $SCRATCH_dir/vm.json ports.host.proxy:=$SCRATCH_PROXY ports.host.ssh:=$SCRATCH_SSH
+
+# web's clone as 0.1.0 left it: the repo's devvm remote for the VM, and
+# the VM's clone at the folder's path, with an agent's branch.
+cd $HOME/src/web
+exec sh -c 'git remote add devvm "$WEB:$(pwd -P)"'
+exec sh -c 'v="$STUB_DIR/vmfs$(pwd -P)"; mkdir -p "$(dirname "$v")" && git clone -q . "$v" && git -C "$v" config receive.denyCurrentBranch updateInstead && git -C "$v" checkout -q -b agent/x && git -C "$v" commit -q --allow-empty -m from-vm'
+
+# devvm clone fetch: the one repo, at ".".
+exec devvm clone fetch
+stdout '^agent/x: \.$'
+exec git log --format=%s -1 devvm/agent/x
+stdout '^from-vm$'
+
+# rm's check: a commit not fetched, then, fetched, an uncommitted change;
+# without a terminal it keeps the VM each time.
+exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)" commit -q --allow-empty -m from-vm-2'
+! exec devvm rm --force
+stdout '^unfetched_commits refs="agent/x"$'
+stderr '^devvm: no_terminal_fetch command=devvm rm remote=devvm$'
+exec devvm clone fetch
+exec sh -c 'echo z > "$STUB_DIR/vmfs$(pwd -P)/new"'
+! exec devvm rm --force
+stdout '^clone_dirty$'
+stdout '^\?\? new$'
+stderr '^devvm: no_terminal_delete command=devvm rm$'
+exec sh -c 'rm "$STUB_DIR/vmfs$(pwd -P)/new"'
+
+# devvm clone add: 0.1.0's clone of its own repo becomes a workspace
+# clone of it, its remote and seed kept, then the repo added.
+exec git init -q -b main sub
+exec git -C sub commit -q --allow-empty -m s
+exec devvm clone add sub
+stdout '^==> clone_added path=sub remote=devvm$'
+vm_state $WEB_dir/vm.json
+stdout '^clone\.on=true$'
+stdout '^clone\.workspace=true$'
+stdout '^clone\.repos\.0\.path=\.$'
+stdout '^clone\.repos\.0\.remote=devvm$'
+stdout '^clone\.repos\.0\.seeded=true$'
+stdout '^clone\.repos\.1\.path=sub$'
+stdout '^clone\.repos\.1\.seeded=true$'
+! stdout '^clone\.made\.remote'
+stdout '^clone\.made\.seeded=true$'
+
+# devvm clone off: the clone checked, then the VM made again mounting
+# the folder.
+exec devvm clone fetch
+exec devvm clone off --force --no-export
+vm_state $WEB_dir/vm.json
+stdout '^clone\.on=false$'
+
+# devvm clone on for 0.1.0's scratch: a clone of its own repo, no
+# workspace.
+cd $HOME/src/scratch
+exec git commit -q --allow-empty -m one
+exec devvm clone on --force --no-export
+vm_state $SCRATCH_dir/vm.json
+stdout '^clone\.on=true$'
+! stdout 'clone\.workspace'

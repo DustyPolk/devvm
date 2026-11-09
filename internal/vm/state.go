@@ -2,6 +2,8 @@ package vm
 
 import (
 	"context"
+	"path/filepath"
+	"slices"
 
 	"github.com/devvmhq/devvm/internal/devcontainer"
 	"github.com/devvmhq/devvm/internal/gitprotect"
@@ -52,16 +54,66 @@ func movedTo(last movedInVM, was, dir string) movedInVM {
 }
 
 // cloneInVM is a VM's clone section: whether it was made with --clone,
-// and what devvm made of its clone.
+// and what devvm made of its clone. A clone of one repo, the folder's own
+// (as devvm 0.1.0 made every clone), has its remote and seed in Made; a
+// workspace clone, of a folder of repos, has its repos in Repos, each
+// with its own, and Made.Seeded once all of them, and the folder's own
+// files (Made.Files), are in the VM. repos reads both alike.
 type cloneInVM struct {
 	On   bool      `json:"on"`
 	Made cloneMade `json:"made,omitzero"`
+	// Workspace: the VM has a clone of each of Repos, at its path, and a
+	// copy of the folder's files outside them.
+	Workspace bool        `json:"workspace,omitempty"`
+	Repos     []cloneRepo `json:"repos,omitempty"`
 }
 
 // cloneMade is what devvm made of a --clone VM's clone.
 type cloneMade struct {
 	Remote string `json:"remote,omitempty"` // the repo's remote for the VM, recorded before it's added
 	Seeded bool   `json:"seeded,omitempty"` // the host's branches are in the VM
+	// Files: a workspace clone's copy of the folder's files outside its
+	// repos is in the VM (workspaceFiles), made once.
+	Files bool `json:"files,omitempty"`
+}
+
+// cloneRepo is one repo of a workspace clone: its folder, relative to the
+// project folder ("." for the folder's own), the repo's remote for the
+// VM, recorded before it's added, and whether its branches are in the VM.
+type cloneRepo struct {
+	Path   string `json:"path"`
+	Remote string `json:"remote,omitempty"`
+	Seeded bool   `json:"seeded,omitempty"`
+}
+
+// repos are the clone's repos: a workspace clone's Repos, each at a
+// local path in the folder (a path that isn't one is passed over: host
+// git runs in each), else the one repo of the folder's own, at ".", with
+// Made's remote and seed.
+func (c cloneInVM) repos() []cloneRepo {
+	if c.Workspace {
+		return slices.DeleteFunc(slices.Clone(c.Repos), func(r cloneRepo) bool { return r.Path != "." && !filepath.IsLocal(r.Path) })
+	}
+	return []cloneRepo{{Path: ".", Remote: c.Made.Remote, Seeded: c.Made.Seeded}}
+}
+
+// setRepo changes the clone's repo at path as change says: a workspace
+// clone's entry in Repos, else Made's remote and seed for ".". A path it
+// hasn't is left alone.
+func (c *cloneInVM) setRepo(path string, change func(*cloneRepo)) {
+	if !c.Workspace {
+		if path == "." {
+			r := cloneRepo{Path: ".", Remote: c.Made.Remote, Seeded: c.Made.Seeded}
+			change(&r)
+			c.Made.Remote, c.Made.Seeded = r.Remote, r.Seeded
+		}
+		return
+	}
+	for i := range c.Repos {
+		if c.Repos[i].Path == path {
+			change(&c.Repos[i])
+		}
+	}
 }
 
 // devcontainerInVM is a VM's devcontainer section: the devcontainer.json

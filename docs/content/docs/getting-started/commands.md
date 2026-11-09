@@ -36,7 +36,8 @@ These options are for a new VM, and only `devvm` takes them. A VM that exists ig
 | `--agents LIST\|none` | the coding agents the VM gets, such as `--agents claude,codex`, in place of those `devvm setup` chose ([details](../using/images.md#what-a-new-vm-gets)) |
 | `--layers LIST\|none` | the layers the VM's image gets, bottom first, such as `--layers docker`, in place of those `devvm setup` chose ([details](../using/images.md#what-a-new-vm-gets)) |
 | `--network TIER` | create the VM on a [network tier](../safety/network.md#network-tiers): `open` reaches anything this machine can, `internet` any public host, `allowlist`, the default, only the hosts you allow, and `none` only its agents' and secrets' hosts and its links |
-| `--clone` | create the VM with its own clone of the repo instead of mounting the folder ([details](../using/clone.md)) |
+| `--clone` | create the VM with its own clone of the repo, or of each repo in a folder of repos, instead of mounting the folder ([details](../using/clone.md)) |
+| `--repos all\|none\|LIST` | with `--clone` in a folder of repos, the repos the VM gets a clone of, such as `--repos frontend,backend`, in place of the picker ([details](../using/clone.md#folders-of-repos)) |
 | `--no-git-protect` | create the VM without `.git` protection |
 | `--ssh-agent` | create the VM forwarding your SSH agent, so while you're connected, anything in it can use your keys ([details](../using/ssh.md#agent-forwarding)) |
 | `--unsafe-folder` | mount a folder that devvm refuses, such as one that is or holds your home folder ([details](../using/settings.md#project-folders-devvm-refuses)) |
@@ -51,6 +52,8 @@ These options are for a new VM, and only `devvm` takes them. A VM that exists ig
 | --- | --- |
 | `devvm --clone` | make this folder's VM with its own clone of the repo, copy your branches into it and open a shell in the clone ([details](../using/clone.md)) |
 | `git fetch devvm` | on this machine, fetch the VM's work as `devvm/<branch>`, to review before you merge it ([details](../using/clone.md#fetching-the-vms-work)) |
+| `devvm clone fetch [--json]` | fetch the VM's work into every repo it has a clone of, and list the new or moved branches, each with its repos ([details](../using/clone.md#fetching-the-vms-work)) |
+| `devvm clone add PATH` | copy one more repo of a folder of repos into the VM, at the same path ([details](../using/clone.md#adding-a-repo)) |
 | `devvm rm` | delete the VM, first offering to keep the work you haven't fetched as `saved/devvm/<branch>` branches ([details](../using/clone.md#deleting-the-vm)) |
 | `devvm clone on\|off` | make an existing VM again with its own clone of the repo, or with the folder mounted once devvm has offered to keep the clone's work as `devvm rm` does ([details](../using/clone.md#switching-a-vm-that-exists)) |
 
@@ -76,7 +79,7 @@ These options are for a new VM, and only `devvm` takes them. A VM that exists ig
 | `devvm ssh-agent add KEY_FILE [--confirm] [--lifetime DURATION]` | load a key into devvm's own agent, and load it again whenever a VM needs it ([details](../using/ssh.md#devvms-own-agent)) |
 | `devvm ssh-agent rm KEY_FILE` | take a key out of devvm's own agent, so devvm doesn't load it again ([details](../using/ssh.md#devvms-own-agent)) |
 | `devvm git-protect [on\|strict\|off]` | show or change this folder's VM's `.git` protection, while it's stopped ([details](../safety/git-protection.md#turning-it-on-or-off)) |
-| `devvm clone [on\|off] [--force] [--no-export] [--clean-home] [--no-clone-check]` | show whether this folder's VM has its own clone of the repo, or make it again with one, or with the folder mounted, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/clone.md#switching-a-vm-that-exists)) |
+| `devvm clone [on\|off] [--force] [--no-export] [--clean-home] [--no-clone-check] [--repos LIST]` | show whether this folder's VM has its own clone of the repo, or make it again with one, or with the folder mounted, keeping its home folder and settings, after asking, then open a shell in it ([details](../using/clone.md#switching-a-vm-that-exists)) |
 | `devvm secret`, `devvm secret rm NAME` | list the secrets, whether each is saved and the VMs using it, or delete a saved one ([details](../safety/network.md#saving-and-binding-secrets)) |
 | `devvm secret set claude\|github [--stdin]` | save your Claude Code token or GitHub token on this machine, so that VMs get a placeholder and their proxy puts the secret in ([details](../safety/network.md#saving-and-binding-secrets)) |
 | `devvm secret set NAME --host HOST --env VARIABLE` | save a secret of your own, such as an API key, which VMs that use it send only to its hosts ([details](../safety/network.md#your-own-secrets)) |

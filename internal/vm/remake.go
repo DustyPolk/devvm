@@ -34,6 +34,10 @@ type RemakeOptions struct {
 	// NoCloneCheck (--no-clone-check, devvm clone off's): the clone isn't
 	// checked for work the repo lacks first, which is lost.
 	NoCloneCheck bool
+	// Repos (--repos, devvm clone on's in a folder of repos) is which
+	// repos its own clone gets: all, none or a comma-separated list of
+	// their paths; "" asks.
+	Repos string
 	// DefaultFrom is what devvm update starts a VM's base from once its
 	// devcontainer.json no longer names the image it started from:
 	// $DEVVM_FROM's, "" for Ubuntu's cloud image.
@@ -65,6 +69,10 @@ type remakeInVM struct {
 	// (devvm clone on, devvm clone off); "" keeps the VM's. Once Made,
 	// the clone section says the new machine's mode (switchedTo).
 	Clone string `json:"clone,omitempty"`
+	// CloneTo is, with Clone CloneOn in a folder of repos, the workspace
+	// clone its new machine gets, the repos the user chose (planClone);
+	// nil for a clone of the folder's own repo.
+	CloneTo *cloneInVM `json:"clone_to,omitempty"`
 	// Done: its new machine has its home folder and its new image is
 	// recorded, so the new machine is the VM, and only deleting the old
 	// one is left.
@@ -594,7 +602,7 @@ func (e remaking) finish(ctx context.Context, t *target, p remakeInVM, c chainOf
 		if err := madeWith(st, p); err != nil {
 			return err
 		}
-		return switchedTo(st, p.Clone, git)
+		return switchedTo(st, p.Clone, p.CloneTo, git)
 	})
 	if err != nil {
 		return err

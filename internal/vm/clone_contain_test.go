@@ -2,26 +2,28 @@ package vm
 
 import "testing"
 
-// insideClone takes the VM's path only clean, absolute and below the
-// clone, never the clone itself.
-func TestInsideClonePins(t *testing.T) {
+// worktreePath takes the VM's path only clean, relative and below the
+// project folder, never the folder itself.
+func TestWorktreePathPins(t *testing.T) {
 	for _, tc := range []struct {
 		p    string
-		want bool
+		want string
 	}{
-		{"/w/c/a", true},
-		{"/w/c/a/b", true},
-		{"/w/c", false},
-		{"/w/c/", false},
-		{"/w/c/a/", false},
-		{"/w/c/a/../b", false},
-		{"/w/c/../x", false},
-		{"/w/c-sibling/a", false},
-		{"w/c/a", false},
-		{"", false},
+		{"a", "/w/c/a"},
+		{"a/b", "/w/c/a/b"},
+		{".worktrees/x/api", "/w/c/.worktrees/x/api"},
+		{".", ""},
+		{"", ""},
+		{"a/", ""},
+		{"a/../b", ""},
+		{"../x", ""},
+		{"..", ""},
+		{"/w/c/a", ""},
+		{"./a", ""},
 	} {
-		if got := insideClone("/w/c", tc.p); got != tc.want {
-			t.Errorf("insideClone(%q) = %v", tc.p, got)
+		got, ok := worktreePath("/w/c", tc.p)
+		if got != tc.want || ok != (tc.want != "") {
+			t.Errorf("worktreePath(%q) = %q, %v", tc.p, got, ok)
 		}
 	}
 }

@@ -65,7 +65,7 @@ type Repos struct {
 	// for its repo, a bare repo whose config can name a work tree.
 	Bare []string
 	// Skipped is how many .git the walk saw where it doesn't look for
-	// repos (deeper than RepoDepth, or in noRepos), which it sees only
+	// repos (deeper than RepoDepth, or in NoRepos), which it sees only
 	// where it walks for set-id files, and Devices how many folders it
 	// didn't enter as they're on another file system.
 	Skipped int
@@ -87,7 +87,7 @@ func IsGitName(name string) bool {
 // skipped: nothing runs a file in one by its path, git's own repos in it
 // (submodules') are gitprotect's to find, and .git holds most of a big
 // project's files. Repos are looked for at most RepoDepth folders down,
-// and not in the folders of packages and build tools (noRepos), which
+// and not in the folders of packages and build tools (NoRepos), which
 // rarely hold a repo anyone runs git in, so a walk without setID stops
 // there. With it, the walk reads each file's metadata, a second or so for
 // 200,000 files, so it runs once the VM is stopped and when a VM is made,
@@ -173,19 +173,20 @@ func (w *walker) repo(rel string) {
 
 // reposIn reports whether the walk looks for a repo's .git in the folder
 // rel, relative to the project folder: it's at most RepoDepth folders
-// down, and neither it nor a folder above it is one of noRepos.
+// down, and neither it nor a folder above it is one of NoRepos.
 func reposIn(rel string) bool {
 	parts := strings.Split(rel, "/")
 	if len(parts) > RepoDepth {
 		return false
 	}
-	return !slices.ContainsFunc(parts, noRepos)
+	return !slices.ContainsFunc(parts, NoRepos)
 }
 
-// noRepos reports whether a folder is one the walk doesn't look for repos
+// NoRepos reports whether a folder is one the walk doesn't look for repos
 // in, for speed: packages and build tools' own, which they fill with
-// what they fetch.
-func noRepos(name string) bool {
+// what they fetch. A workspace clone's copy of the folder's files leaves
+// them out too, as the VM fetches its own.
+func NoRepos(name string) bool {
 	switch name {
 	case "node_modules", "vendor", ".venv", "__pycache__", ".terraform":
 		return true

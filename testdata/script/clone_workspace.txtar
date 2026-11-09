@@ -1,0 +1,227 @@
+# --clone in a folder of repos: a workspace clone. devvm finds the repos
+# below the folder, the user picks them (all ticked first; those --clone
+# can't copy shown with why), or --repos answers without a terminal. The
+# VM gets a clone of each at its own path, with its current and default
+# branches, each repo a remote of its own, and a copy of the folder's
+# files outside them, made once. devvm clone fetch fetches every repo's
+# branches and lists them by name; devvm clone add copies one more repo;
+# rm checks every repo. Inside a repo the workspace clone has, devvm uses
+# that VM. (The stubs keep the VM's files in $STUB_DIR/vmfs.)
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+cd $WORK/ws
+
+# The repos: frontend on main with a feature branch; backend on dev, its
+# default branch main; tools with a detached HEAD; empty with no commits;
+# lib, deeper down, added later.
+exec git init -q -b main frontend
+exec git -C frontend commit -q --allow-empty -m f1
+exec git -C frontend branch feature
+exec git init -q -b main backend
+exec git -C backend commit -q --allow-empty -m b1
+exec git -C backend checkout -q -b dev
+exec git -C backend commit -q --allow-empty -m b2
+exec git init -q -b main tools
+exec git -C tools commit -q --allow-empty -m t1
+exec git -C tools checkout -q --detach
+exec git init -q -b main empty
+mkdir node_modules/pkg
+exec sh -c 'echo x > node_modules/pkg/index.js'
+symlink out -> ../outside
+symlink inside -> docs/notes.md
+
+# Usage errors, before anything runs: --repos needs --clone, and takes
+# all, none or folders in this one.
+! exec devvm --repos all
+stderr '^devvm: flag_needs_flag flag=--repos needs=--clone$'
+! exec devvm --clone --repos ../x
+stderr '^devvm: repos_value value=\.\./x$'
+! exec devvm --clone --repos all,frontend
+stderr '^devvm: repos_value value=all,frontend$'
+! exec devvm clone --repos all
+stderr '^devvm: flag_needs_flag flag=--repos needs=devvm clone on$'
+
+# Without a terminal, the question of which repos is refused, naming
+# --repos; a repo devvm didn't find is refused too. Nothing is made.
+! exec devvm --clone --network open
+stderr '^devvm: no_input answer=--repos$'
+! exec devvm --clone --network open --repos frontend,nope
+stderr '^devvm: workspace_repo_unknown dir=/\S*/ws path=nope$'
+! exists $VMS
+
+# In a terminal: the picker, every repo --clone can copy ticked, the
+# others under their own heading with why. Space unticks backend, the
+# first; enter confirms. (Everything else a new VM asks in a terminal is
+# given.)
+env DEVVM_PICK_ON_PIPE=1
+ttyin -stdin $WORK/untick.txt
+exec devvm --clone --network open --tools none --agents none --layers none --ports none --cpus 2 --memory 4 --disk 100 --ssh-config
+stdout 'workspace_pick_help dir=/\S*/ws\r$'
+stdout '\[ \] backend'
+stdout '\[x\] frontend'
+stdout '\[x\] tools'
+stdout '(?s)workspace_pick_cannot\r\n.*empty +workspace_reason_no_commits'
+env DEVVM_PICK_ON_PIPE=
+stdout '^==> workspace_detached branch=main path=tools$'
+stdout '^==> workspace_ready count=2$'
+vm_name WS ws
+vm_state $WS_dir/vm.json
+stdout '^clone\.workspace=true$'
+stdout '^clone\.repos\.0\.path=frontend$'
+stdout '^clone\.repos\.1\.path=tools$'
+stdout '^clone\.repos\.1\.seeded=true$'
+stdout '^clone\.made\.files=true$'
+exec devvm rm --force
+stdout '^==> removed_remote remote=devvm$'
+
+# --repos none: no repo's clone, only the folder's own files, in the
+# folder, where the shell opens.
+rm $STUB_DIR/vmfs
+exec devvm --clone --network open --repos none
+stdout '^==> workspace_ready count=0$'
+exec sh -c 'cat "$STUB_DIR/vmfs$(pwd -P)/Makefile"'
+stdout '^all:$'
+exec devvm rm --force
+
+# --repos all, without a terminal: every repo --clone can copy, empty
+# named as left out. Each repo's clone at its path in the VM, with its
+# current and default branches, and a remote for it; the folder's own
+# files copied, but not a package folder, a link out of the folder, nor
+# what's in a repo.
+rm $STUB_DIR/vmfs
+exec devvm --clone --network open --repos all
+stderr '^devvm: workspace_skipped paths="empty"$'
+stderr '^devvm: workspace_files_skipped count=1$'
+stdout '^==> workspace_ready count=3$'
+exec sh -c 'v="$STUB_DIR/vmfs$(pwd -P)"; for r in frontend backend tools; do echo "$r:" $(git -C "$v/$r" branch --show-current) $(git -C "$v/$r" branch --format="%(refname:short)"); done'
+cmp stdout $WORK/vm-branches
+exec sh -c 'v="$STUB_DIR/vmfs$(pwd -P)"; cat "$v/Makefile" "$v/docs/notes.md"; readlink "$v/inside"; ls -a "$v"'
+stdout '^all:$'
+stdout '^notes$'
+stdout '^docs/notes\.md$'
+! stdout 'node_modules|^out$|^empty$'
+exec git -C frontend remote get-url devvm
+stdout '^devvm-ws-[0-9a-f]{14}:/\S*/ws/frontend$'
+exec git -C backend remote get-url devvm
+stdout '^devvm-ws-[0-9a-f]{14}:/\S*/ws/backend$'
+
+# Inside a repo the workspace clone has, devvm uses that VM, at the
+# repo's path; --here makes the repo's own. Inside one it doesn't have,
+# it doesn't.
+cd frontend
+stub_reset
+exec devvm
+stdout '^==> using_parent_vm dir=/\S*/ws vm=devvm-ws-[0-9a-f]{14}$'
+stub_calls
+stdout '^limactl shell --workdir /\S*/ws/frontend devvm-ws-[0-9a-f]{14}$'
+! exec devvm host --here
+stderr '^devvm: no_vm dir=/\S*/ws/frontend$'
+cd ../empty
+! exec devvm host
+stderr '^devvm: no_vm dir=/\S*/ws/empty$'
+cd ..
+
+# Agent-like commits in two repos, on one branch name: devvm clone fetch
+# fetches every repo's branches and lists what's new by name, then with
+# nothing new says so; --json lists them by repo and by name.
+exec sh -c 'v="$STUB_DIR/vmfs$(pwd -P)"; for r in frontend backend; do git -C "$v/$r" checkout -q -b agent/x && git -C "$v/$r" commit -q --allow-empty -m "from the VM"; done'
+exec devvm clone fetch
+stdout '^agent/x: backend, frontend$'
+stdout '^==> clone_fetched_review remote=devvm$'
+exec git -C frontend log --format=%s -1 devvm/agent/x
+stdout '^from the VM$'
+exec devvm clone fetch
+stdout '^==> clone_fetched_none$'
+exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)/tools" commit -q --allow-empty -m t2'
+exec devvm clone fetch --json
+stdout '"path": "tools"'
+stdout '"name": "main"'
+
+# devvm clone add: a repo found later, at its path, with its remote; one
+# the clone has is said to be; one outside the folder, or not a repo, is
+# refused.
+exec git init -q -b main deep/lib
+exec git -C deep/lib commit -q --allow-empty -m l1
+exec sh -c 'touch "$STUB_DIR/ssh-fails"'
+! exec devvm clone add deep/lib
+stderr '^devvm: clone_seed_failed vm=devvm-ws-[0-9a-f]{14}$'
+rm $STUB_DIR/ssh-fails
+vm_state $WS_dir/vm.json
+stdout '^clone\.repos\.3\.path=deep/lib$'
+! stdout '^clone\.repos\.3\.seeded'
+exec devvm clone add deep/lib
+stdout '^==> clone_added path=deep/lib remote=devvm$'
+exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)/deep/lib" log --format=%s'
+stdout '^l1$'
+exec devvm clone add deep/lib
+stdout '^==> clone_add_already path=deep/lib vm=devvm-ws-[0-9a-f]{14}$'
+! exec devvm clone add ../elsewhere
+stderr '^devvm: clone_add_missing dir=/\S*/elsewhere$'
+mkdir $WORK/beside
+! exec devvm clone add ../beside
+stderr '^devvm: clone_add_outside dir=/\S*/beside folder=/\S*/ws$'
+! exec devvm clone add empty
+stderr '^devvm: clone_no_commits$'
+
+# rm with unfetched work in one repo and uncommitted changes in another:
+# without a terminal it refuses, naming the repo, and keeps the VM.
+exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)/backend" commit -q --allow-empty -m b3'
+! exec devvm rm --force
+stdout '^unfetched_commits_in refs="agent/x" repo=backend$'
+stderr '^devvm: no_terminal_fetch_repos command=devvm rm$'
+exec devvm clone fetch
+exec sh -c 'echo z > "$STUB_DIR/vmfs$(pwd -P)/frontend/new"'
+! exec devvm rm --force
+stdout '^clone_repo_dirty repo=frontend$'
+stdout '^\?\? new$'
+stderr '^devvm: no_terminal_delete command=devvm rm$'
+
+# A remote pointed elsewhere: devvm clone fetch leaves that repo alone.
+exec git -C tools remote set-url devvm https://example.com/tools.git
+exec devvm clone fetch
+stderr '^devvm: clone_remote_elsewhere path=tools remote=devvm$'
+exec sh -c 'git -C tools remote set-url devvm "$(git -C frontend remote get-url devvm | sed s/frontend/tools/)"'
+
+# A repo on this machine that isn't the one the VM has a clone of any
+# more (its .git gone, so git there would use another): devvm clone
+# fetch leaves it alone, and rm refuses and keeps the VM.
+mv deep/lib/.git deep/lib-git
+exec devvm clone fetch
+stderr '^devvm: clone_repo_changed path=deep/lib$'
+! exec devvm rm --force
+stderr '^devvm: clone_check_repo_changed command=devvm rm path=deep/lib vm=devvm-ws-[0-9a-f]{14}$'
+mv deep/lib-git deep/lib/.git
+
+# --no-clone-check: deleted, and each repo's remote removed, its fetched
+# work kept as local branches.
+exec devvm rm --force --no-clone-check
+stdout '^==> deleted vm=devvm-ws-[0-9a-f]{14}$'
+stdout 'saved_branches branches="saved/devvm/agent/x"'
+! exec git -C frontend remote get-url devvm
+! exec git -C deep/lib remote get-url devvm
+
+# A VM that mounts its folder has no clone to fetch from or add to.
+cd frontend
+exec devvm --network open --no-git-protect
+! exec devvm clone fetch
+stderr '^devvm: clone_fetch_mounted vm=devvm-frontend-[0-9a-f]{14}$'
+! exec devvm clone add .
+stderr '^devvm: clone_add_mounted vm=devvm-frontend-[0-9a-f]{14}$'
+exec devvm rm --force --no-export
+
+# A repo with no other repo below it: --repos chooses nothing, so only
+# all goes with it.
+! exec devvm --clone --network open --repos none
+stderr '^devvm: repos_not_workspace dir=/\S*/ws/frontend$'
+
+-- untick.txt --
+ .
+-- ws/Makefile --
+all:
+-- ws/docs/notes.md --
+notes
+-- outside --
+secret
+-- vm-branches --
+frontend: main main
+backend: dev dev main
+tools: main main

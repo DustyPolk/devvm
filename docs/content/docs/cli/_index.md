@@ -14,6 +14,8 @@ Every devvm command, with its arguments and flags. `devvm <command> --help` prin
 - [devvm agent save](devvm_agent_save.md): Copy the agents' settings from this folder's VM into devvm's store
 - [devvm build](devvm_build.md): Build an image and the images under it, unless they're built
 - [devvm clone](devvm_clone.md): Show or change whether this folder's VM has its own clone of the repo
+- [devvm clone add](devvm_clone_add.md): Copy one more repo into this folder's --clone VM
+- [devvm clone fetch](devvm_clone_fetch.md): Fetch the work of this folder's --clone VM into each of its repos
 - [devvm code](devvm_code.md): Open this folder's VM in VS Code over Remote-SSH
 - [devvm completion](devvm_completion.md): Print the shell completion script for bash, zsh or fish
 - [devvm desktop](devvm_desktop.md): Open this folder's VM's desktop in a VNC viewer

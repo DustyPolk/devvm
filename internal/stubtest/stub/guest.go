@@ -77,13 +77,16 @@ func (l *lima) shell() int {
 }
 
 // cloneGit reports whether line is a --clone VM's git: git -C DIR, the
-// script that makes its clone, or the one that reads a worktree's status.
+// script that makes its clone's repos, the one that reads them for the
+// clone check, or a workspace clone's copy of the folder's files (a tar
+// read from stdin into the folder).
 func (g *guest) cloneGit(line string) bool {
 	if strings.HasPrefix(line, shellPrefix+"'git' '-C' ") {
 		return true
 	}
 	return strings.HasPrefix(line, shellPrefix+"'sh' '-c' ") &&
-		(strings.Contains(line, "receive.denyCurrentBranch") || strings.Contains(line, "status --porcelain"))
+		(strings.Contains(line, "receive.denyCurrentBranch") || strings.Contains(line, "status --porcelain") ||
+			strings.Contains(line, "--no-same-owner"))
 }
 
 // vmfs is the guest's files on the host, under the stubs' folder.

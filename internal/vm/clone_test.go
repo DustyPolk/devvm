@@ -60,24 +60,16 @@ func cloneEnv(t *testing.T) (e *Env, f *backendtest.Fake, vmfs string) {
 		case len(argv) == 3 && strings.Contains(argv[2], "ssh_host_") && o.Stdout != nil:
 			_, err := io.WriteString(o.Stdout, testHostKey+"\n")
 			return err
-		case len(argv) > 4 && argv[0] == "git" && argv[1] == "-C" && argv[3] == "worktree" && argv[4] == "list":
-			// Its paths as the VM's, without vmfs.
-			out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", vmfs + argv[2]}, argv[3:]...)...).Output() //nolint:gosec // the test's own
-			if err != nil {
-				return err
-			}
-			_, err = o.Stdout.Write(bytes.ReplaceAll(out, []byte("worktree "+vmfs), []byte("worktree ")))
-			return err
-		case len(argv) == 5 && argv[0] == "sh" && argv[2] == worktreeStatus:
-			cmd = exec.CommandContext(t.Context(), "sh", "-c", argv[2], argv[3], vmfs+argv[4]) //nolint:gosec // the test's own
 		case len(argv) > 3 && argv[0] == "git" && argv[1] == "-C":
 			cmd = exec.CommandContext(t.Context(), "git", append([]string{"-C", vmfs + argv[2]}, argv[3:]...)...) //nolint:gosec // the test's own
-		case len(argv) == 6 && argv[0] == "sh" && strings.Contains(argv[2], "receive.denyCurrentBranch"):
-			cmd = exec.CommandContext(t.Context(), "bash", "-c", `sudo() { "$@"; }; `+argv[2], argv[3], vmfs+argv[4], argv[5]) //nolint:gosec // the test's own
+		case len(argv) >= 5 && argv[0] == "sh" && argv[1] == "-c":
+			// A clone's script: its first argument the project folder, in
+			// vmfs, the rest relative to it.
+			cmd = exec.CommandContext(t.Context(), "bash", append([]string{"-c", `sudo() { "$@"; }; ` + argv[2], argv[3], vmfs + argv[4]}, argv[5:]...)...) //nolint:gosec // the test's own
 		default:
 			return nil
 		}
-		cmd.Stdout, cmd.Stderr = o.Stdout, o.Stderr
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = o.Stdin, o.Stdout, o.Stderr
 		return cmd.Run()
 	}
 	return e, f, vmfs
@@ -374,37 +366,108 @@ func TestCloneRmWorktrees(t *testing.T) {
 	}
 }
 
-// The VM's worktree list is untrusted: only clean absolute paths below
-// the clone are checked, each once, without bare or prunable ones or the
-// clone itself, at most cloneWorktreesMax; a record cut off isn't used.
-func TestCloneWorktrees(t *testing.T) {
-	const dir = "/p/web"
-	rec := func(lines ...string) string { return strings.Join(lines, "\x00") + "\x00\x00" }
-	list := rec("worktree "+dir, "HEAD 0123", "branch refs/heads/main") +
-		rec("worktree "+dir+"/.worktrees/a", "HEAD 0123", "branch refs/heads/a") +
-		rec("worktree "+dir+"/.worktrees/a", "detached") +
-		rec("worktree "+dir+"/.worktrees/new\nline", "detached", "locked reason\nwith a newline") +
-		rec("worktree "+dir+"/.worktrees/b", "bare") +
-		rec("worktree "+dir+"/.worktrees/c", "detached", "prunable gitdir file points to non-existent location") +
-		rec("worktree "+dir+"/../etc", "detached") +
-		rec("worktree "+dir+"//x", "detached") +
-		rec("worktree "+dir+"2/x", "detached") +
-		rec("worktree relative/x", "detached") +
-		rec("worktree /etc", "detached") +
-		rec("HEAD 0123") +
-		"worktree " + dir + "/cut\x00detached"
-	got, more := cloneWorktrees(dir, []byte(list))
-	want := []string{dir + "/.worktrees/a", dir + "/.worktrees/new\nline"}
-	if !slices.Equal(got, want) || more != 0 {
-		t.Errorf("got %q, %d more", got, more)
-	}
+// rec is one of cloneState's records: its kind, its repo's index, and its
+// body.
+func rec(kind string, i int, body string) string {
+	return fmt.Sprintf("%s %d %d\n%s", kind, i, len(body), body)
+}
 
-	var many strings.Builder
-	for i := range cloneWorktreesMax + 3 {
-		many.WriteString(rec(fmt.Sprintf("worktree %s/w%d", dir, i), "detached"))
+// The VM's answer to the clone check is untrusted: each record whole and
+// of a repo asked for, each repo with its branches and status or gone,
+// each worktree's path clean, relative, below the folder and once, and
+// followed by its status; past cloneWorktreesMax worktrees are counted,
+// not kept.
+func TestParseCloneState(t *testing.T) {
+	const ws = "/p/ws"
+	good := rec("refs", 0, "abc refs/heads/main\n") + rec("status", 0, "") +
+		rec("path", 0, ".worktrees/a/api") + rec("wstatus", 0, "?? x\n") +
+		rec("gone", 1, "") +
+		rec("refs", 2, "") + rec("status", 2, " M y\n")
+	got, err := parseCloneState([]byte(good), ws, 3)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got, more := cloneWorktrees(dir, []byte(many.String())); len(got) != cloneWorktreesMax || more != 3 {
-		t.Errorf("many: %d checked, %d more", len(got), more)
+	if string(got[0].refs) != "abc refs/heads/main\n" || len(got[0].trees) != 1 || got[0].trees[0].path != ws+"/.worktrees/a/api" ||
+		string(got[0].trees[0].status) != "?? x\n" || got[1].refs != nil || string(got[2].status) != " M y\n" {
+		t.Errorf("got %+v", got)
+	}
+	for name, bad := range map[string]string{
+		"no status":         rec("refs", 0, ""),
+		"no repo":           "",
+		"repo not asked":    rec("refs", 3, "") + rec("status", 3, ""),
+		"twice":             rec("refs", 0, "") + rec("refs", 0, "") + rec("status", 0, ""),
+		"cut":               rec("refs", 0, "") + "status 0 10\nabc",
+		"bad header":        "refs zero 0\n" + rec("status", 0, ""),
+		"out of the folder": rec("refs", 0, "") + rec("status", 0, "") + rec("path", 0, "../x") + rec("wstatus", 0, ""),
+		"absolute":          rec("refs", 0, "") + rec("status", 0, "") + rec("path", 0, "/etc") + rec("wstatus", 0, ""),
+		"no status of it":   rec("refs", 0, "") + rec("status", 0, "") + rec("path", 0, "a") + rec("refs", 0, ""),
+		"status of none":    rec("refs", 0, "") + rec("status", 0, "") + rec("wstatus", 0, ""),
+		"its status failed": rec("refs", 0, "") + rec("status", 0, "") + rec("path", 0, "a") + rec("wfail", 0, ""),
+		"same twice":        rec("refs", 0, "") + rec("status", 0, "") + rec("path", 0, "a") + rec("wstatus", 0, "") + rec("path", 0, "a") + rec("wstatus", 0, ""),
+		"unknown":           rec("refs", 0, "") + rec("status", 0, "") + rec("what", 0, ""),
+		"too many branches": rec("refs", 0, strings.Repeat("x\n", cloneRefsMax+1)) + rec("status", 0, ""),
+	} {
+		if _, err := parseCloneState([]byte(bad), ws, 1); err == nil {
+			t.Errorf("%s: taken", name)
+		}
+	}
+	// The branches' bound is for all the repos together.
+	half := strings.Repeat("x\n", cloneRefsMax/2+1)
+	if _, err := parseCloneState([]byte(rec("refs", 0, half)+rec("status", 0, "")+rec("refs", 1, half)+rec("status", 1, "")), ws, 2); err == nil {
+		t.Error("too many branches in two repos: taken")
+	}
+	var many strings.Builder
+	many.WriteString(rec("refs", 0, "") + rec("status", 0, ""))
+	for i := range cloneWorktreesMax + 1 {
+		many.WriteString(rec("path", 0, fmt.Sprintf("w%d", i)) + rec("wstatus", 0, ""))
+	}
+	if got, err := parseCloneState([]byte(many.String()), ws, 1); err != nil || len(got[0].trees) != cloneWorktreesMax || !got[0].more {
+		t.Errorf("many: %v, %d kept", err, len(got[0].trees))
+	}
+}
+
+// The clone check's script, run on a real clone: its branches and status,
+// each linked worktree below the folder with its status, a repo whose
+// folder is gone; a worktree outside the folder, and a bare one, aren't
+// listed, and one outside, listed first, doesn't count towards how many
+// it looks at, so it never hides one inside.
+func TestCloneStateScript(t *testing.T) {
+	gitEnv(t)
+	outside := t.TempDir()
+	ws, _ := filepath.EvalSymlinks(t.TempDir())
+	api := filepath.Join(ws, "api")
+	gitIn(t, ws, "init", "-q", "-b", "main", "api")
+	gitIn(t, api, "commit", "-q", "--allow-empty", "-m", "one")
+	gitIn(t, api, "worktree", "add", "-q", "-b", "out", filepath.Join(outside, "aaa"))
+	gitIn(t, api, "worktree", "add", "-q", "-b", "x", filepath.Join(ws, ".worktrees", "x", "api"))
+	if err := os.WriteFile(filepath.Join(ws, ".worktrees", "x", "api", "new"), []byte("n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The one outside first, as git lists them, so it would take the one
+	// look the second run allows.
+	if list := gitIn(t, api, "worktree", "list", "--porcelain"); strings.Index(list, "/aaa\n") > strings.Index(list, "/.worktrees/x/api\n") {
+		t.Fatalf("git lists the worktree outside after the one inside:\n%s", list)
+	}
+	// The project folder not there, as when its copy never began: every
+	// repo gone.
+	if out, err := exec.CommandContext(t.Context(), "sh", "-c", cloneState, "sh", filepath.Join(ws, "nowhere"), "101", "api", "lib").Output(); err != nil { //nolint:gosec // the test's own
+		t.Fatal(err)
+	} else if got, err := parseCloneState(out, ws, 2); err != nil || !got[0].gone || !got[1].gone {
+		t.Errorf("no folder: %+v, %v\n%s", got, err, out)
+	}
+	for _, limit := range []string{"101", "1"} {
+		out, err := exec.CommandContext(t.Context(), "sh", "-c", cloneState, "sh", ws, limit, "api", "gone").Output() //nolint:gosec // the test's own
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := parseCloneState(out, ws, 2)
+		if err != nil {
+			t.Fatalf("%v:\n%s", err, out)
+		}
+		if !strings.Contains(string(got[0].refs), " refs/heads/main\n") || len(got[0].trees) != 1 ||
+			got[0].trees[0].path != ws+"/.worktrees/x/api" || string(got[0].trees[0].status) != "?? new\n" || !got[1].gone {
+			t.Errorf("looking at %s: got %+v\n%s", limit, got, out)
+		}
 	}
 }
 
@@ -416,12 +479,13 @@ func TestCloneRmTooManyWorktrees(t *testing.T) {
 	vm := st.Name()
 	// The VM lists more worktrees than devvm checks, none of them there.
 	var list strings.Builder
+	list.WriteString(rec("refs", 0, "") + rec("status", 0, ""))
 	for i := range cloneWorktreesMax + 1 {
-		fmt.Fprintf(&list, "worktree %s/w%d\x00detached\x00\x00", e.Dir, i)
+		list.WriteString(rec("path", 0, fmt.Sprintf("w%d", i)) + rec("wstatus", 0, ""))
 	}
 	inner := f.ExecFunc
 	f.ExecFunc = func(name string, argv []string, o backend.ExecOpts) error {
-		if slices.Contains(argv, "worktree") {
+		if len(argv) > 2 && argv[2] == cloneState {
 			_, err := o.Stdout.Write([]byte(list.String()))
 			return err
 		}
@@ -444,7 +508,10 @@ func TestFetchUnfetchedInvalid(t *testing.T) {
 	got := printed(t, e, true)
 	check := cloneCheck{clones: clones{e}, command: "devvm clone off", remakes: true}
 	tg := e.newTarget(project.Folder{Dir: e.Dir, Name: "devvm-web-0123456789abcd"}, nil, f)
-	if err := check.fetchUnfetched(t.Context(), tg, "devvm", []string{"a..b", "x y", "-x:refs/heads/main"}); err != nil {
+	work := func(branches ...string) []unfetchedIn {
+		return []unfetchedIn{{repo: cloneRepo{Path: ".", Remote: "devvm"}, dir: e.Dir, branches: branches}}
+	}
+	if err := check.fetchUnfetched(t.Context(), tg, false, work("a..b", "x y", "-x:refs/heads/main")); err != nil {
 		t.Fatal(msg.NamesOf(err))
 	}
 	want := []string{`branch_names_invalid refs="a..b" "x y" "-x:refs/heads/main"`}
@@ -453,7 +520,7 @@ func TestFetchUnfetchedInvalid(t *testing.T) {
 	}
 	gitIn(t, e.Dir, "branch", "saved")
 	*got = nil
-	err := check.fetchUnfetched(t.Context(), tg, "devvm", []string{"main"})
+	err := check.fetchUnfetched(t.Context(), tg, false, work("main"))
 	if msg.NamesOf(err) != "saved_names_taken command=devvm clone off remote=devvm vm=devvm-web-0123456789abcd" || len(*got) > 0 {
 		t.Errorf("no free names: %s, printed %q", msg.NamesOf(err), *got)
 	}
@@ -635,7 +702,7 @@ func TestFreeRemote(t *testing.T) {
 			_, _ = hostGit(t.Context(), dir, "remote", "remove", c.add[0])
 			gitIn(t, dir, "remote", "add", c.add[0], c.add[1])
 		}
-		got, err := freeRemote(t.Context(), f)
+		got, err := freeRemote(t.Context(), f, dir)
 		if err != nil {
 			got = "error " + msg.NamesOf(err)
 		}

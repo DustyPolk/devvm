@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -79,7 +80,7 @@ func checkCommand(c *cobra.Command) {
 		if err := noBlanks(cmd, a); err != nil {
 			return usage(err)
 		}
-		if err := checkFlags(cmd); err != nil {
+		if err := checkFlags(cmd, a); err != nil {
 			return usage(err)
 		}
 		if args != nil {
@@ -199,11 +200,47 @@ func exclusive(cmd *cobra.Command, names ...string) {
 	cmd.Annotations[exclusiveKey] = groups + strings.Join(names, " ")
 }
 
-// checkFlags checks the flags given to cmd: none of a group exclusive
-// marked on it or a command above it together, and each value
-// checkFlagValue knows.
-func checkFlags(cmd *cobra.Command) error {
+// needs marks cmd's flag name as one that goes only with with: the flag
+// it needs (--clone), or the word its first argument must be (on, for
+// devvm clone on), which checkFlags checks before anything runs.
+func needs(cmd *cobra.Command, name, with string) {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[needsKey+name] = with
+}
+
+// needsKey starts the annotation of a flag that needs another (needs).
+const needsKey = "devvm-needs-"
+
+// checkNeeds refuses a flag given to cmd, with args, without the flag or
+// the first argument it needs (needs).
+func checkNeeds(cmd *cobra.Command, args []string) error {
 	f := cmd.Flags()
+	for key, with := range cmd.Annotations {
+		name, ok := strings.CutPrefix(key, needsKey)
+		if fl := f.Lookup(name); !ok || fl == nil || !fl.Changed {
+			continue
+		}
+		if flag, isFlag := strings.CutPrefix(with, "--"); isFlag {
+			if !f.Changed(flag) {
+				return msg.FlagNeedsFlag("--"+name, with)
+			}
+		} else if len(args) == 0 || args[0] != with {
+			return msg.FlagNeedsFlag("--"+name, cmd.CommandPath()+" "+with)
+		}
+	}
+	return nil
+}
+
+// checkFlags checks the flags given to cmd, with args: none of a group
+// exclusive marked on it or a command above it together, none without
+// the flag or argument it needs, and each value checkFlagValue knows.
+func checkFlags(cmd *cobra.Command, args []string) error {
+	f := cmd.Flags()
+	if err := checkNeeds(cmd, args); err != nil {
+		return err
+	}
 	for c := cmd; c != nil; c = c.Parent() {
 		for group := range strings.SplitSeq(c.Annotations[exclusiveKey], ";") {
 			var set []string
@@ -266,6 +303,8 @@ func checkFlagValue(name, value string) error {
 		_, err = state.ParseDuration(value)
 	case "tools", "agents", "layers":
 		err = checkPartFlag("--"+name, value)
+	case "repos":
+		err = checkReposFlag(value)
 	case "to":
 		if !upgrade.Valid(strings.TrimPrefix(value, "v")) {
 			err = msg.UpgradeNotVersion(value)
@@ -293,6 +332,21 @@ func checkFlagValue(name, value string) error {
 		}
 	}
 	return err
+}
+
+// checkReposFlag checks the value of --repos: all or none alone, or a
+// comma-separated list of paths relative to the folder, each in it.
+func checkReposFlag(value string) error {
+	if value == vm.ReposAll || value == vm.ReposNone {
+		return nil
+	}
+	for p := range strings.SplitSeq(value, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" || p == vm.ReposAll || p == vm.ReposNone || !filepath.IsLocal(p) && p != "." {
+			return msg.ReposValue(value)
+		}
+	}
+	return nil
 }
 
 // flagError is the message for a flag the parser refused: unknown, without

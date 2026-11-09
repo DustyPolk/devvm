@@ -39,6 +39,7 @@ type Options struct {
 	UnsafeFolder               bool           // --unsafe-folder
 	NoGitProtect               bool           // --no-git-protect
 	Clone                      bool           // --clone
+	Repos                      string         // --repos: a workspace clone's repos, all, none or their paths; "" asks
 	SSHAgent                   bool           // --ssh-agent: a new VM forwards the user's SSH agent
 	From                       string         // --from, or its default: the container image a new VM's base starts from
 	FromSet                    bool           // --from was given, not its default
@@ -178,7 +179,7 @@ type newVM struct {
 	net   netpolicy.Tier
 	learn bool            // it learns the hosts it reaches, on the internet tier
 	agent string          // sshagent.On or Off
-	clone bool            // --clone
+	clone cloneInVM       // its clone section: --clone's (planClone)
 	git   gitprotect.InVM // its .git protection (gitprotect.Protector.NewSection), or gitprotect.Clone's
 	// from is the container image its base starts from: --from's, or its
 	// devcontainer.json's image, pinned.
@@ -421,14 +422,19 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 	if err != nil {
 		return newVM{}, err
 	}
+	n := newVM{agent: sshagent.Off}
 	if o.Clone {
-		if err := checkCloneRepo(ctx, f.Dir); err != nil {
+		if n.clone, err = e.clones.planClone(ctx, f.Dir, o.Repos, f.Name); err != nil {
 			return newVM{}, err
 		}
-	} else if err := e.checkUnsafe(f.Dir, o.UnsafeFolder); err != nil {
-		return newVM{}, err
 	}
-	n := newVM{agent: sshagent.Off}
+	// A workspace clone copies the folder's own files, so it's checked
+	// as a folder mounted is.
+	if !o.Clone || n.clone.Workspace {
+		if err := e.checkUnsafe(f.Dir, o.UnsafeFolder); err != nil {
+			return newVM{}, err
+		}
+	}
 	if n.from, n.dc, err = e.devcontainers.prepare(ctx, o, f.Dir); err != nil {
 		return newVM{}, err
 	}
@@ -463,7 +469,7 @@ func (e creation) plan(ctx context.Context, o Options, f project.Folder, b backe
 		n.agent = sshagent.On
 	}
 	if o.Clone {
-		n.clone, n.git = true, gitprotect.InVM{Mode: gitprotect.Clone}
+		n.git = gitprotect.InVM{Mode: gitprotect.Clone}
 	} else {
 		n.git = e.Protector(f.Dir).NewSection(o.NoGitProtect)
 	}
@@ -638,7 +644,7 @@ func (n newVM) record(st *state.VM, tg tools.Target, files []string) error {
 		tools.Set(st, tools.InVM{Names: n.tools, Made: tools.Made{Files: files, Libc: tg.Libc, Glibc: tg.Glibc}}),
 		ports.Set(st, ports.Ports{Forward: forward}),
 		state.SetSection(st, sizeSection, n.size),
-		state.SetSection(st, cloneSection, cloneInVM{On: n.clone}),
+		state.SetSection(st, cloneSection, n.clone),
 	} {
 		if err != nil {
 			return err
@@ -694,7 +700,11 @@ func (e Launch) setUpVM(ctx context.Context, t *target, conf backend.Confinement
 		return err
 	}
 	if c := sectionOf[cloneInVM](st, cloneSection); c.On && !c.Made.Seeded {
-		if err := e.clones.seedClone(ctx, t); err != nil {
+		seed := e.clones.seedClone
+		if c.Workspace {
+			seed = e.clones.seedWorkspace
+		}
+		if err := seed(ctx, t); err != nil {
 			return err
 		}
 	}

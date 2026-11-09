@@ -619,6 +619,41 @@ func ClaudeTokenInvalid() M {
 	return M{id: "claude_token_invalid"}
 }
 
+// CloneAddAlready is [clone_add_already]: "{{.vm}} has its own clone of {{.path}} already."
+func CloneAddAlready(path string, vm string) M {
+	return M{id: "clone_add_already", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// CloneAddFailed is [clone_add_failed]: "Copying the repo into this folder's VM failed: {{.reason}}."
+func CloneAddFailed(reason string) M {
+	return M{id: "clone_add_failed", vals: []val{{"reason", reason}}}
+}
+
+// CloneAddMissing is [clone_add_missing]: "There's no folder {{.dir}} to copy into the VM."
+func CloneAddMissing(dir string) M {
+	return M{id: "clone_add_missing", vals: []val{{"dir", dir}}}
+}
+
+// CloneAddMounted is [clone_add_mounted]: "{{.vm}} mounts this folder, so it has no clone to add a repo to, and the repos in the folder are in the VM already."
+func CloneAddMounted(vm string) M {
+	return M{id: "clone_add_mounted", vals: []val{{"vm", vm}}}
+}
+
+// CloneAddName is [clone_add_name]: "devvm clone add takes a repo whose folder's name has only characters a terminal can show, and no line break. Rename the folder, then run it again."
+func CloneAddName() M {
+	return M{id: "clone_add_name"}
+}
+
+// CloneAddOutside is [clone_add_outside]: "devvm clone add copies a repo in {{.folder}}, the VM's folder, and {{.dir}} is outside it."
+func CloneAddOutside(dir string, folder string) M {
+	return M{id: "clone_add_outside", vals: []val{{"dir", dir}, {"folder", folder}}}
+}
+
+// CloneAdded is [clone_added]: "The VM has its own clone of {{.path}} now, and the repo has the remote {{.remote}} for it."
+func CloneAdded(path string, remote string) M {
+	return M{id: "clone_added", vals: []val{{"path", path}, {"remote", remote}}}
+}
+
 // CloneAlternates is [clone_alternates]: "--clone copies only a repo's own objects, and {{.path}} borrows objects from another repo. Run git repack -a -d, delete that file, then run devvm --clone again."
 func CloneAlternates(path string) M {
 	return M{id: "clone_alternates", vals: []val{{"path", path}}}
@@ -634,6 +669,11 @@ func CloneCheckNotStarted(command string, vm string) M {
 	return M{id: "clone_check_not_started", vals: []val{{"command", command}, {"vm", vm}}}
 }
 
+// CloneCheckRepoChanged is [clone_check_repo_changed]: "{{.path}} isn't the repo on this machine that {{.vm}} has a clone of any more, so devvm kept the VM as it is. Put it back, or run {{.command}} --no-clone-check to go ahead without the check."
+func CloneCheckRepoChanged(command string, path string, vm string) M {
+	return M{id: "clone_check_repo_changed", vals: []val{{"command", command}, {"path", path}, {"vm", vm}}}
+}
+
 // CloneCheckSkipped is [clone_check_skipped]: "Without the clone check, {{.command}} loses the commits on {{.vm}}'s clone that this repo hasn't fetched, and the clone's uncommitted changes."
 func CloneCheckSkipped(command string, vm string) M {
 	return M{id: "clone_check_skipped", vals: []val{{"command", command}, {"vm", vm}}}
@@ -647,6 +687,36 @@ func CloneDetached() M {
 // CloneDirty is [clone_dirty]: "The VM's clone has uncommitted changes, which will be lost:"
 func CloneDirty() M {
 	return M{id: "clone_dirty"}
+}
+
+// CloneFetchFailed is [clone_fetch_failed]: "Fetching the branches of {{.path}} in {{.vm}} failed. Run devvm clone fetch again to retry."
+func CloneFetchFailed(path string, vm string) M {
+	return M{id: "clone_fetch_failed", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// CloneFetchMounted is [clone_fetch_mounted]: "{{.vm}} mounts this folder, so it has no clone to fetch from, and its work is in the folder already."
+func CloneFetchMounted(vm string) M {
+	return M{id: "clone_fetch_mounted", vals: []val{{"vm", vm}}}
+}
+
+// CloneFetchRunFailed is [clone_fetch_run_failed]: "Fetching the work of this folder's VM failed: {{.reason}}."
+func CloneFetchRunFailed(reason string) M {
+	return M{id: "clone_fetch_run_failed", vals: []val{{"reason", reason}}}
+}
+
+// CloneFetchedNone is [clone_fetched_none]: "The VM has no new or moved branches."
+func CloneFetchedNone() M {
+	return M{id: "clone_fetched_none"}
+}
+
+// CloneFetchedReview is [clone_fetched_review]: "Review each branch in its repo before you merge it, such as with git log -p main..{{.remote}}/main."
+func CloneFetchedReview(remote string) M {
+	return M{id: "clone_fetched_review", vals: []val{{"remote", remote}}}
+}
+
+// CloneFolderMounted is [clone_folder_mounted]: "{{.vm}} mounts {{.dir}}, so code in it could swap the repo under the git commands --clone runs here. Delete that VM, or run devvm --clone in a folder no other VM mounts."
+func CloneFolderMounted(dir string, vm string) M {
+	return M{id: "clone_folder_mounted", vals: []val{{"dir", dir}, {"vm", vm}}}
 }
 
 // CloneGitElsewhere is [clone_git_elsewhere]: "--clone takes only a repo of the folder's own or a git worktree of one, and {{.path}} points into another repo. Run devvm --clone in that repo's own folder."
@@ -677,6 +747,36 @@ func CloneNotTop(dir string) M {
 // CloneReady is [clone_ready]: "The VM has its own clone of your branches, without untracked or ignored files.\nTo get its work, run git fetch {{.remote}}, then review it with git log -p {{.branch}}..{{.remote}}/{{.branch}} before you merge."
 func CloneReady(branch string, remote string) M {
 	return M{id: "clone_ready", vals: []val{{"branch", branch}, {"remote", remote}}}
+}
+
+// CloneRemoteElsewhere is [clone_remote_elsewhere]: "The remote {{.remote}} of {{.path}} doesn't point at the VM now, so devvm clone fetch didn't fetch into it. Run git remote remove {{.remote}} in that repo, and devvm clone fetch adds it again."
+func CloneRemoteElsewhere(path string, remote string) M {
+	return M{id: "clone_remote_elsewhere", vals: []val{{"path", path}, {"remote", remote}}}
+}
+
+// CloneRepoChanged is [clone_repo_changed]: "{{.path}} isn't the repo on this machine that the VM has a clone of any more, so devvm left it alone. Run devvm clone add {{.path}} to see why."
+func CloneRepoChanged(path string) M {
+	return M{id: "clone_repo_changed", vals: []val{{"path", path}}}
+}
+
+// CloneRepoDirty is [clone_repo_dirty]: "The VM's clone of {{.repo}} has uncommitted changes, which will be lost:"
+func CloneRepoDirty(repo string) M {
+	return M{id: "clone_repo_dirty", vals: []val{{"repo", repo}}}
+}
+
+// CloneRepoGone is [clone_repo_gone]: "The VM's clone of {{.repo}} isn't at its path, so devvm can't check it, and whatever the VM moved it to will be lost."
+func CloneRepoGone(repo string) M {
+	return M{id: "clone_repo_gone", vals: []val{{"repo", repo}}}
+}
+
+// CloneRepoMounted is [clone_repo_mounted]: "{{.vm}} mounts {{.path}}, so code in it could swap that repo under devvm's git, and devvm leaves it alone. Delete that VM, or move the repo out of its folder, then run the command again."
+func CloneRepoMounted(path string, vm string) M {
+	return M{id: "clone_repo_mounted", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
+// CloneRepoUnchecked is [clone_repo_unchecked]: "{{.vm}} mounts {{.path}}, so devvm leaves this machine's repo alone and can't fetch the VM's work in it, which will be lost."
+func CloneRepoUnchecked(path string, vm string) M {
+	return M{id: "clone_repo_unchecked", vals: []val{{"path", path}, {"vm", vm}}}
 }
 
 // CloneSeedFailed is [clone_seed_failed]: "Copying the repo's branches into {{.vm}} failed. Run devvm again to retry."
@@ -782,6 +882,11 @@ func ConvertingInVM(from string, vm string) M {
 // CopyingBranches is [copying_branches]: "copying the repo's branches into the VM"
 func CopyingBranches() M {
 	return M{id: "copying_branches"}
+}
+
+// CopyingRepo is [copying_repo]: "copying {{.path}}'s branches into the VM"
+func CopyingRepo(path string) M {
+	return M{id: "copying_repo", vals: []val{{"path", path}}}
 }
 
 // CpusNotNumber is [cpus_not_number]: "{{.flag}} takes a whole number of CPUs, not {{.value}}."
@@ -1224,6 +1329,11 @@ func FetchBeforeDelete(prefix string) M {
 	return M{id: "fetch_before_delete", vals: []val{{"prefix", prefix}}}
 }
 
+// FetchBeforeDeleteRepos is [fetch_before_delete_repos]: "Fetch them into local branches saved/REMOTE/* of each of those {{.count}} repos before the clone goes?"
+func FetchBeforeDeleteRepos(count int) M {
+	return M{id: "fetch_before_delete_repos", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // FetchFailed is [fetch_failed]: "Fetching the branches in {{.vm}} failed, so devvm kept the VM as it is. Run {{.command}} again to retry."
 func FetchFailed(command string, vm string) M {
 	return M{id: "fetch_failed", vals: []val{{"command", command}, {"vm", vm}}}
@@ -1237,6 +1347,11 @@ func FetchUntil(file string, remote string) M {
 // Fetching is [fetching]: "fetching the VM's branches into {{.prefix}}/*"
 func Fetching(prefix string) M {
 	return M{id: "fetching", vals: []val{{"prefix", prefix}}}
+}
+
+// FetchingRepo is [fetching_repo]: "fetching {{.path}}'s branches from the VM"
+func FetchingRepo(path string) M {
+	return M{id: "fetching_repo", vals: []val{{"path", path}}}
 }
 
 // FirstRunDefaults is [first_run_defaults]: "These first questions set devvm's defaults for every new VM and its base image."
@@ -1257,6 +1372,11 @@ func FlagBadValue(flag string, form string, value string) M {
 // FlagBlank is [flag_blank]: "The --{{.flag}} flag got an empty value, and no flag takes one. Give it a value, such as none or off where it takes one, or leave the flag out."
 func FlagBlank(flag string) M {
 	return M{id: "flag_blank", vals: []val{{"flag", flag}}}
+}
+
+// FlagNeedsFlag is [flag_needs_flag]: "{{.flag}} goes only with {{.needs}}."
+func FlagNeedsFlag(flag string, needs string) M {
+	return M{id: "flag_needs_flag", vals: []val{{"flag", flag}, {"needs", needs}}}
 }
 
 // FlagNeedsValue is [flag_needs_value]: "{{.flag}} needs a value: {{.form}}."
@@ -2819,6 +2939,11 @@ func NoTerminalFetch(command string, remote string) M {
 	return M{id: "no_terminal_fetch", vals: []val{{"command", command}, {"remote", remote}}}
 }
 
+// NoTerminalFetchRepos is [no_terminal_fetch_repos]: "There's no way to ask here whether to fetch the clone's work, so devvm kept the VM as it is. Run devvm clone fetch first, or {{.command}} in a terminal without --no-input to choose."
+func NoTerminalFetchRepos(command string) M {
+	return M{id: "no_terminal_fetch_repos", vals: []val{{"command", command}}}
+}
+
 // NoToken is [no_token]: "You didn't give a secret, so devvm saved nothing."
 func NoToken() M {
 	return M{id: "no_token"}
@@ -3397,6 +3522,16 @@ func RenameFailed(to string, vm string) M {
 // Renaming is [renaming]: "renaming {{.vm}} to {{.to}}"
 func Renaming(to string, vm string) M {
 	return M{id: "renaming", vals: []val{{"to", to}, {"vm", vm}}}
+}
+
+// ReposNotWorkspace is [repos_not_workspace]: "--repos chooses the repos of a folder of repos, and {{.dir}} has none that --clone can copy besides its own. Run devvm --clone without --repos."
+func ReposNotWorkspace(dir string) M {
+	return M{id: "repos_not_workspace", vals: []val{{"dir", dir}}}
+}
+
+// ReposValue is [repos_value]: "--repos takes all, none, or a comma-separated list of repos' folders relative to this folder, such as frontend,backend, and not {{.value}}."
+func ReposValue(value string) M {
+	return M{id: "repos_value", vals: []val{{"value", value}}}
 }
 
 // ResolvingTools is [resolving_tools]: "resolving the shared tools' versions"
@@ -4069,9 +4204,19 @@ func UncommittedNotCopied(branch string, dir string, remote string) M {
 	return M{id: "uncommitted_not_copied", vals: []val{{"branch", branch}, {"dir", dir}, {"remote", remote}}}
 }
 
+// UncommittedNotCopiedRepos is [uncommitted_not_copied_repos]: "The uncommitted changes in {{.repos}} stay on this machine. To give them to the VM, commit them, then push them to the repo's remote for the VM, such as with git push devvm BRANCH."
+func UncommittedNotCopiedRepos(repos string) M {
+	return M{id: "uncommitted_not_copied_repos", vals: []val{{"repos", repos}}}
+}
+
 // UnfetchedCommits is [unfetched_commits]: "The VM has commits on {{.refs}} that this repo hasn't fetched."
 func UnfetchedCommits(refs string) M {
 	return M{id: "unfetched_commits", vals: []val{{"refs", refs}}}
+}
+
+// UnfetchedCommitsIn is [unfetched_commits_in]: "The VM's clone of {{.repo}} has commits on {{.refs}} that the repo on this machine hasn't fetched."
+func UnfetchedCommitsIn(refs string, repo string) M {
+	return M{id: "unfetched_commits_in", vals: []val{{"refs", refs}, {"repo", repo}}}
 }
 
 // UnfinishedImage is [unfinished_image]: "deleting the unfinished image {{.vm}}"
@@ -4459,6 +4604,91 @@ func WidenParentVMRefused(cmd string, dir string, vm string) M {
 	return M{id: "widen_parent_vm_refused", vals: []val{{"cmd", cmd}, {"dir", dir}, {"vm", vm}}}
 }
 
+// WorkspaceDetached is [workspace_detached]: "HEAD is detached in {{.path}}, so its clone in the VM checks out its default branch, {{.branch}}."
+func WorkspaceDetached(branch string, path string) M {
+	return M{id: "workspace_detached", vals: []val{{"branch", branch}, {"path", path}}}
+}
+
+// WorkspaceFilesFailed is [workspace_files_failed]: "Reading the files of {{.dir}} outside its repos, to copy them into the VM, failed. Run devvm again to retry."
+func WorkspaceFilesFailed(dir string) M {
+	return M{id: "workspace_files_failed", vals: []val{{"dir", dir}}}
+}
+
+// WorkspaceFilesSkipped is [workspace_files_skipped]: "{{.count}} of this folder's files stay on this machine, as they're links that lead out of the folder, special files, or past the size limits."
+func WorkspaceFilesSkipped(count int) M {
+	return M{id: "workspace_files_skipped", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
+// WorkspaceInsideRepo is [workspace_inside_repo]: "{{.dir}} is in the working tree of the repo {{.top}}, so a copy of its files would take that repo's. Run devvm --clone --repos LIST in {{.top}} to choose the repos in it, its own included or not."
+func WorkspaceInsideRepo(dir string, top string) M {
+	return M{id: "workspace_inside_repo", vals: []val{{"dir", dir}, {"top", top}}}
+}
+
+// WorkspacePickCannot is [workspace_pick_cannot]: "--clone can't copy these repos:"
+func WorkspacePickCannot() M {
+	return M{id: "workspace_pick_cannot"}
+}
+
+// WorkspacePickHelp is [workspace_pick_help]: "Choose the repos in {{.dir}} that the VM gets a clone of. Use up and down to move, space to toggle and enter to confirm."
+func WorkspacePickHelp(dir string) M {
+	return M{id: "workspace_pick_help", vals: []val{{"dir", dir}}}
+}
+
+// WorkspaceReady is [workspace_ready]: "The VM has its own clone of {{.count}} repos, each with its current and default branches, without untracked or ignored files.\nTo get their work, run devvm clone fetch, then review each branch it lists before you merge it."
+func WorkspaceReady(count int) M {
+	return M{id: "workspace_ready", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
+// WorkspaceReasonElsewhere is [workspace_reason_elsewhere]: "its .git reads another repo's objects or refs"
+func WorkspaceReasonElsewhere() M {
+	return M{id: "workspace_reason_elsewhere"}
+}
+
+// WorkspaceReasonMounted is [workspace_reason_mounted]: "{{.vm}} mounts it, and could swap it under devvm's git"
+func WorkspaceReasonMounted(vm string) M {
+	return M{id: "workspace_reason_mounted", vals: []val{{"vm", vm}}}
+}
+
+// WorkspaceReasonName is [workspace_reason_name]: "its folder's name has a character a terminal can't show, such as a line break"
+func WorkspaceReasonName() M {
+	return M{id: "workspace_reason_name"}
+}
+
+// WorkspaceReasonNoBranch is [workspace_reason_no_branch]: "HEAD is detached, and there's no default branch to check out"
+func WorkspaceReasonNoBranch() M {
+	return M{id: "workspace_reason_no_branch"}
+}
+
+// WorkspaceReasonNoCommits is [workspace_reason_no_commits]: "no commits yet"
+func WorkspaceReasonNoCommits() M {
+	return M{id: "workspace_reason_no_commits"}
+}
+
+// WorkspaceReasonNotRepo is [workspace_reason_not_repo]: "not the top folder of a git repo"
+func WorkspaceReasonNotRepo() M {
+	return M{id: "workspace_reason_not_repo"}
+}
+
+// WorkspaceRepoDropped is [workspace_repo_dropped]: "{{.path}} no longer passes --clone's checks, or its remote names are all taken, so the VM doesn't get it. Run devvm clone add {{.path}} to see why."
+func WorkspaceRepoDropped(path string) M {
+	return M{id: "workspace_repo_dropped", vals: []val{{"path", path}}}
+}
+
+// WorkspaceRepoUnknown is [workspace_repo_unknown]: "--repos names {{.path}}, which isn't a repo devvm found in {{.dir}}. Give each repo's folder relative to this folder, such as frontend,backend."
+func WorkspaceRepoUnknown(dir string, path string) M {
+	return M{id: "workspace_repo_unknown", vals: []val{{"dir", dir}, {"path", path}}}
+}
+
+// WorkspaceReposPast is [workspace_repos_past]: "The picker lists at most {{.max}} repos, and this folder has {{.count}} more, which the VM doesn't get. Run devvm clone add PATH for each one you need once the VM is made."
+func WorkspaceReposPast(count int, max string) M {
+	return M{id: "workspace_repos_past", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"max", max}}}
+}
+
+// WorkspaceSkipped is [workspace_skipped]: "--clone can't copy these repos, so the VM doesn't get them: {{.paths}}. In a terminal, the picker of devvm --clone says why beside each."
+func WorkspaceSkipped(paths string) M {
+	return M{id: "workspace_skipped", vals: []val{{"paths", paths}}}
+}
+
 // specs describes every message, by ID.
 var specs = map[string]spec{
 	"add_it_now":                     {},
@@ -4584,18 +4814,38 @@ var specs = map[string]spec{
 	"claude_setup_token_saved":       {fields: []string{"vm"}},
 	"claude_token_howto":             {},
 	"claude_token_invalid":           {},
+	"clone_add_already":              {fields: []string{"path", "vm"}},
+	"clone_add_failed":               {fields: []string{"reason"}},
+	"clone_add_missing":              {fields: []string{"dir"}},
+	"clone_add_mounted":              {fields: []string{"vm"}},
+	"clone_add_name":                 {},
+	"clone_add_outside":              {fields: []string{"dir", "folder"}},
+	"clone_added":                    {fields: []string{"path", "remote"}},
 	"clone_alternates":               {fields: []string{"path"}},
 	"clone_check_failed":             {fields: []string{"command", "vm"}},
 	"clone_check_not_started":        {fields: []string{"command", "vm"}},
+	"clone_check_repo_changed":       {fields: []string{"command", "path", "vm"}},
 	"clone_check_skipped":            {fields: []string{"command", "vm"}},
 	"clone_detached":                 {},
 	"clone_dirty":                    {},
+	"clone_fetch_failed":             {fields: []string{"path", "vm"}},
+	"clone_fetch_mounted":            {fields: []string{"vm"}},
+	"clone_fetch_run_failed":         {fields: []string{"reason"}},
+	"clone_fetched_none":             {},
+	"clone_fetched_review":           {fields: []string{"remote"}},
+	"clone_folder_mounted":           {fields: []string{"dir", "vm"}},
 	"clone_git_elsewhere":            {fields: []string{"path"}},
 	"clone_needs_git":                {},
 	"clone_needs_new_vm":             {fields: []string{"vm"}},
 	"clone_no_commits":               {},
 	"clone_not_top":                  {fields: []string{"dir"}},
 	"clone_ready":                    {fields: []string{"branch", "remote"}},
+	"clone_remote_elsewhere":         {fields: []string{"path", "remote"}},
+	"clone_repo_changed":             {fields: []string{"path"}},
+	"clone_repo_dirty":               {fields: []string{"repo"}},
+	"clone_repo_gone":                {fields: []string{"repo"}},
+	"clone_repo_mounted":             {fields: []string{"path", "vm"}},
+	"clone_repo_unchecked":           {fields: []string{"path", "vm"}},
 	"clone_seed_failed":              {fields: []string{"vm"}},
 	"clone_show_failed":              {fields: []string{"reason"}},
 	"clone_switch_off":               {fields: []string{"vm"}},
@@ -4617,6 +4867,7 @@ var specs = map[string]spec{
 	"converting":                     {fields: []string{"from"}},
 	"converting_in_vm":               {fields: []string{"from", "vm"}},
 	"copying_branches":               {},
+	"copying_repo":                   {fields: []string{"path"}},
 	"cpus_not_number":                {fields: []string{"flag", "value"}},
 	"create_running":                 {fields: []string{"vm"}},
 	"creating":                       {fields: []string{"vm"}},
@@ -4705,13 +4956,16 @@ var specs = map[string]spec{
 	"exporting_docker":               {fields: []string{"from"}},
 	"features_help":                  {},
 	"fetch_before_delete":            {fields: []string{"prefix"}},
+	"fetch_before_delete_repos":      {plural: true, fields: []string{"count"}},
 	"fetch_failed":                   {fields: []string{"command", "vm"}},
 	"fetch_until":                    {fields: []string{"file", "remote"}},
 	"fetching":                       {fields: []string{"prefix"}},
+	"fetching_repo":                  {fields: []string{"path"}},
 	"first_run_defaults":             {},
 	"flag_bad_switch":                {fields: []string{"flag", "value"}},
 	"flag_bad_value":                 {fields: []string{"flag", "form", "value"}},
 	"flag_blank":                     {fields: []string{"flag"}},
+	"flag_needs_flag":                {fields: []string{"flag", "needs"}},
 	"flag_needs_value":               {fields: []string{"flag", "form"}},
 	"flag_unknown":                   {fields: []string{"command", "flag"}},
 	"flags_exclusive":                {fields: []string{"flag", "other"}},
@@ -5024,6 +5278,7 @@ var specs = map[string]spec{
 	"no_subcommand":                  {fields: []string{"command", "commands", "given"}},
 	"no_terminal_delete":             {fields: []string{"command"}},
 	"no_terminal_fetch":              {fields: []string{"command", "remote"}},
+	"no_terminal_fetch_repos":        {fields: []string{"command"}},
 	"no_token":                       {},
 	"no_ubuntu_image":                {fields: []string{"release", "url", "version"}},
 	"no_ubuntu_release":              {fields: []string{"url", "version"}},
@@ -5140,6 +5395,8 @@ var specs = map[string]spec{
 	"removed_remote":                 {fields: []string{"remote"}},
 	"rename_failed":                  {fields: []string{"to", "vm"}},
 	"renaming":                       {fields: []string{"to", "vm"}},
+	"repos_not_workspace":            {fields: []string{"dir"}},
+	"repos_value":                    {fields: []string{"value"}},
 	"resolving_tools":                {},
 	"restart_now":                    {plural: true, fields: []string{"count", "vm"}},
 	"restoring_home":                 {fields: []string{"vm"}},
@@ -5274,7 +5531,9 @@ var specs = map[string]spec{
 	"ubuntu_newest_older":            {fields: []string{"newest", "pinned"}},
 	"ubuntu_unreachable":             {fields: []string{"url", "version"}},
 	"uncommitted_not_copied":         {fields: []string{"branch", "dir", "remote"}},
+	"uncommitted_not_copied_repos":   {fields: []string{"repos"}},
 	"unfetched_commits":              {fields: []string{"refs"}},
+	"unfetched_commits_in":           {fields: []string{"refs", "repo"}},
 	"unfinished_image":               {fields: []string{"vm"}},
 	"unknown_feature":                {fields: []string{"feature"}},
 	"unknown_layer":                  {fields: []string{"layer", "layers"}},
@@ -5352,4 +5611,21 @@ var specs = map[string]spec{
 	"vms_unreadable":                 {fields: []string{"path"}},
 	"widen_parent_vm":                {fields: []string{"cmd", "dir", "vm"}},
 	"widen_parent_vm_refused":        {fields: []string{"cmd", "dir", "vm"}},
+	"workspace_detached":             {fields: []string{"branch", "path"}},
+	"workspace_files_failed":         {fields: []string{"dir"}},
+	"workspace_files_skipped":        {plural: true, fields: []string{"count"}},
+	"workspace_inside_repo":          {fields: []string{"dir", "top"}},
+	"workspace_pick_cannot":          {},
+	"workspace_pick_help":            {fields: []string{"dir"}},
+	"workspace_ready":                {plural: true, fields: []string{"count"}},
+	"workspace_reason_elsewhere":     {},
+	"workspace_reason_mounted":       {fields: []string{"vm"}},
+	"workspace_reason_name":          {},
+	"workspace_reason_no_branch":     {},
+	"workspace_reason_no_commits":    {},
+	"workspace_reason_not_repo":      {},
+	"workspace_repo_dropped":         {fields: []string{"path"}},
+	"workspace_repo_unknown":         {fields: []string{"dir", "path"}},
+	"workspace_repos_past":           {plural: true, fields: []string{"count", "max"}},
+	"workspace_skipped":              {fields: []string{"paths"}},
 }

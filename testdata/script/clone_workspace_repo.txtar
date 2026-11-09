@@ -1,0 +1,169 @@
+# --clone in a repo that holds a linked worktree of its own and a repo
+# below it: a clone of the folder's own repo, as for any repo, nothing
+# asked; with --repos, a workspace clone of it and the repo below, never
+# the worktree, which is its repo's, and the folder's own clone leaves the
+# other repo's clone and what the host's info/exclude names out of its
+# git status, so rm finds nothing to lose. A repo another VM mounts is
+# left out, with why. (The stubs keep the VM's files in $STUB_DIR/vmfs.)
+env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+mkdir $WORK/app
+cd $WORK/app
+exec git init -q -b main
+exec git commit -q --allow-empty -m one
+exec git worktree add -q -b wt .worktrees/wt
+exec sh -c 'echo .worktrees/ >> .git/info/exclude'
+exec git init -q -b main lib
+exec git -C lib commit -q --allow-empty -m l
+
+# Without --repos: the folder's own repo's clone, without a terminal too.
+exec devvm --clone --network open --no-input
+stdout '^==> clone_ready branch=main remote=devvm$'
+vm_name APP app
+vm_state $APP_dir/vm.json
+stdout '^clone\.on=true$'
+! stdout 'clone\.workspace'
+exec devvm rm --force --no-export
+stdout '^==> removed_remote remote=devvm$'
+
+# --repos all: the folder's own repo and lib, not the worktree; the
+# worktree's repo has one remote, the folder's own; lib's clone and
+# .worktrees/ aren't changes in the folder's own clone.
+rm $STUB_DIR/vmfs
+exec devvm --clone --network open --repos all
+stdout '^==> workspace_ready count=2$'
+vm_state $APP_dir/vm.json
+stdout '^clone\.repos\.0\.path=\.$'
+stdout '^clone\.repos\.1\.path=lib$'
+! stdout 'clone\.repos\.2'
+exec sh -c 'v="$STUB_DIR/vmfs$(pwd -P)"; mkdir -p "$v/.worktrees/x" && echo f > "$v/.worktrees/x/f" && git -C "$v" status --porcelain'
+! stdout .
+exec devvm rm --force --no-export
+stdout '^==> deleted vm=devvm-app-[0-9a-f]{14}$'
+exec git remote
+! stdout devvm
+
+# devvm clone add . into a workspace clone of lib alone: the folder's own
+# clone leaves lib's clone, and what the host's exclude names, out of its
+# git status.
+rm $STUB_DIR/vmfs
+exec devvm --clone --network open --repos lib
+stdout '^==> workspace_ready count=1$'
+exec devvm clone add .
+stdout '^==> clone_added path=\. remote=devvm$'
+exec sh -c 'v="$STUB_DIR/vmfs$(pwd -P)"; mkdir -p "$v/.worktrees/x" && echo f > "$v/.worktrees/x/f" && git -C "$v" status --porcelain'
+! stdout .
+
+# A copy whose push landed but whose remote couldn't be added, then work
+# in the VM: devvm clone add again adds the remote, and leaves the VM's
+# work as it is.
+exec git init -q -b main tools
+exec git -C tools commit -q --allow-empty -m t
+chmod 0555 tools/.git
+! exec devvm clone add tools
+stderr '^devvm: remote_add_failed remote=devvm$'
+chmod 0755 tools/.git
+exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)/tools" commit -q --allow-empty -m from-vm'
+exec devvm clone add tools
+stdout '^==> clone_added path=tools remote=devvm$'
+exec sh -c 'git -C "$STUB_DIR/vmfs$(pwd -P)/tools" log --format=%s -1'
+stdout '^from-vm$'
+exec devvm rm --force --no-export --no-clone-check
+rm tools
+
+# A repo in a folder another VM mounts, and a linked worktree whose repo
+# another VM mounts: listed with why, left out, and devvm clone add
+# refuses them, naming that VM.
+mkdir $WORK/ws/shared
+cd $WORK/ws/shared
+exec git init -q -b main inner
+exec git -C inner commit -q --allow-empty -m i
+exec devvm --network open --no-git-protect
+mkdir $WORK/outside
+cd $WORK/outside
+exec git init -q -b main r
+exec git -C r commit -q --allow-empty -m r
+exec git -C r worktree add -q -b wt $WORK/ws/wt
+exec devvm --network open --no-git-protect
+cd $WORK/ws
+exec git init -q -b main a
+exec git -C a commit -q --allow-empty -m a
+rm $STUB_DIR/vmfs
+exec devvm --clone --network open --repos all
+stderr '^devvm: workspace_skipped paths="shared/inner" "wt"$'
+stdout '^==> workspace_ready count=1$'
+! exec devvm clone add shared/inner
+stderr '^devvm: clone_repo_mounted path=shared/inner vm=devvm-shared-[0-9a-f]{14}$'
+! exec devvm clone add wt
+stderr '^devvm: clone_repo_mounted path=wt vm=devvm-outside-[0-9a-f]{14}$'
+
+# A repo another VM mounts once the clone has it: rm reads its clone in
+# the VM, never this machine's repo, names it, and asks before its work
+# goes; without a terminal it keeps the VM.
+cd a
+exec devvm --here --network open --no-git-protect
+cd ..
+# devvm clone fetch leaves it alone, and with nothing else to fetch from,
+# says nothing more.
+exec devvm clone fetch
+stderr '^devvm: clone_repo_mounted path=a vm=devvm-a-[0-9a-f]{14}$'
+! stdout clone_fetched_none
+! exec devvm rm --force
+stdout '^clone_repo_unchecked path=a vm=devvm-a-[0-9a-f]{14}$'
+stderr '^devvm: no_terminal_delete command=devvm rm$'
+cd a
+exec devvm rm --here --force --no-export
+cd ..
+exec devvm rm --force --no-export
+cd shared
+exec devvm rm --force --no-export
+cd $WORK/outside
+exec devvm rm --force --no-export
+
+# Repos --clone can't copy, each with why: a detached HEAD with no default
+# branch, a .git that points into another repo, and one that's no repo;
+# past the walk's 100, how many more.
+mkdir $WORK/many
+cd $WORK/many
+exec git init -q -b main a
+exec git -C a commit -q --allow-empty -m a
+exec git init -q -b dev nobranch
+exec git -C nobranch commit -q --allow-empty -m n
+exec git -C nobranch checkout -q --detach
+exec git -C nobranch branch -q -D dev
+mkdir elsewhere broken
+exec sh -c 'echo "gitdir: $WORK/many/a/.git" > elsewhere/.git && echo "gitdir: /nowhere" > broken/.git'
+exec sh -c 'i=0; while [ $i -lt 100 ]; do mkdir -p "z/r$i/.git"; i=$((i+1)); done'
+env DEVVM_PICK_ON_PIPE=1
+ttyin -stdin $WORK/enter.txt
+exec devvm --clone --network open --tools none --agents none --layers none --ports none --cpus 2 --memory 4 --disk 100 --ssh-config
+stdout '\[ \] broken +workspace_reason_not_repo'
+stdout '\[ \] elsewhere +workspace_reason_elsewhere'
+stdout '\[ \] nobranch +workspace_reason_no_branch'
+stderr '^devvm: workspace_repos_past count=4 max=100$'
+stdout '^==> workspace_ready count=1$'
+env DEVVM_PICK_ON_PIPE=
+exec devvm rm --force --no-export
+
+# A copy that failed, then a repo that no longer passes before the next
+# launch copies it: left out and named. A clone moved in the VM: rm asks.
+rm -r z elsewhere broken nobranch
+exec git init -q -b main b
+exec git -C b commit -q --allow-empty -m b
+rm $STUB_DIR/vmfs
+exec sh -c 'touch "$STUB_DIR/ssh-fails"'
+! exec devvm --clone --network open --repos all
+stderr '^devvm: clone_seed_failed vm=devvm-many-[0-9a-f]{14}$'
+rm $STUB_DIR/ssh-fails
+mv b/.git b-git
+exec devvm
+stderr '^devvm: workspace_repo_dropped path=b$'
+stdout '^==> workspace_ready count=1$'
+mv b-git b/.git
+exec sh -c 'v="$STUB_DIR/vmfs$(pwd -P)"; mv "$v/a" "$v/a-moved"'
+! exec devvm rm --force
+stdout '^clone_repo_gone repo=a$'
+stderr '^devvm: no_terminal_delete command=devvm rm$'
+exec devvm rm --force --no-clone-check --no-export
+
+-- enter.txt --
+.

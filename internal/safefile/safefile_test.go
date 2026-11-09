@@ -215,6 +215,80 @@ func TestSwapDuringOpen(t *testing.T) {
 	}
 }
 
+// OpenDir opens a folder, never a link to one, in the root or out of it,
+// nor a file; and a folder swapped for a link to another while it's
+// opened is never the one opened, so a walk from it reads only what's
+// below the folder listed.
+func TestOpenDir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	must(t, os.MkdirAll(filepath.Join(dir, "d"), 0o700))
+	must(t, os.MkdirAll(filepath.Join(dir, "other"), 0o700))
+	must(t, os.WriteFile(filepath.Join(dir, "other", "secret"), []byte("s"), 0o600))
+	must(t, os.WriteFile(filepath.Join(dir, "d", "mine"), []byte("m"), 0o600))
+	must(t, os.WriteFile(filepath.Join(dir, "file"), nil, 0o600))
+	must(t, os.Symlink("other", filepath.Join(dir, "in")))
+	must(t, os.Symlink(t.TempDir(), filepath.Join(dir, "out")))
+	root, err := OpenRoot(dir)
+	must(t, err)
+	defer func() { _ = root.Close() }()
+	d, err := root.OpenDir("d")
+	must(t, err)
+	if entries, err := d.ReadDir(); err != nil || len(entries) != 1 || entries[0].Name() != "mine" {
+		t.Errorf("ReadDir = %v, %v", entries, err)
+	}
+	if fi, err := d.Stat(); err != nil || !fi.IsDir() {
+		t.Errorf("Stat = %v, %v", fi, err)
+	}
+	_ = d.Close()
+	if fi, err := root.Lstat("in"); err != nil || fi.Mode()&fs.ModeSymlink == 0 {
+		t.Errorf("Lstat(in) = %v, %v", fi, err)
+	}
+	if target, err := root.Readlink("in"); err != nil || target != "other" {
+		t.Errorf("Readlink(in) = %q, %v", target, err)
+	}
+	if _, err := OpenRoot(filepath.Join(dir, "gone")); err == nil {
+		t.Error("OpenRoot(gone) opened")
+	}
+	for _, name := range []string{"in", "out", "file", "gone"} {
+		if s, err := root.OpenDir(name); err == nil {
+			_ = s.Close()
+			t.Errorf("OpenDir(%s) opened", name)
+		}
+	}
+	stop, swapped := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(swapped)
+		d, aside, link := filepath.Join(dir, "d"), filepath.Join(dir, "d-aside"), filepath.Join(dir, "d-link")
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if os.Rename(d, aside) != nil || os.Symlink("other", link) != nil || os.Rename(link, d) != nil ||
+				os.Remove(d) != nil || os.Rename(aside, d) != nil {
+				return
+			}
+		}
+	}()
+	defer func() { close(stop); <-swapped }()
+	_ = within(t, "OpenDir during a swap", func() error {
+		for end := time.Now().Add(300 * time.Millisecond); time.Now().Before(end); {
+			s, err := root.OpenDir("d")
+			if err != nil {
+				continue
+			}
+			entries, _ := s.ReadDir()
+			_ = s.Close()
+			if len(entries) == 1 && entries[0].Name() == "secret" {
+				return errors.New("opened the folder a link led to")
+			}
+		}
+		return nil
+	})
+}
+
 func closeRead(f *File, err error) ([]byte, error) {
 	if err != nil {
 		return nil, err

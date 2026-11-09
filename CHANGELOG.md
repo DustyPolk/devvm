@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Folders of repos with `--clone`:** `devvm --clone` in a folder of repos gives one VM a clone of each repo you choose, in a picker or with `--repos`, at the same path as on your machine, so paths between the repos work in the VM, and a copy of the folder's own files. `devvm clone fetch` fetches every repo's work and lists the branches by name, and `devvm clone add PATH` copies one more repo ([folders of repos](https://next.devvm.dev/docs/using/clone/#folders-of-repos)).
+- **A `--clone` VM in a folder another VM mounts:** another VM's code could swap the repo under devvm's git, so `devvm --clone` and `devvm clone on` refuse such a folder, naming that VM. For a `--clone` VM made before, `devvm rm` runs no git in the repo on this machine: it asks before the clone's work goes, and without a terminal it refuses and keeps the VM, which `--no-clone-check` deletes.
+
 ## 0.1.1-rc.1
 
 A release candidate for 0.1.1, for trying the changes below before the release. Install it with `devvm upgrade --to 0.1.1-rc.1`, or with the install script's `--version 0.1.1-rc.1`. Homebrew stays on 0.1.0.

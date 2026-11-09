@@ -47,6 +47,12 @@ func addNoCloneCheckFlag(f *pflag.FlagSet, p *bool) {
 	f.BoolVar(p, "no-clone-check", false, "don't check a --clone VM's clone for unfetched commits and uncommitted changes first, which are lost")
 }
 
+// addReposFlag adds --repos, which answers the question of a --clone VM's
+// repos in a folder of repos (devvm --clone, devvm clone on).
+func addReposFlag(f *pflag.FlagSet, p *string) {
+	f.StringVar(p, "repos", "", "the repos a --clone VM of a folder of repos gets: all, none or a `LIST` of their paths, such as frontend,backend (default: a picker in a terminal)")
+}
+
 // addRemakeFlags adds the flags of a command that makes the folder's VM
 // again (devvm layer add, devvm layer rm, devvm update, devvm clone):
 // --force, --no-export and --clean-home.

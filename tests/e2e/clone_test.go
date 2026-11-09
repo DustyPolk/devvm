@@ -73,6 +73,7 @@ func cloneSection(s *S) {
 	cloneRm(s, g, vm, c)
 	cloneWorktree(s, g, c)
 	cloneSwitch(s, g)
+	cloneWorkspace(s, g)
 }
 
 // cloneGit runs host git and devvm in the clone section's home.

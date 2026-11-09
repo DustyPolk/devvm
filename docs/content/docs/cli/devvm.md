@@ -27,7 +27,7 @@ devvm [flags]
 
 ```text
       --agents LIST       the LIST of coding agents a new VM gets, such as claude,codex, or none (default: devvm setup's)
-      --clone             create the VM with its own clone of this repo instead of mounting the folder
+      --clone             create the VM with its own clone of this repo, or of each repo in this folder, instead of mounting the folder
       --cpus N            the N CPUs the VM gets (default: devvm size -g, else the image's)
       --disk GiB          the VM's disk in GiB, at least the image's (default: devvm size -g, else the image's)
       --from IMAGE        the container IMAGE base starts from, such as node:24, instead of Ubuntu's cloud image (default: $DEVVM_FROM)
@@ -41,6 +41,7 @@ devvm [flags]
       --no-input          never ask, and fail where devvm would ask, naming the flag that answers it
       --parent            use the VM of the nearest folder this one is inside, even across a git repo of its own
       --ports PORTS       the PORTS the VM forwards: all, none or a list like 5173,8000-8010 (default: devvm ports -g, else all)
+      --repos LIST        the repos a --clone VM of a folder of repos gets: all, none or a LIST of their paths, such as frontend,backend (default: a picker in a terminal)
       --ssh-agent         create the VM with your SSH agent forwarded, so anything in it can use your keys while you're connected
       --ssh-config        add devvm's Include line to ~/.ssh/config without asking
       --tools LIST        the LIST of toolchains a new VM gets, such as node,python, or none (default: those the folder's files call for)

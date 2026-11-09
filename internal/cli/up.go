@@ -26,6 +26,7 @@ type upFlags struct {
 	unsafeFolder   bool
 	noGitProtect   bool
 	clone          bool
+	repos          string // --repos: a workspace clone's repos
 	sshAgent       bool
 	noDevcontainer bool
 	sshConfig      bool
@@ -46,13 +47,15 @@ func addUpFlags(root *cobra.Command, a *app, uf *upFlags) {
 	f.StringVar(&uf.size.Memory, "memory", "", "the VM's memory in `GiB`, such as 16 or 16G (default: devvm size -g, else the image's)")
 	f.StringVar(&uf.size.Disk, "disk", "", "the VM's disk in `GiB`, at least the image's (default: devvm size -g, else the image's)")
 	f.StringVar(&uf.ports, "ports", "", "the `PORTS` the VM forwards: all, none or a list like 5173,8000-8010 (default: devvm ports -g, else all)")
-	f.BoolVar(&uf.clone, "clone", false, "create the VM with its own clone of this repo instead of mounting the folder")
+	f.BoolVar(&uf.clone, "clone", false, "create the VM with its own clone of this repo, or of each repo in this folder, instead of mounting the folder")
+	addReposFlag(f, &uf.repos)
 	f.BoolVar(&uf.unsafeFolder, "unsafe-folder", false, "mount a folder devvm refuses, such as your home folder")
 	f.BoolVar(&uf.noGitProtect, "no-git-protect", false, "create the VM without .git protection")
 	f.BoolVar(&uf.sshAgent, "ssh-agent", false, "create the VM with your SSH agent forwarded, so anything in it can use your keys while you're connected")
 	f.BoolVar(&uf.noDevcontainer, "no-devcontainer", false, "create the VM without reading the folder's devcontainer.json")
 	addFolderFlags(root, a)
 	exclusive(root, "clone", "parent")
+	needs(root, "repos", "--clone")
 	addSSHConfigFlag(f, &uf.sshConfig)
 }
 
@@ -66,7 +69,7 @@ func (uf *upFlags) options() vm.Options {
 		Toolchains: partFlag(uf.tools), Agents: partFlag(uf.agents), Layers: partFlag(uf.layers),
 		Network: tier, Learn: learn, Size: uf.size, Ports: uf.ports,
 		From: fromRef(uf.from), FromSet: uf.from != "",
-		UnsafeFolder: uf.unsafeFolder, NoGitProtect: uf.noGitProtect, Clone: uf.clone, SSHAgent: uf.sshAgent,
+		UnsafeFolder: uf.unsafeFolder, NoGitProtect: uf.noGitProtect, Clone: uf.clone, Repos: uf.repos, SSHAgent: uf.sshAgent,
 		NoDevcontainer: uf.noDevcontainer,
 	}
 }

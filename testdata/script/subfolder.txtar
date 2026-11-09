@@ -90,17 +90,17 @@ cd $WORK/app
 ! exec devvm stop --parent
 stderr '^devvm: no_parent_vm dir=/\S*/app$'
 
-# --clone: a new VM for the subfolder's own repo, as --here, nothing
-# asked.
+# --clone: the subfolder's own repo's VM, as --here, never the parent's.
 mkdir $WORK/app/repo
 cd $WORK/app/repo
 env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 exec git init -q -b main
 exec git commit -q --allow-empty -m one
-exec devvm --clone --network open
-stdout '^==> creating_from image=base vm=devvm-repo-[0-9a-f]{14}$'
-! stdout using_parent_vm
-exec devvm rm --force --no-export
+# The parent's VM mounts the repo, so its seed's host git could be swapped
+# from there: refused before anything is made, naming that VM.
+! exec devvm --clone --network open
+stderr '^devvm: clone_folder_mounted dir=/\S*/app/repo vm=devvm-app-[0-9a-f]{14}$'
+! stdout 'using_parent_vm|creating_from'
 
 # rm: never a parent's without asking. Without a terminal it's refused,
 # --force or not, and nothing is deleted; in the parent's folder it goes.

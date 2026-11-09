@@ -39,7 +39,11 @@
 //     network tier, network log, allowlist and secrets.
 //   - Links (links.go): links between VMs and published ports; Groups
 //     (groups.go): the links a group makes.
-//   - --clone (clone.go): the clone, rm's check and devvm clone's switch.
+//   - --clone (clone.go): the clone, rm's check (clonecheck.go: every
+//     repo read in one command) and devvm clone's switch; a workspace
+//     clone of a folder of repos (workspace.go: finding and choosing
+//     them, their seeds, devvm clone fetch and devvm clone add;
+//     workspacefiles.go: the folder's own files, copied once).
 //   - devcontainer.go: a devcontainer.json's mapping and commands; sync.go:
 //     the setup devvm sends to a VM.
 package vm

@@ -7,7 +7,7 @@ Show or change whether this folder's VM has its own clone of the repo
 
 ## Synopsis
 
-Show whether this folder's VM has its own clone of the repo, on, or mounts this folder, off. devvm clone on and devvm clone off make the VM again from its image, after asking in a terminal without --no-input, then open a shell in it, and devvm keeps its home folder and its settings, while everything else on its disk is lost. On copies the repo's branches into the new clone, and off first offers to fetch the clone's work into this repo, unless you give --no-clone-check.
+Show whether this folder's VM has its own clone of the repo, or of each repo in a folder of repos, on, or mounts this folder, off. devvm clone on and devvm clone off make the VM again from its image, after asking in a terminal without --no-input, then open a shell in it, and devvm keeps its home folder and its settings, while everything else on its disk is lost. On copies the repos' branches into the new clone, and off first offers to fetch the clone's work into this machine's repos, unless you give --no-clone-check.
 
 ```text
 devvm clone [on|off] [flags]
@@ -20,6 +20,7 @@ devvm clone [on|off] [flags]
   devvm clone on          # make the VM again with its own clone of the repo, after asking
   devvm clone off         # fetch the clone's work, then make the VM again with this folder mounted
   devvm clone on --force  # make it again without asking, as a script must
+  devvm clone fetch       # fetch the VM's branches into each repo on this machine
 ```
 
 ## Options
@@ -33,6 +34,7 @@ devvm clone [on|off] [flags]
       --no-clone-check   don't check a --clone VM's clone for unfetched commits and uncommitted changes first, which are lost
       --no-export        don't export the agents' history first
       --parent           use the VM of the nearest folder this one is inside, even across a git repo of its own
+      --repos LIST       the repos a --clone VM of a folder of repos gets: all, none or a LIST of their paths, such as frontend,backend (default: a picker in a terminal)
 ```
 
 ## Options inherited from parent commands
@@ -49,3 +51,5 @@ devvm clone [on|off] [flags]
 ## See also
 
 - [devvm](devvm.md): Open a shell in this folder's VM, creating it first
+- [devvm clone add](devvm_clone_add.md): Copy one more repo into this folder's --clone VM
+- [devvm clone fetch](devvm_clone_fetch.md): Fetch the work of this folder's --clone VM into each of its repos

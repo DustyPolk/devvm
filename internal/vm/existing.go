@@ -146,6 +146,7 @@ func ignoredFlags(o Options, from string) []flagGroup {
 	add("devvm size", flagIf(o.Size.CPUs != "", "--cpus"), flagIf(o.Size.Memory != "", "--memory"), flagIf(o.Size.Disk != "", "--disk"))
 	add("devvm ports LIST", flagIf(o.Ports != "", "--ports"))
 	add("devvm ssh-agent on", flagIf(o.SSHAgent, "--ssh-agent"))
+	add("devvm clone add PATH", flagIf(o.Repos != "", "--repos"))
 	return gs
 }
 

@@ -2159,6 +2159,163 @@ other = "kept {{.vm}}"
 [removed_remote]
 other = "removed git remote {{.remote}}"
 
+[flag_needs_flag]
+description = "flag is a flag given, such as --repos; needs is the flag or command it goes with, such as --clone or devvm clone on"
+other = "{{.flag}} goes only with {{.needs}}."
+
+[repos_value]
+other = "--repos takes all, none, or a comma-separated list of repos' folders relative to this folder, such as frontend,backend, and not {{.value}}."
+
+[repos_not_workspace]
+other = "--repos chooses the repos of a folder of repos, and {{.dir}} has none that --clone can copy besides its own. Run devvm --clone without --repos."
+
+[workspace_repo_unknown]
+other = "--repos names {{.path}}, which isn't a repo devvm found in {{.dir}}. Give each repo's folder relative to this folder, such as frontend,backend."
+
+[workspace_pick_help]
+other = "Choose the repos in {{.dir}} that the VM gets a clone of. Use up and down to move, space to toggle and enter to confirm."
+
+[workspace_pick_cannot]
+other = "--clone can't copy these repos:"
+
+[workspace_reason_not_repo]
+other = "not the top folder of a git repo"
+
+[workspace_reason_elsewhere]
+other = "its .git reads another repo's objects or refs"
+
+[workspace_reason_no_commits]
+other = "no commits yet"
+
+[workspace_reason_name]
+other = "its folder's name has a character a terminal can't show, such as a line break"
+
+[workspace_inside_repo]
+description = "dir is the folder of repos; top is the repo whose working tree it's in"
+other = "{{.dir}} is in the working tree of the repo {{.top}}, so a copy of its files would take that repo's. Run devvm --clone --repos LIST in {{.top}} to choose the repos in it, its own included or not."
+
+[clone_add_name]
+other = "devvm clone add takes a repo whose folder's name has only characters a terminal can show, and no line break. Rename the folder, then run it again."
+
+[clone_folder_mounted]
+description = "vm is another VM that mounts dir"
+other = "{{.vm}} mounts {{.dir}}, so code in it could swap the repo under the git commands --clone runs here. Delete that VM, or run devvm --clone in a folder no other VM mounts."
+
+[clone_repo_unchecked]
+description = "path is the repo's folder, relative to the project folder; vm is another VM that mounts it"
+other = "{{.vm}} mounts {{.path}}, so devvm leaves this machine's repo alone and can't fetch the VM's work in it, which will be lost."
+
+[workspace_reason_mounted]
+other = "{{.vm}} mounts it, and could swap it under devvm's git"
+
+[clone_repo_mounted]
+description = "path is the repo's folder, relative to the project folder; vm is another VM that mounts it"
+other = "{{.vm}} mounts {{.path}}, so code in it could swap that repo under devvm's git, and devvm leaves it alone. Delete that VM, or move the repo out of its folder, then run the command again."
+
+[workspace_reason_no_branch]
+other = "HEAD is detached, and there's no default branch to check out"
+
+[workspace_repos_past]
+one = "The picker lists at most {{.max}} repos, and this folder has {{.count}} more, which the VM doesn't get. Run devvm clone add PATH for it once the VM is made."
+other = "The picker lists at most {{.max}} repos, and this folder has {{.count}} more, which the VM doesn't get. Run devvm clone add PATH for each one you need once the VM is made."
+
+[workspace_skipped]
+description = "paths is a space-separated list of quoted folders, relative to the project folder"
+other = "--clone can't copy these repos, so the VM doesn't get them: {{.paths}}. In a terminal, the picker of devvm --clone says why beside each."
+
+[workspace_repo_dropped]
+description = "path is the repo's folder, relative to the project folder"
+other = "{{.path}} no longer passes --clone's checks, or its remote names are all taken, so the VM doesn't get it. Run devvm clone add {{.path}} to see why."
+
+[workspace_detached]
+other = "HEAD is detached in {{.path}}, so its clone in the VM checks out its default branch, {{.branch}}."
+
+[copying_repo]
+other = "copying {{.path}}'s branches into the VM"
+
+[uncommitted_not_copied_repos]
+description = "repos is a space-separated list of quoted folders, relative to the project folder"
+other = "The uncommitted changes in {{.repos}} stay on this machine. To give them to the VM, commit them, then push them to the repo's remote for the VM, such as with git push devvm BRANCH."
+
+[workspace_ready]
+one = "The VM has its own clone of {{.count}} repo, with its current and default branches, without untracked or ignored files.\nTo get its work, run devvm clone fetch, then review each branch it lists before you merge it."
+other = "The VM has its own clone of {{.count}} repos, each with its current and default branches, without untracked or ignored files.\nTo get their work, run devvm clone fetch, then review each branch it lists before you merge it."
+
+[workspace_files_failed]
+other = "Reading the files of {{.dir}} outside its repos, to copy them into the VM, failed. Run devvm again to retry."
+
+[workspace_files_skipped]
+one = "{{.count}} of this folder's files stays on this machine, as it's a link that leads out of the folder, a special file, or past the size limits."
+other = "{{.count}} of this folder's files stay on this machine, as they're links that lead out of the folder, special files, or past the size limits."
+
+[unfetched_commits_in]
+description = "repo is the repo's folder, relative to the project folder; refs is a space-separated list of quoted branch names"
+other = "The VM's clone of {{.repo}} has commits on {{.refs}} that the repo on this machine hasn't fetched."
+
+[clone_repo_dirty]
+description = "repo is the repo's folder, relative to the project folder"
+other = "The VM's clone of {{.repo}} has uncommitted changes, which will be lost:"
+
+[fetch_before_delete_repos]
+one = "Fetch them into local branches saved/REMOTE/* of that repo before the clone goes?"
+other = "Fetch them into local branches saved/REMOTE/* of each of those {{.count}} repos before the clone goes?"
+
+[no_terminal_fetch_repos]
+description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
+other = "There's no way to ask here whether to fetch the clone's work, so devvm kept the VM as it is. Run devvm clone fetch first, or {{.command}} in a terminal without --no-input to choose."
+
+[clone_repo_gone]
+description = "repo is the repo's folder, relative to the project folder"
+other = "The VM's clone of {{.repo}} isn't at its path, so devvm can't check it, and whatever the VM moved it to will be lost."
+
+[clone_repo_changed]
+other = "{{.path}} isn't the repo on this machine that the VM has a clone of any more, so devvm left it alone. Run devvm clone add {{.path}} to see why."
+
+[clone_check_repo_changed]
+description = "command is the command that would lose the clone, as typed: devvm rm, devvm clone off"
+other = "{{.path}} isn't the repo on this machine that {{.vm}} has a clone of any more, so devvm kept the VM as it is. Put it back, or run {{.command}} --no-clone-check to go ahead without the check."
+
+[clone_fetch_mounted]
+other = "{{.vm}} mounts this folder, so it has no clone to fetch from, and its work is in the folder already."
+
+[clone_remote_elsewhere]
+other = "The remote {{.remote}} of {{.path}} doesn't point at the VM now, so devvm clone fetch didn't fetch into it. Run git remote remove {{.remote}} in that repo, and devvm clone fetch adds it again."
+
+[fetching_repo]
+other = "fetching {{.path}}'s branches from the VM"
+
+[clone_fetch_failed]
+other = "Fetching the branches of {{.path}} in {{.vm}} failed. Run devvm clone fetch again to retry."
+
+[clone_fetch_run_failed]
+description = "reason is an error from the system, in English"
+other = "Fetching the work of this folder's VM failed: {{.reason}}."
+
+[clone_fetched_none]
+other = "The VM has no new or moved branches."
+
+[clone_fetched_review]
+other = "Review each branch in its repo before you merge it, such as with git log -p main..{{.remote}}/main."
+
+[clone_add_mounted]
+other = "{{.vm}} mounts this folder, so it has no clone to add a repo to, and the repos in the folder are in the VM already."
+
+[clone_add_missing]
+other = "There's no folder {{.dir}} to copy into the VM."
+
+[clone_add_outside]
+other = "devvm clone add copies a repo in {{.folder}}, the VM's folder, and {{.dir}} is outside it."
+
+[clone_add_already]
+other = "{{.vm}} has its own clone of {{.path}} already."
+
+[clone_added]
+other = "The VM has its own clone of {{.path}} now, and the repo has the remote {{.remote}} for it."
+
+[clone_add_failed]
+description = "reason is an error from the system, in English"
+other = "Copying the repo into this folder's VM failed: {{.reason}}."
+
 [setid_files]
 description = "files is a space-separated list of paths"
 other = "The project folder has set-user-id or set-group-id files, which run as their owner for anyone who runs them: {{.files}}. To clear the bits, run chmod u-s,g-s FILE on each one."

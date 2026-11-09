@@ -104,7 +104,7 @@ type FolderRule int
 const (
 	// FolderAuto is the default: the folder's own VM when it has one,
 	// else the nearest parent folder's, unless a repo of its own is in
-	// between.
+	// between that isn't one of the parent's workspace clone's repos.
 	FolderAuto FolderRule = iota
 	// FolderHere is --here: the folder's own, never a parent's.
 	FolderHere
@@ -368,7 +368,8 @@ func (e finder) newName(dir string) (project.Folder, *state.VM, error) {
 // parentVM finds the VM of the nearest parent folder with state of its own
 // (project.Parents, stopping before home and the root) for
 // resolveFolder, else nil, with the nearest folder below it with a .git of
-// its own (repo), the folder devvm runs in included. Only folders without
+// its own (repo), the folder devvm runs in included, but none when that's
+// one of a workspace clone's repos (coversRepo). Only folders without
 // state are passed over: the search stops at the first with state, which
 // gives nil unless its backend has its VM and it was made for that folder.
 // A VM in an outer folder can replace a nested folder through its mount,
@@ -402,6 +403,11 @@ func (e finder) parentVM(ctx context.Context) (*target, error) {
 		return nil, err
 	}
 	p.sub, p.repo = here, repo
+	// A workspace clone has the repo, at the same path, and mounts
+	// nothing: its folders are the VM's as its own folder's are.
+	if repo != "" && coversRepo(fst, found.Dir, repo) {
+		p.repo = ""
+	}
 	return p, nil
 }
 
@@ -435,6 +441,31 @@ func (e finder) mountedBy(dir string) string {
 	vm := ""
 	_ = e.parents(dir, func(pf project.Folder, pst *state.VM) (bool, error) {
 		if pst.Exists() && !isClone(pst) && sameFolder(pf, pst) {
+			vm = pf.Name
+			return false, nil
+		}
+		return true, nil
+	})
+	return vm
+}
+
+// mountsRepo is the VM, other than self, that mounts the folder dir, a
+// workspace clone's repo, read-write: dir's own VM, or the VM of a folder
+// dir is inside, nearest first, made for that folder and not a --clone VM,
+// running or not; "" for none. Code in it can swap the repo's folder, or
+// what's in it, under host git, so a workspace clone leaves such a repo
+// alone. self is the VM the workspace clone is for, which may still mount
+// the folder while devvm clone on makes it again.
+func (e finder) mountsRepo(dir, self string) string {
+	mounts := func(f project.Folder, st *state.VM) bool {
+		return st.Exists() && !isClone(st) && sameFolder(f, st) && f.Name != self
+	}
+	if f, st, err := e.state(dir, new(recorded)); err == nil && mounts(f, st) {
+		return f.Name
+	}
+	vm := ""
+	_ = e.parents(dir, func(pf project.Folder, pst *state.VM) (bool, error) {
+		if mounts(pf, pst) {
 			vm = pf.Name
 			return false, nil
 		}

@@ -63,6 +63,15 @@ type shapeCase struct {
 	want    []string
 }
 
+// cloneShapes are the shapes of devvm clone's subcommands.
+func cloneShapes() []shapeCase {
+	return []shapeCase{{
+		"clone fetch",
+		cloneFetchOutput{Repos: []cloneFetchRepo{{Path: "a", Remote: "devvm", Branches: []string{"x"}}}, Branches: []cloneFetchBranch{{Name: "x", Repos: []string{"a"}}}},
+		[]string{"branches[].name: string", "branches[].repos[]: string", "repos[].branches[]: string", "repos[].path: string", "repos[].remote: string"},
+	}}
+}
+
 // machineShapes are the shapes of This machine's commands.
 func machineShapes() []shapeCase {
 	yes, fix := true, "brew install lima"
@@ -228,6 +237,7 @@ func TestJSONShapes(t *testing.T) {
 		{"retention", retentionJSON(settings.Retention{}), retentionShape()},
 	}
 	cases = append(cases, machineShapes()...)
+	cases = append(cases, cloneShapes()...)
 	shaped := map[string]bool{}
 	for _, tc := range cases {
 		path, _, _ := strings.Cut(tc.command, " -")
