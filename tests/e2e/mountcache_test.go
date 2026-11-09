@@ -218,7 +218,10 @@ func mountOptions(s *S, vm, dir string) string {
 // mountCacheSwitch: on a Linux host, vm, dir's VM, given Lima's mmap with
 // no mode chosen, as a VM made before devvm chose one, gets devvm
 // mount-cache none at its next start, whose remount devvm checks in
-// /proc/self/mountinfo, so it works without findmnt, as on Alpine.
+// /proc/self/mountinfo, so it works without findmnt. Where the remount
+// fails, as an OpenRC guest's mount of the share it just unmounted does,
+// the launch restarts the VM once, and its boot mounts the folder with
+// none: the launch succeeds either way.
 func mountCacheSwitch(s *S, vm, dir, title string) {
 	if runtime.GOOS != "linux" {
 		return

@@ -233,6 +233,20 @@ func TestGuestMountOptions(t *testing.T) {
 	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", mountpoint); out != "devvm-not-mounted\n" {
 		t.Errorf("a running VM's check, not mounted: %q", out)
 	}
+	// A remount that fails leaves the folder unmounted until the VM's
+	// next start.
+	s.rm("mount-unmounted")
+	s.touch("remount-fails")
+	remount := "umount '/p' || exit 3; mount '/p' || { mount '/p'; mountpoint -q '/p' || exit 4; }"
+	s.fails(4, "limactl", "shell", "--workdir", "/", "a", "sudo", "sh", "-c", remount)
+	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", check); out != "devvm-not-mounted\n" {
+		t.Errorf("after a failed remount: %q", out)
+	}
+	s.ok("", "limactl", "stop", "a")
+	s.ok("", "limactl", "start", "--tty=false", "a")
+	if out := s.ok("", "limactl", "shell", "--workdir", "/", "a", "sh", "-c", check); !strings.Contains(out, "trans=virtio") {
+		t.Errorf("after the next start: %q", out)
+	}
 }
 
 // create, clone, edit, start, stop and delete keep Lima's instances as

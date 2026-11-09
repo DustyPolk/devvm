@@ -9,6 +9,7 @@ import (
 
 	"github.com/devvmhq/devvm/internal/backend"
 	"github.com/devvmhq/devvm/internal/backend/backendtest"
+	"github.com/devvmhq/devvm/internal/daemon"
 	"github.com/devvmhq/devvm/internal/gitprotect"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/paths"
@@ -270,6 +271,62 @@ func TestSetMountCache(t *testing.T) {
 	}
 	if c := cacheOf(readState(t, e.Dirs, vm)); c != "" {
 		t.Errorf("refused, but recorded %q", c)
+	}
+}
+
+// A start whose backend stopped the VM again, as its project folder
+// couldn't be mounted again with its new cache mode
+// (backend.RemountError), gets one start again, which asks for the check
+// and gets a proxy of its own: the launch goes on when that start does,
+// and fails with its error when it fails too, with no third start.
+func TestRemountRestart(t *testing.T) {
+	e, f, execs := upEnv(t, allNative())
+	st := existingVM(t, e, Options{Network: "open"})
+	vm := st.Name()
+	proxies, start := 0, e.Proxy.Start
+	e.Proxy.Start = func(c daemon.Cmd) (int, error) { proxies++; return start(c) }
+	for _, tc := range []struct {
+		name  string
+		fails int // how many starts fail
+		err   string
+	}{
+		{"mounted by the restart", 1, ""},
+		{"not mounted after it", 2, "mount_cache_unmounted vm=" + vm},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := f.Stop(t.Context(), vm); err != nil {
+				t.Fatal(err)
+			}
+			before, shells := len(f.Calls()), len(*execs)
+			n := 0
+			proxies = 0
+			f.StartErr = func(string, backend.Want) error {
+				if n++; n <= tc.fails {
+					return &backend.RemountError{Msg: msg.MountCacheUnmounted(vm)}
+				}
+				return nil
+			}
+			defer func() { f.StartErr = nil }()
+			err := (Launch{e}).Up(t.Context(), Options{})
+			if got := msg.NamesOf(err); got != tc.err {
+				t.Errorf("launch: %q, want %q", got, tc.err)
+			}
+			var wants []backend.Want
+			for _, c := range f.Calls()[before:] {
+				if c.Method == "Start" {
+					wants = append(wants, c.Args[1].(backend.Want))
+				}
+			}
+			if len(wants) != 2 || wants[0].CheckCache || !wants[1].CheckCache {
+				t.Errorf("started %d times, wanting %+v", len(wants), wants)
+			}
+			if proxies != 2 {
+				t.Errorf("%d proxies started, want one for each start", proxies)
+			}
+			if opened := len(*execs) > shells; opened != (tc.err == "") {
+				t.Errorf("opened a shell %v", opened)
+			}
+		})
 	}
 }
 

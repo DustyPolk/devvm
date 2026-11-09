@@ -84,7 +84,10 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 		}
 		defer release()
 	}
+	// Its project folder mounted again with its new cache mode once it
+	// runs, or, started again after that failed (RemountError), checked.
 	remount := w != nil && cacheChanges(in, *w)
+	check := remount || w != nil && w.CheckCache && w.Project != "" && w.ProjectCache != "" && in.ninep()
 	if err := configure(ctx, l.Lima, in, w, c, sshPort); err != nil {
 		return err
 	}
@@ -127,8 +130,8 @@ func (l *machines) start(ctx context.Context, vm string, w *backend.Want, c back
 	if err := l.recordStart(vm, c.Net); err != nil {
 		return err
 	}
-	if remount {
-		return remountProject(ctx, l, vm, w.Project, w.ProjectCache)
+	if check {
+		return remountProject(ctx, l, vm, *w, remount)
 	}
 	return nil
 }

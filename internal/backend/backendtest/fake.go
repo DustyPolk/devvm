@@ -60,6 +60,11 @@ type Fake struct {
 	// BuildErr, when set, is what each BuildImage fails with, if
 	// anything, after recording the call.
 	BuildErr func(backend.ImageSpec) error
+	// StartErr, when set, is what each Start of a stopped VM fails with,
+	// if anything, after recording the call, the VM left stopped: a
+	// backend that stopped it again (a RemountError). It's called with
+	// the fake locked.
+	StartErr func(vm string, w backend.Want) error
 	// PackagesOut is the tar stream a build's packages give back, read by
 	// its Take (none: empty); PackagesSent is what the last build's Send
 	// wrote.
@@ -355,6 +360,11 @@ func (f *machines) Start(_ context.Context, vm string, w backend.Want, c backend
 	}
 	if err := backend.Validate(w, in); err != nil {
 		return err
+	}
+	if f.StartErr != nil {
+		if err := f.StartErr(vm, w); err != nil {
+			return err
+		}
 	}
 	backend.Apply(&in, w)
 	in.Status = backend.StatusRunning

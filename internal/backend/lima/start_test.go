@@ -571,34 +571,38 @@ func TestStartSetsProjectCacheOnce(t *testing.T) {
 	if got := edits(); len(got) > 0 || slices.Contains(f.lines(), remount) {
 		t.Errorf("set already, edited or mounted again: %q", f.lines())
 	}
+	// Anything but the folder mounted with none stops the VM, and the start
+	// fails with a RemountError, for its caller's one start again; the run
+	// log says how the remount left it.
 	for _, tc := range []struct {
 		name  string
 		check string // what the check prints; "" for a check that fails
 		fail  string // a command that fails
-		err   string // the start's error
-		warn  string
+		err   string // the start's error, a RemountError's
+		why   string // the run log's line ends so
 	}{
-		// The unmount refused (the share busy): the old mount stays, and
-		// gets the mode at the next start.
-		{"kept the old mount", mountinfoOfP("rw,cache=0x5,access=client,trans=virtio"), remount, "", "mount_cache_remount_failed has=mmap vm=v want=none"},
+		// The unmount refused (the share busy): the old mount stays.
+		{"kept the old mount", mountinfoOfP("rw,cache=0x5,access=client,trans=virtio"), remount, "mount_cache_remount_failed has=mmap vm=v want=none", "it's mounted with mmap"},
 		// A degraded start's old fstab: mounted again, with the old mode.
-		{"the old mode again", mountinfoOfP("rw,cache=0x5,trans=virtio"), "", "", "mount_cache_remount_failed has=mmap vm=v want=none"},
+		{"the old mode again", mountinfoOfP("rw,cache=0x5,trans=virtio"), "", "mount_cache_remount_failed has=mmap vm=v want=none", "it's mounted with mmap"},
 		// Stacked mounts: the last line, the mount visible there, counts.
 		{"stacked", mountinfoOfP("rw,cache=0x5,trans=virtio") + "\n" + mountinfoOfP("rw,trans=virtio") + "\n", "", "", ""},
 		// A mode devvm doesn't know is named as such, never as the guest's
 		// text.
-		{"another mode", mountinfoOfP("rw,cache=0xf,trans=virtio\x1b[2J"), "", "", "mount_cache_remount_failed has=unknown vm=v want=none"},
-		// Unmounted, or not known to be mounted: the VM stops, and the start
-		// fails, as what's written there would vanish under the share.
-		{"not mounted", "devvm-not-mounted\n", remount, "mount_cache_unmounted vm=v", ""},
-		{"mounted, then not", mountinfoOfP("rw,trans=virtio") + "\ndevvm-not-mounted", "", "mount_cache_unmounted vm=v", ""},
-		{"the check fails", "", check, "mount_cache_unchecked vm=v", ""},
-		{"no answer", "\n", "", "mount_cache_unchecked vm=v", ""},
+		{"another mode", mountinfoOfP("rw,cache=0xf,trans=virtio\x1b[2J"), "", "mount_cache_remount_failed has=unknown vm=v want=none", "it's mounted with unknown"},
+		// Unmounted (an Alpine guest's mount refusing a share it just
+		// unmounted), or not known to be mounted.
+		{"not mounted", "devvm-not-mounted\n", remount, "mount_cache_unmounted vm=v", "it isn't mounted"},
+		{"mounted, then not", mountinfoOfP("rw,trans=virtio") + "\ndevvm-not-mounted", "", "mount_cache_unmounted vm=v", "it isn't mounted"},
+		{"the check fails", "", check, "mount_cache_unchecked vm=v", "the check failed: failed"},
+		{"no answer", "\n", "", "mount_cache_unchecked vm=v", "the check failed: the guest gave no answer"},
 		// An answer that isn't a line of mountinfo can't be read.
-		{"not mountinfo", "rw,trans=virtio\n", "", "mount_cache_unchecked vm=v", ""},
+		{"not mountinfo", "rw,trans=virtio\n", "", "mount_cache_unchecked vm=v", "the check failed: the guest's answer isn't a line of mountinfo"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			*warned = msg.Recorder{}
+			log := &strings.Builder{}
+			l.Reporter.(*msg.Fake).Log = log
 			f.calls, f.fail = nil, nil
 			if tc.fail != "" {
 				f.fail = []string{tc.fail}
@@ -609,8 +613,88 @@ func TestStartSetsProjectCacheOnce(t *testing.T) {
 			if got := msg.NamesOf(err); got != tc.err {
 				t.Errorf("start: %q, want %q", got, tc.err)
 			}
+			if _, ok := errors.AsType[*backend.RemountError](err); ok != (tc.err != "") {
+				t.Errorf("a RemountError %v, want %v", ok, tc.err != "")
+			}
 			if stopped := slices.Contains(f.lines(), "limactl stop v"); stopped != (tc.err != "") {
 				t.Errorf("stopped %v, want %v: %q", stopped, tc.err != "", f.lines())
+			}
+			if want := "devvm: v's project folder after its remount: " + tc.why + "; restarting the VM\n"; tc.why != "" && log.String() != want {
+				t.Errorf("logged %q, want %q", log.String(), want)
+			}
+			if got := warned.Names(); len(got) > 0 {
+				t.Errorf("warned %q", got)
+			}
+		})
+	}
+}
+
+// The start again after a RemountError checks the folder, its config's
+// mode set already, without mounting it again: mounted with none, the
+// VM goes on; not mounted, or a check that fails, stops it and fails the
+// start; another mode is warned of. None of them restarts it again, and
+// neither does a remount that fails on that start.
+func TestStartRechecksProjectCache(t *testing.T) {
+	l, f, warned := testLima(t, "linux")
+	c := backend.Confinement{SSHPort: 2222}
+	vm := func(cache string) string {
+		return `{"name":"v","status":"Stopped","vmType":"qemu","cpus":4,"memory":8589934592,"disk":107374182400,"config":{` +
+			`"ssh":{"localPort":2222,"forwardAgent":false},"portForwards":` + yqJSON(noForwards()) + `,"mounts":[` +
+			`{"location":"/p","mountPoint":"/p","writable":true,"9p":{"msize":"128KiB","cache":"` + cache + `"}}]}}`
+	}
+	if err := os.MkdirAll(l.Dirs.LimaVM("v"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	remount := `limactl shell --workdir / v sudo sh -c umount`
+	w := backend.Want{Project: "/p", ProjectCache: backend.CacheNone, CheckCache: true}
+	for _, tc := range []struct {
+		name   string
+		config string // the cache mode lima.yaml has
+		check  string // what the check prints; "" for a check that fails
+		err    string
+		warn   string
+	}{
+		{"mounted with none", backend.CacheNone, mountinfoOfP("rw,trans=virtio"), "", ""},
+		{"not mounted", backend.CacheNone, "devvm-not-mounted\n", "mount_cache_unmounted vm=v", ""},
+		{"the check fails", backend.CacheNone, "", "mount_cache_unchecked vm=v", ""},
+		{"the old mode", backend.CacheNone, mountinfoOfP("rw,cache=0x5,trans=virtio"), "", "mount_cache_remount_failed has=mmap vm=v want=none"},
+		// Its config lost the mode: it's edited and mounted again, and
+		// what fails stops it, with no second restart.
+		{"mounted again, not mounted", backend.CacheMmap, "devvm-not-mounted\n", "mount_cache_unmounted vm=v", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			*warned = msg.Recorder{}
+			f.calls, f.fail = nil, nil
+			f.stdout = map[string]string{checkOfP: tc.check}
+			if tc.check == "" {
+				f.fail = []string{checkOfP}
+			}
+			f.out["limactl list --json"] = vm(tc.config)
+			err := l.Start(t.Context(), "v", w, c)
+			if got := msg.NamesOf(err); got != tc.err {
+				t.Errorf("start: %q, want %q", got, tc.err)
+			}
+			if _, ok := errors.AsType[*backend.RemountError](err); ok {
+				t.Errorf("restarts again: %v", err)
+			}
+			lines := f.lines()
+			if !slices.Contains(lines, checkOfP) {
+				t.Errorf("not checked: %q", lines)
+			}
+			if mounted := slices.ContainsFunc(lines, func(s string) bool { return strings.HasPrefix(s, remount) }); mounted != (tc.config != backend.CacheNone) {
+				t.Errorf("mounted again %v: %q", mounted, lines)
+			}
+			stops, want := 0, 0
+			if tc.err != "" {
+				want = 1
+			}
+			for _, s := range lines {
+				if s == "limactl stop v" {
+					stops++
+				}
+			}
+			if stops != want {
+				t.Errorf("stopped %d times, want %d: %q", stops, want, lines)
 			}
 			var warns []string
 			if tc.warn != "" {
@@ -621,11 +705,21 @@ func TestStartSetsProjectCacheOnce(t *testing.T) {
 			}
 		})
 	}
+	// A VM whose folder has no cache mode to check (not 9p) isn't checked.
+	f.calls = nil
+	f.out["limactl list --json"] = `{"name":"v","status":"Stopped","vmType":"vz","config":{"ssh":{"localPort":2222},"portForwards":` + yqJSON(noForwards()) + `}}`
+	_ = l.Start(t.Context(), "v", w, c)
+	if slices.Contains(f.lines(), checkOfP) {
+		t.Errorf("checked a folder with no cache mode: %q", f.lines())
+	}
 }
 
 // An interrupt during the remount leaves a cleanup that stops the VM, on
-// any tier; without one, the cleanup goes once the folder's checked.
+// any tier; without one, the cleanup goes once the folder's checked. An
+// interrupted remount whose folder isn't mounted gets no restart: the
+// start fails, and the cleanup alone stops the VM.
 func TestRemountInterrupted(t *testing.T) {
+	w := backend.Want{Project: "/p", ProjectCache: backend.CacheNone}
 	for _, interrupted := range []bool{false, true} {
 		l, f, _ := testLima(t, "linux")
 		var cleanups []func(context.Context)
@@ -636,7 +730,7 @@ func TestRemountInterrupted(t *testing.T) {
 		}}
 		l.Reporter = fk
 		f.stdout = map[string]string{checkOfP: mountinfoOfP("rw,trans=virtio") + "\n"}
-		if err := remountProject(t.Context(), &l.machines, "v", "/p", backend.CacheNone); err != nil {
+		if err := remountProject(t.Context(), &l.machines, "v", w, true); err != nil {
 			t.Fatal(err)
 		}
 		if len(cleanups) != 1 || (removed == 1) == interrupted {
@@ -649,6 +743,16 @@ func TestRemountInterrupted(t *testing.T) {
 				t.Errorf("the cleanup didn't stop the VM: %q", f.lines())
 			}
 		}
+	}
+	l, f, _ := testLima(t, "linux")
+	l.Reporter = &msg.Fake{Interrupt: true, OnCleanup: func(func(context.Context)) func() { return func() {} }}
+	f.stdout = map[string]string{checkOfP: "devvm-not-mounted\n"}
+	err := remountProject(t.Context(), &l.machines, "v", w, true)
+	if _, ok := errors.AsType[*backend.RemountError](err); ok || msg.NamesOf(err) != "mount_cache_unmounted vm=v" {
+		t.Errorf("interrupted, not mounted: %v", err)
+	}
+	if slices.Contains(f.lines(), "limactl stop v") {
+		t.Errorf("stopped before the cleanup: %q", f.lines())
 	}
 }
 

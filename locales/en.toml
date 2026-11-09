@@ -1301,7 +1301,7 @@ other = "{{.vm}} is a --clone VM, so it mounts no project folder to cache. It us
 
 [mount_cache_remount_failed]
 description = "has is the cache mode the folder is mounted with (mmap), want the one chosen (none)"
-other = "{{.vm}}'s project folder is still mounted with {{.has}}, as mounting it again with {{.want}} failed. It gets {{.want}} when the VM next starts, so run devvm restart to apply it now."
+other = "{{.vm}}'s project folder is still mounted with {{.has}}, as mounting it again with {{.want}} failed. Run devvm restart to try again."
 
 [mount_cache_no_choice]
 other = "{{.vm}} doesn't mount its project folder with 9p, so it has no cache mode to choose."
@@ -1320,6 +1320,9 @@ other = "{{.vm}}'s project folder isn't mounted in the VM, so what's written the
 
 [remounting]
 other = "mounting {{.vm}}'s project folder again"
+
+[remount_restarting]
+other = "restarting {{.vm}} to mount its project folder"
 
 [next_start_mount_cache]
 other = "{{.vm}} gets its new cache mode only when it starts."

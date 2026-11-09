@@ -45,6 +45,10 @@ import (
 //	tools-glibc-<tool>  the glibc a shared tool's image needs (limactl.go's tools build)
 //	mount-unmounted     the project folder isn't a mount point (the remount's check,
 //	                    mountOptions, and a running VM's, which answers devvm-not-mounted)
+//	remount-fails       the project folder's remount (umount, then mount) fails, as an
+//	                    Alpine guest's mount of a share it just unmounted does, and leaves
+//	                    the folder unmounted until the VM's next start, which mounts it:
+//	                    the stubs mark it with unmounted-<vm>, which start removes
 type guest struct {
 	*call
 	vm string // the VM's name, "" over ssh
@@ -248,11 +252,14 @@ func (g *guest) answer() int {
 		}
 		g.print(hostKey(g.vm) + "\nnot a key\n")
 		return 0
+	case strings.Contains(all, "umount ") && g.on("remount-fails"):
+		g.touch("unmounted-" + g.vm)
+		return 4
 	case strings.Contains(all, "/proc/self/mountinfo"):
 		g.print(g.mountinfo(all) + "\n")
 		return 0
 	case strings.Contains(all, "echo devvm-mounted"):
-		if g.on("mount-unmounted") {
+		if g.unmounted() {
 			g.print("devvm-not-mounted\n")
 		} else {
 			g.print("devvm-mounted\n")
@@ -268,10 +275,11 @@ func (g *guest) answer() int {
 
 // mountinfo is the project folder's line of /proc/self/mountinfo, which
 // devvm's check (all) asks for by the folder that mountpoint -q names: a
-// 9p share with mountOptions's options; $STUB_DIR/mount-unmounted makes
-// it not a mount point (devvm's check prints its own word then).
+// 9p share with mountOptions's options; $STUB_DIR/mount-unmounted, or a
+// remount that failed (unmounted), makes it not a mount point (devvm's
+// check prints its own word then).
 func (g *guest) mountinfo(all string) string {
-	if g.on("mount-unmounted") {
+	if g.unmounted() {
 		return "devvm-not-mounted"
 	}
 	dir := "/"
@@ -281,6 +289,11 @@ func (g *guest) mountinfo(all string) string {
 	dir = strings.NewReplacer(`\`, `\134`, " ", `\040`, "\t", `\011`, "\n", `\012`).Replace(dir)
 	return "1109 29 0:61 / " + dir + " rw,relatime shared:604 - 9p mount0 " + g.mountOptions()
 }
+
+// unmounted reports whether the project folder isn't a mount point:
+// mount-unmounted, or the VM's remount failed since its start
+// (remount-fails).
+func (g *guest) unmounted() bool { return g.on("mount-unmounted") || g.on("unmounted-"+g.vm) }
 
 // mountpointArg finds the folder devvm's check gives mountpoint -q.
 var mountpointArg = regexp.MustCompile(`mountpoint -q '([^']*)'`)

@@ -37,3 +37,13 @@ func TestLoggedError(t *testing.T) {
 		t.Errorf("as its message: %v", err)
 	}
 }
+
+// A start's RemountError is still its message, for errors.As and
+// printing, where its caller doesn't start the VM again.
+func TestRemountError(t *testing.T) {
+	m := msg.MountCacheUnmounted("v")
+	var err error = &RemountError{Msg: m}
+	if msg.IDOf(err) != m.ID() || err.Error() != m.Error() {
+		t.Errorf("as its message: %v", err)
+	}
+}

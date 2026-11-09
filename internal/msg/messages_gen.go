@@ -2484,7 +2484,7 @@ func MountCachePending(mode string, vm string) M {
 	return M{id: "mount_cache_pending", vals: []val{{"mode", mode}, {"vm", vm}}}
 }
 
-// MountCacheRemountFailed is [mount_cache_remount_failed]: "{{.vm}}'s project folder is still mounted with {{.has}}, as mounting it again with {{.want}} failed. It gets {{.want}} when the VM next starts, so run devvm restart to apply it now."
+// MountCacheRemountFailed is [mount_cache_remount_failed]: "{{.vm}}'s project folder is still mounted with {{.has}}, as mounting it again with {{.want}} failed. Run devvm restart to try again."
 func MountCacheRemountFailed(has string, vm string, want string) M {
 	return M{id: "mount_cache_remount_failed", vals: []val{{"has", has}, {"vm", vm}, {"want", want}}}
 }
@@ -3612,6 +3612,11 @@ func RemoteKept(remote string) M {
 // RemotesTaken is [remotes_taken]: "This repo already has other git remotes named devvm, devvm-{{.slug}} and {{.vm}}. Remove one, then run devvm again."
 func RemotesTaken(slug string, vm string) M {
 	return M{id: "remotes_taken", vals: []val{{"slug", slug}, {"vm", vm}}}
+}
+
+// RemountRestarting is [remount_restarting]: "restarting {{.vm}} to mount its project folder"
+func RemountRestarting(vm string) M {
+	return M{id: "remount_restarting", vals: []val{{"vm", vm}}}
 }
 
 // Remounting is [remounting]: "mounting {{.vm}}'s project folder again"
@@ -5558,6 +5563,7 @@ var specs = map[string]spec{
 	"remote_add_failed":              {fields: []string{"remote"}},
 	"remote_kept":                    {fields: []string{"remote"}},
 	"remotes_taken":                  {fields: []string{"slug", "vm"}},
+	"remount_restarting":             {fields: []string{"vm"}},
 	"remounting":                     {fields: []string{"vm"}},
 	"removed_remote":                 {fields: []string{"remote"}},
 	"rename_failed":                  {fields: []string{"to", "vm"}},

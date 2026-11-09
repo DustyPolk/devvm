@@ -107,8 +107,9 @@ exec devvm
 stub_calls
 ! stdout 'limactl edit'
 
-# A folder that isn't mounted after the remount fails the launch before
-# its shell opens, naming devvm restart.
+# A folder that isn't mounted after the remount gets one restart, whose
+# boot mounts it. One that isn't mounted after the restart either fails
+# the launch before its shell opens, naming devvm restart.
 exec limactl stop $WEB
 json_set $WEB_dir/vm.json mount:={}
 exec sh -c 'limactl edit "$1" --set ".mounts = [{\"location\":\"$(pwd -P)\",\"writable\":true},{\"location\":\"$DATA/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]"' sh $WEB
@@ -120,8 +121,30 @@ stub_reset
 stderr '^devvm: mount_cache_unmounted vm=devvm-web-[0-9a-f]{14}$'
 stub_calls
 ! stdout '^limactl shell --workdir \S*/web devvm-web'
-stdout '^limactl stop devvm-web-[0-9a-f]{14}$'
+stdout '(?s)sudo sh -c umount .*\nlimactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n(.*\n)*limactl stop devvm-web-[0-9a-f]{14}\n'
+! stdout '(?s)sudo sh -c umount .*sudo sh -c umount '
+! stdout '(?s)(limactl start --tty=false devvm-web.*){3}'
 rm $STUB_DIR/mount-unmounted
+
+# The remount fails, as an Alpine guest's can, and leaves the folder
+# unmounted: the restart's boot mounts it with none, and the launch goes
+# on into its shell, with the restart in the run log.
+exec limactl stop $WEB
+json_set $WEB_dir/vm.json mount:={}
+exec sh -c 'limactl edit "$1" --set ".mounts = [{\"location\":\"$(pwd -P)\",\"writable\":true},{\"location\":\"$DATA/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]"' sh $WEB
+exec devvm mount-cache none
+exec sh -c ': > "$STUB_DIR/remount-fails"'
+stub_reset
+exec devvm
+! stderr 'mount_cache_'
+stub_calls
+stdout '(?s)sudo sh -c umount .*\nlimactl stop devvm-web-[0-9a-f]{14}\n(.*\n)*limactl start --tty=false devvm-web-[0-9a-f]{14}\n(.*\n)*limactl shell --workdir \S*/web devvm-web-[0-9a-f]{14}\n'
+! stdout '(?s)sudo sh -c umount .*sudo sh -c umount '
+exec sh -c 'cat "$DATA"/logs/runs/*.log'
+stdout 'devvm: devvm-web-[0-9a-f]{14}''s project folder after its remount: it isn''t mounted; restarting the VM$'
+exec devvm mount-cache
+stdout '\Anone\n\z'
+rm $STUB_DIR/remount-fails
 
 # A launch into a running VM whose folder isn't mounted is refused before
 # its shell.

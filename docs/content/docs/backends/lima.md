@@ -83,10 +83,15 @@ A [`--clone` VM](../using/clone.md) mounts no project folder, so it has no cache
 The VM gets `none` at its next start, and that start mounts the project folder again once the VM runs, before devvm sets the VM up or opens its shell. The VM's first mount of the folder at boot still has the old mode, because the guest reads its new mount options only after it has mounted the folder. devvm then checks the folder:
 
 - When the folder is mounted with `none`, the VM goes on as usual.
-- When the folder is still mounted with the old mode, devvm warns and goes on. That happens when the VM couldn't unmount the folder, because something it started at boot, such as a container, was using it, or when the VM's start was degraded. The VM gets `none` at its next start, so run `devvm restart` to apply it now.
-- When the folder isn't mounted at all, or the VM doesn't answer the check, devvm stops the VM before it sets it up or opens its shell, because files written there would go to the VM's own disk and vanish once the folder is mounted over them. Run `devvm restart`, which starts it and mounts the folder again. Pressing Ctrl+C while devvm mounts the folder again stops the VM too.
+- When the folder is still mounted with the old mode, isn't mounted at all, or the VM doesn't answer the check, devvm restarts the VM once, before it sets it up or opens its shell. The folder can be left with the old mode when the VM couldn't unmount it, because something it started at boot, such as a container, was using it, or when the VM's start was degraded. It can be left unmounted when the VM unmounted it but couldn't mount it again, as happens on an Alpine VM. The restart's boot mounts the folder with `none`, and devvm checks it again.
 
-The run log has what the VM's `umount` and `mount` said ([logs](../using/troubleshooting.md#a-command-fails)). A launch into a running VM checks too that its project folder is mounted, and refuses to open a shell in one whose folder isn't, naming `devvm restart`.
+After the restart, devvm checks the folder once more and doesn't restart the VM again:
+
+- When the folder is mounted with `none`, the VM goes on as usual.
+- When the folder is still mounted with the old mode, devvm warns and goes on. Run `devvm restart` to try again.
+- When the folder isn't mounted at all, or the VM doesn't answer the check, devvm stops the VM before it sets it up or opens its shell, because files written there would go to the VM's own disk and vanish once the folder is mounted over them. Run `devvm restart`, which starts it and mounts the folder again.
+
+Pressing Ctrl+C while devvm mounts or checks the folder stops the VM, without a restart. The run log has what the VM's `umount` and `mount` said, and why devvm restarted the VM ([logs](../using/troubleshooting.md#a-command-fails)). A launch into a running VM checks too that its project folder is mounted, and refuses to open a shell in one whose folder isn't, naming `devvm restart`.
 
 ### devvm mount-cache --json
 

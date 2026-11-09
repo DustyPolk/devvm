@@ -22,6 +22,7 @@ func TestMountCacheMessages(t *testing.T) {
 		{ProjectUnmounted("v"), "project_unmounted vm=v"},
 		{ProjectUnchecked("v"), "project_unchecked vm=v"},
 		{Remounting("v"), "remounting vm=v"},
+		{RemountRestarting("v"), "remount_restarting vm=v"},
 		{NextStartMountCache("v"), "next_start_mount_cache vm=v"},
 		{NoVMMountCache("/p"), "no_vm_mount_cache dir=/p"},
 		{MountCacheFailed("x"), "mount_cache_failed reason=x"},

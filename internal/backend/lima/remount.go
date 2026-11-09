@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os/exec"
 	"regexp"
 	"slices"
@@ -29,21 +30,27 @@ func cacheChanges(in instance, w backend.Want) bool {
 	return w.Project != "" && w.ProjectCache != "" && in.ninep() && in.backend().ProjectCache != w.ProjectCache
 }
 
-// remountProject mounts the project folder at dir in a VM just started
-// again, as its /etc/fstab now has it, with the cache mode want. Lima's
-// cloud-init rewrites fstab with a mount's new options at the boot after
-// an edit, but systemd has mounted the folder by the old line by then, and
-// a 9p share's tag stays the same, so without this the new mode would wait
-// for a second boot. Nothing in the VM uses the folder yet, unless
-// something it starts at boot does (a container), which keeps the old
-// mount busy. Its output goes to the run log. Then the folder is checked:
-// one that isn't mounted, or that the check can't see (ssh not answering),
-// stops the VM and fails the start, as what's written there would land on
-// the VM's disk and vanish under the share at its next mount; one mounted
-// with another mode (the unmount refused, or a degraded start's old fstab)
-// is warned of, and gets the new mode at the VM's next start. An interrupt
-// meanwhile stops the VM too, whatever its tier.
-func remountProject(ctx context.Context, l *machines, vm, dir, want string) error {
+// remountProject checks the project folder of a VM just started, w's,
+// for w's cache mode, and first mounts it again, as its /etc/fstab now has
+// it, when remount is set. Lima's cloud-init rewrites fstab with a mount's
+// new options at the boot after an edit, but systemd has mounted the
+// folder by the old line by then, and a 9p share's tag stays the same, so
+// without this the new mode would wait for a second boot. Nothing in the
+// VM uses the folder yet, unless something it starts at boot does (a
+// container), which keeps the old mount busy. Its output goes to the run
+// log.
+//
+// A folder that isn't mounted, one mounted with another mode, or a check
+// that fails (ssh not answering) gets one restart (restartToMount): the
+// VM is stopped, and the start fails with a RemountError, which its
+// caller answers with a start again, w.CheckCache set, whose boot mounts
+// the folder with the new mode. That start's check is the last: a folder
+// that isn't mounted, or that the check can't see, stops the VM and fails
+// the start, as what's written there would land on the VM's disk and
+// vanish under the share at its next mount; one mounted with another
+// mode is warned of. An interrupt meanwhile stops the VM too, whatever
+// its tier, and gets no restart.
+func remountProject(ctx context.Context, l *machines, vm string, w backend.Want, remount bool) error {
 	stopIt := func(ctx context.Context) { _ = l.stop(ctx, vm) }
 	done := l.AddCleanup(func(ctx context.Context) {
 		if l.Interrupted() {
@@ -54,31 +61,51 @@ func remountProject(ctx context.Context, l *machines, vm, dir, want string) erro
 	parent := context.WithoutCancel(ctx)
 	ctx, cancel := context.WithTimeout(ctx, remountTimeout)
 	defer cancel()
-	d := shell.Quote(dir)
-	script := "umount " + d + " || exit 3; mount " + d + " || { mount " + d + "; mountpoint -q " + d + " || exit 4; }"
-	_ = l.Runner.Run(ctx, msg.Remounting(vm), bounded(l.limactl(ctx, "shell", "--workdir", "/", vm, "sudo", "sh", "-c", script)))
-	has, err := mountedCache(ctx, l, vm, dir)
+	if remount {
+		d := shell.Quote(w.Project)
+		script := "umount " + d + " || exit 3; mount " + d + " || { mount " + d + "; mountpoint -q " + d + " || exit 4; }"
+		_ = l.Runner.Run(ctx, msg.Remounting(vm), bounded(l.limactl(ctx, "shell", "--workdir", "/", vm, "sudo", "sh", "-c", script)))
+	}
+	has, err := mountedCache(ctx, l, vm, w.Project)
 	if !l.Interrupted() {
 		// An interrupt's is the cleanup's to stop, once the command returns.
 		done()
 	}
-	// Interrupted, the cleanup stops it: one stop, not two at once.
-	stopNow := func() {
-		if !l.Interrupted() {
-			stopIt(parent)
-		}
-	}
+	var fail msg.M
+	var why string
 	switch {
 	case err != nil:
-		stopNow()
-		return msg.MountCacheUnchecked(vm).Because(err)
+		fail, why = msg.MountCacheUnchecked(vm).Because(err), "the check failed: "+err.Error()
 	case has == "":
-		stopNow()
-		return msg.MountCacheUnmounted(vm)
-	case has != want:
-		l.Warn(msg.MountCacheRemountFailed(has, vm, want))
+		fail, why = msg.MountCacheUnmounted(vm), "it isn't mounted"
+	case has != w.ProjectCache:
+		fail, why = msg.MountCacheRemountFailed(has, vm, w.ProjectCache), "it's mounted with "+has
+	default:
+		return nil
 	}
-	return nil
+	switch {
+	case !w.CheckCache && !l.Interrupted():
+		return restartToMount(parent, l, vm, why, fail)
+	case err == nil && has != "":
+		l.Warn(fail)
+		return nil
+	case !l.Interrupted():
+		// Interrupted, the cleanup stops it: one stop, not two at once.
+		stopIt(parent)
+	}
+	return fail
+}
+
+// restartToMount stops the VM vm, whose project folder its start left as
+// why says, for a start again that mounts it as it boots: it returns
+// fail as a RemountError then, which the run log explains. A stop that
+// fails returns fail itself, the VM as it is.
+func restartToMount(ctx context.Context, l *machines, vm, why string, fail msg.M) error {
+	_, _ = io.WriteString(l.LogWriter(), "devvm: "+vm+"'s project folder after its remount: "+why+"; restarting the VM\n")
+	if err := l.Runner.Run(ctx, msg.RemountRestarting(vm), l.limactl(ctx, "stop", vm)); err != nil {
+		return fail
+	}
+	return &backend.RemountError{Msg: fail}
 }
 
 // maxCheckOutput caps what's read of the guest's answer to a mount check:

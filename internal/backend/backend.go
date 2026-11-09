@@ -243,6 +243,19 @@ func (e *LoggedError) Error() string { return e.Msg.Error() }
 // Unwrap returns the message, so errors.As finds it.
 func (e *LoggedError) Unwrap() error { return e.Msg }
 
+// RemountError is a Start's error for a VM it started, then stopped
+// again, because its project folder couldn't be mounted again with the
+// cache mode Want asked while it ran (Msg says how it was left). The VM's
+// config has that mode, so its next boot mounts the folder with it: the
+// caller starts it again once, with Want.CheckCache, and otherwise fails
+// with Msg.
+type RemountError struct{ Msg msg.M }
+
+func (e *RemountError) Error() string { return e.Msg.Error() }
+
+// Unwrap returns the message, so errors.As finds it.
+func (e *RemountError) Unwrap() error { return e.Msg }
+
 // ImageSpec is an image to build. Its name, its parent's key, From and
 // its Recipe are what go into it, and its key hashes every one of them;
 // the rest is how its build runs, which the image keeps nothing of.
@@ -374,7 +387,13 @@ type Want struct {
 	// CacheNone or CacheMmap, on a backend whose mount has that choice
 	// (FeatureMountCache); "" leaves the mount's as it is.
 	ProjectCache string
-	AgentDirs    []string // agents' host folders, read-only
+	// CheckCache asks the start to check, once the VM runs, that the
+	// guest mounts the project folder with ProjectCache, where its mount
+	// has that choice: the start again after a RemountError. A folder
+	// that isn't mounted, or a check that fails, stops the VM and fails
+	// the start, and one mounted with another mode is warned of.
+	CheckCache bool
+	AgentDirs  []string // agents' host folders, read-only
 	// AgentForwarding is whether the VM forwards an ssh-agent; changing
 	// it once the VM is made needs FeatureAgentToggle.
 	AgentForwarding bool

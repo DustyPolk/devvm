@@ -430,6 +430,9 @@ func (l *lima) start() error {
 	}); err != nil {
 		return err
 	}
+	// Its boot mounts the project folder a failed remount left unmounted
+	// (guest.go's remount-fails).
+	_ = os.Remove(l.path("unmounted-" + vm))
 	ha := strconv.Itoa(l.ppid)
 	if t, ok := l.text("hostagent"); ok {
 		ha = t

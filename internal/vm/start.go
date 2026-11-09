@@ -512,8 +512,22 @@ func (s starter) reloadAgent(ctx context.Context, mode string) error {
 // backend gets the proxy's confinement; a start that fails stops the
 // proxy again. Its host keys are read again once it runs: a VM whose
 // backend config changed can get new ones when it boots. t is what the
-// start made it once it runs (target.started).
+// start made it once it runs (target.started). A backend that stopped the
+// VM again, as its project folder couldn't be mounted again with its new
+// cache mode while it ran (backend.RemountError), gets one start again,
+// all of it (its proxy, pins and host keys anew), whose boot mounts the
+// folder with that mode, which that start checks (Want.CheckCache).
 func (s starter) start(ctx context.Context, t *target, conf backend.Confinement) (backend.Confinement, error) {
+	got, err := s.startOnce(ctx, t, conf, false)
+	if _, ok := errors.AsType[*backend.RemountError](err); !ok || ctx.Err() != nil {
+		return got, err
+	}
+	return s.startOnce(ctx, t, conf, true)
+}
+
+// startOnce is one of start's starts: checkCache asks the backend to
+// check the project folder's cache mode once the VM runs.
+func (s starter) startOnce(ctx context.Context, t *target, conf backend.Confinement, checkCache bool) (backend.Confinement, error) {
 	vm, st, b := t.f.Name, t.st, t.b
 	if err := vmssh.ForgetHostKeys(s.Dirs, vm); err != nil {
 		return conf, err
@@ -557,7 +571,7 @@ func (s starter) start(ctx context.Context, t *target, conf backend.Confinement)
 	// agent forwarding.
 	agentDirs, _ := agentMounts(s.Dirs, tools.Names(st))
 	want := backend.Want{
-		Size: sectionOf[Size](st, sizeSection).Backend(), Project: projectMount(st), ProjectCache: cacheOf(st),
+		Size: sectionOf[Size](st, sizeSection).Backend(), Project: projectMount(st), ProjectCache: cacheOf(st), CheckCache: checkCache,
 		AgentDirs: agentDirs, AgentForwarding: sshagent.Forwards(mode),
 	}
 	if want.Project != "" {
