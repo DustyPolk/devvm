@@ -151,5 +151,31 @@ json_set $WEB_dir/vm.json mount.cache=loose
 ! exec devvm mount-cache
 stderr '\S*/vm\.json: mount\.cache: mount_cache_invalid value="loose"'
 
+# A VM an earlier devvm left strict, with no cache mode chosen, on a host
+# that pins (DEVVM_PINS), as on is refused where it can't (git_pins.txtar):
+# after devvm mount-cache none, one start converts strict to on and
+# switches the cache in its one edit, then mounts the folder again.
+env DEVVM_PINS=on
+project app git
+exec devvm --network open
+vm_name APP app
+exec devvm stop
+json_set $APP_dir/vm.json mount:={} git.mode=strict
+exec sh -c 'limactl edit "$1" --set ".mounts = [{\"location\":\"$(pwd -P)\",\"writable\":true},{\"location\":\"$DATA/tools\",\"mountPoint\":\"/mnt/devvm-tools\",\"writable\":false}]"' sh $APP
+exec git config --file .git/config diff.ignoreSubmodules all
+exec devvm mount-cache none
+stdout '^==> mount_cache_pending mode=none vm=devvm-app-[0-9a-f]{14}$'
+stub_reset
+exec devvm
+stderr '^devvm: git_strict_converted vm=devvm-app-[0-9a-f]{14}$'
+! stderr 'mount_cache_unchosen|mount_cache_unchecked|mount_cache_unmounted'
+stub_calls
+stdout '^limactl edit --tty=false devvm-app-[0-9a-f]{14} --set \.mounts = \[\{"location":"\S*/app","writable":true,"9p":\{"cache":"none"\}\},'
+! stdout '(?s)limactl edit --tty=false devvm-app.*limactl edit --tty=false devvm-app'
+stdout '^limactl start --tty=false devvm-app-[0-9a-f]{14}\n(.*\n)*limactl shell --workdir / devvm-app-[0-9a-f]{14} sudo sh -c umount ''\S*/app'' \|\| exit 3; mount '
+vm_state $APP_dir/vm.json
+stdout '^git\.mode=on$'
+stdout '^mount\.cache=none$'
+
 -- features-none.json --
 {"features": []}
