@@ -1,0 +1,152 @@
+package platform
+
+import (
+	"bufio"
+	"bytes"
+	"errors"
+	"net/http"
+	"net/url"
+	"slices"
+	"strings"
+)
+
+// Clip is what devvm paste takes from the clipboard: an image's bytes
+// and type, or one copied file's path. Nothing else is read, so text on
+// the clipboard, such as a password, never reaches devvm.
+type Clip struct {
+	Image []byte
+	Type  string // image/png, image/jpeg, image/gif or image/webp, with Image
+	File  string // a copied file's path, instead of Image
+}
+
+// ReadClip's errors, which its callers turn into messages.
+var (
+	// ErrClipEmpty: nothing devvm can send is on the clipboard, neither an
+	// image nor a copied file.
+	ErrClipEmpty = errors.New("no image or copied file on the clipboard")
+	// ErrClipManyFiles: several files are on the clipboard, and devvm
+	// paste sends one. The error carries how many (ClipManyFiles).
+	ErrClipManyFiles = errors.New("several files on the clipboard")
+	// ErrClipTooLarge: what's on the clipboard is over the cap.
+	ErrClipTooLarge = errors.New("the clipboard's contents are over the cap")
+	// ErrClipNoSession: on Linux, neither WAYLAND_DISPLAY nor DISPLAY is
+	// set, so there's no clipboard to read.
+	ErrClipNoSession = errors.New("no Wayland or X11 session")
+)
+
+// ClipManyFiles is ErrClipManyFiles with how many files were copied.
+type ClipManyFiles struct{ N int }
+
+func (e *ClipManyFiles) Error() string { return ErrClipManyFiles.Error() }
+
+// Is makes errors.Is(err, ErrClipManyFiles) true for it.
+func (e *ClipManyFiles) Is(err error) bool { return err == ErrClipManyFiles }
+
+// ClipToolMissing is ReadClip's or CopyText's error when the clipboard
+// tool it runs isn't on PATH.
+type ClipToolMissing struct{ Tool string }
+
+func (e *ClipToolMissing) Error() string { return e.Tool + " isn't on PATH" }
+
+// ClipToolFailed is ReadClip's error when the clipboard tool failed to
+// list the clipboard's types for a reason other than an empty clipboard,
+// such as wl-paste with no compositor at WAYLAND_DISPLAY, with what it
+// said on stderr, bounded.
+type ClipToolFailed struct{ Tool, Stderr string }
+
+func (e *ClipToolFailed) Error() string { return e.Tool + " failed: " + strings.TrimSpace(e.Stderr) }
+
+// The clipboard types devvm reads, in the order it prefers them: a copied
+// file's reference first, because Finder and the Linux file managers put
+// the file's icon on the clipboard as an image beside it, then the image
+// types, PNG first.
+const (
+	typeURIList = "text/uri-list"
+	typeGnome   = "x-special/gnome-copied-files"
+)
+
+// imageType is an image type devvm sends, with its file extension.
+type imageType struct{ mime, ext string }
+
+// imageTypes are the image types devvm sends, in the order it prefers
+// them.
+func imageTypes() []imageType {
+	return []imageType{{"image/png", "png"}, {"image/jpeg", "jpg"}, {"image/gif", "gif"}, {"image/webp", "webp"}}
+}
+
+// ImageExt is the file extension for an image of type mime, "" for a type
+// devvm doesn't send.
+func ImageExt(mime string) string {
+	for _, t := range imageTypes() {
+		if t.mime == mime {
+			return t.ext
+		}
+	}
+	return ""
+}
+
+// chooseTypes picks, from the types a clipboard offers (one per line, as
+// wl-paste --list-types and xclip's TARGETS print them), those devvm
+// reads, in the order it tries them: a file reference, then the image
+// types it prefers. None means nothing devvm can send is there.
+func chooseTypes(listed []byte) []string {
+	var have []string
+	for _, line := range strings.Split(string(listed), "\n") {
+		if t := strings.TrimSpace(line); t != "" {
+			have = append(have, t)
+		}
+	}
+	var picked []string
+	for _, t := range []string{typeURIList, typeGnome} {
+		if slices.Contains(have, t) {
+			picked = append(picked, t)
+		}
+	}
+	for _, t := range imageTypes() {
+		if slices.Contains(have, t.mime) {
+			picked = append(picked, t.mime)
+		}
+	}
+	return picked
+}
+
+// isFileType reports whether t is a copied file's reference.
+func isFileType(t string) bool { return t == typeURIList || t == typeGnome }
+
+// uriListPaths are the paths of the file: URIs in a text/uri-list (RFC
+// 2483: one URI per line, CRLF or LF, # lines comments), or in GNOME's
+// x-special/gnome-copied-files, whose first line is copy or cut. A URI
+// that isn't a file on this machine, such as a web address, is left out.
+func uriListPaths(data []byte, gnome bool) []string {
+	var paths []string
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	first := true
+	for sc.Scan() {
+		line := strings.TrimRight(sc.Text(), "\r")
+		if gnome && first {
+			first = false
+			if line == "copy" || line == "cut" {
+				continue
+			}
+		}
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		u, err := url.Parse(line)
+		if err != nil || u.Scheme != "file" || (u.Host != "" && u.Host != "localhost") || !strings.HasPrefix(u.Path, "/") {
+			continue
+		}
+		paths = append(paths, u.Path)
+	}
+	return paths
+}
+
+// imageOf checks that data is an image of type want, by its bytes
+// (http.DetectContentType), and returns it as a Clip; false when it
+// isn't, such as a type a program claims and bytes that aren't its.
+func imageOf(data []byte, want string) (Clip, bool) {
+	if http.DetectContentType(data) != want || ImageExt(want) == "" {
+		return Clip{}, false
+	}
+	return Clip{Image: data, Type: want}, true
+}
