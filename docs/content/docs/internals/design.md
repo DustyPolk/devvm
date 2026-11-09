@@ -4,7 +4,7 @@ explainer: Why devvm is built this way, and what's open
 weight: 12
 ---
 
-For contributors: why devvm is built the way it is, what was tried and dropped, and what's still open. How each part works is on its own page; the layout and rules are in [AGENTS.md](https://github.com/devvmhq/devvm/blob/main/AGENTS.md).
+For contributors: why devvm is built the way it is, what was tried and dropped, and what's still open. How each part works is on its own page, and [Contributing](../contributing/_index.md) has the repo's layout and rules.
 
 ## Emulated features
 
@@ -718,7 +718,7 @@ Lima on QEMU keeps one qcow2 disk per VM, and a clone copies it (2.0 GB for `bas
 
 ## One binary
 
-devvm's own files (`assets/` in the repo: `base.yaml`, `layers/`, `features/`, `shared-tools/`, `guest/`, `oci/`) are embedded in the binary (`assets.FS`), so devvm installs, moves and upgrades as one file and can't find a mismatched copy beside it. Code reads them from that file system; scripts reach VMs on their standard input, never by path or file mode. The binary is the only copy: no shared folder on disk holds devvm's files, because a copy there could be edited and still be used. A VM's proxy is devvm itself, so it reads its built-in policies from the binary (its config's `builtin_policies`, by name), once, and its `policies` carry only your files. `limactl create` reads `base.yaml` on its standard input (`-`). Only `--from`'s build on Lima needs a path, because its build VM mounts the conversion's scripts from `oci/` read-only (root there reads them), and none of the folder's other files, with `guest/ca.sh` beside it when you have [company CAs](network.md#a-companys-ca). It writes them into its own temporary folder, `devvm-oci.<random>`, beside `vm/` and never inside it, files 600 and folders 700, and the build's cleanup deletes the folder however the build ends. Image keys hash the embedded files, so what goes into an image is always what its key describes.
+devvm's own files (`assets/` in the repo: `base.yaml`, `prelude.sh`, `layers/`, `features/`, `shared-tools/`, `network/`, `guest/`, `oci/`) are embedded in the binary (`assets.FS`), so devvm installs, moves and upgrades as one file and can't find a mismatched copy beside it. Code reads them from that file system; scripts reach VMs on their standard input, never by path or file mode. The binary is the only copy: no shared folder on disk holds devvm's files, because a copy there could be edited and still be used. A VM's proxy is devvm itself, so it reads its built-in policies from the binary (its config's `builtin_policies`, by name), once, and its `policies` carry only your files. `limactl create` reads `base.yaml` on its standard input (`-`). Only `--from`'s build on Lima needs a path, because its build VM mounts the conversion's scripts from `oci/` read-only (root there reads them), and none of the folder's other files, with `guest/ca.sh` beside it when you have [company CAs](network.md#a-companys-ca). It writes them into its own temporary folder, `devvm-oci.<random>`, beside `vm/` and never inside it, files 600 and folders 700, and the build's cleanup deletes the folder however the build ends. Image keys hash the embedded files, so what goes into an image is always what its key describes.
 
 ## devvm's own Lima home
 
