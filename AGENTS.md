@@ -72,7 +72,7 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 - **Extend the owner, don't copy it:** before adding a helper, parser, path, file reader, message or table, find its owner and extend it; a new owner gets a forbidigo rule or a structure-test check only when a second copy would be a bug ([Contributing](docs/content/docs/contributing/structure.md#one-owner-for-each-concern)).
 - **Edit files with the editor tools,** not `sed`, `awk`, `python`, heredocs or `cat >`.
 - **Ask first** before anything outward-facing (publishing, releases, repos, pushing) and before deleting anything you didn't create.
-- **A task that turns out wrong or incomplete** gets a proposed change (`dex edit`), not quietly something else.
+- **A task that turns out wrong or incomplete:** say so and propose the change; don't quietly do something else.
 
 ## Go conventions
 
@@ -139,8 +139,6 @@ devvm: one isolated VM per project folder, cloned from a base image, with toolch
 
 ## Commits and tasks
 
-- Tasks are in dex (`.dex/`, git-ignored).
-- **One commit when each task is complete**, its Docs and Review subtasks included. Conventional Commits: `type(scope): summary`, types `feat`, `fix`, `docs`, `test`, `refactor`, `build`, `ci`, `chore`. Then `dex complete <id> --commit <sha>`.
-- **Don't commit or `dex complete` until the gate passes**, with whatever `mise run fmt` changed in the commit.
-- **Dex task IDs never go in commit messages, code comments or docs.**
-- **AGENTS.md stays short:** one line per path or rule. Inventories (functions, messages, test names) go in the commit message and the `dex complete` result, not here.
+- **One commit when each task is complete**, its docs and review included. Conventional Commits: `type(scope): summary`, types `feat`, `fix`, `docs`, `test`, `refactor`, `build`, `ci`, `chore`.
+- **Don't commit until the gate passes**, with whatever `mise run fmt` changed in the commit.
+- **AGENTS.md stays short:** one line per path or rule. Inventories (functions, messages, test names) go in the commit message, not here.
