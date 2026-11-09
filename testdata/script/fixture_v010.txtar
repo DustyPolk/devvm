@@ -6,7 +6,9 @@
 # 0.1.0's defaults, its agent store and logins. Nothing is migrated: the
 # layout version stays, the read-only commands change no file, each
 # --json has all that 0.1.0's had, and a launch starts the VM as it is,
-# with only the notes an upgrade brings.
+# with only the notes an upgrade brings. Then today's commands work on
+# app as 0.1.0 left it: a repo nested in its folder, .git pins on a Linux
+# host that has them, a secret of your own, and devvm rm.
 [!darwin] [!linux] skip 'a fixture for macOS and Linux only'
 env GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
@@ -114,6 +116,7 @@ grep '\A1\n\z' $CFG/version
 # account has only fields it knows, and the link's target is stopped.
 cd $HOME/src/app
 cp $APP_dir/vm.json $WORK/app-before.json
+cp $APP_dir/run/secrets.json $WORK/app-secrets.json
 stub_reset
 exec devvm
 stdout '^==> starting vm=devvm-app-[0-9a-f]{14}$'
@@ -123,6 +126,10 @@ stderr '^devvm: login_fields_withheld agent=Codex file=auth\.json keys=extra_fie
 ! stderr 'login_fields_withheld agent=Claude'
 stderr '^devvm: link_target_stopped target=devvm-db-[0-9a-f]{14} vm=devvm-app-[0-9a-f]{14}$'
 ! stderr 'unreadable|corrupt|layout_|moved|replaced|refused|failed'
+# The github secret 0.1.0 saved is found, and the bindings file it wrote
+# is written again byte for byte: the placeholder the VM has is the same.
+! stderr no_github_token
+cmp $APP_dir/run/secrets.json $WORK/app-secrets.json
 # On Linux, where the tests' host can't pin (DEVVM_PINS), .git is
 # unprotected, as it was, and the watch 0.1.0 didn't have takes its first
 # scan, which reports nothing.
@@ -142,17 +149,27 @@ stdout '^agent\.made\.started=off_[0-9a-f]{32}$'
 [darwin] ! stdout '^git\.watched'
 grep '\A1\n\z' $DATA/version
 
-# scratch and web start too, with the same notes.
+# scratch and web start too, with the same notes, their Lima configs
+# unchanged, and nothing said of nested repos or the github secret, which
+# neither has.
 cd $HOME/src/scratch
+stub_reset
 exec devvm
 stdout '^==> starting vm=devvm-scratch-[0-9a-f]{14}$'
 stderr '^devvm: vm_outdated changed=base$'
 ! stderr 'unreadable|corrupt|layout_|moved|replaced|refused|failed'
+! stderr 'git_nested|no_github_token'
+stub_calls
+! stdout 'limactl (edit|create|clone|delete)'
 cd $HOME/src/web
+stub_reset
 exec devvm
 stdout '^==> starting vm=devvm-web-[0-9a-f]{14}$'
 stderr '^devvm: vm_outdated changed=base$'
 ! stderr 'unreadable|corrupt|layout_|moved|replaced|refused|failed'
+! stderr 'git_nested|no_github_token'
+stub_calls
+! stdout 'limactl (edit|create|clone|delete)'
 
 # devvm agent save reads web's Claude Code settings, which are 0.1.0's
 # store's.
@@ -160,3 +177,70 @@ exec devvm agent save --no-input
 stdout '^==> agent_save_nothing vm=devvm-web-[0-9a-f]{14}$'
 ! stderr .
 grep '\A1\n\z' $DATA/version
+
+# A repo nested in app's folder, which 0.1.0's protection, its own repo's
+# alone, doesn't cover. On macOS, the stop's check says once that devvm
+# git-protect on covers it, which then locks it. On Linux, where app's
+# .git is unprotected and watched, the stop names the repo that appeared
+# while the VM ran, and the watch covers it from then on, so the next
+# launch names only app's own .git.
+cd $HOME/src/app
+exec git init -q lib
+exec devvm stop
+[darwin] stderr '^devvm: git_nested_protectable repos=lib vm=devvm-app-[0-9a-f]{14}$'
+[linux] stderr '^devvm: git_nested_appeared repo=lib vm=devvm-app-[0-9a-f]{14}$'
+[darwin] exec devvm stop
+[darwin] ! stderr git_nested
+[darwin] stub_reset
+[darwin] exec devvm git-protect on
+[darwin] stdout '^==> git_locked vm=devvm-app-[0-9a-f]{14}$'
+[darwin] stub_calls
+[darwin] stdout '^chflags -R -P uchg \S*/home/src/app/lib/\.git/config$'
+[linux] exec devvm
+[linux] stderr '^devvm: git_unprotected vm=devvm-app-[0-9a-f]{14}$'
+[linux] ! stderr git_nested
+[linux] exec devvm stop
+[linux] ! stderr git_nested
+vm_state $APP_dir/vm.json
+stdout '^git\.made\.nested=true$'
+stdout '^git\.made\.repos\.lib\.git_id=[0-9]+:[0-9]+'
+
+# On a Linux host that pins (DEVVM_PINS), app, which 0.1.0 left
+# unprotected, is told it can be locked now; devvm git-protect on turns it
+# on, and the next start pins .git, nested repos too.
+[linux] env DEVVM_PINS=on
+[linux] exec devvm
+[linux] stderr '^devvm: git_protect_available vm=devvm-app-[0-9a-f]{14}$'
+[linux] exec devvm stop
+[linux] exec devvm git-protect on
+[linux] exec devvm
+[linux] ! stderr 'git_protect_available|git_unprotected|git_nested_unprotected'
+[linux] grep '"root":"\S*/home/src/app",' $APP_dir/run/git-pins.json
+[linux] grep '\{"path":"\.git/config","read_only":true\}' $APP_dir/run/git-pins.json
+[linux] grep '\{"path":"lib/\.git/config","read_only":true\}' $APP_dir/run/git-pins.json
+[linux] exec devvm stop
+
+# A secret of your own, used in app next to 0.1.0's github secret: its
+# state lists both, and its bindings file keeps github's placeholder.
+stdin $WORK/stripe.token
+exec devvm secret set stripe --host api.stripe.com --env STRIPE_API_KEY --stdin
+exec devvm secret use stripe
+vm_state $APP_dir/vm.json
+stdout '^secrets\.names=github stripe$'
+stdout '^secrets\.yours\.0\.name=stripe$'
+grep '^\{"version":1,' $APP_dir/run/secrets.json
+grep '"name":"stripe","kind":"secret"' $APP_dir/run/secrets.json
+exec sh -c 'grep -o "{\"name\":\"github\"[^}]*}" "$WORK/app-secrets.json" >"$WORK/github.binding" && test -s "$WORK/github.binding" && grep -qF -f "$WORK/github.binding" "$APP_dir/run/secrets.json"'
+
+# devvm rm unlocks every .git it locked, nested ones too, keeps none for
+# another VM, and deletes the VM.
+stub_reset
+exec devvm rm --force --no-export
+! stderr git_kept_
+stub_calls
+[darwin] stdout '^chflags -R -P nouchg \S*/home/src/app/\.git/config$'
+[darwin] stdout '^chflags -R -P nouchg \S*/home/src/app/lib/\.git/config$'
+stdout '^limactl delete -f devvm-app-[0-9a-f]{14}$'
+
+-- stripe.token --
+sk_test_fixturefakev010
