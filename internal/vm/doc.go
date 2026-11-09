@@ -34,8 +34,9 @@
 //     (exports.go): the exports of agents' history, their .folder files,
 //     Newest.
 //   - Tools (tools.go): a VM's shared tools; Settings (settings.go,
-//     size.go, ports.go, sshagent.go, transparent.go): its size, ports,
-//     SSH agent forwarding, .git protection and transparent mode; Net
+//     size.go, ports.go, sshagent.go, transparent.go, mountcache.go): its
+//     size, ports, SSH agent forwarding, .git protection, transparent mode
+//     and its project folder's cache mode; Net
 //     (network.go, secret.go): its network tier, network log, allowlist
 //     and secrets.
 //   - Links (links.go): links between VMs and published ports; Groups
