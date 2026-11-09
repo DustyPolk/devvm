@@ -127,10 +127,12 @@ Each package's concerns and identifiers: [The packages](docs/content/docs/contri
 - **The ssh socket path limit (103 characters at most: macOS's 104 include the NUL)** bounds VM names (`NameMax`).
 - **Linux hosts (QEMU):** mounts are 9p, and a 9p share mounts once per guest. Debian's tmpfs `/tmp` hides anything mounted below it during boot. Project VMs' qcow2 disks are overlays of their image's, so never start an image VM or write its disk after it's built.
 - **Shared tools:** mise rewrites `latest`/`24`/`lts` links in a tool's folder after any install, so those folders are local in the VM; only version folders are mounted.
+- **Lima can report a failed start for a VM that is running but degraded;** starting tolerates it.
 - **Linux's `pgrep -f` matches the shell running it** (procps), so e2e's patterns are written `[_]proxy`. mise skips minisign on linux/arm64 (no build).
 
 ## Commits and tasks
 
 - **One commit when each task is complete**, its docs and review included. Conventional Commits: `type(scope): summary`, types `feat`, `fix`, `docs`, `test`, `refactor`, `build`, `ci`, `chore`.
 - **Don't commit until the gate passes**, with whatever `mise run fmt` changed in the commit.
+- **Task IDs from any tracker never go in commit messages, code comments or docs.**
 - **AGENTS.md stays short:** one line per path or rule. Inventories (functions, messages, test names) go in the commit message, not here.
