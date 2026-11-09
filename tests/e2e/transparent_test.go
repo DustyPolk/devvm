@@ -168,6 +168,13 @@ sleep 1; devvm-why | sed -n '/^Refused lately/,/^Names/p' | grep -q '5432'`); er
 		seen(s, title+": devvm-why", vmOut(s, vm, "devvm-why"))
 		return nil
 	})
+	// In an inet table, ip daddr matches IPv4 alone, so an IPv6 connection
+	// that got past the sentinel's return was logged as refused.
+	s.Check(title+": an IPv6 connection on loopback that works isn't listed as refused", func() error {
+		return inVM(s, vm, `socat -u TCP6-LISTEN:18787,bind=[::1],reuseaddr OPEN:/dev/null & p=$!; sleep 1
+socat -u /dev/null 'TCP6:[::1]:18787' || { kill $p 2>/dev/null; echo "[::1]:18787 refused"; exit 1; }
+wait $p; sleep 1; ! devvm-why | sed -n '/^Refused lately/,/^Names/p' | grep -Eq '^ +18787( |$)'`)
+	})
 }
 
 // seen records what a check saw in the run's output, a line each, for a

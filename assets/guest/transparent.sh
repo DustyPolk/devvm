@@ -137,7 +137,11 @@ ${redirects}    jump sentinel
     ip daddr != @kept udp dport 53 dnat ip to $a:53
     ip daddr != @kept tcp dport 53 dnat ip to $a:53
   }
+  # IPv6 returns first: in an inet table, ip daddr matches IPv4 alone, so an IPv6 packet would skip
+  # the next return and be logged as refused. The stand-in address is IPv4, and a connection to it
+  # from an IPv6 socket (::ffff:198.18.0.1) leaves as IPv4, so this opens no way to it.
   chain sentinel {
+    meta nfproto != ipv4 return
     ip daddr != $a return
     udp dport 53 dnat ip to $a:53
     tcp dport 53 dnat ip to $a:53

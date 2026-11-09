@@ -84,6 +84,14 @@ func TestTransparentRuleset(t *testing.T) {
 				t.Errorf("%s: the ruleset lacks %q:\n%s", bash, want, out)
 			}
 		}
+		// IPv6 leaves the sentinel before anything else: an inet table's
+		// ip daddr matches IPv4 alone, so an IPv6 connection would get past
+		// the address's return and be logged as refused. The log is the
+		// sentinel's alone.
+		if !strings.Contains(out, "  chain sentinel {\n    meta nfproto != ipv4 return\n    ip daddr != 198.18.0.1 return\n") ||
+			strings.Count(out, "log prefix") != 1 || strings.Index(out, "log prefix") < strings.Index(out, "chain sentinel {") {
+			t.Errorf("%s: the sentinel doesn't return IPv6 first:\n%s", bash, out)
+		}
 		if strings.Count(out, "{") != strings.Count(out, "}") || strings.Count(out, "jump sentinel") != 2 {
 			t.Errorf("%s: unbalanced, or a chain without the stand-in address's ports:\n%s", bash, out)
 		}
