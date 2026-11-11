@@ -51,7 +51,7 @@ func ReadClip(ctx context.Context, limit int64) (Clip, error) {
 		}
 		return Clip{}, ErrClipEmpty
 	}
-	f, err := os.Open(file) //nolint:gosec,forbidigo // devvm's own file, in a folder of mode 700 it just made
+	f, err := os.Open(file) //nolint:gosec // devvm's own file, in a folder of mode 700 it just made
 	if err != nil {
 		return Clip{}, err
 	}

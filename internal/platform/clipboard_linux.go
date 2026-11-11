@@ -107,6 +107,9 @@ func ReadClip(ctx context.Context, limit int64) (Clip, error) {
 	return Clip{}, ErrClipEmpty
 }
 
+// isFileType reports whether t is a copied file's reference.
+func isFileType(t string) bool { return t == typeURIList || t == typeGnome }
+
 // clipStderrMax is the most of a clipboard tool's stderr devvm keeps.
 const clipStderrMax = 4 << 10
 

@@ -33,7 +33,7 @@ exec sh -c 'printf "text/plain\nUTF8_STRING\n" > "$STUB_DIR/clip-types"'
 ! exec devvm paste
 stderr '^devvm: paste_nothing$'
 stub_calls
-! stdout 'devvm-paste'
+! stdout '''devvm-paste'''
 [linux] ! stdout 'wl-paste --no-newline'
 
 # An image: the PNG's bytes go to paste.sh put on stdin, under a name
@@ -53,7 +53,8 @@ stub_calls
 [linux] stdout '^wl-paste --list-types$'
 [linux] stdout '^wl-paste --no-newline --type image/png$'
 [linux] stdout '^wl-copy$'
-[darwin] stdout '^osascript .*PNGf'
+[darwin] stdout '^osascript -e on run argv$'
+[darwin] stdout 'the clipboard as «class PNGf»'
 [darwin] stdout '^pbcopy$'
 ! stdout 'text/html'
 
@@ -88,7 +89,7 @@ stub_reset
 ! exec devvm paste
 stderr '^devvm: paste_too_large max=64 MiB$'
 stub_calls
-! stdout 'devvm-paste'
+! stdout '''devvm-paste'''
 [linux] rm $STUB_DIR/clip-floods
 
 # paste.sh failing in the VM: nothing copied.
@@ -129,7 +130,7 @@ stub_reset
 ! exec devvm paste
 stderr '^devvm: paste_file_link file=\S*/plain/planted\.txt$'
 stub_calls
-! stdout 'devvm-paste'
+! stdout '''devvm-paste'''
 
 # A link the VM planted at a folder of yours, before the copy, is refused
 # on the way to the file, and so is a copied folder's reference, which
@@ -147,7 +148,7 @@ exec sh -c 'printf "%s/id_ed25519/\n" "$PWD" > "$STUB_DIR/clip-file"'
 ! exec devvm paste
 stderr '^devvm: paste_file_link file=\S*/plain/id_ed25519$'
 stub_calls
-! stdout 'devvm-paste'
+! stdout '''devvm-paste'''
 
 # A folder, and a file that's gone.
 exec sh -c 'printf "file://%s\n" "$PWD" > "$STUB_DIR/clip"'

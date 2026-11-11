@@ -110,9 +110,6 @@ func chooseTypes(listed []byte) []string {
 	return picked
 }
 
-// isFileType reports whether t is a copied file's reference.
-func isFileType(t string) bool { return t == typeURIList || t == typeGnome }
-
 // uriListPaths are the paths of the file: URIs in a text/uri-list (RFC
 // 2483: one URI per line, CRLF or LF, # lines comments), or in GNOME's
 // x-special/gnome-copied-files, whose first line is copy or cut. A URI
