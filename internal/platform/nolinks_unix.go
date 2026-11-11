@@ -21,6 +21,11 @@ var ErrLinkOnPath = errors.New("a symbolic link is on the path")
 // own limit, past which it fails with ELOOP.
 const linkHops = 40
 
+// fileFlags open the last part of OpenNoLinks's path: never a link in its
+// place (O_NOFOLLOW), never waiting on a FIFO (O_NONBLOCK), and never
+// taking a terminal there as devvm's controlling terminal (O_NOCTTY).
+const fileFlags = unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_NOCTTY | unix.O_CLOEXEC
+
 // OpenNoLinks opens the file at path, an absolute and clean path, for
 // reading, following no symbolic link but root's. Each folder on the way
 // and the file itself are opened from their parent with O_NOFOLLOW,
@@ -69,7 +74,7 @@ func openNoLinks(path string, follow func(link, dir *unix.Stat_t) bool) (*os.Fil
 		parts = parts[1:]
 		flags := rootFlags | unix.O_NOFOLLOW
 		if last {
-			flags = unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_CLOEXEC
+			flags = fileFlags
 		}
 		next, err := unix.Openat(fd, part, flags, 0)
 		if err == nil {

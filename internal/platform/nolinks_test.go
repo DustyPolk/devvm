@@ -175,6 +175,21 @@ func TestOpenNoLinksHopCap(t *testing.T) {
 	}
 }
 
+// The last part is opened following no link, waiting on no FIFO, and
+// taking no terminal as devvm's: a copied file that's a terminal, such as
+// /dev/ttys001, never becomes the controlling terminal of a devvm that
+// has none, before the check for a regular file refuses it.
+func TestOpenNoLinksFileFlags(t *testing.T) {
+	for _, f := range []struct {
+		name string
+		flag int
+	}{{"O_NOFOLLOW", unix.O_NOFOLLOW}, {"O_NONBLOCK", unix.O_NONBLOCK}, {"O_NOCTTY", unix.O_NOCTTY}, {"O_CLOEXEC", unix.O_CLOEXEC}} {
+		if fileFlags&f.flag == 0 {
+			t.Errorf("the file is opened without %s", f.name)
+		}
+	}
+}
+
 // A link is the system's only when root owns it and its folder, and the
 // folder isn't writable by its group or by others: root's link
 // hard-linked into a folder of yours, or in one that others can write,
