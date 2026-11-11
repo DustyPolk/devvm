@@ -25,25 +25,32 @@ const linkHops = 40
 // reading, following no symbolic link but root's. Each folder on the way
 // and the file itself are opened from their parent with O_NOFOLLOW,
 // through file descriptors, so there's no moment for a swap between a
-// check and the open. A link on the way is followed only when root owns
-// it, as the system's are (macOS's /tmp, /var and /etc), because a link
-// a VM makes in a mount is the user's on this machine, never root's. Any
-// other link on the way, the user's own included, and a link in the
+// check and the open. A link on the way is followed only when it's the
+// system's (systemLink), as macOS's /tmp, /var and /etc are, because a
+// link a VM makes in a mount is the user's on this machine, never root's.
+// Any other link on the way, the user's own included, and a link in the
 // file's place, fail with ErrLinkOnPath. The file isn't checked further:
 // the caller fstats it for a regular file within its cap. Its caller
 // closes it.
-func OpenNoLinks(path string) (*os.File, error) { return openNoLinks(path, rootOwns) }
+func OpenNoLinks(path string) (*os.File, error) { return openNoLinks(path, systemLink) }
 
-// rootOwns reports whether root owns a link, from its fstatat.
-func rootOwns(st *unix.Stat_t) bool { return st.Uid == 0 }
+// systemLink reports whether a link on the way is the system's, from its
+// fstatat and its folder's fstat: root owns both, and the folder isn't
+// writable by its group or by others. Root owning the link isn't enough,
+// as root's link can be hard-linked into a folder of yours; and in a
+// folder only root can change, no one else can swap the link between its
+// fstatat and its readlinkat.
+func systemLink(link, dir *unix.Stat_t) bool {
+	return link.Uid == 0 && dir.Uid == 0 && dir.Mode&(unix.S_IWGRP|unix.S_IWOTH) == 0
+}
 
-// openNoLinks is OpenNoLinks with follow deciding, from a link's fstatat,
-// whether a link on the way is followed: tests can't make root's links,
-// so they choose their own. A followed link's target replaces it on the
-// path: an absolute one starts over from /, a relative one goes on from
-// the folder holding the link, and .. goes through openat like any other
-// part.
-func openNoLinks(path string, follow func(*unix.Stat_t) bool) (*os.File, error) {
+// openNoLinks is OpenNoLinks with follow deciding, from a link's fstatat
+// and its folder's fstat, whether a link on the way is followed: tests
+// can't make root's links, so they choose their own. A followed link's
+// target replaces it on the path: an absolute one starts over from /, a
+// relative one goes on from the folder holding the link, and .. goes
+// through openat like any other part.
+func openNoLinks(path string, follow func(link, dir *unix.Stat_t) bool) (*os.File, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, fmt.Errorf("%s: not an absolute, clean path", path)
 	}
@@ -71,11 +78,12 @@ func openNoLinks(path string, follow func(*unix.Stat_t) bool) (*os.File, error) 
 			continue
 		}
 		st, isLink := linkAt(fd, part)
+		var dir unix.Stat_t
 		switch {
 		case !isLink:
 			_ = unix.Close(fd)
 			return nil, &os.PathError{Op: "open", Path: path, Err: err}
-		case last || !follow(st):
+		case last || unix.Fstat(fd, &dir) != nil || !follow(st, &dir):
 			_ = unix.Close(fd)
 			return nil, fmt.Errorf("%s: %w", path, ErrLinkOnPath)
 		}

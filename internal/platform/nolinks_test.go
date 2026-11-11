@@ -53,7 +53,7 @@ func (n noLinksTree) link(target string, parts ...string) {
 
 // following follows the links at the paths given and no other, as
 // OpenNoLinks follows root's links and no other.
-func (n noLinksTree) following(paths ...string) func(*unix.Stat_t) bool {
+func (n noLinksTree) following(paths ...string) func(link, dir *unix.Stat_t) bool {
 	n.t.Helper()
 	inos := map[uint64]bool{}
 	for _, p := range paths {
@@ -61,11 +61,11 @@ func (n noLinksTree) following(paths ...string) func(*unix.Stat_t) bool {
 		n.must(unix.Lstat(p, &st))
 		inos[st.Ino] = true
 	}
-	return func(st *unix.Stat_t) bool { return inos[st.Ino] }
+	return func(st, _ *unix.Stat_t) bool { return inos[st.Ino] }
 }
 
 // readOf is what opening path with follow reads.
-func readOf(t *testing.T, path string, follow func(*unix.Stat_t) bool) (string, error) {
+func readOf(t *testing.T, path string, follow func(link, dir *unix.Stat_t) bool) (string, error) {
 	t.Helper()
 	f, err := openNoLinks(path, follow)
 	if err != nil {
@@ -87,7 +87,7 @@ func TestOpenNoLinks(t *testing.T) {
 	n.link(n.at("elsewhere", "shots", "shot.png"), "project", "link.png")
 
 	path := n.at("project", "shots", "shot.png")
-	if got, err := readOf(t, path, rootOwns); err != nil || got != "png" {
+	if got, err := readOf(t, path, systemLink); err != nil || got != "png" {
 		t.Fatalf("read %q, %v", got, err)
 	}
 	if _, err := OpenNoLinks(n.at("project", "link.png")); !errors.Is(err, ErrLinkOnPath) {
@@ -168,9 +168,58 @@ func TestOpenNoLinksHopCap(t *testing.T) {
 	n := newNoLinksTree(t)
 	n.link("b", "loop", "a")
 	n.link("a", "loop", "b")
-	follow := func(*unix.Stat_t) bool { return true }
+	follow := func(_, _ *unix.Stat_t) bool { return true }
 	_, err := readOf(t, n.at("loop", "a", "shot.png"), follow)
 	if !errors.Is(err, unix.ELOOP) {
 		t.Errorf("a loop of links: %v", err)
+	}
+}
+
+// A link is the system's only when root owns it and its folder, and the
+// folder isn't writable by its group or by others: root's link
+// hard-linked into a folder of yours, or in one that others can write,
+// isn't followed.
+func TestSystemLink(t *testing.T) {
+	rootLink := &unix.Stat_t{Uid: 0, Mode: unix.S_IFLNK | 0o755}
+	yourLink := &unix.Stat_t{Uid: 501, Mode: unix.S_IFLNK | 0o755}
+	rootDir := &unix.Stat_t{Uid: 0, Mode: unix.S_IFDIR | 0o755}
+	for _, c := range []struct {
+		name      string
+		link, dir *unix.Stat_t
+		want      bool
+	}{
+		{"root's link in root's folder", rootLink, rootDir, true},
+		{"root's link in a folder of yours", rootLink, &unix.Stat_t{Uid: 501, Mode: unix.S_IFDIR | 0o755}, false},
+		{"root's link in root's folder its group writes", rootLink, &unix.Stat_t{Uid: 0, Mode: unix.S_IFDIR | 0o775}, false},
+		{"root's link in root's folder anyone writes", rootLink, &unix.Stat_t{Uid: 0, Mode: unix.S_IFDIR | 0o1777}, false},
+		{"your link in root's folder", yourLink, rootDir, false},
+	} {
+		if got := systemLink(c.link, c.dir); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// The system's own links on the way, such as macOS's /etc, /tmp and /var,
+// are followed: /etc/hosts, a file in /tmp, and one in the test's own
+// folder as TMPDIR names it (/var/folders/… on macOS).
+func TestOpenNoLinksSystemPaths(t *testing.T) {
+	inTmp, err := os.CreateTemp("/tmp", "devvm-nolinks-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = inTmp.Close()
+	t.Cleanup(func() { _ = os.Remove(inTmp.Name()) })
+	inTMPDIR := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(inTMPDIR, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"/etc/hosts", inTmp.Name(), inTMPDIR} {
+		f, err := OpenNoLinks(p)
+		if err != nil {
+			t.Errorf("%s: %v", p, err)
+			continue
+		}
+		_ = f.Close()
 	}
 }
