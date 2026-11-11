@@ -5,6 +5,7 @@ package platform
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,21 +13,31 @@ import (
 )
 
 // A clipboard tool is run from the test build's folder when it's given,
-// else from its system path, else found on PATH; a tool missing from
-// its path is ClipToolMissing, named without its folder.
+// else from the first of the system's folders that has it, else from the
+// first folder, where it's missing; never by its name alone, found on
+// PATH. A tool missing from its path is ClipToolMissing, named without
+// its folder.
 func TestClipboardTool(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(b, "wl-paste"), nil, 0o700); err != nil { //nolint:gosec // a stand-in that's never run
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(a, "xclip"), 0o700); err != nil { // a folder isn't the tool
+		t.Fatal(err)
+	}
 	for _, c := range []struct {
-		clip         Clipboard
-		name, system string
-		want         string
+		clip Clipboard
+		name string
+		dirs []string
+		want string
 	}{
-		{Clipboard{}, "osascript", "/usr/bin/osascript", "/usr/bin/osascript"},
-		{Clipboard{}, "wl-paste", "", "wl-paste"},
-		{Clipboard{Tools: "/stubs"}, "osascript", "/usr/bin/osascript", "/stubs/osascript"},
-		{Clipboard{Tools: "/stubs"}, "wl-paste", "", "/stubs/wl-paste"},
+		{Clipboard{}, "wl-paste", []string{a, b}, filepath.Join(b, "wl-paste")},
+		{Clipboard{}, "xclip", []string{a, b}, filepath.Join(a, "xclip")},
+		{Clipboard{}, "wl-copy", []string{a, b}, filepath.Join(a, "wl-copy")},
+		{Clipboard{Tools: "/stubs"}, "wl-paste", []string{a, b}, "/stubs/wl-paste"},
 	} {
-		if got := c.clip.tool(c.name, c.system); got != c.want {
-			t.Errorf("%+v.tool(%q, %q) = %q, want %q", c.clip, c.name, c.system, got, c.want)
+		if got := c.clip.tool(c.name, c.dirs...); got != c.want {
+			t.Errorf("%+v.tool(%q, %q) = %q, want %q", c.clip, c.name, c.dirs, got, c.want)
 		}
 	}
 	gone := filepath.Join(t.TempDir(), "pbcopy")

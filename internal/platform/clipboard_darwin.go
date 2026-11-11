@@ -68,12 +68,9 @@ type clipFound struct {
 // clipFoundMax bounds what clipScript prints: one path at most.
 const clipFoundMax = 64 << 10
 
-// The macOS clipboard tools, by their full paths: never ones found on
-// PATH, which anything that can write a folder on it could plant.
-const (
-	osascript = "/usr/bin/osascript"
-	pbcopy    = "/usr/bin/pbcopy"
-)
+// macTools is the folder of macOS's clipboard tools, osascript and
+// pbcopy, which System Integrity Protection keeps as Apple shipped them.
+const macTools = "/usr/bin"
 
 // ReadClip reads the clipboard through osascript (clipScript): one copied
 // file's path, else an image, written to a file in a private folder of
@@ -100,7 +97,7 @@ func (c Clipboard) readClip(ctx context.Context, limit int64, pasteboard string)
 	if pasteboard != "" {
 		args = append(args, pasteboard)
 	}
-	out, err := runClipTool(ctx, c.tool("osascript", osascript), args, clipFoundMax, clipWait)
+	out, err := runClipTool(ctx, c.tool("osascript", macTools), args, clipFoundMax, clipWait)
 	if err != nil {
 		return Clip{}, err
 	}
@@ -140,5 +137,5 @@ func (c Clipboard) readClip(ctx context.Context, limit int64, pasteboard string)
 
 // CopyText puts text on the clipboard with pbcopy.
 func (c Clipboard) CopyText(ctx context.Context, text string) error {
-	return copyWith(ctx, c.tool("pbcopy", pbcopy), nil, text, clipWait)
+	return copyWith(ctx, c.tool("pbcopy", macTools), nil, text, clipWait)
 }

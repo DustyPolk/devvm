@@ -22,21 +22,29 @@ type clipTool struct {
 	empty []string
 }
 
-// clipTool is the clipboard tool for this session, found on PATH:
-// Wayland's when WAYLAND_DISPLAY is set, X11's when DISPLAY is, else
-// ErrClipNoSession.
+// linuxTools are the folders devvm finds the Linux clipboard tools in,
+// in this order, and never PATH: the distributions' own, /usr/local's,
+// and NixOS's system profile. Each is root's.
+func linuxTools() []string {
+	return []string{"/usr/bin", "/bin", "/usr/local/bin", "/run/current-system/sw/bin"}
+}
+
+// clipTool is the clipboard tool for this session, from the system's
+// folders (linuxTools): Wayland's when WAYLAND_DISPLAY is set, X11's when
+// DISPLAY is, else ErrClipNoSession.
 func (c Clipboard) clipTool() (clipTool, error) {
+	dirs := linuxTools()
 	switch {
 	case os.Getenv("WAYLAND_DISPLAY") != "":
 		return clipTool{
-			paste: c.tool("wl-paste", ""), copy: c.tool("wl-copy", ""),
+			paste: c.tool("wl-paste", dirs...), copy: c.tool("wl-copy", dirs...),
 			list:  []string{"--list-types"},
 			read:  func(t string) []string { return []string{"--no-newline", "--type", t} },
 			empty: []string{"Nothing is copied", "No selection"},
 		}, nil
 	case os.Getenv("DISPLAY") != "":
 		return clipTool{
-			paste: c.tool("xclip", ""), copy: c.tool("xclip", ""),
+			paste: c.tool("xclip", dirs...), copy: c.tool("xclip", dirs...),
 			list:  []string{"-selection", "clipboard", "-t", "TARGETS", "-o"},
 			read:  func(t string) []string { return []string{"-selection", "clipboard", "-t", t, "-o"} },
 			write: []string{"-selection", "clipboard", "-i"},

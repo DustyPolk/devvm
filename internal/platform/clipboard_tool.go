@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -20,17 +21,21 @@ const clipStderrMax = 4 << 10
 // hang on a program that holds the clipboard and doesn't answer.
 const clipWait = 30 * time.Second
 
-// tool is the clipboard tool name's command: in Tools when it's set,
-// else at system, its path (macOS's /usr/bin/osascript), or name alone,
-// found on PATH, when system is "".
-func (c Clipboard) tool(name, system string) string {
-	switch {
-	case c.Tools != "":
+// tool is the path of the clipboard tool name: in Tools when it's set,
+// else in the first of the system's folders, dirs, that has it, and never
+// one found on PATH, where a folder you or a VM can write, such as a
+// project's, may come first. When none has it, it's the first folder's
+// path, which fails as missing (ClipToolMissing).
+func (c Clipboard) tool(name string, dirs ...string) string {
+	if c.Tools != "" {
 		return filepath.Join(c.Tools, name)
-	case system != "":
-		return system
 	}
-	return name
+	for _, d := range dirs {
+		if fi, err := os.Stat(filepath.Join(d, name)); err == nil && fi.Mode().IsRegular() {
+			return filepath.Join(d, name)
+		}
+	}
+	return filepath.Join(dirs[0], name)
 }
 
 // missing reports whether starting a command failed because its program
