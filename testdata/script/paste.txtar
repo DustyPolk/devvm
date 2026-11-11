@@ -57,6 +57,20 @@ stub_calls
 [darwin] stdout '^pbcopy$'
 ! stdout 'text/html'
 
+# On macOS, osascript and pbcopy are the system's, never ones first on
+# PATH (the tests' stand-ins are in DEVVM_CLIP_TOOLS).
+[darwin] mkdir $WORK/planted
+[darwin] cp $WORK/planted.sh $WORK/planted/osascript
+[darwin] cp $WORK/planted.sh $WORK/planted/pbcopy
+[darwin] chmod 0755 $WORK/planted/osascript
+[darwin] chmod 0755 $WORK/planted/pbcopy
+[darwin] env PATH0=$PATH
+[darwin] env PATH=$WORK/planted:$PATH
+[darwin] exec devvm paste
+[darwin] stdout '^==> paste_sent path=/tmp/devvm-paste/paste-'
+[darwin] ! exists $WORK/planted/ran
+[darwin] env PATH=$PATH0
+
 # --json: the same, as one object.
 exec devvm paste --json
 stdout '"version": ?1'
@@ -221,18 +235,18 @@ rm $STUB_DIR/clip-file
 [linux] stderr '^devvm: paste_nothing$'
 [linux] rm $STUB_DIR/clip-fails
 
-# No session, and a missing tool (a PATH without xclip, with what devvm
-# itself needs).
+# No session, and a missing tool (a folder of tools without it).
 [linux] env DISPLAY=
 [linux] ! exec devvm paste
 [linux] stderr '^devvm: paste_no_session$'
 [linux] env DISPLAY=:0
-[linux] exec sh -c 'mkdir -p "$WORK/bin" && for c in devvm limactl ssh sh git uname qemu-img qemu-system-x86_64 qemu-system-aarch64; do ln -s "$(command -v "$c")" "$WORK/bin/$c"; done'
-[linux] env PATH0=$PATH
-[linux] env PATH=$WORK/bin
-[linux] ! exec devvm paste
+mkdir $WORK/notools
+env CLIP0=$DEVVM_CLIP_TOOLS
+env DEVVM_CLIP_TOOLS=$WORK/notools
+! exec devvm paste
 [linux] stderr '^devvm: paste_needs_tool tool=xclip$'
-[linux] env PATH=$PATH0
+[darwin] stderr '^devvm: paste_needs_tool tool=osascript$'
+env DEVVM_CLIP_TOOLS=$CLIP0
 [linux] env DISPLAY=
 [linux] env WAYLAND_DISPLAY=wayland-0
 
@@ -263,3 +277,7 @@ paste-dir = "/home/me/pastes"
 -- bad.toml --
 # not absolute
 paste-dir = "pastes"
+-- planted.sh --
+#!/bin/sh
+touch "$(dirname "$0")/ran"
+exit 1

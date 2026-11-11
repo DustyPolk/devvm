@@ -5,9 +5,38 @@ package platform
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// A clipboard tool is run from the test build's folder when it's given,
+// else from its system path, else found on PATH; a tool missing from
+// its path is ClipToolMissing, named without its folder.
+func TestClipboardTool(t *testing.T) {
+	for _, c := range []struct {
+		clip         Clipboard
+		name, system string
+		want         string
+	}{
+		{Clipboard{}, "osascript", "/usr/bin/osascript", "/usr/bin/osascript"},
+		{Clipboard{}, "wl-paste", "", "wl-paste"},
+		{Clipboard{Tools: "/stubs"}, "osascript", "/usr/bin/osascript", "/stubs/osascript"},
+		{Clipboard{Tools: "/stubs"}, "wl-paste", "", "/stubs/wl-paste"},
+	} {
+		if got := c.clip.tool(c.name, c.system); got != c.want {
+			t.Errorf("%+v.tool(%q, %q) = %q, want %q", c.clip, c.name, c.system, got, c.want)
+		}
+	}
+	gone := filepath.Join(t.TempDir(), "pbcopy")
+	var missing *ClipToolMissing
+	if err := copyWith(t.Context(), gone, nil, "x"); !errors.As(err, &missing) || missing.Tool != "pbcopy" {
+		t.Errorf("a copier missing from its path: %v", err)
+	}
+	if _, err := runClipTool(t.Context(), gone, nil, 1); !errors.As(err, &missing) || missing.Tool != "pbcopy" {
+		t.Errorf("a reader missing from its path: %v", err)
+	}
+}
 
 // A clipboard tool's output is kept to its limit, the tool stopped past
 // it; a tool that isn't there is ClipToolMissing; one that fails is

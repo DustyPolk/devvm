@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-// projectPaste: devvm paste, with stand-in clipboard tools first on PATH
-// (as NoDocker stands in for docker), puts the copied image into the
+// projectPaste: devvm paste, with stand-in clipboard tools (FakeClipboard,
+// as NoDocker stands in for docker), puts the copied image into the
 // running VM's paste folder, where its checksum matches, mode 600 in the
 // folder of mode 700, and the stand-in copier got the path; devvm paste
 // rm --force deletes it and nothing else; and a stopped VM is refused
@@ -99,10 +99,11 @@ func projectPaste(s *S, w *webVM) {
 	})
 }
 
-// FakeClipboard is an environment with stand-in clipboard tools first on
-// PATH, which hold image as the clipboard's one image: wl-paste and
-// wl-copy (Wayland, which the environment names), and osascript and
-// pbcopy (macOS). Whatever is copied goes to the file returned.
+// FakeClipboard is an environment whose test build runs stand-in
+// clipboard tools (DEVVM_CLIP_TOOLS), which hold image as the clipboard's
+// one image: wl-paste and wl-copy (Wayland, which the environment names),
+// and osascript and pbcopy (macOS). Whatever is copied goes to the file
+// returned.
 func FakeClipboard(s *S, image []byte) (env []string, copied string, err error) {
 	dir := filepath.Join(s.sb.work, "clipboard")
 	copied = filepath.Join(dir, "copied")
@@ -127,11 +128,5 @@ func FakeClipboard(s *S, image []byte) (env []string, copied string, err error) 
 			return nil, "", err
 		}
 	}
-	path := ""
-	for _, kv := range s.sb.env {
-		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
-			path = v
-		}
-	}
-	return []string{"PATH=" + dir + ":" + path, "WAYLAND_DISPLAY=wayland-0", "DISPLAY="}, copied, nil
+	return []string{"DEVVM_CLIP_TOOLS=" + dir, "WAYLAND_DISPLAY=wayland-0", "DISPLAY="}, copied, nil
 }

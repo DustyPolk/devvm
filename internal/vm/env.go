@@ -58,7 +58,8 @@ type Env struct {
 	OpenURL func(ctx context.Context, url string) error
 	// ReadClip reads an image or one copied file's path from this
 	// machine's clipboard, at most limit bytes, and CopyText puts text on
-	// it (platform's): devvm paste's.
+	// it (platform.Clipboard's, with the system's tools unless the CLI
+	// gives a test build's): devvm paste's.
 	ReadClip func(ctx context.Context, limit int64) (platform.Clip, error)
 	CopyText func(ctx context.Context, text string) error
 	// Environ is the environment devvm started with, the SSH agent
@@ -159,7 +160,7 @@ func NewEnv(d paths.Dirs, assets fs.FS, self, version string, reg *backend.Regis
 		Proxy: netpolicy.NewProxy(d, assets, self, store, r),
 		OS:    runtime.GOOS, Version: version,
 		Host: func() (Host, error) { return ThisHost(reg.Host) }, Exec: execShell, OpenURL: openURL, Environ: os.Environ(),
-		ReadClip: platform.ReadClip, CopyText: platform.CopyText,
+		ReadClip: platform.Clipboard{}.ReadClip, CopyText: platform.Clipboard{}.CopyText,
 		Getenv: os.Getenv, HostTZ: hostTZ, GitConfig: gitConfig,
 		SSHAdd:    func(ctx context.Context, args ...string) int { return sshAdd(ctx, r.Stderr(), args...) },
 		Reporter:  r,

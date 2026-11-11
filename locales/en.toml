@@ -2066,8 +2066,8 @@ description = "max is the most devvm paste sends, such as 64 MiB"
 other = "What's on the clipboard is over {{.max}}, more than devvm paste sends."
 
 [paste_needs_tool]
-description = "tool is the clipboard tool's command: wl-paste, wl-copy or xclip"
-other = "{{.tool}} isn't on PATH, and devvm paste reads and writes the clipboard with it. Install it, then run devvm paste again."
+description = "tool is the clipboard tool's command: wl-paste, wl-copy, xclip, osascript or pbcopy"
+other = "{{.tool}} isn't installed, and devvm paste reads and writes the clipboard with it. Install it, then run devvm paste again."
 
 [paste_no_session]
 other = "Neither WAYLAND_DISPLAY nor DISPLAY is set, so there's no clipboard to read. Run devvm paste from a terminal in your desktop session."

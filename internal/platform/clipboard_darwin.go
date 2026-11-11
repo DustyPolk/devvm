@@ -3,14 +3,11 @@ package platform
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 )
 
 // clipScript is the JavaScript for Automation that osascript runs to read
@@ -71,6 +68,13 @@ type clipFound struct {
 // clipFoundMax bounds what clipScript prints: one path at most.
 const clipFoundMax = 64 << 10
 
+// The macOS clipboard tools, by their full paths: never ones found on
+// PATH, which anything that can write a folder on it could plant.
+const (
+	osascript = "/usr/bin/osascript"
+	pbcopy    = "/usr/bin/pbcopy"
+)
+
 // ReadClip reads the clipboard through osascript (clipScript): one copied
 // file's path, else an image, written to a file in a private folder of
 // devvm's, read, and deleted, at most limit bytes (ErrClipTooLarge past
@@ -79,13 +83,13 @@ const clipFoundMax = 64 << 10
 // ClipManyFiles, and one that's gone is ErrClipFileGone, never the icon
 // sent instead. A script that fails is ClipToolFailed. Text is never
 // asked for.
-func ReadClip(ctx context.Context, limit int64) (Clip, error) {
-	return readClip(ctx, limit, "")
+func (c Clipboard) ReadClip(ctx context.Context, limit int64) (Clip, error) {
+	return c.readClip(ctx, limit, "")
 }
 
 // readClip is ReadClip on the pasteboard named pasteboard, "" for the
 // clipboard: tests read their own.
-func readClip(ctx context.Context, limit int64, pasteboard string) (Clip, error) {
+func (c Clipboard) readClip(ctx context.Context, limit int64, pasteboard string) (Clip, error) {
 	dir, err := os.MkdirTemp("", "devvm-paste-")
 	if err != nil {
 		return Clip{}, err
@@ -96,7 +100,7 @@ func readClip(ctx context.Context, limit int64, pasteboard string) (Clip, error)
 	if pasteboard != "" {
 		args = append(args, pasteboard)
 	}
-	out, err := runClipTool(ctx, "osascript", args, clipFoundMax)
+	out, err := runClipTool(ctx, c.tool("osascript", osascript), args, clipFoundMax)
 	if err != nil {
 		return Clip{}, err
 	}
@@ -128,19 +132,13 @@ func readClip(ctx context.Context, limit int64, pasteboard string) (Clip, error)
 	case int64(len(data)) > limit:
 		return Clip{}, ErrClipTooLarge
 	}
-	if c, ok := imageOf(data, found.Image); ok {
-		return c, nil
+	if clip, ok := imageOf(data, found.Image); ok {
+		return clip, nil
 	}
 	return Clip{}, ErrClipEmpty
 }
 
 // CopyText puts text on the clipboard with pbcopy.
-func CopyText(ctx context.Context, text string) error {
-	cmd := exec.CommandContext(ctx, "pbcopy")
-	cmd.Stdin = strings.NewReader(text)
-	err := cmd.Run()
-	if errors.Is(err, exec.ErrNotFound) {
-		return &ClipToolMissing{Tool: "pbcopy"}
-	}
-	return err
+func (c Clipboard) CopyText(ctx context.Context, text string) error {
+	return copyWith(ctx, c.tool("pbcopy", pbcopy), nil, text)
 }

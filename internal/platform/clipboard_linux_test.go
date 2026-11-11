@@ -28,18 +28,18 @@ func TestReadClipToolFailed(t *testing.T) {
 	t.Setenv("DISPLAY", "")
 	t.Setenv("WAYLAND_DISPLAY", "wayland-9")
 	fakePasteTool(t, "wl-paste", "'Nothing is copied'")
-	if _, err := ReadClip(t.Context(), 1<<20); !errors.Is(err, ErrClipEmpty) {
+	if _, err := (Clipboard{}).ReadClip(t.Context(), 1<<20); !errors.Is(err, ErrClipEmpty) {
 		t.Errorf("wl-paste on an empty clipboard: %v", err)
 	}
 	fakePasteTool(t, "wl-paste", "'Failed to connect to a Wayland server'")
 	var failed *ClipToolFailed
-	if _, err := ReadClip(t.Context(), 1<<20); !errors.As(err, &failed) || failed.Tool != "wl-paste" || !strings.Contains(failed.Stderr, "Failed to connect") {
+	if _, err := (Clipboard{}).ReadClip(t.Context(), 1<<20); !errors.As(err, &failed) || failed.Tool != "wl-paste" || !strings.Contains(failed.Stderr, "Failed to connect") {
 		t.Errorf("wl-paste without a compositor: %v", err)
 	}
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", ":9")
 	fakePasteTool(t, "xclip", "\"Error: Can't open display: :9\"")
-	if _, err := ReadClip(t.Context(), 1<<20); !errors.Is(err, ErrClipEmpty) {
+	if _, err := (Clipboard{}).ReadClip(t.Context(), 1<<20); !errors.Is(err, ErrClipEmpty) {
 		t.Errorf("xclip failing: %v", err)
 	}
 }

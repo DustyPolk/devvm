@@ -3254,7 +3254,7 @@ func PasteManyFiles(count int) M {
 	return M{id: "paste_many_files", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
-// PasteNeedsTool is [paste_needs_tool]: "{{.tool}} isn't on PATH, and devvm paste reads and writes the clipboard with it. Install it, then run devvm paste again."
+// PasteNeedsTool is [paste_needs_tool]: "{{.tool}} isn't installed, and devvm paste reads and writes the clipboard with it. Install it, then run devvm paste again."
 func PasteNeedsTool(tool string) M {
 	return M{id: "paste_needs_tool", vals: []val{{"tool", tool}}}
 }

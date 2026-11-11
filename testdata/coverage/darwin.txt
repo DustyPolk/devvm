@@ -22,7 +22,7 @@ internal/image 99.4
 internal/jsonc 97.1
 internal/msg 72.0
 internal/msg/gen 93.3
-internal/netpolicy 91.4
+internal/netpolicy 91.6
 internal/paths 98.1
 internal/platform 89.8
 internal/ports 91.4

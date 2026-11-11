@@ -155,6 +155,8 @@ func (a *app) vmEnv() (*vm.Env, error) {
 		e.PickMany = pickMany(a.u)
 		e.Folder = a.folder.rule()
 		e.HistoryMax = a.testOverrides().HistoryMax
+		clip := platform.Clipboard{Tools: a.testOverrides().ClipTools}
+		e.ReadClip, e.CopyText = clip.ReadClip, clip.CopyText
 		return e, nil
 	})
 }

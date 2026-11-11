@@ -31,6 +31,10 @@ type Overrides struct {
 	// HistoryMax (DEVVM_HISTORY_MAX) is the most of an export of agents'
 	// history devvm keeps, in bytes (vm.Env.HistoryMax), in place of 2 GiB.
 	HistoryMax int
+	// ClipTools (DEVVM_CLIP_TOOLS) is the folder devvm paste runs the
+	// clipboard tools from (platform.Clipboard's Tools), in place of the
+	// system's, so the tests' stand-ins never reach the real clipboard.
+	ClipTools string
 }
 
 // ReleaseOverrides are devvm upgrade's stand-ins: a fake release server
@@ -78,5 +82,6 @@ func readOverrides(getenv func(string) string) Overrides {
 			CA: getenv("DEVVM_RELEASE_CA"), Version: getenv("DEVVM_TEST_VERSION"),
 		},
 		HistoryMax: historyMax,
+		ClipTools:  getenv("DEVVM_CLIP_TOOLS"),
 	}
 }

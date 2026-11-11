@@ -103,7 +103,7 @@ func TestReadClipPasteboard(t *testing.T) {
 	pb := newPasteboard(t)
 	read := func(limit int64) (Clip, error) {
 		t.Helper()
-		return readClip(t.Context(), limit, pb.name)
+		return Clipboard{}.readClip(t.Context(), limit, pb.name)
 	}
 	// Text is never a file.
 	for _, text := range []string{a, "file://" + a, "hello world"} {

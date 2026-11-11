@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -23,20 +22,21 @@ type clipTool struct {
 	empty []string
 }
 
-// linuxClipTool is the clipboard tool for this session: Wayland's when
-// WAYLAND_DISPLAY is set, X11's when DISPLAY is, else ErrClipNoSession.
-func linuxClipTool() (clipTool, error) {
+// clipTool is the clipboard tool for this session, found on PATH:
+// Wayland's when WAYLAND_DISPLAY is set, X11's when DISPLAY is, else
+// ErrClipNoSession.
+func (c Clipboard) clipTool() (clipTool, error) {
 	switch {
 	case os.Getenv("WAYLAND_DISPLAY") != "":
 		return clipTool{
-			paste: "wl-paste", copy: "wl-copy",
+			paste: c.tool("wl-paste", ""), copy: c.tool("wl-copy", ""),
 			list:  []string{"--list-types"},
 			read:  func(t string) []string { return []string{"--no-newline", "--type", t} },
 			empty: []string{"Nothing is copied", "No selection"},
 		}, nil
 	case os.Getenv("DISPLAY") != "":
 		return clipTool{
-			paste: "xclip", copy: "xclip",
+			paste: c.tool("xclip", ""), copy: c.tool("xclip", ""),
 			list:  []string{"-selection", "clipboard", "-t", "TARGETS", "-o"},
 			read:  func(t string) []string { return []string{"-selection", "clipboard", "-t", t, "-o"} },
 			write: []string{"-selection", "clipboard", "-i"},
@@ -67,8 +67,8 @@ func (c clipTool) saysEmpty(stderr string) bool {
 // (ErrClipEmpty); one it fails otherwise, as wl-paste does when
 // WAYLAND_DISPLAY names a session that's gone, is the tool's failure
 // (ClipToolFailed), so that copying again isn't the advice.
-func ReadClip(ctx context.Context, limit int64) (Clip, error) {
-	tool, err := linuxClipTool()
+func (c Clipboard) ReadClip(ctx context.Context, limit int64) (Clip, error) {
+	tool, err := c.clipTool()
 	if err != nil {
 		return Clip{}, err
 	}
@@ -98,8 +98,8 @@ func ReadClip(ctx context.Context, limit int64) (Clip, error) {
 			}
 			continue
 		}
-		if c, ok := imageOf(data, t); ok {
-			return c, nil
+		if clip, ok := imageOf(data, t); ok {
+			return clip, nil
 		}
 	}
 	return Clip{}, ErrClipEmpty
@@ -114,20 +114,12 @@ func (c clipTool) output(ctx context.Context, args []string, limit int64) ([]byt
 	return runClipTool(ctx, c.paste, args, limit)
 }
 
-// CopyText puts text on the clipboard with wl-copy or xclip. Either
-// forks a child that serves the clipboard until something else is copied,
-// so the command runs without pipes on its output: Go's Wait would wait
-// for that child to close them.
-func CopyText(ctx context.Context, text string) error {
-	tool, err := linuxClipTool()
+// CopyText puts text on the clipboard with wl-copy or xclip (copyWith),
+// which serve it until something else is copied.
+func (c Clipboard) CopyText(ctx context.Context, text string) error {
+	tool, err := c.clipTool()
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, tool.copy, tool.write...) //nolint:gosec // devvm's own arguments
-	cmd.Stdin = strings.NewReader(text)
-	err = cmd.Run()
-	if errors.Is(err, exec.ErrNotFound) {
-		return &ClipToolMissing{Tool: tool.copy}
-	}
-	return err
+	return copyWith(ctx, tool.copy, tool.write, text)
 }

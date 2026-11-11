@@ -10,6 +10,15 @@ import (
 	"strings"
 )
 
+// Clipboard is this machine's clipboard, which ReadClip reads and
+// CopyText writes with the system's clipboard tools.
+type Clipboard struct {
+	// Tools is the folder the clipboard tools are run from in place of
+	// the system's: a test build's stand-ins (DEVVM_CLIP_TOOLS), "" for
+	// the system's own.
+	Tools string
+}
+
 // Clip is what devvm paste takes from the clipboard: an image's bytes
 // and type, or one copied file's path. Nothing else is read, so text on
 // the clipboard, such as a password, never reaches devvm.
@@ -46,10 +55,10 @@ func (e *ClipManyFiles) Error() string { return ErrClipManyFiles.Error() }
 func (e *ClipManyFiles) Is(err error) bool { return err == ErrClipManyFiles }
 
 // ClipToolMissing is ReadClip's or CopyText's error when the clipboard
-// tool it runs isn't on PATH.
+// tool it runs isn't there: not on PATH, or not at its path.
 type ClipToolMissing struct{ Tool string }
 
-func (e *ClipToolMissing) Error() string { return e.Tool + " isn't on PATH" }
+func (e *ClipToolMissing) Error() string { return e.Tool + " isn't installed" }
 
 // ClipToolFailed is ReadClip's error when the clipboard tool failed to
 // list the clipboard's types for a reason other than an empty clipboard,
