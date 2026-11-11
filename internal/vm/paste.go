@@ -286,7 +286,7 @@ func pastePayloadOf(clip platform.Clip, now time.Time) (pastePayload, error) {
 	case len(data) > pasteMax:
 		return pastePayload{}, msg.PasteTooLarge(pasteMaxText)
 	}
-	return pastePayload{data: data, name: stem + "-" + pasteBase(filepath.Base(file)), kind: PasteFile, source: file}, nil
+	return pastePayload{data: data, name: stem + pasteExt(filepath.Base(file)), kind: PasteFile, source: file}, nil
 }
 
 // pasteStem is the start of a pasted file's name: paste-YYYYMMDD-HHMMSS
@@ -298,28 +298,27 @@ func pasteStem(now time.Time) string {
 	return "paste-" + now.Format("20060102-150405") + "-" + hex.EncodeToString(b[:])
 }
 
-// pasteBaseMax is the most of a copied file's name a pasted file keeps.
-const pasteBaseMax = 64
+// pasteExtMax is the longest extension of a copied file's a pasted file
+// keeps.
+const pasteExtMax = 16
 
-// pasteBase is a copied file's name as a pasted file's name carries it:
-// every byte outside [A-Za-z0-9._-] becomes _, at most pasteBaseMax
-// bytes, never empty (file), because it goes into a shell in the VM and
-// onto the clipboard.
-func pasteBase(base string) string {
-	b := []byte(base)
-	for i, c := range b {
-		safe := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-'
-		if !safe {
-			b[i] = '_'
+// pasteExt is the end of a pasted file's name for a copied file named
+// base: its extension, with its dot, when it's letters and digits alone,
+// at most pasteExtMax of them, else nothing. Nothing else of the name is
+// kept, because the path goes onto your clipboard, and the name of a file
+// in the project folder is the VM's to choose.
+func pasteExt(base string) string {
+	ext := strings.TrimPrefix(filepath.Ext(base), ".")
+	if ext == "" || len(ext) > pasteExtMax {
+		return ""
+	}
+	for _, c := range []byte(ext) {
+		alnum := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+		if !alnum {
+			return ""
 		}
 	}
-	if len(b) > pasteBaseMax {
-		b = b[:pasteBaseMax]
-	}
-	if len(b) == 0 {
-		return "file"
-	}
-	return string(b)
+	return "." + ext
 }
 
 // clipError is the message for what reading the clipboard failed with

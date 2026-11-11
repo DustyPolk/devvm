@@ -18,8 +18,8 @@ import (
 )
 
 // A pasted file's name: paste-YYYYMMDD-HHMMSS-8hex, then the image's
-// extension, or a dash and the copied file's name with every byte outside
-// [A-Za-z0-9._-] made _, cut to 64 bytes and never empty.
+// extension, or the copied file's own extension when it's letters and
+// digits alone, at most 16 of them, and nothing else of its name.
 func TestPasteNames(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 34, 56, 0, time.Local)
 	stem := regexp.MustCompile(`^paste-20261109-123456-[0-9a-f]{8}$`)
@@ -30,12 +30,12 @@ func TestPasteNames(t *testing.T) {
 		t.Errorf("two stems in one second are the same: %s", a)
 	}
 	for in, want := range map[string]string{
-		"shot.png": "shot.png", "my shot (1).png": "my_shot__1_.png", "résumé.pdf": "r__sum__.pdf", "": "file",
-		"a;rm -rf /.txt": "a_rm_-rf__.txt", "$HOME": "_HOME", "..": "..", "-n": "-n",
-		strings.Repeat("x", 100) + ".png": strings.Repeat("x", 64),
+		"shot.png": ".png", "my shot (1).png": ".png", "résumé.pdf": ".pdf", "": "", "archive.tar.gz": ".gz",
+		"a;rm -rf /.txt": ".txt", "$HOME": "", "..": "", "-n": "", "Makefile": "", ".bashrc": ".bashrc",
+		"x.p$g": "", "x.ünï": "", "x." + strings.Repeat("a", 17): "", "x." + strings.Repeat("a", 16): "." + strings.Repeat("a", 16),
 	} {
-		if got := pasteBase(in); got != want {
-			t.Errorf("pasteBase(%q) = %q, want %q", in, got, want)
+		if got := pasteExt(in); got != want {
+			t.Errorf("pasteExt(%q) = %q, want %q", in, got, want)
 		}
 	}
 	p, err := pastePayloadOf(platform.Clip{Image: []byte("png"), Type: "image/png"}, now)
@@ -77,7 +77,7 @@ func TestPastePayloadOfFile(t *testing.T) {
 	now := time.Now()
 
 	p, err := pastePayloadOf(platform.Clip{File: project("shots", "shot.png")}, now)
-	if err != nil || string(p.data) != "png" || !strings.HasSuffix(p.name, "-shot.png") || p.kind != PasteFile || p.mime != "" {
+	if err != nil || string(p.data) != "png" || !regexp.MustCompile(`^paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png$`).MatchString(p.name) || p.kind != PasteFile || p.mime != "" {
 		t.Errorf("a file: %+v, %v", p, err)
 	}
 	for what, file := range map[string]string{

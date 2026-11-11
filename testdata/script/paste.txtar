@@ -116,8 +116,8 @@ stub_calls
 rm $STUB_DIR/shell-fails-on
 
 # A copied file wins over the image beside it (its icon), is read as
-# named in its folder, and keeps its name with every other character
-# made _. It's sent only once you say so: devvm asks, showing the file's
+# named in its folder, and keeps only its extension, so nothing of its
+# name reaches the clipboard. It's sent only once you say so: devvm asks, showing the file's
 # path on this machine, and without a terminal the question is refused,
 # naming --send-file, and nothing is sent.
 cp $WORK/doc.txt doc.txt
@@ -140,12 +140,12 @@ stub_calls
 ! stdout '''devvm-paste'''
 ttyin -stdin $WORK/yes.txt
 exec devvm paste
-stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}-my_doc__1_\.txt vm=devvm-plain-[0-9a-f]{14}$'
+stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.txt vm=devvm-plain-[0-9a-f]{14}$'
 cmp $STUB_DIR/paste-in doc.txt
 stub_reset
 exec devvm paste --send-file
 ! stderr .
-stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}-my_doc__1_\.txt vm=devvm-plain-[0-9a-f]{14}$'
+stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.txt vm=devvm-plain-[0-9a-f]{14}$'
 cmp $STUB_DIR/paste-in doc.txt
 stub_calls
 [linux] ! stdout 'image/png'
@@ -236,7 +236,7 @@ rm $STUB_DIR/clip-file
 [linux] exec sh -c 'printf "x-special/gnome-copied-files\nimage/png\n" > "$STUB_DIR/clip-types"'
 [linux] exec sh -c 'printf "copy\nfile://%s/doc.txt\n" "$PWD" > "$STUB_DIR/clip"'
 [linux] exec devvm paste --send-file
-[linux] stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}-doc\.txt '
+[linux] stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.txt '
 [linux] exec sh -c 'printf "text/uri-list\nimage/png\n" > "$STUB_DIR/clip-types"'
 [linux] exec sh -c 'printf "https://example.com/x.png\n" > "$STUB_DIR/clip"'
 [linux] ! exec devvm paste
