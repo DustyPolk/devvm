@@ -2097,6 +2097,10 @@ other = "Counting the pasted files in {{.dir}} in {{.vm}} failed."
 [paste_rm_not_done]
 other = "Deleting the pasted files in {{.dir}} in {{.vm}} failed."
 
+[paste_file_ask]
+description = "file is the copied file's path on this machine"
+other = "Anything in {{.vm}} can read what you send.\nSend {{.file}} from this machine?"
+
 [paste_rm_ask]
 description = "count is how many pasted files are in dir, the paste folder in the VM"
 one = "Delete {{.count}} pasted file in {{.dir}} in {{.vm}}?"

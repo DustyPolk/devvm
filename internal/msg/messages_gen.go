@@ -3234,6 +3234,11 @@ func PasteFailed(reason string) M {
 	return M{id: "paste_failed", vals: []val{{"reason", reason}}}
 }
 
+// PasteFileAsk is [paste_file_ask]: "Anything in {{.vm}} can read what you send.\nSend {{.file}} from this machine?"
+func PasteFileAsk(file string, vm string) M {
+	return M{id: "paste_file_ask", vals: []val{{"file", file}, {"vm", vm}}}
+}
+
 // PasteFileGone is [paste_file_gone]: "The file on the clipboard is gone, so devvm sent nothing. Copy the file again, then run devvm paste again."
 func PasteFileGone() M {
 	return M{id: "paste_file_gone"}
@@ -5597,6 +5602,7 @@ var specs = map[string]spec{
 	"paste_count_failed":             {fields: []string{"dir", "vm"}},
 	"paste_dir_invalid":              {fields: []string{"setting"}},
 	"paste_failed":                   {fields: []string{"reason"}},
+	"paste_file_ask":                 {fields: []string{"file", "vm"}},
 	"paste_file_gone":                {},
 	"paste_file_link":                {fields: []string{"file"}},
 	"paste_launch_ask":               {plural: true, fields: []string{"count", "dir", "vm"}},

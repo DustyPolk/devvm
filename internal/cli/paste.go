@@ -11,17 +11,19 @@ import (
 // this folder's VM, its path copied back, and devvm paste rm.
 func newPasteCmd(a *app) *cobra.Command {
 	u := a.u
-	var asJSON bool
+	var asJSON, sendFile bool
 	c := &cobra.Command{
 		Use:         "paste",
 		Annotations: about{docs: "using/coding-agents#pasting-images", group: groupVM}.annotations(),
 		Short:       "Send the clipboard's image or copied file to this folder's VM",
 		Long: "Put the image, or the one copied file, that's on this machine's clipboard into this folder's VM, " +
 			"which must be running, as a new file in its paste folder, and copy that file's path to the clipboard. " +
+			"A copied file is sent after asking, showing its path on this machine. " +
 			"Then paste the path into the agent with your terminal's paste shortcut.",
 		Example: examples(
 			"devvm paste", "send the copied image, and copy its path in the VM",
 			"devvm paste --json", "the same, printing the path and what was sent as JSON",
+			"devvm paste --send-file", "send a copied file without asking, as a script must",
 			"devvm paste rm", "delete the files devvm paste left in the VM",
 		),
 		Args: noArgs,
@@ -29,13 +31,15 @@ func newPasteCmd(a *app) *cobra.Command {
 			var sent vm.PasteSent
 			err := a.env(func(env *vm.Env) error {
 				var err error
-				sent, err = vm.Paste{Env: env}.Send(cmd.Context())
+				sent, err = vm.Paste{Env: env}.Send(cmd.Context(), sendFile)
 				return err
 			}, msg.PasteFailed)
-			if err != nil {
+			switch {
+			case err != nil:
 				return err
-			}
-			if asJSON {
+			case sent.Path == "": // you said no to sending the file
+				return nil
+			case asJSON:
 				return printJSON(u, pasteJSON(sent))
 			}
 			u.Info(msg.PasteSent(sent.Path, sent.VM))
@@ -43,25 +47,28 @@ func newPasteCmd(a *app) *cobra.Command {
 		},
 	}
 	jsonFlag(c, &asJSON)
+	c.Flags().BoolVar(&sendFile, "send-file", false, "send a copied file without asking")
 	addFolderFlags(c, a)
 	c.AddCommand(newPasteRmCmd(a))
 	return c
 }
 
 // pasteOutput is devvm paste --json: the VM, the file's path in it, its
-// kind (image or file), an image's type ("" for a file), its size in
-// bytes, and whether the path reached the clipboard.
+// kind (image or file), an image's type ("" for a file), a copied file's
+// path on this machine ("" for an image), its size in bytes, and whether
+// the path reached the clipboard.
 type pasteOutput struct {
 	VM     string `json:"vm"`
 	Path   string `json:"path"`
 	Kind   string `json:"kind"`
 	Type   string `json:"type"`
+	Source string `json:"source"`
 	Bytes  int64  `json:"bytes"`
 	Copied bool   `json:"copied"`
 }
 
 func pasteJSON(s vm.PasteSent) pasteOutput {
-	return pasteOutput{VM: s.VM, Path: s.Path, Kind: s.Kind, Type: s.Type, Bytes: s.Bytes, Copied: s.Copied}
+	return pasteOutput{VM: s.VM, Path: s.Path, Kind: s.Kind, Type: s.Type, Source: s.Source, Bytes: s.Bytes, Copied: s.Copied}
 }
 
 // newPasteRmCmd is devvm paste rm.

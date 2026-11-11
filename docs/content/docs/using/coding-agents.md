@@ -32,10 +32,12 @@ Claude Code, Codex and opencode attach an image whose path you paste, and pi rea
 
 A copied file is sent the same way, under a name that ends in the file's own, with any character outside letters, digits and `.`, `_` and `-` replaced by `_` and at most 64 characters of it kept, so `my shot (1).png` becomes `paste-20261109-153012-7f3a9c01-my_shot__1_.png`. That name is one word behind devvm's own prefix, with no space, quote or newline in it, so pasting the path into a terminal can't run anything. devvm sends one file at a time, and it refuses several, a folder and a symbolic link anywhere in the file's path, your own included, because a file you copy may be in the project folder, which the VM can write, and a link planted there could point at a file of yours. The only links devvm follows are the system's own, which root owns, such as macOS's `/tmp`, so copy the file from the folder it's really in. On macOS, Finder puts the copied file's icon on the clipboard as an image beside the file, and devvm sends the file, not the icon. If the file is gone by the time you run devvm paste, devvm says so and sends nothing, rather than the icon. Text is never taken for a file, even when it's a path, so copy the file itself in Finder.
 
-`devvm paste --json` does the same and prints what it sent as one object, with `"version": 1` first, the VM, the file's `path` in it, its `kind` (`image` or `file`), an image's `type` (`image/png`, `image/jpeg`, `image/gif` or `image/webp`, and `""` for a file), its size in `bytes`, and whether the path was `copied` to the clipboard:
+Before devvm sends a copied file, it shows the file's path on this machine and asks, [y/N], because the clipboard can name any file of yours, such as a key in `~/.ssh` that you didn't mean to copy. Answer no and nothing is sent. `devvm paste --send-file` sends the file without asking, as a script must, and where devvm can't ask, such as without a terminal, it sends nothing and names `--send-file`. An image is sent without a question, because it's only the image.
+
+`devvm paste --json` does the same and prints what it sent as one object, with `"version": 1` first, the VM, the file's `path` in it, its `kind` (`image` or `file`), an image's `type` (`image/png`, `image/jpeg`, `image/gif` or `image/webp`, and `""` for a file), a copied file's `source`, its path on this machine (`""` for an image), its size in `bytes`, and whether the path was `copied` to the clipboard:
 
 ```json
-{"version": 1, "vm": "devvm-website-3f9a1c2b4d5e6f", "path": "/tmp/devvm-paste/paste-20261109-153012-7f3a9c01.png", "kind": "image", "type": "image/png", "bytes": 48213, "copied": true}
+{"version": 1, "vm": "devvm-website-3f9a1c2b4d5e6f", "path": "/tmp/devvm-paste/paste-20261109-153012-7f3a9c01.png", "kind": "image", "type": "image/png", "source": "", "bytes": 48213, "copied": true}
 ```
 
 ### The paste folder and your agent's settings

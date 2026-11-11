@@ -31,12 +31,14 @@ type Paste struct{ *Env }
 
 // PasteSent is what devvm paste sent: the VM, the file's path in it, which
 // devvm chose on this machine, its kind (image or file), an image's type
-// (image/png…, "" for a file), its size, and whether the path reached the
-// clipboard.
+// (image/png…, "" for a file), a copied file's path on this machine (""
+// for an image), its size, and whether the path reached the clipboard.
+// It's empty when you said no to sending a file.
 type PasteSent struct {
 	VM, Path string
 	Kind     string
 	Type     string
+	Source   string
 	Bytes    int64
 	Copied   bool
 }
@@ -59,19 +61,24 @@ const pasteCountMax = 32
 
 // pastePayload is what one devvm paste sends, chosen once from the
 // clipboard: the bytes, the file's name in the VM, which devvm picks from
-// a fixed set of characters, its kind and an image's type.
+// a fixed set of characters, its kind, an image's type and a copied
+// file's path on this machine.
 type pastePayload struct {
 	data       []byte
 	name       string
 	kind, mime string
+	source     string
 }
 
 // Send reads the clipboard and puts what's there into the folder's VM,
 // which must be running, as a new file in its paste folder, then copies
 // the file's path. It reads the clipboard before it touches the VM, so an
-// empty one fails fast. A copy that fails is a warning, as the file is
-// already in the VM, and the path is shown.
-func (e Paste) Send(ctx context.Context) (PasteSent, error) {
+// empty one fails fast. A copied file is sent only after a question
+// showing its path on this machine, [y/N], answered by sendFile
+// (--send-file), because the clipboard can name any file of yours; a no
+// sends nothing and returns an empty PasteSent. A copy that fails is a
+// warning, as the file is already in the VM, and the path is shown.
+func (e Paste) Send(ctx context.Context, sendFile bool) (PasteSent, error) {
 	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
 		return PasteSent{}, err
@@ -92,6 +99,12 @@ func (e Paste) Send(ctx context.Context) (PasteSent, error) {
 	if err != nil {
 		return PasteSent{}, err
 	}
+	if p.kind == PasteFile && !sendFile {
+		yes, err := e.Ask(msg.PasteFileAsk(p.source, vm).AnsweredBy("--send-file"))
+		if err != nil || !yes {
+			return PasteSent{}, err
+		}
+	}
 	path := dir + "/" + p.name
 	if err := e.run(ctx, t, []string{"put", dir, p.name}, bytes.NewReader(p.data), nil); err != nil {
 		if ctx.Err() != nil {
@@ -99,7 +112,7 @@ func (e Paste) Send(ctx context.Context) (PasteSent, error) {
 		}
 		return PasteSent{}, backend.Logged(msg.PasteNotSent(path, vm))
 	}
-	sent := PasteSent{VM: vm, Path: path, Kind: p.kind, Type: p.mime, Bytes: int64(len(p.data))}
+	sent := PasteSent{VM: vm, Path: path, Kind: p.kind, Type: p.mime, Source: p.source, Bytes: int64(len(p.data))}
 	if err := e.CopyText(ctx, path); err != nil {
 		e.Warn(msg.PasteCopyFailed(path).Because(err))
 	} else {
@@ -264,7 +277,7 @@ func pastePayloadOf(clip platform.Clip, now time.Time) (pastePayload, error) {
 	case len(data) > pasteMax:
 		return pastePayload{}, msg.PasteTooLarge(pasteMaxText)
 	}
-	return pastePayload{data: data, name: stem + "-" + pasteBase(filepath.Base(file)), kind: PasteFile}, nil
+	return pastePayload{data: data, name: stem + "-" + pasteBase(filepath.Base(file)), kind: PasteFile, source: file}, nil
 }
 
 // pasteStem is the start of a pasted file's name: paste-YYYYMMDD-HHMMSS
