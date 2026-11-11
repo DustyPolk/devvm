@@ -3279,7 +3279,7 @@ func PasteNotSent(path string, vm string) M {
 	return M{id: "paste_not_sent", vals: []val{{"path", path}, {"vm", vm}}}
 }
 
-// PasteNothing is [paste_nothing]: "There's no image and no copied file on the clipboard. Copy one, then run devvm paste again."
+// PasteNothing is [paste_nothing]: "There's no image, PDF or copied file on the clipboard. Copy one, then run devvm paste again."
 func PasteNothing() M {
 	return M{id: "paste_nothing"}
 }

@@ -19,20 +19,23 @@ type Clipboard struct {
 	Tools string
 }
 
-// Clip is what devvm paste takes from the clipboard: an image's bytes
-// and type, or one copied file's path. Nothing else is read, so text on
-// the clipboard, such as a password, never reaches devvm.
+// Clip is what devvm paste takes from the clipboard: an image's or a
+// PDF's bytes and type, or one copied file's path. Nothing else is read,
+// so text on the clipboard, such as a password, never reaches devvm.
 type Clip struct {
-	Image []byte
-	Type  string // image/png, image/jpeg, image/gif or image/webp, with Image
-	File  string // a copied file's path, instead of Image
+	Data []byte
+	Type string // application/pdf, image/png, image/jpeg, image/gif or image/webp, with Data
+	File string // a copied file's path, instead of Data
 }
+
+// TypePDF is a PDF's type, which devvm sends as it is, never as an image.
+const TypePDF = "application/pdf"
 
 // ReadClip's errors, which its callers turn into messages.
 var (
 	// ErrClipEmpty: nothing devvm can send is on the clipboard, neither an
 	// image nor a copied file.
-	ErrClipEmpty = errors.New("no image or copied file on the clipboard")
+	ErrClipEmpty = errors.New("no image, PDF or copied file on the clipboard")
 	// ErrClipManyFiles: several files are on the clipboard, and devvm
 	// paste sends one. The error carries how many (ClipManyFiles).
 	ErrClipManyFiles = errors.New("several files on the clipboard")
@@ -77,19 +80,20 @@ const (
 	typeGnome   = "x-special/gnome-copied-files"
 )
 
-// imageType is an image type devvm sends, with its file extension.
-type imageType struct{ mime, ext string }
+// dataType is a type of data devvm sends, with its file extension.
+type dataType struct{ mime, ext string }
 
-// imageTypes are the image types devvm sends, in the order it prefers
-// them.
-func imageTypes() []imageType {
-	return []imageType{{"image/png", "png"}, {"image/jpeg", "jpg"}, {"image/gif", "gif"}, {"image/webp", "webp"}}
+// dataTypes are the types of data devvm sends, in the order it prefers
+// them: a PDF first, as it is, because a PDF viewer puts a picture of the
+// selection beside it, then the image types.
+func dataTypes() []dataType {
+	return []dataType{{TypePDF, "pdf"}, {"image/png", "png"}, {"image/jpeg", "jpg"}, {"image/gif", "gif"}, {"image/webp", "webp"}}
 }
 
-// ImageExt is the file extension for an image of type mime, "" for a type
+// DataExt is the file extension for data of type mime, "" for a type
 // devvm doesn't send.
-func ImageExt(mime string) string {
-	for _, t := range imageTypes() {
+func DataExt(mime string) string {
+	for _, t := range dataTypes() {
 		if t.mime == mime {
 			return t.ext
 		}
@@ -99,8 +103,9 @@ func ImageExt(mime string) string {
 
 // chooseTypes picks, from the types a clipboard offers (one per line, as
 // wl-paste --list-types and xclip's TARGETS print them), those devvm
-// reads, in the order it tries them: a file reference, then the image
-// types it prefers. None means nothing devvm can send is there.
+// reads, in the order it tries them: a file reference, then the data
+// types it prefers (dataTypes). None means nothing devvm can send is
+// there.
 func chooseTypes(listed []byte) []string {
 	var have []string
 	for _, line := range strings.Split(string(listed), "\n") {
@@ -114,7 +119,7 @@ func chooseTypes(listed []byte) []string {
 			picked = append(picked, t)
 		}
 	}
-	for _, t := range imageTypes() {
+	for _, t := range dataTypes() {
 		if slices.Contains(have, t.mime) {
 			picked = append(picked, t.mime)
 		}
@@ -150,12 +155,13 @@ func uriListPaths(data []byte, gnome bool) []string {
 	return paths
 }
 
-// imageOf checks that data is an image of type want, by its bytes
-// (http.DetectContentType), and returns it as a Clip; false when it
-// isn't, such as a type a program claims and bytes that aren't its.
-func imageOf(data []byte, want string) (Clip, bool) {
-	if http.DetectContentType(data) != want || ImageExt(want) == "" {
+// dataOf checks that data is of type want, an image or a PDF, by its
+// bytes (http.DetectContentType: a PDF's start with %PDF-), and returns
+// it as a Clip; false when it isn't, such as a type a program claims and
+// bytes that aren't its.
+func dataOf(data []byte, want string) (Clip, bool) {
+	if http.DetectContentType(data) != want || DataExt(want) == "" {
 		return Clip{}, false
 	}
-	return Clip{Image: data, Type: want}, true
+	return Clip{Data: data, Type: want}, true
 }

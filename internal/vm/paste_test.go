@@ -38,9 +38,13 @@ func TestPasteNames(t *testing.T) {
 			t.Errorf("pasteExt(%q) = %q, want %q", in, got, want)
 		}
 	}
-	p, err := pastePayloadOf(platform.Clip{Image: []byte("png"), Type: "image/png"}, now)
+	p, err := pastePayloadOf(platform.Clip{Data: []byte("png"), Type: "image/png"}, now)
 	if err != nil || !strings.HasSuffix(p.name, ".png") || !stem.MatchString(strings.TrimSuffix(p.name, ".png")) || p.kind != PasteImage || p.mime != "image/png" {
 		t.Errorf("an image: %+v, %v", p, err)
+	}
+	p, err = pastePayloadOf(platform.Clip{Data: []byte("%PDF-1.4"), Type: platform.TypePDF}, now)
+	if err != nil || !stem.MatchString(strings.TrimSuffix(p.name, ".pdf")) || p.kind != PastePDF || p.mime != platform.TypePDF || string(p.data) != "%PDF-1.4" {
+		t.Errorf("a PDF: %+v, %v", p, err)
 	}
 }
 

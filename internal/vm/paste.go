@@ -19,7 +19,7 @@ import (
 	"github.com/devvmhq/devvm/internal/settings"
 )
 
-// Paste is devvm paste: an image, or one copied file, from this machine's
+// Paste is devvm paste: an image, a PDF or one copied file, from this machine's
 // clipboard into the folder's VM's paste folder (config.toml's paste-dir),
 // its path in the VM then copied to the clipboard for the agent; devvm
 // paste rm, which deletes what devvm paste left there; and the launch's
@@ -30,10 +30,11 @@ import (
 type Paste struct{ *Env }
 
 // PasteSent is what devvm paste sent: the VM, the file's path in it, which
-// devvm chose on this machine, its kind (image or file), an image's type
-// (image/png…, "" for a file), a copied file's path on this machine (""
-// for an image), its size, and whether the path reached the clipboard.
-// It's empty when you said no to sending a file.
+// devvm chose on this machine, its kind (image, pdf or file), an image's
+// or a PDF's type (image/png…, application/pdf, "" for a file), a copied
+// file's path on this machine ("" otherwise), its size, and whether the
+// path reached the clipboard. It's empty when you said no to sending a
+// file.
 type PasteSent struct {
 	VM, Path string
 	Kind     string
@@ -46,10 +47,11 @@ type PasteSent struct {
 // The kinds of a PasteSent.
 const (
 	PasteImage = "image"
+	PastePDF   = "pdf"
 	PasteFile  = "file"
 )
 
-// pasteMax is the most devvm paste sends, an image or a file, and
+// pasteMax is the most devvm paste sends, an image, a PDF or a file, and
 // pasteMaxText how its message says it.
 const (
 	pasteMax     = 64 << 20
@@ -247,8 +249,8 @@ func pasteArgv(script string, args []string) []string {
 	return append([]string{"sh", "-c", script, "devvm-paste"}, args...)
 }
 
-// pastePayloadOf is what to send for clip, named at now: an image as it
-// came, or a copied file, which may be in a project folder, which its VM
+// pastePayloadOf is what to send for clip, named at now: an image or a
+// PDF as it came, or a copied file, which may be in a project folder, which its VM
 // writes. The path is cleaned, so a folder's trailing slash goes, and
 // opened as named, following no link but root's (platform.OpenNoLinks:
 // /tmp on macOS is one). Nothing of the path is resolved first, because
@@ -259,7 +261,11 @@ func pasteArgv(script string, args []string) []string {
 func pastePayloadOf(clip platform.Clip, now time.Time) (pastePayload, error) {
 	stem := pasteStem(now)
 	if clip.File == "" {
-		return pastePayload{data: clip.Image, name: stem + "." + platform.ImageExt(clip.Type), kind: PasteImage, mime: clip.Type}, nil
+		kind := PasteImage
+		if clip.Type == platform.TypePDF {
+			kind = PastePDF
+		}
+		return pastePayload{data: clip.Data, name: stem + "." + platform.DataExt(clip.Type), kind: kind, mime: clip.Type}, nil
 	}
 	file := filepath.Clean(clip.File)
 	f, err := platform.OpenNoLinks(file)

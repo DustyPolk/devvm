@@ -121,7 +121,7 @@ func FakeClipboard(s *S, image []byte) (env []string, copied string, err error) 
 		"pbcopy":   "#!/bin/sh\ncat > '" + copied + "'\n",
 		// devvm paste's script: -l JavaScript -e SCRIPT FILE LIMIT, the image
 		// written to FILE, and its type printed.
-		"osascript": "#!/bin/sh\ncase \"$*\" in\n*NSPasteboard*) cp '" + img + "' \"$5\" && echo '{\"image\":\"image/png\"}' ;;\n*) exit 1 ;;\nesac\n",
+		"osascript": "#!/bin/sh\ncase \"$*\" in\n*NSPasteboard*) cp '" + img + "' \"$5\" && echo '{\"type\":\"image/png\"}' ;;\n*) exit 1 ;;\nesac\n",
 	}
 	for name, script := range scripts {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o700); err != nil { //nolint:gosec // G306: the stand-ins run

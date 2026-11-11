@@ -5,8 +5,9 @@ import (
 	"testing"
 )
 
-// chooseTypes picks a copied file's reference before any image, PNG
-// before the other image types, and nothing from text alone.
+// chooseTypes picks a copied file's reference before a PDF, a PDF before
+// any image, PNG before the other image types, and nothing from text
+// alone.
 func TestChooseTypes(t *testing.T) {
 	for _, c := range []struct {
 		listed string
@@ -19,6 +20,8 @@ func TestChooseTypes(t *testing.T) {
 		{"image/png\ntext/uri-list\nx-special/gnome-copied-files\n", []string{"text/uri-list", "x-special/gnome-copied-files", "image/png"}},
 		{"TARGETS\r\nimage/bmp\r\nimage/png\r\n", []string{"image/png"}},
 		{"image/svg+xml\nimage/bmp\n", nil},
+		{"image/png\napplication/pdf\n", []string{"application/pdf", "image/png"}},
+		{"application/pdf\ntext/uri-list\n", []string{"text/uri-list", "application/pdf"}},
 	} {
 		if got := chooseTypes([]byte(c.listed)); !slices.Equal(got, c.want) {
 			t.Errorf("%q: %q, want %q", c.listed, got, c.want)
@@ -53,23 +56,34 @@ func TestURIListPaths(t *testing.T) {
 	}
 }
 
-// imageOf takes an image whose bytes are the type claimed, and refuses
-// bytes of another type or text.
-func TestImageOf(t *testing.T) {
+// dataOf takes an image or a PDF whose bytes are the type claimed, and
+// refuses bytes of another type or text.
+func TestDataOf(t *testing.T) {
 	png := []byte("\x89PNG\r\n\x1a\n" + "rest")
-	if c, ok := imageOf(png, "image/png"); !ok || c.Type != "image/png" || string(c.Image) != string(png) {
+	if c, ok := dataOf(png, "image/png"); !ok || c.Type != "image/png" || string(c.Data) != string(png) {
 		t.Errorf("a PNG: %v %+v", ok, c)
 	}
-	if _, ok := imageOf(png, "image/jpeg"); ok {
-		t.Error("a PNG as image/jpeg: taken")
+	pdf := []byte("%PDF-1.7\n%\xe2\xe3\xcf\xd3\nrest")
+	if c, ok := dataOf(pdf, TypePDF); !ok || c.Type != TypePDF || string(c.Data) != string(pdf) {
+		t.Errorf("a PDF: %v %+v", ok, c)
 	}
-	if _, ok := imageOf([]byte("hello"), "image/png"); ok {
-		t.Error("text as image/png: taken")
+	for _, c := range []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"a PNG as image/jpeg", png, "image/jpeg"},
+		{"a PNG as a PDF", png, TypePDF},
+		{"a PDF as image/png", pdf, "image/png"},
+		{"text as a PDF", []byte("PDF hello"), TypePDF},
+		{"text as image/png", []byte("hello"), "image/png"},
+		{"an SVG", []byte("<svg/>"), "image/svg+xml"},
+	} {
+		if _, ok := dataOf(c.data, c.want); ok {
+			t.Errorf("%s: taken", c.name)
+		}
 	}
-	if _, ok := imageOf([]byte("<svg/>"), "image/svg+xml"); ok {
-		t.Error("an SVG: taken")
-	}
-	if ImageExt("image/jpeg") != "jpg" || ImageExt("image/webp") != "webp" || ImageExt("text/plain") != "" {
-		t.Error("ImageExt")
+	if DataExt("image/jpeg") != "jpg" || DataExt("image/webp") != "webp" || DataExt(TypePDF) != "pdf" || DataExt("text/plain") != "" {
+		t.Error("DataExt")
 	}
 }

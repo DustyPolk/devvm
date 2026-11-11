@@ -14,8 +14,8 @@ import (
 // What's "on the clipboard" is in $STUB_DIR:
 //
 //	clip-types   the types the clipboard offers, one a line (none: an empty clipboard)
-//	clip         the clipboard's contents for any type devvm asks for: an image's bytes, or a
-//	             text/uri-list; on macOS, the PNG osascript writes
+//	clip         the clipboard's contents for any type devvm asks for: an image's or a PDF's
+//	             bytes, or a text/uri-list; on macOS, the PDF or PNG osascript writes
 //	clip-file    on macOS, the copied files' paths, one a line, which osascript reports
 //	             (none: no file copied)
 //	clip-gone    on macOS, the copied file is gone, so osascript has no path for it
@@ -62,9 +62,10 @@ func xclip(c *call) int {
 // osascript stands in for macOS's osascript, for devvm paste's script
 // alone (-l JavaScript -e SCRIPT FILE LIMIT), printing what it would: with
 // clip-gone, gone; with clip-file, how many files past one, else the one
-// file; else with
-// image/png in clip-types, clip written to FILE when it's within LIMIT
-// bytes, or tooLarge; else nothing. With clip-fails it fails.
+// file; else with application/pdf or image/png in clip-types (a PDF
+// first, as the script prefers it), clip written to FILE as that type
+// when it's within LIMIT bytes, or tooLarge; else nothing. With
+// clip-fails it fails.
 func osascript(c *call) int {
 	c.log()
 	if !strings.Contains(c.joined(), "NSPasteboard") || c.after("-l") != "JavaScript" || len(c.args) < 6 {
@@ -78,8 +79,14 @@ func osascript(c *call) int {
 	found := map[string]any{}
 	text, copied := c.text("clip-file")
 	files := strings.Split(text, "\n")
-	image := c.raw("clip", "")
+	data := c.raw("clip", "")
 	most, err := strconv.Atoi(c.arg(5))
+	typ := ""
+	for _, t := range []string{"application/pdf", "image/png"} {
+		if typ == "" && clipHas(c, t) {
+			typ = t
+		}
+	}
 	switch {
 	case c.on("clip-gone"):
 		found["gone"] = true
@@ -87,14 +94,14 @@ func osascript(c *call) int {
 		found["files"] = len(files)
 	case copied:
 		found["file"] = files[0]
-	case !clipHas(c, "image/png"):
-	case err != nil || len(image) > most:
+	case typ == "":
+	case err != nil || len(data) > most:
 		found["tooLarge"] = true
 	default:
-		if err := writeFile(c.arg(4), image); err != nil {
+		if err := writeFile(c.arg(4), data); err != nil {
 			return c.status(err)
 		}
-		found["image"] = "image/png"
+		found["type"] = typ
 	}
 	out, err := json.Marshal(found)
 	if err != nil {

@@ -7,16 +7,16 @@ import (
 	"github.com/devvmhq/devvm/internal/vm"
 )
 
-// newPasteCmd is devvm paste: the clipboard's image or copied file into
-// this folder's VM, its path copied back, and devvm paste rm.
+// newPasteCmd is devvm paste: the clipboard's image, PDF or copied file
+// into this folder's VM, its path copied back, and devvm paste rm.
 func newPasteCmd(a *app) *cobra.Command {
 	u := a.u
 	var asJSON, sendFile bool
 	c := &cobra.Command{
 		Use:         "paste",
 		Annotations: about{docs: "using/coding-agents#pasting-images", group: groupVM}.annotations(),
-		Short:       "Send the clipboard's image or copied file to this folder's VM",
-		Long: "Put the image, or the one copied file, that's on this machine's clipboard into this folder's VM, " +
+		Short:       "Send the clipboard's image, PDF or copied file to this folder's VM",
+		Long: "Put the image, the PDF, or the one copied file, that's on this machine's clipboard into this folder's VM, " +
 			"which must be running, as a new file in its paste folder, and copy that file's path to the clipboard. " +
 			"A copied file is sent after asking, showing its path on this machine. " +
 			"Then paste the path into the agent with your terminal's paste shortcut.",

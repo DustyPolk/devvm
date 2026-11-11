@@ -42,4 +42,4 @@ devvm paste rm [flags]
 
 ## See also
 
-- [devvm paste](devvm_paste.md): Send the clipboard's image or copied file to this folder's VM
+- [devvm paste](devvm_paste.md): Send the clipboard's image, PDF or copied file to this folder's VM

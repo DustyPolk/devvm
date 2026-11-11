@@ -67,8 +67,8 @@ func (c clipTool) saysEmpty(stderr string) bool {
 	return false
 }
 
-// ReadClip reads the clipboard: one copied file's reference, else an
-// image, at most limit bytes (ErrClipTooLarge past it), of the types
+// ReadClip reads the clipboard: one copied file's reference, else a PDF
+// or an image, at most limit bytes (ErrClipTooLarge past it), of the types
 // devvm sends (chooseTypes), and never text. It lists the types first,
 // then reads only the one it chose, so nothing else leaves the clipboard.
 // A listing the tool fails with its word for an empty clipboard is one
@@ -106,7 +106,7 @@ func (c Clipboard) ReadClip(ctx context.Context, limit int64) (Clip, error) {
 			}
 			continue
 		}
-		if clip, ok := imageOf(data, t); ok {
+		if clip, ok := dataOf(data, t); ok {
 			return clip, nil
 		}
 	}

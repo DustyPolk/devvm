@@ -2054,7 +2054,7 @@ other = "put {{.path}} into {{.vm}} and copied the path, for your terminal's pas
 other = "Copying the path to the clipboard failed. Paste {{.path}} into the agent yourself."
 
 [paste_nothing]
-other = "There's no image and no copied file on the clipboard. Copy one, then run devvm paste again."
+other = "There's no image, PDF or copied file on the clipboard. Copy one, then run devvm paste again."
 
 [paste_many_files]
 description = "count is how many files are on the clipboard, more than one"

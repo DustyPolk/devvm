@@ -19,8 +19,11 @@ import (
 // what, the rest are its files. text TEXT; files PATH... (file URLs, one
 // item each, with the first's icon as TIFF beside them, as Finder copies);
 // ref PATH (a file reference URL, with its icon); image UTI FILE; tiff
-// PNGFILE (the PNG made a TIFF); textimage TEXT PNGFILE; clear (nothing);
-// release (the pasteboard deleted).
+// PNGFILE (the PNG made a TIFF); textimage TEXT PNGFILE; string UTI TEXT
+// (text as any type, such as public.url, as Safari copies a page's
+// text/uri-list); pdfpicture PDFFILE PNGFILE (a PDF and a picture of it,
+// as Preview copies a selection); clear (nothing); release (the
+// pasteboard deleted).
 const setScript = `ObjC.import('AppKit');
 function run(argv) {
   const pb = $.NSPasteboard.pasteboardWithName(argv[0]);
@@ -44,6 +47,11 @@ function run(argv) {
   case 'tiff': pb.setDataForType($.NSBitmapImageRep.imageRepWithData($.NSData.dataWithContentsOfFile(argv[2])).TIFFRepresentation, 'public.tiff'); break;
   case 'textimage':
     pb.setStringForType(argv[2], 'public.utf8-plain-text');
+    pb.setDataForType($.NSData.dataWithContentsOfFile(argv[3]), 'public.png');
+    break;
+  case 'string': pb.setStringForType(argv[3], argv[2]); break;
+  case 'pdfpicture':
+    pb.setDataForType($.NSData.dataWithContentsOfFile(argv[2]), 'com.adobe.pdf');
     pb.setDataForType($.NSData.dataWithContentsOfFile(argv[3]), 'public.png');
     break;
   }
@@ -77,10 +85,12 @@ func (p pasteboard) set(args ...string) {
 
 // The clipboard's reader on a real pasteboard, a test's own: a copied
 // file alone is read as one, Finder's icon beside it ignored, and text is
-// never one, whatever path or URL it says; several files are counted; a
-// copied file that's gone fails rather than sending its icon; an image is
-// read as PNG, a TIFF made one, beside text too; one past the cap is
-// refused before it's written.
+// never one, whatever path or URL it says, nor is a file:// URL a web
+// page wrote as public.url; several files are counted; a copied file
+// that's gone fails rather than sending its icon; an image is read as
+// PNG, a TIFF made one, beside text too; a PDF is read as it is, before
+// the picture beside it, and bytes that aren't one are nothing; one past
+// the cap is refused before it's written.
 func TestReadClipPasteboard(t *testing.T) {
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -105,17 +115,23 @@ func TestReadClipPasteboard(t *testing.T) {
 		t.Helper()
 		return Clipboard{}.readClip(t.Context(), limit, pb.name)
 	}
-	// Text is never a file.
+	// Text is never a file, nor is a URL that isn't a file URL.
 	for _, text := range []string{a, "file://" + a, "hello world"} {
 		pb.set("text", text)
 		if c, err := read(1 << 20); !errors.Is(err, ErrClipEmpty) {
 			t.Errorf("text %q: %+v, %v", text, c, err)
 		}
 	}
+	for _, uti := range []string{"public.url", "Apple URL pasteboard type"} {
+		pb.set("string", uti, "file://"+a)
+		if c, err := read(1 << 20); !errors.Is(err, ErrClipEmpty) {
+			t.Errorf("a file URL as %s: %+v, %v", uti, c, err)
+		}
+	}
 	// A copied file, its icon beside it, and one by its file reference URL.
 	for _, kind := range []string{"files", "ref"} {
 		pb.set(kind, b)
-		if c, err := read(1 << 20); err != nil || c.File != b || c.Image != nil {
+		if c, err := read(1 << 20); err != nil || c.File != b || c.Data != nil {
 			t.Errorf("%s: %+v, %v", kind, c, err)
 		}
 	}
@@ -135,12 +151,37 @@ func TestReadClipPasteboard(t *testing.T) {
 	}
 	// Images.
 	pb.set("image", "public.png", pngFile)
-	if c, err := read(1 << 20); err != nil || !bytes.Equal(c.Image, img.Bytes()) || c.Type != "image/png" {
+	if c, err := read(1 << 20); err != nil || !bytes.Equal(c.Data, img.Bytes()) || c.Type != "image/png" {
 		t.Errorf("a PNG: %+v, %v", c.Type, err)
 	}
 	pb.set("tiff", pngFile)
-	if c, err := read(1 << 20); err != nil || c.Type != "image/png" || len(c.Image) == 0 {
+	if c, err := read(1 << 20); err != nil || c.Type != "image/png" || len(c.Data) == 0 {
 		t.Errorf("a TIFF: %+v, %v", c.Type, err)
+	}
+	// PDFs, as they are, before the picture beside one.
+	pdf := []byte("%PDF-1.4\n1 0 obj << >> endobj\ntrailer << >>\n%%EOF\n")
+	pdfFile, notPDF := filepath.Join(dir, "page.pdf"), filepath.Join(dir, "not.pdf")
+	if err := os.WriteFile(pdfFile, pdf, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(notPDF, []byte("not a PDF at all"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pb.set("image", "com.adobe.pdf", pdfFile)
+	if c, err := read(1 << 20); err != nil || !bytes.Equal(c.Data, pdf) || c.Type != TypePDF {
+		t.Errorf("a PDF: %+v, %v", c.Type, err)
+	}
+	pb.set("pdfpicture", pdfFile, pngFile)
+	if c, err := read(1 << 20); err != nil || !bytes.Equal(c.Data, pdf) || c.Type != TypePDF {
+		t.Errorf("a PDF beside its picture: %+v, %v", c.Type, err)
+	}
+	pb.set("image", "com.adobe.pdf", notPDF)
+	if c, err := read(1 << 20); !errors.Is(err, ErrClipEmpty) {
+		t.Errorf("bytes that aren't a PDF: %+v, %v", c.Type, err)
+	}
+	pb.set("image", "com.adobe.pdf", pdfFile)
+	if c, err := read(int64(len(pdf)) - 1); !errors.Is(err, ErrClipTooLarge) {
+		t.Errorf("a PDF past the cap: %+v, %v", c.Type, err)
 	}
 	pb.set("textimage", a, pngFile)
 	if c, err := read(1 << 20); err != nil || c.Type != "image/png" || c.File != "" {

@@ -1,13 +1,13 @@
 ---
 title: devvm paste
-explainer: "Send the clipboard's image or copied file to this folder's VM"
+explainer: "Send the clipboard's image, PDF or copied file to this folder's VM"
 ---
 
-Send the clipboard's image or copied file to this folder's VM
+Send the clipboard's image, PDF or copied file to this folder's VM
 
 ## Synopsis
 
-Put the image, or the one copied file, that's on this machine's clipboard into this folder's VM, which must be running, as a new file in its paste folder, and copy that file's path to the clipboard. A copied file is sent after asking, showing its path on this machine. Then paste the path into the agent with your terminal's paste shortcut.
+Put the image, the PDF, or the one copied file, that's on this machine's clipboard into this folder's VM, which must be running, as a new file in its paste folder, and copy that file's path to the clipboard. A copied file is sent after asking, showing its path on this machine. Then paste the path into the agent with your terminal's paste shortcut.
 
 ```text
 devvm paste [flags]

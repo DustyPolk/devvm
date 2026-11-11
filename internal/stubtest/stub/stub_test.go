@@ -773,12 +773,17 @@ func TestClipboard(t *testing.T) {
 	if out := s.ok("", "osascript", osa("5")...); out != `{"tooLarge":true}`+"\n" {
 		t.Errorf("osascript past the cap %q", out)
 	}
-	if out := s.ok("", "osascript", osa("100")...); out != `{"image":"image/png"}`+"\n" {
+	if out := s.ok("", "osascript", osa("100")...); out != `{"type":"image/png"}`+"\n" {
 		t.Errorf("osascript's image %q", out)
 	}
 	if got := s.read("out.png"); got != png {
 		t.Errorf("osascript's PNG %q", got)
 	}
+	s.write("clip-types", "image/png\napplication/pdf\n")
+	if out := s.ok("", "osascript", osa("100")...); out != `{"type":"application/pdf"}`+"\n" {
+		t.Errorf("osascript's PDF %q", out)
+	}
+	s.write("clip-types", "text/html\nimage/png\n")
 	s.write("clip-file", "/Users/me/shot.png\n")
 	if out := s.ok("", "osascript", osa("100")...); out != `{"file":"/Users/me/shot.png"}`+"\n" {
 		t.Errorf("osascript's file %q", out)

@@ -12,18 +12,21 @@ import (
 
 // clipScript is the JavaScript for Automation that osascript runs to read
 // the clipboard, through NSPasteboard, with its arguments: the file to
-// write an image to, the most bytes it writes, and a pasteboard's name,
-// which only tests give (their own), for the clipboard's in its place.
+// write a PDF or an image to, the most bytes it writes, and a
+// pasteboard's name, which only tests give (their own), for the
+// clipboard's in its place.
 //
 // It asks first for file URLs alone (NSPasteboardURLReadingFileURLsOnlyKey),
 // which only a copied file puts there, as Finder does: text, a path or a
 // file:// URL included, is never one. Several are counted, never read.
 // One is printed as its path, a file reference URL (file:///.file/id=)
-// resolved, or as gone when it can't be. Then an image: PNG, JPEG, GIF or
-// WebP as it is, else TIFF, as macOS apps copy one, made a PNG. It's
-// written only within the cap, so a huge one never reaches the disk. It
-// prints one JSON object: files (how many, past one), file, gone, image
-// (its type), tooLarge, or none of them for nothing devvm sends. Text is
+// resolved, or as gone when it can't be. Then a PDF (com.adobe.pdf, as
+// Preview copies a selection, with a picture of it beside it) as it is,
+// never made an image; then an image: PNG, JPEG, GIF or WebP as it is,
+// else TIFF, as macOS apps copy one, made a PNG. Either is written only
+// within the cap, so a huge one never reaches the disk. It prints one
+// JSON object: files (how many, past one), file, gone, type (what it
+// wrote), tooLarge, or none of them for nothing devvm sends. Text is
 // never asked for.
 const clipScript = `ObjC.import('AppKit');
 function run(argv) {
@@ -36,8 +39,8 @@ function run(argv) {
     const u = urls.objectAtIndex(0).filePathURL;
     return JSON.stringify(u.isNil() ? {gone: true} : {file: u.path.js});
   }
-  const types = [['public.png', 'image/png'], ['public.jpeg', 'image/jpeg'], ['com.compuserve.gif', 'image/gif'],
-    ['org.webmproject.webp', 'image/webp'], ['public.tiff', '']];
+  const types = [['com.adobe.pdf', 'application/pdf'], ['public.png', 'image/png'], ['public.jpeg', 'image/jpeg'],
+    ['com.compuserve.gif', 'image/gif'], ['org.webmproject.webp', 'image/webp'], ['public.tiff', '']];
   for (const [uti, mime] of types) {
     let d = pb.dataForType(uti);
     if (d.isNil()) continue;
@@ -50,8 +53,8 @@ function run(argv) {
       type = 'image/png';
     }
     if (Number(d.length) > Number(argv[1])) return JSON.stringify({tooLarge: true});
-    if (!d.writeToFileAtomically(argv[0], false)) throw new Error('writing the image failed');
-    return JSON.stringify({image: type});
+    if (!d.writeToFileAtomically(argv[0], false)) throw new Error('writing what was copied failed');
+    return JSON.stringify({type: type});
   }
   return '{}';
 }`
@@ -61,7 +64,7 @@ type clipFound struct {
 	Files    int    `json:"files"`
 	File     string `json:"file"`
 	Gone     bool   `json:"gone"`
-	Image    string `json:"image"`
+	Type     string `json:"type"`
 	TooLarge bool   `json:"tooLarge"`
 }
 
@@ -73,7 +76,7 @@ const clipFoundMax = 64 << 10
 const macTools = "/usr/bin"
 
 // ReadClip reads the clipboard through osascript (clipScript): one copied
-// file's path, else an image, written to a file in a private folder of
+// file's path, else a PDF or an image, written to a file in a private folder of
 // devvm's, read, and deleted, at most limit bytes (ErrClipTooLarge past
 // it). A copied file wins over an image, because Finder puts the file's
 // icon on the clipboard as an image beside it; several are
@@ -114,7 +117,7 @@ func (c Clipboard) readClip(ctx context.Context, limit int64, pasteboard string)
 		return Clip{}, ErrClipFileGone
 	case found.TooLarge:
 		return Clip{}, ErrClipTooLarge
-	case found.Image == "":
+	case found.Type == "":
 		return Clip{}, ErrClipEmpty
 	}
 	f, err := os.Open(file) //nolint:gosec // devvm's own file, in a folder of mode 700 it just made
@@ -129,7 +132,7 @@ func (c Clipboard) readClip(ctx context.Context, limit int64, pasteboard string)
 	case int64(len(data)) > limit:
 		return Clip{}, ErrClipTooLarge
 	}
-	if clip, ok := imageOf(data, found.Image); ok {
+	if clip, ok := dataOf(data, found.Type); ok {
 		return clip, nil
 	}
 	return Clip{}, ErrClipEmpty

@@ -95,6 +95,25 @@ exec sh -c 'printf "hello" > "$STUB_DIR/clip"'
 ! exec devvm paste
 stderr '^devvm: paste_nothing$'
 
+# A PDF, as a PDF viewer copies a selection with a picture of it beside
+# it, is sent as it is, as .pdf, never as an image; bytes that aren't a
+# PDF are nothing devvm sends.
+exec sh -c 'printf "image/png\napplication/pdf\n" > "$STUB_DIR/clip-types"'
+exec sh -c 'printf "%%PDF-1.4\nthe page\n" > "$STUB_DIR/clip"'
+stub_reset
+exec devvm paste --json
+stdout '"kind": ?"pdf"'
+stdout '"type": ?"application/pdf"'
+stdout '"path": ?"/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.pdf"'
+cmp $STUB_DIR/paste-in $STUB_DIR/clip
+stub_calls
+[linux] stdout '^wl-paste --no-newline --type application/pdf$'
+[linux] ! stdout 'type image/png'
+exec sh -c 'printf "PDF? no\n" > "$STUB_DIR/clip"'
+! exec devvm paste
+stderr '^devvm: paste_nothing$'
+exec sh -c 'printf "text/html\nimage/png\n" > "$STUB_DIR/clip-types"'
+
 # Over 64 MiB: stopped at the cap, nothing sent.
 [linux] exec sh -c ': > "$STUB_DIR/clip-floods"'
 [darwin] exec sh -c 'head -c 67108865 /dev/zero > "$STUB_DIR/clip"'
