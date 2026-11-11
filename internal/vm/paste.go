@@ -16,6 +16,7 @@ import (
 	"github.com/devvmhq/devvm/internal/backend"
 	"github.com/devvmhq/devvm/internal/msg"
 	"github.com/devvmhq/devvm/internal/platform"
+	"github.com/devvmhq/devvm/internal/safefile"
 	"github.com/devvmhq/devvm/internal/settings"
 )
 
@@ -51,12 +52,11 @@ const (
 	PasteFile  = "file"
 )
 
-// pasteMax is the most devvm paste sends, an image, a PDF or a file, and
-// pasteMaxText how its message says it.
-const (
-	pasteMax     = 64 << 20
-	pasteMaxText = "64 MiB"
-)
+// pasteMax is the most devvm paste sends, an image, a PDF or a file.
+const pasteMax = 64 << 20
+
+// pasteMaxText is how a message says pasteMax: 64 MiB.
+func pasteMaxText() string { return strconv.Itoa(pasteMax>>20) + " MiB" }
 
 // pasteCountMax bounds what the VM prints for a count.
 const pasteCountMax = 32
@@ -140,7 +140,7 @@ func (e Paste) Rm(ctx context.Context, force bool) error {
 	if err != nil {
 		return err
 	}
-	n, err := e.count(ctx, t, "count", dir)
+	n, err := e.numberFrom(ctx, t, "count", dir)
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func (e Paste) offerRm(ctx context.Context, t *target) error {
 	if err != nil {
 		return err
 	}
-	n, err := e.count(ctx, t, "count", dir)
+	n, err := e.numberFrom(ctx, t, "count", dir)
 	switch {
 	case ctx.Err() != nil:
 		return ctx.Err()
@@ -188,7 +188,7 @@ func (e Paste) offerRm(ctx context.Context, t *target) error {
 
 // rm deletes what devvm paste left in dir in t's VM and says how many.
 func (e Paste) rm(ctx context.Context, t *target, dir string) error {
-	n, err := e.count(ctx, t, "rm", dir)
+	n, err := e.numberFrom(ctx, t, "rm", dir)
 	if err != nil {
 		return err
 	}
@@ -196,11 +196,12 @@ func (e Paste) rm(ctx context.Context, t *target, dir string) error {
 	return nil
 }
 
-// count runs paste.sh's cmd, count or rm, on dir in t's VM and reads the
-// number it prints, the one thing devvm reads back from the VM: a whole
-// number within pasteCountMax bytes, or the command's failure
+// numberFrom runs paste.sh's cmd on dir in t's VM, count (how many files
+// devvm paste left) or rm (deletes them, and says how many), and reads
+// the number it prints, the one thing devvm reads back from the VM: a
+// whole number within pasteCountMax bytes, or the command's failure
 // (paste_count_failed, paste_rm_not_done).
-func (e Paste) count(ctx context.Context, t *target, cmd, dir string) (int, error) {
+func (e Paste) numberFrom(ctx context.Context, t *target, cmd, dir string) (int, error) {
 	out := &bounded{}
 	err := e.run(ctx, t, []string{cmd, dir}, nil, out)
 	if ctx.Err() != nil {
@@ -256,8 +257,9 @@ func pasteArgv(script string, args []string) []string {
 // /tmp on macOS is one). Nothing of the path is resolved first, because
 // a VM can plant a link in the project folder before the copy as well as
 // swap one in after it, and either, say to a key of yours, fails rather
-// than sends what it points to. The file opened is checked to be a
-// regular file within pasteMax.
+// than sends what it points to. The file opened is checked, as every
+// file a VM can write is read, by internal/safefile: a regular file
+// within pasteMax.
 func pastePayloadOf(clip platform.Clip, now time.Time) (pastePayload, error) {
 	stem := pasteStem(now)
 	if clip.File == "" {
@@ -268,29 +270,27 @@ func pastePayloadOf(clip platform.Clip, now time.Time) (pastePayload, error) {
 		return pastePayload{data: clip.Data, name: stem + "." + platform.DataExt(clip.Type), kind: kind, mime: clip.Type}, nil
 	}
 	file := filepath.Clean(clip.File)
-	f, err := platform.OpenNoLinks(file)
+	opened, err := platform.OpenNoLinks(file)
+	if errors.Is(err, platform.ErrLinkOnPath) {
+		return pastePayload{}, msg.PasteFileLink(file)
+	}
+	var f *safefile.File
+	if err == nil {
+		f, err = safefile.Checked(opened, safefile.Opts{})
+	}
+	if errors.Is(err, safefile.ErrNotRegular) {
+		return pastePayload{}, msg.PasteNotFile(file)
+	}
 	if err != nil {
-		if errors.Is(err, platform.ErrLinkOnPath) {
-			return pastePayload{}, msg.PasteFileLink(file)
-		}
 		return pastePayload{}, err
 	}
 	defer func() { _ = f.Close() }()
-	fi, err := f.Stat()
+	data, err := f.ReadAll(pasteMax)
 	switch {
+	case errors.Is(err, safefile.ErrTooLong):
+		return pastePayload{}, msg.PasteTooLarge(pasteMaxText())
 	case err != nil:
 		return pastePayload{}, err
-	case !fi.Mode().IsRegular():
-		return pastePayload{}, msg.PasteNotFile(file)
-	case fi.Size() > pasteMax:
-		return pastePayload{}, msg.PasteTooLarge(pasteMaxText)
-	}
-	data, err := io.ReadAll(io.LimitReader(f, pasteMax+1))
-	switch {
-	case err != nil:
-		return pastePayload{}, err
-	case len(data) > pasteMax:
-		return pastePayload{}, msg.PasteTooLarge(pasteMaxText)
 	}
 	return pastePayload{data: data, name: stem + pasteExt(filepath.Base(file)), kind: PasteFile, source: file}, nil
 }
@@ -345,7 +345,7 @@ func clipError(err error) error {
 	case errors.Is(err, platform.ErrClipFileGone):
 		return msg.PasteFileGone()
 	case errors.Is(err, platform.ErrClipTooLarge):
-		return msg.PasteTooLarge(pasteMaxText)
+		return msg.PasteTooLarge(pasteMaxText())
 	case errors.Is(err, platform.ErrClipNoSession):
 		return msg.PasteNoSession()
 	case errors.Is(err, errors.ErrUnsupported):
