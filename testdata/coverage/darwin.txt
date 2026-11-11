@@ -24,7 +24,7 @@ internal/msg 72.0
 internal/msg/gen 93.3
 internal/netpolicy 91.6
 internal/paths 98.1
-internal/platform 89.8
+internal/platform 90.3
 internal/ports 91.4
 internal/project 98.5
 internal/proxy 92.8
@@ -43,7 +43,7 @@ internal/testbuild 100.0
 internal/tools 90.9
 internal/trust 95.0
 internal/ubuntu 97.3
-internal/ui 97.0
+internal/ui 97.2
 internal/upgrade 93.2
 internal/upgrade/upgradetest 97.4
 internal/vm 88.4

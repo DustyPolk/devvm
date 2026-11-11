@@ -100,7 +100,7 @@ func (c Clipboard) readClip(ctx context.Context, limit int64, pasteboard string)
 	if pasteboard != "" {
 		args = append(args, pasteboard)
 	}
-	out, err := runClipTool(ctx, c.tool("osascript", osascript), args, clipFoundMax)
+	out, err := runClipTool(ctx, c.tool("osascript", osascript), args, clipFoundMax, clipWait)
 	if err != nil {
 		return Clip{}, err
 	}
@@ -140,5 +140,5 @@ func (c Clipboard) readClip(ctx context.Context, limit int64, pasteboard string)
 
 // CopyText puts text on the clipboard with pbcopy.
 func (c Clipboard) CopyText(ctx context.Context, text string) error {
-	return copyWith(ctx, c.tool("pbcopy", pbcopy), nil, text)
+	return copyWith(ctx, c.tool("pbcopy", pbcopy), nil, text, clipWait)
 }

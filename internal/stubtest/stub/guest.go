@@ -214,6 +214,9 @@ func (g *guest) files() (code int, done bool) {
 		if g.on("shell-fails") || g.mentions("shell-fails-on") {
 			return 1, true
 		}
+		if g.on("paste-floods") {
+			return g.flood("1\n"), true
+		}
 		g.print(g.textOr("paste-count", "0") + "\n")
 		return 0, true
 	case strings.Contains(all, "tar -x -C "):

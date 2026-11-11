@@ -111,7 +111,7 @@ func isFileType(t string) bool { return t == typeURIList || t == typeGnome }
 // output runs the paste tool with args (runClipTool), as wl-paste fails on
 // an empty clipboard and without a compositor alike.
 func (c clipTool) output(ctx context.Context, args []string, limit int64) ([]byte, error) {
-	return runClipTool(ctx, c.paste, args, limit)
+	return runClipTool(ctx, c.paste, args, limit, clipWait)
 }
 
 // CopyText puts text on the clipboard with wl-copy or xclip (copyWith),
@@ -121,5 +121,5 @@ func (c Clipboard) CopyText(ctx context.Context, text string) error {
 	if err != nil {
 		return err
 	}
-	return copyWith(ctx, tool.copy, tool.write, text)
+	return copyWith(ctx, tool.copy, tool.write, text, clipWait)
 }

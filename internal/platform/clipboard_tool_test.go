@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A clipboard tool is run from the test build's folder when it's given,
@@ -30,19 +31,25 @@ func TestClipboardTool(t *testing.T) {
 	}
 	gone := filepath.Join(t.TempDir(), "pbcopy")
 	var missing *ClipToolMissing
-	if err := copyWith(t.Context(), gone, nil, "x"); !errors.As(err, &missing) || missing.Tool != "pbcopy" {
+	if err := copyWith(t.Context(), gone, nil, "x", clipWait); !errors.As(err, &missing) || missing.Tool != "pbcopy" {
 		t.Errorf("a copier missing from its path: %v", err)
 	}
-	if _, err := runClipTool(t.Context(), gone, nil, 1); !errors.As(err, &missing) || missing.Tool != "pbcopy" {
+	if _, err := runClipTool(t.Context(), gone, nil, 1, clipWait); !errors.As(err, &missing) || missing.Tool != "pbcopy" {
 		t.Errorf("a reader missing from its path: %v", err)
 	}
 }
 
 // A clipboard tool's output is kept to its limit, the tool stopped past
 // it; a tool that isn't there is ClipToolMissing; one that fails is
-// ClipToolFailed with its stderr, at most clipStderrMax of it; and a
-// cancelled run is the context's error.
+// ClipToolFailed with its stderr, at most clipStderrMax of it; one that
+// doesn't finish in time is stopped and ClipToolFailed, as is one whose
+// child keeps its output open after it ends, soon after; and a cancelled
+// run is the context's error.
 func TestRunClipTool(t *testing.T) {
+	slow := func(err error) bool {
+		var failed *ClipToolFailed
+		return errors.As(err, &failed) && strings.Contains(failed.Stderr, "didn't finish")
+	}
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 	for _, c := range []struct {
@@ -68,10 +75,21 @@ func TestRunClipTool(t *testing.T) {
 			return errors.As(err, &failed) && len(failed.Stderr) == clipStderrMax
 		}},
 		{"cancelled", cancelled, "sh", "sleep 5", "", func(err error) bool { return errors.Is(err, context.Canceled) }},
+		{"hanging", t.Context(), "sh", "sleep 5; echo late", "", slow},
+		{"its child holding its output", t.Context(), "sh", "sleep 5 & echo early", "", slow},
 	} {
-		out, err := runClipTool(c.ctx, c.tool, []string{"-c", c.script}, 64)
+		start := time.Now()
+		out, err := runClipTool(c.ctx, c.tool, []string{"-c", c.script}, 64, 200*time.Millisecond)
 		if string(out) != c.out || !c.check(err) {
 			t.Errorf("%s: %q, %v", c.name, out, err)
 		}
+		if d := time.Since(start); d > 3*time.Second {
+			t.Errorf("%s: took %s", c.name, d)
+		}
+	}
+	// A copier that hangs is stopped too.
+	start := time.Now()
+	if err := copyWith(t.Context(), "sh", []string{"-c", "sleep 5"}, "x", 200*time.Millisecond); !slow(err) || time.Since(start) > 3*time.Second {
+		t.Errorf("a hanging copier: %v after %s", err, time.Since(start))
 	}
 }

@@ -6,15 +6,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"io/fs"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // clipStderrMax is the most of a clipboard tool's stderr devvm keeps.
 const clipStderrMax = 4 << 10
+
+// clipWait is the longest devvm waits for a clipboard tool, which can
+// hang on a program that holds the clipboard and doesn't answer.
+const clipWait = 30 * time.Second
 
 // tool is the clipboard tool name's command: in Tools when it's set,
 // else at system, its path (macOS's /usr/bin/osascript), or name alone,
@@ -35,59 +39,86 @@ func missing(err error) bool {
 	return errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist)
 }
 
+// pipesWait is how long a clipboard tool's pipes may stay open once it
+// ended or was stopped, as when a child of its keeps them, before devvm
+// closes them and goes on.
+const pipesWait = time.Second
+
 // runClipTool runs the clipboard tool, a command or its path, with args
 // and returns what it printed, at most limit bytes: ErrClipTooLarge past
 // it, with the tool stopped, ClipToolMissing when the tool isn't there,
-// and ClipToolFailed, with its stderr, when it failed, each naming the
-// tool without its folder. Its output is read, never logged, so an image
-// and a path stay out of the run log.
-func runClipTool(ctx context.Context, tool string, args []string, limit int64) ([]byte, error) {
-	ctx, cancel := context.WithCancel(ctx)
+// and ClipToolFailed, with its stderr, when it failed or didn't finish
+// within wait, each naming the tool without its folder. Its output is
+// read, never logged, so an image and a path stay out of the run log.
+func runClipTool(ctx context.Context, tool string, args []string, limit int64, wait time.Duration) ([]byte, error) {
+	run, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, tool, args...) //nolint:gosec // devvm's own arguments: the tool, its switches and a type it listed
+	cmd := exec.CommandContext(run, tool, args...) //nolint:gosec // devvm's own arguments: the tool, its switches and a type it listed
+	out := &clipOut{max: limit, cancel: cancel}
 	stderr := &capped{max: clipStderrMax}
-	cmd.Stderr = stderr
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		if missing(err) {
-			return nil, &ClipToolMissing{Tool: filepath.Base(tool)}
-		}
-		return nil, err
-	}
-	data, rerr := io.ReadAll(io.LimitReader(out, limit+1))
-	if int64(len(data)) > limit {
-		cancel()
-		_ = cmd.Wait()
-		return nil, ErrClipTooLarge
-	}
-	werr := cmd.Wait()
+	cmd.Stdout, cmd.Stderr, cmd.WaitDelay = out, stderr, pipesWait
+	err := cmd.Run()
 	switch {
-	case ctx.Err() != nil:
-		return nil, ctx.Err()
-	case rerr != nil:
-		return nil, rerr
-	case werr != nil:
-		return nil, &ClipToolFailed{Tool: filepath.Base(tool), Stderr: stderr.String()}
+	case out.over:
+		return nil, ErrClipTooLarge
+	case err == nil:
+		return out.buf.Bytes(), nil
 	}
-	return data, nil
+	return nil, clipToolErr(ctx, run, cmd, tool, stderr.String(), err)
 }
 
 // copyWith puts text on the clipboard with the copy tool, a command or
-// its path, and args, text on its stdin. It runs without pipes on its
-// output, because wl-copy and xclip fork a child that serves the
-// clipboard until something else is copied, and Go's Wait would wait for
-// that child to close them.
-func copyWith(ctx context.Context, tool string, args []string, text string) error {
-	cmd := exec.CommandContext(ctx, tool, args...) //nolint:gosec // devvm's own arguments
-	cmd.Stdin = strings.NewReader(text)
-	err := cmd.Run()
-	if missing(err) {
-		return &ClipToolMissing{Tool: filepath.Base(tool)}
+// its path, and args, text on its stdin, within wait. It runs without
+// pipes on its output, because wl-copy and xclip fork a child that serves
+// the clipboard until something else is copied, and Go's Wait would wait
+// for that child to close them.
+func copyWith(ctx context.Context, tool string, args []string, text string, wait time.Duration) error {
+	run, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	cmd := exec.CommandContext(run, tool, args...) //nolint:gosec // devvm's own arguments
+	cmd.Stdin, cmd.WaitDelay = strings.NewReader(text), pipesWait
+	if err := cmd.Run(); err != nil {
+		return clipToolErr(ctx, run, cmd, tool, "", err)
 	}
-	return err
+	return nil
+}
+
+// clipToolErr is a clipboard tool's failure, err from running cmd, the
+// tool, on run, a context of ctx with the tool's time limit:
+// ClipToolMissing when it isn't there, ctx's error when ctx ended,
+// ClipToolFailed saying it didn't finish when its time ran out, and
+// ClipToolFailed with stderr when it failed after it started.
+func clipToolErr(ctx, run context.Context, cmd *exec.Cmd, tool, stderr string, err error) error {
+	name := filepath.Base(tool)
+	switch {
+	case missing(err):
+		return &ClipToolMissing{Tool: name}
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case errors.Is(run.Err(), context.DeadlineExceeded) || errors.Is(err, exec.ErrWaitDelay):
+		return &ClipToolFailed{Tool: name, Stderr: name + " didn't finish in time"}
+	case cmd.ProcessState == nil:
+		return err
+	}
+	return &ClipToolFailed{Tool: name, Stderr: stderr}
+}
+
+// clipOut keeps a clipboard tool's output, at most max bytes: past them
+// it's over, cancels the tool and fails every write after.
+type clipOut struct {
+	buf    bytes.Buffer
+	max    int64
+	over   bool
+	cancel func()
+}
+
+func (w *clipOut) Write(p []byte) (int, error) {
+	if w.over || int64(w.buf.Len()+len(p)) > w.max {
+		w.over = true
+		w.cancel()
+		return 0, ErrClipTooLarge
+	}
+	return w.buf.Write(p)
 }
 
 // capped keeps the first max bytes written to it, and takes the rest

@@ -199,7 +199,7 @@ func (e Paste) rm(ctx context.Context, t *target, dir string) error {
 // number within pasteCountMax bytes, or the command's failure
 // (paste_count_failed, paste_rm_not_done).
 func (e Paste) count(ctx context.Context, t *target, cmd, dir string) (int, error) {
-	out := &bounded{max: pasteCountMax}
+	out := &bounded{}
 	err := e.run(ctx, t, []string{cmd, dir}, nil, out)
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
@@ -220,16 +220,25 @@ func (e Paste) count(ctx context.Context, t *target, cmd, dir string) (int, erro
 
 // run runs paste.sh (assets/guest/paste.sh) in t's running VM with args
 // after its command name, the script itself an argument of sh -c, so
-// nothing of it is left on disk, with stdin as its input and stdout
-// where its output goes (nil for none). The VM's stderr goes to the run
-// log. The connection carries no SSH agent: it's the backend's Exec as
-// it is, never target.exec.
-func (e Paste) run(ctx context.Context, t *target, args []string, stdin io.Reader, stdout io.Writer) error {
+// nothing of it is left on disk, with stdin as its input and out, when
+// it's given, keeping its output, at most pasteCountMax bytes. The VM's
+// stderr goes to the run log, at most vmLogMax bytes. Past either cap the
+// command is stopped, so a VM that prints without end can't keep devvm
+// reading. The connection carries no SSH agent: it's the backend's Exec
+// as it is, never target.exec.
+func (e Paste) run(ctx context.Context, t *target, args []string, stdin io.Reader, out *bounded) error {
 	script, err := fs.ReadFile(e.Assets, "guest/paste.sh")
 	if err != nil {
 		return err
 	}
-	return t.b.Exec(ctx, t.f.Name, pasteArgv(string(script), args), backend.ExecOpts{Stdin: stdin, Stdout: stdout, Stderr: e.vmLog()})
+	run, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if out == nil {
+		out = &bounded{}
+	}
+	out.max, out.cancel = pasteCountMax, cancel
+	log := &bounded{to: e.LogWriter(), max: vmLogMax, cancel: cancel}
+	return t.b.Exec(run, t.f.Name, pasteArgv(string(script), args), backend.ExecOpts{Stdin: stdin, Stdout: out, Stderr: log})
 }
 
 // pasteArgv is the command that runs paste.sh, the script, with args

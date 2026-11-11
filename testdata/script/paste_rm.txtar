@@ -67,6 +67,13 @@ exec sh -c 'echo "''rm''" > "$STUB_DIR/shell-fails-on"'
 stderr '^devvm: paste_rm_not_done dir=/tmp/devvm-paste vm=devvm-plain-[0-9a-f]{14}$'
 rm $STUB_DIR/shell-fails-on
 
+# A VM that prints without end for the count is stopped once it's past
+# what devvm reads, and the count fails, rather than devvm reading on.
+exec sh -c ': > "$STUB_DIR/paste-floods"'
+! exec devvm paste rm --force
+stderr '^devvm: paste_count_failed dir=/tmp/devvm-paste vm=devvm-plain-[0-9a-f]{14}$'
+rm $STUB_DIR/paste-floods
+
 # A launch into the running VM asks nothing. A launch that starts the
 # stopped VM asks in a terminal, after the setup, and without one keeps
 # the files and says nothing.
