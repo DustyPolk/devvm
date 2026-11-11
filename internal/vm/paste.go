@@ -315,6 +315,8 @@ func clipError(err error) error {
 		return msg.PasteToolFailed(msg.Printable(strings.TrimSpace(failed.Stderr)), failed.Tool).Because(err)
 	case errors.Is(err, platform.ErrClipEmpty):
 		return msg.PasteNothing()
+	case errors.Is(err, platform.ErrClipFileGone):
+		return msg.PasteFileGone()
 	case errors.Is(err, platform.ErrClipTooLarge):
 		return msg.PasteTooLarge(pasteMaxText)
 	case errors.Is(err, platform.ErrClipNoSession):

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -14,10 +16,12 @@ import (
 //	clip-types   the types the clipboard offers, one a line (none: an empty clipboard)
 //	clip         the clipboard's contents for any type devvm asks for: an image's bytes, or a
 //	             text/uri-list; on macOS, the PNG osascript writes
-//	clip-file    on macOS, the copied file's path osascript prints (none: no file copied)
+//	clip-file    on macOS, the copied files' paths, one a line, which osascript reports
+//	             (none: no file copied)
+//	clip-gone    on macOS, the copied file is gone, so osascript has no path for it
 //	clip-floods  a read prints without end, as a tool with a huge image would
-//	clip-fails   wl-paste and xclip can't reach the session, as with a WAYLAND_DISPLAY or
-//	             DISPLAY from a login that's over, and fail saying so
+//	clip-fails   wl-paste, xclip and osascript can't reach the session, as with a
+//	             WAYLAND_DISPLAY or DISPLAY from a login that's over, and fail saying so
 //	copy-fails   wl-copy, xclip -i and pbcopy fail
 //
 // What was copied goes to $STUB_DIR/copied, and every call to $STUB_LOG.
@@ -55,32 +59,49 @@ func xclip(c *call) int {
 	}
 }
 
-// osascript stands in for macOS's osascript, for devvm paste's two
-// scripts alone: one naming «class furl» prints clip-file, and fails
-// without it, as AppleScript does when no file is copied; one naming
-// «class PNGf» writes clip to the file named by its last argument when
-// clip-types lists image/png, and fails otherwise.
+// osascript stands in for macOS's osascript, for devvm paste's script
+// alone (-l JavaScript -e SCRIPT FILE LIMIT), printing what it would: with
+// clip-gone, gone; with clip-file, how many files past one, else the one
+// file; else with
+// image/png in clip-types, clip written to FILE when it's within LIMIT
+// bytes, or tooLarge; else nothing. With clip-fails it fails.
 func osascript(c *call) int {
 	c.log()
-	script := c.joined()
-	switch {
-	case strings.Contains(script, "furl"):
-		p, ok := c.text("clip-file")
-		if !ok {
-			c.say("execution error: Can't make some data into the expected type. (-1700)")
-			return 1
-		}
-		c.print(p + "\n")
-		return 0
-	case strings.Contains(script, "PNGf"):
-		if !clipHas(c, "image/png") {
-			c.say("execution error: Can't make some data into the expected type. (-1700)")
-			return 1
-		}
-		return c.status(writeFile(c.last(), c.raw("clip", "")))
+	if !strings.Contains(c.joined(), "NSPasteboard") || c.after("-l") != "JavaScript" || len(c.args) < 6 {
+		c.say("stub osascript: not devvm paste's script")
+		return 1
 	}
-	c.say("stub osascript: not one of devvm paste's scripts")
-	return 1
+	if c.on("clip-fails") {
+		c.say("execution error: Error: Connection invalid (-2700)")
+		return 1
+	}
+	found := map[string]any{}
+	text, copied := c.text("clip-file")
+	files := strings.Split(text, "\n")
+	image := c.raw("clip", "")
+	most, err := strconv.Atoi(c.arg(5))
+	switch {
+	case c.on("clip-gone"):
+		found["gone"] = true
+	case copied && len(files) > 1:
+		found["files"] = len(files)
+	case copied:
+		found["file"] = files[0]
+	case !clipHas(c, "image/png"):
+	case err != nil || len(image) > most:
+		found["tooLarge"] = true
+	default:
+		if err := writeFile(c.arg(4), image); err != nil {
+			return c.status(err)
+		}
+		found["image"] = "image/png"
+	}
+	out, err := json.Marshal(found)
+	if err != nil {
+		return c.status(err)
+	}
+	c.print(string(out) + "\n")
+	return 0
 }
 
 // clipCopy stands in for wl-copy and pbcopy: it copies stdin to

@@ -118,8 +118,9 @@ func FakeClipboard(s *S, image []byte) (env []string, copied string, err error) 
 		"wl-paste": "#!/bin/sh\ncase \"$*\" in\n*--list-types*) echo text/html; echo image/png ;;\n*image/png*) cat '" + img + "' ;;\n*) echo 'No suitable type of content copied' >&2; exit 1 ;;\nesac\n",
 		"wl-copy":  "#!/bin/sh\ncat > '" + copied + "'\n",
 		"pbcopy":   "#!/bin/sh\ncat > '" + copied + "'\n",
-		"osascript": "#!/bin/sh\ncase \"$*\" in\n*furl*) echo 'execution error: Can'\\''t make some data into the expected type. (-1700)' >&2; exit 1 ;;\n" +
-			"*PNGf*) eval \"f=\\${$#}\"; cp '" + img + "' \"$f\" ;;\n*) exit 1 ;;\nesac\n",
+		// devvm paste's script: -l JavaScript -e SCRIPT FILE LIMIT, the image
+		// written to FILE, and its type printed.
+		"osascript": "#!/bin/sh\ncase \"$*\" in\n*NSPasteboard*) cp '" + img + "' \"$5\" && echo '{\"image\":\"image/png\"}' ;;\n*) exit 1 ;;\nesac\n",
 	}
 	for name, script := range scripts {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o700); err != nil { //nolint:gosec // G306: the stand-ins run

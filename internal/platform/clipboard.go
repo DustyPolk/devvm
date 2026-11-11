@@ -27,6 +27,9 @@ var (
 	// ErrClipManyFiles: several files are on the clipboard, and devvm
 	// paste sends one. The error carries how many (ClipManyFiles).
 	ErrClipManyFiles = errors.New("several files on the clipboard")
+	// ErrClipFileGone: on macOS, the copied file is gone, so its path
+	// can't be found, and Finder's icon beside it isn't sent instead.
+	ErrClipFileGone = errors.New("the copied file is gone")
 	// ErrClipTooLarge: what's on the clipboard is over the cap.
 	ErrClipTooLarge = errors.New("the clipboard's contents are over the cap")
 	// ErrClipNoSession: on Linux, neither WAYLAND_DISPLAY nor DISPLAY is

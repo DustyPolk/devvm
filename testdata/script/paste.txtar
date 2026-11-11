@@ -53,8 +53,7 @@ stub_calls
 [linux] stdout '^wl-paste --list-types$'
 [linux] stdout '^wl-paste --no-newline --type image/png$'
 [linux] stdout '^wl-copy$'
-[darwin] stdout '^osascript -e on run argv$'
-[darwin] stdout 'the clipboard as «class PNGf»'
+[darwin] stdout '^osascript -l JavaScript -e ObjC.import\(''AppKit''\);$'
 [darwin] stdout '^pbcopy$'
 ! stdout 'text/html'
 
@@ -115,7 +114,7 @@ exec devvm paste
 stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}-my_doc__1_\.txt vm=devvm-plain-[0-9a-f]{14}$'
 cmp $STUB_DIR/paste-in doc.txt
 stub_calls
-! stdout 'image/png'
+[linux] ! stdout 'image/png'
 exec devvm paste --json
 stdout '"kind": ?"file"'
 stdout '"type": ?""'
@@ -160,11 +159,29 @@ exec sh -c 'printf "%s/gone.txt\n" "$PWD" > "$STUB_DIR/clip-file"'
 ! exec devvm paste
 stderr '^devvm: paste_failed reason=.*gone\.txt'
 
-# Several files: devvm paste sends one. (macOS's osascript gives one
-# path, so there's nothing to count there.)
-[linux] exec sh -c 'printf "file://%s/doc.txt\nfile://%s/planted.txt\n" "$PWD" "$PWD" > "$STUB_DIR/clip"'
-[linux] ! exec devvm paste
-[linux] stderr '^devvm: paste_many_files count=2$'
+# On macOS, a copied file whose path can't be found, as it's gone, is
+# said so, and Finder's icon beside it is never sent instead; osascript
+# failing is its failure, with what it said.
+[darwin] exec sh -c ': > "$STUB_DIR/clip-gone"'
+[darwin] stub_reset
+[darwin] ! exec devvm paste
+[darwin] stderr '^devvm: paste_file_gone$'
+[darwin] stub_calls
+[darwin] ! stdout '''devvm-paste'''
+[darwin] rm $STUB_DIR/clip-gone
+[darwin] exec sh -c ': > "$STUB_DIR/clip-fails"'
+[darwin] ! exec devvm paste
+[darwin] stderr '^devvm: paste_tool_failed reason=execution error: Error: Connection invalid \(-2700\) tool=osascript$'
+[darwin] rm $STUB_DIR/clip-fails
+
+# Several files: devvm paste sends one, and never the first alone.
+exec sh -c 'printf "file://%s/doc.txt\nfile://%s/planted.txt\n" "$PWD" "$PWD" > "$STUB_DIR/clip"'
+exec sh -c 'printf "%s/doc.txt\n%s/planted.txt\n" "$PWD" "$PWD" > "$STUB_DIR/clip-file"'
+stub_reset
+! exec devvm paste
+stderr '^devvm: paste_many_files count=2$'
+stub_calls
+! stdout '''devvm-paste'''
 rm $STUB_DIR/clip-file
 
 # GNOME's file copies, and a web address, which isn't a file: the image
