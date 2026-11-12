@@ -296,6 +296,7 @@ func TestClipError(t *testing.T) {
 		{platform.ErrClipTooLarge, msg.PasteTooLarge(pasteMaxText())},
 		{platform.ErrClipNoSession, msg.PasteNoSession()},
 		{&platform.ClipToolSlow{Tool: "xclip", Wait: 30 * time.Second}, msg.PasteToolSlow(30)},
+		{&platform.ClipToolFailed{Tool: "osascript", Stderr: "execution error: Error: Connection invalid (-2700)\n"}, msg.PasteOsascriptFailed("execution error: Error: Connection invalid (-2700)")},
 		{errors.ErrUnsupported, msg.PasteUnsupported()},
 	} {
 		var m msg.M

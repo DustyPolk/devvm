@@ -3289,6 +3289,11 @@ func PasteNothing() M {
 	return M{id: "paste_nothing"}
 }
 
+// PasteOsascriptFailed is [paste_osascript_failed]: "Reading the clipboard with osascript failed: {{.reason}}. Run devvm paste in a terminal on the Mac you're logged in to, not over ssh."
+func PasteOsascriptFailed(reason string) M {
+	return M{id: "paste_osascript_failed", vals: []val{{"reason", reason}}}
+}
+
 // PastePut is [paste_put]: "put {{.path}} into {{.vm}}"
 func PastePut(path string, vm string) M {
 	return M{id: "paste_put", vals: []val{{"path", path}, {"vm", vm}}}
@@ -5628,6 +5633,7 @@ var specs = map[string]spec{
 	"paste_not_file":                 {fields: []string{"file"}},
 	"paste_not_sent":                 {fields: []string{"path", "vm"}},
 	"paste_nothing":                  {},
+	"paste_osascript_failed":         {fields: []string{"reason"}},
 	"paste_put":                      {fields: []string{"path", "vm"}},
 	"paste_rm_ask":                   {plural: true, fields: []string{"count", "dir", "vm"}},
 	"paste_rm_done":                  {plural: true, fields: []string{"count", "dir", "vm"}},

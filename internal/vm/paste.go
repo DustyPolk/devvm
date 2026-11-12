@@ -397,6 +397,8 @@ func clipError(err error) error {
 		return msg.PasteNeedsTool(missing.Tool)
 	case errors.As(err, &slow):
 		return msg.PasteToolSlow(int(slow.Wait / time.Second)).Because(err)
+	case errors.As(err, &failed) && failed.Tool == "osascript":
+		return msg.PasteOsascriptFailed(msg.Printable(strings.TrimSpace(failed.Stderr))).Because(err)
 	case errors.As(err, &failed):
 		return msg.PasteToolFailed(msg.Printable(strings.TrimSpace(failed.Stderr)), failed.Tool).Because(err)
 	case errors.Is(err, platform.ErrClipEmpty):

@@ -2077,8 +2077,12 @@ other = "{{.tool}} isn't installed, and devvm paste reads and writes the clipboa
 other = "Neither WAYLAND_DISPLAY nor DISPLAY is set, so there's no clipboard to read. Run devvm paste from a terminal in your desktop session."
 
 [paste_tool_failed]
-description = "tool is the clipboard tool's command, wl-paste, xclip or osascript; reason is what it printed, in English"
+description = "tool is Linux's clipboard tool's command, wl-paste or xclip; reason is what it printed, in English"
 other = "Reading the clipboard with {{.tool}} failed: {{.reason}}. Run devvm paste from a terminal in your current desktop session."
+
+[paste_osascript_failed]
+description = "reason is what macOS's osascript printed, in English"
+other = "Reading the clipboard with osascript failed: {{.reason}}. Run devvm paste in a terminal on the Mac you're logged in to, not over ssh."
 
 [paste_tool_slow]
 description = "count is how many seconds devvm waits for the clipboard"
