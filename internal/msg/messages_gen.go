@@ -3249,6 +3249,11 @@ func PasteFileLink(file string) M {
 	return M{id: "paste_file_link", vals: []val{{"file", file}}}
 }
 
+// PasteFileOutside is [paste_file_outside]: "{{.file}} is outside {{.dir}}, the folder the VM already reads, so devvm sends it only after you say yes in a terminal. --send-file sends only a file in that folder."
+func PasteFileOutside(dir string, file string) M {
+	return M{id: "paste_file_outside", vals: []val{{"dir", dir}, {"file", file}}}
+}
+
 // PasteLaunchAsk is [paste_launch_ask]: "{{.vm}} still has {{.count}} pasted files in {{.dir}} from before it stopped.\nDelete them?"
 func PasteLaunchAsk(count int, dir string, vm string) M {
 	return M{id: "paste_launch_ask", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"dir", dir}, {"vm", vm}}}
@@ -5615,6 +5620,7 @@ var specs = map[string]spec{
 	"paste_file_ask":                 {fields: []string{"file", "vm"}},
 	"paste_file_gone":                {},
 	"paste_file_link":                {fields: []string{"file"}},
+	"paste_file_outside":             {fields: []string{"dir", "file"}},
 	"paste_launch_ask":               {plural: true, fields: []string{"count", "dir", "vm"}},
 	"paste_many_files":               {plural: true, fields: []string{"count"}},
 	"paste_needs_tool":               {fields: []string{"tool"}},

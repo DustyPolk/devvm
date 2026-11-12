@@ -48,6 +48,28 @@ func TestPasteNames(t *testing.T) {
 	}
 }
 
+// A file is in the folder only below it: not the folder itself, not a
+// sibling whose name starts the same, and not a path through a system
+// link to it.
+func TestInFolder(t *testing.T) {
+	for _, c := range []struct {
+		file string
+		want bool
+	}{
+		{"/Users/me/web/shot.png", true},
+		{"/Users/me/web/docs/a b.pdf", true},
+		{"/Users/me/web", false},
+		{"/Users/me/webapp/x.png", false},
+		{"/Users/me/.ssh/id_ed25519", false},
+		{"/etc/hosts", false},
+		{"/tmp/web/shot.png", false},
+	} {
+		if got := inFolder("/Users/me/web", c.file); got != c.want {
+			t.Errorf("inFolder(%q) = %v, want %v", c.file, got, c.want)
+		}
+	}
+}
+
 // ids reports whether err is the message want.
 func ids(err error, want msg.M) bool {
 	var m msg.M

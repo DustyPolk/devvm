@@ -188,6 +188,26 @@ stdout '"type": ?""'
 stdout '"bytes": ?13'
 stdout '"source": ?"\S*/plain/my doc \(1\)\.txt"'
 
+# A file outside the project folder, which the VM can't read already, is
+# sent only after a yes in a terminal: --send-file doesn't answer for it,
+# and without a terminal it's refused, naming the file and the folder.
+mkdir $WORK/outside
+cp $WORK/doc.txt $WORK/outside/notes.txt
+exec sh -c 'printf "file://%s/outside/notes.txt\n" "$WORK" > "$STUB_DIR/clip"'
+exec sh -c 'printf "%s/outside/notes.txt\n" "$WORK" > "$STUB_DIR/clip-file"'
+stub_reset
+! exec devvm paste --send-file
+stderr '^devvm: paste_file_outside dir=\S*/plain file=\S*/outside/notes\.txt$'
+! stdout .
+stub_calls
+! stdout '''devvm-paste'''
+ttyin -stdin $WORK/yes.txt
+exec devvm paste --send-file
+stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.txt '
+cmp $STUB_DIR/paste-in $WORK/outside/notes.txt
+exec sh -c 'printf "file://%s/my%%20doc%%20(1).txt\r\n" "$PWD" > "$STUB_DIR/clip"'
+exec sh -c 'printf "%s/my doc (1).txt\n" "$PWD" > "$STUB_DIR/clip-file"'
+
 # --send-file sends an image as it would without it, and an image's
 # source is "".
 exec sh -c 'printf "image/png\n" > "$STUB_DIR/clip-types"'

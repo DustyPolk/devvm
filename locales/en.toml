@@ -2110,6 +2110,10 @@ other = "Deleting the pasted files in {{.dir}} in {{.vm}} failed."
 description = "file is the copied file's path on this machine"
 other = "Anything in {{.vm}} can read what you send.\nSend {{.file}} from this machine?"
 
+[paste_file_outside]
+description = "file is the copied file's path on this machine; dir is the project folder the VM reads"
+other = "{{.file}} is outside {{.dir}}, the folder the VM already reads, so devvm sends it only after you say yes in a terminal. --send-file sends only a file in that folder."
+
 [paste_rm_ask]
 description = "count is how many pasted files are in dir, the paste folder in the VM"
 one = "Delete {{.count}} pasted file in {{.dir}} in {{.vm}}?"

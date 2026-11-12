@@ -76,10 +76,10 @@ type pastePayload struct {
 // which must be running, as a new file in its paste folder, then copies
 // the file's path. It reads the clipboard before it touches the VM, so an
 // empty one fails fast. A copied file is sent only after a question
-// showing its path on this machine, [y/N], answered by sendFile
-// (--send-file), because the clipboard can name any file of yours; a no
-// sends nothing and returns an empty PasteSent. A copy that fails is a
-// warning, as the file is already in the VM, and the path is shown.
+// showing its path on this machine (confirmFile), because the clipboard
+// can name any file of yours; a no sends nothing and returns an empty
+// PasteSent. A copy that fails is a warning, as the file is already in
+// the VM, and the path is shown.
 func (e Paste) Send(ctx context.Context, sendFile bool) (PasteSent, error) {
 	t, err := e.finder.target(ctx, need{has: hasMade})
 	if err != nil {
@@ -101,9 +101,8 @@ func (e Paste) Send(ctx context.Context, sendFile bool) (PasteSent, error) {
 	if err != nil {
 		return PasteSent{}, err
 	}
-	if p.kind == PasteFile && !sendFile {
-		yes, err := e.Ask(msg.PasteFileAsk(p.source, vm).AnsweredBy("--send-file"))
-		if err != nil || !yes {
+	if p.kind == PasteFile {
+		if yes, err := e.confirmFile(t, p.source, sendFile); err != nil || !yes {
 			return PasteSent{}, err
 		}
 	}
@@ -121,6 +120,35 @@ func (e Paste) Send(ctx context.Context, sendFile bool) (PasteSent, error) {
 		sent.Copied = true
 	}
 	return sent, nil
+}
+
+// confirmFile asks, [y/N], before the copied file, file, goes into t's
+// VM, showing its path. sendFile (--send-file) answers for a file in the
+// folder the VM mounts, which it can read already (inFolder). A file
+// anywhere else, or any file for a VM with a clone of its own, is asked
+// about whatever the flag says, and where devvm can't ask it's refused
+// with paste_file_outside, naming the file and the folder, so a script or
+// a hotkey with --send-file can't send a file it never showed.
+func (e Paste) confirmFile(t *target, file string, sendFile bool) (bool, error) {
+	ask := msg.PasteFileAsk(file, t.f.Name)
+	if !isClone(t.st) && inFolder(t.f.Dir, file) {
+		if sendFile {
+			return true, nil
+		}
+		return e.Ask(ask.AnsweredBy("--send-file"))
+	}
+	return e.Ask(ask.RefusedWith(msg.PasteFileOutside(t.f.Dir, file)))
+}
+
+// inFolder reports whether file, a clean absolute path opened as it's
+// named, through no link but the system's (pastePayloadOf), is below dir,
+// a folder's physical path. Comparing the paths is enough: the open
+// followed no link a VM or you could make, so the file is where its path
+// says. A path through a system link, such as /tmp for /private/tmp,
+// isn't below the physical folder, and is asked about.
+func inFolder(dir, file string) bool {
+	rel, err := filepath.Rel(dir, file)
+	return err == nil && rel != "." && filepath.IsLocal(rel)
 }
 
 // Rm deletes what devvm paste left in the folder's VM's paste folder,
