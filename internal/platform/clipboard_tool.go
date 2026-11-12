@@ -69,7 +69,7 @@ func runClipTool(ctx context.Context, tool string, args []string, limit int64, w
 	case err == nil:
 		return out.buf.Bytes(), nil
 	}
-	return nil, clipToolErr(ctx, run, cmd, tool, stderr.String(), err)
+	return nil, clipToolErr(ctx, run, cmd, tool, stderr.String(), err, wait)
 }
 
 // copyWith puts text on the clipboard with the copy tool, a command or
@@ -83,17 +83,17 @@ func copyWith(ctx context.Context, tool string, args []string, text string, wait
 	cmd := exec.CommandContext(run, tool, args...) //nolint:gosec // devvm's own arguments
 	cmd.Stdin, cmd.WaitDelay = strings.NewReader(text), pipesWait
 	if err := cmd.Run(); err != nil {
-		return clipToolErr(ctx, run, cmd, tool, "", err)
+		return clipToolErr(ctx, run, cmd, tool, "", err, wait)
 	}
 	return nil
 }
 
 // clipToolErr is a clipboard tool's failure, err from running cmd, the
-// tool, on run, a context of ctx with the tool's time limit:
+// tool, on run, a context of ctx with the tool's time limit, wait:
 // ClipToolMissing when it isn't there, ctx's error when ctx ended,
-// ClipToolFailed saying it didn't finish when its time ran out, and
-// ClipToolFailed with stderr when it failed after it started.
-func clipToolErr(ctx, run context.Context, cmd *exec.Cmd, tool, stderr string, err error) error {
+// ClipToolSlow when its time ran out, and ClipToolFailed with stderr when
+// it failed after it started.
+func clipToolErr(ctx, run context.Context, cmd *exec.Cmd, tool, stderr string, err error, wait time.Duration) error {
 	name := filepath.Base(tool)
 	switch {
 	case missing(err):
@@ -101,7 +101,7 @@ func clipToolErr(ctx, run context.Context, cmd *exec.Cmd, tool, stderr string, e
 	case ctx.Err() != nil:
 		return ctx.Err()
 	case errors.Is(run.Err(), context.DeadlineExceeded) || errors.Is(err, exec.ErrWaitDelay):
-		return &ClipToolFailed{Tool: name, Stderr: name + " didn't finish in time"}
+		return &ClipToolSlow{Tool: name, Wait: wait}
 	case cmd.ProcessState == nil:
 		return err
 	}

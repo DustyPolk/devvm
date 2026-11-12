@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Clipboard is this machine's clipboard, which ReadClip reads and
@@ -71,8 +72,18 @@ type ClipToolFailed struct{ Tool, Stderr string }
 
 func (e *ClipToolFailed) Error() string { return e.Tool + " failed: " + strings.TrimSpace(e.Stderr) }
 
-// The clipboard types devvm reads, in the order it prefers them: a copied
-// file's reference first, because Finder and the Linux file managers put
+// ClipToolSlow is ReadClip's or CopyText's error when the clipboard tool
+// didn't finish within Wait, as when the app holding the clipboard
+// doesn't answer, and was stopped.
+type ClipToolSlow struct {
+	Tool string
+	Wait time.Duration
+}
+
+func (e *ClipToolSlow) Error() string { return e.Tool + " didn't finish within " + e.Wait.String() }
+
+// The clipboard types devvm reads besides a PDF (TypePDF, first): a
+// copied file's reference, because Finder and the Linux file managers put
 // the file's icon on the clipboard as an image beside it, then the image
 // types, PNG first.
 const (

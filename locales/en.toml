@@ -2076,6 +2076,11 @@ other = "Neither WAYLAND_DISPLAY nor DISPLAY is set, so there's no clipboard to 
 description = "tool is the clipboard tool's command, wl-paste, xclip or osascript; reason is what it printed, in English"
 other = "Reading the clipboard with {{.tool}} failed: {{.reason}}. Run devvm paste from a terminal in your current desktop session."
 
+[paste_tool_slow]
+description = "count is how many seconds devvm waits for the clipboard"
+one = "The app you copied from didn't hand over the clipboard within {{.count}} second. Copy it again, or wait until that app responds, then run devvm paste again."
+other = "The app you copied from didn't hand over the clipboard within {{.count}} seconds. Copy it again, or wait until that app responds, then run devvm paste again."
+
 [paste_file_gone]
 other = "The file on the clipboard is gone, so devvm sent nothing. Copy the file again, then run devvm paste again."
 

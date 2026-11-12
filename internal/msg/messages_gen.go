@@ -3324,6 +3324,11 @@ func PasteToolFailed(reason string, tool string) M {
 	return M{id: "paste_tool_failed", vals: []val{{"reason", reason}, {"tool", tool}}}
 }
 
+// PasteToolSlow is [paste_tool_slow]: "The app you copied from didn't hand over the clipboard within {{.count}} seconds. Copy it again, or wait until that app responds, then run devvm paste again."
+func PasteToolSlow(count int) M {
+	return M{id: "paste_tool_slow", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
+}
+
 // PasteUnsupported is [paste_unsupported]: "The clipboard can be read only on macOS and Linux."
 func PasteUnsupported() M {
 	return M{id: "paste_unsupported"}
@@ -5620,6 +5625,7 @@ var specs = map[string]spec{
 	"paste_sent":                     {fields: []string{"path", "vm"}},
 	"paste_too_large":                {fields: []string{"max"}},
 	"paste_tool_failed":              {fields: []string{"reason", "tool"}},
+	"paste_tool_slow":                {plural: true, fields: []string{"count"}},
 	"paste_unsupported":              {},
 	"pi_settings_dropped":            {fields: []string{"keys", "vm"}},
 	"pi_trusts_all":                  {fields: []string{"vm"}},

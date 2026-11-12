@@ -260,6 +260,7 @@ func TestClipError(t *testing.T) {
 		{&platform.ClipToolFailed{Tool: "wl-paste", Stderr: "Failed to connect to a Wayland server\n"}, msg.PasteToolFailed("Failed to connect to a Wayland server", "wl-paste")},
 		{platform.ErrClipTooLarge, msg.PasteTooLarge(pasteMaxText())},
 		{platform.ErrClipNoSession, msg.PasteNoSession()},
+		{&platform.ClipToolSlow{Tool: "xclip", Wait: 30 * time.Second}, msg.PasteToolSlow(30)},
 		{errors.ErrUnsupported, msg.PasteUnsupported()},
 	} {
 		var m msg.M

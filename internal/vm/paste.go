@@ -333,11 +333,14 @@ func clipError(err error) error {
 	var many *platform.ClipManyFiles
 	var missing *platform.ClipToolMissing
 	var failed *platform.ClipToolFailed
+	var slow *platform.ClipToolSlow
 	switch {
 	case errors.As(err, &many):
 		return msg.PasteManyFiles(many.N)
 	case errors.As(err, &missing):
 		return msg.PasteNeedsTool(missing.Tool)
+	case errors.As(err, &slow):
+		return msg.PasteToolSlow(int(slow.Wait / time.Second)).Because(err)
 	case errors.As(err, &failed):
 		return msg.PasteToolFailed(msg.Printable(strings.TrimSpace(failed.Stderr)), failed.Tool).Because(err)
 	case errors.Is(err, platform.ErrClipEmpty):

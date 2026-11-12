@@ -53,13 +53,13 @@ func TestClipboardTool(t *testing.T) {
 // A clipboard tool's output is kept to its limit, the tool stopped past
 // it; a tool that isn't there is ClipToolMissing; one that fails is
 // ClipToolFailed with its stderr, at most clipStderrMax of it; one that
-// doesn't finish in time is stopped and ClipToolFailed, as is one whose
-// child keeps its output open after it ends, soon after; and a cancelled
-// run is the context's error.
+// doesn't finish in time is stopped and ClipToolSlow, with the tool and
+// its limit, as is one whose child keeps its output open after it ends,
+// soon after; and a cancelled run is the context's error.
 func TestRunClipTool(t *testing.T) {
 	slow := func(err error) bool {
-		var failed *ClipToolFailed
-		return errors.As(err, &failed) && strings.Contains(failed.Stderr, "didn't finish")
+		var s *ClipToolSlow
+		return errors.As(err, &s) && s.Tool == "sh" && s.Wait == 200*time.Millisecond
 	}
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
