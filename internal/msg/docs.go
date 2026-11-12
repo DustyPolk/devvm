@@ -375,6 +375,7 @@ var docs = map[string]string{ //nolint:gosec // message IDs and pages, not crede
 	"paste_file_gone":                "using/coding-agents#pasting-images",
 	"paste_tool_slow":                "using/coding-agents#pasting-images",
 	"paste_file_outside":             "using/coding-agents#pasting-images",
+	"paste_file_through_link":        "using/coding-agents#pasting-images",
 	"paste_unsupported":              "using/coding-agents#pasting-images",
 	"paste_not_file":                 "using/coding-agents#pasting-images",
 	"paste_file_link":                "using/coding-agents#pasting-images",

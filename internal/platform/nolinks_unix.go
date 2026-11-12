@@ -34,10 +34,12 @@ const fileFlags = unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_NOC
 // system's (systemLink), as macOS's /tmp, /var and /etc are, because a
 // link a VM makes in a mount is the user's on this machine, never root's.
 // Any other link on the way, the user's own included, and a link in the
-// file's place, fail with ErrLinkOnPath. The file isn't checked further:
-// the caller fstats it for a regular file within its cap. Its caller
-// closes it.
-func OpenNoLinks(path string) (*os.File, error) { return openNoLinks(path, systemLink) }
+// file's place, fail with ErrLinkOnPath. It also returns how many links
+// it followed, 0 when the file is where its path says, as a caller that
+// decides from the path, such as whether it's in a folder, needs to know.
+// The file isn't checked further: the caller fstats it for a regular file
+// within its cap. Its caller closes it.
+func OpenNoLinks(path string) (*os.File, int, error) { return openNoLinks(path, systemLink) }
 
 // systemLink reports whether a link on the way is the system's, from its
 // fstatat and its folder's fstat: root owns both, and the folder isn't
@@ -55,18 +57,18 @@ func systemLink(link, dir *unix.Stat_t) bool {
 // target replaces it on the path: an absolute one starts over from /, a
 // relative one goes on from the folder holding the link, and .. goes
 // through openat like any other part.
-func openNoLinks(path string, follow func(link, dir *unix.Stat_t) bool) (*os.File, error) {
+func openNoLinks(path string, follow func(link, dir *unix.Stat_t) bool) (*os.File, int, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-		return nil, fmt.Errorf("%s: not an absolute, clean path", path)
+		return nil, 0, fmt.Errorf("%s: not an absolute, clean path", path)
 	}
 	parts := pathParts(path)
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("%s: not a file", path)
+		return nil, 0, fmt.Errorf("%s: not a file", path)
 	}
 	const rootFlags = unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC
 	fd, err := unix.Open("/", rootFlags, 0)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	hops := 0
 	for len(parts) > 0 {
@@ -87,29 +89,29 @@ func openNoLinks(path string, follow func(link, dir *unix.Stat_t) bool) (*os.Fil
 		switch {
 		case !isLink:
 			_ = unix.Close(fd)
-			return nil, &os.PathError{Op: "open", Path: path, Err: err}
+			return nil, 0, &os.PathError{Op: "open", Path: path, Err: err}
 		case last || unix.Fstat(fd, &dir) != nil || !follow(st, &dir):
 			_ = unix.Close(fd)
-			return nil, fmt.Errorf("%s: %w", path, ErrLinkOnPath)
+			return nil, 0, fmt.Errorf("%s: %w", path, ErrLinkOnPath)
 		}
 		if hops++; hops > linkHops {
 			_ = unix.Close(fd)
-			return nil, &os.PathError{Op: "open", Path: path, Err: unix.ELOOP}
+			return nil, 0, &os.PathError{Op: "open", Path: path, Err: unix.ELOOP}
 		}
 		target, err := readLinkAt(fd, part)
 		if err != nil {
 			_ = unix.Close(fd)
-			return nil, &os.PathError{Op: "readlink", Path: path, Err: err}
+			return nil, 0, &os.PathError{Op: "readlink", Path: path, Err: err}
 		}
 		if filepath.IsAbs(target) {
 			_ = unix.Close(fd)
 			if fd, err = unix.Open("/", rootFlags, 0); err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 		}
 		parts = append(pathParts(target), parts...)
 	}
-	return os.NewFile(uintptr(fd), path), nil
+	return os.NewFile(uintptr(fd), path), hops, nil
 }
 
 // pathParts splits path into the names openat takes one by one, with

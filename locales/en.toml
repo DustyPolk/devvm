@@ -2118,6 +2118,10 @@ other = "Anything in {{.vm}} can read what you send.\nSend {{.file}} from this m
 description = "file is the copied file's path on this machine; dir is the project folder the VM reads"
 other = "{{.file}} is outside {{.dir}}, the folder the VM already reads, so devvm sends it only after you say yes in a terminal. --send-file sends only a file in that folder."
 
+[paste_file_through_link]
+description = "file is the copied file's path on this machine, which has a system symbolic link on it"
+other = "{{.file}} is reached through a symbolic link, so it may not be where its path says, and devvm sends it only after you say yes in a terminal. --send-file sends only a file in the project folder with no link on its path."
+
 [paste_rm_ask]
 description = "count is how many pasted files are in dir, the paste folder in the VM"
 one = "Delete {{.count}} pasted file in {{.dir}} in {{.vm}}?"

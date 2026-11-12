@@ -63,13 +63,15 @@ const pasteCountMax = 32
 
 // pastePayload is what one devvm paste sends, chosen once from the
 // clipboard: the bytes, the file's name in the VM, which devvm picks from
-// a fixed set of characters, its kind, an image's type and a copied
-// file's path on this machine.
+// a fixed set of characters, its kind, an image's type, a copied file's
+// path on this machine, and how many links opening it followed (the
+// system's, platform.OpenNoLinks), which make its path not where it is.
 type pastePayload struct {
 	data       []byte
 	name       string
 	kind, mime string
 	source     string
+	links      int
 }
 
 // Send reads the clipboard and puts what's there into the folder's VM,
@@ -102,7 +104,7 @@ func (e Paste) Send(ctx context.Context, sendFile bool) (PasteSent, error) {
 		return PasteSent{}, err
 	}
 	if p.kind == PasteFile {
-		yes, err := e.confirmFile(t, p.source, sendFile)
+		yes, err := e.confirmFile(t, p, sendFile)
 		if err != nil {
 			return PasteSent{}, err
 		}
@@ -126,22 +128,37 @@ func (e Paste) Send(ctx context.Context, sendFile bool) (PasteSent, error) {
 	return sent, nil
 }
 
-// confirmFile asks, [y/N], before the copied file, file, goes into t's
-// VM, showing its path. sendFile (--send-file) answers for a file in the
-// folder the VM mounts, which it can read already (inFolder). A file
-// anywhere else, or any file for a VM with a clone of its own, is asked
-// about whatever the flag says, and where devvm can't ask it's refused
-// with paste_file_outside, naming the file and the folder, so a script or
-// a hotkey with --send-file can't send a file it never showed.
-func (e Paste) confirmFile(t *target, file string, sendFile bool) (bool, error) {
-	ask := msg.PasteFileAsk(file, t.f.Name)
-	if !isClone(t.st) && inFolder(t.f.Dir, file) {
-		if sendFile {
-			return true, nil
-		}
+// confirmFile asks, [y/N], before the copied file p goes into t's VM,
+// showing its path. sendFile (--send-file) answers for a file in the
+// folder the VM mounts, which it can read already, reached through no
+// link (sendFileAnswers). A file anywhere else, one reached through a
+// link, or any file for a VM with a clone of its own, is asked about
+// whatever the flag says, and where devvm can't ask it's refused, naming
+// the file (paste_file_outside, with the folder, or
+// paste_file_through_link), so a script or a hotkey with --send-file
+// can't send a file it never showed.
+func (e Paste) confirmFile(t *target, p pastePayload, sendFile bool) (bool, error) {
+	ask := msg.PasteFileAsk(p.source, t.f.Name)
+	switch {
+	case sendFileAnswers(isClone(t.st), p.links, t.f.Dir, p.source) && sendFile:
+		return true, nil
+	case sendFileAnswers(isClone(t.st), p.links, t.f.Dir, p.source):
 		return e.Ask(ask.AnsweredBy("--send-file"))
+	case p.links > 0:
+		return e.Ask(ask.RefusedWith(msg.PasteFileThroughLink(p.source)))
 	}
-	return e.Ask(ask.RefusedWith(msg.PasteFileOutside(t.f.Dir, file)))
+	return e.Ask(ask.RefusedWith(msg.PasteFileOutside(t.f.Dir, p.source)))
+}
+
+// sendFileAnswers reports whether --send-file answers the question for
+// file, opened through links links (pastePayload): only for a file below
+// dir, the folder the VM mounts, reached through no link at all, and
+// never for a clone VM, which mounts nothing of the folder. A link
+// OpenNoLinks follows is root's, but one below the folder, such as a root
+// container made on a Linux host, can lead anywhere, so a path that went
+// through one isn't where it says.
+func sendFileAnswers(clone bool, links int, dir, file string) bool {
+	return !clone && links == 0 && inFolder(dir, file)
 }
 
 // inFolder reports whether file, a clean absolute path opened as it's
@@ -330,7 +347,7 @@ func pastePayloadOf(clip platform.Clip, now time.Time) (pastePayload, error) {
 		return pastePayload{data: clip.Data, name: stem + "." + platform.DataExt(clip.Type), kind: kind, mime: clip.Type}, nil
 	}
 	file := filepath.Clean(clip.File)
-	opened, err := platform.OpenNoLinks(file)
+	opened, links, err := platform.OpenNoLinks(file)
 	if errors.Is(err, platform.ErrLinkOnPath) {
 		return pastePayload{}, msg.PasteFileLink(file)
 	}
@@ -352,7 +369,7 @@ func pastePayloadOf(clip platform.Clip, now time.Time) (pastePayload, error) {
 	case err != nil:
 		return pastePayload{}, err
 	}
-	return pastePayload{data: data, name: stem + pasteExt(filepath.Base(file)), kind: PasteFile, source: file}, nil
+	return pastePayload{data: data, name: stem + pasteExt(filepath.Base(file)), kind: PasteFile, source: file, links: links}, nil
 }
 
 // pasteStem is the start of a pasted file's name: paste-YYYYMMDD-HHMMSS

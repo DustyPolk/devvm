@@ -64,16 +64,30 @@ func (n noLinksTree) following(paths ...string) func(link, dir *unix.Stat_t) boo
 	return func(st, _ *unix.Stat_t) bool { return inos[st.Ino] }
 }
 
+// openPath is OpenNoLinks without its count of links followed.
+func openPath(path string) (*os.File, error) {
+	f, _, err := OpenNoLinks(path)
+	return f, err
+}
+
 // readOf is what opening path with follow reads.
 func readOf(t *testing.T, path string, follow func(link, dir *unix.Stat_t) bool) (string, error) {
 	t.Helper()
-	f, err := openNoLinks(path, follow)
+	got, _, err := readHops(t, path, follow)
+	return got, err
+}
+
+// readHops is what opening path with follow reads, and how many links
+// it followed on the way.
+func readHops(t *testing.T, path string, follow func(link, dir *unix.Stat_t) bool) (string, int, error) {
+	t.Helper()
+	f, hops, err := openNoLinks(path, follow)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer func() { _ = f.Close() }()
 	b, err := io.ReadAll(f)
-	return string(b), err
+	return string(b), hops, err
 }
 
 // OpenNoLinks reads a file whose path has no link, and refuses one with a
@@ -87,31 +101,31 @@ func TestOpenNoLinks(t *testing.T) {
 	n.link(n.at("elsewhere", "shots", "shot.png"), "project", "link.png")
 
 	path := n.at("project", "shots", "shot.png")
-	if got, err := readOf(t, path, systemLink); err != nil || got != "png" {
-		t.Fatalf("read %q, %v", got, err)
+	if got, hops, err := readHops(t, path, systemLink); err != nil || got != "png" || hops != 0 {
+		t.Fatalf("read %q, %d links, %v", got, hops, err)
 	}
-	if _, err := OpenNoLinks(n.at("project", "link.png")); !errors.Is(err, ErrLinkOnPath) {
+	if _, err := openPath(n.at("project", "link.png")); !errors.Is(err, ErrLinkOnPath) {
 		t.Errorf("a link at the end: %v", err)
 	}
 	// The VM swaps the folder for a link after devvm resolved the path.
 	n.must(os.Rename(n.at("project", "shots"), n.at("project", "shots.was")))
 	n.link(n.at("elsewhere", "shots"), "project", "shots")
-	if _, err := OpenNoLinks(path); !errors.Is(err, ErrLinkOnPath) {
+	if _, err := openPath(path); !errors.Is(err, ErrLinkOnPath) {
 		t.Errorf("a link on the way: %v", err)
 	}
-	if _, err := OpenNoLinks("project/shots/shot.png"); err == nil || errors.Is(err, ErrLinkOnPath) {
+	if _, err := openPath("project/shots/shot.png"); err == nil || errors.Is(err, ErrLinkOnPath) {
 		t.Errorf("a relative path: %v", err)
 	}
-	if _, err := OpenNoLinks(n.at("project") + "/"); err == nil {
+	if _, err := openPath(n.at("project") + "/"); err == nil {
 		t.Error("an unclean path: opened")
 	}
-	if _, err := OpenNoLinks("/"); err == nil {
+	if _, err := openPath("/"); err == nil {
 		t.Error("/: opened")
 	}
-	if _, err := OpenNoLinks(n.at("project", "missing.png")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := openPath(n.at("project", "missing.png")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("a missing file: %v", err)
 	}
-	f, err := OpenNoLinks(n.at("project"))
+	f, err := openPath(n.at("project"))
 	if err == nil {
 		fi, _ := f.Stat()
 		_ = f.Close()
@@ -138,13 +152,14 @@ func TestOpenNoLinksFollowsSystemLinks(t *testing.T) {
 	n.link(n.at("private", "tmp", "shots", "shot.png"), "last") // a link in the file's place
 
 	system := n.following(n.at("tmp"), n.at("var", "tmp"), n.at("chain"), n.at("dead"), n.at("last"))
-	for _, p := range []string{
-		n.at("tmp", "shots", "shot.png"),
-		n.at("var", "tmp", "shots", "shot.png"),
-		n.at("chain", "shot.png"),
+	for p, links := range map[string]int{
+		n.at("tmp", "shots", "shot.png"):            1,
+		n.at("var", "tmp", "shots", "shot.png"):     1,
+		n.at("chain", "shot.png"):                   2,
+		n.at("private", "tmp", "shots", "shot.png"): 0,
 	} {
-		if got, err := readOf(t, p, system); err != nil || got != "real" {
-			t.Errorf("%s: read %q, %v", p, got, err)
+		if got, hops, err := readHops(t, p, system); err != nil || got != "real" || hops != links {
+			t.Errorf("%s: read %q through %d links (want %d), %v", p, got, hops, links, err)
 		}
 	}
 	if _, err := readOf(t, n.at("project", "docs", "shot.png"), system); !errors.Is(err, ErrLinkOnPath) {
@@ -157,7 +172,7 @@ func TestOpenNoLinksFollowsSystemLinks(t *testing.T) {
 		t.Errorf("a followed link whose target is gone: %v", err)
 	}
 	// Without the check, the same system links are refused.
-	if _, err := OpenNoLinks(n.at("tmp", "shots", "shot.png")); !errors.Is(err, ErrLinkOnPath) {
+	if _, err := openPath(n.at("tmp", "shots", "shot.png")); !errors.Is(err, ErrLinkOnPath) {
 		t.Errorf("a link on the way that isn't root's: %v", err)
 	}
 }
@@ -230,7 +245,7 @@ func TestOpenNoLinksSystemPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range []string{"/etc/hosts", inTmp.Name(), inTMPDIR} {
-		f, err := OpenNoLinks(p)
+		f, err := openPath(p)
 		if err != nil {
 			t.Errorf("%s: %v", p, err)
 			continue

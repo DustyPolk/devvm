@@ -61,6 +61,29 @@ func TestPasteWait(t *testing.T) {
 	}
 }
 
+// --send-file answers for a file opened in the folder through no link:
+// never for one a followed link reached, even one whose path is in the
+// folder, as a root-owned link below it can lead anywhere, and never for
+// a clone VM, which mounts nothing of the folder.
+func TestSendFileAnswers(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		clone bool
+		links int
+		file  string
+		want  bool
+	}{
+		{"in the folder", false, 0, "/home/me/web/shot.png", true},
+		{"in the folder through a followed link", false, 1, "/home/me/web/data/link/shot.png", false},
+		{"outside", false, 0, "/home/me/.ssh/id_ed25519", false},
+		{"a clone VM's", true, 0, "/home/me/web/shot.png", false},
+	} {
+		if got := sendFileAnswers(c.clone, c.links, "/home/me/web", c.file); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 // A file is in the folder only below it: not the folder itself, not a
 // sibling whose name starts the same, and not a path through a system
 // link to it.
