@@ -3319,7 +3319,7 @@ func PasteSent(path string, vm string) M {
 	return M{id: "paste_sent", vals: []val{{"path", path}, {"vm", vm}}}
 }
 
-// PasteTooLarge is [paste_too_large]: "What's on the clipboard is over {{.max}}, more than devvm paste sends."
+// PasteTooLarge is [paste_too_large]: "The image, PDF or file is over {{.max}}, the most devvm paste sends."
 func PasteTooLarge(max string) M {
 	return M{id: "paste_too_large", vals: []val{{"max", max}}}
 }
@@ -3334,7 +3334,7 @@ func PasteToolSlow(count int) M {
 	return M{id: "paste_tool_slow", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}}}
 }
 
-// PasteUnsupported is [paste_unsupported]: "The clipboard can be read only on macOS and Linux."
+// PasteUnsupported is [paste_unsupported]: "Reading the clipboard works only on macOS and Linux."
 func PasteUnsupported() M {
 	return M{id: "paste_unsupported"}
 }

@@ -2067,7 +2067,7 @@ other = "{{.count}} files are on the clipboard, and devvm paste sends one. Copy 
 
 [paste_too_large]
 description = "max is the most devvm paste sends, such as 64 MiB"
-other = "What's on the clipboard is over {{.max}}, more than devvm paste sends."
+other = "The image, PDF or file is over {{.max}}, the most devvm paste sends."
 
 [paste_needs_tool]
 description = "tool is the clipboard tool's command: wl-paste, wl-copy, xclip, osascript or pbcopy"
@@ -2089,7 +2089,7 @@ other = "The app you copied from didn't hand over the clipboard within {{.count}
 other = "The file on the clipboard is gone, so devvm sent nothing. Copy the file again, then run devvm paste again."
 
 [paste_unsupported]
-other = "The clipboard can be read only on macOS and Linux."
+other = "Reading the clipboard works only on macOS and Linux."
 
 [paste_not_file]
 other = "{{.file}} isn't a regular file, so devvm sent nothing. Copy a file, not a folder."
