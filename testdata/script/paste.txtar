@@ -148,6 +148,19 @@ stub_calls
 ! stdout '^(wl-copy|pbcopy)$'
 rm $STUB_DIR/shell-fails-on
 
+# paste.sh that never finishes writing is stopped at its time limit (a
+# test build's DEVVM_PASTE_WAIT, in seconds, in place of 10 minutes):
+# nothing copied.
+exec sh -c ': > "$STUB_DIR/paste-hangs"'
+env DEVVM_PASTE_WAIT=1
+stub_reset
+! exec devvm paste
+stderr '^devvm: paste_not_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png vm=devvm-plain-[0-9a-f]{14}$'
+stub_calls
+! stdout '^(wl-copy|pbcopy)$'
+env DEVVM_PASTE_WAIT=
+rm $STUB_DIR/paste-hangs
+
 # A copied file wins over the image beside it (its icon), is read as
 # named in its folder, and keeps only its extension, so nothing of its
 # name reaches the clipboard. It's sent only once you say so: devvm asks, showing the file's

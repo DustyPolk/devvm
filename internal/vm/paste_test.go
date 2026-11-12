@@ -48,6 +48,19 @@ func TestPasteNames(t *testing.T) {
 	}
 }
 
+// paste.sh's put may take 10 minutes, its count and rm 2, and a test
+// build's PasteWait stands in for both.
+func TestPasteWait(t *testing.T) {
+	e := Paste{Env: &Env{}}
+	if e.pasteWait("put") != 10*time.Minute || e.pasteWait("count") != 2*time.Minute || e.pasteWait("rm") != 2*time.Minute {
+		t.Errorf("put %s, count %s, rm %s", e.pasteWait("put"), e.pasteWait("count"), e.pasteWait("rm"))
+	}
+	e.PasteWait = time.Second
+	if e.pasteWait("put") != time.Second || e.pasteWait("rm") != time.Second {
+		t.Errorf("with PasteWait: put %s, rm %s", e.pasteWait("put"), e.pasteWait("rm"))
+	}
+}
+
 // A file is in the folder only below it: not the folder itself, not a
 // sibling whose name starts the same, and not a path through a system
 // link to it.

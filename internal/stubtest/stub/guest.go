@@ -202,6 +202,9 @@ func (g *guest) files() (code int, done bool) {
 		if g.on("shell-fails") || g.mentions("shell-fails-on") {
 			return 1, true
 		}
+		if g.on("paste-hangs") {
+			g.hang() // then goes on, as a write that's only slow
+		}
 		words := shellWords(strings.TrimPrefix(g.last(), shellPrefix))
 		if len(words) < 7 {
 			return 2, true
@@ -216,6 +219,9 @@ func (g *guest) files() (code int, done bool) {
 		}
 		if g.on("paste-floods") {
 			return g.flood("1\n"), true
+		}
+		if g.on("paste-hangs") {
+			g.hang() // then goes on, as a count that's only slow
 		}
 		g.print(g.textOr("paste-count", "0") + "\n")
 		return 0, true

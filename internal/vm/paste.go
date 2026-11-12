@@ -262,14 +262,15 @@ func (e Paste) numberFrom(ctx context.Context, t *target, cmd, dir string) (int,
 // it's given, keeping its output, at most pasteCountMax bytes. The VM's
 // stderr goes to the run log, at most vmLogMax bytes. Past either cap the
 // command is stopped, so a VM that prints without end can't keep devvm
-// reading. The connection carries no SSH agent: it's the backend's Exec
-// as it is, never target.exec.
+// reading, and so is one past its time (pasteWait), so a VM that never
+// answers can't keep devvm waiting. The connection carries no SSH agent:
+// it's the backend's Exec as it is, never target.exec.
 func (e Paste) run(ctx context.Context, t *target, args []string, stdin io.Reader, out *bounded) error {
 	script, err := fs.ReadFile(e.Assets, "guest/paste.sh")
 	if err != nil {
 		return err
 	}
-	run, cancel := context.WithCancel(ctx)
+	run, cancel := context.WithTimeout(ctx, e.pasteWait(args[0]))
 	defer cancel()
 	if out == nil {
 		out = &bounded{}
@@ -277,6 +278,26 @@ func (e Paste) run(ctx context.Context, t *target, args []string, stdin io.Reade
 	out.max, out.cancel = pasteCountMax, cancel
 	log := &bounded{to: e.LogWriter(), max: vmLogMax, cancel: cancel}
 	return t.b.Exec(run, t.f.Name, pasteArgv(string(script), args), backend.ExecOpts{Stdin: stdin, Stdout: out, Stderr: log})
+}
+
+// How long paste.sh may take in the VM: put, which takes up to pasteMax
+// over the VM's ssh, and count and rm, which list one folder.
+const (
+	pastePutWait   = 10 * time.Minute
+	pasteCountWait = 2 * time.Minute
+)
+
+// pasteWait is how long paste.sh's cmd may take: Env.PasteWait when a
+// test build sets it, else pastePutWait for put and pasteCountWait for
+// count and rm.
+func (e Paste) pasteWait(cmd string) time.Duration {
+	switch {
+	case e.PasteWait > 0:
+		return e.PasteWait
+	case cmd == "put":
+		return pastePutWait
+	}
+	return pasteCountWait
 }
 
 // pasteArgv is the command that runs paste.sh, the script, with args

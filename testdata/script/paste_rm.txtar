@@ -74,6 +74,15 @@ exec sh -c ': > "$STUB_DIR/paste-floods"'
 stderr '^devvm: paste_count_failed dir=/tmp/devvm-paste vm=devvm-plain-[0-9a-f]{14}$'
 rm $STUB_DIR/paste-floods
 
+# A count that never finishes is stopped at its time limit (a test
+# build's DEVVM_PASTE_WAIT, in seconds, in place of 2 minutes), and fails.
+exec sh -c ': > "$STUB_DIR/paste-hangs"'
+env DEVVM_PASTE_WAIT=1
+! exec devvm paste rm --force
+stderr '^devvm: paste_count_failed dir=/tmp/devvm-paste vm=devvm-plain-[0-9a-f]{14}$'
+env DEVVM_PASTE_WAIT=
+rm $STUB_DIR/paste-hangs
+
 # A launch into the running VM asks nothing. A launch that starts the
 # stopped VM asks in a terminal, after the setup, and without one keeps
 # the files and says nothing.

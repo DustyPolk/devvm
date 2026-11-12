@@ -91,6 +91,10 @@ type Env struct {
 	// HistoryMax is the most of an export of agents' history devvm
 	// keeps, in bytes; 0 is historyMax.
 	HistoryMax int
+	// PasteWait is how long devvm paste waits for paste.sh in the VM, in
+	// place of pastePutWait and pasteCountWait: a test build's; 0 is
+	// those.
+	PasteWait time.Duration
 	// Links returns the links a VM's start and setup give it: its targets'
 	// addresses and names, for its /etc/hosts and its NO_PROXY (checkLinks checks them first); nil gives none.
 	Links func(st *state.VM) ([]GuestLink, error)
