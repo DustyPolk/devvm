@@ -38,10 +38,10 @@ func newPasteCmd(a *app) *cobra.Command {
 			switch {
 			case err != nil:
 				return err
-			case sent.Path == "": // you said no to sending the file
-				return nil
 			case asJSON:
 				return printJSON(u, pasteJSON(sent))
+			case sent.Path == "": // you said no to sending the file
+				return nil
 			case !sent.Copied: // the warning said copying failed
 				u.Info(msg.PastePut(sent.Path, sent.VM))
 				return nil
@@ -57,11 +57,14 @@ func newPasteCmd(a *app) *cobra.Command {
 	return c
 }
 
-// pasteOutput is devvm paste --json: the VM, the file's path in it, its
-// kind (image or file), an image's type ("" for a file), a copied file's
-// path on this machine ("" for an image), its size in bytes, and whether
-// the path reached the clipboard.
+// pasteOutput is devvm paste --json: whether anything was sent (false
+// when you said no to sending a file), the VM, the file's path in it (""
+// when nothing was sent), its kind (image, pdf or file), an image's or a
+// PDF's type ("" for a file), a copied file's path on this machine (""
+// otherwise), its size in bytes, and whether the path reached the
+// clipboard.
 type pasteOutput struct {
+	Sent   bool   `json:"sent"`
 	VM     string `json:"vm"`
 	Path   string `json:"path"`
 	Kind   string `json:"kind"`
@@ -72,7 +75,7 @@ type pasteOutput struct {
 }
 
 func pasteJSON(s vm.PasteSent) pasteOutput {
-	return pasteOutput{VM: s.VM, Path: s.Path, Kind: s.Kind, Type: s.Type, Source: s.Source, Bytes: s.Bytes, Copied: s.Copied}
+	return pasteOutput{Sent: s.Path != "", VM: s.VM, Path: s.Path, Kind: s.Kind, Type: s.Type, Source: s.Source, Bytes: s.Bytes, Copied: s.Copied}
 }
 
 // newPasteRmCmd is devvm paste rm.

@@ -34,8 +34,8 @@ type Paste struct{ *Env }
 // devvm chose on this machine, its kind (image, pdf or file), an image's
 // or a PDF's type (image/png…, application/pdf, "" for a file), a copied
 // file's path on this machine ("" otherwise), its size, and whether the
-// path reached the clipboard. It's empty when you said no to sending a
-// file.
+// path reached the clipboard. When you said no to sending a file, it has
+// only the VM, the kind and the source, and no Path: nothing was sent.
 type PasteSent struct {
 	VM, Path string
 	Kind     string
@@ -77,8 +77,8 @@ type pastePayload struct {
 // the file's path. It reads the clipboard before it touches the VM, so an
 // empty one fails fast. A copied file is sent only after a question
 // showing its path on this machine (confirmFile), because the clipboard
-// can name any file of yours; a no sends nothing and returns an empty
-// PasteSent. A copy that fails is a warning, as the file is already in
+// can name any file of yours; a no sends nothing and returns a PasteSent
+// without a Path. A copy that fails is a warning, as the file is already in
 // the VM, and the path is shown.
 func (e Paste) Send(ctx context.Context, sendFile bool) (PasteSent, error) {
 	t, err := e.finder.target(ctx, need{has: hasMade})
@@ -102,8 +102,12 @@ func (e Paste) Send(ctx context.Context, sendFile bool) (PasteSent, error) {
 		return PasteSent{}, err
 	}
 	if p.kind == PasteFile {
-		if yes, err := e.confirmFile(t, p.source, sendFile); err != nil || !yes {
+		yes, err := e.confirmFile(t, p.source, sendFile)
+		if err != nil {
 			return PasteSent{}, err
+		}
+		if !yes {
+			return PasteSent{VM: vm, Kind: p.kind, Source: p.source}, nil
 		}
 	}
 	path := dir + "/" + p.name

@@ -74,6 +74,7 @@ stub_calls
 # --json: the same, as one object.
 exec devvm paste --json
 stdout '"version": ?1'
+stdout '"sent": ?true'
 stdout '"kind": ?"image"'
 stdout '"type": ?"image/png"'
 stdout '"bytes": ?17'
@@ -184,6 +185,13 @@ stderr '^paste_file_ask file=\S*/plain/my doc \(1\)\.txt vm=devvm-plain-[0-9a-f]
 ! stdout .
 stub_calls
 ! stdout '''devvm-paste'''
+# With --json, a no is an object a script can read: nothing sent, the
+# VM and the file it was asked about.
+ttyin -stdin $WORK/no.txt
+exec devvm paste --json
+stdout '"sent": ?false'
+stdout '"path": ?""'
+stdout '"source": ?"\S*/plain/my doc \(1\)\.txt"'
 ttyin -stdin $WORK/yes.txt
 exec devvm paste
 stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.txt vm=devvm-plain-[0-9a-f]{14}$'

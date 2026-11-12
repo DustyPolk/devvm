@@ -106,10 +106,13 @@ func defaultShapes() []shapeCase {
 func pasteShapes() []shapeCase {
 	return []shapeCase{{
 		"paste", pasteJSON(vm.PasteSent{VM: "devvm-a", Path: "/tmp/devvm-paste/paste-20261109-120000-0123abcd.png", Kind: "image", Type: "image/png", Bytes: 1, Copied: true}),
-		[]string{"bytes: number", "copied: bool", "kind: string", "path: string", "source: string", "type: string", "vm: string"},
+		[]string{"bytes: number", "copied: bool", "kind: string", "path: string", "sent: bool", "source: string", "type: string", "vm: string"},
 	}, {
-		"paste a file", pasteJSON(vm.PasteSent{VM: "devvm-a", Path: "/tmp/devvm-paste/paste-20261109-120000-0123abcd-notes.txt", Kind: "file", Source: "/Users/me/notes.txt", Bytes: 1, Copied: true}),
-		[]string{"bytes: number", "copied: bool", "kind: string", "path: string", "source: string", "type: string", "vm: string"},
+		"paste a file", pasteJSON(vm.PasteSent{VM: "devvm-a", Path: "/tmp/devvm-paste/paste-20261109-120000-0123abcd.txt", Kind: "file", Source: "/Users/me/notes.txt", Bytes: 1, Copied: true}),
+		[]string{"bytes: number", "copied: bool", "kind: string", "path: string", "sent: bool", "source: string", "type: string", "vm: string"},
+	}, {
+		"paste a file you said no to", pasteJSON(vm.PasteSent{VM: "devvm-a", Kind: "file", Source: "/Users/me/notes.txt"}),
+		[]string{"bytes: number", "copied: bool", "kind: string", "path: string", "sent: bool", "source: string", "type: string", "vm: string"},
 	}}
 }
 
