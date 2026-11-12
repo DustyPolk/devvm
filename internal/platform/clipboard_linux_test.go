@@ -23,8 +23,8 @@ func fakePasteTool(t *testing.T, tool, text string) Clipboard {
 
 // A listing wl-paste fails with its word for an empty clipboard is an
 // empty clipboard; one it fails otherwise, as without a compositor at
-// WAYLAND_DISPLAY, is the tool's failure, with what it said. xclip's
-// words aren't known, so its every failed listing is an empty clipboard.
+// WAYLAND_DISPLAY, is the tool's failure, with what it said; and the same
+// for xclip, whose display that's gone is its failure.
 func TestReadClipToolFailed(t *testing.T) {
 	t.Setenv("DISPLAY", "")
 	t.Setenv("WAYLAND_DISPLAY", "wayland-9")
@@ -39,9 +39,13 @@ func TestReadClipToolFailed(t *testing.T) {
 	}
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", ":9")
-	clip = fakePasteTool(t, "xclip", "\"Error: Can't open display: :9\"")
+	clip = fakePasteTool(t, "xclip", "'xclip: Error: There is no owner for the CLIPBOARD selection'")
 	if _, err := clip.ReadClip(t.Context(), 1<<20); !errors.Is(err, ErrClipEmpty) {
-		t.Errorf("xclip failing: %v", err)
+		t.Errorf("xclip on an empty clipboard: %v", err)
+	}
+	clip = fakePasteTool(t, "xclip", "\"xclip: Error: Can't open display: :9\"")
+	if _, err := clip.ReadClip(t.Context(), 1<<20); !errors.As(err, &failed) || failed.Tool != "xclip" || !strings.Contains(failed.Stderr, "Can't open display") {
+		t.Errorf("xclip without a display: %v", err)
 	}
 }
 

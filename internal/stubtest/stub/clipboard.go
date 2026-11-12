@@ -36,24 +36,25 @@ func wlPaste(c *call) int {
 		return 1
 	}
 	if c.has("--list-types") {
-		return clipTypes(c)
+		return clipTypes(c, "Nothing is copied")
 	}
 	return clipRead(c, c.after("--type"))
 }
 
-// xclip stands in for xclip: -t TARGETS -o prints clip-types, -t T -o
-// prints clip when T is listed, and -i copies stdin.
+// xclip stands in for xclip: -t TARGETS -o prints clip-types, failing in
+// xclip's words without it, -t T -o prints clip when T is listed, and -i
+// copies stdin.
 func xclip(c *call) int {
 	c.log()
 	if c.on("clip-fails") {
-		c.say("Error: Can't open display: " + os.Getenv("DISPLAY"))
+		c.say("xclip: Error: Can't open display: " + os.Getenv("DISPLAY"))
 		return 1
 	}
 	switch t := c.after("-t"); {
 	case c.has("-i"):
 		return clipWrite(c)
 	case t == "TARGETS":
-		return clipTypes(c)
+		return clipTypes(c, "xclip: Error: There is no owner for the CLIPBOARD selection")
 	default:
 		return clipRead(c, t)
 	}
@@ -120,11 +121,12 @@ func clipCopy(c *call) int {
 	return clipWrite(c)
 }
 
-// clipTypes prints clip-types, failing without it.
-func clipTypes(c *call) int {
+// clipTypes prints clip-types, failing without it, saying empty, the
+// tool's words for an empty clipboard.
+func clipTypes(c *call, empty string) int {
 	t, ok := c.text("clip-types")
 	if !ok {
-		c.say("Nothing is copied")
+		c.say(empty)
 		return 1
 	}
 	c.print(t + "\n")

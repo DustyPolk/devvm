@@ -82,6 +82,29 @@ type ClipToolSlow struct {
 
 func (e *ClipToolSlow) Error() string { return e.Tool + " didn't finish within " + e.Wait.String() }
 
+// wlPasteEmpty and xclipEmpty are what wl-paste and xclip say on stderr
+// when the clipboard is empty or doesn't offer the type asked for, which
+// is how they report it: a failure that says anything else, such as a
+// display or a compositor that can't be reached, is the tool's own
+// (ClipToolFailed). xclip's are its current words, "There is no owner"
+// and "cannot convert", and older releases' "not available".
+func wlPasteEmpty() []string { return []string{"Nothing is copied", "No selection"} }
+
+func xclipEmpty() []string {
+	return []string{"There is no owner", "cannot convert", "not available"}
+}
+
+// saysEmpty reports whether stderr, a failed clipboard tool's, says one
+// of words, its words for an empty clipboard.
+func saysEmpty(words []string, stderr string) bool {
+	for _, w := range words {
+		if strings.Contains(stderr, w) {
+			return true
+		}
+	}
+	return false
+}
+
 // The clipboard types devvm reads besides a PDF (TypePDF, first): a
 // copied file's reference, because Finder and the Linux file managers put
 // the file's icon on the clipboard as an image beside it, then the image

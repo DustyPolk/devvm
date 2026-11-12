@@ -294,11 +294,15 @@ rm $STUB_DIR/clip-file
 [linux] stdout '^xclip -selection clipboard -t TARGETS -o$'
 [linux] stdout '^xclip -selection clipboard -t image/png -o$'
 [linux] stdout '^xclip -selection clipboard -i$'
-# xclip's words for an empty clipboard aren't known, so its failure still
-# reads as one.
-[linux] exec sh -c ': > "$STUB_DIR/clip-fails"'
+# xclip on an empty clipboard is nothing to send, and xclip that can't
+# reach the display DISPLAY names is its failure, with what it said.
+[linux] exec sh -c 'mv "$STUB_DIR/clip-types" "$WORK/clip-types"'
 [linux] ! exec devvm paste
 [linux] stderr '^devvm: paste_nothing$'
+[linux] exec sh -c 'mv "$WORK/clip-types" "$STUB_DIR/clip-types"'
+[linux] exec sh -c ': > "$STUB_DIR/clip-fails"'
+[linux] ! exec devvm paste
+[linux] stderr '^devvm: paste_tool_failed reason=xclip: Error: Can''t open display: :0 tool=xclip$'
 [linux] rm $STUB_DIR/clip-fails
 
 # No session, and a missing tool (a folder of tools without it).

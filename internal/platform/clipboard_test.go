@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+// A clipboard tool's failure is an empty clipboard only when it says so
+// in its own words; anything else, such as a display or a compositor that
+// can't be reached, is the tool's failure, for xclip as for wl-paste.
+func TestSaysEmpty(t *testing.T) {
+	for _, c := range []struct {
+		words  []string
+		stderr string
+		want   bool
+	}{
+		{wlPasteEmpty(), "Nothing is copied\n", true},
+		{wlPasteEmpty(), "No selection\n", true},
+		{wlPasteEmpty(), "Failed to connect to a Wayland server\n", false},
+		{xclipEmpty(), "xclip: Error: There is no owner for the CLIPBOARD selection\n", true},
+		{xclipEmpty(), "Error: target TARGETS not available\n", true},
+		{xclipEmpty(), "xclip: Error: Can't open display: :0\n", false},
+		{xclipEmpty(), "Error: Can't open display: (null)\n", false},
+		{xclipEmpty(), "", false},
+	} {
+		if got := saysEmpty(c.words, c.stderr); got != c.want {
+			t.Errorf("%q: %v, want %v", c.stderr, got, c.want)
+		}
+	}
+}
+
 // chooseTypes picks a PDF before a copied file's reference, which a PDF
 // viewer names beside the PDF it copied, a file's reference before any
 // image, PNG before the other image types, and nothing from text alone.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strings"
 )
 
 // clipTool is a Linux clipboard tool: wl-paste and wl-copy on Wayland,
@@ -16,9 +15,8 @@ type clipTool struct {
 	read        func(t string) []string // reads the clipboard as type t
 	write       []string                // copies stdin
 	// empty is what the paste tool says on stderr when the clipboard is
-	// empty, which is how it reports one: a failed listing saying anything
-	// else is the tool failing (ClipToolFailed). nil, where its words
-	// aren't known, makes every failed listing an empty clipboard.
+	// empty (wlPasteEmpty, xclipEmpty): a failed listing saying anything
+	// else is the tool failing (ClipToolFailed).
 	empty []string
 }
 
@@ -40,7 +38,7 @@ func (c Clipboard) clipTool() (clipTool, error) {
 			paste: c.tool("wl-paste", dirs...), copy: c.tool("wl-copy", dirs...),
 			list:  []string{"--list-types"},
 			read:  func(t string) []string { return []string{"--no-newline", "--type", t} },
-			empty: []string{"Nothing is copied", "No selection"},
+			empty: wlPasteEmpty(),
 		}, nil
 	case os.Getenv("DISPLAY") != "":
 		return clipTool{
@@ -48,6 +46,7 @@ func (c Clipboard) clipTool() (clipTool, error) {
 			list:  []string{"-selection", "clipboard", "-t", "TARGETS", "-o"},
 			read:  func(t string) []string { return []string{"-selection", "clipboard", "-t", t, "-o"} },
 			write: []string{"-selection", "clipboard", "-i"},
+			empty: xclipEmpty(),
 		}, nil
 	}
 	return clipTool{}, ErrClipNoSession
@@ -55,17 +54,7 @@ func (c Clipboard) clipTool() (clipTool, error) {
 
 // saysEmpty reports whether a failed listing's stderr is the tool's word
 // for an empty clipboard.
-func (c clipTool) saysEmpty(stderr string) bool {
-	if c.empty == nil {
-		return true
-	}
-	for _, s := range c.empty {
-		if strings.Contains(stderr, s) {
-			return true
-		}
-	}
-	return false
-}
+func (c clipTool) saysEmpty(stderr string) bool { return saysEmpty(c.empty, stderr) }
 
 // ReadClip reads the clipboard: one copied file's reference, else a PDF
 // or an image, at most limit bytes (ErrClipTooLarge past it), of the types
