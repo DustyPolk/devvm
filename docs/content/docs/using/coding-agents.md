@@ -54,7 +54,7 @@ Anything in the VM can read what you send, as it can read any file in the projec
 
 devvm never deletes a pasted file on its own, because Codex reads the image when you submit your message and pi when the model calls `read`, which may be some time after the paste. `devvm paste rm` deletes the files devvm paste left in the folder, after asking in a terminal, and `devvm paste rm --force` deletes them without asking, as a script must. It deletes only the files devvm paste named, and nothing else in the folder, so a `paste-dir` of your own, such as `/home/USER/pastes` where `USER` is your user in the VM, can hold other files.
 
-The VM's `/tmp` is emptied when the VM boots, so with the default folder the files are gone after a restart anyway. With a `paste-dir` of your own, they stay. When `devvm` or `devvm restart` starts a stopped VM that still has pasted files there, devvm offers to delete them, [y/N], once the VM is set up, and without a terminal it keeps them and says nothing. Other commands that start a VM, such as `devvm code` and `devvm agent save`, don't ask, so run `devvm paste rm` when you want the files gone.
+The VM's `/tmp` is emptied when the VM boots, so with the default folder the files are gone after a restart anyway. With a `paste-dir` of your own, they stay. When `devvm` or `devvm restart` starts a stopped VM that still has pasted files there, devvm offers to delete them, [y/N], once the VM is set up, and without a terminal it keeps them and says nothing. If deleting them fails, devvm warns you and opens the shell anyway. Other commands that start a VM, such as `devvm code` and `devvm agent save`, don't ask, so run `devvm paste rm` when you want the files gone.
 
 ### On Linux
 

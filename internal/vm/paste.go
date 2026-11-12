@@ -189,7 +189,8 @@ func (e Paste) Rm(ctx context.Context, force bool) error {
 // to delete what devvm paste left in its paste folder: it asks, [y/N],
 // when there's anything, and where it can't ask it keeps them and says
 // nothing, as devvm paste rm deletes them later. A count that fails is
-// in the run log, and the launch goes on.
+// in the run log, and a delete that fails after the yes is a warning
+// (paste_rm_not_done); the launch goes on either way.
 func (e Paste) offerRm(ctx context.Context, t *target) error {
 	dir, err := settings.PasteDir(e.Dirs)
 	if err != nil {
@@ -211,7 +212,13 @@ func (e Paste) offerRm(ctx context.Context, t *target) error {
 	if !yes {
 		return nil
 	}
-	return e.rm(ctx, t, dir)
+	if err := e.rm(ctx, t, dir); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		e.Warn(msg.PasteRmNotDone(dir, t.f.Name))
+	}
+	return nil
 }
 
 // rm deletes what devvm paste left in dir in t's VM and says how many.
