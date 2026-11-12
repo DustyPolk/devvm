@@ -81,10 +81,12 @@ stdout '"copied": ?true'
 stdout '"path": ?"/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png"'
 ! stdout 'paste_sent'
 
-# A copy that fails is a warning: the image is in the VM already.
+# A copy that fails is a warning: the image is in the VM already, and
+# devvm says where without saying it copied the path.
 exec sh -c ': > "$STUB_DIR/copy-fails"'
 exec devvm paste
-stdout '^==> paste_sent path=/tmp/devvm-paste/paste-'
+stdout '^==> paste_put path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png vm=devvm-plain-[0-9a-f]{14}$'
+! stdout 'paste_sent'
 stderr '^devvm: paste_copy_failed path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.png$'
 exec devvm paste --json
 stdout '"copied": ?false'

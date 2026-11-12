@@ -3284,6 +3284,11 @@ func PasteNothing() M {
 	return M{id: "paste_nothing"}
 }
 
+// PastePut is [paste_put]: "put {{.path}} into {{.vm}}"
+func PastePut(path string, vm string) M {
+	return M{id: "paste_put", vals: []val{{"path", path}, {"vm", vm}}}
+}
+
 // PasteRmAsk is [paste_rm_ask]: "Delete {{.count}} pasted files in {{.dir}} in {{.vm}}?"
 func PasteRmAsk(count int, dir string, vm string) M {
 	return M{id: "paste_rm_ask", plural: true, count: count, vals: []val{{"count", strconv.Itoa(count)}, {"dir", dir}, {"vm", vm}}}
@@ -5617,6 +5622,7 @@ var specs = map[string]spec{
 	"paste_not_file":                 {fields: []string{"file"}},
 	"paste_not_sent":                 {fields: []string{"path", "vm"}},
 	"paste_nothing":                  {},
+	"paste_put":                      {fields: []string{"path", "vm"}},
 	"paste_rm_ask":                   {plural: true, fields: []string{"count", "dir", "vm"}},
 	"paste_rm_done":                  {plural: true, fields: []string{"count", "dir", "vm"}},
 	"paste_rm_failed":                {fields: []string{"reason"}},

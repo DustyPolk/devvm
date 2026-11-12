@@ -2050,6 +2050,10 @@ other = "Sending the clipboard to this folder's VM failed: {{.reason}}."
 description = "path is the file's path in the VM, which devvm chose"
 other = "put {{.path}} into {{.vm}} and copied the path, for your terminal's paste shortcut"
 
+[paste_put]
+description = "path is the file's path in the VM, which devvm chose; copying it to the clipboard failed, which a warning says"
+other = "put {{.path}} into {{.vm}}"
+
 [paste_copy_failed]
 other = "Copying the path to the clipboard failed. Paste {{.path}} into the agent yourself."
 

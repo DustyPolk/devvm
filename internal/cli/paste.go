@@ -41,6 +41,9 @@ func newPasteCmd(a *app) *cobra.Command {
 				return nil
 			case asJSON:
 				return printJSON(u, pasteJSON(sent))
+			case !sent.Copied: // the warning said copying failed
+				u.Info(msg.PastePut(sent.Path, sent.VM))
+				return nil
 			}
 			u.Info(msg.PasteSent(sent.Path, sent.VM))
 			return nil
