@@ -17,31 +17,46 @@ import (
 // setScript puts what a test asks for on the pasteboard named by its
 // first argument, a test's own, never the clipboard: its second says
 // what, the rest are its files. text TEXT; files PATH... (file URLs, one
-// item each, with the first's icon as TIFF beside them, as Finder copies);
-// ref PATH (a file reference URL, with its icon); image UTI FILE; tiff
-// PNGFILE (the PNG made a TIFF); textimage TEXT PNGFILE; string UTI TEXT
-// (text as any type, such as public.url, as Safari copies a page's
+// item each, with an icon as com.apple.icns beside them, as Finder
+// copies); ref PATH (a file reference URL, with the icon); image UTI FILE;
+// tiff PNGFILE (the PNG made a TIFF); textimage TEXT PNGFILE; string UTI
+// TEXT (text as any type, such as public.url, as Safari copies a page's
 // text/uri-list); pdfpicture PDFFILE PNGFILE (a PDF and a picture of it,
-// as Preview copies a selection); clear (nothing); release (the
+// as Preview copies a selection); thumbnail PDFFILE PNGFILE PATH (a PDF,
+// a TIFF of it, a file URL to PATH and empty text in one item, as
+// Preview copies a page's thumbnail); photo JPEGFILE PATH (a JPEG and a
+// file URL to PATH, as Photos copies); clear (nothing); release (the
 // pasteboard deleted).
 const setScript = `ObjC.import('AppKit');
 function run(argv) {
   const pb = $.NSPasteboard.pasteboardWithName(argv[0]);
   if (argv[1] === 'release') { pb.releaseGlobally; return; }
   pb.clearContents;
-  const icon = (p) => pb.setDataForType($.NSWorkspace.sharedWorkspace.iconForFile(p).TIFFRepresentation, 'public.tiff');
+  const data = (p) => $.NSData.dataWithContentsOfFile(p);
+  const url = (p) => pb.writeObjects($.NSArray.arrayWithObject($.NSURL.fileURLWithPath(p)));
+  const icon = () => pb.setDataForType(data('/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericDocumentIcon.icns'), 'com.apple.icns');
   switch (argv[1]) {
   case 'text': pb.setStringForType(argv[2], 'public.utf8-plain-text'); break;
   case 'files': {
     const urls = $.NSMutableArray.array;
     for (const p of argv.slice(2)) urls.addObject($.NSURL.fileURLWithPath(p));
     pb.writeObjects(urls);
-    icon(argv[2]);
+    icon();
     break;
   }
   case 'ref':
     pb.writeObjects($.NSArray.arrayWithObject($.NSURL.fileURLWithPath(argv[2]).fileReferenceURL));
-    icon(argv[2]);
+    icon();
+    break;
+  case 'thumbnail':
+    url(argv[4]);
+    pb.setDataForType(data(argv[2]), 'com.adobe.pdf');
+    pb.setDataForType($.NSBitmapImageRep.imageRepWithData(data(argv[3])).TIFFRepresentation, 'public.tiff');
+    pb.setStringForType('', 'public.utf8-plain-text');
+    break;
+  case 'photo':
+    url(argv[3]);
+    pb.setDataForType(data(argv[2]), 'public.jpeg');
     break;
   case 'image': pb.setDataForType($.NSData.dataWithContentsOfFile(argv[3]), argv[2]); break;
   case 'tiff': pb.setDataForType($.NSBitmapImageRep.imageRepWithData($.NSData.dataWithContentsOfFile(argv[2])).TIFFRepresentation, 'public.tiff'); break;
@@ -89,8 +104,10 @@ func (p pasteboard) set(args ...string) {
 // page wrote as public.url; several files are counted; a copied file
 // that's gone fails rather than sending its icon; an image is read as
 // PNG, a TIFF made one, beside text too; a PDF is read as it is, before
-// the picture beside it, and bytes that aren't one are nothing; one past
-// the cap is refused before it's written.
+// the picture beside it and before a file it names, as Preview's
+// thumbnails do, while a file beside an image wins, as in Photos; bytes
+// that aren't a PDF are nothing; one past the cap is refused before it's
+// written.
 func TestReadClipPasteboard(t *testing.T) {
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -174,6 +191,17 @@ func TestReadClipPasteboard(t *testing.T) {
 	pb.set("pdfpicture", pdfFile, pngFile)
 	if c, err := read(1 << 20); err != nil || !bytes.Equal(c.Data, pdf) || c.Type != TypePDF {
 		t.Errorf("a PDF beside its picture: %+v, %v", c.Type, err)
+	}
+	// A page's thumbnail copied in Preview: the PDF, never the temporary
+	// file Preview names beside it. A copy in Photos: the file it names,
+	// which devvm asks about, not the JPEG beside it.
+	pb.set("thumbnail", pdfFile, pngFile, a)
+	if c, err := read(1 << 20); err != nil || !bytes.Equal(c.Data, pdf) || c.Type != TypePDF || c.File != "" {
+		t.Errorf("a thumbnail in Preview: %+v, %v", c, err)
+	}
+	pb.set("photo", pngFile, b)
+	if c, err := read(1 << 20); err != nil || c.File != b || c.Data != nil {
+		t.Errorf("a copy in Photos: %+v, %v", c, err)
 	}
 	pb.set("image", "com.adobe.pdf", notPDF)
 	if c, err := read(1 << 20); !errors.Is(err, ErrClipEmpty) {

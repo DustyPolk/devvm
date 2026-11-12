@@ -60,12 +60,13 @@ func xclip(c *call) int {
 }
 
 // osascript stands in for macOS's osascript, for devvm paste's script
-// alone (-l JavaScript -e SCRIPT FILE LIMIT), printing what it would: with
-// clip-gone, gone; with clip-file, how many files past one, else the one
-// file; else with application/pdf or image/png in clip-types (a PDF
-// first, as the script prefers it), clip written to FILE as that type
-// when it's within LIMIT bytes, or tooLarge; else nothing. With
-// clip-fails it fails.
+// alone (-l JavaScript -e SCRIPT FILE LIMIT), printing what it would, in
+// the script's order: with application/pdf in clip-types, clip as a PDF,
+// whatever file is copied beside it; else with clip-gone, gone; with
+// clip-file, how many files past one, else the one file; else with
+// image/png in clip-types, clip as a PNG. Either is written to FILE when
+// it's within LIMIT bytes, else it's tooLarge; with none of them, nothing.
+// With clip-fails it fails.
 func osascript(c *call) int {
 	c.log()
 	if !strings.Contains(c.joined(), "NSPasteboard") || c.after("-l") != "JavaScript" || len(c.args) < 6 {
@@ -87,12 +88,13 @@ func osascript(c *call) int {
 			typ = t
 		}
 	}
+	file := copied && typ != "application/pdf"
 	switch {
-	case c.on("clip-gone"):
+	case typ != "application/pdf" && c.on("clip-gone"):
 		found["gone"] = true
-	case copied && len(files) > 1:
+	case file && len(files) > 1:
 		found["files"] = len(files)
-	case copied:
+	case file:
 		found["file"] = files[0]
 	case typ == "":
 	case err != nil || len(data) > most:

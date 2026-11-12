@@ -103,9 +103,10 @@ func DataExt(mime string) string {
 
 // chooseTypes picks, from the types a clipboard offers (one per line, as
 // wl-paste --list-types and xclip's TARGETS print them), those devvm
-// reads, in the order it tries them: a file reference, then the data
-// types it prefers (dataTypes). None means nothing devvm can send is
-// there.
+// reads, in the order it tries them: a PDF, as a PDF viewer may name a
+// temporary file of its own beside it, then a file reference, then the
+// image types it prefers (dataTypes). None means nothing devvm can send
+// is there.
 func chooseTypes(listed []byte) []string {
 	var have []string
 	for _, line := range strings.Split(string(listed), "\n") {
@@ -114,13 +115,16 @@ func chooseTypes(listed []byte) []string {
 		}
 	}
 	var picked []string
+	if slices.Contains(have, TypePDF) {
+		picked = append(picked, TypePDF)
+	}
 	for _, t := range []string{typeURIList, typeGnome} {
 		if slices.Contains(have, t) {
 			picked = append(picked, t)
 		}
 	}
 	for _, t := range dataTypes() {
-		if slices.Contains(have, t.mime) {
+		if t.mime != TypePDF && slices.Contains(have, t.mime) {
 			picked = append(picked, t.mime)
 		}
 	}

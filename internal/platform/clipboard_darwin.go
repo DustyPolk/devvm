@@ -16,21 +16,29 @@ import (
 // pasteboard's name, which only tests give (their own), for the
 // clipboard's in its place.
 //
-// It asks first for file URLs alone (NSPasteboardURLReadingFileURLsOnlyKey),
-// which only a copied file puts there, as Finder does: text, a path or a
-// file:// URL included, is never one. Several are counted, never read.
-// One is printed as its path, a file reference URL (file:///.file/id=)
-// resolved, or as gone when it can't be. Then a PDF (com.adobe.pdf, as
-// Preview copies a selection, with a picture of it beside it) as it is,
-// never made an image; then an image: PNG, JPEG, GIF or WebP as it is,
-// else TIFF, as macOS apps copy one, made a PNG. Either is written only
-// within the cap, so a huge one never reaches the disk. It prints one
-// JSON object: files (how many, past one), file, gone, type (what it
-// wrote), tooLarge, or none of them for nothing devvm sends. Text is
-// never asked for.
+// It takes a PDF first (com.adobe.pdf), as it is, never made an image: a
+// selection copied in Preview has a picture of it beside it, and a page's
+// thumbnail a file URL to a temporary file of Preview's too. Then file
+// URLs alone (NSPasteboardURLReadingFileURLsOnlyKey), which only a copied
+// file puts there, as Finder and Photos do: text, a path or a file:// URL
+// included, is never one. Several are counted, never read. One is printed
+// as its path, a file reference URL (file:///.file/id=) resolved, or as
+// gone when it can't be. Then an image: PNG, JPEG, GIF or WebP as it is,
+// else TIFF, as macOS apps copy one, made a PNG. A PDF or an image is
+// written only within the cap, so a huge one never reaches the disk. It
+// prints one JSON object: files (how many, past one), file, gone, type
+// (what it wrote), tooLarge, or none of them for nothing devvm sends.
+// Text is never asked for.
 const clipScript = `ObjC.import('AppKit');
 function run(argv) {
   const pb = argv[2] ? $.NSPasteboard.pasteboardWithName(argv[2]) : $.NSPasteboard.generalPasteboard;
+  const write = (d, type) => {
+    if (Number(d.length) > Number(argv[1])) return JSON.stringify({tooLarge: true});
+    if (!d.writeToFileAtomically(argv[0], false)) throw new Error('writing what was copied failed');
+    return JSON.stringify({type: type});
+  };
+  const pdf = pb.dataForType('com.adobe.pdf');
+  if (!pdf.isNil()) return write(pdf, 'application/pdf');
   const only = $.NSDictionary.dictionaryWithObjectForKey($.NSNumber.numberWithBool(true), $.NSPasteboardURLReadingFileURLsOnlyKey);
   const urls = pb.readObjectsForClassesOptions($.NSArray.arrayWithObject($.NSURL), only);
   const n = urls.isNil() ? 0 : Number(urls.count);
@@ -39,8 +47,8 @@ function run(argv) {
     const u = urls.objectAtIndex(0).filePathURL;
     return JSON.stringify(u.isNil() ? {gone: true} : {file: u.path.js});
   }
-  const types = [['com.adobe.pdf', 'application/pdf'], ['public.png', 'image/png'], ['public.jpeg', 'image/jpeg'],
-    ['com.compuserve.gif', 'image/gif'], ['org.webmproject.webp', 'image/webp'], ['public.tiff', '']];
+  const types = [['public.png', 'image/png'], ['public.jpeg', 'image/jpeg'], ['com.compuserve.gif', 'image/gif'],
+    ['org.webmproject.webp', 'image/webp'], ['public.tiff', '']];
   for (const [uti, mime] of types) {
     let d = pb.dataForType(uti);
     if (d.isNil()) continue;
@@ -52,9 +60,7 @@ function run(argv) {
       if (d.isNil()) continue;
       type = 'image/png';
     }
-    if (Number(d.length) > Number(argv[1])) return JSON.stringify({tooLarge: true});
-    if (!d.writeToFileAtomically(argv[0], false)) throw new Error('writing what was copied failed');
-    return JSON.stringify({type: type});
+    return write(d, type);
   }
   return '{}';
 }`

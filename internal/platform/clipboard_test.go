@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// chooseTypes picks a copied file's reference before a PDF, a PDF before
-// any image, PNG before the other image types, and nothing from text
-// alone.
+// chooseTypes picks a PDF before a copied file's reference, which a PDF
+// viewer names beside the PDF it copied, a file's reference before any
+// image, PNG before the other image types, and nothing from text alone.
 func TestChooseTypes(t *testing.T) {
 	for _, c := range []struct {
 		listed string
@@ -21,7 +21,8 @@ func TestChooseTypes(t *testing.T) {
 		{"TARGETS\r\nimage/bmp\r\nimage/png\r\n", []string{"image/png"}},
 		{"image/svg+xml\nimage/bmp\n", nil},
 		{"image/png\napplication/pdf\n", []string{"application/pdf", "image/png"}},
-		{"application/pdf\ntext/uri-list\n", []string{"text/uri-list", "application/pdf"}},
+		{"application/pdf\ntext/uri-list\n", []string{"application/pdf", "text/uri-list"}},
+		{"image/png\ntext/uri-list\napplication/pdf\n", []string{"application/pdf", "text/uri-list", "image/png"}},
 	} {
 		if got := chooseTypes([]byte(c.listed)); !slices.Equal(got, c.want) {
 			t.Errorf("%q: %q, want %q", c.listed, got, c.want)

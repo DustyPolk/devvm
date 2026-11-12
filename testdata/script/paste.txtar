@@ -109,6 +109,18 @@ cmp $STUB_DIR/paste-in $STUB_DIR/clip
 stub_calls
 [linux] stdout '^wl-paste --no-newline --type application/pdf$'
 [linux] ! stdout 'type image/png'
+
+# A page's thumbnail copied in a PDF viewer names a temporary file beside
+# the PDF: the PDF is sent, and the file is neither read nor asked about.
+exec sh -c 'printf "text/uri-list\nimage/png\napplication/pdf\n" > "$STUB_DIR/clip-types"'
+exec sh -c 'printf "%s/page (dragged).pdf\n" "$PWD" > "$STUB_DIR/clip-file"'
+stub_reset
+exec devvm paste
+stdout '^==> paste_sent path=/tmp/devvm-paste/paste-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.pdf '
+! stderr 'paste_file_ask'
+stub_calls
+[linux] ! stdout 'type text/uri-list'
+rm $STUB_DIR/clip-file
 exec sh -c 'printf "PDF? no\n" > "$STUB_DIR/clip"'
 ! exec devvm paste
 stderr '^devvm: paste_nothing$'

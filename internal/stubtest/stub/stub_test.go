@@ -792,6 +792,11 @@ func TestClipboard(t *testing.T) {
 	if out := s.ok("", "osascript", osa("100")...); out != `{"files":2}`+"\n" {
 		t.Errorf("osascript's files %q", out)
 	}
+	s.write("clip-types", "application/pdf\n")
+	if out := s.ok("", "osascript", osa("100")...); out != `{"type":"application/pdf"}`+"\n" {
+		t.Errorf("osascript's PDF beside files %q", out)
+	}
+	s.write("clip-types", "text/html\nimage/png\n")
 	s.touch("clip-gone")
 	if out := s.ok("", "osascript", osa("100")...); out != `{"gone":true}`+"\n" {
 		t.Errorf("osascript's file that's gone %q", out)
